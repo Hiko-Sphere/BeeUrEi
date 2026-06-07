@@ -1,0 +1,21 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+
+# Swift Package Manager
+.swiftpm/
+.build/
+
+# XcodeGen 生成的工程（可由 project.yml + `xcodegen generate` 重建）
+# 新手如果想用 git 跟踪 .xcodeproj，删掉下面这一行即可。
+BeeUrEi.xcodeproj/
+
+# macOS
+.DS_Store
+
+# Local agent/editor state
+.claude/

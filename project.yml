@@ -1,0 +1,45 @@
+# XcodeGen 工程描述文件。
+# 改完这个文件后，在项目根目录运行 `xcodegen generate` 重新生成 BeeUrEi.xcodeproj。
+# 新手通常不用碰它——直接 open BeeUrEi.xcodeproj 即可。
+name: BeeUrEi
+options:
+  bundleIdPrefix: com.beeurei
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"          # 用 Swift 5 语言模式，先避开 Swift 6 严格并发对新手的干扰
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  BeeUrEi:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: BeeUrEi
+      # 直接编译核心逻辑源码（与 Packages/BeeUrEiCore 同一份文件，单一真相来源）。
+      # 该包独立用于 `swift test` 在 Mac 本机跑单测；因本机未装 iOS 模拟器运行时，
+      # 走 Xcode SPM 产物链接会卡在 scheme 目的地解析，故直接把源码纳入 App 编译。
+      - path: Packages/BeeUrEiCore/Sources/BeeUrEiCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.beeurei.BeeUrEi
+        TARGETED_DEVICE_FAMILY: "1"   # 1 = 仅 iPhone（iPad 是否支持见 PLAN.md §11-12，暂不支持）
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: Config/Info.plist
+      properties:
+        CFBundleDisplayName: BeeUrEi
+        # 仅适配 ARKit 设备（最终 LiDAR 限制由运行时 DeviceSupport.hasLiDAR 把关，见 PLAN §12.1）
+        UIRequiredDeviceCapabilities:
+          - arm64
+          - arkit
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # 这三段权限文案会原样显示在系统授权弹窗里（见 PLAN.md §7.4）
+        NSCameraUsageDescription: "用于通过摄像头实时识别前方障碍并向你语音提示，以及在你呼叫志愿者时传输画面。"
+        NSLocationWhenInUseUsageDescription: "用于规划步行路线并播报你途经的路口与地标。"
+        NSMicrophoneUsageDescription: "用于与远程志愿者实时语音交流。"

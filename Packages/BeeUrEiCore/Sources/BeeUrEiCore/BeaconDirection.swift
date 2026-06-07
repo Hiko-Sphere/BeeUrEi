@@ -26,4 +26,10 @@ public struct BeaconDirection: Sendable, Equatable {
     }
 
     public var spokenPhrase: String { "\(clockHour) 点钟方向" }
+
+    /// 用「身体航向 + 头部偏航」作为朝向计算信标相对方位（AirPods 头追踪增强，见 PLAN §14 Q8）。
+    /// 无头追踪时传 headYawDegrees=0 即退化为纯身体航向。
+    public static func relative(headingDegrees: Double, headYawDegrees: Double, bearingDegrees: Double) -> BeaconDirection {
+        BeaconDirection(headingDegrees: headingDegrees + headYawDegrees, bearingDegrees: bearingDegrees)
+    }
 }

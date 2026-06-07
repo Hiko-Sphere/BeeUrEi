@@ -54,6 +54,17 @@ final class BeaconDirectionTests: XCTestCase {
         XCTAssertEqual(b.clockHour, 1)
     }
 
+    // 头部追踪：身体航向 + 头部偏航 共同决定朝向（Q8）。
+    func testHeadRelativeAzimuth() {
+        // 头转向右 90°，目标在地理 90°（正东）→ 相对头部正前方。
+        let head = BeaconDirection.relative(headingDegrees: 0, headYawDegrees: 90, bearingDegrees: 90)
+        XCTAssertEqual(head.relativeAzimuthDegrees, 0, accuracy: 0.0001)
+        XCTAssertEqual(head.clockHour, 12)
+        // 无头追踪(yaw=0) 退化为纯身体航向。
+        let body = BeaconDirection.relative(headingDegrees: 0, headYawDegrees: 0, bearingDegrees: 90)
+        XCTAssertEqual(body.clockHour, 3)
+    }
+
     // 回归：非有限 heading/bearing 不得崩溃，退化为「正前方/12 点」。
     func testNonFiniteInputDoesNotCrash() {
         XCTAssertEqual(BeaconDirection(headingDegrees: .nan, bearingDegrees: 90).clockHour, 12)

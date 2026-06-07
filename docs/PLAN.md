@@ -1,5 +1,7 @@
 # BeeUrEi 项目计划书（终稿）
 
+> 隶属组织：**Hiko Sphere 彦穹科技** ｜ 软件制作人：**Li Yanpei Hiko**
+
 > 用 iPhone 主摄像头，为视障人士提供「实时避障 + 步行路线导航 + 远程明眼志愿者视频协助」三合一的原生 iOS App。所有 AI 推理在设备端完成（视频通话的信令/TURN 中继、地图路线检索/导航除外）。
 >
 > **本文档面向「第一次做 iOS App 的新手」编写**，每个技术点都给出框架、为什么这么选、新手难度，以及可验证的成功标准。
@@ -675,6 +677,7 @@ createwithswift.com、Hacking with Swift、Kodeco（前 raywenderlich）、nship
 - [x] 设置页 `SettingsView`（开关简短提醒 + 重听完整安全须知）+ 首屏齿轮入口
 - [x] 远程协助 UI `RemoteAssistView`/`RemoteAssistViewModel`（亲友名单本地持久化 `ContactStore`，呼叫状态接核心已测 `RemoteAssistCall`）+ 首屏求助入口（RTC 媒体连接仍属 §13.3 外部依赖）
 - [x] VoiceOver 协作：`SpeechFeedback` 在 VoiceOver 开启时改用 `UIAccessibility` 播报而非直接 TTS，避免抢话（§7.2）；各视图 VoiceOver 标签/Header/Dynamic Type 审查通过
+- [x] 已生成并编入 demo Core ML 模型 `BeeUrEi/Models/YOLO.mlpackage`（Ultralytics yolo11n + NMS，COCO 英文类别）→ 检测路径已激活、随 App 编译进包（`YOLO.mlmodelc`）。⚠️ 正式版需中文/裁剪高危类别模型（§5.8），当前英文标签不触发中文高危加成
 
 ### 13.3 外部依赖 / 真人事项（不设勾选框，登记备忘）
 
@@ -698,3 +701,62 @@ createwithswift.com、Hacking with Swift、Kodeco（前 raywenderlich）、nship
 - [x] `HeadingFilter.update` 忽略 `accuracyDegrees` 致磁干扰样本污染航向 → 强制可信门控
 - [x] `OffRouteDetector` 反子午线(±180°)跨越把在线点误判偏航 → 经度差归一化
 - [x] `OffRouteDetector` 端点夹取分支补回归测试
+
+---
+
+## 14. 后端与新功能（2026-06-07 启动）
+
+### 14.1 决策定案（Q1–Q12）
+
+- Q1/Q2 仅 LiDAR iPhone Pro；避障只用 ARKit `sceneDepth`（已定）。
+- Q3/Q4 海外 + 国内：海外 MapKit；国内持牌图商（持续联网）。
+- Q5 远程协助：亲友名单 + 紧急呼叫（自建后端账号体系）。
+- **Q6 通话录制**：支持但**默认关闭**；需双方知情同意；紧急呼叫可按需自动录制留证；媒体**加密存储 + 默认保留 N 天后自动删除（可配置）**；非紧急默认不录制不留存。
+- **Q7 红绿灯/过街识别**：做（端侧 Core ML 子能力）。
+- **Q8 AirPods 头部追踪**：做，作为**增强**（`CMHeadphoneMotionManager` 提升空间音方向；无兼容耳机回退手机朝向）。
+- **Q9 导航/避障**：**可分别开关**（默认避障开、导航按需）。
+- **Q10 定位精度安全策略**：编码保守默认（核心 `LocationAccuracyGate`），标注**上线前需 O&M 专家复核**。
+- **Q11 预算**：**自建后端 + WebRTC P2P 自托管信令/TURN**，规避按量 RTC 费用（仅服务器/TURN 带宽成本）；「申请厂商公益折扣」记为待办。
+- Q12 仅 iPhone（不变）。
+
+### 14.2 后端范围（自托管，`server/`）
+
+栈：**Node.js + TypeScript + Fastify + WebSocket 信令 + SQLite + JWT/bcrypt**。`npm run dev` 即自托管运行。
+功能：账号登录与**角色**（视障 / 协助者 / 亲友 / 管理员 / 开发者）、亲友绑定、紧急呼叫路由、WebRTC 信令与匹配、管理员（用户管理 / 封禁 / 举报处理）、录制与留存策略、开发/测试端点。
+
+### 14.3 视频隐私模型
+
+1:1 P2P WebRTC：协助者**不开摄像头**、只收视频 + 双向语音；视障侧摄像头默认**不输出画面**（只传音频），仅当**连续点击/长按隐私按钮**时才把视频轨发出（防误触、保护隐私），松开即停。
+
+### 14.4 开发者模式
+
+App 内**手动开启**（无需账号，如连点版本号），叠加显示**温度 / 帧率 / 延迟**等调试信息；后端另设 developer 角色用于测试端点。
+
+> 详细 API / 数据模型 / 信令时序 / iOS 任务清单见 **docs/BACKEND_PLAN.md**（由设计工作流产出）。
+
+### 14.5 工程任务（🚧 进行中）
+
+- [x] 后端骨架（Fastify + TS，可 `npm run dev` 运行，含 /health + /api/version + 2 测试通过）
+- [x] 账号与角色（注册/登录 JWT、bcrypt、RBAC、/api/me）— 6 测试
+- [x] 亲友绑定 + 紧急呼叫路由（/api/family/links、/api/emergency/trigger、纯逻辑 `planEmergencyRoute`）— 共 11 测试
+- [x] WebRTC 信令（WebSocket /ws）+ 房间/匹配 + 视频门控消息（含纯逻辑 `SignalingHub` 单测 + 真实双端 relay 集成测试）
+- [x] 管理员端点（列用户/封禁解封/举报列表与处理）+ 举报提交
+- [x] 录制配置 + 留存策略（默认关 + 知情同意 + 到期自动删，纯逻辑 `expiredRecordingIds` 单测）
+- [x] 开发者后端测试端点（developer 角色：/api/dev/ping、/api/dev/stats）
+- [x] 后端共 **24 个测试全过**（typecheck 干净）
+- [x] 后端增强：SQLite 持久化（`node:sqlite`，默认驱动）、速率限制（`@fastify/rate-limit`）、admin 环境变量引导（`seedAdmin`）、coturn 配置示例（`server/coturn.conf.example`）— 后端共 **29 测试**
+- [ ] 后端增强（可选，留后）：refresh token 轮换
+- [x] iOS：开发者模式叠层 `DevOverlayView`（温度/帧率/检测器，`DevSettings` 手动开启）
+- [x] iOS：导航/避障分别开关 `FeatureSettings`（Q9，设置页 + 避障门控）
+- [x] iOS：登录界面 `LoginView` + `AuthSession` + Keychain + `APIClient`（接后端 /api/auth；可配服务器地址；ATS 本地网络例外）
+- [x] iOS：双角色通话 UI `CallView`/`CallViewModel` + 信令客户端 `SignalingClient`(接 /ws) + 隐私门控视频(按住/切换发画面，video-gate 信令) + `MediaEngine` 抽象（⚠️ 真实 WebRTC 媒体引擎需 WebRTC SPM 包 + 双真机，属外部 §13.3；信令/UI/门控已就位）
+- [x] iOS：红绿灯/过街提示 `CrossingAssistant`（Q7，存在性识别+过街提醒，已测+已接入；⚠️ 红/绿颜色判别需专用模型，属外部资产 §13.3）
+- [x] iOS：AirPods 头部追踪 `HeadTracker`（Q8，增强空间音；核心 `BeaconDirection.relative` 已测；`SpatialAudioFeedback.setListenerYaw`；无耳机回退）
+- [x] iOS：录制知情同意 UI `RecordingConsentView` + 核心 `RecordingConsent`（Q6，需各方同意，已测）
+- [x] iOS：海外 MapKit 步行导航 `WalkNavigationView`/`NavigationViewModel`/`NavigationService`（搜索目的地→步行路线→定位→精度门控+转向播报，接已测核心 `RouteProgress`/`LocationAccuracyGate`/`Geo`；真机验证定位）
+- [x] 国内导航：高德 **Web 服务**接入（key 在 `server/.env`，仅后端持有不进 App）；后端 `/api/nav/walking`（geocode + 步行路线，2 测试）+ iOS `AMapRouteClient` + 导航页地区选择 + 步骤读出。⚠️ 完整「实时逐向 + GCJ-02 定位」需高德 iOS SDK（外部）；当前为路线步骤读出 MVP
+- [x] 署名：隶属组织 Hiko Sphere 彦穹科技 · 软件制作人 Li Yanpei Hiko（README/PLAN/NOTICE/Info.plist 版权/设置「关于」）
+- [x] 修复：手抖检测闪烁致播报反复打断「说不完」→ `ObstacleStabilizer` 时间稳定化(迟滞) + 仅目标变化/每6s刷新才播报（已测）
+- [x] 增强：ROI 中央带检测（Vision `regionOfInterest`，聚焦正前方）+ 检测框坐标重映射 `ROIMapper`（已测）
+- [x] 品牌：应用图标接入 `Assets.xcassets/AppIcon`（用品牌资产全套尺寸）+ 重写专业 README（字标/徽章/架构图）
+- [x] iOS：检测标签 英文→中文 + 高危加成映射 `LabelCatalog`（§5.8，已单测、已接入检测链路）

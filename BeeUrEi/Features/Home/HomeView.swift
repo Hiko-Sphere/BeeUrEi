@@ -5,17 +5,20 @@ struct HomeView: View {
     @State private var model = HomeViewModel()
     @State private var showSettings = false
     @State private var showRemoteAssist = false
+    @State private var showNavigation = false
     private let consentStore = ConsentStore()
 
     var body: some View {
         ZStack {
             content
-            VStack {
+            VStack(alignment: .leading) {
                 HStack {
                     helpButton
+                    navButton
                     Spacer()
                     settingsButton
                 }
+                if DevSettings().enabled { DevOverlayView(model: model) }
                 Spacer()
                 if case .running = model.state { statusBar }
             }
@@ -29,6 +32,19 @@ struct HomeView: View {
         .sheet(isPresented: $showRemoteAssist) {
             RemoteAssistView { showRemoteAssist = false }
         }
+        .sheet(isPresented: $showNavigation) {
+            WalkNavigationView { showNavigation = false }
+        }
+    }
+
+    private var navButton: some View {
+        Button { showNavigation = true } label: {
+            Image(systemName: "figure.walk")
+                .font(.title2)
+                .padding(12)
+                .background(.ultraThinMaterial, in: Circle())
+        }
+        .accessibilityLabel("步行导航")
     }
 
     private var helpButton: some View {

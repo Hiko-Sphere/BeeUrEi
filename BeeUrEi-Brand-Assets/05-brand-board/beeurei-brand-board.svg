@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="760" viewBox="0 0 680 760"><defs><clipPath id="bee0"><rect x="206" y="204" width="100" height="128" rx="50"/></clipPath><clipPath id="bee1"><rect x="206" y="204" width="100" height="128" rx="50"/></clipPath><clipPath id="bee2"><rect x="206" y="204" width="100" height="128" rx="50"/></clipPath><clipPath id="bee3"><rect x="206" y="204" width="100" height="128" rx="50"/></clipPath></defs>
+<rect x="0" y="0" width="680" height="760" rx="28" fill="#14161F"/>
+<text x="340" y="42" text-anchor="middle" font-family="'PingFang SC','-apple-system','Hiragino Sans GB','Noto Sans CJK SC','Noto Sans CJK HK','Microsoft YaHei',sans-serif" font-size="14" fill="#6B7488">BeeUrEi · 标识概念</text>
+<rect x="190" y="64" width="300" height="300" rx="67" fill="#171A26" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+<g transform="translate(340,214) scale(0.5859375) translate(-256,-256)"><circle cx="256" cy="266" r="158" fill="#FFC42E" opacity="0.05"/>
+<circle cx="256" cy="266" r="124" fill="#FFC42E" opacity="0.05"/>
+<circle cx="256" cy="266" r="92" fill="#FFC42E" opacity="0.06"/>
+<path d="M72,256 Q256,130 440,256 Q256,382 72,256 Z" fill="none" stroke="#FFC42E" stroke-width="5" opacity="0.22"/>
+<path d="M96,256 Q256,150 416,256 Q256,362 96,256 Z" fill="#FFC42E" fill-opacity="0.05" stroke="#FFC42E" stroke-width="14" stroke-linejoin="round"/>
+<ellipse cx="210" cy="224" rx="52" ry="30" fill="#FFFFFF" fill-opacity="0.9" stroke="#FFC42E" stroke-opacity="0.3" stroke-width="3" transform="rotate(-30 210 224)"/>
+<ellipse cx="302" cy="224" rx="52" ry="30" fill="#FFFFFF" fill-opacity="0.9" stroke="#FFC42E" stroke-opacity="0.3" stroke-width="3" transform="rotate(30 302 224)"/>
+<path d="M249,210 Q233,182 224,168" fill="none" stroke="#FFC42E" stroke-width="6" stroke-linecap="round"/>
+<circle cx="224" cy="168" r="6" fill="#FFC42E"/>
+<path d="M263,210 Q279,182 288,168" fill="none" stroke="#FFC42E" stroke-width="6" stroke-linecap="round"/>
+<circle cx="288" cy="168" r="6" fill="#FFC42E"/>
+<g clip-path="url(#bee0)">
+<rect x="206" y="204" width="100" height="128" fill="#FFC42E"/>
+<ellipse cx="236" cy="250" rx="40" ry="50" fill="#FFD874" opacity="0.4"/>
+<rect x="200" y="204" width="112" height="36" fill="#14161F"/>
+<rect x="196" y="262" width="120" height="20" fill="#14161F"/>
+<rect x="196" y="298" width="120" height="20" fill="#14161F"/>
+</g>
+<path d="M256,346 L246,326 L266,326 Z" fill="#14161F"/></g>
+<text x="340" y="400" text-anchor="middle" font-family="'PingFang SC','-apple-system','Hiragino Sans GB','Noto Sans CJK SC','Noto Sans CJK HK','Microsoft YaHei',sans-serif" font-size="19" fill="#9AA3B8">“成为你的眼睛”</text>
+<line x1="120" y1="424" x2="560" y2="424" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="1"/>
+<rect x="105" y="447" width="110" height="118" rx="24" fill="#171A26" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+<g transform="translate(160,506) scale(0.171875) translate(-256,-256)"><path d="M96,256 Q256,150 416,256 Q256,362 96,256 Z" fill="none" stroke="#FFC42E" stroke-width="13" stroke-linejoin="round"/>
+<ellipse cx="210" cy="224" rx="50" ry="29" fill="none" stroke="#FFC42E" stroke-width="7" transform="rotate(-30 210 224)"/>
+<ellipse cx="302" cy="224" rx="50" ry="29" fill="none" stroke="#FFC42E" stroke-width="7" transform="rotate(30 302 224)"/>
+<path d="M249,210 Q233,182 224,168" fill="none" stroke="#FFC42E" stroke-width="6" stroke-linecap="round"/>
+<circle cx="224" cy="168" r="5.5" fill="#FFC42E"/>
+<path d="M263,210 Q279,182 288,168" fill="none" stroke="#FFC42E" stroke-width="6" stroke-linecap="round"/>
+<circle cx="288" cy="168" r="5.5" fill="#FFC42E"/>
+<rect x="206" y="204" width="100" height="128" rx="50" fill="none" stroke="#FFC42E" stroke-width="9"/>
+<line x1="214" y1="240" x2="298" y2="240" stroke="#FFC42E" stroke-width="9" stroke-linecap="round"/>
+<line x1="216" y1="276" x2="296" y2="276" stroke="#FFC42E" stroke-width="9" stroke-linecap="round"/>
+<line x1="220" y1="306" x2="292" y2="306" stroke="#FFC42E" stroke-width="9" stroke-linecap="round"/>
+<line x1="256" y1="324" x2="256" y2="346" stroke="#FFC42E" stroke-width="8" stroke-linecap="round"/></g>
+<text x="160" y="588" text-anchor="middle" font-family="'PingFang SC','-apple-system','Hiragino Sans GB','Noto Sans CJK SC','Noto Sans CJK HK','Microsoft YaHei',sans-serif" font-size="15" fill="#9AA3B8">单色</text>
+<rect x="285" y="447" width="110" height="118" rx="24" fill="#F1F2F6" stroke="rgba(0,0,0,0.12)" stroke-width="1"/>
+<g transform="translate(340,506) scale(0.171875) translate(-256,-256)"><path d="M96,256 Q256,150 416,256 Q256,362 96,256 Z" fill="none" stroke="#1E2230" stroke-width="13" stroke-linejoin="round"/>
+<ellipse cx="210" cy="224" rx="50" ry="29" fill="none" stroke="#1E2230" stroke-width="7" transform="rotate(-30 210 224)"/>
+<ellipse cx="302" cy="224" rx="50" ry="29" fill="none" stroke="#1E2230" stroke-width="7" transform="rotate(30 302 224)"/>
+<path d="M249,210 Q233,182 224,168" fill="none" stroke="#1E2230" stroke-width="6" stroke-linecap="round"/>
+<circle cx="224" cy="168" r="5.5" fill="#1E2230"/>
+<path d="M263,210 Q279,182 288,168" fill="none" stroke="#1E2230" stroke-width="6" stroke-linecap="round"/>
+<circle cx="288" cy="168" r="5.5" fill="#1E2230"/>
+<rect x="206" y="204" width="100" height="128" rx="50" fill="none" stroke="#1E2230" stroke-width="9"/>
+<line x1="214" y1="240" x2="298" y2="240" stroke="#1E2230" stroke-width="9" stroke-linecap="round"/>
+<line x1="216" y1="276" x2="296" y2="276" stroke="#1E2230" stroke-width="9" stroke-linecap="round"/>
+<line x1="220" y1="306" x2="292" y2="306" stroke="#1E2230" stroke-width="9" stroke-linecap="round"/>
+<line x1="256" y1="324" x2="256" y2="346" stroke="#1E2230" stroke-width="8" stroke-linecap="round"/></g>
+<text x="340" y="588" text-anchor="middle" font-family="'PingFang SC','-apple-system','Hiragino Sans GB','Noto Sans CJK SC','Noto Sans CJK HK','Microsoft YaHei',sans-serif" font-size="15" fill="#9AA3B8">浅色背景</text>
+<rect x="466" y="474" width="64" height="64" rx="14" fill="#171A26" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+<g transform="translate(498,506) scale(0.125) translate(-256,-256)"><circle cx="256" cy="266" r="158" fill="#FFC42E" opacity="0.05"/>
+<circle cx="256" cy="266" r="124" fill="#FFC42E" opacity="0.05"/>
+<circle cx="256" cy="266" r="92" fill="#FFC42E" opacity="0.06"/>
+<path d="M72,256 Q256,130 440,256 Q256,382 72,256 Z" fill="none" stroke="#FFC42E" stroke-width="5" opacity="0.22"/>
+<path d="M96,256 Q256,150 416,256 Q256,362 96,256 Z" fill="#FFC42E" fill-opacity="0.05" stroke="#FFC42E" stroke-width="14" stroke-linejoin="round"/>
+<ellipse cx="210" cy="224" rx="52" ry="30" fill="#FFFFFF" fill-opacity="0.9" stroke="#FFC42E" stroke-opacity="0.3" stroke-width="3" transform="rotate(-30 210 224)"/>
+<ellipse cx="302" cy="224" rx="52" ry="30" fill="#FFFFFF" fill-opacity="0.9" stroke="#FFC42E" stroke-opacity="0.3" stroke-width="3" transform="rotate(30 302 224)"/>
+<path d="M249,210 Q233,182 224,168" fill="none" stroke="#FFC42E" stroke-width="6" stroke-linecap="round"/>
+<circle cx="224" cy="168" r="6" fill="#FFC42E"/>
+<path d="M263,210 Q279,182 288,168" fill="none" stroke="#FFC42E" stroke-width="6" stroke-linecap="round"/>
+<circle cx="288" cy="168" r="6" fill="#FFC42E"/>
+<g clip-path="url(#bee1)">
+<rect x="206" y="204" width="100" height="128" fill="#FFC42E"/>
+<ellipse cx="236" cy="250" rx="40" ry="50" fill="#FFD874" opacity="0.4"/>
+<rect x="200" y="204" width="112" height="36" fill="#14161F"/>
+<rect x="196" y="262" width="120" height="20" fill="#14161F"/>
+<rect x="196" y="298" width="120" height="20" fill="#14161F"/>
+</g>
+<path d="M256,346 L246,326 L266,326 Z" fill="#14161F"/></g>
+<rect x="540" y="495" width="36" height="36" rx="8" fill="#171A26" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+<g transform="translate(558,513) scale(0.0703125) translate(-256,-256)"><circle cx="256" cy="266" r="158" fill="#FFC42E" opacity="0.05"/>
+<circle cx="256" cy="266" r="124" fill="#FFC42E" opacity="0.05"/>
+<circle cx="256" cy="266" r="92" fill="#FFC42E" opacity="0.06"/>
+<path d="M72,256 Q256,130 440,256 Q256,382 72,256 Z" fill="none" stroke="#FFC42E" stroke-width="5" opacity="0.22"/>
+<path d="M96,256 Q256,150 416,256 Q256,362 96,256 Z" fill="#FFC42E" fill-opacity="0.05" stroke="#FFC42E" stroke-width="14" stroke-linejoin="round"/>
+<ellipse cx="210" cy="224" rx="52" ry="30" fill="#FFFFFF" fill-opacity="0.9" stroke="#FFC42E" stroke-opacity="0.3" stroke-width="3" transform="rotate(-30 210 224)"/>
+<ellipse cx="302" cy="224" rx="52" ry="30" fill="#FFFFFF" fill-opacity="0.9" stroke="#FFC42E" stroke-opacity="0.3" stroke-width="3" transform="rotate(30 302 224)"/>
+<path d="M249,210 Q233,182 224,168" fill="none" stroke="#FFC42E" stroke-width="6" stroke-linecap="round"/>
+<circle cx="224" cy="168" r="6" fill="#FFC42E"/>
+<path d="M263,210 Q279,182 288,168" fill="none" stroke="#FFC42E" stroke-width="6" stroke-linecap="round"/>
+<circle cx="288" cy="168" r="6" fill="#FFC42E"/>
+<g clip-path="url(#bee2)">
+<rect x="206" y="204" width="100" height="128" fill="#FFC42E"/>
+<ellipse cx="236" cy="250" rx="40" ry="50" fill="#FFD874" opacity="0.4"/>
+<rect x="200" y="204" width="112" height="36" fill="#14161F"/>
+<rect x="196" y="262" width="120" height="20" fill="#14161F"/>
+<rect x="196" y="298" width="120" height="20" fill="#14161F"/>
+</g>
+<path d="M256,346 L246,326 L266,326 Z" fill="#14161F"/></g>
+<text x="521" y="588" text-anchor="middle" font-family="'PingFang SC','-apple-system','Hiragino Sans GB','Noto Sans CJK SC','Noto Sans CJK HK','Microsoft YaHei',sans-serif" font-size="15" fill="#9AA3B8">小尺寸</text>
+<rect x="60" y="614" width="560" height="120" rx="20" fill="#1E2230" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+<g transform="translate(136,676) scale(0.15625) translate(-256,-256)"><circle cx="256" cy="266" r="158" fill="#FFC42E" opacity="0.05"/>
+<circle cx="256" cy="266" r="124" fill="#FFC42E" opacity="0.05"/>
+<circle cx="256" cy="266" r="92" fill="#FFC42E" opacity="0.06"/>
+<path d="M72,256 Q256,130 440,256 Q256,382 72,256 Z" fill="none" stroke="#FFC42E" stroke-width="5" opacity="0.22"/>
+<path d="M96,256 Q256,150 416,256 Q256,362 96,256 Z" fill="#FFC42E" fill-opacity="0.05" stroke="#FFC42E" stroke-width="14" stroke-linejoin="round"/>
+<ellipse cx="210" cy="224" rx="52" ry="30" fill="#FFFFFF" fill-opacity="0.9" stroke="#FFC42E" stroke-opacity="0.3" stroke-width="3" transform="rotate(-30 210 224)"/>
+<ellipse cx="302" cy="224" rx="52" ry="30" fill="#FFFFFF" fill-opacity="0.9" stroke="#FFC42E" stroke-opacity="0.3" stroke-width="3" transform="rotate(30 302 224)"/>
+<path d="M249,210 Q233,182 224,168" fill="none" stroke="#FFC42E" stroke-width="6" stroke-linecap="round"/>
+<circle cx="224" cy="168" r="6" fill="#FFC42E"/>
+<path d="M263,210 Q279,182 288,168" fill="none" stroke="#FFC42E" stroke-width="6" stroke-linecap="round"/>
+<circle cx="288" cy="168" r="6" fill="#FFC42E"/>
+<g clip-path="url(#bee3)">
+<rect x="206" y="204" width="100" height="128" fill="#FFC42E"/>
+<ellipse cx="236" cy="250" rx="40" ry="50" fill="#FFD874" opacity="0.4"/>
+<rect x="200" y="204" width="112" height="36" fill="#14161F"/>
+<rect x="196" y="262" width="120" height="20" fill="#14161F"/>
+<rect x="196" y="298" width="120" height="20" fill="#14161F"/>
+</g>
+<path d="M256,346 L246,326 L266,326 Z" fill="#14161F"/></g>
+<text x="198" y="684" font-family="'SF Pro Display','Helvetica Neue',Helvetica,Arial,'Liberation Sans','DejaVu Sans',sans-serif" font-size="46" font-weight="600" style="letter-spacing:0.5px"><tspan fill="#FFC42E">Bee</tspan><tspan fill="#EEF0F7">Ur</tspan><tspan fill="#FFC42E">Ei</tspan></text>
+<text x="200" y="712" font-family="'PingFang SC','-apple-system','Hiragino Sans GB','Noto Sans CJK SC','Noto Sans CJK HK','Microsoft YaHei',sans-serif" font-size="18" fill="#A7B0C4">实时避障 · 步行导航 · 远程协助</text></svg>

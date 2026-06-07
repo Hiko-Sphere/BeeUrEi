@@ -11,7 +11,7 @@ public struct HazardCatalog: Sendable {
 
     public static let defaultHighRisk: Set<String> = [
         "台阶", "路桩", "玻璃门", "消火栓", "护栏", "坑洞", "障碍",
-        "车辆", "自行车", "电动车", "栏杆", "井盖",
+        "车辆", "自行车", "电动车", "摩托车", "公交车", "卡车", "栏杆", "井盖",
     ]
 
     public func isHighRisk(_ label: String) -> Bool {

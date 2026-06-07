@@ -1,0 +1,39 @@
+# BeeUrEi 自托管 TURN/STUN（coturn）示例配置
+#
+# 作用：WebRTC P2P 直连失败时（约 15%，移动网下更高）经 TURN 中继音视频，
+# 保证通话可连通。这是"通话所需的网络中继"，不做任何 AI 推理（见 PLAN §8.4）。
+#
+# 安装（macOS/Homebrew）：  brew install coturn
+#       （Ubuntu/Debian）：  sudo apt install coturn
+# 启动：  turnserver -c coturn.conf
+#
+# 客户端（iOS）把下面的 realm/credential 配进 RTCIceServer（urls: turn:<你的公网IP>:3478）。
+
+# 监听端口
+listening-port=3478
+tls-listening-port=5349
+
+# 你的服务器公网 IP（必填，替换成实际 IP）
+external-ip=YOUR_PUBLIC_IP
+
+# 鉴权：用固定账号密码（开发用）。生产建议用 use-auth-secret + 短期 TURN 凭据。
+lt-cred-mech
+user=beeurei:CHANGE_ME_STRONG_PASSWORD
+realm=beeurei.local
+
+# 中继地址范围
+min-port=49152
+max-port=65535
+
+# 安全：仅按需放开；关闭多余功能
+no-multicast-peers
+no-cli
+fingerprint
+
+# 生产用 TLS 证书（Let's Encrypt）：
+# cert=/etc/letsencrypt/live/turn.example.com/fullchain.pem
+# pkey=/etc/letsencrypt/live/turn.example.com/privkey.pem
+
+# 日志
+log-file=stdout
+verbose

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><path d="M96,256 Q256,150 416,256 Q256,362 96,256 Z" fill="none" stroke="#FFC42E" stroke-width="13" stroke-linejoin="round"/>
+<ellipse cx="210" cy="224" rx="50" ry="29" fill="none" stroke="#FFC42E" stroke-width="7" transform="rotate(-30 210 224)"/>
+<ellipse cx="302" cy="224" rx="50" ry="29" fill="none" stroke="#FFC42E" stroke-width="7" transform="rotate(30 302 224)"/>
+<path d="M249,210 Q233,182 224,168" fill="none" stroke="#FFC42E" stroke-width="6" stroke-linecap="round"/>
+<circle cx="224" cy="168" r="5.5" fill="#FFC42E"/>
+<path d="M263,210 Q279,182 288,168" fill="none" stroke="#FFC42E" stroke-width="6" stroke-linecap="round"/>
+<circle cx="288" cy="168" r="5.5" fill="#FFC42E"/>
+<rect x="206" y="204" width="100" height="128" rx="50" fill="none" stroke="#FFC42E" stroke-width="9"/>
+<line x1="214" y1="240" x2="298" y2="240" stroke="#FFC42E" stroke-width="9" stroke-linecap="round"/>
+<line x1="216" y1="276" x2="296" y2="276" stroke="#FFC42E" stroke-width="9" stroke-linecap="round"/>
+<line x1="220" y1="306" x2="292" y2="306" stroke="#FFC42E" stroke-width="9" stroke-linecap="round"/>
+<line x1="256" y1="324" x2="256" y2="346" stroke="#FFC42E" stroke-width="8" stroke-linecap="round"/></svg>

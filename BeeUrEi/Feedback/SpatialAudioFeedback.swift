@@ -25,6 +25,11 @@ final class SpatialAudioFeedback: FeedbackSink {
         playCue(azimuthDegrees: 0)
     }
 
+    /// 旋转听者朝向（用 AirPods 头部偏航驱动，使信标保持世界固定；见 HeadTracker / PLAN §14 Q8）。
+    func setListenerYaw(_ degrees: Float) {
+        environment.listenerAngularOrientation = AVAudio3DAngularOrientation(yaw: degrees, pitch: 0, roll: 0)
+    }
+
     /// 在给定方位角播放短提示音（右为正，单位度），声源置于听者前方 1m 处的该方位。
     func playCue(azimuthDegrees: Float) {
         guard let toneBuffer else { return }

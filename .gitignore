@@ -17,5 +17,13 @@ BeeUrEi.xcodeproj/
 # macOS
 .DS_Store
 
+# 密钥/环境变量（绝不提交）
+.env
+*.env
+!*.env.example
+**/.env
+*.xcconfig
+Secrets.plist
+
 # Local agent/editor state
 .claude/

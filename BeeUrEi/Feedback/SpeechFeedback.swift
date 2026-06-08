@@ -18,7 +18,9 @@ final class SpeechFeedback: NSObject, FeedbackSink {
     }
 
     func play(_ event: FeedbackEvent) {
-        guard let text = event.speech, !text.isEmpty else { return }
+        // 无文本(如纯震动事件)：本通道无可播，但必须立即释放仲裁通道，否则该事件会永久占用通道、
+        // 把后续同/低优先级的危险警告永远压住（见审查 #6）。
+        guard let text = event.speech, !text.isEmpty else { onFinish?(); return }
 
         // 与 VoiceOver 协作（见 PLAN §7.2）：VoiceOver 开启时用无障碍播报而非直接 TTS，
         // 避免和 VoiceOver 抢话/互相打断。盲人用户通常常开 VoiceOver，这是主路径。
@@ -73,9 +75,11 @@ final class SpeechFeedback: NSObject, FeedbackSink {
         return utterance
     }
 
-    /// 估算中文播报时长（秒）：约 4.5 字/秒，保底 0.8s、上限 6s；偏长一点更安全（多占一会通道）。
+    /// 估算中文播报时长（秒）用于 VoiceOver 路径释放仲裁通道：保底 0.8s、上限放宽到 15s。
+    /// 偏长是**安全方向**（仅多占一会通道）；偏短则会过早释放、让低优先级抢占盖掉仍在朗读的危险警告。
+    /// 故每字按偏慢的 0.32s 估（盲人常把 VoiceOver 语速调慢），上限取 15s 以覆盖长危险描述（见审查 #3/#7）。
     private static func estimatedDuration(_ text: String) -> Double {
-        min(max(0.8, Double(text.count) * 0.22), 6)
+        min(max(0.8, Double(text.count) * 0.32), 15)
     }
 }
 

@@ -22,6 +22,7 @@ export interface FamilyLink {
   memberId: string
   relation: string
   isEmergency: boolean
+  phone?: string // 亲友真实手机号（App 通话连不上时一键拨打兜底）
   createdAt: number
 }
 

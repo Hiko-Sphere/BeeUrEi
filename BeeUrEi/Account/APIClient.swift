@@ -42,6 +42,7 @@ struct FamilyLinkInfo: Codable, Sendable, Identifiable {
     let memberName: String
     let relation: String
     let isEmergency: Bool
+    let phone: String?
 }
 
 struct IncomingLinkInfo: Codable, Sendable, Identifiable {
@@ -223,9 +224,10 @@ struct APIClient {
         return (try? JSONDecoder().decode(R.self, from: data))?.links ?? []
     }
 
-    func addFamilyLink(token: String, username: String, relation: String?, isEmergency: Bool) async throws {
+    func addFamilyLink(token: String, username: String, relation: String?, isEmergency: Bool, phone: String?) async throws {
         var body: [String: Any] = ["username": username, "isEmergency": isEmergency]
         if let relation, !relation.isEmpty { body["relation"] = relation }
+        if let phone, !phone.isEmpty { body["phone"] = phone }
         _ = try await authedSend("POST", "/api/family/links", token: token, body: body)
     }
 

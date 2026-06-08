@@ -1,10 +1,12 @@
 import SwiftUI
+import UIKit
 
-/// 视障侧：亲友绑定（后端 /api/family）+ 紧急呼叫（/api/emergency/trigger 取优先级目标）。
+/// 视障侧：亲友绑定（后端 /api/family）+ 紧急呼叫（/api/emergency/trigger 取优先级目标）+ 电话兜底。
 struct FamilyLinksView: View {
     @State private var links: [FamilyLinkInfo] = []
     @State private var newUsername = ""
     @State private var newRelation = ""
+    @State private var newPhone = ""
     @State private var isEmergency = false
     @State private var errorText: String?
     @State private var emergencyInfo: String?
@@ -34,10 +36,22 @@ struct FamilyLinksView: View {
                     Text("还没有绑定。下面按对方用户名添加。").foregroundStyle(.secondary)
                 } else {
                     ForEach(links) { l in
-                        VStack(alignment: .leading) {
-                            Text(l.memberName)
-                            Text("\(l.relation)\(l.isEmergency ? " · 紧急联系人" : "")")
-                                .font(.caption).foregroundStyle(.secondary)
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(l.memberName)
+                                Text("\(l.relation)\(l.isEmergency ? " · 紧急联系人" : "")")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if let phone = l.phone, !phone.isEmpty {
+                                Button {
+                                    if let url = URL(string: "tel://\(phone)") { UIApplication.shared.open(url) }
+                                } label: {
+                                    Label("拨打", systemImage: "phone.fill")
+                                }
+                                .buttonStyle(.bordered)
+                                .accessibilityLabel("拨打 \(l.memberName) 的电话")
+                            }
                         }
                     }
                     .onDelete { idx in
@@ -50,6 +64,8 @@ struct FamilyLinksView: View {
                 TextField("对方用户名", text: $newUsername)
                     .textInputAutocapitalization(.never).autocorrectionDisabled()
                 TextField("关系（如 母亲）", text: $newRelation)
+                TextField("手机号（可选，App 连不上时电话兜底）", text: $newPhone)
+                    .keyboardType(.phonePad)
                 Toggle("设为紧急联系人", isOn: $isEmergency)
                 Button("添加") { Task { await add() } }
                     .disabled(newUsername.trimmingCharacters(in: .whitespaces).count < 3)
@@ -73,8 +89,9 @@ struct FamilyLinksView: View {
         do {
             try await api.addFamilyLink(token: token,
                                         username: newUsername.trimmingCharacters(in: .whitespaces),
-                                        relation: newRelation, isEmergency: isEmergency)
-            newUsername = ""; newRelation = ""; isEmergency = false
+                                        relation: newRelation, isEmergency: isEmergency,
+                                        phone: newPhone.trimmingCharacters(in: .whitespaces))
+            newUsername = ""; newRelation = ""; newPhone = ""; isEmergency = false
             await load()
         } catch let APIError.server(msg) {
             errorText = msg == "member_not_found" ? "找不到该用户名" : msg

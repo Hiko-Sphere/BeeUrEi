@@ -24,7 +24,7 @@ export class SqliteStore implements Store {
         displayName TEXT, role TEXT, status TEXT, createdAt INTEGER);
       CREATE TABLE IF NOT EXISTS links (
         id TEXT PRIMARY KEY, ownerId TEXT, memberId TEXT, relation TEXT,
-        isEmergency INTEGER, createdAt INTEGER);
+        isEmergency INTEGER, phone TEXT, createdAt INTEGER);
       CREATE TABLE IF NOT EXISTS reports (
         id TEXT PRIMARY KEY, reporterId TEXT, targetUserId TEXT, callId TEXT,
         reason TEXT, status TEXT, createdAt INTEGER);
@@ -35,6 +35,8 @@ export class SqliteStore implements Store {
       CREATE TABLE IF NOT EXISTS refresh_tokens (
         tokenHash TEXT PRIMARY KEY, userId TEXT, expiresAt INTEGER);
     `)
+    // 迁移：旧库 links 表补 phone 列（已存在则忽略）。
+    try { this.db.exec('ALTER TABLE links ADD COLUMN phone TEXT') } catch { /* 列已存在 */ }
   }
 
   // MARK: refresh tokens
@@ -85,9 +87,9 @@ export class SqliteStore implements Store {
   // MARK: links
   createLink(l: FamilyLink): void {
     this.db.prepare(
-      `INSERT OR REPLACE INTO links (id, ownerId, memberId, relation, isEmergency, createdAt)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(l.id, l.ownerId, l.memberId, l.relation, l.isEmergency ? 1 : 0, l.createdAt)
+      `INSERT OR REPLACE INTO links (id, ownerId, memberId, relation, isEmergency, phone, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(l.id, l.ownerId, l.memberId, l.relation, l.isEmergency ? 1 : 0, l.phone ?? null, l.createdAt)
   }
   linksByOwner(ownerId: string): FamilyLink[] {
     return this.db.prepare('SELECT * FROM links WHERE ownerId = ?').all(ownerId).map((r) => this.toLink(r))
@@ -158,7 +160,7 @@ export class SqliteStore implements Store {
     return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt) }
   }
   private toLink(r: any): FamilyLink {
-    return { id: r.id, ownerId: r.ownerId, memberId: r.memberId, relation: r.relation, isEmergency: Number(r.isEmergency) === 1, createdAt: Number(r.createdAt) }
+    return { id: r.id, ownerId: r.ownerId, memberId: r.memberId, relation: r.relation, isEmergency: Number(r.isEmergency) === 1, phone: r.phone ?? undefined, createdAt: Number(r.createdAt) }
   }
   private toReport(r: any): Report {
     return { id: r.id, reporterId: r.reporterId, targetUserId: r.targetUserId, callId: r.callId ?? undefined, reason: r.reason, status: r.status as ReportStatus, createdAt: Number(r.createdAt) }

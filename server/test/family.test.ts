@@ -17,9 +17,10 @@ describe('family + emergency', () => {
     await reg('friend', 'helper')
     const auth = { authorization: `Bearer ${owner.token}` }
 
-    const l1 = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth, payload: { username: 'mom', relation: '妈妈', isEmergency: true } })
+    const l1 = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth, payload: { username: 'mom', relation: '妈妈', isEmergency: true, phone: '13800000000' } })
     expect(l1.statusCode).toBe(201)
     expect(l1.json().link.memberName).toBe('mom')
+    expect(l1.json().link.phone).toBe('13800000000') // 电话兜底
 
     await a.inject({ method: 'POST', url: '/api/family/links', headers: auth, payload: { username: 'friend' } })
 

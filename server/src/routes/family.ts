@@ -8,6 +8,7 @@ const addLinkSchema = z.object({
   username: z.string().min(3).max(32),
   relation: z.string().min(1).max(32).optional(),
   isEmergency: z.boolean().optional(),
+  phone: z.string().max(32).optional(),
 })
 
 export function registerFamilyRoutes(app: FastifyInstance, store: Store): void {
@@ -27,6 +28,7 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store): void {
       memberId: member.id,
       relation: parsed.data.relation ?? '亲友',
       isEmergency: parsed.data.isEmergency ?? false,
+      phone: parsed.data.phone,
       createdAt: Date.now(),
     }
     store.createLink(link)
@@ -75,5 +77,6 @@ function viewLink(store: Store, link: FamilyLink) {
     memberName: member?.displayName ?? '未知',
     relation: link.relation,
     isEmergency: link.isEmergency,
+    phone: link.phone,
   }
 }

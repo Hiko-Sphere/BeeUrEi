@@ -11,6 +11,8 @@ struct RemoteAssistView: View {
     @State private var showAdd = false
     @State private var newName = ""
     @State private var activeCall: CallSession?
+    @State private var statusText: String?
+    @State private var calling = false
     let onClose: () -> Void
 
     var body: some View {
@@ -36,18 +38,46 @@ struct RemoteAssistView: View {
         }
         .onAppear { model.load() }
         .fullScreenCover(item: $activeCall) { session in
-            CallView(role: .blind, callId: session.id) { activeCall = nil }
+            CallView(role: .blind, callId: session.id) {
+                // 挂断时取消待接登记，避免对端在 TTL 内仍弹出已结束的来电。
+                if let token = KeychainStore.read() { Task { await APIClient().cancelCall(token: token, callId: session.id) } }
+                activeCall = nil
+            }
+        }
+    }
+
+    /// 一键求助：匹配在线的已绑定亲友/协助者 → 登记会合(让对端轮询接听) → 进入通话。
+    private func callForHelp() async {
+        guard !calling else { return }
+        guard let token = KeychainStore.read() else { statusText = "请先在「设置 → 账号」登录"; return }
+        calling = true
+        statusText = "正在为你呼叫帮手…"
+        defer { calling = false }
+        do {
+            let online = try await APIClient().assistMatch(token: token, emergency: true)
+            let targets = online.isEmpty ? try await APIClient().emergencyTargets(token: token) : online
+            guard !targets.isEmpty else { statusText = "还没有可呼叫的亲友/协助者，请先添加并绑定。"; return }
+            let session = CallSession()
+            try? await APIClient().startEmergencyCall(token: token, callId: session.id, targetUserIds: targets.map(\.memberId))
+            statusText = (online.isEmpty ? "暂无在线，仍尝试呼叫：" : "正在呼叫：") + targets.map(\.memberName).joined(separator: " → ")
+            activeCall = session
+        } catch {
+            statusText = "呼叫失败，请检查网络后重试。"
         }
     }
 
     private var contactsList: some View {
         List {
             Section {
-                Button { activeCall = CallSession() } label: {
+                Button { Task { await callForHelp() } } label: {
                     Label("一键求助（呼叫帮手）", systemImage: "person.fill.questionmark")
                         .font(.headline)
                 }
+                .disabled(calling)
                 .accessibilityLabel("一键求助，呼叫帮手")
+                if let statusText {
+                    Text(statusText).font(.footnote).foregroundStyle(.secondary)
+                }
             }
 
             if model.contacts.isEmpty {
@@ -56,7 +86,7 @@ struct RemoteAssistView: View {
             } else {
                 Section("亲友") {
                     ForEach(model.contacts) { contact in
-                        Button { activeCall = CallSession() } label: {
+                        Button { Task { await callForHelp() } } label: {
                             HStack {
                                 Image(systemName: "person.crop.circle.fill")
                                 Text(contact.name).font(.headline)
@@ -64,6 +94,7 @@ struct RemoteAssistView: View {
                                 Image(systemName: "video.fill").foregroundStyle(.green)
                             }
                         }
+                        .disabled(calling)
                         .accessibilityLabel("呼叫 \(contact.name)")
                     }
                     .onDelete { indexSet in

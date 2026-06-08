@@ -258,6 +258,13 @@ struct APIClient {
         return (try? JSONDecoder().decode(R.self, from: data))?.iceServers ?? []
     }
 
+    /// 通话中/后举报对方（信任与安全）。
+    func submitReport(token: String, targetUserId: String, callId: String?, reason: String) async throws {
+        var body: [String: Any] = ["targetUserId": targetUserId, "reason": reason]
+        if let callId { body["callId"] = callId }
+        _ = try await authedSend("POST", "/api/reports", token: token, body: body)
+    }
+
     // MARK: 录制策略（管理员）
 
     func recordingConfig(token: String) async throws -> RecordingConfig {

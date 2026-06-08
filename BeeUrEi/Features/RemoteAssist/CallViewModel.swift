@@ -12,6 +12,9 @@ final class CallViewModel {
     private(set) var connected = false
     private(set) var videoSending = false
     private(set) var statusText = "正在连接…"
+    private(set) var peerUserId: String?
+    private(set) var reportStatus: String?
+    var canReport: Bool { peerUserId != nil }
 
     @ObservationIgnored private let signaling = SignalingClient()
     @ObservationIgnored let media: MediaEngine = MediaEngineFactory.make()
@@ -54,15 +57,19 @@ final class CallViewModel {
     private func handle(_ msg: [String: Any]) {
         switch msg["type"] as? String {
         case "joined":
-            // 我加入时若对端已在房间，且我是发起方(视障)，则发起 offer。
-            if let peers = msg["peers"] as? [[String: Any]], !peers.isEmpty, role == .blind {
-                connected = true
-                statusText = "已连接"
-                media.createOffer()
+            // 我加入时若对端已在房间，记录对端 userId（用于举报）；我是发起方(视障)则发起 offer。
+            if let peers = msg["peers"] as? [[String: Any]], let first = peers.first {
+                peerUserId = first["userId"] as? String ?? peerUserId
+                if role == .blind {
+                    connected = true
+                    statusText = "已连接"
+                    media.createOffer()
+                }
             }
         case "peer-joined":
             connected = true
             statusText = "已连接"
+            peerUserId = msg["userId"] as? String ?? peerUserId
             if role == .blind { media.createOffer() }
         case "offer":
             if let sdp = msg["sdp"] as? String { media.handleRemoteDescription(type: "offer", sdp: sdp) }
@@ -89,6 +96,20 @@ final class CallViewModel {
         videoSending = sending
         media.setLocalVideoSending(sending)
         signaling.videoGate(on: sending)
+    }
+
+    /// 举报对方（信任与安全）。
+    func report(reason: String) async {
+        guard let token = KeychainStore.read(), let target = peerUserId else {
+            reportStatus = "暂时无法举报"
+            return
+        }
+        do {
+            try await APIClient().submitReport(token: token, targetUserId: target, callId: callId, reason: reason)
+            reportStatus = "已举报，感谢反馈"
+        } catch {
+            reportStatus = "举报失败，请稍后再试"
+        }
     }
 
     func hangUp() {

@@ -4,6 +4,7 @@ import SwiftUI
 /// 协助者侧：看对方画面（开启时）+ 双向语音，自己不开摄像头。
 struct CallView: View {
     @State private var model: CallViewModel
+    @State private var showReport = false
     let onClose: () -> Void
 
     init(role: CallViewModel.Role, callId: String, onClose: @escaping () -> Void) {
@@ -42,8 +43,25 @@ struct CallView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+
+            if model.canReport {
+                Button("举报对方") { showReport = true }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            if let status = model.reportStatus {
+                Text(status).font(.footnote).foregroundStyle(.secondary)
+            }
         }
         .padding()
+        .confirmationDialog("举报对方", isPresented: $showReport, titleVisibility: .visible) {
+            ForEach(["不当行为", "言语骚扰", "诈骗或可疑", "其他"], id: \.self) { reason in
+                Button(reason, role: .destructive) { Task { await model.report(reason: reason) } }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("举报会发送给管理员审核，请仅在确有问题时使用。")
+        }
         .task { await model.start() }
     }
 

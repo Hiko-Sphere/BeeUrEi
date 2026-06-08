@@ -78,6 +78,9 @@ export class SqliteStore implements Store {
     this.createUser(next)
     return next
   }
+  deleteUser(id: string): void {
+    this.db.prepare('DELETE FROM users WHERE id = ?').run(id)
+  }
 
   // MARK: links
   createLink(l: FamilyLink): void {

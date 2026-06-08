@@ -68,6 +68,7 @@ export interface Store {
   findById(id: string): User | undefined
   allUsers(): User[]
   updateUser(id: string, patch: Partial<User>): User | undefined
+  deleteUser(id: string): void
 
   createLink(link: FamilyLink): void
   linksByOwner(ownerId: string): FamilyLink[]
@@ -139,6 +140,9 @@ export class MemoryStore implements Store {
     this.users.set(id, next)
     this.afterMutate()
     return next
+  }
+  deleteUser(id: string): void {
+    if (this.users.delete(id)) this.afterMutate()
   }
 
   createLink(link: FamilyLink): void {

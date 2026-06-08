@@ -258,6 +258,17 @@ struct APIClient {
         return (try? JSONDecoder().decode(R.self, from: data))?.iceServers ?? []
     }
 
+    /// 修改密码（旧密码验证；成功后服务端撤销所有 refresh token）。
+    func changePassword(token: String, oldPassword: String, newPassword: String) async throws {
+        _ = try await authedSend("POST", "/api/account/password", token: token,
+                                 body: ["oldPassword": oldPassword, "newPassword": newPassword])
+    }
+
+    /// 删除账号（App Store 要求）。
+    func deleteAccount(token: String) async throws {
+        _ = try await authedSend("DELETE", "/api/account", token: token)
+    }
+
     /// 通话中/后举报对方（信任与安全）。
     func submitReport(token: String, targetUserId: String, callId: String?, reason: String) async throws {
         var body: [String: Any] = ["targetUserId": targetUserId, "reason": reason]

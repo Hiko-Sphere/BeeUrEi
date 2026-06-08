@@ -3,6 +3,7 @@ import rateLimit from '@fastify/rate-limit'
 import { JsonFileStore, type Store } from './db/store'
 import { SqliteStore } from './db/sqliteStore'
 import { registerAuthRoutes } from './routes/auth'
+import { registerAccountRoutes } from './routes/account'
 import { registerUserRoutes } from './routes/users'
 import { registerFamilyRoutes } from './routes/family'
 import { registerEmergencyRoutes } from './routes/emergency'
@@ -35,6 +36,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     instance.get('/health', async () => ({ status: 'ok', service: 'beeurei-server' }))
     instance.get('/api/version', async () => ({ version: '0.1.0' }))
     registerAuthRoutes(instance, store)
+    registerAccountRoutes(instance, store)
     registerUserRoutes(instance, store)
     registerFamilyRoutes(instance, store)
     registerEmergencyRoutes(instance, store)

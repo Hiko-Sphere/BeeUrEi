@@ -9,6 +9,11 @@ struct LoginView: View {
     @State private var isRegister = false
     @State private var role = "blind"
     @State private var serverURL = ServerConfig.baseURLString
+    @State private var showChangePassword = false
+    @State private var oldPassword = ""
+    @State private var newPassword = ""
+    @State private var showDeleteConfirm = false
+    @State private var accountMessage: String?
 
     private let roles: [(label: String, value: String)] = [
         ("求助者（视障）", "blind"),
@@ -22,7 +27,12 @@ struct LoginView: View {
                 Section("当前账号") {
                     Text(session.user?.displayName ?? "已登录")
                     Text("角色：\(session.user?.role ?? "")").foregroundStyle(.secondary)
+                    Button("修改密码") { showChangePassword = true }
                     Button("退出登录", role: .destructive) { session.logout() }
+                    Button("删除账号", role: .destructive) { showDeleteConfirm = true }
+                }
+                if let accountMessage {
+                    Section { Text(accountMessage).foregroundStyle(.secondary) }
                 }
             } else {
                 Section("账号") {
@@ -61,6 +71,52 @@ struct LoginView: View {
             }
         }
         .navigationTitle("账号")
+        .sheet(isPresented: $showChangePassword) {
+            NavigationStack {
+                Form {
+                    SecureField("当前密码", text: $oldPassword)
+                    SecureField("新密码（至少 6 位）", text: $newPassword)
+                    Button("确认修改") { changePassword() }
+                        .disabled(oldPassword.isEmpty || newPassword.count < 6)
+                }
+                .navigationTitle("修改密码")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("取消") { showChangePassword = false; oldPassword = ""; newPassword = "" }
+                    }
+                }
+            }
+        }
+        .confirmationDialog("删除账号", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("永久删除我的账号", role: .destructive) { deleteAccount() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("将永久删除你的账号、亲友绑定与登录信息，且不可恢复。")
+        }
+    }
+
+    private func changePassword() {
+        guard let token = KeychainStore.read() else { accountMessage = "请先登录"; return }
+        let old = oldPassword, new = newPassword
+        Task {
+            do {
+                try await APIClient().changePassword(token: token, oldPassword: old, newPassword: new)
+                accountMessage = "密码已修改，请用新密码重新登录。"
+                showChangePassword = false; oldPassword = ""; newPassword = ""
+                session.logout()
+            } catch {
+                accountMessage = "修改失败：当前密码不正确或网络错误。"
+            }
+        }
+    }
+
+    private func deleteAccount() {
+        guard let token = KeychainStore.read() else { return }
+        Task {
+            try? await APIClient().deleteAccount(token: token)
+            accountMessage = "账号已删除。"
+            session.logout()
+        }
     }
 
     private func submit() {

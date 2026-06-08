@@ -3,13 +3,14 @@ import fastifyWebsocket from '@fastify/websocket'
 import { randomUUID } from 'node:crypto'
 import { verifyAccessToken } from '../auth/tokens'
 import { SignalingHub, type Member } from '../signaling/hub'
+import { type Store } from '../db/store'
 
 const RELAY_TYPES = new Set(['offer', 'answer', 'ice', 'video-gate', 'end'])
 
 /// WebRTC 信令：/ws?token=<JWT>。客户端先发 {type:'join', callId, role}，
 /// 之后 offer/answer/ice/video-gate/end 会被转发给同房间的另一端。
 /// video-gate {on} 用于视障侧通知协助者"画面已开/关"（见 BACKEND_PLAN §5）。
-export function registerSignaling(app: FastifyInstance, hub: SignalingHub): void {
+export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store: Store): void {
   app.register(fastifyWebsocket)
   app.register(async (f) => {
     // clientId → socket（转发用）。adapter 层，故用 any 规避 ws 类型摩擦。
@@ -42,8 +43,12 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub): void
         if (msg.type === 'join') {
           joined = { clientId, userId: auth.sub, role: msg.role ?? 'unknown', callId: String(msg.callId ?? '') }
           const peers = hub.join(joined)
-          socket.send(JSON.stringify({ type: 'joined', peers: peers.map((p) => ({ userId: p.userId, role: p.role })) }))
-          for (const p of peers) relay(p.clientId, { type: 'peer-joined', userId: auth.sub, role: joined.role })
+          const myName = store.findById(auth.sub)?.displayName
+          socket.send(JSON.stringify({
+            type: 'joined',
+            peers: peers.map((p) => ({ userId: p.userId, role: p.role, userName: store.findById(p.userId)?.displayName })),
+          }))
+          for (const p of peers) relay(p.clientId, { type: 'peer-joined', userId: auth.sub, role: joined.role, userName: myName })
           return
         }
 

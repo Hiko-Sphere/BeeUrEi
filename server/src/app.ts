@@ -54,7 +54,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   })
 
   // WebSocket 信令（自带子插件作用域）。
-  registerSignaling(app, hub)
+  registerSignaling(app, hub, store)
 
   // 统一 404 + 错误兜底（清洁 JSON，不泄露堆栈）。
   app.setNotFoundHandler((_req, reply) => reply.code(404).send({ error: 'not_found' }))

@@ -109,6 +109,28 @@ final class FramingAssistViewModel {
         speak(text)
     }
 
+    /// 识别二维码/条码并朗读内容（端侧 Vision）——读 QR 海报、产品码、WiFi 码等。
+    func readBarcode() {
+        guard let buffer = latestBuffer else { speak("请把二维码或条码对准相机"); return }
+        if tooDarkToProceed() { return }
+        resultText = "正在扫码…"
+        let request = VNDetectBarcodesRequest { [weak self] req, _ in
+            let payloads = (req.results as? [VNBarcodeObservation])?.compactMap { $0.payloadStringValue } ?? []
+            DispatchQueue.main.async {
+                if let first = payloads.first {
+                    self?.resultText = "码内容：\(first)"
+                    self?.speak("识别到：\(first)")
+                } else {
+                    self?.resultText = ""
+                    self?.speak("没有识别到二维码或条码")
+                }
+            }
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? VNImageRequestHandler(cvPixelBuffer: buffer, options: [:]).perform([request])
+        }
+    }
+
     /// 识别画面中央区域的颜色（端侧采样 + 核心 ColorNamer，已测）。
     func readColor() {
         guard let buffer = latestBuffer else { speak("请先把物体对准相机"); return }
@@ -200,6 +222,10 @@ struct FramingAssistView: View {
                         Label("识别颜色", systemImage: "paintpalette.fill")
                     }
                     .accessibilityHint("说出画面中央的颜色")
+                    Button { model.readBarcode() } label: {
+                        Label("扫码", systemImage: "qrcode.viewfinder")
+                    }
+                    .accessibilityHint("识别并朗读二维码或条码的内容")
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)

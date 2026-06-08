@@ -49,6 +49,7 @@ export function registerAssistRoutes(
       online: presence.isAvailable(l.memberId, now) || hub.isOnline(l.memberId),
       isEmergency: l.isEmergency,
       load: hub.callCount(l.memberId),
+      language: store.findById(l.memberId)?.language, // 让 preferredLanguage 真正生效（见审查 #10）
     }))
     const ranked = rankHelpers(candidates, {
       emergency: parsed.data.emergency ?? false,

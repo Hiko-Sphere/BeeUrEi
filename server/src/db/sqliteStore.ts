@@ -21,7 +21,7 @@ export class SqliteStore implements Store {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY, username TEXT UNIQUE, passwordHash TEXT,
-        displayName TEXT, role TEXT, status TEXT, createdAt INTEGER);
+        displayName TEXT, role TEXT, status TEXT, createdAt INTEGER, language TEXT);
       CREATE TABLE IF NOT EXISTS links (
         id TEXT PRIMARY KEY, ownerId TEXT, memberId TEXT, relation TEXT,
         isEmergency INTEGER, phone TEXT, createdAt INTEGER);
@@ -35,8 +35,9 @@ export class SqliteStore implements Store {
       CREATE TABLE IF NOT EXISTS refresh_tokens (
         tokenHash TEXT PRIMARY KEY, userId TEXT, expiresAt INTEGER);
     `)
-    // 迁移：旧库 links 表补 phone 列（已存在则忽略）。
+    // 迁移：旧库 links 表补 phone 列、users 表补 language 列（已存在则忽略）。
     try { this.db.exec('ALTER TABLE links ADD COLUMN phone TEXT') } catch { /* 列已存在 */ }
+    try { this.db.exec('ALTER TABLE users ADD COLUMN language TEXT') } catch { /* 列已存在 */ }
   }
 
   // MARK: refresh tokens
@@ -58,9 +59,9 @@ export class SqliteStore implements Store {
   // MARK: users
   createUser(u: User): void {
     this.db.prepare(
-      `INSERT OR REPLACE INTO users (id, username, passwordHash, displayName, role, status, createdAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run(u.id, u.username, u.passwordHash, u.displayName, u.role, u.status, u.createdAt)
+      `INSERT OR REPLACE INTO users (id, username, passwordHash, displayName, role, status, createdAt, language)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(u.id, u.username, u.passwordHash, u.displayName, u.role, u.status, u.createdAt, u.language ?? null)
   }
   findByUsername(username: string): User | undefined {
     const row = this.db.prepare('SELECT * FROM users WHERE username = ?').get(username)
@@ -157,7 +158,7 @@ export class SqliteStore implements Store {
 
   // MARK: row mappers
   private toUser(r: any): User {
-    return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt) }
+    return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt), language: r.language ?? undefined }
   }
   private toLink(r: any): FamilyLink {
     return { id: r.id, ownerId: r.ownerId, memberId: r.memberId, relation: r.relation, isEmergency: Number(r.isEmergency) === 1, phone: r.phone ?? undefined, createdAt: Number(r.createdAt) }

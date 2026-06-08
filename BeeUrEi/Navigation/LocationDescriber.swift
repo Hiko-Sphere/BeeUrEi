@@ -10,6 +10,7 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     private let geocoder = CLGeocoder()
     private let synth = AVSpeechSynthesizer()
+    private var isDescribing = false // 防重入：上一次还在解析时忽略新点击（见审查 #3）
 
     override init() {
         super.init()
@@ -18,6 +19,8 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
     }
 
     func describe() {
+        guard !isDescribing else { return }
+        isDescribing = true
         speak("正在确定你的位置")
         manager.requestWhenInUseAuthorization()
         manager.requestLocation() // 一次性定位
@@ -32,6 +35,7 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
             self.findNearby(loc) { nearby in
                 let text = nearby.isEmpty ? address : address + "。附近有：" + nearby
                 self.speak(text)
+                self.isDescribing = false
             }
         }
     }
@@ -56,6 +60,7 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         speak("定位失败，请检查定位权限与信号")
+        isDescribing = false
     }
 
     private func speak(_ text: String) {

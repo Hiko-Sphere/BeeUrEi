@@ -7,6 +7,9 @@ final class ProximitySonifier {
     private let engine = AVAudioEngine()
     private let player = AVAudioPlayerNode()
     private let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
+    /// 专用串行队列：所有共享状态(started/currentPitch/currentInterval/timer)与音频引擎调用都在此队列，
+    /// 避免定时器回调与主线程 update/stop 的数据竞争（见审查 #1）。
+    private let queue = DispatchQueue(label: "com.beeurei.sonifier")
     private var timer: DispatchSourceTimer?
     private var started = false
     private var currentInterval: Double = -1
@@ -17,14 +20,30 @@ final class ProximitySonifier {
         engine.connect(player, to: engine.mainMixerNode, format: format)
     }
 
+    deinit { queue.sync { teardown() } }
+
     /// 每帧用最近距离的提示音参数更新；nil（无目标/太远）则停止蜂鸣。
     func update(_ cue: ProximityCue?) {
-        guard let cue else { stop(); return }
+        queue.async { [weak self] in self?.applyUpdate(cue) }
+    }
+
+    func stop() {
+        queue.async { [weak self] in self?.teardown() }
+    }
+
+    private func applyUpdate(_ cue: ProximityCue?) {
+        guard let cue else { teardown(); return }
         currentPitch = cue.pitchHz
+        // started 仅在引擎实际运行时为真；若被系统中断会复位，从而可重启（见审查 #2）。
         if !started {
-            try? engine.start()
-            player.play()
-            started = true
+            do {
+                try engine.start()
+                player.play()
+                started = true
+            } catch {
+                started = false
+                return
+            }
         }
         if timer == nil || abs(currentInterval - cue.beepIntervalSeconds) > 0.001 {
             currentInterval = cue.beepIntervalSeconds
@@ -32,15 +51,21 @@ final class ProximitySonifier {
         }
     }
 
-    func stop() {
+    /// 彻底停止：取消定时器 + 停 player/engine + 复位 started（释放音频会话、可恢复）。
+    private func teardown() {
         timer?.cancel()
         timer = nil
         currentInterval = -1
+        if started {
+            player.stop()
+            engine.stop()
+            started = false
+        }
     }
 
     private func restartTimer() {
         timer?.cancel()
-        let t = DispatchSource.makeTimerSource(queue: .global(qos: .userInitiated))
+        let t = DispatchSource.makeTimerSource(queue: queue) // 与共享状态同队列，串行无竞争
         t.schedule(deadline: .now(), repeating: max(currentInterval, 0.05))
         t.setEventHandler { [weak self] in self?.beep() }
         timer = t
@@ -48,7 +73,7 @@ final class ProximitySonifier {
     }
 
     private func beep() {
-        guard started else { return }
+        guard started, engine.isRunning else { return }
         let buffer = ProximitySonifier.tone(format: format, frequency: Float(currentPitch))
         player.scheduleBuffer(buffer, at: nil, options: [.interrupts], completionHandler: nil)
     }

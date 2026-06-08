@@ -36,7 +36,13 @@ struct HelperHomeView: View {
                 RoleAccountSection(session: session, onSwitchRole: onSwitchRole)
             }
             .navigationTitle("协助者")
-            .onDisappear { hbTask?.cancel() }
+            .onDisappear {
+                hbTask?.cancel(); hbTask = nil
+                // 离开页面要显式下线，否则后端在 TTL 窗口内仍可能把已离开的人匹配给紧急求助（见审查 #7）。
+                if online, let token = session.token {
+                    Task { await APIClient().assistHeartbeat(token: token, available: false) }
+                }
+            }
         }
         .fullScreenCover(item: $testCall) { s in
             CallView(role: .helper, callId: s.id) { testCall = nil }

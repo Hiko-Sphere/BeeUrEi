@@ -66,6 +66,7 @@ final class FramingAssistViewModel {
                 let name = labels.localizedName(target.object.label)
                 resultText = "识别到：\(name)"
                 speak("这是\(name)")
+                lastSpoke = frame.timestamp // 防止下一非居中帧立刻打断"这是X"重复方向播报（见审查 #4）
                 centeredFrames = 0
             }
         } else {

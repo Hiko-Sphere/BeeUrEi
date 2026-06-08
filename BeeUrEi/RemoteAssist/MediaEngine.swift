@@ -138,9 +138,12 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
     }
 
     /// 协助者侧把远端视频渲染到给定 renderer。
+    /// remoteRenderer/remoteVideoTrack 统一在主线程读写，避免与 WebRTC 信令线程回调竞争（见审查 #5）。
     func setRemoteRenderer(_ renderer: RTCVideoRenderer) {
-        remoteRenderer = renderer
-        remoteVideoTrack?.add(renderer)
+        DispatchQueue.main.async {
+            self.remoteRenderer = renderer
+            self.remoteVideoTrack?.add(renderer)
+        }
     }
 
     private func startCapture(_ capturer: RTCCameraVideoCapturer) {
@@ -161,8 +164,11 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
     }
     func peerConnection(_ peerConnection: RTCPeerConnection, didAdd rtpReceiver: RTCRtpReceiver, streams: [RTCMediaStream]) {
         if let track = rtpReceiver.track as? RTCVideoTrack {
-            remoteVideoTrack = track
-            if let renderer = remoteRenderer { track.add(renderer) }
+            // 该回调在 WebRTC 信令线程；统一切到主线程访问 remoteVideoTrack/remoteRenderer（见审查 #5）。
+            DispatchQueue.main.async {
+                self.remoteVideoTrack = track
+                if let renderer = self.remoteRenderer { track.add(renderer) }
+            }
         }
     }
     func peerConnection(_ peerConnection: RTCPeerConnection, didChange stateChanged: RTCSignalingState) {}

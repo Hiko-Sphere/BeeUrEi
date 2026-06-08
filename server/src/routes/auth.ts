@@ -21,6 +21,7 @@ const registerSchema = z.object({
   displayName: z.string().min(1).max(64).optional(),
   // 自助注册仅限这些角色；admin/developer 由后台分配。
   role: z.enum(['blind', 'helper', 'family']).optional(),
+  language: z.string().min(2).max(8).optional(), // 协助者/亲友语言，用于匹配排序（见审查 #10）
 })
 
 const loginSchema = z.object({
@@ -34,7 +35,7 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store): void {
     if (!parsed.success) {
       return reply.code(400).send({ error: 'invalid_input', details: parsed.error.flatten() })
     }
-    const { username, password, displayName, role } = parsed.data
+    const { username, password, displayName, role, language } = parsed.data
     if (store.findByUsername(username)) {
       return reply.code(409).send({ error: 'username_taken' })
     }
@@ -46,6 +47,7 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store): void {
       role: (role ?? 'blind') as Role,
       status: 'active',
       createdAt: Date.now(),
+      language,
     }
     store.createUser(user)
     const tokens = issueTokens(store, user)

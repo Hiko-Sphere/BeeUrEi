@@ -46,6 +46,24 @@ describe('assist presence + match', () => {
     await a.close()
   })
 
+  it('preferredLanguage 真正影响排序（注册时带 language）', async () => {
+    const a = app()
+    const owner = await reg(a, 'owner2', 'blind')
+    const auth = (t: string) => ({ authorization: `Bearer ${t}` })
+    // 两位非紧急协助者，一位母语 en、一位 zh。
+    const en = (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'helperEn', password: 'secret123', role: 'helper', language: 'en' } })).json()
+    const zh = (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'helperZh', password: 'secret123', role: 'helper', language: 'zh' } })).json()
+    await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(owner.token), payload: { username: 'helperEn' } })
+    await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(owner.token), payload: { username: 'helperZh' } })
+    await a.inject({ method: 'POST', url: '/api/assist/heartbeat', headers: auth(en.token), payload: { available: true } })
+    await a.inject({ method: 'POST', url: '/api/assist/heartbeat', headers: auth(zh.token), payload: { available: true } })
+
+    const m = await a.inject({ method: 'POST', url: '/api/assist/match', headers: auth(owner.token), payload: { emergency: false, preferredLanguage: 'zh' } })
+    expect(m.json().count).toBe(2)
+    expect(m.json().targets[0].memberId).toBe(zh.user.id) // 偏好 zh → zh 协助者排首
+    await a.close()
+  })
+
   it('heartbeat requires auth', async () => {
     const a = app()
     const res = await a.inject({ method: 'POST', url: '/api/assist/heartbeat', payload: { available: true } })

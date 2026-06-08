@@ -94,7 +94,7 @@ struct HomeView: View {
                 .background(.ultraThinMaterial, in: Circle())
         }
         .accessibilityLabel("我在哪")
-        .accessibilityHint("播报你当前的大概位置")
+        .accessibilityHint("播报你当前位置和附近的地点")
     }
 
     private var settingsButton: some View {

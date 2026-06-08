@@ -2,7 +2,8 @@ import Foundation
 
 struct AMapWalkStep: Decodable {
     let instruction: String
-    let distanceMeters: Double
+    // 可选：后端某步距离若为非数（NaN→JSON null）也不致整条路线解码失败、丢失整条路线（见审查 #8）。
+    let distanceMeters: Double?
 }
 
 private struct AMapWalkResponse: Decodable {
@@ -16,10 +17,14 @@ struct AMapRouteClient {
         guard let token = KeychainStore.read() else { throw APIError.server("请先登录") }
         guard var comps = URLComponents(url: ServerConfig.baseURL.appendingPathComponent("api/nav/walking"),
                                         resolvingAgainstBaseURL: false) else { throw APIError.network }
-        comps.queryItems = [
-            URLQueryItem(name: "originLat", value: String(originLat)),
-            URLQueryItem(name: "originLon", value: String(originLon)),
-            URLQueryItem(name: "destination", value: destination),
+        // 显式百分号编码：URLComponents 不编码 '+'，而服务端会把查询里的 '+' 解成空格，
+        // 使含 '+' 的目的地(如"A+B大厦")被破坏 → 这里把 '+' 等也编码掉（见审查 #9）。
+        let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "+&=?#"))
+        func enc(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: allowed) ?? "" }
+        comps.percentEncodedQueryItems = [
+            URLQueryItem(name: "originLat", value: enc(String(originLat))),
+            URLQueryItem(name: "originLon", value: enc(String(originLon))),
+            URLQueryItem(name: "destination", value: enc(destination)),
         ]
         guard let url = comps.url else { throw APIError.network }
         var req = URLRequest(url: url)

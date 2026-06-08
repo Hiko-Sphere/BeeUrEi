@@ -1,7 +1,13 @@
 import jwt from 'jsonwebtoken'
 import { randomBytes, createHash } from 'node:crypto'
 
-const SECRET = process.env.JWT_SECRET ?? 'beeurei-dev-secret-change-me'
+// 安全：绝不使用硬编码兜底密钥——否则生产漏配 JWT_SECRET 时会用仓库里公开的字符串签发/校验 JWT，
+// 攻击者可据此伪造任意用户/admin 令牌绕过全部 RBAC（见审查 #3）。缺失即拒绝启动（fail-closed）。
+const SECRET = process.env.JWT_SECRET
+  ?? (process.env.NODE_ENV === 'test' ? 'test-only-secret-not-for-production-0123456789' : '')
+if (!SECRET || SECRET.length < 16) {
+  throw new Error('JWT_SECRET 未配置或过短：生产环境必须设置足够长（≥16）的随机密钥')
+}
 
 /// refresh token 有效期（30 天）。
 export const refreshTtlMs = 30 * 24 * 60 * 60 * 1000

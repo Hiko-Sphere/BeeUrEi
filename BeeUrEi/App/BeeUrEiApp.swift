@@ -51,6 +51,9 @@ private struct RootView: View {
                 RoleHomeView(role: enteredRole!, session: session) { enteredRole = nil }
             }
         }
+        // 共享同一个 AuthSession 给所有子视图(含 sheet 里的 LoginView)，避免出现第二个独立会话实例
+        // 导致登出/删号/改密后内存态不同步（见审查 #5）。
+        .environment(session)
         // 退出登录后回到登录页，并清掉已选角色，避免下次登录沿用旧角色。
         .onChange(of: session.isLoggedIn) { _, loggedIn in
             if !loggedIn { enteredRole = nil }

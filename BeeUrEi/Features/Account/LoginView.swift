@@ -1,9 +1,12 @@
 import SwiftUI
+import UIKit
 
 /// 账号登录 / 注册（接自托管后端）。VoiceOver 友好。
 /// 设计为可被 NavigationLink 推入（不自带 NavigationStack）。
 struct LoginView: View {
-    @State private var session = AuthSession()
+    // 用 App 共享的同一个 AuthSession（由 RootView .environment 注入），避免本地另起实例
+    // 致登出/删号后内存态不同步（见审查 #5）。
+    @Environment(AuthSession.self) private var session
     @State private var username = ""
     @State private var password = ""
     @State private var isRegister = false
@@ -102,6 +105,8 @@ struct LoginView: View {
             do {
                 try await APIClient().changePassword(token: token, oldPassword: old, newPassword: new)
                 accountMessage = "密码已修改，请用新密码重新登录。"
+                // 登出会立刻切回登录界面，文字反馈来不及看到——给 VoiceOver 用户语音确认（见审查 #6）。
+                UIAccessibility.post(notification: .announcement, argument: "密码已修改，请用新密码重新登录。")
                 showChangePassword = false; oldPassword = ""; newPassword = ""
                 session.logout()
             } catch {
@@ -115,6 +120,7 @@ struct LoginView: View {
         Task {
             try? await APIClient().deleteAccount(token: token)
             accountMessage = "账号已删除。"
+            UIAccessibility.post(notification: .announcement, argument: "账号已删除。") // 见审查 #6
             session.logout()
         }
     }

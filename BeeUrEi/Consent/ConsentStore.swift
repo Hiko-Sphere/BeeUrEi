@@ -21,7 +21,10 @@ final class ConsentStore {
     var daysSinceLastAcceptance: Double {
         let stored = defaults.double(forKey: dateKey)
         guard stored > 0 else { return .greatestFiniteMagnitude }
-        return (Date().timeIntervalSinceReferenceDate - stored) / 86_400
+        let days = (Date().timeIntervalSinceReferenceDate - stored) / 86_400
+        // 时钟被往回调（now < stored）会得负值，使"超期需重新完整同意"永不触发——
+        // 保守按"需重新完整同意"处理，防止时钟操纵绕过安全须知定期重申（见审查 #7）。
+        return days < 0 ? .greatestFiniteMagnitude : days
     }
 
     var briefReminderSpeechEnabled: Bool {

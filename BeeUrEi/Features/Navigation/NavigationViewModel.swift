@@ -31,6 +31,7 @@ final class NavigationViewModel {
     @ObservationIgnored private var destination: CLLocationCoordinate2D?
     @ObservationIgnored private var routeReady = false
     @ObservationIgnored private var replanning = false      // 重规划进行中：期间不依旧路线引导（见审查 #2）
+    @ObservationIgnored private var navGeneration = 0        // 代次令牌：旧规划任务恢复后比对，过期则丢弃（见审查 #1）
     @ObservationIgnored private var headingFilter = HeadingFilter()
     @ObservationIgnored private var headingReliable = false // 罗盘是否可信（磁干扰时为假，抑制信标，见审查 #3）
     @ObservationIgnored private var lastSpoken = ""
@@ -50,6 +51,7 @@ final class NavigationViewModel {
 
         // 重入保护：导航中再次 start(如点了常用目的地)先彻底停止旧导航，避免新旧目的地状态混合（见审查 #5）。
         if running { stop() }
+        navGeneration += 1   // 作废任何仍挂在 await 上的旧规划任务（见审查 #1）
 
         self.region = region
         self.destinationQuery = trimmed
@@ -90,6 +92,7 @@ final class NavigationViewModel {
     func stop() {
         running = false
         replanning = false
+        navGeneration += 1   // 作废挂起的旧规划任务（见审查 #1）
         service.stop()
         headTracker.stop()
         spatial.stop()   // 释放空间音引擎（见审查 #11）
@@ -101,7 +104,8 @@ final class NavigationViewModel {
 
         if !routeReady {
             routeReady = true
-            Task { await planRoute(from: loc) }
+            let gen = navGeneration
+            Task { await planRoute(from: loc, gen: gen) }
             return
         }
 
@@ -164,15 +168,17 @@ final class NavigationViewModel {
         }
     }
 
-    private func planRoute(from loc: CLLocation) async {
-        defer { replanning = false } // 无论成功失败，规划结束即解除重规划门控（见审查 #2）
+    private func planRoute(from loc: CLLocation, gen: Int) async {
+        // 仅当本任务仍是最新一代（未被新的 start/stop 作废）时才解除重规划门控（见审查 #1）。
+        defer { if gen == navGeneration { replanning = false } }
         switch region {
         case .china:
             do {
                 let result = try await amap.walking(originLat: loc.coordinate.latitude,
                                                     originLon: loc.coordinate.longitude,
                                                     destination: destinationQuery)
-                steps = result.map { "\($0.instruction)（\(Int($0.distanceMeters)) 米）" }
+                guard running, gen == navGeneration else { return } // 已被新导航/停止作废，丢弃旧结果
+                steps = result.map { "\($0.instruction)（\(Int($0.distanceMeters ?? 0)) 米）" }
                 if let first = result.first {
                     status = "共 \(result.count) 步"
                     speak("共\(result.count)步。第一步：\(first.instruction)")
@@ -188,12 +194,16 @@ final class NavigationViewModel {
             if let existing = destination {
                 dest = existing
             } else if let geocoded = await service.geocode(destinationQuery) {
+                guard running, gen == navGeneration else { return }
                 dest = geocoded
                 destination = geocoded
             } else {
+                guard running, gen == navGeneration else { return }
                 status = "找不到目的地"; return
             }
             let m = await service.walkingManeuvers(from: loc.coordinate, to: dest)
+            // 关键：旧目的地的规划任务恢复后不得覆盖正在为新目的地建立的状态（见审查 #1）。
+            guard running, gen == navGeneration else { return }
             maneuvers = m
             stepIndex = 0
             // 路线折线（转向点 + 目的地）用于偏航检测。

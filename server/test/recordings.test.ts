@@ -47,7 +47,12 @@ describe('recordings API', () => {
     const noConsent = await app.inject({ method: 'POST', url: '/api/recordings', headers: userAuth, payload: { callId: 'c1', consentBy: [] } })
     expect(noConsent.statusCode).toBe(400) // consent_required
 
-    const ok = await app.inject({ method: 'POST', url: '/api/recordings', headers: userAuth, payload: { callId: 'c1', consentBy: [userId] } })
+    // 自我同意应被拒绝——同意必须来自被录制的对方参与者，而非发起者本人（见审查 #4）。
+    const selfOnly = await app.inject({ method: 'POST', url: '/api/recordings', headers: userAuth, payload: { callId: 'c1', consentBy: [userId] } })
+    expect(selfOnly.statusCode).toBe(400)
+
+    // 含被录方(非发起者)的同意 → 通过。
+    const ok = await app.inject({ method: 'POST', url: '/api/recordings', headers: userAuth, payload: { callId: 'c1', consentBy: ['peer-blind-user'] } })
     expect(ok.statusCode).toBe(201)
     await app.close()
   })

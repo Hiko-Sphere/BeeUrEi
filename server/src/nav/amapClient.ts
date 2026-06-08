@@ -34,5 +34,10 @@ export async function amapWalking(origin: string, destination: string): Promise<
     route?: { paths?: Array<{ steps?: Array<{ instruction?: string; distance?: string }> }> }
   }
   const steps = data.route?.paths?.[0]?.steps ?? []
-  return steps.map((s) => ({ instruction: s.instruction ?? '', distanceMeters: Number(s.distance ?? 0) }))
+  return steps.map((s) => {
+    // 高德某步 distance 若是非数字字符串，Number(...) 得 NaN，JSON.stringify 会序列化成 null，
+    // 致客户端整条路线解码失败、丢失整条路线 → 用 0 兜底，绝不外发 NaN（见审查 #8）。
+    const d = Number(s.distance ?? 0)
+    return { instruction: s.instruction ?? '', distanceMeters: Number.isFinite(d) ? d : 0 }
+  })
 }

@@ -63,9 +63,11 @@ final class CallViewModel {
             if let peers = msg["peers"] as? [[String: Any]], let first = peers.first {
                 peerUserId = first["userId"] as? String ?? peerUserId
                 peerName = first["userName"] as? String ?? peerName
+                // 对端已在房间→双方都标记已连接(否则后加入的协助者 UI 永久卡在"等待接入"，见审查 #2)；
+                // 但只有发起方(视障)才发 offer。
+                connected = true
+                statusText = connectedStatus()
                 if role == .blind {
-                    connected = true
-                    statusText = connectedStatus()
                     media.createOffer()
                 }
             }

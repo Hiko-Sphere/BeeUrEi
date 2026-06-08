@@ -35,7 +35,11 @@ export function registerRecordingRoutes(app: FastifyInstance, store: Store): voi
     const parsed = createSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const owner = req.user!
-    if (cfg.requireConsent && !parsed.data.consentBy.includes(owner.sub)) {
+    // 知情同意必须来自**被录制的对方参与者**，而非发起者自我同意——否则协助者/亲友可把自己的 id
+    // 填进 consentBy 就绕过、在视障用户不知情下录制（见审查 #4）。要求至少有一个非发起者的同意。
+    // 注：完整方案应校验 callId 对应通话的真实参与者集合（待通话参与者模型）。
+    const othersConsented = parsed.data.consentBy.some((id) => id !== owner.sub)
+    if (cfg.requireConsent && !othersConsented) {
       return reply.code(400).send({ error: 'consent_required' })
     }
     const rec: Recording = {

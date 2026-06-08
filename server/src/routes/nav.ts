@@ -4,10 +4,17 @@ import { type Store } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { amapConfigured, amapGeocode, amapWalking } from '../nav/amapClient'
 
+// 坐标校验：从原始字符串校验而非 z.coerce.number()——后者会把空串/空白静默 coerce 成 0，
+// 从 (0,0)Null Island 起算路线（看似正常却完全错误，对盲人导航安全攸关，见审查 round5 #2）；
+// 也拒绝 'Infinity'/非数字与超出经纬度范围。
+const coord = (min: number, max: number) =>
+  z.string().trim().min(1).transform(Number)
+    .refine(Number.isFinite, 'invalid')
+    .refine((v) => v >= min && v <= max, 'out_of_range')
 const querySchema = z.object({
-  originLat: z.coerce.number(),
-  originLon: z.coerce.number(),
-  destination: z.string().min(1),
+  originLat: coord(-90, 90),
+  originLon: coord(-180, 180),
+  destination: z.string().trim().min(1),
 })
 
 /// 国内步行导航：用高德 Web 服务（key 仅后端持有），App 通过本接口取路线。

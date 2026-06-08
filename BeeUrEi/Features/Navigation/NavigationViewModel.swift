@@ -186,6 +186,7 @@ final class NavigationViewModel {
                     status = "未找到步行路线"
                 }
             } catch {
+                guard running, gen == navGeneration else { return } // 过期/已停止任务的失败不得覆盖新会话状态（见审查 round5 #1）
                 status = "国内路线获取失败（需登录并连接后端）"
             }
         case .overseas:

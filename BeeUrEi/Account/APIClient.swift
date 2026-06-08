@@ -240,7 +240,10 @@ struct APIClient {
     func emergencyTargets(token: String) async throws -> [EmergencyTarget] {
         struct R: Codable { let targets: [EmergencyTarget] }
         let data = try await authedSend("POST", "/api/emergency/trigger", token: token, body: [:])
-        return (try? JSONDecoder().decode(R.self, from: data))?.targets ?? []
+        // 区分"解码失败"与"确实没有联系人"：紧急路径上把解码失败抛成 .decoding，让调用方提示
+        // "发起失败请重试"，而非误报"没有可呼叫的亲友"（见审查 round5 #3）。
+        guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.decoding }
+        return r.targets
     }
 
     // MARK: 在线待命 / 匹配
@@ -252,7 +255,9 @@ struct APIClient {
     func assistMatch(token: String, emergency: Bool) async throws -> [EmergencyTarget] {
         struct R: Codable { let targets: [EmergencyTarget] }
         let data = try await authedSend("POST", "/api/assist/match", token: token, body: ["emergency": emergency])
-        return (try? JSONDecoder().decode(R.self, from: data))?.targets ?? []
+        // 同上：解码失败抛错而非静默空数组，避免紧急路径误报"没有亲友"（见审查 round5 #3）。
+        guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.decoding }
+        return r.targets
     }
 
     /// 通话前拉取 ICE 服务器（STUN + 短时效 TURN 凭据）。

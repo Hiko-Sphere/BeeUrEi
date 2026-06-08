@@ -26,6 +26,18 @@ describe('AMap walking nav proxy', () => {
     await app.close()
   })
 
+  it('rejects non-finite / empty / out-of-range coordinates (400, 不从 Null Island 起算)', async () => {
+    process.env.AMAP_API_KEY = 'testkey'
+    const app = buildApp(new MemoryStore())
+    const t = await token(app)
+    const auth = { authorization: `Bearer ${t}` }
+    for (const q of ['originLat=Infinity&originLon=Infinity&destination=x', 'originLat=&originLon=&destination=x', 'originLat=999&originLon=116&destination=x']) {
+      const res = await app.inject({ method: 'GET', url: `/api/nav/walking?${q}`, headers: auth })
+      expect(res.statusCode).toBe(400)
+    }
+    await app.close()
+  })
+
   it('returns parsed steps when configured (mocked AMap)', async () => {
     process.env.AMAP_API_KEY = 'testkey'
     vi.stubGlobal('fetch', vi.fn(async (url: string) => ({

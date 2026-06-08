@@ -17,6 +17,8 @@ struct SettingsView: View {
     @State private var sonarOn: Bool
     @State private var verbosity: Int
     @State private var showTutorial = false
+    @State private var previewSpeech = SpeechFeedback()
+    @State private var previewHaptic = HapticFeedback()
 
     init(store: ConsentStore, onClose: @escaping () -> Void) {
         self.store = store
@@ -80,6 +82,10 @@ struct SettingsView: View {
                     .onChange(of: verbosity) { _, v in
                         var f = FeatureSettings(); f.verbosity = v
                     }
+                    Button("试听播报") {
+                        previewSpeech.play(FeedbackEvent(priority: .obstacle, speech: sampleAnnouncement()))
+                    }
+                    .accessibilityHint("用当前语速和详略念一句示例")
                 } header: {
                     Text("播报")
                 } footer: {
@@ -91,6 +97,10 @@ struct SettingsView: View {
                         .onChange(of: highContrastOn) { _, v in
                             var f = FeatureSettings(); f.highContrast = v
                         }
+                    Button("试一下震动") {
+                        previewHaptic.play(FeedbackEvent(priority: .obstacle, speech: nil))
+                    }
+                    .accessibilityHint("播放一次危险等级的震动")
                 } header: {
                     Text("无障碍")
                 } footer: {
@@ -160,6 +170,11 @@ struct SettingsView: View {
                 TutorialView { showTutorial = false }
             }
         }
+    }
+
+    private func sampleAnnouncement() -> String {
+        let o = Obstacle(label: "行人", clock: ClockDirection(angleDegrees: 30), distanceMeters: 1.5, confidence: 1)
+        return SpeechComposer().announce(o, concise: FeatureSettings().conciseAnnouncements)
     }
 }
 

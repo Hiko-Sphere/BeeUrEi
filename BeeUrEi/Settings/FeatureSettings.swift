@@ -33,4 +33,11 @@ struct FeatureSettings {
         get { defaults.object(forKey: speechRateKey) == nil ? 0.5 : defaults.float(forKey: speechRateKey) }
         set { defaults.set(min(max(newValue, 0), 1), forKey: speechRateKey) }
     }
+
+    /// 高对比大字状态条（低视力友好：实底深色 + 高亮大字）。默认关。
+    private let highContrastKey = "feature.highContrast"
+    var highContrast: Bool {
+        get { defaults.bool(forKey: highContrastKey) }
+        set { defaults.set(newValue, forKey: highContrastKey) }
+    }
 }

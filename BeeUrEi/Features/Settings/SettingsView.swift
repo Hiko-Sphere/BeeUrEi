@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var dynamicROIOn: Bool
     @State private var concise: Bool
     @State private var rate: Double
+    @State private var highContrastOn: Bool
     @State private var showTutorial = false
 
     init(store: ConsentStore, onClose: @escaping () -> Void) {
@@ -26,6 +27,7 @@ struct SettingsView: View {
         _dynamicROIOn = State(initialValue: DevSettings().dynamicROIEnabled)
         _concise = State(initialValue: features.conciseAnnouncements)
         _rate = State(initialValue: Double(features.speechRate))
+        _highContrastOn = State(initialValue: features.highContrast)
     }
 
     var body: some View {
@@ -66,6 +68,17 @@ struct SettingsView: View {
                     Text("播报")
                 } footer: {
                     Text("简短播报更快说完、降低认知负荷；语速可按习惯调整。")
+                }
+
+                Section {
+                    Toggle("高对比大字状态条", isOn: $highContrastOn)
+                        .onChange(of: highContrastOn) { _, v in
+                            var f = FeatureSettings(); f.highContrast = v
+                        }
+                } header: {
+                    Text("无障碍")
+                } footer: {
+                    Text("为低视力用户：避障状态用实底深色 + 高亮大字显示。文字大小同时跟随系统「字体大小」设置。")
                 }
 
                 Section("账号") {

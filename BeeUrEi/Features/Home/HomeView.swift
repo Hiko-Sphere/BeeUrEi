@@ -97,18 +97,21 @@ struct HomeView: View {
     }
 
     private var statusBar: some View {
-        VStack(spacing: 4) {
+        let highContrast = FeatureSettings().highContrast
+        return VStack(spacing: 6) {
             Text(model.proximityText)
-                .font(.headline)
+                // 高对比时用更大字号 + 蜂蜜黄；均走 Dynamic Type（系统字号设置依然生效）。
+                .font(highContrast ? .system(.title, weight: .bold) : .headline)
+                .foregroundStyle(highContrast ? Color(red: 1, green: 0.77, blue: 0.18) : .primary)
             if !model.advisoryText.isEmpty {
                 Text(model.advisoryText)
-                    .font(.subheadline)
-                    .foregroundStyle(.orange)
+                    .font(highContrast ? .system(.title3, weight: .semibold) : .subheadline)
+                    .foregroundStyle(highContrast ? .white : .orange)
             }
         }
-        .padding()
+        .padding(highContrast ? 20 : 16)
         .frame(maxWidth: .infinity)
-        .background(.ultraThinMaterial)
+        .background(highContrast ? AnyShapeStyle(Color.black.opacity(0.92)) : AnyShapeStyle(.ultraThinMaterial))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(model.advisoryText.isEmpty ? model.proximityText : "\(model.proximityText)。\(model.advisoryText)")
     }

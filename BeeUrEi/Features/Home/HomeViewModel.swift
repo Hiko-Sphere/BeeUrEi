@@ -116,6 +116,14 @@ final class HomeViewModel {
         sonifier.stop()
     }
 
+    /// 降级/暂停（避障关、过热停机、跟踪暂停、无深度）时统一收尾：
+    /// 停接近声呐（否则会持续误鸣陈旧"有近物"，见审查 #4/#10），并复位跟踪时间基线
+    /// （置 0，使恢复后首帧用保守默认 dt 而非跨越中断时段的墙钟差污染速度/TTC，见审查 #11）。
+    private func degradeStop() {
+        sonifier.update(nil)
+        lastTrackTime = 0
+    }
+
     /// 重复播报当前避障状态（盲人常错过语音；用户主动触发，走专用路径不污染仲裁通道，见审查 #13）。
     func repeatLastAnnouncement() {
         let text = advisoryText.isEmpty ? proximityText : "\(proximityText)。\(advisoryText)"
@@ -158,6 +166,7 @@ final class HomeViewModel {
         // 导航/避障分别开关（Q9）：避障关闭时不做决策与播报。
         guard FeatureSettings().avoidanceEnabled else {
             proximityText = "避障已关闭"
+            degradeStop()
             return
         }
 
@@ -165,11 +174,13 @@ final class HomeViewModel {
         let thermalPlan = thermalPolicy.plan(for: Self.mapThermal(ProcessInfo.processInfo.thermalState))
         if thermalPlan.stopCamera {
             proximityText = thermalPlan.advisory ?? "设备过热，避障暂停"
+            degradeStop()
             return
         }
 
         guard currentMode != .suspended, let depth = frame.depth else {
             proximityText = "测距暂停"
+            degradeStop()
             return
         }
 
@@ -178,7 +189,8 @@ final class HomeViewModel {
         let groundProfile = DepthSampling.groundProfile(depth: depth.depth, confidence: depth.confidence)
         if let groundHint = groundHazard.hint(groundHazard.detect(groundProfile: groundProfile)),
            throttle.shouldAnnounce(key: "groundhazard", now: frame.timestamp, minGap: 2.5) {
-            isSpeaking = true
+            // 不设 isSpeaking：地面危险有自己的 2.5s 去抖且经 arbiter 仲裁；若在此置 true，同帧后面的危险
+            // 障碍 announcePolicy.decide 会误以为"正在播报同一障碍目标"而把快速逼近的车/人静音漏播（见审查 #1/#8）。
             coordinator.submit(FeedbackEvent(priority: .obstacle, speech: groundHint))
         }
 
@@ -233,50 +245,64 @@ final class HomeViewModel {
                              distanceMeters: o.distanceMeters, isHazard: hazards.isHighRisk(o.label))
         }
         let tracks = tracker.update(observations, dt: dt)
-        // 只用"本帧确有观测"(misses==0)的轨迹驱动危险播报：漏检期间轨迹的距离/速度/TTC 是冻结的
-        // 陈旧值，若障碍已离开或用户已转向，会以陈旧 TTC 误报"幽灵障碍"（见审查 #4）。轨迹本身仍保留以维持 ID。
+        // 只用"本帧确有观测"(misses==0)的轨迹驱动危险播报：漏检期间轨迹是冻结的陈旧值（见审查 #4）。
         let activeTracks = tracks.filter { $0.misses == 0 }
+
+        // 中央深度兜底**始终评估**：分类器没认出但很近的正前方障碍(玻璃门/矮桩/横杆)，
+        // 不能因为存在(可能在侧前方的)跟踪目标就被跳过（见审查 #9）。
+        let samples = DepthSampling.centerSamples(depth: depth.depth, confidence: depth.confidence)
+        let centralResult = depthSampler.evaluate(depths: samples.depths, confidences: samples.confidences)
+        // 跟踪受限(.relative 模式)：不报精确米数，改方向性措辞，避免给出不可信的精确距离（见审查 #5）。
+        let suppressMeters = (currentMode == .relative)
+
+        // 1) 正前方中央极近(深度 danger 区) = 最即时的物理危险 → 最高优先级安全门，即使有侧前方跟踪目标也先播（见审查 #9）。
+        if centralResult.zone == .danger {
+            proximityText = suppressMeters ? "正前方很近，请停下"
+                                           : String(format: "正前方约 %.1f 米，请注意", centralResult.nearest ?? 0)
+            if let phrase = speechComposer.announceProximity(.danger, nearestMeters: suppressMeters ? nil : centralResult.nearest),
+               throttle.shouldAnnounce(key: "proximity:danger", now: frame.timestamp, minGap: 1.5) {
+                coordinator.submit(FeedbackEvent(priority: .obstacle, speech: phrase))
+            }
+            _ = clearConfirmer.update(isClear: false, now: frame.timestamp)
+            return
+        }
+
+        // 2) 跟踪到的危险障碍（按 TTC 排序，承诺式播报）。
         if let danger = risk.mostDangerous(activeTracks) {
             let smoothed = Obstacle(label: danger.label,
                                     clock: ClockDirection(angleDegrees: danger.bearingDegrees),
-                                    distanceMeters: danger.distanceMeters,
+                                    distanceMeters: suppressMeters ? nil : danger.distanceMeters,
                                     confidence: 1)
             let phrase = speechComposer.announce(smoothed, concise: FeatureSettings().conciseAnnouncements)
             proximityText = phrase
-            // 紧急度优先用 TTC（碰撞时间越小越急），否则退化到距离。
             let urgency = danger.timeToCollision.map { 1.0 / max($0, 0.3) }
                 ?? danger.distanceMeters.map { 1.0 / max($0, 0.3) } ?? 1.0
-            // 承诺式播报：用稳定的 track id+标签作目标键，说话期间不打断同目标，只有明显更紧急的新目标才打断。
             let decision = announcePolicy.decide(targetKey: "\(danger.id)|\(danger.label)", urgency: urgency,
                                                  isSpeaking: isSpeaking, now: frame.timestamp)
             if decision.announce {
                 isSpeaking = true
                 coordinator.submit(FeedbackEvent(priority: .obstacle, speech: phrase))
             }
-            _ = clearConfirmer.update(isClear: false, now: frame.timestamp) // 有威胁 → 非通畅，重置确认
+            _ = clearConfirmer.update(isClear: false, now: frame.timestamp)
             return
         }
 
-        // 2) 深度兜底：分类器没认出但很近时，仅靠深度也要预警（见 PLAN §5.8）。
-        let samples = DepthSampling.centerSamples(depth: depth.depth, confidence: depth.confidence)
-        let result = depthSampler.evaluate(depths: samples.depths, confidences: samples.confidences)
-
-        if let nearest = result.nearest {
-            proximityText = String(format: "正前方约 %.1f 米", nearest)
+        // 3) 无跟踪危险：中央深度兜底(warn 区)或通畅。
+        if let nearest = centralResult.nearest {
+            proximityText = suppressMeters ? "正前方有障碍" : String(format: "正前方约 %.1f 米", nearest)
         } else {
             proximityText = "正前方通畅"
         }
-
-        if let phrase = speechComposer.announceProximity(result.zone, nearestMeters: result.nearest) {
-            let minGap = result.zone == .danger ? 1.5 : 3.0
-            if throttle.shouldAnnounce(key: "proximity:\(result.zone)", now: frame.timestamp, minGap: minGap) {
+        if let phrase = speechComposer.announceProximity(centralResult.zone, nearestMeters: suppressMeters ? nil : centralResult.nearest) {
+            let minGap = centralResult.zone == .danger ? 1.5 : 3.0
+            if throttle.shouldAnnounce(key: "proximity:\(centralResult.zone)", now: frame.timestamp, minGap: minGap) {
                 coordinator.submit(FeedbackEvent(priority: .obstacle, speech: phrase))
             }
         }
 
-        // "前方通畅"周期确认（可选）：持续通畅给予确信，避免静默带来的不确定。
+        // "前方通畅"周期确认（可选）。
         if FeatureSettings().clearPathConfirm {
-            let clear = (result.nearest ?? .greatestFiniteMagnitude) > 2.5
+            let clear = (centralResult.nearest ?? .greatestFiniteMagnitude) > 2.5
             if clearConfirmer.update(isClear: clear, now: frame.timestamp) {
                 coordinator.submit(FeedbackEvent(priority: .status, speech: "前方通畅"))
             }

@@ -3,6 +3,7 @@ import ARKit
 import UIKit
 import AVFoundation
 import CoreGraphics
+import Vision
 
 /// 取景识别：用相机 + YOLO 找最大目标，语音指引把它移到画面中央对准，对准后说出"这是什么"。
 /// 解决竞品最弱的"盲人不知镜头对着哪"。决策逻辑在核心 `FramingGuide`（已测）。
@@ -24,6 +25,7 @@ final class FramingAssistViewModel {
     @ObservationIgnored private var lastSpoke: TimeInterval = 0
     @ObservationIgnored private var lastHint = ""
     @ObservationIgnored private var centeredFrames = 0
+    @ObservationIgnored private var latestBuffer: CVPixelBuffer?
 
     var arSession: ARSession { source.session }
 
@@ -41,6 +43,7 @@ final class FramingAssistViewModel {
     func stop() { source.stop() }
 
     private func handle(_ frame: SensorFrame) {
+        latestBuffer = frame.pixelBuffer // 供"朗读文字"用最新帧
         guard frame.timestamp - lastProcess >= 0.4 else { return }
         lastProcess = frame.timestamp
 
@@ -69,6 +72,28 @@ final class FramingAssistViewModel {
                 lastSpoke = frame.timestamp
                 speak(hint)
             }
+        }
+    }
+
+    /// 朗读相机里看到的文字（端侧 Vision OCR，中英文）——盲人读标牌/标签/菜单。
+    func readText() {
+        guard let buffer = latestBuffer else { speak("请先把要读的文字对准相机"); return }
+        resultText = "正在识别文字…"
+        let request = VNRecognizeTextRequest { [weak self] req, _ in
+            let texts = (req.results as? [VNRecognizedTextObservation])?
+                .compactMap { $0.topCandidates(1).first?.string } ?? []
+            let joined = texts.joined(separator: " ")
+            DispatchQueue.main.async {
+                let out = joined.isEmpty ? "没有识别到文字" : joined
+                self?.resultText = out
+                self?.speak(out)
+            }
+        }
+        request.recognitionLanguages = ["zh-Hans", "en-US"]
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? VNImageRequestHandler(cvPixelBuffer: buffer, options: [:]).perform([request])
         }
     }
 
@@ -108,6 +133,13 @@ struct FramingAssistView: View {
                         .padding()
                 }
                 Spacer()
+                Button { model.readText() } label: {
+                    Label("朗读文字", systemImage: "text.viewfinder")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .padding(.bottom, 8)
+                .accessibilityHint("识别并朗读相机里看到的文字")
                 VStack(spacing: 8) {
                     Text(model.guidanceText).font(.title).bold()
                     if !model.resultText.isEmpty {

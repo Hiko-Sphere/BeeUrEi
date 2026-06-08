@@ -34,8 +34,9 @@ final class ProximitySonifier {
     private func applyUpdate(_ cue: ProximityCue?) {
         guard let cue else { teardown(); return }
         currentPitch = cue.pitchHz
-        // started 仅在引擎实际运行时为真；若被系统中断会复位，从而可重启（见审查 #2）。
-        if !started {
+        // 用 engine.isRunning 判断而非粘滞的 started：来电/Siri/媒体重置会停掉引擎但**不会**复位 started，
+        // 若只看 started 则中断后永不重启、声呐永久失声。检测引擎实际未运行就重启（见审查 #2，与 SpatialAudio 一致）。
+        if !engine.isRunning {
             do {
                 try engine.start()
                 player.play()

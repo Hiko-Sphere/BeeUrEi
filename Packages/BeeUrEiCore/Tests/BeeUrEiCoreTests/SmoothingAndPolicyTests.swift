@@ -40,6 +40,15 @@ final class AnnouncementPolicyTests: XCTestCase {
         XCTAssertEqual(p.decide(targetKey: "a", urgency: 1, isSpeaking: true, now: 1), .silent)
     }
 
+    func testSameTargetUrgencySpikeInterruptsWhileSpeaking() {
+        // 同一障碍快速逼近(urgency 骤升)：即使正在播报也必须立即打断更新（安全攸关，见审查 #1）。
+        let p = AnnouncementPolicy(urgencyMargin: 1.3)
+        _ = p.decide(targetKey: "a", urgency: 1, isSpeaking: false, now: 0)
+        let d = p.decide(targetKey: "a", urgency: 10, isSpeaking: true, now: 1)
+        XCTAssertTrue(d.announce)
+        XCTAssertTrue(d.interrupt)
+    }
+
     func testSameTargetRefreshesAfterInterval() {
         let p = AnnouncementPolicy(refreshInterval: 6)
         _ = p.decide(targetKey: "a", urgency: 1, isSpeaking: false, now: 0)

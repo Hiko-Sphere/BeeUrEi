@@ -14,9 +14,16 @@ final class GroundHazardDetectorTests: XCTestCase {
         XCTAssertEqual(det.detect(groundProfile: [1.0, 1.2, 2.0]), .dropOff(distanceMeters: 1.2))
     }
 
-    func testRayMissIsDropOff() {
-        // 射线打空（地面消失）→ 落差。
-        XCTAssertEqual(det.detect(groundProfile: [1.0, 1.2, 1.4, -1, .nan]), .dropOff(distanceMeters: 1.4))
+    func testRayMissAloneIsNotDropOff() {
+        // 仅射线打空(未知/低置信)不再误报落差——LiDAR 在深色/湿滑地面常读不到（见审查 #7）。
+        XCTAssertEqual(det.detect(groundProfile: [1.0, 1.2, 1.4, -1, .nan]), .none)
+        // 开头打空后地面正常：跳过未知样本，平滑递增 → 无危险（见审查 #5/#7 折中）。
+        XCTAssertEqual(det.detect(groundProfile: [.nan, 1.0, 1.1, 1.2, 1.3]), .none)
+    }
+
+    func testDropOffViaDiscontinuityIgnoresMisses() {
+        // 未知样本被跳过；可靠样本间真实不连续(1.2→2.5)仍判落差。
+        XCTAssertEqual(det.detect(groundProfile: [1.0, 1.2, -1, 2.5, 2.6]), .dropOff(distanceMeters: 1.2))
     }
 
     func testStepUpDetected() {

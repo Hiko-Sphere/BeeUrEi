@@ -29,6 +29,12 @@ public final class AnnouncementPolicy {
     ///   - isSpeaking: 当前是否正在播报。
     public func decide(targetKey: String, urgency: Double, isSpeaking: Bool, now: TimeInterval) -> AnnouncementDecision {
         if targetKey == lastKey {
+            // 同一目标危险骤升（如车辆/行人快速逼近）：即使正在播报也立即打断更新，
+            // 否则会被静音到当前句说完+刷新间隔，盲人可能已撞上（安全攸关，见审查 #1）。
+            if urgency > lastUrgency * urgencyMargin {
+                commit(targetKey, urgency, now)
+                return AnnouncementDecision(announce: true, interrupt: true)
+            }
             if !isSpeaking, now - lastAnnounce >= refreshInterval {
                 commit(targetKey, urgency, now)
                 return AnnouncementDecision(announce: true, interrupt: false)

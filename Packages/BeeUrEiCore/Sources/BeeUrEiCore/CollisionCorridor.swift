@@ -52,14 +52,19 @@ public struct CollisionCorridor: Sendable {
         var minU = Float.greatestFiniteMagnitude, minV = Float.greatestFiniteMagnitude
         var maxU = -Float.greatestFiniteMagnitude, maxV = -Float.greatestFiniteMagnitude
         var any = false
+        var allProjected = true
         for p in corners(origin: origin, forward: forward, up: up) {
             if let (u, v, _) = PinholeCamera.project(p, cameraToWorld: cameraToWorld, intrinsics: k) {
                 any = true
                 minU = min(minU, u); maxU = max(maxU, u)
                 minV = min(minV, v); maxV = max(maxV, v)
+            } else {
+                allProjected = false
             }
         }
-        guard any, maxU > minU, maxV > minV else { return .full }
+        // 任一角点在相机后方（投影失败，常见于水平持机时走廊近端落在光心后方）：
+        // 仅用剩余角点会算出过小且偏移的 ROI 而漏判障碍 → 保守回退整帧扫描（安全优先，见审查 #3）。
+        guard allProjected, any, maxU > minU, maxV > minV else { return .full }
         let x0 = Double(max(0, minU / imageWidth)), x1 = Double(min(1, maxU / imageWidth))
         let y0 = Double(max(0, minV / imageHeight)), y1 = Double(min(1, maxV / imageHeight))
         return NormalizedBox(x: x0, y: y0, width: max(0, x1 - x0), height: max(0, y1 - y0))

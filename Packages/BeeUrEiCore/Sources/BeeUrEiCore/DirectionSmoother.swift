@@ -29,7 +29,8 @@ public final class DirectionSmoother {
         if let d = distanceMeters, d.isFinite {
             dist = dist.map { (1 - alpha) * $0 + alpha * d } ?? d
         }
-        return (smoothedAngle ?? angleDegrees, dist)
+        // 未初始化且本帧角度非有限（坏帧）：返回 0=正前方而非把 NaN/Inf 透传给上层（见审查 #2）。
+        return (smoothedAngle ?? (angleDegrees.isFinite ? angleDegrees : 0), dist)
     }
 
     public var smoothedAngle: Double? {

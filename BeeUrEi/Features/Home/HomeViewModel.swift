@@ -175,7 +175,7 @@ final class HomeViewModel {
 
         // 地面高危地形（落差/下台阶/路缘）——纯 LiDAR 几何，COCO 模型识别不了的"脚下"危险。
         // 安全优先：去抖 2.5s 即可播报，不等其它逻辑。
-        let groundProfile = DepthSampling.groundProfile(depth: depth.depth)
+        let groundProfile = DepthSampling.groundProfile(depth: depth.depth, confidence: depth.confidence)
         if let groundHint = groundHazard.hint(groundHazard.detect(groundProfile: groundProfile)),
            throttle.shouldAnnounce(key: "groundhazard", now: frame.timestamp, minGap: 2.5) {
             isSpeaking = true
@@ -205,7 +205,11 @@ final class HomeViewModel {
             coordinator.submit(FeedbackEvent(priority: .turn, speech: hint))
         }
         let obstacles = detections.map { det -> Obstacle in
-            let s = DepthSampling.samples(depth: depth.depth, confidence: depth.confidence, normalizedX: det.normalizedX)
+            // 用检测框真实纵向中心取距离，而非永远取深度图垂直中线(y=0.5)——否则地上/头顶等
+            // 非居中目标会读到中线那片远处地面/背景的距离，距离严重说错（安全攸关，见审查 #6）。
+            let s = DepthSampling.samples(depth: depth.depth, confidence: depth.confidence,
+                                          normalizedX: det.box?.midX ?? det.normalizedX,
+                                          normalizedY: det.box?.midY ?? 0.5)
             let dist = depthSampler.nearestDistance(depths: s.depths, confidences: s.confidences)
             // 英文 COCO 标签 → 中文（命中高危加成、中文播报，见 §5.8）。
             let localized = DetectedObject(label: labels.localizedName(det.label),
@@ -229,7 +233,10 @@ final class HomeViewModel {
                              distanceMeters: o.distanceMeters, isHazard: hazards.isHighRisk(o.label))
         }
         let tracks = tracker.update(observations, dt: dt)
-        if let danger = risk.mostDangerous(tracks) {
+        // 只用"本帧确有观测"(misses==0)的轨迹驱动危险播报：漏检期间轨迹的距离/速度/TTC 是冻结的
+        // 陈旧值，若障碍已离开或用户已转向，会以陈旧 TTC 误报"幽灵障碍"（见审查 #4）。轨迹本身仍保留以维持 ID。
+        let activeTracks = tracks.filter { $0.misses == 0 }
+        if let danger = risk.mostDangerous(activeTracks) {
             let smoothed = Obstacle(label: danger.label,
                                     clock: ClockDirection(angleDegrees: danger.bearingDegrees),
                                     distanceMeters: danger.distanceMeters,

@@ -69,10 +69,12 @@ enum DepthSampling {
     }
 
     /// 沿下方中央竖直列采样"地面命中距离"剖面（从近到远），喂给核心 `GroundHazardDetector`。
-    /// 每个采样点取该行 x 附近的中位数抗噪；无效命中记为 -1。
+    /// 每个采样点取该行 x 附近的中位数抗噪。**用置信度过滤**：低置信(LiDAR 在深色/湿滑/超量程
+    /// 地面常返回低置信 0)记为 -1=未知，由核心跳过、不误判落差（见审查 #7）。
     /// ⚠️ near→far 的 y 映射依赖机型/朝向，真机可调 fromY/toY。
-    static func groundProfile(depth: CVPixelBuffer, steps: Int = 6, normalizedX: Double = 0.5,
-                              fromY: Double = 0.95, toY: Double = 0.55) -> [Double] {
+    static func groundProfile(depth: CVPixelBuffer, confidence: CVPixelBuffer? = nil, steps: Int = 6,
+                              normalizedX: Double = 0.5, fromY: Double = 0.95, toY: Double = 0.55,
+                              minConfidence: Float = 0.5) -> [Double] {
         CVPixelBufferLockBaseAddress(depth, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(depth, .readOnly) }
         let w = CVPixelBufferGetWidth(depth)
@@ -80,6 +82,17 @@ enum DepthSampling {
         guard w > 0, h > 0, steps >= 2, let base = CVPixelBufferGetBaseAddress(depth) else { return [] }
         let rowBytes = CVPixelBufferGetBytesPerRow(depth)
         let cx = clampIndex(normalizedX, count: w)
+
+        // 可选：锁定置信度图，用于过滤低置信地面像素。
+        var cInfo: (base: UnsafeMutableRawPointer, rowBytes: Int, w: Int, h: Int)?
+        if let confidence {
+            CVPixelBufferLockBaseAddress(confidence, .readOnly)
+            if let cbase = CVPixelBufferGetBaseAddress(confidence) {
+                cInfo = (cbase, CVPixelBufferGetBytesPerRow(confidence),
+                         CVPixelBufferGetWidth(confidence), CVPixelBufferGetHeight(confidence))
+            }
+        }
+        defer { if confidence != nil { CVPixelBufferUnlockBaseAddress(confidence!, .readOnly) } }
 
         var profile: [Double] = []
         for i in 0..<steps {
@@ -92,8 +105,24 @@ enum DepthSampling {
                 let x = cx + dx
                 if x >= 0, x < w { vals.append(Double(row[x])) }
             }
+            // 该采样行的置信度（取中位）：低于阈值视为读不到，整点记为未知 -1。
+            var confidentEnough = true
+            if let c = cInfo {
+                let cy = clampIndex(ny, count: c.h)
+                let ccx = clampIndex(normalizedX, count: c.w)
+                let crow = c.base.advanced(by: cy * c.rowBytes).assumingMemoryBound(to: UInt8.self)
+                var cvals: [Float] = []
+                for dx in -2...2 {
+                    let x = ccx + dx
+                    if x >= 0, x < c.w { cvals.append(Float(crow[x]) / 2.0) } // 0 low/1 med/2 high → 0...1
+                }
+                if !cvals.isEmpty {
+                    let sorted = cvals.sorted()
+                    confidentEnough = sorted[sorted.count / 2] >= minConfidence
+                }
+            }
             let valid = vals.filter { $0.isFinite && $0 > 0 }.sorted()
-            profile.append(valid.isEmpty ? -1 : valid[valid.count / 2])
+            profile.append((confidentEnough && !valid.isEmpty) ? valid[valid.count / 2] : -1)
         }
         return profile
     }

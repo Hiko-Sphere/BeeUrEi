@@ -97,6 +97,19 @@ final class FramingAssistViewModel {
         }
     }
 
+    /// 识别画面中央区域的颜色（端侧采样 + 核心 ColorNamer，已测）。
+    func readColor() {
+        guard let buffer = latestBuffer else { speak("请先把物体对准相机"); return }
+        let rect = CGRect(x: 0.4, y: 0.4, width: 0.2, height: 0.2)
+        if let rgb = ColorSampler.averageRGB(in: buffer, rect: rect) {
+            let name = ColorNamer().name(r: rgb.r, g: rgb.g, b: rgb.b)
+            resultText = "颜色：\(name)"
+            speak("中间的颜色大概是\(name)")
+        } else {
+            speak("无法识别颜色")
+        }
+    }
+
     private func speak(_ text: String) {
         if UIAccessibility.isVoiceOverRunning {
             UIAccessibility.post(notification: .announcement, argument: text)
@@ -133,13 +146,19 @@ struct FramingAssistView: View {
                         .padding()
                 }
                 Spacer()
-                Button { model.readText() } label: {
-                    Label("朗读文字", systemImage: "text.viewfinder")
+                HStack {
+                    Button { model.readText() } label: {
+                        Label("朗读文字", systemImage: "text.viewfinder")
+                    }
+                    .accessibilityHint("识别并朗读相机里看到的文字")
+                    Button { model.readColor() } label: {
+                        Label("识别颜色", systemImage: "paintpalette.fill")
+                    }
+                    .accessibilityHint("说出画面中央的颜色")
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .padding(.bottom, 8)
-                .accessibilityHint("识别并朗读相机里看到的文字")
                 VStack(spacing: 8) {
                     Text(model.guidanceText).font(.title).bold()
                     if !model.resultText.isEmpty {

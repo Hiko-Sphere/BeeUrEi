@@ -9,14 +9,17 @@ protocol FeedbackSink: AnyObject {
 /// 语音通道播报结束时回调 `finishCurrent()` 释放通道。
 final class FeedbackCoordinator {
     private var arbiter = FeedbackArbiter()
+    private let verbosityPolicy = VerbosityPolicy()
     private let sinks: [FeedbackSink]
 
     init(sinks: [FeedbackSink]) {
         self.sinks = sinks
     }
 
-    /// 提交事件；仅当核心仲裁允许（抢占/空闲）时才真正分发播放。
+    /// 提交事件；先按"播报详略"门控（安静模式只放危险），再用核心仲裁做优先级抢占。
     func submit(_ event: FeedbackEvent) {
+        let level = FeedbackVerbosity(rawValue: FeatureSettings().verbosity) ?? .full
+        guard verbosityPolicy.shouldSpeak(priority: event.priority, verbosity: level) else { return }
         guard arbiter.shouldPlay(event) else { return }
         for sink in sinks {
             sink.play(event)

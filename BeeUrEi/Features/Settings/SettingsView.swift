@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var rate: Double
     @State private var highContrastOn: Bool
     @State private var sonarOn: Bool
+    @State private var verbosity: Int
     @State private var showTutorial = false
 
     init(store: ConsentStore, onClose: @escaping () -> Void) {
@@ -30,6 +31,7 @@ struct SettingsView: View {
         _rate = State(initialValue: Double(features.speechRate))
         _highContrastOn = State(initialValue: features.highContrast)
         _sonarOn = State(initialValue: features.proximitySonar)
+        _verbosity = State(initialValue: features.verbosity)
     }
 
     var body: some View {
@@ -70,6 +72,14 @@ struct SettingsView: View {
                         .onChange(of: sonarOn) { _, v in
                             var f = FeatureSettings(); f.proximitySonar = v
                         }
+                    Picker("播报详略", selection: $verbosity) {
+                        Text("安静（只危险）").tag(0)
+                        Text("正常（转向+危险）").tag(1)
+                        Text("详细（全部）").tag(2)
+                    }
+                    .onChange(of: verbosity) { _, v in
+                        var f = FeatureSettings(); f.verbosity = v
+                    }
                 } header: {
                     Text("播报")
                 } footer: {

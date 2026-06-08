@@ -47,4 +47,11 @@ struct FeatureSettings {
         get { defaults.bool(forKey: proximitySonarKey) }
         set { defaults.set(newValue, forKey: proximitySonarKey) }
     }
+
+    /// 播报详略：0=安静(只危险) 1=正常(转向+危险) 2=详细(全部)。默认 2。
+    private let verbosityKey = "feature.verbosity"
+    var verbosity: Int {
+        get { defaults.object(forKey: verbosityKey) == nil ? 2 : defaults.integer(forKey: verbosityKey) }
+        set { defaults.set(min(max(newValue, 0), 2), forKey: verbosityKey) }
+    }
 }

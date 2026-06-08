@@ -17,13 +17,17 @@ final class FeedbackCoordinator {
     }
 
     /// 提交事件；先按"播报详略"门控（安静模式只放危险），再用核心仲裁做优先级抢占。
-    func submit(_ event: FeedbackEvent) {
+    /// 返回该事件是否**真正进入播报**（被详略或更高优先级仲裁拦下则返回 false）——
+    /// 调用方据此决定是否记账(isSpeaking/承诺式播报)，避免被吞事件造成"以为已播"而静音真实危险（见审查 #3/#4）。
+    @discardableResult
+    func submit(_ event: FeedbackEvent) -> Bool {
         let level = FeedbackVerbosity(rawValue: FeatureSettings().verbosity) ?? .full
-        guard verbosityPolicy.shouldSpeak(priority: event.priority, verbosity: level) else { return }
-        guard arbiter.shouldPlay(event) else { return }
+        guard verbosityPolicy.shouldSpeak(priority: event.priority, verbosity: level) else { return false }
+        guard arbiter.shouldPlay(event) else { return false }
         for sink in sinks {
             sink.play(event)
         }
+        return true
     }
 
     /// 当前播报结束（由语音通道回调）。

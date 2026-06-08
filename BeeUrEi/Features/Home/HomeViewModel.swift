@@ -188,14 +188,16 @@ final class HomeViewModel {
         // 安全优先：去抖 2.5s 即可播报，不等其它逻辑。
         let groundProfile = DepthSampling.groundProfile(depth: depth.depth, confidence: depth.confidence)
         let groundHazardResult = groundHazard.detect(groundProfile: groundProfile)
+        var groundCritical = false // 本帧是否已播脚下危险(critical)，供后面避免被正前方极近播报截断/重复（见审查 #5）
         if let groundHint = groundHazard.hint(groundHazardResult),
            throttle.shouldAnnounce(key: "groundhazard", now: frame.timestamp, minGap: 2.5) {
             // 不设 isSpeaking：地面危险有自己的 2.5s 去抖且经 arbiter 仲裁；若在此置 true，同帧后面的危险
             // 障碍 announcePolicy.decide 会误以为"正在播报同一障碍目标"而把快速逼近的车/人静音漏播（见审查 #1/#8）。
-            // 落差(下台阶/坠落)是不可恢复的危险 → .critical+打断，不被普通障碍截断（见审查 #6）；台阶/竖直面用 .obstacle。
+            // 脚下危险(落差/台阶)都用 .critical：是即时足下危险，不应被前方普通障碍 stopSpeaking 截断（见审查 #1/#6）。
+            // dropOff(下台阶/坠落)更紧急 → interrupt 立即打断；stepUp(台阶/竖直面)仅需不被截断，不强制打断。
             let isDropOff: Bool = { if case .dropOff = groundHazardResult { return true }; return false }()
-            coordinator.submit(FeedbackEvent(priority: isDropOff ? .critical : .obstacle,
-                                             speech: groundHint, interrupt: isDropOff))
+            coordinator.submit(FeedbackEvent(priority: .critical, speech: groundHint, interrupt: isDropOff))
+            groundCritical = true
         }
 
         // 接近声呐（可选）：用正前方最近距离驱动蜂鸣节奏/音高（核心 ProximityCueMapper，已测）。
@@ -248,11 +250,12 @@ final class HomeViewModel {
             TrackObservation(label: o.label, bearingDegrees: o.clock.angleDegrees,
                              distanceMeters: o.distanceMeters, isHazard: hazards.isHighRisk(o.label))
         }
-        tracker.update(observations, dt: dt)
-        // 只用"本帧确有观测"(misses==0)的轨迹驱动危险播报：漏检期间是冻结的陈旧值（见审查 #4）。
-        // 高危类别(车/人等 isHazard)允许 tentative(未确认)轨迹立即参与，避免确认延迟(~0.5s)漏掉快速逼近(见审查 #7)；
-        // 普通类别仍需确认以去抖。
-        let activeTracks = tracker.allTracks.filter { $0.misses == 0 && ($0.confirmed || $0.isHazard) }
+        let tracks = tracker.update(observations, dt: dt)
+        // 只用**已确认**且本帧有观测(misses==0)的轨迹驱动危险播报：confirmed 需累计 confirmHits 帧、id 已稳定，
+        // 承诺式去抖(announcePolicy 用 id 作 key)才有效；放行 tentative 高危轨迹会因 id 逐帧抖动绕过去抖、
+        // 连珠重复播报、且单帧误检即触发打断式播报（见审查 #2/#6）。漏检期(misses>0)是陈旧值，排除（见审查 #4）。
+        // 正前方极近的未分类危险由下方"中央深度兜底"即时兜住，不依赖此处。
+        let activeTracks = tracks.filter { $0.misses == 0 }
 
         // 中央深度兜底**始终评估**：分类器没认出但很近的正前方障碍(玻璃门/矮桩/横杆)，
         // 不能因为存在(可能在侧前方的)跟踪目标就被跳过（见审查 #9）。
@@ -265,9 +268,12 @@ final class HomeViewModel {
         if centralResult.zone == .danger {
             proximityText = suppressMeters ? "正前方很近，请停下"
                                            : String(format: "正前方约 %.1f 米，请注意", centralResult.nearest ?? 0)
-            if let phrase = speechComposer.announceProximity(.danger, nearestMeters: suppressMeters ? nil : centralResult.nearest),
+            // 正前方极近 = 最即时碰撞 → .critical+打断（见审查 #9/#2）。
+            // 但若本帧已播脚下危险(groundCritical)，不再叠加极近播报：避免 .critical 互相 stopSpeaking 截断、
+            // 且"落差/台阶"已隐含"请停下"，语义重复（见审查 #5）。
+            if !groundCritical,
+               let phrase = speechComposer.announceProximity(.danger, nearestMeters: suppressMeters ? nil : centralResult.nearest),
                throttle.shouldAnnounce(key: "proximity:danger", now: frame.timestamp, minGap: 1.5) {
-                // 正前方极近 = 最即时碰撞 → .critical+打断（见审查 #9/#2）。
                 coordinator.submit(FeedbackEvent(priority: .critical, speech: phrase, interrupt: true))
             }
             _ = clearConfirmer.update(isClear: false, now: frame.timestamp)
@@ -287,9 +293,14 @@ final class HomeViewModel {
             let decision = announcePolicy.decide(targetKey: "\(danger.id)|\(danger.label)", urgency: urgency,
                                                  isSpeaking: isSpeaking, now: frame.timestamp)
             if decision.announce {
-                isSpeaking = true
                 // 透传 interrupt：同目标危险骤升(快速逼近)时立即打断当前播报，VoiceOver 下也抢占（见审查 #2）。
-                coordinator.submit(FeedbackEvent(priority: .obstacle, speech: phrase, interrupt: decision.interrupt))
+                // 仅当事件**真正播出**才置 isSpeaking；若被更高优先级(.critical 地面/极近)吞掉，撤销承诺
+                // (announcePolicy.reset)，否则策略会以为"已播报"而把这个真实障碍静音到刷新间隔(~6s)（见审查 #3/#4）。
+                if coordinator.submit(FeedbackEvent(priority: .obstacle, speech: phrase, interrupt: decision.interrupt)) {
+                    isSpeaking = true
+                } else {
+                    announcePolicy.reset()
+                }
             }
             _ = clearConfirmer.update(isClear: false, now: frame.timestamp)
             return

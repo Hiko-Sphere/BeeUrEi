@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var concise: Bool
     @State private var rate: Double
     @State private var highContrastOn: Bool
+    @State private var sonarOn: Bool
     @State private var showTutorial = false
 
     init(store: ConsentStore, onClose: @escaping () -> Void) {
@@ -28,6 +29,7 @@ struct SettingsView: View {
         _concise = State(initialValue: features.conciseAnnouncements)
         _rate = State(initialValue: Double(features.speechRate))
         _highContrastOn = State(initialValue: features.highContrast)
+        _sonarOn = State(initialValue: features.proximitySonar)
     }
 
     var body: some View {
@@ -64,10 +66,14 @@ struct SettingsView: View {
                         .accessibilityLabel("语速")
                         .accessibilityValue("\(Int(rate * 100)) %")
                     }
+                    Toggle("接近声呐（越近蜂鸣越密）", isOn: $sonarOn)
+                        .onChange(of: sonarOn) { _, v in
+                            var f = FeatureSettings(); f.proximitySonar = v
+                        }
                 } header: {
                     Text("播报")
                 } footer: {
-                    Text("简短播报更快说完、降低认知负荷；语速可按习惯调整。")
+                    Text("简短播报更快说完、降低认知负荷；语速可按习惯调整。接近声呐像倒车雷达，正前方越近蜂鸣越急。")
                 }
 
                 Section {

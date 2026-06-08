@@ -40,4 +40,11 @@ struct FeatureSettings {
         get { defaults.bool(forKey: highContrastKey) }
         set { defaults.set(newValue, forKey: highContrastKey) }
     }
+
+    /// 接近声呐（倒车雷达式蜂鸣，越近越密）。默认关（部分用户偏好安静）。
+    private let proximitySonarKey = "feature.proximitySonar"
+    var proximitySonar: Bool {
+        get { defaults.bool(forKey: proximitySonarKey) }
+        set { defaults.set(newValue, forKey: proximitySonarKey) }
+    }
 }

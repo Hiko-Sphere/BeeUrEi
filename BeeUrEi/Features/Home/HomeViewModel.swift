@@ -59,6 +59,8 @@ final class HomeViewModel {
     @ObservationIgnored private let risk = RiskScore()
     @ObservationIgnored private let hazards = HazardCatalog()
     @ObservationIgnored private let groundHazard = GroundHazardDetector()
+    @ObservationIgnored private let proximityMapper = ProximityCueMapper()
+    @ObservationIgnored private let sonifier = ProximitySonifier()
     @ObservationIgnored private let announcePolicy = AnnouncementPolicy()
     @ObservationIgnored private let depthSampler = DepthSampler()
     @ObservationIgnored private let speechComposer = SpeechComposer()
@@ -110,6 +112,7 @@ final class HomeViewModel {
 
     func onDisappear() {
         source.stop()
+        sonifier.stop()
     }
 
     /// 跳到系统「设置」让用户开启被拒的相机权限。
@@ -169,6 +172,15 @@ final class HomeViewModel {
            throttle.shouldAnnounce(key: "groundhazard", now: frame.timestamp, minGap: 2.5) {
             isSpeaking = true
             coordinator.submit(FeedbackEvent(priority: .obstacle, speech: groundHint))
+        }
+
+        // 接近声呐（可选）：用正前方最近距离驱动蜂鸣节奏/音高（核心 ProximityCueMapper，已测）。
+        if FeatureSettings().proximitySonar {
+            let center = DepthSampling.centerSamples(depth: depth.depth, confidence: depth.confidence)
+            let nearest = depthSampler.evaluate(depths: center.depths, confidences: center.confidences).nearest
+            sonifier.update(nearest.flatMap { proximityMapper.cue(distanceMeters: $0) })
+        } else {
+            sonifier.update(nil)
         }
 
         // 1) 检测路径：detector 无模型时返回空 → 自动走深度兜底。

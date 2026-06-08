@@ -8,6 +8,7 @@ struct HomeView: View {
     @State private var showNavigation = false
     @State private var showFraming = false
     @State private var showTutorial = false
+    @State private var locationDescriber = LocationDescriber()
     private let consentStore = ConsentStore()
 
     var body: some View {
@@ -22,6 +23,7 @@ struct HomeView: View {
                     helpButton
                     navButton
                     framingButton
+                    locationButton
                     Spacer()
                     settingsButton
                 }
@@ -82,6 +84,17 @@ struct HomeView: View {
         }
         .accessibilityLabel("识别物体")
         .accessibilityHint("用相机对准物体，语音指引你对准并说出它是什么")
+    }
+
+    private var locationButton: some View {
+        Button { locationDescriber.describe() } label: {
+            Image(systemName: "location.fill")
+                .font(.title2)
+                .padding(12)
+                .background(.ultraThinMaterial, in: Circle())
+        }
+        .accessibilityLabel("我在哪")
+        .accessibilityHint("播报你当前的大概位置")
     }
 
     private var settingsButton: some View {

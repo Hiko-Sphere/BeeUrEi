@@ -6,6 +6,7 @@ struct HomeView: View {
     @State private var showSettings = false
     @State private var showRemoteAssist = false
     @State private var showNavigation = false
+    @State private var showFraming = false
     @State private var showTutorial = false
     private let consentStore = ConsentStore()
 
@@ -20,6 +21,7 @@ struct HomeView: View {
                 HStack {
                     helpButton
                     navButton
+                    framingButton
                     Spacer()
                     settingsButton
                 }
@@ -46,6 +48,9 @@ struct HomeView: View {
         .sheet(isPresented: $showNavigation) {
             WalkNavigationView { showNavigation = false }
         }
+        .fullScreenCover(isPresented: $showFraming) {
+            FramingAssistView { showFraming = false }
+        }
     }
 
     private var navButton: some View {
@@ -66,6 +71,17 @@ struct HomeView: View {
                 .background(.ultraThinMaterial, in: Circle())
         }
         .accessibilityLabel("呼叫帮手")
+    }
+
+    private var framingButton: some View {
+        Button { showFraming = true } label: {
+            Image(systemName: "viewfinder")
+                .font(.title2)
+                .padding(12)
+                .background(.ultraThinMaterial, in: Circle())
+        }
+        .accessibilityLabel("识别物体")
+        .accessibilityHint("用相机对准物体，语音指引你对准并说出它是什么")
     }
 
     private var settingsButton: some View {

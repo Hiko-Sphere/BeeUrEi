@@ -5,11 +5,13 @@ public struct DetectedObject: Sendable, Equatable {
     public let label: String       // 是什么
     public let normalizedX: Double // 检测框中心横坐标 0...1
     public let confidence: Float
+    public let box: NormalizedBox? // 整帧归一化检测框（原点左上），用于取景引导；可选
 
-    public init(label: String, normalizedX: Double, confidence: Float) {
+    public init(label: String, normalizedX: Double, confidence: Float, box: NormalizedBox? = nil) {
         self.label = label
         self.normalizedX = normalizedX
         self.confidence = confidence
+        self.box = box
     }
 }
 

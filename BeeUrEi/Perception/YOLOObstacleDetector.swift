@@ -68,9 +68,17 @@ final class YOLOObstacleDetector: ObstacleDetecting {
             guard let top = obs.labels.first, top.confidence >= confidenceThreshold else { return nil }
             // ROI 内的归一化 midX → 整帧归一化 X（保证几点钟方向正确）。
             let fullX = mapper.fullNormalizedX(Double(obs.boundingBox.midX))
+            // 整帧检测框（原点左上）用于取景引导：ROI 相对(左下) → 整帧 → 翻 y。
+            let bb = obs.boundingBox
+            let fx = Double(activeROI.origin.x) + Double(bb.origin.x) * Double(activeROI.width)
+            let fyBL = Double(activeROI.origin.y) + Double(bb.origin.y) * Double(activeROI.height)
+            let fw = Double(bb.width) * Double(activeROI.width)
+            let fh = Double(bb.height) * Double(activeROI.height)
+            let box = NormalizedBox(x: fx, y: 1 - fyBL - fh, width: fw, height: fh)
             return DetectedObject(label: top.identifier,
                                   normalizedX: fullX,
-                                  confidence: top.confidence)
+                                  confidence: top.confidence,
+                                  box: box)
         }
     }
 

@@ -1,0 +1,51 @@
+# BeeUrEi 持续集成：每次 push 到 main 或 PR 时，自动跑核心单测 + 后端测试 + iOS 构建。
+# 守住"可上线"质量门槛——任一失败即阻止合并。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  core-tests:
+    name: 核心逻辑单测 (Swift)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: swift test (BeeUrEiCore)
+        run: swift test --package-path Packages/BeeUrEiCore
+
+  backend:
+    name: 后端 (Node + vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - name: typecheck
+        run: npm run typecheck
+      - name: test
+        run: npm test
+
+  ios-build:
+    name: iOS 构建
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Build (iphonesimulator, no signing)
+        run: |
+          xcodebuild -project BeeUrEi.xcodeproj -target BeeUrEi \
+            -sdk iphonesimulator -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO build

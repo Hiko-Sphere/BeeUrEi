@@ -182,7 +182,7 @@
 - **达成标准**：接入崩溃/错误监控(Crashlytics/Sentry)；关键流程 E2E 冒烟；感知管线性能基准守住阈值。
 - **依赖**：监控 SDK。
 
-### F3. CI/CD 流水线 ❌ · P1
+### F3. CI/CD 流水线 ✅（GitHub Actions：核心单测+后端测试+iOS 构建；CD 自动部署待办）· P1
 - **目标**：提交即自动构建/测试/分发。
 - **达成标准**：PR 自动跑 `swift test` + 后端 `vitest` + iOS 构建；main 合并自动部署后端 + TestFlight 分发。
 - **技术要点**：GitHub Actions（macOS runner 跑 iOS 构建；自托管或云）。

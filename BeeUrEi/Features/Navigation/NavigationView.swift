@@ -5,6 +5,7 @@ struct WalkNavigationView: View {
     @State private var model = NavigationViewModel()
     @State private var destination = ""
     @State private var region: NavigationViewModel.Region = .overseas
+    @State private var favorites: [String] = []
     let onClose: () -> Void
 
     var body: some View {
@@ -23,11 +24,33 @@ struct WalkNavigationView: View {
                         .autocorrectionDisabled()
                     if !model.running {
                         Button("开始导航") {
+                            let store = FavoritePlacesStore()
+                            store.add(destination)
+                            favorites = store.all
                             Task { await model.start(destination: destination, region: region) }
                         }
                         .disabled(destination.isEmpty)
                     } else {
                         Button("停止导航", role: .destructive) { model.stop() }
+                    }
+                }
+
+                if !favorites.isEmpty {
+                    Section("常用目的地") {
+                        ForEach(favorites, id: \.self) { place in
+                            Button(place) {
+                                destination = place
+                                let store = FavoritePlacesStore()
+                                store.add(place)
+                                favorites = store.all
+                                Task { await model.start(destination: place, region: region) }
+                            }
+                        }
+                        .onDelete { idx in
+                            let store = FavoritePlacesStore()
+                            idx.map { favorites[$0] }.forEach { store.remove($0) }
+                            favorites = store.all
+                        }
                     }
                 }
 
@@ -49,6 +72,7 @@ struct WalkNavigationView: View {
                 }
             }
             .navigationTitle("步行导航")
+            .onAppear { favorites = FavoritePlacesStore().all }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("完成") { onClose() } }
             }

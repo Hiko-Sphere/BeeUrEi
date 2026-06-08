@@ -32,6 +32,7 @@ struct AccountInfo: Codable, Sendable, Equatable, Identifiable {
 
 struct AuthResult: Codable, Sendable {
     let token: String
+    let refreshToken: String
     let user: AccountInfo
 }
 
@@ -91,6 +92,15 @@ struct APIClient {
 
     func login(username: String, password: String) async throws -> AuthResult {
         try await postAuth("/api/auth/login", body: ["username": username, "password": password])
+    }
+
+    func refresh(refreshToken: String) async throws -> AuthResult {
+        try await postAuth("/api/auth/refresh", body: ["refreshToken": refreshToken])
+    }
+
+    /// 撤销 refresh token（登出，尽力而为）。
+    func revokeRefresh(token: String, refreshToken: String) async {
+        _ = try? await authedSend("POST", "/api/auth/logout", token: token, body: ["refreshToken": refreshToken])
     }
 
     private func postAuth(_ path: String, body: [String: Any]) async throws -> AuthResult {

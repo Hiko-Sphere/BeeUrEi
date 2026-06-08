@@ -2,7 +2,7 @@ import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { Store, User, Role, UserStatus, FamilyLink, Report, ReportStatus, Recording, RecordingConfig } from './store'
+import type { Store, User, Role, UserStatus, FamilyLink, Report, ReportStatus, Recording, RecordingConfig, RefreshToken } from './store'
 
 // 用运行时 require + 非静态模块名加载 node:sqlite，避免打包器(vitest/vite)静态解析失败；
 // 由 Node 在运行时解析（需 --experimental-sqlite，已在 npm 脚本里通过 NODE_OPTIONS 开启）。
@@ -32,7 +32,25 @@ export class SqliteStore implements Store {
         id TEXT PRIMARY KEY, callId TEXT, ownerId TEXT, consentBy TEXT,
         reason TEXT, recordedAt INTEGER);
       CREATE TABLE IF NOT EXISTS config (k TEXT PRIMARY KEY, v TEXT);
+      CREATE TABLE IF NOT EXISTS refresh_tokens (
+        tokenHash TEXT PRIMARY KEY, userId TEXT, expiresAt INTEGER);
     `)
+  }
+
+  // MARK: refresh tokens
+  createRefreshToken(rt: RefreshToken): void {
+    this.db.prepare('INSERT OR REPLACE INTO refresh_tokens (tokenHash, userId, expiresAt) VALUES (?, ?, ?)')
+      .run(rt.tokenHash, rt.userId, rt.expiresAt)
+  }
+  findRefreshToken(tokenHash: string): RefreshToken | undefined {
+    const row = this.db.prepare('SELECT * FROM refresh_tokens WHERE tokenHash = ?').get(tokenHash) as any
+    return row ? { tokenHash: row.tokenHash, userId: row.userId, expiresAt: Number(row.expiresAt) } : undefined
+  }
+  deleteRefreshToken(tokenHash: string): void {
+    this.db.prepare('DELETE FROM refresh_tokens WHERE tokenHash = ?').run(tokenHash)
+  }
+  deleteRefreshTokensForUser(userId: string): void {
+    this.db.prepare('DELETE FROM refresh_tokens WHERE userId = ?').run(userId)
   }
 
   // MARK: users

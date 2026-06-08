@@ -37,6 +37,13 @@ export interface Report {
   createdAt: number
 }
 
+/// refresh token（仅存哈希，轮换+撤销）。
+export interface RefreshToken {
+  tokenHash: string
+  userId: string
+  expiresAt: number
+}
+
 /// 录制策略（Q6）：默认不录、需同意、到期自动删。
 export interface RecordingConfig {
   enabled: boolean
@@ -73,6 +80,11 @@ export interface Store {
   findReport(id: string): Report | undefined
   updateReport(id: string, patch: Partial<Report>): Report | undefined
 
+  createRefreshToken(rt: RefreshToken): void
+  findRefreshToken(tokenHash: string): RefreshToken | undefined
+  deleteRefreshToken(tokenHash: string): void
+  deleteRefreshTokensForUser(userId: string): void
+
   getRecordingConfig(): RecordingConfig
   setRecordingConfig(patch: Partial<RecordingConfig>): RecordingConfig
   createRecording(rec: Recording): void
@@ -87,7 +99,24 @@ export class MemoryStore implements Store {
   protected links = new Map<string, FamilyLink>()
   protected reports = new Map<string, Report>()
   protected recordings = new Map<string, Recording>()
+  protected refreshTokens = new Map<string, RefreshToken>()
   protected recordingConfig: RecordingConfig = { enabled: false, retentionDays: 7, requireConsent: true }
+
+  createRefreshToken(rt: RefreshToken): void {
+    this.refreshTokens.set(rt.tokenHash, rt)
+    this.afterMutate()
+  }
+  findRefreshToken(tokenHash: string): RefreshToken | undefined {
+    return this.refreshTokens.get(tokenHash)
+  }
+  deleteRefreshToken(tokenHash: string): void {
+    if (this.refreshTokens.delete(tokenHash)) this.afterMutate()
+  }
+  deleteRefreshTokensForUser(userId: string): void {
+    let changed = false
+    for (const [k, v] of this.refreshTokens) if (v.userId === userId) { this.refreshTokens.delete(k); changed = true }
+    if (changed) this.afterMutate()
+  }
 
   createUser(user: User): void {
     this.users.set(user.id, user)
@@ -184,12 +213,14 @@ export class JsonFileStore extends MemoryStore {
           links?: FamilyLink[]
           reports?: Report[]
           recordings?: Recording[]
+          refreshTokens?: RefreshToken[]
           recordingConfig?: RecordingConfig
         }
         for (const u of data.users ?? []) this.users.set(u.id, u)
         for (const l of data.links ?? []) this.links.set(l.id, l)
         for (const r of data.reports ?? []) this.reports.set(r.id, r)
         for (const rec of data.recordings ?? []) this.recordings.set(rec.id, rec)
+        for (const rt of data.refreshTokens ?? []) this.refreshTokens.set(rt.tokenHash, rt)
         if (data.recordingConfig) this.recordingConfig = data.recordingConfig
       } catch {
         /* 损坏的文件忽略，从空开始 */
@@ -204,6 +235,7 @@ export class JsonFileStore extends MemoryStore {
       links: [...this.links.values()],
       reports: [...this.reports.values()],
       recordings: [...this.recordings.values()],
+      refreshTokens: [...this.refreshTokens.values()],
       recordingConfig: this.recordingConfig,
     }
     writeFileSync(this.path, JSON.stringify(data, null, 2))

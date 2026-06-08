@@ -1,12 +1,11 @@
 import Foundation
 import Security
 
-/// 把登录 token 存进 Keychain（比 UserDefaults 安全）。
+/// 把登录凭据存进 Keychain（比 UserDefaults 安全）。支持多键（access + refresh token）。
 enum KeychainStore {
     private static let service = "com.beeurei.BeeUrEi"
-    private static let account = "authToken"
 
-    static func save(_ token: String) {
+    static func save(_ value: String, account: String = "authToken") {
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -14,11 +13,11 @@ enum KeychainStore {
         ]
         SecItemDelete(base as CFDictionary)
         var add = base
-        add[kSecValueData as String] = Data(token.utf8)
+        add[kSecValueData as String] = Data(value.utf8)
         SecItemAdd(add as CFDictionary, nil)
     }
 
-    static func read() -> String? {
+    static func read(account: String = "authToken") -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -32,7 +31,7 @@ enum KeychainStore {
         return String(data: data, encoding: .utf8)
     }
 
-    static func delete() {
+    static func delete(account: String = "authToken") {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -40,4 +39,9 @@ enum KeychainStore {
         ]
         SecItemDelete(query as CFDictionary)
     }
+
+    // MARK: refresh token 便捷
+    static func saveRefresh(_ token: String) { save(token, account: "refreshToken") }
+    static func readRefresh() -> String? { read(account: "refreshToken") }
+    static func deleteRefresh() { delete(account: "refreshToken") }
 }

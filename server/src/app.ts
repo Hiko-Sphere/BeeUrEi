@@ -9,6 +9,7 @@ import { registerFamilyRoutes } from './routes/family'
 import { registerEmergencyRoutes } from './routes/emergency'
 import { registerSignaling } from './routes/ws'
 import { PresenceRegistry } from './assist/presence'
+import { PendingCallRegistry } from './assist/pendingCalls'
 import { registerAssistRoutes } from './routes/assist'
 import { SignalingHub } from './signaling/hub'
 import { registerReportRoutes } from './routes/reports'
@@ -27,6 +28,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   const app = Fastify({ logger: false })
   const hub = new SignalingHub()
   const presence = new PresenceRegistry()
+  const pendingCalls = new PendingCallRegistry()
 
   // 速率限制（防暴力/滥用）。必须在路由之前加载，故把 HTTP 路由放进随后加载的子插件，
   // 确保它们继承到限流钩子。
@@ -50,7 +52,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerRecordingRoutes(instance, store)
     registerDevRoutes(instance, store)
     registerNavRoutes(instance, store)
-    registerAssistRoutes(instance, store, hub, presence)
+    registerAssistRoutes(instance, store, hub, presence, pendingCalls)
   })
 
   // WebSocket 信令（自带子插件作用域）。

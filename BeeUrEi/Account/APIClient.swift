@@ -61,6 +61,14 @@ struct EmergencyTarget: Codable, Sendable, Identifiable {
     let isEmergency: Bool
 }
 
+/// 待接来电（协助者/亲友轮询得到）：发起人 + 用于加入的 callId。
+struct IncomingCall: Codable, Sendable, Identifiable {
+    var id: String { callId }
+    let callId: String
+    let fromName: String
+    let fromUserId: String
+}
+
 struct RecordingConfig: Codable, Sendable {
     let enabled: Bool
     let retentionDays: Int
@@ -258,6 +266,26 @@ struct APIClient {
         // 同上：解码失败抛错而非静默空数组，避免紧急路径误报"没有亲友"（见审查 round5 #3）。
         guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.decoding }
         return r.targets
+    }
+
+    // MARK: 免推送前台会合（视障登记呼叫 → 在线协助者/亲友轮询接听）
+
+    /// 视障侧发起呼叫：登记 callId + 目标用户，供对端轮询发现并加入。
+    func startEmergencyCall(token: String, callId: String, targetUserIds: [String]) async throws {
+        _ = try await authedSend("POST", "/api/assist/call", token: token, body: ["callId": callId, "targetUserIds": targetUserIds])
+    }
+
+    /// 取消/结束待接来电（尽力而为）。
+    func cancelCall(token: String, callId: String) async {
+        _ = try? await authedSend("POST", "/api/assist/call/cancel", token: token, body: ["callId": callId])
+    }
+
+    /// 协助者/亲友轮询自己的待接来电。
+    func incomingCalls(token: String) async throws -> [IncomingCall] {
+        struct R: Codable { let calls: [IncomingCall] }
+        let data = try await authedGet("/api/assist/incoming", token: token)
+        guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.decoding }
+        return r.calls
     }
 
     /// 通话前拉取 ICE 服务器（STUN + 短时效 TURN 凭据）。

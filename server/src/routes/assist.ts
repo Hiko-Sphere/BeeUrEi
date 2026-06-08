@@ -6,15 +6,18 @@ import { SignalingHub } from '../signaling/hub'
 import { PresenceRegistry } from '../assist/presence'
 import { rankHelpers, type Candidate } from '../assist/matcher'
 import { buildIceServers } from '../assist/turnCredentials'
+import { PendingCallRegistry } from '../assist/pendingCalls'
 
 const heartbeatSchema = z.object({ available: z.boolean() })
 const matchSchema = z.object({ emergency: z.boolean().optional(), preferredLanguage: z.string().optional() })
+const callSchema = z.object({ callId: z.string().min(1).max(128), targetUserIds: z.array(z.string().min(1)).min(1).max(20) })
 
 export function registerAssistRoutes(
   app: FastifyInstance,
   store: Store,
   hub: SignalingHub,
   presence: PresenceRegistry,
+  pendingCalls: PendingCallRegistry,
 ): void {
   // 协助者/亲友"在线待命"心跳（客户端定期调用；available=false 即下线）。
   app.post('/api/assist/heartbeat', { preHandler: requireAuth() }, async (req, reply) => {
@@ -60,5 +63,34 @@ export function registerAssistRoutes(
       return { memberId: c.userId, memberName: u?.displayName ?? '未知', isEmergency: c.isEmergency, load: c.load }
     })
     return { targets, count: targets.length }
+  })
+
+  // 视障侧发起呼叫：登记 callId 与目标用户，供在线协助者/亲友轮询发现并加入（免推送前台会合）。
+  app.post('/api/assist/call', { preHandler: requireAuth() }, async (req, reply) => {
+    const parsed = callSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const from = req.user!
+    pendingCalls.register({
+      callId: parsed.data.callId,
+      fromUserId: from.sub,
+      fromName: store.findById(from.sub)?.displayName ?? '求助者',
+      toUserIds: parsed.data.targetUserIds,
+      createdAt: Date.now(),
+    })
+    return { ok: true }
+  })
+
+  // 协助者/亲友轮询：取针对自己的待接来电（callId + 发起人）。
+  app.get('/api/assist/incoming', { preHandler: requireAuth() }, async (req) => {
+    const calls = pendingCalls.incomingFor(req.user!.sub, Date.now())
+    return { calls: calls.map((c) => ({ callId: c.callId, fromName: c.fromName, fromUserId: c.fromUserId })) }
+  })
+
+  // 取消/结束待接来电（接通或挂断后清理）。
+  app.post('/api/assist/call/cancel', { preHandler: requireAuth() }, async (req, reply) => {
+    const id = (req.body as { callId?: string })?.callId
+    if (typeof id !== 'string' || !id) return reply.code(400).send({ error: 'invalid_input' })
+    pendingCalls.cancel(id)
+    return { ok: true }
   })
 }

@@ -116,7 +116,10 @@ struct FamilyLinksView: View {
             }
             let prefix = online.isEmpty ? "暂无在线联系人，仍尝试呼叫：" : "正在呼叫在线联系人："
             emergencyInfo = prefix + targets.map(\.memberName).joined(separator: " → ")
-            emergencyCall = CallSession()  // 接通由信令负责；真实响铃需推送（真机）
+            let session = CallSession()
+            // 登记本次呼叫，使在线的协助者/亲友前台轮询即可接听（免推送会合；真机后台响铃仍需推送）。
+            try? await api.startEmergencyCall(token: token, callId: session.id, targetUserIds: targets.map(\.memberId))
+            emergencyCall = session
         } catch { errorText = "紧急呼叫发起失败" }
     }
 }

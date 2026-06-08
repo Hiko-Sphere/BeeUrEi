@@ -8,6 +8,8 @@ struct HelperHomeView: View {
     @State private var online = false
     @State private var testCall: CallSession?
     @State private var hbTask: Task<Void, Never>?
+    @State private var pollTask: Task<Void, Never>?
+    @State private var incomingCall: IncomingCall?
 
     var body: some View {
         NavigationStack {
@@ -38,6 +40,7 @@ struct HelperHomeView: View {
             .navigationTitle("协助者")
             .onDisappear {
                 hbTask?.cancel(); hbTask = nil
+                pollTask?.cancel(); pollTask = nil
                 // 离开页面要显式下线，否则后端在 TTL 窗口内仍可能把已离开的人匹配给紧急求助（见审查 #7）。
                 if online, let token = session.token {
                     Task { await APIClient().assistHeartbeat(token: token, available: false) }
@@ -47,11 +50,18 @@ struct HelperHomeView: View {
         .fullScreenCover(item: $testCall) { s in
             CallView(role: .helper, callId: s.id) { testCall = nil }
         }
+        .fullScreenCover(item: $incomingCall) { call in
+            CallView(role: .helper, callId: call.callId) {
+                if let token = session.token { Task { await APIClient().cancelCall(token: token, callId: call.callId) } }
+                incomingCall = nil
+            }
+        }
     }
 
-    /// "在线待命"开关 → 周期性心跳（20s）上报可用；关闭即下线。
+    /// "在线待命"开关 → 周期性心跳（20s）上报可用 + 轮询待接来电；关闭即下线。
     private func heartbeat(_ on: Bool) {
         hbTask?.cancel(); hbTask = nil
+        pollTask?.cancel(); pollTask = nil
         guard let token = session.token else { return }
         if on {
             hbTask = Task {
@@ -60,8 +70,19 @@ struct HelperHomeView: View {
                     try? await Task.sleep(for: .seconds(20))
                 }
             }
+            pollTask = Task { await pollIncoming(token: token) }
         } else {
             Task { await APIClient().assistHeartbeat(token: token, available: false) }
+        }
+    }
+
+    /// 在线期间每 3s 轮询一次待接来电；发现即弹出通话（免推送前台会合）。
+    private func pollIncoming(token: String) async {
+        while !Task.isCancelled {
+            if incomingCall == nil, let calls = try? await APIClient().incomingCalls(token: token), let first = calls.first {
+                incomingCall = first
+            }
+            try? await Task.sleep(for: .seconds(3))
         }
     }
 }

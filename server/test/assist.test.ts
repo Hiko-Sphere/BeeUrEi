@@ -64,6 +64,30 @@ describe('assist presence + match', () => {
     await a.close()
   })
 
+  it('紧急呼叫前台会合：视障登记呼叫，目标协助者轮询到、他人收不到、取消后清除', async () => {
+    const a = app()
+    const owner = await reg(a, 'caller9', 'blind')
+    const helper = await reg(a, 'helper9', 'helper')
+    const other = await reg(a, 'other9', 'helper')
+    const auth = (t: string) => ({ authorization: `Bearer ${t}` })
+
+    const r1 = await a.inject({ method: 'POST', url: '/api/assist/call', headers: auth(owner.token), payload: { callId: 'call-xyz', targetUserIds: [helper.user.id] } })
+    expect(r1.statusCode).toBe(200)
+
+    const inc = await a.inject({ method: 'GET', url: '/api/assist/incoming', headers: auth(helper.token) })
+    expect(inc.json().calls.length).toBe(1)
+    expect(inc.json().calls[0].callId).toBe('call-xyz')
+    expect(inc.json().calls[0].fromName).toBe('caller9')
+
+    const inc2 = await a.inject({ method: 'GET', url: '/api/assist/incoming', headers: auth(other.token) })
+    expect(inc2.json().calls.length).toBe(0)
+
+    await a.inject({ method: 'POST', url: '/api/assist/call/cancel', headers: auth(owner.token), payload: { callId: 'call-xyz' } })
+    const inc3 = await a.inject({ method: 'GET', url: '/api/assist/incoming', headers: auth(helper.token) })
+    expect(inc3.json().calls.length).toBe(0)
+    await a.close()
+  })
+
   it('heartbeat requires auth', async () => {
     const a = app()
     const res = await a.inject({ method: 'POST', url: '/api/assist/heartbeat', payload: { available: true } })

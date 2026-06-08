@@ -23,9 +23,15 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store): void {
     return { user: publicUser(updated) }
   })
 
-  // 举报列表。
+  // 举报列表（解析举报人/被举报人显示名，便于审核）。
   app.get('/api/admin/reports', adminOnly, async () => {
-    return { reports: store.allReports() }
+    return {
+      reports: store.allReports().map((r) => ({
+        ...r,
+        reporterName: store.findById(r.reporterId)?.displayName ?? '未知',
+        targetName: store.findById(r.targetUserId)?.displayName ?? '未知',
+      })),
+    }
   })
 
   // 处理举报（标记已解决）。

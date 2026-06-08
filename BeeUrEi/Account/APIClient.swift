@@ -80,6 +80,8 @@ struct ReportInfo: Codable, Sendable, Identifiable {
     let targetUserId: String
     let reason: String
     let status: String
+    let reporterName: String?
+    let targetName: String?
 }
 
 enum APIError: Error {

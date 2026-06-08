@@ -73,6 +73,7 @@ describe('admin + reports', () => {
 
     const list = await app.inject({ method: 'GET', url: '/api/admin/reports', headers: adminAuth })
     expect(list.json().reports.length).toBe(1)
+    expect(list.json().reports[0].reporterName).toBe('carol') // 解析举报人显示名
 
     const resolve = await app.inject({ method: 'POST', url: `/api/admin/reports/${reportId}/resolve`, headers: adminAuth })
     expect(resolve.json().report.status).toBe('resolved')

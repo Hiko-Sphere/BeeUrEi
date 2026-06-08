@@ -56,7 +56,7 @@ struct AdminHomeView: View {
                             HStack {
                                 VStack(alignment: .leading) {
                                     Text(r.reason)
-                                    Text(r.status == "open" ? "待处理" : "已处理")
+                                    Text("\(r.reporterName ?? "?") 举报 \(r.targetName ?? "?") · \(r.status == "open" ? "待处理" : "已处理")")
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
                                 Spacer()

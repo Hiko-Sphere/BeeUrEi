@@ -44,7 +44,7 @@ struct CallView: View {
             .controlSize(.large)
         }
         .padding()
-        .task { model.start() }
+        .task { await model.start() }
     }
 
     private var blindControls: some View {

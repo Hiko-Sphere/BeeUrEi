@@ -5,6 +5,7 @@ import { requireAuth } from '../auth/rbac'
 import { SignalingHub } from '../signaling/hub'
 import { PresenceRegistry } from '../assist/presence'
 import { rankHelpers, type Candidate } from '../assist/matcher'
+import { buildIceServers } from '../assist/turnCredentials'
 
 const heartbeatSchema = z.object({ available: z.boolean() })
 const matchSchema = z.object({ emergency: z.boolean().optional(), preferredLanguage: z.string().optional() })
@@ -21,6 +22,20 @@ export function registerAssistRoutes(
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     presence.heartbeat(req.user!.sub, parsed.data.available, Date.now())
     return { ok: true }
+  })
+
+  // WebRTC ICE 服务器（STUN + 短时效 TURN 凭据）。客户端通话前拉取。
+  app.get('/api/assist/turn', { preHandler: requireAuth() }, async () => {
+    const stun = (process.env.STUN_URLS ?? 'stun:stun.l.google.com:19302').split(',').map((s) => s.trim()).filter(Boolean)
+    const turn = (process.env.TURN_URLS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+    const iceServers = buildIceServers({
+      stun,
+      turn,
+      secret: process.env.TURN_SECRET,
+      ttlSeconds: 6 * 60 * 60, // 6 小时
+      nowMs: Date.now(),
+    })
+    return { iceServers }
   })
 
   // 视障侧请求匹配：在"我绑定的亲友/协助者"里挑在线可用者，按优先级排序。

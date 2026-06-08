@@ -27,7 +27,7 @@
 - **技术要点**：Xcode 加 SPM 包 `https://github.com/stasel/WebRTC`；真机编译激活真实路径；按需修正个别 API；加麦克风/摄像头权限串与用途说明。
 - **依赖**：🌐 stasel/WebRTC 包 + 两台真机。
 
-### A3. coturn TURN 服务器实部署 ❌ · P0
+### A3. coturn TURN 服务器实部署 🔜（短时效凭据系统+/api/assist/turn 端点+iOS ICE 接线+coturn 配置已就绪；coturn 实部署待开 UDP 安全组端口）· P0
 - **目标**：跨运营商/NAT 的两端也能接通（不只是同 Wi‑Fi）。
 - **达成标准**：双方分别在 4G 与家庭宽带下仍能接通；信令把 TURN 凭据下发到客户端 `RTCIceServer`；连通率在测试样本中 > 95%。
 - **技术要点**：在 awsjapan 跑 coturn（已存 `coturn.conf.example`）；用短期 TURN 凭据(HMAC)由后端签发；开放 UDP 端口；客户端 ICE servers 加 STUN+TURN。

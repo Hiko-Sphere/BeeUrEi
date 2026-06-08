@@ -21,7 +21,7 @@ final class CallViewModel {
         self.callId = callId
     }
 
-    func start() {
+    func start() async {
         guard let token = KeychainStore.read() else {
             statusText = "请先在「设置 → 账号」登录后再呼叫"
             return
@@ -43,6 +43,10 @@ final class CallViewModel {
         }
         signaling.connect(token: token, baseURL: ServerConfig.baseURL)
         signaling.join(callId: callId, role: role == .blind ? "blind" : "helper")
+        // 通话前拉取 ICE 服务器（STUN + 短时效 TURN 凭据），用于 NAT 穿透。
+        if let servers = try? await APIClient().iceServers(token: token) {
+            media.setIceServers(servers)
+        }
         media.start(asCaller: role == .blind)
         statusText = "已加入，等待对方接入…"
     }

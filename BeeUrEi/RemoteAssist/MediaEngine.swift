@@ -11,6 +11,7 @@ protocol MediaEngine: AnyObject {
     /// 本端生成的 ICE candidate，交给信令发送。
     var onLocalCandidate: ((_ candidate: String, _ sdpMid: String?, _ sdpMLineIndex: Int32) -> Void)? { get set }
 
+    func setIceServers(_ servers: [IceServerInfo])
     func start(asCaller: Bool)
     func createOffer()
     func handleRemoteDescription(type: String, sdp: String)
@@ -23,6 +24,7 @@ protocol MediaEngine: AnyObject {
 final class StubMediaEngine: MediaEngine {
     var onLocalDescription: ((String, String) -> Void)?
     var onLocalCandidate: ((String, String?, Int32) -> Void)?
+    func setIceServers(_ servers: [IceServerInfo]) {}
     func start(asCaller: Bool) {}
     func createOffer() {}
     func handleRemoteDescription(type: String, sdp: String) {}
@@ -65,11 +67,16 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
     private(set) var remoteVideoTrack: RTCVideoTrack?
     private weak var remoteRenderer: RTCVideoRenderer?
     private var asCaller = false
+    private var iceConfig: [IceServerInfo] = []
+
+    func setIceServers(_ servers: [IceServerInfo]) { iceConfig = servers }
 
     func start(asCaller: Bool) {
         self.asCaller = asCaller
         let config = RTCConfiguration()
-        config.iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
+        config.iceServers = iceConfig.isEmpty
+            ? [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
+            : iceConfig.map { RTCIceServer(urlStrings: $0.urls, username: $0.username ?? "", credential: $0.credential ?? "") }
         config.sdpSemantics = .unifiedPlan
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
         pc = Self.factory.peerConnection(with: config, constraints: constraints, delegate: self)

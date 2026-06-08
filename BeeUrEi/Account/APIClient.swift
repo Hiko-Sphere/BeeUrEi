@@ -66,6 +66,13 @@ struct RecordingConfig: Codable, Sendable {
     let requireConsent: Bool
 }
 
+/// WebRTC ICE 服务器（STUN/TURN）。
+struct IceServerInfo: Codable, Sendable {
+    let urls: [String]
+    let username: String?
+    let credential: String?
+}
+
 struct ReportInfo: Codable, Sendable, Identifiable {
     let id: String
     let reporterId: String
@@ -242,6 +249,13 @@ struct APIClient {
         struct R: Codable { let targets: [EmergencyTarget] }
         let data = try await authedSend("POST", "/api/assist/match", token: token, body: ["emergency": emergency])
         return (try? JSONDecoder().decode(R.self, from: data))?.targets ?? []
+    }
+
+    /// 通话前拉取 ICE 服务器（STUN + 短时效 TURN 凭据）。
+    func iceServers(token: String) async throws -> [IceServerInfo] {
+        struct R: Codable { let iceServers: [IceServerInfo] }
+        let data = try await authedGet("/api/assist/turn", token: token)
+        return (try? JSONDecoder().decode(R.self, from: data))?.iceServers ?? []
     }
 
     // MARK: 录制策略（管理员）

@@ -1,0 +1,17 @@
+# 自托管 TURN（coturn）。用 host 网络以便中继端口可达。
+# 部署：在 server/coturn/ 放一个 .env（TURN_SECRET 与后端一致、TURN_EXTERNAL_IP=公网IP），然后：
+#   sudo docker compose up -d
+# ⚠️ TURN 走 UDP，必须在云安全组放行：UDP 3478 与 UDP 49160-49200（Cloudflare 隧道无法代理 TURN UDP）。
+# 放行后，在后端 .env 设 TURN_URLS=turn:<公网IP>:3478 与 TURN_SECRET=<同一密钥>，重启后端即生效。
+services:
+  coturn:
+    image: coturn/coturn:latest
+    container_name: beeurei-coturn
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
+    command: >
+      -c /etc/coturn/turnserver.conf
+      --static-auth-secret=${TURN_SECRET}
+      --external-ip=${TURN_EXTERNAL_IP}

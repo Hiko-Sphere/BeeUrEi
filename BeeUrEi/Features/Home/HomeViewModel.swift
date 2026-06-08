@@ -58,6 +58,7 @@ final class HomeViewModel {
     @ObservationIgnored private let tracker = ObstacleTracker()
     @ObservationIgnored private let risk = RiskScore()
     @ObservationIgnored private let hazards = HazardCatalog()
+    @ObservationIgnored private let groundHazard = GroundHazardDetector()
     @ObservationIgnored private let announcePolicy = AnnouncementPolicy()
     @ObservationIgnored private let depthSampler = DepthSampler()
     @ObservationIgnored private let speechComposer = SpeechComposer()
@@ -159,6 +160,15 @@ final class HomeViewModel {
         guard currentMode != .suspended, let depth = frame.depth else {
             proximityText = "测距暂停"
             return
+        }
+
+        // 地面高危地形（落差/下台阶/路缘）——纯 LiDAR 几何，COCO 模型识别不了的"脚下"危险。
+        // 安全优先：去抖 2.5s 即可播报，不等其它逻辑。
+        let groundProfile = DepthSampling.groundProfile(depth: depth.depth)
+        if let groundHint = groundHazard.hint(groundHazard.detect(groundProfile: groundProfile)),
+           throttle.shouldAnnounce(key: "groundhazard", now: frame.timestamp, minGap: 2.5) {
+            isSpeaking = true
+            coordinator.submit(FeedbackEvent(priority: .obstacle, speech: groundHint))
         }
 
         // 1) 检测路径：detector 无模型时返回空 → 自动走深度兜底。

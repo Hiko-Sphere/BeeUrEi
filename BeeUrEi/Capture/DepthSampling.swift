@@ -68,6 +68,36 @@ enum DepthSampling {
         return (depths, confidences)
     }
 
+    /// 沿下方中央竖直列采样"地面命中距离"剖面（从近到远），喂给核心 `GroundHazardDetector`。
+    /// 每个采样点取该行 x 附近的中位数抗噪；无效命中记为 -1。
+    /// ⚠️ near→far 的 y 映射依赖机型/朝向，真机可调 fromY/toY。
+    static func groundProfile(depth: CVPixelBuffer, steps: Int = 6, normalizedX: Double = 0.5,
+                              fromY: Double = 0.95, toY: Double = 0.55) -> [Double] {
+        CVPixelBufferLockBaseAddress(depth, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(depth, .readOnly) }
+        let w = CVPixelBufferGetWidth(depth)
+        let h = CVPixelBufferGetHeight(depth)
+        guard w > 0, h > 0, steps >= 2, let base = CVPixelBufferGetBaseAddress(depth) else { return [] }
+        let rowBytes = CVPixelBufferGetBytesPerRow(depth)
+        let cx = clampIndex(normalizedX, count: w)
+
+        var profile: [Double] = []
+        for i in 0..<steps {
+            let t = Double(i) / Double(steps - 1)
+            let ny = fromY + (toY - fromY) * t // 近 → 远
+            let y = clampIndex(ny, count: h)
+            let row = base.advanced(by: y * rowBytes).assumingMemoryBound(to: Float32.self)
+            var vals: [Double] = []
+            for dx in -2...2 {
+                let x = cx + dx
+                if x >= 0, x < w { vals.append(Double(row[x])) }
+            }
+            let valid = vals.filter { $0.isFinite && $0 > 0 }.sorted()
+            profile.append(valid.isEmpty ? -1 : valid[valid.count / 2])
+        }
+        return profile
+    }
+
     private static func clampIndex(_ normalized: Double, count: Int) -> Int {
         let clamped = min(max(normalized, 0), 1)
         return min(Int(clamped * Double(count - 1)), count - 1)

@@ -64,6 +64,7 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
     private var pc: RTCPeerConnection?
     private var localVideoTrack: RTCVideoTrack?
     private var videoCapturer: RTCCameraVideoCapturer?
+    private var capturing = false // 仅在用户主动发画面时才开相机（最小权限/默认隐私，见审查 #2）
     private(set) var remoteVideoTrack: RTCVideoTrack?
     private weak var remoteRenderer: RTCVideoRenderer?
     private var asCaller = false
@@ -95,7 +96,8 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
             pc?.add(videoTrack, streamIds: ["stream0"])
             localVideoTrack = videoTrack
             videoCapturer = capturer
-            startCapture(capturer)
+            // 不在此处开相机：仅在 setLocalVideoSending(true) 时才启动采集，确保相机只在用户主动
+            // 发画面期间运转、隐私指示灯与"画面未发送"一致（见审查 #2）。
         }
     }
 
@@ -129,10 +131,17 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
 
     func setLocalVideoSending(_ sending: Bool) {
         localVideoTrack?.isEnabled = sending
+        // 按需开/关相机硬件：发画面时才采集，停发即停采集（见审查 #2）。
+        if sending {
+            if !capturing, let capturer = videoCapturer { startCapture(capturer); capturing = true }
+        } else if capturing {
+            videoCapturer?.stopCapture()
+            capturing = false
+        }
     }
 
     func stop() {
-        videoCapturer?.stopCapture()
+        if capturing { videoCapturer?.stopCapture(); capturing = false }
         pc?.close()
         pc = nil
     }

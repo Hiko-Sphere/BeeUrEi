@@ -88,7 +88,8 @@ final class CallViewModel {
                                             sdpMLineIndex: Int32((msg["sdpMLineIndex"] as? Int) ?? 0))
             }
         case "video-gate":
-            if let on = msg["on"] as? Bool { statusText = on ? "对方开启了画面" : "对方关闭了画面" }
+            // 关闭画面时恢复"已连接"，避免状态栏永久停在"对方关闭了画面"让协助者误以为掉线（见审查 #3）。
+            if let on = msg["on"] as? Bool { statusText = on ? "已连接 · 对方已开启画面" : connectedStatus() }
         case "peer-left":
             statusText = "对方已离开"
         default:

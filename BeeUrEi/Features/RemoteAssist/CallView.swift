@@ -5,6 +5,7 @@ import SwiftUI
 struct CallView: View {
     @State private var model: CallViewModel
     @State private var showReport = false
+    @Environment(\.scenePhase) private var scenePhase
     let onClose: () -> Void
 
     init(role: CallViewModel.Role, callId: String, onClose: @escaping () -> Void) {
@@ -63,6 +64,12 @@ struct CallView: View {
             Text("举报会发送给管理员审核，请仅在确有问题时使用。")
         }
         .task { await model.start() }
+        // 隐私 fail-safe：手势被取消(来电/弹窗/进后台/手指滑出)不会触发 DragGesture.onEnded，
+        // 故在离开界面与进入非活跃态时强制关闭画面外发，确保"按住才发"绝不漏成"持续发"（见审查 #1）。
+        .onDisappear { model.setVideoSending(false) }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { model.setVideoSending(false) }
+        }
     }
 
     private var blindControls: some View {

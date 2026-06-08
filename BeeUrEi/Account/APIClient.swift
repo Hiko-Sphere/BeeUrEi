@@ -134,6 +134,8 @@ struct APIClient {
             throw APIError.network
         }
         guard let http = resp as? HTTPURLResponse else { throw APIError.network }
+        // 5xx 是后端瞬时故障（token 仍有效）→ 归为可重试的 .network，绝不据此登出/删令牌（见审查 #4）。
+        if http.statusCode >= 500 { throw APIError.network }
         if http.statusCode >= 400 {
             let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             let msg = (obj?["error"] as? String) ?? "HTTP \(http.statusCode)"
@@ -154,6 +156,7 @@ struct APIClient {
         let (data, resp): (Data, URLResponse)
         do { (data, resp) = try await URLSession.shared.data(for: req) } catch { throw APIError.network }
         guard let http = resp as? HTTPURLResponse else { throw APIError.network }
+        if http.statusCode >= 500 { throw APIError.network } // 瞬时后端故障：可重试，不登出（见审查 #4）
         if http.statusCode >= 400 {
             let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             throw APIError.server((obj?["error"] as? String) ?? "HTTP \(http.statusCode)")
@@ -189,7 +192,9 @@ struct APIClient {
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.httpBody = try JSONSerialization.data(withJSONObject: ["status": status])
         let (_, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse, http.statusCode < 400 else { throw APIError.server("操作失败") }
+        guard let http = resp as? HTTPURLResponse else { throw APIError.network }
+        if http.statusCode >= 500 { throw APIError.network }
+        guard http.statusCode < 400 else { throw APIError.server("操作失败") }
     }
 
     func devStats(token: String) async throws -> [String: Any] {
@@ -213,6 +218,7 @@ struct APIClient {
         let (data, resp): (Data, URLResponse)
         do { (data, resp) = try await URLSession.shared.data(for: req) } catch { throw APIError.network }
         guard let http = resp as? HTTPURLResponse else { throw APIError.network }
+        if http.statusCode >= 500 { throw APIError.network } // 瞬时后端故障：可重试，不登出（见审查 #4）
         if http.statusCode >= 400 {
             let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             throw APIError.server((obj?["error"] as? String) ?? "HTTP \(http.statusCode)")

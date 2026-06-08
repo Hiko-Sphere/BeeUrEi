@@ -46,6 +46,24 @@ describe('PendingCallRegistry', () => {
     expect(r.register({ ...base(), toUserIds: ['family1'] })).toBe(true)
   })
 
+  it('target cancel only removes self in a multi-target group call (见审查 #5)', () => {
+    const r = new PendingCallRegistry()
+    r.register(base({ toUserIds: ['h1', 'h2'] }))
+    expect(r.cancel('c1', 'h1')).toBe(true)
+    expect(r.incomingFor('h1', 0).length).toBe(0) // h1 退出
+    expect(r.incomingFor('h2', 0).length).toBe(1) // h2 仍能接听
+    expect(r.cancel('c1', 'h2')).toBe(true)        // 最后一个目标退出 → 整条删除
+    expect(r.incomingFor('h2', 0).length).toBe(0)
+  })
+
+  it('register prunes expired entries before ownership check (见审查 #4)', () => {
+    const r = new PendingCallRegistry(60_000)
+    expect(r.register(base({ createdAt: 0 }))).toBe(true) // A(blind1) at t=0
+    // B 在 A 过期(t=70s)后用同一 callId 登记 → 不应被僵尸条目挡住
+    expect(r.register({ callId: 'c1', fromUserId: 'B', fromName: 'b', toUserIds: ['x'], createdAt: 70_000 })).toBe(true)
+    expect(r.incomingFor('x', 70_000).length).toBe(1)
+  })
+
   it('returns most recent first', () => {
     const r = new PendingCallRegistry()
     r.register(base({ callId: 'old', createdAt: 1 }))

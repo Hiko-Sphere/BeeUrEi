@@ -19,11 +19,11 @@ export class PendingCallRegistry {
     private readonly maxEntries = 1000,
   ) {}
 
-  /// 登记。若该 callId 已被**他人**占用则拒绝（返回 false），防止覆盖/劫持他人会合。
+  /// 登记。若该 callId 已被**他人且未过期**占用则拒绝（返回 false），防止覆盖/劫持他人会合。
   register(call: PendingCall): boolean {
+    this.prune(call.createdAt) // 先清过期：否则他人的"僵尸"过期条目会一直阻挡合法登记(callId 占位 DoS，见审查 #4)
     const existing = this.calls.get(call.callId)
     if (existing && existing.fromUserId !== call.fromUserId) return false
-    this.prune(call.createdAt)
     this.cap()
     this.calls.set(call.callId, call)
     return true
@@ -37,13 +37,24 @@ export class PendingCallRegistry {
       .sort((a, b) => b.createdAt - a.createdAt)
   }
 
-  /// 取消：仅发起人或目标之一可取消（归属校验，防止任意用户压制他人求助）。
+  /// 取消（归属校验，防止任意用户压制他人求助）：
+  /// - 发起人取消 → 删整条；
+  /// - 某个目标取消 → 只把自己从 toUserIds 移除（仅当无剩余目标才删整条），
+  ///   不影响对其他在线亲友的群呼（见审查 #5）。
   cancel(callId: string, requesterId: string): boolean {
     const c = this.calls.get(callId)
     if (!c) return false
-    if (c.fromUserId !== requesterId && !c.toUserIds.includes(requesterId)) return false
-    this.calls.delete(callId)
-    return true
+    if (c.fromUserId === requesterId) {
+      this.calls.delete(callId)
+      return true
+    }
+    if (c.toUserIds.includes(requesterId)) {
+      const remaining = c.toUserIds.filter((id) => id !== requesterId)
+      if (remaining.length === 0) this.calls.delete(callId)
+      else this.calls.set(callId, { ...c, toUserIds: remaining })
+      return true
+    }
+    return false
   }
 
   private prune(now: number): void {

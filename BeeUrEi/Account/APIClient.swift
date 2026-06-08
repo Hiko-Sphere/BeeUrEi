@@ -257,7 +257,9 @@ struct APIClient {
     // MARK: 在线待命 / 匹配
 
     func assistHeartbeat(token: String, available: Bool) async {
-        _ = try? await authedSend("POST", "/api/assist/heartbeat", token: token, body: ["available": available])
+        // 带客户端发起时刻：后端据此忽略乱序到达的过期心跳，避免切页时把在线亲友错标离线（见审查 #1）。
+        let at = Int(Date().timeIntervalSince1970 * 1000)
+        _ = try? await authedSend("POST", "/api/assist/heartbeat", token: token, body: ["available": available, "at": at])
     }
 
     func assistMatch(token: String, emergency: Bool) async throws -> [EmergencyTarget] {

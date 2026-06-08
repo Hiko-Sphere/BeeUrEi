@@ -118,29 +118,32 @@ struct RemoteAssistView: View {
     }
 
     /// 一键求助：匹配在线的已绑定亲友/协助者 → 登记会合(让对端轮询接听) → 进入通话。
+    /// activeCall == nil 守卫：防止 cover 呈现前的一帧内重复触发生成第二个 CallSession 覆盖、
+    /// 孤立刚登记的 callId（见审查 #3）。
     private func callForHelp() async {
-        guard !calling, let token = KeychainStore.read() else {
-            if KeychainStore.read() == nil { statusText = "请先在「设置 → 账号」登录" }
-            return
-        }
+        guard !calling, activeCall == nil else { return }
+        guard let token = KeychainStore.read() else { statusText = "请先在「设置 → 账号」登录"; return }
         calling = true; statusText = "正在为你呼叫帮手…"; defer { calling = false }
         do {
             let online = try await APIClient().assistMatch(token: token, emergency: true)
             let targets = online.isEmpty ? try await APIClient().emergencyTargets(token: token) : online
             guard !targets.isEmpty else { statusText = "还没有可呼叫的亲友/协助者，请先添加并绑定。"; return }
             let session = CallSession()
-            try? await APIClient().startEmergencyCall(token: token, callId: session.id, targetUserIds: targets.map(\.memberId))
+            // 用 try(非 try?)：登记失败(断网/服务端拒绝)时进入 catch，不进"假通话"苦等（见审查 #2）。
+            try await APIClient().startEmergencyCall(token: token, callId: session.id, targetUserIds: targets.map(\.memberId))
             statusText = (online.isEmpty ? "暂无在线，仍尝试呼叫：" : "正在呼叫：") + targets.map(\.memberName).joined(separator: " → ")
             activeCall = session
-        } catch { statusText = "呼叫失败，请检查网络后重试。" }
+        } catch { statusText = "呼叫未送达，请检查网络后重试，或改用电话联系。" }
     }
 
     /// 定向呼叫某位已绑定的亲友/协助者。
     private func call(_ link: FamilyLinkInfo) async {
-        guard !calling, let token = KeychainStore.read() else { return }
+        guard !calling, activeCall == nil, let token = KeychainStore.read() else { return }
         calling = true; statusText = "正在呼叫：\(link.memberName)"; defer { calling = false }
-        let session = CallSession()
-        try? await APIClient().startEmergencyCall(token: token, callId: session.id, targetUserIds: [link.memberId])
-        activeCall = session
+        do {
+            let session = CallSession()
+            try await APIClient().startEmergencyCall(token: token, callId: session.id, targetUserIds: [link.memberId])
+            activeCall = session
+        } catch { statusText = "呼叫 \(link.memberName) 未送达，请重试或改用电话联系。" }
     }
 }

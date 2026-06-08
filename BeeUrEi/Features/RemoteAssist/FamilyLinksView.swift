@@ -122,7 +122,8 @@ struct FamilyLinksView: View {
             emergencyInfo = prefix + targets.map(\.memberName).joined(separator: " → ")
             let session = CallSession()
             // 登记本次呼叫，使在线的协助者/亲友前台轮询即可接听（免推送会合；真机后台响铃仍需推送）。
-            try? await api.startEmergencyCall(token: token, callId: session.id, targetUserIds: targets.map(\.memberId))
+            // 用 try(非 try?)：登记失败时进入 catch 提示而非进"假通话"（见审查 #2）。
+            try await api.startEmergencyCall(token: token, callId: session.id, targetUserIds: targets.map(\.memberId))
             emergencyCall = session
         } catch { errorText = "紧急呼叫发起失败" }
     }

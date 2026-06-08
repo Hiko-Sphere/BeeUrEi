@@ -8,7 +8,7 @@ import { rankHelpers, type Candidate } from '../assist/matcher'
 import { buildIceServers } from '../assist/turnCredentials'
 import { PendingCallRegistry } from '../assist/pendingCalls'
 
-const heartbeatSchema = z.object({ available: z.boolean() })
+const heartbeatSchema = z.object({ available: z.boolean(), at: z.number().optional() })
 const matchSchema = z.object({ emergency: z.boolean().optional(), preferredLanguage: z.string().optional() })
 const callSchema = z.object({ callId: z.string().min(1).max(128), targetUserIds: z.array(z.string().min(1)).min(1).max(20) })
 
@@ -23,7 +23,7 @@ export function registerAssistRoutes(
   app.post('/api/assist/heartbeat', { preHandler: requireAuth() }, async (req, reply) => {
     const parsed = heartbeatSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
-    presence.heartbeat(req.user!.sub, parsed.data.available, Date.now())
+    presence.heartbeat(req.user!.sub, parsed.data.available, Date.now(), parsed.data.at ?? Date.now())
     return { ok: true }
   })
 

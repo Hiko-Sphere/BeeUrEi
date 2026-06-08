@@ -10,6 +10,8 @@ struct AdminHomeView: View {
     @State private var recConfig: RecordingConfig?
     @State private var errorText: String?
     @State private var loading = false
+    @State private var busyIds: Set<String> = []   // 在途的封禁/解封/处理目标，防重复点击竞态（见审查 #1）
+    @State private var savingRec = false             // 录制配置写入中，防两个开关并发覆盖（见审查 #2）
 
     @State private var api = APIClient()
 
@@ -43,6 +45,7 @@ struct AdminHomeView: View {
                                     Task { await setStatus(u, to: u.status == "active" ? "disabled" : "active") }
                                 }
                                 .buttonStyle(.bordered)
+                                .disabled(busyIds.contains(u.id))
                             }
                         }
                     }
@@ -63,6 +66,7 @@ struct AdminHomeView: View {
                                 if r.status == "open" {
                                     Button("处理") { Task { await resolve(r) } }
                                         .buttonStyle(.bordered)
+                                        .disabled(busyIds.contains(r.id))
                                 }
                             }
                         }
@@ -72,7 +76,9 @@ struct AdminHomeView: View {
                 Section("录制策略") {
                     if let cfg = recConfig {
                         Toggle("允许录制", isOn: Binding(get: { cfg.enabled }, set: { v in Task { await setRec(enabled: v) } }))
+                            .disabled(savingRec)
                         Toggle("录制需各方同意", isOn: Binding(get: { cfg.requireConsent }, set: { v in Task { await setRec(consent: v) } }))
+                            .disabled(savingRec)
                         LabeledContent("保留天数", value: "\(cfg.retentionDays) 天")
                     } else {
                         Text("加载中…").foregroundStyle(.secondary)
@@ -90,25 +96,30 @@ struct AdminHomeView: View {
 
     private func load() async {
         guard let token = session.token else { errorText = "请先登录"; return }
+        guard !loading else { return } // 防重入：.task 与 .refreshable 与操作后刷新可并发，避免重叠 load 竞态（见审查 #3）
         loading = true; defer { loading = false }
         do {
-            users = try await api.adminUsers(token: token)
-            reports = try await api.adminReports(token: token)
-            recConfig = try? await api.recordingConfig(token: token)
+            // 全部成功后再一次性提交，避免部分失败时半新半旧的不一致数据（见审查 #3）。
+            let u = try await api.adminUsers(token: token)
+            let r = try await api.adminReports(token: token)
+            let c = try? await api.recordingConfig(token: token)
+            users = u; reports = r; recConfig = c
             errorText = nil
         } catch {
-            errorText = "加载失败（需管理员权限并连接后端）"
+            errorText = "加载失败（需管理员权限并连接后端）" // 失败不动已有数据
         }
     }
 
     private func setRec(enabled: Bool? = nil, consent: Bool? = nil) async {
-        guard let token = session.token else { return }
+        guard let token = session.token, !savingRec else { return } // 串行化，防两个开关并发覆盖（见审查 #2）
+        savingRec = true; defer { savingRec = false }
         do { recConfig = try await api.setRecordingConfig(token: token, enabled: enabled, requireConsent: consent) }
         catch { errorText = "录制配置更新失败" }
     }
 
     private func setStatus(_ user: AccountInfo, to status: String) async {
-        guard let token = session.token else { return }
+        guard let token = session.token, !busyIds.contains(user.id) else { return } // 防重复点击（见审查 #1）
+        busyIds.insert(user.id); defer { busyIds.remove(user.id) }
         do {
             try await api.setUserStatus(token: token, userId: user.id, status: status)
             await load()
@@ -118,7 +129,8 @@ struct AdminHomeView: View {
     }
 
     private func resolve(_ report: ReportInfo) async {
-        guard let token = session.token else { return }
+        guard let token = session.token, !busyIds.contains(report.id) else { return } // 防重复点击（见审查 #1）
+        busyIds.insert(report.id); defer { busyIds.remove(report.id) }
         do {
             try await api.resolveReport(token: token, id: report.id)
             await load()

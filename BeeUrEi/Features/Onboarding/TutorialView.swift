@@ -44,9 +44,13 @@ final class TutorialModel {
     var isLast: Bool { index >= steps.count - 1 }
     var spokenText: String { "\(current.title)。\(current.body)" }
 
-    func announceCurrent() {
+    /// proactiveVoiceOver=false 时（首次出现）不主动 post——让 VoiceOver 焦点朗读描述元素的 label，
+    /// 避免与焦点朗读重复念两遍（见审查）。翻页时焦点在按钮上，需 proactive=true 主动播报。
+    func announceCurrent(proactiveVoiceOver: Bool = true) {
         if UIAccessibility.isVoiceOverRunning {
-            UIAccessibility.post(notification: .announcement, argument: spokenText)
+            if proactiveVoiceOver {
+                UIAccessibility.post(notification: .announcement, argument: spokenText)
+            }
         } else {
             let u = AVSpeechUtterance(string: spokenText)
             u.voice = AVSpeechSynthesisVoice(language: "zh-CN")
@@ -74,14 +78,19 @@ struct TutorialView: View {
     var body: some View {
         VStack(spacing: 24) {
             Spacer()
-            Image(systemName: model.current.icon)
-                .font(.system(size: 72)).foregroundStyle(.tint)
-                .accessibilityHidden(true)
-            Text(model.current.title)
-                .font(.largeTitle).bold().multilineTextAlignment(.center)
-            Text(model.current.body)
-                .font(.title3).multilineTextAlignment(.center)
-                .padding(.horizontal)
+            // 仅把"描述"(图标+标题+正文)合并为一个可读元素；按钮保持各自独立、可聚焦、可激活，
+            // 否则 .combine 会吞掉按钮的激活动作，VoiceOver 用户无法跳过/翻页/退出，卡在首屏（见审查）。
+            VStack(spacing: 24) {
+                Image(systemName: model.current.icon)
+                    .font(.system(size: 72)).foregroundStyle(.tint)
+                Text(model.current.title)
+                    .font(.largeTitle).bold().multilineTextAlignment(.center)
+                Text(model.current.body)
+                    .font(.title3).multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(model.spokenText)
             Spacer()
             Text("第 \(model.index + 1) / \(model.steps.count) 步")
                 .font(.footnote).foregroundStyle(.secondary)
@@ -98,10 +107,8 @@ struct TutorialView: View {
             .padding(.horizontal)
         }
         .padding()
-        // VoiceOver：当前步骤合并为一个可读元素。
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(model.spokenText)
-        .task { model.announceCurrent() }
+        // 首次出现：VoiceOver 让焦点朗读描述 label（不主动 post，避免重复）；非 VoiceOver 用语音读出。
+        .task { model.announceCurrent(proactiveVoiceOver: false) }
     }
 }
 

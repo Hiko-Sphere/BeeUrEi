@@ -80,6 +80,7 @@ final class FramingAssistViewModel {
     /// 朗读相机里看到的文字（端侧 Vision OCR，中英文）——盲人读标牌/标签/菜单。
     func readText() {
         guard let buffer = latestBuffer else { speak("请先把要读的文字对准相机"); return }
+        if tooDarkToProceed() { return }
         resultText = "正在识别文字…"
         let request = VNRecognizeTextRequest { [weak self] req, _ in
             let texts = (req.results as? [VNRecognizedTextObservation])?
@@ -101,6 +102,7 @@ final class FramingAssistViewModel {
 
     /// "前方有什么"：把最近一帧的检测物体按左/中/右汇总播报（核心 SceneSummarizer，已测）。
     func describeScene() {
+        if tooDarkToProceed() { return }
         let objects = latestDetections.map { (label: labels.localizedName($0.label), normalizedX: $0.normalizedX) }
         let text = SceneSummarizer().summary(objects: objects)
         resultText = text
@@ -110,6 +112,7 @@ final class FramingAssistViewModel {
     /// 识别画面中央区域的颜色（端侧采样 + 核心 ColorNamer，已测）。
     func readColor() {
         guard let buffer = latestBuffer else { speak("请先把物体对准相机"); return }
+        if tooDarkToProceed() { return }
         let rect = CGRect(x: 0.4, y: 0.4, width: 0.2, height: 0.2)
         if let rgb = ColorSampler.averageRGB(in: buffer, rect: rect) {
             let name = ColorNamer().name(r: rgb.r, g: rgb.g, b: rgb.b)
@@ -118,6 +121,21 @@ final class FramingAssistViewModel {
         } else {
             speak("无法识别颜色")
         }
+    }
+
+    private func currentBrightness() -> Double? {
+        guard let buffer = latestBuffer,
+              let rgb = ColorSampler.averageRGB(in: buffer, rect: CGRect(x: 0, y: 0, width: 1, height: 1)) else { return nil }
+        return LightMeter.luminance(r: rgb.r, g: rgb.g, b: rgb.b)
+    }
+
+    /// 太暗则播报提示并返回 true（识别/OCR 在暗处会失败，先提醒）。
+    private func tooDarkToProceed() -> Bool {
+        if let b = currentBrightness(), LightMeter().level(brightness: b) == .dark {
+            speak("光线太暗，可能看不清，请到亮一点的地方再试")
+            return true
+        }
+        return false
     }
 
     private func speak(_ text: String) {

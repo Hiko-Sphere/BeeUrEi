@@ -70,6 +70,12 @@ describe('assist presence + match', () => {
     const helper = await reg(a, 'helper9', 'helper')
     const other = await reg(a, 'other9', 'helper')
     const auth = (t: string) => ({ authorization: `Bearer ${t}` })
+    // owner 须与目标有亲友绑定才能呼叫（越权防护）。
+    await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(owner.token), payload: { username: 'helper9' } })
+
+    // 未绑定的目标 → 403（不能向任意用户强推来电）。
+    const forbidden = await a.inject({ method: 'POST', url: '/api/assist/call', headers: auth(owner.token), payload: { callId: 'c-bad', targetUserIds: [other.user.id] } })
+    expect(forbidden.statusCode).toBe(403)
 
     const r1 = await a.inject({ method: 'POST', url: '/api/assist/call', headers: auth(owner.token), payload: { callId: 'call-xyz', targetUserIds: [helper.user.id] } })
     expect(r1.statusCode).toBe(200)

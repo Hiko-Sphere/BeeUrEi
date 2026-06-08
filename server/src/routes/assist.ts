@@ -70,13 +70,18 @@ export function registerAssistRoutes(
     const parsed = callSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const from = req.user!
-    pendingCalls.register({
+    // 仅允许呼叫与自己有亲友绑定关系的目标——否则任意用户可向任意 userId 强推伪造来电(越权/骚扰，见审查 #1)。
+    const allowed = new Set(store.linksByOwner(from.sub).map((l) => l.memberId))
+    const targets = parsed.data.targetUserIds.filter((id) => allowed.has(id))
+    if (targets.length === 0) return reply.code(403).send({ error: 'not_linked' })
+    const ok = pendingCalls.register({
       callId: parsed.data.callId,
       fromUserId: from.sub,
       fromName: store.findById(from.sub)?.displayName ?? '求助者',
-      toUserIds: parsed.data.targetUserIds,
+      toUserIds: targets,
       createdAt: Date.now(),
     })
+    if (!ok) return reply.code(409).send({ error: 'call_id_conflict' }) // 该 callId 被他人占用，防覆盖/劫持(见审查 #2)
     return { ok: true }
   })
 
@@ -86,11 +91,11 @@ export function registerAssistRoutes(
     return { calls: calls.map((c) => ({ callId: c.callId, fromName: c.fromName, fromUserId: c.fromUserId })) }
   })
 
-  // 取消/结束待接来电（接通或挂断后清理）。
+  // 取消/结束待接来电（接通或挂断后清理）。仅发起人或目标可取消（归属校验，防越权压制，见审查 #3）。
   app.post('/api/assist/call/cancel', { preHandler: requireAuth() }, async (req, reply) => {
     const id = (req.body as { callId?: string })?.callId
     if (typeof id !== 'string' || !id) return reply.code(400).send({ error: 'invalid_input' })
-    pendingCalls.cancel(id)
+    pendingCalls.cancel(id, req.user!.sub)
     return { ok: true }
   })
 }

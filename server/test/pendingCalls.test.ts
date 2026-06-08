@@ -26,11 +26,24 @@ describe('PendingCallRegistry', () => {
     expect(r.size).toBe(0)
   })
 
-  it('cancel removes a call', () => {
+  it('cancel only by owner or target (归属校验)', () => {
     const r = new PendingCallRegistry()
     r.register(base())
-    r.cancel('c1')
+    expect(r.cancel('c1', 'stranger')).toBe(false) // 非发起人/目标不可取消
+    expect(r.incomingFor('helper1', 0).length).toBe(1)
+    expect(r.cancel('c1', 'helper1')).toBe(true)    // 目标可取消
     expect(r.incomingFor('helper1', 0).length).toBe(0)
+  })
+
+  it('rejects overwriting another user’s callId', () => {
+    const r = new PendingCallRegistry()
+    expect(r.register(base())).toBe(true)
+    // 同 callId、不同发起人 → 拒绝覆盖
+    expect(r.register({ ...base(), fromUserId: 'attacker', toUserIds: ['victim'] })).toBe(false)
+    expect(r.incomingFor('victim', 0).length).toBe(0) // 攻击者注入失败
+    expect(r.incomingFor('helper1', 0).length).toBe(1)
+    // 同发起人可更新自己的
+    expect(r.register({ ...base(), toUserIds: ['family1'] })).toBe(true)
   })
 
   it('returns most recent first', () => {

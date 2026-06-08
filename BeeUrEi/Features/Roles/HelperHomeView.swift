@@ -10,6 +10,7 @@ struct HelperHomeView: View {
     @State private var hbTask: Task<Void, Never>?
     @State private var pollTask: Task<Void, Never>?
     @State private var incomingCall: IncomingCall?
+    @State private var dismissedCallIds: Set<String> = []  // 已挂断的来电不再重复弹出（见审查 #5）
 
     var body: some View {
         NavigationStack {
@@ -52,6 +53,7 @@ struct HelperHomeView: View {
         }
         .fullScreenCover(item: $incomingCall) { call in
             CallView(role: .helper, callId: call.callId) {
+                dismissedCallIds.insert(call.callId)  // 防止取消请求与轮询竞速时反复弹回（见审查 #5）
                 if let token = session.token { Task { await APIClient().cancelCall(token: token, callId: call.callId) } }
                 incomingCall = nil
             }
@@ -77,9 +79,13 @@ struct HelperHomeView: View {
     }
 
     /// 在线期间每 3s 轮询一次待接来电；发现即弹出通话（免推送前台会合）。
+    /// 仅当没有任何通话在呈现(testCall/incomingCall 均 nil)且该来电未被挂断过时才弹出，
+    /// 避免与测试通话双 cover 竞态遮蔽真实来电(#9)、以及挂断后反复弹回(#5)。
     private func pollIncoming(token: String) async {
         while !Task.isCancelled {
-            if incomingCall == nil, let calls = try? await APIClient().incomingCalls(token: token), let first = calls.first {
+            if incomingCall == nil, testCall == nil,
+               let calls = try? await APIClient().incomingCalls(token: token),
+               let first = calls.first(where: { !dismissedCallIds.contains($0.callId) }) {
                 incomingCall = first
             }
             try? await Task.sleep(for: .seconds(3))

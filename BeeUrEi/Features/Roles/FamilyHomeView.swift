@@ -13,6 +13,7 @@ struct FamilyHomeView: View {
     @State private var hbTask: Task<Void, Never>?
     @State private var pollTask: Task<Void, Never>?
     @State private var incomingCall: IncomingCall?
+    @State private var dismissedCallIds: Set<String> = []  // 已挂断的来电不再重复弹出（见审查 #5）
 
     var body: some View {
         NavigationStack {
@@ -70,6 +71,7 @@ struct FamilyHomeView: View {
         }
         .fullScreenCover(item: $incomingCall) { call in
             CallView(role: .helper, callId: call.callId) {
+                dismissedCallIds.insert(call.callId)
                 if let token = session.token { Task { await APIClient().cancelCall(token: token, callId: call.callId) } }
                 incomingCall = nil
             }
@@ -100,10 +102,12 @@ struct FamilyHomeView: View {
         }
     }
 
-    /// 在线期间每 3s 轮询待接来电；发现即弹出通话（免推送前台会合）。
+    /// 在线期间每 3s 轮询待接来电；仅当无通话呈现且该来电未被挂断过时才弹出（见审查 #5/#9）。
     private func pollIncoming(token: String) async {
         while !Task.isCancelled {
-            if incomingCall == nil, let calls = try? await APIClient().incomingCalls(token: token), let first = calls.first {
+            if incomingCall == nil, testCall == nil,
+               let calls = try? await APIClient().incomingCalls(token: token),
+               let first = calls.first(where: { !dismissedCallIds.contains($0.callId) }) {
                 incomingCall = first
             }
             try? await Task.sleep(for: .seconds(3))

@@ -17,6 +17,7 @@ final class YOLOObstacleDetector: ObstacleDetecting {
     private let roi: CGRect
     private let roiMapper: ROIMapper
     private let trafficClassifier = TrafficLightClassifier()
+    private let trafficStabilizer = TrafficLightStabilizer()
 
     /// 最近一帧的红绿灯状态（按灯框平均色判别；远距/小目标不可靠，见 §5.7）。
     private(set) var lastTrafficLightState: TrafficLightState = .unknown
@@ -63,7 +64,8 @@ final class YOLOObstacleDetector: ObstacleDetecting {
             return []
         }
         let observations = (request.results as? [VNRecognizedObjectObservation]) ?? []
-        lastTrafficLightState = trafficLightState(observations, activeROI: activeROI, pixelBuffer: pixelBuffer)
+        // 时间稳定化：连续多帧一致才改判，避免红/绿误闪（安全）。
+        lastTrafficLightState = trafficStabilizer.update(trafficLightState(observations, activeROI: activeROI, pixelBuffer: pixelBuffer))
         return observations.compactMap { obs in
             guard let top = obs.labels.first, top.confidence >= confidenceThreshold else { return nil }
             // ROI 内的归一化 midX → 整帧归一化 X（保证几点钟方向正确）。

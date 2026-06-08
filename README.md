@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/Swift-5-FFC42E?logo=swift&logoColor=14161F" alt="Swift 5">
   <img src="https://img.shields.io/badge/on--device%20AI-Core%20ML%20%2B%20ARKit-14161F" alt="On-device AI">
   <img src="https://img.shields.io/badge/backend-Node%20%2B%20Fastify-339933?logo=nodedotjs&logoColor=white" alt="Backend">
-  <img src="https://img.shields.io/badge/tests-216%20passing-2ea44f" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-221%20passing-2ea44f" alt="Tests">
   <img src="https://img.shields.io/badge/built%20for-accessibility-FFC42E?logoColor=14161F" alt="Accessibility">
 </p>
 

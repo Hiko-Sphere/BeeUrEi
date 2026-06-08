@@ -40,6 +40,9 @@ final class NavigationViewModel {
     @ObservationIgnored private var currentHeading: Double = 0
     @ObservationIgnored private var lastBeacon: TimeInterval = 0
     @ObservationIgnored private var lastOffRouteAnnounce: TimeInterval = 0
+    @ObservationIgnored private var lastHeadingTime: TimeInterval = 0   // 最近一次可信航向的时刻(单调钟)；陈旧则抑制信标（见审查 #4）
+    @ObservationIgnored private var announcedImminent = false           // 当前转向点的"现在…"高确定性指令是否已播——推进的前提（见审查 #7）
+    @ObservationIgnored private var offRouteStreak = 0                  // 连续判定偏航的帧数，需≥2 抗单帧抖动（见审查 #3）
 
     func start(destination query: String, region: Region) async {
         guard FeatureSettings().navigationEnabled else {
@@ -66,6 +69,9 @@ final class NavigationViewModel {
         lastSpoken = ""
         headingReliable = false
         headingFilter = HeadingFilter()
+        announcedImminent = false
+        offRouteStreak = 0
+        lastHeadingTime = 0
         running = true
         status = "正在定位…"
 
@@ -77,6 +83,7 @@ final class NavigationViewModel {
                 let raw = h.trueHeading >= 0 ? h.trueHeading : h.magneticHeading
                 self.currentHeading = self.headingFilter.update(headingDegrees: raw, accuracyDegrees: h.headingAccuracy)
                 self.headingReliable = true
+                self.lastHeadingTime = ProcessInfo.processInfo.systemUptime // 记录可信航向时刻，供信标时效门控（见审查 #4）
             } else {
                 self.headingReliable = false
             }
@@ -114,14 +121,22 @@ final class NavigationViewModel {
 
         // 仅海外做实时引导（国内为静态步骤读出）。
         guard region == .overseas, let dest = destination else { return }
-        let now = Date().timeIntervalSince1970
+        let now = ProcessInfo.processInfo.systemUptime // 单调时钟，避免系统时间回拨冻结信标/偏航节流（见审查 #6）
         let lat = loc.coordinate.latitude, lon = loc.coordinate.longitude
         let level = gate.level(horizontalAccuracyMeters: loc.horizontalAccuracy)
 
         // 偏航检测 → 重新规划（核心 OffRouteDetector，已测）。
-        if !routeCoords.isEmpty, offRoute.isOffRoute(lat: lat, lon: lon, route: routeCoords),
-           now - lastOffRouteAnnounce >= 6 {
+        // 安全门控：仅在**精度可信**(level != .none)且有真实折线(>=2 点)时才判定偏航，否则低精度抖动会反复
+        // 误判偏航、陷入"误判→重规划→精度仍差→再误判"死循环而长期瘫痪引导（见审查 #3）；并要求连续≥2 帧确认抗单帧抖动。
+        // 到达后 maneuvers 为空时 routeCoords 退化为单点 [dest]，不可做折线偏航判定（见审查 #10）。
+        if level != .none, routeCoords.count >= 2, offRoute.isOffRoute(lat: lat, lon: lon, route: routeCoords) {
+            offRouteStreak += 1
+        } else {
+            offRouteStreak = 0
+        }
+        if offRouteStreak >= 2, now - lastOffRouteAnnounce >= 6 {
             lastOffRouteAnnounce = now
+            offRouteStreak = 0
             instruction = "已偏离路线，正在重新规划"
             speak("已偏离路线，正在重新规划")
             replanning = true    // 立即门控住旧路线引导
@@ -132,8 +147,11 @@ final class NavigationViewModel {
         // 目标点：当前转向点，过完则朝目的地。
         let target = stepIndex < maneuvers.count ? maneuvers[stepIndex].coordinate : dest
 
-        // 空间音信标：仅在罗盘可信时发声，否则会把方向挂到错误方位误导用户（见审查 #3）。
-        if headingReliable, now - lastBeacon >= 1.5 {
+        // 空间音信标：方位由"当前 GPS 位置 → 目标"算出，故**位置与罗盘都须可信**才发定向音。
+        // level==.none(精度差，位置可能差到隔壁街区)或罗盘不可信/航向陈旧(>5s 无新可信航向)时停发，
+        // 避免把稳定的确定性方向挂到错误方位、让盲人跟着走向车道/错误路口（见审查 #2/#4）。
+        let headingFresh = now - lastHeadingTime < 5
+        if level != .none, headingReliable, headingFresh, now - lastBeacon >= 1.5 {
             lastBeacon = now
             let bearing = Geo.initialBearing(fromLat: lat, fromLon: lon, toLat: target.latitude, toLon: target.longitude)
             let beacon = BeaconDirection(headingDegrees: currentHeading, bearingDegrees: bearing)
@@ -161,10 +179,16 @@ final class NavigationViewModel {
         if decision.shouldAnnounce, let text = decision.text {
             instruction = text
             speak(text)
+            if decision.isHighCertainty { announcedImminent = true } // 记录"现在…"已播，作为安全推进的前提
         }
-        if distance < 8 {
+        // 步进推进必须同时满足：(a) 高精度(level==.precise)，(b) 该转向点的"现在…"高确定性指令**已经播报**，
+        // (c) 已进入即将窗口(distance < imminentMeters)。否则：
+        // - 低精度单帧 GPS 抖动会无声吞掉转向点(漏播"过马路/转向"，对盲人是直接危险，见审查 #1/#8)；
+        // - 旧的 8m 推进阈值 > 5m 即将阈值，会在播"现在转向"之前就推进，导致该关键指令永不播报（见审查 #7）。
+        if level == .precise, announcedImminent, distance < progress.imminentMeters {
             stepIndex += 1
-            lastSpoken = ""   // 新转向点：清空去重基线，使下个转向即便文本相同也能播报（见审查 #4）
+            announcedImminent = false
+            lastSpoken = ""   // 新转向点：清空去重基线，使下个转向即便文本相同也能播报
         }
     }
 
@@ -207,6 +231,8 @@ final class NavigationViewModel {
             guard running, gen == navGeneration else { return }
             maneuvers = m
             stepIndex = 0
+            announcedImminent = false   // 新路线：重置"现在…已播"标志，避免沿用旧步的状态（见审查 #7）
+            offRouteStreak = 0
             // 路线折线（转向点 + 目的地）用于偏航检测。
             routeCoords = m.map { Coordinate(lat: $0.coordinate.latitude, lon: $0.coordinate.longitude) }
                 + [Coordinate(lat: dest.latitude, lon: dest.longitude)]

@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var dynamicROIOn: Bool
     @State private var concise: Bool
     @State private var rate: Double
+    @State private var showTutorial = false
 
     init(store: ConsentStore, onClose: @escaping () -> Void) {
         self.store = store
@@ -104,6 +105,10 @@ struct SettingsView: View {
                     Text("开启开发者模式后首屏叠加显示温度、帧率、检测器、ROI 等。动态 ROI 用碰撞走廊随相机姿态投影检测区（实验，需真机调参；绿框即当前检测区）。")
                 }
 
+                Section("帮助") {
+                    Button("重看使用教程") { showTutorial = true }
+                }
+
                 Section("关于") {
                     LabeledContent("组织", value: "Hiko Sphere 彦穹科技")
                     LabeledContent("软件制作人", value: "Li Yanpei Hiko")
@@ -121,6 +126,9 @@ struct SettingsView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") { onClose() }
                 }
+            }
+            .fullScreenCover(isPresented: $showTutorial) {
+                TutorialView { showTutorial = false }
             }
         }
     }

@@ -6,6 +6,7 @@ struct HomeView: View {
     @State private var showSettings = false
     @State private var showRemoteAssist = false
     @State private var showNavigation = false
+    @State private var showTutorial = false
     private let consentStore = ConsentStore()
 
     var body: some View {
@@ -28,8 +29,14 @@ struct HomeView: View {
             }
             .padding()
         }
-        .task { model.onAppear() }
+        .task {
+            model.onAppear()
+            if !TutorialStore().seen { showTutorial = true }
+        }
         .onDisappear { model.onDisappear() }
+        .fullScreenCover(isPresented: $showTutorial) {
+            TutorialView { TutorialStore().seen = true; showTutorial = false }
+        }
         .sheet(isPresented: $showSettings) {
             SettingsView(store: consentStore) { showSettings = false }
         }

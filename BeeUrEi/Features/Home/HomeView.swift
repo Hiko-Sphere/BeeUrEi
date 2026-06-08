@@ -143,6 +143,10 @@ struct HomeView: View {
         .background(highContrast ? AnyShapeStyle(Color.black.opacity(0.92)) : AnyShapeStyle(.ultraThinMaterial))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(model.advisoryText.isEmpty ? model.proximityText : "\(model.proximityText)。\(model.advisoryText)")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("点按重复播报")
+        .contentShape(Rectangle())
+        .onTapGesture { model.repeatLastAnnouncement() }
     }
 
     private var permissionDeniedView: some View {

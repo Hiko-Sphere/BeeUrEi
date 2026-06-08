@@ -26,6 +26,7 @@ final class FramingAssistViewModel {
     @ObservationIgnored private var lastHint = ""
     @ObservationIgnored private var centeredFrames = 0
     @ObservationIgnored private var latestBuffer: CVPixelBuffer?
+    @ObservationIgnored private var latestDetections: [DetectedObject] = []
 
     var arSession: ARSession { source.session }
 
@@ -49,6 +50,7 @@ final class FramingAssistViewModel {
 
         // 全帧检测，取最大框作为取景目标。
         let detections = detector.detect(in: frame.pixelBuffer, regionOfInterest: CGRect(x: 0, y: 0, width: 1, height: 1))
+        latestDetections = detections // 供"前方有什么"概述
         let target = detections
             .compactMap { d -> (object: DetectedObject, box: NormalizedBox)? in d.box.map { (d, $0) } }
             .max { $0.box.width * $0.box.height < $1.box.width * $1.box.height }
@@ -95,6 +97,14 @@ final class FramingAssistViewModel {
         DispatchQueue.global(qos: .userInitiated).async {
             try? VNImageRequestHandler(cvPixelBuffer: buffer, options: [:]).perform([request])
         }
+    }
+
+    /// "前方有什么"：把最近一帧的检测物体按左/中/右汇总播报（核心 SceneSummarizer，已测）。
+    func describeScene() {
+        let objects = latestDetections.map { (label: labels.localizedName($0.label), normalizedX: $0.normalizedX) }
+        let text = SceneSummarizer().summary(objects: objects)
+        resultText = text
+        speak(text)
     }
 
     /// 识别画面中央区域的颜色（端侧采样 + 核心 ColorNamer，已测）。
@@ -146,6 +156,14 @@ struct FramingAssistView: View {
                         .padding()
                 }
                 Spacer()
+                Button { model.describeScene() } label: {
+                    Label("前方有什么", systemImage: "eye.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .padding(.horizontal)
+                .accessibilityHint("汇总播报前方识别到的物体")
                 HStack {
                     Button { model.readText() } label: {
                         Label("朗读文字", systemImage: "text.viewfinder")
@@ -156,7 +174,7 @@ struct FramingAssistView: View {
                     }
                     .accessibilityHint("说出画面中央的颜色")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
                 .controlSize(.large)
                 .padding(.bottom, 8)
                 VStack(spacing: 8) {

@@ -61,6 +61,7 @@ final class HomeViewModel {
     @ObservationIgnored private let groundHazard = GroundHazardDetector()
     @ObservationIgnored private let proximityMapper = ProximityCueMapper()
     @ObservationIgnored private let sonifier = ProximitySonifier()
+    @ObservationIgnored private let clearConfirmer = ClearPathConfirmer()
     @ObservationIgnored private let announcePolicy = AnnouncementPolicy()
     @ObservationIgnored private let depthSampler = DepthSampler()
     @ObservationIgnored private let speechComposer = SpeechComposer()
@@ -245,6 +246,7 @@ final class HomeViewModel {
                 isSpeaking = true
                 coordinator.submit(FeedbackEvent(priority: .obstacle, speech: phrase))
             }
+            _ = clearConfirmer.update(isClear: false, now: frame.timestamp) // 有威胁 → 非通畅，重置确认
             return
         }
 
@@ -262,6 +264,14 @@ final class HomeViewModel {
             let minGap = result.zone == .danger ? 1.5 : 3.0
             if throttle.shouldAnnounce(key: "proximity:\(result.zone)", now: frame.timestamp, minGap: minGap) {
                 coordinator.submit(FeedbackEvent(priority: .obstacle, speech: phrase))
+            }
+        }
+
+        // "前方通畅"周期确认（可选）：持续通畅给予确信，避免静默带来的不确定。
+        if FeatureSettings().clearPathConfirm {
+            let clear = (result.nearest ?? .greatestFiniteMagnitude) > 2.5
+            if clearConfirmer.update(isClear: clear, now: frame.timestamp) {
+                coordinator.submit(FeedbackEvent(priority: .status, speech: "前方通畅"))
             }
         }
     }

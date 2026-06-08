@@ -54,4 +54,11 @@ struct FeatureSettings {
         get { defaults.object(forKey: verbosityKey) == nil ? 2 : defaults.integer(forKey: verbosityKey) }
         set { defaults.set(min(max(newValue, 0), 2), forKey: verbosityKey) }
     }
+
+    /// 前方持续通畅时定期播报"前方通畅"给予确信（默认关，部分用户偏好安静）。
+    private let clearConfirmKey = "feature.clearPathConfirm"
+    var clearPathConfirm: Bool {
+        get { defaults.bool(forKey: clearConfirmKey) }
+        set { defaults.set(newValue, forKey: clearConfirmKey) }
+    }
 }

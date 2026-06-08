@@ -16,6 +16,7 @@ struct SettingsView: View {
     @State private var highContrastOn: Bool
     @State private var sonarOn: Bool
     @State private var verbosity: Int
+    @State private var clearConfirm: Bool
     @State private var showTutorial = false
     @State private var previewSpeech = SpeechFeedback()
     @State private var previewHaptic = HapticFeedback()
@@ -34,6 +35,7 @@ struct SettingsView: View {
         _highContrastOn = State(initialValue: features.highContrast)
         _sonarOn = State(initialValue: features.proximitySonar)
         _verbosity = State(initialValue: features.verbosity)
+        _clearConfirm = State(initialValue: features.clearPathConfirm)
     }
 
     var body: some View {
@@ -82,6 +84,10 @@ struct SettingsView: View {
                     .onChange(of: verbosity) { _, v in
                         var f = FeatureSettings(); f.verbosity = v
                     }
+                    Toggle("前方通畅时定期确认", isOn: $clearConfirm)
+                        .onChange(of: clearConfirm) { _, v in
+                            var f = FeatureSettings(); f.clearPathConfirm = v
+                        }
                     Button("试听播报") {
                         previewSpeech.play(FeedbackEvent(priority: .obstacle, speech: sampleAnnouncement()))
                     }

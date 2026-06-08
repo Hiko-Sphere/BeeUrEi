@@ -17,6 +17,7 @@ final class ARDepthCameraSource: NSObject, FrameSource, ARSessionProviding {
     var onTracking: ((TrackingQuality) -> Void)?
 
     let session = ARSession()
+    private var reportedRunning = false
 
     override init() {
         super.init()
@@ -35,12 +36,15 @@ final class ARDepthCameraSource: NSObject, FrameSource, ARSessionProviding {
         }
         let config = ARWorldTrackingConfiguration()
         config.frameSemantics.insert(.sceneDepth)
+        reportedRunning = false
         session.run(config)
-        onStateChange?(.running)
+        // 不在此处同步上报 .running：此刻相机权限未知，被拒会异步走 didFailWithError(.denied)。
+        // 待收到第一帧再切 .running，确保"自称运行"时确有真实感知数据（见审查 #9）。
     }
 
     func stop() {
         session.pause()
+        reportedRunning = false
     }
 
     static func map(_ state: ARCamera.TrackingState) -> TrackingQuality {
@@ -63,6 +67,8 @@ final class ARDepthCameraSource: NSObject, FrameSource, ARSessionProviding {
 
 extension ARDepthCameraSource: ARSessionDelegate {
     func session(_ session: ARSession, didUpdate frame: ARFrame) {
+        // 收到首帧才宣布 .running——此时确有真实画面/深度数据（见审查 #9）。
+        if !reportedRunning { reportedRunning = true; onStateChange?(.running) }
         var depthMap: DepthMap?
         if let sd = frame.sceneDepth {
             depthMap = DepthMap(

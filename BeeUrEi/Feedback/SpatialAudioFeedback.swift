@@ -33,15 +33,33 @@ final class SpatialAudioFeedback: FeedbackSink {
     /// 在给定方位角播放短提示音（右为正，单位度），声源置于听者前方 1m 处的该方位。
     func playCue(azimuthDegrees: Float) {
         guard let toneBuffer else { return }
-        if !started {
-            try? engine.start()
-            player.play()
-            started = true
+        // 用 engine.isRunning 判断而非粘滞的 started：来电/Siri/媒体重置会停掉引擎，
+        // 此处检测到未运行就重启，避免一次中断后信标永久失声（导航核心反馈，见审查 #10）。
+        if !engine.isRunning {
+            do {
+                try engine.start()
+                player.play()
+                started = true
+            } catch {
+                started = false
+                return
+            }
         }
         let radians = azimuthDegrees * .pi / 180
         player.position = AVAudio3DPoint(x: sin(radians), y: 0, z: -cos(radians))
         player.scheduleBuffer(toneBuffer, at: nil, options: [.interrupts], completionHandler: nil)
     }
+
+    /// 停止并释放音频引擎（导航结束调用，避免占用音频会话；见审查 #11）。
+    func stop() {
+        if started {
+            player.stop()
+            engine.stop()
+            started = false
+        }
+    }
+
+    deinit { stop() }
 
     private static func makeTone(format: AVAudioFormat,
                                  frequency: Float = 880,

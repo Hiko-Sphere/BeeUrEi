@@ -47,6 +47,14 @@ public struct RemoteAssistCall {
         return true
     }
 
+    /// 收到来电（callee 侧）：从 idle 进入振铃，使随后的 answer() 能转入 connected。
+    @discardableResult
+    public mutating func incoming(callerID: String) -> Bool {
+        guard case .idle = state else { return false }
+        state = .ringing(helperID: callerID)
+        return true
+    }
+
     /// 对方接听。
     public mutating func answer() {
         if case .ringing(let id) = state {

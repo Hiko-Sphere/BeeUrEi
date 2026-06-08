@@ -16,6 +16,15 @@ final class RemoteAssistCallTests: XCTestCase {
         XCTAssertEqual(callable.map(\.id), ["1"])  // 在线且中文
     }
 
+    func testIncomingCallRingsThenAnswers() {
+        var call = RemoteAssistCall()
+        XCTAssertTrue(call.incoming(callerID: "9"))           // idle → ringing
+        XCTAssertEqual(call.state, .ringing(helperID: "9"))
+        call.answer()                                         // ringing → connected（修复前来电侧 answer 是 no-op）
+        XCTAssertEqual(call.state, .connected(helperID: "9"))
+        XCTAssertFalse(call.incoming(callerID: "x"))          // 非 idle 不再接受新来电
+    }
+
     func testCallFlowRingingToConnectedToEnded() {
         var call = RemoteAssistCall()
         let mom = contacts()[0]

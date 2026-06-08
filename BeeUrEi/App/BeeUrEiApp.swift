@@ -29,8 +29,22 @@ private struct RootView: View {
                 AuthGateView(session: session)
             } else if session.user == nil {
                 // 有 token 但未恢复账号 → 拉 /api/me 恢复角色。
-                ProgressView("正在登录…")
-                    .task { await session.restore() }
+                if session.restoreFailed {
+                    // 网络/后端暂不可用：给出重试与退出出口，而非永久卡在转圈（见审查 #15）。
+                    VStack(spacing: 20) {
+                        Image(systemName: "wifi.exclamationmark").font(.system(size: 44)).foregroundStyle(.secondary)
+                        Text("连接服务器失败").font(.title2).bold()
+                        Text("请检查网络后重试。").foregroundStyle(.secondary)
+                        Button("重试") { Task { await session.restore() } }
+                            .buttonStyle(.borderedProminent).controlSize(.large)
+                        Button("退出登录") { session.logout() }
+                            .foregroundStyle(.red)
+                    }
+                    .padding()
+                } else {
+                    ProgressView("正在登录…")
+                        .task { await session.restore() }
+                }
             } else if enteredRole == nil {
                 RoleEntryView(account: session.user!, session: session) { enteredRole = $0 }
             } else {

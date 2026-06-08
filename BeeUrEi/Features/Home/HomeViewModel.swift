@@ -116,11 +116,11 @@ final class HomeViewModel {
         sonifier.stop()
     }
 
-    /// 重复播报当前避障状态（盲人常错过语音；用户主动触发，绕过详略门控直接播）。
+    /// 重复播报当前避障状态（盲人常错过语音；用户主动触发，走专用路径不污染仲裁通道，见审查 #13）。
     func repeatLastAnnouncement() {
         let text = advisoryText.isEmpty ? proximityText : "\(proximityText)。\(advisoryText)"
         guard !text.isEmpty, text != "—" else { return }
-        speech.play(FeedbackEvent(priority: .status, speech: text))
+        speech.speakUserInitiated(text)
     }
 
     /// 跳到系统「设置」让用户开启被拒的相机权限。

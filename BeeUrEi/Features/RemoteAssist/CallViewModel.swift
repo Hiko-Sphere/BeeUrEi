@@ -45,13 +45,14 @@ final class CallViewModel {
             self?.connected = false
             self?.statusText = "连接已断开"
         }
-        signaling.connect(token: token, baseURL: ServerConfig.baseURL)
-        signaling.join(callId: callId, role: role == .blind ? "blind" : "helper")
-        // 通话前拉取 ICE 服务器（STUN + 短时效 TURN 凭据），用于 NAT 穿透。
+        // 先拉 ICE 服务器并启动媒体引擎，**再**连接/加入信令——否则 await 期间提前到达的 joined
+        // 会在 pc 还是 nil 时调 createOffer 而静默落空，视障侧永不发 offer、通话卡死（见审查 #7）。
         if let servers = try? await APIClient().iceServers(token: token) {
             media.setIceServers(servers)
         }
         media.start(asCaller: role == .blind)
+        signaling.connect(token: token, baseURL: ServerConfig.baseURL)
+        signaling.join(callId: callId, role: role == .blind ? "blind" : "helper")
         statusText = "已加入，等待对方接入…"
     }
 

@@ -37,11 +37,15 @@ final class RemoteAssistService: NSObject, RemoteAssisting {
     }
 
     /// iOS 强制：收到 VoIP push 后必须立刻 reportNewIncomingCall，否则系统会终止 App。
-    func reportIncoming(uuid: UUID, callerName: String) {
+    func reportIncoming(uuid: UUID, callerID: String, callerName: String) {
+        // 把来电接入状态机进入振铃，否则接听时 answer() 在 idle 态是 no-op、永不进入 connected（见审查 #8）。
+        callMachine.incoming(callerID: callerID)
         let update = CXCallUpdate()
         update.localizedCallerName = callerName
         update.hasVideo = true
-        provider.reportNewIncomingCall(with: uuid, update: update) { _ in }
+        provider.reportNewIncomingCall(with: uuid, update: update) { [weak self] error in
+            if error != nil { self?.callMachine.reset() } // 上报失败：回滚状态机，避免悬挂的振铃态
+        }
     }
 }
 
@@ -76,8 +80,10 @@ extension RemoteAssistService: PKPushRegistryDelegate {
                       didReceiveIncomingPushWith payload: PKPushPayload,
                       for type: PKPushType,
                       completion: @escaping () -> Void) {
-        let caller = payload.dictionaryPayload["caller"] as? String ?? "BeeUrEi 求助"
-        reportIncoming(uuid: UUID(), callerName: caller)
+        let dict = payload.dictionaryPayload
+        let caller = dict["caller"] as? String ?? "BeeUrEi 求助"
+        let callerID = dict["callerID"] as? String ?? "unknown"
+        reportIncoming(uuid: UUID(), callerID: callerID, callerName: caller)
         completion()
     }
 }

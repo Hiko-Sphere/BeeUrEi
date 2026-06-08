@@ -41,8 +41,7 @@ final class NavigationViewModel {
     @ObservationIgnored private var lastBeacon: TimeInterval = 0
     @ObservationIgnored private var lastOffRouteAnnounce: TimeInterval = 0
     @ObservationIgnored private var lastHeadingTime: TimeInterval = 0   // 最近一次可信航向的时刻(单调钟)；陈旧则抑制信标（见审查 #4）
-    @ObservationIgnored private var minDistToManeuver = Double.greatestFiniteMagnitude // 到当前转向点的历史最近距离，用于"越过波谷"几何推进（见回归 #1/#2）
-    @ObservationIgnored private var passedStreak = 0                    // 连续判定"已走过当前转向点"的帧数，需≥2 抗低精度单帧抖动（见回归 #1）
+    @ObservationIgnored private var waypointAdvance = WaypointAdvance() // "越过波谷"几何推进判定（核心，已测；见回归 #1/#2）
     @ObservationIgnored private var offRouteStreak = 0                  // 连续判定偏航的帧数，需≥2 抗单帧抖动（见审查 #3）
 
     func start(destination query: String, region: Region) async {
@@ -70,8 +69,7 @@ final class NavigationViewModel {
         lastSpoken = ""
         headingReliable = false
         headingFilter = HeadingFilter()
-        minDistToManeuver = .greatestFiniteMagnitude
-        passedStreak = 0
+        waypointAdvance.reset()
         offRouteStreak = 0
         lastHeadingTime = 0
         running = true
@@ -189,20 +187,10 @@ final class NavigationViewModel {
         // 这样：①低/无精度单帧抖动不会"无声吞掉"转向点(下方 level!=.none 门控+回升判定)；②不会在播"现在转向"前
         // 就推进(推进发生在走过之后)；③不依赖采样恰好命中 5m，避免持续 .beacon 或采样稀疏时永不推进而卡死、
         // 信标长期指回已过转向点(见回归 #1/#2/#4/#5)。.none 精度下 GPS 噪声大，不做几何推进，待精度恢复。
-        if level != .none {
-            minDistToManeuver = min(minDistToManeuver, distance)
-            // 已接近过(minDist<=20m)且距离明显回升(>minDist+4m)=越过波谷；需连续≥2 帧确认抗低精度单帧抖动误推进。
-            if minDistToManeuver <= progress.announceWithinMeters, distance > minDistToManeuver + 4 {
-                passedStreak += 1
-            } else {
-                passedStreak = 0
-            }
-            if passedStreak >= 2 {
-                stepIndex += 1
-                minDistToManeuver = .greatestFiniteMagnitude
-                passedStreak = 0
-                lastSpoken = ""   // 新转向点：清空去重基线，使下个转向即便文本相同也能播报
-            }
+        // .none 精度下 GPS 噪声大，不喂入几何推进判定，待精度恢复（信标此时也已被门控关闭）。
+        if level != .none, waypointAdvance.update(distanceMeters: distance) {
+            stepIndex += 1
+            lastSpoken = ""   // 新转向点：清空去重基线，使下个转向即便文本相同也能播报
         }
     }
 
@@ -245,8 +233,7 @@ final class NavigationViewModel {
             guard running, gen == navGeneration else { return }
             maneuvers = m
             stepIndex = 0
-            minDistToManeuver = .greatestFiniteMagnitude // 新路线：重置越过波谷基线（见回归 #1）
-            passedStreak = 0
+            waypointAdvance.reset()  // 新路线：重置越过波谷基线（见回归 #1）
             offRouteStreak = 0
             // 路线折线（转向点 + 目的地）用于偏航检测。
             routeCoords = m.map { Coordinate(lat: $0.coordinate.latitude, lon: $0.coordinate.longitude) }

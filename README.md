@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/Swift-5-FFC42E?logo=swift&logoColor=14161F" alt="Swift 5">
   <img src="https://img.shields.io/badge/on--device%20AI-Core%20ML%20%2B%20ARKit-14161F" alt="On-device AI">
   <img src="https://img.shields.io/badge/backend-Node%20%2B%20Fastify-339933?logo=nodedotjs&logoColor=white" alt="Backend">
-  <img src="https://img.shields.io/badge/tests-262%20passing-2ea44f" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-268%20passing-2ea44f" alt="Tests">
   <img src="https://img.shields.io/badge/built%20for-accessibility-FFC42E?logoColor=14161F" alt="Accessibility">
 </p>
 
@@ -134,11 +134,11 @@ curl http://localhost:8787/health        # → {"status":"ok",...}
 ## 🧪 测试与质量
 
 ```sh
-swift test --package-path Packages/BeeUrEiCore   # 核心安全逻辑：188 测试
+swift test --package-path Packages/BeeUrEiCore   # 核心安全逻辑：194 测试
 cd server && npm test                            # 后端：74 测试
 ```
 
-- **262 个单元测试全部通过**；后端 `tsc` 类型检查干净、App 编译通过。
+- **268 个单元测试全部通过**；后端 `tsc` 类型检查干净、App 编译通过。
 - 经**七轮多智能体对抗式代码审查**（已收敛），累计修复 93 个真实缺陷（含信令窃听、并发数据竞争、弱网误登出、**避障距离/方向错算、快速逼近障碍漏播、深色地面落差误报、到达判定绕过精度门控、偏航重规划用旧路线、磁干扰信标指错、中断后空间音永久失声、通话因时序卡死**、非有限输入崩溃等）并补齐回归测试。
 - 安全攸关的数学/门控（几点钟方向、深度分级、定位精度、延迟预算、转向播报…）全部下沉到核心包并单测——无需模拟器即可在本机验证。
 
@@ -167,7 +167,7 @@ cd server && npm test                            # 后端：74 测试
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| 核心安全逻辑 | 40+ 模块 / 188 测试 / 多轮对抗式审查 | ✅ |
+| 核心安全逻辑 | 40+ 模块 / 194 测试 / 多轮对抗式审查 | ✅ |
 | Phase 1 实时避障 | ARKit 深度 + YOLO 检测 + 中文播报 + 稳定化 | ✅（待真机调参）|
 | Phase 2 步行导航 | 海外 MapKit 接线 | ✅（待真机定位）· 国内图商需 API key ⏳ |
 | 自托管后端 | 账号/亲友/紧急/信令/管理/录制/开发者 | ✅ |

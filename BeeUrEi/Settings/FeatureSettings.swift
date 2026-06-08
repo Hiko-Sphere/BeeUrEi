@@ -61,4 +61,12 @@ struct FeatureSettings {
         get { defaults.bool(forKey: clearConfirmKey) }
         set { defaults.set(newValue, forKey: clearConfirmKey) }
     }
+
+    /// 恢复"播报/无障碍"相关设置为默认（不动避障/导航功能开关与开发者模式）。
+    static func resetToDefaults(_ defaults: UserDefaults = .standard) {
+        for key in ["feature.conciseAnnouncements", "feature.speechRate", "feature.verbosity",
+                    "feature.clearPathConfirm", "feature.highContrast", "feature.proximitySonar"] {
+            defaults.removeObject(forKey: key)
+        }
+    }
 }

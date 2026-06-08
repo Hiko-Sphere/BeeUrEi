@@ -107,6 +107,17 @@ struct SettingsView: View {
                         previewHaptic.play(FeedbackEvent(priority: .obstacle, speech: nil))
                     }
                     .accessibilityHint("播放一次危险等级的震动")
+                    Button("恢复默认设置", role: .destructive) {
+                        FeatureSettings.resetToDefaults()
+                        let f = FeatureSettings()
+                        concise = f.conciseAnnouncements
+                        rate = Double(f.speechRate)
+                        verbosity = f.verbosity
+                        clearConfirm = f.clearPathConfirm
+                        highContrastOn = f.highContrast
+                        sonarOn = f.proximitySonar
+                    }
+                    .accessibilityHint("把语速、详略、对比、声呐等播报设置恢复为默认")
                 } header: {
                     Text("无障碍")
                 } footer: {

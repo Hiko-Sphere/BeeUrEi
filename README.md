@@ -180,6 +180,7 @@ cd server && npm test                            # 后端：63 测试
 
 ## 📚 文档
 
+- [docs/SHIP_CHECKLIST.md](docs/SHIP_CHECKLIST.md) — **上架与真机落地清单**（新手可照做：从真机跑起来到 App Store 的每一步外部操作）
 - [docs/PLAN.md](docs/PLAN.md) — 完整项目计划、架构、风险、分阶段路线图、工程任务勾选
 - [docs/BACKEND_PLAN.md](docs/BACKEND_PLAN.md) — 后端 API / 数据模型 / 信令协议 / 视频隐私门控
 - [docs/RESEARCH_NOTES.md](docs/RESEARCH_NOTES.md) — 竞品与技术调研（含事实核查）

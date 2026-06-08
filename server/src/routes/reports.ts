@@ -16,6 +16,11 @@ export function registerReportRoutes(app: FastifyInstance, store: Store): void {
     const parsed = createReportSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const reporter = req.user!
+    // 去重：同一举报人对同一对象已有未处理举报则不重复创建（防刷）。
+    const existing = store.allReports().find(
+      (r) => r.reporterId === reporter.sub && r.targetUserId === parsed.data.targetUserId && r.status === 'open',
+    )
+    if (existing) return reply.code(200).send({ report: existing, deduped: true })
     const report: Report = {
       id: randomUUID(),
       reporterId: reporter.sub,

@@ -25,6 +25,19 @@ describe('reports', () => {
     await a.close()
   })
 
+  it('dedupes repeated open reports against the same target', async () => {
+    const a = app()
+    const t = await token(a, 'reporter3')
+    const auth = { authorization: `Bearer ${t}` }
+    const r1 = await a.inject({ method: 'POST', url: '/api/reports', headers: auth, payload: { targetUserId: 'same', reason: 'a' } })
+    expect(r1.statusCode).toBe(201)
+    const r2 = await a.inject({ method: 'POST', url: '/api/reports', headers: auth, payload: { targetUserId: 'same', reason: 'b' } })
+    expect(r2.statusCode).toBe(200)
+    expect(r2.json().deduped).toBe(true)
+    expect(r2.json().report.id).toBe(r1.json().report.id)
+    await a.close()
+  })
+
   it('requires auth', async () => {
     const a = app()
     const res = await a.inject({ method: 'POST', url: '/api/reports', payload: { targetUserId: 'x', reason: 'y' } })

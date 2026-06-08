@@ -74,7 +74,11 @@ struct FamilyLinksView: View {
         .navigationTitle("亲友与紧急呼叫")
         .task { await load() }
         .fullScreenCover(item: $emergencyCall) { s in
-            CallView(role: .blind, callId: s.id) { emergencyCall = nil }
+            CallView(role: .blind, callId: s.id) {
+                // 挂断时取消待接登记，避免对端在 TTL 内仍弹出已结束的来电。
+                if let token = KeychainStore.read() { Task { await api.cancelCall(token: token, callId: s.id) } }
+                emergencyCall = nil
+            }
         }
     }
 

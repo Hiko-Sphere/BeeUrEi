@@ -62,7 +62,7 @@
 │                                                             │                          │
 │                                          Feedback 仲裁(优先级抢占) ─▶ 语音/空间音/震动  │
 │                                                                                       │
-│  ── 核心安全逻辑（平台无关 Swift Package，185 单测）──────────────────────────────────  │
+│  ── 核心安全逻辑（平台无关 Swift Package，188 单测）──────────────────────────────────  │
 │  ClockDirection · DepthSampler · ObstacleRanker · FeedbackArbiter · LatencyBudget      │
 │  LocationAccuracyGate · HeadingFilter · ThermalPolicy/PowerPolicy · RouteProgress ...  │
 └───────────────────────────────────────────────────────────────────────────────────────┘
@@ -134,8 +134,8 @@ curl http://localhost:8787/health        # → {"status":"ok",...}
 ## 🧪 测试与质量
 
 ```sh
-swift test --package-path Packages/BeeUrEiCore   # 核心安全逻辑：185 测试
-cd server && npm test                            # 后端：56 测试
+swift test --package-path Packages/BeeUrEiCore   # 核心安全逻辑：188 测试
+cd server && npm test                            # 后端：63 测试
 ```
 
 - **251 个单元测试全部通过**；后端 `tsc` 类型检查干净、App 编译通过。
@@ -167,7 +167,7 @@ cd server && npm test                            # 后端：56 测试
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| 核心安全逻辑 | 40+ 模块 / 185 测试 / 多轮对抗式审查 | ✅ |
+| 核心安全逻辑 | 40+ 模块 / 188 测试 / 多轮对抗式审查 | ✅ |
 | Phase 1 实时避障 | ARKit 深度 + YOLO 检测 + 中文播报 + 稳定化 | ✅（待真机调参）|
 | Phase 2 步行导航 | 海外 MapKit 接线 | ✅（待真机定位）· 国内图商需 API key ⏳ |
 | 自托管后端 | 账号/亲友/紧急/信令/管理/录制/开发者 | ✅ |

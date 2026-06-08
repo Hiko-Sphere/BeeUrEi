@@ -90,14 +90,16 @@ struct FamilyLinksView: View {
     private func triggerEmergency() async {
         guard let token = KeychainStore.read() else { errorText = "请先登录"; return }
         do {
-            let targets = try await api.emergencyTargets(token: token)
-            guard let first = targets.first else {
+            // 优先呼叫"在线可用"的联系人（匹配）；无人在线则回退呼叫全部紧急联系人。
+            let online = try await api.assistMatch(token: token, emergency: true)
+            let targets = online.isEmpty ? try await api.emergencyTargets(token: token) : online
+            guard !targets.isEmpty else {
                 emergencyInfo = "没有可呼叫的亲友，请先添加紧急联系人。"
                 return
             }
-            emergencyInfo = "正在呼叫：\(targets.map(\.memberName).joined(separator: " → "))"
+            let prefix = online.isEmpty ? "暂无在线联系人，仍尝试呼叫：" : "正在呼叫在线联系人："
+            emergencyInfo = prefix + targets.map(\.memberName).joined(separator: " → ")
             emergencyCall = CallSession()  // 接通由信令负责；真实响铃需推送（真机）
-            _ = first
         } catch { errorText = "紧急呼叫发起失败" }
     }
 }

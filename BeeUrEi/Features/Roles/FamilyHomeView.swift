@@ -10,12 +10,14 @@ struct FamilyHomeView: View {
     @State private var incoming: [IncomingLinkInfo] = []
     @State private var loadError: String?
     @State private var api = APIClient()
+    @State private var hbTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
                     Toggle("接收亲人的紧急呼叫", isOn: $standby)
+                        .onChange(of: standby) { _, on in heartbeat(on) }
                     Text(standby ? "亲人发起紧急呼叫时会优先呼叫你。" : "已关闭，亲人紧急呼叫不会呼叫你。")
                         .font(.footnote).foregroundStyle(.secondary)
                 } header: {
@@ -50,8 +52,9 @@ struct FamilyHomeView: View {
                 RoleAccountSection(session: session, onSwitchRole: onSwitchRole)
             }
             .navigationTitle("亲友")
-            .task { await load() }
+            .task { await load(); heartbeat(standby) }
             .refreshable { await load() }
+            .onDisappear { hbTask?.cancel() }
         }
         .fullScreenCover(item: $testCall) { s in
             CallView(role: .helper, callId: s.id) { testCall = nil }
@@ -62,5 +65,21 @@ struct FamilyHomeView: View {
         guard let token = session.token else { loadError = "请先登录"; return }
         do { incoming = try await api.incomingLinks(token: token); loadError = nil }
         catch { loadError = "加载失败（需连接后端）" }
+    }
+
+    /// 紧急待命开关 → 周期性心跳上报可用（亲人紧急呼叫时被匹配优先）。
+    private func heartbeat(_ on: Bool) {
+        hbTask?.cancel(); hbTask = nil
+        guard let token = session.token else { return }
+        if on {
+            hbTask = Task {
+                while !Task.isCancelled {
+                    await APIClient().assistHeartbeat(token: token, available: true)
+                    try? await Task.sleep(for: .seconds(20))
+                }
+            }
+        } else {
+            Task { await APIClient().assistHeartbeat(token: token, available: false) }
+        }
     }
 }

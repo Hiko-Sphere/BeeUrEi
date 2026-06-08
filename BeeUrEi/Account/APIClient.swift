@@ -56,7 +56,7 @@ struct EmergencyTarget: Codable, Sendable, Identifiable {
     var id: String { memberId }
     let memberId: String
     let memberName: String
-    let relation: String
+    let relation: String?
     let isEmergency: Bool
 }
 
@@ -229,6 +229,18 @@ struct APIClient {
     func emergencyTargets(token: String) async throws -> [EmergencyTarget] {
         struct R: Codable { let targets: [EmergencyTarget] }
         let data = try await authedSend("POST", "/api/emergency/trigger", token: token, body: [:])
+        return (try? JSONDecoder().decode(R.self, from: data))?.targets ?? []
+    }
+
+    // MARK: 在线待命 / 匹配
+
+    func assistHeartbeat(token: String, available: Bool) async {
+        _ = try? await authedSend("POST", "/api/assist/heartbeat", token: token, body: ["available": available])
+    }
+
+    func assistMatch(token: String, emergency: Bool) async throws -> [EmergencyTarget] {
+        struct R: Codable { let targets: [EmergencyTarget] }
+        let data = try await authedSend("POST", "/api/assist/match", token: token, body: ["emergency": emergency])
         return (try? JSONDecoder().decode(R.self, from: data))?.targets ?? []
     }
 

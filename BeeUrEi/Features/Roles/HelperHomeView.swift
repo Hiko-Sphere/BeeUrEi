@@ -7,12 +7,14 @@ struct HelperHomeView: View {
 
     @State private var online = false
     @State private var testCall: CallSession?
+    @State private var hbTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
                     Toggle("在线待命（接听求助）", isOn: $online)
+                        .onChange(of: online) { _, on in heartbeat(on) }
                     Text(online ? "你在线，可接到求助者的视频请求。" : "你已离线，不会收到请求。")
                         .font(.footnote).foregroundStyle(.secondary)
                 } header: {
@@ -34,9 +36,26 @@ struct HelperHomeView: View {
                 RoleAccountSection(session: session, onSwitchRole: onSwitchRole)
             }
             .navigationTitle("协助者")
+            .onDisappear { hbTask?.cancel() }
         }
         .fullScreenCover(item: $testCall) { s in
             CallView(role: .helper, callId: s.id) { testCall = nil }
+        }
+    }
+
+    /// "在线待命"开关 → 周期性心跳（20s）上报可用；关闭即下线。
+    private func heartbeat(_ on: Bool) {
+        hbTask?.cancel(); hbTask = nil
+        guard let token = session.token else { return }
+        if on {
+            hbTask = Task {
+                while !Task.isCancelled {
+                    await APIClient().assistHeartbeat(token: token, available: true)
+                    try? await Task.sleep(for: .seconds(20))
+                }
+            }
+        } else {
+            Task { await APIClient().assistHeartbeat(token: token, available: false) }
         }
     }
 }

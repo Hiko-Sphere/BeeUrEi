@@ -37,6 +37,13 @@ export class SignalingHub {
     return new Set([...this.members.values()].map((m) => m.userId))
   }
 
+  /// 该用户当前在多少个房间（≈进行中的通话数，用于负载均衡匹配）。
+  callCount(userId: string): number {
+    let n = 0
+    for (const m of this.members.values()) if (m.userId === userId) n++
+    return n
+  }
+
   get size(): number {
     return this.members.size
   }

@@ -7,6 +7,8 @@ import { registerUserRoutes } from './routes/users'
 import { registerFamilyRoutes } from './routes/family'
 import { registerEmergencyRoutes } from './routes/emergency'
 import { registerSignaling } from './routes/ws'
+import { PresenceRegistry } from './assist/presence'
+import { registerAssistRoutes } from './routes/assist'
 import { SignalingHub } from './signaling/hub'
 import { registerReportRoutes } from './routes/reports'
 import { registerAdminRoutes } from './routes/admin'
@@ -22,6 +24,8 @@ export interface AppOptions {
 /// 测试传入 MemoryStore；生产/开发默认 SQLite 持久化（见 makeDefaultStore）。
 export function buildApp(store: Store = makeDefaultStore(), options: AppOptions = {}): FastifyInstance {
   const app = Fastify({ logger: false })
+  const hub = new SignalingHub()
+  const presence = new PresenceRegistry()
 
   // 速率限制（防暴力/滥用）。必须在路由之前加载，故把 HTTP 路由放进随后加载的子插件，
   // 确保它们继承到限流钩子。
@@ -39,10 +43,11 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerRecordingRoutes(instance, store)
     registerDevRoutes(instance, store)
     registerNavRoutes(instance, store)
+    registerAssistRoutes(instance, store, hub, presence)
   })
 
   // WebSocket 信令（自带子插件作用域）。
-  registerSignaling(app, new SignalingHub())
+  registerSignaling(app, hub)
 
   return app
 }

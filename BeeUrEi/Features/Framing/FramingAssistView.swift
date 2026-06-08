@@ -154,6 +154,7 @@ final class FramingAssistViewModel {
 
 struct FramingAssistView: View {
     @State private var model = FramingAssistViewModel()
+    @State private var torchOn = false
     let onClose: () -> Void
 
     var body: some View {
@@ -167,6 +168,14 @@ struct FramingAssistView: View {
             }
             VStack {
                 HStack {
+                    Button { torchOn.toggle(); Torch.set(torchOn) } label: {
+                        Image(systemName: torchOn ? "flashlight.on.fill" : "flashlight.off.fill")
+                            .font(.title2)
+                            .padding()
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
+                    .accessibilityLabel(torchOn ? "关闭手电筒" : "打开手电筒")
+                    .padding(.leading)
                     Spacer()
                     Button("完成") { onClose() }
                         .padding()
@@ -209,6 +218,6 @@ struct FramingAssistView: View {
             }
         }
         .task { model.start() }
-        .onDisappear { model.stop() }
+        .onDisappear { model.stop(); Torch.set(false) }
     }
 }

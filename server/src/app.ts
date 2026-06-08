@@ -35,6 +35,11 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   app.register(async (instance) => {
     instance.get('/health', async () => ({ status: 'ok', service: 'beeurei-server' }))
     instance.get('/api/version', async () => ({ version: '0.1.0' }))
+    // 就绪探针：触达存储确认可用（供监控/编排健康检查）。
+    instance.get('/api/ready', async () => {
+      store.getRecordingConfig()
+      return { ready: true }
+    })
     registerAuthRoutes(instance, store)
     registerAccountRoutes(instance, store)
     registerUserRoutes(instance, store)
@@ -50,6 +55,14 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
 
   // WebSocket 信令（自带子插件作用域）。
   registerSignaling(app, hub)
+
+  // 统一 404 + 错误兜底（清洁 JSON，不泄露堆栈）。
+  app.setNotFoundHandler((_req, reply) => reply.code(404).send({ error: 'not_found' }))
+  app.setErrorHandler((err, _req, reply) => {
+    const e = err as Error & { statusCode?: number }
+    const status = e.statusCode && e.statusCode >= 400 ? e.statusCode : 500
+    reply.code(status).send({ error: status >= 500 ? 'internal_error' : e.message || 'error' })
+  })
 
   return app
 }

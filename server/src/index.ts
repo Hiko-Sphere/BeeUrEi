@@ -21,3 +21,13 @@ app
     console.error(err)
     process.exit(1)
   })
+
+// 优雅关闭：收到 SIGTERM/SIGINT 时先关闭 server（完成在途请求）再退出。
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(sig, () => {
+    app
+      .close()
+      .then(() => process.exit(0))
+      .catch(() => process.exit(1))
+  })
+}

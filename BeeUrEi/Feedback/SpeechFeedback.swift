@@ -23,7 +23,15 @@ final class SpeechFeedback: NSObject, FeedbackSink {
         // 与 VoiceOver 协作（见 PLAN §7.2）：VoiceOver 开启时用无障碍播报而非直接 TTS，
         // 避免和 VoiceOver 抢话/互相打断。盲人用户通常常开 VoiceOver，这是主路径。
         if UIAccessibility.isVoiceOverRunning {
-            UIAccessibility.post(notification: .announcement, argument: text)
+            // interrupt=true(危险骤升/极近)：用高优先级公告抢占正在朗读的内容，而非排到其后（见审查 #2）。
+            if event.interrupt {
+                let attr = NSAttributedString(string: text, attributes: [
+                    .accessibilitySpeechAnnouncementPriority: UIAccessibilityPriority.high,
+                ])
+                UIAccessibility.post(notification: .announcement, argument: attr)
+            } else {
+                UIAccessibility.post(notification: .announcement, argument: text)
+            }
             // 无 didFinish 回调：按文本长度估算播报时长，到时再释放仲裁通道；期间仲裁仍按优先级
             // 阻止低优先级抢占（立即释放会让优先级保证失效、并把 isSpeaking 同步重置，见审查 #12）。
             voGeneration += 1

@@ -5,7 +5,8 @@ public enum FeedbackPriority: Int, Comparable, Sendable {
     case environment = 0   // P3 环境描述
     case status      = 1   // P2 状态 / 确认
     case turn        = 2   // P1 转向指令
-    case obstacle    = 3   // P0 安全 / 避障，可抢占一切
+    case obstacle    = 3   // P0 安全 / 避障
+    case critical    = 4   // 最高：落差/坠落、正前方极近——不可被普通障碍打断（见审查 #6/#9）
 
     public static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
 }
@@ -14,10 +15,13 @@ public enum FeedbackPriority: Int, Comparable, Sendable {
 public struct FeedbackEvent: Equatable, Sendable {
     public let priority: FeedbackPriority
     public let speech: String?
+    /// 是否要求立即打断当前播报（危险骤升/极近时透传到反馈层，VoiceOver 用高优先级公告抢占，见审查 #2）。
+    public let interrupt: Bool
 
-    public init(priority: FeedbackPriority, speech: String?) {
+    public init(priority: FeedbackPriority, speech: String?, interrupt: Bool = false) {
         self.priority = priority
         self.speech = speech
+        self.interrupt = interrupt
     }
 }
 

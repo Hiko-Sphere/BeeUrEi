@@ -13,7 +13,7 @@ public struct VerbosityPolicy: Sendable {
 
     public func shouldSpeak(priority: FeedbackPriority, verbosity: FeedbackVerbosity) -> Bool {
         switch verbosity {
-        case .quiet:  return priority == .obstacle                         // 仅安全/避障
+        case .quiet:  return priority.rawValue >= FeedbackPriority.obstacle.rawValue // 仅安全/避障(含更高的 critical)
         case .normal: return priority.rawValue >= FeedbackPriority.turn.rawValue // 转向 + 危险
         case .full:   return true
         }

@@ -33,6 +33,13 @@ public enum HapticDesign {
                 HapticPulse(relativeTime: 0.12, intensity: 1.0, sharpness: 0.9),
                 HapticPulse(relativeTime: 0.24, intensity: 1.0, sharpness: 0.9),
             ]
+        case .critical:
+            return [ // 4 下急促满强：落差/极近——最高危险，与普通障碍可区分
+                HapticPulse(relativeTime: 0, intensity: 1.0, sharpness: 1.0),
+                HapticPulse(relativeTime: 0.08, intensity: 1.0, sharpness: 1.0),
+                HapticPulse(relativeTime: 0.16, intensity: 1.0, sharpness: 1.0),
+                HapticPulse(relativeTime: 0.24, intensity: 1.0, sharpness: 1.0),
+            ]
         }
     }
 }

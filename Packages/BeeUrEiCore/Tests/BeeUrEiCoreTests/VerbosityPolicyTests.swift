@@ -5,6 +5,7 @@ final class VerbosityPolicyTests: XCTestCase {
     let p = VerbosityPolicy()
 
     func testQuietOnlyDanger() {
+        XCTAssertTrue(p.shouldSpeak(priority: .critical, verbosity: .quiet)) // 最高危险(落差/极近)也必须播
         XCTAssertTrue(p.shouldSpeak(priority: .obstacle, verbosity: .quiet))
         XCTAssertFalse(p.shouldSpeak(priority: .turn, verbosity: .quiet))
         XCTAssertFalse(p.shouldSpeak(priority: .status, verbosity: .quiet))

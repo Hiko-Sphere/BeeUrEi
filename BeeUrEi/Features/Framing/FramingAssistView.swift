@@ -3,6 +3,7 @@ import ARKit
 import UIKit
 import AVFoundation
 import CoreGraphics
+import CoreVideo
 import Vision
 
 /// 取景识别：用相机 + YOLO 找最大目标，语音指引把它移到画面中央对准，对准后说出"这是什么"。
@@ -81,8 +82,9 @@ final class FramingAssistViewModel {
 
     /// 朗读相机里看到的文字（端侧 Vision OCR，中英文）——盲人读标牌/标签/菜单。
     func readText() {
-        guard let buffer = latestBuffer else { speak("请先把要读的文字对准相机"); return }
+        guard let live = latestBuffer else { speak("请先把要读的文字对准相机"); return }
         if tooDarkToProceed() { return }
+        guard let buffer = copyPixelBuffer(live) else { speak("识别失败，请重试"); return } // 深拷贝供异步安全读
         resultText = "正在识别文字…"
         let request = VNRecognizeTextRequest { [weak self] req, _ in
             let texts = (req.results as? [VNRecognizedTextObservation])?
@@ -115,8 +117,9 @@ final class FramingAssistViewModel {
 
     /// 识别二维码/条码并朗读内容（端侧 Vision）——读 QR 海报、产品码、WiFi 码等。
     func readBarcode() {
-        guard let buffer = latestBuffer else { speak("请把二维码或条码对准相机"); return }
+        guard let live = latestBuffer else { speak("请把二维码或条码对准相机"); return }
         if tooDarkToProceed() { return }
+        guard let buffer = copyPixelBuffer(live) else { speak("识别失败，请重试"); return } // 深拷贝供异步安全读
         resultText = "正在扫码…"
         let request = VNDetectBarcodesRequest { [weak self] req, _ in
             let payloads = (req.results as? [VNBarcodeObservation])?.compactMap { $0.payloadStringValue } ?? []
@@ -150,6 +153,39 @@ final class FramingAssistViewModel {
         } else {
             speak("无法识别颜色")
         }
+    }
+
+    /// 深拷贝相机帧——`latestBuffer` 是 ARKit 内部缓冲池里的 capturedImage，ARKit 后续帧会回收/覆盖它；
+    /// 异步(OCR/扫码 perform 在 global 队列、耗时数十~数百 ms)读它会读到撕裂/脏帧甚至 UB。
+    /// 故对要异步处理的画面先逐平面深拷贝一份独立内存（见审查：use-after-recycle）。
+    private func copyPixelBuffer(_ src: CVPixelBuffer) -> CVPixelBuffer? {
+        CVPixelBufferLockBaseAddress(src, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(src, .readOnly) }
+        let width = CVPixelBufferGetWidth(src)
+        let height = CVPixelBufferGetHeight(src)
+        let format = CVPixelBufferGetPixelFormatType(src)
+        var dst: CVPixelBuffer?
+        let attrs: [CFString: Any] = [kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary]
+        guard CVPixelBufferCreate(kCFAllocatorDefault, width, height, format, attrs as CFDictionary, &dst) == kCVReturnSuccess,
+              let dst else { return nil }
+        CVPixelBufferLockBaseAddress(dst, [])
+        defer { CVPixelBufferUnlockBaseAddress(dst, []) }
+        let planeCount = CVPixelBufferGetPlaneCount(src)
+        if planeCount == 0 {
+            if let s = CVPixelBufferGetBaseAddress(src), let d = CVPixelBufferGetBaseAddress(dst) {
+                let sb = CVPixelBufferGetBytesPerRow(src), db = CVPixelBufferGetBytesPerRow(dst)
+                for row in 0..<height { memcpy(d.advanced(by: row * db), s.advanced(by: row * sb), min(sb, db)) }
+            }
+        } else {
+            for plane in 0..<planeCount {
+                guard let s = CVPixelBufferGetBaseAddressOfPlane(src, plane),
+                      let d = CVPixelBufferGetBaseAddressOfPlane(dst, plane) else { continue }
+                let sb = CVPixelBufferGetBytesPerRowOfPlane(src, plane), db = CVPixelBufferGetBytesPerRowOfPlane(dst, plane)
+                let h = CVPixelBufferGetHeightOfPlane(src, plane)
+                for row in 0..<h { memcpy(d.advanced(by: row * db), s.advanced(by: row * sb), min(sb, db)) }
+            }
+        }
+        return dst
     }
 
     private func currentBrightness() -> Double? {

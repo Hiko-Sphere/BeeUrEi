@@ -71,6 +71,9 @@ export class SqliteStore implements Store {
   linksByOwner(ownerId: string): FamilyLink[] {
     return this.db.prepare('SELECT * FROM links WHERE ownerId = ?').all(ownerId).map((r) => this.toLink(r))
   }
+  linksByMember(memberId: string): FamilyLink[] {
+    return this.db.prepare('SELECT * FROM links WHERE memberId = ?').all(memberId).map((r) => this.toLink(r))
+  }
   findLink(id: string): FamilyLink | undefined {
     const row = this.db.prepare('SELECT * FROM links WHERE id = ?').get(id)
     return row ? this.toLink(row) : undefined

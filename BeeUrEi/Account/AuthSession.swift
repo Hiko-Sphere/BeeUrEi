@@ -18,6 +18,13 @@ final class AuthSession {
 
     var isLoggedIn: Bool { token != nil }
 
+    /// 启动时若有 token 但还没账号信息，拉 /api/me 恢复账号与角色；token 失效则登出。
+    func restore() async {
+        guard let token, user == nil else { return }
+        do { user = try await api.me(token: token) }
+        catch { logout() }
+    }
+
     func login(username: String, password: String) async {
         await run { try await self.api.login(username: username, password: password) }
     }

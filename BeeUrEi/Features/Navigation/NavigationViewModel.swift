@@ -3,8 +3,8 @@ import Observation
 import AVFoundation
 import CoreLocation
 
-/// 步行导航视图模型。海外用 MapKit（实时转向播报，接已测核心）；国内用高德（经后端，
-/// key 在 .env）取步行路线并读出步骤。
+/// 步行导航视图模型。海外用 MapKit（实时转向播报 + **空间音信标** + **偏航重规划** +
+/// **AirPods 头追踪**，接已测核心）；国内用高德（经后端，key 在 .env）取步行路线并读出步骤。
 @MainActor
 @Observable
 final class NavigationViewModel {
@@ -20,6 +20,9 @@ final class NavigationViewModel {
     @ObservationIgnored private let progress = RouteProgress()
     @ObservationIgnored private let gate = LocationAccuracyGate()
     @ObservationIgnored private let synthesizer = AVSpeechSynthesizer()
+    @ObservationIgnored private let spatial = SpatialAudioFeedback()
+    @ObservationIgnored private let headTracker = HeadTracker()
+    @ObservationIgnored private let offRoute = OffRouteDetector()
 
     @ObservationIgnored private var region: Region = .overseas
     @ObservationIgnored private var destinationQuery = ""
@@ -28,6 +31,11 @@ final class NavigationViewModel {
     @ObservationIgnored private var destination: CLLocationCoordinate2D?
     @ObservationIgnored private var routeReady = false
     @ObservationIgnored private var lastSpoken = ""
+
+    @ObservationIgnored private var routeCoords: [Coordinate] = []
+    @ObservationIgnored private var currentHeading: Double = 0
+    @ObservationIgnored private var lastBeacon: TimeInterval = 0
+    @ObservationIgnored private var lastOffRouteAnnounce: TimeInterval = 0
 
     func start(destination query: String, region: Region) async {
         guard FeatureSettings().navigationEnabled else {
@@ -43,42 +51,73 @@ final class NavigationViewModel {
         stepIndex = 0
         steps = []
         instruction = ""
+        routeCoords = []
         running = true
         status = "正在定位…"
+
         service.onLocation = { [weak self] loc in self?.handle(loc) }
+        service.onHeading = { [weak self] h in
+            self?.currentHeading = h.trueHeading >= 0 ? h.trueHeading : h.magneticHeading
+        }
+        // AirPods 头追踪驱动空间音听者朝向，使信标保持世界固定（无耳机自动跳过）。
+        headTracker.onYaw = { [weak self] yaw in self?.spatial.setListenerYaw(Float(yaw)) }
+        headTracker.start()
         service.requestAuthAndStart()
     }
 
     func stop() {
         running = false
         service.stop()
+        headTracker.stop()
         status = "导航已停止"
     }
 
     private func handle(_ loc: CLLocation) {
         guard running else { return }
 
-        // 首次定位后规划路线。
         if !routeReady {
             routeReady = true
             Task { await planRoute(from: loc) }
             return
         }
 
-        // 仅海外做实时转向推进（国内为静态步骤读出）。
+        // 仅海外做实时引导（国内为静态步骤读出）。
         guard region == .overseas, let dest = destination else { return }
+        let now = Date().timeIntervalSince1970
+        let lat = loc.coordinate.latitude, lon = loc.coordinate.longitude
 
+        // 偏航检测 → 重新规划（核心 OffRouteDetector，已测）。
+        if !routeCoords.isEmpty, offRoute.isOffRoute(lat: lat, lon: lon, route: routeCoords),
+           now - lastOffRouteAnnounce >= 6 {
+            lastOffRouteAnnounce = now
+            instruction = "已偏离路线，正在重新规划"
+            speak("已偏离路线，正在重新规划")
+            routeReady = false   // 下次定位触发重规划
+            return
+        }
+
+        // 目标点：当前转向点，过完则朝目的地。
+        let target = stepIndex < maneuvers.count ? maneuvers[stepIndex].coordinate : dest
+
+        // 空间音信标：把提示音"挂"在目标方位（核心 Geo + BeaconDirection，已测），约每 1.5s 一响。
+        if now - lastBeacon >= 1.5 {
+            lastBeacon = now
+            let bearing = Geo.initialBearing(fromLat: lat, fromLon: lon, toLat: target.latitude, toLon: target.longitude)
+            let beacon = BeaconDirection(headingDegrees: currentHeading, bearingDegrees: bearing)
+            spatial.playCue(azimuthDegrees: Float(beacon.relativeAzimuthDegrees))
+        }
+
+        // 已过完所有转向点：接近目的地判定。
         guard stepIndex < maneuvers.count else {
-            let toDest = Geo.distanceMeters(fromLat: loc.coordinate.latitude, fromLon: loc.coordinate.longitude,
-                                            toLat: dest.latitude, toLon: dest.longitude)
+            let toDest = Geo.distanceMeters(fromLat: lat, fromLon: lon, toLat: dest.latitude, toLon: dest.longitude)
             if toDest < 15 { status = "已接近目的地"; speak("已接近目的地"); stop() }
             return
         }
 
+        // 转向播报（精度门控，核心 RouteProgress，已测）。
         let level = gate.level(horizontalAccuracyMeters: loc.horizontalAccuracy)
         let next = maneuvers[stepIndex]
-        let distance = Geo.distanceMeters(fromLat: loc.coordinate.latitude, fromLon: loc.coordinate.longitude,
-                                          toLat: next.coordinate.latitude, toLon: next.coordinate.longitude)
+        let distance = Geo.distanceMeters(fromLat: lat, fromLon: lon, toLat: next.coordinate.latitude, toLon: next.coordinate.longitude)
         let decision = progress.decide(distanceToManeuverMeters: distance, instruction: next.instruction, level: level)
         if decision.shouldAnnounce, let text = decision.text {
             instruction = text
@@ -109,6 +148,10 @@ final class NavigationViewModel {
             destination = dest
             let m = await service.walkingManeuvers(from: loc.coordinate, to: dest)
             maneuvers = m
+            stepIndex = 0
+            // 路线折线（转向点 + 目的地）用于偏航检测。
+            routeCoords = m.map { Coordinate(lat: $0.coordinate.latitude, lon: $0.coordinate.longitude) }
+                + [Coordinate(lat: dest.latitude, lon: dest.longitude)]
             status = m.isEmpty ? "未找到步行路线" : "导航开始，共 \(m.count) 步"
         }
     }
@@ -118,6 +161,8 @@ final class NavigationViewModel {
         lastSpoken = text
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: "zh-CN")
+        utterance.rate = AVSpeechUtteranceMinimumSpeechRate
+            + (AVSpeechUtteranceMaximumSpeechRate - AVSpeechUtteranceMinimumSpeechRate) * FeatureSettings().speechRate
         synthesizer.speak(utterance)
     }
 }

@@ -14,7 +14,7 @@ final class CallViewModel {
     private(set) var statusText = "正在连接…"
 
     @ObservationIgnored private let signaling = SignalingClient()
-    @ObservationIgnored private let media: MediaEngine = StubMediaEngine()
+    @ObservationIgnored let media: MediaEngine = MediaEngineFactory.make()
 
     init(role: Role, callId: String) {
         self.role = role
@@ -26,6 +26,16 @@ final class CallViewModel {
             statusText = "请先在「设置 → 账号」登录后再呼叫"
             return
         }
+        // 媒体本端 SDP/ICE → 经信令发给对端。
+        media.onLocalDescription = { [weak self] type, sdp in
+            self?.signaling.send(["type": type, "sdp": sdp])
+        }
+        media.onLocalCandidate = { [weak self] candidate, sdpMid, sdpMLineIndex in
+            var msg: [String: Any] = ["type": "ice", "candidate": candidate, "sdpMLineIndex": Int(sdpMLineIndex)]
+            if let sdpMid { msg["sdpMid"] = sdpMid }
+            self?.signaling.send(msg)
+        }
+
         signaling.onMessage = { [weak self] msg in self?.handle(msg) }
         signaling.onClose = { [weak self] in
             self?.connected = false
@@ -39,13 +49,31 @@ final class CallViewModel {
 
     private func handle(_ msg: [String: Any]) {
         switch msg["type"] as? String {
-        case "joined", "peer-joined":
+        case "joined":
+            // 我加入时若对端已在房间，且我是发起方(视障)，则发起 offer。
+            if let peers = msg["peers"] as? [[String: Any]], !peers.isEmpty, role == .blind {
+                connected = true
+                statusText = "已连接"
+                media.createOffer()
+            }
+        case "peer-joined":
             connected = true
             statusText = "已连接"
-        case "peer-left":
-            statusText = "对方已离开"
+            if role == .blind { media.createOffer() }
+        case "offer":
+            if let sdp = msg["sdp"] as? String { media.handleRemoteDescription(type: "offer", sdp: sdp) }
+        case "answer":
+            if let sdp = msg["sdp"] as? String { media.handleRemoteDescription(type: "answer", sdp: sdp) }
+        case "ice":
+            if let candidate = msg["candidate"] as? String {
+                media.handleRemoteCandidate(candidate: candidate,
+                                            sdpMid: msg["sdpMid"] as? String,
+                                            sdpMLineIndex: Int32((msg["sdpMLineIndex"] as? Int) ?? 0))
+            }
         case "video-gate":
             if let on = msg["on"] as? Bool { statusText = on ? "对方开启了画面" : "对方关闭了画面" }
+        case "peer-left":
+            statusText = "对方已离开"
         default:
             break
         }

@@ -11,6 +11,10 @@ struct HomeView: View {
     var body: some View {
         ZStack {
             content
+            if DevSettings().enabled, case .running = model.state {
+                DevROIOverlay(roi: model.currentROI)
+                    .ignoresSafeArea()
+            }
             VStack(alignment: .leading) {
                 HStack {
                     helpButton

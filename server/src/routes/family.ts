@@ -39,6 +39,23 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store): void {
     return { links: store.linksByOwner(owner.sub).map((l) => viewLink(store, l)) }
   })
 
+  // 成员侧：列出"谁把我加为亲友/协助者"（供亲友/协助者角色查看）。
+  app.get('/api/family/incoming', { preHandler: requireAuth() }, async (req) => {
+    const me = req.user!
+    return {
+      links: store.linksByMember(me.sub).map((l) => {
+        const owner = store.findById(l.ownerId)
+        return {
+          id: l.id,
+          ownerId: l.ownerId,
+          ownerName: owner?.displayName ?? '未知',
+          relation: l.relation,
+          isEmergency: l.isEmergency,
+        }
+      }),
+    }
+  })
+
   // 删除一条绑定（仅本人）。
   app.delete('/api/family/links/:id', { preHandler: requireAuth() }, async (req, reply) => {
     const owner = req.user!

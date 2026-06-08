@@ -72,9 +72,22 @@ extension ARDepthCameraSource: ARSessionDelegate {
                 height: CVPixelBufferGetHeight(sd.depthMap)
             )
         }
+        // 相机几何（用于动态 ROI）：ARKit→CV 约定（翻转 Y、Z）。
+        let cam = frame.camera
+        let K = cam.intrinsics
+        let res = cam.imageResolution
+        let flip = simd_float4x4(diagonal: SIMD4<Float>(1, -1, -1, 1))
+        let geometry = CameraGeometry(
+            intrinsics: CameraIntrinsics(fx: K[0][0], fy: K[1][1], cx: K[2][0], cy: K[2][1]),
+            cameraToWorld: cam.transform * flip,
+            worldUp: SIMD3<Float>(0, 1, 0),
+            imageWidth: Float(res.width),
+            imageHeight: Float(res.height))
+
         let sensorFrame = SensorFrame(pixelBuffer: frame.capturedImage,
                                       depth: depthMap,
-                                      timestamp: frame.timestamp)
+                                      timestamp: frame.timestamp,
+                                      camera: geometry)
         onFrame?(sensorFrame)
         onTracking?(Self.map(frame.camera.trackingState))
     }

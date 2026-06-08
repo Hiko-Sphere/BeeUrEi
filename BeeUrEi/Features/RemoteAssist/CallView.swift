@@ -20,6 +20,14 @@ struct CallView: View {
             if model.role == .blind {
                 blindControls
             } else {
+                #if canImport(WebRTC)
+                if let engine = model.media as? WebRTCMediaEngine {
+                    RemoteVideoView(engine: engine)
+                        .frame(height: 320)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .accessibilityHidden(true)
+                }
+                #endif
                 Text("协助者模式：对方开启画面时这里显示其摄像头画面，并可与对方语音交流。")
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
@@ -69,3 +77,19 @@ struct CallView: View {
         }
     }
 }
+
+#if canImport(WebRTC)
+import WebRTC
+
+/// 渲染远端视频（协助者侧）。需 stasel/WebRTC 包。
+struct RemoteVideoView: UIViewRepresentable {
+    let engine: WebRTCMediaEngine
+    func makeUIView(context: Context) -> RTCMTLVideoView {
+        let view = RTCMTLVideoView()
+        view.videoContentMode = .scaleAspectFill
+        engine.setRemoteRenderer(view)
+        return view
+    }
+    func updateUIView(_ uiView: RTCMTLVideoView, context: Context) {}
+}
+#endif

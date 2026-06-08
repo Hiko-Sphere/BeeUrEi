@@ -14,6 +14,26 @@ public struct SpeechComposer: Sendable {
         return parts.joined(separator: "，")
     }
 
+    /// 简短播报（更快说完、降低认知负荷），如「正前方 行人 1米」。
+    public func conciseAnnounce(_ o: Obstacle) -> String {
+        var parts: [String] = [o.clock.coarsePhrase]
+        if !o.label.isEmpty { parts.append(o.label) }
+        if let d = o.distanceMeters, d.isFinite, d >= 0 {
+            parts.append(conciseMeters(d))
+        }
+        return parts.joined(separator: " ")
+    }
+
+    func conciseMeters(_ d: Double) -> String {
+        if d < 0.5 { return "很近" }
+        if d < 1 { return "半米" }
+        return "\(Int(d.rounded()))米"
+    }
+
+    public func announce(_ o: Obstacle, concise: Bool) -> String {
+        concise ? conciseAnnounce(o) : announce(o)
+    }
+
     /// 仅靠深度的近距预警（分类器没认出但很近时），如「正前方很近，请停下」。
     public func announceProximity(_ zone: ProximityZone, nearestMeters: Double?) -> String? {
         switch zone {

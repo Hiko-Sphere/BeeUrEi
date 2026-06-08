@@ -48,13 +48,16 @@ struct LoginView: View {
                 }
             }
 
-            Section("服务器地址") {
-                TextField("如 http://192.168.1.10:8787", text: $serverURL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .onChange(of: serverURL) { _, v in ServerConfig.setBaseURL(v) }
-                Text("真机测试请填运行后端的电脑局域网地址（不是 localhost）。")
-                    .font(.footnote).foregroundStyle(.secondary)
+            // 服务器地址仅在开发者模式下可自定义；否则一律用默认生产地址。
+            if DevSettings().enabled {
+                Section("服务器地址（开发者）") {
+                    TextField("如 http://192.168.1.10:8787", text: $serverURL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .onChange(of: serverURL) { _, v in ServerConfig.setBaseURL(v) }
+                    Text("默认 \(ServerConfig.production)。本地联调可改为运行后端的电脑局域网地址（不是 localhost）。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
             }
         }
         .navigationTitle("账号")

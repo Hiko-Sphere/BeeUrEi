@@ -14,4 +14,11 @@ struct DevSettings {
         get { defaults.bool(forKey: key) }
         set { defaults.set(newValue, forKey: key) }
     }
+
+    /// 实验：用碰撞走廊算动态 ROI 喂检测器（默认关；需真机配合相机/平面调参）。
+    private let dynamicROIKey = "dev.dynamicROIEnabled"
+    var dynamicROIEnabled: Bool {
+        get { defaults.bool(forKey: dynamicROIKey) }
+        set { defaults.set(newValue, forKey: dynamicROIKey) }
+    }
 }

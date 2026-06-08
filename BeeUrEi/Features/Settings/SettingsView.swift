@@ -10,6 +10,9 @@ struct SettingsView: View {
     @State private var avoidanceOn: Bool
     @State private var navigationOn: Bool
     @State private var devModeOn: Bool
+    @State private var dynamicROIOn: Bool
+    @State private var concise: Bool
+    @State private var rate: Double
 
     init(store: ConsentStore, onClose: @escaping () -> Void) {
         self.store = store
@@ -19,6 +22,9 @@ struct SettingsView: View {
         _avoidanceOn = State(initialValue: features.avoidanceEnabled)
         _navigationOn = State(initialValue: features.navigationEnabled)
         _devModeOn = State(initialValue: DevSettings().enabled)
+        _dynamicROIOn = State(initialValue: DevSettings().dynamicROIEnabled)
+        _concise = State(initialValue: features.conciseAnnouncements)
+        _rate = State(initialValue: Double(features.speechRate))
     }
 
     var body: some View {
@@ -35,8 +41,35 @@ struct SettingsView: View {
                     Text("关闭后，每次开始避障不再播报那句简短提醒；首次启动的完整安全须知仍会保留。")
                 }
 
+                Section {
+                    Toggle("简短播报", isOn: $concise)
+                        .onChange(of: concise) { _, v in
+                            var f = FeatureSettings(); f.conciseAnnouncements = v
+                        }
+                    VStack(alignment: .leading) {
+                        Text("语速")
+                        Slider(value: $rate, in: 0...1, step: 0.05) {
+                            Text("语速")
+                        } minimumValueLabel: {
+                            Text("慢")
+                        } maximumValueLabel: {
+                            Text("快")
+                        }
+                        .onChange(of: rate) { _, v in
+                            var f = FeatureSettings(); f.speechRate = Float(v)
+                        }
+                        .accessibilityLabel("语速")
+                        .accessibilityValue("\(Int(rate * 100)) %")
+                    }
+                } header: {
+                    Text("播报")
+                } footer: {
+                    Text("简短播报更快说完、降低认知负荷；语速可按习惯调整。")
+                }
+
                 Section("账号") {
                     NavigationLink("登录 / 注册") { LoginView() }
+                    NavigationLink("亲友与紧急呼叫") { FamilyLinksView() }
                 }
 
                 Section {
@@ -59,10 +92,16 @@ struct SettingsView: View {
                         .onChange(of: devModeOn) { _, v in
                             var d = DevSettings(); d.enabled = v
                         }
+                    if devModeOn {
+                        Toggle("动态 ROI 碰撞走廊（实验）", isOn: $dynamicROIOn)
+                            .onChange(of: dynamicROIOn) { _, v in
+                                var d = DevSettings(); d.dynamicROIEnabled = v
+                            }
+                    }
                 } header: {
                     Text("开发者")
                 } footer: {
-                    Text("开启后首屏左上角叠加显示温度、帧率、检测器等调试信息，用于开发测试。")
+                    Text("开启开发者模式后首屏叠加显示温度、帧率、检测器、ROI 等。动态 ROI 用碰撞走廊随相机姿态投影检测区（实验，需真机调参；绿框即当前检测区）。")
                 }
 
                 Section("关于") {

@@ -64,6 +64,7 @@ export interface Store {
 
   createLink(link: FamilyLink): void
   linksByOwner(ownerId: string): FamilyLink[]
+  linksByMember(memberId: string): FamilyLink[]
   findLink(id: string): FamilyLink | undefined
   deleteLink(id: string): void
 
@@ -117,6 +118,9 @@ export class MemoryStore implements Store {
   }
   linksByOwner(ownerId: string): FamilyLink[] {
     return [...this.links.values()].filter((l) => l.ownerId === ownerId)
+  }
+  linksByMember(memberId: string): FamilyLink[] {
+    return [...this.links.values()].filter((l) => l.memberId === memberId)
   }
   findLink(id: string): FamilyLink | undefined {
     return this.links.get(id)

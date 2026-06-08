@@ -16,6 +16,10 @@ final class YOLOObstacleDetector: ObstacleDetecting {
     private let confidenceThreshold: Float
     private let roi: CGRect
     private let roiMapper: ROIMapper
+    private let trafficClassifier = TrafficLightClassifier()
+
+    /// 最近一帧的红绿灯状态（按灯框平均色判别；远距/小目标不可靠，见 §5.7）。
+    private(set) var lastTrafficLightState: TrafficLightState = .unknown
 
     /// - Parameters:
     ///   - modelName: 不带扩展名的模型资源名（编译后为 .mlmodelc）。
@@ -26,7 +30,7 @@ final class YOLOObstacleDetector: ObstacleDetecting {
     ///     ⚠️ 真机验证：若方向偏移，说明该 iOS 版本 Vision 已按整帧坐标返回，去掉重映射即可。
     init(modelName: String = "YOLO",
          confidenceThreshold: Float = 0.35,
-         regionOfInterest: CGRect = CGRect(x: 0.15, y: 0.15, width: 0.7, height: 0.8)) {
+         regionOfInterest: CGRect = DetectionConfig.regionOfInterest) {
         self.confidenceThreshold = confidenceThreshold
         self.roi = regionOfInterest
         self.roiMapper = ROIMapper(originX: Double(regionOfInterest.origin.x), width: Double(regionOfInterest.width))
@@ -43,8 +47,15 @@ final class YOLOObstacleDetector: ObstacleDetecting {
     /// 是否成功加载到模型（否则 App 走深度兜底）。
     var isAvailable: Bool { request != nil }
 
-    func detect(in pixelBuffer: CVPixelBuffer) -> [DetectedObject] {
+    func detect(in pixelBuffer: CVPixelBuffer, regionOfInterest dynamicROI: CGRect?) -> [DetectedObject] {
         guard let request else { return [] }
+        // 动态 ROI（碰撞走廊）优先；否则用默认静态 ROI。X 重映射的 mapper 随 ROI 变化。
+        let activeROI = dynamicROI ?? roi
+        let mapper = (dynamicROI == nil)
+            ? roiMapper
+            : ROIMapper(originX: Double(activeROI.origin.x), width: Double(activeROI.width))
+        request.regionOfInterest = activeROI
+
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
         do {
             try handler.perform([request])
@@ -52,14 +63,32 @@ final class YOLOObstacleDetector: ObstacleDetecting {
             return []
         }
         let observations = (request.results as? [VNRecognizedObjectObservation]) ?? []
+        lastTrafficLightState = trafficLightState(observations, activeROI: activeROI, pixelBuffer: pixelBuffer)
         return observations.compactMap { obs in
             guard let top = obs.labels.first, top.confidence >= confidenceThreshold else { return nil }
             // ROI 内的归一化 midX → 整帧归一化 X（保证几点钟方向正确）。
-            let fullX = roiMapper.fullNormalizedX(Double(obs.boundingBox.midX))
+            let fullX = mapper.fullNormalizedX(Double(obs.boundingBox.midX))
             return DetectedObject(label: top.identifier,
                                   normalizedX: fullX,
                                   confidence: top.confidence)
         }
+    }
+
+    /// 取置信度最高的红绿灯框，采样其平均色判别红/绿/黄。坐标：ROI 相对(左下) → 整帧 → 左上。
+    private func trafficLightState(_ observations: [VNRecognizedObjectObservation],
+                                   activeROI: CGRect, pixelBuffer: CVPixelBuffer) -> TrafficLightState {
+        let light = observations
+            .filter { ($0.labels.first?.identifier == "traffic light") && (($0.labels.first?.confidence ?? 0) >= confidenceThreshold) }
+            .max { ($0.labels.first?.confidence ?? 0) < ($1.labels.first?.confidence ?? 0) }
+        guard let light else { return .unknown }
+        let bb = light.boundingBox
+        let fx = activeROI.origin.x + bb.origin.x * activeROI.width
+        let fyBL = activeROI.origin.y + bb.origin.y * activeROI.height
+        let fw = bb.width * activeROI.width
+        let fh = bb.height * activeROI.height
+        let rect = CGRect(x: fx, y: 1 - fyBL - fh, width: fw, height: fh)
+        guard let rgb = ColorSampler.averageRGB(in: pixelBuffer, rect: rect) else { return .unknown }
+        return trafficClassifier.classify(r: rgb.r, g: rgb.g, b: rgb.b)
     }
 
     private static func loadModel(named name: String) -> VNCoreMLModel? {

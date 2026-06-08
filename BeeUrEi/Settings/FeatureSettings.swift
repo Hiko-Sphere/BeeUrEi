@@ -5,6 +5,8 @@ struct FeatureSettings {
     private let defaults: UserDefaults
     private let avoidanceKey = "feature.avoidanceEnabled"
     private let navigationKey = "feature.navigationEnabled"
+    private let conciseKey = "feature.conciseAnnouncements"
+    private let speechRateKey = "feature.speechRate"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -18,5 +20,17 @@ struct FeatureSettings {
     var navigationEnabled: Bool {
         get { defaults.bool(forKey: navigationKey) }
         set { defaults.set(newValue, forKey: navigationKey) }
+    }
+
+    /// 简短播报（默认开）：更快说完、降低认知负荷。
+    var conciseAnnouncements: Bool {
+        get { defaults.object(forKey: conciseKey) == nil ? true : defaults.bool(forKey: conciseKey) }
+        set { defaults.set(newValue, forKey: conciseKey) }
+    }
+
+    /// 语音播报速率 0...1（映射到 AVSpeechUtterance 速率）。默认 0.5。
+    var speechRate: Float {
+        get { defaults.object(forKey: speechRateKey) == nil ? 0.5 : defaults.float(forKey: speechRateKey) }
+        set { defaults.set(min(max(newValue, 0), 1), forKey: speechRateKey) }
     }
 }

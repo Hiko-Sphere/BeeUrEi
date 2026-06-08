@@ -29,7 +29,10 @@ final class SpeechFeedback: NSObject, FeedbackSink {
         }
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: "zh-CN")
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        // 可调语速（设置里 0...1 → AVSpeech 速率区间）。
+        let t = FeatureSettings().speechRate
+        utterance.rate = AVSpeechUtteranceMinimumSpeechRate
+            + (AVSpeechUtteranceMaximumSpeechRate - AVSpeechUtteranceMinimumSpeechRate) * t
         synthesizer.speak(utterance)
     }
 }

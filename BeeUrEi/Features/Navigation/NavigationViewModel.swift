@@ -41,7 +41,8 @@ final class NavigationViewModel {
     @ObservationIgnored private var lastBeacon: TimeInterval = 0
     @ObservationIgnored private var lastOffRouteAnnounce: TimeInterval = 0
     @ObservationIgnored private var lastHeadingTime: TimeInterval = 0   // 最近一次可信航向的时刻(单调钟)；陈旧则抑制信标（见审查 #4）
-    @ObservationIgnored private var announcedImminent = false           // 当前转向点的"现在…"高确定性指令是否已播——推进的前提（见审查 #7）
+    @ObservationIgnored private var minDistToManeuver = Double.greatestFiniteMagnitude // 到当前转向点的历史最近距离，用于"越过波谷"几何推进（见回归 #1/#2）
+    @ObservationIgnored private var passedStreak = 0                    // 连续判定"已走过当前转向点"的帧数，需≥2 抗低精度单帧抖动（见回归 #1）
     @ObservationIgnored private var offRouteStreak = 0                  // 连续判定偏航的帧数，需≥2 抗单帧抖动（见审查 #3）
 
     func start(destination query: String, region: Region) async {
@@ -69,7 +70,8 @@ final class NavigationViewModel {
         lastSpoken = ""
         headingReliable = false
         headingFilter = HeadingFilter()
-        announcedImminent = false
+        minDistToManeuver = .greatestFiniteMagnitude
+        passedStreak = 0
         offRouteStreak = 0
         lastHeadingTime = 0
         running = true
@@ -179,16 +181,28 @@ final class NavigationViewModel {
         if decision.shouldAnnounce, let text = decision.text {
             instruction = text
             speak(text)
-            if decision.isHighCertainty { announcedImminent = true } // 记录"现在…"已播，作为安全推进的前提
         }
-        // 步进推进必须同时满足：(a) 高精度(level==.precise)，(b) 该转向点的"现在…"高确定性指令**已经播报**，
-        // (c) 已进入即将窗口(distance < imminentMeters)。否则：
-        // - 低精度单帧 GPS 抖动会无声吞掉转向点(漏播"过马路/转向"，对盲人是直接危险，见审查 #1/#8)；
-        // - 旧的 8m 推进阈值 > 5m 即将阈值，会在播"现在转向"之前就推进，导致该关键指令永不播报（见审查 #7）。
-        if level == .precise, announcedImminent, distance < progress.imminentMeters {
-            stepIndex += 1
-            announcedImminent = false
-            lastSpoken = ""   // 新转向点：清空去重基线，使下个转向即便文本相同也能播报
+
+        // 步进推进——用"越过波谷"几何判定，而非脆弱的"必须命中 5m 窗 + precise"：
+        // 记录到当前转向点的历史最近距离 minDist；当用户已足够接近(minDist<=announceWithinMeters)且距离开始
+        // 明显回升(distance > minDist + 3m，即走过了最近点)，判定已越过该转向点 → 推进。
+        // 这样：①低/无精度单帧抖动不会"无声吞掉"转向点(下方 level!=.none 门控+回升判定)；②不会在播"现在转向"前
+        // 就推进(推进发生在走过之后)；③不依赖采样恰好命中 5m，避免持续 .beacon 或采样稀疏时永不推进而卡死、
+        // 信标长期指回已过转向点(见回归 #1/#2/#4/#5)。.none 精度下 GPS 噪声大，不做几何推进，待精度恢复。
+        if level != .none {
+            minDistToManeuver = min(minDistToManeuver, distance)
+            // 已接近过(minDist<=20m)且距离明显回升(>minDist+4m)=越过波谷；需连续≥2 帧确认抗低精度单帧抖动误推进。
+            if minDistToManeuver <= progress.announceWithinMeters, distance > minDistToManeuver + 4 {
+                passedStreak += 1
+            } else {
+                passedStreak = 0
+            }
+            if passedStreak >= 2 {
+                stepIndex += 1
+                minDistToManeuver = .greatestFiniteMagnitude
+                passedStreak = 0
+                lastSpoken = ""   // 新转向点：清空去重基线，使下个转向即便文本相同也能播报
+            }
         }
     }
 
@@ -231,7 +245,8 @@ final class NavigationViewModel {
             guard running, gen == navGeneration else { return }
             maneuvers = m
             stepIndex = 0
-            announcedImminent = false   // 新路线：重置"现在…已播"标志，避免沿用旧步的状态（见审查 #7）
+            minDistToManeuver = .greatestFiniteMagnitude // 新路线：重置越过波谷基线（见回归 #1）
+            passedStreak = 0
             offRouteStreak = 0
             // 路线折线（转向点 + 目的地）用于偏航检测。
             routeCoords = m.map { Coordinate(lat: $0.coordinate.latitude, lon: $0.coordinate.longitude) }

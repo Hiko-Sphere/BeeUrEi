@@ -12,6 +12,7 @@ final class FramingAssistViewModel {
     private(set) var state: FrameSourceState = .idle
     private(set) var guidanceText = "正在启动…"
     private(set) var resultText = ""
+    private(set) var copyableResult: String?   // OCR/扫码的原始内容，可复制
 
     @ObservationIgnored private let source = ARDepthCameraSource()
     @ObservationIgnored private let detector: ObstacleDetecting = {
@@ -89,6 +90,7 @@ final class FramingAssistViewModel {
             DispatchQueue.main.async {
                 let out = joined.isEmpty ? "没有识别到文字" : joined
                 self?.resultText = out
+                self?.copyableResult = joined.isEmpty ? nil : joined
                 self?.speak(out)
             }
         }
@@ -106,6 +108,7 @@ final class FramingAssistViewModel {
         let objects = latestDetections.map { (label: labels.localizedName($0.label), normalizedX: $0.normalizedX) }
         let text = SceneSummarizer().summary(objects: objects)
         resultText = text
+        copyableResult = nil
         speak(text)
     }
 
@@ -119,9 +122,11 @@ final class FramingAssistViewModel {
             DispatchQueue.main.async {
                 if let first = payloads.first {
                     self?.resultText = "码内容：\(first)"
+                    self?.copyableResult = first
                     self?.speak("识别到：\(first)")
                 } else {
                     self?.resultText = ""
+                    self?.copyableResult = nil
                     self?.speak("没有识别到二维码或条码")
                 }
             }
@@ -139,6 +144,7 @@ final class FramingAssistViewModel {
         if let rgb = ColorSampler.averageRGB(in: buffer, rect: rect) {
             let name = ColorNamer().name(r: rgb.r, g: rgb.g, b: rgb.b)
             resultText = "颜色：\(name)"
+            copyableResult = nil
             speak("中间的颜色大概是\(name)")
         } else {
             speak("无法识别颜色")
@@ -234,6 +240,11 @@ struct FramingAssistView: View {
                     Text(model.guidanceText).font(.title).bold()
                     if !model.resultText.isEmpty {
                         Text(model.resultText).font(.title2).foregroundStyle(.green)
+                    }
+                    if let copyable = model.copyableResult {
+                        Button("复制内容") { UIPasteboard.general.string = copyable }
+                            .buttonStyle(.bordered)
+                            .accessibilityHint("把识别到的文字或码内容复制到剪贴板")
                     }
                 }
                 .padding()

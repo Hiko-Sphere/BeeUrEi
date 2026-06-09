@@ -41,6 +41,11 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store): void {
     if (store.findByUsername(username)) {
       return reply.code(409).send({ error: 'username_taken' })
     }
+    // 规范化邮箱 + 唯一性（邮箱是账号身份锚，见审查 #13）。
+    const normEmail = email?.trim().toLowerCase()
+    if (normEmail && store.allUsers().some((u) => (u.email ?? '').toLowerCase() === normEmail)) {
+      return reply.code(409).send({ error: 'email_taken' })
+    }
     const user: User = {
       id: randomUUID(),
       username,
@@ -50,8 +55,8 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store): void {
       status: 'active',
       createdAt: Date.now(),
       language,
-      email,
-      emailVerified: email ? false : undefined,
+      email: normEmail,
+      emailVerified: normEmail ? false : undefined,
     }
     store.createUser(user)
     const tokens = issueTokens(store, user)

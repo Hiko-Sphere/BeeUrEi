@@ -155,6 +155,37 @@ describe('公开求助队列路由', () => {
     await a.close()
   })
 
+  it('跨注册表防影子覆盖：公开求助的 callId 不能被他人在定向呼叫表抢注（见审查 #1）', async () => {
+    const a = app()
+    const blind = await reg(a, 'blindShadow', 'blind')
+    const attacker = await reg(a, 'attackerShadow', 'helper')
+    const accomplice = await reg(a, 'accompliceShadow', 'helper')
+    // 攻击者与小号互绑并接受（满足 /assist/call 的 accepted 校验）
+    const lk = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(attacker.token), payload: { username: 'accompliceShadow' } })
+    await a.inject({ method: 'POST', url: `/api/family/links/${lk.json().link.id}/accept`, headers: auth(accomplice.token) })
+
+    // 受害者广播公开求助 callId=X
+    await a.inject({ method: 'POST', url: '/api/assist/help/request', headers: auth(blind.token), payload: { callId: 'shadow-X' } })
+    // 攻击者尝试用同一 callId 在定向呼叫表抢注 → 必须被拒（冲突）
+    const hijack = await a.inject({ method: 'POST', url: '/api/assist/call', headers: auth(attacker.token), payload: { callId: 'shadow-X', targetUserIds: [accomplice.user.id] } })
+    expect(hijack.statusCode).toBe(409)
+    await a.close()
+  })
+
+  it('反向：定向呼叫的 callId 不能被公开求助抢注', async () => {
+    const a = app()
+    const blind = await reg(a, 'blindRev', 'blind')
+    const helper = await reg(a, 'helperRev', 'helper')
+    const lk = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(blind.token), payload: { username: 'helperRev' } })
+    await a.inject({ method: 'POST', url: `/api/family/links/${lk.json().link.id}/accept`, headers: auth(helper.token) })
+    await a.inject({ method: 'POST', url: '/api/assist/call', headers: auth(blind.token), payload: { callId: 'dir-Y', targetUserIds: [helper.user.id] } })
+    // 另一用户想用同 callId 发公开求助 → 冲突
+    const other = await reg(a, 'otherRev', 'blind')
+    const conflict = await a.inject({ method: 'POST', url: '/api/assist/help/request', headers: auth(other.token), payload: { callId: 'dir-Y' } })
+    expect(conflict.statusCode).toBe(409)
+    await a.close()
+  })
+
   it('help 端点需要登录', async () => {
     const a = app()
     expect((await a.inject({ method: 'GET', url: '/api/assist/help/queue' })).statusCode).toBe(401)

@@ -19,6 +19,7 @@ export interface HelpRequest {
   createdAt: number
   claimedBy?: string // 认领该求助的志愿者 userId（认领后从公开队列移除）
   claimedAt?: number
+  requeuedAt?: number // 志愿者放弃认领、释放回队列的时刻；过期以此为基准（避免长通话后释放被立即清除，见审查 #6）
 }
 
 export interface HelpMatchPrefs {
@@ -38,6 +39,8 @@ export interface HelpSummary {
 
 export class OpenHelpRegistry {
   private reqs = new Map<string, HelpRequest>()
+  // 跨注册表冲突检查：该 callId 是否已被另一类会话(定向亲友呼叫)占用（见审查 #1）。
+  private conflictCheck?: (callId: string, now: number) => boolean
 
   constructor(
     private readonly ttlMs = 120_000, // 未认领求助 2 分钟无人接即过期
@@ -45,9 +48,14 @@ export class OpenHelpRegistry {
     private readonly maxEntries = 1000,
   ) {}
 
-  /// 登记一条公开求助。若该 callId 已被**他人且未过期**占用则拒绝（防覆盖/劫持）。
+  setConflictCheck(fn: (callId: string, now: number) => boolean): void {
+    this.conflictCheck = fn
+  }
+
+  /// 登记一条公开求助。若该 callId 已被**他人且未过期**占用、或已被另一注册表占用，则拒绝（防覆盖/劫持/影子覆盖）。
   register(req: HelpRequest): boolean {
     this.prune(req.createdAt)
+    if (this.conflictCheck?.(req.callId, req.createdAt)) return false // 跨表去重（见审查 #1）
     const existing = this.reqs.get(req.callId)
     if (existing && existing.fromUserId !== req.fromUserId) return false
     this.cap()
@@ -119,10 +127,18 @@ export class OpenHelpRegistry {
   }
 
   /// 参与权（供 ws join 校验）：求助者本人始终是参与者；认领后追加认领者。未登记返回 null。
-  participants(callId: string): string[] | null {
+  /// 传 now 则先清过期（过期条目视为不存在，避免僵尸条目影子覆盖参与权，见审查 #7）。
+  participants(callId: string, now?: number): string[] | null {
+    if (now !== undefined) this.prune(now)
     const r = this.reqs.get(callId)
     if (!r) return null
     return r.claimedBy ? [r.fromUserId, r.claimedBy] : [r.fromUserId]
+  }
+
+  /// 该 callId 是否有未过期登记（供跨注册表冲突检查）。
+  hasActive(callId: string, now: number): boolean {
+    this.prune(now)
+    return this.reqs.has(callId)
   }
 
   /// 取消/放弃（归属校验，防越权压制他人求助）：
@@ -136,9 +152,10 @@ export class OpenHelpRegistry {
       return true
     }
     if (r.claimedBy === requesterId) {
-      // 释放回队列：重置 createdAt 为 now 之外保持原排队位置——这里保留原 createdAt 以免被放弃者
-      // 反复 claim/release 把求助永远顶在队首；只清认领标记。
-      this.reqs.set(callId, { ...r, claimedBy: undefined, claimedAt: undefined })
+      // 释放回队列：保留原 createdAt 以维持排队位置（防放弃者反复 claim/release 顶队首），
+      // 但用 requeuedAt=now 作为**过期基准**——否则长通话(>ttl)后放弃会因 createdAt 陈旧被立即清除，
+      // 求助凭空消失而非回到队列（见审查 #6）。
+      this.reqs.set(callId, { ...r, claimedBy: undefined, claimedAt: undefined, requeuedAt: now })
       return true
     }
     return false
@@ -146,9 +163,10 @@ export class OpenHelpRegistry {
 
   private prune(now: number): void {
     for (const [id, r] of this.reqs) {
+      // 未认领条目以 requeuedAt(若曾释放)否则 createdAt 为基准计过期；已认领条目以 claimedAt 计。
       const expired = r.claimedBy
         ? r.claimedAt !== undefined && now - r.claimedAt > this.claimedTtlMs
-        : now - r.createdAt > this.ttlMs
+        : now - (r.requeuedAt ?? r.createdAt) > this.ttlMs
       if (expired) this.reqs.delete(id)
     }
   }

@@ -127,6 +127,32 @@ describe('OpenHelpRegistry', () => {
     expect(r.byId('claimed')).toBeUndefined()
   })
 
+  it('放弃认领后即使早已超过未认领 TTL 也释放回队列（不被立即清除，见审查 #6）', () => {
+    const r = new OpenHelpRegistry(60_000, 4 * 60 * 60 * 1000)
+    r.register(base({ callId: 'c', fromUserId: 'b1', createdAt: 0 }))
+    r.claim('c', 'helperA', 30_000)
+    // t=330s 放弃（远超 60s 未认领 TTL）：应释放回队列，而非因 createdAt=0 陈旧被清除
+    expect(r.cancel('c', 'helperA', 330_000)).toBe(true)
+    expect(r.open(330_000).map((x) => x.callId)).toEqual(['c']) // 仍在队列
+    // 释放后从新基准(requeuedAt=330s)再过 TTL 才过期
+    expect(r.open(330_000 + 61_000).length).toBe(0)
+  })
+
+  it('跨注册表冲突：conflictCheck 命中时 register 拒绝（防同名 callId 影子覆盖，见审查 #1）', () => {
+    const r = new OpenHelpRegistry()
+    r.setConflictCheck((id) => id === 'taken-elsewhere')
+    expect(r.register(base({ callId: 'taken-elsewhere', fromUserId: 'b1' }))).toBe(false)
+    expect(r.register(base({ callId: 'fine', fromUserId: 'b1' }))).toBe(true)
+  })
+
+  it('hasActive 反映未过期登记', () => {
+    const r = new OpenHelpRegistry(60_000)
+    r.register(base({ callId: 'c', fromUserId: 'b1', createdAt: 0 }))
+    expect(r.hasActive('c', 30_000)).toBe(true)
+    expect(r.hasActive('c', 61_000)).toBe(false) // 过期
+    expect(r.hasActive('nope', 0)).toBe(false)
+  })
+
   it('硬上限：超出淘汰最旧', () => {
     const r = new OpenHelpRegistry(120_000, 1000, 3)
     for (let i = 0; i < 5; i++) r.register(base({ callId: `c${i}`, fromUserId: `b${i}`, createdAt: i }))

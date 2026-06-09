@@ -64,6 +64,22 @@ describe('PendingCallRegistry', () => {
     expect(r.incomingFor('x', 70_000).length).toBe(1)
   })
 
+  it('participants(now) 在响铃窗口内可入会、超窗才拒（见复审 #4）', () => {
+    const r = new PendingCallRegistry(180_000)
+    r.register(base({ createdAt: 0, toUserIds: ['helper1'] }))
+    // 晚接听（120s，仍在 180s 窗口内）：合法亲友能拿到参与者列表入会
+    expect(r.participants('c1', 120_000)).toEqual(['blind1', 'helper1'])
+    // 超过窗口（200s）：清理并拒绝
+    expect(r.participants('c1', 200_000)).toBeNull()
+  })
+
+  it('hasActive 反映未过期登记（跨注册表去重用）', () => {
+    const r = new PendingCallRegistry(180_000)
+    r.register(base({ createdAt: 0 }))
+    expect(r.hasActive('c1', 100_000)).toBe(true)
+    expect(r.hasActive('c1', 200_000)).toBe(false)
+  })
+
   it('returns most recent first', () => {
     const r = new PendingCallRegistry()
     r.register(base({ callId: 'old', createdAt: 1 }))

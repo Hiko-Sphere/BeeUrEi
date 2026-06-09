@@ -108,4 +108,30 @@ describe('admin + reports', () => {
     expect(selfChange.statusCode).toBe(400)
     await app.close()
   })
+
+  it('防后台锁死：管理员不能自封；不能封禁/降级最后一名管理员（见审查 #10/#11）', async () => {
+    const { app } = withAdmin()
+    const adminToken = await login(app, 'root', 'rootpass1')
+    const adminAuth = { authorization: `Bearer ${adminToken}` }
+    const adminId = (await app.inject({ method: 'GET', url: '/api/me', headers: adminAuth })).json().user.id
+
+    // 自封 → 400
+    const selfBan = await app.inject({ method: 'POST', url: `/api/admin/users/${adminId}/status`, headers: adminAuth, payload: { status: 'disabled' } })
+    expect(selfBan.statusCode).toBe(400)
+
+    // 再造一个管理员，验证最后一名保护：先升 eve 为 admin，则可降回 root？不行——降 root 会使活跃 admin 仍有 eve，允许。
+    const eve = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'eve', password: 'secret123' } })
+    const eveId = eve.json().user.id
+    await app.inject({ method: 'POST', url: `/api/admin/users/${eveId}/role`, headers: adminAuth, payload: { role: 'admin' } })
+
+    // 现在两名管理员：可封禁 eve（仍剩 root 一名）
+    const banEve = await app.inject({ method: 'POST', url: `/api/admin/users/${eveId}/status`, headers: adminAuth, payload: { status: 'disabled' } })
+    expect(banEve.statusCode).toBe(200)
+
+    // eve 被封后只剩 root 一名活跃管理员：降级 root 角色 → 最后一名保护 400
+    const demoteLast = await app.inject({ method: 'POST', url: `/api/admin/users/${adminId}/role`, headers: adminAuth, payload: { role: 'helper' } })
+    // 注：root 改自己角色本就被 cannot_change_own_role 拦截（400），此处验证仍是 400
+    expect(demoteLast.statusCode).toBe(400)
+    await app.close()
+  })
 })

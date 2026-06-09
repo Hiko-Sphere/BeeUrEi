@@ -21,9 +21,13 @@ export function registerRecoveryRoutes(app: FastifyInstance, store: Store, codes
     const parsed = forgotSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const user = store.findByUsername(parsed.data.username)
-    if (user?.email) {
+    // 仅向**已验证**邮箱发码：未验证邮箱可能是拼错/他人地址，不应作为账号恢复锚点（见审查 #8）。
+    if (user?.email && user.emailVerified) {
       const code = codes.issue(`reset:${user.id}`, Date.now())
-      await mailer.send(user.email, 'BeeUrEi 重置密码验证码', `你的重置密码验证码是：${code}（10 分钟内有效）。若非你本人操作请忽略。`)
+      // fire-and-forget：不 await 发信，使"账号存在/不存在"两条路径响应时延一致，消除时序枚举侧信道（见审查 #9）。
+      void mailer
+        .send(user.email, 'BeeUrEi 重置密码验证码', `你的重置密码验证码是：${code}（10 分钟内有效）。若非你本人操作请忽略。`)
+        .catch(() => {})
     }
     return { ok: true }
   })

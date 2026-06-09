@@ -8,6 +8,7 @@ import { rankHelpers, type Candidate } from '../assist/matcher'
 import { buildIceServers } from '../assist/turnCredentials'
 import { PendingCallRegistry } from '../assist/pendingCalls'
 import { OpenHelpRegistry } from '../assist/openHelp'
+import { type PushSender } from '../push/apns'
 
 const heartbeatSchema = z.object({ available: z.boolean(), at: z.number().optional() })
 const matchSchema = z.object({ emergency: z.boolean().optional(), preferredLanguage: z.string().optional() })
@@ -32,6 +33,7 @@ export function registerAssistRoutes(
   presence: PresenceRegistry,
   pendingCalls: PendingCallRegistry,
   openHelp: OpenHelpRegistry,
+  pushSender: PushSender,
 ): void {
   // 协助者/亲友"在线待命"心跳（客户端定期调用；available=false 即下线）。
   app.post('/api/assist/heartbeat', { preHandler: requireAuth() }, async (req, reply) => {
@@ -98,6 +100,12 @@ export function registerAssistRoutes(
       createdAt: Date.now(),
     })
     if (!ok) return reply.code(409).send({ error: 'call_id_conflict' }) // 该 callId 被他人占用，防覆盖/劫持(见审查 #2)
+    // A1：向各目标设备推 VoIP 来电（后台/锁屏唤起 CallKit）。fire-and-forget，失败不阻断呼叫。
+    const callerName = store.findById(from.sub)?.displayName ?? '求助者'
+    for (const id of targets) {
+      const token = store.findById(id)?.voipToken
+      if (token) void pushSender.sendCallInvite(token, parsed.data.callId, callerName, from.sub)
+    }
     return { ok: true }
   })
 

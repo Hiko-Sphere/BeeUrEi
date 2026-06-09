@@ -38,9 +38,14 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const user = store.findById(req.user!.sub)
     if (!user) return reply.code(404).send({ error: 'not_found' })
-    store.updateUser(user.id, { email: parsed.data.email, emailVerified: false })
+    // 规范化 + 唯一性：邮箱是账号身份锚，不能被设成他人已用的邮箱（见审查 #13）。
+    const email = parsed.data.email.trim().toLowerCase()
+    if (store.allUsers().some((u) => u.id !== user.id && (u.email ?? '').toLowerCase() === email)) {
+      return reply.code(409).send({ error: 'email_taken' })
+    }
+    store.updateUser(user.id, { email, emailVerified: false })
     const code = codes.issue(`verify:${user.id}`, Date.now())
-    await mailer.send(parsed.data.email, 'BeeUrEi 邮箱验证码', `你的邮箱验证码是：${code}（10 分钟内有效）。`)
+    await mailer.send(email, 'BeeUrEi 邮箱验证码', `你的邮箱验证码是：${code}（10 分钟内有效）。`)
     return { ok: true }
   })
 

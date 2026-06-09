@@ -52,7 +52,15 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
           // 参与权校验：只有该 callId 登记表里的发起者/目标本人才能加入，否则任意登录用户知道 callId
           // 即可抢先占位、窃听信令、劫持 WebRTC 会话（见审查 #8）。
           // 两条来源：① 定向亲友呼叫(pendingCalls) ② 公开求助队列(openHelp，认领后含志愿者)。
-          const participants = pendingCalls.participants(callId) ?? openHelp.participants(callId)
+          // 传 now 让两表都先清过期；若同一 callId 在两表同时有效则视为冲突一律拒绝（防影子覆盖，见审查 #1/#7）。
+          const now = Date.now()
+          const pcParticipants = pendingCalls.participants(callId, now)
+          const ohParticipants = openHelp.participants(callId, now)
+          if (pcParticipants && ohParticipants) {
+            socket.close(4003, 'call_conflict') // 跨表去重后理论不应发生，作为纵深防御
+            return
+          }
+          const participants = pcParticipants ?? ohParticipants
           if (!participants || !participants.includes(auth.sub)) {
             socket.close(4003, 'not_a_participant')
             return

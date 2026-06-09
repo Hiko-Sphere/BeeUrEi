@@ -13,15 +13,23 @@ export interface PendingCall {
 
 export class PendingCallRegistry {
   private calls = new Map<string, PendingCall>()
+  // 跨注册表冲突检查：该 callId 是否已被另一类会话(公开求助)占用。防同名 callId 影子覆盖参与权（见审查 #1/#7）。
+  private conflictCheck?: (callId: string, now: number) => boolean
 
   constructor(
-    private readonly ttlMs = 60_000,
+    // 响铃/待接听窗口：亲友可能不在手机旁，60s 太短会把晚接听的合法亲友锁在自己该接的紧急来电外（见复审 #4）。
+    private readonly ttlMs = 180_000,
     private readonly maxEntries = 1000,
   ) {}
 
-  /// 登记。若该 callId 已被**他人且未过期**占用则拒绝（返回 false），防止覆盖/劫持他人会合。
+  setConflictCheck(fn: (callId: string, now: number) => boolean): void {
+    this.conflictCheck = fn
+  }
+
+  /// 登记。若该 callId 已被**他人且未过期**占用、或已被另一注册表占用，则拒绝（返回 false），防覆盖/劫持/影子覆盖。
   register(call: PendingCall): boolean {
     this.prune(call.createdAt) // 先清过期：否则他人的"僵尸"过期条目会一直阻挡合法登记(callId 占位 DoS，见审查 #4)
+    if (this.conflictCheck?.(call.callId, call.createdAt)) return false // 跨表去重（见审查 #1）
     const existing = this.calls.get(call.callId)
     if (existing && existing.fromUserId !== call.fromUserId) return false
     this.cap()
@@ -30,10 +38,18 @@ export class PendingCallRegistry {
   }
 
   /// 返回该 callId 的合法参与者（发起者 + 目标）；未登记则 null。供信令 join 的参与权校验（见审查 #8）。
-  participants(callId: string): string[] | null {
+  /// 传 now 则先清过期（过期条目视为不存在，避免僵尸条目影子覆盖参与权，见审查 #7）。
+  participants(callId: string, now?: number): string[] | null {
+    if (now !== undefined) this.prune(now)
     const c = this.calls.get(callId)
     if (!c) return null
     return [c.fromUserId, ...c.toUserIds]
+  }
+
+  /// 该 callId 是否有未过期登记（供跨注册表冲突检查）。
+  hasActive(callId: string, now: number): boolean {
+    this.prune(now)
+    return this.calls.has(callId)
   }
 
   /// 返回针对该用户、未过期的待接来电（最近的在前）。

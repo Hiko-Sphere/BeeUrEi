@@ -65,7 +65,8 @@ export class SqliteStore implements Store {
     ).run(u.id, u.username, u.passwordHash, u.displayName, u.role, u.status, u.createdAt, u.language ?? null, u.tokenVersion ?? 0)
   }
   findByUsername(username: string): User | undefined {
-    const row = this.db.prepare('SELECT * FROM users WHERE username = ?').get(username)
+    // 大小写不敏感(COLLATE NOCASE)：防同名混淆/冒充；登录兼容任意大小写（见审查 #4）。
+    const row = this.db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(username.trim())
     return row ? this.toUser(row) : undefined
   }
   findById(id: string): User | undefined {

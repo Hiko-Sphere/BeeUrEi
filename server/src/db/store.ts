@@ -127,7 +127,9 @@ export class MemoryStore implements Store {
     this.afterMutate()
   }
   findByUsername(username: string): User | undefined {
-    for (const u of this.users.values()) if (u.username === username) return u
+    // 大小写不敏感：防止注册"Alice"与"alice"两个混淆账号/冒充；登录也兼容任意大小写（见审查 #4）。
+    const key = username.trim().toLowerCase()
+    for (const u of this.users.values()) if (u.username.toLowerCase() === key) return u
     return undefined
   }
   findById(id: string): User | undefined {

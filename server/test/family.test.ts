@@ -42,6 +42,32 @@ describe('family + emergency', () => {
     await a.close()
   })
 
+  it('rejects duplicate link to same member (409)', async () => {
+    const { a, reg } = setup()
+    const owner = await reg('alice')
+    await reg('mom', 'family')
+    const auth = { authorization: `Bearer ${owner.token}` }
+    expect((await a.inject({ method: 'POST', url: '/api/family/links', headers: auth, payload: { username: 'mom' } })).statusCode).toBe(201)
+    const dup = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth, payload: { username: 'mom' } })
+    expect(dup.statusCode).toBe(409) // 去重，不会无界增长
+    await a.close()
+  })
+
+  it('username lookup is case-insensitive (no impersonation by case)', async () => {
+    const { a, reg } = setup()
+    const owner = await reg('alice')
+    await reg('Mom', 'family')
+    const auth = { authorization: `Bearer ${owner.token}` }
+    // 用不同大小写绑定应命中同一用户（而非 404 或新建混淆账号）。
+    const r = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth, payload: { username: 'MOM' } })
+    expect(r.statusCode).toBe(201)
+    expect(r.json().link.memberName).toBe('Mom')
+    // 注册同名不同大小写应被拒(用户名已占用)。
+    const taken = await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'ALICE', password: 'secret123' } })
+    expect(taken.statusCode).toBe(409)
+    await a.close()
+  })
+
   it('rejects linking self and requires auth', async () => {
     const { a, reg } = setup()
     const owner = await reg('alice')

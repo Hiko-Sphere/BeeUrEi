@@ -18,9 +18,18 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store): void {
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
 
     const owner = req.user!
-    const member = store.findByUsername(parsed.data.username)
+    const member = store.findByUsername(parsed.data.username.trim())
     if (!member) return reply.code(404).send({ error: 'member_not_found' })
     if (member.id === owner.sub) return reply.code(400).send({ error: 'cannot_link_self' })
+
+    // 去重 + 每用户上限：防止重复绑定同一人、防止无界增长(存储/匹配放大，见审查 #7)。
+    const existing = store.linksByOwner(owner.sub)
+    if (existing.some((l) => l.memberId === member.id)) {
+      return reply.code(409).send({ error: 'already_linked' })
+    }
+    if (existing.length >= 200) {
+      return reply.code(422).send({ error: 'too_many_links' })
+    }
 
     const link: FamilyLink = {
       id: randomUUID(),

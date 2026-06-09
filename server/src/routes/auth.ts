@@ -16,7 +16,7 @@ function issueTokens(store: Store, user: User): { token: string; refreshToken: s
 const refreshSchema = z.object({ refreshToken: z.string().min(1) })
 
 const registerSchema = z.object({
-  username: z.string().min(3).max(32),
+  username: z.string().trim().min(3).max(32), // 去首尾空白，避免" alice"/"alice"混淆（见审查 #4）
   password: z.string().min(6).max(128),
   displayName: z.string().min(1).max(64).optional(),
   // 自助注册仅限这些角色；admin/developer 由后台分配。
@@ -25,7 +25,7 @@ const registerSchema = z.object({
 })
 
 const loginSchema = z.object({
-  username: z.string(),
+  username: z.string().trim(),
   password: z.string(),
 })
 

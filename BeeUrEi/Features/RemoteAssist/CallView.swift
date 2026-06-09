@@ -64,9 +64,15 @@ struct CallView: View {
             Text("举报会发送给管理员审核，请仅在确有问题时使用。")
         }
         .task { await model.start() }
+        // 通话期间让出音频会话给 WebRTC(.playAndRecord)；离开后恢复避障/导航的 .playback 会话，
+        // 否则用过一次远程协助后危险警告会被 WebRTC 留下的会话置于静音开关之下（见回归 #1）。
+        .onAppear { AudioSessionManager.beginCall() }
         // 隐私 fail-safe：手势被取消(来电/弹窗/进后台/手指滑出)不会触发 DragGesture.onEnded，
         // 故在离开界面与进入非活跃态时强制关闭画面外发，确保"按住才发"绝不漏成"持续发"（见审查 #1）。
-        .onDisappear { model.setVideoSending(false) }
+        .onDisappear {
+            model.setVideoSending(false)
+            AudioSessionManager.endCall()
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { model.setVideoSending(false) }
         }

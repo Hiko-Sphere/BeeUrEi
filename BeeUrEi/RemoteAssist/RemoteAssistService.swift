@@ -80,6 +80,21 @@ final class RemoteAssistService: NSObject {
             if KeychainStore.read() == nil {
                 self.active[uuid] = nil
                 self.provider.reportCall(with: uuid, endedAt: nil, reason: .failed)
+                return
+            }
+            // 前台（App 正在使用）：iOS 规定收到 VoIP push 必须先 reportNewIncomingCall（上面已满足），
+            // 随后立刻收起系统来电界面、改在应用内显示来电（按需求"用软件时不弹 CallKit"）。仅 .active 走此分支，
+            // 锁屏/后台仍用系统 CallKit。answered 标记避免之后 endCall() 触发的 CXEndCallAction 误判为"拒绝"。
+            if UIApplication.shared.applicationState == .active {
+                let info = self.active[uuid]
+                self.callMachine.answer()
+                self.answered.insert(uuid)
+                self.active[uuid] = nil
+                self.provider.reportCall(with: uuid, endedAt: Date(), reason: .answeredElsewhere)
+                Task { @MainActor in
+                    guard IncomingCallCenter.shared.pending == nil else { return } // 去重：已在通话/已呈现则不再弹
+                    IncomingCallCenter.shared.present(callId: info?.callId ?? callId, callerName: info?.name ?? callerName)
+                }
             }
         }
     }

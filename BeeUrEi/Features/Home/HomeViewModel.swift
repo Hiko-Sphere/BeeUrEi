@@ -121,6 +121,8 @@ final class HomeViewModel {
     func pauseSession() {
         source.stop()
         sonifier.stop()
+        speech.stopAll()            // 立刻掐断正在念/排队的"前方…"，避免串入通话
+        coordinator.finishCurrent() // 释放仲裁通道，resume 后可正常重新播报
     }
 
     /// 恢复避障会话（上述界面关闭返回主页时调用）。重跑得到干净的世界跟踪。

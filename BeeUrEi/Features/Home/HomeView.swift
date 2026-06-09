@@ -12,6 +12,7 @@ struct HomeView: View {
     @State private var showTutorial = false
     @State private var locationDescriber = LocationDescriber()
     @State private var idleTask: Task<Void, Never>? // 屏幕常亮计时（到时允许系统息屏）
+    @State private var incoming = IncomingCallCenter.shared // 监听来电（接听别人的呼叫经此在根层呈现）
     private let consentStore = ConsentStore()
 
     var body: some View {
@@ -47,6 +48,15 @@ struct HomeView: View {
             SettingsView(store: consentStore) { showSettings = false }
         }
         .onChange(of: showSettings) { _, shown in if !shown { applyKeepAwake() } } // 设置可能改了常亮时长，返回时重新应用
+        // 接到别人来电：暂停避障(停语音/帧/声呐) + 强制常亮 + 关掉本页其它模态(否则根层来电 CallView 弹不出来，见来电链路深审 #1/#3)。
+        .onChange(of: incoming.pending != nil) { _, inCall in
+            if inCall {
+                model.pauseSession(); forceKeepAwake()
+                showSettings = false; showRemoteAssist = false; showNavigation = false; showFraming = false; showTutorial = false
+            } else {
+                model.resumeSession(); applyKeepAwake()
+            }
+        }
         // 求助/取景界面也用相机：呈现时暂停主页避障会话+强制常亮(通话期间不息屏)，关闭返回时恢复。
         .onChange(of: showRemoteAssist) { _, shown in
             if shown { model.pauseSession(); forceKeepAwake() } else { model.resumeSession(); applyKeepAwake() }

@@ -55,6 +55,13 @@ final class SpeechFeedback: NSObject, FeedbackSink {
         synthesizer.speak(utterance)
     }
 
+    /// 立即停止一切播报（进入通话等场景）：掐断正在播的 TTS（触发 didCancel→释放仲裁），
+    /// 并使任何挂起的 VoiceOver 估时释放失效，避免暂停后仍念出"前方…"。
+    func stopAll() {
+        voGeneration += 1 // 让挂起的 VO 释放回调失效
+        synthesizer.stopSpeaking(at: .immediate)
+    }
+
     /// 用户主动触发的播报（如点状态条「重复」）——不经仲裁、其结束不释放仲裁通道，
     /// 避免污染正被障碍/转向播报占据的优先级状态（见审查 #13）。
     func speakUserInitiated(_ text: String) {

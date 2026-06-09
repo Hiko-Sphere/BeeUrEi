@@ -20,6 +20,7 @@ struct AssistHomeView: View {
     @State private var showAddFamily = false
     @State private var newFamilyUsername = ""
     @State private var addFamilyMsg: String?
+    @State private var incomingCenter = IncomingCallCenter.shared // 监听来电以关闭冲突模态
     @State private var answering: AnsweringCall?    // 正在接听/帮助（认领的陌生人 + 亲人来电统一走这里）
     @State private var matched: HelpRequestDetail?  // 随机匹配到、待确认是否帮助
     @State private var pendingAnswer: AnsweringCall? // 「帮助 TA」选定、待 matched sheet 关闭后再呈现通话（避免同一 tick 切换两个模态，见审查 #3）
@@ -45,6 +46,10 @@ struct AssistHomeView: View {
         .task { await onAppear() }
         // 匹配/认领状态变化主动朗读——盲人/低视力协助者点完按钮才有语音反馈（见无障碍审计）。
         .onChange(of: statusText) { _, new in if let new, !new.isEmpty { A11y.announce(new) } }
+        // 来电(根层 CallView)呈现时，关掉本页可能占用的模态(匹配卡/偏好/添加)，否则根层 fullScreenCover 会被吞（见来电链路深审 #3）。
+        .onChange(of: incomingCenter.pending != nil) { _, inCall in
+            if inCall { matched = nil; prefsShown = false; showAddFamily = false }
+        }
         .onDisappear { stopTasks(goOffline: true) }
         .sheet(item: $matched, onDismiss: {
             // sheet 真正关闭后再呈现通话，避免同一 tick「关 sheet + 开 fullScreenCover」被吞（见审查 #3）。

@@ -73,6 +73,27 @@ struct IncomingCall: Codable, Sendable, Identifiable {
     let fromUserId: String
 }
 
+/// 公开求助队列摘要（协助者浏览）：粗粒度信息，不含发起人 userId（隐私）。
+struct HelpRequestSummary: Codable, Sendable, Identifiable {
+    var id: String { callId }
+    let callId: String
+    let fromName: String
+    let language: String?
+    let locality: String?
+    let topic: String?
+    let waitedSeconds: Int
+}
+
+/// 认领/匹配成功后返回的求助详情（供协助者决定是否帮助 + 入会）。
+struct HelpRequestDetail: Codable, Sendable, Identifiable {
+    var id: String { callId }
+    let callId: String
+    let fromName: String
+    let language: String?
+    let locality: String?
+    let topic: String?
+}
+
 struct RecordingConfig: Codable, Sendable {
     let enabled: Bool
     let retentionDays: Int
@@ -307,6 +328,88 @@ struct APIClient {
         let data = try await authedGet("/api/assist/incoming", token: token)
         guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.decoding }
         return r.calls
+    }
+
+    // MARK: 公开求助队列（面向陌生志愿者的众包协助）
+
+    /// 视障侧广播一条公开求助（登记 callId + 粗粒度信息），随后进入通话界面等待志愿者接入。
+    func postHelpRequest(token: String, callId: String, language: String?, locality: String?, topic: String?) async throws {
+        var body: [String: Any] = ["callId": callId]
+        if let language, !language.isEmpty { body["language"] = language }
+        if let locality, !locality.isEmpty { body["locality"] = locality }
+        if let topic, !topic.isEmpty { body["topic"] = topic }
+        _ = try await authedSend("POST", "/api/assist/help/request", token: token, body: body)
+    }
+
+    /// 协助者浏览公开求助队列。
+    func helpQueue(token: String) async throws -> [HelpRequestSummary] {
+        struct R: Codable { let requests: [HelpRequestSummary] }
+        let data = try await authedGet("/api/assist/help/queue", token: token)
+        guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.decoding }
+        return r.requests
+    }
+
+    /// 协助者认领指定求助（成功返回详情；已被他人认领时抛 .server("already_claimed_or_gone")）。
+    func claimHelp(token: String, callId: String) async throws -> HelpRequestDetail {
+        struct R: Codable { let request: HelpRequestDetail }
+        let data = try await authedSend("POST", "/api/assist/help/claim", token: token, body: ["callId": callId])
+        guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.decoding }
+        return r.request
+    }
+
+    /// 协助者随机/偏好匹配一条公开求助并认领。无可匹配返回 nil。
+    func matchHelp(token: String, preferredLanguage: String?, requireLanguageMatch: Bool) async throws -> HelpRequestDetail? {
+        struct R: Codable { let request: HelpRequestDetail? }
+        var body: [String: Any] = ["requireLanguageMatch": requireLanguageMatch]
+        if let preferredLanguage, !preferredLanguage.isEmpty { body["preferredLanguage"] = preferredLanguage }
+        let data = try await authedSend("POST", "/api/assist/help/match", token: token, body: body)
+        guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.decoding }
+        return r.request
+    }
+
+    /// 取消公开求助（发起人撤销）/ 放弃认领（志愿者释放回队列）。尽力而为。
+    func cancelHelp(token: String, callId: String) async {
+        _ = try? await authedSend("POST", "/api/assist/help/cancel", token: token, body: ["callId": callId])
+    }
+
+    // MARK: 邮箱验证 / 找回密码（D1）
+
+    /// 设置/更新邮箱（随后服务端发一封验证码邮件）。
+    func setEmail(token: String, email: String) async throws {
+        _ = try await authedSend("POST", "/api/account/email", token: token, body: ["email": email])
+    }
+
+    /// 校验邮箱验证码。
+    func verifyEmail(token: String, code: String) async throws {
+        _ = try await authedSend("POST", "/api/account/email/verify", token: token, body: ["code": code])
+    }
+
+    /// 发起找回密码（向账号邮箱发验证码；不论账号是否存在均返回成功，防枚举）。
+    func forgotPassword(username: String) async throws {
+        _ = try await postNoAuth("/api/auth/forgot-password", body: ["username": username])
+    }
+
+    /// 凭验证码重置密码。
+    func resetPassword(username: String, code: String, newPassword: String) async throws {
+        _ = try await postNoAuth("/api/auth/reset-password", body: ["username": username, "code": code, "newPassword": newPassword])
+    }
+
+    /// 未登录的简单 POST（找回密码等）。返回原始 Data；4xx 抛 .server，5xx/网络抛 .network。
+    @discardableResult
+    private func postNoAuth(_ path: String, body: [String: Any]) async throws -> Data {
+        var req = URLRequest(url: baseURL.appendingPathComponent(path))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, resp): (Data, URLResponse)
+        do { (data, resp) = try await URLSession.shared.data(for: req) } catch { throw APIError.network }
+        guard let http = resp as? HTTPURLResponse else { throw APIError.network }
+        if http.statusCode >= 500 { throw APIError.network }
+        if http.statusCode >= 400 {
+            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            throw APIError.server((obj?["error"] as? String) ?? "HTTP \(http.statusCode)")
+        }
+        return data
     }
 
     /// 通话前拉取 ICE 服务器（STUN + 短时效 TURN 凭据）。

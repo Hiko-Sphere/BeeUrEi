@@ -11,6 +11,10 @@ func roleDisplayName(_ role: String) -> String {
     }
 }
 
+/// 协助端角色（协助者 / 亲友）：合并后共用同一套界面，同时具备
+/// 「帮助陌生人（志愿者队列+匹配）」与「帮助我绑定的亲人」全部功能。
+func isAssistRole(_ role: String) -> Bool { role == "helper" || role == "family" }
+
 /// 各角色界面通用「账号」区：查看账号、切换角色、退出登录。
 struct RoleAccountSection: View {
     let session: AuthSession
@@ -66,8 +70,8 @@ struct RoleHomeView: View {
 
     var body: some View {
         switch role {
-        case "helper": HelperHomeView(session: session, onSwitchRole: onSwitchRole)
-        case "family": FamilyHomeView(session: session, onSwitchRole: onSwitchRole)
+        // 协助者与亲友合并：同一「协助端」界面，两个角色的全部功能都在内（见 [[isAssistRole]]）。
+        case "helper", "family": AssistHomeView(session: session, onSwitchRole: onSwitchRole)
         case "admin": AdminHomeView(session: session, onSwitchRole: onSwitchRole)
         case "developer": DeveloperHomeView(session: session, onSwitchRole: onSwitchRole)
         default: HomeView() // 视障：实时避障主界面

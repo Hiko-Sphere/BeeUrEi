@@ -38,7 +38,8 @@ targets:
         UIRequiredDeviceCapabilities:
           - arm64
           - arkit
-        UILaunchScreen: {}
+        # 品牌化启动界面：墨蓝背景 + 居中蜂鸣 Logo（BeeUrEi/LaunchScreen.storyboard）。
+        UILaunchStoryboardName: LaunchScreen
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         # 这三段权限文案会原样显示在系统授权弹窗里（见 PLAN.md §7.4）

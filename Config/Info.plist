@@ -37,8 +37,8 @@
 	<string>用于与远程志愿者实时语音交流。</string>
 	<key>NSMotionUsageDescription</key>
 	<string>用于 AirPods 头部追踪，提升空间音方向提示的准确度。</string>
-	<key>UILaunchScreen</key>
-	<dict/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>arm64</string>

@@ -11,6 +11,8 @@ struct HelperHomeView: View {
     @State private var pollTask: Task<Void, Never>?
     @State private var incomingCall: IncomingCall?
     @State private var dismissedCallIds: Set<String> = []  // 已挂断的来电不再重复弹出（见审查 #5）
+    @State private var pendingLinks: [IncomingLinkInfo] = []  // 待我接受的绑定请求（双向同意，见审查 #6）
+    @State private var linkBusy: Set<String> = []            // 在途的接受/拒绝，防重复点击
 
     var body: some View {
         NavigationStack {
@@ -22,6 +24,26 @@ struct HelperHomeView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 } header: {
                     Text("状态")
+                }
+
+                if !pendingLinks.isEmpty {
+                    Section("绑定请求") {
+                        ForEach(pendingLinks) { l in
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("\(l.ownerName) 想把你加为\(l.relation)\(l.isEmergency ? "（紧急联系人）" : "")")
+                                    .font(.subheadline)
+                                HStack {
+                                    Button("接受") { Task { await accept(l) } }
+                                        .buttonStyle(.borderedProminent)
+                                        .disabled(linkBusy.contains(l.id))
+                                    Button("拒绝", role: .destructive) { Task { await reject(l) } }
+                                        .buttonStyle(.bordered)
+                                        .disabled(linkBusy.contains(l.id))
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
                 }
 
                 Section("通话") {
@@ -39,6 +61,8 @@ struct HelperHomeView: View {
                 RoleAccountSection(session: session, onSwitchRole: onSwitchRole)
             }
             .navigationTitle("协助者")
+            .task { await loadPendingLinks() }
+            .refreshable { await loadPendingLinks() }
             .onDisappear {
                 hbTask?.cancel(); hbTask = nil
                 pollTask?.cancel(); pollTask = nil
@@ -58,6 +82,28 @@ struct HelperHomeView: View {
                 incomingCall = nil
             }
         }
+    }
+
+    /// 加载待我接受的绑定请求（双向同意，见审查 #6）。
+    private func loadPendingLinks() async {
+        guard let token = session.token else { return }
+        if let links = try? await APIClient().incomingLinks(token: token) {
+            pendingLinks = links.filter { $0.isPending }
+        }
+    }
+
+    private func accept(_ l: IncomingLinkInfo) async {
+        guard let token = session.token, !linkBusy.contains(l.id) else { return }
+        linkBusy.insert(l.id); defer { linkBusy.remove(l.id) }
+        try? await APIClient().acceptFamilyLink(token: token, id: l.id)
+        await loadPendingLinks()
+    }
+
+    private func reject(_ l: IncomingLinkInfo) async {
+        guard let token = session.token, !linkBusy.contains(l.id) else { return }
+        linkBusy.insert(l.id); defer { linkBusy.remove(l.id) }
+        try? await APIClient().deleteFamilyLink(token: token, id: l.id)
+        await loadPendingLinks()
     }
 
     /// "在线待命"开关 → 周期性心跳（20s）上报可用 + 轮询待接来电；关闭即下线。

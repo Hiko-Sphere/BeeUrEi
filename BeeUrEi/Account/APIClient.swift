@@ -43,6 +43,8 @@ struct FamilyLinkInfo: Codable, Sendable, Identifiable {
     let relation: String
     let isEmergency: Bool
     let phone: String?
+    let status: String?   // "pending"=待对方接受，"accepted"=已生效（旧数据无此字段按已接受）
+    var isPending: Bool { status == "pending" }
 }
 
 struct IncomingLinkInfo: Codable, Sendable, Identifiable {
@@ -51,6 +53,8 @@ struct IncomingLinkInfo: Codable, Sendable, Identifiable {
     let ownerName: String
     let relation: String
     let isEmergency: Bool
+    let status: String?   // "pending" 表示待我接受；"accepted" 已生效（旧数据无此字段按已接受）
+    var isPending: Bool { status == "pending" }
 }
 
 struct EmergencyTarget: Codable, Sendable, Identifiable {
@@ -245,6 +249,11 @@ struct APIClient {
         if let relation, !relation.isEmpty { body["relation"] = relation }
         if let phone, !phone.isEmpty { body["phone"] = phone }
         _ = try await authedSend("POST", "/api/family/links", token: token, body: body)
+    }
+
+    /// 协助者/亲友接受一条绑定请求（双向同意，见审查 #6）。
+    func acceptFamilyLink(token: String, id: String) async throws {
+        _ = try await authedSend("POST", "/api/family/links/\(id)/accept", token: token)
     }
 
     func deleteFamilyLink(token: String, id: String) async throws {

@@ -99,5 +99,6 @@ function viewLink(store: Store, link: FamilyLink) {
     relation: link.relation,
     isEmergency: link.isEmergency,
     phone: link.phone,
+    status: link.status ?? 'accepted', // owner 可见绑定是否已被对方接受（见审查 #6）
   }
 }

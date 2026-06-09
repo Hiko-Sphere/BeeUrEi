@@ -14,6 +14,7 @@ struct FamilyHomeView: View {
     @State private var pollTask: Task<Void, Never>?
     @State private var incomingCall: IncomingCall?
     @State private var dismissedCallIds: Set<String> = []  // 已挂断的来电不再重复弹出（见审查 #5）
+    @State private var linkBusy: Set<String> = []          // 在途的接受/拒绝，防重复点击（见审查 #6）
 
     var body: some View {
         NavigationStack {
@@ -35,11 +36,21 @@ struct FamilyHomeView: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(incoming) { l in
-                            VStack(alignment: .leading) {
+                            VStack(alignment: .leading, spacing: l.isPending ? 10 : 2) {
                                 Text(l.ownerName)
-                                Text("\(l.relation)\(l.isEmergency ? " · 紧急联系人" : "")")
+                                Text("\(l.relation)\(l.isEmergency ? " · 紧急联系人" : "")\(l.isPending ? " · 待你接受" : "")")
                                     .font(.caption).foregroundStyle(.secondary)
+                                // 双向同意：未接受的绑定不会让对方探测你的在线状态/向你强推来电（见审查 #6）。
+                                if l.isPending {
+                                    HStack {
+                                        Button("接受") { Task { await accept(l) } }
+                                            .buttonStyle(.borderedProminent).disabled(linkBusy.contains(l.id))
+                                        Button("拒绝", role: .destructive) { Task { await reject(l) } }
+                                            .buttonStyle(.bordered).disabled(linkBusy.contains(l.id))
+                                    }
+                                }
                             }
+                            .padding(.vertical, 2)
                         }
                     }
                 }
@@ -82,6 +93,20 @@ struct FamilyHomeView: View {
         guard let token = session.token else { loadError = "请先登录"; return }
         do { incoming = try await api.incomingLinks(token: token); loadError = nil }
         catch { loadError = "加载失败（需连接后端）" }
+    }
+
+    private func accept(_ l: IncomingLinkInfo) async {
+        guard let token = session.token, !linkBusy.contains(l.id) else { return }
+        linkBusy.insert(l.id); defer { linkBusy.remove(l.id) }
+        try? await api.acceptFamilyLink(token: token, id: l.id)
+        await load()
+    }
+
+    private func reject(_ l: IncomingLinkInfo) async {
+        guard let token = session.token, !linkBusy.contains(l.id) else { return }
+        linkBusy.insert(l.id); defer { linkBusy.remove(l.id) }
+        try? await api.deleteFamilyLink(token: token, id: l.id)
+        await load()
     }
 
     /// 紧急待命开关 → 周期性心跳上报可用 + 轮询待接来电（亲人紧急呼叫时前台即可接听）。

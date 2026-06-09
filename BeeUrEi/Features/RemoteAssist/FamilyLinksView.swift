@@ -39,8 +39,8 @@ struct FamilyLinksView: View {
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(l.memberName)
-                                Text("\(l.relation)\(l.isEmergency ? " · 紧急联系人" : "")")
-                                    .font(.caption).foregroundStyle(.secondary)
+                                Text("\(l.relation)\(l.isEmergency ? " · 紧急联系人" : "")\(l.isPending ? " · 待对方接受" : "")")
+                                    .font(.caption).foregroundStyle(l.isPending ? .orange : .secondary)
                             }
                             Spacer()
                             if let phone = l.phone, !phone.isEmpty {

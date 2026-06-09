@@ -8,6 +8,16 @@ enum MediaConnState: Equatable {
     case disconnected // 暂时中断（可能恢复）
 }
 
+/// 通话连接质量（用 WebRTC 实测往返时延表达"信号强弱"——iOS 不开放原始信号格数）。
+enum CallQuality: Equatable {
+    case unknown, weak, fair, good
+    var label: String {
+        switch self { case .good: return "信号强"; case .fair: return "信号中"; case .weak: return "信号弱"; case .unknown: return "信号检测中" }
+    }
+    /// 显示几格（0–3）。
+    var bars: Int { switch self { case .good: return 3; case .fair: return 2; case .weak: return 1; case .unknown: return 0 } }
+}
+
 /// 媒体引擎抽象（WebRTC）。把"真实音视频"与"信令/UI"解耦。
 ///
 /// 视频隐私模型（见 BACKEND_PLAN §5）：
@@ -22,6 +32,8 @@ protocol MediaEngine: AnyObject {
     var onMediaStateChange: ((_ state: MediaConnState) -> Void)? { get set }
     /// 协助者侧：收到远端视频轨（主线程回调）。
     var onRemoteVideoTrack: (() -> Void)? { get set }
+    /// 通话质量定期上报（主线程回调）——"信号强弱"。
+    var onCallQuality: ((_ quality: CallQuality) -> Void)? { get set }
 
     func setIceServers(_ servers: [IceServerInfo])
     func start(asCaller: Bool)
@@ -38,6 +50,7 @@ final class StubMediaEngine: MediaEngine {
     var onLocalCandidate: ((String, String?, Int32) -> Void)?
     var onMediaStateChange: ((MediaConnState) -> Void)?
     var onRemoteVideoTrack: (() -> Void)?
+    var onCallQuality: ((CallQuality) -> Void)?
     func setIceServers(_ servers: [IceServerInfo]) {}
     func start(asCaller: Bool) {}
     func createOffer() {}
@@ -70,6 +83,8 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
     var onLocalCandidate: ((String, String?, Int32) -> Void)?
     var onMediaStateChange: ((MediaConnState) -> Void)?
     var onRemoteVideoTrack: (() -> Void)?
+    var onCallQuality: ((CallQuality) -> Void)?
+    private var statsTimer: Timer?
 
     private static let factory: RTCPeerConnectionFactory = {
         RTCInitializeSSL()
@@ -178,11 +193,38 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
     }
 
     func stop() {
+        statsTimer?.invalidate(); statsTimer = nil
         if capturing { videoCapturer?.stopCapture(); capturing = false }
         pc?.close()
         pc = nil
         pendingCandidates.removeAll()
         hasRemoteDescription = false
+    }
+
+    /// 每 2s 拉一次 WebRTC 统计，用活跃候选对的往返时延映射"信号强弱"。
+    private func startStatsPolling() {
+        statsTimer?.invalidate()
+        statsTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.pollStats() }
+    }
+
+    private func pollStats() {
+        pc?.statistics { [weak self] report in
+            guard let self else { return }
+            var rtt: Double?
+            for (_, s) in report.statistics where s.type == "candidate-pair" {
+                let nominated = (s.values["nominated"] as? NSNumber)?.boolValue ?? false
+                let state = s.values["state"] as? String
+                guard nominated || state == "succeeded" else { continue }
+                if let r = (s.values["currentRoundTripTime"] as? NSNumber)?.doubleValue { rtt = r }
+            }
+            let quality: CallQuality
+            if let rtt {
+                quality = rtt < 0.15 ? .good : (rtt < 0.4 ? .fair : .weak)
+            } else {
+                quality = .unknown
+            }
+            DispatchQueue.main.async { self.onCallQuality?(quality) }
+        }
     }
 
     /// 协助者侧把远端视频渲染到给定 renderer。
@@ -234,6 +276,14 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
         case .disconnected: mapped = .disconnected
         case .closed: mapped = nil
         @unknown default: mapped = nil
+        }
+        // 连通后开始采质量统计；失败/关闭则停。
+        DispatchQueue.main.async {
+            switch newState {
+            case .connected, .completed: if self.statsTimer == nil { self.startStatsPolling() }
+            case .failed, .closed: self.statsTimer?.invalidate(); self.statsTimer = nil
+            default: break
+            }
         }
         if let mapped { DispatchQueue.main.async { self.onMediaStateChange?(mapped) } }
     }

@@ -67,6 +67,8 @@ struct AssistHomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: BeeSpacing.md) {
+                    NetworkStatusBar() // 当前网络类型（WiFi/移动数据/有线链接）
+
                     HStack {
                         BeeStatusPill(online: online)
                         Spacer()

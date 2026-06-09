@@ -18,6 +18,7 @@ final class CallViewModel {
     private(set) var mediaState: MediaConnState?     // 真实媒体连通状态（区别于信令已连接）
     private(set) var remoteVideoAvailable = false    // 协助者：已收到远端视频轨（轨道存在；是否有画面再看 frames）
     private(set) var remoteVideoFrames = false       // 协助者：远端视频真的有画面帧（对方已开启并在传）
+    private(set) var callQuality: CallQuality = .unknown // 通话信号强弱（WebRTC 实测往返时延）
     var canReport: Bool { peerUserId != nil }
 
     /// 协助者侧画面区的提示文案（把"无画面"的原因讲清楚）。
@@ -69,6 +70,7 @@ final class CallViewModel {
             }
         }
         media.onRemoteVideoTrack = { [weak self] in self?.remoteVideoAvailable = true }
+        media.onCallQuality = { [weak self] q in self?.callQuality = q }
 
         signaling.onMessage = { [weak self] msg in self?.handle(msg) }
         signaling.onClose = { [weak self] in

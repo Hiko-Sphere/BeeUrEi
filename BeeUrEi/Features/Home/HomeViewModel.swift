@@ -116,6 +116,19 @@ final class HomeViewModel {
         sonifier.stop()
     }
 
+    /// 暂停避障会话：当呼叫/取景等**也用相机**的界面盖在主页上时调用，避免与之争抢相机致
+    /// ARKit "World Tracking failed"（求助返回后主页报错的根因）。
+    func pauseSession() {
+        source.stop()
+        sonifier.stop()
+    }
+
+    /// 恢复避障会话（上述界面关闭返回主页时调用）。重跑得到干净的世界跟踪。
+    func resumeSession() {
+        guard DeviceSupport.hasLiDAR else { return }
+        source.start()
+    }
+
     /// 降级/暂停（避障关、过热停机、跟踪暂停、无深度）时统一收尾：
     /// 停接近声呐（否则会持续误鸣陈旧"有近物"，见审查 #4/#10），并复位跟踪时间基线
     /// （置 0，使恢复后首帧用保守默认 dt 而非跨越中断时段的墙钟差污染速度/TTC，见审查 #11）。

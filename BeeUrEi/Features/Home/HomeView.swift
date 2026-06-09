@@ -43,6 +43,9 @@ struct HomeView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView(store: consentStore) { showSettings = false }
         }
+        // 求助/取景界面也用相机：呈现时暂停主页避障会话，关闭返回时再恢复，避免争抢相机致 World Tracking failed。
+        .onChange(of: showRemoteAssist) { _, shown in shown ? model.pauseSession() : model.resumeSession() }
+        .onChange(of: showFraming) { _, shown in shown ? model.pauseSession() : model.resumeSession() }
         .sheet(isPresented: $showRemoteAssist) {
             RemoteAssistView { showRemoteAssist = false }
         }

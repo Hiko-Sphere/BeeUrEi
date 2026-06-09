@@ -34,6 +34,8 @@ struct RemoteAssistView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: BeeSpacing.md) {
+                    NetworkStatusBar() // 当前网络类型（WiFi/移动数据/有线链接）
+
                     // 主行动：向志愿者求助
                     BeeBigButton("向志愿者求助",
                                  systemImage: "hand.raised.fill",

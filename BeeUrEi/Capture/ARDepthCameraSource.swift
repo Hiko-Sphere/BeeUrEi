@@ -18,6 +18,8 @@ final class ARDepthCameraSource: NSObject, FrameSource, ARSessionProviding {
 
     let session = ARSession()
     private var reportedRunning = false
+    private var recoveryAttempts = 0          // worldTrackingFailed 自动恢复的已尝试次数（成功收到帧即清零）
+    private static let maxRecoveryAttempts = 3
 
     override init() {
         super.init()
@@ -34,12 +36,18 @@ final class ARDepthCameraSource: NSObject, FrameSource, ARSessionProviding {
             onStateChange?(.unsupported("此设备没有 LiDAR（缺少 sceneDepth）"))
             return
         }
+        recoveryAttempts = 0
+        run(reset: false)
+        // 不在此处同步上报 .running：此刻相机权限未知，被拒会异步走 didFailWithError(.denied)。
+        // 待收到第一帧再切 .running，确保"自称运行"时确有真实感知数据（见审查 #9）。
+    }
+
+    /// 启动/重跑会话。reset=true 时清除已有跟踪与锚点（中断/失败恢复用）。
+    private func run(reset: Bool) {
         let config = ARWorldTrackingConfiguration()
         config.frameSemantics.insert(.sceneDepth)
         reportedRunning = false
-        session.run(config)
-        // 不在此处同步上报 .running：此刻相机权限未知，被拒会异步走 didFailWithError(.denied)。
-        // 待收到第一帧再切 .running，确保"自称运行"时确有真实感知数据（见审查 #9）。
+        session.run(config, options: reset ? [.resetTracking, .removeExistingAnchors] : [])
     }
 
     func stop() {
@@ -68,7 +76,7 @@ final class ARDepthCameraSource: NSObject, FrameSource, ARSessionProviding {
 extension ARDepthCameraSource: ARSessionDelegate {
     func session(_ session: ARSession, didUpdate frame: ARFrame) {
         // 收到首帧才宣布 .running——此时确有真实画面/深度数据（见审查 #9）。
-        if !reportedRunning { reportedRunning = true; onStateChange?(.running) }
+        if !reportedRunning { reportedRunning = true; recoveryAttempts = 0; onStateChange?(.running) }
         var depthMap: DepthMap?
         if let sd = frame.sceneDepth {
             depthMap = DepthMap(
@@ -101,8 +109,26 @@ extension ARDepthCameraSource: ARSessionDelegate {
     func session(_ session: ARSession, didFailWithError error: Error) {
         if let arError = error as? ARError, arError.code == .cameraUnauthorized {
             onStateChange?(.denied)
-        } else {
-            onStateChange?(.failed(error.localizedDescription))
+            return
         }
+        // worldTrackingFailed 是**可恢复**错误：通话占用相机/音视频会话变化等会触发它。
+        // 自动重跑会话恢复，不进终态——否则每次求助返回后主页永久卡在"相机出错：World Tracking failed"。
+        // 有限次重试（成功收到帧即清零），超过才报终态，避免相机仍被占用时死循环。
+        if let arError = error as? ARError, arError.code == .worldTrackingFailed,
+           recoveryAttempts < Self.maxRecoveryAttempts {
+            recoveryAttempts += 1
+            run(reset: true)
+            return
+        }
+        onStateChange?(.failed(error.localizedDescription))
+    }
+
+    // 被打断（来电、切到用相机的其它界面、被其它 App 抢占相机）→ 暂停；打断结束后重跑恢复。
+    func sessionWasInterrupted(_ session: ARSession) {
+        reportedRunning = false
+    }
+    func sessionInterruptionEnded(_ session: ARSession) {
+        recoveryAttempts = 0
+        run(reset: true)
     }
 }

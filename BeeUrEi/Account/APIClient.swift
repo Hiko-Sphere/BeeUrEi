@@ -386,6 +386,14 @@ struct APIClient {
         _ = try? await authedSend("POST", "/api/assist/call/answered", token: token, body: ["callId": callId])
     }
 
+    /// 求助前：我绑定的协助者/亲友中在线人数（online）与总数（total）。
+    func onlineHelperCount(token: String) async -> (online: Int, total: Int) {
+        struct R: Codable { let total: Int; let online: Int }
+        guard let data = try? await authedGet("/api/assist/online-count", token: token),
+              let r = try? JSONDecoder().decode(R.self, from: data) else { return (0, 0) }
+        return (r.online, r.total)
+    }
+
     /// 通话记录（呼出/呼入/未接）。
     func callHistory(token: String) async throws -> [CallRecordInfo] {
         struct R: Codable { let calls: [CallRecordInfo] }

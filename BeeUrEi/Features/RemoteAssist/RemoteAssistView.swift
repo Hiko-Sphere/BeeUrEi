@@ -27,6 +27,9 @@ struct RemoteAssistView: View {
     @State private var topic = ""
     @State private var incomingRequests: [IncomingLinkInfo] = []  // 对方(协助者/亲友)发来的待确认请求
     @State private var linkBusy: Set<String> = []
+    @State private var onlineCount = 0     // 我绑定的协助者/亲友在线人数
+    @State private var totalCount = 0      // 绑定总数
+    @State private var onlineTask: Task<Void, Never>?
     let onClose: () -> Void
 
     /// 常用求助内容（也可不选直接求助）。
@@ -37,6 +40,20 @@ struct RemoteAssistView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: BeeSpacing.md) {
                     NetworkStatusBar() // 当前网络类型（WiFi/移动数据/有线链接）
+
+                    // 我的协助者/亲友在线人数（求助前一眼知道有没有人能接）。
+                    HStack(spacing: BeeSpacing.sm) {
+                        Circle().fill(onlineCount > 0 ? Color.beeSuccess : Color.secondary).frame(width: 10, height: 10)
+                        Text(onlineCount > 0 ? "\(onlineCount) 位协助者/亲友在线" : "暂无协助者/亲友在线")
+                            .font(.subheadline.weight(.medium))
+                        if totalCount > 0 { Text("（共 \(totalCount) 位）").font(.caption).foregroundStyle(.secondary) }
+                        Spacer()
+                    }
+                    .padding(.horizontal, BeeSpacing.md).padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(onlineCount > 0 ? "\(onlineCount) 位协助者或亲友在线，共 \(totalCount) 位" : "暂无协助者或亲友在线")
 
                     // 主行动：向志愿者求助
                     BeeBigButton("向志愿者求助",
@@ -111,8 +128,9 @@ struct RemoteAssistView: View {
                 Text("选择后会把你的求助发给在线志愿者，并告诉他们你的大概位置和语言（不含精确地址）。")
             }
         }
-        .task { await load() }
+        .task { await load(); startOnlinePolling() }
         .refreshable { await load() }
+        .onDisappear { onlineTask?.cancel(); onlineTask = nil }
         // 所有求助/呼叫/错误状态变化主动朗读——盲人点完按钮后才能得到语音反馈，不会以为没反应反复点（见无障碍审计）。
         .onChange(of: statusText) { _, new in if let new, !new.isEmpty { A11y.announce(new) } }
         .fullScreenCover(item: $activeCall) { call in
@@ -166,6 +184,20 @@ struct RemoteAssistView: View {
                         Button("删除绑定", role: .destructive) { Task { await deleteLink(link) } }
                     }
                 }
+            }
+        }
+    }
+
+    /// 每 8 秒刷新在线协助者/亲友人数（求助界面打开期间）。
+    private func startOnlinePolling() {
+        onlineTask?.cancel()
+        onlineTask = Task {
+            while !Task.isCancelled {
+                if let token = KeychainStore.read() {
+                    let c = await APIClient().onlineHelperCount(token: token)
+                    onlineCount = c.online; totalCount = c.total
+                }
+                try? await Task.sleep(for: .seconds(8))
             }
         }
     }

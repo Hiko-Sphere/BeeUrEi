@@ -87,6 +87,16 @@ export function registerAssistRoutes(
     return { targets, count: targets.length }
   })
 
+  // 求助端：统计我绑定的协助者/亲友中有多少在线（供求助前显示"X 位在线"）。
+  app.get('/api/assist/online-count', { preHandler: requireAuth() }, async (req) => {
+    const now = Date.now()
+    const blocked = blockedUserIdSet(store, req.user!.sub)
+    const links = store.linksByOwner(req.user!.sub)
+      .filter((l) => (l.status ?? 'accepted') === 'accepted' && !blocked.has(l.memberId))
+    const online = links.filter((l) => presence.isAvailable(l.memberId, now) || hub.isOnline(l.memberId)).length
+    return { total: links.length, online }
+  })
+
   // 视障侧发起呼叫：登记 callId 与目标用户，供在线协助者/亲友轮询发现并加入（免推送前台会合）。
   app.post('/api/assist/call', { preHandler: requireAuth() }, async (req, reply) => {
     const parsed = callSchema.safeParse(req.body)

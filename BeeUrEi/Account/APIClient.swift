@@ -228,6 +228,11 @@ struct APIClient {
         guard http.statusCode < 400 else { throw APIError.server("操作失败") }
     }
 
+    /// 管理员分配/变更用户角色。
+    func setUserRole(token: String, userId: String, role: String) async throws {
+        _ = try await authedSend("POST", "/api/admin/users/\(userId)/role", token: token, body: ["role": role])
+    }
+
     func devStats(token: String) async throws -> [String: Any] {
         let data = try await authedGet("/api/dev/stats", token: token)
         return (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]

@@ -53,8 +53,9 @@ struct RoleEntryView: View {
                         .buttonStyle(.bordered).controlSize(.large)
                 }
             } else {
-                Button("以 \(roleDisplayName(account.role)) 身份进入") { onEnter(account.role) }
-                    .buttonStyle(.borderedProminent).controlSize(.large)
+                BeeBigButton("进入", systemImage: "arrow.right.circle.fill",
+                             subtitle: "以\(roleDisplayName(account.role))身份") { onEnter(account.role) }
+                    .padding(.horizontal)
             }
 
             Button("退出登录", role: .destructive) { session.logout() }.padding(.top)

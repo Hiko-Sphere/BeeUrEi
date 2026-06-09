@@ -9,6 +9,7 @@ import { buildIceServers } from '../assist/turnCredentials'
 import { PendingCallRegistry } from '../assist/pendingCalls'
 import { OpenHelpRegistry } from '../assist/openHelp'
 import { type PushSender } from '../push/apns'
+import { type Metrics } from '../metrics/metrics'
 
 const heartbeatSchema = z.object({ available: z.boolean(), at: z.number().optional() })
 const matchSchema = z.object({ emergency: z.boolean().optional(), preferredLanguage: z.string().optional() })
@@ -34,6 +35,7 @@ export function registerAssistRoutes(
   pendingCalls: PendingCallRegistry,
   openHelp: OpenHelpRegistry,
   pushSender: PushSender,
+  metrics: Metrics,
 ): void {
   // 协助者/亲友"在线待命"心跳（客户端定期调用；available=false 即下线）。
   app.post('/api/assist/heartbeat', { preHandler: requireAuth() }, async (req, reply) => {
@@ -106,6 +108,7 @@ export function registerAssistRoutes(
       const token = store.findById(id)?.voipToken
       if (token) void pushSender.sendCallInvite(token, parsed.data.callId, callerName, from.sub)
     }
+    metrics.inc('calls_registered_total')
     return { ok: true }
   })
 
@@ -141,6 +144,7 @@ export function registerAssistRoutes(
       createdAt: Date.now(),
     })
     if (!ok) return reply.code(409).send({ error: 'call_id_conflict' }) // callId 被他人占用，防覆盖/劫持
+    metrics.inc('help_requests_total')
     return { ok: true }
   })
 
@@ -156,6 +160,7 @@ export function registerAssistRoutes(
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const claimed = openHelp.claim(parsed.data.callId, req.user!.sub, Date.now())
     if (!claimed) return reply.code(409).send({ error: 'already_claimed_or_gone' })
+    metrics.inc('help_claims_total')
     return { request: detailView(claimed) }
   })
 

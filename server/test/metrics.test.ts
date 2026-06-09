@@ -31,6 +31,15 @@ describe('Metrics', () => {
     await a.close()
   })
 
+  it('业务计数：发起公开求助后 /metrics 反映 help_requests_total', async () => {
+    const a = buildApp(new MemoryStore())
+    const reg = (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'mblind', password: 'secret123', role: 'blind' } })).json()
+    await a.inject({ method: 'POST', url: '/api/assist/help/request', headers: { authorization: `Bearer ${reg.token}` }, payload: { callId: 'm-1' } })
+    const m = await a.inject({ method: 'GET', url: '/metrics' })
+    expect(m.body).toContain('beeurei_help_requests_total 1')
+    await a.close()
+  })
+
   it('设了 METRICS_TOKEN 时 /metrics 需 Bearer 鉴权', async () => {
     process.env.METRICS_TOKEN = 'secret-scrape'
     try {

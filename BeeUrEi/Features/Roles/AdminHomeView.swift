@@ -40,12 +40,21 @@ struct AdminHomeView: View {
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
-                            if u.role != "admin" {
-                                Button(u.status == "active" ? "封禁" : "解封") {
-                                    Task { await setStatus(u, to: u.status == "active" ? "disabled" : "active") }
+                            if u.id != session.user?.id {  // 不能操作自己（封禁/降级会锁死后台）
+                                Menu {
+                                    Button(u.status == "active" ? "封禁" : "解封") {
+                                        Task { await setStatus(u, to: u.status == "active" ? "disabled" : "active") }
+                                    }
+                                    Menu("设为角色") {
+                                        ForEach(["blind", "helper", "admin", "developer"], id: \.self) { r in
+                                            Button(roleDisplayName(r)) { Task { await setRole(u, to: r) } }
+                                        }
+                                    }
+                                } label: {
+                                    Image(systemName: "ellipsis.circle").font(.title3)
                                 }
-                                .buttonStyle(.bordered)
                                 .disabled(busyIds.contains(u.id))
+                                .accessibilityLabel("管理 \(u.displayName)")
                             }
                         }
                     }
@@ -125,6 +134,17 @@ struct AdminHomeView: View {
             await load()
         } catch {
             errorText = "操作失败"
+        }
+    }
+
+    private func setRole(_ user: AccountInfo, to role: String) async {
+        guard let token = session.token, !busyIds.contains(user.id) else { return }
+        busyIds.insert(user.id); defer { busyIds.remove(user.id) }
+        do {
+            try await api.setUserRole(token: token, userId: user.id, role: role)
+            await load()
+        } catch {
+            errorText = "改角色失败（不能降级最后一名管理员/不能改自己）"
         }
     }
 

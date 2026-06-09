@@ -19,15 +19,9 @@ struct OnboardingView: View {
                     .padding()
             }
 
-            Button(action: onAccept) {
-                Text("我已理解并同意")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .padding(.horizontal)
-            .accessibilityHint("点击表示你已知悉本 App 的局限并同意使用")
+            BeeBigButton("我已理解并同意", systemImage: "checkmark.circle.fill", action: onAccept)
+                .padding(.horizontal)
+                .accessibilityHint("点击表示你已知悉本 App 的局限并同意使用")
         }
         .padding()
     }

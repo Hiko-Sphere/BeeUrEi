@@ -23,6 +23,7 @@ import { registerNavRoutes } from './routes/nav'
 import { registerRecoveryRoutes } from './routes/recovery'
 import { registerPushRoutes } from './routes/push'
 import { Metrics } from './metrics/metrics'
+import { captureException } from './monitoring/errorReporting'
 import { CodeRegistry } from './auth/codes'
 import { ConsoleMailer, type Mailer } from './mail/mailer'
 import { NoopPushSender, type PushSender } from './push/apns'
@@ -91,7 +92,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerRecordingRoutes(instance, store)
     registerDevRoutes(instance, store)
     registerNavRoutes(instance, store)
-    registerAssistRoutes(instance, store, hub, presence, pendingCalls, openHelp, pushSender)
+    registerAssistRoutes(instance, store, hub, presence, pendingCalls, openHelp, pushSender, metrics)
   })
 
   // WebSocket 信令（自带子插件作用域）。
@@ -102,6 +103,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   app.setErrorHandler((err, _req, reply) => {
     const e = err as Error & { statusCode?: number }
     const status = e.statusCode && e.statusCode >= 400 ? e.statusCode : 500
+    if (status >= 500) captureException(err) // 仅服务端故障上报 Sentry（D3/F2），4xx 业务错误不上报
     reply.code(status).send({ error: status >= 500 ? 'internal_error' : e.message || 'error' })
   })
 

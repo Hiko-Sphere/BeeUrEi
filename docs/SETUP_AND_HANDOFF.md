@@ -41,21 +41,25 @@
 
 ---
 
-## A2. 真实视频音视频（代码已就绪，差两台真机）
+## A2. 真实视频音视频（代码已就绪并接好，差两台真机）
 
-视频"分享画面"之前看不到，根因是没装 WebRTC 包→运行到空实现。**现已接好**：
+视频"分享画面"看不到，根因是没接 WebRTC 库→运行到占位空实现（`StubMediaEngine`）。
 
-- `project.yml` 已加入 `stasel/WebRTC` 包（`from: 148.0.0`）与后台音频/voip 模式。
-- `BeeUrEi/RemoteAssist/MediaEngine.swift` 的 `#if canImport(WebRTC)` 真实引擎已对着真正的 WebRTC SDK **编译通过**。
+**接入方式：本地 vendored 框架（不走 SPM/GitHub，国内可编译）。**
+- WebRTC 二进制放在 `Frameworks/WebRTC.xcframework`（91MB，已 gitignore，**不入库**）。
+- `project.yml` 以本地 framework 依赖引用它，装上即激活 `MediaEngine.swift` 的 `#if canImport(WebRTC)` 真实引擎。
+- 开发机上已 vendored 好；**新机器/CI** 用 `bash scripts/fetch-webrtc.sh` 下载（需能访问 github.com；CI 已自动执行）。
+- 国内开发机若 `Frameworks/WebRTC.xcframework` 丢失又无法访问 GitHub：找一台能上 GitHub 的机器跑 `scripts/fetch-webrtc.sh`，把 `Frameworks/WebRTC.xcframework` 拷过来即可。
 
-你要做的：
-1. 在项目根目录运行 `xcodegen generate`（首次会从 GitHub 下载约百 MB 的 WebRTC 产物，需联网）。
-2. 用 Xcode 打开 `BeeUrEi.xcodeproj`，连**真机**运行（签名见你的开发者账号）。
-3. **两台真机**：一台登录视障账号发起求助/通话，一台登录协助者账号接听；视障侧点「显示画面给对方」，协助者侧即可看到画面。
+测试步骤：
+1. 确认 `Frameworks/WebRTC.xcframework` 存在（没有就跑 `bash scripts/fetch-webrtc.sh`）。
+2. `xcodegen generate` → Xcode 打开，连**真机**运行（用你的开发者账号签名）。
+3. **两台真机**：一台登录视障账号发起求助/通话，一台登录协助者/亲友接听；视障侧点「显示画面给对方」，对方即可看到画面。
 
-注意：
-- **stasel/WebRTC 的模拟器切片只含 arm64**。请用真机，或 Apple Silicon Mac 上的模拟器；Intel 模拟器会链接失败（CI 已固定为 arm64）。
-- 同一局域网内两台真机用公共 STUN 即可直连；**跨网络**（一台 4G 一台 WiFi）需要 TURN，见 §A3。
+⚠️ 重要：
+- **模拟器没有摄像头**——即使代码已激活，模拟器上也看不到真实画面。必须用真机。
+- 首次测试请让**两台真机连同一个 WiFi**：只用公共 STUN 即可直连。**跨网络**（一台 4G 一台 WiFi）必须先把 coturn/TURN 跑起来（见 §A3），否则连不通、也就没画面。
+- 画面默认**不发送**（隐私门控）：视障侧必须主动点/按「显示画面给对方」，对方才会看到。
 
 ---
 

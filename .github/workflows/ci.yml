@@ -42,6 +42,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install XcodeGen
         run: brew install xcodegen
+      - name: Fetch WebRTC.xcframework (A2 真实音视频，CI 可达 GitHub)
+        run: bash scripts/fetch-webrtc.sh
       - name: Generate Xcode project
         run: xcodegen generate
       - name: Build (iphonesimulator, no signing)

@@ -31,8 +31,12 @@ targets:
       # 该包独立用于 `swift test` 在 Mac 本机跑单测；因本机未装 iOS 模拟器运行时，
       # 走 Xcode SPM 产物链接会卡在 scheme 目的地解析，故直接把源码纳入 App 编译。
       - path: Packages/BeeUrEiCore/Sources/BeeUrEiCore
-    # dependencies:
-    #   - package: WebRTC   # 真实音视频引擎（A2）——做真机视频联调时取消注释（连同上面 packages 块）
+    dependencies:
+      # 本地 vendored WebRTC.xcframework（A2 真实音视频）：不走 GitHub，国内可用。
+      # 文件在 Frameworks/WebRTC.xcframework（已 gitignore，91MB，需本地存在）。
+      # 装包即激活 MediaEngine.swift 的 #if canImport(WebRTC) 真实引擎。
+      - framework: Frameworks/WebRTC.xcframework
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.beeurei.BeeUrEi

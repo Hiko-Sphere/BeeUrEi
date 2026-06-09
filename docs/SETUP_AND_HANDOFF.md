@@ -59,23 +59,28 @@
 
 ---
 
-## A1. 后台来电响铃（息屏唤起）— 需 Apple 开发者账号
+## A1. 后台来电响铃（息屏唤起）— 代码已就绪，只差 Apple 凭据
 
 目标：协助者/亲友 App 在**后台/锁屏**也能被求助来电唤醒响铃（像微信语音通话）。技术栈：PushKit（VoIP 推送）+ CallKit（系统来电界面）+ APNs。
 
-现状：iOS 侧 CallKit/PushKit 骨架已在 `BeeUrEi/RemoteAssist/RemoteAssistService.swift`；`project.yml` 已声明 `UIBackgroundModes: [audio, voip]`。**缺的是 Apple 侧凭据 + 后端推送发送**，这些必须你来配：
+**已完成（本次）：**
+- iOS：`RemoteAssistService` 完整接好——PushKit 取 VoIP token 并上报后端、收到推送用 CallKit 拉起系统来电、接听后桥接到 `CallView` 自动加入对应 callId 房间、挂断结束 CallKit 通话。`project.yml` 已声明 `UIBackgroundModes: [audio, voip]`。
+- 后端：`POST /api/push/register`（存 VoIP token）；定向呼叫 `/api/assist/call` 时自动向目标设备发 VoIP push（payload 带 callId+发起人名）；**零依赖 APNs 推送器**（`server/src/push/apns.ts`，Node 内置 `http2`+`crypto` 签 ES256，已单测）。未配 APNs 时自动降级为无推送（前台轮询仍可用）。
 
-1. **Apple 开发者后台**（developer.apple.com，需付费账号）：
-   - App ID 打开 **Push Notifications** 能力。
-   - 新建一个 **APNs Auth Key**（.p8 文件，记下 Key ID 和 Team ID）。
-2. **Xcode**：Signing & Capabilities 添加 **Push Notifications** 与 **Background Modes（Voice over IP）**（会生成 `.entitlements`）。
-3. **后端**（待补一个发送端点 + APNs 客户端，建议加 `node-apn` 或用 `http2` 直连 APNs）：
-   - 新增 `POST /api/push/register`：客户端把 PushKit 的 VoIP token 上报存库。
-   - 求助登记时（`/api/assist/call`、`/api/assist/help/claim`）向目标的 VoIP token 推一条 VoIP push，payload 带 `callId`+发起人名。
-   - 客户端在 `PKPushRegistryDelegate.didReceiveIncomingPushWith` 里 `reportIncoming` 拉起 CallKit。
-4. 把 .p8 / Key ID / Team ID / Bundle ID 配进 `server/.env`（如 `APNS_KEY_PATH` / `APNS_KEY_ID` / `APNS_TEAM_ID` / `APNS_TOPIC`）。
+**你要做的（需付费 Apple 开发者账号）：**
+1. **Apple 开发者后台**：App ID 打开 **Push Notifications**；Keys 新建 **APNs Auth Key**（下载 `.p8`，记 Key ID 与 Team ID）。
+2. **Xcode**：Signing & Capabilities 给 App 添加 **Push Notifications** 与 **Background Modes → Voice over IP**（会生成 `.entitlements`，连你的开发团队签名）。
+3. **后端 `server/.env`** 填（见 `.env.example`）：
+   ```
+   APNS_KEY_PATH=/绝对路径/AuthKey_XXXX.p8
+   APNS_KEY_ID=10位KeyID
+   APNS_TEAM_ID=10位TeamID
+   APNS_TOPIC=com.beeurei.BeeUrEi.voip
+   APNS_HOST=api.sandbox.push.apple.com   # 真机+开发签名用沙盒；上架后改 api.push.apple.com
+   ```
+   重启后端，日志出现「[apns] VoIP 推送已启用」即生效。
 
-> 没配 APNs 时，现有"前台轮询会合"仍可用（App 在前台能接到来电），只是后台/锁屏不会响铃。
+> 没配 APNs 时，现有"前台轮询会合"仍可用（App 在前台能接到来电），只是后台/锁屏不会响铃。验证需真机（模拟器不支持 PushKit/VoIP 推送）。
 
 ---
 

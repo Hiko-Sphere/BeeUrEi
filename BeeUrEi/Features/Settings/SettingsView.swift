@@ -17,6 +17,7 @@ struct SettingsView: View {
     @State private var sonarOn: Bool
     @State private var verbosity: Int
     @State private var clearConfirm: Bool
+    @State private var keepAwakeSeconds: Int
     @State private var showTutorial = false
     @State private var previewSpeech = SpeechFeedback()
     @State private var previewHaptic = HapticFeedback()
@@ -36,6 +37,7 @@ struct SettingsView: View {
         _sonarOn = State(initialValue: features.proximitySonar)
         _verbosity = State(initialValue: features.verbosity)
         _clearConfirm = State(initialValue: features.clearPathConfirm)
+        _keepAwakeSeconds = State(initialValue: features.keepAwakeSeconds)
     }
 
     var body: some View {
@@ -96,6 +98,23 @@ struct SettingsView: View {
                     Text("播报")
                 } footer: {
                     Text("简短播报更快说完、降低认知负荷；语速可按习惯调整。接近声呐像倒车雷达，正前方越近蜂鸣越急。")
+                }
+
+                Section {
+                    Picker("屏幕常亮", selection: $keepAwakeSeconds) {
+                        Text("永久不息屏（避障持续，最费电）").tag(0)
+                        Text("5 分钟后允许息屏").tag(300)
+                        Text("2 分钟后允许息屏").tag(120)
+                        Text("1 分钟后允许息屏").tag(60)
+                        Text("30 秒后允许息屏").tag(30)
+                    }
+                    .onChange(of: keepAwakeSeconds) { _, v in
+                        var f = FeatureSettings(); f.keepAwakeSeconds = v
+                    }
+                } header: {
+                    Text("屏幕与省电")
+                } footer: {
+                    Text("避障使用期间默认保持屏幕常亮（否则息屏会暂停摄像头与避障）。若想省电，可设为若干秒后允许自动息屏；息屏后避障会暂停，重新点亮屏幕即恢复。")
                 }
 
                 Section {

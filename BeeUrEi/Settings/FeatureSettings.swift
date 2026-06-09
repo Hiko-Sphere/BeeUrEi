@@ -62,6 +62,14 @@ struct FeatureSettings {
         set { defaults.set(newValue, forKey: clearConfirmKey) }
     }
 
+    /// 主页避障屏幕常亮时长（秒）：0 = 永久不息屏（避障持续运行）；>0 = 常亮该秒数后允许系统自动息屏(省电)。
+    /// 默认 0（永久不息屏）——避障是安全攸关功能，默认不让它在使用中息屏中断。
+    private let keepAwakeKey = "feature.keepAwakeSeconds"
+    var keepAwakeSeconds: Int {
+        get { defaults.integer(forKey: keepAwakeKey) } // 未设置默认 0 = 永久不息屏
+        set { defaults.set(max(newValue, 0), forKey: keepAwakeKey) }
+    }
+
     /// 恢复"播报/无障碍"相关设置为默认（不动避障/导航功能开关与开发者模式）。
     static func resetToDefaults(_ defaults: UserDefaults = .standard) {
         for key in ["feature.conciseAnnouncements", "feature.speechRate", "feature.verbosity",

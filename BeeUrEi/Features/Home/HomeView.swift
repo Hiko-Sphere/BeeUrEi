@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// 视障首屏（重设计）：ARKit 相机在后台做避障；前台是**大字高对比**的状态条与超大带标签按钮。
 /// 设计原则：信息走语音/状态条；操作件超大、有文字标签、VoiceOver 友好；首要操作「求助」最突出。
@@ -10,6 +11,7 @@ struct HomeView: View {
     @State private var showFraming = false
     @State private var showTutorial = false
     @State private var locationDescriber = LocationDescriber()
+    @State private var idleTask: Task<Void, Never>? // 屏幕常亮计时（到时允许系统息屏）
     private let consentStore = ConsentStore()
 
     var body: some View {
@@ -34,18 +36,24 @@ struct HomeView: View {
         }
         .task {
             model.onAppear()
+            applyKeepAwake()
             if !TutorialStore().seen { showTutorial = true }
         }
-        .onDisappear { model.onDisappear() }
+        .onDisappear { model.onDisappear(); releaseKeepAwake() }
         .fullScreenCover(isPresented: $showTutorial) {
             TutorialView { TutorialStore().seen = true; showTutorial = false }
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(store: consentStore) { showSettings = false }
         }
-        // 求助/取景界面也用相机：呈现时暂停主页避障会话，关闭返回时再恢复，避免争抢相机致 World Tracking failed。
-        .onChange(of: showRemoteAssist) { _, shown in shown ? model.pauseSession() : model.resumeSession() }
-        .onChange(of: showFraming) { _, shown in shown ? model.pauseSession() : model.resumeSession() }
+        .onChange(of: showSettings) { _, shown in if !shown { applyKeepAwake() } } // 设置可能改了常亮时长，返回时重新应用
+        // 求助/取景界面也用相机：呈现时暂停主页避障会话+强制常亮(通话期间不息屏)，关闭返回时恢复。
+        .onChange(of: showRemoteAssist) { _, shown in
+            if shown { model.pauseSession(); forceKeepAwake() } else { model.resumeSession(); applyKeepAwake() }
+        }
+        .onChange(of: showFraming) { _, shown in
+            if shown { model.pauseSession(); forceKeepAwake() } else { model.resumeSession(); applyKeepAwake() }
+        }
         .sheet(isPresented: $showRemoteAssist) {
             RemoteAssistView { showRemoteAssist = false }
         }
@@ -55,6 +63,32 @@ struct HomeView: View {
         .fullScreenCover(isPresented: $showFraming) {
             FramingAssistView { showFraming = false }
         }
+    }
+
+    // MARK: 屏幕常亮（省电设置）
+
+    /// 按设置应用屏幕常亮：先常亮；若设了时长，则到时允许系统自动息屏（息屏后避障暂停，省电）。
+    private func applyKeepAwake() {
+        idleTask?.cancel()
+        UIApplication.shared.isIdleTimerDisabled = true
+        let secs = FeatureSettings().keepAwakeSeconds
+        guard secs > 0 else { return } // 0 = 永久不息屏
+        idleTask = Task {
+            try? await Task.sleep(for: .seconds(Double(secs)))
+            if !Task.isCancelled { UIApplication.shared.isIdleTimerDisabled = false }
+        }
+    }
+
+    /// 通话/取景期间强制常亮（不让其在使用中息屏）。
+    private func forceKeepAwake() {
+        idleTask?.cancel(); idleTask = nil
+        UIApplication.shared.isIdleTimerDisabled = true
+    }
+
+    /// 离开主页：交还系统息屏控制（避免影响其它界面）。
+    private func releaseKeepAwake() {
+        idleTask?.cancel(); idleTask = nil
+        UIApplication.shared.isIdleTimerDisabled = false
     }
 
     // MARK: 底部大按钮面板

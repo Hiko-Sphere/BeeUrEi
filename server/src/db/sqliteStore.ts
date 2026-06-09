@@ -2,7 +2,7 @@ import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken } from './store'
+import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Block, Report, ReportStatus, Recording, RecordingConfig, RefreshToken } from './store'
 
 // 用运行时 require + 非静态模块名加载 node:sqlite，避免打包器(vitest/vite)静态解析失败；
 // 由 Node 在运行时解析（需 --experimental-sqlite，已在 npm 脚本里通过 NODE_OPTIONS 开启）。
@@ -34,6 +34,8 @@ export class SqliteStore implements Store {
       CREATE TABLE IF NOT EXISTS config (k TEXT PRIMARY KEY, v TEXT);
       CREATE TABLE IF NOT EXISTS refresh_tokens (
         tokenHash TEXT PRIMARY KEY, userId TEXT, expiresAt INTEGER);
+      CREATE TABLE IF NOT EXISTS blocks (
+        id TEXT PRIMARY KEY, blockerId TEXT, blockedId TEXT, createdAt INTEGER);
     `)
     // 迁移：旧库 links 表补 phone 列、users 表补 language 列（已存在则忽略）。
     try { this.db.exec('ALTER TABLE links ADD COLUMN phone TEXT') } catch { /* 列已存在 */ }
@@ -43,6 +45,7 @@ export class SqliteStore implements Store {
     try { this.db.exec('ALTER TABLE users ADD COLUMN email TEXT') } catch { /* 列已存在 */ } // 邮箱验证/找回密码（D1）
     try { this.db.exec('ALTER TABLE users ADD COLUMN emailVerified INTEGER') } catch { /* 列已存在 */ }
     try { this.db.exec('ALTER TABLE users ADD COLUMN voipToken TEXT') } catch { /* 列已存在 */ } // PushKit VoIP 后台来电（A1）
+    try { this.db.exec('ALTER TABLE links ADD COLUMN requestedBy TEXT') } catch { /* 列已存在 */ } // 双向加好友：记录请求发起方
   }
 
   // MARK: refresh tokens
@@ -94,9 +97,9 @@ export class SqliteStore implements Store {
   // MARK: links
   createLink(l: FamilyLink): void {
     this.db.prepare(
-      `INSERT OR REPLACE INTO links (id, ownerId, memberId, relation, isEmergency, phone, createdAt, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(l.id, l.ownerId, l.memberId, l.relation, l.isEmergency ? 1 : 0, l.phone ?? null, l.createdAt, l.status ?? null)
+      `INSERT OR REPLACE INTO links (id, ownerId, memberId, relation, isEmergency, phone, createdAt, status, requestedBy)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(l.id, l.ownerId, l.memberId, l.relation, l.isEmergency ? 1 : 0, l.phone ?? null, l.createdAt, l.status ?? null, l.requestedBy ?? null)
   }
   linksByOwner(ownerId: string): FamilyLink[] {
     return this.db.prepare('SELECT * FROM links WHERE ownerId = ?').all(ownerId).map((r) => this.toLink(r))
@@ -110,6 +113,23 @@ export class SqliteStore implements Store {
   }
   deleteLink(id: string): void {
     this.db.prepare('DELETE FROM links WHERE id = ?').run(id)
+  }
+
+  // MARK: blocks
+  createBlock(b: Block): void {
+    this.db.prepare('INSERT OR REPLACE INTO blocks (id, blockerId, blockedId, createdAt) VALUES (?, ?, ?, ?)')
+      .run(b.id, b.blockerId, b.blockedId, b.createdAt)
+  }
+  deleteBlock(id: string): void {
+    this.db.prepare('DELETE FROM blocks WHERE id = ?').run(id)
+  }
+  findBlock(id: string): Block | undefined {
+    const row = this.db.prepare('SELECT * FROM blocks WHERE id = ?').get(id) as any
+    return row ? { id: row.id, blockerId: row.blockerId, blockedId: row.blockedId, createdAt: Number(row.createdAt) } : undefined
+  }
+  blocksInvolving(userId: string): Block[] {
+    return this.db.prepare('SELECT * FROM blocks WHERE blockerId = ? OR blockedId = ?').all(userId, userId)
+      .map((r: any) => ({ id: r.id, blockerId: r.blockerId, blockedId: r.blockedId, createdAt: Number(r.createdAt) }))
   }
 
   // MARK: reports
@@ -167,7 +187,7 @@ export class SqliteStore implements Store {
     return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt), language: r.language ?? undefined, tokenVersion: r.tokenVersion != null ? Number(r.tokenVersion) : 0, email: r.email ?? undefined, emailVerified: r.emailVerified != null ? Number(r.emailVerified) === 1 : undefined, voipToken: r.voipToken ?? undefined }
   }
   private toLink(r: any): FamilyLink {
-    return { id: r.id, ownerId: r.ownerId, memberId: r.memberId, relation: r.relation, isEmergency: Number(r.isEmergency) === 1, phone: r.phone ?? undefined, createdAt: Number(r.createdAt), status: (r.status as LinkStatus) ?? undefined }
+    return { id: r.id, ownerId: r.ownerId, memberId: r.memberId, relation: r.relation, isEmergency: Number(r.isEmergency) === 1, phone: r.phone ?? undefined, createdAt: Number(r.createdAt), status: (r.status as LinkStatus) ?? undefined, requestedBy: r.requestedBy ?? undefined }
   }
   private toReport(r: any): Report {
     return { id: r.id, reporterId: r.reporterId, targetUserId: r.targetUserId, callId: r.callId ?? undefined, reason: r.reason, status: r.status as ReportStatus, createdAt: Number(r.createdAt) }

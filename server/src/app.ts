@@ -8,6 +8,7 @@ import { registerAuthRoutes } from './routes/auth'
 import { registerAccountRoutes } from './routes/account'
 import { registerUserRoutes } from './routes/users'
 import { registerFamilyRoutes } from './routes/family'
+import { registerBlockRoutes } from './routes/blocks'
 import { registerEmergencyRoutes } from './routes/emergency'
 import { registerSignaling } from './routes/ws'
 import { PresenceRegistry } from './assist/presence'
@@ -93,6 +94,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerPushRoutes(instance, store) // VoIP token 注册（A1）
     registerUserRoutes(instance, store)
     registerFamilyRoutes(instance, store)
+    registerBlockRoutes(instance, store)
     registerEmergencyRoutes(instance, store)
     registerReportRoutes(instance, store)
     registerAdminRoutes(instance, store)

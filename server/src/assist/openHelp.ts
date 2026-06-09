@@ -67,17 +67,18 @@ export class OpenHelpRegistry {
     return this.reqs.get(callId)
   }
 
-  /// 公开队列：未认领、未过期，按等待时间（最久优先）。可排除某用户（通常是请求者本人）。
-  open(now: number, excludeUserId?: string): HelpRequest[] {
+  /// 公开队列：未认领、未过期，按等待时间（最久优先）。
+  /// excludeUserId：排除某用户（通常请求者本人）；blockedIds：排除黑名单双方（互不可见）。
+  open(now: number, excludeUserId?: string, blockedIds?: Set<string>): HelpRequest[] {
     this.prune(now)
     return [...this.reqs.values()]
-      .filter((r) => !r.claimedBy && r.fromUserId !== excludeUserId)
+      .filter((r) => !r.claimedBy && r.fromUserId !== excludeUserId && !(blockedIds?.has(r.fromUserId) ?? false))
       .sort((a, b) => a.createdAt - b.createdAt)
   }
 
   /// 队列的安全摘要视图（供 GET /queue 直接返回）。
-  summaries(now: number, excludeUserId?: string): HelpSummary[] {
-    return this.open(now, excludeUserId).map((r) => ({
+  summaries(now: number, excludeUserId?: string, blockedIds?: Set<string>): HelpSummary[] {
+    return this.open(now, excludeUserId, blockedIds).map((r) => ({
       callId: r.callId,
       fromName: r.fromName,
       language: r.language,
@@ -104,8 +105,8 @@ export class OpenHelpRegistry {
   /// - requireLanguageMatch 时只在语言一致的求助里挑，否则全队列。
   /// - preferredLanguage 给定时，语言一致者优先；其次等待最久者优先。
   /// 返回认领后的请求，无可匹配/认领竞争失败则返回 null。
-  matchOne(prefs: HelpMatchPrefs, helperId: string, now: number): HelpRequest | null {
-    const candidates = this.open(now, helperId)
+  matchOne(prefs: HelpMatchPrefs, helperId: string, now: number, blockedIds?: Set<string>): HelpRequest | null {
+    const candidates = this.open(now, helperId, blockedIds)
     const pool =
       prefs.requireLanguageMatch && prefs.preferredLanguage
         ? candidates.filter((r) => r.language === prefs.preferredLanguage)

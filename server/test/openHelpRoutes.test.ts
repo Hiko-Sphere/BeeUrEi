@@ -158,7 +158,7 @@ describe('公开求助队列路由', () => {
   it('跨注册表防影子覆盖：公开求助的 callId 不能被他人在定向呼叫表抢注（见审查 #1）', async () => {
     const a = app()
     const blind = await reg(a, 'blindShadow', 'blind')
-    const attacker = await reg(a, 'attackerShadow', 'helper')
+    const attacker = await reg(a, 'attackerShadow', 'blind') // 攻击者须为 blind 才能 own 绑定并登记定向呼叫（双向加好友后 owner 恒为 blind）
     const accomplice = await reg(a, 'accompliceShadow', 'helper')
     // 攻击者与小号互绑并接受（满足 /assist/call 的 accepted 校验）
     const lk = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(attacker.token), payload: { username: 'accompliceShadow' } })

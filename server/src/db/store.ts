@@ -35,6 +35,17 @@ export interface FamilyLink {
   // 仅 accepted 的绑定参与匹配/呼叫/紧急路由——否则任意用户可单向绑定他人来探测在线状态/强推来电（见审查 #6）。
   // 旧库无此列读为 undefined，按 accepted 兼容（不破坏既有绑定）。
   status?: LinkStatus
+  // 发起请求的一方（双向加好友：盲人或亲友/协助者任一方都可发起，由**另一方**确认才 accepted）。
+  // owner 恒为视障侧（保证匹配/紧急用 linksByOwner(blind) 仍成立）；requestedBy 仅记录是谁发的请求。
+  requestedBy?: string
+}
+
+/// 黑名单：blocker 拉黑 blocked 后，双方互不出现在对方的匹配/求助队列/来电中。
+export interface Block {
+  id: string
+  blockerId: string
+  blockedId: string
+  createdAt: number
 }
 
 /// 举报（通话后一键举报 → 管理员审核）。
@@ -88,6 +99,11 @@ export interface Store {
   findLink(id: string): FamilyLink | undefined
   deleteLink(id: string): void
 
+  createBlock(block: Block): void
+  deleteBlock(id: string): void
+  findBlock(id: string): Block | undefined
+  blocksInvolving(userId: string): Block[] // blockerId==userId 或 blockedId==userId 的所有拉黑记录
+
   createReport(report: Report): void
   allReports(): Report[]
   findReport(id: string): Report | undefined
@@ -110,6 +126,7 @@ export interface Store {
 export class MemoryStore implements Store {
   protected users = new Map<string, User>()
   protected links = new Map<string, FamilyLink>()
+  protected blocks = new Map<string, Block>()
   protected reports = new Map<string, Report>()
   protected recordings = new Map<string, Recording>()
   protected refreshTokens = new Map<string, RefreshToken>()
@@ -176,6 +193,20 @@ export class MemoryStore implements Store {
     if (this.links.delete(id)) this.afterMutate()
   }
 
+  createBlock(block: Block): void {
+    this.blocks.set(block.id, block)
+    this.afterMutate()
+  }
+  deleteBlock(id: string): void {
+    if (this.blocks.delete(id)) this.afterMutate()
+  }
+  findBlock(id: string): Block | undefined {
+    return this.blocks.get(id)
+  }
+  blocksInvolving(userId: string): Block[] {
+    return [...this.blocks.values()].filter((b) => b.blockerId === userId || b.blockedId === userId)
+  }
+
   createReport(report: Report): void {
     this.reports.set(report.id, report)
     this.afterMutate()
@@ -229,6 +260,7 @@ export class JsonFileStore extends MemoryStore {
         const data = JSON.parse(readFileSync(path, 'utf8')) as {
           users?: User[]
           links?: FamilyLink[]
+          blocks?: Block[]
           reports?: Report[]
           recordings?: Recording[]
           refreshTokens?: RefreshToken[]
@@ -236,6 +268,7 @@ export class JsonFileStore extends MemoryStore {
         }
         for (const u of data.users ?? []) this.users.set(u.id, u)
         for (const l of data.links ?? []) this.links.set(l.id, l)
+        for (const b of data.blocks ?? []) this.blocks.set(b.id, b)
         for (const r of data.reports ?? []) this.reports.set(r.id, r)
         for (const rec of data.recordings ?? []) this.recordings.set(rec.id, rec)
         for (const rt of data.refreshTokens ?? []) this.refreshTokens.set(rt.tokenHash, rt)
@@ -251,6 +284,7 @@ export class JsonFileStore extends MemoryStore {
     const data = {
       users: [...this.users.values()],
       links: [...this.links.values()],
+      blocks: [...this.blocks.values()],
       reports: [...this.reports.values()],
       recordings: [...this.recordings.values()],
       refreshTokens: [...this.refreshTokens.values()],
@@ -258,6 +292,20 @@ export class JsonFileStore extends MemoryStore {
     }
     writeFileSync(this.path, JSON.stringify(data, null, 2))
   }
+}
+
+/// 与某用户**互为**黑名单的所有对方 userId 集合（任一方向拉黑都算）。供匹配/队列/呼叫排除。
+export function blockedUserIdSet(store: Store, userId: string): Set<string> {
+  const s = new Set<string>()
+  for (const b of store.blocksInvolving(userId)) s.add(b.blockerId === userId ? b.blockedId : b.blockerId)
+  return s
+}
+
+/// a 与 b 之间是否存在任一方向的拉黑。
+export function isBlockedBetween(store: Store, a: string, b: string): boolean {
+  return store.blocksInvolving(a).some(
+    (blk) => (blk.blockerId === a && blk.blockedId === b) || (blk.blockerId === b && blk.blockedId === a),
+  )
 }
 
 /// 对外暴露的安全用户字段（不含 passwordHash / email；用于管理员列表、亲友等场景）。

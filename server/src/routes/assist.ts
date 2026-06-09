@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { type Store } from '../db/store'
+import { type Store, isBlockedBetween, blockedUserIdSet } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { SignalingHub } from '../signaling/hub'
 import { PresenceRegistry } from '../assist/presence'
@@ -64,8 +64,10 @@ export function registerAssistRoutes(
     const parsed = matchSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const now = Date.now()
-    // 仅 accepted 的绑定参与匹配——否则单向绑定他人即可探测其在线状态（见审查 #6）。
-    const links = store.linksByOwner(req.user!.sub).filter((l) => (l.status ?? 'accepted') === 'accepted')
+    // 仅 accepted 的绑定参与匹配（见审查 #6）；并排除黑名单双方（见黑名单需求）。
+    const blocked = blockedUserIdSet(store, req.user!.sub)
+    const links = store.linksByOwner(req.user!.sub)
+      .filter((l) => (l.status ?? 'accepted') === 'accepted' && !blocked.has(l.memberId))
     const candidates: Candidate[] = links.map((l) => ({
       userId: l.memberId,
       online: presence.isAvailable(l.memberId, now) || hub.isOnline(l.memberId),
@@ -91,8 +93,9 @@ export function registerAssistRoutes(
     const from = req.user!
     // 仅允许呼叫与自己有亲友绑定关系的目标——否则任意用户可向任意 userId 强推伪造来电(越权/骚扰，见审查 #1)。
     // 仅可呼叫**已接受**绑定的目标——pending（对方未同意）不可被强推来电（见审查 #6）。
+    const blocked = blockedUserIdSet(store, from.sub)
     const allowed = new Set(store.linksByOwner(from.sub).filter((l) => (l.status ?? 'accepted') === 'accepted').map((l) => l.memberId))
-    const targets = parsed.data.targetUserIds.filter((id) => allowed.has(id))
+    const targets = parsed.data.targetUserIds.filter((id) => allowed.has(id) && !blocked.has(id)) // 排除黑名单
     if (targets.length === 0) return reply.code(403).send({ error: 'not_linked' })
     const ok = pendingCalls.register({
       callId: parsed.data.callId,
@@ -148,9 +151,9 @@ export function registerAssistRoutes(
     return { ok: true }
   })
 
-  // 志愿者浏览公开求助队列（粗粒度摘要，排除自己发起的；不含精确坐标/联系方式）。
+  // 志愿者浏览公开求助队列（粗粒度摘要，排除自己发起的与黑名单双方；不含精确坐标/联系方式）。
   app.get('/api/assist/help/queue', { preHandler: requireAuth() }, async (req) => {
-    const list = openHelp.summaries(Date.now(), req.user!.sub)
+    const list = openHelp.summaries(Date.now(), req.user!.sub, blockedUserIdSet(store, req.user!.sub))
     return { requests: list, count: list.length }
   })
 
@@ -158,6 +161,11 @@ export function registerAssistRoutes(
   app.post('/api/assist/help/claim', { preHandler: requireAuth() }, async (req, reply) => {
     const parsed = helpClaimSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    // 黑名单：不能认领与自己互拉黑者的求助。
+    const existing = openHelp.byId(parsed.data.callId)
+    if (existing && isBlockedBetween(store, req.user!.sub, existing.fromUserId)) {
+      return reply.code(403).send({ error: 'blocked' })
+    }
     const claimed = openHelp.claim(parsed.data.callId, req.user!.sub, Date.now())
     if (!claimed) return reply.code(409).send({ error: 'already_claimed_or_gone' })
     metrics.inc('help_claims_total')
@@ -172,6 +180,7 @@ export function registerAssistRoutes(
       { preferredLanguage: parsed.data.preferredLanguage, requireLanguageMatch: parsed.data.requireLanguageMatch },
       req.user!.sub,
       Date.now(),
+      blockedUserIdSet(store, req.user!.sub), // 排除黑名单双方
     )
     return { request: matched ? detailView(matched) : null }
   })

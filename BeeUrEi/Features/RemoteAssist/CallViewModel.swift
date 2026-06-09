@@ -23,6 +23,7 @@ final class CallViewModel {
     private(set) var callQuality: CallQuality = .unknown // 通话信号强弱（WebRTC 实测往返时延）
     private(set) var declined = false                     // 发起方：对方已拒绝
     private(set) var muted = false                        // 本端是否静音
+    private(set) var callEnded = false                   // 对方已挂断/离开 → 本端自动挂断并关闭界面
     var canReport: Bool { peerUserId != nil }
 
     /// 切换静音（禁用/启用本端麦克风音频轨）。
@@ -159,18 +160,23 @@ final class CallViewModel {
         case "video-gate":
             // 关闭画面时恢复"已连接"，避免状态栏永久停在"对方关闭了画面"让协助者误以为掉线（见审查 #3）。
             if let on = msg["on"] as? Bool { statusText = on ? "已连接 · 对方已开启画面" : connectedStatus() }
-        case "peer-left":
-            statusText = "对方已离开"
-            setVideoSending(false)      // 对端离开：复位隐私门控，画面默认不外发（见审查 #4）
-            connected = false
-            peerUserId = nil            // 清空，避免举报指向已离开者 / 新对端沿用旧 id（见审查 #7）
-            peerName = nil
-            // **不**复位 hasOffered：1:1 协助通话中对端离开即视为本通结束，不尝试在旧 pc 上对新对端重协商
-            // ——否则会在残留 hasRemoteDescription/旧 remoteDescription 的 pc 上错配候选致连接退化（见回归 #1/#3）。
-            // 如需联系新协助者，用户重新发起呼叫（全新 CallViewModel + 干净 pc）。
+        case "end", "peer-left":
+            // 一方挂断/离开 → 本端自动挂断并关闭界面（见“同时自动挂断”需求）。
+            // 'end' 是对方主动挂断的即时通知；'peer-left' 是其连接关闭后服务端补发，二者取先到者。
+            endByPeer()
         default:
             break
         }
+    }
+
+    /// 对端结束通话：复位隐私门控、置结束标记，界面据此自动关闭。
+    private func endByPeer() {
+        guard !callEnded else { return }
+        setVideoSending(false)
+        connected = false
+        statusText = "对方已挂断"
+        A11y.announce("对方已挂断")
+        callEnded = true
     }
 
     /// 协助者侧：远端视频出现真实画面帧（由 RemoteVideoView 的尺寸变化回调触发）。

@@ -209,14 +209,7 @@ export function registerAssistRoutes(
     })
     if (!ok) return reply.code(409).send({ error: 'call_id_conflict' }) // callId 被他人占用，防覆盖/劫持
     metrics.inc('help_requests_total')
-    // 软件外通知：提醒"在线待命"的志愿者有新求助（排除自己与黑名单；fire-and-forget）。
-    const now = Date.now()
-    const blocked = blockedUserIdSet(store, req.user!.sub)
-    for (const uid of presence.availableUserIds(now)) {
-      if (uid === req.user!.sub || blocked.has(uid)) continue
-      const apns = store.findById(uid)?.apnsToken
-      if (apns) void pushSender.sendAlert(apns, '有人需要帮助', `${me?.displayName ?? '一位用户'}发起了求助`, { kind: 'help_request' }).catch(() => {})
-    }
+    // 注意：公开求助**不发对外推送**——只有打开 App 的用户经队列轮询看到（按需求“有人发起求助不用通知”）。
     return { ok: true }
   })
 

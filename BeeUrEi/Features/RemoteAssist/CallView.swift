@@ -45,6 +45,8 @@ struct CallView: View {
             A11y.announce(sending ? "已开始把画面显示给对方" : "已停止显示画面")
         }
         .onChange(of: model.muted) { _, m in A11y.announce(m ? "已静音，对方听不到你" : "已取消静音") }
+        // 一方挂断 → 对方自动挂断并关闭界面。
+        .onChange(of: model.callEnded) { _, ended in if ended { onClose() } }
         .onChange(of: model.reportStatus) { _, s in if let s, !s.isEmpty { A11y.announce(s) } }
         .onAppear { AudioSessionManager.beginCall() }
         .onDisappear { autoHide?.cancel(); model.hangUp(); AudioSessionManager.endCall() }

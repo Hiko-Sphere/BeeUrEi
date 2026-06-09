@@ -12,13 +12,14 @@ settings:
     SWIFT_VERSION: "5.0"          # 用 Swift 5 语言模式，先避开 Swift 6 严格并发对新手的干扰
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
-# 真实 WebRTC 音视频（A2）。stasel/WebRTC 提供预编译 xcframework（含真机+模拟器切片）。
-# 加入后 BeeUrEi/RemoteAssist/MediaEngine.swift 的 `#if canImport(WebRTC)` 自动激活真实引擎。
-# 改完本文件运行 `xcodegen generate`；首次会从 GitHub 下载约百 MB 产物（需联网）。
-packages:
-  WebRTC:
-    url: https://github.com/stasel/WebRTC
-    from: "148.0.0"
+# 真实 WebRTC 音视频（A2）——默认**不**接入，保证在任意网络（含国内无法稳定访问 GitHub）下都能编译。
+# 代码已就绪：MediaEngine.swift 的 `#if canImport(WebRTC)` 在装包后自动激活真实引擎，未装则用占位引擎。
+# 做真机双端视频联调时再启用：在能访问 github.com 的网络（或用镜像/手动下 xcframework）下，
+# 取消下面 packages 块与 dependencies 里 WebRTC 一行的注释，然后 `xcodegen generate`：
+# packages:
+#   WebRTC:
+#     url: https://github.com/stasel/WebRTC
+#     from: "148.0.0"
 targets:
   BeeUrEi:
     type: application
@@ -30,8 +31,8 @@ targets:
       # 该包独立用于 `swift test` 在 Mac 本机跑单测；因本机未装 iOS 模拟器运行时，
       # 走 Xcode SPM 产物链接会卡在 scheme 目的地解析，故直接把源码纳入 App 编译。
       - path: Packages/BeeUrEiCore/Sources/BeeUrEiCore
-    dependencies:
-      - package: WebRTC   # 真实音视频引擎（A2）
+    # dependencies:
+    #   - package: WebRTC   # 真实音视频引擎（A2）——做真机视频联调时取消注释（连同上面 packages 块）
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.beeurei.BeeUrEi

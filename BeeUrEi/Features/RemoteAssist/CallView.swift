@@ -45,6 +45,7 @@ struct CallView: View {
             A11y.announce(sending ? "已开始把画面显示给对方" : "已停止显示画面")
         }
         .onChange(of: model.muted) { _, m in A11y.announce(m ? "已静音，对方听不到你" : "已取消静音") }
+        .onChange(of: model.cameraFront) { _, f in A11y.announce(f ? "已切换到前置摄像头，对方将看到你的脸" : "已切换到后置摄像头，对方看到你面前的情况") }
         // 一方挂断 → 对方自动挂断并关闭界面。
         .onChange(of: model.callEnded) { _, ended in if ended { onClose() } }
         .onChange(of: model.reportStatus) { _, s in if let s, !s.isEmpty { A11y.announce(s) } }
@@ -194,8 +195,11 @@ struct CallView: View {
 
     private var blindControls: some View {
         VStack(spacing: 12) {
-            Text(model.videoSending ? "正在把后置摄像头画面显示给对方" : "画面未发送（隐私保护）")
+            Text(model.videoSending
+                 ? (model.cameraFront ? "正在显示前置摄像头（你的面部）给对方" : "正在显示后置摄像头（你面前的情况）给对方")
+                 : "画面未发送（隐私保护）")
                 .foregroundStyle(model.videoSending ? Color.beeWarn : .secondary)
+                .multilineTextAlignment(.center)
 
             // 无障碍/防误触：明确的切换按钮（VoiceOver 可用），状态会朗读。
             BeeBigButton(model.videoSending ? "停止显示画面" : "显示画面给对方",
@@ -203,7 +207,17 @@ struct CallView: View {
                          tint: model.videoSending ? .beeWarn : .beeHoney) {
                 model.setVideoSending(!model.videoSending)
             }
-            .accessibilityHint("开启后会把你的后置摄像头画面发送给协助者，让对方看到你面前的情况；请仅在需要时开启")
+            .accessibilityHint("开启后会把你的摄像头画面发送给协助者；可在下方选择后置(看你面前)或前置(看你的脸)")
+
+            // 前/后摄像头选择（分享时可切）。
+            if model.videoSending {
+                Picker("摄像头", selection: Binding(get: { model.cameraFront }, set: { model.setCameraFront($0) })) {
+                    Text("后置（看前方）").tag(false)
+                    Text("前置（看面部）").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .accessibilityLabel("选择摄像头：后置看你面前的情况，前置让对方看到你的脸")
+            }
         }
     }
 }

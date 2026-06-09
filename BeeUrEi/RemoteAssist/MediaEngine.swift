@@ -41,6 +41,7 @@ protocol MediaEngine: AnyObject {
     func handleRemoteDescription(type: String, sdp: String)
     func handleRemoteCandidate(candidate: String, sdpMid: String?, sdpMLineIndex: Int32)
     func setLocalVideoSending(_ sending: Bool)
+    func setCameraPosition(front: Bool) // 切换前/后摄像头（前置=显示面部）
     func setMicMuted(_ muted: Bool) // 静音：禁用/启用本端音频轨
     func stop()
 }
@@ -58,6 +59,7 @@ final class StubMediaEngine: MediaEngine {
     func handleRemoteDescription(type: String, sdp: String) {}
     func handleRemoteCandidate(candidate: String, sdpMid: String?, sdpMLineIndex: Int32) {}
     func setLocalVideoSending(_ sending: Bool) {}
+    func setCameraPosition(front: Bool) {}
     func setMicMuted(_ muted: Bool) {}
     func stop() {}
 }
@@ -100,6 +102,8 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
     private var localAudioTrack: RTCAudioTrack?
     private var micMuted = false
     private var videoCapturer: RTCCameraVideoCapturer?
+    private var videoSender: RTCRtpSender?
+    private var cameraFront = false // false=后置(看前方场景) true=前置(看面部)
     private var capturing = false // 仅在用户主动发画面时才开相机（最小权限/默认隐私，见审查 #2）
     private(set) var remoteVideoTrack: RTCVideoTrack?
     private weak var remoteRenderer: RTCVideoRenderer?
@@ -150,7 +154,7 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
             let capturer = RTCCameraVideoCapturer(delegate: videoSource)
             let videoTrack = Self.factory.videoTrack(with: videoSource, trackId: "video0")
             videoTrack.isEnabled = false
-            pc?.add(videoTrack, streamIds: ["stream0"])
+            videoSender = pc?.add(videoTrack, streamIds: ["stream0"]) // 留存 sender 以便设码率/降级策略
             localVideoTrack = videoTrack
             videoCapturer = capturer
             // 不在此处开相机：仅在 setLocalVideoSending(true) 时才启动采集，确保相机只在用户主动
@@ -207,10 +211,36 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
         // 按需开/关相机硬件：发画面时才采集，停发即停采集（见审查 #2）。
         if sending {
             if !capturing, let capturer = videoCapturer { startCapture(capturer); capturing = true }
+            applyVideoQuality() // 此刻多已协商完成，encodings 已就绪，设高画质上限+拥塞降级
         } else if capturing {
             videoCapturer?.stopCapture()
             capturing = false
         }
+    }
+
+    func setCameraPosition(front: Bool) {
+        guard front != cameraFront else { return }
+        cameraFront = front
+        // 若正在采集，切到新摄像头（停旧采集→以新设备重启）。
+        if capturing, let capturer = videoCapturer {
+            capturer.stopCapture { [weak self] in
+                guard let self else { return }
+                DispatchQueue.main.async { self.startCapture(capturer) }
+            }
+        }
+    }
+
+    /// 设较高画质上限 + 拥塞自动降级（卡顿时由 WebRTC 自动降分辨率/帧率，不卡时保持高清）。
+    private func applyVideoQuality() {
+        guard let sender = videoSender else { return }
+        let params = sender.parameters
+        for enc in params.encodings {
+            enc.maxBitrateBps = NSNumber(value: 2_500_000) // 上限 ~2.5Mbps（720p 流畅高清）
+            enc.maxFramerate = NSNumber(value: 30)
+        }
+        // balanced：拥塞时分辨率与帧率一起酌情下调，恢复后回升（“卡顿才降画质”）。
+        params.degradationPreference = NSNumber(value: RTCDegradationPreference.balanced.rawValue)
+        sender.parameters = params
     }
 
     func setMicMuted(_ muted: Bool) {
@@ -263,11 +293,17 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
     }
 
     private func startCapture(_ capturer: RTCCameraVideoCapturer) {
+        let wanted: AVCaptureDevice.Position = cameraFront ? .front : .back
         let devices = RTCCameraVideoCapturer.captureDevices()
-        guard let device = devices.first(where: { $0.position == .back }) ?? devices.first else { return }
+        guard let device = devices.first(where: { $0.position == wanted })
+            ?? devices.first(where: { $0.position == .back }) ?? devices.first else { return }
         let formats = RTCCameraVideoCapturer.supportedFormats(for: device)
-        let format = formats.first(where: {
-            CMVideoFormatDescriptionGetDimensions($0.formatDescription).width >= 640
+        // 目标 720p（1280 宽）高清：选尺寸最接近 1280 宽的格式（兼顾画质与带宽）。
+        let target = 1280
+        let format = formats.min(by: {
+            let aw = Int(CMVideoFormatDescriptionGetDimensions($0.formatDescription).width)
+            let bw = Int(CMVideoFormatDescriptionGetDimensions($1.formatDescription).width)
+            return abs(aw - target) < abs(bw - target)
         }) ?? formats.last
         guard let format else { return }
         let fps = format.videoSupportedFrameRateRanges.map(\.maxFrameRate).max() ?? 30

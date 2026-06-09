@@ -182,6 +182,15 @@ final class CallViewModel {
     /// 协助者侧：远端视频出现真实画面帧（由 RemoteVideoView 的尺寸变化回调触发）。
     func markRemoteVideoFrames() { remoteVideoFrames = true }
 
+    private(set) var cameraFront = false // 盲人分享时的摄像头：false=后置(看前方场景) true=前置(看面部)
+
+    /// 切换前/后摄像头（前置=让协助者看到盲人面部）。
+    func setCameraFront(_ front: Bool) {
+        guard role == .blind, front != cameraFront else { return }
+        cameraFront = front
+        media.setCameraPosition(front: front)
+    }
+
     /// 视障侧隐私门控：开启/关闭把画面发给对方。
     func setVideoSending(_ sending: Bool) {
         guard role == .blind, sending != videoSending else { return }

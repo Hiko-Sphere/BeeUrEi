@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
+import { randomUUID } from 'node:crypto'
 import { type Store, isBlockedBetween, blockedUserIdSet } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { SignalingHub } from '../signaling/hub'
@@ -91,10 +92,12 @@ export function registerAssistRoutes(
     const parsed = callSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const from = req.user!
-    // 仅允许呼叫与自己有亲友绑定关系的目标——否则任意用户可向任意 userId 强推伪造来电(越权/骚扰，见审查 #1)。
-    // 仅可呼叫**已接受**绑定的目标——pending（对方未同意）不可被强推来电（见审查 #6）。
+    // 仅允许呼叫与自己有**已接受**绑定关系的目标（防越权/骚扰，见审查 #1/#6）。
+    // 双向：我作为 owner(盲人) 可呼叫我的协助者；我作为 member(协助者/亲友) 可呼叫绑定我的盲人。
     const blocked = blockedUserIdSet(store, from.sub)
-    const allowed = new Set(store.linksByOwner(from.sub).filter((l) => (l.status ?? 'accepted') === 'accepted').map((l) => l.memberId))
+    const owned = store.linksByOwner(from.sub).filter((l) => (l.status ?? 'accepted') === 'accepted').map((l) => l.memberId)
+    const memberOf = store.linksByMember(from.sub).filter((l) => (l.status ?? 'accepted') === 'accepted').map((l) => l.ownerId)
+    const allowed = new Set([...owned, ...memberOf])
     const targets = parsed.data.targetUserIds.filter((id) => allowed.has(id) && !blocked.has(id)) // 排除黑名单
     if (targets.length === 0) return reply.code(403).send({ error: 'not_linked' })
     const ok = pendingCalls.register({
@@ -105,6 +108,9 @@ export function registerAssistRoutes(
       createdAt: Date.now(),
     })
     if (!ok) return reply.code(409).send({ error: 'call_id_conflict' }) // 该 callId 被他人占用，防覆盖/劫持(见审查 #2)
+    // 通话记录：每个目标一条（默认 missed，被叫接听/拒绝后更新）。
+    const recAt = Date.now()
+    for (const id of targets) store.createCallRecord({ id: randomUUID(), callId: parsed.data.callId, callerId: from.sub, calleeId: id, status: 'missed', createdAt: recAt })
     // A1：向各目标设备推 VoIP 来电（后台/锁屏唤起 CallKit）。fire-and-forget，失败不阻断呼叫。
     const callerName = store.findById(from.sub)?.displayName ?? '求助者'
     console.log('[call] dispatch from=%s callId=%s targets=%j voip=%j apns=%j',
@@ -143,7 +149,37 @@ export function registerAssistRoutes(
     const id = (req.body as { callId?: string })?.callId
     if (typeof id !== 'string' || !id) return reply.code(400).send({ error: 'invalid_input' })
     pendingCalls.decline(id, req.user!.sub, Date.now())
+    store.updateCallStatus(id, req.user!.sub, 'declined') // 通话记录：标记为已拒绝
     return { ok: true }
+  })
+
+  // 被叫接听：把通话记录标记为已接听（区别于未接）。被叫进入通话界面时调用。
+  app.post('/api/assist/call/answered', { preHandler: requireAuth() }, async (req, reply) => {
+    const id = (req.body as { callId?: string })?.callId
+    if (typeof id !== 'string' || !id) return reply.code(400).send({ error: 'invalid_input' })
+    store.updateCallStatus(id, req.user!.sub, 'answered')
+    return { ok: true }
+  })
+
+  // 通话记录（呼出/呼入/未接）：我作为主叫或被叫的记录，按时间倒序。
+  app.get('/api/calls', { preHandler: requireAuth() }, async (req) => {
+    const me = req.user!.sub
+    const recs = store.callRecordsForUser(me, 100)
+    return {
+      calls: recs.map((r) => {
+        const outgoing = r.callerId === me
+        const other = store.findById(outgoing ? r.calleeId : r.callerId)
+        return {
+          id: r.id,
+          callId: r.callId,
+          direction: outgoing ? 'outgoing' : 'incoming',
+          status: r.status, // missed/answered/declined
+          peerName: other?.displayName ?? '已注销用户',
+          peerAvatar: other?.avatar ?? null,
+          createdAt: r.createdAt,
+        }
+      }),
+    }
   })
 
   // 发起方轮询呼叫状态：是否所有目标已拒绝（据此在通话界面显示"对方已拒绝"）。

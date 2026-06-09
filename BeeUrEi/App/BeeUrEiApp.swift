@@ -74,7 +74,9 @@ private struct RootView: View {
         }
         // 来电统一在此顶层呈现（CallKit 接听 + 协助端轮询都经 IncomingCallCenter，单一通路，见复审 #2）。
         .fullScreenCover(item: Binding(get: { incoming.pending }, set: { incoming.pending = $0 })) { call in
-            CallView(role: .helper, callId: call.callId) {
+            // 接收方的通话角色由"自己的账号角色"决定：盲人接到协助者来电 → 自己仍是画面分享方(.blind)；
+            // 协助者接到盲人来电 → 自己是观看方(.helper)。这样双向呼叫的视频方向都正确。
+            CallView(role: session.user?.role == "blind" ? .blind : .helper, callId: call.callId) {
                 // 结束：取消后端会合登记（防 TTL 内被轮询重新弹出）+ 结束对应 CallKit 通话。
                 if let token = KeychainStore.read() {
                     let id = call.callId
@@ -82,6 +84,10 @@ private struct RootView: View {
                 }
                 RemoteAssistService.shared.endCall()
                 incoming.clear()
+            }
+            // 打开来电界面即视为"接听"，更新通话记录为已接听。
+            .task {
+                if let token = KeychainStore.read() { await APIClient().markAnswered(token: token, callId: call.callId) }
             }
         }
     }

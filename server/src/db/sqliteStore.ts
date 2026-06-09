@@ -2,7 +2,7 @@ import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Block, Report, ReportStatus, Recording, RecordingConfig, RefreshToken } from './store'
+import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken } from './store'
 
 // 用运行时 require + 非静态模块名加载 node:sqlite，避免打包器(vitest/vite)静态解析失败；
 // 由 Node 在运行时解析（需 --experimental-sqlite，已在 npm 脚本里通过 NODE_OPTIONS 开启）。
@@ -36,6 +36,8 @@ export class SqliteStore implements Store {
         tokenHash TEXT PRIMARY KEY, userId TEXT, expiresAt INTEGER);
       CREATE TABLE IF NOT EXISTS blocks (
         id TEXT PRIMARY KEY, blockerId TEXT, blockedId TEXT, createdAt INTEGER);
+      CREATE TABLE IF NOT EXISTS call_records (
+        id TEXT PRIMARY KEY, callId TEXT, callerId TEXT, calleeId TEXT, status TEXT, createdAt INTEGER);
     `)
     // 迁移：旧库 links 表补 phone 列、users 表补 language 列（已存在则忽略）。
     try { this.db.exec('ALTER TABLE links ADD COLUMN phone TEXT') } catch { /* 列已存在 */ }
@@ -132,6 +134,20 @@ export class SqliteStore implements Store {
   blocksInvolving(userId: string): Block[] {
     return this.db.prepare('SELECT * FROM blocks WHERE blockerId = ? OR blockedId = ?').all(userId, userId)
       .map((r: any) => ({ id: r.id, blockerId: r.blockerId, blockedId: r.blockedId, createdAt: Number(r.createdAt) }))
+  }
+
+  // MARK: call records
+  createCallRecord(rec: CallRecord): void {
+    this.db.prepare('INSERT OR REPLACE INTO call_records (id, callId, callerId, calleeId, status, createdAt) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(rec.id, rec.callId, rec.callerId, rec.calleeId, rec.status, rec.createdAt)
+  }
+  updateCallStatus(callId: string, calleeId: string, status: CallRecordStatus): void {
+    this.db.prepare('UPDATE call_records SET status = ? WHERE callId = ? AND calleeId = ?').run(status, callId, calleeId)
+  }
+  callRecordsForUser(userId: string, limit = 100): CallRecord[] {
+    return this.db.prepare('SELECT * FROM call_records WHERE callerId = ? OR calleeId = ? ORDER BY createdAt DESC LIMIT ?')
+      .all(userId, userId, limit)
+      .map((r: any) => ({ id: r.id, callId: r.callId, callerId: r.callerId, calleeId: r.calleeId, status: r.status as CallRecordStatus, createdAt: Number(r.createdAt) }))
   }
 
   // MARK: reports

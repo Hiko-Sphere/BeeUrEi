@@ -236,6 +236,12 @@ struct AssistHomeView: View {
                                     Text("\(l.relation)\(l.isEmergency ? " · 紧急联系人" : "")")
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
+                                Spacer()
+                                Button { Task { await callBound(l) } } label: {
+                                    Image(systemName: "phone.fill").foregroundStyle(Color.beeSuccess)
+                                }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel("呼叫 \(l.memberName)")
                             }
                         }
                     }
@@ -260,6 +266,19 @@ struct AssistHomeView: View {
             .refreshable { await loadLinks() }
             .onChange(of: addFamilyMsg) { _, m in if let m, !m.isEmpty { A11y.announce(m) } }
         }
+    }
+
+    /// 协助者/亲友主动呼叫已绑定的对方（多为呼叫盲人）。后端双向放行。
+    private func callBound(_ l: FamilyLinkInfo) async {
+        guard answering == nil, matched == nil, pendingAnswer == nil,
+              IncomingCallCenter.shared.pending == nil, let token = session.token else { return }
+        let callId = UUID().uuidString
+        do {
+            try await APIClient().startEmergencyCall(token: token, callId: callId, targetUserIds: [l.memberId])
+            answering = AnsweringCall(callId: callId, title: "呼叫 \(l.memberName)", isIncoming: false)
+        } catch let APIError.server(msg) {
+            addFamilyMsg = msg == "not_linked" ? "对方未确认绑定，暂不能呼叫" : "呼叫失败，请重试"
+        } catch { addFamilyMsg = "呼叫失败，请重试" }
     }
 
     private func addFamily() async {

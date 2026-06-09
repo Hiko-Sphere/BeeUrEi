@@ -51,6 +51,7 @@ struct LoginView: View {
                         Button("修改") { nickInput = session.user?.displayName ?? ""; showNickname = true }
                     }
                     Text("角色：\(roleDisplayName(session.user?.role ?? ""))").foregroundStyle(.secondary)
+                    NavigationLink("通话记录") { CallHistoryView() }
                     NavigationLink("黑名单") { BlocklistView() }
                     Button("修改密码") { showChangePassword = true }
                     Button("退出登录", role: .destructive) { session.logout() }

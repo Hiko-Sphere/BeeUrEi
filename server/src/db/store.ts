@@ -50,6 +50,17 @@ export interface Block {
   createdAt: number
 }
 
+/// 通话记录：每个 (callId, callee) 一条。caller 视角为"呼出"，callee 视角为"呼入/未接"。
+export type CallRecordStatus = 'missed' | 'answered' | 'declined'
+export interface CallRecord {
+  id: string
+  callId: string
+  callerId: string
+  calleeId: string
+  status: CallRecordStatus
+  createdAt: number
+}
+
 /// 举报（通话后一键举报 → 管理员审核）。
 export type ReportStatus = 'open' | 'resolved'
 export interface Report {
@@ -106,6 +117,10 @@ export interface Store {
   findBlock(id: string): Block | undefined
   blocksInvolving(userId: string): Block[] // blockerId==userId 或 blockedId==userId 的所有拉黑记录
 
+  createCallRecord(rec: CallRecord): void
+  updateCallStatus(callId: string, calleeId: string, status: CallRecordStatus): void
+  callRecordsForUser(userId: string, limit?: number): CallRecord[] // 我作为主叫或被叫，按时间倒序
+
   createReport(report: Report): void
   allReports(): Report[]
   findReport(id: string): Report | undefined
@@ -129,6 +144,7 @@ export class MemoryStore implements Store {
   protected users = new Map<string, User>()
   protected links = new Map<string, FamilyLink>()
   protected blocks = new Map<string, Block>()
+  protected callRecords = new Map<string, CallRecord>()
   protected reports = new Map<string, Report>()
   protected recordings = new Map<string, Recording>()
   protected refreshTokens = new Map<string, RefreshToken>()
@@ -209,6 +225,24 @@ export class MemoryStore implements Store {
     return [...this.blocks.values()].filter((b) => b.blockerId === userId || b.blockedId === userId)
   }
 
+  createCallRecord(rec: CallRecord): void {
+    this.callRecords.set(rec.id, rec)
+    this.afterMutate()
+  }
+  updateCallStatus(callId: string, calleeId: string, status: CallRecordStatus): void {
+    let changed = false
+    for (const r of this.callRecords.values()) {
+      if (r.callId === callId && r.calleeId === calleeId) { r.status = status; changed = true }
+    }
+    if (changed) this.afterMutate()
+  }
+  callRecordsForUser(userId: string, limit = 100): CallRecord[] {
+    return [...this.callRecords.values()]
+      .filter((r) => r.callerId === userId || r.calleeId === userId)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit)
+  }
+
   createReport(report: Report): void {
     this.reports.set(report.id, report)
     this.afterMutate()
@@ -263,6 +297,7 @@ export class JsonFileStore extends MemoryStore {
           users?: User[]
           links?: FamilyLink[]
           blocks?: Block[]
+          callRecords?: CallRecord[]
           reports?: Report[]
           recordings?: Recording[]
           refreshTokens?: RefreshToken[]
@@ -271,6 +306,7 @@ export class JsonFileStore extends MemoryStore {
         for (const u of data.users ?? []) this.users.set(u.id, u)
         for (const l of data.links ?? []) this.links.set(l.id, l)
         for (const b of data.blocks ?? []) this.blocks.set(b.id, b)
+        for (const c of data.callRecords ?? []) this.callRecords.set(c.id, c)
         for (const r of data.reports ?? []) this.reports.set(r.id, r)
         for (const rec of data.recordings ?? []) this.recordings.set(rec.id, rec)
         for (const rt of data.refreshTokens ?? []) this.refreshTokens.set(rt.tokenHash, rt)
@@ -287,6 +323,7 @@ export class JsonFileStore extends MemoryStore {
       users: [...this.users.values()],
       links: [...this.links.values()],
       blocks: [...this.blocks.values()],
+      callRecords: [...this.callRecords.values()],
       reports: [...this.reports.values()],
       recordings: [...this.recordings.values()],
       refreshTokens: [...this.refreshTokens.values()],

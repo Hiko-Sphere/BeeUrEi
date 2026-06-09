@@ -119,6 +119,18 @@ struct IceServerInfo: Codable, Sendable {
     let credential: String?
 }
 
+/// 通话记录条目。
+struct CallRecordInfo: Codable, Sendable, Identifiable {
+    let id: String
+    let callId: String
+    let direction: String  // "outgoing" 呼出 / "incoming" 呼入
+    let status: String     // "missed" 未接 / "answered" 已接 / "declined" 已拒绝
+    let peerName: String
+    var peerAvatar: String?
+    let createdAt: Double   // 毫秒时间戳
+    var isMissed: Bool { status == "missed" }
+}
+
 /// 黑名单条目（我拉黑的人）。
 struct BlockedUser: Codable, Sendable, Identifiable {
     var id: String { recordId }
@@ -367,6 +379,18 @@ struct APIClient {
     /// 目标"拒绝"来电（尽力而为）——发起方据此显示"对方已拒绝"。
     func declineCall(token: String, callId: String) async {
         _ = try? await authedSend("POST", "/api/assist/call/decline", token: token, body: ["callId": callId])
+    }
+
+    /// 被叫接听 → 通话记录标记已接听（尽力而为）。
+    func markAnswered(token: String, callId: String) async {
+        _ = try? await authedSend("POST", "/api/assist/call/answered", token: token, body: ["callId": callId])
+    }
+
+    /// 通话记录（呼出/呼入/未接）。
+    func callHistory(token: String) async throws -> [CallRecordInfo] {
+        struct R: Codable { let calls: [CallRecordInfo] }
+        let data = try await authedGet("/api/calls", token: token)
+        return (try? JSONDecoder().decode(R.self, from: data))?.calls ?? []
     }
 
     /// 发起方轮询呼叫状态：是否所有目标已拒绝。

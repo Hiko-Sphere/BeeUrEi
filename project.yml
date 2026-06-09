@@ -12,6 +12,13 @@ settings:
     SWIFT_VERSION: "5.0"          # 用 Swift 5 语言模式，先避开 Swift 6 严格并发对新手的干扰
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
+# 真实 WebRTC 音视频（A2）。stasel/WebRTC 提供预编译 xcframework（含真机+模拟器切片）。
+# 加入后 BeeUrEi/RemoteAssist/MediaEngine.swift 的 `#if canImport(WebRTC)` 自动激活真实引擎。
+# 改完本文件运行 `xcodegen generate`；首次会从 GitHub 下载约百 MB 产物（需联网）。
+packages:
+  WebRTC:
+    url: https://github.com/stasel/WebRTC
+    from: "148.0.0"
 targets:
   BeeUrEi:
     type: application
@@ -23,6 +30,8 @@ targets:
       # 该包独立用于 `swift test` 在 Mac 本机跑单测；因本机未装 iOS 模拟器运行时，
       # 走 Xcode SPM 产物链接会卡在 scheme 目的地解析，故直接把源码纳入 App 编译。
       - path: Packages/BeeUrEiCore/Sources/BeeUrEiCore
+    dependencies:
+      - package: WebRTC   # 真实音视频引擎（A2）
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.beeurei.BeeUrEi
@@ -40,6 +49,10 @@ targets:
           - arkit
         # 品牌化启动界面：墨蓝背景 + 居中蜂鸣 Logo（BeeUrEi/LaunchScreen.storyboard）。
         UILaunchStoryboardName: LaunchScreen
+        # 后台音频（通话期间锁屏仍可对讲）+ voip（A1 后台来电唤醒，需配合 PushKit/CallKit 与 APNs）。
+        UIBackgroundModes:
+          - audio
+          - voip
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         # 这三段权限文案会原样显示在系统授权弹窗里（见 PLAN.md §7.4）

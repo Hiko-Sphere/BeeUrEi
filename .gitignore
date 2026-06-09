@@ -9,6 +9,7 @@ xcuserdata/
 # Swift Package Manager
 .swiftpm/
 .build/
+.spm-cache/
 
 # XcodeGen 生成的工程（可由 project.yml + `xcodegen generate` 重建）
 # 新手如果想用 git 跟踪 .xcodeproj，删掉下面这一行即可。

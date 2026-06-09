@@ -45,7 +45,11 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
       - name: Build (iphonesimulator, no signing)
+        # 仅 arm64 模拟器：stasel/WebRTC（A2）的模拟器切片只含 arm64，
+        # 不指定会连 x86_64 致链接失败。macos-14 runner 为 Apple Silicon，真机/Xcode 同样走 arm64。
         run: |
           xcodebuild -project BeeUrEi.xcodeproj -target BeeUrEi \
             -sdk iphonesimulator -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
             CODE_SIGNING_ALLOWED=NO build

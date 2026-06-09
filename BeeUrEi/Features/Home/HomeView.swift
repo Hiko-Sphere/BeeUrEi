@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// 首屏：ARKit 相机预览 + 避障状态条；非 LiDAR 设备显示「设备不支持」。
+/// 视障首屏（重设计）：ARKit 相机在后台做避障；前台是**大字高对比**的状态条与超大带标签按钮。
+/// 设计原则：信息走语音/状态条；操作件超大、有文字标签、VoiceOver 友好；首要操作「求助」最突出。
 struct HomeView: View {
     @State private var model = HomeViewModel()
     @State private var showSettings = false
@@ -18,18 +19,14 @@ struct HomeView: View {
                 DevROIOverlay(roi: model.currentROI)
                     .ignoresSafeArea()
             }
-            VStack(alignment: .leading) {
-                HStack {
-                    helpButton
-                    navButton
-                    framingButton
-                    locationButton
-                    Spacer()
+            VStack(spacing: BeeSpacing.md) {
+                HStack(alignment: .top) {
+                    if case .running = model.state { statusBanner } else { Spacer() }
                     settingsButton
                 }
                 if DevSettings().enabled { DevOverlayView(model: model) }
                 Spacer()
-                if case .running = model.state { statusBar }
+                actionPanel
             }
             .padding()
         }
@@ -55,46 +52,41 @@ struct HomeView: View {
         }
     }
 
-    private var navButton: some View {
-        Button { showNavigation = true } label: {
-            Image(systemName: "figure.walk")
-                .font(.title2)
-                .padding(12)
-                .background(.ultraThinMaterial, in: Circle())
+    // MARK: 底部大按钮面板
+
+    private var actionPanel: some View {
+        VStack(spacing: BeeSpacing.sm) {
+            // 首要操作：求助（最大、蜂蜜黄）
+            BeeBigButton("求助", systemImage: "hand.raised.fill",
+                         subtitle: "呼叫志愿者或亲友帮你看", tint: .beeHoney) {
+                showRemoteAssist = true
+            }
+            HStack(spacing: BeeSpacing.sm) {
+                tile("步行导航", systemImage: "figure.walk") { showNavigation = true }
+                tile("看一看", systemImage: "viewfinder",
+                     hint: "用相机对准物体，语音说出它是什么") { showFraming = true }
+            }
+            HStack(spacing: BeeSpacing.sm) {
+                tile("我在哪", systemImage: "location.fill",
+                     hint: "播报你当前位置和附近的地点") { locationDescriber.describe() }
+                tile("设置", systemImage: "gearshape.fill") { showSettings = true }
+            }
         }
-        .accessibilityLabel("步行导航")
     }
 
-    private var helpButton: some View {
-        Button { showRemoteAssist = true } label: {
-            Image(systemName: "person.fill.questionmark")
-                .font(.title2)
-                .padding(12)
-                .background(.ultraThinMaterial, in: Circle())
+    /// 方块磁贴按钮：深底白字 + 蜂蜜黄图标，保证在任意相机画面上都清晰可读；超大点按区。
+    private func tile(_ title: String, systemImage: String, hint: String? = nil, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: BeeSpacing.sm) {
+                Image(systemName: systemImage).font(.system(size: 30, weight: .bold)).foregroundStyle(Color.beeHoney)
+                Text(title).font(.headline).foregroundStyle(.white)
+            }
+            .frame(maxWidth: .infinity, minHeight: 92)
+            .background(Color.beeInk.opacity(0.88), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
-        .accessibilityLabel("呼叫帮手")
-    }
-
-    private var framingButton: some View {
-        Button { showFraming = true } label: {
-            Image(systemName: "viewfinder")
-                .font(.title2)
-                .padding(12)
-                .background(.ultraThinMaterial, in: Circle())
-        }
-        .accessibilityLabel("识别物体")
-        .accessibilityHint("用相机对准物体，语音指引你对准并说出它是什么")
-    }
-
-    private var locationButton: some View {
-        Button { locationDescriber.describe() } label: {
-            Image(systemName: "location.fill")
-                .font(.title2)
-                .padding(12)
-                .background(.ultraThinMaterial, in: Circle())
-        }
-        .accessibilityLabel("我在哪")
-        .accessibilityHint("播报你当前位置和附近的地点")
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .modifier(OptionalA11yHint(hint: hint))
     }
 
     private var settingsButton: some View {
@@ -125,22 +117,22 @@ struct HomeView: View {
         }
     }
 
-    private var statusBar: some View {
+    private var statusBanner: some View {
         let highContrast = FeatureSettings().highContrast
-        return VStack(spacing: 6) {
+        return VStack(alignment: .leading, spacing: 6) {
             Text(model.proximityText)
-                // 高对比时用更大字号 + 蜂蜜黄；均走 Dynamic Type（系统字号设置依然生效）。
-                .font(highContrast ? .system(.title, weight: .bold) : .headline)
-                .foregroundStyle(highContrast ? Color(red: 1, green: 0.77, blue: 0.18) : .primary)
+                .font(highContrast ? .system(.title, weight: .bold) : .system(.title2, weight: .bold))
+                .foregroundStyle(highContrast ? Color.beeHoney : .primary)
             if !model.advisoryText.isEmpty {
                 Text(model.advisoryText)
                     .font(highContrast ? .system(.title3, weight: .semibold) : .subheadline)
-                    .foregroundStyle(highContrast ? .white : .orange)
+                    .foregroundStyle(highContrast ? .white : Color.beeWarn)
             }
         }
         .padding(highContrast ? 20 : 16)
-        .frame(maxWidth: .infinity)
-        .background(highContrast ? AnyShapeStyle(Color.black.opacity(0.92)) : AnyShapeStyle(.ultraThinMaterial))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(highContrast ? AnyShapeStyle(Color.black.opacity(0.92)) : AnyShapeStyle(.ultraThinMaterial),
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(model.advisoryText.isEmpty ? model.proximityText : "\(model.proximityText)。\(model.advisoryText)")
         .accessibilityAddTraits(.isButton)
@@ -184,6 +176,14 @@ struct HomeView: View {
             .font(.headline)
             .multilineTextAlignment(.center)
             .padding()
+    }
+}
+
+/// 可选 VoiceOver 提示修饰符（hint 为空则不加）。
+private struct OptionalA11yHint: ViewModifier {
+    let hint: String?
+    func body(content: Content) -> some View {
+        if let hint { content.accessibilityHint(hint) } else { content }
     }
 }
 

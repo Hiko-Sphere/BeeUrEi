@@ -16,8 +16,9 @@ struct CallView: View {
     var body: some View {
         VStack(spacing: 24) {
             Text(model.statusText)
-                .font(.headline)
+                .font(.title3.weight(.semibold))
                 .multilineTextAlignment(.center)
+                .accessibilityAddTraits(.updatesFrequently)
 
             if model.role == .blind {
                 blindControls
@@ -36,14 +37,10 @@ struct CallView: View {
                     .padding(.horizontal)
             }
 
-            Button(role: .destructive) {
+            BeeBigButton("挂断", systemImage: "phone.down.fill", tint: .beeDanger, foreground: .white) {
                 model.hangUp()
                 onClose()
-            } label: {
-                Label("挂断", systemImage: "phone.down.fill")
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
 
             if model.canReport {
                 Button("举报对方") { showReport = true }
@@ -100,10 +97,11 @@ struct CallView: View {
                 .foregroundStyle(.secondary)
 
             // 无障碍/防误触替代：明确的切换按钮（VoiceOver 可用），状态会朗读。
-            Button(model.videoSending ? "停止显示画面" : "显示画面给对方") {
+            BeeBigButton(model.videoSending ? "停止显示画面" : "显示画面给对方",
+                         systemImage: model.videoSending ? "video.slash.fill" : "video.fill",
+                         tint: model.videoSending ? .beeWarn : .beeHoney) {
                 model.setVideoSending(!model.videoSending)
             }
-            .buttonStyle(.bordered)
             .accessibilityHint("开启后会把你的摄像头画面发送给协助者，请仅在需要时开启")
         }
     }

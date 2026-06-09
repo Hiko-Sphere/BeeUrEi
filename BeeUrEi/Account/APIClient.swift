@@ -28,6 +28,9 @@ struct AccountInfo: Codable, Sendable, Equatable, Identifiable {
     let displayName: String
     let role: String
     let status: String
+    // 仅本人 /api/me 返回（selfView）；登录/注册/管理员列表为 publicUser，这两项为 nil。
+    var email: String?
+    var emailVerified: Bool?
 }
 
 struct AuthResult: Codable, Sendable {

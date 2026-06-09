@@ -17,11 +17,13 @@ struct LoginView: View {
     @State private var newPassword = ""
     @State private var showDeleteConfirm = false
     @State private var accountMessage: String?
+    @State private var detail: AccountInfo?     // /api/me（含邮箱/验证状态）
+    @State private var showEmail = false
+    @State private var showForgot = false
 
     private let roles: [(label: String, value: String)] = [
         ("求助者（视障）", "blind"),
-        ("协助者", "helper"),
-        ("亲友", "family"),
+        ("协助者 / 亲友", "helper"), // 合并：协助者与亲友同一套界面与权限
     ]
 
     var body: some View {
@@ -29,10 +31,27 @@ struct LoginView: View {
             if session.isLoggedIn {
                 Section("当前账号") {
                     Text(session.user?.displayName ?? "已登录")
-                    Text("角色：\(session.user?.role ?? "")").foregroundStyle(.secondary)
+                    Text("角色：\(roleDisplayName(session.user?.role ?? ""))").foregroundStyle(.secondary)
                     Button("修改密码") { showChangePassword = true }
                     Button("退出登录", role: .destructive) { session.logout() }
                     Button("删除账号", role: .destructive) { showDeleteConfirm = true }
+                }
+                Section("邮箱（用于找回密码）") {
+                    if let email = detail?.email, !email.isEmpty {
+                        HStack {
+                            Text(email)
+                            Spacer()
+                            if detail?.emailVerified == true {
+                                Label("已验证", systemImage: "checkmark.seal.fill").foregroundStyle(Color.beeSuccess).font(.caption)
+                            } else {
+                                Text("未验证").foregroundStyle(Color.beeWarn).font(.caption)
+                            }
+                        }
+                        Button(detail?.emailVerified == true ? "更换邮箱" : "更换 / 验证邮箱") { showEmail = true }
+                    } else {
+                        Text("尚未绑定邮箱。绑定后可在忘记密码时自助找回。").foregroundStyle(.secondary)
+                        Button("绑定邮箱") { showEmail = true }
+                    }
                 }
                 if let accountMessage {
                     Section { Text(accountMessage).foregroundStyle(.secondary) }
@@ -58,6 +77,9 @@ struct LoginView: View {
                     Button(isRegister ? "注册并登录" : "登录") { submit() }
                         .disabled(session.isWorking || username.isEmpty || password.isEmpty)
                     Button(isRegister ? "已有账号？去登录" : "没有账号？去注册") { isRegister.toggle() }
+                    if !isRegister {
+                        Button("忘记密码？") { showForgot = true }.font(.footnote)
+                    }
                 }
             }
 
@@ -74,6 +96,11 @@ struct LoginView: View {
             }
         }
         .navigationTitle("账号")
+        .task { await loadMe() }
+        .sheet(isPresented: $showEmail, onDismiss: { Task { await loadMe() } }) {
+            EmailManageView()
+        }
+        .sheet(isPresented: $showForgot) { ForgotPasswordView(presetUsername: username) }
         .sheet(isPresented: $showChangePassword) {
             NavigationStack {
                 Form {
@@ -96,6 +123,11 @@ struct LoginView: View {
         } message: {
             Text("将永久删除你的账号、亲友绑定与登录信息，且不可恢复。")
         }
+    }
+
+    private func loadMe() async {
+        guard session.isLoggedIn, let token = KeychainStore.read() else { detail = nil; return }
+        detail = try? await APIClient().me(token: token)
     }
 
     private func changePassword() {
@@ -133,5 +165,72 @@ struct LoginView: View {
                 await session.login(username: username, password: password)
             }
         }
+    }
+}
+
+/// 绑定 / 更换邮箱并验证（D1）。
+struct EmailManageView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var email = ""
+    @State private var code = ""
+    @State private var stage: Stage = .enter
+    @State private var message: String?
+    @State private var working = false
+
+    enum Stage { case enter, verify }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if stage == .enter {
+                    Section {
+                        TextField("you@example.com", text: $email)
+                            .keyboardType(.emailAddress)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    } header: {
+                        Text("邮箱")
+                    } footer: {
+                        Text("绑定后会发一封验证码邮件。验证后即可在忘记密码时自助找回。")
+                    }
+                    Section {
+                        Button("发送验证码") { Task { await setEmail() } }
+                            .disabled(working || !email.contains("@"))
+                    }
+                } else {
+                    Section("输入验证码") {
+                        TextField("邮箱收到的 6 位验证码", text: $code).keyboardType(.numberPad)
+                    }
+                    Section {
+                        Button("确认验证") { Task { await verify() } }
+                            .disabled(working || code.isEmpty)
+                        Button("重新发送") { Task { await setEmail() } }.font(.footnote)
+                    }
+                }
+                if let message { Section { Text(message).foregroundStyle(.secondary) } }
+            }
+            .navigationTitle("邮箱验证")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
+        }
+    }
+
+    private func setEmail() async {
+        guard let token = KeychainStore.read() else { return }
+        working = true; defer { working = false }
+        do {
+            try await APIClient().setEmail(token: token, email: email.trimmingCharacters(in: .whitespaces))
+            message = "验证码已发送，请查收邮箱后填写。"
+            stage = .verify
+        } catch { message = "发送失败，请检查邮箱格式或稍后再试。" }
+    }
+
+    private func verify() async {
+        guard let token = KeychainStore.read() else { return }
+        working = true; defer { working = false }
+        do {
+            try await APIClient().verifyEmail(token: token, code: code)
+            message = "邮箱已验证。"
+            A11y.announce("邮箱已验证")
+            dismiss()
+        } catch { message = "验证码无效或已过期，请重试。" }
     }
 }

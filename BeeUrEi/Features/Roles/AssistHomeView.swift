@@ -39,6 +39,8 @@ struct AssistHomeView: View {
         }
         .tint(.beeInk)
         .task { await onAppear() }
+        // 匹配/认领状态变化主动朗读——盲人/低视力协助者点完按钮才有语音反馈（见无障碍审计）。
+        .onChange(of: statusText) { _, new in if let new, !new.isEmpty { A11y.announce(new) } }
         .onDisappear { stopTasks(goOffline: true) }
         .sheet(item: $matched, onDismiss: {
             // sheet 真正关闭后再呈现通话，避免同一 tick「关 sheet + 开 fullScreenCover」被吞（见审查 #3）。
@@ -135,7 +137,7 @@ struct AssistHomeView: View {
         .buttonStyle(.plain)
         .disabled(busy)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("求助者 \(r.fromName)。\(r.topic ?? "")。\(r.locality.map { "地点 " + $0 + "。" } ?? "")\(r.language.map { "语言 " + languageName($0) + "。" } ?? "")已等待\(waitText(r.waitedSeconds))。")
+        .accessibilityLabel("求助者 \(r.fromName)。\(r.topic.flatMap { $0.isEmpty ? nil : "事项 " + $0 + "。" } ?? "")\(r.locality.map { "地点 " + $0 + "。" } ?? "")\(r.language.map { "语言 " + languageName($0) + "。" } ?? "")已等待\(waitText(r.waitedSeconds))。")
         .accessibilityHint("双击接听并帮助 TA")
         .accessibilityAddTraits(.isButton)
     }
@@ -371,6 +373,9 @@ struct AssistHomeView: View {
                         if let lang = detail.language, !lang.isEmpty { BeeInfoRow(systemImage: "globe", text: languageName(lang)) }
                     }
                 }
+                // 合并为单一可读元素，与首屏求助卡片措辞一致，避免逐条右滑（见无障碍审计）。
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(matchedLabel(detail))
                 BeeBigButton("帮助 TA", systemImage: "video.fill", tint: .beeSuccess, foreground: .white) {
                     // 暂存待呈现的通话，关掉 sheet；待 onDismiss 触发后再开 fullScreenCover（见审查 #3）。
                     pendingAnswer = AnsweringCall(callId: detail.callId, title: "正在帮助 \(detail.fromName)", isIncoming: false)
@@ -389,6 +394,7 @@ struct AssistHomeView: View {
             .padding()
             .navigationTitle("匹配结果")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear { A11y.announce("为你匹配到：\(matchedLabel(detail))") }
         }
         .presentationDetents([.medium, .large])
     }
@@ -413,6 +419,14 @@ struct AssistHomeView: View {
         if seconds < 10 { return "刚刚" }
         if seconds < 60 { return "\(seconds) 秒" }
         return "\(seconds / 60) 分钟"
+    }
+
+    /// 匹配详情的统一合并朗读文案（与首屏求助卡片措辞一致）。
+    private func matchedLabel(_ d: HelpRequestDetail) -> String {
+        "求助者 \(d.fromName)。"
+            + (d.topic.flatMap { $0.isEmpty ? nil : "事项 " + $0 + "。" } ?? "")
+            + (d.locality.flatMap { $0.isEmpty ? nil : "地点 " + $0 + "。" } ?? "")
+            + (d.language.flatMap { $0.isEmpty ? nil : "语言 " + languageName($0) + "。" } ?? "")
     }
 
     private func languageName(_ code: String) -> String {

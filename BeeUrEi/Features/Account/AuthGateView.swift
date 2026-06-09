@@ -57,6 +57,8 @@ struct AuthGateView: View {
                 }
             }
             .navigationTitle("BeeUrEi")
+            // 登录/注册失败主动朗读，否则盲人点完按钮听不到失败原因（见无障碍审计）。
+            .onChange(of: session.errorMessage) { _, msg in if let msg, !msg.isEmpty { A11y.announce(msg) } }
             .sheet(isPresented: $showForgot) { ForgotPasswordView(presetUsername: username) }
         }
     }
@@ -102,6 +104,7 @@ struct ForgotPasswordView: View {
                     Section("重置密码") {
                         TextField("邮箱收到的验证码", text: $code)
                             .keyboardType(.numberPad)
+                            .accessibilityLabel("验证码")
                         SecureField("新密码（至少 6 位）", text: $newPassword)
                     }
                 }
@@ -123,6 +126,8 @@ struct ForgotPasswordView: View {
             }
             .navigationTitle("找回密码")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
+            // 发码/失败/重置结果主动朗读（见无障碍审计）。
+            .onChange(of: message) { _, m in if let m, !m.isEmpty { A11y.announce(m) } }
         }
     }
 
@@ -146,8 +151,7 @@ struct ForgotPasswordView: View {
         working = true; defer { working = false }
         do {
             try await APIClient().resetPassword(username: username.trimmingCharacters(in: .whitespaces), code: code, newPassword: newPassword)
-            message = "密码已重置，请用新密码登录。"
-            A11y.announce("密码已重置，请用新密码登录")
+            message = "密码已重置，请用新密码登录。" // 经 .onChange(message) 朗读
             dismiss()
         } catch {
             message = "验证码无效或已过期，请重试。"

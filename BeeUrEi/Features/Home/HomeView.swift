@@ -166,6 +166,8 @@ struct HomeView: View {
                 .controlSize(.large)
         }
         .padding()
+        // 相机变为不可用是安全攸关的状态变化——主动朗读，避免盲人误以为避障仍在工作（见无障碍审计）。
+        .onAppear { A11y.announce("相机权限被关闭，避障已停止。请到设置开启相机权限，或呼叫帮手。") }
     }
 
     private func unsupportedView(_ message: String) -> some View {
@@ -182,6 +184,7 @@ struct HomeView: View {
             helpFallbackButton
         }
         .padding()
+        .onAppear { A11y.announce("设备不支持避障。\(message)") } // 安全攸关，主动朗读（见无障碍审计）
     }
 
     private func messageView(_ text: String) -> some View {
@@ -198,6 +201,7 @@ struct HomeView: View {
             if showHelp { helpFallbackButton }
         }
         .padding()
+        .onAppear { A11y.announce(text) } // 相机出错主动朗读（见无障碍审计）
     }
 }
 

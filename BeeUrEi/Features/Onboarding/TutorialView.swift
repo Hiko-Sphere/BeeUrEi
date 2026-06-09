@@ -94,7 +94,7 @@ struct TutorialView: View {
             Spacer()
             Text("第 \(model.index + 1) / \(model.steps.count) 步")
                 .font(.footnote).foregroundStyle(.secondary)
-                .accessibilityHidden(true)
+                .accessibilityLabel("第 \(model.index + 1) 步，共 \(model.steps.count) 步") // 让盲人也能获知进度（见无障碍审计）
             HStack {
                 Button("跳过") { model.stop(); onFinish() }
                     .buttonStyle(.bordered)

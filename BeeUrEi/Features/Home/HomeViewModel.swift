@@ -359,8 +359,14 @@ final class HomeViewModel {
         var parts: [String] = []
         if !trackingAdvisory.isEmpty { parts.append(trackingAdvisory) }
         if let degrade = degradeAdvisory() { parts.append(degrade) }
-        advisoryText = parts.joined(separator: " · ")
+        let text = parts.joined(separator: " · ")
+        advisoryText = text
+        // 降级提示是安全相关：内容变化且非空时主动朗读一次（去重防刷屏），
+        // 否则盲人焦点不在状态条上时不知避障已降级/暂停仍照常行走（见无障碍审计）。
+        if !text.isEmpty, text != lastAnnouncedAdvisory { A11y.announce(text) }
+        lastAnnouncedAdvisory = text
     }
+    private var lastAnnouncedAdvisory = ""
 
     private func degradeAdvisory() -> String? {
         let thermalPlan = thermalPolicy.plan(for: Self.mapThermal(ProcessInfo.processInfo.thermalState))

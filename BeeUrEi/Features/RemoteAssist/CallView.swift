@@ -61,6 +61,12 @@ struct CallView: View {
             Text("举报会发送给管理员审核，请仅在确有问题时使用。")
         }
         .task { await model.start() }
+        // 通话状态（连接中→已连接→对方离开等）变化主动朗读——焦点不在状态文字上时盲人也能听到（见无障碍审计）。
+        .onChange(of: model.statusText) { _, new in A11y.announce(new) }
+        // 隐私关键：切换画面外发后明确朗读结果，让盲人确认画面是否正在发送（见无障碍审计）。
+        .onChange(of: model.videoSending) { _, sending in
+            A11y.announce(sending ? "已开始把画面显示给对方" : "已停止显示画面")
+        }
         // 通话期间让出音频会话给 WebRTC(.playAndRecord)；离开后恢复避障/导航的 .playback 会话，
         // 否则用过一次远程协助后危险警告会被 WebRTC 留下的会话置于静音开关之下（见回归 #1）。
         .onAppear { AudioSessionManager.beginCall() }
@@ -80,7 +86,7 @@ struct CallView: View {
     private var blindControls: some View {
         VStack(spacing: 12) {
             Text(model.videoSending ? "正在把画面显示给对方" : "画面未发送（隐私保护）")
-                .foregroundStyle(model.videoSending ? .green : .secondary)
+                .foregroundStyle(model.videoSending ? Color.beeWarn : .secondary) // 外发态用高对比警示色（见无障碍审计）
 
             Image(systemName: model.videoSending ? "video.fill" : "video.slash.fill")
                 .font(.system(size: 56))

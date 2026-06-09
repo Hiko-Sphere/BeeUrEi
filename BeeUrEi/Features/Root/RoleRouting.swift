@@ -42,6 +42,7 @@ struct RoleEntryView: View {
         VStack(spacing: 20) {
             Image(systemName: "person.crop.circle.badge.checkmark")
                 .font(.system(size: 56)).foregroundStyle(.tint)
+                .accessibilityHidden(true) // 纯装饰，紧跟的"你好，xxx"已表意（见无障碍审计）
             Text("你好，\(account.displayName)").font(.title2).bold()
             Text("账号角色：\(roleDisplayName(account.role))").foregroundStyle(.secondary)
 

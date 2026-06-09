@@ -7,7 +7,7 @@ extension Color {
     static let beeHoney = Color(red: 1.0, green: 0.768, blue: 0.180) // #FFC42E
     static let beeInk = Color(red: 0.078, green: 0.086, blue: 0.122) // #14161F
     static let beeDanger = Color(red: 0.90, green: 0.22, blue: 0.21)
-    static let beeSuccess = Color(red: 0.18, green: 0.70, blue: 0.40)
+    static let beeSuccess = Color(red: 0.10, green: 0.50, blue: 0.27) // 较深绿：白字胶囊达 WCAG 对比、白底成功文字也更清晰（见无障碍审计）
     static let beeWarn = Color(red: 0.98, green: 0.62, blue: 0.11)
 }
 

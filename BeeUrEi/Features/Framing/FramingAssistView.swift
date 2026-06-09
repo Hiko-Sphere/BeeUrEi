@@ -274,10 +274,18 @@ struct FramingAssistView: View {
                 .controlSize(.large)
                 .padding(.bottom, 8)
                 VStack(spacing: 8) {
-                    Text(model.guidanceText).font(.title).bold()
-                    if !model.resultText.isEmpty {
-                        Text(model.resultText).font(.title2).foregroundStyle(Color.beeSuccess)
+                    // 仅把两段纯文本合并朗读；可交互的「复制内容」按钮放在合并元素之外，
+                    // 否则 .combine 会吞掉按钮的可聚焦性与激活动作、且不念出"复制内容"（见无障碍审计）。
+                    VStack(spacing: 8) {
+                        Text(model.guidanceText).font(.title).bold()
+                        if !model.resultText.isEmpty {
+                            Text(model.resultText).font(.title2).foregroundStyle(Color.beeSuccess)
+                        }
                     }
+                    .frame(maxWidth: .infinity)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(model.resultText.isEmpty ? model.guidanceText : model.resultText)
+
                     if let copyable = model.copyableResult {
                         Button("复制内容") { UIPasteboard.general.string = copyable }
                             .buttonStyle(.bordered)
@@ -287,8 +295,6 @@ struct FramingAssistView: View {
                 .padding()
                 .frame(maxWidth: .infinity)
                 .background(.ultraThinMaterial)
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(model.resultText.isEmpty ? model.guidanceText : model.resultText)
             }
         }
         .task { model.start() }

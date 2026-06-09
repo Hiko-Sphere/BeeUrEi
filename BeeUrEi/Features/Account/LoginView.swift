@@ -96,6 +96,8 @@ struct LoginView: View {
             }
         }
         .navigationTitle("账号")
+        // 登录/注册失败主动朗读（见无障碍审计）。
+        .onChange(of: session.errorMessage) { _, msg in if let msg, !msg.isEmpty { A11y.announce(msg) } }
         .task { await loadMe() }
         .sheet(isPresented: $showEmail, onDismiss: { Task { await loadMe() } }) {
             EmailManageView()
@@ -199,6 +201,7 @@ struct EmailManageView: View {
                 } else {
                     Section("输入验证码") {
                         TextField("邮箱收到的 6 位验证码", text: $code).keyboardType(.numberPad)
+                            .accessibilityLabel("验证码")
                     }
                     Section {
                         Button("确认验证") { Task { await verify() } }
@@ -210,6 +213,8 @@ struct EmailManageView: View {
             }
             .navigationTitle("邮箱验证")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
+            // 发码/失败/验证结果主动朗读（见无障碍审计）。
+            .onChange(of: message) { _, m in if let m, !m.isEmpty { A11y.announce(m) } }
         }
     }
 
@@ -228,8 +233,7 @@ struct EmailManageView: View {
         working = true; defer { working = false }
         do {
             try await APIClient().verifyEmail(token: token, code: code)
-            message = "邮箱已验证。"
-            A11y.announce("邮箱已验证")
+            message = "邮箱已验证。" // 经 .onChange(message) 朗读
             dismiss()
         } catch { message = "验证码无效或已过期，请重试。" }
     }

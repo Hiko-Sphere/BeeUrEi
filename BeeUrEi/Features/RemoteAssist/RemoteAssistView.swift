@@ -54,7 +54,6 @@ struct RemoteAssistView: View {
 
                     if let statusText {
                         Text(statusText).font(.subheadline).foregroundStyle(.secondary)
-                            .accessibilityLiveRegion()
                     }
 
                     Text("我的亲友 / 协助者").font(.headline).padding(.top, BeeSpacing.sm)
@@ -89,6 +88,8 @@ struct RemoteAssistView: View {
         }
         .task { await load() }
         .refreshable { await load() }
+        // 所有求助/呼叫/错误状态变化主动朗读——盲人点完按钮后才能得到语音反馈，不会以为没反应反复点（见无障碍审计）。
+        .onChange(of: statusText) { _, new in if let new, !new.isEmpty { A11y.announce(new) } }
         .fullScreenCover(item: $activeCall) { call in
             CallView(role: .blind, callId: call.id) {
                 if let token = KeychainStore.read() {
@@ -176,8 +177,7 @@ struct RemoteAssistView: View {
         let language = Locale.current.language.languageCode?.identifier // 设备语言（zh/en…）
         do {
             try await APIClient().postHelpRequest(token: token, callId: callId, language: language, locality: locality, topic: topic)
-            statusText = "已发出求助，正在等待志愿者接入…"
-            A11y.announce("已发出求助，正在等待志愿者接入")
+            statusText = "已发出求助，正在等待志愿者接入…" // 经 .onChange(statusText) 统一朗读
             activeCall = ActiveBlindCall(id: callId, isVolunteer: true)
         } catch {
             statusText = "求助未送达，请检查网络后重试，或改为呼叫亲友。"
@@ -209,12 +209,5 @@ struct RemoteAssistView: View {
             try await APIClient().startEmergencyCall(token: token, callId: callId, targetUserIds: [link.memberId])
             activeCall = ActiveBlindCall(id: callId, isVolunteer: false)
         } catch { statusText = "呼叫 \(link.memberName) 未送达，请重试或改用电话联系。" }
-    }
-}
-
-private extension View {
-    /// VoiceOver 状态变化朗读（封装可用性差异）。
-    func accessibilityLiveRegion() -> some View {
-        accessibilityAddTraits(.updatesFrequently)
     }
 }

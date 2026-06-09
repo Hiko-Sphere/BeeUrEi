@@ -79,4 +79,33 @@ describe('admin + reports', () => {
     expect(resolve.json().report.status).toBe('resolved')
     await app.close()
   })
+
+  it('admin can assign roles (promote to helper); non-admin forbidden; cannot change own role', async () => {
+    const { app } = withAdmin()
+    const adminToken = await login(app, 'root', 'rootpass1')
+    const adminAuth = { authorization: `Bearer ${adminToken}` }
+
+    const reg = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'dave', password: 'secret123' } })
+    const daveId = reg.json().user.id
+    const daveToken = reg.json().token
+
+    // 晋升 dave 为 helper
+    const promote = await app.inject({ method: 'POST', url: `/api/admin/users/${daveId}/role`, headers: adminAuth, payload: { role: 'helper' } })
+    expect(promote.statusCode).toBe(200)
+    expect(promote.json().user.role).toBe('helper')
+
+    // 服务端立即生效：dave 现在能访问 helper-only? (没有 helper-only 端点，验证 /me 反映新角色)
+    const me = await app.inject({ method: 'GET', url: '/api/me', headers: { authorization: `Bearer ${daveToken}` } })
+    expect(me.json().user.role).toBe('helper')
+
+    // 非管理员不可改角色
+    const forbidden = await app.inject({ method: 'POST', url: `/api/admin/users/${daveId}/role`, headers: { authorization: `Bearer ${daveToken}` }, payload: { role: 'admin' } })
+    expect(forbidden.statusCode).toBe(403)
+
+    // 管理员不能改自己的角色（防自锁）
+    const adminId = (await app.inject({ method: 'GET', url: '/api/me', headers: adminAuth })).json().user.id
+    const selfChange = await app.inject({ method: 'POST', url: `/api/admin/users/${adminId}/role`, headers: adminAuth, payload: { role: 'blind' } })
+    expect(selfChange.statusCode).toBe(400)
+    await app.close()
+  })
 })

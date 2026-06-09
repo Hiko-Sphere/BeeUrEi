@@ -4,6 +4,7 @@ import { type Store, publicUser } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 
 const statusSchema = z.object({ status: z.enum(['active', 'disabled']) })
+const roleSchema = z.object({ role: z.enum(['blind', 'helper', 'family', 'admin', 'developer']) })
 
 export function registerAdminRoutes(app: FastifyInstance, store: Store): void {
   const adminOnly = { preHandler: requireAuth(['admin']) }
@@ -11,6 +12,18 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store): void {
   // 列出所有用户。
   app.get('/api/admin/users', adminOnly, async () => {
     return { users: store.allUsers().map(publicUser) }
+  })
+
+  // 分配/变更角色（含晋升管理员/开发者——自助注册不可，仅 admin 可在此分配）。
+  // requireAuth 每次都读库中最新 role，故变更服务端**立即生效**；客户端下次 /me 或重新登录后界面切换。
+  app.post('/api/admin/users/:id/role', adminOnly, async (req, reply) => {
+    const parsed = roleSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const id = (req.params as { id: string }).id
+    if (id === req.user!.sub) return reply.code(400).send({ error: 'cannot_change_own_role' }) // 防管理员误把自己降级锁死
+    const updated = store.updateUser(id, { role: parsed.data.role })
+    if (!updated) return reply.code(404).send({ error: 'not_found' })
+    return { user: publicUser(updated) }
   })
 
   // 封禁 / 解封（设置 status）。

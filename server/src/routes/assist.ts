@@ -7,10 +7,23 @@ import { PresenceRegistry } from '../assist/presence'
 import { rankHelpers, type Candidate } from '../assist/matcher'
 import { buildIceServers } from '../assist/turnCredentials'
 import { PendingCallRegistry } from '../assist/pendingCalls'
+import { OpenHelpRegistry } from '../assist/openHelp'
 
 const heartbeatSchema = z.object({ available: z.boolean(), at: z.number().optional() })
 const matchSchema = z.object({ emergency: z.boolean().optional(), preferredLanguage: z.string().optional() })
 const callSchema = z.object({ callId: z.string().min(1).max(128), targetUserIds: z.array(z.string().min(1)).min(1).max(20) })
+// 公开求助（面向陌生志愿者）：
+const helpRequestSchema = z.object({
+  callId: z.string().min(1).max(128),
+  language: z.string().max(8).optional(),
+  locality: z.string().max(80).optional(),
+  topic: z.string().max(200).optional(),
+})
+const helpClaimSchema = z.object({ callId: z.string().min(1).max(128) })
+const helpMatchSchema = z.object({
+  preferredLanguage: z.string().max(8).optional(),
+  requireLanguageMatch: z.boolean().optional(),
+})
 
 export function registerAssistRoutes(
   app: FastifyInstance,
@@ -18,6 +31,7 @@ export function registerAssistRoutes(
   hub: SignalingHub,
   presence: PresenceRegistry,
   pendingCalls: PendingCallRegistry,
+  openHelp: OpenHelpRegistry,
 ): void {
   // 协助者/亲友"在线待命"心跳（客户端定期调用；available=false 即下线）。
   app.post('/api/assist/heartbeat', { preHandler: requireAuth() }, async (req, reply) => {
@@ -100,4 +114,65 @@ export function registerAssistRoutes(
     pendingCalls.cancel(id, req.user!.sub)
     return { ok: true }
   })
+
+  // MARK: 公开求助队列（面向陌生志愿者的众包协助，区别于上面定向呼叫亲友）
+
+  // 视障侧广播一条公开求助：登记 callId + 粗粒度信息，供在线志愿者浏览/匹配并加入 callId 房间。
+  // language 缺省取账号语言。重复广播（同一发起人同一 callId）幂等更新。
+  app.post('/api/assist/help/request', { preHandler: requireAuth() }, async (req, reply) => {
+    const parsed = helpRequestSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const me = store.findById(req.user!.sub)
+    const ok = openHelp.register({
+      callId: parsed.data.callId,
+      fromUserId: req.user!.sub,
+      fromName: me?.displayName ?? '求助者',
+      language: parsed.data.language ?? me?.language,
+      locality: parsed.data.locality,
+      topic: parsed.data.topic,
+      createdAt: Date.now(),
+    })
+    if (!ok) return reply.code(409).send({ error: 'call_id_conflict' }) // callId 被他人占用，防覆盖/劫持
+    return { ok: true }
+  })
+
+  // 志愿者浏览公开求助队列（粗粒度摘要，排除自己发起的；不含精确坐标/联系方式）。
+  app.get('/api/assist/help/queue', { preHandler: requireAuth() }, async (req) => {
+    const list = openHelp.summaries(Date.now(), req.user!.sub)
+    return { requests: list, count: list.length }
+  })
+
+  // 志愿者认领指定求助：原子操作，一条求助只能被一位志愿者拿到。成功后双方可加入 callId 房间。
+  app.post('/api/assist/help/claim', { preHandler: requireAuth() }, async (req, reply) => {
+    const parsed = helpClaimSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const claimed = openHelp.claim(parsed.data.callId, req.user!.sub, Date.now())
+    if (!claimed) return reply.code(409).send({ error: 'already_claimed_or_gone' })
+    return { request: detailView(claimed) }
+  })
+
+  // 志愿者随机/偏好匹配一条公开求助并直接认领。无可匹配则 request 为 null（非错误）。
+  app.post('/api/assist/help/match', { preHandler: requireAuth() }, async (req, reply) => {
+    const parsed = helpMatchSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const matched = openHelp.matchOne(
+      { preferredLanguage: parsed.data.preferredLanguage, requireLanguageMatch: parsed.data.requireLanguageMatch },
+      req.user!.sub,
+      Date.now(),
+    )
+    return { request: matched ? detailView(matched) : null }
+  })
+
+  // 取消公开求助（发起人撤销）/ 放弃认领（志愿者释放回队列）。归属校验防越权。
+  app.post('/api/assist/help/cancel', { preHandler: requireAuth() }, async (req, reply) => {
+    const parsed = helpClaimSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    openHelp.cancel(parsed.data.callId, req.user!.sub, Date.now())
+    return { ok: true }
+  })
+}
+
+/// 认领成功后返回给志愿者的详情（含求助者显示名/语言/地点/内容，供其决定是否帮助 + 入会）。
+function detailView(r: { callId: string; fromName: string; language?: string; locality?: string; topic?: string }) {
+  return { callId: r.callId, fromName: r.fromName, language: r.language ?? null, locality: r.locality ?? null, topic: r.topic ?? null }
 }

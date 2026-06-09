@@ -5,13 +5,14 @@ import { verifyAccessToken } from '../auth/tokens'
 import { SignalingHub, type Member } from '../signaling/hub'
 import { type Store } from '../db/store'
 import { type PendingCallRegistry } from '../assist/pendingCalls'
+import { type OpenHelpRegistry } from '../assist/openHelp'
 
 const RELAY_TYPES = new Set(['offer', 'answer', 'ice', 'video-gate', 'end'])
 
 /// WebRTC 信令：/ws?token=<JWT>。客户端先发 {type:'join', callId, role}，
 /// 之后 offer/answer/ice/video-gate/end 会被转发给同房间的另一端。
 /// video-gate {on} 用于视障侧通知协助者"画面已开/关"（见 BACKEND_PLAN §5）。
-export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store: Store, pendingCalls: PendingCallRegistry): void {
+export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store: Store, pendingCalls: PendingCallRegistry, openHelp: OpenHelpRegistry): void {
   app.register(fastifyWebsocket)
   app.register(async (f) => {
     // clientId → socket（转发用）。adapter 层，故用 any 规避 ws 类型摩擦。
@@ -50,7 +51,8 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
           }
           // 参与权校验：只有该 callId 登记表里的发起者/目标本人才能加入，否则任意登录用户知道 callId
           // 即可抢先占位、窃听信令、劫持 WebRTC 会话（见审查 #8）。
-          const participants = pendingCalls.participants(callId)
+          // 两条来源：① 定向亲友呼叫(pendingCalls) ② 公开求助队列(openHelp，认领后含志愿者)。
+          const participants = pendingCalls.participants(callId) ?? openHelp.participants(callId)
           if (!participants || !participants.includes(auth.sub)) {
             socket.close(4003, 'not_a_participant')
             return

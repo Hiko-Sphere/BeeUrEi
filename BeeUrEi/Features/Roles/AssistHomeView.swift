@@ -300,8 +300,13 @@ struct AssistHomeView: View {
             List {
                 Section("账号") {
                     if let u = session.user {
-                        LabeledContent("用户", value: u.displayName)
-                        LabeledContent("角色", value: roleDisplayName(u.role))
+                        HStack(spacing: BeeSpacing.md) {
+                            AvatarView(dataURL: u.avatar, name: u.displayName, size: 52)
+                            VStack(alignment: .leading) {
+                                Text(u.displayName).font(.headline)
+                                Text("@\(u.username) · \(roleDisplayName(u.role))").font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
                     }
                     NavigationLink("账号与安全") { LoginView() }
                     Button("切换角色") { onSwitchRole() }

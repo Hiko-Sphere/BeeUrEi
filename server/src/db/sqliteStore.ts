@@ -40,6 +40,8 @@ export class SqliteStore implements Store {
     try { this.db.exec('ALTER TABLE users ADD COLUMN language TEXT') } catch { /* 列已存在 */ }
     try { this.db.exec('ALTER TABLE users ADD COLUMN tokenVersion INTEGER') } catch { /* 列已存在 */ } // 改密/封禁令旧 token 失效（见审查 #2）
     try { this.db.exec('ALTER TABLE links ADD COLUMN status TEXT') } catch { /* 列已存在 */ } // 绑定双向同意 pending/accepted（见审查 #6）
+    try { this.db.exec('ALTER TABLE users ADD COLUMN email TEXT') } catch { /* 列已存在 */ } // 邮箱验证/找回密码（D1）
+    try { this.db.exec('ALTER TABLE users ADD COLUMN emailVerified INTEGER') } catch { /* 列已存在 */ }
   }
 
   // MARK: refresh tokens
@@ -61,9 +63,9 @@ export class SqliteStore implements Store {
   // MARK: users
   createUser(u: User): void {
     this.db.prepare(
-      `INSERT OR REPLACE INTO users (id, username, passwordHash, displayName, role, status, createdAt, language, tokenVersion)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(u.id, u.username, u.passwordHash, u.displayName, u.role, u.status, u.createdAt, u.language ?? null, u.tokenVersion ?? 0)
+      `INSERT OR REPLACE INTO users (id, username, passwordHash, displayName, role, status, createdAt, language, tokenVersion, email, emailVerified)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(u.id, u.username, u.passwordHash, u.displayName, u.role, u.status, u.createdAt, u.language ?? null, u.tokenVersion ?? 0, u.email ?? null, u.emailVerified ? 1 : 0)
   }
   findByUsername(username: string): User | undefined {
     // 大小写不敏感(COLLATE NOCASE)：防同名混淆/冒充；登录兼容任意大小写（见审查 #4）。
@@ -161,7 +163,7 @@ export class SqliteStore implements Store {
 
   // MARK: row mappers
   private toUser(r: any): User {
-    return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt), language: r.language ?? undefined, tokenVersion: r.tokenVersion != null ? Number(r.tokenVersion) : 0 }
+    return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt), language: r.language ?? undefined, tokenVersion: r.tokenVersion != null ? Number(r.tokenVersion) : 0, email: r.email ?? undefined, emailVerified: r.emailVerified != null ? Number(r.emailVerified) === 1 : undefined }
   }
   private toLink(r: any): FamilyLink {
     return { id: r.id, ownerId: r.ownerId, memberId: r.memberId, relation: r.relation, isEmergency: Number(r.isEmergency) === 1, phone: r.phone ?? undefined, createdAt: Number(r.createdAt), status: (r.status as LinkStatus) ?? undefined }

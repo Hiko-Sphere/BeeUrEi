@@ -15,6 +15,8 @@ export interface User {
   createdAt: number
   language?: string // 协助者/亲友所说语言(如 'zh'/'en')，用于匹配排序加分（见审查 #10）
   tokenVersion?: number // 递增即令该用户已签发的 access token 全部失效（改密/封禁，见审查 #1/#2）
+  email?: string // 可选邮箱：用于邮箱验证 + 找回密码（D1）。仅本人 /api/me 可见，不进 publicUser。
+  emailVerified?: boolean // 邮箱是否已通过验证码确认
 }
 
 /// 亲友绑定：视障用户(owner) ↔ 亲友/协助者账号(member)，可标记为紧急联系人。
@@ -257,7 +259,17 @@ export class JsonFileStore extends MemoryStore {
   }
 }
 
-/// 对外暴露的安全用户字段（不含 passwordHash）。
+/// 对外暴露的安全用户字段（不含 passwordHash / email；用于管理员列表、亲友等场景）。
 export function publicUser(u: User) {
   return { id: u.id, username: u.username, displayName: u.displayName, role: u.role, status: u.status }
+}
+
+/// 本人视图（/api/me）：在 publicUser 基础上加自己的邮箱/语言/验证状态（仅本人可见）。
+export function selfView(u: User) {
+  return {
+    ...publicUser(u),
+    language: u.language ?? null,
+    email: u.email ?? null,
+    emailVerified: u.emailVerified ?? false,
+  }
 }

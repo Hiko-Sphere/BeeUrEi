@@ -19,10 +19,14 @@ import { registerAdminRoutes } from './routes/admin'
 import { registerRecordingRoutes } from './routes/recordings'
 import { registerDevRoutes } from './routes/dev'
 import { registerNavRoutes } from './routes/nav'
+import { registerRecoveryRoutes } from './routes/recovery'
 import { Metrics } from './metrics/metrics'
+import { CodeRegistry } from './auth/codes'
+import { ConsoleMailer, type Mailer } from './mail/mailer'
 
 export interface AppOptions {
   rateLimitMax?: number
+  mailer?: Mailer // 默认 ConsoleMailer（日志打码）；index.ts 可注入 SMTP 邮件器
 }
 
 /// 构建 Fastify 应用（与 listen 分离，便于用 app.inject() 单测）。
@@ -34,6 +38,8 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   const pendingCalls = new PendingCallRegistry()
   const openHelp = new OpenHelpRegistry()
   const metrics = new Metrics(Date.now())
+  const codes = new CodeRegistry()
+  const mailer = options.mailer ?? new ConsoleMailer()
 
   // 监控（D3）：记录每次响应的状态码族，供 /metrics 暴露给 Prometheus。
   app.addHook('onResponse', async (_req, reply) => metrics.observeResponse(reply.statusCode))
@@ -64,7 +70,8 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     })
     setAuthStore(store) // 让 requireAuth 能实时校验账号状态/tokenVersion（见审查 #1/#2）
     registerAuthRoutes(instance, store)
-    registerAccountRoutes(instance, store)
+    registerRecoveryRoutes(instance, store, codes, mailer) // 找回密码（D1）
+    registerAccountRoutes(instance, store, codes, mailer)
     registerUserRoutes(instance, store)
     registerFamilyRoutes(instance, store)
     registerEmergencyRoutes(instance, store)

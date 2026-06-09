@@ -3,13 +3,17 @@ import { z } from 'zod'
 import { type Store } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { hashPassword, verifyPassword } from '../auth/passwords'
+import { type CodeRegistry } from '../auth/codes'
+import { type Mailer } from '../mail/mailer'
 
 const passwordSchema = z.object({
   oldPassword: z.string().min(1),
   newPassword: z.string().min(6).max(128),
 })
+const emailSchema = z.object({ email: z.string().email().max(254) })
+const verifyEmailSchema = z.object({ code: z.string().min(4).max(12) })
 
-export function registerAccountRoutes(app: FastifyInstance, store: Store): void {
+export function registerAccountRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer): void {
   // 修改密码：验证旧密码 → 设新密码 → 递增 tokenVersion(令已签发的 access token 立即失效) → 撤销所有 refresh token。
   // 递增 tokenVersion 是关键：否则被盗号者手里的 access token 在改密后仍可用最长 1h，改密自救形同虚设（见审查 #2）。
   app.post('/api/account/password', { preHandler: requireAuth() }, async (req, reply) => {
@@ -25,6 +29,31 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store): void 
       tokenVersion: (user.tokenVersion ?? 0) + 1,
     })
     store.deleteRefreshTokensForUser(user.id)
+    return { ok: true }
+  })
+
+  // 设置/更新邮箱（D1）：保存邮箱并标记未验证，随即发一封验证码邮件。
+  app.post('/api/account/email', { preHandler: requireAuth() }, async (req, reply) => {
+    const parsed = emailSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const user = store.findById(req.user!.sub)
+    if (!user) return reply.code(404).send({ error: 'not_found' })
+    store.updateUser(user.id, { email: parsed.data.email, emailVerified: false })
+    const code = codes.issue(`verify:${user.id}`, Date.now())
+    await mailer.send(parsed.data.email, 'BeeUrEi 邮箱验证码', `你的邮箱验证码是：${code}（10 分钟内有效）。`)
+    return { ok: true }
+  })
+
+  // 校验邮箱验证码（D1）：成功则标记 emailVerified=true。
+  app.post('/api/account/email/verify', { preHandler: requireAuth() }, async (req, reply) => {
+    const parsed = verifyEmailSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const user = store.findById(req.user!.sub)
+    if (!user) return reply.code(404).send({ error: 'not_found' })
+    if (!codes.verify(`verify:${user.id}`, parsed.data.code, Date.now())) {
+      return reply.code(400).send({ error: 'invalid_code' })
+    }
+    store.updateUser(user.id, { emailVerified: true })
     return { ok: true }
   })
 

@@ -92,6 +92,7 @@ struct RemoteAssistView: View {
                     Button { showAdd = true } label: { Image(systemName: "plus") }
                         .accessibilityLabel("添加亲友")
                 }
+                ToolbarItem(placement: .topBarLeading) { NotificationsBell() }
             }
             .alert("添加亲友", isPresented: $showAdd) {
                 TextField("对方用户名", text: $newUsername)

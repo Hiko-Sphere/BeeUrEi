@@ -43,6 +43,8 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"   # 1 = 仅 iPhone（iPad 是否支持见 PLAN.md §11-12，暂不支持）
         GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # 推送能力（VoIP 来电 + 提醒推送）。无此入口则真机拿不到任何 APNs token。
+        CODE_SIGN_ENTITLEMENTS: BeeUrEi/BeeUrEi.entitlements
     info:
       path: Config/Info.plist
       properties:

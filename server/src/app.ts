@@ -93,7 +93,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerAccountRoutes(instance, store, codes, mailer)
     registerPushRoutes(instance, store) // VoIP token 注册（A1）
     registerUserRoutes(instance, store)
-    registerFamilyRoutes(instance, store)
+    registerFamilyRoutes(instance, store, pushSender)
     registerBlockRoutes(instance, store)
     registerEmergencyRoutes(instance, store)
     registerReportRoutes(instance, store)

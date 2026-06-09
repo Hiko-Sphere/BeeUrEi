@@ -5,12 +5,16 @@ import type { PushSender } from '../src/push/apns'
 
 function capturingApp() {
   const sent: { token: string; callId: string; callerName: string; callerId: string }[] = []
+  const alerts: { token: string; title: string; body: string }[] = []
   const pushSender: PushSender = {
     async sendCallInvite(token, callId, callerName, callerId) {
       sent.push({ token, callId, callerName, callerId })
     },
+    async sendAlert(token, title, body) {
+      alerts.push({ token, title, body })
+    },
   }
-  return { app: buildApp(new MemoryStore(), { pushSender }), sent }
+  return { app: buildApp(new MemoryStore(), { pushSender }), sent, alerts }
 }
 const auth = (t: string) => ({ authorization: `Bearer ${t}` })
 const tick = () => new Promise((r) => setTimeout(r, 30))
@@ -23,6 +27,34 @@ async function reg(a: ReturnType<typeof buildApp>, username: string, role = 'bli
     user: { id: string }
   }
 }
+
+describe('提醒类推送（软件外通知）', () => {
+  it('好友请求向被请求方推送提醒；接受后向发起方推送', async () => {
+    const { app, alerts } = capturingApp()
+    const blind = await reg(app, 'naBlind', 'blind')
+    const helper = await reg(app, 'naHelper', 'helper')
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(helper.token), payload: { token: HEX_TOKEN } })
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(blind.token), payload: { token: HEX_TOKEN2 } })
+    // blind 发起 → 推给 helper
+    const lk = await app.inject({ method: 'POST', url: '/api/family/links', headers: auth(blind.token), payload: { username: 'naHelper' } })
+    await tick()
+    expect(alerts.some((a) => a.token === HEX_TOKEN && a.title.includes('好友请求'))).toBe(true)
+    // helper 接受 → 推给 blind(发起者)
+    await app.inject({ method: 'POST', url: `/api/family/links/${lk.json().link.id}/accept`, headers: auth(helper.token) })
+    await tick()
+    expect(alerts.some((a) => a.token === HEX_TOKEN2)).toBe(true)
+    await app.close()
+  })
+
+  it('注册/注销普通 APNs token（非法格式被拒）', async () => {
+    const { app } = capturingApp()
+    const u = await reg(app, 'naTok', 'blind')
+    expect((await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(u.token), payload: { token: 'xyz' } })).statusCode).toBe(400)
+    expect((await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(u.token), payload: { token: HEX_TOKEN } })).statusCode).toBe(200)
+    expect((await app.inject({ method: 'DELETE', url: '/api/push/apns-register', headers: auth(u.token) })).statusCode).toBe(200)
+    await app.close()
+  })
+})
 
 describe('VoIP 推送（A1 后台来电）', () => {
   it('注册 VoIP token 后，定向呼叫向目标设备推送来电', async () => {

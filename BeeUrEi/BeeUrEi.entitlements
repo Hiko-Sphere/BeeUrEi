@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- 推送通知能力：PushKit VoIP 后台来电(A1) 与普通提醒推送(软件外通知)都需要它。
+	     开发构建用 development；上架 App Store 时 Xcode 会按发布证书改为 production（服务器同步把 APNS_HOST 改为 api.push.apple.com）。 -->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>

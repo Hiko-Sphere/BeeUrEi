@@ -8,11 +8,14 @@ import http2 from 'node:http2'
 export interface PushSender {
   /// 向某设备的 VoIP token 推送一条来电邀请。失败只记日志，绝不抛出（不阻断呼叫主流程）。
   sendCallInvite(voipToken: string, callId: string, callerName: string, callerId: string): Promise<void>
+  /// 普通"提醒类"通知（软件外通知：好友请求/被接受等）。失败只记日志。
+  sendAlert(apnsToken: string, title: string, body: string, extra?: Record<string, string>): Promise<void>
 }
 
-/// 未配置 APNs 时的空实现（前台轮询会合仍可用，仅后台/锁屏不响铃）。
+/// 未配置 APNs 时的空实现（前台轮询/应用内通知仍可用，仅后台横幅不弹）。
 export class NoopPushSender implements PushSender {
   async sendCallInvite(): Promise<void> {}
+  async sendAlert(): Promise<void> {}
 }
 
 function base64url(input: Buffer | string): string {
@@ -28,8 +31,9 @@ export class ApnsPushSender implements PushSender {
     private readonly key: KeyObject,
     private readonly keyId: string,
     private readonly teamId: string,
-    private readonly topic: string,
+    private readonly topic: string,      // VoIP topic（…​.voip）
     private readonly host: string,
+    private readonly alertTopic: string, // 普通推送 topic（App bundle id，去掉 .voip 后缀）
   ) {}
 
   /// APNs provider JWT（ES256）。最长有效 1h，缓存 ~40 分钟复用（APNs 限制频繁换发新 token）。
@@ -57,6 +61,20 @@ export class ApnsPushSender implements PushSender {
       }, body)
     } catch (err) {
       console.warn('[apns] VoIP push failed:', (err as Error).message)
+    }
+  }
+
+  async sendAlert(apnsToken: string, title: string, body: string, extra?: Record<string, string>): Promise<void> {
+    const payload = JSON.stringify({ ...(extra ?? {}), aps: { alert: { title, body }, sound: 'default' } })
+    try {
+      await this.post(`/3/device/${apnsToken}`, {
+        authorization: `bearer ${this.providerToken(Date.now())}`,
+        'apns-topic': this.alertTopic, // 普通推送用 App bundle id（非 .voip）
+        'apns-push-type': 'alert',
+        'apns-priority': '10',
+      }, payload)
+    } catch (err) {
+      console.warn('[apns] alert push failed:', (err as Error).message)
     }
   }
 
@@ -102,8 +120,9 @@ export function makePushSender(): PushSender {
   try {
     const key = createPrivateKey(readFileSync(keyPath, 'utf8'))
     const host = process.env.APNS_HOST ?? 'api.sandbox.push.apple.com'
-    console.log(`[apns] VoIP 推送已启用（host=${host}, topic=${topic}）`)
-    return new ApnsPushSender(key, keyId, teamId, topic, host)
+    const alertTopic = topic.endsWith('.voip') ? topic.slice(0, -'.voip'.length) : topic
+    console.log(`[apns] 推送已启用（host=${host}, voip=${topic}, alert=${alertTopic}）`)
+    return new ApnsPushSender(key, keyId, teamId, topic, host, alertTopic)
   } catch (err) {
     console.warn('[apns] 配置不完整或 .p8 读取失败，回退无推送：', (err as Error).message)
     return new NoopPushSender()

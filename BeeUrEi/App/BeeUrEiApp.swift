@@ -3,6 +3,8 @@ import SwiftUI
 /// App 入口。先过免责知情同意门（首次/超期需完整同意），再进首屏。
 @main
 struct BeeUrEiApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate // 普通 APNs 提醒推送（软件外通知）
+
     init() {
         // 尽早配置音频会话：危险警告音须无视静音开关发声、压低背景音、来电后能恢复（见反馈输出深审 #1）。
         AudioSessionManager.configure()
@@ -65,8 +67,10 @@ private struct RootView: View {
         .tint(.beeInk) // 全局品牌强调色，统一按钮/开关/链接观感（墨蓝高对比，无障碍友好）
         // 退出登录后回到登录页，并清掉已选角色，避免下次登录沿用旧角色；登录后绑定 VoIP token（A1）。
         .onChange(of: session.isLoggedIn) { _, loggedIn in
-            if loggedIn { RemoteAssistService.shared.refreshRegistration() }
-            else { enteredRole = nil }
+            if loggedIn {
+                RemoteAssistService.shared.refreshRegistration()
+                Task { await PushAlerts.shared.uploadIfPossible(); await NotificationsCenter.shared.refresh() }
+            } else { enteredRole = nil }
         }
         // 来电统一在此顶层呈现（CallKit 接听 + 协助端轮询都经 IncomingCallCenter，单一通路，见复审 #2）。
         .fullScreenCover(item: Binding(get: { incoming.pending }, set: { incoming.pending = $0 })) { call in

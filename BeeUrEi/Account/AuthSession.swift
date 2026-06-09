@@ -71,6 +71,7 @@ final class AuthSession {
             let rt = KeychainStore.readRefresh()
             Task {
                 await api.unregisterVoipToken(token: token)
+                await api.unregisterApnsToken(token: token) // 解绑提醒推送，避免投到已登出设备
                 if let rt { await api.revokeRefresh(token: token, refreshToken: rt) }
             }
         }

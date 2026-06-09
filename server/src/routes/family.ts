@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import { type Store, type FamilyLink, isBlockedBetween } from '../db/store'
 import { requireAuth } from '../auth/rbac'
+import { type PushSender, NoopPushSender } from '../push/apns'
 
 const addLinkSchema = z.object({
   username: z.string().min(3).max(32).optional(),
@@ -12,7 +13,7 @@ const addLinkSchema = z.object({
   phone: z.string().max(32).optional(),
 }).refine((d) => d.username || d.userId, { message: 'username_or_userId_required' })
 
-export function registerFamilyRoutes(app: FastifyInstance, store: Store): void {
+export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: PushSender = new NoopPushSender()): void {
   // 发起加亲友/协助者请求（**双向**：盲人或协助者/亲友任一方都可发起，由另一方确认才建立关系）。
   // owner 恒为视障侧（保证匹配/紧急用 linksByOwner(blind) 成立）；requestedBy 记录发起方。
   app.post('/api/family/links', { preHandler: requireAuth() }, async (req, reply) => {
@@ -46,6 +47,11 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store): void {
       requestedBy: meId,
     }
     store.createLink(link)
+    // 软件外通知：提醒"被请求方"(target)有新的好友请求待确认。fire-and-forget。
+    if (target.apnsToken) {
+      void push.sendAlert(target.apnsToken, '新的好友请求', `${me.displayName} 想加你为${link.relation}`, { kind: 'friend_request' })
+        .catch((e) => console.warn('[push] friend_request alert failed:', (e as Error).message))
+    }
     return reply.code(201).send({ link: viewLink(store, link, meId) })
   })
 
@@ -60,6 +66,13 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store): void {
     const canAccept = isParty && (link.requestedBy ? link.requestedBy !== meId : link.memberId === meId)
     if (!canAccept) return reply.code(404).send({ error: 'not_found' })
     store.createLink({ ...link, status: 'accepted' })
+    // 软件外通知：告诉"发起者"对方已接受。fire-and-forget。
+    const requester = link.requestedBy ? store.findById(link.requestedBy) : undefined
+    const me = store.findById(meId)
+    if (requester?.apnsToken && me) {
+      void push.sendAlert(requester.apnsToken, '好友请求已通过', `${me.displayName} 接受了你的请求`, { kind: 'friend_accepted' })
+        .catch((e) => console.warn('[push] friend_accepted alert failed:', (e as Error).message))
+    }
     return { ok: true }
   })
 

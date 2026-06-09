@@ -426,6 +426,14 @@ struct APIClient {
         _ = try? await authedSend("DELETE", "/api/push/register", token: token)
     }
 
+    /// 上报普通 APNs 提醒推送 token（软件外通知；尽力而为）。
+    func registerApnsToken(token: String, apnsToken: String) async {
+        _ = try? await authedSend("POST", "/api/push/apns-register", token: token, body: ["token": apnsToken])
+    }
+    func unregisterApnsToken(token: String) async {
+        _ = try? await authedSend("DELETE", "/api/push/apns-register", token: token)
+    }
+
     // MARK: 邮箱验证 / 找回密码（D1）
 
     /// 设置/更新邮箱（随后服务端发一封验证码邮件）。

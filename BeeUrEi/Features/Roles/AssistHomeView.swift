@@ -111,6 +111,7 @@ struct AssistHomeView: View {
                 .padding()
             }
             .navigationTitle("帮助大家")
+            .toolbar { ToolbarItem(placement: .primaryAction) { NotificationsBell() } }
             .refreshable { await refreshQueue() }
         }
         .sheet(isPresented: $prefsShown) { prefsSheet }

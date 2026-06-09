@@ -90,6 +90,12 @@ private struct RootView: View {
                 if let token = KeychainStore.read() { await APIClient().markAnswered(token: token, callId: call.callId) }
             }
         }
+        // 前台来电铃（应用内手动接听，参照 WhatsApp）。CallKit(后台)接听走上面的 pending → 直接进通话。
+        .fullScreenCover(item: Binding(get: { incoming.ringing }, set: { incoming.ringing = $0 })) { ring in
+            IncomingCallView(ring: ring, role: session.user?.role == "blind" ? .blind : .helper) {
+                incoming.ringing = nil
+            }
+        }
     }
 
     private var needsFullConsent: Bool {

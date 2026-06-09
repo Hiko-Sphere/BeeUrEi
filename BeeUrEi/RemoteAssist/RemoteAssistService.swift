@@ -6,17 +6,39 @@ import UIKit
 
 /// CallKit 接听后，把"要进入哪通通话"桥接给 SwiftUI 呈现层。
 /// RemoteAssistService 不是视图，无法直接 present；它写这里，RootView 观察并弹出 CallView。
+/// 应用内来电铃（前台手动接听用）。
+struct IncomingRing: Identifiable {
+    var id: String { callId }
+    let callId: String
+    let callerName: String
+    let callerAvatar: String?
+}
+
 @MainActor
 @Observable
 final class IncomingCallCenter {
     static let shared = IncomingCallCenter()
-    /// 被 CallKit 接听、待 RootView 呈现的通话（复用 AnsweringCall）。
+    /// 直接进入通话（CallView）：CallKit 在系统界面接听后 / 应用内点「接听」后。
     var pending: AnsweringCall?
+    /// 应用内来电铃（待手动接听）：仅前台（用软件时不弹 CallKit，参照 WhatsApp）。
+    var ringing: IncomingRing?
+    /// 是否有任何来电在进行（铃响或已接入）——供主页据此暂停避障/关闭冲突模态。
+    var hasIncoming: Bool { pending != nil || ringing != nil }
     private init() {}
+
+    /// 直接进入通话（CallKit 接听走这里——已在系统界面点过接听，故自动接通）。
     func present(callId: String, callerName: String) {
+        guard !hasIncoming else { return }
         pending = AnsweringCall(callId: callId, title: callerName, isIncoming: true)
     }
-    func clear() { pending = nil }
+
+    /// 应用内来电铃（前台：展示来电界面，由用户手动接听/拒绝）。
+    func ring(callId: String, callerName: String, callerAvatar: String? = nil) {
+        guard !hasIncoming else { return }
+        ringing = IncomingRing(callId: callId, callerName: callerName, callerAvatar: callerAvatar)
+    }
+
+    func clear() { pending = nil; ringing = nil }
 }
 
 /// 远程协助：CallKit 系统来电 + PushKit VoIP 推送（A1 后台/息屏来电）。
@@ -83,18 +105,15 @@ final class RemoteAssistService: NSObject {
                 return
             }
             // 前台（App 正在使用）：iOS 规定收到 VoIP push 必须先 reportNewIncomingCall（上面已满足），
-            // 随后立刻收起系统来电界面、改在应用内显示来电（按需求"用软件时不弹 CallKit"）。仅 .active 走此分支，
-            // 锁屏/后台仍用系统 CallKit。answered 标记避免之后 endCall() 触发的 CXEndCallAction 误判为"拒绝"。
+            // 随后立刻收起系统来电界面、改在**应用内显示来电铃由用户手动接听**（参照 WhatsApp；CallKit 接听才自动接通）。
+            // 仅 .active 走此分支；锁屏/后台仍用系统 CallKit。
             if UIApplication.shared.applicationState == .active {
-                let info = self.active[uuid]
-                self.callMachine.answer()
-                self.answered.insert(uuid)
+                let name = self.active[uuid]?.name ?? callerName
+                let cid = self.active[uuid]?.callId ?? callId
                 self.active[uuid] = nil
+                self.callMachine.reset() // 这通 CallKit 结束，交给应用内来电铃
                 self.provider.reportCall(with: uuid, endedAt: Date(), reason: .answeredElsewhere)
-                Task { @MainActor in
-                    guard IncomingCallCenter.shared.pending == nil else { return } // 去重：已在通话/已呈现则不再弹
-                    IncomingCallCenter.shared.present(callId: info?.callId ?? callId, callerName: info?.name ?? callerName)
-                }
+                Task { @MainActor in IncomingCallCenter.shared.ring(callId: cid, callerName: name) }
             }
         }
     }

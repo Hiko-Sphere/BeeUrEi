@@ -29,6 +29,7 @@ final class FramingAssistViewModel {
     @ObservationIgnored private var centeredFrames = 0
     @ObservationIgnored private var latestBuffer: CVPixelBuffer?
     @ObservationIgnored private var latestDetections: [DetectedObject] = []
+    @ObservationIgnored private var paused = false // 关闭/被来电盖上后：停止播报并丢弃在途帧/异步识别结果
 
     var arSession: ARSession { source.session }
 
@@ -38,14 +39,20 @@ final class FramingAssistViewModel {
             guidanceText = "设备不支持"
             return
         }
+        paused = false
         source.onStateChange = { [weak self] in self?.state = $0 }
         source.onFrame = { [weak self] frame in self?.handle(frame) }
         source.start()
     }
 
-    func stop() { source.stop() }
+    func stop() {
+        paused = true
+        source.stop()
+        synth.stopSpeaking(at: .immediate) // 关闭/被来电盖上时立刻闭嘴，避免识别播报串入通话
+    }
 
     private func handle(_ frame: SensorFrame) {
+        guard !paused else { return } // 暂停后丢弃在途帧
         latestBuffer = frame.pixelBuffer // 供"朗读文字"用最新帧
         guard frame.timestamp - lastProcess >= 0.4 else { return }
         lastProcess = frame.timestamp
@@ -204,6 +211,7 @@ final class FramingAssistViewModel {
     }
 
     private func speak(_ text: String) {
+        guard !paused else { return } // 已暂停(关闭/来电)：异步识别回调到达也不再播报
         if UIAccessibility.isVoiceOverRunning {
             UIAccessibility.post(notification: .announcement, argument: text)
             return

@@ -48,8 +48,8 @@ struct HomeView: View {
             SettingsView(store: consentStore) { showSettings = false }
         }
         .onChange(of: showSettings) { _, shown in if !shown { applyKeepAwake() } } // 设置可能改了常亮时长，返回时重新应用
-        // 接到别人来电：暂停避障(停语音/帧/声呐) + 强制常亮 + 关掉本页其它模态(否则根层来电 CallView 弹不出来，见来电链路深审 #1/#3)。
-        .onChange(of: incoming.pending != nil) { _, inCall in
+        // 接到别人来电(铃响或已接入)：暂停避障(停语音/帧/声呐) + 强制常亮 + 关掉本页其它模态(否则根层来电界面弹不出来，见来电链路深审 #1/#3)。
+        .onChange(of: incoming.hasIncoming) { _, inCall in
             if inCall {
                 model.pauseSession(); forceKeepAwake()
                 showSettings = false; showRemoteAssist = false; showNavigation = false; showFraming = false; showTutorial = false

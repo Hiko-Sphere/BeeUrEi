@@ -60,6 +60,7 @@ final class HomeViewModel {
     @ObservationIgnored private let hazards = HazardCatalog()
     @ObservationIgnored private let groundHazard = GroundHazardDetector()
     @ObservationIgnored private let proximityMapper = ProximityCueMapper()
+    @ObservationIgnored private var paused = false // 暂停中(通话/取景)：丢弃在途帧，杜绝暂停后仍冒出"前方…"
     @ObservationIgnored private let sonifier = ProximitySonifier()
     @ObservationIgnored private let clearConfirmer = ClearPathConfirmer()
     @ObservationIgnored private let announcePolicy = AnnouncementPolicy()
@@ -119,6 +120,7 @@ final class HomeViewModel {
     /// 暂停避障会话：当呼叫/取景等**也用相机**的界面盖在主页上时调用，避免与之争抢相机致
     /// ARKit "World Tracking failed"（求助返回后主页报错的根因）。
     func pauseSession() {
+        paused = true               // 先置位：丢弃在途帧，杜绝暂停后再提交"前方…"
         source.stop()
         sonifier.stop()
         speech.stopAll()            // 立刻掐断正在念/排队的"前方…"，避免串入通话
@@ -128,6 +130,7 @@ final class HomeViewModel {
     /// 恢复避障会话（上述界面关闭返回主页时调用）。重跑得到干净的世界跟踪。
     func resumeSession() {
         guard DeviceSupport.hasLiDAR else { return }
+        paused = false
         source.start()
     }
 
@@ -160,6 +163,7 @@ final class HomeViewModel {
     }
 
     private func handle(_ frame: SensorFrame) {
+        guard !paused else { return } // 暂停后(已 source.stop)仍可能有在途帧到达主队列——直接丢弃，避免再提交播报
         if !isStreaming { isStreaming = true }
 
         // FPS 统计（每帧计数，约 1s 汇总一次）——供开发者模式显示。

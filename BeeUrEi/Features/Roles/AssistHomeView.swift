@@ -46,8 +46,8 @@ struct AssistHomeView: View {
         .task { await onAppear() }
         // 匹配/认领状态变化主动朗读——盲人/低视力协助者点完按钮才有语音反馈（见无障碍审计）。
         .onChange(of: statusText) { _, new in if let new, !new.isEmpty { A11y.announce(new) } }
-        // 来电(根层 CallView)呈现时，关掉本页可能占用的模态(匹配卡/偏好/添加)，否则根层 fullScreenCover 会被吞（见来电链路深审 #3）。
-        .onChange(of: incomingCenter.pending != nil) { _, inCall in
+        // 来电(铃响或已接入)时，关掉本页可能占用的模态(匹配卡/偏好/添加)，否则根层来电界面会被吞（见来电链路深审 #3）。
+        .onChange(of: incomingCenter.hasIncoming) { _, inCall in
             if inCall { matched = nil; prefsShown = false; showAddFamily = false }
         }
         .onDisappear { stopTasks(goOffline: true) }
@@ -276,7 +276,7 @@ struct AssistHomeView: View {
     /// 协助者/亲友主动呼叫已绑定的对方（多为呼叫盲人）。后端双向放行。
     private func callBound(_ l: FamilyLinkInfo) async {
         guard answering == nil, matched == nil, pendingAnswer == nil,
-              IncomingCallCenter.shared.pending == nil, let token = session.token else { return }
+              !IncomingCallCenter.shared.hasIncoming, let token = session.token else { return }
         let callId = UUID().uuidString
         do {
             try await APIClient().startEmergencyCall(token: token, callId: callId, targetUserIds: [l.memberId])
@@ -384,11 +384,12 @@ struct AssistHomeView: View {
             // 避免「轮询」与「CallKit 桥接」对同一 callId 各弹一个 CallView 的双呈现竞态（见复审 #2）。
             // 守卫：本页无模态/确认卡/待呈现通话，且当前没有正在桥接的来电。
             if answering == nil, matched == nil, pendingAnswer == nil, !prefsShown,
-               IncomingCallCenter.shared.pending == nil,
+               !IncomingCallCenter.shared.hasIncoming,
                let calls = try? await APIClient().incomingCalls(token: token),
                let first = calls.first(where: { !dismissedCallIds.contains($0.callId) }) {
                 dismissedCallIds.insert(first.callId) // 标记已处理，结束后不再反复弹回
-                IncomingCallCenter.shared.present(callId: first.callId, callerName: "\(first.fromName) 的来电")
+                // 前台：应用内来电铃，手动接听（参照 WhatsApp）。
+                IncomingCallCenter.shared.ring(callId: first.callId, callerName: first.fromName, callerAvatar: first.fromAvatar)
             }
             try? await Task.sleep(for: .seconds(3))
         }
@@ -407,7 +408,7 @@ struct AssistHomeView: View {
 
     private func claim(_ r: HelpRequestSummary) async {
         guard !busy, answering == nil, matched == nil, pendingAnswer == nil,
-              IncomingCallCenter.shared.pending == nil, let token = session.token else { return }
+              !IncomingCallCenter.shared.hasIncoming, let token = session.token else { return }
         busy = true; defer { busy = false }
         do {
             let detail = try await APIClient().claimHelp(token: token, callId: r.callId)
@@ -420,7 +421,7 @@ struct AssistHomeView: View {
 
     private func matchRandom() async {
         guard !busy, answering == nil, matched == nil, pendingAnswer == nil,
-              IncomingCallCenter.shared.pending == nil, let token = session.token else { return }
+              !IncomingCallCenter.shared.hasIncoming, let token = session.token else { return }
         busy = true; statusText = "正在为你匹配…"; defer { busy = false }
         do {
             let lang = preferredLanguage.isEmpty ? nil : preferredLanguage

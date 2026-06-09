@@ -41,6 +41,7 @@ export class Metrics {
     }
 
     for (const [name, val] of this.counters) {
+      lines.push(`# HELP beeurei_${name} Cumulative count of ${name.replace(/_total$/, '')}.`)
       lines.push(`# TYPE beeurei_${name} counter`)
       lines.push(`beeurei_${name} ${val}`)
     }

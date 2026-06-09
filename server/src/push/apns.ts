@@ -63,17 +63,22 @@ export class ApnsPushSender implements PushSender {
   private post(path: string, headers: Record<string, string>, body: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const client = http2.connect(`https://${this.host}`)
-      // settle 守卫：无论成功/连接错误/请求错误，都确保 client 被关闭一次，杜绝失败路径上的 http2 会话/socket 泄漏（见复审 #7）。
+      // settle 守卫：无论成功/连接错误/请求错误/超时，都确保 client 被关闭一次，杜绝失败路径上的 http2 会话/socket 泄漏（见复审 #7）。
       let settled = false
       const settle = (err?: Error) => {
         if (settled) return
         settled = true
-        try { client.close() } catch { /* 已关闭 */ }
+        try { client.destroy() } catch { /* 已关闭 */ }
         if (err) reject(err)
         else resolve()
       }
+      // 总超时兜底：APNs 接受连接后静默挂起（网络分区/半开连接）时不会有任何事件，
+      // 没有超时则 Promise 永不 settle、会话永久泄漏（见复审 #1）。到点强制 settle 并销毁会话。
+      const TIMEOUT_MS = 10_000
+      client.setTimeout(TIMEOUT_MS, () => settle(new Error('APNs connect timeout')))
       client.on('error', settle)
       const req = client.request({ ':method': 'POST', ':path': path, ...headers })
+      req.setTimeout(TIMEOUT_MS, () => settle(new Error('APNs request timeout')))
       let status = 0
       let data = ''
       req.on('response', (h) => { status = Number(h[':status']) })

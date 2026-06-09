@@ -51,8 +51,15 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   const mailer = options.mailer ?? new ConsoleMailer()
   const pushSender = options.pushSender ?? new NoopPushSender()
 
+  // 业务计数预置 0 基线：使这些 series 自启动起就存在，避免 Prometheus rate() 在首次命中时断档（见复审 #5）。
+  for (const name of ['calls_registered_total', 'help_requests_total', 'help_claims_total']) metrics.inc(name, 0)
+
   // 监控（D3）：记录每次响应的状态码族，供 /metrics 暴露给 Prometheus。
-  app.addHook('onResponse', async (_req, reply) => metrics.observeResponse(reply.statusCode))
+  // 跳过 /metrics 自身——否则每次抓取都会把自己计入 2xx，污染请求量指标（见复审 #4）。
+  app.addHook('onResponse', async (req, reply) => {
+    if (req.routeOptions?.url === '/metrics') return
+    metrics.observeResponse(reply.statusCode)
+  })
 
   // 速率限制（防暴力/滥用）。必须在路由之前加载，故把 HTTP 路由放进随后加载的子插件，
   // 确保它们继承到限流钩子。

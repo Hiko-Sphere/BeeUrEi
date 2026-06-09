@@ -40,7 +40,7 @@ struct AdminHomeView: View {
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
-                            if u.id != session.user?.id {  // 不能操作自己（封禁/降级会锁死后台）
+                            if let myId = session.user?.id, u.id != myId {  // 不能操作自己；身份未知则不显示菜单(fail-closed，见复审 #9)
                                 Menu {
                                     Button(u.status == "active" ? "封禁" : "解封") {
                                         Task { await setStatus(u, to: u.status == "active" ? "disabled" : "active") }
@@ -103,6 +103,13 @@ struct AdminHomeView: View {
         }
     }
 
+    /// access token 过期(401)统一处理：登出回登录页，而非把鉴权过期误报成业务/权限错误（见复审 #3）。
+    /// 返回 true 表示已作为 401 处理，调用方不必再设业务错误文案。
+    private func handleAuthError(_ error: Error) -> Bool {
+        if case APIError.unauthorized = error { session.logout(); return true }
+        return false
+    }
+
     private func load() async {
         guard let token = session.token else { errorText = "请先登录"; return }
         guard !loading else { return } // 防重入：.task 与 .refreshable 与操作后刷新可并发，避免重叠 load 竞态（见审查 #3）
@@ -115,6 +122,7 @@ struct AdminHomeView: View {
             users = u; reports = r; recConfig = c
             errorText = nil
         } catch {
+            if handleAuthError(error) { return }
             errorText = "加载失败（需管理员权限并连接后端）" // 失败不动已有数据
         }
     }
@@ -123,7 +131,7 @@ struct AdminHomeView: View {
         guard let token = session.token, !savingRec else { return } // 串行化，防两个开关并发覆盖（见审查 #2）
         savingRec = true; defer { savingRec = false }
         do { recConfig = try await api.setRecordingConfig(token: token, enabled: enabled, requireConsent: consent) }
-        catch { errorText = "录制配置更新失败" }
+        catch { if !handleAuthError(error) { errorText = "录制配置更新失败" } }
     }
 
     private func setStatus(_ user: AccountInfo, to status: String) async {
@@ -133,7 +141,10 @@ struct AdminHomeView: View {
             try await api.setUserStatus(token: token, userId: user.id, status: status)
             await load()
         } catch {
-            errorText = "操作失败"
+            if handleAuthError(error) { return }
+            if case let APIError.server(msg) = error {
+                errorText = msg == "last_admin_protected" ? "不能封禁最后一名管理员" : "操作失败"
+            } else { errorText = "操作失败" }
         }
     }
 
@@ -144,7 +155,16 @@ struct AdminHomeView: View {
             try await api.setUserRole(token: token, userId: user.id, role: role)
             await load()
         } catch {
-            errorText = "改角色失败（不能降级最后一名管理员/不能改自己）"
+            if handleAuthError(error) { return }
+            // 映射后端真实原因，而非用一个写死的串覆盖所有情况（见复审 #8）。
+            if case let APIError.server(msg) = error {
+                switch msg {
+                case "last_admin_protected": errorText = "不能降级最后一名管理员"
+                case "cannot_change_own_role": errorText = "不能修改自己的角色"
+                case "not_found": errorText = "该用户已不存在"
+                default: errorText = "改角色失败：\(msg)"
+                }
+            } else { errorText = "改角色失败，请检查网络后重试" }
         }
     }
 
@@ -155,7 +175,7 @@ struct AdminHomeView: View {
             try await api.resolveReport(token: token, id: report.id)
             await load()
         } catch {
-            errorText = "操作失败"
+            if !handleAuthError(error) { errorText = "操作失败" }
         }
     }
 }

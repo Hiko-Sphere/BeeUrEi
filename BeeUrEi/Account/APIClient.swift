@@ -217,15 +217,8 @@ struct APIClient {
     }
 
     func setUserStatus(token: String, userId: String, status: String) async throws {
-        var req = URLRequest(url: baseURL.appendingPathComponent("/api/admin/users/\(userId)/status"))
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        req.httpBody = try JSONSerialization.data(withJSONObject: ["status": status])
-        let (_, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse else { throw APIError.network }
-        if http.statusCode >= 500 { throw APIError.network }
-        guard http.statusCode < 400 else { throw APIError.server("操作失败") }
+        // 走 authedSend：401→.unauthorized（调用方据此登出）、其它 4xx→.server(真实原因)，与其余管理端点一致。
+        _ = try await authedSend("POST", "/api/admin/users/\(userId)/status", token: token, body: ["status": status])
     }
 
     /// 管理员分配/变更用户角色。

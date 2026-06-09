@@ -26,7 +26,8 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store): void {
     const target = store.findById(id)
     if (!target) return reply.code(404).send({ error: 'not_found' })
     // 最后一名管理员保护：把唯一的活跃管理员降级会使后台无人可管（见审查 #11）。
-    if (target.role === 'admin' && parsed.data.role !== 'admin' && activeAdminCount() <= 1) {
+    // 仅当目标本身是**活跃**管理员才计入——降级一个已封禁的管理员不减少活跃数，不应误拦（见复审 #6）。
+    if (target.role === 'admin' && target.status === 'active' && parsed.data.role !== 'admin' && activeAdminCount() <= 1) {
       return reply.code(400).send({ error: 'last_admin_protected' })
     }
     const updated = store.updateUser(id, { role: parsed.data.role })

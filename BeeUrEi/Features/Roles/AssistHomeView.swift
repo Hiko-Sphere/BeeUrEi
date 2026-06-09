@@ -326,7 +326,8 @@ struct AssistHomeView: View {
     // MARK: 动作
 
     private func claim(_ r: HelpRequestSummary) async {
-        guard !busy, answering == nil, matched == nil, pendingAnswer == nil, let token = session.token else { return }
+        guard !busy, answering == nil, matched == nil, pendingAnswer == nil,
+              IncomingCallCenter.shared.pending == nil, let token = session.token else { return }
         busy = true; defer { busy = false }
         do {
             let detail = try await APIClient().claimHelp(token: token, callId: r.callId)
@@ -338,7 +339,8 @@ struct AssistHomeView: View {
     }
 
     private func matchRandom() async {
-        guard !busy, answering == nil, matched == nil, pendingAnswer == nil, let token = session.token else { return }
+        guard !busy, answering == nil, matched == nil, pendingAnswer == nil,
+              IncomingCallCenter.shared.pending == nil, let token = session.token else { return }
         busy = true; statusText = "正在为你匹配…"; defer { busy = false }
         do {
             let lang = preferredLanguage.isEmpty ? nil : preferredLanguage

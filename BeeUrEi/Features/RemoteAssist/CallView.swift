@@ -17,6 +17,10 @@ struct CallView: View {
         VStack(spacing: 24) {
             NetworkStatusBar(callQuality: model.callQuality) // 网络类型 + 通话信号强弱
 
+            if let name = model.peerName, !name.isEmpty {
+                AvatarView(dataURL: model.peerAvatar, name: name, size: 64)
+            }
+
             Text(model.statusText)
                 .font(.title3.weight(.semibold))
                 .multilineTextAlignment(.center)

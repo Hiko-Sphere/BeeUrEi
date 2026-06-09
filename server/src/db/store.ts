@@ -18,6 +18,8 @@ export interface User {
   email?: string // 可选邮箱：用于邮箱验证 + 找回密码（D1）。仅本人 /api/me 可见，不进 publicUser。
   emailVerified?: boolean // 邮箱是否已通过验证码确认
   voipToken?: string // PushKit VoIP 推送 token（A1 后台来电）。仅服务端用于发推，不对外暴露。
+  avatar?: string // 头像：小尺寸图片 data URL(base64)。非敏感，进 publicUser 供联系人/队列/通话显示。
+  apnsToken?: string // 普通 APNs 提醒推送 token（软件外通知，区别于 voipToken）。
 }
 
 /// 亲友绑定：视障用户(owner) ↔ 亲友/协助者账号(member)，可标记为紧急联系人。
@@ -310,7 +312,7 @@ export function isBlockedBetween(store: Store, a: string, b: string): boolean {
 
 /// 对外暴露的安全用户字段（不含 passwordHash / email；用于管理员列表、亲友等场景）。
 export function publicUser(u: User) {
-  return { id: u.id, username: u.username, displayName: u.displayName, role: u.role, status: u.status }
+  return { id: u.id, username: u.username, displayName: u.displayName, role: u.role, status: u.status, avatar: u.avatar ?? null }
 }
 
 /// 本人视图（/api/me）：在 publicUser 基础上加自己的邮箱/语言/验证状态（仅本人可见）。

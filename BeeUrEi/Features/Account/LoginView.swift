@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import PhotosUI
 
 /// 账号登录 / 注册（接自托管后端）。VoiceOver 友好。
 /// 设计为可被 NavigationLink 推入（不自带 NavigationStack）。
@@ -17,9 +18,11 @@ struct LoginView: View {
     @State private var newPassword = ""
     @State private var showDeleteConfirm = false
     @State private var accountMessage: String?
-    @State private var detail: AccountInfo?     // /api/me（含邮箱/验证状态）
+    @State private var detail: AccountInfo?     // /api/me（含邮箱/验证状态/头像）
     @State private var showEmail = false
     @State private var showForgot = false
+    @State private var photoItem: PhotosPickerItem?
+    @State private var avatarMsg: String?
 
     private let roles: [(label: String, value: String)] = [
         ("求助者（视障）", "blind"),
@@ -29,6 +32,15 @@ struct LoginView: View {
     var body: some View {
         Form {
             if session.isLoggedIn {
+                Section("头像") {
+                    HStack(spacing: BeeSpacing.md) {
+                        AvatarView(dataURL: detail?.avatar, name: session.user?.displayName ?? "", size: 56)
+                        PhotosPicker(selection: $photoItem, matching: .images) {
+                            Text(detail?.avatar == nil ? "上传头像" : "更换头像")
+                        }
+                    }
+                    if let avatarMsg { Text(avatarMsg).font(.footnote).foregroundStyle(.secondary) }
+                }
                 Section("当前账号") {
                     Text(session.user?.displayName ?? "已登录")
                     Text("角色：\(roleDisplayName(session.user?.role ?? ""))").foregroundStyle(.secondary)
@@ -99,6 +111,7 @@ struct LoginView: View {
         .navigationTitle("账号")
         // 登录/注册失败主动朗读（见无障碍审计）。
         .onChange(of: session.errorMessage) { _, msg in if let msg, !msg.isEmpty { A11y.announce(msg) } }
+        .onChange(of: photoItem) { _, item in if let item { Task { await uploadAvatar(item) } } }
         .task { await loadMe() }
         .sheet(isPresented: $showEmail, onDismiss: { Task { await loadMe() } }) {
             EmailManageView()
@@ -131,6 +144,20 @@ struct LoginView: View {
     private func loadMe() async {
         guard session.isLoggedIn, let token = KeychainStore.read() else { detail = nil; return }
         detail = try? await APIClient().me(token: token)
+    }
+
+    private func uploadAvatar(_ item: PhotosPickerItem) async {
+        guard let token = KeychainStore.read() else { return }
+        avatarMsg = "正在上传头像…"
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let img = UIImage(data: data),
+              let dataURL = AvatarEncoder.dataURL(from: img) else { avatarMsg = "读取图片失败"; return }
+        do {
+            try await APIClient().setAvatar(token: token, dataURL: dataURL)
+            avatarMsg = "头像已更新"
+            A11y.announce("头像已更新")
+            await loadMe()
+        } catch { avatarMsg = "上传失败：图片太大或网络错误" }
     }
 
     private func changePassword() {

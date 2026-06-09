@@ -121,7 +121,7 @@ struct AssistHomeView: View {
             BeeCard {
                 VStack(alignment: .leading, spacing: BeeSpacing.sm) {
                     HStack {
-                        Image(systemName: "person.crop.circle.fill").font(.title2).foregroundStyle(.secondary)
+                        AvatarView(dataURL: r.fromAvatar, name: r.fromName, size: 36)
                         Text(r.fromName).font(.headline)
                         Spacer()
                         Text(waitText(r.waitedSeconds)).font(.caption).foregroundStyle(.secondary)
@@ -229,7 +229,7 @@ struct AssistHomeView: View {
                     } else {
                         ForEach(accepted) { l in
                             HStack {
-                                Image(systemName: "person.crop.circle.fill").foregroundStyle(.secondary)
+                                AvatarView(dataURL: l.memberAvatar, name: l.memberName, size: 36)
                                 VStack(alignment: .leading) {
                                     Text(l.memberName)
                                     Text("\(l.relation)\(l.isEmergency ? " · 紧急联系人" : "")")
@@ -413,7 +413,7 @@ struct AssistHomeView: View {
                 BeeCard {
                     VStack(alignment: .leading, spacing: BeeSpacing.sm) {
                         HStack {
-                            Image(systemName: "person.crop.circle.fill").font(.largeTitle).foregroundStyle(.secondary)
+                            AvatarView(dataURL: detail.fromAvatar, name: detail.fromName, size: 48)
                             Text(detail.fromName).font(.title2.weight(.bold))
                         }
                         if let t = detail.topic, !t.isEmpty { BeeInfoRow(systemImage: "text.bubble", text: t) }

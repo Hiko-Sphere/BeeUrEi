@@ -77,12 +77,15 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
           }
           joined = { clientId, userId: auth.sub, role: msg.role ?? 'unknown', callId }
           const peers = hub.join(joined)
-          const myName = store.findById(auth.sub)?.displayName
+          const meRec = store.findById(auth.sub)
           socket.send(JSON.stringify({
             type: 'joined',
-            peers: peers.map((p) => ({ userId: p.userId, role: p.role, userName: store.findById(p.userId)?.displayName })),
+            peers: peers.map((p) => {
+              const pu = store.findById(p.userId)
+              return { userId: p.userId, role: p.role, userName: pu?.displayName, userAvatar: pu?.avatar ?? null }
+            }),
           }))
-          for (const p of peers) relay(p.clientId, { type: 'peer-joined', userId: auth.sub, role: joined.role, userName: myName })
+          for (const p of peers) relay(p.clientId, { type: 'peer-joined', userId: auth.sub, role: joined.role, userName: meRec?.displayName, userAvatar: meRec?.avatar ?? null })
           return
         }
 

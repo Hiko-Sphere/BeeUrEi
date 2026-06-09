@@ -13,6 +13,7 @@ export interface HelpRequest {
   callId: string
   fromUserId: string
   fromName: string
+  fromAvatar?: string // 求助者头像（展示用，非敏感）
   language?: string // 求助者第一语言（如 'zh'/'en'）
   locality?: string // 城市/区级地点（端侧反查后上报，非精确地址）
   topic?: string // 求助内容简述（可选）
@@ -31,6 +32,7 @@ export interface HelpMatchPrefs {
 export interface HelpSummary {
   callId: string
   fromName: string
+  fromAvatar?: string
   language?: string
   locality?: string
   topic?: string
@@ -81,6 +83,7 @@ export class OpenHelpRegistry {
     return this.open(now, excludeUserId, blockedIds).map((r) => ({
       callId: r.callId,
       fromName: r.fromName,
+      fromAvatar: r.fromAvatar,
       language: r.language,
       locality: r.locality,
       topic: r.topic,

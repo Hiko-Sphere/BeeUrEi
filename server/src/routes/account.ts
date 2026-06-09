@@ -12,6 +12,10 @@ const passwordSchema = z.object({
 })
 const emailSchema = z.object({ email: z.string().email().max(254) })
 const verifyEmailSchema = z.object({ code: z.string().min(4).max(12) })
+// 头像：小尺寸图片 data URL（客户端已压缩）。限大小，防滥用 DB 存大图。
+const avatarSchema = z.object({
+  avatar: z.string().regex(/^data:image\/(png|jpeg|jpg|webp);base64,/).max(600_000),
+})
 
 export function registerAccountRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer): void {
   // 修改密码：验证旧密码 → 设新密码 → 递增 tokenVersion(令已签发的 access token 立即失效) → 撤销所有 refresh token。
@@ -59,6 +63,15 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
       return reply.code(400).send({ error: 'invalid_code' })
     }
     store.updateUser(user.id, { emailVerified: true })
+    return { ok: true }
+  })
+
+  // 设置头像（小尺寸 data URL；客户端压缩后上传）。
+  app.post('/api/account/avatar', { preHandler: requireAuth() }, async (req, reply) => {
+    const parsed = avatarSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    if (!store.findById(req.user!.sub)) return reply.code(404).send({ error: 'not_found' })
+    store.updateUser(req.user!.sub, { avatar: parsed.data.avatar })
     return { ok: true }
   })
 

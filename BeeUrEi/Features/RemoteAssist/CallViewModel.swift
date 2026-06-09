@@ -15,6 +15,7 @@ final class CallViewModel {
     private(set) var statusText = "正在连接…"
     private(set) var peerUserId: String?
     private(set) var peerName: String?
+    private(set) var peerAvatar: String?
     private(set) var reportStatus: String?
     private(set) var mediaState: MediaConnState?     // 真实媒体连通状态（区别于信令已连接）
     private(set) var remoteVideoAvailable = false    // 协助者：已收到远端视频轨（轨道存在；是否有画面再看 frames）
@@ -103,6 +104,7 @@ final class CallViewModel {
             if let peers = msg["peers"] as? [[String: Any]], let first = peers.first {
                 peerUserId = first["userId"] as? String ?? peerUserId
                 peerName = first["userName"] as? String ?? peerName
+                peerAvatar = first["userAvatar"] as? String ?? peerAvatar
                 // 对端已在房间→双方都标记已连接(否则后加入的协助者 UI 永久卡在"等待接入"，见审查 #2)；
                 // 但只有发起方(视障)才发 offer。
                 connected = true
@@ -116,6 +118,7 @@ final class CallViewModel {
             connected = true
             peerUserId = msg["userId"] as? String ?? peerUserId
             peerName = msg["userName"] as? String ?? peerName
+            peerAvatar = msg["userAvatar"] as? String ?? peerAvatar
             statusText = connectedStatus()
             if role == .blind, !hasOffered { hasOffered = true; media.createOffer() }
         case "offer":

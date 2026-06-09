@@ -31,6 +31,7 @@ struct AccountInfo: Codable, Sendable, Equatable, Identifiable {
     // 仅本人 /api/me 返回（selfView）；登录/注册/管理员列表为 publicUser，这两项为 nil。
     var email: String?
     var emailVerified: Bool?
+    var avatar: String?   // 头像 data URL（publicUser 也带，供联系人/通话显示）
 }
 
 struct AuthResult: Codable, Sendable {
@@ -43,6 +44,7 @@ struct FamilyLinkInfo: Codable, Sendable, Identifiable {
     let id: String
     let memberId: String   // 对方 userId（无论我是 owner 还是 member）
     let memberName: String // 对方显示名
+    var memberAvatar: String?
     let relation: String
     let isEmergency: Bool
     let phone: String?
@@ -56,6 +58,7 @@ struct IncomingLinkInfo: Codable, Sendable, Identifiable {
     let id: String
     let ownerId: String
     let ownerName: String
+    var ownerAvatar: String?
     let relation: String
     let isEmergency: Bool
     let status: String?   // "pending" 表示待我接受；"accepted" 已生效（旧数据无此字段按已接受）
@@ -66,6 +69,7 @@ struct EmergencyTarget: Codable, Sendable, Identifiable {
     var id: String { memberId }
     let memberId: String
     let memberName: String
+    var avatar: String?
     let relation: String?
     let isEmergency: Bool
 }
@@ -76,6 +80,7 @@ struct IncomingCall: Codable, Sendable, Identifiable {
     let callId: String
     let fromName: String
     let fromUserId: String
+    var fromAvatar: String?
 }
 
 /// 公开求助队列摘要（协助者浏览）：粗粒度信息，不含发起人 userId（隐私）。
@@ -83,6 +88,7 @@ struct HelpRequestSummary: Codable, Sendable, Identifiable {
     var id: String { callId }
     let callId: String
     let fromName: String
+    var fromAvatar: String?
     let language: String?
     let locality: String?
     let topic: String?
@@ -94,6 +100,7 @@ struct HelpRequestDetail: Codable, Sendable, Identifiable {
     var id: String { callId }
     let callId: String
     let fromName: String
+    var fromAvatar: String?
     let language: String?
     let locality: String?
     let topic: String?
@@ -429,6 +436,11 @@ struct APIClient {
     /// 校验邮箱验证码。
     func verifyEmail(token: String, code: String) async throws {
         _ = try await authedSend("POST", "/api/account/email/verify", token: token, body: ["code": code])
+    }
+
+    /// 设置头像（小尺寸 data URL，客户端已压缩）。
+    func setAvatar(token: String, dataURL: String) async throws {
+        _ = try await authedSend("POST", "/api/account/avatar", token: token, body: ["avatar": dataURL])
     }
 
     /// 发起找回密码（向账号邮箱发验证码；不论账号是否存在均返回成功，防枚举）。

@@ -81,7 +81,7 @@ export function registerAssistRoutes(
     })
     const targets = ranked.map((c) => {
       const u = store.findById(c.userId)
-      return { memberId: c.userId, memberName: u?.displayName ?? '未知', isEmergency: c.isEmergency, load: c.load }
+      return { memberId: c.userId, memberName: u?.displayName ?? '未知', avatar: u?.avatar ?? null, isEmergency: c.isEmergency, load: c.load }
     })
     return { targets, count: targets.length }
   })
@@ -118,7 +118,7 @@ export function registerAssistRoutes(
   // 协助者/亲友轮询：取针对自己的待接来电（callId + 发起人）。
   app.get('/api/assist/incoming', { preHandler: requireAuth() }, async (req) => {
     const calls = pendingCalls.incomingFor(req.user!.sub, Date.now())
-    return { calls: calls.map((c) => ({ callId: c.callId, fromName: c.fromName, fromUserId: c.fromUserId })) }
+    return { calls: calls.map((c) => ({ callId: c.callId, fromName: c.fromName, fromUserId: c.fromUserId, fromAvatar: store.findById(c.fromUserId)?.avatar ?? null })) }
   })
 
   // 取消/结束待接来电（接通或挂断后清理）。仅发起人或目标可取消（归属校验，防越权压制，见审查 #3）。
@@ -141,6 +141,7 @@ export function registerAssistRoutes(
       callId: parsed.data.callId,
       fromUserId: req.user!.sub,
       fromName: me?.displayName ?? '求助者',
+      fromAvatar: me?.avatar,
       language: parsed.data.language ?? me?.language,
       locality: parsed.data.locality,
       topic: parsed.data.topic,
@@ -195,6 +196,6 @@ export function registerAssistRoutes(
 }
 
 /// 认领成功后返回给志愿者的详情（含求助者显示名/语言/地点/内容，供其决定是否帮助 + 入会）。
-function detailView(r: { callId: string; fromName: string; language?: string; locality?: string; topic?: string }) {
-  return { callId: r.callId, fromName: r.fromName, language: r.language ?? null, locality: r.locality ?? null, topic: r.topic ?? null }
+function detailView(r: { callId: string; fromName: string; fromAvatar?: string; language?: string; locality?: string; topic?: string }) {
+  return { callId: r.callId, fromName: r.fromName, fromAvatar: r.fromAvatar ?? null, language: r.language ?? null, locality: r.locality ?? null, topic: r.topic ?? null }
 }

@@ -65,7 +65,10 @@ struct RemoteAssistView: View {
                         ForEach(incomingRequests) { r in
                             BeeCard {
                                 VStack(alignment: .leading, spacing: BeeSpacing.sm) {
-                                    Text("\(r.ownerName) 想和你建立\(r.relation)关系")
+                                    HStack {
+                                        AvatarView(dataURL: r.ownerAvatar, name: r.ownerName, size: 36)
+                                        Text("\(r.ownerName) 想和你建立\(r.relation)关系")
+                                    }
                                     HStack {
                                         Button("接受") { Task { await accept(r) } }
                                             .buttonStyle(.borderedProminent).disabled(linkBusy.contains(r.id))
@@ -141,7 +144,7 @@ struct RemoteAssistView: View {
                     Button { Task { await call(link) } } label: {
                         BeeCard {
                             HStack {
-                                Image(systemName: "person.crop.circle.fill").font(.title2).foregroundStyle(.secondary)
+                                AvatarView(dataURL: link.memberAvatar, name: link.memberName, size: 40)
                                 VStack(alignment: .leading) {
                                     Text(link.memberName).font(.headline)
                                     if link.isEmergency {

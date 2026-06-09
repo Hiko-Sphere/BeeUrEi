@@ -46,6 +46,8 @@ export class SqliteStore implements Store {
     try { this.db.exec('ALTER TABLE users ADD COLUMN emailVerified INTEGER') } catch { /* 列已存在 */ }
     try { this.db.exec('ALTER TABLE users ADD COLUMN voipToken TEXT') } catch { /* 列已存在 */ } // PushKit VoIP 后台来电（A1）
     try { this.db.exec('ALTER TABLE links ADD COLUMN requestedBy TEXT') } catch { /* 列已存在 */ } // 双向加好友：记录请求发起方
+    try { this.db.exec('ALTER TABLE users ADD COLUMN avatar TEXT') } catch { /* 列已存在 */ } // 头像 data URL
+    try { this.db.exec('ALTER TABLE users ADD COLUMN apnsToken TEXT') } catch { /* 列已存在 */ } // 普通 APNs 提醒推送 token
   }
 
   // MARK: refresh tokens
@@ -67,9 +69,9 @@ export class SqliteStore implements Store {
   // MARK: users
   createUser(u: User): void {
     this.db.prepare(
-      `INSERT OR REPLACE INTO users (id, username, passwordHash, displayName, role, status, createdAt, language, tokenVersion, email, emailVerified, voipToken)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(u.id, u.username, u.passwordHash, u.displayName, u.role, u.status, u.createdAt, u.language ?? null, u.tokenVersion ?? 0, u.email ?? null, u.emailVerified ? 1 : 0, u.voipToken ?? null)
+      `INSERT OR REPLACE INTO users (id, username, passwordHash, displayName, role, status, createdAt, language, tokenVersion, email, emailVerified, voipToken, avatar, apnsToken)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(u.id, u.username, u.passwordHash, u.displayName, u.role, u.status, u.createdAt, u.language ?? null, u.tokenVersion ?? 0, u.email ?? null, u.emailVerified ? 1 : 0, u.voipToken ?? null, u.avatar ?? null, u.apnsToken ?? null)
   }
   findByUsername(username: string): User | undefined {
     // 大小写不敏感(COLLATE NOCASE)：防同名混淆/冒充；登录兼容任意大小写（见审查 #4）。
@@ -184,7 +186,7 @@ export class SqliteStore implements Store {
 
   // MARK: row mappers
   private toUser(r: any): User {
-    return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt), language: r.language ?? undefined, tokenVersion: r.tokenVersion != null ? Number(r.tokenVersion) : 0, email: r.email ?? undefined, emailVerified: r.emailVerified != null ? Number(r.emailVerified) === 1 : undefined, voipToken: r.voipToken ?? undefined }
+    return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt), language: r.language ?? undefined, tokenVersion: r.tokenVersion != null ? Number(r.tokenVersion) : 0, email: r.email ?? undefined, emailVerified: r.emailVerified != null ? Number(r.emailVerified) === 1 : undefined, voipToken: r.voipToken ?? undefined, avatar: r.avatar ?? undefined, apnsToken: r.apnsToken ?? undefined }
   }
   private toLink(r: any): FamilyLink {
     return { id: r.id, ownerId: r.ownerId, memberId: r.memberId, relation: r.relation, isEmergency: Number(r.isEmergency) === 1, phone: r.phone ?? undefined, createdAt: Number(r.createdAt), status: (r.status as LinkStatus) ?? undefined, requestedBy: r.requestedBy ?? undefined }

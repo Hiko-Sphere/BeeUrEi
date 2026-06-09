@@ -41,6 +41,7 @@ protocol MediaEngine: AnyObject {
     func handleRemoteDescription(type: String, sdp: String)
     func handleRemoteCandidate(candidate: String, sdpMid: String?, sdpMLineIndex: Int32)
     func setLocalVideoSending(_ sending: Bool)
+    func setMicMuted(_ muted: Bool) // 静音：禁用/启用本端音频轨
     func stop()
 }
 
@@ -57,6 +58,7 @@ final class StubMediaEngine: MediaEngine {
     func handleRemoteDescription(type: String, sdp: String) {}
     func handleRemoteCandidate(candidate: String, sdpMid: String?, sdpMLineIndex: Int32) {}
     func setLocalVideoSending(_ sending: Bool) {}
+    func setMicMuted(_ muted: Bool) {}
     func stop() {}
 }
 
@@ -95,6 +97,8 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
 
     private var pc: RTCPeerConnection?
     private var localVideoTrack: RTCVideoTrack?
+    private var localAudioTrack: RTCAudioTrack?
+    private var micMuted = false
     private var videoCapturer: RTCCameraVideoCapturer?
     private var capturing = false // 仅在用户主动发画面时才开相机（最小权限/默认隐私，见审查 #2）
     private(set) var remoteVideoTrack: RTCVideoTrack?
@@ -137,6 +141,8 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
         let audioSource = Self.factory.audioSource(with: RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil))
         let audioTrack = Self.factory.audioTrack(with: audioSource, trackId: "audio0")
         pc?.add(audioTrack, streamIds: ["stream0"])
+        localAudioTrack = audioTrack
+        localAudioTrack?.isEnabled = !micMuted // 维持当前静音态（重连等场景）
 
         if asCaller {
             // 视障侧：加摄像头视频轨，但默认 disabled（不输出画面）。
@@ -205,6 +211,11 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
             videoCapturer?.stopCapture()
             capturing = false
         }
+    }
+
+    func setMicMuted(_ muted: Bool) {
+        micMuted = muted
+        localAudioTrack?.isEnabled = !muted
     }
 
     func stop() {

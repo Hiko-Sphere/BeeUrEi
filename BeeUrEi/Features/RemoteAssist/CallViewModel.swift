@@ -22,7 +22,14 @@ final class CallViewModel {
     private(set) var remoteVideoFrames = false       // 协助者：远端视频真的有画面帧（对方已开启并在传）
     private(set) var callQuality: CallQuality = .unknown // 通话信号强弱（WebRTC 实测往返时延）
     private(set) var declined = false                     // 发起方：对方已拒绝
+    private(set) var muted = false                        // 本端是否静音
     var canReport: Bool { peerUserId != nil }
+
+    /// 切换静音（禁用/启用本端麦克风音频轨）。
+    func setMuted(_ on: Bool) {
+        muted = on
+        media.setMicMuted(on)
+    }
 
     /// 协助者侧画面区的提示文案（把"无画面"的原因讲清楚）。
     var helperVideoHint: String {

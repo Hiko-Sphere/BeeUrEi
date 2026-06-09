@@ -276,7 +276,7 @@ struct FramingAssistView: View {
                 VStack(spacing: 8) {
                     Text(model.guidanceText).font(.title).bold()
                     if !model.resultText.isEmpty {
-                        Text(model.resultText).font(.title2).foregroundStyle(.green)
+                        Text(model.resultText).font(.title2).foregroundStyle(Color.beeSuccess)
                     }
                     if let copyable = model.copyableResult {
                         Button("复制内容") { UIPasteboard.general.string = copyable }

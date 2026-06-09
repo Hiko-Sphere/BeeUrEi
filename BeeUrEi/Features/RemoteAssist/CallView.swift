@@ -25,15 +25,27 @@ struct CallView: View {
             } else {
                 #if canImport(WebRTC)
                 if let engine = model.media as? WebRTCMediaEngine {
-                    RemoteVideoView(engine: engine)
+                    RemoteVideoView(engine: engine) { model.markRemoteVideoFrames() }
                         .frame(height: 320)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.black)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .accessibilityHidden(true)
+                        .overlay(alignment: .center) {
+                            // 没有真实画面帧时，叠一层说明：把"为何黑屏"讲清楚（媒体没通 / 对方没开画面）。
+                            if !model.remoteVideoFrames {
+                                Text(model.helperVideoHint)
+                                    .font(.subheadline).foregroundStyle(.white)
+                                    .multilineTextAlignment(.center).padding()
+                            }
+                        }
+                        .accessibilityElement()
+                        .accessibilityLabel(model.helperVideoHint)
                 }
                 #endif
-                Text("协助者模式：对方开启画面时这里显示其摄像头画面，并可与对方语音交流。")
+                Text(model.helperVideoHint)
+                    .font(.subheadline)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(model.mediaState == .failed ? Color.beeDanger : .secondary)
                     .padding(.horizontal)
             }
 
@@ -119,14 +131,31 @@ struct CallView: View {
 import WebRTC
 
 /// 渲染远端视频（协助者侧）。需 stasel/WebRTC 包。
+/// onFrames：真正收到非零尺寸画面帧时回调一次——用于把"已连通但对方没开画面/黑屏"与"真有画面"区分开。
 struct RemoteVideoView: UIViewRepresentable {
     let engine: WebRTCMediaEngine
+    let onFrames: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onFrames: onFrames) }
+
     func makeUIView(context: Context) -> RTCMTLVideoView {
         let view = RTCMTLVideoView()
         view.videoContentMode = .scaleAspectFill
+        view.delegate = context.coordinator
         engine.setRemoteRenderer(view)
         return view
     }
     func updateUIView(_ uiView: RTCMTLVideoView, context: Context) {}
+
+    final class Coordinator: NSObject, RTCVideoViewDelegate {
+        private let onFrames: () -> Void
+        private var reported = false
+        init(onFrames: @escaping () -> Void) { self.onFrames = onFrames }
+        func videoView(_ videoView: RTCVideoRenderer, didChangeVideoSize size: CGSize) {
+            guard !reported, size.width > 0, size.height > 0 else { return } // 非零尺寸=真有画面帧
+            reported = true
+            DispatchQueue.main.async { self.onFrames() }
+        }
+    }
 }
 #endif

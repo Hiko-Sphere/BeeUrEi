@@ -15,7 +15,21 @@ final class CallViewModel {
     private(set) var peerUserId: String?
     private(set) var peerName: String?
     private(set) var reportStatus: String?
+    private(set) var mediaState: MediaConnState?     // 真实媒体连通状态（区别于信令已连接）
+    private(set) var remoteVideoAvailable = false    // 协助者：已收到远端视频轨（轨道存在；是否有画面再看 frames）
+    private(set) var remoteVideoFrames = false       // 协助者：远端视频真的有画面帧（对方已开启并在传）
     var canReport: Bool { peerUserId != nil }
+
+    /// 协助者侧画面区的提示文案（把"无画面"的原因讲清楚）。
+    var helperVideoHint: String {
+        switch mediaState {
+        case .failed: return "媒体连接失败。请确保两台手机连同一个 WiFi；跨网络需开启 TURN（见手册 A3）。"
+        case .disconnected: return "连接中断，正在尝试恢复…"
+        case .connecting, .none: return "正在建立媒体连接…"
+        case .connected:
+            return remoteVideoFrames ? "正在显示对方画面" : "已连通。等待对方点「显示画面给对方」…"
+        }
+    }
 
     @ObservationIgnored private let signaling = SignalingClient()
     @ObservationIgnored let media: MediaEngine = MediaEngineFactory.make()
@@ -41,6 +55,20 @@ final class CallViewModel {
             if let sdpMid { msg["sdpMid"] = sdpMid }
             self?.signaling.send(msg)
         }
+        // 真实媒体连通状态：把"信令已连接但媒体没通"暴露出来，让无画面可定位（见无画面深审）。
+        media.onMediaStateChange = { [weak self] state in
+            guard let self else { return }
+            self.mediaState = state
+            switch state {
+            case .failed:
+                self.statusText = "媒体连接失败：请两台手机连同一 WiFi；跨网络需开启 TURN"
+            case .connected:
+                if self.connected { self.statusText = self.connectedStatus() }
+            default:
+                break
+            }
+        }
+        media.onRemoteVideoTrack = { [weak self] in self?.remoteVideoAvailable = true }
 
         signaling.onMessage = { [weak self] msg in self?.handle(msg) }
         signaling.onClose = { [weak self] in
@@ -112,6 +140,9 @@ final class CallViewModel {
             break
         }
     }
+
+    /// 协助者侧：远端视频出现真实画面帧（由 RemoteVideoView 的尺寸变化回调触发）。
+    func markRemoteVideoFrames() { remoteVideoFrames = true }
 
     /// 视障侧隐私门控：开启/关闭把画面发给对方。
     func setVideoSending(_ sending: Bool) {

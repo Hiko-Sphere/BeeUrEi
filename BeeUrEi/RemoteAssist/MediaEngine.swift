@@ -1,5 +1,13 @@
 import Foundation
 
+/// 真实媒体（P2P）连接状态——区别于"信令是否加入房间"。
+enum MediaConnState: Equatable {
+    case connecting   // ICE 协商中
+    case connected    // 媒体已连通（可传音视频）
+    case failed       // 媒体连接失败（多为 NAT 穿透失败：跨网络需 TURN，或同 WiFi 也被网络隔离）
+    case disconnected // 暂时中断（可能恢复）
+}
+
 /// 媒体引擎抽象（WebRTC）。把"真实音视频"与"信令/UI"解耦。
 ///
 /// 视频隐私模型（见 BACKEND_PLAN §5）：
@@ -10,6 +18,10 @@ protocol MediaEngine: AnyObject {
     var onLocalDescription: ((_ type: String, _ sdp: String) -> Void)? { get set }
     /// 本端生成的 ICE candidate，交给信令发送。
     var onLocalCandidate: ((_ candidate: String, _ sdpMid: String?, _ sdpMLineIndex: Int32) -> Void)? { get set }
+    /// 真实 ICE/媒体连接状态变化（主线程回调）——用于把"信令已连接但媒体没通"暴露出来，便于定位无画面。
+    var onMediaStateChange: ((_ state: MediaConnState) -> Void)? { get set }
+    /// 协助者侧：收到远端视频轨（主线程回调）。
+    var onRemoteVideoTrack: (() -> Void)? { get set }
 
     func setIceServers(_ servers: [IceServerInfo])
     func start(asCaller: Bool)
@@ -24,6 +36,8 @@ protocol MediaEngine: AnyObject {
 final class StubMediaEngine: MediaEngine {
     var onLocalDescription: ((String, String) -> Void)?
     var onLocalCandidate: ((String, String?, Int32) -> Void)?
+    var onMediaStateChange: ((MediaConnState) -> Void)?
+    var onRemoteVideoTrack: (() -> Void)?
     func setIceServers(_ servers: [IceServerInfo]) {}
     func start(asCaller: Bool) {}
     func createOffer() {}
@@ -54,6 +68,8 @@ import CoreMedia
 final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate {
     var onLocalDescription: ((String, String) -> Void)?
     var onLocalCandidate: ((String, String?, Int32) -> Void)?
+    var onMediaStateChange: ((MediaConnState) -> Void)?
+    var onRemoteVideoTrack: (() -> Void)?
 
     private static let factory: RTCPeerConnectionFactory = {
         RTCInitializeSSL()
@@ -200,6 +216,7 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
             DispatchQueue.main.async {
                 self.remoteVideoTrack = track
                 if let renderer = self.remoteRenderer { track.add(renderer) }
+                self.onRemoteVideoTrack?()
             }
         }
     }
@@ -207,7 +224,19 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
     func peerConnection(_ peerConnection: RTCPeerConnection, didAdd stream: RTCMediaStream) {}
     func peerConnection(_ peerConnection: RTCPeerConnection, didRemove stream: RTCMediaStream) {}
     func peerConnectionShouldNegotiate(_ peerConnection: RTCPeerConnection) {}
-    func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceConnectionState) {}
+    func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceConnectionState) {
+        // 把真实媒体连通状态报给上层——失败/中断时 UI 才能区别于"信令已连接"，定位无画面（见无画面深审）。
+        let mapped: MediaConnState?
+        switch newState {
+        case .checking, .new: mapped = .connecting
+        case .connected, .completed: mapped = .connected
+        case .failed: mapped = .failed
+        case .disconnected: mapped = .disconnected
+        case .closed: mapped = nil
+        @unknown default: mapped = nil
+        }
+        if let mapped { DispatchQueue.main.async { self.onMediaStateChange?(mapped) } }
+    }
     func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {}
     func peerConnection(_ peerConnection: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {}
     func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {}

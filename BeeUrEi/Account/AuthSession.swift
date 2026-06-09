@@ -30,26 +30,30 @@ final class AuthSession {
         do {
             user = try await api.me(token: token)
             return
-        } catch APIError.network {
-            // 纯网络问题（离线/超时/后端暂不可用）：令牌仍有效，保留、稍后重试，绝不登出（见审查 #6）。
-            // 标记失败，让 UI 给出重试/退出出口，而非永久卡在「正在登录…」（见审查 #15）。
+        } catch APIError.unauthorized {
+            // 仅 401（access 真失效/被撤销）才继续 refresh（下方）。
+        } catch {
+            // 网络/解码/其它非鉴权 4xx(.server，如 403/429)：令牌仍可能有效，**保留**、给 UI 重试出口，
+            // 绝不据此 refresh 或登出——否则一次解码漂移/限流就误烧 refresh 甚至误删有效令牌（见审查 #2/#4）。
             restoreFailed = true
             return
-        } catch {
-            // access 失效等 → 继续尝试 refresh。
         }
-        // access 失效 → 用 refresh 换新。
+        // access 失效(401) → 用 refresh 换新。
         guard let rt = KeychainStore.readRefresh() else { logout(); return }
         do {
             let result = try await api.refresh(refreshToken: rt)
+            // 若刷新期间会话已被登出（token 置 nil），不要把新令牌写回，避免"死而复生"（见审查 #5）。
+            guard token != nil else { return }
             self.token = result.token
             self.user = result.user
             KeychainStore.save(result.token)
             KeychainStore.saveRefresh(result.refreshToken)
         } catch APIError.network {
             restoreFailed = true // refresh 也遇网络错误：保留令牌、给出重试出口，下次再试。
+        } catch APIError.unauthorized {
+            logout() // refresh token 被服务端拒绝（401 失效）才真正登出。
         } catch {
-            logout() // refresh 被服务端拒绝（失效）才真正登出。
+            restoreFailed = true // refresh 遇其它瞬时错误(5xx 已是 .network；4xx/解码)：保留令牌，不贸然登出。
         }
     }
 
@@ -82,6 +86,8 @@ final class AuthSession {
             user = result.user
             KeychainStore.save(result.token)
             KeychainStore.saveRefresh(result.refreshToken)
+        } catch APIError.unauthorized {
+            errorMessage = "用户名或密码错误"
         } catch let APIError.server(message) {
             errorMessage = message
         } catch {

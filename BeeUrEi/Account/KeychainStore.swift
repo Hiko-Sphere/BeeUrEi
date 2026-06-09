@@ -14,6 +14,9 @@ enum KeychainStore {
         SecItemDelete(base as CFDictionary)
         var add = base
         add[kSecValueData as String] = Data(value.utf8)
+        // ThisDeviceOnly：令牌**不随**加密备份/iCloud 钥匙串迁移到其它设备——长期 refresh token 跟着备份搬走是真实泄露面。
+        // AfterFirstUnlock：设备首次解锁后即可读（含锁屏时的后台心跳/轮询），避免锁屏时读不到令牌（见审查：令牌存储）。
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         SecItemAdd(add as CFDictionary, nil)
     }
 

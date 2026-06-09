@@ -7,7 +7,7 @@ import { signAccessToken, generateRefreshToken, hashToken, refreshTtlMs } from '
 
 /// 签发 access + refresh 一对（refresh 仅存哈希）。
 function issueTokens(store: Store, user: User): { token: string; refreshToken: string } {
-  const token = signAccessToken({ sub: user.id, role: user.role })
+  const token = signAccessToken({ sub: user.id, role: user.role, tv: user.tokenVersion ?? 0 })
   const refreshToken = generateRefreshToken()
   store.createRefreshToken({ tokenHash: hashToken(refreshToken), userId: user.id, expiresAt: Date.now() + refreshTtlMs })
   return { token, refreshToken }
@@ -30,7 +30,8 @@ const loginSchema = z.object({
 })
 
 export function registerAuthRoutes(app: FastifyInstance, store: Store): void {
-  app.post('/api/auth/register', async (req, reply) => {
+  // 注册/登录/refresh 是凭证暴破与刷号的高危端点，给独立且更严格的限流（防口令暴破/凭证填充/批量刷号，见审查 #3）。
+  app.post('/api/auth/register', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = registerSchema.safeParse(req.body)
     if (!parsed.success) {
       return reply.code(400).send({ error: 'invalid_input', details: parsed.error.flatten() })
@@ -54,7 +55,7 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store): void {
     return reply.code(201).send({ ...tokens, user: publicUser(user) })
   })
 
-  app.post('/api/auth/login', async (req, reply) => {
+  app.post('/api/auth/login', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = loginSchema.safeParse(req.body)
     if (!parsed.success) {
       return reply.code(400).send({ error: 'invalid_input' })
@@ -71,7 +72,7 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store): void {
   })
 
   // 用 refresh token 换新的一对 token（轮换：旧 refresh 立即作废）。
-  app.post('/api/auth/refresh', async (req, reply) => {
+  app.post('/api/auth/refresh', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = refreshSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const hash = hashToken(parsed.data.refreshToken)

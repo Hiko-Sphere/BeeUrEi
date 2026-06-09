@@ -4,13 +4,14 @@ import { randomUUID } from 'node:crypto'
 import { verifyAccessToken } from '../auth/tokens'
 import { SignalingHub, type Member } from '../signaling/hub'
 import { type Store } from '../db/store'
+import { type PendingCallRegistry } from '../assist/pendingCalls'
 
 const RELAY_TYPES = new Set(['offer', 'answer', 'ice', 'video-gate', 'end'])
 
 /// WebRTC 信令：/ws?token=<JWT>。客户端先发 {type:'join', callId, role}，
 /// 之后 offer/answer/ice/video-gate/end 会被转发给同房间的另一端。
 /// video-gate {on} 用于视障侧通知协助者"画面已开/关"（见 BACKEND_PLAN §5）。
-export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store: Store): void {
+export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store: Store, pendingCalls: PendingCallRegistry): void {
   app.register(fastifyWebsocket)
   app.register(async (f) => {
     // clientId → socket（转发用）。adapter 层，故用 any 规避 ws 类型摩擦。
@@ -45,6 +46,13 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
           const callId = typeof msg.callId === 'string' ? msg.callId.trim() : ''
           if (!callId) {
             socket.close(4002, 'invalid_call')
+            return
+          }
+          // 参与权校验：只有该 callId 登记表里的发起者/目标本人才能加入，否则任意登录用户知道 callId
+          // 即可抢先占位、窃听信令、劫持 WebRTC 会话（见审查 #8）。
+          const participants = pendingCalls.participants(callId)
+          if (!participants || !participants.includes(auth.sub)) {
+            socket.close(4003, 'not_a_participant')
             return
           }
           // 同一连接重复 join 不同房间：先离开旧房间并通知旧对端，避免旧房间状态泄漏（见审查 #9）。

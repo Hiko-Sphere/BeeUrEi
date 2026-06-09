@@ -14,6 +14,7 @@ export interface User {
   status: UserStatus
   createdAt: number
   language?: string // 协助者/亲友所说语言(如 'zh'/'en')，用于匹配排序加分（见审查 #10）
+  tokenVersion?: number // 递增即令该用户已签发的 access token 全部失效（改密/封禁，见审查 #1/#2）
 }
 
 /// 亲友绑定：视障用户(owner) ↔ 亲友/协助者账号(member)，可标记为紧急联系人。

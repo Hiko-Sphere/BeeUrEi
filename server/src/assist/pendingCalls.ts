@@ -29,6 +29,13 @@ export class PendingCallRegistry {
     return true
   }
 
+  /// 返回该 callId 的合法参与者（发起者 + 目标）；未登记则 null。供信令 join 的参与权校验（见审查 #8）。
+  participants(callId: string): string[] | null {
+    const c = this.calls.get(callId)
+    if (!c) return null
+    return [c.fromUserId, ...c.toUserIds]
+  }
+
   /// 返回针对该用户、未过期的待接来电（最近的在前）。
   incomingFor(userId: string, now: number): PendingCall[] {
     this.prune(now)

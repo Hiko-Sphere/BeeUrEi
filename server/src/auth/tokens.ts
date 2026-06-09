@@ -24,6 +24,7 @@ export function hashToken(token: string): string {
 export interface TokenPayload {
   sub: string
   role: string
+  tv?: number // tokenVersion：与库中用户的 tokenVersion 比对；改密/封禁递增即令旧 access token 立即失效（见审查 #1/#2）
 }
 
 export function signAccessToken(payload: TokenPayload): string {
@@ -34,7 +35,8 @@ export function verifyAccessToken(token: string): TokenPayload | null {
   try {
     const decoded = jwt.verify(token, SECRET) as jwt.JwtPayload
     if (typeof decoded.sub !== 'string' || typeof decoded.role !== 'string') return null
-    return { sub: decoded.sub, role: decoded.role }
+    const tv = typeof decoded.tv === 'number' ? decoded.tv : 0
+    return { sub: decoded.sub, role: decoded.role, tv }
   } catch {
     return null
   }

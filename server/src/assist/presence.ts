@@ -9,9 +9,12 @@ export class PresenceRegistry {
   /// seq 为客户端发起时刻(ms)；用于忽略乱序到达的过期心跳——否则切页时滞后到达的
   /// available:false 会把刚回前台的在线亲友错误标记为离线，紧急匹配漏人(见审查 #1)。
   heartbeat(userId: string, available: boolean, now: number, seq: number = now): void {
+    // seq 由客户端提供，夹取到 [0, now+60s]：否则恶意超大 seq 会让该用户后续所有合法心跳(seq<巨值)被丢弃，
+    // 把自己永久"钉"在某一状态(如常驻在线却不应答紧急呼叫)，污染紧急匹配（见审查 #9）。
+    const boundedSeq = Math.min(Math.max(Number.isFinite(seq) ? seq : now, 0), now + 60_000)
     const prev = this.lastSeq.get(userId)
-    if (prev !== undefined && seq < prev) return // 过期/乱序心跳：丢弃
-    this.lastSeq.set(userId, seq)
+    if (prev !== undefined && boundedSeq < prev) return // 过期/乱序心跳：丢弃
+    this.lastSeq.set(userId, boundedSeq)
     if (available) this.last.set(userId, now)
     else this.last.delete(userId)
   }

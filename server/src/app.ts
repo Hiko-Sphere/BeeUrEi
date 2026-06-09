@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import rateLimit from '@fastify/rate-limit'
 import { JsonFileStore, type Store } from './db/store'
 import { SqliteStore } from './db/sqliteStore'
+import { setAuthStore } from './auth/rbac'
 import { registerAuthRoutes } from './routes/auth'
 import { registerAccountRoutes } from './routes/account'
 import { registerUserRoutes } from './routes/users'
@@ -42,6 +43,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
       store.getRecordingConfig()
       return { ready: true }
     })
+    setAuthStore(store) // 让 requireAuth 能实时校验账号状态/tokenVersion（见审查 #1/#2）
     registerAuthRoutes(instance, store)
     registerAccountRoutes(instance, store)
     registerUserRoutes(instance, store)
@@ -56,7 +58,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   })
 
   // WebSocket 信令（自带子插件作用域）。
-  registerSignaling(app, hub, store)
+  registerSignaling(app, hub, store, pendingCalls)
 
   // 统一 404 + 错误兜底（清洁 JSON，不泄露堆栈）。
   app.setNotFoundHandler((_req, reply) => reply.code(404).send({ error: 'not_found' }))

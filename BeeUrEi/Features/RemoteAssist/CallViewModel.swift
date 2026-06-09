@@ -46,9 +46,11 @@ final class CallViewModel {
             guard let self else { return }
             self.connected = false
             self.statusText = "连接已断开，请重新呼叫"
-            // 信令断开可能是"幽灵通话"：强制关画面(隐私 fail-safe)并释放媒体，绝不让相机在断线后仍采集/外发（见审查 #5/#8）。
+            // 隐私 fail-safe：信令断开时强制关画面、停相机（setVideoSending(false) 会 disable 视频轨并 stopCapture），
+            // 绝不让相机在断线后仍采集/外发（见审查 #5/#8）。
+            // 但**不** media.stop() 拆除 pc：信令断开多为瞬时(移动网切换/服务器 reload)，P2P 媒体本身可能仍存活；
+            // 立刻拆 pc 会把可恢复断线变成不可恢复的僵尸界面。彻底释放交给用户挂断(hangUp→media.stop)（见回归 #2）。
             self.setVideoSending(false)
-            self.media.stop()
         }
         // 先拉 ICE 服务器并启动媒体引擎，**再**连接/加入信令——否则 await 期间提前到达的 joined
         // 会在 pc 还是 nil 时调 createOffer 而静默落空，视障侧永不发 offer、通话卡死（见审查 #7）。
@@ -102,7 +104,9 @@ final class CallViewModel {
             connected = false
             peerUserId = nil            // 清空，避免举报指向已离开者 / 新对端沿用旧 id（见审查 #7）
             peerName = nil
-            hasOffered = false          // 允许对新对端重新协商
+            // **不**复位 hasOffered：1:1 协助通话中对端离开即视为本通结束，不尝试在旧 pc 上对新对端重协商
+            // ——否则会在残留 hasRemoteDescription/旧 remoteDescription 的 pc 上错配候选致连接退化（见回归 #1/#3）。
+            // 如需联系新协助者，用户重新发起呼叫（全新 CallViewModel + 干净 pc）。
         default:
             break
         }

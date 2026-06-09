@@ -12,6 +12,8 @@ const passwordSchema = z.object({
 })
 const emailSchema = z.object({ email: z.string().email().max(254) })
 const verifyEmailSchema = z.object({ code: z.string().min(4).max(12) })
+// 昵称（displayName）：可改、可重复；用户名(username)才是唯一登录标识。通话/CallKit 显示昵称。
+const profileSchema = z.object({ displayName: z.string().trim().min(1).max(64) })
 // 头像：小尺寸图片 data URL（客户端已压缩）。限大小，防滥用 DB 存大图。
 const avatarSchema = z.object({
   avatar: z.string().regex(/^data:image\/(png|jpeg|jpg|webp);base64,/).max(600_000),
@@ -64,6 +66,15 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     }
     store.updateUser(user.id, { emailVerified: true })
     return { ok: true }
+  })
+
+  // 设置昵称（displayName）。用户名唯一不可改；昵称可改、可重复，用于通话/CallKit/列表显示。
+  app.post('/api/account/profile', { preHandler: requireAuth() }, async (req, reply) => {
+    const parsed = profileSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    if (!store.findById(req.user!.sub)) return reply.code(404).send({ error: 'not_found' })
+    const updated = store.updateUser(req.user!.sub, { displayName: parsed.data.displayName })
+    return { displayName: updated?.displayName }
   })
 
   // 设置头像（小尺寸 data URL；客户端压缩后上传）。

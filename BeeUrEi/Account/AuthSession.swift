@@ -22,6 +22,13 @@ final class AuthSession {
 
     /// 启动时若有 token 但还没账号信息，拉 /api/me 恢复账号与角色；
     /// access 过期则用 refresh token 自动换新；都失败才登出。
+    /// 本地更新昵称（改昵称成功后同步内存态，让"你好，X"等处即时刷新）。
+    func setLocalDisplayName(_ name: String) {
+        guard var u = user else { return }
+        u.displayName = name
+        user = u
+    }
+
     func restore() async {
         guard let token, user == nil, !isRestoring else { return }
         isRestoring = true

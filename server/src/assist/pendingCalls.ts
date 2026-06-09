@@ -9,6 +9,7 @@ export interface PendingCall {
   fromName: string
   toUserIds: string[]
   createdAt: number
+  declinedBy?: string[] // 已明确"拒绝"的目标（供发起方看到"对方已拒绝"）
 }
 
 export class PendingCallRegistry {
@@ -78,6 +79,27 @@ export class PendingCallRegistry {
       return true
     }
     return false
+  }
+
+  /// 目标"拒绝"来电（区别于取消/超时）。仅目标本人有效。保留登记，供发起方轮询看到拒绝。
+  decline(callId: string, userId: string, now: number): boolean {
+    this.prune(now)
+    const c = this.calls.get(callId)
+    if (!c || !c.toUserIds.includes(userId)) return false
+    const set = new Set(c.declinedBy ?? [])
+    set.add(userId)
+    this.calls.set(callId, { ...c, declinedBy: [...set] })
+    return true
+  }
+
+  /// 呼叫状态（发起方轮询）：是否存在、是否所有目标都已拒绝。
+  status(callId: string, now: number): { exists: boolean; declinedAll: boolean } {
+    this.prune(now)
+    const c = this.calls.get(callId)
+    if (!c) return { exists: false, declinedAll: false }
+    const declined = new Set(c.declinedBy ?? [])
+    const declinedAll = c.toUserIds.length > 0 && c.toUserIds.every((id) => declined.has(id))
+    return { exists: true, declinedAll }
   }
 
   private prune(now: number): void {

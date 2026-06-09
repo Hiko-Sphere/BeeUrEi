@@ -25,7 +25,7 @@ enum ServerConfig {
 struct AccountInfo: Codable, Sendable, Equatable, Identifiable {
     let id: String
     let username: String
-    let displayName: String
+    var displayName: String  // 昵称，可改（用户名 username 才唯一不可改）
     let role: String
     let status: String
     // 仅本人 /api/me 返回（selfView）；登录/注册/管理员列表为 publicUser，这两项为 nil。
@@ -362,6 +362,24 @@ struct APIClient {
     /// 取消/结束待接来电（尽力而为）。
     func cancelCall(token: String, callId: String) async {
         _ = try? await authedSend("POST", "/api/assist/call/cancel", token: token, body: ["callId": callId])
+    }
+
+    /// 目标"拒绝"来电（尽力而为）——发起方据此显示"对方已拒绝"。
+    func declineCall(token: String, callId: String) async {
+        _ = try? await authedSend("POST", "/api/assist/call/decline", token: token, body: ["callId": callId])
+    }
+
+    /// 发起方轮询呼叫状态：是否所有目标已拒绝。
+    func callDeclined(token: String, callId: String) async -> Bool {
+        struct R: Codable { let exists: Bool; let declinedAll: Bool }
+        guard let data = try? await authedGet("/api/assist/call/status?callId=\(callId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? callId)", token: token),
+              let r = try? JSONDecoder().decode(R.self, from: data) else { return false }
+        return r.declinedAll
+    }
+
+    /// 设置昵称（displayName）。用户名唯一不可改；昵称可改可重复，用于通话/CallKit/列表显示。
+    func setDisplayName(token: String, displayName: String) async throws {
+        _ = try await authedSend("POST", "/api/account/profile", token: token, body: ["displayName": displayName])
     }
 
     /// 协助者/亲友轮询自己的待接来电。

@@ -18,12 +18,14 @@ struct CallView: View {
             NetworkStatusBar(callQuality: model.callQuality) // 网络类型 + 通话信号强弱
 
             if let name = model.peerName, !name.isEmpty {
-                AvatarView(dataURL: model.peerAvatar, name: name, size: 64)
+                AvatarView(dataURL: model.peerAvatar, name: name, size: 96)
+                Text(name).font(.headline) // 显示昵称
             }
 
             Text(model.statusText)
                 .font(.title3.weight(.semibold))
                 .multilineTextAlignment(.center)
+                .foregroundStyle(model.declined ? Color.beeDanger : .primary) // 被拒绝时红色突出
                 .accessibilityAddTraits(.updatesFrequently)
 
             if model.role == .blind {

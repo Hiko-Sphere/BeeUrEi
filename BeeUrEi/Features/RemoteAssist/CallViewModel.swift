@@ -21,6 +21,7 @@ final class CallViewModel {
     private(set) var remoteVideoAvailable = false    // 协助者：已收到远端视频轨（轨道存在；是否有画面再看 frames）
     private(set) var remoteVideoFrames = false       // 协助者：远端视频真的有画面帧（对方已开启并在传）
     private(set) var callQuality: CallQuality = .unknown // 通话信号强弱（WebRTC 实测往返时延）
+    private(set) var declined = false                     // 发起方：对方已拒绝
     var canReport: Bool { peerUserId != nil }
 
     /// 协助者侧画面区的提示文案（把"无画面"的原因讲清楚）。
@@ -95,6 +96,23 @@ final class CallViewModel {
         signaling.connect(token: token, baseURL: ServerConfig.baseURL)
         signaling.join(callId: callId, role: role == .blind ? "blind" : "helper")
         statusText = waitingText // 寻找志愿者/呼叫亲友显示各自的等待文案，不再笼统说"已加入"
+        if role == .blind { startDeclineWatch(token: token) } // 发起方：轮询"对方是否拒绝"
+    }
+
+    /// 发起方等待期间轮询呼叫状态；对方全部拒绝则显示"对方已拒绝"。
+    private func startDeclineWatch(token: String) {
+        let cid = callId
+        Task { [weak self] in
+            while true {
+                try? await Task.sleep(for: .seconds(2))
+                guard let self, !self.connected, !self.ended, !self.declined else { return }
+                if await APIClient().callDeclined(token: token, callId: cid) {
+                    self.declined = true
+                    self.statusText = "对方已拒绝"
+                    return
+                }
+            }
+        }
     }
 
     private func handle(_ msg: [String: Any]) {

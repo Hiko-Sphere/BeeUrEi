@@ -2,6 +2,7 @@ import Foundation
 import CallKit
 import PushKit
 import Observation
+import UIKit
 
 /// CallKit 接听后，把"要进入哪通通话"桥接给 SwiftUI 呈现层。
 /// RemoteAssistService 不是视图，无法直接 present；它写这里，RootView 观察并弹出 CallView。
@@ -33,12 +34,16 @@ final class RemoteAssistService: NSObject {
     /// CallKit UUID → 该来电的会合信息（接听/挂断时回查）。仅在主线程访问（CallKit/PushKit 回调均走主队列，
     /// 其余调用方为 SwiftUI MainActor，见复审 #6）。
     private var active: [UUID: (callId: String, name: String)] = [:]
+    private var answered: Set<UUID> = [] // 已接听的来电；用于区分"拒绝"(未接听即结束)与"通话后挂断"
 
     override init() {
         let config = CXProviderConfiguration()
         config.supportsVideo = true
         config.maximumCallsPerCallGroup = 1
         config.supportedHandleTypes = [.generic]
+        // CallKit 系统来电界面的图标（App 品牌 Logo）。注意：CallKit 公开 API 不支持按"来电人"显示任意头像，
+        // 只能放 App 图标(作为模板/掩膜)；来电人头像在接听后的应用内通话界面显示（见 CallView）。
+        config.iconTemplateImageData = UIImage(named: "LaunchLogo")?.pngData()
         provider = CXProvider(configuration: config)
         super.init()
         provider.setDelegate(self, queue: nil)
@@ -97,6 +102,7 @@ extension RemoteAssistService: CXProviderDelegate {
 
     func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
         callMachine.answer()
+        answered.insert(action.callUUID)
         if let info = active[action.callUUID] {
             // 桥接到 SwiftUI：RootView 会据此弹出 CallView 加入该 callId 房间。
             Task { @MainActor in IncomingCallCenter.shared.present(callId: info.callId, callerName: info.name) }
@@ -105,8 +111,14 @@ extension RemoteAssistService: CXProviderDelegate {
     }
 
     func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
+        // 未接听即结束 = 拒绝：通知发起方"对方已拒绝"（接听后挂断则不算拒绝）。
+        let uuid = action.callUUID
+        let wasAnswered = answered.remove(uuid) != nil
+        if !wasAnswered, let callId = active[uuid]?.callId {
+            Task { if let token = KeychainStore.read() { await APIClient().declineCall(token: token, callId: callId) } }
+        }
         // 系统通话界面挂断：清空呈现层（关掉 CallView）+ 复位状态机。
-        active[action.callUUID] = nil
+        active[uuid] = nil
         Task { @MainActor in IncomingCallCenter.shared.clear() }
         callMachine.hangUp()
         action.fulfill()

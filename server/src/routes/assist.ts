@@ -138,6 +138,21 @@ export function registerAssistRoutes(
     return { ok: true }
   })
 
+  // 目标"拒绝"来电：保留登记，让发起方轮询看到"对方已拒绝"（区别于取消/超时）。
+  app.post('/api/assist/call/decline', { preHandler: requireAuth() }, async (req, reply) => {
+    const id = (req.body as { callId?: string })?.callId
+    if (typeof id !== 'string' || !id) return reply.code(400).send({ error: 'invalid_input' })
+    pendingCalls.decline(id, req.user!.sub, Date.now())
+    return { ok: true }
+  })
+
+  // 发起方轮询呼叫状态：是否所有目标已拒绝（据此在通话界面显示"对方已拒绝"）。
+  app.get('/api/assist/call/status', { preHandler: requireAuth() }, async (req) => {
+    const id = (req.query as { callId?: string })?.callId
+    if (typeof id !== 'string' || !id) return { exists: false, declinedAll: false }
+    return pendingCalls.status(id, Date.now())
+  })
+
   // MARK: 公开求助队列（面向陌生志愿者的众包协助，区别于上面定向呼叫亲友）
 
   // 视障侧广播一条公开求助：登记 callId + 粗粒度信息，供在线志愿者浏览/匹配并加入 callId 房间。

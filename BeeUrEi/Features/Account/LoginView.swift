@@ -23,6 +23,8 @@ struct LoginView: View {
     @State private var showForgot = false
     @State private var photoItem: PhotosPickerItem?
     @State private var avatarMsg: String?
+    @State private var showNickname = false
+    @State private var nickInput = ""
 
     private let roles: [(label: String, value: String)] = [
         ("求助者（视障）", "blind"),
@@ -42,7 +44,12 @@ struct LoginView: View {
                     if let avatarMsg { Text(avatarMsg).font(.footnote).foregroundStyle(.secondary) }
                 }
                 Section("当前账号") {
-                    Text(session.user?.displayName ?? "已登录")
+                    LabeledContent("用户名", value: session.user?.username ?? "—") // 唯一登录标识，不可改
+                    HStack {
+                        LabeledContent("昵称", value: session.user?.displayName ?? "—")
+                        Spacer()
+                        Button("修改") { nickInput = session.user?.displayName ?? ""; showNickname = true }
+                    }
                     Text("角色：\(roleDisplayName(session.user?.role ?? ""))").foregroundStyle(.secondary)
                     NavigationLink("黑名单") { BlocklistView() }
                     Button("修改密码") { showChangePassword = true }
@@ -112,6 +119,13 @@ struct LoginView: View {
         // 登录/注册失败主动朗读（见无障碍审计）。
         .onChange(of: session.errorMessage) { _, msg in if let msg, !msg.isEmpty { A11y.announce(msg) } }
         .onChange(of: photoItem) { _, item in if let item { Task { await uploadAvatar(item) } } }
+        .alert("修改昵称", isPresented: $showNickname) {
+            TextField("昵称", text: $nickInput)
+            Button("保存") { Task { await saveNickname() } }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("昵称用于通话、来电界面和联系人显示，可重复。用户名是唯一登录标识，不可修改。")
+        }
         .task { await loadMe() }
         .sheet(isPresented: $showEmail, onDismiss: { Task { await loadMe() } }) {
             EmailManageView()
@@ -144,6 +158,17 @@ struct LoginView: View {
     private func loadMe() async {
         guard session.isLoggedIn, let token = KeychainStore.read() else { detail = nil; return }
         detail = try? await APIClient().me(token: token)
+    }
+
+    private func saveNickname() async {
+        let name = nickInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, let token = KeychainStore.read() else { return }
+        do {
+            try await APIClient().setDisplayName(token: token, displayName: name)
+            session.setLocalDisplayName(name)
+            await loadMe()
+            A11y.announce("昵称已更新为 \(name)")
+        } catch { accountMessage = "昵称修改失败，请重试。" }
     }
 
     private func uploadAvatar(_ item: PhotosPickerItem) async {

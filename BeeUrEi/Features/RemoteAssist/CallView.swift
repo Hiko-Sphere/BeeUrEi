@@ -8,8 +8,8 @@ struct CallView: View {
     @Environment(\.scenePhase) private var scenePhase
     let onClose: () -> Void
 
-    init(role: CallViewModel.Role, callId: String, onClose: @escaping () -> Void) {
-        _model = State(initialValue: CallViewModel(role: role, callId: callId))
+    init(role: CallViewModel.Role, callId: String, waitingText: String = "正在接通，请稍候…", onClose: @escaping () -> Void) {
+        _model = State(initialValue: CallViewModel(role: role, callId: callId, waitingText: waitingText))
         self.onClose = onClose
     }
 

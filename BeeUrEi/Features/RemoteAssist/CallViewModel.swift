@@ -9,6 +9,7 @@ final class CallViewModel {
 
     let role: Role
     let callId: String
+    private let waitingText: String   // 等待对端接入时的提示（求助志愿者/呼叫亲友文案不同）
     private(set) var connected = false
     private(set) var videoSending = false
     private(set) var statusText = "正在连接…"
@@ -37,9 +38,10 @@ final class CallViewModel {
     @ObservationIgnored private var hasOffered = false // 视障侧是否已发过 offer，防对端重连/重复 peer-joined 在已建立 pc 上重发 offer 造成 glare（见审查 #2）
     @ObservationIgnored private var ended = false // hangUp 幂等：任意路径（按钮/界面消失/CallKit 系统挂断）都能安全调用，确保媒体/信令确定性释放（见复审 #1）
 
-    init(role: Role, callId: String) {
+    init(role: Role, callId: String, waitingText: String = "正在接通，请稍候…") {
         self.role = role
         self.callId = callId
+        self.waitingText = waitingText
     }
 
     func start() async {
@@ -91,7 +93,7 @@ final class CallViewModel {
         media.start(asCaller: role == .blind)
         signaling.connect(token: token, baseURL: ServerConfig.baseURL)
         signaling.join(callId: callId, role: role == .blind ? "blind" : "helper")
-        statusText = "已加入，等待对方接入…"
+        statusText = waitingText // 寻找志愿者/呼叫亲友显示各自的等待文案，不再笼统说"已加入"
     }
 
     private func handle(_ msg: [String: Any]) {

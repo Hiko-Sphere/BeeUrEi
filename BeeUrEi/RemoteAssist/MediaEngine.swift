@@ -76,6 +76,7 @@ enum MediaEngineFactory {
 #if canImport(WebRTC)
 import WebRTC
 import CoreMedia
+import AVFoundation
 
 /// 自托管 WebRTC：P2P 1:1。STUN 用公共，TURN 待接自托管 coturn。
 final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate {
@@ -108,8 +109,22 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
 
     func setIceServers(_ servers: [IceServerInfo]) { iceConfig = servers }
 
+    /// 把音频会话配成 WebRTC 通话所需的 .playAndRecord（双向语音）。
+    /// 必须经 RTCAudioSession 配置，让 WebRTC 与会话状态同步——直接改 AVAudioSession 会与 WebRTC 内部状态冲突致无声。
+    private func configureAudioSession() {
+        let session = RTCAudioSession.sharedInstance()
+        let config = RTCAudioSessionConfiguration.webRTC()
+        config.category = AVAudioSession.Category.playAndRecord.rawValue
+        config.mode = AVAudioSession.Mode.voiceChat.rawValue
+        config.categoryOptions = [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker] // 默认走扬声器，盲人免持
+        session.lockForConfiguration()
+        try? session.setConfiguration(config, active: true)
+        session.unlockForConfiguration()
+    }
+
     func start(asCaller: Bool) {
         self.asCaller = asCaller
+        configureAudioSession() // 关键：切到 .playAndRecord，否则 App 启动设的 .playback 只放不录→听不见/采不到声（见音频深审）
         let config = RTCConfiguration()
         config.iceServers = iceConfig.isEmpty
             ? [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]

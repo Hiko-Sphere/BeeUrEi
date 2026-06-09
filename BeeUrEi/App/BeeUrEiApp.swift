@@ -64,7 +64,7 @@ private struct RootView: View {
         // 共享同一个 AuthSession 给所有子视图(含 sheet 里的 LoginView)，避免出现第二个独立会话实例
         // 导致登出/删号/改密后内存态不同步（见审查 #5）。
         .environment(session)
-        .tint(.beeInk) // 全局品牌强调色，统一按钮/开关/链接观感（墨蓝高对比，无障碍友好）
+        .tint(.beeAccent) // 全局强调色：浅色墨蓝/深色蜂蜜，两端皆高对比、无障碍友好
         // 退出登录后回到登录页，并清掉已选角色，避免下次登录沿用旧角色；登录后绑定 VoIP token（A1）。
         .onChange(of: session.isLoggedIn) { _, loggedIn in
             if loggedIn {

@@ -42,7 +42,7 @@ struct AssistHomeView: View {
             familyTab.tabItem { Label("我的亲人", systemImage: "person.2.fill") }
             meTab.tabItem { Label("我的", systemImage: "person.crop.circle") }
         }
-        .tint(.beeInk)
+        .tint(.beeAccent)
         .task { await onAppear() }
         // 匹配/认领状态变化主动朗读——盲人/低视力协助者点完按钮才有语音反馈（见无障碍审计）。
         .onChange(of: statusText) { _, new in if let new, !new.isEmpty { A11y.announce(new) } }
@@ -78,18 +78,22 @@ struct AssistHomeView: View {
                 VStack(alignment: .leading, spacing: BeeSpacing.md) {
                     NetworkStatusBar() // 当前网络类型（WiFi/移动数据/有线链接）
 
-                    HStack {
-                        BeeStatusPill(online: online)
-                        Spacer()
-                        Button { prefsShown = true } label: {
-                            Label("匹配偏好", systemImage: "slider.horizontal.3")
+                    // 状态卡：在线待命 + 匹配偏好，统一收进一张卡片，简洁清晰。
+                    BeeCard {
+                        VStack(alignment: .leading, spacing: BeeSpacing.sm) {
+                            HStack {
+                                BeeStatusPill(online: online)
+                                Spacer()
+                                Button { prefsShown = true } label: {
+                                    Label("匹配偏好", systemImage: "slider.horizontal.3").font(.subheadline)
+                                }
+                                .accessibilityHint("设置随机匹配时优先的语言")
+                            }
+                            Toggle("在线待命（接听求助与亲人来电）", isOn: $online)
+                                .onChange(of: online) { _, v in setOnline(v) }
+                                .font(.subheadline)
                         }
-                        .accessibilityHint("设置随机匹配时优先的语言")
                     }
-
-                    Toggle("在线待命（接听求助与亲人来电）", isOn: $online)
-                        .onChange(of: online) { _, v in setOnline(v) }
-                        .font(.subheadline)
 
                     BeeBigButton("随机匹配一位需要帮助的人",
                                  systemImage: "shuffle",
@@ -103,7 +107,7 @@ struct AssistHomeView: View {
                         Text(statusText).font(.footnote).foregroundStyle(.secondary)
                     }
 
-                    Text("待帮助队列").font(.headline).padding(.top, BeeSpacing.sm)
+                    BeeSectionHeader("待帮助队列", systemImage: "person.2.wave.2.fill").padding(.top, BeeSpacing.sm)
 
                     if queue.isEmpty {
                         BeeEmptyState(systemImage: queueError ? "wifi.exclamationmark" : "checkmark.circle",

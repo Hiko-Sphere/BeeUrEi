@@ -57,4 +57,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         [.banner, .sound, .badge]
     }
+
+    // 点击通知：来电横幅 → 直接进入接听界面；其余 → 打开 App 即可（应用内已展示请求）。
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse) async {
+        let info = response.notification.request.content.userInfo
+        if info["kind"] as? String == "incoming_call", let callId = info["callId"] as? String {
+            let name = response.notification.request.content.title
+            await MainActor.run { IncomingCallCenter.shared.present(callId: callId, callerName: name) }
+        } else {
+            await NotificationsCenter.shared.refresh()
+        }
+    }
 }

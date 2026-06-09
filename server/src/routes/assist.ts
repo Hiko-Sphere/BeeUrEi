@@ -107,9 +107,18 @@ export function registerAssistRoutes(
     if (!ok) return reply.code(409).send({ error: 'call_id_conflict' }) // 该 callId 被他人占用，防覆盖/劫持(见审查 #2)
     // A1：向各目标设备推 VoIP 来电（后台/锁屏唤起 CallKit）。fire-and-forget，失败不阻断呼叫。
     const callerName = store.findById(from.sub)?.displayName ?? '求助者'
+    console.log('[call] dispatch from=%s callId=%s targets=%j voip=%j apns=%j',
+      from.sub, parsed.data.callId, targets,
+      targets.map((id) => (store.findById(id)?.voipToken ? 1 : 0)),
+      targets.map((id) => (store.findById(id)?.apnsToken ? 1 : 0)))
     for (const id of targets) {
-      const token = store.findById(id)?.voipToken
-      if (token) void pushSender.sendCallInvite(token, parsed.data.callId, callerName, from.sub)
+      const u = store.findById(id)
+      if (u?.voipToken) void pushSender.sendCallInvite(u.voipToken, parsed.data.callId, callerName, from.sub)
+      // 兜底：同时发一条普通提醒推送（万一 CallKit 未弹，至少出现"来电"横幅，可点开 App 接听）。
+      if (u?.apnsToken) {
+        void pushSender.sendAlert(u.apnsToken, `${callerName} 来电`, '点击打开 App 接听', { kind: 'incoming_call', callId: parsed.data.callId })
+          .catch(() => {})
+      }
     }
     metrics.inc('calls_registered_total')
     return { ok: true }
@@ -149,6 +158,14 @@ export function registerAssistRoutes(
     })
     if (!ok) return reply.code(409).send({ error: 'call_id_conflict' }) // callId 被他人占用，防覆盖/劫持
     metrics.inc('help_requests_total')
+    // 软件外通知：提醒"在线待命"的志愿者有新求助（排除自己与黑名单；fire-and-forget）。
+    const now = Date.now()
+    const blocked = blockedUserIdSet(store, req.user!.sub)
+    for (const uid of presence.availableUserIds(now)) {
+      if (uid === req.user!.sub || blocked.has(uid)) continue
+      const apns = store.findById(uid)?.apnsToken
+      if (apns) void pushSender.sendAlert(apns, '有人需要帮助', `${me?.displayName ?? '一位用户'}发起了求助`, { kind: 'help_request' }).catch(() => {})
+    }
     return { ok: true }
   })
 

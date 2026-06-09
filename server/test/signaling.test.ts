@@ -30,9 +30,10 @@ describe('WebRTC signaling relay', () => {
     const helper = await reg('helper', 'helper')
     const tCaller = caller.token, tHelper = helper.token
 
-    // 真实流程：绑定亲友 → 登记会合呼叫(使 callId 'c1' 在 pendingCalls 有参与者) → 双方才能 join /ws（见审查 #8）。
-    await app.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${tCaller}` },
+    // 真实流程：绑定亲友 → 对方接受(双向同意 #6) → 登记会合呼叫(callId 'c1' 入 pendingCalls) → 双方才能 join /ws（见审查 #8）。
+    const link = await app.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${tCaller}` },
       payload: { username: 'helper', relation: '志愿者', isEmergency: true } })
+    await app.inject({ method: 'POST', url: `/api/family/links/${link.json().link.id}/accept`, headers: { authorization: `Bearer ${tHelper}` } })
     const call = await app.inject({ method: 'POST', url: '/api/assist/call', headers: { authorization: `Bearer ${tCaller}` },
       payload: { callId: 'c1', targetUserIds: [helper.id] } })
     expect(call.statusCode).toBe(200)
@@ -89,8 +90,9 @@ describe('WebRTC signaling relay', () => {
     const helper = await reg('helper2', 'helper')
     const attacker = await reg('attacker', 'helper') // 第三方：非该通话参与者
 
-    await app.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${caller.token}` },
+    const link2 = await app.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${caller.token}` },
       payload: { username: 'helper2', relation: '志愿者', isEmergency: true } })
+    await app.inject({ method: 'POST', url: `/api/family/links/${link2.json().link.id}/accept`, headers: { authorization: `Bearer ${helper.token}` } })
     await app.inject({ method: 'POST', url: '/api/assist/call', headers: { authorization: `Bearer ${caller.token}` },
       payload: { callId: 'c2', targetUserIds: [helper.id] } })
 

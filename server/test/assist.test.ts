@@ -20,9 +20,11 @@ describe('assist presence + match', () => {
 
     const auth = (t: string) => ({ authorization: `Bearer ${t}` })
 
-    // owner 绑定两位（family 设为紧急联系人）。
-    await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(owner.token), payload: { username: 'helper1' } })
-    await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(owner.token), payload: { username: 'family1', isEmergency: true } })
+    // owner 绑定两位（family 设为紧急联系人），并由被绑定方接受（双向同意，见审查 #6）。
+    const lh = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(owner.token), payload: { username: 'helper1' } })
+    const lf = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(owner.token), payload: { username: 'family1', isEmergency: true } })
+    await a.inject({ method: 'POST', url: `/api/family/links/${lh.json().link.id}/accept`, headers: auth(helper.token) })
+    await a.inject({ method: 'POST', url: `/api/family/links/${lf.json().link.id}/accept`, headers: auth(family.token) })
 
     // 都不在线 → 匹配为空。
     let m = await a.inject({ method: 'POST', url: '/api/assist/match', headers: auth(owner.token), payload: { emergency: true } })
@@ -53,8 +55,10 @@ describe('assist presence + match', () => {
     // 两位非紧急协助者，一位母语 en、一位 zh。
     const en = (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'helperEn', password: 'secret123', role: 'helper', language: 'en' } })).json()
     const zh = (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'helperZh', password: 'secret123', role: 'helper', language: 'zh' } })).json()
-    await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(owner.token), payload: { username: 'helperEn' } })
-    await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(owner.token), payload: { username: 'helperZh' } })
+    const le = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(owner.token), payload: { username: 'helperEn' } })
+    const lz = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(owner.token), payload: { username: 'helperZh' } })
+    await a.inject({ method: 'POST', url: `/api/family/links/${le.json().link.id}/accept`, headers: auth(en.token) })
+    await a.inject({ method: 'POST', url: `/api/family/links/${lz.json().link.id}/accept`, headers: auth(zh.token) })
     await a.inject({ method: 'POST', url: '/api/assist/heartbeat', headers: auth(en.token), payload: { available: true } })
     await a.inject({ method: 'POST', url: '/api/assist/heartbeat', headers: auth(zh.token), payload: { available: true } })
 
@@ -70,8 +74,9 @@ describe('assist presence + match', () => {
     const helper = await reg(a, 'helper9', 'helper')
     const other = await reg(a, 'other9', 'helper')
     const auth = (t: string) => ({ authorization: `Bearer ${t}` })
-    // owner 须与目标有亲友绑定才能呼叫（越权防护）。
-    await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(owner.token), payload: { username: 'helper9' } })
+    // owner 须与目标有**已接受**的亲友绑定才能呼叫（越权防护 + 双向同意，见审查 #1/#6）。
+    const lk = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(owner.token), payload: { username: 'helper9' } })
+    await a.inject({ method: 'POST', url: `/api/family/links/${lk.json().link.id}/accept`, headers: auth(helper.token) })
 
     // 未绑定的目标 → 403（不能向任意用户强推来电）。
     const forbidden = await a.inject({ method: 'POST', url: '/api/assist/call', headers: auth(owner.token), payload: { callId: 'c-bad', targetUserIds: [other.user.id] } })

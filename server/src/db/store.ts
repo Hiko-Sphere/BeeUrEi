@@ -18,6 +18,8 @@ export interface User {
 }
 
 /// 亲友绑定：视障用户(owner) ↔ 亲友/协助者账号(member)，可标记为紧急联系人。
+export type LinkStatus = 'pending' | 'accepted'
+
 export interface FamilyLink {
   id: string
   ownerId: string
@@ -26,6 +28,10 @@ export interface FamilyLink {
   isEmergency: boolean
   phone?: string // 亲友真实手机号（App 通话连不上时一键拨打兜底）
   createdAt: number
+  // 被绑定方(member)的同意状态：新绑定为 pending，member 接受后才 accepted。
+  // 仅 accepted 的绑定参与匹配/呼叫/紧急路由——否则任意用户可单向绑定他人来探测在线状态/强推来电（见审查 #6）。
+  // 旧库无此列读为 undefined，按 accepted 兼容（不破坏既有绑定）。
+  status?: LinkStatus
 }
 
 /// 举报（通话后一键举报 → 管理员审核）。

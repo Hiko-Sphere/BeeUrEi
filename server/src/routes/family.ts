@@ -39,9 +39,20 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store): void {
       isEmergency: parsed.data.isEmergency ?? false,
       phone: parsed.data.phone,
       createdAt: Date.now(),
+      status: 'pending', // 需被绑定方接受后才生效（匹配/呼叫/紧急仅认 accepted，见审查 #6）
     }
     store.createLink(link)
     return reply.code(201).send({ link: viewLink(store, link) })
+  })
+
+  // 成员侧：接受一条绑定请求（仅被绑定者本人）。接受后该绑定才参与匹配/呼叫/紧急路由。
+  app.post('/api/family/links/:id/accept', { preHandler: requireAuth() }, async (req, reply) => {
+    const me = req.user!
+    const id = (req.params as { id: string }).id
+    const link = store.findLink(id)
+    if (!link || link.memberId !== me.sub) return reply.code(404).send({ error: 'not_found' })
+    store.createLink({ ...link, status: 'accepted' }) // INSERT OR REPLACE 即更新
+    return { ok: true }
   })
 
   // 列出我的亲友。
@@ -62,17 +73,18 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store): void {
           ownerName: owner?.displayName ?? '未知',
           relation: l.relation,
           isEmergency: l.isEmergency,
+          status: l.status ?? 'accepted', // pending 表示待我接受（见审查 #6）
         }
       }),
     }
   })
 
-  // 删除一条绑定（仅本人）。
+  // 删除一条绑定：owner 解绑，或 member 拒绝/解除（任一方本人均可，见审查 #6）。
   app.delete('/api/family/links/:id', { preHandler: requireAuth() }, async (req, reply) => {
-    const owner = req.user!
+    const me = req.user!
     const id = (req.params as { id: string }).id
     const link = store.findLink(id)
-    if (!link || link.ownerId !== owner.sub) return reply.code(404).send({ error: 'not_found' })
+    if (!link || (link.ownerId !== me.sub && link.memberId !== me.sub)) return reply.code(404).send({ error: 'not_found' })
     store.deleteLink(id)
     return reply.code(204).send()
   })

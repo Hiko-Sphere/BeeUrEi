@@ -46,7 +46,8 @@ export function registerAssistRoutes(
     const parsed = matchSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const now = Date.now()
-    const links = store.linksByOwner(req.user!.sub)
+    // 仅 accepted 的绑定参与匹配——否则单向绑定他人即可探测其在线状态（见审查 #6）。
+    const links = store.linksByOwner(req.user!.sub).filter((l) => (l.status ?? 'accepted') === 'accepted')
     const candidates: Candidate[] = links.map((l) => ({
       userId: l.memberId,
       online: presence.isAvailable(l.memberId, now) || hub.isOnline(l.memberId),
@@ -71,7 +72,8 @@ export function registerAssistRoutes(
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const from = req.user!
     // 仅允许呼叫与自己有亲友绑定关系的目标——否则任意用户可向任意 userId 强推伪造来电(越权/骚扰，见审查 #1)。
-    const allowed = new Set(store.linksByOwner(from.sub).map((l) => l.memberId))
+    // 仅可呼叫**已接受**绑定的目标——pending（对方未同意）不可被强推来电（见审查 #6）。
+    const allowed = new Set(store.linksByOwner(from.sub).filter((l) => (l.status ?? 'accepted') === 'accepted').map((l) => l.memberId))
     const targets = parsed.data.targetUserIds.filter((id) => allowed.has(id))
     if (targets.length === 0) return reply.code(403).send({ error: 'not_linked' })
     const ok = pendingCalls.register({

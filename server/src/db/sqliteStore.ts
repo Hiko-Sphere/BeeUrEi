@@ -2,7 +2,7 @@ import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { Store, User, Role, UserStatus, FamilyLink, Report, ReportStatus, Recording, RecordingConfig, RefreshToken } from './store'
+import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken } from './store'
 
 // 用运行时 require + 非静态模块名加载 node:sqlite，避免打包器(vitest/vite)静态解析失败；
 // 由 Node 在运行时解析（需 --experimental-sqlite，已在 npm 脚本里通过 NODE_OPTIONS 开启）。
@@ -24,7 +24,7 @@ export class SqliteStore implements Store {
         displayName TEXT, role TEXT, status TEXT, createdAt INTEGER, language TEXT, tokenVersion INTEGER);
       CREATE TABLE IF NOT EXISTS links (
         id TEXT PRIMARY KEY, ownerId TEXT, memberId TEXT, relation TEXT,
-        isEmergency INTEGER, phone TEXT, createdAt INTEGER);
+        isEmergency INTEGER, phone TEXT, createdAt INTEGER, status TEXT);
       CREATE TABLE IF NOT EXISTS reports (
         id TEXT PRIMARY KEY, reporterId TEXT, targetUserId TEXT, callId TEXT,
         reason TEXT, status TEXT, createdAt INTEGER);
@@ -39,6 +39,7 @@ export class SqliteStore implements Store {
     try { this.db.exec('ALTER TABLE links ADD COLUMN phone TEXT') } catch { /* 列已存在 */ }
     try { this.db.exec('ALTER TABLE users ADD COLUMN language TEXT') } catch { /* 列已存在 */ }
     try { this.db.exec('ALTER TABLE users ADD COLUMN tokenVersion INTEGER') } catch { /* 列已存在 */ } // 改密/封禁令旧 token 失效（见审查 #2）
+    try { this.db.exec('ALTER TABLE links ADD COLUMN status TEXT') } catch { /* 列已存在 */ } // 绑定双向同意 pending/accepted（见审查 #6）
   }
 
   // MARK: refresh tokens
@@ -90,9 +91,9 @@ export class SqliteStore implements Store {
   // MARK: links
   createLink(l: FamilyLink): void {
     this.db.prepare(
-      `INSERT OR REPLACE INTO links (id, ownerId, memberId, relation, isEmergency, phone, createdAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run(l.id, l.ownerId, l.memberId, l.relation, l.isEmergency ? 1 : 0, l.phone ?? null, l.createdAt)
+      `INSERT OR REPLACE INTO links (id, ownerId, memberId, relation, isEmergency, phone, createdAt, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(l.id, l.ownerId, l.memberId, l.relation, l.isEmergency ? 1 : 0, l.phone ?? null, l.createdAt, l.status ?? null)
   }
   linksByOwner(ownerId: string): FamilyLink[] {
     return this.db.prepare('SELECT * FROM links WHERE ownerId = ?').all(ownerId).map((r) => this.toLink(r))
@@ -163,7 +164,7 @@ export class SqliteStore implements Store {
     return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt), language: r.language ?? undefined, tokenVersion: r.tokenVersion != null ? Number(r.tokenVersion) : 0 }
   }
   private toLink(r: any): FamilyLink {
-    return { id: r.id, ownerId: r.ownerId, memberId: r.memberId, relation: r.relation, isEmergency: Number(r.isEmergency) === 1, phone: r.phone ?? undefined, createdAt: Number(r.createdAt) }
+    return { id: r.id, ownerId: r.ownerId, memberId: r.memberId, relation: r.relation, isEmergency: Number(r.isEmergency) === 1, phone: r.phone ?? undefined, createdAt: Number(r.createdAt), status: (r.status as LinkStatus) ?? undefined }
   }
   private toReport(r: any): Report {
     return { id: r.id, reporterId: r.reporterId, targetUserId: r.targetUserId, callId: r.callId ?? undefined, reason: r.reason, status: r.status as ReportStatus, createdAt: Number(r.createdAt) }

@@ -13,8 +13,8 @@ describe('family + emergency', () => {
   it('add / list / delete links and emergency routing order', async () => {
     const { a, reg } = setup()
     const owner = await reg('alice')
-    await reg('mom', 'family')
-    await reg('friend', 'helper')
+    const mom = await reg('mom', 'family')
+    const friend = await reg('friend', 'helper')
     const auth = { authorization: `Bearer ${owner.token}` }
 
     const l1 = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth, payload: { username: 'mom', relation: '妈妈', isEmergency: true, phone: '13800000000' } })
@@ -22,7 +22,11 @@ describe('family + emergency', () => {
     expect(l1.json().link.memberName).toBe('mom')
     expect(l1.json().link.phone).toBe('13800000000') // 电话兜底
 
-    await a.inject({ method: 'POST', url: '/api/family/links', headers: auth, payload: { username: 'friend' } })
+    const l2 = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth, payload: { username: 'friend' } })
+
+    // 双向同意：被绑定方(member)接受后绑定才生效（见审查 #6）。
+    await a.inject({ method: 'POST', url: `/api/family/links/${l1.json().link.id}/accept`, headers: { authorization: `Bearer ${mom.token}` } })
+    await a.inject({ method: 'POST', url: `/api/family/links/${l2.json().link.id}/accept`, headers: { authorization: `Bearer ${friend.token}` } })
 
     const ghost = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth, payload: { username: 'ghost' } })
     expect(ghost.statusCode).toBe(404)
@@ -65,6 +69,29 @@ describe('family + emergency', () => {
     // 注册同名不同大小写应被拒(用户名已占用)。
     const taken = await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'ALICE', password: 'secret123' } })
     expect(taken.statusCode).toBe(409)
+    await a.close()
+  })
+
+  it('pending link does not participate until member accepts (bidirectional consent #6)', async () => {
+    const { a, reg } = setup()
+    const owner = await reg('blindx', 'blind')
+    const helper = await reg('helperx', 'helper')
+    const oAuth = { authorization: `Bearer ${owner.token}` }
+    const hAuth = { authorization: `Bearer ${helper.token}` }
+
+    const lk = await a.inject({ method: 'POST', url: '/api/family/links', headers: oAuth, payload: { username: 'helperx', isEmergency: true } })
+    await a.inject({ method: 'POST', url: '/api/assist/heartbeat', headers: hAuth, payload: { available: true } })
+
+    // 未接受(pending)：探测不到在线状态、紧急不收录、呼叫被拒——杜绝单向绑定探测/强推（见审查 #6）。
+    expect((await a.inject({ method: 'POST', url: '/api/assist/match', headers: oAuth, payload: { emergency: false } })).json().count).toBe(0)
+    expect((await a.inject({ method: 'POST', url: '/api/emergency/trigger', headers: oAuth })).json().count).toBe(0)
+    expect((await a.inject({ method: 'POST', url: '/api/assist/call', headers: oAuth, payload: { callId: 'cx', targetUserIds: [helper.user.id] } })).statusCode).toBe(403)
+
+    // helper 接受后 → 绑定生效。
+    const acc = await a.inject({ method: 'POST', url: `/api/family/links/${lk.json().link.id}/accept`, headers: hAuth })
+    expect(acc.statusCode).toBe(200)
+    expect((await a.inject({ method: 'POST', url: '/api/assist/match', headers: oAuth, payload: { emergency: false } })).json().count).toBe(1)
+    expect((await a.inject({ method: 'POST', url: '/api/assist/call', headers: oAuth, payload: { callId: 'cx2', targetUserIds: [helper.user.id] } })).statusCode).toBe(200)
     await a.close()
   })
 

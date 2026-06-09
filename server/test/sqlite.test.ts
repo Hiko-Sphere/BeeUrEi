@@ -20,10 +20,13 @@ describe('SqliteStore (node:sqlite)', () => {
     store.updateUser('u1', { tokenVersion: 3 })
     expect(store.findById('u1')?.tokenVersion).toBe(3)
 
-    store.createLink({ id: 'l1', ownerId: 'u1', memberId: 'u2', relation: '妈妈', isEmergency: true, createdAt: 2000 })
+    store.createLink({ id: 'l1', ownerId: 'u1', memberId: 'u2', relation: '妈妈', isEmergency: true, createdAt: 2000, status: 'pending' })
     const links = store.linksByOwner('u1')
     expect(links.length).toBe(1)
     expect(links[0].isEmergency).toBe(true) // 0/1 ↔ bool 映射
+    expect(links[0].status).toBe('pending') // 双向同意状态必须持久化(否则 #6 门控在生产失效，见 tokenVersion 教训)
+    store.createLink({ ...links[0], status: 'accepted' })
+    expect(store.findLink('l1')?.status).toBe('accepted')
     store.deleteLink('l1')
     expect(store.linksByOwner('u1').length).toBe(0)
 

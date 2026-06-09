@@ -25,6 +25,8 @@ struct RemoteAssistView: View {
     @State private var calling = false
     @State private var showTopicPicker = false
     @State private var topic = ""
+    @State private var incomingRequests: [IncomingLinkInfo] = []  // 对方(协助者/亲友)发来的待确认请求
+    @State private var linkBusy: Set<String> = []
     let onClose: () -> Void
 
     /// 常用求助内容（也可不选直接求助）。
@@ -56,6 +58,23 @@ struct RemoteAssistView: View {
 
                     if let statusText {
                         Text(statusText).font(.subheadline).foregroundStyle(.secondary)
+                    }
+
+                    if !incomingRequests.isEmpty {
+                        Text("待确认的请求").font(.headline).padding(.top, BeeSpacing.sm)
+                        ForEach(incomingRequests) { r in
+                            BeeCard {
+                                VStack(alignment: .leading, spacing: BeeSpacing.sm) {
+                                    Text("\(r.ownerName) 想和你建立\(r.relation)关系")
+                                    HStack {
+                                        Button("接受") { Task { await accept(r) } }
+                                            .buttonStyle(.borderedProminent).disabled(linkBusy.contains(r.id))
+                                        Button("拒绝", role: .destructive) { Task { await reject(r) } }
+                                            .buttonStyle(.bordered).disabled(linkBusy.contains(r.id))
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     Text("我的亲友 / 协助者").font(.headline).padding(.top, BeeSpacing.sm)
@@ -109,15 +128,16 @@ struct RemoteAssistView: View {
 
     @ViewBuilder
     private var contactsSection: some View {
+        let callable = links.filter { $0.isAccepted } // 只列已建立关系的（可呼叫）；待确认的不在此
         if let loadError {
             Text(loadError).foregroundStyle(.secondary)
-        } else if links.isEmpty {
+        } else if callable.isEmpty {
             BeeEmptyState(systemImage: "person.crop.circle.badge.plus",
                           title: "还没有绑定亲友",
-                          message: "点右上角「＋」按用户名添加可以帮你看东西的家人或朋友。")
+                          message: "点右上角「＋」按用户名添加可以帮你看东西的家人或朋友（对方确认后建立）。")
         } else {
             VStack(spacing: BeeSpacing.sm) {
-                ForEach(links) { link in
+                ForEach(callable) { link in
                     Button { Task { await call(link) } } label: {
                         BeeCard {
                             HStack {
@@ -150,6 +170,21 @@ struct RemoteAssistView: View {
         guard let token = KeychainStore.read() else { loadError = "请先在「设置 → 账号」登录"; return }
         do { links = try await APIClient().familyLinks(token: token); loadError = nil }
         catch { loadError = "加载亲友失败（需连接后端）" }
+        if let inc = try? await APIClient().incomingLinks(token: token) { incomingRequests = inc.filter { $0.isPending } }
+    }
+
+    private func accept(_ r: IncomingLinkInfo) async {
+        guard let token = KeychainStore.read(), !linkBusy.contains(r.id) else { return }
+        linkBusy.insert(r.id); defer { linkBusy.remove(r.id) }
+        try? await APIClient().acceptFamilyLink(token: token, id: r.id)
+        await load()
+    }
+
+    private func reject(_ r: IncomingLinkInfo) async {
+        guard let token = KeychainStore.read(), !linkBusy.contains(r.id) else { return }
+        linkBusy.insert(r.id); defer { linkBusy.remove(r.id) }
+        try? await APIClient().deleteFamilyLink(token: token, id: r.id)
+        await load()
     }
 
     private func addLink() async {

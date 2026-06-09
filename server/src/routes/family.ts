@@ -5,11 +5,12 @@ import { type Store, type FamilyLink, isBlockedBetween } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 
 const addLinkSchema = z.object({
-  username: z.string().min(3).max(32),
+  username: z.string().min(3).max(32).optional(),
+  userId: z.string().min(1).max(64).optional(), // 通话中加好友只有对方 userId
   relation: z.string().min(1).max(32).optional(),
   isEmergency: z.boolean().optional(),
   phone: z.string().max(32).optional(),
-})
+}).refine((d) => d.username || d.userId, { message: 'username_or_userId_required' })
 
 export function registerFamilyRoutes(app: FastifyInstance, store: Store): void {
   // 发起加亲友/协助者请求（**双向**：盲人或协助者/亲友任一方都可发起，由另一方确认才建立关系）。
@@ -19,7 +20,7 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store): void {
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const meId = req.user!.sub
     const me = store.findById(meId)
-    const target = store.findByUsername(parsed.data.username.trim())
+    const target = parsed.data.userId ? store.findById(parsed.data.userId) : store.findByUsername(parsed.data.username!.trim())
     if (!me || !target) return reply.code(404).send({ error: 'member_not_found' })
     if (target.id === meId) return reply.code(400).send({ error: 'cannot_link_self' })
     if (isBlockedBetween(store, meId, target.id)) return reply.code(403).send({ error: 'blocked' })

@@ -57,12 +57,16 @@ struct CallView: View {
             }
 
             if model.canReport {
-                Button("举报对方") { showReport = true }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: BeeSpacing.lg) {
+                    Button("加为亲友/协助者") { Task { await model.addPeerAsFriend() } }
+                    Button("拉黑对方", role: .destructive) { Task { await model.blockPeer() } }
+                    Button("举报对方") { showReport = true }
+                }
+                .font(.subheadline)
             }
             if let status = model.reportStatus {
                 Text(status).font(.footnote).foregroundStyle(.secondary)
+                    .accessibilityAddTraits(.updatesFrequently)
             }
         }
         .padding()
@@ -81,6 +85,8 @@ struct CallView: View {
         .onChange(of: model.videoSending) { _, sending in
             A11y.announce(sending ? "已开始把画面显示给对方" : "已停止显示画面")
         }
+        // 加好友/拉黑/举报结果朗读。
+        .onChange(of: model.reportStatus) { _, s in if let s, !s.isEmpty { A11y.announce(s) } }
         // 通话期间让出音频会话给 WebRTC(.playAndRecord)；离开后恢复避障/导航的 .playback 会话，
         // 否则用过一次远程协助后危险警告会被 WebRTC 留下的会话置于静音开关之下（见回归 #1）。
         .onAppear { AudioSessionManager.beginCall() }

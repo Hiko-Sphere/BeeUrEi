@@ -161,6 +161,30 @@ final class CallViewModel {
         return "已连接"
     }
 
+    /// 通话中把对方加为常用亲友/协助者（发起请求，待对方确认）。
+    func addPeerAsFriend() async {
+        guard let token = KeychainStore.read(), let peer = peerUserId else { return }
+        do {
+            try await APIClient().addFamilyLink(token: token, userId: peer)
+            reportStatus = "已发送添加请求，待对方确认"
+        } catch let APIError.server(msg) {
+            reportStatus = msg == "already_linked" ? "你们已是亲友/协助者" : (msg == "blocked" ? "无法添加：存在拉黑关系" : "添加失败")
+        } catch {
+            reportStatus = "添加失败，请重试"
+        }
+    }
+
+    /// 拉黑对方：之后互不出现在匹配/求助队列/来电中。
+    func blockPeer() async {
+        guard let token = KeychainStore.read(), let peer = peerUserId else { return }
+        do {
+            try await APIClient().blockUser(token: token, userId: peer)
+            reportStatus = "已拉黑对方，今后将互不匹配/呼叫"
+        } catch {
+            reportStatus = "拉黑失败，请重试"
+        }
+    }
+
     /// 举报对方（信任与安全）。
     func report(reason: String) async {
         guard let token = KeychainStore.read(), let target = peerUserId else {

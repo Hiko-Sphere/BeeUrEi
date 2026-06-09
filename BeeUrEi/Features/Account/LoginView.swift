@@ -32,6 +32,7 @@ struct LoginView: View {
                 Section("当前账号") {
                     Text(session.user?.displayName ?? "已登录")
                     Text("角色：\(roleDisplayName(session.user?.role ?? ""))").foregroundStyle(.secondary)
+                    NavigationLink("黑名单") { BlocklistView() }
                     Button("修改密码") { showChangePassword = true }
                     Button("退出登录", role: .destructive) { session.logout() }
                     Button("删除账号", role: .destructive) { showDeleteConfirm = true }

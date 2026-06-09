@@ -41,13 +41,15 @@ struct AuthResult: Codable, Sendable {
 
 struct FamilyLinkInfo: Codable, Sendable, Identifiable {
     let id: String
-    let memberId: String
-    let memberName: String
+    let memberId: String   // 对方 userId（无论我是 owner 还是 member）
+    let memberName: String // 对方显示名
     let relation: String
     let isEmergency: Bool
     let phone: String?
-    let status: String?   // "pending"=待对方接受，"accepted"=已生效（旧数据无此字段按已接受）
+    let status: String?   // "pending"=待确认，"accepted"=已生效（旧数据无此字段按已接受）
+    var outgoing: Bool?   // true=我发起、待对方确认；false/nil=对方发起或已生效
     var isPending: Bool { status == "pending" }
+    var isAccepted: Bool { (status ?? "accepted") == "accepted" }
 }
 
 struct IncomingLinkInfo: Codable, Sendable, Identifiable {
@@ -108,6 +110,14 @@ struct IceServerInfo: Codable, Sendable {
     let urls: [String]
     let username: String?
     let credential: String?
+}
+
+/// 黑名单条目（我拉黑的人）。
+struct BlockedUser: Codable, Sendable, Identifiable {
+    var id: String { recordId }
+    let recordId: String
+    let user: AccountInfo
+    enum CodingKeys: String, CodingKey { case recordId = "id"; case user }
 }
 
 struct ReportInfo: Codable, Sendable, Identifiable {
@@ -284,6 +294,30 @@ struct APIClient {
 
     func deleteFamilyLink(token: String, id: String) async throws {
         _ = try await authedSend("DELETE", "/api/family/links/\(id)", token: token)
+    }
+
+    /// 按 userId 发起加好友请求（通话中加对方为常用亲友/协助者）。
+    func addFamilyLink(token: String, userId: String, relation: String? = nil) async throws {
+        var body: [String: Any] = ["userId": userId]
+        if let relation, !relation.isEmpty { body["relation"] = relation }
+        _ = try await authedSend("POST", "/api/family/links", token: token, body: body)
+    }
+
+    // MARK: 黑名单
+
+    func blockUser(token: String, username: String) async throws {
+        _ = try await authedSend("POST", "/api/blocks", token: token, body: ["username": username])
+    }
+    func blockUser(token: String, userId: String) async throws {
+        _ = try await authedSend("POST", "/api/blocks", token: token, body: ["userId": userId])
+    }
+    func blocks(token: String) async throws -> [BlockedUser] {
+        struct R: Codable { let blocks: [BlockedUser] }
+        let data = try await authedGet("/api/blocks", token: token)
+        return (try? JSONDecoder().decode(R.self, from: data))?.blocks ?? []
+    }
+    func unblock(token: String, id: String) async {
+        _ = try? await authedSend("DELETE", "/api/blocks/\(id)", token: token)
     }
 
     func emergencyTargets(token: String) async throws -> [EmergencyTarget] {

@@ -14,8 +14,12 @@ struct AssistHomeView: View {
     @State private var online = true               // 在线待命：默认开（亲人紧急呼叫/被匹配可达）
     @State private var queue: [HelpRequestSummary] = []
     @State private var queueError = false
-    @State private var pendingLinks: [IncomingLinkInfo] = []
+    @State private var pendingLinks: [IncomingLinkInfo] = []   // 待我确认的请求
+    @State private var myLinks: [FamilyLinkInfo] = []           // 我的关系（已建立 + 我发出的待确认）
     @State private var linkBusy: Set<String> = []
+    @State private var showAddFamily = false
+    @State private var newFamilyUsername = ""
+    @State private var addFamilyMsg: String?
     @State private var answering: AnsweringCall?    // 正在接听/帮助（认领的陌生人 + 亲人来电统一走这里）
     @State private var matched: HelpRequestDetail?  // 随机匹配到、待确认是否帮助
     @State private var pendingAnswer: AnsweringCall? // 「帮助 TA」选定、待 matched sheet 关闭后再呈现通话（避免同一 tick 切换两个模态，见审查 #3）
@@ -204,17 +208,30 @@ struct AssistHomeView: View {
                     }
                 }
 
-                Section("绑定我的亲人") {
-                    let accepted = pendingLinks.filter { !$0.isPending }
+                let outgoing = myLinks.filter { $0.outgoing == true }
+                if !outgoing.isEmpty {
+                    Section("我发出的请求（待对方确认）") {
+                        ForEach(outgoing) { l in
+                            HStack {
+                                Text(l.memberName)
+                                Spacer()
+                                Text("待确认").font(.caption).foregroundStyle(Color.beeWarn)
+                            }
+                        }
+                    }
+                }
+
+                Section("我的亲人 / 求助者") {
+                    let accepted = myLinks.filter { $0.isAccepted }
                     if accepted.isEmpty {
-                        Text("还没有亲人绑定你。请让对方在 App 里按你的用户名添加你为亲友/协助者。")
+                        Text("还没有建立关系。点右上角「＋」按对方用户名发起，或让对方添加你后在上方确认。")
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(accepted) { l in
                             HStack {
                                 Image(systemName: "person.crop.circle.fill").foregroundStyle(.secondary)
                                 VStack(alignment: .leading) {
-                                    Text(l.ownerName)
+                                    Text(l.memberName)
                                     Text("\(l.relation)\(l.isEmergency ? " · 紧急联系人" : "")")
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
@@ -222,10 +239,38 @@ struct AssistHomeView: View {
                         }
                     }
                 }
+
+                if let addFamilyMsg { Section { Text(addFamilyMsg).foregroundStyle(.secondary) } }
             }
             .navigationTitle("我的亲人")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { showAddFamily = true } label: { Image(systemName: "plus") }
+                        .accessibilityLabel("添加亲人或求助者")
+                }
+            }
+            .alert("添加亲人 / 求助者", isPresented: $showAddFamily) {
+                TextField("对方用户名", text: $newFamilyUsername).textInputAutocapitalization(.never).autocorrectionDisabled()
+                Button("发送请求") { Task { await addFamily() } }
+                Button("取消", role: .cancel) { newFamilyUsername = "" }
+            } message: {
+                Text("输入对方用户名发起绑定请求，对方确认后建立关系。")
+            }
             .refreshable { await loadLinks() }
+            .onChange(of: addFamilyMsg) { _, m in if let m, !m.isEmpty { A11y.announce(m) } }
         }
+    }
+
+    private func addFamily() async {
+        let u = newFamilyUsername.trimmingCharacters(in: .whitespacesAndNewlines); newFamilyUsername = ""
+        guard !u.isEmpty, let token = session.token else { return }
+        do {
+            try await APIClient().addFamilyLink(token: token, username: u, relation: nil, isEmergency: false, phone: nil)
+            addFamilyMsg = "已向 \(u) 发送请求，待对方确认"
+            await loadLinks()
+        } catch let APIError.server(msg) {
+            addFamilyMsg = msg == "member_not_found" ? "找不到该用户名" : (msg == "already_linked" ? "你们已绑定/已发过请求" : (msg == "blocked" ? "无法添加：存在拉黑关系" : "发送失败"))
+        } catch { addFamilyMsg = "发送失败，请重试" }
     }
 
     // MARK: 标签三：我的（账号）
@@ -264,7 +309,8 @@ struct AssistHomeView: View {
 
     private func loadLinks() async {
         guard let token = session.token else { return }
-        if let links = try? await APIClient().incomingLinks(token: token) { pendingLinks = links }
+        if let inc = try? await APIClient().incomingLinks(token: token) { pendingLinks = inc }   // 待我确认
+        if let mine = try? await APIClient().familyLinks(token: token) { myLinks = mine }         // 我的关系
     }
 
     private func refreshQueue() async {

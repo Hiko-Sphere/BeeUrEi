@@ -4,7 +4,11 @@ import { randomUUID } from 'node:crypto'
 import { type Store, publicUser } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 
-const blockSchema = z.object({ username: z.string().trim().min(1).max(32) })
+// 按用户名或 userId 拉黑（通话中只有对方 userId）。
+const blockSchema = z.object({
+  username: z.string().trim().min(1).max(32).optional(),
+  userId: z.string().min(1).max(64).optional(),
+}).refine((d) => d.username || d.userId, { message: 'username_or_userId_required' })
 
 /// 黑名单：拉黑后双方互不出现在匹配/公开求助队列/来电中（任一方向拉黑都生效）。
 export function registerBlockRoutes(app: FastifyInstance, store: Store): void {
@@ -13,7 +17,7 @@ export function registerBlockRoutes(app: FastifyInstance, store: Store): void {
     const parsed = blockSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const meId = req.user!.sub
-    const target = store.findByUsername(parsed.data.username)
+    const target = parsed.data.userId ? store.findById(parsed.data.userId) : store.findByUsername(parsed.data.username!)
     if (!target) return reply.code(404).send({ error: 'not_found' })
     if (target.id === meId) return reply.code(400).send({ error: 'cannot_block_self' })
     // 去重：同一方向已拉黑则幂等返回。

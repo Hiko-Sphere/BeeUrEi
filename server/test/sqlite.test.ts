@@ -16,6 +16,9 @@ describe('SqliteStore (node:sqlite)', () => {
     store.updateUser('u1', { status: 'disabled' })
     expect(store.findById('u1')?.status).toBe('disabled')
     expect(store.allUsers().length).toBe(1)
+    // tokenVersion 必须持久化(否则改密/封禁令旧 token 失效在生产 SqliteStore 上不生效，见审查 #2)。
+    store.updateUser('u1', { tokenVersion: 3 })
+    expect(store.findById('u1')?.tokenVersion).toBe(3)
 
     store.createLink({ id: 'l1', ownerId: 'u1', memberId: 'u2', relation: '妈妈', isEmergency: true, createdAt: 2000 })
     const links = store.linksByOwner('u1')

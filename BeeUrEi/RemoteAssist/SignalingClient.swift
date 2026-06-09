@@ -8,6 +8,7 @@ import Foundation
 /// 对 `task` 的读写，避免数据竞争/use-after-free（见审查 #6）。回调仍切回主线程。
 final class SignalingClient {
     private var task: URLSessionWebSocketTask?
+    private var closed = false // 是否已主动关闭(hangUp)；在 queue 上读写。主动关闭后不再回调 onClose / 不重挂 receive（见审查 #10）
     private let queue = DispatchQueue(label: "com.beeurei.signaling")
 
     /// 收到信令消息（已切回主线程）。
@@ -39,6 +40,7 @@ final class SignalingClient {
 
     func close() {
         queue.async {
+            self.closed = true
             self.task?.cancel(with: .goingAway, reason: nil)
             self.task = nil
         }
@@ -50,14 +52,21 @@ final class SignalingClient {
             guard let self else { return }
             switch result {
             case .failure:
-                DispatchQueue.main.async { self.onClose?() }
+                // 主动关闭(hangUp)导致的 receive 失败不应再回调 onClose，否则会触发已挂断 VM 的"连接已断开"清理（见审查 #10）。
+                self.queue.async {
+                    guard !self.closed else { return }
+                    DispatchQueue.main.async { self.onClose?() }
+                }
             case .success(let message):
                 if case .string(let text) = message,
                    let data = text.data(using: .utf8),
                    let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                     DispatchQueue.main.async { self.onMessage?(obj) }
                 }
-                self.queue.async { self.receiveLocked() } // 在串行队列上重新挂载，安全读 task
+                self.queue.async {
+                    guard !self.closed else { return } // 已关闭不再重挂，避免"复活"接收循环
+                    self.receiveLocked()
+                }
             }
         }
     }

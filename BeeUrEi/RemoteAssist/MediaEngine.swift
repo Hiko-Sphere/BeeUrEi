@@ -69,6 +69,11 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
     private weak var remoteRenderer: RTCVideoRenderer?
     private var asCaller = false
     private var iceConfig: [IceServerInfo] = []
+    // 远端候选缓存：WebRTC 要求先成功 setRemoteDescription 才能 add 远端候选，否则被静默丢弃 → 连接建立失败/退化。
+    // 早到的候选先入队，待 setRemoteDescription 成功后统一 flush。两者只在主线程访问（信令消息经 @MainActor 投递，
+    // flush 也 hop 回主线程），避免与 add 竞争（见审查 #1/#6）。
+    private var pendingCandidates: [RTCIceCandidate] = []
+    private var hasRemoteDescription = false
 
     func setIceServers(_ servers: [IceServerInfo]) { iceConfig = servers }
 
@@ -114,8 +119,18 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
 
     func handleRemoteDescription(type: String, sdp: String) {
         let rtcType: RTCSdpType = (type == "offer") ? .offer : .answer
-        pc?.setRemoteDescription(RTCSessionDescription(type: rtcType, sdp: sdp)) { [weak self] _ in
-            guard let self, rtcType == .offer else { return }
+        pc?.setRemoteDescription(RTCSessionDescription(type: rtcType, sdp: sdp)) { [weak self] error in
+            guard let self else { return }
+            if error == nil {
+                // remoteDescription 已就位：在主线程 flush 之前缓存的早到候选（见审查 #1）。
+                DispatchQueue.main.async {
+                    self.hasRemoteDescription = true
+                    for c in self.pendingCandidates { self.pc?.add(c) { _ in } }
+                    self.pendingCandidates.removeAll()
+                }
+            }
+            // 收到 offer 且设置成功 → 本端回 answer。
+            guard rtcType == .offer, error == nil else { return }
             let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
             self.pc?.answer(for: constraints) { sdp, _ in
                 guard let sdp else { return }
@@ -126,7 +141,13 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
     }
 
     func handleRemoteCandidate(candidate: String, sdpMid: String?, sdpMLineIndex: Int32) {
-        pc?.add(RTCIceCandidate(sdp: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid)) { _ in }
+        // 调用方在主线程（信令经 @MainActor 投递）。remoteDescription 未就位前先缓存，避免被 WebRTC 丢弃（见审查 #1）。
+        let c = RTCIceCandidate(sdp: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid)
+        if hasRemoteDescription {
+            pc?.add(c) { _ in }
+        } else {
+            pendingCandidates.append(c)
+        }
     }
 
     func setLocalVideoSending(_ sending: Bool) {
@@ -144,6 +165,8 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
         if capturing { videoCapturer?.stopCapture(); capturing = false }
         pc?.close()
         pc = nil
+        pendingCandidates.removeAll()
+        hasRemoteDescription = false
     }
 
     /// 协助者侧把远端视频渲染到给定 renderer。

@@ -19,6 +19,7 @@ final class CallViewModel {
 
     @ObservationIgnored private let signaling = SignalingClient()
     @ObservationIgnored let media: MediaEngine = MediaEngineFactory.make()
+    @ObservationIgnored private var hasOffered = false // 视障侧是否已发过 offer，防对端重连/重复 peer-joined 在已建立 pc 上重发 offer 造成 glare（见审查 #2）
 
     init(role: Role, callId: String) {
         self.role = role
@@ -42,8 +43,12 @@ final class CallViewModel {
 
         signaling.onMessage = { [weak self] msg in self?.handle(msg) }
         signaling.onClose = { [weak self] in
-            self?.connected = false
-            self?.statusText = "连接已断开"
+            guard let self else { return }
+            self.connected = false
+            self.statusText = "连接已断开，请重新呼叫"
+            // 信令断开可能是"幽灵通话"：强制关画面(隐私 fail-safe)并释放媒体，绝不让相机在断线后仍采集/外发（见审查 #5/#8）。
+            self.setVideoSending(false)
+            self.media.stop()
         }
         // 先拉 ICE 服务器并启动媒体引擎，**再**连接/加入信令——否则 await 期间提前到达的 joined
         // 会在 pc 还是 nil 时调 createOffer 而静默落空，视障侧永不发 offer、通话卡死（见审查 #7）。
@@ -67,16 +72,17 @@ final class CallViewModel {
                 // 但只有发起方(视障)才发 offer。
                 connected = true
                 statusText = connectedStatus()
-                if role == .blind {
-                    media.createOffer()
-                }
+                // 仅在尚未发过 offer 时才发，避免对端重连/重复消息在已建立的 pc 上重发 offer 造成 glare（见审查 #2）。
+                if role == .blind, !hasOffered { hasOffered = true; media.createOffer() }
             }
         case "peer-joined":
+            // 新对端接入：默认不发画面，须重新按住才发——避免沿用上一个对端时的发送状态把画面直接推给新对端（隐私默认关，见审查 #4）。
+            setVideoSending(false)
             connected = true
             peerUserId = msg["userId"] as? String ?? peerUserId
             peerName = msg["userName"] as? String ?? peerName
             statusText = connectedStatus()
-            if role == .blind { media.createOffer() }
+            if role == .blind, !hasOffered { hasOffered = true; media.createOffer() }
         case "offer":
             if let sdp = msg["sdp"] as? String { media.handleRemoteDescription(type: "offer", sdp: sdp) }
         case "answer":
@@ -92,6 +98,11 @@ final class CallViewModel {
             if let on = msg["on"] as? Bool { statusText = on ? "已连接 · 对方已开启画面" : connectedStatus() }
         case "peer-left":
             statusText = "对方已离开"
+            setVideoSending(false)      // 对端离开：复位隐私门控，画面默认不外发（见审查 #4）
+            connected = false
+            peerUserId = nil            // 清空，避免举报指向已离开者 / 新对端沿用旧 id（见审查 #7）
+            peerName = nil
+            hasOffered = false          // 允许对新对端重新协商
         default:
             break
         }

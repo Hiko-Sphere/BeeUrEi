@@ -66,8 +66,10 @@ struct CallView: View {
         .onAppear { AudioSessionManager.beginCall() }
         // 隐私 fail-safe：手势被取消(来电/弹窗/进后台/手指滑出)不会触发 DragGesture.onEnded，
         // 故在离开界面与进入非活跃态时强制关闭画面外发，确保"按住才发"绝不漏成"持续发"（见审查 #1）。
+        // 任意原因消失（按钮/CallKit 系统界面挂断/被其它模态顶掉）都确定性拆除媒体与信令，
+        // 杜绝"用户以为已挂断但麦克风/PeerConnection 仍存活"的隐私/资源泄漏（见复审 #1）。hangUp 幂等。
         .onDisappear {
-            model.setVideoSending(false)
+            model.hangUp()
             AudioSessionManager.endCall()
         }
         .onChange(of: scenePhase) { _, phase in

@@ -18,7 +18,7 @@ struct DeveloperHomeView: View {
         NavigationStack {
             List {
                 Section("以角色界面进入（测试）") {
-                    ForEach(["blind", "helper", "family", "admin"], id: \.self) { r in
+                    ForEach(["blind", "helper", "admin"], id: \.self) { r in // helper=合并后的协助端(含原 family 全部功能)
                         Button("以 \(roleDisplayName(r)) 界面进入") { preview = RolePreview(role: r) }
                     }
                     Text("从这里进入任一角色界面预览；下滑可关闭返回。").font(.footnote).foregroundStyle(.secondary)

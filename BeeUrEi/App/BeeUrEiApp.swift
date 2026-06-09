@@ -6,6 +6,8 @@ struct BeeUrEiApp: App {
     init() {
         // 尽早配置音频会话：危险警告音须无视静音开关发声、压低背景音、来电后能恢复（见反馈输出深审 #1）。
         AudioSessionManager.configure()
+        // 启动 CallKit/PushKit 服务（A1 后台来电）：单例存活后 PushKit 即注册 VoIP token。
+        RemoteAssistService.shared.start()
     }
 
     var body: some Scene {
@@ -22,6 +24,7 @@ private struct RootView: View {
     @State private var accepted = false
     @State private var session = AuthSession()
     @State private var enteredRole: String?
+    @State private var incoming = IncomingCallCenter.shared // CallKit 接听后由它驱动来电界面
 
     var body: some View {
         Group {
@@ -59,9 +62,22 @@ private struct RootView: View {
         // 共享同一个 AuthSession 给所有子视图(含 sheet 里的 LoginView)，避免出现第二个独立会话实例
         // 导致登出/删号/改密后内存态不同步（见审查 #5）。
         .environment(session)
-        // 退出登录后回到登录页，并清掉已选角色，避免下次登录沿用旧角色。
+        // 退出登录后回到登录页，并清掉已选角色，避免下次登录沿用旧角色；登录后绑定 VoIP token（A1）。
         .onChange(of: session.isLoggedIn) { _, loggedIn in
-            if !loggedIn { enteredRole = nil }
+            if loggedIn { RemoteAssistService.shared.refreshRegistration() }
+            else { enteredRole = nil }
+        }
+        // 来电统一在此顶层呈现（CallKit 接听 + 协助端轮询都经 IncomingCallCenter，单一通路，见复审 #2）。
+        .fullScreenCover(item: Binding(get: { incoming.pending }, set: { incoming.pending = $0 })) { call in
+            CallView(role: .helper, callId: call.callId) {
+                // 结束：取消后端会合登记（防 TTL 内被轮询重新弹出）+ 结束对应 CallKit 通话。
+                if let token = KeychainStore.read() {
+                    let id = call.callId
+                    Task { await APIClient().cancelCall(token: token, callId: id) }
+                }
+                RemoteAssistService.shared.endCall()
+                incoming.clear()
+            }
         }
     }
 

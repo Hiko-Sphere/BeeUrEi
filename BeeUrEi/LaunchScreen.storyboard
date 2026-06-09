@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="22154" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="BeeUrEi-vc-01">
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="24765" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="BeeUrEi-vc-01">
     <device id="retina6_12" orientation="portrait" appearance="light"/>
     <dependencies>
-        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="22131"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="24743"/>
         <capability name="Safe area layout guides" minToolsVersion="9.0"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <scenes>
+        <!--View Controller-->
         <scene sceneID="BeeUrEi-scene-01">
             <objects>
                 <viewController id="BeeUrEi-vc-01" sceneMemberID="viewController">
@@ -15,15 +16,15 @@
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
                             <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" image="LaunchLogo" translatesAutoresizingMaskIntoConstraints="NO" id="BeeUrEi-logo-01">
-                                <rect key="frame" x="116.5" y="346" width="160" height="160"/>
+                                <rect key="frame" x="116.66666666666669" y="346" width="160" height="160"/>
                                 <constraints>
-                                    <constraint firstAttribute="width" constant="160" id="BeeUrEi-w-01"/>
                                     <constraint firstAttribute="height" constant="160" id="BeeUrEi-h-01"/>
+                                    <constraint firstAttribute="width" constant="160" id="BeeUrEi-w-01"/>
                                 </constraints>
                             </imageView>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="BeeUrEi-safe-01"/>
-                        <color key="backgroundColor" red="0.07843137254901961" green="0.08627450980392157" blue="0.12156862745098039" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                        <color key="backgroundColor" red="0.078431372549019607" green="0.086274509803921567" blue="0.12156862745098039" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <constraints>
                             <constraint firstItem="BeeUrEi-logo-01" firstAttribute="centerX" secondItem="BeeUrEi-view-01" secondAttribute="centerX" id="BeeUrEi-cx-01"/>
                             <constraint firstItem="BeeUrEi-logo-01" firstAttribute="centerY" secondItem="BeeUrEi-view-01" secondAttribute="centerY" id="BeeUrEi-cy-01"/>
@@ -35,4 +36,7 @@
             <point key="canvasLocation" x="53" y="375"/>
         </scene>
     </scenes>
+    <resources>
+        <image name="LaunchLogo" width="1024" height="1024"/>
+    </resources>
 </document>

@@ -26,7 +26,9 @@ struct HomeView: View {
                 }
                 if DevSettings().enabled { DevOverlayView(model: model) }
                 Spacer()
-                actionPanel
+                // 仅相机运行时显示底部操作面板：否则会与「相机权限被关闭/设备不支持」等居中提示重叠，
+                // 且会把依赖相机的「看一看」等暴露为可点（见审查 #5）。求助按钮在权限页另行提供。
+                if case .running = model.state { actionPanel }
             }
             .padding()
         }
@@ -111,10 +113,17 @@ struct HomeView: View {
         case .unsupported(let message):
             unsupportedView(message)
         case .failed(let message):
-            messageView("相机出错：\(message)")
+            stateMessageView("相机出错：\(message)", showHelp: true)
         case .idle:
             messageView("正在启动…")
         }
+    }
+
+    /// 求助入口兜底：相机不可用（设备不支持/出错）时，求助不依赖相机，仍让视障用户能呼叫。
+    private var helpFallbackButton: some View {
+        Button("呼叫帮手") { showRemoteAssist = true }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
     }
 
     private var statusBanner: some View {
@@ -151,6 +160,10 @@ struct HomeView: View {
             Button("打开设置") { model.openSettings() }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
+            // 求助不依赖相机：即使相机被拒，仍让用户能呼叫志愿者/亲友。
+            Button("呼叫帮手") { showRemoteAssist = true }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
         }
         .padding()
     }
@@ -165,10 +178,10 @@ struct HomeView: View {
             Text(message)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
+            // 设备不支持避障（无 LiDAR），但远程求助不依赖 LiDAR/相机，仍提供入口（见复审 #5）。
+            helpFallbackButton
         }
         .padding()
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("设备不支持。\(message)")
     }
 
     private func messageView(_ text: String) -> some View {
@@ -176,6 +189,15 @@ struct HomeView: View {
             .font(.headline)
             .multilineTextAlignment(.center)
             .padding()
+    }
+
+    /// 带可选求助按钮的状态提示（相机出错等）。
+    private func stateMessageView(_ text: String, showHelp: Bool) -> some View {
+        VStack(spacing: 16) {
+            Text(text).font(.headline).multilineTextAlignment(.center)
+            if showHelp { helpFallbackButton }
+        }
+        .padding()
     }
 }
 

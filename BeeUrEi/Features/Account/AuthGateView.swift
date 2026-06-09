@@ -128,10 +128,18 @@ struct ForgotPasswordView: View {
 
     private func sendCode() async {
         working = true; defer { working = false }
-        try? await APIClient().forgotPassword(username: username.trimmingCharacters(in: .whitespaces))
-        // 不做枚举：无论账号/邮箱是否存在都提示已发送。
-        message = "如果该账号绑定了邮箱，验证码已发送。请查收后填写下方验证码。"
-        stage = .reset
+        let sent = "如果该账号绑定了邮箱，验证码已发送。请查收后填写下方验证码。"
+        do {
+            try await APIClient().forgotPassword(username: username.trimmingCharacters(in: .whitespaces))
+            message = sent // 不做枚举：无论账号/邮箱是否存在都提示已发送
+            stage = .reset
+        } catch APIError.network {
+            // 真正的网络/5xx 失败：明确反馈并停留在当前步，避免断网仍误导"已发送"（见审查 #16）。
+            message = "发送失败，请检查网络后重试。"
+        } catch {
+            message = sent // 其它（含 4xx）仍走统一文案，保持防枚举
+            stage = .reset
+        }
     }
 
     private func reset() async {

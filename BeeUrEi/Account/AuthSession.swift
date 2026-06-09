@@ -66,9 +66,13 @@ final class AuthSession {
     }
 
     func logout() {
-        // 撤销服务端 refresh token（尽力而为）。
-        if let token, let rt = KeychainStore.readRefresh() {
-            Task { await api.revokeRefresh(token: token, refreshToken: rt) }
+        // 撤销服务端 refresh token + 解绑本机 VoIP token（尽力而为）——后者避免来电误投到已登出设备（见复审 #3）。
+        if let token {
+            let rt = KeychainStore.readRefresh()
+            Task {
+                await api.unregisterVoipToken(token: token)
+                if let rt { await api.revokeRefresh(token: token, refreshToken: rt) }
+            }
         }
         token = nil
         user = nil

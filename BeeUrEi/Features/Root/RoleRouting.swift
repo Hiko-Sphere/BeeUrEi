@@ -47,7 +47,8 @@ struct RoleEntryView: View {
 
             if account.role == "developer" {
                 Text("开发者：选择以哪个角色界面进入").font(.subheadline)
-                ForEach(["blind", "helper", "family", "admin", "developer"], id: \.self) { r in
+                // helper 即合并后的协助端（含原 family 全部功能），故不再单列 family。
+                ForEach(["blind", "helper", "admin", "developer"], id: \.self) { r in
                     Button("以 \(roleDisplayName(r)) 进入") { onEnter(r) }
                         .buttonStyle(.bordered).controlSize(.large)
                 }

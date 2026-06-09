@@ -20,6 +20,7 @@ final class CallViewModel {
     @ObservationIgnored private let signaling = SignalingClient()
     @ObservationIgnored let media: MediaEngine = MediaEngineFactory.make()
     @ObservationIgnored private var hasOffered = false // 视障侧是否已发过 offer，防对端重连/重复 peer-joined 在已建立 pc 上重发 offer 造成 glare（见审查 #2）
+    @ObservationIgnored private var ended = false // hangUp 幂等：任意路径（按钮/界面消失/CallKit 系统挂断）都能安全调用，确保媒体/信令确定性释放（见复审 #1）
 
     init(role: Role, callId: String) {
         self.role = role
@@ -139,7 +140,10 @@ final class CallViewModel {
         }
     }
 
+    /// 结束通话并释放媒体/信令。幂等：可被「挂断按钮」「界面消失(含 CallKit 系统挂断)」重复调用（见复审 #1）。
     func hangUp() {
+        guard !ended else { return }
+        ended = true
         signaling.end()
         media.stop()
         signaling.close()

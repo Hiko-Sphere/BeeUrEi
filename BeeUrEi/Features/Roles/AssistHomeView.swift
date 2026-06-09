@@ -18,6 +18,7 @@ struct AssistHomeView: View {
     @State private var linkBusy: Set<String> = []
     @State private var answering: AnsweringCall?    // 正在接听/帮助（认领的陌生人 + 亲人来电统一走这里）
     @State private var matched: HelpRequestDetail?  // 随机匹配到、待确认是否帮助
+    @State private var pendingAnswer: AnsweringCall? // 「帮助 TA」选定、待 matched sheet 关闭后再呈现通话（避免同一 tick 切换两个模态，见审查 #3）
     @State private var dismissedCallIds: Set<String> = []
     @State private var statusText: String?
     @State private var prefsShown = false
@@ -39,7 +40,10 @@ struct AssistHomeView: View {
         .tint(.beeInk)
         .task { await onAppear() }
         .onDisappear { stopTasks(goOffline: true) }
-        .sheet(item: $matched) { detail in matchedSheet(detail) }
+        .sheet(item: $matched, onDismiss: {
+            // sheet 真正关闭后再呈现通话，避免同一 tick「关 sheet + 开 fullScreenCover」被吞（见审查 #3）。
+            if let p = pendingAnswer { pendingAnswer = nil; answering = p }
+        }) { detail in matchedSheet(detail) }
         .fullScreenCover(item: $answering) { call in
             CallView(role: .helper, callId: call.callId) {
                 if let token = session.token {
@@ -296,10 +300,15 @@ struct AssistHomeView: View {
     /// 轮询亲人来电；仅当无通话呈现且该来电未被挂断过时弹出（见原 HelperHomeView 审查 #5/#9）。
     private func pollIncoming(token: String) async {
         while !Task.isCancelled {
-            if answering == nil,
+            // 来电统一经 IncomingCallCenter 由 RootView 顶层呈现——与 CallKit 接听同一通路，
+            // 避免「轮询」与「CallKit 桥接」对同一 callId 各弹一个 CallView 的双呈现竞态（见复审 #2）。
+            // 守卫：本页无模态/确认卡/待呈现通话，且当前没有正在桥接的来电。
+            if answering == nil, matched == nil, pendingAnswer == nil, !prefsShown,
+               IncomingCallCenter.shared.pending == nil,
                let calls = try? await APIClient().incomingCalls(token: token),
                let first = calls.first(where: { !dismissedCallIds.contains($0.callId) }) {
-                answering = AnsweringCall(callId: first.callId, title: "\(first.fromName) 的来电", isIncoming: true)
+                dismissedCallIds.insert(first.callId) // 标记已处理，结束后不再反复弹回
+                IncomingCallCenter.shared.present(callId: first.callId, callerName: "\(first.fromName) 的来电")
             }
             try? await Task.sleep(for: .seconds(3))
         }
@@ -317,7 +326,7 @@ struct AssistHomeView: View {
     // MARK: 动作
 
     private func claim(_ r: HelpRequestSummary) async {
-        guard !busy, answering == nil, let token = session.token else { return }
+        guard !busy, answering == nil, matched == nil, pendingAnswer == nil, let token = session.token else { return }
         busy = true; defer { busy = false }
         do {
             let detail = try await APIClient().claimHelp(token: token, callId: r.callId)
@@ -329,7 +338,7 @@ struct AssistHomeView: View {
     }
 
     private func matchRandom() async {
-        guard !busy, answering == nil, matched == nil, let token = session.token else { return }
+        guard !busy, answering == nil, matched == nil, pendingAnswer == nil, let token = session.token else { return }
         busy = true; statusText = "正在为你匹配…"; defer { busy = false }
         do {
             let lang = preferredLanguage.isEmpty ? nil : preferredLanguage
@@ -361,9 +370,9 @@ struct AssistHomeView: View {
                     }
                 }
                 BeeBigButton("帮助 TA", systemImage: "video.fill", tint: .beeSuccess, foreground: .white) {
-                    let callId = detail.callId, name = detail.fromName
+                    // 暂存待呈现的通话，关掉 sheet；待 onDismiss 触发后再开 fullScreenCover（见审查 #3）。
+                    pendingAnswer = AnsweringCall(callId: detail.callId, title: "正在帮助 \(detail.fromName)", isIncoming: false)
                     matched = nil
-                    answering = AnsweringCall(callId: callId, title: "正在帮助 \(name)", isIncoming: false)
                 }
                 Button("跳过这一位", role: .cancel) {
                     let callId = detail.callId

@@ -375,6 +375,18 @@ struct APIClient {
         _ = try? await authedSend("POST", "/api/assist/help/cancel", token: token, body: ["callId": callId])
     }
 
+    // MARK: PushKit VoIP token（A1 后台来电）
+
+    /// 上报本机 VoIP 推送 token（尽力而为）。
+    func registerVoipToken(token: String, voipToken: String) async {
+        _ = try? await authedSend("POST", "/api/push/register", token: token, body: ["voipToken": voipToken])
+    }
+
+    /// 注销 VoIP token（尽力而为）。
+    func unregisterVoipToken(token: String) async {
+        _ = try? await authedSend("DELETE", "/api/push/register", token: token)
+    }
+
     // MARK: 邮箱验证 / 找回密码（D1）
 
     /// 设置/更新邮箱（随后服务端发一封验证码邮件）。

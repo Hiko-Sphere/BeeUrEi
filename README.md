@@ -180,6 +180,7 @@ cd server && npm test                            # 后端：80 测试
 
 ## 📚 文档
 
+- [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) — **项目状态与未完成项对照**（交接文档：当前真实状态 + 对照计划的未完成项分类清单，供接续）
 - [docs/SHIP_CHECKLIST.md](docs/SHIP_CHECKLIST.md) — **上架与真机落地清单**（新手可照做：从真机跑起来到 App Store 的每一步外部操作）
 - [docs/PLAN.md](docs/PLAN.md) — 完整项目计划、架构、风险、分阶段路线图、工程任务勾选
 - [docs/BACKEND_PLAN.md](docs/BACKEND_PLAN.md) — 后端 API / 数据模型 / 信令协议 / 视频隐私门控

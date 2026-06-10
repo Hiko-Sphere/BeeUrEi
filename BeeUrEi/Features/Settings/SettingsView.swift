@@ -44,18 +44,22 @@ struct SettingsView: View {
         _languagePref = State(initialValue: features.languagePreference)
     }
 
+    /// 设置页文案语言（E5）：每次渲染解析；切换「播报语言」后界面即时跟随。
+    private var lang: Language { Language.resolve(preference: languagePref,
+                                                  systemCode: Locale.preferredLanguages.first) }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    Toggle("开始避障时播报安全提醒", isOn: $briefReminderOn)
+                    Toggle(SettingsStrings.briefReminderToggle(lang), isOn: $briefReminderOn)
                         .onChange(of: briefReminderOn) { _, newValue in
                             store.briefReminderSpeechEnabled = newValue
                         }
                 } header: {
-                    Text("语音提醒")
+                    Text(SettingsStrings.reminderHeader(lang))
                 } footer: {
-                    Text("关闭后，每次开始避障不再播报那句简短提醒；首次启动的完整安全须知仍会保留。")
+                    Text(SettingsStrings.reminderFooter(lang))
                 }
 
                 Section {
@@ -75,83 +79,83 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Toggle("简短播报", isOn: $concise)
+                    Toggle(SettingsStrings.conciseToggle(lang), isOn: $concise)
                         .onChange(of: concise) { _, v in
                             var f = FeatureSettings(); f.conciseAnnouncements = v
                         }
                     VStack(alignment: .leading) {
-                        Text("语速")
+                        Text(SettingsStrings.speechRate(lang))
                         Slider(value: $rate, in: 0...1, step: 0.05) {
-                            Text("语速")
+                            Text(SettingsStrings.speechRate(lang))
                         } minimumValueLabel: {
-                            Text("慢")
+                            Text(SettingsStrings.slow(lang))
                         } maximumValueLabel: {
-                            Text("快")
+                            Text(SettingsStrings.fast(lang))
                         }
                         .onChange(of: rate) { _, v in
                             var f = FeatureSettings(); f.speechRate = Float(v)
                         }
-                        .accessibilityLabel("语速")
+                        .accessibilityLabel(SettingsStrings.speechRate(lang))
                         .accessibilityValue("\(Int(rate * 100)) %")
                     }
-                    Toggle("接近声呐（越近蜂鸣越密）", isOn: $sonarOn)
+                    Toggle(SettingsStrings.sonarToggle(lang), isOn: $sonarOn)
                         .onChange(of: sonarOn) { _, v in
                             var f = FeatureSettings(); f.proximitySonar = v
                         }
-                    Toggle("空间音方向提示（AirPods 推荐）", isOn: $spatialCuesOn)
+                    Toggle(SettingsStrings.spatialToggle(lang), isOn: $spatialCuesOn)
                         .onChange(of: spatialCuesOn) { _, v in
                             var f = FeatureSettings(); f.spatialObstacleCues = v
                         }
-                        .accessibilityHint("播报危险障碍时，从障碍所在方向播一声提示音；戴 AirPods 转头时声音方向保持不变")
-                    Picker("播报详略", selection: $verbosity) {
-                        Text("安静（只危险）").tag(0)
-                        Text("正常（转向+危险）").tag(1)
-                        Text("详细（全部）").tag(2)
+                        .accessibilityHint(SettingsStrings.spatialHint(lang))
+                    Picker(SettingsStrings.verbosityPicker(lang), selection: $verbosity) {
+                        Text(SettingsStrings.verbosityQuiet(lang)).tag(0)
+                        Text(SettingsStrings.verbosityNormal(lang)).tag(1)
+                        Text(SettingsStrings.verbosityDetailed(lang)).tag(2)
                     }
                     .onChange(of: verbosity) { _, v in
                         var f = FeatureSettings(); f.verbosity = v
                     }
-                    Toggle("前方通畅时定期确认", isOn: $clearConfirm)
+                    Toggle(SettingsStrings.clearConfirmToggle(lang), isOn: $clearConfirm)
                         .onChange(of: clearConfirm) { _, v in
                             var f = FeatureSettings(); f.clearPathConfirm = v
                         }
-                    Button("试听播报") {
+                    Button(SettingsStrings.previewSpeech(lang)) {
                         previewSpeech.play(FeedbackEvent(priority: .obstacle, speech: sampleAnnouncement()))
                     }
-                    .accessibilityHint("用当前语速和详略念一句示例")
+                    .accessibilityHint(SettingsStrings.previewSpeechHint(lang))
                 } header: {
-                    Text("播报")
+                    Text(SettingsStrings.speechHeader(lang))
                 } footer: {
-                    Text("简短播报更快说完、降低认知负荷；语速可按习惯调整。接近声呐像倒车雷达，正前方越近蜂鸣越急。")
+                    Text(SettingsStrings.speechFooter(lang))
                 }
 
                 Section {
-                    Picker("屏幕常亮", selection: $keepAwakeSeconds) {
-                        Text("永久不息屏（避障持续，最费电）").tag(0)
-                        Text("5 分钟后允许息屏").tag(300)
-                        Text("2 分钟后允许息屏").tag(120)
-                        Text("1 分钟后允许息屏").tag(60)
-                        Text("30 秒后允许息屏").tag(30)
+                    Picker(SettingsStrings.keepAwakePicker(lang), selection: $keepAwakeSeconds) {
+                        Text(SettingsStrings.keepAwakeForever(lang)).tag(0)
+                        Text(SettingsStrings.keepAwakeAfter(300, lang)).tag(300)
+                        Text(SettingsStrings.keepAwakeAfter(120, lang)).tag(120)
+                        Text(SettingsStrings.keepAwakeAfter(60, lang)).tag(60)
+                        Text(SettingsStrings.keepAwakeAfter(30, lang)).tag(30)
                     }
                     .onChange(of: keepAwakeSeconds) { _, v in
                         var f = FeatureSettings(); f.keepAwakeSeconds = v
                     }
                 } header: {
-                    Text("屏幕与省电")
+                    Text(SettingsStrings.screenHeader(lang))
                 } footer: {
-                    Text("避障使用期间默认保持屏幕常亮（否则息屏会暂停摄像头与避障）。若想省电，可设为若干秒后允许自动息屏；息屏后避障会暂停，重新点亮屏幕即恢复。")
+                    Text(SettingsStrings.screenFooter(lang))
                 }
 
                 Section {
-                    Toggle("高对比大字状态条", isOn: $highContrastOn)
+                    Toggle(SettingsStrings.highContrastToggle(lang), isOn: $highContrastOn)
                         .onChange(of: highContrastOn) { _, v in
                             var f = FeatureSettings(); f.highContrast = v
                         }
-                    Button("试一下震动") {
+                    Button(SettingsStrings.previewHaptic(lang)) {
                         previewHaptic.play(FeedbackEvent(priority: .obstacle, speech: nil))
                     }
-                    .accessibilityHint("播放一次危险等级的震动")
-                    Button("恢复默认设置", role: .destructive) {
+                    .accessibilityHint(SettingsStrings.previewHapticHint(lang))
+                    Button(SettingsStrings.resetDefaults(lang), role: .destructive) {
                         FeatureSettings.resetToDefaults()
                         let f = FeatureSettings()
                         concise = f.conciseAnnouncements
@@ -161,70 +165,70 @@ struct SettingsView: View {
                         highContrastOn = f.highContrast
                         sonarOn = f.proximitySonar
                     }
-                    .accessibilityHint("把语速、详略、对比、声呐等播报设置恢复为默认")
+                    .accessibilityHint(SettingsStrings.resetDefaultsHint(lang))
                 } header: {
-                    Text("无障碍")
+                    Text(SettingsStrings.a11yHeader(lang))
                 } footer: {
-                    Text("为低视力用户：避障状态用实底深色 + 高亮大字显示。文字大小同时跟随系统「字体大小」设置。")
+                    Text(SettingsStrings.a11yFooter(lang))
                 }
 
-                Section("账号") {
-                    NavigationLink("登录 / 注册") { LoginView() }
-                    NavigationLink("亲友与紧急呼叫") { FamilyLinksView() }
+                Section(SettingsStrings.accountHeader(lang)) {
+                    NavigationLink(SettingsStrings.loginRegister(lang)) { LoginView() }
+                    NavigationLink(SettingsStrings.familyAndEmergency(lang)) { FamilyLinksView() }
                 }
 
                 Section {
-                    Toggle("实时避障", isOn: $avoidanceOn)
+                    Toggle(SettingsStrings.avoidanceToggle(lang), isOn: $avoidanceOn)
                         .onChange(of: avoidanceOn) { _, v in
                             var f = FeatureSettings(); f.avoidanceEnabled = v
                         }
-                    Toggle("步行导航", isOn: $navigationOn)
+                    Toggle(SettingsStrings.navigationToggle(lang), isOn: $navigationOn)
                         .onChange(of: navigationOn) { _, v in
                             var f = FeatureSettings(); f.navigationEnabled = v
                         }
                 } header: {
-                    Text("功能")
+                    Text(SettingsStrings.featuresHeader(lang))
                 } footer: {
-                    Text("避障与导航可分别开关。导航功能仍在开发中。")
+                    Text(SettingsStrings.featuresFooter(lang))
                 }
 
                 Section {
-                    Toggle("开发者模式（显示温度/帧率）", isOn: $devModeOn)
+                    Toggle(SettingsStrings.devModeToggle(lang), isOn: $devModeOn)
                         .onChange(of: devModeOn) { _, v in
                             var d = DevSettings(); d.enabled = v
                         }
                     if devModeOn {
-                        Toggle("动态 ROI 碰撞走廊（实验）", isOn: $dynamicROIOn)
+                        Toggle(SettingsStrings.dynamicROIToggle(lang), isOn: $dynamicROIOn)
                             .onChange(of: dynamicROIOn) { _, v in
                                 var d = DevSettings(); d.dynamicROIEnabled = v
                             }
                     }
                 } header: {
-                    Text("开发者")
+                    Text(SettingsStrings.devHeader(lang))
                 } footer: {
-                    Text("开启开发者模式后首屏叠加显示温度、帧率、检测器、ROI 等。动态 ROI 用碰撞走廊随相机姿态投影检测区（实验，需真机调参；绿框即当前检测区）。")
+                    Text(SettingsStrings.devFooter(lang))
                 }
 
-                Section("帮助") {
-                    Button("重看使用教程") { showTutorial = true }
+                Section(SettingsStrings.helpHeader(lang)) {
+                    Button(SettingsStrings.replayTutorial(lang)) { showTutorial = true }
                 }
 
-                Section("关于") {
-                    LabeledContent("组织", value: "Hiko Sphere 彦穹科技")
-                    LabeledContent("软件制作人", value: "Li Yanpei Hiko")
-                    LabeledContent("版本", value: "0.1.0")
+                Section(SettingsStrings.aboutHeader(lang)) {
+                    LabeledContent(SettingsStrings.orgLabel(lang), value: "Hiko Sphere 彦穹科技")
+                    LabeledContent(SettingsStrings.producerLabel(lang), value: "Li Yanpei Hiko")
+                    LabeledContent(SettingsStrings.versionLabel(lang), value: "0.1.0")
                 }
 
-                Section("安全须知") {
+                Section(SettingsStrings.disclaimerHeader(lang)) {
                     Text(DisclaimerText.full)
                         .font(.body)
                         .accessibilityLabel(DisclaimerText.full)
                 }
             }
-            .navigationTitle("设置")
+            .navigationTitle(SettingsStrings.navTitle(lang))
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { onClose() }
+                    Button(SettingsStrings.done(lang)) { onClose() }
                 }
             }
             .fullScreenCover(isPresented: $showTutorial) {
@@ -234,8 +238,10 @@ struct SettingsView: View {
     }
 
     private func sampleAnnouncement() -> String {
-        let o = Obstacle(label: "行人", clock: ClockDirection(angleDegrees: 30), distanceMeters: 1.5, confidence: 1)
-        return SpeechComposer().announce(o, concise: FeatureSettings().conciseAnnouncements, language: FeatureSettings().language)
+        let language = FeatureSettings().language
+        let o = Obstacle(label: LabelCatalog(language: language).localizedName("person"),
+                         clock: ClockDirection(angleDegrees: 30), distanceMeters: 1.5, confidence: 1)
+        return SpeechComposer().announce(o, concise: FeatureSettings().conciseAnnouncements, language: language)
     }
 }
 

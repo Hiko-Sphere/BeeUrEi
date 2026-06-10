@@ -70,6 +70,45 @@ enum AssistStrings {
                  : "Tap \"+\" at top right to add family or friends by username (the link starts after they confirm)."
     }
 
+    // MARK: 亲友与紧急呼叫屏（FamilyLinksView）
+
+    static func emergencyHeader(_ l: Language) -> String { l == .zh ? "紧急呼叫" : "Emergency call" }
+    static func emergencyCallFamily(_ l: Language) -> String { l == .zh ? "紧急呼叫亲友" : "Emergency Call Family" }
+    static func emergencyCallHint(_ l: Language) -> String {
+        l == .zh ? "按优先级依次呼叫标记为紧急联系人的亲友" : "Calls your emergency contacts in priority order"
+    }
+    static func noLinksYet(_ l: Language) -> String {
+        l == .zh ? "还没有绑定。下面按对方用户名添加。" : "No links yet. Add someone by username below."
+    }
+    static func pendingSuffix(_ l: Language) -> String { l == .zh ? " · 待对方接受" : " · awaiting their approval" }
+    static func emergencySuffix(_ l: Language) -> String { l == .zh ? " · 紧急联系人" : " · emergency contact" }
+    static func dial(_ l: Language) -> String { l == .zh ? "拨打" : "Call" }
+    static func dialA11y(_ name: String, _ l: Language) -> String {
+        l == .zh ? "拨打 \(name) 的电话" : "Phone call \(name)"
+    }
+    static func addByUsernameHeader(_ l: Language) -> String {
+        l == .zh ? "添加亲友（按对方用户名）" : "Add family (by username)"
+    }
+    static func relationPlaceholder(_ l: Language) -> String { l == .zh ? "关系（如 母亲）" : "Relation (e.g. mother)" }
+    static func phonePlaceholder(_ l: Language) -> String {
+        l == .zh ? "手机号（可选，App 连不上时电话兜底）" : "Phone (optional, fallback when the app can't connect)"
+    }
+    static func emergencyToggle(_ l: Language) -> String { l == .zh ? "设为紧急联系人" : "Set as emergency contact" }
+    static func familyNavTitle(_ l: Language) -> String { l == .zh ? "亲友与紧急呼叫" : "Family & Emergency Calls" }
+    static func loginShort(_ l: Language) -> String { l == .zh ? "请先登录" : "Sign in first" }
+    static func loadFailed(_ l: Language) -> String {
+        l == .zh ? "加载失败（需登录并连接后端）" : "Couldn't load (sign in and connect to the backend)"
+    }
+    static func deleteFailed(_ l: Language) -> String { l == .zh ? "删除失败" : "Couldn't remove" }
+    static func noEmergencyTargets(_ l: Language) -> String {
+        l == .zh ? "没有可呼叫的亲友，请先添加紧急联系人。" : "Nobody to call — add an emergency contact first."
+    }
+    static func emergencyCallingPrefix(anyOnline: Bool, _ l: Language) -> String {
+        if anyOnline { return l == .zh ? "正在呼叫在线联系人：" : "Calling online contacts: " }
+        return l == .zh ? "暂无在线联系人，仍尝试呼叫：" : "Nobody online, trying anyway: "
+    }
+    static func emergencyFailed(_ l: Language) -> String { l == .zh ? "紧急呼叫发起失败" : "Couldn't start the emergency call" }
+
     // MARK: 呼叫状态（经 onChange 统一朗读，盲人听到的话）
 
     static func waitingVolunteer(_ l: Language) -> String {

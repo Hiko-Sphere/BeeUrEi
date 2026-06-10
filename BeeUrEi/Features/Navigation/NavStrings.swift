@@ -101,6 +101,45 @@ enum NavStrings {
         l == .zh ? "\(instruction)（\(meters) 米）" : "\(instruction) (\(meters) m)"
     }
 
+    // MARK: 导航屏界面文案（E5）
+
+    static func regionHeader(_ l: Language) -> String { l == .zh ? "地区" : "Region" }
+    static func regionOverseas(_ l: Language) -> String { l == .zh ? "海外（MapKit）" : "Overseas (MapKit)" }
+    static func regionChina(_ l: Language) -> String { l == .zh ? "中国大陆（高德）" : "Mainland China (AMap)" }
+    static func destinationHeader(_ l: Language) -> String { l == .zh ? "目的地" : "Destination" }
+    static func destinationPlaceholder(_ l: Language) -> String {
+        l == .zh ? "如：地铁站、超市名称" : "e.g. metro station, supermarket"
+    }
+    static func stopPreview(_ l: Language) -> String { l == .zh ? "停止预览" : "Stop Preview" }
+    static func startNav(_ l: Language) -> String { l == .zh ? "开始导航" : "Start Navigation" }
+    static func previewRoute(_ l: Language) -> String { l == .zh ? "预览路线（出门前试听）" : "Preview Route (listen first)" }
+    static func previewHint(_ l: Language) -> String {
+        l == .zh ? "不出门，先把整条路线逐步念给你听：每一步怎么走、走多远、全程多长"
+                 : "Without going out, hear the whole route step by step: each turn, each distance, and the total length"
+    }
+    static func stopNav(_ l: Language) -> String { l == .zh ? "停止导航" : "Stop Navigation" }
+    static func startTrail(_ l: Language) -> String { l == .zh ? "开始记路" : "Start Recording Trail" }
+    static func startTrailHint(_ l: Language) -> String {
+        l == .zh ? "沿途记录你的来路，回程时可原路返回" : "Records your path so you can backtrack later"
+    }
+    static func stopTrail(_ l: Language) -> String { l == .zh ? "停止记路" : "Stop Recording" }
+    static func backtrack(_ n: Int, _ l: Language) -> String {
+        l == .zh ? "原路返回（已记 \(n) 个点）" : "Backtrack (\(n) points recorded)"
+    }
+    static func backtrackHint(_ l: Language) -> String {
+        l == .zh ? "沿记录的来路反向引导你走回出发点" : "Guides you back along the recorded path to your start"
+    }
+    static func backtrackHeader(_ l: Language) -> String { l == .zh ? "原路返回" : "Backtrack" }
+    static func backtrackFooter(_ l: Language) -> String {
+        l == .zh ? "进陌生地方前点「开始记路」；要回去时点「原路返回」，跟着提示音原路走回出发点。"
+                 : "Tap \"Start Recording Trail\" before entering an unfamiliar place; tap \"Backtrack\" to follow the beacon back to where you started."
+    }
+    static func favoritesHeader(_ l: Language) -> String { l == .zh ? "常用目的地" : "Favorite destinations" }
+    static func statusHeader(_ l: Language) -> String { l == .zh ? "状态" : "Status" }
+    static func stepsHeader(_ l: Language) -> String { l == .zh ? "路线步骤" : "Route steps" }
+    static func navScreenTitle(_ l: Language) -> String { l == .zh ? "步行导航" : "Walking Navigation" }
+    static func done(_ l: Language) -> String { l == .zh ? "完成" : "Done" }
+
     /// 反向地理编码/POI 查询的地名语言。
     static func geocodeLocale(_ l: Language) -> Locale {
         Locale(identifier: l == .zh ? "zh_CN" : "en_US")

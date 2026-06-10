@@ -8,59 +8,62 @@ struct WalkNavigationView: View {
     @State private var favorites: [String] = []
     let onClose: () -> Void
 
+    /// 导航屏文案语言（E5）。
+    private var lang: Language { FeatureSettings().language }
+
     var body: some View {
         NavigationStack {
             Form {
-                Section("地区") {
-                    Picker("地区", selection: $region) {
-                        Text("海外（MapKit）").tag(NavigationViewModel.Region.overseas)
-                        Text("中国大陆（高德）").tag(NavigationViewModel.Region.china)
+                Section(NavStrings.regionHeader(lang)) {
+                    Picker(NavStrings.regionHeader(lang), selection: $region) {
+                        Text(NavStrings.regionOverseas(lang)).tag(NavigationViewModel.Region.overseas)
+                        Text(NavStrings.regionChina(lang)).tag(NavigationViewModel.Region.china)
                     }
                     .pickerStyle(.segmented)
                 }
 
-                Section("目的地") {
-                    TextField("如：地铁站、超市名称", text: $destination)
+                Section(NavStrings.destinationHeader(lang)) {
+                    TextField(NavStrings.destinationPlaceholder(lang), text: $destination)
                         .autocorrectionDisabled()
                     if model.previewing {
-                        Button("停止预览", role: .destructive) { model.stopPreview() }
+                        Button(NavStrings.stopPreview(lang), role: .destructive) { model.stopPreview() }
                     } else if !model.running {
-                        Button("开始导航") {
+                        Button(NavStrings.startNav(lang)) {
                             let store = FavoritePlacesStore()
                             store.add(destination)
                             favorites = store.all
                             Task { await model.start(destination: destination, region: region) }
                         }
                         .disabled(destination.isEmpty)
-                        Button("预览路线（出门前试听）") {
+                        Button(NavStrings.previewRoute(lang)) {
                             Task { await model.startPreview(destination: destination, region: region) }
                         }
                         .disabled(destination.isEmpty)
-                        .accessibilityHint("不出门，先把整条路线逐步念给你听：每一步怎么走、走多远、全程多长")
+                        .accessibilityHint(NavStrings.previewHint(lang))
                     } else {
-                        Button("停止导航", role: .destructive) { model.stop() }
+                        Button(NavStrings.stopNav(lang), role: .destructive) { model.stop() }
                     }
                 }
 
                 Section {
                     if !model.recordingTrail {
-                        Button("开始记路") { model.startTrailRecording() }
-                            .accessibilityHint("沿途记录你的来路，回程时可原路返回")
+                        Button(NavStrings.startTrail(lang)) { model.startTrailRecording() }
+                            .accessibilityHint(NavStrings.startTrailHint(lang))
                     } else {
-                        Button("停止记路", role: .destructive) { model.stopTrailRecording() }
+                        Button(NavStrings.stopTrail(lang), role: .destructive) { model.stopTrailRecording() }
                     }
                     if model.trailCount >= 2 {
-                        Button("原路返回（已记 \(model.trailCount) 个点）") { model.startBacktrack() }
-                            .accessibilityHint("沿记录的来路反向引导你走回出发点")
+                        Button(NavStrings.backtrack(model.trailCount, lang)) { model.startBacktrack() }
+                            .accessibilityHint(NavStrings.backtrackHint(lang))
                     }
                 } header: {
-                    Text("原路返回")
+                    Text(NavStrings.backtrackHeader(lang))
                 } footer: {
-                    Text("进陌生地方前点「开始记路」；要回去时点「原路返回」，跟着提示音原路走回出发点。")
+                    Text(NavStrings.backtrackFooter(lang))
                 }
 
                 if !favorites.isEmpty {
-                    Section("常用目的地") {
+                    Section(NavStrings.favoritesHeader(lang)) {
                         ForEach(favorites, id: \.self) { place in
                             Button(place) {
                                 destination = place
@@ -78,7 +81,7 @@ struct WalkNavigationView: View {
                     }
                 }
 
-                Section("状态") {
+                Section(NavStrings.statusHeader(lang)) {
                     Text(model.status)
                     if !model.instruction.isEmpty {
                         Text(model.instruction).font(.headline)
@@ -88,17 +91,17 @@ struct WalkNavigationView: View {
                 .accessibilityLabel(model.instruction.isEmpty ? model.status : "\(model.status)。\(model.instruction)")
 
                 if !model.steps.isEmpty {
-                    Section("路线步骤") {
+                    Section(NavStrings.stepsHeader(lang)) {
                         ForEach(Array(model.steps.enumerated()), id: \.offset) { idx, step in
                             Text("\(idx + 1). \(step)")
                         }
                     }
                 }
             }
-            .navigationTitle("步行导航")
+            .navigationTitle(NavStrings.navScreenTitle(lang))
             .onAppear { favorites = FavoritePlacesStore().all }
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("完成") { onClose() } }
+                ToolbarItem(placement: .confirmationAction) { Button(NavStrings.done(lang)) { onClose() } }
             }
         }
     }

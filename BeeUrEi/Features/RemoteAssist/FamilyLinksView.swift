@@ -12,6 +12,8 @@ struct FamilyLinksView: View {
     @State private var emergencyInfo: String?
     @State private var emergencyCall: CallSession?
     @State private var api = APIClient()
+    /// 亲友屏文案语言（E5）。
+    private var lang: Language { FeatureSettings().language }
 
     var body: some View {
         List {
@@ -19,27 +21,30 @@ struct FamilyLinksView: View {
                 Section { Text(errorText).foregroundStyle(.red) }
             }
 
-            Section("紧急呼叫") {
+            Section(AssistStrings.emergencyHeader(lang)) {
                 Button {
                     Task { await triggerEmergency() }
                 } label: {
-                    Label("紧急呼叫亲友", systemImage: "sos.circle.fill").foregroundStyle(.red).font(.headline)
+                    Label(AssistStrings.emergencyCallFamily(lang), systemImage: "sos.circle.fill")
+                        .foregroundStyle(.red).font(.headline)
                 }
-                .accessibilityHint("按优先级依次呼叫标记为紧急联系人的亲友")
+                .accessibilityHint(AssistStrings.emergencyCallHint(lang))
                 if let emergencyInfo {
                     Text(emergencyInfo).font(.footnote).foregroundStyle(.secondary)
                 }
             }
 
-            Section("我的亲友 / 协助者") {
+            Section(AssistStrings.familySection(lang)) {
                 if links.isEmpty {
-                    Text("还没有绑定。下面按对方用户名添加。").foregroundStyle(.secondary)
+                    Text(AssistStrings.noLinksYet(lang)).foregroundStyle(.secondary)
                 } else {
                     ForEach(links) { l in
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(l.memberName)
-                                Text("\(l.relation)\(l.isEmergency ? " · 紧急联系人" : "")\(l.isPending ? " · 待对方接受" : "")")
+                                Text(l.relation
+                                     + (l.isEmergency ? AssistStrings.emergencySuffix(lang) : "")
+                                     + (l.isPending ? AssistStrings.pendingSuffix(lang) : ""))
                                     .font(.caption).foregroundStyle(l.isPending ? .orange : .secondary)
                             }
                             Spacer()
@@ -47,10 +52,10 @@ struct FamilyLinksView: View {
                                 Button {
                                     if let url = URL(string: "tel://\(phone)") { UIApplication.shared.open(url) }
                                 } label: {
-                                    Label("拨打", systemImage: "phone.fill")
+                                    Label(AssistStrings.dial(lang), systemImage: "phone.fill")
                                 }
                                 .buttonStyle(.bordered)
-                                .accessibilityLabel("拨打 \(l.memberName) 的电话")
+                                .accessibilityLabel(AssistStrings.dialA11y(l.memberName, lang))
                             }
                         }
                     }
@@ -60,18 +65,18 @@ struct FamilyLinksView: View {
                 }
             }
 
-            Section("添加亲友（按对方用户名）") {
-                TextField("对方用户名", text: $newUsername)
+            Section(AssistStrings.addByUsernameHeader(lang)) {
+                TextField(AssistStrings.usernamePlaceholder(lang), text: $newUsername)
                     .textInputAutocapitalization(.never).autocorrectionDisabled()
-                TextField("关系（如 母亲）", text: $newRelation)
-                TextField("手机号（可选，App 连不上时电话兜底）", text: $newPhone)
+                TextField(AssistStrings.relationPlaceholder(lang), text: $newRelation)
+                TextField(AssistStrings.phonePlaceholder(lang), text: $newPhone)
                     .keyboardType(.phonePad)
-                Toggle("设为紧急联系人", isOn: $isEmergency)
-                Button("添加") { Task { await add() } }
+                Toggle(AssistStrings.emergencyToggle(lang), isOn: $isEmergency)
+                Button(AssistStrings.add(lang)) { Task { await add() } }
                     .disabled(newUsername.trimmingCharacters(in: .whitespaces).count < 3)
             }
         }
-        .navigationTitle("亲友与紧急呼叫")
+        .navigationTitle(AssistStrings.familyNavTitle(lang))
         .task { await load() }
         .fullScreenCover(item: $emergencyCall) { s in
             CallView(role: .blind, callId: s.id) {
@@ -83,13 +88,13 @@ struct FamilyLinksView: View {
     }
 
     private func load() async {
-        guard let token = KeychainStore.read() else { errorText = "请先在「设置 → 账号」登录"; return }
+        guard let token = KeychainStore.read() else { errorText = AssistStrings.loginFirst(lang); return }
         do { links = try await api.familyLinks(token: token); errorText = nil }
-        catch { errorText = "加载失败（需登录并连接后端）" }
+        catch { errorText = AssistStrings.loadFailed(lang) }
     }
 
     private func add() async {
-        guard let token = KeychainStore.read() else { errorText = "请先登录"; return }
+        guard let token = KeychainStore.read() else { errorText = AssistStrings.loginShort(lang); return }
         do {
             try await api.addFamilyLink(token: token,
                                         username: newUsername.trimmingCharacters(in: .whitespaces),
@@ -98,33 +103,33 @@ struct FamilyLinksView: View {
             newUsername = ""; newRelation = ""; newPhone = ""; isEmergency = false
             await load()
         } catch let APIError.server(msg) {
-            errorText = msg == "member_not_found" ? "找不到该用户名" : msg
-        } catch { errorText = "添加失败" }
+            errorText = msg == "member_not_found" ? AssistStrings.memberNotFound(lang) : msg
+        } catch { errorText = AssistStrings.addFailed(lang) }
     }
 
     private func remove(_ link: FamilyLinkInfo) async {
         guard let token = KeychainStore.read() else { return }
         do { try await api.deleteFamilyLink(token: token, id: link.id); await load() }
-        catch { errorText = "删除失败" }
+        catch { errorText = AssistStrings.deleteFailed(lang) }
     }
 
     private func triggerEmergency() async {
-        guard let token = KeychainStore.read() else { errorText = "请先登录"; return }
+        guard let token = KeychainStore.read() else { errorText = AssistStrings.loginShort(lang); return }
         do {
             // 优先呼叫"在线可用"的联系人（匹配）；无人在线则回退呼叫全部紧急联系人。
             let online = try await api.assistMatch(token: token, emergency: true)
             let targets = online.isEmpty ? try await api.emergencyTargets(token: token) : online
             guard !targets.isEmpty else {
-                emergencyInfo = "没有可呼叫的亲友，请先添加紧急联系人。"
+                emergencyInfo = AssistStrings.noEmergencyTargets(lang)
                 return
             }
-            let prefix = online.isEmpty ? "暂无在线联系人，仍尝试呼叫：" : "正在呼叫在线联系人："
-            emergencyInfo = prefix + targets.map(\.memberName).joined(separator: " → ")
+            emergencyInfo = AssistStrings.emergencyCallingPrefix(anyOnline: !online.isEmpty, lang)
+                + targets.map(\.memberName).joined(separator: " → ")
             let session = CallSession()
             // 登记本次呼叫，使在线的协助者/亲友前台轮询即可接听（免推送会合；真机后台响铃仍需推送）。
             // 用 try(非 try?)：登记失败时进入 catch 提示而非进"假通话"（见审查 #2）。
             try await api.startEmergencyCall(token: token, callId: session.id, targetUserIds: targets.map(\.memberId))
             emergencyCall = session
-        } catch { errorText = "紧急呼叫发起失败" }
+        } catch { errorText = AssistStrings.emergencyFailed(lang) }
     }
 }

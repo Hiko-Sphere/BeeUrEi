@@ -169,7 +169,7 @@
 - **技术要点**：逐屏 VoiceOver 走查清单 + 修复；动态状态用 `accessibilityValue`/通知播报。
 - **依赖**：真机 + 最好盲人用户参与。
 
-### E2. 视觉无障碍适配 🔜（高对比大字状态条 + Dynamic Type；减少动效待补）· P1
+### E2. 视觉无障碍适配 🔜（高对比大字状态条 + Dynamic Type + 减少动效已尊重系统设置[全仓仅 5 处动画，呼吸光环等装饰动效已 reduceMotion 门控]；放大不破版走查归 E1 真机）· P1
 - **目标**：覆盖**低视力**用户（不只是全盲）。
 - **达成标准**：支持动态字体(Dynamic Type)放大不破版；高对比模式；减少动效尊重系统设置；色彩不依赖单一通道。
 - **依赖**：设计走查。
@@ -184,18 +184,18 @@
 - **达成标准**：不同危险等级/方向有可区分的 Core Haptics 模式；可在嘈杂环境替代语音；可开关。
 - **技术要点**：`CoreHaptics` 设计模式库（可核心定义参数）。
 
-### E5. 多语言（i18n）🔜（核心播报本地化地基已就绪：`Language`+`SpokenStrings` 中英双语 + 12 个播报组件语言感知 + 语言设置/选嗓音 + 避障实时语音已全量双语；UI 视图文案/导航/取景页待 String Catalog 下一轮）· P1
-- **目标**：从仅中文到多语言（英/中起步）。
-- **达成标准**：UI 与播报全量本地化；语音/标签按语言切换；竞品多语言是出海硬门槛。
-- **技术要点**：`String Catalog` 本地化 + 播报文案按语言；`LabelCatalog` 多语映射。
+### E5. 多语言（i18n）✅（2026-06-10 十批收官：核心 SpokenStrings + 各屏文案表 Framing/Nav/Home/Assist/Call/Settings/Account/Helper Strings——双端全链路[首启→同意→教程→登录→主屏→识别→导航→求助→通话→设置→亲友→通知]中英双语；TTS 嗓音/OCR 语言/推送文案[后端 pushStrings 按收件人 users.language]随语言；全部带"中文逐字一致+英文防漏翻"双向测试）· P1
+- **残留**：①安全须知英文版为**草稿**（DisclaimerText.fullEnglishDraft，法律文本需法务/母语校对）②英文文案出海前建议母语者通读 ③AdminHome/DevOverlay 为内部工具不本地化。
+- **实现说明**：未走 String Catalog，采用与核心 SpokenStrings 同模式的文案表（可单测、语言解析单一真相源 `FeatureSettings().language`）。
 
 ---
 
 ## F. 测试与质量（P0–P1）
 
-### F1. iOS 适配层测试 ❌ · P1
+### F1. iOS 适配层测试 🔜（两批落地：BeeUrEiTests target 51 测——含 **CallViewModel 信令/隐私门控 9 项安全回归**[Signaling 协议化注入+MockMediaEngine]、AMap 解码、来电中心、各文案表、本地库[商品/识别历史]；已接 CI）· P1
 - **目标**：ViewModel/关键视图有自动化测试。
 - **达成标准**：HomeViewModel/CallViewModel/NavigationViewModel 等核心 VM 有单测（依赖注入 mock 帧/信令）；关键无障碍属性有 UI 测试。
+- **残留**：HomeViewModel（相机帧依赖重，需抽 FrameSource 协议）与 NavigationViewModel（定位依赖；核心判定已在 BeeUrEiCore 全测）；UI 快照/无障碍属性测试未起。
 - **技术要点**：把 VM 依赖抽象为协议便于注入；XCTest + ViewInspector/快照。
 
 ### F2. 端到端 + 性能基准 + 崩溃监控 ❌ · P0（崩溃监控）

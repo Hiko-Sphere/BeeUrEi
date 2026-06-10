@@ -30,6 +30,9 @@ final class FramingAssistViewModel {
     @ObservationIgnored private var latestBuffer: CVPixelBuffer?
     @ObservationIgnored private var latestDetections: [DetectedObject] = []
     @ObservationIgnored private var paused = false // 关闭/被来电盖上后：停止播报并丢弃在途帧/异步识别结果
+    @ObservationIgnored private var docMode = false        // 文档模式（整页取景引导+自动拍摄）
+    @ObservationIgnored private var docStableFrames = 0    // 整页完整入画的连续帧数（≥2 自动拍摄）
+    @ObservationIgnored private var docCapturing = false   // OCR 进行中，防重复拍摄
 
     var arSession: ARSession { source.session }
 
@@ -56,6 +59,12 @@ final class FramingAssistViewModel {
         latestBuffer = frame.pixelBuffer // 供"朗读文字"用最新帧
         guard frame.timestamp - lastProcess >= 0.4 else { return }
         lastProcess = frame.timestamp
+
+        // 文档模式（Seeing AI 式）：引导把整页放进画面，稳定后自动拍摄整页朗读。
+        if docMode {
+            documentGuidance(frame)
+            return
+        }
 
         // 全帧检测，取最大框作为取景目标。
         let detections = detector.detect(in: frame.pixelBuffer, regionOfInterest: CGRect(x: 0, y: 0, width: 1, height: 1))
@@ -84,6 +93,110 @@ final class FramingAssistViewModel {
                 lastSpoke = frame.timestamp
                 speak(hint)
             }
+        }
+    }
+
+    // MARK: 文档模式（Seeing AI 式整页朗读）
+
+    /// 进入/退出「读整页」：语音引导把整页放进画面，连续 2 帧完整入画即自动拍摄并按版面顺序朗读。
+    func toggleDocumentMode() {
+        docMode.toggle()
+        docStableFrames = 0
+        docCapturing = false
+        if docMode {
+            resultText = ""
+            copyableResult = nil
+            guidanceText = "读整页：把整页纸放进画面"
+            speak("读整页模式。把手机举在纸张上方约三十厘米，听提示调整，对好后会自动拍摄并朗读全文。")
+        } else {
+            guidanceText = "已退出读整页"
+            speak("已退出读整页")
+        }
+    }
+
+    /// 文档取景引导：页面分割检测 → 边缘出画/太小提示 → 稳定自动拍摄。
+    private func documentGuidance(_ frame: SensorFrame) {
+        guard !docCapturing else { return }
+        let request = VNDetectDocumentSegmentationRequest()
+        try? VNImageRequestHandler(cvPixelBuffer: frame.pixelBuffer, options: [:]).perform([request])
+        guard let doc = request.results?.first, doc.confidence > 0.5 else {
+            docStableFrames = 0
+            docHint("没有找到纸张，请把整页纸放进画面", at: frame.timestamp)
+            return
+        }
+        let box = doc.boundingBox // 归一化坐标
+        let m: CGFloat = 0.02
+        let touchesEdge = box.minX < m || box.maxX > 1 - m || box.minY < m || box.maxY > 1 - m
+        let area = box.width * box.height
+        // 方向词在相机旋转下易说反，统一用"拿远/靠近"这类无方向提示（稳妥且对盲人更可执行）。
+        if touchesEdge {
+            docStableFrames = 0
+            docHint("纸张边缘超出画面，请拿远一点并居中", at: frame.timestamp)
+            return
+        }
+        if area < 0.18 {
+            docStableFrames = 0
+            docHint("靠近一点", at: frame.timestamp)
+            return
+        }
+        docStableFrames += 1
+        guidanceText = "对准了，保持不动…"
+        if docStableFrames >= 2 {
+            docCapturing = true
+            speak("拍好了，正在识别整页")
+            guidanceText = "正在识别整页…"
+            captureDocument(frame.pixelBuffer)
+        }
+    }
+
+    /// 文档引导提示：去重 + 2.5s 节流，避免连环重复念。
+    private func docHint(_ text: String, at now: TimeInterval) {
+        guidanceText = text
+        if text != lastHint || now - lastSpoke >= 2.5 {
+            lastHint = text
+            lastSpoke = now
+            speak(text)
+        }
+    }
+
+    /// 拍摄整页：深拷贝当前帧 → 精确 OCR → 按版面顺序（自上而下、同行从左到右）朗读全文。
+    private func captureDocument(_ live: CVPixelBuffer) {
+        guard let buffer = copyPixelBuffer(live) else {
+            docCapturing = false
+            speak("拍摄失败，请重试")
+            return
+        }
+        let request = VNRecognizeTextRequest { [weak self] req, _ in
+            let obs = (req.results as? [VNRecognizedTextObservation]) ?? []
+            // 版面顺序：bbox 原点在左下 → midY 大者在上；同一行（纵向重叠）按 minX 从左到右。
+            let sorted = obs.sorted { a, b in
+                let ba = a.boundingBox, bb = b.boundingBox
+                if abs(ba.midY - bb.midY) > min(ba.height, bb.height) * 0.6 { return ba.midY > bb.midY }
+                return ba.minX < bb.minX
+            }
+            let lines = sorted.compactMap { $0.topCandidates(1).first?.string }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.docCapturing = false
+                self.docMode = false
+                if lines.isEmpty {
+                    self.resultText = "没有识别到文字"
+                    self.guidanceText = "没有识别到文字，请再试一次"
+                    self.speak("没有识别到文字，请再点一次读整页重试")
+                } else {
+                    let full = lines.joined(separator: "\n")
+                    self.resultText = "整页：\(lines.first ?? "")…"
+                    self.copyableResult = full
+                    self.guidanceText = "识别完成，共 \(lines.count) 行"
+                    self.speak("识别完成。" + lines.joined(separator: "。"))
+                }
+            }
+        }
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["zh-Hans", "en-US"]
+        request.usesLanguageCorrection = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? VNImageRequestHandler(cvPixelBuffer: buffer, options: [:]).perform([request])
         }
     }
 
@@ -268,6 +381,11 @@ struct FramingAssistView: View {
                 HStack(spacing: BeeSpacing.sm) {
                     overlayAction("朗读文字", systemImage: "text.viewfinder",
                                   hint: "识别并朗读相机里看到的文字") { model.readText() }
+                    overlayAction("读整页", systemImage: "doc.text.viewfinder",
+                                  hint: "引导你把整页纸放进画面，自动拍摄并按顺序朗读全文") { model.toggleDocumentMode() }
+                }
+                .padding(.horizontal)
+                HStack(spacing: BeeSpacing.sm) {
                     overlayAction("识别颜色", systemImage: "paintpalette.fill",
                                   hint: "说出画面中央的颜色") { model.readColor() }
                     overlayAction("扫码", systemImage: "qrcode.viewfinder",

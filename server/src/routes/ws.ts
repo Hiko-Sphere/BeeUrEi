@@ -7,7 +7,7 @@ import { type Store } from '../db/store'
 import { type PendingCallRegistry } from '../assist/pendingCalls'
 import { type OpenHelpRegistry } from '../assist/openHelp'
 
-const RELAY_TYPES = new Set(['offer', 'answer', 'ice', 'video-gate', 'end'])
+const RELAY_TYPES = new Set(['offer', 'answer', 'ice', 'video-gate', 'end', 'control'])
 
 /// WebRTC 信令：/ws?token=<JWT>。客户端先发 {type:'join', callId, role}，
 /// 之后 offer/answer/ice/video-gate/end 会被转发给同房间的另一端。

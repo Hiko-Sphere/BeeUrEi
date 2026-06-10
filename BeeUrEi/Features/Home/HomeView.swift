@@ -13,6 +13,7 @@ struct HomeView: View {
     @State private var locationDescriber = LocationDescriber()
     @State private var idleTask: Task<Void, Never>? // 屏幕常亮计时（到时允许系统息屏）
     @State private var incoming = IncomingCallCenter.shared // 监听来电（接听别人的呼叫经此在根层呈现）
+    @State private var route = AppRoute.shared              // Siri/快捷指令路由（一句话直达）
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency // 减弱透明度→实底
     @Environment(\.colorSchemeContrast) private var schemeContrast               // 增强对比→实底+更高对比
     private let consentStore = ConsentStore()
@@ -53,6 +54,16 @@ struct HomeView: View {
             SettingsView(store: consentStore) { showSettings = false }
         }
         .onChange(of: showSettings) { _, shown in if !shown { applyKeepAwake() } } // 设置可能改了常亮时长，返回时重新应用
+        // Siri/快捷指令直达（来电优先级更高：来电中忽略路由请求）。
+        .onChange(of: route.pending) { _, dest in
+            guard let dest, !incoming.hasIncoming else { route.pending = nil; return }
+            route.pending = nil
+            switch dest {
+            case .help: showRemoteAssist = true
+            case .lookAround: showFraming = true
+            case .whereAmI: locationDescriber.describe()
+            }
+        }
         // 接到别人来电(铃响或已接入)：暂停避障(停语音/帧/声呐) + 强制常亮 + 关掉本页其它模态(否则根层来电界面弹不出来，见来电链路深审 #1/#3)。
         .onChange(of: incoming.hasIncoming) { _, inCall in
             if inCall {

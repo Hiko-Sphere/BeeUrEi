@@ -116,6 +116,26 @@ struct CallView: View {
 
             // 底部渐隐遮罩 + 控件。
             VStack(spacing: BeeSpacing.md) {
+                // 远程控制（对方画面已出时）：暗光开对方手电筒 / 变焦放大看细节（Be My Eyes 式）。
+                if model.remoteVideoFrames {
+                    HStack(spacing: 32) {
+                        circleButton(model.remoteTorchOn ? "flashlight.on.fill" : "flashlight.off.fill",
+                                     label: model.remoteTorchOn ? "关闭对方手电筒" : "打开对方手电筒",
+                                     tint: model.remoteTorchOn ? Color.beeWarn : Color.white.opacity(0.22)) {
+                            model.toggleRemoteTorch(); scheduleAutoHide()
+                        }
+                        Button {
+                            model.cycleRemoteZoom(); scheduleAutoHide()
+                        } label: {
+                            Text("\(Int(model.remoteZoom))x").font(.headline).foregroundStyle(.white)
+                                .frame(width: 64, height: 64)
+                                .background(model.remoteZoom > 1 ? Color.beeWarn : Color.white.opacity(0.22), in: Circle())
+                                .overlay(Circle().strokeBorder(.white.opacity(0.18), lineWidth: 0.5))
+                        }
+                        .buttonStyle(BeePressStyle())
+                        .accessibilityLabel("变焦，当前 \(Int(model.remoteZoom)) 倍，双击切换")
+                    }
+                }
                 HStack(spacing: 48) {
                     circleButton(model.muted ? "mic.slash.fill" : "mic.fill",
                                  label: model.muted ? "取消静音" : "静音",

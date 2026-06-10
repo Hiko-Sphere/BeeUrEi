@@ -43,6 +43,8 @@ protocol MediaEngine: AnyObject {
     func setLocalVideoSending(_ sending: Bool)
     func setCameraPosition(front: Bool) // 切换前/后摄像头（前置=显示面部）
     func setMicMuted(_ muted: Bool) // 静音：禁用/启用本端音频轨
+    func setTorch(_ on: Bool)       // 手电筒（协助者远程开/关，暗光看不清时）
+    func setZoom(_ factor: Double)  // 变焦（协助者远程放大看细节）
     func stop()
 }
 
@@ -61,6 +63,8 @@ final class StubMediaEngine: MediaEngine {
     func setLocalVideoSending(_ sending: Bool) {}
     func setCameraPosition(front: Bool) {}
     func setMicMuted(_ muted: Bool) {}
+    func setTorch(_ on: Bool) {}
+    func setZoom(_ factor: Double) {}
     func stop() {}
 }
 
@@ -104,6 +108,7 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
     private var videoCapturer: RTCCameraVideoCapturer?
     private var videoSender: RTCRtpSender?
     private var cameraFront = false // false=后置(看前方场景) true=前置(看面部)
+    private var activeDevice: AVCaptureDevice? // 当前采集设备（手电筒/变焦远程控制用）
     private var capturing = false // 仅在用户主动发画面时才开相机（最小权限/默认隐私，见审查 #2）
     private(set) var remoteVideoTrack: RTCVideoTrack?
     private weak var remoteRenderer: RTCVideoRenderer?
@@ -248,6 +253,26 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
         localAudioTrack?.isEnabled = !muted
     }
 
+    /// 手电筒（协助者远程开/关）：仅后置摄像头有手电；采集停止后系统自动关闭。
+    func setTorch(_ on: Bool) {
+        guard let device = activeDevice, device.hasTorch else { return }
+        do {
+            try device.lockForConfiguration()
+            device.torchMode = on ? .on : .off
+            device.unlockForConfiguration()
+        } catch { /* 设备占用等：忽略，保持原状 */ }
+    }
+
+    /// 变焦（协助者远程放大看细节）。限制在设备支持范围内。
+    func setZoom(_ factor: Double) {
+        guard let device = activeDevice else { return }
+        do {
+            try device.lockForConfiguration()
+            device.videoZoomFactor = min(max(1, factor), min(device.activeFormat.videoMaxZoomFactor, 5))
+            device.unlockForConfiguration()
+        } catch { /* 忽略 */ }
+    }
+
     func stop() {
         statsTimer?.invalidate(); statsTimer = nil
         if capturing { videoCapturer?.stopCapture(); capturing = false }
@@ -297,6 +322,7 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
         let devices = RTCCameraVideoCapturer.captureDevices()
         guard let device = devices.first(where: { $0.position == wanted })
             ?? devices.first(where: { $0.position == .back }) ?? devices.first else { return }
+        activeDevice = device // 留存：手电筒/变焦远程控制作用于当前采集设备
         let formats = RTCCameraVideoCapturer.supportedFormats(for: device)
         // 目标 720p（1280 宽）高清：选尺寸最接近 1280 宽的格式（兼顾画质与带宽）。
         let target = 1280

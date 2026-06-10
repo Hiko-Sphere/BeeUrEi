@@ -169,6 +169,17 @@ final class CallViewModel {
         case "video-gate":
             // 关闭画面时恢复"已连接"，避免状态栏永久停在"对方关闭了画面"让协助者误以为掉线（见审查 #3）。
             if let on = msg["on"] as? Bool { statusText = on ? "已连接 · 对方已开启画面" : connectedStatus() }
+        case "control":
+            // 协助者远程控制（Be My Eyes 式）：仅盲人端、且**正在分享画面**时才接受——
+            // 不分享时不允许对方动我的手电/相机（隐私与最小权限）。
+            guard role == .blind, videoSending else { return }
+            if let torch = msg["torch"] as? Bool {
+                media.setTorch(torch)
+                A11y.announce(torch ? "协助者帮你打开了手电筒" : "协助者关闭了手电筒")
+            }
+            if let zoom = msg["zoom"] as? Double {
+                media.setZoom(zoom)
+            }
         case "end", "peer-left":
             // 一方挂断/离开 → 本端自动挂断并关闭界面（见“同时自动挂断”需求）。
             // 'end' 是对方主动挂断的即时通知；'peer-left' 是其连接关闭后服务端补发，二者取先到者。
@@ -190,6 +201,25 @@ final class CallViewModel {
 
     /// 协助者侧：远端视频出现真实画面帧（由 RemoteVideoView 的尺寸变化回调触发）。
     func markRemoteVideoFrames() { remoteVideoFrames = true }
+
+    // MARK: 协助者远程控制（手电筒/变焦，Be My Eyes 式）
+
+    private(set) var remoteTorchOn = false   // 协助者视角：对方手电筒是否已被我打开
+    private(set) var remoteZoom: Double = 1  // 协助者视角：当前远程变焦倍率
+
+    /// 协助者：远程开/关盲人手电筒（暗光下看不清画面时）。
+    func toggleRemoteTorch() {
+        guard role == .helper else { return }
+        remoteTorchOn.toggle()
+        signaling.send(["type": "control", "torch": remoteTorchOn])
+    }
+
+    /// 协助者：循环远程变焦 1x→2x→3x→1x（放大看标签/细节）。
+    func cycleRemoteZoom() {
+        guard role == .helper else { return }
+        remoteZoom = remoteZoom >= 3 ? 1 : remoteZoom + 1
+        signaling.send(["type": "control", "zoom": remoteZoom])
+    }
 
     private(set) var cameraFront = false // 盲人分享时的摄像头：false=后置(看前方场景) true=前置(看面部)
 

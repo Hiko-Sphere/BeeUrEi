@@ -165,6 +165,12 @@ struct HomeView: View {
             HStack(spacing: BeeSpacing.sm) {
                 tile("我在哪", systemImage: "location.fill",
                      hint: "播报你当前位置和附近的地点") { locationDescriber.describe() }
+                tile("周围有什么", systemImage: "dot.circle.viewfinder",
+                     hint: "按时钟方位播报四周的地点，如三点钟方向五十米便利店") { locationDescriber.describeAround() }
+            }
+            HStack(spacing: BeeSpacing.sm) {
+                tile("前方有什么", systemImage: "arrow.up.circle",
+                     hint: "只播报你面朝方向的地点") { locationDescriber.describeAhead() }
                 tile("设置", systemImage: "gearshape.fill") { showSettings = true }
             }
         }

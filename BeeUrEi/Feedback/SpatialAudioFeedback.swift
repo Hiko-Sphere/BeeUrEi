@@ -18,6 +18,31 @@ final class SpatialAudioFeedback: FeedbackSink {
         engine.connect(environment, to: engine.mainMixerNode, format: nil)
         environment.listenerPosition = AVAudio3DPoint(x: 0, y: 0, z: 0)
         toneBuffer = SpatialAudioFeedback.makeTone(format: format)
+        configureSpatialization()
+    }
+
+    /// 启用**真正的双耳空间化**——这是此前缺失的关键一环：`AVAudioPlayerNode` 默认渲染算法是
+    /// `.equalPowerPanning`（只有左右声像 pan），AirPods 上听不出「几点钟方向」。
+    /// 从环境节点支持的算法里挑最优双耳算法（HRTFHQ>HRTF>…，核心 `SpatialAudioPolicy` 已测）并设为点声源，
+    /// 配合 `setListenerYaw`（AirPods 头追踪）即可让信标在用户转头时保持世界固定（Soundscape 式）。
+    private func configureSpatialization() {
+        let available = environment.applicableRenderingAlgorithms.map { $0.intValue }
+        let best = SpatialAudioPolicy.bestBeaconAlgorithm(availableRawValues: available)
+        if let avAlgo = AVAudio3DMixingRenderingAlgorithm(rawValue: best.rawValue) {
+            player.renderingAlgorithm = avAlgo
+        }
+        player.sourceMode = .pointSource   // 信标是空间中的一个明确点，而非弥散声场
+        refreshOutputType()
+    }
+
+    /// 按当前音频路由设置环境输出类型：戴 AirPods/耳机时用 `.headphones`（最佳 HRTF 双耳渲染），
+    /// 否则内置扬声器（用扬声器播 HRTF 会闷且方位错乱）。路由可能在导航中变化，故每次启动引擎时刷新。
+    private func refreshOutputType() {
+        let outputs = AVAudioSession.sharedInstance().currentRoute.outputs
+        let onHeadphones = outputs.contains { out in
+            [.headphones, .bluetoothA2DP, .bluetoothLE, .bluetoothHFP, .airPlay].contains(out.portType)
+        }
+        environment.outputType = onHeadphones ? .headphones : .builtInSpeakers
     }
 
     /// FeedbackSink：播放一个非定向提示音。定向版用 `playCue(azimuthDegrees:)`。
@@ -39,6 +64,7 @@ final class SpatialAudioFeedback: FeedbackSink {
         // 此处检测到未运行就重启，避免一次中断后信标永久失声（导航核心反馈，见审查 #10）。
         if !engine.isRunning {
             do {
+                refreshOutputType()   // 路由可能在导航途中变化（插上 AirPods）：重启引擎时重判耳机/扬声器
                 try engine.start()
                 player.play()
                 started = true

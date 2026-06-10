@@ -6,8 +6,11 @@ import CoreMotion
 /// 配合核心 `BeaconDirection.relative(headingDegrees:headYawDegrees:bearingDegrees:)` 使用。
 final class HeadTracker {
     private let manager = CMHeadphoneMotionManager()
+    // 偏航参考系（核心 HeadYawReference，已测）：把 CMHeadphoneMotionManager 的「相对会话启动的任意朝向」
+    // 归一为「相对零位（戴上耳机面朝前那一刻）」，消除开机偏置；断连重连自动重新标定，避免听者朝向跳变。
+    private var yawRef = HeadYawReference()
 
-    /// 头部偏航角（度）回调。
+    /// 头部偏航角（度，已相对零位归一）回调。
     var onYaw: ((Double) -> Void)?
     /// 耳机断连/运动数据不可用时回调，让上层回退到"手机朝向驱动信标"（见审查 #14）。
     var onUnavailable: (() -> Void)?
@@ -16,16 +19,23 @@ final class HeadTracker {
 
     func start() {
         guard manager.isDeviceMotionAvailable else { return }
+        yawRef.reset()   // 本次会话重新标定零位（用户此刻约定面朝行进方向）
         manager.startDeviceMotionUpdates(to: .main) { [weak self] motion, error in
             guard let self else { return }
             // 耳机中途断连/取下或出错：motion 为 nil 或有 error。通知上层回退，避免听者朝向冻结在陈旧值。
             guard error == nil, let motion else {
+                self.yawRef.reset()   // 清零位：重连后第一帧重新标定，不继承断连前的陈旧基线
                 self.onUnavailable?()
                 return
             }
-            self.onYaw?(motion.attitude.yaw * 180 / .pi)
+            // 原始 yaw 经参考系归一为相对零位的偏航（跨 ±180 不跳变，NaN/Inf 保护，见 HeadYawReference 单测）。
+            let rawDegrees = motion.attitude.yaw * 180 / .pi
+            self.onYaw?(self.yawRef.relativeYaw(fromRawDegrees: rawDegrees))
         }
     }
+
+    /// 用户「现在朝前，请重新校准」：把当前一帧设为新零位（可选交互，供设置/语音指令调用）。
+    func recenter() { yawRef.reset() }
 
     func stop() {
         manager.stopDeviceMotionUpdates()

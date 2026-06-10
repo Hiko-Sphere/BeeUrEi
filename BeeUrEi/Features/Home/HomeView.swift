@@ -101,9 +101,9 @@ struct HomeView: View {
     private func crossingOverlay(_ state: TrafficLightState) -> some View {
         let (color, text): (Color, String) = {
             switch state {
-            case .red: return (.beeDanger, "红灯 · 请等待")
-            case .green: return (.beeSuccess, "绿灯 · 可通行")
-            case .yellow: return (.beeWarn, "黄灯 · 请勿通行")
+            case .red: return (.beeDanger, HomeStrings.trafficRed(lang))
+            case .green: return (.beeSuccess, HomeStrings.trafficGreen(lang))
+            case .yellow: return (.beeWarn, HomeStrings.trafficYellow(lang))
             case .unknown: return (.clear, "")
             }
         }()
@@ -150,28 +150,31 @@ struct HomeView: View {
 
     // MARK: 底部大按钮面板
 
+    /// 主屏文案语言（E5）：每次渲染解析，与各屏同一真相来源。
+    private var lang: Language { FeatureSettings().language }
+
     private var actionPanel: some View {
         VStack(spacing: BeeSpacing.sm) {
             // 首要操作：求助（最大、蜂蜜黄）
-            BeeBigButton("求助", systemImage: "hand.raised.fill",
-                         subtitle: "呼叫志愿者或亲友帮你看", tint: .beeHoney) {
+            BeeBigButton(HomeStrings.helpTitle(lang), systemImage: "hand.raised.fill",
+                         subtitle: HomeStrings.helpSubtitle(lang), tint: .beeHoney) {
                 showRemoteAssist = true
             }
             HStack(spacing: BeeSpacing.sm) {
-                tile("步行导航", systemImage: "figure.walk") { showNavigation = true }
-                tile("看一看", systemImage: "viewfinder",
-                     hint: "用相机对准物体，语音说出它是什么") { showFraming = true }
+                tile(HomeStrings.tileNav(lang), systemImage: "figure.walk") { showNavigation = true }
+                tile(HomeStrings.tileLook(lang), systemImage: "viewfinder",
+                     hint: HomeStrings.hintLook(lang)) { showFraming = true }
             }
             HStack(spacing: BeeSpacing.sm) {
-                tile("我在哪", systemImage: "location.fill",
-                     hint: "播报你当前位置和附近的地点") { locationDescriber.describe() }
-                tile("周围有什么", systemImage: "dot.circle.viewfinder",
-                     hint: "按时钟方位播报四周的地点，如三点钟方向五十米便利店") { locationDescriber.describeAround() }
+                tile(HomeStrings.tileWhereAmI(lang), systemImage: "location.fill",
+                     hint: HomeStrings.hintWhereAmI(lang)) { locationDescriber.describe() }
+                tile(HomeStrings.tileAround(lang), systemImage: "dot.circle.viewfinder",
+                     hint: HomeStrings.hintAround(lang)) { locationDescriber.describeAround() }
             }
             HStack(spacing: BeeSpacing.sm) {
-                tile("前方有什么", systemImage: "arrow.up.circle",
-                     hint: "只播报你面朝方向的地点") { locationDescriber.describeAhead() }
-                tile("设置", systemImage: "gearshape.fill") { showSettings = true }
+                tile(HomeStrings.tileAhead(lang), systemImage: "arrow.up.circle",
+                     hint: HomeStrings.hintAhead(lang)) { locationDescriber.describeAhead() }
+                tile(HomeStrings.tileSettings(lang), systemImage: "gearshape.fill") { showSettings = true }
             }
         }
     }
@@ -205,7 +208,7 @@ struct HomeView: View {
                 .foregroundStyle(wantsSolidSurfaces ? .white : Color.primary)
         }
         .buttonStyle(BeePressStyle())
-        .accessibilityLabel("设置")
+        .accessibilityLabel(HomeStrings.tileSettings(lang))
     }
 
     @ViewBuilder
@@ -220,15 +223,15 @@ struct HomeView: View {
         case .unsupported(let message):
             unsupportedView(message)
         case .failed(let message):
-            stateMessageView("相机出错：\(message)", showHelp: true)
+            stateMessageView(HomeStrings.cameraError(message, lang), showHelp: true)
         case .idle:
-            messageView("正在启动…")
+            messageView(HomeStrings.starting(lang))
         }
     }
 
     /// 求助入口兜底：相机不可用（设备不支持/出错）时，求助不依赖相机，仍让视障用户能呼叫。
     private var helpFallbackButton: some View {
-        Button("呼叫帮手") { showRemoteAssist = true }
+        Button(HomeStrings.callHelper(lang)) { showRemoteAssist = true }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
     }
@@ -255,29 +258,29 @@ struct HomeView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(model.advisoryText.isEmpty ? model.proximityText : "\(model.proximityText)。\(model.advisoryText)")
         .accessibilityAddTraits([.isButton, .updatesFrequently])
-        .accessibilityHint("点按重复播报")
+        .accessibilityHint(HomeStrings.tapToRepeat(lang))
         .contentShape(Rectangle())
         .onTapGesture { model.repeatLastAnnouncement() }
     }
 
     private var permissionDeniedView: some View {
         VStack(spacing: 16) {
-            Text("相机权限被关闭")
+            Text(HomeStrings.permTitle(lang))
                 .font(.title2).bold()
-            Text("BeeUrEi 需要使用摄像头来识别前方障碍。请前往「设置」开启相机权限。")
+            Text(HomeStrings.permBody(lang))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
-            Button("打开设置") { model.openSettings() }
+            Button(HomeStrings.openSettings(lang)) { model.openSettings() }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
             // 求助不依赖相机：即使相机被拒，仍让用户能呼叫志愿者/亲友。
-            Button("呼叫帮手") { showRemoteAssist = true }
+            Button(HomeStrings.callHelper(lang)) { showRemoteAssist = true }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
         }
         .padding()
         // 相机变为不可用是安全攸关的状态变化——主动朗读，避免盲人误以为避障仍在工作（见无障碍审计）。
-        .onAppear { A11y.announce("相机权限被关闭，避障已停止。请到设置开启相机权限，或呼叫帮手。") }
+        .onAppear { A11y.announce(HomeStrings.permAnnounce(lang)) }
     }
 
     private func unsupportedView(_ message: String) -> some View {
@@ -285,7 +288,7 @@ struct HomeView: View {
             Image(systemName: "iphone.gen3.slash")
                 .font(.system(size: 48))
                 .foregroundStyle(.secondary)
-            Text("设备不支持")
+            Text(HomeStrings.unsupportedTitle(lang))
                 .font(.title2).bold()
             Text(message)
                 .multilineTextAlignment(.center)
@@ -294,7 +297,7 @@ struct HomeView: View {
             helpFallbackButton
         }
         .padding()
-        .onAppear { A11y.announce("设备不支持避障。\(message)") } // 安全攸关，主动朗读（见无障碍审计）
+        .onAppear { A11y.announce(HomeStrings.unsupportedAnnounce(message, lang)) } // 安全攸关，主动朗读（见无障碍审计）
     }
 
     private func messageView(_ text: String) -> some View {

@@ -48,6 +48,26 @@ final class FramingAssistViewModel {
         guard let c = latestCamera else { return 68 }
         return CameraFOV.horizontalDegrees(fx: c.intrinsics.fx, imageWidth: c.imageWidth)
     }
+
+    // MARK: Siri 频道直达
+
+    @ObservationIgnored private var queuedChannel: AppRoute.FramingChannel?
+
+    /// 排队一个待执行的频道动作（进屏时由 View 从 AppRoute 取走传入；首帧就绪后执行）。
+    func queueChannel(_ channel: AppRoute.FramingChannel?) {
+        queuedChannel = channel
+    }
+
+    private func runChannel(_ channel: AppRoute.FramingChannel) {
+        switch channel {
+        case .banknote: readCurrency()
+        case .scan: readBarcode()
+        case .fullPage: if !docMode { toggleDocumentMode() }
+        case .bus: readBus()
+        case .people: describePeople()
+        case .light: readLight()
+        }
+    }
     @ObservationIgnored private var paused = false // 关闭/被来电盖上后：停止播报并丢弃在途帧/异步识别结果
     @ObservationIgnored private var docMode = false        // 文档模式（整页取景引导+自动拍摄）
     @ObservationIgnored private var docStableFrames = 0    // 整页完整入画的连续帧数（≥2 自动拍摄）
@@ -82,6 +102,12 @@ final class FramingAssistViewModel {
         latestBuffer = frame.pixelBuffer // 供"朗读文字"用最新帧
         latestDepth = frame.depth        // 供"周围的人"报距离
         latestCamera = frame.camera      // 供方位计算用真实视场角
+
+        // Siri 频道直达（Seeing AI 全频道快捷指令惯例）：首帧就绪后自动触发排队的动作。
+        if let channel = queuedChannel {
+            queuedChannel = nil
+            runChannel(channel)
+        }
         guard frame.timestamp - lastProcess >= 0.4 else { return }
         lastProcess = frame.timestamp
 
@@ -939,8 +965,16 @@ struct FramingAssistView: View {
                 .background(Color.beeInk.opacity(reduceTransparency ? 1 : 0.88))
             }
         }
-        .task { model.start(); model.refreshTaughtItems() }
+        .task {
+            model.start()
+            model.refreshTaughtItems()
+            // Siri 频道直达：取走待执行频道（无快捷指令进入时为 nil，无副作用）。
+            model.queueChannel(AppRoute.shared.pendingChannel)
+            AppRoute.shared.pendingChannel = nil
+        }
         .onDisappear { model.stop(); Torch.set(false) }
+        // VoiceOver 魔法轻点（双指双击）= 主操作"前方有什么"（Seeing AI 同款惯例）。
+        .accessibilityAction(.magicTap) { model.describeScene() }
         // 找东西：先列已教的个人物品，再列通用类别（Lookout Find 式），最后教新物品。
         .confirmationDialog(FramingStrings.uiFindMenuTitle(model.lang),
                             isPresented: $showFindMenu, titleVisibility: .visible) {

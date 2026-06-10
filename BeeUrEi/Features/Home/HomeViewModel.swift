@@ -104,7 +104,7 @@ final class HomeViewModel {
 
     func onAppear() {
         guard DeviceSupport.hasLiDAR else {
-            state = .unsupported("此设备没有 LiDAR。BeeUrEi 仅支持带 LiDAR 的 iPhone（iPhone 12 Pro 及更新的 Pro 机型）。")
+            state = .unsupported(HomeStrings.noLiDARMessage(lang))
             return
         }
         UIDevice.current.isBatteryMonitoringEnabled = true
@@ -401,9 +401,10 @@ final class HomeViewModel {
 
         // 3) 无跟踪危险：中央深度兜底(warn 区)或通畅。
         if let nearest = centralResult.nearest {
-            proximityText = suppressMeters ? "正前方有障碍" : String(format: "正前方约 %.1f 米", nearest)
+            proximityText = suppressMeters ? HomeStrings.proximityBlocked(lang)
+                                           : HomeStrings.proximityMeters(nearest, lang)
         } else {
-            proximityText = "正前方通畅"
+            proximityText = HomeStrings.proximityClear(lang)
         }
         if let phrase = speechComposer.announceProximity(zone, nearestMeters: suppressMeters ? nil : centralResult.nearest) {
             let minGap = zone == .danger ? 1.5 : 3.0
@@ -416,7 +417,7 @@ final class HomeViewModel {
         if FeatureSettings().clearPathConfirm {
             let clear = (zone == .clear)
             if clearConfirmer.update(isClear: clear, now: frame.timestamp) {
-                coordinator.submit(FeedbackEvent(priority: .status, speech: "前方通畅"))
+                coordinator.submit(FeedbackEvent(priority: .status, speech: HomeStrings.clearAheadSpeech(lang)))
             }
         }
     }

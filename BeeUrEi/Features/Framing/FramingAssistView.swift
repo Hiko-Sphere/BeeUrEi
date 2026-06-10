@@ -6,6 +6,14 @@ import CoreGraphics
 import CoreVideo
 import Vision
 
+/// 触摸探索条目：物体框或文字行（定向图像空间，Vision 归一化、原点左下）。
+struct ExploreItem: Identifiable {
+    let id = UUID()
+    let label: String
+    let box: CGRect
+    let isText: Bool
+}
+
 /// 取景识别：用相机 + YOLO 找最大目标，语音指引把它移到画面中央对准，对准后说出"这是什么"。
 /// 解决竞品最弱的"盲人不知镜头对着哪"。决策逻辑在核心 `FramingGuide`（已测）。
 @Observable
@@ -94,6 +102,76 @@ final class FramingAssistViewModel {
                 speak(hint)
             }
         }
+    }
+
+    // MARK: 触摸探索（Seeing AI 式：手指划到哪读哪）
+
+    private(set) var exploreImage: UIImage?
+    private(set) var exploreItems: [ExploreItem] = []
+    var exploring = false
+
+    /// 定格当前画面 → YOLO+OCR 全帧分析 → 进入触摸探索。
+    /// 帧先旋转为竖屏 upright，检测/OCR/显示共用**同一**定向空间——触摸↔框映射天然自洽，无方向坑。
+    func captureExplore() {
+        guard let live = latestBuffer, !exploring, !paused else { return }
+        speak("正在分析画面")
+        guard let oriented = Self.orientedBuffer(from: live) else { speak("分析失败，请重试"); return }
+        // 物体（YOLO 全帧，中文名）。
+        let dets = detector.detect(in: oriented.buffer, regionOfInterest: CGRect(x: 0, y: 0, width: 1, height: 1))
+        let objectItems: [ExploreItem] = dets.compactMap { d in
+            guard let b = d.box else { return nil }
+            return ExploreItem(label: labels.localizedName(d.label),
+                               box: CGRect(x: b.x, y: b.y, width: b.width, height: b.height), isText: false)
+        }
+        // 文字行（OCR fast：探索场景求响应）。
+        let request = VNRecognizeTextRequest { [weak self] req, _ in
+            let obs = (req.results as? [VNRecognizedTextObservation]) ?? []
+            let textItems: [ExploreItem] = obs.compactMap { o in
+                guard let s = o.topCandidates(1).first?.string, !s.isEmpty else { return nil }
+                return ExploreItem(label: s, box: o.boundingBox, isText: true)
+            }
+            DispatchQueue.main.async {
+                guard let self, !self.paused else { return }
+                self.exploreItems = objectItems + textItems
+                self.exploreImage = UIImage(cgImage: oriented.cgImage)
+                self.exploring = true
+                self.speak("触摸探索。手指在屏幕上滑动，碰到什么读什么。共\(objectItems.count)个物体、\(textItems.count)段文字。")
+            }
+        }
+        request.recognitionLevel = .fast
+        request.recognitionLanguages = ["zh-Hans", "en-US"]
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? VNImageRequestHandler(cgImage: oriented.cgImage, options: [:]).perform([request])
+        }
+    }
+
+    func exitExplore() {
+        exploring = false
+        exploreImage = nil
+        exploreItems = []
+    }
+
+    /// 探索命中：归一化点（Vision 系，原点左下）→ 重叠时取**最小面积**框（具体物胜过背景大框）。
+    func exploreHit(atNormalized p: CGPoint) -> String? {
+        let hits = exploreItems.filter { $0.box.insetBy(dx: -0.01, dy: -0.01).contains(p) }
+        return hits.min(by: { $0.box.width * $0.box.height < $1.box.width * $1.box.height })?.label
+    }
+
+    /// 探索朗读（去重由画布管理）。
+    func speakExplore(_ text: String) { speak(text) }
+
+    /// ARKit 横向帧 → 竖屏 upright 的 CGImage + 同向 CVPixelBuffer。
+    private static func orientedBuffer(from src: CVPixelBuffer) -> (cgImage: CGImage, buffer: CVPixelBuffer)? {
+        let ci = CIImage(cvPixelBuffer: src).oriented(.right)
+        let ctx = CIContext()
+        guard let cg = ctx.createCGImage(ci, from: ci.extent) else { return nil }
+        var out: CVPixelBuffer?
+        let attrs: [CFString: Any] = [kCVPixelBufferCGImageCompatibilityKey: true,
+                                      kCVPixelBufferCGBitmapContextCompatibilityKey: true]
+        CVPixelBufferCreate(kCFAllocatorDefault, cg.width, cg.height, kCVPixelFormatType_32BGRA, attrs as CFDictionary, &out)
+        guard let buffer = out else { return nil }
+        ctx.render(ci, to: buffer)
+        return (cg, buffer)
     }
 
     // MARK: 文档模式（Seeing AI 式整页朗读）
@@ -390,6 +468,8 @@ struct FramingAssistView: View {
                                   hint: "说出画面中央的颜色") { model.readColor() }
                     overlayAction("扫码", systemImage: "qrcode.viewfinder",
                                   hint: "识别并朗读二维码或条码的内容") { model.readBarcode() }
+                    overlayAction("触摸探索", systemImage: "hand.draw.fill",
+                                  hint: "定格画面后，手指滑到哪里就朗读那里的物体或文字") { model.captureExplore() }
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 8)
@@ -422,6 +502,11 @@ struct FramingAssistView: View {
         }
         .task { model.start() }
         .onDisappear { model.stop(); Torch.set(false) }
+        // 触摸探索：定格画面全屏呈现，手指划到哪读哪（Seeing AI 式）。
+        .fullScreenCover(isPresented: Binding(get: { model.exploring },
+                                              set: { if !$0 { model.exitExplore() } })) {
+            ExploreCanvas(model: model) { model.exitExplore() }
+        }
     }
 
     /// 相机浮层的次级操作（深底白字+蜂蜜图标，与主页磁贴一致）。
@@ -440,5 +525,56 @@ struct FramingAssistView: View {
         .buttonStyle(BeePressStyle())
         .accessibilityLabel(title)
         .accessibilityHint(hint)
+    }
+}
+
+/// 触摸探索画布（Seeing AI 式）：显示定格画面，手指滑到哪个物体/文字就朗读哪个。
+/// VoiceOver 下用 .allowsDirectInteraction 让拖动直达画布（标准探索式交互做法）。
+private struct ExploreCanvas: View {
+    let model: FramingAssistViewModel
+    let onClose: () -> Void
+    @State private var lastSpoken = ""
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Color.black.ignoresSafeArea()
+            if let img = model.exploreImage {
+                GeometryReader { geo in
+                    let fit = Self.fittedRect(imageSize: img.size, in: geo.size)
+                    Image(uiImage: img)
+                        .resizable().scaledToFit()
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .contentShape(Rectangle())
+                        .gesture(
+                            DragGesture(minimumDistance: 0).onChanged { v in
+                                let p = v.location
+                                guard fit.contains(p), fit.width > 0, fit.height > 0 else { return }
+                                // 屏幕点 → 定向图像归一化（Vision 原点左下）。
+                                let nx = (p.x - fit.minX) / fit.width
+                                let ny = 1 - (p.y - fit.minY) / fit.height
+                                if let label = model.exploreHit(atNormalized: CGPoint(x: nx, y: ny)),
+                                   label != lastSpoken {
+                                    lastSpoken = label
+                                    model.speakExplore(label)
+                                }
+                            }
+                        )
+                        .accessibilityElement()
+                        .accessibilityLabel("触摸探索画布。手指在屏幕上滑动，碰到物体或文字会朗读。")
+                        .accessibilityAddTraits(.allowsDirectInteraction)
+                }
+            }
+            BeeBigButton("完成", systemImage: "checkmark.circle.fill", tint: .beeHoney) { onClose() }
+                .padding(.horizontal, BeeSpacing.lg)
+                .padding(.bottom, BeeSpacing.lg)
+        }
+    }
+
+    /// aspect-fit 后图像在容器内的实际显示矩形（用于触摸→图像坐标映射）。
+    static func fittedRect(imageSize: CGSize, in container: CGSize) -> CGRect {
+        guard imageSize.width > 0, imageSize.height > 0 else { return .zero }
+        let scale = min(container.width / imageSize.width, container.height / imageSize.height)
+        let w = imageSize.width * scale, h = imageSize.height * scale
+        return CGRect(x: (container.width - w) / 2, y: (container.height - h) / 2, width: w, height: h)
     }
 }

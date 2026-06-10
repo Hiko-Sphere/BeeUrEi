@@ -61,6 +61,7 @@ final class HomeViewModel {
     @ObservationIgnored private let groundHazard = GroundHazardDetector()
     @ObservationIgnored private let proximityMapper = ProximityCueMapper()
     @ObservationIgnored private var paused = false // 暂停中(通话/取景)：丢弃在途帧，杜绝暂停后仍冒出"前方…"
+    @ObservationIgnored private var zoneHysteresis = ZoneHysteresis() // 分区滞回（PERCEPTION §6）
     @ObservationIgnored private let sonifier = ProximitySonifier()
     @ObservationIgnored private let clearConfirmer = ClearPathConfirmer()
     @ObservationIgnored private let announcePolicy = AnnouncementPolicy()
@@ -131,6 +132,7 @@ final class HomeViewModel {
     func resumeSession() {
         guard DeviceSupport.hasLiDAR else { return }
         paused = false
+        zoneHysteresis.reset() // 重新开始：不携带暂停前的分区状态
         source.start()
     }
 
@@ -280,11 +282,13 @@ final class HomeViewModel {
         // 不能因为存在(可能在侧前方的)跟踪目标就被跳过（见审查 #9）。
         let samples = DepthSampling.centerSamples(depth: depth.depth, confidence: depth.confidence)
         let centralResult = depthSampler.evaluate(depths: samples.depths, confidences: samples.confidences)
+        // 分区过滞回（进 1.0m/出 1.4m；caution 2.5/2.9）：站在阈值边界时不再 danger↔caution 反复横跳（PERCEPTION §6）。
+        let zone = zoneHysteresis.update(nearest: centralResult.nearest)
         // 跟踪受限(.relative 模式)：不报精确米数，改方向性措辞，避免给出不可信的精确距离（见审查 #5）。
         let suppressMeters = (currentMode == .relative)
 
         // 1) 正前方中央极近(深度 danger 区) = 最即时的物理危险 → 最高优先级安全门，即使有侧前方跟踪目标也先播（见审查 #9）。
-        if centralResult.zone == .danger {
+        if zone == .danger {
             proximityText = suppressMeters ? "正前方很近，请停下"
                                            : String(format: "正前方约 %.1f 米，请注意", centralResult.nearest ?? 0)
             // 正前方极近 = 最即时碰撞 → .critical+打断（见审查 #9/#2）。
@@ -331,16 +335,16 @@ final class HomeViewModel {
         } else {
             proximityText = "正前方通畅"
         }
-        if let phrase = speechComposer.announceProximity(centralResult.zone, nearestMeters: suppressMeters ? nil : centralResult.nearest) {
-            let minGap = centralResult.zone == .danger ? 1.5 : 3.0
-            if throttle.shouldAnnounce(key: "proximity:\(centralResult.zone)", now: frame.timestamp, minGap: minGap) {
+        if let phrase = speechComposer.announceProximity(zone, nearestMeters: suppressMeters ? nil : centralResult.nearest) {
+            let minGap = zone == .danger ? 1.5 : 3.0
+            if throttle.shouldAnnounce(key: "proximity:\(zone)", now: frame.timestamp, minGap: minGap) {
                 coordinator.submit(FeedbackEvent(priority: .obstacle, speech: phrase))
             }
         }
 
-        // "前方通畅"周期确认（可选）。
+        // "前方通畅"周期确认（可选）。滞回后的 .clear 才算通畅，与播报分区一致。
         if FeatureSettings().clearPathConfirm {
-            let clear = (centralResult.nearest ?? .greatestFiniteMagnitude) > 2.5
+            let clear = (zone == .clear)
             if clearConfirmer.update(isClear: clear, now: frame.timestamp) {
                 coordinator.submit(FeedbackEvent(priority: .status, speech: "前方通畅"))
             }

@@ -22,6 +22,7 @@ final class CallViewModel {
     private(set) var remoteVideoFrames = false       // 协助者：远端视频真的有画面帧（对方已开启并在传）
     private(set) var callQuality: CallQuality = .unknown // 通话信号强弱（WebRTC 实测往返时延）
     private(set) var declined = false                     // 发起方：对方已拒绝
+    private(set) var unanswered = false                   // 发起方：40s 无人接听（A4 回退志愿者）
     private(set) var muted = false                        // 本端是否静音
     private(set) var callEnded = false                   // 对方已挂断/离开 → 本端自动挂断并关闭界面
     var canReport: Bool { peerUserId != nil }
@@ -108,6 +109,7 @@ final class CallViewModel {
     }
 
     /// 发起方等待期间轮询呼叫状态；对方全部拒绝则显示"对方已拒绝"。
+    /// 同时跑 40s 无人接听看门狗（A4）：超时置 unanswered，界面据此提供「转向志愿者求助」回退。
     private func startDeclineWatch(token: String) {
         let cid = callId
         Task { [weak self] in
@@ -120,6 +122,13 @@ final class CallViewModel {
                     return
                 }
             }
+        }
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(40))
+            guard let self, !self.connected, !self.ended, !self.declined, !self.callEnded else { return }
+            self.unanswered = true
+            self.statusText = "暂时无人接听"
+            A11y.announce("暂时无人接听。可以挂断，或改为向志愿者求助。")
         }
     }
 

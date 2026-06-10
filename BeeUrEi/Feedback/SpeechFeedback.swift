@@ -11,6 +11,8 @@ final class SpeechFeedback: NSObject, FeedbackSink {
     private var arbiterUtterance: AVSpeechUtterance?
     /// VoiceOver 路径的代次令牌：异步释放时只认最新一条，避免旧释放误放新通道（见审查 #12）。
     private var voGeneration = 0
+    /// 当前句开播时刻（单调钟），供 300ms 半句保护判定。
+    private var utteranceStart: TimeInterval = 0
 
     override init() {
         super.init()
@@ -49,12 +51,19 @@ final class SpeechFeedback: NSObject, FeedbackSink {
         }
 
         // 高优先级（转向/避障）抢占正在播报的内容。
+        // 300ms 半句保护（PERCEPTION §6）：刚开播 <300ms 的句子不被同/次级打断——
+        // 连环触发时句句被掐头、用户什么都听不完整；critical(即时碰撞/落差)不受限，永远立即打断。
         if event.priority >= .turn {
-            synthesizer.stopSpeaking(at: .immediate)
+            let justStarted = ProcessInfo.processInfo.systemUptime - utteranceStart < 0.3
+            if event.priority >= .critical || !justStarted || !synthesizer.isSpeaking {
+                synthesizer.stopSpeaking(at: .immediate)
+            }
+            // 否则不掐断：新句排在当前句之后（AVSpeechSynthesizer 自动排队），半句保护生效。
         }
         voGeneration += 1 // 使任何挂起的 VO 释放失效（避免 VO 切换时误释放）
         let utterance = makeUtterance(text)
         arbiterUtterance = utterance
+        utteranceStart = ProcessInfo.processInfo.systemUptime
         synthesizer.speak(utterance)
     }
 

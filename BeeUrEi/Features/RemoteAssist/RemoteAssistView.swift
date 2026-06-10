@@ -30,6 +30,7 @@ struct RemoteAssistView: View {
     @State private var onlineCount = 0     // 我绑定的协助者/亲友在线人数
     @State private var totalCount = 0      // 绑定总数
     @State private var onlineTask: Task<Void, Never>?
+    @State private var pendingVolunteerFallback = false // A4：亲友无人接听→关旧通话后自动转志愿者
     let onClose: () -> Void
 
     /// 常用求助内容（也可不选直接求助）。
@@ -133,9 +134,24 @@ struct RemoteAssistView: View {
         .onDisappear { onlineTask?.cancel(); onlineTask = nil }
         // 所有求助/呼叫/错误状态变化主动朗读——盲人点完按钮后才能得到语音反馈，不会以为没反应反复点（见无障碍审计）。
         .onChange(of: statusText) { _, new in if let new, !new.isEmpty { A11y.announce(new) } }
-        .fullScreenCover(item: $activeCall) { call in
+        .fullScreenCover(item: $activeCall, onDismiss: {
+            // A4：呼亲友无人接听 → 关闭旧通话后自动发起志愿者求助（模态真正关闭后再开新 cover，防同 tick 吞没）。
+            if pendingVolunteerFallback {
+                pendingVolunteerFallback = false
+                Task { await callForVolunteer(topic: "需要帮助") }
+            }
+        }) { call in
             CallView(role: .blind, callId: call.id,
-                     waitingText: call.isVolunteer ? "正在为你寻找愿意帮忙的热心人，请稍候…" : "正在呼叫，等待对方接听…") {
+                     waitingText: call.isVolunteer ? "正在为你寻找愿意帮忙的热心人，请稍候…" : "正在呼叫，等待对方接听…",
+                     onFallbackToVolunteer: call.isVolunteer ? nil : {
+                         // 清理这通没人接的亲友呼叫，并在 cover 关闭后转向志愿者求助（A4）。
+                         if let token = KeychainStore.read() {
+                             let id = call.id
+                             Task { await APIClient().cancelCall(token: token, callId: id) }
+                         }
+                         pendingVolunteerFallback = true
+                         activeCall = nil
+                     }) {
                 if let token = KeychainStore.read() {
                     let id = call.id, isVol = call.isVolunteer
                     Task {

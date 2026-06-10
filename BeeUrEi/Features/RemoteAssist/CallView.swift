@@ -12,9 +12,13 @@ struct CallView: View {
     @State private var autoHide: Task<Void, Never>?
     @Environment(\.scenePhase) private var scenePhase
     let onClose: () -> Void
+    /// A4：呼叫亲友无人接听/被拒时的「改为向志愿者求助」回退（仅盲人呼亲友的路径传入）。
+    var onFallbackToVolunteer: (() -> Void)?
 
-    init(role: CallViewModel.Role, callId: String, waitingText: String = "正在接通，请稍候…", onClose: @escaping () -> Void) {
+    init(role: CallViewModel.Role, callId: String, waitingText: String = "正在接通，请稍候…",
+         onFallbackToVolunteer: (() -> Void)? = nil, onClose: @escaping () -> Void) {
         _model = State(initialValue: CallViewModel(role: role, callId: callId, waitingText: waitingText))
+        self.onFallbackToVolunteer = onFallbackToVolunteer
         self.onClose = onClose
     }
 
@@ -179,6 +183,15 @@ struct CallView: View {
                 .accessibilityAddTraits(.updatesFrequently)
 
             blindControls // 是否开启后置摄像头让协助者看到（隐私门控）
+
+            // A4：无人接听/被拒 → 一键转向公开志愿者求助（不让盲人卡死在没人接的呼叫里）。
+            if (model.unanswered || model.declined), let fallback = onFallbackToVolunteer {
+                BeeBigButton("改为向志愿者求助", systemImage: "hand.raised.fill",
+                             subtitle: "亲友暂时没接，让在线志愿者帮你", tint: .beeHoney) {
+                    model.hangUp()
+                    fallback()
+                }
+            }
 
             HStack(spacing: BeeSpacing.md) {
                 BeeBigButton(model.muted ? "取消静音" : "静音",

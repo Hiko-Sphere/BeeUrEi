@@ -64,6 +64,9 @@ final class HomeViewModel {
     @ObservationIgnored private var zoneHysteresis = ZoneHysteresis() // 分区滞回（PERCEPTION §6）
     @ObservationIgnored private var processingInterval: TimeInterval = 0.5 // 决策节流间隔（热/电降级会放宽）
     @ObservationIgnored private let lightMeter = LightMeter()
+    private(set) var trafficLight: TrafficLightState = .unknown // 当前红绿灯状态（驱动全屏色块）
+    @ObservationIgnored private var lastTrafficSeen: TimeInterval = 0
+    @ObservationIgnored private let crossingSignal = CrossingSignalFeedback()
     @ObservationIgnored private let sonifier = ProximitySonifier()
     @ObservationIgnored private let clearConfirmer = ClearPathConfirmer()
     @ObservationIgnored private let announcePolicy = AnnouncementPolicy()
@@ -118,6 +121,8 @@ final class HomeViewModel {
     func onDisappear() {
         source.stop()
         sonifier.stop()
+        crossingSignal.stop()
+        trafficLight = .unknown
     }
 
     /// 暂停避障会话：当呼叫/取景等**也用相机**的界面盖在主页上时调用，避免与之争抢相机致
@@ -126,6 +131,8 @@ final class HomeViewModel {
         paused = true               // 先置位：丢弃在途帧，杜绝暂停后再提交"前方…"
         source.stop()
         sonifier.stop()
+        crossingSignal.stop()       // 停红绿灯节奏反馈
+        trafficLight = .unknown
         speech.stopAll()            // 立刻掐断正在念/排队的"前方…"，避免串入通话
         coordinator.finishCurrent() // 释放仲裁通道，resume 后可正常重新播报
     }
@@ -254,11 +261,20 @@ final class HomeViewModel {
         let detections = detector.detect(in: frame.pixelBuffer, regionOfInterest: dynamicROI)
         detectionCountText = "\(detections.count)"
 
-        // 红绿灯颜色识别（Q7）：检测器采样灯框平均色判红/绿/黄 → 一句较低优先级提醒（去抖 4s）。
-        if let yolo = detector as? YOLOObstacleDetector,
-           let hint = TrafficLightClassifier().hint(yolo.lastTrafficLightState),
-           throttle.shouldAnnounce(key: "trafficlight", now: frame.timestamp, minGap: 4) {
-            coordinator.submit(FeedbackEvent(priority: .turn, speech: hint))
+        // 红绿灯颜色识别（Q7）：检测器采样灯框平均色判红/绿/黄 → 语音 + 三通道节奏反馈（Oko 式）。
+        if let yolo = detector as? YOLOObstacleDetector {
+            let state = yolo.lastTrafficLightState
+            if state != .unknown { lastTrafficSeen = frame.timestamp }
+            // 灯移出画面/判别失稳 4s 后清空状态，停节奏与色块。
+            let effective: TrafficLightState = (frame.timestamp - lastTrafficSeen <= 4) ? state : .unknown
+            if effective != trafficLight {
+                trafficLight = effective
+                crossingSignal.update(effective) // 节奏音+节奏震动（色块由 HomeView 按 trafficLight 渲染）
+            }
+            if let hint = TrafficLightClassifier().hint(state),
+               throttle.shouldAnnounce(key: "trafficlight", now: frame.timestamp, minGap: 4) {
+                coordinator.submit(FeedbackEvent(priority: .turn, speech: hint))
+            }
         }
         let obstacles = detections.map { det -> Obstacle in
             // 用检测框真实纵向中心取距离，而非永远取深度图垂直中线(y=0.5)——否则地上/头顶等

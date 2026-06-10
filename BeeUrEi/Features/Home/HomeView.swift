@@ -24,6 +24,11 @@ struct HomeView: View {
     var body: some View {
         ZStack {
             content
+            // 红绿灯第三通道（Oko 式，低视力/盲聋可视）：全屏高对比色框 + 顶部大字状态。
+            // 与节奏音频/节奏震动并行；语音由协调器另行播报，此处对 VoiceOver 隐藏。
+            if case .running = model.state, model.trafficLight != .unknown {
+                crossingOverlay(model.trafficLight)
+            }
             if DevSettings().enabled, case .running = model.state {
                 DevROIOverlay(roi: model.currentROI)
                     .ignoresSafeArea()
@@ -89,6 +94,32 @@ struct HomeView: View {
         .fullScreenCover(isPresented: $showFraming) {
             FramingAssistView { showFraming = false }
         }
+    }
+
+    // MARK: 红绿灯全屏色块（Oko 式第三通道）
+
+    private func crossingOverlay(_ state: TrafficLightState) -> some View {
+        let (color, text): (Color, String) = {
+            switch state {
+            case .red: return (.beeDanger, "红灯 · 请等待")
+            case .green: return (.beeSuccess, "绿灯 · 可通行")
+            case .yellow: return (.beeWarn, "黄灯 · 请勿通行")
+            case .unknown: return (.clear, "")
+            }
+        }()
+        return ZStack(alignment: .top) {
+            // 全屏高对比边框：低视力用户用余光即可感知状态。
+            RoundedRectangle(cornerRadius: 0)
+                .strokeBorder(color, lineWidth: 14)
+                .ignoresSafeArea()
+            Text(text)
+                .font(.title2.bold()).foregroundStyle(.white)
+                .padding(.horizontal, 20).padding(.vertical, 10)
+                .background(color, in: Capsule())
+                .padding(.top, 60)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true) // 语音由反馈协调器播报；色块仅服务低视力/盲聋用户
     }
 
     // MARK: 屏幕常亮（省电设置）

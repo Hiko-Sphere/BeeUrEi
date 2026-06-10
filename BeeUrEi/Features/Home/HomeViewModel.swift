@@ -75,6 +75,9 @@ final class HomeViewModel {
     @ObservationIgnored private var lastLatencyReport: TimeInterval = 0
     @ObservationIgnored private let latencyBudget = LatencyBudget()
     @ObservationIgnored private let sonifier = ProximitySonifier()
+    // 避障空间音（AirPods）：危险障碍在其方位播 HRTF 提示音；头追踪让声音方向随头转动保持世界固定。
+    @ObservationIgnored private let spatial = SpatialAudioFeedback()
+    @ObservationIgnored private let headTracker = HeadTracker()
     @ObservationIgnored private let clearConfirmer = ClearPathConfirmer()
     @ObservationIgnored private let announcePolicy = AnnouncementPolicy()
     @ObservationIgnored private let depthSampler = DepthSampler()
@@ -112,6 +115,10 @@ final class HomeViewModel {
         source.onStateChange = { [weak self] in self?.state = $0 }
         source.onTracking = { [weak self] quality in self?.handleTracking(quality) }
         source.onFrame = { [weak self] frame in self?.handle(frame) }
+        // AirPods 头追踪：避障空间音提示随头转动保持世界固定（无耳机自动跳过）。
+        headTracker.onYaw = { [weak self] yaw in self?.spatial.setListenerYaw(Float(yaw)) }
+        headTracker.onUnavailable = { [weak self] in self?.spatial.setListenerYaw(0) }
+        headTracker.start()
         source.start()
         maybeSpeakBriefReminder()
     }
@@ -140,6 +147,8 @@ final class HomeViewModel {
         sonifier.stop()
         crossingSignal.stop()
         trafficLight = .unknown
+        headTracker.stop()
+        spatial.stop()
     }
 
     /// 暂停避障会话：当呼叫/取景等**也用相机**的界面盖在主页上时调用，避免与之争抢相机致
@@ -150,6 +159,7 @@ final class HomeViewModel {
         sonifier.stop()
         crossingSignal.stop()       // 停红绿灯节奏反馈
         trafficLight = .unknown
+        spatial.stop()              // 停空间音（通话期间不抢音频会话）
         speech.stopAll()            // 立刻掐断正在念/排队的"前方…"，避免串入通话
         coordinator.finishCurrent() // 释放仲裁通道，resume 后可正常重新播报
     }
@@ -375,6 +385,12 @@ final class HomeViewModel {
                 // (announcePolicy.reset)，否则策略会以为"已播报"而把这个真实障碍静音到刷新间隔(~6s)（见审查 #3/#4）。
                 if coordinator.submit(FeedbackEvent(priority: .obstacle, speech: phrase, interrupt: decision.interrupt)) {
                     isSpeaking = true
+                    // AirPods 空间音：在障碍**方位**播一声 HRTF 提示音——声音本身就是方向，
+                    // 比听完"两点钟方向"更快建立空间感（头追踪使其随头转动保持世界固定）。
+                    if FeatureSettings().spatialObstacleCues {
+                        spatial.playCue(azimuthDegrees: Float(danger.bearingDegrees),
+                                        distanceMeters: danger.distanceMeters)
+                    }
                 } else {
                     announcePolicy.reset()
                 }

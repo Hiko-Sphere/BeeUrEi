@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var rate: Double
     @State private var highContrastOn: Bool
     @State private var sonarOn: Bool
+    @State private var spatialCuesOn: Bool
     @State private var verbosity: Int
     @State private var clearConfirm: Bool
     @State private var keepAwakeSeconds: Int
@@ -36,6 +37,7 @@ struct SettingsView: View {
         _rate = State(initialValue: Double(features.speechRate))
         _highContrastOn = State(initialValue: features.highContrast)
         _sonarOn = State(initialValue: features.proximitySonar)
+        _spatialCuesOn = State(initialValue: features.spatialObstacleCues)
         _verbosity = State(initialValue: features.verbosity)
         _clearConfirm = State(initialValue: features.clearPathConfirm)
         _keepAwakeSeconds = State(initialValue: features.keepAwakeSeconds)
@@ -96,6 +98,11 @@ struct SettingsView: View {
                         .onChange(of: sonarOn) { _, v in
                             var f = FeatureSettings(); f.proximitySonar = v
                         }
+                    Toggle("空间音方向提示（AirPods 推荐）", isOn: $spatialCuesOn)
+                        .onChange(of: spatialCuesOn) { _, v in
+                            var f = FeatureSettings(); f.spatialObstacleCues = v
+                        }
+                        .accessibilityHint("播报危险障碍时，从障碍所在方向播一声提示音；戴 AirPods 转头时声音方向保持不变")
                     Picker("播报详略", selection: $verbosity) {
                         Text("安静（只危险）").tag(0)
                         Text("正常（转向+危险）").tag(1)

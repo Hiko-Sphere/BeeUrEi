@@ -62,6 +62,14 @@ struct FeatureSettings {
         set { defaults.set(newValue, forKey: clearConfirmKey) }
     }
 
+    /// 空间音方向提示（默认开）：危险障碍播报时，同方位播一声 HRTF 提示音——
+    /// 声音本身就是方向，戴 AirPods 时随头转动保持世界固定。
+    private let spatialCuesKey = "feature.spatialObstacleCues"
+    var spatialObstacleCues: Bool {
+        get { defaults.object(forKey: spatialCuesKey) == nil ? true : defaults.bool(forKey: spatialCuesKey) }
+        set { defaults.set(newValue, forKey: spatialCuesKey) }
+    }
+
     /// 主页避障屏幕常亮时长（秒）：0 = 永久不息屏（避障持续运行）；>0 = 常亮该秒数后允许系统自动息屏(省电)。
     /// 默认 0（永久不息屏）——避障是安全攸关功能，默认不让它在使用中息屏中断。
     private let keepAwakeKey = "feature.keepAwakeSeconds"

@@ -22,22 +22,41 @@ struct TutorialStep: Identifiable {
 @Observable
 final class TutorialModel {
     let steps: [TutorialStep]
+    let lang: Language // 教程文案与朗读嗓音语言（E5）
     var index = 0
     @ObservationIgnored private let synth = AVSpeechSynthesizer()
 
     init() {
-        steps = [
-            TutorialStep(icon: "figure.walk", title: "实时避障",
-                         body: "打开后，BeeUrEi 会用摄像头和激光雷达感知前方。遇到障碍、台阶或落差，会自动语音提醒你方向和距离。"),
-            TutorialStep(icon: "person.fill.questionmark", title: "一键求助",
-                         body: "需要人帮忙时，点首屏的‘呼叫帮手’。可以联系你的亲友或志愿者，和他们语音交流。"),
-            TutorialStep(icon: "hand.point.up.left.fill", title: "按住才发画面",
-                         body: "求助时你的摄像头画面默认不发送。只有你按住‘显示画面’按钮，对方才能看到，保护你的隐私。"),
-            TutorialStep(icon: "slider.horizontal.3", title: "按习惯调整",
-                         body: "在‘设置’里可以调节语速、开启简短播报、单独开关避障和导航。"),
-            TutorialStep(icon: "exclamationmark.shield.fill", title: "安全须知",
-                         body: "BeeUrEi 是辅助工具，不能替代盲杖或导盲犬。请继续用你习惯的出行方式，并谨慎判断。"),
-        ]
+        let lang = FeatureSettings().language
+        self.lang = lang
+        switch lang {
+        case .zh:
+            steps = [
+                TutorialStep(icon: "figure.walk", title: "实时避障",
+                             body: "打开后，BeeUrEi 会用摄像头和激光雷达感知前方。遇到障碍、台阶或落差，会自动语音提醒你方向和距离。"),
+                TutorialStep(icon: "person.fill.questionmark", title: "一键求助",
+                             body: "需要人帮忙时，点首屏的‘呼叫帮手’。可以联系你的亲友或志愿者，和他们语音交流。"),
+                TutorialStep(icon: "hand.point.up.left.fill", title: "按住才发画面",
+                             body: "求助时你的摄像头画面默认不发送。只有你按住‘显示画面’按钮，对方才能看到，保护你的隐私。"),
+                TutorialStep(icon: "slider.horizontal.3", title: "按习惯调整",
+                             body: "在‘设置’里可以调节语速、开启简短播报、单独开关避障和导航。"),
+                TutorialStep(icon: "exclamationmark.shield.fill", title: "安全须知",
+                             body: "BeeUrEi 是辅助工具，不能替代盲杖或导盲犬。请继续用你习惯的出行方式，并谨慎判断。"),
+            ]
+        case .en:
+            steps = [
+                TutorialStep(icon: "figure.walk", title: "Obstacle detection",
+                             body: "BeeUrEi senses what's ahead with the camera and LiDAR. It announces obstacles, steps and drop-offs with direction and distance."),
+                TutorialStep(icon: "person.fill.questionmark", title: "One-tap help",
+                             body: "When you need a person, tap \"Get Help\" on the home screen to talk with your family or a volunteer."),
+                TutorialStep(icon: "hand.point.up.left.fill", title: "Camera off by default",
+                             body: "During a call, your camera is not shared until you press \"Show My Camera\" — your privacy stays in your hands."),
+                TutorialStep(icon: "slider.horizontal.3", title: "Make it yours",
+                             body: "In Settings you can adjust the speech rate, switch to concise announcements, and toggle detection and navigation separately."),
+                TutorialStep(icon: "exclamationmark.shield.fill", title: "Safety notice",
+                             body: "BeeUrEi is an aid — it does not replace a white cane or guide dog. Keep your usual travel habits and judge carefully."),
+            ]
+        }
     }
 
     var current: TutorialStep { steps[index] }
@@ -53,7 +72,7 @@ final class TutorialModel {
             }
         } else {
             let u = AVSpeechUtterance(string: spokenText)
-            u.voice = AVSpeechSynthesisVoice(language: "zh-CN")
+            u.voice = AVSpeechSynthesisVoice(language: lang.voiceCode)
             u.rate = AVSpeechUtteranceMinimumSpeechRate
                 + (AVSpeechUtteranceMaximumSpeechRate - AVSpeechUtteranceMinimumSpeechRate) * FeatureSettings().speechRate
             synth.stopSpeaking(at: .immediate)
@@ -92,14 +111,18 @@ struct TutorialView: View {
             .accessibilityElement(children: .combine)
             .accessibilityLabel(model.spokenText)
             Spacer()
-            Text("第 \(model.index + 1) / \(model.steps.count) 步")
+            Text(model.lang == .zh ? "第 \(model.index + 1) / \(model.steps.count) 步"
+                                   : "Step \(model.index + 1) of \(model.steps.count)")
                 .font(.footnote).foregroundStyle(.secondary)
-                .accessibilityLabel("第 \(model.index + 1) 步，共 \(model.steps.count) 步") // 让盲人也能获知进度（见无障碍审计）
+                // 让盲人也能获知进度（见无障碍审计）
+                .accessibilityLabel(model.lang == .zh ? "第 \(model.index + 1) 步，共 \(model.steps.count) 步"
+                                                      : "Step \(model.index + 1) of \(model.steps.count)")
             HStack {
-                Button("跳过") { model.stop(); onFinish() }
+                Button(model.lang == .zh ? "跳过" : "Skip") { model.stop(); onFinish() }
                     .buttonStyle(.bordered)
                 Spacer()
-                Button(model.isLast ? "开始使用" : "下一步") {
+                Button(model.isLast ? (model.lang == .zh ? "开始使用" : "Get Started")
+                                    : (model.lang == .zh ? "下一步" : "Next")) {
                     if model.isLast { model.stop(); onFinish() } else { model.next() }
                 }
                 .buttonStyle(.borderedProminent).controlSize(.large)

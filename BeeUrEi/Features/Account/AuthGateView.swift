@@ -10,10 +10,12 @@ struct AuthGateView: View {
     @State private var serverURL = ServerConfig.baseURLString
     @State private var showForgot = false
 
-    private let roles: [(label: String, value: String)] = [
-        ("求助者（视障）", "blind"),
-        ("协助者 / 亲友", "helper"), // 合并：协助者与亲友同一套界面与权限
-    ]
+    /// 登录门文案语言（E5）。
+    private var lang: Language { FeatureSettings().language }
+    private var roles: [(label: String, value: String)] {
+        [(AccountStrings.roleBlind(lang), "blind"),
+         (AccountStrings.roleHelper(lang), "helper")] // 合并：协助者与亲友同一套界面与权限
+    }
 
     var body: some View {
         NavigationStack {
@@ -27,7 +29,7 @@ struct AuthGateView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                             .accessibilityHidden(true)
                         Text("BeeUrEi").font(.title2.bold())
-                        Text("为视障人士而生的避障与远程协助")
+                        Text(AccountStrings.tagline(lang))
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity)
@@ -37,16 +39,16 @@ struct AuthGateView: View {
                 .listRowBackground(Color.clear)
 
                 Section {
-                    Text("登录后选择你的角色再进入。求助者也需登录以使用呼叫帮助（实时避障可离线使用）。")
+                    Text(AccountStrings.loginExplain(lang))
                         .font(.footnote).foregroundStyle(.secondary)
                 }
 
-                Section(isRegister ? "注册" : "登录") {
-                    TextField("用户名", text: $username)
+                Section(isRegister ? AccountStrings.registerHeader(lang) : AccountStrings.loginHeader(lang)) {
+                    TextField(AccountStrings.username(lang), text: $username)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    SecureField("密码", text: $password)
+                    SecureField(AccountStrings.password(lang), text: $password)
                     if isRegister {
-                        Picker("身份", selection: $role) {
+                        Picker(AccountStrings.rolePicker(lang), selection: $role) {
                             ForEach(roles, id: \.value) { Text($0.label).tag($0.value) }
                         }
                     }
@@ -57,17 +59,19 @@ struct AuthGateView: View {
                 }
 
                 Section {
-                    Button(isRegister ? "注册并登录" : "登录") { Task { await submit() } }
-                        .disabled(session.isWorking || username.isEmpty || password.isEmpty)
-                    Button(isRegister ? "已有账号？去登录" : "没有账号？去注册") { isRegister.toggle() }
+                    Button(isRegister ? AccountStrings.registerAndLogin(lang) : AccountStrings.signIn(lang)) {
+                        Task { await submit() }
+                    }
+                    .disabled(session.isWorking || username.isEmpty || password.isEmpty)
+                    Button(isRegister ? AccountStrings.toLogin(lang) : AccountStrings.toRegister(lang)) { isRegister.toggle() }
                     if !isRegister {
-                        Button("忘记密码？") { showForgot = true }
+                        Button(AccountStrings.forgotPassword(lang)) { showForgot = true }
                             .font(.footnote)
                     }
                 }
 
                 if DevSettings().enabled {
-                    Section("服务器地址（开发者）") {
+                    Section(AccountStrings.devServerHeader(lang)) {
                         TextField("如 http://192.168.1.10:8787", text: $serverURL)
                             .textInputAutocapitalization(.never).autocorrectionDisabled()
                             .onChange(of: serverURL) { _, v in ServerConfig.setBaseURL(v) }
@@ -108,22 +112,25 @@ struct ForgotPasswordView: View {
         _username = State(initialValue: presetUsername)
     }
 
+    /// 找回密码文案语言（E5）。
+    private var lang: Language { FeatureSettings().language }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("用户名", text: $username)
+                    TextField(AccountStrings.username(lang), text: $username)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
                 } footer: {
-                    Text("我们会把验证码发到你账号绑定的邮箱。若未绑定邮箱，请联系管理员重置。")
+                    Text(AccountStrings.forgotFooter(lang))
                 }
 
                 if stage == .reset {
-                    Section("重置密码") {
-                        TextField("邮箱收到的验证码", text: $code)
+                    Section(AccountStrings.resetHeader(lang)) {
+                        TextField(AccountStrings.codePlaceholder(lang), text: $code)
                             .keyboardType(.numberPad)
-                            .accessibilityLabel("验证码")
-                        SecureField("新密码（至少 6 位）", text: $newPassword)
+                            .accessibilityLabel(AccountStrings.codeA11y(lang))
+                        SecureField(AccountStrings.newPasswordPlaceholder(lang), text: $newPassword)
                     }
                 }
 
@@ -133,17 +140,17 @@ struct ForgotPasswordView: View {
 
                 Section {
                     if stage == .request {
-                        Button("发送验证码") { Task { await sendCode() } }
+                        Button(AccountStrings.sendCode(lang)) { Task { await sendCode() } }
                             .disabled(working || username.isEmpty)
                     } else {
-                        Button("确认重置密码") { Task { await reset() } }
+                        Button(AccountStrings.confirmReset(lang)) { Task { await reset() } }
                             .disabled(working || code.isEmpty || newPassword.count < 6)
-                        Button("重新发送验证码") { Task { await sendCode() } }.font(.footnote)
+                        Button(AccountStrings.resendCode(lang)) { Task { await sendCode() } }.font(.footnote)
                     }
                 }
             }
-            .navigationTitle("找回密码")
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
+            .navigationTitle(AccountStrings.forgotTitle(lang))
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(AccountStrings.cancel(lang)) { dismiss() } } }
             // 发码/失败/重置结果主动朗读（见无障碍审计）。
             .onChange(of: message) { _, m in if let m, !m.isEmpty { A11y.announce(m) } }
         }
@@ -151,14 +158,14 @@ struct ForgotPasswordView: View {
 
     private func sendCode() async {
         working = true; defer { working = false }
-        let sent = "如果该账号绑定了邮箱，验证码已发送。请查收后填写下方验证码。"
+        let sent = AccountStrings.codeSent(lang)
         do {
             try await APIClient().forgotPassword(username: username.trimmingCharacters(in: .whitespaces))
             message = sent // 不做枚举：无论账号/邮箱是否存在都提示已发送
             stage = .reset
         } catch APIError.network {
             // 真正的网络/5xx 失败：明确反馈并停留在当前步，避免断网仍误导"已发送"（见审查 #16）。
-            message = "发送失败，请检查网络后重试。"
+            message = AccountStrings.sendFailed(lang)
         } catch {
             message = sent // 其它（含 4xx）仍走统一文案，保持防枚举
             stage = .reset
@@ -169,10 +176,10 @@ struct ForgotPasswordView: View {
         working = true; defer { working = false }
         do {
             try await APIClient().resetPassword(username: username.trimmingCharacters(in: .whitespaces), code: code, newPassword: newPassword)
-            message = "密码已重置，请用新密码登录。" // 经 .onChange(message) 朗读
+            message = AccountStrings.resetDone(lang) // 经 .onChange(message) 朗读
             dismiss()
         } catch {
-            message = "验证码无效或已过期，请重试。"
+            message = AccountStrings.codeInvalid(lang)
         }
     }
 }

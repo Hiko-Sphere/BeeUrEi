@@ -19,7 +19,7 @@ struct ExploreItem: Identifiable {
 @Observable
 final class FramingAssistViewModel {
     private(set) var state: FrameSourceState = .idle
-    private(set) var guidanceText = "正在启动…"
+    private(set) var guidanceText = FramingStrings.starting(FeatureSettings().language)
     private(set) var resultText = ""
     private(set) var copyableResult: String?   // OCR/扫码的原始内容，可复制
 
@@ -28,7 +28,9 @@ final class FramingAssistViewModel {
         let yolo = YOLOObstacleDetector()
         return yolo.isAvailable ? yolo : StubObstacleDetector()
     }()
-    @ObservationIgnored private let labels = LabelCatalog()
+    // 识别屏全量中英双语（E5）：播报语言/标签/OCR 语言/TTS 嗓音都跟随 App 语言设置（进屏时解析）。
+    @ObservationIgnored private var lang: Language = FeatureSettings().language
+    @ObservationIgnored private var labels = LabelCatalog(language: FeatureSettings().language)
     @ObservationIgnored private let framing = FramingGuide()
     @ObservationIgnored private let synth = AVSpeechSynthesizer()
     @ObservationIgnored private var lastProcess: TimeInterval = 0
@@ -37,7 +39,14 @@ final class FramingAssistViewModel {
     @ObservationIgnored private var centeredFrames = 0
     @ObservationIgnored private var latestBuffer: CVPixelBuffer?
     @ObservationIgnored private var latestDepth: DepthMap?
+    @ObservationIgnored private var latestCamera: CameraGeometry?
     @ObservationIgnored private var latestDetections: [DetectedObject] = []
+
+    /// 真实水平视场角（有内参时计算，否则回退 68° 经验值）。
+    private var currentFOV: Double {
+        guard let c = latestCamera else { return 68 }
+        return CameraFOV.horizontalDegrees(fx: c.intrinsics.fx, imageWidth: c.imageWidth)
+    }
     @ObservationIgnored private var paused = false // 关闭/被来电盖上后：停止播报并丢弃在途帧/异步识别结果
     @ObservationIgnored private var docMode = false        // 文档模式（整页取景引导+自动拍摄）
     @ObservationIgnored private var docStableFrames = 0    // 整页完整入画的连续帧数（≥2 自动拍摄）
@@ -46,9 +55,11 @@ final class FramingAssistViewModel {
     var arSession: ARSession { source.session }
 
     func start() {
+        lang = FeatureSettings().language          // 进屏解析一次（设置页改语言后重进生效）
+        labels = LabelCatalog(language: lang)
         guard DeviceSupport.hasLiDAR else {
-            state = .unsupported("识别功能需要带 LiDAR 的 iPhone。")
-            guidanceText = "设备不支持"
+            state = .unsupported(FramingStrings.unsupportedDevice(lang))
+            guidanceText = FramingStrings.unsupportedShort(lang)
             return
         }
         paused = false
@@ -67,6 +78,7 @@ final class FramingAssistViewModel {
         guard !paused else { return } // 暂停后丢弃在途帧
         latestBuffer = frame.pixelBuffer // 供"朗读文字"用最新帧
         latestDepth = frame.depth        // 供"周围的人"报距离
+        latestCamera = frame.camera      // 供方位计算用真实视场角
         guard frame.timestamp - lastProcess >= 0.4 else { return }
         lastProcess = frame.timestamp
 
@@ -87,15 +99,15 @@ final class FramingAssistViewModel {
             .max { $0.box.width * $0.box.height < $1.box.width * $1.box.height }
 
         let guidance = framing.guide(target: target?.box)
-        let hint = framing.hint(guidance)
+        let hint = framing.hint(guidance, language: lang)
         guidanceText = hint
 
         if guidance == .centered, let target {
             centeredFrames += 1
             if centeredFrames >= 2 {
                 let name = labels.localizedName(target.object.label)
-                resultText = "识别到：\(name)"
-                speak("这是\(name)")
+                resultText = FramingStrings.recognizedResult(name, lang)
+                speak(FramingStrings.thisIs(name, lang))
                 lastSpoke = frame.timestamp // 防止下一非居中帧立刻打断"这是X"重复方向播报（见审查 #4）
                 centeredFrames = 0
             }
@@ -111,23 +123,26 @@ final class FramingAssistViewModel {
 
     // MARK: 找周围的物品（Lookout Find 式：通用类别寻找，复用 YOLO + 时钟方位 + LiDAR 距离）
 
-    /// 可寻找的通用类别（COCO 标签 → 中文名）。只放当前模型真能检出的类别，避免"永远找不到"。
-    static let findableCategories: [(label: String, name: String)] = [
-        ("chair", "椅子"), ("couch", "沙发"), ("bed", "床"), ("dining table", "餐桌"),
-        ("toilet", "马桶"), ("bottle", "瓶子"), ("cup", "杯子"), ("cell phone", "手机"), ("backpack", "背包"),
+    /// 可寻找的通用类别（COCO 标签；显示名经 LabelCatalog 按语言解析）。只放当前模型真能检出的类别，避免"永远找不到"。
+    static let findableCategories: [String] = [
+        "chair", "couch", "bed", "dining table", "toilet", "bottle", "cup", "cell phone", "backpack",
     ]
     @ObservationIgnored private var categoryTarget: (label: String, name: String)?
 
+    /// 类别的本地化显示名（中文"椅子"/英文 "chair"，复用核心 LabelCatalog 映射）。
+    func categoryName(_ label: String) -> String { labels.localizedName(label) }
+
     /// 开始寻找一类通用物品（不需要先教，YOLO 直接认）。
-    func startCategoryFind(label: String, name: String) {
+    func startCategoryFind(label: String) {
+        let name = categoryName(label)
         docMode = false
         findTarget = nil
         categoryTarget = (label, name)
         findPhase = .finding
         lastFindHit = 0
         lastFindHeartbeat = 0
-        guidanceText = "寻找：\(name)"
-        speak("开始找\(name)。拿着手机慢慢左右移动扫一圈，看到了我会报方位。")
+        guidanceText = FramingStrings.findingGuidance(name, lang)
+        speak(FramingStrings.findStartCategory(name, lang))
     }
 
     /// 类别寻找帧：YOLO 命中类别即报方位与 LiDAR 距离（与"找我的东西"同节奏去抖）。
@@ -138,21 +153,21 @@ final class FramingAssistViewModel {
         if let hit, let box = hit.box {
             guard frame.timestamp - lastFindHit >= 2.5 else { return } // 命中去抖
             lastFindHit = frame.timestamp
-            let clock = ClockDirection(normalizedX: box.midX, horizontalFOVDegrees: 68)
+            let clock = ClockDirection(normalizedX: box.midX, horizontalFOVDegrees: currentFOV)
             var distText = ""
             if let depth = frame.depth {
                 let s = DepthSampling.samples(depth: depth.depth, confidence: depth.confidence,
                                               normalizedX: box.midX, normalizedY: box.midY)
                 if let m = DepthSampler().nearestDistance(depths: s.depths, confidences: s.confidences) {
-                    distText = String(format: "，大约%.1f米", m)
+                    distText = FramingStrings.approx(m, lang)
                 }
             }
-            let where_ = clock.hour == 12 ? "正前方" : "\(clock.hour)点钟方向"
-            guidanceText = "\(category.name)：\(where_)"
-            speak("\(category.name)，在\(where_)\(distText)")
+            let where_ = FramingStrings.direction(hour: clock.hour, lang)
+            guidanceText = FramingStrings.foundCategoryGuide(category.name, where_, lang)
+            speak(FramingStrings.foundCategorySpeak(category.name, where_, distText, lang))
         } else if frame.timestamp - lastFindHeartbeat >= 6 {
             lastFindHeartbeat = frame.timestamp
-            speak("还在找\(category.name)，慢慢移动手机")
+            speak(FramingStrings.stillSearchingFor(category.name, lang))
         }
     }
 
@@ -179,8 +194,8 @@ final class FramingAssistViewModel {
         findPhase = .teaching
         pendingPrints = []
         lastTeachShot = 0
-        guidanceText = "教我认东西：把物品举在镜头前"
-        speak("教我认东西。把物品举在镜头前约三十厘米，慢慢转动它，我会自动拍三张。")
+        guidanceText = FramingStrings.teachGuidance(lang)
+        speak(FramingStrings.teachIntro(lang))
     }
 
     /// 拍满三张后由命名弹窗回调保存。
@@ -191,8 +206,8 @@ final class FramingAssistViewModel {
         pendingPrints = []
         findPhase = .idle
         refreshTaughtItems()
-        guidanceText = "已学会：\(trimmed)"
-        speak("学会了。以后可以让我帮你找\(trimmed)。")
+        guidanceText = FramingStrings.learnedResult(trimmed, lang)
+        speak(FramingStrings.learnedSpeak(trimmed, lang))
     }
 
     func deleteTaughtItem(_ name: String) {
@@ -203,15 +218,15 @@ final class FramingAssistViewModel {
     /// 开始寻找某个已学物品。
     func startFinding(_ name: String) {
         let prints = itemsStore.prints(for: name)
-        guard !prints.isEmpty else { speak("没有找到\(name)的学习记录"); return }
+        guard !prints.isEmpty else { speak(FramingStrings.noRecord(name, lang)); return }
         docMode = false
         categoryTarget = nil
         findTarget = (name, prints)
         findPhase = .finding
         lastFindHit = 0
         lastFindHeartbeat = 0
-        guidanceText = "寻找：\(name)"
-        speak("开始找\(name)。拿着手机慢慢左右移动扫一圈，对到了我会告诉你方位。")
+        guidanceText = FramingStrings.findingGuidance(name, lang)
+        speak(FramingStrings.findStartTaught(name, lang))
     }
 
     func stopFindFlow() {
@@ -219,7 +234,7 @@ final class FramingAssistViewModel {
         findTarget = nil
         categoryTarget = nil
         pendingPrints = []
-        guidanceText = "已停止"
+        guidanceText = FramingStrings.stopped(lang)
     }
 
     /// 教学帧：约 1s 自动拍一张中央区特征，三张后请命名。
@@ -230,12 +245,12 @@ final class FramingAssistViewModel {
         guard let print = Self.featurePrint(in: frame.pixelBuffer,
                                             roi: CGRect(x: 0.25, y: 0.25, width: 0.5, height: 0.5)) else { return }
         pendingPrints.append(print)
-        speak("拍了第\(pendingPrints.count)张")
-        guidanceText = "已拍 \(pendingPrints.count)/3"
+        speak(FramingStrings.teachShot(pendingPrints.count, lang))
+        guidanceText = FramingStrings.teachProgress(pendingPrints.count, lang)
         if pendingPrints.count >= 3 {
             findPhase = .idle
             showTeachNaming = true
-            speak("拍好了。请输入这个东西的名字，可以用键盘上的话筒说出来。")
+            speak(FramingStrings.teachNamePrompt(lang))
         }
     }
 
@@ -261,22 +276,22 @@ final class FramingAssistViewModel {
         if let best, best.dist < matchThreshold {
             guard frame.timestamp - lastFindHit >= 2.5 else { return } // 命中去抖
             lastFindHit = frame.timestamp
-            let clock = ClockDirection(normalizedX: best.roi.midX, horizontalFOVDegrees: 68)
+            let clock = ClockDirection(normalizedX: best.roi.midX, horizontalFOVDegrees: currentFOV)
             // 距离：用候选区中心的 LiDAR 深度（有就报，没有只报方向）。
             var distText = ""
             if let depth = frame.depth {
                 let s = DepthSampling.samples(depth: depth.depth, confidence: depth.confidence,
                                               normalizedX: best.roi.midX, normalizedY: best.roi.midY)
                 if let m = DepthSampler().nearestDistance(depths: s.depths, confidences: s.confidences) {
-                    distText = String(format: "，大约%.1f米", m)
+                    distText = FramingStrings.approx(m, lang)
                 }
             }
-            let where_ = clock.hour == 12 ? "正前方" : "\(clock.hour)点钟方向"
-            guidanceText = "可能找到\(target.name)：\(where_)"
-            speak("可能是\(target.name)，在\(where_)\(distText)")
+            let where_ = FramingStrings.direction(hour: clock.hour, lang)
+            guidanceText = FramingStrings.maybeFoundGuide(target.name, where_, lang)
+            speak(FramingStrings.maybeFoundSpeak(target.name, where_, distText, lang))
         } else if frame.timestamp - lastFindHeartbeat >= 6 {
             lastFindHeartbeat = frame.timestamp
-            speak("还在找，慢慢移动手机")
+            speak(FramingStrings.stillSearching(lang))
         }
     }
 
@@ -298,8 +313,8 @@ final class FramingAssistViewModel {
     /// 帧先旋转为竖屏 upright，检测/OCR/显示共用**同一**定向空间——触摸↔框映射天然自洽，无方向坑。
     func captureExplore() {
         guard let live = latestBuffer, !exploring, !paused else { return }
-        speak("正在分析画面")
-        guard let oriented = Self.orientedBuffer(from: live) else { speak("分析失败，请重试"); return }
+        speak(FramingStrings.analyzing(lang))
+        guard let oriented = Self.orientedBuffer(from: live) else { speak(FramingStrings.analyzeFailed(lang)); return }
         // 物体（YOLO 全帧，中文名）。
         let dets = detector.detect(in: oriented.buffer, regionOfInterest: CGRect(x: 0, y: 0, width: 1, height: 1))
         let objectItems: [ExploreItem] = dets.compactMap { d in
@@ -319,11 +334,11 @@ final class FramingAssistViewModel {
                 self.exploreItems = objectItems + textItems
                 self.exploreImage = UIImage(cgImage: oriented.cgImage)
                 self.exploring = true
-                self.speak("触摸探索。手指在屏幕上滑动，碰到什么读什么。共\(objectItems.count)个物体、\(textItems.count)段文字。")
+                self.speak(FramingStrings.exploreIntro(objects: objectItems.count, texts: textItems.count, self.lang))
             }
         }
         request.recognitionLevel = .fast
-        request.recognitionLanguages = ["zh-Hans", "en-US"]
+        request.recognitionLanguages = ocrLanguages
         DispatchQueue.global(qos: .userInitiated).async {
             try? VNImageRequestHandler(cgImage: oriented.cgImage, options: [:]).perform([request])
         }
@@ -368,11 +383,11 @@ final class FramingAssistViewModel {
         if docMode {
             resultText = ""
             copyableResult = nil
-            guidanceText = "读整页：把整页纸放进画面"
-            speak("读整页模式。把手机举在纸张上方约三十厘米，听提示调整，对好后会自动拍摄并朗读全文。")
+            guidanceText = FramingStrings.docGuidance(lang)
+            speak(FramingStrings.docIntro(lang))
         } else {
-            guidanceText = "已退出读整页"
-            speak("已退出读整页")
+            guidanceText = FramingStrings.docExited(lang)
+            speak(FramingStrings.docExited(lang))
         }
     }
 
@@ -383,7 +398,7 @@ final class FramingAssistViewModel {
         try? VNImageRequestHandler(cvPixelBuffer: frame.pixelBuffer, options: [:]).perform([request])
         guard let doc = request.results?.first, doc.confidence > 0.5 else {
             docStableFrames = 0
-            docHint("没有找到纸张，请把整页纸放进画面", at: frame.timestamp)
+            docHint(FramingStrings.docNoPage(lang), at: frame.timestamp)
             return
         }
         let box = doc.boundingBox // 归一化坐标
@@ -393,20 +408,20 @@ final class FramingAssistViewModel {
         // 方向词在相机旋转下易说反，统一用"拿远/靠近"这类无方向提示（稳妥且对盲人更可执行）。
         if touchesEdge {
             docStableFrames = 0
-            docHint("纸张边缘超出画面，请拿远一点并居中", at: frame.timestamp)
+            docHint(FramingStrings.docEdge(lang), at: frame.timestamp)
             return
         }
         if area < 0.18 {
             docStableFrames = 0
-            docHint("靠近一点", at: frame.timestamp)
+            docHint(FramingStrings.docCloser(lang), at: frame.timestamp)
             return
         }
         docStableFrames += 1
-        guidanceText = "对准了，保持不动…"
+        guidanceText = FramingStrings.docHold(lang)
         if docStableFrames >= 2 {
             docCapturing = true
-            speak("拍好了，正在识别整页")
-            guidanceText = "正在识别整页…"
+            speak(FramingStrings.docCaptured(lang))
+            guidanceText = FramingStrings.docReading(lang)
             captureDocument(frame.pixelBuffer)
         }
     }
@@ -425,7 +440,7 @@ final class FramingAssistViewModel {
     private func captureDocument(_ live: CVPixelBuffer) {
         guard let buffer = copyPixelBuffer(live) else {
             docCapturing = false
-            speak("拍摄失败，请重试")
+            speak(FramingStrings.captureFailed(lang))
             return
         }
         let request = VNRecognizeTextRequest { [weak self] req, _ in
@@ -442,20 +457,21 @@ final class FramingAssistViewModel {
                 self.docCapturing = false
                 self.docMode = false
                 if lines.isEmpty {
-                    self.resultText = "没有识别到文字"
-                    self.guidanceText = "没有识别到文字，请再试一次"
-                    self.speak("没有识别到文字，请再点一次读整页重试")
+                    self.resultText = FramingStrings.noTextFound(self.lang)
+                    self.guidanceText = FramingStrings.docRetryGuide(self.lang)
+                    self.speak(FramingStrings.docRetrySpeak(self.lang))
                 } else {
                     let full = lines.joined(separator: "\n")
-                    self.resultText = "整页：\(lines.first ?? "")…"
+                    self.resultText = FramingStrings.docResult(lines.first ?? "", self.lang)
                     self.copyableResult = full
-                    self.guidanceText = "识别完成，共 \(lines.count) 行"
-                    self.speak("识别完成。" + lines.joined(separator: "。"))
+                    self.guidanceText = FramingStrings.docDoneGuide(lines.count, self.lang)
+                    self.speak(FramingStrings.docDonePrefix(self.lang)
+                               + lines.joined(separator: FramingStrings.docJoinSeparator(self.lang)))
                 }
             }
         }
         request.recognitionLevel = .accurate
-        request.recognitionLanguages = ["zh-Hans", "en-US"]
+        request.recognitionLanguages = ocrLanguages
         request.usesLanguageCorrection = true
         DispatchQueue.global(qos: .userInitiated).async {
             try? VNImageRequestHandler(cvPixelBuffer: buffer, options: [:]).perform([request])
@@ -464,22 +480,23 @@ final class FramingAssistViewModel {
 
     /// 朗读相机里看到的文字（端侧 Vision OCR，中英文）——盲人读标牌/标签/菜单。
     func readText() {
-        guard let live = latestBuffer else { speak("请先把要读的文字对准相机"); return }
+        guard let live = latestBuffer else { speak(FramingStrings.aimText(lang)); return }
         if tooDarkToProceed() { return }
-        guard let buffer = copyPixelBuffer(live) else { speak("识别失败，请重试"); return } // 深拷贝供异步安全读
-        resultText = "正在识别文字…"
+        guard let buffer = copyPixelBuffer(live) else { speak(FramingStrings.recognizeFailed(lang)); return } // 深拷贝供异步安全读
+        resultText = FramingStrings.readingText(lang)
         let request = VNRecognizeTextRequest { [weak self] req, _ in
             let texts = (req.results as? [VNRecognizedTextObservation])?
                 .compactMap { $0.topCandidates(1).first?.string } ?? []
             let joined = texts.joined(separator: " ")
             DispatchQueue.main.async {
-                let out = joined.isEmpty ? "没有识别到文字" : joined
-                self?.resultText = out
-                self?.copyableResult = joined.isEmpty ? nil : joined
-                self?.speak(out)
+                guard let self else { return }
+                let out = joined.isEmpty ? FramingStrings.noTextFound(self.lang) : joined
+                self.resultText = out
+                self.copyableResult = joined.isEmpty ? nil : joined
+                self.speak(out)
             }
         }
-        request.recognitionLanguages = ["zh-Hans", "en-US"]
+        request.recognitionLanguages = ocrLanguages
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = true
         DispatchQueue.global(qos: .userInitiated).async {
@@ -491,7 +508,7 @@ final class FramingAssistViewModel {
     func describeScene() {
         if tooDarkToProceed() { return }
         let objects = latestDetections.map { (label: labels.localizedName($0.label), normalizedX: $0.normalizedX) }
-        let text = SceneSummarizer().summary(objects: objects)
+        let text = SceneSummarizer().summary(objects: objects, language: lang)
         resultText = text
         copyableResult = nil
         speak(text)
@@ -499,10 +516,10 @@ final class FramingAssistViewModel {
 
     /// 识别二维码/条码并朗读内容（端侧 Vision）——读 QR 海报、产品码、WiFi 码等。
     func readBarcode() {
-        guard let live = latestBuffer else { speak("请把二维码或条码对准相机"); return }
+        guard let live = latestBuffer else { speak(FramingStrings.aimBarcode(lang)); return }
         if tooDarkToProceed() { return }
-        guard let buffer = copyPixelBuffer(live) else { speak("识别失败，请重试"); return } // 深拷贝供异步安全读
-        resultText = "正在扫码…"
+        guard let buffer = copyPixelBuffer(live) else { speak(FramingStrings.recognizeFailed(lang)); return } // 深拷贝供异步安全读
+        resultText = FramingStrings.scanning(lang)
         let request = VNDetectBarcodesRequest { [weak self] req, _ in
             let payloads = (req.results as? [VNBarcodeObservation])?.compactMap { $0.payloadStringValue } ?? []
             DispatchQueue.main.async {
@@ -510,7 +527,7 @@ final class FramingAssistViewModel {
                 guard let first = payloads.first else {
                     self.resultText = ""
                     self.copyableResult = nil
-                    self.speak("没有识别到二维码或条码")
+                    self.speak(FramingStrings.noBarcode(self.lang))
                     return
                 }
                 self.copyableResult = first
@@ -518,29 +535,29 @@ final class FramingAssistViewModel {
                 switch BarcodePayload.classify(first) {
                 case .productCode:
                     if let name = self.productStore.name(for: first) {
-                        self.resultText = "商品：\(name)"
-                        self.speak("这是\(name)")
+                        self.resultText = FramingStrings.productResult(name, self.lang)
+                        self.speak(FramingStrings.thisIs(name, self.lang))
                     } else {
-                        self.resultText = "商品条码：\(first)"
+                        self.resultText = FramingStrings.productCodeResult(first, self.lang)
                         self.pendingProductCode = first
                         self.showProductNaming = true
-                        self.speak("是商品条码，我还不认识它。给它起个名字，下次扫到我直接报名字。")
+                        self.speak(FramingStrings.productUnknownSpeak(self.lang))
                     }
                 case .wifi(let ssid):
-                    self.resultText = "无线网络码" + (ssid.map { "：\($0)" } ?? "")
-                    self.speak("是无线网络配置码" + (ssid.map { "，网络名称\($0)" } ?? ""))
+                    self.resultText = FramingStrings.wifiResult(ssid, self.lang)
+                    self.speak(FramingStrings.wifiSpeak(ssid, self.lang))
                 case .url(let host):
-                    self.resultText = "网址：\(first)"
-                    self.speak("是一个网址" + (host.map { "，网站是\($0)" } ?? "") + "，内容已可复制")
+                    self.resultText = FramingStrings.urlResult(first, self.lang)
+                    self.speak(FramingStrings.urlSpeak(host, self.lang))
                 case .phone(let number):
-                    self.resultText = "电话：\(number)"
-                    self.speak("是电话号码：\(number)")
+                    self.resultText = FramingStrings.phoneResult(number, self.lang)
+                    self.speak(FramingStrings.phoneSpeak(number, self.lang))
                 case .contact:
-                    self.resultText = "名片码"
-                    self.speak("是一张电子名片，内容已可复制")
+                    self.resultText = FramingStrings.contactResult(self.lang)
+                    self.speak(FramingStrings.contactSpeak(self.lang))
                 case .text:
-                    self.resultText = "码内容：\(first)"
-                    self.speak("识别到：\(first)")
+                    self.resultText = FramingStrings.codeContent(first, self.lang)
+                    self.speak(FramingStrings.recognizedResult(first, self.lang))
                 }
             }
         }
@@ -553,15 +570,16 @@ final class FramingAssistViewModel {
     /// 隐私边界：不识别身份、不估年龄表情、不存任何人脸数据——检测完即弃。
     /// 坐标约定与 YOLO 一致（原始相机缓冲，midX 即方位；深度采样 y 由左下翻到左上）。
     func describePeople() {
-        guard let live = latestBuffer else { speak("请先把相机对准前方"); return }
+        guard let live = latestBuffer else { speak(FramingStrings.aimAhead(lang)); return }
         if tooDarkToProceed() { return }
-        guard let buffer = copyPixelBuffer(live) else { speak("识别失败，请重试"); return } // 深拷贝供异步安全读
+        guard let buffer = copyPixelBuffer(live) else { speak(FramingStrings.recognizeFailed(lang)); return } // 深拷贝供异步安全读
         // 深度同样深拷贝：人脸检测是异步的，回调时 ARKit 原深度图可能已被回收复用。
         var depthCopy: (depth: CVPixelBuffer, confidence: CVPixelBuffer?)?
         if let d = latestDepth, let dd = copyPixelBuffer(d.depth) {
             depthCopy = (dd, d.confidence.flatMap { copyPixelBuffer($0) })
         }
-        resultText = "正在找人…"
+        resultText = FramingStrings.findingPeople(lang)
+        let fov = currentFOV
         let request = VNDetectFaceRectanglesRequest { [weak self] req, _ in
             let boxes = (req.results as? [VNFaceObservation])?.map(\.boundingBox) ?? []
             DispatchQueue.main.async {
@@ -578,7 +596,7 @@ final class FramingAssistViewModel {
                     }
                     return (Double(box.midX), dist)
                 }
-                let text = PeopleSummarizer().summary(people: people)
+                let text = PeopleSummarizer().summary(people: people, horizontalFOVDegrees: fov, language: self.lang)
                 self.resultText = text
                 self.copyableResult = nil
                 self.speak(text)
@@ -602,17 +620,17 @@ final class FramingAssistViewModel {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         productStore.save(barcode: code, name: trimmed)
-        resultText = "已记住：\(trimmed)"
-        speak("记住了。下次扫到这个条码我会直接说\(trimmed)。")
+        resultText = FramingStrings.rememberedResult(trimmed, lang)
+        speak(FramingStrings.rememberedSpeak(trimmed, lang))
     }
 
     /// 识别人民币纸币面额（端侧 OCR 角号/大写 + 票面主色，核心 CurrencyClassifier，已测）。
     /// 低置信只说"可能"，并提醒换角度确认——识币错了是真金白银，宁可多让用户拍一次。
     func readCurrency() {
-        guard let live = latestBuffer else { speak("请把纸币平整地对准相机"); return }
+        guard let live = latestBuffer else { speak(FramingStrings.aimBanknote(lang)); return }
         if tooDarkToProceed() { return }
-        guard let buffer = copyPixelBuffer(live) else { speak("识别失败，请重试"); return } // 深拷贝供异步安全读
-        resultText = "正在识别纸币…"
+        guard let buffer = copyPixelBuffer(live) else { speak(FramingStrings.recognizeFailed(lang)); return } // 深拷贝供异步安全读
+        resultText = FramingStrings.readingBanknote(lang)
         let rgb = ColorSampler.averageRGB(in: buffer, rect: CGRect(x: 0.3, y: 0.3, width: 0.4, height: 0.4))
         let request = VNRecognizeTextRequest { [weak self] req, _ in
             let texts = (req.results as? [VNRecognizedTextObservation])?
@@ -622,46 +640,52 @@ final class FramingAssistViewModel {
                 guard let self else { return }
                 self.copyableResult = nil
                 if let result {
-                    let name = Self.yuanName(result.denomination)
-                    self.resultText = "纸币：\(name)"
-                    self.speak(result.confident ? name : "可能是\(name)，请换个角度再拍一次确认")
+                    let name = FramingStrings.yuan(result.denomination, self.lang)
+                    self.resultText = FramingStrings.banknoteResult(name, self.lang)
+                    self.speak(result.confident ? name : FramingStrings.banknoteUncertain(name, self.lang))
                 } else {
                     self.resultText = ""
-                    self.speak("没认出纸币面额。请把纸币平整地举在镜头前约三十厘米再试")
+                    self.speak(FramingStrings.banknoteNone(self.lang))
                 }
             }
         }
         request.recognitionLevel = .accurate
-        request.recognitionLanguages = ["zh-Hans", "en-US"]
+        request.recognitionLanguages = ocrLanguages
         DispatchQueue.global(qos: .userInitiated).async {
             try? VNImageRequestHandler(cvPixelBuffer: buffer, options: [:]).perform([request])
         }
     }
 
-    private static func yuanName(_ d: Int) -> String {
-        switch d {
-        case 100: return "一百元"
-        case 50: return "五十元"
-        case 20: return "二十元"
-        case 10: return "十元"
-        case 5: return "五元"
-        default: return "一元"
-        }
-    }
-
     /// 识别画面中央区域的颜色（端侧采样 + 核心 ColorNamer，已测）。
     func readColor() {
-        guard let buffer = latestBuffer else { speak("请先把物体对准相机"); return }
+        guard let buffer = latestBuffer else { speak(FramingStrings.aimObject(lang)); return }
         if tooDarkToProceed() { return }
         let rect = CGRect(x: 0.4, y: 0.4, width: 0.2, height: 0.2)
         if let rgb = ColorSampler.averageRGB(in: buffer, rect: rect) {
-            let name = ColorNamer().name(r: rgb.r, g: rgb.g, b: rgb.b)
-            resultText = "颜色：\(name)"
+            let name = ColorNamer().name(r: rgb.r, g: rgb.g, b: rgb.b, language: lang)
+            resultText = FramingStrings.colorResult(name, lang)
             copyableResult = nil
-            speak("中间的颜色大概是\(name)")
+            speak(FramingStrings.colorSpeak(name, lang))
         } else {
-            speak("无法识别颜色")
+            speak(FramingStrings.colorFailed(lang))
         }
+    }
+
+    /// 光线探测（Seeing AI Light 频道式）：报明暗等级 + 亮源方向（左右半区亮度对比，核心 LightMeter，已测）。
+    /// 盲人找窗户/灯/亮着的出口通道、确认屋里灯有没有开。
+    func readLight() {
+        guard let buffer = latestBuffer else { speak(FramingStrings.aimAhead(lang)); return }
+        guard let whole = ColorSampler.averageRGB(in: buffer, rect: CGRect(x: 0, y: 0, width: 1, height: 1)),
+              let left = ColorSampler.averageRGB(in: buffer, rect: CGRect(x: 0, y: 0, width: 0.33, height: 1)),
+              let right = ColorSampler.averageRGB(in: buffer, rect: CGRect(x: 0.67, y: 0, width: 0.33, height: 1))
+        else { speak(FramingStrings.lightFailed(lang)); return }
+        let side = LightMeter.brighterSide(left: LightMeter.luminance(r: left.r, g: left.g, b: left.b),
+                                           right: LightMeter.luminance(r: right.r, g: right.g, b: right.b))
+        let text = LightMeter().description(brightness: LightMeter.luminance(r: whole.r, g: whole.g, b: whole.b),
+                                            brighterSide: side, language: lang)
+        resultText = FramingStrings.lightResult(text, lang)
+        copyableResult = nil
+        speak(text)
     }
 
     /// 深拷贝相机帧——`latestBuffer` 是 ARKit 内部缓冲池里的 capturedImage，ARKit 后续帧会回收/覆盖它；
@@ -705,11 +729,17 @@ final class FramingAssistViewModel {
 
     /// 太暗则播报提示并返回 true（识别/OCR 在暗处会失败，先提醒）。
     private func tooDarkToProceed() -> Bool {
-        if let b = currentBrightness(), LightMeter().level(brightness: b) == .dark {
-            speak("光线太暗，可能看不清，请到亮一点的地方再试")
+        if let b = currentBrightness(), let warning = LightMeter().warning(brightness: b, language: lang),
+           LightMeter().level(brightness: b) == .dark {
+            speak(warning)
             return true
         }
         return false
+    }
+
+    /// OCR 识别语言优先级跟随 App 语言（英文用户优先英文模型，识别更准）。
+    private var ocrLanguages: [String] {
+        lang == .en ? ["en-US", "zh-Hans"] : ["zh-Hans", "en-US"]
     }
 
     private func speak(_ text: String) {
@@ -719,7 +749,7 @@ final class FramingAssistViewModel {
             return
         }
         let u = AVSpeechUtterance(string: text)
-        u.voice = AVSpeechSynthesisVoice(language: "zh-CN")
+        u.voice = AVSpeechSynthesisVoice(language: lang.voiceCode)
         u.rate = AVSpeechUtteranceMinimumSpeechRate
             + (AVSpeechUtteranceMaximumSpeechRate - AVSpeechUtteranceMinimumSpeechRate) * FeatureSettings().speechRate
         synth.stopSpeaking(at: .immediate)
@@ -775,6 +805,8 @@ struct FramingAssistView: View {
                                   hint: "识别并朗读相机里看到的文字") { model.readText() }
                     overlayAction("读整页", systemImage: "doc.text.viewfinder",
                                   hint: "引导你把整页纸放进画面，自动拍摄并按顺序朗读全文") { model.toggleDocumentMode() }
+                    overlayAction("光线", systemImage: "sun.max.fill",
+                                  hint: "报告环境明暗和亮光的方向，帮你找窗户或灯") { model.readLight() }
                 }
                 .padding(.horizontal)
                 HStack(spacing: BeeSpacing.sm) {
@@ -833,8 +865,8 @@ struct FramingAssistView: View {
             ForEach(model.taughtItems, id: \.self) { item in
                 Button("找：\(item)") { model.startFinding(item) }
             }
-            ForEach(FramingAssistViewModel.findableCategories, id: \.label) { c in
-                Button("找周围的\(c.name)") { model.startCategoryFind(label: c.label, name: c.name) }
+            ForEach(FramingAssistViewModel.findableCategories, id: \.self) { label in
+                Button("找周围的\(model.categoryName(label))") { model.startCategoryFind(label: label) }
             }
             Button("教我认一个新东西") { model.startTeaching() }
             Button("取消", role: .cancel) {}

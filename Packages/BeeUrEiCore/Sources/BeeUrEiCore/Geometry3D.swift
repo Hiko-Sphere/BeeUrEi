@@ -9,6 +9,16 @@ public struct CameraIntrinsics: Sendable, Equatable {
     }
 }
 
+/// 相机视场角（纯几何，可单测）：由内参算水平 FOV，替代硬编码经验值（68°），
+/// 让"几点钟方向"在不同机型/变焦下都准。
+public enum CameraFOV {
+    /// 水平视场角（度）= 2·atan(width / 2fx)。非法输入回退 68°（后置广角经验值）。
+    public static func horizontalDegrees(fx: Float, imageWidth: Float) -> Double {
+        guard fx.isFinite, imageWidth.isFinite, fx > 0, imageWidth > 0 else { return 68 }
+        return 2 * atan(Double(imageWidth) / (2 * Double(fx))) * 180 / .pi
+    }
+}
+
 /// 归一化矩形（原点左上，0...1），用于动态 ROI。
 public struct NormalizedBox: Sendable, Equatable {
     public let x: Double, y: Double, width: Double, height: Double

@@ -7,7 +7,9 @@ public struct PeopleSummarizer: Sendable {
     public init() {}
 
     /// people：每张脸的归一化横坐标（0=最左）与可选距离（米）。近的最重要：按近→远播报，无距离排最后。
+    /// horizontalFOVDegrees：相机水平视场角（有真实内参时传 CameraFOV 计算值）。
     public func summary(people: [(normalizedX: Double, distanceMeters: Double?)],
+                        horizontalFOVDegrees: Double = 68,
                         language: Language = .zh) -> String {
         guard !people.isEmpty else { return SpokenStrings.peopleNone(language) }
         let sorted = people.sorted { a, b in
@@ -19,7 +21,8 @@ public struct PeopleSummarizer: Sendable {
             }
         }
         func direction(_ x: Double) -> String {
-            SpokenStrings.coarseDirection(hour: ClockDirection(normalizedX: x, horizontalFOVDegrees: 68).hour,
+            SpokenStrings.coarseDirection(hour: ClockDirection(normalizedX: x,
+                                                               horizontalFOVDegrees: horizontalFOVDegrees).hour,
                                           language)
         }
         let nearest = sorted[0]

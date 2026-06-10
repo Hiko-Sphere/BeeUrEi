@@ -206,6 +206,49 @@ public enum SpokenStrings {
         }
     }
 
+    // MARK: 光线（LightMeter）
+
+    public static func lightLevel(_ level: LightMeter.Level, _ lang: Language) -> String {
+        switch lang {
+        case .zh:
+            switch level {
+            case .dark: return "光线很暗"
+            case .dim: return "光线较暗"
+            case .ok: return "光线充足"
+            }
+        case .en:
+            switch level {
+            case .dark: return "It's dark"
+            case .dim: return "Light is dim"
+            case .ok: return "Light is good"
+            }
+        }
+    }
+
+    public static func lightBrighter(left: Bool, _ lang: Language) -> String {
+        switch lang {
+        case .zh: return left ? "，亮的方向在左边" : "，亮的方向在右边"
+        case .en: return left ? ", brighter to the left" : ", brighter to the right"
+        }
+    }
+
+    public static func lightWarning(_ level: LightMeter.Level, _ lang: Language) -> String? {
+        switch lang {
+        case .zh:
+            switch level {
+            case .dark: return "光线太暗，可能看不清，请到亮一点的地方再试"
+            case .dim: return "光线较暗，识别可能不准"
+            case .ok: return nil
+            }
+        case .en:
+            switch level {
+            case .dark: return "Too dark to see well — try again in a brighter place"
+            case .dim: return "Low light, recognition may be less accurate"
+            case .ok: return nil
+            }
+        }
+    }
+
     // MARK: 人物（PeopleSummarizer）
 
     public static func peopleNone(_ lang: Language) -> String {

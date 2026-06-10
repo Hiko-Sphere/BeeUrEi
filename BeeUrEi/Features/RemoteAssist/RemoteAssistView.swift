@@ -33,8 +33,10 @@ struct RemoteAssistView: View {
     @State private var pendingVolunteerFallback = false // A4：亲友无人接听→关旧通话后自动转志愿者
     let onClose: () -> Void
 
+    /// 求助屏文案语言（E5）：每次渲染解析，与各屏同一真相来源。
+    private var lang: Language { FeatureSettings().language }
     /// 常用求助内容（也可不选直接求助）。
-    private let topics = ["看看前面是什么", "读一段文字或标签", "帮我认方向 / 找路", "看看颜色或物品", "其他"]
+    private var topics: [String] { AssistStrings.topics(lang) }
 
     var body: some View {
         NavigationStack {
@@ -45,30 +47,30 @@ struct RemoteAssistView: View {
                     // 我的协助者/亲友在线人数（求助前一眼知道有没有人能接）。
                     HStack(spacing: BeeSpacing.sm) {
                         Circle().fill(onlineCount > 0 ? Color.beeSuccess : Color.secondary).frame(width: 10, height: 10)
-                        Text(onlineCount > 0 ? "\(onlineCount) 位协助者/亲友在线" : "暂无协助者/亲友在线")
+                        Text(AssistStrings.onlineCount(onlineCount, lang))
                             .font(.subheadline.weight(.medium))
-                        if totalCount > 0 { Text("（共 \(totalCount) 位）").font(.caption).foregroundStyle(.secondary) }
+                        if totalCount > 0 { Text(lang == .zh ? "（共 \(totalCount) 位）" : "(\(totalCount) total)").font(.caption).foregroundStyle(.secondary) }
                         Spacer()
                     }
                     .padding(.horizontal, BeeSpacing.md).padding(.vertical, 8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(.ultraThinMaterial, in: Capsule())
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel(onlineCount > 0 ? "\(onlineCount) 位协助者或亲友在线，共 \(totalCount) 位" : "暂无协助者或亲友在线")
+                    .accessibilityLabel(AssistStrings.onlineCountA11y(online: onlineCount, total: totalCount, lang))
 
                     // 主行动：向志愿者求助
-                    BeeBigButton("向志愿者求助",
+                    BeeBigButton(AssistStrings.callVolunteerTitle(lang),
                                  systemImage: "hand.raised.fill",
-                                 subtitle: "让在线的热心志愿者帮你看（陌生人）",
+                                 subtitle: AssistStrings.callVolunteerSubtitle(lang),
                                  tint: .beeHoney) {
                         showTopicPicker = true
                     }
                     .disabled(calling)
 
                     // 次行动：呼叫亲友（一键）
-                    BeeBigButton("呼叫我的亲友",
+                    BeeBigButton(AssistStrings.callFamilyTitle(lang),
                                  systemImage: "person.2.fill",
-                                 subtitle: "呼叫你已绑定的家人或朋友",
+                                 subtitle: AssistStrings.callFamilySubtitle(lang),
                                  tint: .beeInk, foreground: .white) {
                         Task { await callForHelp() }
                     }
@@ -79,18 +81,19 @@ struct RemoteAssistView: View {
                     }
 
                     if !incomingRequests.isEmpty {
-                        BeeSectionHeader("待确认的请求", systemImage: "person.crop.circle.badge.questionmark").padding(.top, BeeSpacing.sm)
+                        BeeSectionHeader(AssistStrings.pendingSection(lang), systemImage: "person.crop.circle.badge.questionmark").padding(.top, BeeSpacing.sm)
                         ForEach(incomingRequests) { r in
                             BeeCard {
                                 VStack(alignment: .leading, spacing: BeeSpacing.sm) {
                                     HStack {
                                         AvatarView(dataURL: r.ownerAvatar, name: r.ownerName, size: 36)
-                                        Text("\(r.ownerName) 想和你建立\(r.relation)关系")
+                                        Text(lang == .zh ? "\(r.ownerName) 想和你建立\(r.relation)关系"
+                                                         : "\(r.ownerName) wants to link with you as \(r.relation)")
                                     }
                                     HStack {
-                                        Button("接受") { Task { await accept(r) } }
+                                        Button(AssistStrings.accept(lang)) { Task { await accept(r) } }
                                             .buttonStyle(.borderedProminent).disabled(linkBusy.contains(r.id))
-                                        Button("拒绝", role: .destructive) { Task { await reject(r) } }
+                                        Button(AssistStrings.reject(lang), role: .destructive) { Task { await reject(r) } }
                                             .buttonStyle(.bordered).disabled(linkBusy.contains(r.id))
                                     }
                                 }
@@ -98,35 +101,35 @@ struct RemoteAssistView: View {
                         }
                     }
 
-                    BeeSectionHeader("我的亲友 / 协助者", systemImage: "person.2.fill").padding(.top, BeeSpacing.sm)
+                    BeeSectionHeader(AssistStrings.familySection(lang), systemImage: "person.2.fill").padding(.top, BeeSpacing.sm)
                     contactsSection
                 }
                 .padding()
             }
-            .navigationTitle("求助")
+            .navigationTitle(AssistStrings.navTitle(lang))
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("完成") { onClose() } }
+                ToolbarItem(placement: .confirmationAction) { Button(AssistStrings.done(lang)) { onClose() } }
                 ToolbarItem(placement: .primaryAction) {
                     Button { showAdd = true } label: { Image(systemName: "plus") }
-                        .accessibilityLabel("添加亲友")
+                        .accessibilityLabel(AssistStrings.addFamilyA11y(lang))
                 }
                 ToolbarItem(placement: .topBarLeading) { NotificationsBell() }
             }
-            .alert("添加亲友", isPresented: $showAdd) {
-                TextField("对方用户名", text: $newUsername)
+            .alert(AssistStrings.addFamilyTitle(lang), isPresented: $showAdd) {
+                TextField(AssistStrings.usernamePlaceholder(lang), text: $newUsername)
                     .textInputAutocapitalization(.never).autocorrectionDisabled()
-                Button("添加") { Task { await addLink() } }
-                Button("取消", role: .cancel) { newUsername = "" }
+                Button(AssistStrings.add(lang)) { Task { await addLink() } }
+                Button(AssistStrings.cancel(lang), role: .cancel) { newUsername = "" }
             } message: {
-                Text("输入可以帮你看东西的家人或朋友的 App 用户名。")
+                Text(AssistStrings.addFamilyMessage(lang))
             }
-            .confirmationDialog("你需要什么帮助？", isPresented: $showTopicPicker, titleVisibility: .visible) {
+            .confirmationDialog(AssistStrings.topicTitle(lang), isPresented: $showTopicPicker, titleVisibility: .visible) {
                 ForEach(topics, id: \.self) { t in
                     Button(t) { Task { await callForVolunteer(topic: t) } }
                 }
-                Button("取消", role: .cancel) {}
+                Button(AssistStrings.cancel(lang), role: .cancel) {}
             } message: {
-                Text("选择后会把你的求助发给在线志愿者，并告诉他们你的大概位置和语言（不含精确地址）。")
+                Text(AssistStrings.topicMessage(lang))
             }
         }
         .task { await load(); startOnlinePolling() }
@@ -138,11 +141,12 @@ struct RemoteAssistView: View {
             // A4：呼亲友无人接听 → 关闭旧通话后自动发起志愿者求助（模态真正关闭后再开新 cover，防同 tick 吞没）。
             if pendingVolunteerFallback {
                 pendingVolunteerFallback = false
-                Task { await callForVolunteer(topic: "需要帮助") }
+                Task { await callForVolunteer(topic: AssistStrings.defaultTopic(lang)) }
             }
         }) { call in
             CallView(role: .blind, callId: call.id,
-                     waitingText: call.isVolunteer ? "正在为你寻找愿意帮忙的热心人，请稍候…" : "正在呼叫，等待对方接听…",
+                     waitingText: call.isVolunteer ? AssistStrings.waitingVolunteer(lang)
+                                                   : AssistStrings.waitingAnswer(lang),
                      onFallbackToVolunteer: call.isVolunteer ? nil : {
                          // 清理这通没人接的亲友呼叫，并在 cover 关闭后转向志愿者求助（A4）。
                          if let token = KeychainStore.read() {
@@ -171,8 +175,8 @@ struct RemoteAssistView: View {
             Text(loadError).foregroundStyle(.secondary)
         } else if callable.isEmpty {
             BeeEmptyState(systemImage: "person.crop.circle.badge.plus",
-                          title: "还没有绑定亲友",
-                          message: "点右上角「＋」按用户名添加可以帮你看东西的家人或朋友（对方确认后建立）。")
+                          title: AssistStrings.noFamilyTitle(lang),
+                          message: AssistStrings.noFamilyMessage(lang))
         } else {
             VStack(spacing: BeeSpacing.sm) {
                 ForEach(callable) { link in
@@ -183,7 +187,7 @@ struct RemoteAssistView: View {
                                 VStack(alignment: .leading) {
                                     Text(link.memberName).font(.headline)
                                     if link.isEmergency {
-                                        Text("紧急联系人").font(.caption).foregroundStyle(Color.beeWarn)
+                                        Text(AssistStrings.emergencyContact(lang)).font(.caption).foregroundStyle(Color.beeWarn)
                                     }
                                 }
                                 Spacer()
@@ -198,10 +202,10 @@ struct RemoteAssistView: View {
                     .buttonStyle(BeePressStyle())
                     .disabled(calling)
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel("呼叫 \(link.memberName)\(link.isEmergency ? "，紧急联系人" : "")")
+                    .accessibilityLabel(AssistStrings.callMemberA11y(link.memberName, emergency: link.isEmergency, lang))
                     .accessibilityAddTraits(.isButton)
                     .contextMenu {
-                        Button("删除绑定", role: .destructive) { Task { await deleteLink(link) } }
+                        Button(AssistStrings.deleteLink(lang), role: .destructive) { Task { await deleteLink(link) } }
                     }
                 }
             }
@@ -223,9 +227,9 @@ struct RemoteAssistView: View {
     }
 
     private func load() async {
-        guard let token = KeychainStore.read() else { loadError = "请先在「设置 → 账号」登录"; return }
+        guard let token = KeychainStore.read() else { loadError = AssistStrings.loginFirst(lang); return }
         do { links = try await APIClient().familyLinks(token: token); loadError = nil }
-        catch { loadError = "加载亲友失败（需连接后端）" }
+        catch { loadError = AssistStrings.loadFamilyFailed(lang) }
         if let inc = try? await APIClient().incomingLinks(token: token) { incomingRequests = inc.filter { $0.isPending } }
     }
 
@@ -251,8 +255,8 @@ struct RemoteAssistView: View {
             try await APIClient().addFamilyLink(token: token, username: username, relation: nil, isEmergency: false, phone: nil)
             await load()
         } catch let APIError.server(msg) {
-            statusText = msg == "member_not_found" ? "找不到该用户名" : "添加失败"
-        } catch { statusText = "添加失败" }
+            statusText = msg == "member_not_found" ? AssistStrings.memberNotFound(lang) : AssistStrings.addFailed(lang)
+        } catch { statusText = AssistStrings.addFailed(lang) }
     }
 
     private func deleteLink(_ link: FamilyLinkInfo) async {
@@ -264,44 +268,45 @@ struct RemoteAssistView: View {
     /// 向公开队列发起志愿者求助：取粗粒度地点 + 语言 → 广播 → 进入通话等待志愿者接入。
     private func callForVolunteer(topic: String) async {
         guard !calling, activeCall == nil else { return }
-        guard let token = KeychainStore.read() else { statusText = "请先在「设置 → 账号」登录"; return }
-        calling = true; statusText = "正在发起求助，请稍候…"; defer { calling = false }
+        guard let token = KeychainStore.read() else { statusText = AssistStrings.loginFirst(lang); return }
+        calling = true; statusText = AssistStrings.sendingHelp(lang); defer { calling = false }
         let callId = UUID().uuidString
         let locality = await CoarseLocality().fetch() // best-effort，未授权则为 nil
         let language = Locale.current.language.languageCode?.identifier // 设备语言（zh/en…）
         do {
             try await APIClient().postHelpRequest(token: token, callId: callId, language: language, locality: locality, topic: topic)
-            statusText = "已发出求助，正在等待志愿者接入…" // 经 .onChange(statusText) 统一朗读
+            statusText = AssistStrings.helpSent(lang) // 经 .onChange(statusText) 统一朗读
             activeCall = ActiveBlindCall(id: callId, isVolunteer: true)
         } catch {
-            statusText = "求助未送达，请检查网络后重试，或改为呼叫亲友。"
+            statusText = AssistStrings.helpFailed(lang)
         }
     }
 
     /// 一键求助：匹配在线的已绑定亲友/协助者 → 登记会合 → 进入通话。
     private func callForHelp() async {
         guard !calling, activeCall == nil else { return }
-        guard let token = KeychainStore.read() else { statusText = "请先在「设置 → 账号」登录"; return }
-        calling = true; statusText = "正在为你呼叫亲友…"; defer { calling = false }
+        guard let token = KeychainStore.read() else { statusText = AssistStrings.loginFirst(lang); return }
+        calling = true; statusText = AssistStrings.callingFamily(lang); defer { calling = false }
         do {
             let online = try await APIClient().assistMatch(token: token, emergency: true)
             let targets = online.isEmpty ? try await APIClient().emergencyTargets(token: token) : online
-            guard !targets.isEmpty else { statusText = "还没有可呼叫的亲友/协助者，请先添加并绑定，或改用「向志愿者求助」。"; return }
+            guard !targets.isEmpty else { statusText = AssistStrings.noCallableFamily(lang); return }
             let callId = UUID().uuidString
             try await APIClient().startEmergencyCall(token: token, callId: callId, targetUserIds: targets.map(\.memberId))
-            statusText = (online.isEmpty ? "暂无在线，仍尝试呼叫：" : "正在呼叫：") + targets.map(\.memberName).joined(separator: " → ")
+            statusText = AssistStrings.callingListPrefix(anyOnline: !online.isEmpty, lang)
+                + targets.map(\.memberName).joined(separator: " → ")
             activeCall = ActiveBlindCall(id: callId, isVolunteer: false)
-        } catch { statusText = "呼叫未送达，请检查网络后重试，或改用电话联系。" }
+        } catch { statusText = AssistStrings.familyCallFailed(lang) }
     }
 
     /// 定向呼叫某位已绑定的亲友/协助者。
     private func call(_ link: FamilyLinkInfo) async {
         guard !calling, activeCall == nil, let token = KeychainStore.read() else { return }
-        calling = true; statusText = "正在呼叫：\(link.memberName)"; defer { calling = false }
+        calling = true; statusText = AssistStrings.callingOne(link.memberName, lang); defer { calling = false }
         do {
             let callId = UUID().uuidString
             try await APIClient().startEmergencyCall(token: token, callId: callId, targetUserIds: [link.memberId])
             activeCall = ActiveBlindCall(id: callId, isVolunteer: false)
-        } catch { statusText = "呼叫 \(link.memberName) 未送达，请重试或改用电话联系。" }
+        } catch { statusText = AssistStrings.callOneFailed(link.memberName, lang) }
     }
 }

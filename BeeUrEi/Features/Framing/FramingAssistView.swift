@@ -49,6 +49,13 @@ final class FramingAssistViewModel {
         return CameraFOV.horizontalDegrees(fx: c.intrinsics.fx, imageWidth: c.imageWidth)
     }
 
+    // MARK: 识别历史（Supersense Read History 式：回放"刚才读的内容"，端侧零云端）
+
+    @ObservationIgnored let historyStore = RecognitionHistoryStore()
+
+    /// 回放一条历史记录（供历史面板调用）。
+    func speakHistory(_ text: String) { speak(text) }
+
     // MARK: Siri 频道直达
 
     @ObservationIgnored private var queuedChannel: AppRoute.FramingChannel?
@@ -520,6 +527,7 @@ final class FramingAssistViewModel {
                     // 多页连读（Envision 批量扫描式）：本页念完提示翻页；全文随页累计、随时可复制。
                     let full = lines.joined(separator: "\n")
                     self.docPages.append(full)
+                    self.historyStore.add(kind: "page", content: full)
                     self.docAwaitingNextPage = true
                     self.copyableResult = self.docPages.joined(separator: "\n\n")
                     self.resultText = FramingStrings.docPageResult(self.docPages.count, lines.first ?? "", self.lang)
@@ -553,6 +561,7 @@ final class FramingAssistViewModel {
                 let out = joined.isEmpty ? FramingStrings.noTextFound(self.lang) : joined
                 self.resultText = out
                 self.copyableResult = joined.isEmpty ? nil : joined
+                if !joined.isEmpty { self.historyStore.add(kind: "text", content: joined) }
                 self.speak(out)
             }
         }
@@ -591,6 +600,7 @@ final class FramingAssistViewModel {
                     return
                 }
                 self.copyableResult = first
+                self.historyStore.add(kind: "barcode", content: first)
                 // 先说"这是什么类型"再读内容（核心 BarcodePayload，已测）；商品条码走本地商品库。
                 switch BarcodePayload.classify(first) {
                 case .productCode:
@@ -702,6 +712,7 @@ final class FramingAssistViewModel {
                 if let result {
                     let name = FramingStrings.yuan(result.denomination, self.lang)
                     self.resultText = FramingStrings.banknoteResult(name, self.lang)
+                    if result.confident { self.historyStore.add(kind: "banknote", content: name) }
                     self.speak(result.confident ? name : FramingStrings.banknoteUncertain(name, self.lang))
                 } else {
                     self.resultText = ""
@@ -865,6 +876,7 @@ struct FramingAssistView: View {
     @State private var showFindMenu = false
     @State private var teachName = ""
     @State private var productName = ""
+    @State private var showHistory = false
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     let onClose: () -> Void
 
@@ -887,6 +899,14 @@ struct FramingAssistView: View {
                     }
                     .accessibilityLabel(FramingStrings.uiTorch(on: torchOn, model.lang))
                     .padding(.leading)
+                    Button { showHistory = true } label: {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.title2)
+                            .padding()
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
+                    .accessibilityLabel(FramingStrings.uiHistory(model.lang))
+                    .accessibilityHint(FramingStrings.uiHistoryHint(model.lang))
                     Spacer()
                     Button(FramingStrings.uiDone(model.lang)) { onClose() }
                         .padding()
@@ -1016,6 +1036,10 @@ struct FramingAssistView: View {
                                               set: { if !$0 { model.exitExplore() } })) {
             ExploreCanvas(model: model) { model.exitExplore() }
         }
+        // 识别历史（Supersense Read History 式）：回放/复制/删除读过的内容。
+        .sheet(isPresented: $showHistory) {
+            RecognitionHistorySheet(model: model) { showHistory = false }
+        }
     }
 
     /// 相机浮层的次级操作（深底白字+蜂蜜图标，与主页磁贴一致）。
@@ -1034,6 +1058,71 @@ struct FramingAssistView: View {
         .buttonStyle(BeePressStyle())
         .accessibilityLabel(title)
         .accessibilityHint(hint)
+    }
+}
+
+/// 识别历史面板（Supersense Read History 式）：最近优先列表，点按回放、可复制/单删/清空。
+/// 内容只存本机；删除权完全在用户（可能含信件/票据等敏感文字）。
+private struct RecognitionHistorySheet: View {
+    let model: FramingAssistViewModel
+    let onClose: () -> Void
+    @State private var records: [RecognitionRecord] = []
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if records.isEmpty {
+                    Text(FramingStrings.historyEmpty(model.lang))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding()
+                } else {
+                    List {
+                        ForEach(records) { r in
+                            Button {
+                                model.speakHistory(r.content)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text(FramingStrings.historyKind(r.kind, model.lang))
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(Color.beeHoney)
+                                        Spacer()
+                                        Text(r.date, style: .time).font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Text(r.content).lineLimit(3)
+                                }
+                            }
+                            .accessibilityHint(FramingStrings.uiHistoryRowHint(model.lang))
+                            .swipeActions {
+                                Button(role: .destructive) {
+                                    model.historyStore.delete(id: r.id)
+                                    records = model.historyStore.records
+                                } label: { Image(systemName: "trash") }
+                                Button { UIPasteboard.general.string = r.content } label: {
+                                    Image(systemName: "doc.on.doc")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle(FramingStrings.uiHistory(model.lang))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .destructiveAction) {
+                    Button(FramingStrings.uiClearAll(model.lang)) {
+                        model.historyStore.clear()
+                        records = []
+                    }
+                    .disabled(records.isEmpty)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(FramingStrings.uiDone(model.lang)) { onClose() }
+                }
+            }
+            .onAppear { records = model.historyStore.records }
+        }
     }
 }
 

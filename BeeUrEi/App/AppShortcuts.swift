@@ -123,32 +123,42 @@ struct ReadLightIntent: AppIntent {
 
 struct BeeAppShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
+        // 中英短语并列：Siri 按系统语言匹配（E5——英文用户也能一句话直达）。
         AppShortcut(intent: CallHelpIntent(),
-                    phrases: ["用\(.applicationName)呼叫帮手", "在\(.applicationName)求助", "\(.applicationName)帮我看"],
+                    phrases: ["用\(.applicationName)呼叫帮手", "在\(.applicationName)求助", "\(.applicationName)帮我看",
+                              "Call a helper with \(.applicationName)", "Get help with \(.applicationName)"],
                     shortTitle: "求助", systemImageName: "hand.raised.fill")
         AppShortcut(intent: LookAroundIntent(),
-                    phrases: ["用\(.applicationName)看一看", "让\(.applicationName)认一下这是什么"],
+                    phrases: ["用\(.applicationName)看一看", "让\(.applicationName)认一下这是什么",
+                              "Look around with \(.applicationName)", "What is this in \(.applicationName)"],
                     shortTitle: "看一看", systemImageName: "viewfinder")
         AppShortcut(intent: WhereAmIIntent(),
-                    phrases: ["用\(.applicationName)我在哪", "问\(.applicationName)我在哪里"],
+                    phrases: ["用\(.applicationName)我在哪", "问\(.applicationName)我在哪里",
+                              "Where am I with \(.applicationName)"],
                     shortTitle: "我在哪", systemImageName: "location.fill")
         AppShortcut(intent: ReadBanknoteIntent(),
-                    phrases: ["用\(.applicationName)识别纸币", "让\(.applicationName)看看这是多少钱"],
+                    phrases: ["用\(.applicationName)识别纸币", "让\(.applicationName)看看这是多少钱",
+                              "Read banknote with \(.applicationName)"],
                     shortTitle: "识别纸币", systemImageName: "banknote.fill")
         AppShortcut(intent: ScanCodeIntent(),
-                    phrases: ["用\(.applicationName)扫码", "让\(.applicationName)扫一下条码"],
+                    phrases: ["用\(.applicationName)扫码", "让\(.applicationName)扫一下条码",
+                              "Scan a code with \(.applicationName)", "Scan barcode with \(.applicationName)"],
                     shortTitle: "扫码", systemImageName: "qrcode.viewfinder")
         AppShortcut(intent: ReadFullPageIntent(),
-                    phrases: ["用\(.applicationName)读整页", "让\(.applicationName)读这页纸"],
+                    phrases: ["用\(.applicationName)读整页", "让\(.applicationName)读这页纸",
+                              "Read a page with \(.applicationName)", "Read document with \(.applicationName)"],
                     shortTitle: "读整页", systemImageName: "doc.text.viewfinder")
         AppShortcut(intent: ReadBusIntent(),
-                    phrases: ["用\(.applicationName)公交识别", "让\(.applicationName)看看是几路车"],
+                    phrases: ["用\(.applicationName)公交识别", "让\(.applicationName)看看是几路车",
+                              "Read the bus with \(.applicationName)", "Which bus is this in \(.applicationName)"],
                     shortTitle: "公交识别", systemImageName: "bus.fill")
         AppShortcut(intent: PeopleNearbyIntent(),
-                    phrases: ["用\(.applicationName)周围的人", "问\(.applicationName)前面有没有人"],
+                    phrases: ["用\(.applicationName)周围的人", "问\(.applicationName)前面有没有人",
+                              "People nearby with \(.applicationName)", "Is anyone ahead in \(.applicationName)"],
                     shortTitle: "周围的人", systemImageName: "person.2.fill")
         AppShortcut(intent: ReadLightIntent(),
-                    phrases: ["用\(.applicationName)光线探测", "问\(.applicationName)灯开着吗"],
+                    phrases: ["用\(.applicationName)光线探测", "问\(.applicationName)灯开着吗",
+                              "Check the light with \(.applicationName)", "Is the light on in \(.applicationName)"],
                     shortTitle: "光线", systemImageName: "sun.max.fill")
     }
 }

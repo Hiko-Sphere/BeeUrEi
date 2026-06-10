@@ -374,6 +374,38 @@ enum FramingStrings {
                  : "Next scan of this barcode will say this name. You can dictate with the keyboard microphone."
     }
 
+    // 识别历史（Supersense Read History 式）
+    static func uiHistory(_ l: Language) -> String { l == .zh ? "识别历史" : "History" }
+    static func uiHistoryHint(_ l: Language) -> String {
+        l == .zh ? "回放、复制或删除你读过的文字、整页、码和纸币" : "Replay, copy or delete what you've read"
+    }
+    static func historyEmpty(_ l: Language) -> String {
+        l == .zh ? "还没有识别记录。朗读文字、读整页、扫码、识别纸币的结果会自动存在这里（只存在本机）。"
+                 : "No history yet. Text, pages, codes and banknotes you read are saved here (on this device only)."
+    }
+    static func historyKind(_ kind: String, _ l: Language) -> String {
+        switch l {
+        case .zh:
+            switch kind {
+            case "page": return "整页"
+            case "barcode": return "扫码"
+            case "banknote": return "纸币"
+            default: return "文字"
+            }
+        case .en:
+            switch kind {
+            case "page": return "Page"
+            case "barcode": return "Code"
+            case "banknote": return "Banknote"
+            default: return "Text"
+            }
+        }
+    }
+    static func uiClearAll(_ l: Language) -> String { l == .zh ? "清空" : "Clear All" }
+    static func uiHistoryRowHint(_ l: Language) -> String {
+        l == .zh ? "点按朗读这条记录" : "Tap to read this entry aloud"
+    }
+
     // 触摸探索画布
     static func uiExploreCanvasLabel(_ l: Language) -> String {
         l == .zh ? "触摸探索画布。手指在屏幕上滑动，碰到物体或文字会朗读。"

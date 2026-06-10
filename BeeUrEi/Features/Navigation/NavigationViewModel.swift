@@ -46,6 +46,10 @@ final class NavigationViewModel {
     @ObservationIgnored private var lastCallout: TimeInterval = 0       // 沿途地标 callout 节流
     @ObservationIgnored private var lastCalloutName = ""                // 上次报过的地标（不重复报同一个）
     @ObservationIgnored private var calloutBusy = false                 // POI 查询进行中
+    // 面包屑回程（Soundscape 式）：记路 → 一键原路返回。
+    private(set) var recordingTrail = false
+    private(set) var trailCount = 0
+    @ObservationIgnored private var trail = BreadcrumbTrail()
 
     func start(destination query: String, region: Region) async {
         guard FeatureSettings().navigationEnabled else {
@@ -298,6 +302,86 @@ final class NavigationViewModel {
         lastSpoken = text
         // 经共享导航语音通道：避障 obstacle/critical 播报会掐断它（跨通道仲裁，Phase 2 标准）。
         NavVoice.shared.speak(text, rate: FeatureSettings().speechRate)
+    }
+
+    // MARK: 面包屑回程（Soundscape 式）
+
+    /// 开始记路：行进中每 ≥8m 记一个航点（去抖原地抖动），供之后一键原路返回。
+    func startTrailRecording() {
+        if running { stop() } // 与导航互斥（共用定位服务）
+        trail.reset()
+        trailCount = 0
+        recordingTrail = true
+        status = "记路中：沿途位置会被记录，回程时点「原路返回」"
+        speak("开始记路。走吧，我会记住来路。")
+        service.onLocation = { [weak self] loc in self?.handleTrail(loc) }
+        service.requestAuthAndStart()
+    }
+
+    /// 停止记路（保留已记轨迹，可随时原路返回）。
+    func stopTrailRecording() {
+        recordingTrail = false
+        service.stop()
+        status = trailCount >= 2 ? "已记 \(trailCount) 个点，可点「原路返回」" : "记录点太少，暂无法回程"
+        speak(status)
+    }
+
+    /// 一键原路返回：把轨迹反向作为航点喂给同一套实时引导引擎（信标+转向+到达判定）。
+    func startBacktrack() {
+        guard trail.count >= 2, let origin = trail.start else {
+            status = "还没有记录来路，请先「开始记路」"
+            speak(status)
+            return
+        }
+        if recordingTrail { recordingTrail = false }
+        if running { stop() }
+        navGeneration += 1
+        // 轨迹与 GPS 同为 WGS-84 原始坐标：回程不做 GCJ 纠偏（region 置 overseas 即"不转换"）。
+        region = .overseas
+        destinationQuery = "回到出发点"
+        let waypoints = trail.backtrackWaypoints(minSpacingMeters: 25)
+        maneuvers = waypoints.map { (CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon), "沿原路继续") }
+        destination = CLLocationCoordinate2D(latitude: origin.lat, longitude: origin.lon)
+        routeCoords = waypoints
+        stepIndex = 0
+        waypointAdvance.reset()
+        offRouteStreak = 0
+        steps = []
+        instruction = ""
+        lastSpoken = ""
+        headingReliable = false
+        headingFilter = HeadingFilter()
+        routeReady = true  // 航点已就绪，不走 planRoute
+        replanning = false
+        running = true
+        status = "原路返回：跟着提示音走，共 \(waypoints.count) 个路点"
+        speak("开始原路返回。跟着提示音的方向走。")
+        service.onLocation = { [weak self] loc in self?.handle(loc) }
+        service.onHeading = { [weak self] h in
+            guard let self else { return }
+            if self.headingFilter.isReliable(accuracyDegrees: h.headingAccuracy) {
+                let raw = h.trueHeading >= 0 ? h.trueHeading : h.magneticHeading
+                self.currentHeading = self.headingFilter.update(headingDegrees: raw, accuracyDegrees: h.headingAccuracy)
+                self.headingReliable = true
+                self.lastHeadingTime = ProcessInfo.processInfo.systemUptime
+            } else {
+                self.headingReliable = false
+            }
+        }
+        headTracker.onYaw = { [weak self] yaw in self?.spatial.setListenerYaw(Float(yaw)) }
+        headTracker.onUnavailable = { [weak self] in self?.spatial.setListenerYaw(0) }
+        headTracker.start()
+        service.requestAuthAndStart()
+    }
+
+    /// 记路：精度可信(≤30m)才入轨，去抖在核心 BreadcrumbTrail 内（≥8m）。
+    private func handleTrail(_ loc: CLLocation) {
+        guard recordingTrail else { return }
+        guard loc.horizontalAccuracy > 0, loc.horizontalAccuracy <= 30 else { return }
+        if trail.record(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude) {
+            trailCount = trail.count
+            status = "记路中：已记 \(trailCount) 个点"
+        }
     }
 
     /// 沿途地标 callout：查最近 POI，60m 内且与上次不同才报"途经 X"（参考 Soundscape）。

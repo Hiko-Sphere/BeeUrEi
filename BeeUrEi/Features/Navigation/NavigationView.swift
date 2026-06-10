@@ -35,6 +35,23 @@ struct WalkNavigationView: View {
                     }
                 }
 
+                Section {
+                    if !model.recordingTrail {
+                        Button("开始记路") { model.startTrailRecording() }
+                            .accessibilityHint("沿途记录你的来路，回程时可原路返回")
+                    } else {
+                        Button("停止记路", role: .destructive) { model.stopTrailRecording() }
+                    }
+                    if model.trailCount >= 2 {
+                        Button("原路返回（已记 \(model.trailCount) 个点）") { model.startBacktrack() }
+                            .accessibilityHint("沿记录的来路反向引导你走回出发点")
+                    }
+                } header: {
+                    Text("原路返回")
+                } footer: {
+                    Text("进陌生地方前点「开始记路」；要回去时点「原路返回」，跟着提示音原路走回出发点。")
+                }
+
                 if !favorites.isEmpty {
                     Section("常用目的地") {
                         ForEach(favorites, id: \.self) { place in

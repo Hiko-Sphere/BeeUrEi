@@ -67,6 +67,11 @@ final class HomeViewModel {
     private(set) var trafficLight: TrafficLightState = .unknown // 当前红绿灯状态（驱动全屏色块）
     @ObservationIgnored private var lastTrafficSeen: TimeInterval = 0
     @ObservationIgnored private let crossingSignal = CrossingSignalFeedback()
+    // 端到端延迟仪表（§5.6 / B6）：拍帧→决策完成的 p50/p95，开发者叠层显示，真机一跑即出报告。
+    private(set) var latencyText = "—"
+    @ObservationIgnored private var latencySamples: [Double] = []
+    @ObservationIgnored private var lastLatencyReport: TimeInterval = 0
+    @ObservationIgnored private let latencyBudget = LatencyBudget()
     @ObservationIgnored private let sonifier = ProximitySonifier()
     @ObservationIgnored private let clearConfirmer = ClearPathConfirmer()
     @ObservationIgnored private let announcePolicy = AnnouncementPolicy()
@@ -189,6 +194,9 @@ final class HomeViewModel {
         // （真正降低检测/决策计算量，而不只是播一句提示，见 PLAN §5.4）。
         guard frame.timestamp - lastProcess >= processingInterval else { return }
         lastProcess = frame.timestamp
+        // 端到端延迟打点（§5.6）：frame.timestamp 与 CACurrentMediaTime 同钟（开机秒），
+        // 决策路径（含检测/深度/播报提交）任一出口都计入。
+        defer { recordLatency(since: frame.timestamp) }
         updateAdvisory()
         thermalText = Self.thermalLabel(ProcessInfo.processInfo.thermalState)
         resolutionText = "\(CVPixelBufferGetWidth(frame.pixelBuffer))×\(CVPixelBufferGetHeight(frame.pixelBuffer))"
@@ -423,6 +431,26 @@ final class HomeViewModel {
         lastAnnouncedAdvisory = text
     }
     private var lastAnnouncedAdvisory = ""
+
+    /// 端到端延迟统计：保留最近 200 个样本，每 2s 汇总一次 p50/p95 + 预算判定（good/可接受/超限）。
+    private func recordLatency(since frameTimestamp: TimeInterval) {
+        let latency = CACurrentMediaTime() - frameTimestamp
+        guard latency >= 0, latency < 10 else { return } // 时钟异常防护
+        latencySamples.append(latency)
+        if latencySamples.count > 200 { latencySamples.removeFirst(latencySamples.count - 200) }
+        guard frameTimestamp - lastLatencyReport >= 2, latencySamples.count >= 10 else { return }
+        lastLatencyReport = frameTimestamp
+        let sorted = latencySamples.sorted()
+        let p50 = sorted[sorted.count / 2]
+        let p95 = sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))]
+        let verdict: String
+        switch latencyBudget.verdict(latencySeconds: p95) {
+        case .good: verdict = "良"
+        case .acceptable: verdict = "可"
+        case .fail: verdict = "超"
+        }
+        latencyText = String(format: "p50 %.0fms · p95 %.0fms [%@]", p50 * 1000, p95 * 1000, verdict)
+    }
 
     private func degradeAdvisory() -> String? {
         let thermalPlan = thermalPolicy.plan(for: Self.mapThermal(ProcessInfo.processInfo.thermalState))

@@ -10,6 +10,7 @@ struct DevOverlayView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text("开发者模式").bold()
             row("FPS", "\(model.fps)")
+            row("延迟", model.latencyText) // 端到端 p50/p95（§5.6 预算 0.8s/1.3s），B6 真机实测仪表
             row("热状态", model.thermalText)
             row("电量", model.batteryText)
             row("检测器", model.detectorActive ? "YOLO" : "深度兜底")

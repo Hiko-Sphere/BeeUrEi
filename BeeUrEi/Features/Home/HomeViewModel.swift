@@ -47,11 +47,18 @@ final class HomeViewModel {
     }
 
     @ObservationIgnored private let source = ARDepthCameraSource()
-    // 有 Core ML 模型则用真实检测；模型缺失则降级为深度兜底（StubObstacleDetector 返回空）。
-    @ObservationIgnored private let detector: ObstacleDetecting = {
-        let yolo = YOLOObstacleDetector()
-        return yolo.isAvailable ? yolo : StubObstacleDetector()
-    }()
+    @ObservationIgnored private let detector: ObstacleDetecting
+
+    /// F1：检测器可注入（mock 驱动避障管线单测）。默认：有 Core ML 模型用真实检测；
+    /// 模型缺失降级为深度兜底（StubObstacleDetector 返回空）。
+    init(detector: ObstacleDetecting? = nil) {
+        if let detector {
+            self.detector = detector
+        } else {
+            let yolo = YOLOObstacleDetector()
+            self.detector = yolo.isAvailable ? yolo : StubObstacleDetector()
+        }
+    }
     @ObservationIgnored private let fusion = ObstacleFusion(horizontalFOVDegrees: 68)
     // 语言相关目录（按播报语言构建；运行时改语言由 refreshLanguage() 重建，E5）。
     @ObservationIgnored private var lang: Language = FeatureSettings().language
@@ -200,7 +207,8 @@ final class HomeViewModel {
         updateAdvisory()
     }
 
-    private func handle(_ frame: SensorFrame) {
+    /// 帧处理主链路。internal 供单测以合成帧直驱（生产路径仍经 onAppear 里的 source.onFrame 接线）。
+    func handle(_ frame: SensorFrame) {
         guard !paused else { return } // 暂停后(已 source.stop)仍可能有在途帧到达主队列——直接丢弃，避免再提交播报
         if !isStreaming { isStreaming = true }
 

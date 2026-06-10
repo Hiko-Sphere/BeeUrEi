@@ -56,6 +56,7 @@
 - **OKO**：强=同形态、端侧、已上架、App Store Awards 入围;弱=**只做过街窄场景**、不覆盖中国。
 - **GoodMaps/NaviLens**：强=室内米级/枢纽部署;弱=**需预建图或铺物理码**(基建型,不进中国)。
 - **Meta Ray-Ban / Ally Solos**：强=$299–399 击穿价格锚点、续航好、远程协助齐;弱=**无LiDAR、无避障、延迟靠云、英文生态**。
+- **单功能 LiDAR 测距类**(Super Lidar[Mediate/Supersense 系]、Obstacle Detector、LiDAR Eyes、EyeGuide)：强=同用 iPhone LiDAR、免费/低价、已上架;弱=**纯测距音调/距离播报，无语义识别、无导航、无协助**——验证了品类存在，也反衬 BeeUrEi"语义+导航+协助三合一"的集成壁垒。
 
 ---
 

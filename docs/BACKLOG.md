@@ -195,7 +195,7 @@
 ### F1. iOS 适配层测试 🔜（两批落地：BeeUrEiTests target 51 测——含 **CallViewModel 信令/隐私门控 9 项安全回归**[Signaling 协议化注入+MockMediaEngine]、AMap 解码、来电中心、各文案表、本地库[商品/识别历史]；已接 CI）· P1
 - **目标**：ViewModel/关键视图有自动化测试。
 - **达成标准**：HomeViewModel/CallViewModel/NavigationViewModel 等核心 VM 有单测（依赖注入 mock 帧/信令）；关键无障碍属性有 UI 测试。
-- **残留**：HomeViewModel（相机帧依赖重，需抽 FrameSource 协议）与 NavigationViewModel（定位依赖；核心判定已在 BeeUrEiCore 全测）；UI 快照/无障碍属性测试未起。
+- **残留**：HomeViewModel 无头单测被**音频反馈组件 init 期 AVAudioEngine 图连接**阻塞（attach/connect 触达音频服务器，无头模拟器 CoreAudio RPC abort，实测 2026-06-10）——需把 SpatialAudio/Sonifier/CrossingSignal 抽协议注入或图连接延迟到首用（动安全路径音频初始化，需专门评审）；检测器注入缝与 handle() 直驱口已留好。NavigationViewModel（定位依赖；核心判定已在 BeeUrEiCore 全测）；UI 快照/无障碍属性测试未起。
 - **技术要点**：把 VM 依赖抽象为协议便于注入；XCTest + ViewInspector/快照。
 
 ### F2. 端到端 + 性能基准 + 崩溃监控 ❌ · P0（崩溃监控）

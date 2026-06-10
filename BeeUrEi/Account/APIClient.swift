@@ -485,6 +485,11 @@ struct APIClient {
     func registerApnsToken(token: String, apnsToken: String) async {
         _ = try? await authedSend("POST", "/api/push/apns-register", token: token, body: ["token": apnsToken])
     }
+
+    /// 同步播报语言偏好到后端（推送文案/匹配排序按此选语言；尽力而为）。
+    func setLanguage(token: String, language: String) async {
+        _ = try? await authedSend("POST", "/api/account/language", token: token, body: ["language": language])
+    }
     func unregisterApnsToken(token: String) async {
         _ = try? await authedSend("DELETE", "/api/push/apns-register", token: token)
     }

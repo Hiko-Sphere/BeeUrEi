@@ -89,6 +89,7 @@ final class AuthSession {
     }
 
     private func run(_ op: () async throws -> AuthResult) async {
+        let lang = FeatureSettings().language
         isWorking = true
         errorMessage = nil
         defer { isWorking = false }
@@ -98,12 +99,15 @@ final class AuthSession {
             user = result.user
             KeychainStore.save(result.token)
             KeychainStore.saveRefresh(result.refreshToken)
+            // 同步语言偏好（尽力而为）：推送文案（来电/好友请求横幅）按后端 users.language 选语言。
+            let t = result.token
+            Task { await api.setLanguage(token: t, language: lang.rawValue) }
         } catch APIError.unauthorized {
-            errorMessage = "用户名或密码错误"
+            errorMessage = AccountStrings.wrongCredentials(lang)
         } catch let APIError.server(message) {
             errorMessage = message
         } catch {
-            errorMessage = "网络错误，请检查服务器地址"
+            errorMessage = AccountStrings.networkError(lang)
         }
     }
 }

@@ -8,6 +8,7 @@ import { PresenceRegistry } from '../assist/presence'
 import { rankHelpers, type Candidate } from '../assist/matcher'
 import { buildIceServers } from '../assist/turnCredentials'
 import { PendingCallRegistry } from '../assist/pendingCalls'
+import { pushLang, pushStrings } from '../push/pushStrings'
 import { OpenHelpRegistry } from '../assist/openHelp'
 import { type PushSender } from '../push/apns'
 import { type Metrics } from '../metrics/metrics'
@@ -131,8 +132,12 @@ export function registerAssistRoutes(
       const u = store.findById(id)
       if (u?.voipToken) void pushSender.sendCallInvite(u.voipToken, parsed.data.callId, callerName, from.sub)
       // 兜底：同时发一条普通提醒推送（万一 CallKit 未弹，至少出现"来电"横幅，可点开 App 接听）。
+      // 文案按收件人语言（users.language，pushStrings）——推送在 App 外展示，客户端文案表够不着。
       if (u?.apnsToken) {
-        void pushSender.sendAlert(u.apnsToken, `${callerName} 来电`, '点击打开 App 接听', { kind: 'incoming_call', callId: parsed.data.callId })
+        const lang = pushLang(u.language)
+        void pushSender.sendAlert(u.apnsToken, pushStrings.incomingCallTitle(callerName, lang),
+                                  pushStrings.incomingCallBody(lang),
+                                  { kind: 'incoming_call', callId: parsed.data.callId })
           .catch(() => {})
       }
     }

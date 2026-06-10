@@ -71,6 +71,12 @@ struct SettingsView: View {
                     }
                     .onChange(of: languagePref) { _, v in
                         var f = FeatureSettings(); f.languagePreference = v
+                        // 同步到后端（尽力而为）：来电/好友请求等推送文案按 users.language 选语言。
+                        if let token = KeychainStore.read() {
+                            let resolved = Language.resolve(preference: v,
+                                                            systemCode: Locale.preferredLanguages.first)
+                            Task { await APIClient().setLanguage(token: token, language: resolved.rawValue) }
+                        }
                     }
                 } header: {
                     Text("语言 / Language")

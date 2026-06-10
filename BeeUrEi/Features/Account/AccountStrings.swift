@@ -135,6 +135,13 @@ enum AccountStrings {
     }
     static func emailVerified(_ l: Language) -> String { l == .zh ? "邮箱已验证。" : "Email verified." }
 
+    // MARK: 登录错误（AuthSession）
+
+    static func wrongCredentials(_ l: Language) -> String { l == .zh ? "用户名或密码错误" : "Wrong username or password" }
+    static func networkError(_ l: Language) -> String {
+        l == .zh ? "网络错误，请检查服务器地址" : "Network error — check the server address"
+    }
+
     /// 角色显示名。
     static func roleName(_ role: String, _ l: Language) -> String {
         switch role {

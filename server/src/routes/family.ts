@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { type Store, type FamilyLink, isBlockedBetween } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { type PushSender, NoopPushSender } from '../push/apns'
+import { pushLang, pushStrings } from '../push/pushStrings'
 
 const addLinkSchema = z.object({
   username: z.string().min(3).max(32).optional(),
@@ -47,9 +48,11 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: P
       requestedBy: meId,
     }
     store.createLink(link)
-    // 软件外通知：提醒"被请求方"(target)有新的好友请求待确认。fire-and-forget。
+    // 软件外通知：提醒"被请求方"(target)有新的好友请求待确认。fire-and-forget。文案按收件人语言。
     if (target.apnsToken) {
-      void push.sendAlert(target.apnsToken, '新的好友请求', `${me.displayName} 想加你为${link.relation}`, { kind: 'friend_request' })
+      const lang = pushLang(target.language)
+      void push.sendAlert(target.apnsToken, pushStrings.friendRequestTitle(lang),
+                          pushStrings.friendRequestBody(me.displayName, link.relation, lang), { kind: 'friend_request' })
         .catch((e) => console.warn('[push] friend_request alert failed:', (e as Error).message))
     }
     return reply.code(201).send({ link: viewLink(store, link, meId) })
@@ -70,7 +73,9 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: P
     const requester = link.requestedBy ? store.findById(link.requestedBy) : undefined
     const me = store.findById(meId)
     if (requester?.apnsToken && me) {
-      void push.sendAlert(requester.apnsToken, '好友请求已通过', `${me.displayName} 接受了你的请求`, { kind: 'friend_accepted' })
+      const lang = pushLang(requester.language)
+      void push.sendAlert(requester.apnsToken, pushStrings.friendAcceptedTitle(lang),
+                          pushStrings.friendAcceptedBody(me.displayName, lang), { kind: 'friend_accepted' })
         .catch((e) => console.warn('[push] friend_accepted alert failed:', (e as Error).message))
     }
     return { ok: true }

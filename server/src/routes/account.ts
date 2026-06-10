@@ -14,6 +14,8 @@ const emailSchema = z.object({ email: z.string().email().max(254) })
 const verifyEmailSchema = z.object({ code: z.string().min(4).max(12) })
 // 昵称（displayName）：可改、可重复；用户名(username)才是唯一登录标识。通话/CallKit 显示昵称。
 const profileSchema = z.object({ displayName: z.string().trim().min(1).max(64) })
+// 播报语言偏好（"zh"/"en"…）：推送文案（pushStrings）与匹配排序按此选语言；App 登录/改语言时上报。
+const languageSchema = z.object({ language: z.string().trim().min(2).max(8) })
 // 头像：小尺寸图片 data URL（客户端已压缩）。限大小，防滥用 DB 存大图。
 const avatarSchema = z.object({
   avatar: z.string().regex(/^data:image\/(png|jpeg|jpg|webp);base64,/).max(600_000),
@@ -35,6 +37,15 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
       tokenVersion: (user.tokenVersion ?? 0) + 1,
     })
     store.deleteRefreshTokensForUser(user.id)
+    return { ok: true }
+  })
+
+  // 更新语言偏好：推送文案与求助匹配排序按此选语言。
+  app.post('/api/account/language', { preHandler: requireAuth() }, async (req, reply) => {
+    const parsed = languageSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const updated = store.updateUser(req.user!.sub, { language: parsed.data.language })
+    if (!updated) return reply.code(404).send({ error: 'not_found' })
     return { ok: true }
   })
 

@@ -121,13 +121,14 @@
 **端侧库 Data Protection**(识别历史/商品库/教学物品三库写盘加 completeFileProtection——锁屏后文件不可读) ·
 **设置/导航/亲友屏双语**(E5 第七批：SettingsStrings 约50条+NavStrings 界面26条+AssistStrings 亲友屏20条；设置页语言切换即时生效；试听播报示例随语言) ·
 **登录链路+首启教程双语**(E5 第八批：AccountStrings 约70条——登录门/找回密码/账号页/邮箱验证；TutorialView 五步教程中英成套+TTS嗓音随语言) ·
-**协助端+知情同意双语**(E5 第九批收官：HelperStrings 约60条——帮助大家/我的亲人/我的三标签全量；OnboardingView 知情同意页双语；DisclaimerText 英文版**草稿**已接入[标注待法务/母语校对])。
+**协助端+知情同意双语**(E5 第九批收官：HelperStrings 约60条——帮助大家/我的亲人/我的三标签全量；OnboardingView 知情同意页双语；DisclaimerText 英文版**草稿**已接入[标注待法务/母语校对]) ·
+**推送文案双语+语言同步**(E5 第十批跨端：后端 pushStrings——来电/好友请求/请求通过横幅按收件人 users.language 选语言；新端点 POST /api/account/language；iOS 登录与改语言时自动上报；**后端改动待部署 awsjapan**)。
 
 **计划残留收尾：** C1 国内实时逐向导航(高德折线+GCJ-02，复用海外引擎) · 避障掐断导航语音 ·
 A4 无人接听转志愿者 · 滞回双阈值+300ms半句保护 · 热/电降级真作用帧率 · 光照告警 ·
 信标距离渐强+地标callout · 端到端延迟 p50/p95 仪表(开发者叠层)。
 
-**质量：** 核心 293 测 / 应用层 42 测 / 后端 159 测全过；覆盖率 后端91%+ 核心97%+；CI 绿。
+**质量：** 核心 293 测 / 应用层 42 测 / 后端 164 测全过；覆盖率 后端91%+ 核心97%+；CI 绿。
 **E5 状态：双端全链路双语完成**（盲人侧 + 协助端 + 知情同意）。剩余：①安全须知英文版为**草稿**，
 上架前需法务/母语者校对（DisclaimerText.fullEnglishDraft）②全部英文文案建议母语者通读
 ③后端产出文案（来电推送等）核查 ④AdminHomeView/DevOverlay 为内部工具不本地化。

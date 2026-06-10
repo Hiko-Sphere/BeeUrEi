@@ -49,15 +49,26 @@ final class HomeViewModel {
     @ObservationIgnored private let source = ARDepthCameraSource()
     @ObservationIgnored private let detector: ObstacleDetecting
 
-    /// F1：检测器可注入（mock 驱动避障管线单测）。默认：有 Core ML 模型用真实检测；
-    /// 模型缺失降级为深度兜底（StubObstacleDetector 返回空）。
-    init(detector: ObstacleDetecting? = nil) {
+    /// F1：检测器与全部反馈通道可注入（mock 驱动避障管线单测，零音频）。
+    /// 生产默认实现与初始化时序不变：检测器有 Core ML 模型用真实检测、缺失降级深度兜底；
+    /// 协调器默认 = 语音 + 触觉双 sink 经核心仲裁。
+    init(detector: ObstacleDetecting? = nil,
+         speech: SpeechFeeding = SpeechFeedback(),
+         sonifier: Sonifying = ProximitySonifier(),
+         spatial: SpatialCueing = SpatialAudioFeedback(),
+         crossingSignal: CrossingSignaling = CrossingSignalFeedback(),
+         coordinator: FeedbackCoordinating? = nil) {
         if let detector {
             self.detector = detector
         } else {
             let yolo = YOLOObstacleDetector()
             self.detector = yolo.isAvailable ? yolo : StubObstacleDetector()
         }
+        self.speech = speech
+        self.sonifier = sonifier
+        self.spatial = spatial
+        self.crossingSignal = crossingSignal
+        self.coordinator = coordinator ?? FeedbackCoordinator(sinks: [speech, HapticFeedback()])
     }
     @ObservationIgnored private let fusion = ObstacleFusion(horizontalFOVDegrees: 68)
     // 语言相关目录（按播报语言构建；运行时改语言由 refreshLanguage() 重建，E5）。
@@ -75,15 +86,15 @@ final class HomeViewModel {
     @ObservationIgnored private let lightMeter = LightMeter()
     private(set) var trafficLight: TrafficLightState = .unknown // 当前红绿灯状态（驱动全屏色块）
     @ObservationIgnored private var lastTrafficSeen: TimeInterval = 0
-    @ObservationIgnored private let crossingSignal = CrossingSignalFeedback()
+    @ObservationIgnored private let crossingSignal: CrossingSignaling
     // 端到端延迟仪表（§5.6 / B6）：拍帧→决策完成的 p50/p95，开发者叠层显示，真机一跑即出报告。
     private(set) var latencyText = "—"
     @ObservationIgnored private var latencySamples: [Double] = []
     @ObservationIgnored private var lastLatencyReport: TimeInterval = 0
     @ObservationIgnored private let latencyBudget = LatencyBudget()
-    @ObservationIgnored private let sonifier = ProximitySonifier()
+    @ObservationIgnored private let sonifier: Sonifying
     // 避障空间音（AirPods）：危险障碍在其方位播 HRTF 提示音；头追踪让声音方向随头转动保持世界固定。
-    @ObservationIgnored private let spatial = SpatialAudioFeedback()
+    @ObservationIgnored private let spatial: SpatialCueing
     @ObservationIgnored private let headTracker = HeadTracker()
     @ObservationIgnored private let clearConfirmer = ClearPathConfirmer()
     @ObservationIgnored private let announcePolicy = AnnouncementPolicy()
@@ -92,8 +103,8 @@ final class HomeViewModel {
     @ObservationIgnored private let trackingGate = TrackingGate()
     @ObservationIgnored private let thermalPolicy = ThermalPolicy()
     @ObservationIgnored private let powerPolicy = PowerPolicy()
-    @ObservationIgnored private let speech = SpeechFeedback()
-    @ObservationIgnored private lazy var coordinator = FeedbackCoordinator(sinks: [speech, HapticFeedback()])
+    @ObservationIgnored private var speech: SpeechFeeding
+    @ObservationIgnored private let coordinator: FeedbackCoordinating
     @ObservationIgnored private let consent = ConsentStore()
     @ObservationIgnored private let disclaimer = DisclaimerPolicy()
 

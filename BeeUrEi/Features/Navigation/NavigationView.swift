@@ -22,7 +22,9 @@ struct WalkNavigationView: View {
                 Section("目的地") {
                     TextField("如：地铁站、超市名称", text: $destination)
                         .autocorrectionDisabled()
-                    if !model.running {
+                    if model.previewing {
+                        Button("停止预览", role: .destructive) { model.stopPreview() }
+                    } else if !model.running {
                         Button("开始导航") {
                             let store = FavoritePlacesStore()
                             store.add(destination)
@@ -30,6 +32,11 @@ struct WalkNavigationView: View {
                             Task { await model.start(destination: destination, region: region) }
                         }
                         .disabled(destination.isEmpty)
+                        Button("预览路线（出门前试听）") {
+                            Task { await model.startPreview(destination: destination, region: region) }
+                        }
+                        .disabled(destination.isEmpty)
+                        .accessibilityHint("不出门，先把整条路线逐步念给你听：每一步怎么走、走多远、全程多长")
                     } else {
                         Button("停止导航", role: .destructive) { model.stop() }
                     }

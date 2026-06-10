@@ -50,6 +50,8 @@ final class NavigationViewModel {
     private(set) var recordingTrail = false
     private(set) var trailCount = 0
     @ObservationIgnored private var trail = BreadcrumbTrail()
+    // 街景预览（Soundscape Street Preview 式）：出门前在家试听整条路线。
+    private(set) var previewing = false
 
     func start(destination query: String, region: Region) async {
         guard FeatureSettings().navigationEnabled else {
@@ -67,6 +69,7 @@ final class NavigationViewModel {
         self.destinationQuery = trimmed
         routeReady = false
         replanning = false
+        previewing = false  // 直接「开始导航」要清掉残留的预览态（startPreview 在本方法返回后再置位）
         stepIndex = 0
         steps = []
         instruction = ""
@@ -254,6 +257,7 @@ final class NavigationViewModel {
                 waypointAdvance.reset()
                 offRouteStreak = 0
 
+                if previewing { narratePreview(); return } // 预览：不进实时跟踪，逐步试听
                 if let first = result.first {
                     if destination != nil, !maneuvers.isEmpty {
                         status = "导航开始，共 \(result.count) 步"
@@ -293,6 +297,7 @@ final class NavigationViewModel {
             // 路线折线（转向点 + 目的地）用于偏航检测。
             routeCoords = m.map { Coordinate(lat: $0.coordinate.latitude, lon: $0.coordinate.longitude) }
                 + [Coordinate(lat: dest.latitude, lon: dest.longitude)]
+            if previewing { narratePreview(); return } // 预览：不进实时跟踪，逐步试听
             status = m.isEmpty ? "未找到步行路线" : "导航开始，共 \(m.count) 步"
         }
     }
@@ -302,6 +307,54 @@ final class NavigationViewModel {
         lastSpoken = text
         // 经共享导航语音通道：避障 obstacle/critical 播报会掐断它（跨通道仲裁，Phase 2 标准）。
         NavVoice.shared.speak(text, rate: FeatureSettings().speechRate)
+    }
+
+    // MARK: 街景预览（出门前虚拟试听整条路线）
+
+    /// 预览路线：正常规划，但**不**进入实时跟踪——拿到路线后停定位，逐步朗读全程。
+    func startPreview(destination query: String, region: Region) async {
+        await start(destination: query, region: region)
+        guard running else { return } // start 内部校验失败(未开导航/空目的地)则不进预览
+        previewing = true
+        status = "正在规划预览路线…"
+    }
+
+    /// 停止预览（停掉正在念的步骤队列）。
+    func stopPreview() {
+        previewing = false
+        NavVoice.shared.stop()
+        if running { stop() }
+        status = "已停止预览"
+    }
+
+    /// 路线就绪后的预览旁白：总长 + 逐步"第N步，指令，前行约X米"（经 NavVoice 排队朗读，可随时停）。
+    private func narratePreview() {
+        service.stop()
+        headTracker.stop()
+        running = false
+        guard !maneuvers.isEmpty else {
+            previewing = false
+            status = "没有可预览的路线"
+            speak("没有可预览的路线")
+            return
+        }
+        var pts = maneuvers.map(\.coordinate)
+        if let dest = destination { pts.append(dest) }
+        var total = 0.0
+        var lines: [String] = []
+        for i in 0..<maneuvers.count {
+            let cur = maneuvers[i].coordinate
+            let nxt = pts[min(i + 1, pts.count - 1)]
+            let d = Geo.distanceMeters(fromLat: cur.latitude, fromLon: cur.longitude,
+                                       toLat: nxt.latitude, toLon: nxt.longitude)
+            total += d
+            lines.append("第\(i + 1)步，\(maneuvers[i].instruction)，前行约\(Int(d.rounded()))米。")
+        }
+        status = "路线预览中：共 \(maneuvers.count) 步，约 \(Int(total.rounded())) 米"
+        let rate = FeatureSettings().speechRate
+        NavVoice.shared.speak("路线预览开始。全程约\(Int(total.rounded()))米，共\(maneuvers.count)步。", rate: rate)
+        for l in lines { NavVoice.shared.speak(l, rate: rate) } // AVSpeechSynthesizer 自动排队顺读
+        NavVoice.shared.speak("预览结束。准备好后，点开始导航。", rate: rate)
     }
 
     // MARK: 面包屑回程（Soundscape 式）

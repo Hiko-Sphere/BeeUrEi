@@ -14,8 +14,11 @@ struct CallView: View {
     let onClose: () -> Void
     /// A4：呼叫亲友无人接听/被拒时的「改为向志愿者求助」回退（仅盲人呼亲友的路径传入）。
     var onFallbackToVolunteer: (() -> Void)?
+    /// 通话屏文案语言（E5）。
+    private var lang: Language { FeatureSettings().language }
 
-    init(role: CallViewModel.Role, callId: String, waitingText: String = "正在接通，请稍候…",
+    init(role: CallViewModel.Role, callId: String,
+         waitingText: String = CallStrings.defaultWaiting(FeatureSettings().language),
          onFallbackToVolunteer: (() -> Void)? = nil, onClose: @escaping () -> Void) {
         _model = State(initialValue: CallViewModel(role: role, callId: callId, waitingText: waitingText))
         self.onFallbackToVolunteer = onFallbackToVolunteer
@@ -26,30 +29,34 @@ struct CallView: View {
         Group {
             if model.role == .helper { helperFullScreen } else { blindLayout }
         }
-        .confirmationDialog("举报对方", isPresented: $showReport, titleVisibility: .visible) {
-            ForEach(["不当行为", "言语骚扰", "诈骗或可疑", "其他"], id: \.self) { reason in
+        .confirmationDialog(CallStrings.reportDialogTitle(lang), isPresented: $showReport, titleVisibility: .visible) {
+            ForEach(CallStrings.reportReasons(lang), id: \.self) { reason in
                 Button(reason, role: .destructive) { Task { await model.report(reason: reason) } }
             }
-            Button("取消", role: .cancel) {}
+            Button(CallStrings.cancel(lang), role: .cancel) {}
         } message: {
-            Text("举报会发送给管理员审核，请仅在确有问题时使用。")
+            Text(CallStrings.reportDialogMessage(lang))
         }
         // 防呆：盲人挂断/静音需二次确认，避免摸索手机时误触（取消静音可立即生效）。
-        .alert("确认挂断通话？", isPresented: $showHangupConfirm) {
-            Button("挂断", role: .destructive) { model.hangUp(); onClose() }
-            Button("继续通话", role: .cancel) {}
+        .alert(CallStrings.hangupConfirmTitle(lang), isPresented: $showHangupConfirm) {
+            Button(CallStrings.hangup(lang), role: .destructive) { model.hangUp(); onClose() }
+            Button(CallStrings.continueCall(lang), role: .cancel) {}
         }
-        .alert("确认静音？", isPresented: $showMuteConfirm) {
-            Button("静音", role: .destructive) { model.setMuted(true) }
-            Button("取消", role: .cancel) {}
-        } message: { Text("静音后对方将暂时听不到你的声音。") }
+        .alert(CallStrings.muteConfirmTitle(lang), isPresented: $showMuteConfirm) {
+            Button(CallStrings.mute(lang), role: .destructive) { model.setMuted(true) }
+            Button(CallStrings.cancel(lang), role: .cancel) {}
+        } message: { Text(CallStrings.muteConfirmMessage(lang)) }
         .task { await model.start() }
         .onChange(of: model.statusText) { _, new in A11y.announce(new) }
         .onChange(of: model.videoSending) { _, sending in
-            A11y.announce(sending ? "已开始把画面显示给对方" : "已停止显示画面")
+            A11y.announce(CallStrings.announceVideo(sending: sending, lang))
         }
-        .onChange(of: model.muted) { _, m in A11y.announce(m ? "已静音，对方听不到你" : "已取消静音") }
-        .onChange(of: model.cameraFront) { _, f in A11y.announce(f ? "已切换到前置摄像头，对方将看到你的脸" : "已切换到后置摄像头，对方看到你面前的情况") }
+        .onChange(of: model.muted) { _, m in A11y.announce(CallStrings.announceMuted(m, lang)) }
+        .onChange(of: model.cameraFront) { _, f in A11y.announce(CallStrings.announceCamera(front: f, lang)) }
+        // VoiceOver 魔法轻点（双指双击）= 挂断（系统通话惯例）；盲人侧仍走二次确认防呆。
+        .accessibilityAction(.magicTap) {
+            if model.role == .blind { showHangupConfirm = true } else { model.hangUp(); onClose() }
+        }
         // 一方挂断 → 对方自动挂断并关闭界面。
         .onChange(of: model.callEnded) { _, ended in if ended { onClose() } }
         .onChange(of: model.reportStatus) { _, s in if let s, !s.isEmpty { A11y.announce(s) } }
@@ -120,7 +127,7 @@ struct CallView: View {
                 if model.remoteVideoFrames {
                     HStack(spacing: 32) {
                         circleButton(model.remoteTorchOn ? "flashlight.on.fill" : "flashlight.off.fill",
-                                     label: model.remoteTorchOn ? "关闭对方手电筒" : "打开对方手电筒",
+                                     label: CallStrings.remoteTorch(on: model.remoteTorchOn, lang),
                                      tint: model.remoteTorchOn ? Color.beeWarn : Color.white.opacity(0.22)) {
                             model.toggleRemoteTorch(); scheduleAutoHide()
                         }
@@ -133,24 +140,24 @@ struct CallView: View {
                                 .overlay(Circle().strokeBorder(.white.opacity(0.18), lineWidth: 0.5))
                         }
                         .buttonStyle(BeePressStyle())
-                        .accessibilityLabel("变焦，当前 \(Int(model.remoteZoom)) 倍，双击切换")
+                        .accessibilityLabel(CallStrings.zoomA11y(Int(model.remoteZoom), lang))
                     }
                 }
                 HStack(spacing: 48) {
                     circleButton(model.muted ? "mic.slash.fill" : "mic.fill",
-                                 label: model.muted ? "取消静音" : "静音",
+                                 label: model.muted ? CallStrings.unmute(lang) : CallStrings.mute(lang),
                                  tint: model.muted ? Color.beeWarn : Color.white.opacity(0.22)) {
                         model.setMuted(!model.muted); scheduleAutoHide()
                     }
-                    circleButton("phone.down.fill", label: "挂断", tint: Color.beeDanger) {
+                    circleButton("phone.down.fill", label: CallStrings.hangup(lang), tint: Color.beeDanger) {
                         model.hangUp(); onClose()
                     }
                 }
                 if model.canReport {
                     HStack(spacing: BeeSpacing.lg) {
-                        Button("加为亲友") { Task { await model.addPeerAsFriend() }; scheduleAutoHide() }
-                        Button("拉黑", role: .destructive) { Task { await model.blockPeer() }; scheduleAutoHide() }
-                        Button("举报") { showReport = true }
+                        Button(CallStrings.addFriendShort(lang)) { Task { await model.addPeerAsFriend() }; scheduleAutoHide() }
+                        Button(CallStrings.blockShort(lang), role: .destructive) { Task { await model.blockPeer() }; scheduleAutoHide() }
+                        Button(CallStrings.reportShort(lang)) { showReport = true }
                     }
                     .font(.footnote).foregroundStyle(.white.opacity(0.9))
                 }
@@ -206,30 +213,30 @@ struct CallView: View {
 
             // A4：无人接听/被拒 → 一键转向公开志愿者求助（不让盲人卡死在没人接的呼叫里）。
             if (model.unanswered || model.declined), let fallback = onFallbackToVolunteer {
-                BeeBigButton("改为向志愿者求助", systemImage: "hand.raised.fill",
-                             subtitle: "亲友暂时没接，让在线志愿者帮你", tint: .beeHoney) {
+                BeeBigButton(CallStrings.fallbackTitle(lang), systemImage: "hand.raised.fill",
+                             subtitle: CallStrings.fallbackSubtitle(lang), tint: .beeHoney) {
                     model.hangUp()
                     fallback()
                 }
             }
 
             HStack(spacing: BeeSpacing.md) {
-                BeeBigButton(model.muted ? "取消静音" : "静音",
+                BeeBigButton(model.muted ? CallStrings.unmute(lang) : CallStrings.mute(lang),
                              systemImage: model.muted ? "mic.slash.fill" : "mic.fill",
                              tint: model.muted ? .beeWarn : .beeInk, foreground: .white) {
                     if model.muted { model.setMuted(false) } else { showMuteConfirm = true } // 静音需确认，取消静音立即
                 }
-                BeeBigButton("挂断", systemImage: "phone.down.fill", tint: .beeDanger, foreground: .white) {
+                BeeBigButton(CallStrings.hangup(lang), systemImage: "phone.down.fill", tint: .beeDanger, foreground: .white) {
                     showHangupConfirm = true // 防呆：二次确认
                 }
-                .accessibilityHint("挂断需再次确认，避免误触")
+                .accessibilityHint(CallStrings.hangupHint(lang))
             }
 
             if model.canReport {
                 HStack(spacing: BeeSpacing.lg) {
-                    Button("加为亲友/协助者") { Task { await model.addPeerAsFriend() } }
-                    Button("拉黑对方", role: .destructive) { Task { await model.blockPeer() } }
-                    Button("举报对方") { showReport = true }
+                    Button(CallStrings.addFriendLong(lang)) { Task { await model.addPeerAsFriend() } }
+                    Button(CallStrings.blockLong(lang), role: .destructive) { Task { await model.blockPeer() } }
+                    Button(CallStrings.reportLong(lang)) { showReport = true }
                 }
                 .font(.subheadline)
             }
@@ -243,28 +250,27 @@ struct CallView: View {
 
     private var blindControls: some View {
         VStack(spacing: 12) {
-            Text(model.videoSending
-                 ? (model.cameraFront ? "正在显示前置摄像头（你的面部）给对方" : "正在显示后置摄像头（你面前的情况）给对方")
-                 : "画面未发送（隐私保护）")
+            Text(CallStrings.videoStatus(sending: model.videoSending, front: model.cameraFront, lang))
                 .foregroundStyle(model.videoSending ? Color.beeWarn : .secondary)
                 .multilineTextAlignment(.center)
 
             // 无障碍/防误触：明确的切换按钮（VoiceOver 可用），状态会朗读。
-            BeeBigButton(model.videoSending ? "停止显示画面" : "显示画面给对方",
+            BeeBigButton(model.videoSending ? CallStrings.stopVideo(lang) : CallStrings.showVideo(lang),
                          systemImage: model.videoSending ? "video.slash.fill" : "video.fill",
                          tint: model.videoSending ? .beeWarn : .beeHoney) {
                 model.setVideoSending(!model.videoSending)
             }
-            .accessibilityHint("开启后会把你的摄像头画面发送给协助者；可在下方选择后置(看你面前)或前置(看你的脸)")
+            .accessibilityHint(CallStrings.showVideoHint(lang))
 
             // 前/后摄像头选择（分享时可切）。
             if model.videoSending {
-                Picker("摄像头", selection: Binding(get: { model.cameraFront }, set: { model.setCameraFront($0) })) {
-                    Text("后置（看前方）").tag(false)
-                    Text("前置（看面部）").tag(true)
+                Picker(CallStrings.cameraPicker(lang),
+                       selection: Binding(get: { model.cameraFront }, set: { model.setCameraFront($0) })) {
+                    Text(CallStrings.cameraRear(lang)).tag(false)
+                    Text(CallStrings.cameraFront(lang)).tag(true)
                 }
                 .pickerStyle(.segmented)
-                .accessibilityLabel("选择摄像头：后置看你面前的情况，前置让对方看到你的脸")
+                .accessibilityLabel(CallStrings.cameraPickerA11y(lang))
             }
         }
     }

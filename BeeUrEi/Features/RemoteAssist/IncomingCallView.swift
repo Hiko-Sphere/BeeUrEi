@@ -12,6 +12,8 @@ struct IncomingCallView: View {
     @State private var pollTask: Task<Void, Never>?
     @State private var pulsing = false // 头像呼吸光环（来电中）
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// 来电屏文案语言（E5）。
+    private var lang: Language { FeatureSettings().language }
 
     var body: some View {
         if accepted {
@@ -45,25 +47,29 @@ struct IncomingCallView: View {
                         withAnimation(.easeOut(duration: 1.6).repeatForever(autoreverses: false)) { pulsing = true }
                     }
                 Text(ring.callerName).font(.largeTitle.bold()).foregroundStyle(.white)
-                Text("BeeUrEi 视频通话…").font(.headline).foregroundStyle(.white.opacity(0.75))
+                Text(lang == .zh ? "BeeUrEi 视频通话…" : "BeeUrEi video call…")
+                    .font(.headline).foregroundStyle(.white.opacity(0.75))
                 Spacer()
                 HStack(spacing: 72) {
                     VStack(spacing: 10) {
                         circle("phone.down.fill", .beeDanger) { decline() }
-                        Text("拒绝").font(.subheadline).foregroundStyle(.white.opacity(0.9))
+                        Text(CallStrings.decline(lang)).font(.subheadline).foregroundStyle(.white.opacity(0.9))
                     }
                     VStack(spacing: 10) {
                         circle("phone.fill", .beeSuccess) { accept() }
-                        Text("接听").font(.subheadline).foregroundStyle(.white.opacity(0.9))
+                        Text(CallStrings.answer(lang)).font(.subheadline).foregroundStyle(.white.opacity(0.9))
                     }
                 }
                 .padding(.bottom, 64)
             }
         }
         .task {
-            A11y.announce("\(ring.callerName) 来电，双击接听或拒绝")
+            A11y.announce(lang == .zh ? "\(ring.callerName) 来电，双击接听或拒绝"
+                                      : "Incoming call from \(ring.callerName). Double-tap to answer or decline.")
             startCancelWatch()
         }
+        // VoiceOver 魔法轻点（双指双击）= 接听（系统来电惯例）。
+        .accessibilityAction(.magicTap) { accept() }
         .onDisappear { pollTask?.cancel() }
     }
 
@@ -77,7 +83,7 @@ struct IncomingCallView: View {
         }
         .buttonStyle(BeePressStyle())
         .disabled(busy)
-        .accessibilityLabel(icon == "phone.fill" ? "接听" : "拒绝")
+        .accessibilityLabel(icon == "phone.fill" ? CallStrings.answer(lang) : CallStrings.decline(lang))
     }
 
     private func accept() {
@@ -88,7 +94,7 @@ struct IncomingCallView: View {
             if let token = KeychainStore.read() {
                 let won = await APIClient().markAnswered(token: token, callId: ring.callId)
                 guard won else {
-                    A11y.announce("已被其他亲友接听")
+                    A11y.announce(CallStrings.answeredElsewhere(lang))
                     dismiss()
                     return
                 }

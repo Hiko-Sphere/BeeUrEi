@@ -36,7 +36,10 @@ final class TaughtItemsStore {
     }
 
     private func persist() {
-        if let data = try? PropertyListEncoder().encode(items) { try? data.write(to: fileURL) }
+        // completeFileProtection：个人物品特征指纹属用户隐私数据，锁屏后文件不可读（仅前台读写）。
+        if let data = try? PropertyListEncoder().encode(items) {
+            try? data.write(to: fileURL, options: [.atomic, .completeFileProtection])
+        }
     }
 
     private func load() {

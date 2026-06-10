@@ -50,7 +50,10 @@ final class RecognitionHistoryStore {
     }
 
     private func persist() {
-        if let data = try? PropertyListEncoder().encode(records) { try? data.write(to: fileURL) }
+        // completeFileProtection：识别历史可能含信件/票据等敏感文字，锁屏后文件不可读（仅前台读写，无后台访问）。
+        if let data = try? PropertyListEncoder().encode(records) {
+            try? data.write(to: fileURL, options: [.atomic, .completeFileProtection])
+        }
     }
 
     private func load() {

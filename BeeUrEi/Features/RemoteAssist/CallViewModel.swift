@@ -10,9 +10,10 @@ final class CallViewModel {
     let role: Role
     let callId: String
     private let waitingText: String   // 等待对端接入时的提示（求助志愿者/呼叫亲友文案不同）
+    private let lang = FeatureSettings().language  // 通话内播报语言（E5，开播即定）
     private(set) var connected = false
     private(set) var videoSending = false
-    private(set) var statusText = "正在连接…"
+    private(set) var statusText = CallStrings.connecting(FeatureSettings().language)
     private(set) var peerUserId: String?
     private(set) var peerName: String?
     private(set) var peerAvatar: String?
@@ -36,11 +37,11 @@ final class CallViewModel {
     /// 协助者侧画面区的提示文案（把"无画面"的原因讲清楚）。
     var helperVideoHint: String {
         switch mediaState {
-        case .failed: return "媒体连接失败。请确保两台手机连同一个 WiFi；跨网络需开启 TURN（见手册 A3）。"
-        case .disconnected: return "连接中断，正在尝试恢复…"
-        case .connecting, .none: return "正在建立媒体连接…"
+        case .failed: return CallStrings.mediaFailedHint(lang)
+        case .disconnected: return CallStrings.reconnecting(lang)
+        case .connecting, .none: return CallStrings.establishingMedia(lang)
         case .connected:
-            return remoteVideoFrames ? "正在显示对方画面" : "已连通。等待对方点「显示画面给对方」…"
+            return remoteVideoFrames ? CallStrings.showingPeerVideo(lang) : CallStrings.waitingPeerVideo(lang)
         }
     }
 
@@ -49,7 +50,7 @@ final class CallViewModel {
     @ObservationIgnored private var hasOffered = false // 视障侧是否已发过 offer，防对端重连/重复 peer-joined 在已建立 pc 上重发 offer 造成 glare（见审查 #2）
     @ObservationIgnored private var ended = false // hangUp 幂等：任意路径（按钮/界面消失/CallKit 系统挂断）都能安全调用，确保媒体/信令确定性释放（见复审 #1）
 
-    init(role: Role, callId: String, waitingText: String = "正在接通，请稍候…") {
+    init(role: Role, callId: String, waitingText: String = CallStrings.defaultWaiting(FeatureSettings().language)) {
         self.role = role
         self.callId = callId
         self.waitingText = waitingText
@@ -57,7 +58,7 @@ final class CallViewModel {
 
     func start() async {
         guard let token = KeychainStore.read() else {
-            statusText = "请先在「设置 → 账号」登录后再呼叫"
+            statusText = CallStrings.loginToCall(lang)
             return
         }
         // 媒体本端 SDP/ICE → 经信令发给对端。
@@ -75,7 +76,7 @@ final class CallViewModel {
             self.mediaState = state
             switch state {
             case .failed:
-                self.statusText = "媒体连接失败：请两台手机连同一 WiFi；跨网络需开启 TURN"
+                self.statusText = CallStrings.mediaFailedStatus(self.lang)
             case .connected:
                 if self.connected { self.statusText = self.connectedStatus() }
             default:
@@ -89,7 +90,7 @@ final class CallViewModel {
         signaling.onClose = { [weak self] in
             guard let self else { return }
             self.connected = false
-            self.statusText = "连接已断开，请重新呼叫"
+            self.statusText = CallStrings.signalingClosed(self.lang)
             // 隐私 fail-safe：信令断开时强制关画面、停相机（setVideoSending(false) 会 disable 视频轨并 stopCapture），
             // 绝不让相机在断线后仍采集/外发（见审查 #5/#8）。
             // 但**不** media.stop() 拆除 pc：信令断开多为瞬时(移动网切换/服务器 reload)，P2P 媒体本身可能仍存活；
@@ -118,7 +119,7 @@ final class CallViewModel {
                 guard let self, !self.connected, !self.ended, !self.declined else { return }
                 if await APIClient().callDeclined(token: token, callId: cid) {
                     self.declined = true
-                    self.statusText = "对方已拒绝"
+                    self.statusText = CallStrings.declined(self.lang)
                     return
                 }
             }
@@ -127,8 +128,8 @@ final class CallViewModel {
             try? await Task.sleep(for: .seconds(40))
             guard let self, !self.connected, !self.ended, !self.declined, !self.callEnded else { return }
             self.unanswered = true
-            self.statusText = "暂时无人接听"
-            A11y.announce("暂时无人接听。可以挂断，或改为向志愿者求助。")
+            self.statusText = CallStrings.unanswered(self.lang)
+            A11y.announce(CallStrings.unansweredAnnounce(self.lang))
         }
     }
 
@@ -168,14 +169,14 @@ final class CallViewModel {
             }
         case "video-gate":
             // 关闭画面时恢复"已连接"，避免状态栏永久停在"对方关闭了画面"让协助者误以为掉线（见审查 #3）。
-            if let on = msg["on"] as? Bool { statusText = on ? "已连接 · 对方已开启画面" : connectedStatus() }
+            if let on = msg["on"] as? Bool { statusText = on ? CallStrings.peerVideoOn(lang) : connectedStatus() }
         case "control":
             // 协助者远程控制（Be My Eyes 式）：仅盲人端、且**正在分享画面**时才接受——
             // 不分享时不允许对方动我的手电/相机（隐私与最小权限）。
             guard role == .blind, videoSending else { return }
             if let torch = msg["torch"] as? Bool {
                 media.setTorch(torch)
-                A11y.announce(torch ? "协助者帮你打开了手电筒" : "协助者关闭了手电筒")
+                A11y.announce(CallStrings.announceRemoteTorch(on: torch, lang))
             }
             if let zoom = msg["zoom"] as? Double {
                 media.setZoom(zoom)
@@ -194,8 +195,8 @@ final class CallViewModel {
         guard !callEnded else { return }
         setVideoSending(false)
         connected = false
-        statusText = "对方已挂断"
-        A11y.announce("对方已挂断")
+        statusText = CallStrings.peerHungUp(lang)
+        A11y.announce(CallStrings.peerHungUp(lang))
         callEnded = true
     }
 
@@ -239,8 +240,7 @@ final class CallViewModel {
     }
 
     private func connectedStatus() -> String {
-        if let peerName, !peerName.isEmpty { return "已连接 · 与\(peerName)" }
-        return "已连接"
+        CallStrings.connectedWith(peerName, lang)
     }
 
     /// 通话中把对方加为常用亲友/协助者（发起请求，待对方确认）。
@@ -248,11 +248,12 @@ final class CallViewModel {
         guard let token = KeychainStore.read(), let peer = peerUserId else { return }
         do {
             try await APIClient().addFamilyLink(token: token, userId: peer)
-            reportStatus = "已发送添加请求，待对方确认"
+            reportStatus = CallStrings.addRequestSent(lang)
         } catch let APIError.server(msg) {
-            reportStatus = msg == "already_linked" ? "你们已是亲友/协助者" : (msg == "blocked" ? "无法添加：存在拉黑关系" : "添加失败")
+            reportStatus = msg == "already_linked" ? CallStrings.alreadyLinked(lang)
+                : (msg == "blocked" ? CallStrings.blockedRelation(lang) : CallStrings.addFailed(lang))
         } catch {
-            reportStatus = "添加失败，请重试"
+            reportStatus = CallStrings.addFailedRetry(lang)
         }
     }
 
@@ -261,23 +262,23 @@ final class CallViewModel {
         guard let token = KeychainStore.read(), let peer = peerUserId else { return }
         do {
             try await APIClient().blockUser(token: token, userId: peer)
-            reportStatus = "已拉黑对方，今后将互不匹配/呼叫"
+            reportStatus = CallStrings.blockedOk(lang)
         } catch {
-            reportStatus = "拉黑失败，请重试"
+            reportStatus = CallStrings.blockFailed(lang)
         }
     }
 
     /// 举报对方（信任与安全）。
     func report(reason: String) async {
         guard let token = KeychainStore.read(), let target = peerUserId else {
-            reportStatus = "暂时无法举报"
+            reportStatus = CallStrings.cantReport(lang)
             return
         }
         do {
             try await APIClient().submitReport(token: token, targetUserId: target, callId: callId, reason: reason)
-            reportStatus = "已举报，感谢反馈"
+            reportStatus = CallStrings.reported(lang)
         } catch {
-            reportStatus = "举报失败，请稍后再试"
+            reportStatus = CallStrings.reportFailed(lang)
         }
     }
 

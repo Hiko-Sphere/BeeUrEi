@@ -37,7 +37,10 @@ final class ProductMemoryStore {
     }
 
     private func persist() {
-        if let data = try? PropertyListEncoder().encode(items) { try? data.write(to: fileURL) }
+        // completeFileProtection：商品库反映用户的药品/饮食习惯，锁屏后文件不可读（仅前台读写）。
+        if let data = try? PropertyListEncoder().encode(items) {
+            try? data.write(to: fileURL, options: [.atomic, .completeFileProtection])
+        }
     }
 
     private func load() {

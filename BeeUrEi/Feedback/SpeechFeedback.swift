@@ -87,7 +87,8 @@ final class SpeechFeedback: NSObject, FeedbackSink {
 
     private func makeUtterance(_ text: String) -> AVSpeechUtterance {
         let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = AVSpeechSynthesisVoice(language: "zh-CN")
+        // 按播报语言选嗓音（zh-CN / en-US）：英文文案需英文嗓音才能正确发音（核心 Language.voiceCode）。
+        utterance.voice = AVSpeechSynthesisVoice(language: FeatureSettings().language.voiceCode)
         let t = FeatureSettings().speechRate
         utterance.rate = AVSpeechUtteranceMinimumSpeechRate
             + (AVSpeechUtteranceMaximumSpeechRate - AVSpeechUtteranceMinimumSpeechRate) * t

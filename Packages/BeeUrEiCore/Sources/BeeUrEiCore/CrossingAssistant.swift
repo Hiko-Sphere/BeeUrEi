@@ -10,7 +10,15 @@ public struct CrossingAssistant: Sendable {
         self.trafficLightLabel = trafficLightLabel
     }
 
-    public func hint(forLabels labels: [String]) -> String? {
-        labels.contains(trafficLightLabel) ? "前方有红绿灯，请确认信号后再过街" : nil
+    /// 按语言选红绿灯的本地化检测名（需与 LabelCatalog 同语言，才能命中 obstacles 里的名字）。
+    public init(language: Language) {
+        switch language {
+        case .zh: self.init(trafficLightLabel: "红绿灯")
+        case .en: self.init(trafficLightLabel: "traffic light")
+        }
+    }
+
+    public func hint(forLabels labels: [String], language: Language = .zh) -> String? {
+        labels.contains(trafficLightLabel) ? SpokenStrings.crossingHasLight(language) : nil
     }
 }

@@ -21,12 +21,12 @@ public struct TrafficLightClassifier: Sendable {
         return .unknown
     }
 
-    /// 过街提示语（安全偏保守：非绿一律"请等待"）。
-    public func hint(_ state: TrafficLightState) -> String? {
+    /// 过街提示语（安全偏保守：非绿一律“请等待”；语言可选，默认中文）。
+    public func hint(_ state: TrafficLightState, language: Language = .zh) -> String? {
         switch state {
-        case .green: return "前方绿灯，可通行，仍请谨慎观察"
-        case .red: return "前方红灯，请等待"
-        case .yellow: return "前方黄灯，请勿通行"
+        case .green: return SpokenStrings.trafficGreen(language)
+        case .red: return SpokenStrings.trafficRed(language)
+        case .yellow: return SpokenStrings.trafficYellow(language)
         case .unknown: return nil
         }
     }

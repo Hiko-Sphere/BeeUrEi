@@ -12,7 +12,15 @@ public struct LabelCatalog: Sendable {
         self.unknownName = unknownName
     }
 
-    /// 返回中文名；未知标签回退中文通用词（绝不返回英文）。大小写不敏感。
+    /// 按语言选映射表与未知回退词。中文用 COCO→中文，英文用 COCO→英文。
+    public init(language: Language) {
+        switch language {
+        case .zh: self.init(map: LabelCatalog.cocoToChinese, unknownName: "障碍物")
+        case .en: self.init(map: LabelCatalog.cocoToEnglish, unknownName: "obstacle")
+        }
+    }
+
+    /// 返回本地化名；未知标签回退通用词。大小写不敏感。
     public func localizedName(_ englishLabel: String) -> String {
         map[englishLabel.lowercased()] ?? unknownName
     }
@@ -41,5 +49,32 @@ public struct LabelCatalog: Sendable {
         "scissors": "剪刀", "teddy bear": "玩偶", "hair drier": "吹风机", "toothbrush": "牙刷",
         // 街景补充（非 COCO 但常用于自训）
         "door": "门", "stairs": "台阶", "pole": "路桩", "curb": "路沿",
+    ]
+
+    /// COCO-80 的“规范英文显示名”映射（几乎是恒等，仅统一少量别名，如 car→vehicle）+ 街景补充。
+    /// 英文圈用户听到的便是这些词；localizedName 未知回退 "obstacle"。
+    public static let cocoToEnglish: [String: String] = [
+        "person": "person", "bicycle": "bicycle", "car": "vehicle", "motorcycle": "motorcycle",
+        "airplane": "airplane", "bus": "bus", "train": "train", "truck": "truck", "boat": "boat",
+        "traffic light": "traffic light", "fire hydrant": "fire hydrant", "stop sign": "stop sign",
+        "parking meter": "parking meter", "bench": "bench",
+        "bird": "bird", "cat": "cat", "dog": "dog", "horse": "horse", "sheep": "sheep", "cow": "cow",
+        "elephant": "elephant", "bear": "bear", "zebra": "zebra", "giraffe": "giraffe",
+        "backpack": "backpack", "umbrella": "umbrella", "handbag": "handbag", "tie": "tie",
+        "suitcase": "suitcase", "frisbee": "frisbee", "skis": "skis", "snowboard": "snowboard",
+        "sports ball": "ball", "kite": "kite", "baseball bat": "baseball bat", "baseball glove": "baseball glove",
+        "skateboard": "skateboard", "surfboard": "surfboard", "tennis racket": "tennis racket",
+        "bottle": "bottle", "wine glass": "wine glass", "cup": "cup", "fork": "fork", "knife": "knife",
+        "spoon": "spoon", "bowl": "bowl", "banana": "banana", "apple": "apple", "sandwich": "sandwich",
+        "orange": "orange", "broccoli": "broccoli", "carrot": "carrot", "hot dog": "hot dog",
+        "pizza": "pizza", "donut": "donut", "cake": "cake",
+        "chair": "chair", "couch": "couch", "potted plant": "potted plant", "bed": "bed",
+        "dining table": "table", "toilet": "toilet", "tv": "TV", "laptop": "laptop",
+        "mouse": "mouse", "remote": "remote", "keyboard": "keyboard", "cell phone": "phone",
+        "microwave": "microwave", "oven": "oven", "toaster": "toaster", "sink": "sink",
+        "refrigerator": "refrigerator", "book": "book", "clock": "clock", "vase": "vase",
+        "scissors": "scissors", "teddy bear": "teddy bear", "hair drier": "hair drier", "toothbrush": "toothbrush",
+        // 街景补充
+        "door": "door", "stairs": "stairs", "pole": "pole", "curb": "curb",
     ]
 }

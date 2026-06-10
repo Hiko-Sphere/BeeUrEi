@@ -70,6 +70,19 @@ struct FeatureSettings {
         set { defaults.set(max(newValue, 0), forKey: keepAwakeKey) }
     }
 
+    /// 播报语言偏好（E5 多语言）："system"=跟随系统、"zh"=中文、"en"=English。默认跟随系统。
+    /// 决定盲人实时听到的引导语言（核心 SpokenStrings）与 TTS 选用的嗓音（zh-CN / en-US）。
+    private let languageKey = "feature.appLanguage"
+    var languagePreference: String {
+        get { defaults.string(forKey: languageKey) ?? "system" }
+        set { defaults.set(newValue, forKey: languageKey) }
+    }
+
+    /// 解析后的播报语言：偏好为 system 时跟随系统首选语言（核心 `Language.resolve`，已测）。
+    var language: Language {
+        Language.resolve(preference: languagePreference, systemCode: Locale.preferredLanguages.first)
+    }
+
     /// 恢复"播报/无障碍"相关设置为默认（不动避障/导航功能开关与开发者模式）。
     static func resetToDefaults(_ defaults: UserDefaults = .standard) {
         for key in ["feature.conciseAnnouncements", "feature.speechRate", "feature.verbosity",

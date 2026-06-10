@@ -39,15 +39,15 @@ public struct FramingGuide: Sendable {
         return .centered
     }
 
-    public func hint(_ g: FramingGuidance) -> String {
+    public func hint(_ g: FramingGuidance, language: Language = .zh) -> String {
         switch g {
-        case .searching: return "正在寻找目标，请慢慢移动手机"
-        case .moveLeft: return "向左移动"
-        case .moveRight: return "向右移动"
-        case .moveUp: return "向上移动"
-        case .moveDown: return "向下移动"
-        case .moveCloser: return "靠近一点"
-        case .centered: return "对准了，保持不动"
+        case .searching: return SpokenStrings.framingSearching(language)
+        case .moveLeft: return SpokenStrings.framingMoveLeft(language)
+        case .moveRight: return SpokenStrings.framingMoveRight(language)
+        case .moveUp: return SpokenStrings.framingMoveUp(language)
+        case .moveDown: return SpokenStrings.framingMoveDown(language)
+        case .moveCloser: return SpokenStrings.framingMoveCloser(language)
+        case .centered: return SpokenStrings.framingCentered(language)
         }
     }
 }

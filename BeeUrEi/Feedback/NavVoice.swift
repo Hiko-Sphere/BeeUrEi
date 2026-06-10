@@ -12,7 +12,8 @@ final class NavVoice {
 
     func speak(_ text: String, rate: Float) {
         let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = AVSpeechSynthesisVoice(language: "zh-CN")
+        // 按播报语言选嗓音（zh-CN / en-US）：英文文案用英文嗓音才自然（核心 Language.voiceCode）。
+        utterance.voice = AVSpeechSynthesisVoice(language: FeatureSettings().language.voiceCode)
         utterance.rate = AVSpeechUtteranceMinimumSpeechRate
             + (AVSpeechUtteranceMaximumSpeechRate - AVSpeechUtteranceMinimumSpeechRate) * rate
         synthesizer.speak(utterance)

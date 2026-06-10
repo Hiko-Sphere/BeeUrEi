@@ -42,18 +42,19 @@ public struct ClockDirection: Equatable, Sendable {
         self.hour = ((12 + offset - 1) % 12 + 12) % 12 + 1
     }
 
-    /// 中文播报用的方向短语，如「12 点钟方向」。
-    public var spokenPhrase: String { "\(hour) 点钟方向" }
+    /// 中文播报用的方向短语，如「12 点钟方向」（默认中文，向后兼容）。
+    public var spokenPhrase: String { spokenPhrase(in: .zh) }
 
-    /// 简短方向词（用于简短播报）：前方扇区用左前/正前/右前，两侧用左/右。
-    public var coarsePhrase: String {
-        switch hour {
-        case 12: return "正前方"
-        case 1, 2: return "右前方"
-        case 10, 11: return "左前方"
-        case 3, 4, 5: return "右侧"
-        case 7, 8, 9: return "左侧"
-        default: return "后方"
-        }
+    /// 方向短语（语言可选），如「12 点钟方向」/「12 o'clock」。
+    public func spokenPhrase(in language: Language) -> String {
+        SpokenStrings.clockDirection(hour: hour, language)
+    }
+
+    /// 简短方向词（默认中文，向后兼容）：前方扇区用左前/正前/右前，两侧用左/右。
+    public var coarsePhrase: String { coarsePhrase(in: .zh) }
+
+    /// 简短方向词（语言可选）。
+    public func coarsePhrase(in language: Language) -> String {
+        SpokenStrings.coarseDirection(hour: hour, language)
     }
 }

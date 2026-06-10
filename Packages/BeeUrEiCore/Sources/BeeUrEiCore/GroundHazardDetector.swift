@@ -54,17 +54,12 @@ public struct GroundHazardDetector: Sendable {
         return .none
     }
 
-    /// 安全播报语（偏保守、简短）。
-    public func hint(_ hazard: GroundHazard) -> String? {
+    /// 安全播报语（偏保守、简短；语言可选，默认中文）。
+    public func hint(_ hazard: GroundHazard, language: Language = .zh) -> String? {
         switch hazard {
-        case .dropOff(let d): return "注意，前方约\(meters(d))有落差或下台阶"
-        case .stepUp(let d):  return "注意，前方约\(meters(d))有台阶"
+        case .dropOff(let d): return SpokenStrings.groundDropOff(metersStr: SpokenStrings.groundMeters(d, language), language)
+        case .stepUp(let d):  return SpokenStrings.groundStepUp(metersStr: SpokenStrings.groundMeters(d, language), language)
         case .none:           return nil
         }
-    }
-
-    private func meters(_ d: Double) -> String {
-        if d < 0.5 { return "半米" }
-        return "\(Int(d.rounded()))米"
     }
 }

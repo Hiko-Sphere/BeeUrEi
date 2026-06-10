@@ -5,9 +5,8 @@ import Foundation
 public struct SceneSummarizer: Sendable {
     public init() {}
 
-    public func summary(objects: [(label: String, normalizedX: Double)]) -> String {
-        guard !objects.isEmpty else { return "前方没有识别到明显物体" }
-        let zoneNames = ["左边", "中间", "右边"]
+    public func summary(objects: [(label: String, normalizedX: Double)], language: Language = .zh) -> String {
+        guard !objects.isEmpty else { return SpokenStrings.sceneEmpty(language) }
         func zone(_ x: Double) -> Int { x < 0.4 ? 0 : (x > 0.6 ? 2 : 1) }
 
         var parts: [String] = []
@@ -21,9 +20,10 @@ public struct SceneSummarizer: Sendable {
                 if counts[l] == nil { order.append(l) }
                 counts[l, default: 0] += 1
             }
-            let desc = order.map { l in counts[l]! > 1 ? "\(counts[l]!)个\(l)" : l }.joined(separator: "、")
-            parts.append("\(zoneNames[z])有\(desc)")
+            let desc = order.map { l in SpokenStrings.sceneCount(counts[l]!, label: l, language) }
+                .joined(separator: SpokenStrings.sceneItemSeparator(language))
+            parts.append(SpokenStrings.sceneZoneHas(zone: SpokenStrings.sceneZone(z, language), desc: desc, language))
         }
-        return "前方：" + parts.joined(separator: "，")
+        return SpokenStrings.scenePrefix(language) + parts.joined(separator: SpokenStrings.scenePartSeparator(language))
     }
 }

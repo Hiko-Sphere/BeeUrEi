@@ -29,7 +29,8 @@ public struct RouteProgress: Sendable {
 
     public func decide(distanceToManeuverMeters: Double,
                        instruction: String,
-                       level: InstructionLevel) -> ManeuverAnnouncement {
+                       level: InstructionLevel,
+                       language: Language = .zh) -> ManeuverAnnouncement {
         // 精度太差：不下任何方向指令。
         guard level != .none else { return .silent }
         // 已越过转向点（GPS 抖动/回放延迟/卫星回跳导致负距离）：绝不下达高确定性「现在……」。
@@ -40,14 +41,14 @@ public struct RouteProgress: Sendable {
         if distanceToManeuverMeters <= imminentMeters {
             if level == .precise {
                 // 仅高精度允许「现在……」。
-                return ManeuverAnnouncement(shouldAnnounce: true, text: "现在\(instruction)", isHighCertainty: true)
+                return ManeuverAnnouncement(shouldAnnounce: true, text: SpokenStrings.maneuverNow(instruction, language), isHighCertainty: true)
             } else {
                 // 信标级精度：给提示但不下高确定性「现在」。
-                return ManeuverAnnouncement(shouldAnnounce: true, text: "前方即将\(instruction)", isHighCertainty: false)
+                return ManeuverAnnouncement(shouldAnnounce: true, text: SpokenStrings.maneuverSoon(instruction, language), isHighCertainty: false)
             }
         }
 
         let meters = Int(distanceToManeuverMeters.rounded())
-        return ManeuverAnnouncement(shouldAnnounce: true, text: "前方约 \(meters) 米后\(instruction)", isHighCertainty: false)
+        return ManeuverAnnouncement(shouldAnnounce: true, text: SpokenStrings.maneuverInMeters(meters, instruction: instruction, language), isHighCertainty: false)
     }
 }

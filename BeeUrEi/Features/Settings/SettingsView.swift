@@ -18,6 +18,7 @@ struct SettingsView: View {
     @State private var verbosity: Int
     @State private var clearConfirm: Bool
     @State private var keepAwakeSeconds: Int
+    @State private var languagePref: String
     @State private var showTutorial = false
     @State private var previewSpeech = SpeechFeedback()
     @State private var previewHaptic = HapticFeedback()
@@ -38,6 +39,7 @@ struct SettingsView: View {
         _verbosity = State(initialValue: features.verbosity)
         _clearConfirm = State(initialValue: features.clearPathConfirm)
         _keepAwakeSeconds = State(initialValue: features.keepAwakeSeconds)
+        _languagePref = State(initialValue: features.languagePreference)
     }
 
     var body: some View {
@@ -52,6 +54,22 @@ struct SettingsView: View {
                     Text("语音提醒")
                 } footer: {
                     Text("关闭后，每次开始避障不再播报那句简短提醒；首次启动的完整安全须知仍会保留。")
+                }
+
+                Section {
+                    // 双语标签：英文用户也能變出这个选项（播报语言）。
+                    Picker("播报语言 / Speech language", selection: $languagePref) {
+                        Text("跟随系统 / System").tag("system")
+                        Text("中文").tag("zh")
+                        Text("English").tag("en")
+                    }
+                    .onChange(of: languagePref) { _, v in
+                        var f = FeatureSettings(); f.languagePreference = v
+                    }
+                } header: {
+                    Text("语言 / Language")
+                } footer: {
+                    Text("决定避障实时语音引导的语言与嗓音（中文/English）。Sets the language and voice for real-time obstacle guidance.")
                 }
 
                 Section {
@@ -210,7 +228,7 @@ struct SettingsView: View {
 
     private func sampleAnnouncement() -> String {
         let o = Obstacle(label: "行人", clock: ClockDirection(angleDegrees: 30), distanceMeters: 1.5, confidence: 1)
-        return SpeechComposer().announce(o, concise: FeatureSettings().conciseAnnouncements)
+        return SpeechComposer().announce(o, concise: FeatureSettings().conciseAnnouncements, language: FeatureSettings().language)
     }
 }
 

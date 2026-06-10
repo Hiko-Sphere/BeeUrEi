@@ -22,5 +22,10 @@ public struct DisclaimerPolicy: Sendable {
         return .briefReminder
     }
 
-    public var briefReminderText: String { "避障已开启，仅作辅助，请配合盲杖" }
+    public var briefReminderText: String { briefReminderText(in: .zh) }
+
+    /// 简短提醒语（语言可选，默认中文）。
+    public func briefReminderText(in language: Language) -> String {
+        SpokenStrings.disclaimerBrief(language)
+    }
 }

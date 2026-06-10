@@ -53,11 +53,13 @@ final class HomeViewModel {
         return yolo.isAvailable ? yolo : StubObstacleDetector()
     }()
     @ObservationIgnored private let fusion = ObstacleFusion(horizontalFOVDegrees: 68)
-    @ObservationIgnored private let labels = LabelCatalog()
-    @ObservationIgnored private let crossing = CrossingAssistant()
+    // 语言相关目录（按播报语言构建；运行时改语言由 refreshLanguage() 重建，E5）。
+    @ObservationIgnored private var lang: Language = FeatureSettings().language
+    @ObservationIgnored private var labels = LabelCatalog(language: FeatureSettings().language)
+    @ObservationIgnored private var crossing = CrossingAssistant(language: FeatureSettings().language)
     @ObservationIgnored private let tracker = ObstacleTracker()
     @ObservationIgnored private let risk = RiskScore()
-    @ObservationIgnored private let hazards = HazardCatalog()
+    @ObservationIgnored private var hazards = HazardCatalog(language: FeatureSettings().language)
     @ObservationIgnored private let groundHazard = GroundHazardDetector()
     @ObservationIgnored private let proximityMapper = ProximityCueMapper()
     @ObservationIgnored private var paused = false // 暂停中(通话/取景)：丢弃在途帧，杜绝暂停后仍冒出"前方…"
@@ -114,13 +116,23 @@ final class HomeViewModel {
         maybeSpeakBriefReminder()
     }
 
+    /// 运行时切换播报语言时重建语言相关目录（标签/高危/过街），使英文检测名、高危加成、过街匹配同步切换。
+    private func refreshLanguage() {
+        let current = FeatureSettings().language
+        guard current != lang else { return }
+        lang = current
+        labels = LabelCatalog(language: current)
+        crossing = CrossingAssistant(language: current)
+        hazards = HazardCatalog(language: current)
+    }
+
     /// 每次开始避障播报一句简短免责提醒（可在设置关闭语音；见 PLAN §1.3）。
     private func maybeSpeakBriefReminder() {
         guard consent.briefReminderSpeechEnabled,
               disclaimer.requirement(hasEverAccepted: consent.hasEverAccepted,
                                      daysSinceLastAcceptance: consent.daysSinceLastAcceptance) == .briefReminder
         else { return }
-        coordinator.submit(FeedbackEvent(priority: .status, speech: disclaimer.briefReminderText))
+        coordinator.submit(FeedbackEvent(priority: .status, speech: disclaimer.briefReminderText(in: FeatureSettings().language)))
     }
 
     func onDisappear() {
@@ -197,6 +209,7 @@ final class HomeViewModel {
         // 端到端延迟打点（§5.6）：frame.timestamp 与 CACurrentMediaTime 同钟（开机秒），
         // 决策路径（含检测/深度/播报提交）任一出口都计入。
         defer { recordLatency(since: frame.timestamp) }
+        refreshLanguage()   // 运行时改播报语言时重建语言相关目录（E5）
         updateAdvisory()
         thermalText = Self.thermalLabel(ProcessInfo.processInfo.thermalState)
         resolutionText = "\(CVPixelBufferGetWidth(frame.pixelBuffer))×\(CVPixelBufferGetHeight(frame.pixelBuffer))"
@@ -204,7 +217,7 @@ final class HomeViewModel {
 
         // 导航/避障分别开关（Q9）：避障关闭时不做决策与播报。
         guard FeatureSettings().avoidanceEnabled else {
-            proximityText = "避障已关闭"
+            proximityText = SpokenStrings.avoidanceOff(lang)
             degradeStop()
             return
         }
@@ -212,7 +225,7 @@ final class HomeViewModel {
         // 设备过热：安全停机并提示（见 PLAN §5.4）。
         let thermalPlan = thermalPolicy.plan(for: Self.mapThermal(ProcessInfo.processInfo.thermalState))
         if thermalPlan.stopCamera {
-            proximityText = thermalPlan.advisory ?? "设备过热，避障暂停"
+            proximityText = thermalPlan.advisory ?? SpokenStrings.deviceOverheated(lang)
             degradeStop()
             return
         }
@@ -228,11 +241,11 @@ final class HomeViewModel {
            lightMeter.level(brightness: LightMeter.luminance(r: rgb.r, g: rgb.g, b: rgb.b)) == .dark,
            throttle.shouldAnnounce(key: "light", now: frame.timestamp, minGap: 60) {
             coordinator.submit(FeedbackEvent(priority: .status,
-                                             speech: "光线较暗，物体识别能力下降，仅保留距离警告，请小心慢行"))
+                                             speech: SpokenStrings.lightLowWarning(lang)))
         }
 
         guard currentMode != .suspended, let depth = frame.depth else {
-            proximityText = "测距暂停"
+            proximityText = SpokenStrings.rangingPaused(lang)
             degradeStop()
             return
         }
@@ -242,7 +255,7 @@ final class HomeViewModel {
         let groundProfile = DepthSampling.groundProfile(depth: depth.depth, confidence: depth.confidence)
         let groundHazardResult = groundHazard.detect(groundProfile: groundProfile)
         var groundCritical = false // 本帧是否已播脚下危险(critical)，供后面避免被正前方极近播报截断/重复（见审查 #5）
-        if let groundHint = groundHazard.hint(groundHazardResult),
+        if let groundHint = groundHazard.hint(groundHazardResult, language: lang),
            throttle.shouldAnnounce(key: "groundhazard", now: frame.timestamp, minGap: 2.5) {
             // 不设 isSpeaking：地面危险有自己的 2.5s 去抖且经 arbiter 仲裁；若在此置 true，同帧后面的危险
             // 障碍 announcePolicy.decide 会误以为"正在播报同一障碍目标"而把快速逼近的车/人静音漏播（见审查 #1/#8）。
@@ -299,7 +312,7 @@ final class HomeViewModel {
         }
 
         // 过街提示（Q7）：检测到红绿灯时给一句较低优先级的提醒（去抖 5s）。
-        if let hint = crossing.hint(forLabels: obstacles.map(\.label)),
+        if let hint = crossing.hint(forLabels: obstacles.map(\.label), language: lang),
            throttle.shouldAnnounce(key: "crossing", now: frame.timestamp, minGap: 5) {
             coordinator.submit(FeedbackEvent(priority: .turn, speech: hint))
         }
@@ -330,13 +343,13 @@ final class HomeViewModel {
 
         // 1) 正前方中央极近(深度 danger 区) = 最即时的物理危险 → 最高优先级安全门，即使有侧前方跟踪目标也先播（见审查 #9）。
         if zone == .danger {
-            proximityText = suppressMeters ? "正前方很近，请停下"
-                                           : String(format: "正前方约 %.1f 米，请注意", centralResult.nearest ?? 0)
+            proximityText = suppressMeters ? SpokenStrings.proximityDanger(lang)
+                                           : SpokenStrings.proximityDangerMeters(centralResult.nearest ?? 0, lang)
             // 正前方极近 = 最即时碰撞 → .critical+打断（见审查 #9/#2）。
             // 但若本帧已播脚下危险(groundCritical)，不再叠加极近播报：避免 .critical 互相 stopSpeaking 截断、
             // 且"落差/台阶"已隐含"请停下"，语义重复（见审查 #5）。
             if !groundCritical,
-               let phrase = speechComposer.announceProximity(.danger, nearestMeters: suppressMeters ? nil : centralResult.nearest),
+               let phrase = speechComposer.announceProximity(.danger, nearestMeters: suppressMeters ? nil : centralResult.nearest, language: lang),
                throttle.shouldAnnounce(key: "proximity:danger", now: frame.timestamp, minGap: 1.5) {
                 coordinator.submit(FeedbackEvent(priority: .critical, speech: phrase, interrupt: true))
             }
@@ -350,7 +363,7 @@ final class HomeViewModel {
                                     clock: ClockDirection(angleDegrees: danger.bearingDegrees),
                                     distanceMeters: suppressMeters ? nil : danger.distanceMeters,
                                     confidence: 1)
-            let phrase = speechComposer.announce(smoothed, concise: FeatureSettings().conciseAnnouncements)
+            let phrase = speechComposer.announce(smoothed, concise: FeatureSettings().conciseAnnouncements, language: lang)
             proximityText = phrase
             let urgency = danger.timeToCollision.map { 1.0 / max($0, 0.3) }
                 ?? danger.distanceMeters.map { 1.0 / max($0, 0.3) } ?? 1.0

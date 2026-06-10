@@ -16,7 +16,11 @@ struct BlocklistView: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
             if blocks.isEmpty {
-                Section { Text("黑名单为空").foregroundStyle(.secondary) }
+                Section {
+                    BeeEmptyState(systemImage: "hand.raised.slash.fill", title: "黑名单为空",
+                                  message: "拉黑的用户会出现在这里，可随时解除。")
+                }
+                .listRowBackground(Color.clear)
             } else {
                 Section("已拉黑（\(blocks.count)）") {
                     ForEach(blocks) { b in

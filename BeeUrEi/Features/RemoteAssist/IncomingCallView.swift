@@ -10,6 +10,8 @@ struct IncomingCallView: View {
     @State private var accepted = false
     @State private var busy = false
     @State private var pollTask: Task<Void, Never>?
+    @State private var pulsing = false // 头像呼吸光环（来电中）
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         if accepted {
@@ -26,21 +28,33 @@ struct IncomingCallView: View {
 
     private var ringingUI: some View {
         ZStack {
-            Color.beeInk.ignoresSafeArea()
+            // 墨蓝纵向渐变背景（沉稳精致，类系统来电）。
+            LinearGradient(colors: [Color.beeInk, Color.beeInk.opacity(0.82), Color(red: 0.05, green: 0.06, blue: 0.10)],
+                           startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
             VStack(spacing: BeeSpacing.lg) {
                 Spacer()
+                // 来电中头像带蜂蜜色呼吸光环；开了「减弱动态效果」则静态光环。
                 AvatarView(dataURL: ring.callerAvatar, name: ring.callerName, size: 120)
+                    .background(
+                        Circle().stroke(Color.beeHoney.opacity(pulsing ? 0.0 : 0.55), lineWidth: 3)
+                            .scaleEffect(pulsing ? 1.45 : 1.05)
+                    )
+                    .onAppear {
+                        guard !reduceMotion else { return }
+                        withAnimation(.easeOut(duration: 1.6).repeatForever(autoreverses: false)) { pulsing = true }
+                    }
                 Text(ring.callerName).font(.largeTitle.bold()).foregroundStyle(.white)
-                Text("邀请你视频通话…").foregroundStyle(.white.opacity(0.85))
+                Text("BeeUrEi 视频通话…").font(.headline).foregroundStyle(.white.opacity(0.75))
                 Spacer()
                 HStack(spacing: 72) {
-                    VStack(spacing: 8) {
+                    VStack(spacing: 10) {
                         circle("phone.down.fill", .beeDanger) { decline() }
-                        Text("拒绝").foregroundStyle(.white)
+                        Text("拒绝").font(.subheadline).foregroundStyle(.white.opacity(0.9))
                     }
-                    VStack(spacing: 8) {
+                    VStack(spacing: 10) {
                         circle("phone.fill", .beeSuccess) { accept() }
-                        Text("接听").foregroundStyle(.white)
+                        Text("接听").font(.subheadline).foregroundStyle(.white.opacity(0.9))
                     }
                 }
                 .padding(.bottom, 64)
@@ -55,9 +69,13 @@ struct IncomingCallView: View {
 
     private func circle(_ icon: String, _ tint: Color, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: icon).font(.system(size: 30)).foregroundStyle(.white)
-                .frame(width: 76, height: 76).background(tint, in: Circle())
+            Image(systemName: icon).font(.system(size: 30, weight: .semibold)).foregroundStyle(.white)
+                .frame(width: 78, height: 78)
+                .background(tint, in: Circle())
+                .overlay(Circle().strokeBorder(.white.opacity(0.18), lineWidth: 0.5))
+                .shadow(color: tint.opacity(0.45), radius: 12, y: 6)
         }
+        .buttonStyle(BeePressStyle())
         .disabled(busy)
         .accessibilityLabel(icon == "phone.fill" ? "接听" : "拒绝")
     }

@@ -91,21 +91,31 @@ struct CallView: View {
 
     private var helperControlsOverlay: some View {
         VStack {
+            // 顶部渐隐遮罩（类 FaceTime）：信息浮于画面之上而不压一块生硬黑条。
             VStack(spacing: 6) {
                 NetworkStatusBar(callQuality: model.callQuality)
-                Text(model.statusText).font(.subheadline.weight(.medium))
-                    .foregroundStyle(model.declined ? Color.beeDanger : .white)
-                    .accessibilityAddTraits(.updatesFrequently)
+                HStack(spacing: 8) {
+                    if let name = model.peerName, !name.isEmpty, model.remoteVideoFrames {
+                        AvatarView(dataURL: model.peerAvatar, name: name, size: 24)
+                        Text(name).font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                    }
+                    Text(model.statusText).font(.subheadline.weight(.medium))
+                        .foregroundStyle(model.declined ? Color.beeDanger : .white.opacity(0.9))
+                        .accessibilityAddTraits(.updatesFrequently)
+                }
             }
-            .padding().frame(maxWidth: .infinity).background(.black.opacity(0.35))
+            .padding(.horizontal).padding(.top, 8).padding(.bottom, 28)
+            .frame(maxWidth: .infinity)
+            .background(LinearGradient(colors: [.black.opacity(0.62), .clear], startPoint: .top, endPoint: .bottom))
 
             Spacer()
 
+            // 底部渐隐遮罩 + 控件。
             VStack(spacing: BeeSpacing.md) {
                 HStack(spacing: 48) {
                     circleButton(model.muted ? "mic.slash.fill" : "mic.fill",
                                  label: model.muted ? "取消静音" : "静音",
-                                 tint: model.muted ? Color.beeWarn : Color.white.opacity(0.25)) {
+                                 tint: model.muted ? Color.beeWarn : Color.white.opacity(0.22)) {
                         model.setMuted(!model.muted); scheduleAutoHide()
                     }
                     circleButton("phone.down.fill", label: "挂断", tint: Color.beeDanger) {
@@ -118,19 +128,24 @@ struct CallView: View {
                         Button("拉黑", role: .destructive) { Task { await model.blockPeer() }; scheduleAutoHide() }
                         Button("举报") { showReport = true }
                     }
-                    .font(.footnote).foregroundStyle(.white)
+                    .font(.footnote).foregroundStyle(.white.opacity(0.9))
                 }
             }
-            .padding(.bottom, 40).padding(.horizontal)
-            .frame(maxWidth: .infinity).background(.black.opacity(0.35))
+            .padding(.top, 36).padding(.bottom, 40).padding(.horizontal)
+            .frame(maxWidth: .infinity)
+            .background(LinearGradient(colors: [.clear, .black.opacity(0.66)], startPoint: .top, endPoint: .bottom))
         }
+        .ignoresSafeArea(edges: [.top, .bottom])
     }
 
     private func circleButton(_ icon: String, label: String, tint: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon).font(.title2).foregroundStyle(.white)
-                .frame(width: 64, height: 64).background(tint, in: Circle())
+                .frame(width: 64, height: 64)
+                .background(tint, in: Circle())
+                .overlay(Circle().strokeBorder(.white.opacity(0.18), lineWidth: 0.5))
         }
+        .buttonStyle(BeePressStyle())
         .accessibilityLabel(label)
     }
 

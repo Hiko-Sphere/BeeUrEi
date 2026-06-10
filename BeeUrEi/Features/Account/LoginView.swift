@@ -34,23 +34,36 @@ struct LoginView: View {
     var body: some View {
         Form {
             if session.isLoggedIn {
-                Section("头像") {
-                    HStack(spacing: BeeSpacing.md) {
-                        AvatarView(dataURL: detail?.avatar, name: session.user?.displayName ?? "", size: 56)
-                        PhotosPicker(selection: $photoItem, matching: .images) {
-                            Text(detail?.avatar == nil ? "上传头像" : "更换头像")
+                // 个人资料头部：大头像 + 昵称 + @用户名 · 角色，一眼识别当前账号。
+                Section {
+                    VStack(spacing: BeeSpacing.sm) {
+                        AvatarView(dataURL: detail?.avatar, name: session.user?.displayName ?? "", size: 84)
+                            .overlay(Circle().strokeBorder(Color.beeHoney.opacity(0.5), lineWidth: 2))
+                        Text(session.user?.displayName ?? "已登录").font(.title3.bold())
+                        Text("@\(session.user?.username ?? "—") · \(roleDisplayName(session.user?.role ?? ""))")
+                            .font(.footnote).foregroundStyle(.secondary)
+                        HStack(spacing: BeeSpacing.md) {
+                            PhotosPicker(selection: $photoItem, matching: .images) {
+                                Label(detail?.avatar == nil ? "上传头像" : "更换头像", systemImage: "camera.fill")
+                                    .font(.subheadline)
+                            }
+                            .buttonStyle(.bordered)
+                            Button {
+                                nickInput = session.user?.displayName ?? ""; showNickname = true
+                            } label: {
+                                Label("改昵称", systemImage: "pencil").font(.subheadline)
+                            }
+                            .buttonStyle(.bordered)
                         }
+                        if let avatarMsg { Text(avatarMsg).font(.footnote).foregroundStyle(.secondary) }
                     }
-                    if let avatarMsg { Text(avatarMsg).font(.footnote).foregroundStyle(.secondary) }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, BeeSpacing.sm)
+                    .accessibilityElement(children: .contain)
                 }
-                Section("当前账号") {
-                    LabeledContent("用户名", value: session.user?.username ?? "—") // 唯一登录标识，不可改
-                    HStack {
-                        LabeledContent("昵称", value: session.user?.displayName ?? "—")
-                        Spacer()
-                        Button("修改") { nickInput = session.user?.displayName ?? ""; showNickname = true }
-                    }
-                    Text("角色：\(roleDisplayName(session.user?.role ?? ""))").foregroundStyle(.secondary)
+                .listRowBackground(Color.clear)
+
+                Section("账号") {
                     NavigationLink("通话记录") { CallHistoryView() }
                     NavigationLink("黑名单") { BlocklistView() }
                     Button("修改密码") { showChangePassword = true }

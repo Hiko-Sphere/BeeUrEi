@@ -13,7 +13,12 @@ struct HomeView: View {
     @State private var locationDescriber = LocationDescriber()
     @State private var idleTask: Task<Void, Never>? // 屏幕常亮计时（到时允许系统息屏）
     @State private var incoming = IncomingCallCenter.shared // 监听来电（接听别人的呼叫经此在根层呈现）
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency // 减弱透明度→实底
+    @Environment(\.colorSchemeContrast) private var schemeContrast               // 增强对比→实底+更高对比
     private let consentStore = ConsentStore()
+
+    /// 系统开了「降低透明度」或「增强对比度」时，相机画面上的浮层一律用实底（材质会透出画面致对比不足）。
+    private var wantsSolidSurfaces: Bool { reduceTransparency || schemeContrast == .increased }
 
     var body: some View {
         ZStack {
@@ -124,6 +129,7 @@ struct HomeView: View {
     }
 
     /// 方块磁贴按钮：深底白字 + 蜂蜜黄图标，保证在任意相机画面上都清晰可读；超大点按区。
+    /// 「降低透明度/增强对比」时实底化（材质/半透明会透出相机画面致对比不足）。
     private func tile(_ title: String, systemImage: String, hint: String? = nil, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: BeeSpacing.sm) {
@@ -131,9 +137,13 @@ struct HomeView: View {
                 Text(title).font(.headline).foregroundStyle(.white)
             }
             .frame(maxWidth: .infinity, minHeight: 92)
-            .background(Color.beeInk.opacity(0.88), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(Color.beeInk.opacity(wantsSolidSurfaces ? 1 : 0.88),
+                        in: RoundedRectangle(cornerRadius: BeeRadius.card, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: BeeRadius.card, style: .continuous)
+                .strokeBorder(.white.opacity(0.10), lineWidth: 0.5))
+            .contentShape(RoundedRectangle(cornerRadius: BeeRadius.card, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(BeePressStyle())
         .accessibilityLabel(title)
         .modifier(OptionalA11yHint(hint: hint))
     }
@@ -143,8 +153,10 @@ struct HomeView: View {
             Image(systemName: "gearshape.fill")
                 .font(.title2)
                 .padding(12)
-                .background(.ultraThinMaterial, in: Circle())
+                .background(wantsSolidSurfaces ? AnyShapeStyle(Color.beeInk) : AnyShapeStyle(.ultraThinMaterial), in: Circle())
+                .foregroundStyle(wantsSolidSurfaces ? .white : Color.primary)
         }
+        .buttonStyle(BeePressStyle())
         .accessibilityLabel("设置")
     }
 
@@ -178,20 +190,23 @@ struct HomeView: View {
         return VStack(alignment: .leading, spacing: 6) {
             Text(model.proximityText)
                 .font(highContrast ? .system(.title, weight: .bold) : .system(.title2, weight: .bold))
-                .foregroundStyle(highContrast ? Color.beeHoney : .primary)
+                .foregroundStyle(highContrast ? Color.beeHoney : (wantsSolidSurfaces ? .white : .primary))
             if !model.advisoryText.isEmpty {
                 Text(model.advisoryText)
                     .font(highContrast ? .system(.title3, weight: .semibold) : .subheadline)
-                    .foregroundStyle(highContrast ? .white : Color.beeWarn)
+                    .foregroundStyle(highContrast || wantsSolidSurfaces ? .white : Color.beeWarn)
             }
         }
         .padding(highContrast ? 20 : 16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(highContrast ? AnyShapeStyle(Color.black.opacity(0.92)) : AnyShapeStyle(.ultraThinMaterial),
+        // 高对比模式恒为实底；普通模式下若系统开了降低透明度/增强对比也实底化（材质透出相机画面致对比不足）。
+        .background(highContrast || wantsSolidSurfaces
+                        ? AnyShapeStyle(Color.black.opacity(highContrast ? 0.92 : 0.85))
+                        : AnyShapeStyle(.regularMaterial),
                     in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(model.advisoryText.isEmpty ? model.proximityText : "\(model.proximityText)。\(model.advisoryText)")
-        .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits([.isButton, .updatesFrequently])
         .accessibilityHint("点按重复播报")
         .contentShape(Rectangle())
         .onTapGesture { model.repeatLastAnnouncement() }

@@ -228,6 +228,7 @@ final class FramingAssistViewModel {
 struct FramingAssistView: View {
     @State private var model = FramingAssistViewModel()
     @State private var torchOn = false
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     let onClose: () -> Void
 
     var body: some View {
@@ -256,56 +257,70 @@ struct FramingAssistView: View {
                         .padding()
                 }
                 Spacer()
-                Button { model.describeScene() } label: {
-                    Label("前方有什么", systemImage: "eye.fill")
-                        .frame(maxWidth: .infinity)
+                // 主操作：与主页磁贴同语言（蜂蜜大按钮），相机画面上始终清晰。
+                BeeBigButton("前方有什么", systemImage: "eye.fill",
+                             subtitle: "汇总播报识别到的物体", tint: .beeHoney) {
+                    model.describeScene()
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
                 .padding(.horizontal)
                 .accessibilityHint("汇总播报前方识别到的物体")
-                HStack {
-                    Button { model.readText() } label: {
-                        Label("朗读文字", systemImage: "text.viewfinder")
-                    }
-                    .accessibilityHint("识别并朗读相机里看到的文字")
-                    Button { model.readColor() } label: {
-                        Label("识别颜色", systemImage: "paintpalette.fill")
-                    }
-                    .accessibilityHint("说出画面中央的颜色")
-                    Button { model.readBarcode() } label: {
-                        Label("扫码", systemImage: "qrcode.viewfinder")
-                    }
-                    .accessibilityHint("识别并朗读二维码或条码的内容")
+
+                HStack(spacing: BeeSpacing.sm) {
+                    overlayAction("朗读文字", systemImage: "text.viewfinder",
+                                  hint: "识别并朗读相机里看到的文字") { model.readText() }
+                    overlayAction("识别颜色", systemImage: "paintpalette.fill",
+                                  hint: "说出画面中央的颜色") { model.readColor() }
+                    overlayAction("扫码", systemImage: "qrcode.viewfinder",
+                                  hint: "识别并朗读二维码或条码的内容") { model.readBarcode() }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
+                .padding(.horizontal)
                 .padding(.bottom, 8)
+
                 VStack(spacing: 8) {
                     // 仅把两段纯文本合并朗读；可交互的「复制内容」按钮放在合并元素之外，
                     // 否则 .combine 会吞掉按钮的可聚焦性与激活动作、且不念出"复制内容"（见无障碍审计）。
                     VStack(spacing: 8) {
-                        Text(model.guidanceText).font(.title).bold()
+                        Text(model.guidanceText).font(.title).bold().foregroundStyle(.white)
                         if !model.resultText.isEmpty {
-                            Text(model.resultText).font(.title2).foregroundStyle(Color.beeSuccess)
+                            Text(model.resultText).font(.title2).foregroundStyle(Color.beeHoney)
                         }
                     }
                     .frame(maxWidth: .infinity)
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel(model.resultText.isEmpty ? model.guidanceText : model.resultText)
+                    .accessibilityAddTraits(.updatesFrequently)
 
                     if let copyable = model.copyableResult {
                         Button("复制内容") { UIPasteboard.general.string = copyable }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.bordered).tint(.white)
                             .accessibilityHint("把识别到的文字或码内容复制到剪贴板")
                     }
                 }
                 .padding()
                 .frame(maxWidth: .infinity)
-                .background(.ultraThinMaterial)
+                // 实底深色结果条：相机画面上白字/蜂蜜字恒高对比（材质会透出画面）。
+                .background(Color.beeInk.opacity(reduceTransparency ? 1 : 0.88))
             }
         }
         .task { model.start() }
         .onDisappear { model.stop(); Torch.set(false) }
+    }
+
+    /// 相机浮层的次级操作（深底白字+蜂蜜图标，与主页磁贴一致）。
+    private func overlayAction(_ title: String, systemImage: String, hint: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: systemImage).font(.title3.weight(.semibold)).foregroundStyle(Color.beeHoney)
+                Text(title).font(.footnote.weight(.semibold)).foregroundStyle(.white)
+            }
+            .frame(maxWidth: .infinity, minHeight: 64)
+            .background(Color.beeInk.opacity(reduceTransparency ? 1 : 0.88),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(.white.opacity(0.10), lineWidth: 0.5))
+        }
+        .buttonStyle(BeePressStyle())
+        .accessibilityLabel(title)
+        .accessibilityHint(hint)
     }
 }

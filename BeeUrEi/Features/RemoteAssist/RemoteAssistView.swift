@@ -78,7 +78,7 @@ struct RemoteAssistView: View {
                     }
 
                     if !incomingRequests.isEmpty {
-                        Text("待确认的请求").font(.headline).padding(.top, BeeSpacing.sm)
+                        BeeSectionHeader("待确认的请求", systemImage: "person.crop.circle.badge.questionmark").padding(.top, BeeSpacing.sm)
                         ForEach(incomingRequests) { r in
                             BeeCard {
                                 VStack(alignment: .leading, spacing: BeeSpacing.sm) {
@@ -97,7 +97,7 @@ struct RemoteAssistView: View {
                         }
                     }
 
-                    Text("我的亲友 / 协助者").font(.headline).padding(.top, BeeSpacing.sm)
+                    BeeSectionHeader("我的亲友 / 协助者", systemImage: "person.2.fill").padding(.top, BeeSpacing.sm)
                     contactsSection
                 }
                 .padding()
@@ -171,11 +171,15 @@ struct RemoteAssistView: View {
                                     }
                                 }
                                 Spacer()
-                                Image(systemName: "video.fill").foregroundStyle(Color.beeSuccess)
+                                Image(systemName: "video.fill")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 36, height: 36)
+                                    .background(Color.beeSuccess, in: Circle())
                             }
                         }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(BeePressStyle())
                     .disabled(calling)
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("呼叫 \(link.memberName)\(link.isEmergency ? "，紧急联系人" : "")")

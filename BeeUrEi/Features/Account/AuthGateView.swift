@@ -18,6 +18,24 @@ struct AuthGateView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // 品牌头部：Logo + 一句话定位。
+                Section {
+                    VStack(spacing: BeeSpacing.sm) {
+                        Image("LaunchLogo")
+                            .resizable().scaledToFit()
+                            .frame(width: 72, height: 72)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .accessibilityHidden(true)
+                        Text("BeeUrEi").font(.title2.bold())
+                        Text("为视障人士而生的避障与远程协助")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, BeeSpacing.sm)
+                    .accessibilityElement(children: .combine)
+                }
+                .listRowBackground(Color.clear)
+
                 Section {
                     Text("登录后选择你的角色再进入。求助者也需登录以使用呼叫帮助（实时避障可离线使用）。")
                         .font(.footnote).foregroundStyle(.secondary)

@@ -8,7 +8,15 @@ struct CallHistoryView: View {
     var body: some View {
         List {
             if calls.isEmpty {
-                Section { Text(loaded ? "暂无通话记录" : "加载中…").foregroundStyle(.secondary) }
+                Section {
+                    if loaded {
+                        BeeEmptyState(systemImage: "phone.badge.waveform.fill", title: "暂无通话记录",
+                                      message: "呼出与呼入的通话都会记录在这里。")
+                    } else {
+                        HStack { Spacer(); ProgressView("加载中…"); Spacer() }.padding(.vertical, BeeSpacing.lg)
+                    }
+                }
+                .listRowBackground(Color.clear)
             } else {
                 ForEach(calls) { c in
                     HStack(spacing: BeeSpacing.md) {

@@ -39,13 +39,23 @@ struct RoleEntryView: View {
     let onEnter: (String) -> Void
 
     var body: some View {
-        VStack(spacing: 20) {
-            AvatarView(dataURL: account.avatar, name: account.displayName, size: 72) // 登录用户头像
-            Text("你好，\(account.displayName)").font(.title2).bold()
-            Text("账号角色：\(roleDisplayName(account.role))").foregroundStyle(.secondary)
+        VStack(spacing: BeeSpacing.md) {
+            Spacer()
+            AvatarView(dataURL: account.avatar, name: account.displayName, size: 88) // 登录用户头像
+                .overlay(Circle().strokeBorder(Color.beeHoney.opacity(0.5), lineWidth: 2))
+            Text("你好，\(account.displayName)").font(.title.bold())
+            // 角色徽章。
+            Text(roleDisplayName(account.role))
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 14).padding(.vertical, 6)
+                .background(Color.beeHoney.opacity(0.18), in: Capsule())
+                .foregroundStyle(Color.beeAccent)
+                .accessibilityLabel("账号角色：\(roleDisplayName(account.role))")
+
+            Spacer()
 
             if account.role == "developer" {
-                Text("开发者：选择以哪个角色界面进入").font(.subheadline)
+                Text("开发者：选择以哪个角色界面进入").font(.subheadline).foregroundStyle(.secondary)
                 // helper 即合并后的协助端（含原 family 全部功能），故不再单列 family。
                 ForEach(["blind", "helper", "admin", "developer"], id: \.self) { r in
                     Button("以 \(roleDisplayName(r)) 进入") { onEnter(r) }
@@ -54,12 +64,13 @@ struct RoleEntryView: View {
             } else {
                 BeeBigButton("进入", systemImage: "arrow.right.circle.fill",
                              subtitle: "以\(roleDisplayName(account.role))身份") { onEnter(account.role) }
-                    .padding(.horizontal)
             }
 
-            Button("退出登录", role: .destructive) { session.logout() }.padding(.top)
+            Button("退出登录", role: .destructive) { session.logout() }
+                .font(.subheadline)
+                .padding(.top, BeeSpacing.sm)
         }
-        .padding()
+        .padding(BeeSpacing.lg)
     }
 }
 

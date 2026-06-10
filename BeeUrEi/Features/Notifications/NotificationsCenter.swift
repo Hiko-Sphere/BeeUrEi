@@ -49,7 +49,11 @@ struct NotificationsView: View {
         NavigationStack {
             List {
                 if center.pendingRequests.isEmpty {
-                    Section { Text("暂无新通知").foregroundStyle(.secondary) }
+                    Section {
+                        BeeEmptyState(systemImage: "bell.slash.fill", title: "暂无新通知",
+                                      message: "好友请求等待你确认时会出现在这里。")
+                    }
+                    .listRowBackground(Color.clear)
                 } else {
                     Section("待确认的请求") {
                         ForEach(center.pendingRequests) { r in

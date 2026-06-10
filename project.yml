@@ -20,6 +20,15 @@ settings:
 #   WebRTC:
 #     url: https://github.com/stasel/WebRTC
 #     from: "148.0.0"
+schemes:
+  BeeUrEi:
+    build:
+      targets:
+        BeeUrEi: all
+        BeeUrEiTests: [test]
+    test:
+      targets:
+        - BeeUrEiTests
 targets:
   BeeUrEi:
     type: application
@@ -71,3 +80,17 @@ targets:
         # 开发期允许访问局域网内自托管后端的明文 HTTP（生产应改用 HTTPS）。
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+  # 应用层单测（F1）：跑在模拟器，宿主为 BeeUrEi App（可 @testable 访问 VM/编解码等内部逻辑）。
+  BeeUrEiTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Tests/BeeUrEiTests
+    dependencies:
+      - target: BeeUrEi
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/BeeUrEi.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)BeeUrEi
+        BUNDLE_LOADER: $(TEST_HOST)

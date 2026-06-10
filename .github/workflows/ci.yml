@@ -55,3 +55,10 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
             CODE_SIGNING_ALLOWED=NO build
+      - name: App-layer unit tests (F1, 模拟器)
+        run: |
+          DEST=$(xcrun simctl list devices available | grep -m1 -oE 'iPhone [^(]+' | sed 's/ *$//')
+          xcodebuild -project BeeUrEi.xcodeproj -scheme BeeUrEi \
+            -destination "platform=iOS Simulator,name=${DEST:-iPhone 15}" \
+            -only-testing BeeUrEiTests \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES test

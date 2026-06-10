@@ -107,6 +107,53 @@ final class FramingAssistViewModel {
         }
     }
 
+    // MARK: 找周围的物品（Lookout Find 式：通用类别寻找，复用 YOLO + 时钟方位 + LiDAR 距离）
+
+    /// 可寻找的通用类别（COCO 标签 → 中文名）。只放当前模型真能检出的类别，避免"永远找不到"。
+    static let findableCategories: [(label: String, name: String)] = [
+        ("chair", "椅子"), ("couch", "沙发"), ("bed", "床"), ("dining table", "餐桌"),
+        ("toilet", "马桶"), ("bottle", "瓶子"), ("cup", "杯子"), ("cell phone", "手机"), ("backpack", "背包"),
+    ]
+    @ObservationIgnored private var categoryTarget: (label: String, name: String)?
+
+    /// 开始寻找一类通用物品（不需要先教，YOLO 直接认）。
+    func startCategoryFind(label: String, name: String) {
+        docMode = false
+        findTarget = nil
+        categoryTarget = (label, name)
+        findPhase = .finding
+        lastFindHit = 0
+        lastFindHeartbeat = 0
+        guidanceText = "寻找：\(name)"
+        speak("开始找\(name)。拿着手机慢慢左右移动扫一圈，看到了我会报方位。")
+    }
+
+    /// 类别寻找帧：YOLO 命中类别即报方位与 LiDAR 距离（与"找我的东西"同节奏去抖）。
+    private func categoryFindStep(_ frame: SensorFrame, category: (label: String, name: String)) {
+        let dets = detector.detect(in: frame.pixelBuffer, regionOfInterest: CGRect(x: 0, y: 0, width: 1, height: 1))
+        let hit = dets.filter { $0.label.lowercased() == category.label }
+            .max { $0.confidence < $1.confidence }
+        if let hit, let box = hit.box {
+            guard frame.timestamp - lastFindHit >= 2.5 else { return } // 命中去抖
+            lastFindHit = frame.timestamp
+            let clock = ClockDirection(normalizedX: box.midX, horizontalFOVDegrees: 68)
+            var distText = ""
+            if let depth = frame.depth {
+                let s = DepthSampling.samples(depth: depth.depth, confidence: depth.confidence,
+                                              normalizedX: box.midX, normalizedY: box.midY)
+                if let m = DepthSampler().nearestDistance(depths: s.depths, confidences: s.confidences) {
+                    distText = String(format: "，大约%.1f米", m)
+                }
+            }
+            let where_ = clock.hour == 12 ? "正前方" : "\(clock.hour)点钟方向"
+            guidanceText = "\(category.name)：\(where_)"
+            speak("\(category.name)，在\(where_)\(distText)")
+        } else if frame.timestamp - lastFindHeartbeat >= 6 {
+            lastFindHeartbeat = frame.timestamp
+            speak("还在找\(category.name)，慢慢移动手机")
+        }
+    }
+
     // MARK: 找我的东西（Seeing AI Find My Things 式，端侧 FeaturePrint）
 
     enum FindPhase { case idle, teaching, finding }
@@ -156,6 +203,7 @@ final class FramingAssistViewModel {
         let prints = itemsStore.prints(for: name)
         guard !prints.isEmpty else { speak("没有找到\(name)的学习记录"); return }
         docMode = false
+        categoryTarget = nil
         findTarget = (name, prints)
         findPhase = .finding
         lastFindHit = 0
@@ -167,6 +215,7 @@ final class FramingAssistViewModel {
     func stopFindFlow() {
         findPhase = .idle
         findTarget = nil
+        categoryTarget = nil
         pendingPrints = []
         guidanceText = "已停止"
     }
@@ -188,8 +237,9 @@ final class FramingAssistViewModel {
         }
     }
 
-    /// 寻找帧：候选区（YOLO 框 + 中央区）逐个比对特征距离；命中报方位与距离。
+    /// 寻找帧：类别寻找走 YOLO 直认；个人物品走候选区特征距离比对，命中报方位与距离。
     private func findStep(_ frame: SensorFrame) {
+        if let category = categoryTarget { categoryFindStep(frame, category: category); return }
         guard let target = findTarget else { return }
         // 候选区：YOLO 框（最多 3 个）+ 中央区兜底（YOLO 认不出"钥匙串"这类小物）。
         var rois: [CGRect] = [CGRect(x: 0.3, y: 0.3, width: 0.4, height: 0.4)]
@@ -454,19 +504,106 @@ final class FramingAssistViewModel {
         let request = VNDetectBarcodesRequest { [weak self] req, _ in
             let payloads = (req.results as? [VNBarcodeObservation])?.compactMap { $0.payloadStringValue } ?? []
             DispatchQueue.main.async {
-                if let first = payloads.first {
-                    self?.resultText = "码内容：\(first)"
-                    self?.copyableResult = first
-                    self?.speak("识别到：\(first)")
-                } else {
-                    self?.resultText = ""
-                    self?.copyableResult = nil
-                    self?.speak("没有识别到二维码或条码")
+                guard let self else { return }
+                guard let first = payloads.first else {
+                    self.resultText = ""
+                    self.copyableResult = nil
+                    self.speak("没有识别到二维码或条码")
+                    return
+                }
+                self.copyableResult = first
+                // 先说"这是什么类型"再读内容（核心 BarcodePayload，已测）；商品条码走本地商品库。
+                switch BarcodePayload.classify(first) {
+                case .productCode:
+                    if let name = self.productStore.name(for: first) {
+                        self.resultText = "商品：\(name)"
+                        self.speak("这是\(name)")
+                    } else {
+                        self.resultText = "商品条码：\(first)"
+                        self.pendingProductCode = first
+                        self.showProductNaming = true
+                        self.speak("是商品条码，我还不认识它。给它起个名字，下次扫到我直接报名字。")
+                    }
+                case .wifi(let ssid):
+                    self.resultText = "无线网络码" + (ssid.map { "：\($0)" } ?? "")
+                    self.speak("是无线网络配置码" + (ssid.map { "，网络名称\($0)" } ?? ""))
+                case .url(let host):
+                    self.resultText = "网址：\(first)"
+                    self.speak("是一个网址" + (host.map { "，网站是\($0)" } ?? "") + "，内容已可复制")
+                case .phone(let number):
+                    self.resultText = "电话：\(number)"
+                    self.speak("是电话号码：\(number)")
+                case .contact:
+                    self.resultText = "名片码"
+                    self.speak("是一张电子名片，内容已可复制")
+                case .text:
+                    self.resultText = "码内容：\(first)"
+                    self.speak("识别到：\(first)")
                 }
             }
         }
         DispatchQueue.global(qos: .userInitiated).async {
             try? VNImageRequestHandler(cvPixelBuffer: buffer, options: [:]).perform([request])
+        }
+    }
+
+    // MARK: 扫码认商品（Seeing AI Products 频道的隐私版：本地商品库，扫一次自己命名）
+
+    @ObservationIgnored private let productStore = ProductMemoryStore()
+    @ObservationIgnored private var pendingProductCode: String?
+    var showProductNaming = false // 扫到陌生商品条码后弹命名输入
+
+    /// 给刚扫到的陌生商品条码命名（存本地商品库，下次扫到直接报名字）。
+    func saveProductName(_ name: String) {
+        guard let code = pendingProductCode else { return }
+        pendingProductCode = nil
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        productStore.save(barcode: code, name: trimmed)
+        resultText = "已记住：\(trimmed)"
+        speak("记住了。下次扫到这个条码我会直接说\(trimmed)。")
+    }
+
+    /// 识别人民币纸币面额（端侧 OCR 角号/大写 + 票面主色，核心 CurrencyClassifier，已测）。
+    /// 低置信只说"可能"，并提醒换角度确认——识币错了是真金白银，宁可多让用户拍一次。
+    func readCurrency() {
+        guard let live = latestBuffer else { speak("请把纸币平整地对准相机"); return }
+        if tooDarkToProceed() { return }
+        guard let buffer = copyPixelBuffer(live) else { speak("识别失败，请重试"); return } // 深拷贝供异步安全读
+        resultText = "正在识别纸币…"
+        let rgb = ColorSampler.averageRGB(in: buffer, rect: CGRect(x: 0.3, y: 0.3, width: 0.4, height: 0.4))
+        let request = VNRecognizeTextRequest { [weak self] req, _ in
+            let texts = (req.results as? [VNRecognizedTextObservation])?
+                .compactMap { $0.topCandidates(1).first?.string } ?? []
+            let result = CurrencyClassifier().classify(texts: texts, rgb: rgb)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.copyableResult = nil
+                if let result {
+                    let name = Self.yuanName(result.denomination)
+                    self.resultText = "纸币：\(name)"
+                    self.speak(result.confident ? name : "可能是\(name)，请换个角度再拍一次确认")
+                } else {
+                    self.resultText = ""
+                    self.speak("没认出纸币面额。请把纸币平整地举在镜头前约三十厘米再试")
+                }
+            }
+        }
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["zh-Hans", "en-US"]
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? VNImageRequestHandler(cvPixelBuffer: buffer, options: [:]).perform([request])
+        }
+    }
+
+    private static func yuanName(_ d: Int) -> String {
+        switch d {
+        case 100: return "一百元"
+        case 50: return "五十元"
+        case 20: return "二十元"
+        case 10: return "十元"
+        case 5: return "五元"
+        default: return "一元"
         }
     }
 
@@ -553,6 +690,7 @@ struct FramingAssistView: View {
     @State private var torchOn = false
     @State private var showFindMenu = false
     @State private var teachName = ""
+    @State private var productName = ""
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     let onClose: () -> Void
 
@@ -607,9 +745,11 @@ struct FramingAssistView: View {
                 }
                 .padding(.horizontal)
                 HStack(spacing: BeeSpacing.sm) {
-                    overlayAction(model.findPhase == .idle ? "找我的东西" : "停止寻找",
+                    overlayAction("识别纸币", systemImage: "banknote.fill",
+                                  hint: "识别人民币纸币的面额") { model.readCurrency() }
+                    overlayAction(model.findPhase == .idle ? "找东西" : "停止寻找",
                                   systemImage: model.findPhase == .idle ? "magnifyingglass" : "stop.circle.fill",
-                                  hint: "教 App 认你自己的钥匙、水杯等，再帮你找到它在哪个方向") {
+                                  hint: "教 App 认你自己的钥匙、水杯等，或寻找周围的椅子、瓶子等物品") {
                         if model.findPhase == .idle { showFindMenu = true } else { model.stopFindFlow() }
                     }
                 }
@@ -644,15 +784,27 @@ struct FramingAssistView: View {
         }
         .task { model.start(); model.refreshTaughtItems() }
         .onDisappear { model.stop(); Torch.set(false) }
-        // 找我的东西：选择要找的物品 / 教新物品。
-        .confirmationDialog("找我的东西", isPresented: $showFindMenu, titleVisibility: .visible) {
+        // 找东西：先列已教的个人物品，再列通用类别（Lookout Find 式），最后教新物品。
+        .confirmationDialog("找东西", isPresented: $showFindMenu, titleVisibility: .visible) {
             ForEach(model.taughtItems, id: \.self) { item in
                 Button("找：\(item)") { model.startFinding(item) }
+            }
+            ForEach(FramingAssistViewModel.findableCategories, id: \.label) { c in
+                Button("找周围的\(c.name)") { model.startCategoryFind(label: c.label, name: c.name) }
             }
             Button("教我认一个新东西") { model.startTeaching() }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("先「教我认一个新东西」拍三张，以后就能让我帮你找它。重新教同名物品会覆盖旧的。")
+            Text("个人物品先「教我认一个新东西」拍三张；椅子、瓶子这类通用物品不用教，直接找。")
+        }
+        // 扫到陌生商品条码：起名字存本地商品库（键盘话筒可语音输入）。
+        .alert("给这个商品起个名字", isPresented: Binding(get: { model.showProductNaming },
+                                                          set: { model.showProductNaming = $0 })) {
+            TextField("如：牛奶、感冒药", text: $productName)
+            Button("保存") { model.saveProductName(productName); productName = "" }
+            Button("取消", role: .cancel) { productName = "" }
+        } message: {
+            Text("下次扫到同一条码会直接报这个名字。可以点键盘上的话筒用语音输入。")
         }
         // 教学拍满三张：命名（键盘话筒可语音输入）。
         .alert("给它起个名字", isPresented: Binding(get: { model.showTeachNaming },

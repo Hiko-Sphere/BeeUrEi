@@ -122,6 +122,45 @@ enum FramingStrings {
     static func docDonePrefix(_ l: Language) -> String { l == .zh ? "识别完成。" : "Done. " }
     static func docJoinSeparator(_ l: Language) -> String { l == .zh ? "。" : ". " }
 
+    // MARK: 读整页 · 多页连读
+
+    static func docPageDonePrefix(_ n: Int, _ l: Language) -> String {
+        l == .zh ? "第\(n)页识别完成。" : "Page \(n) done. "
+    }
+    static func docPageResult(_ n: Int, _ firstLine: String, _ l: Language) -> String {
+        l == .zh ? "第\(n)页：\(firstLine)…" : "Page \(n): \(firstLine)…"
+    }
+    static func docNextPageHint(_ l: Language) -> String {
+        l == .zh ? "。翻页后继续对准，或点读整页结束。" : ". Turn the page to continue, or tap Full Page to finish."
+    }
+    static func docTurnPage(_ l: Language) -> String {
+        l == .zh ? "这一页读过了，翻到下一页再对准" : "This page is done — turn to the next page"
+    }
+    static func docRetryStay(_ l: Language) -> String {
+        l == .zh ? "没有识别到文字，请重新对准这一页" : "No text found — line up this page again"
+    }
+    static func docMultiDoneResult(_ pages: Int, _ l: Language) -> String {
+        l == .zh ? "读整页结束：共\(pages)页，全文已可复制" : "Finished: \(pages) pages, full text ready to copy"
+    }
+    static func docMultiDoneSpeak(_ pages: Int, _ l: Language) -> String {
+        l == .zh ? "读整页结束，共\(pages)页，全文已可复制。" : "Finished — \(pages) pages. The full text is ready to copy."
+    }
+
+    // MARK: 公交识别（OKO 式）
+
+    static func noBusFound(_ l: Language) -> String {
+        l == .zh ? "没有看到公交车，把手机对准来车方向再试" : "No bus in view — point the phone toward the road and try again"
+    }
+    static func readingBus(_ l: Language) -> String { l == .zh ? "正在读车头牌…" : "Reading the bus sign…" }
+    static func busResult(_ name: String, _ direction: String, _ info: String, _ l: Language) -> String {
+        l == .zh ? "\(name)，在\(direction)：\(info)" : "\(name) \(direction): \(info)"
+    }
+    static func busNoText(_ name: String, _ direction: String, _ l: Language) -> String {
+        l == .zh ? "看到\(name)在\(direction)，没读清车头牌，等车近一点再试"
+                 : "I see a \(name) \(direction) but can't read its sign — try when it's closer"
+    }
+    static func busInfoSeparator(_ l: Language) -> String { l == .zh ? "，" : ", " }
+
     // MARK: 朗读文字
 
     static func aimText(_ l: Language) -> String {

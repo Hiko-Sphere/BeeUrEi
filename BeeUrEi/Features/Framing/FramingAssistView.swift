@@ -51,6 +51,8 @@ final class FramingAssistViewModel {
     @ObservationIgnored private var docMode = false        // 文档模式（整页取景引导+自动拍摄）
     @ObservationIgnored private var docStableFrames = 0    // 整页完整入画的连续帧数（≥2 自动拍摄）
     @ObservationIgnored private var docCapturing = false   // OCR 进行中，防重复拍摄
+    @ObservationIgnored private var docPages: [String] = [] // 多页连读：已读页全文（Envision 批量扫描式）
+    @ObservationIgnored private var docAwaitingNextPage = false // 刚读完一页：等旧页移出画面再拍，防同页重复拍
 
     var arSession: ARSession { source.session }
 
@@ -380,14 +382,23 @@ final class FramingAssistViewModel {
         docMode.toggle()
         docStableFrames = 0
         docCapturing = false
+        docAwaitingNextPage = false
         if docMode {
+            docPages = []
             resultText = ""
             copyableResult = nil
             guidanceText = FramingStrings.docGuidance(lang)
             speak(FramingStrings.docIntro(lang))
-        } else {
+        } else if docPages.isEmpty {
             guidanceText = FramingStrings.docExited(lang)
             speak(FramingStrings.docExited(lang))
+        } else {
+            // 多页连读收尾：全文合并可复制（Envision 批量扫描式）。
+            copyableResult = docPages.joined(separator: "\n\n")
+            resultText = FramingStrings.docMultiDoneResult(docPages.count, lang)
+            guidanceText = FramingStrings.docMultiDoneResult(docPages.count, lang)
+            speak(FramingStrings.docMultiDoneSpeak(docPages.count, lang))
+            docPages = []
         }
     }
 
@@ -398,7 +409,18 @@ final class FramingAssistViewModel {
         try? VNImageRequestHandler(cvPixelBuffer: frame.pixelBuffer, options: [:]).perform([request])
         guard let doc = request.results?.first, doc.confidence > 0.5 else {
             docStableFrames = 0
-            docHint(FramingStrings.docNoPage(lang), at: frame.timestamp)
+            if docAwaitingNextPage {
+                docAwaitingNextPage = false   // 旧页已移出画面：静默等待下一页对准
+                guidanceText = FramingStrings.docGuidance(lang)
+            } else {
+                docHint(FramingStrings.docNoPage(lang), at: frame.timestamp)
+            }
+            return
+        }
+        if docAwaitingNextPage {
+            // 还是刚读过的那页：提示翻页，不重复拍。
+            docStableFrames = 0
+            docHint(FramingStrings.docTurnPage(lang), at: frame.timestamp)
             return
         }
         let box = doc.boundingBox // 归一化坐标
@@ -455,18 +477,23 @@ final class FramingAssistViewModel {
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.docCapturing = false
-                self.docMode = false
+                self.docStableFrames = 0
                 if lines.isEmpty {
+                    // 留在读整页模式重新对准即可，不退出（多页流程中途失败不丢已读页）。
                     self.resultText = FramingStrings.noTextFound(self.lang)
                     self.guidanceText = FramingStrings.docRetryGuide(self.lang)
-                    self.speak(FramingStrings.docRetrySpeak(self.lang))
+                    self.speak(FramingStrings.docRetryStay(self.lang))
                 } else {
+                    // 多页连读（Envision 批量扫描式）：本页念完提示翻页；全文随页累计、随时可复制。
                     let full = lines.joined(separator: "\n")
-                    self.resultText = FramingStrings.docResult(lines.first ?? "", self.lang)
-                    self.copyableResult = full
+                    self.docPages.append(full)
+                    self.docAwaitingNextPage = true
+                    self.copyableResult = self.docPages.joined(separator: "\n\n")
+                    self.resultText = FramingStrings.docPageResult(self.docPages.count, lines.first ?? "", self.lang)
                     self.guidanceText = FramingStrings.docDoneGuide(lines.count, self.lang)
-                    self.speak(FramingStrings.docDonePrefix(self.lang)
-                               + lines.joined(separator: FramingStrings.docJoinSeparator(self.lang)))
+                    self.speak(FramingStrings.docPageDonePrefix(self.docPages.count, self.lang)
+                               + lines.joined(separator: FramingStrings.docJoinSeparator(self.lang))
+                               + FramingStrings.docNextPageHint(self.lang))
                 }
             }
         }
@@ -688,6 +715,48 @@ final class FramingAssistViewModel {
         speak(text)
     }
 
+    /// 公交识别（OKO 式，端侧 YOLO+OCR）：认出公交/电车，读车头牌的线路号与终点站。
+    /// 多辆车同时进站时帮盲人确认"来的是不是我要坐的那班"。行挑选在核心 BusDisplayReader（已测）。
+    func readBus() {
+        guard let live = latestBuffer else { speak(FramingStrings.aimAhead(lang)); return }
+        if tooDarkToProceed() { return }
+        let dets = detector.detect(in: live, regionOfInterest: CGRect(x: 0, y: 0, width: 1, height: 1))
+        guard let bus = dets.filter({ ["bus", "train"].contains($0.label.lowercased()) })
+            .max(by: { $0.confidence < $1.confidence }), let box = bus.box else {
+            speak(FramingStrings.noBusFound(lang))
+            return
+        }
+        guard let buffer = copyPixelBuffer(live) else { speak(FramingStrings.recognizeFailed(lang)); return }
+        resultText = FramingStrings.readingBus(lang)
+        let clock = ClockDirection(normalizedX: box.midX, horizontalFOVDegrees: currentFOV)
+        let where_ = FramingStrings.direction(hour: clock.hour, lang)
+        let busName = labels.localizedName(bus.label)
+        // OCR 限定在车体框内（NormalizedBox 原点左上 → Vision ROI 原点左下）。
+        let roi = CGRect(x: box.x, y: 1 - box.y - box.height, width: box.width, height: box.height)
+        let request = VNRecognizeTextRequest { [weak self] req, _ in
+            let texts = (req.results as? [VNRecognizedTextObservation])?
+                .compactMap { $0.topCandidates(1).first?.string } ?? []
+            let picked = BusDisplayReader.pick(texts: texts)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.copyableResult = nil
+                if picked.isEmpty {
+                    self.resultText = FramingStrings.busNoText(busName, where_, self.lang)
+                } else {
+                    let info = picked.joined(separator: FramingStrings.busInfoSeparator(self.lang))
+                    self.resultText = FramingStrings.busResult(busName, where_, info, self.lang)
+                }
+                self.speak(self.resultText)
+            }
+        }
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ocrLanguages
+        request.regionOfInterest = roi
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? VNImageRequestHandler(cvPixelBuffer: buffer, options: [:]).perform([request])
+        }
+    }
+
     /// 深拷贝相机帧——`latestBuffer` 是 ARKit 内部缓冲池里的 capturedImage，ARKit 后续帧会回收/覆盖它；
     /// 异步(OCR/扫码 perform 在 global 队列、耗时数十~数百 ms)读它会读到撕裂/脏帧甚至 UB。
     /// 故对要异步处理的画面先逐平面深拷贝一份独立内存（见审查：use-after-recycle）。
@@ -828,6 +897,11 @@ struct FramingAssistView: View {
                                   hint: "教 App 认你自己的钥匙、水杯等，或寻找周围的椅子、瓶子等物品") {
                         if model.findPhase == .idle { showFindMenu = true } else { model.stopFindFlow() }
                     }
+                }
+                .padding(.horizontal)
+                HStack(spacing: BeeSpacing.sm) {
+                    overlayAction("公交识别", systemImage: "bus.fill",
+                                  hint: "认出进站的公交车或电车，朗读车头的线路号和终点站") { model.readBus() }
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 8)

@@ -11,8 +11,9 @@ import MapKit
 final class NavigationViewModel {
     enum Region { case overseas, china }
 
-    private(set) var status = "输入目的地后开始导航"
+    private(set) var status = NavStrings.idleStatus(FeatureSettings().language)
     private(set) var instruction = ""
+    @ObservationIgnored private var lang: Language = FeatureSettings().language // 播报语言（E5，进导航/预览/记路时解析）
     private(set) var steps: [String] = []     // 国内：路线步骤列表（VoiceOver 可读）
     private(set) var running = false
 
@@ -58,12 +59,13 @@ final class NavigationViewModel {
     private(set) var previewing = false
 
     func start(destination query: String, region: Region) async {
+        lang = FeatureSettings().language   // 进导航解析一次（设置页改语言后重开生效）
         guard FeatureSettings().navigationEnabled else {
-            status = "请先在「设置 → 功能」开启步行导航"
+            status = NavStrings.enableFirst(lang)
             return
         }
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { status = "请输入目的地"; return }
+        guard !trimmed.isEmpty else { status = NavStrings.enterDestination(lang); return }
 
         // 重入保护：导航中再次 start(如点了常用目的地)先彻底停止旧导航，避免新旧目的地状态混合（见审查 #5）。
         if running { stop() }
@@ -87,7 +89,7 @@ final class NavigationViewModel {
         offRouteStreak = 0
         lastHeadingTime = 0
         running = true
-        status = "正在定位…"
+        status = NavStrings.locating(lang)
 
         service.onLocation = { [weak self] loc in self?.handle(loc) }
         service.onHeading = { [weak self] h in
@@ -118,7 +120,7 @@ final class NavigationViewModel {
         headTracker.stop()
         spatial.stop()   // 释放空间音引擎（见审查 #11）
         NavVoice.shared.stop() // 停掉仍在念的导航指令
-        status = "导航已停止"
+        status = NavStrings.navStopped(lang)
     }
 
     private func handle(_ loc: CLLocation) {
@@ -159,8 +161,8 @@ final class NavigationViewModel {
         if offRouteStreak >= 2, now - lastOffRouteAnnounce >= 6 {
             lastOffRouteAnnounce = now
             offRouteStreak = 0
-            instruction = "已偏离路线，正在重新规划"
-            speak("已偏离路线，正在重新规划")
+            instruction = NavStrings.offRoute(lang)
+            speak(NavStrings.offRoute(lang))
             replanning = true    // 立即门控住旧路线引导
             routeReady = false   // 下次定位触发重规划
             return
@@ -204,9 +206,9 @@ final class NavigationViewModel {
             let toDest = Geo.distanceMeters(fromLat: lat, fromLon: lon, toLat: dest.latitude, toLon: dest.longitude)
             if toDest < 15 {
                 if level == .precise {
-                    status = "已接近目的地"; speak("已接近目的地"); stop()
+                    status = NavStrings.nearDestination(lang); speak(NavStrings.nearDestination(lang)); stop()
                 } else {
-                    status = "正在接近目的地"   // 精度不足：不轻易宣布到达并终止
+                    status = NavStrings.approachingDestination(lang)   // 精度不足：不轻易宣布到达并终止
                 }
             }
             return
@@ -247,7 +249,7 @@ final class NavigationViewModel {
                                                    destination: destinationQuery)
                 guard running, gen == navGeneration else { return } // 已被新导航/停止作废，丢弃旧结果
                 let result = route.steps
-                steps = result.map { "\($0.instruction)（\(Int($0.distanceMeters ?? 0)) 米）" }
+                steps = result.map { NavStrings.stepListItem($0.instruction, meters: Int($0.distanceMeters ?? 0), lang) }
 
                 // 实时逐向引导（与海外同一引擎）：每步折线首点=转向点；全折线供偏航检测；目的地坐标供到达判定。
                 let withLine = result.filter { ($0.polyline?.first?.count ?? 0) >= 2 }
@@ -272,19 +274,19 @@ final class NavigationViewModel {
                 if previewing { narratePreview(); return } // 预览：不进实时跟踪，逐步试听
                 if let first = result.first {
                     if destination != nil, !maneuvers.isEmpty {
-                        status = "导航开始，共 \(result.count) 步"
-                        speak("导航开始，共\(result.count)步。\(first.instruction)")
+                        status = NavStrings.navStartedStatus(result.count, lang)
+                        speak(NavStrings.navStartedSpeak(result.count, first.instruction, lang))
                     } else {
                         // 后端未带折线（旧版本）：退化为静态步骤读出。
-                        status = "共 \(result.count) 步（静态路线）"
-                        speak("共\(result.count)步。第一步：\(first.instruction)")
+                        status = NavStrings.staticRouteStatus(result.count, lang)
+                        speak(NavStrings.staticRouteSpeak(result.count, first.instruction, lang))
                     }
                 } else {
-                    status = "未找到步行路线"
+                    status = NavStrings.noWalkingRoute(lang)
                 }
             } catch {
                 guard running, gen == navGeneration else { return } // 过期/已停止任务的失败不得覆盖新会话状态（见审查 round5 #1）
-                status = "国内路线获取失败（需登录并连接后端）"
+                status = NavStrings.chinaRouteFailed(lang)
             }
         case .overseas:
             // 重规划时复用已知目的地，不重复 geocode（少一个失败点、避免返回不同坐标，见审查 #2）。
@@ -297,7 +299,7 @@ final class NavigationViewModel {
                 destination = geocoded
             } else {
                 guard running, gen == navGeneration else { return }
-                status = "找不到目的地"; return
+                status = NavStrings.destinationNotFound(lang); return
             }
             let m = await service.walkingManeuvers(from: loc.coordinate, to: dest)
             // 关键：旧目的地的规划任务恢复后不得覆盖正在为新目的地建立的状态（见审查 #1）。
@@ -310,7 +312,7 @@ final class NavigationViewModel {
             routeCoords = m.map { Coordinate(lat: $0.coordinate.latitude, lon: $0.coordinate.longitude) }
                 + [Coordinate(lat: dest.latitude, lon: dest.longitude)]
             if previewing { narratePreview(); return } // 预览：不进实时跟踪，逐步试听
-            status = m.isEmpty ? "未找到步行路线" : "导航开始，共 \(m.count) 步"
+            status = m.isEmpty ? NavStrings.noWalkingRoute(lang) : NavStrings.navStartedStatus(m.count, lang)
         }
     }
 
@@ -328,7 +330,7 @@ final class NavigationViewModel {
         await start(destination: query, region: region)
         guard running else { return } // start 内部校验失败(未开导航/空目的地)则不进预览
         previewing = true
-        status = "正在规划预览路线…"
+        status = NavStrings.planningPreview(lang)
     }
 
     /// 停止预览（停掉正在念的步骤队列）。
@@ -336,7 +338,7 @@ final class NavigationViewModel {
         previewing = false
         NavVoice.shared.stop()
         if running { stop() }
-        status = "已停止预览"
+        status = NavStrings.previewStopped(lang)
     }
 
     /// 路线就绪后的预览旁白：总长 + 逐步"第N步，指令，前行约X米"（经 NavVoice 排队朗读，可随时停）。
@@ -346,8 +348,8 @@ final class NavigationViewModel {
         running = false
         guard !maneuvers.isEmpty else {
             previewing = false
-            status = "没有可预览的路线"
-            speak("没有可预览的路线")
+            status = NavStrings.noPreviewRoute(lang)
+            speak(NavStrings.noPreviewRoute(lang))
             return
         }
         var pts = maneuvers.map(\.coordinate)
@@ -360,25 +362,27 @@ final class NavigationViewModel {
             let d = Geo.distanceMeters(fromLat: cur.latitude, fromLon: cur.longitude,
                                        toLat: nxt.latitude, toLon: nxt.longitude)
             total += d
-            lines.append("第\(i + 1)步，\(maneuvers[i].instruction)，前行约\(Int(d.rounded()))米。")
+            lines.append(NavStrings.previewStep(i + 1, maneuvers[i].instruction, meters: Int(d.rounded()), lang))
         }
-        status = "路线预览中：共 \(maneuvers.count) 步，约 \(Int(total.rounded())) 米"
+        status = NavStrings.previewingStatus(steps: maneuvers.count, meters: Int(total.rounded()), lang)
         let rate = FeatureSettings().speechRate
-        NavVoice.shared.speak("路线预览开始。全程约\(Int(total.rounded()))米，共\(maneuvers.count)步。", rate: rate)
+        NavVoice.shared.speak(NavStrings.previewStartSpeak(meters: Int(total.rounded()),
+                                                           steps: maneuvers.count, lang), rate: rate)
         for l in lines { NavVoice.shared.speak(l, rate: rate) } // AVSpeechSynthesizer 自动排队顺读
-        NavVoice.shared.speak("预览结束。准备好后，点开始导航。", rate: rate)
+        NavVoice.shared.speak(NavStrings.previewEndSpeak(lang), rate: rate)
     }
 
     // MARK: 面包屑回程（Soundscape 式）
 
     /// 开始记路：行进中每 ≥8m 记一个航点（去抖原地抖动），供之后一键原路返回。
     func startTrailRecording() {
+        lang = FeatureSettings().language
         if running { stop() } // 与导航互斥（共用定位服务）
         trail.reset()
         trailCount = 0
         recordingTrail = true
-        status = "记路中：沿途位置会被记录，回程时点「原路返回」"
-        speak("开始记路。走吧，我会记住来路。")
+        status = NavStrings.trailRecordingStatus(lang)
+        speak(NavStrings.trailStartSpeak(lang))
         service.onLocation = { [weak self] loc in self?.handleTrail(loc) }
         service.requestAuthAndStart()
     }
@@ -387,14 +391,15 @@ final class NavigationViewModel {
     func stopTrailRecording() {
         recordingTrail = false
         service.stop()
-        status = trailCount >= 2 ? "已记 \(trailCount) 个点，可点「原路返回」" : "记录点太少，暂无法回程"
+        status = trailCount >= 2 ? NavStrings.trailStopStatus(trailCount, lang) : NavStrings.trailTooFew(lang)
         speak(status)
     }
 
     /// 一键原路返回：把轨迹反向作为航点喂给同一套实时引导引擎（信标+转向+到达判定）。
     func startBacktrack() {
+        lang = FeatureSettings().language
         guard trail.count >= 2, let origin = trail.start else {
-            status = "还没有记录来路，请先「开始记路」"
+            status = NavStrings.noTrailYet(lang)
             speak(status)
             return
         }
@@ -403,9 +408,10 @@ final class NavigationViewModel {
         navGeneration += 1
         // 轨迹与 GPS 同为 WGS-84 原始坐标：回程不做 GCJ 纠偏（region 置 overseas 即"不转换"）。
         region = .overseas
-        destinationQuery = "回到出发点"
+        destinationQuery = NavStrings.backtrackDestinationName(lang)
         let waypoints = trail.backtrackWaypoints(minSpacingMeters: 25)
-        maneuvers = waypoints.map { (CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon), "沿原路继续") }
+        maneuvers = waypoints.map { (CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
+                                     NavStrings.backtrackInstruction(lang)) }
         destination = CLLocationCoordinate2D(latitude: origin.lat, longitude: origin.lon)
         routeCoords = waypoints
         stepIndex = 0
@@ -419,8 +425,8 @@ final class NavigationViewModel {
         routeReady = true  // 航点已就绪，不走 planRoute
         replanning = false
         running = true
-        status = "原路返回：跟着提示音走，共 \(waypoints.count) 个路点"
-        speak("开始原路返回。跟着提示音的方向走。")
+        status = NavStrings.backtrackStatus(waypoints.count, lang)
+        speak(NavStrings.backtrackStartSpeak(lang))
         service.onLocation = { [weak self] loc in self?.handle(loc) }
         service.onHeading = { [weak self] h in
             guard let self else { return }
@@ -445,7 +451,7 @@ final class NavigationViewModel {
         guard loc.horizontalAccuracy > 0, loc.horizontalAccuracy <= 30 else { return }
         if trail.record(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude) {
             trailCount = trail.count
-            status = "记路中：已记 \(trailCount) 个点"
+            status = NavStrings.trailProgress(trailCount, lang)
         }
     }
 
@@ -462,7 +468,7 @@ final class NavigationViewModel {
                       let name = item.name, let ploc = item.placemark.location,
                       loc.distance(from: ploc) <= 60 else { return }
                 self.lastCalloutName = name
-                NavVoice.shared.speak("途经\(name)", rate: FeatureSettings().speechRate)
+                NavVoice.shared.speak(NavStrings.passingBy(name, self.lang), rate: FeatureSettings().speechRate)
             }
         }
     }
@@ -470,14 +476,14 @@ final class NavigationViewModel {
     /// 路名变化 callout：反向地理编码取当前路名，确实变了才报"进入 X"（核心 RoadAnnouncer，已测）。
     /// 传给 CLGeocoder 的是原始 WGS-84 定位（系统内部自行处理国内地名展示），不经 GCJ 纠偏。
     private func announceRoadChange(at loc: CLLocation, now: TimeInterval) {
-        roadGeocoder.reverseGeocodeLocation(loc, preferredLocale: Locale(identifier: "zh_CN")) { [weak self] placemarks, _ in
+        roadGeocoder.reverseGeocodeLocation(loc, preferredLocale: NavStrings.geocodeLocale(lang)) { [weak self] placemarks, _ in
             Task { @MainActor in
                 guard let self else { return }
                 self.roadGeocodeBusy = false
                 guard self.running else { return }
                 let road = placemarks?.first?.thoroughfare
                 if let name = self.roadAnnouncer.update(road: road, now: now) {
-                    NavVoice.shared.speak("进入\(name)", rate: FeatureSettings().speechRate)
+                    NavVoice.shared.speak(NavStrings.enteringRoad(name, self.lang), rate: FeatureSettings().speechRate)
                 }
             }
         }

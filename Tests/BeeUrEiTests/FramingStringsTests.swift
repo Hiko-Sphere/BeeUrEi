@@ -29,6 +29,14 @@ final class FramingStringsTests: XCTestCase {
         }
     }
 
+    func testBusAndMultiPagePhrases() {
+        XCTAssertEqual(FramingStrings.busResult("公交车", "11 点钟方向", "103，开往东站", .zh),
+                       "公交车，在11 点钟方向：103，开往东站")
+        XCTAssertEqual(FramingStrings.docPageDonePrefix(2, .zh), "第2页识别完成。")
+        XCTAssertEqual(FramingStrings.docMultiDoneResult(3, .zh), "读整页结束：共3页，全文已可复制")
+        XCTAssertFalse(FramingStrings.busNoText("bus", "ahead", .en).isEmpty)
+    }
+
     func testYuanNames() {
         XCTAssertEqual(FramingStrings.yuan(100, .zh), "一百元")
         XCTAssertEqual(FramingStrings.yuan(5, .zh), "五元")

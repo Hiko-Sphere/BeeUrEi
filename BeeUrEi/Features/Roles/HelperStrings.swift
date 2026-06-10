@@ -1,0 +1,190 @@
+import Foundation
+
+/// 协助端主界面文案中心表——E5 多语言主线第九批（帮助大家/我的亲人/我的）。
+/// 协助者也可能是英文用户（海外亲友）；匹配/认领状态经 A11y 朗读，必须随语言。中文与历史一致。
+enum HelperStrings {
+
+    // MARK: 标签
+
+    static func tabQueue(_ l: Language) -> String { l == .zh ? "帮助大家" : "Help Others" }
+    static func tabFamily(_ l: Language) -> String { l == .zh ? "我的亲人" : "My Family" }
+    static func tabMe(_ l: Language) -> String { l == .zh ? "我的" : "Me" }
+
+    // MARK: 帮助大家
+
+    static func matchPrefs(_ l: Language) -> String { l == .zh ? "匹配偏好" : "Match preferences" }
+    static func matchPrefsHint(_ l: Language) -> String {
+        l == .zh ? "设置随机匹配时优先的语言" : "Choose the preferred language for random matching"
+    }
+    static func onlineToggleQueue(_ l: Language) -> String {
+        l == .zh ? "在线待命（接听求助与亲人来电）" : "Available (help requests & family calls)"
+    }
+    static func matchRandom(_ l: Language) -> String {
+        l == .zh ? "随机匹配一位需要帮助的人" : "Match me with someone who needs help"
+    }
+    static func queueHeader(_ l: Language) -> String { l == .zh ? "待帮助队列" : "Waiting for help" }
+    static func queueLoadFailedTitle(_ l: Language) -> String { l == .zh ? "暂时无法加载" : "Couldn't load" }
+    static func queueEmptyTitle(_ l: Language) -> String { l == .zh ? "暂时没有人等待帮助" : "Nobody waiting right now" }
+    static func queueLoadFailedMessage(_ l: Language) -> String {
+        l == .zh ? "下拉重试，或检查网络。" : "Pull to retry, or check your network."
+    }
+    static func queueEmptyMessage(_ l: Language) -> String {
+        l == .zh ? "有人发起求助时会出现在这里。下拉刷新。" : "New requests appear here. Pull to refresh."
+    }
+    static func helpThem(_ l: Language) -> String { l == .zh ? "帮助 TA" : "Help them" }
+    static func queueCardA11y(name: String, topic: String?, locality: String?, languageName: String?,
+                              waited: String, _ l: Language) -> String {
+        switch l {
+        case .zh:
+            return "求助者 \(name)。"
+                + (topic.flatMap { $0.isEmpty ? nil : "事项 " + $0 + "。" } ?? "")
+                + (locality.flatMap { $0.isEmpty ? nil : "地点 " + $0 + "。" } ?? "")
+                + (languageName.flatMap { $0.isEmpty ? nil : "语言 " + $0 + "。" } ?? "")
+                + "已等待\(waited)。"
+        case .en:
+            return "Requester \(name). "
+                + (topic.flatMap { $0.isEmpty ? nil : "Topic: " + $0 + ". " } ?? "")
+                + (locality.flatMap { $0.isEmpty ? nil : "Area: " + $0 + ". " } ?? "")
+                + (languageName.flatMap { $0.isEmpty ? nil : "Language: " + $0 + ". " } ?? "")
+                + "Waiting \(waited)."
+        }
+    }
+    static func queueCardHint(_ l: Language) -> String {
+        l == .zh ? "双击接听并帮助 TA" : "Double-tap to answer and help"
+    }
+    static func anyLanguage(_ l: Language) -> String { l == .zh ? "不限语言" : "Any language" }
+    static func prefer(_ name: String, _ l: Language) -> String { l == .zh ? "偏好\(name)" : "Prefer \(name)" }
+    static func sameLanguageOnly(_ l: Language) -> String { l == .zh ? "仅同语言" : "Same language only" }
+    static func preferredLanguageHeader(_ l: Language) -> String { l == .zh ? "优先语言" : "Preferred language" }
+    static func anyOption(_ l: Language) -> String { l == .zh ? "不限" : "Any" }
+    static func requireSameLanguage(_ l: Language) -> String {
+        l == .zh ? "只匹配同语言的求助" : "Only match same-language requests"
+    }
+    static func requireSameLanguageFooter(_ l: Language) -> String {
+        l == .zh ? "开启后，随机匹配只会匹配与上面所选语言一致的求助；关闭则优先同语言、其次等待最久者。"
+                 : "When on, random match only picks requests in the language above; when off it prefers same language, then longest waiting."
+    }
+    static func done(_ l: Language) -> String { l == .zh ? "完成" : "Done" }
+
+    // MARK: 我的亲人
+
+    static func onlineToggleFamily(_ l: Language) -> String {
+        l == .zh ? "在线待命（接听亲人紧急呼叫）" : "Available (family emergency calls)"
+    }
+    static func onlineFooterOn(_ l: Language) -> String {
+        l == .zh ? "亲人发起紧急呼叫时会在此自动弹出来电。" : "Family emergency calls will ring here automatically."
+    }
+    static func onlineFooterOff(_ l: Language) -> String {
+        l == .zh ? "已离线，不会接到亲人来电。" : "Offline — you won't receive family calls."
+    }
+    static func pendingHeader(_ l: Language) -> String { l == .zh ? "待你接受的绑定请求" : "Requests awaiting your approval" }
+    static func wantsToLink(owner: String, relation: String, emergency: Bool, _ l: Language) -> String {
+        l == .zh ? "\(owner) 想把你加为\(relation)\(emergency ? "（紧急联系人）" : "")"
+                 : "\(owner) wants to add you as \(relation)\(emergency ? " (emergency contact)" : "")"
+    }
+    static func accept(_ l: Language) -> String { l == .zh ? "接受" : "Accept" }
+    static func reject(_ l: Language) -> String { l == .zh ? "拒绝" : "Decline" }
+    static func outgoingHeader(_ l: Language) -> String { l == .zh ? "我发出的请求（待对方确认）" : "My requests (awaiting confirmation)" }
+    static func pendingBadge(_ l: Language) -> String { l == .zh ? "待确认" : "Pending" }
+    static func withdraw(_ l: Language) -> String { l == .zh ? "撤回" : "Withdraw" }
+    static func withdrawA11y(_ name: String, _ l: Language) -> String {
+        l == .zh ? "撤回发给 \(name) 的绑定请求" : "Withdraw the link request to \(name)"
+    }
+    static func familyHeader(_ l: Language) -> String { l == .zh ? "我的亲人 / 求助者" : "My family / requesters" }
+    static func noRelationsYet(_ l: Language) -> String {
+        l == .zh ? "还没有建立关系。点右上角「＋」按对方用户名发起，或让对方添加你后在上方确认。"
+                 : "No links yet. Tap \"+\" to send a request by username, or approve theirs above."
+    }
+    static func emergencySuffix(_ l: Language) -> String { l == .zh ? " · 紧急联系人" : " · emergency contact" }
+    static func callA11y(_ name: String, _ l: Language) -> String { l == .zh ? "呼叫 \(name)" : "Call \(name)" }
+    static func familyNavTitle(_ l: Language) -> String { l == .zh ? "我的亲人" : "My Family" }
+    static func addFamilyA11y(_ l: Language) -> String { l == .zh ? "添加亲人或求助者" : "Add family or requester" }
+    static func addFamilyTitle(_ l: Language) -> String { l == .zh ? "添加亲人 / 求助者" : "Add family / requester" }
+    static func usernamePlaceholder(_ l: Language) -> String { l == .zh ? "对方用户名" : "Their username" }
+    static func sendRequest(_ l: Language) -> String { l == .zh ? "发送请求" : "Send request" }
+    static func cancel(_ l: Language) -> String { l == .zh ? "取消" : "Cancel" }
+    static func addFamilyMessage(_ l: Language) -> String {
+        l == .zh ? "输入对方用户名发起绑定请求，对方确认后建立关系。"
+                 : "Enter their username to send a link request; the link starts after they confirm."
+    }
+    static func callingTitle(_ name: String, _ l: Language) -> String { l == .zh ? "呼叫 \(name)" : "Calling \(name)" }
+    static func notLinkedYet(_ l: Language) -> String {
+        l == .zh ? "对方未确认绑定，暂不能呼叫" : "They haven't confirmed the link yet — can't call"
+    }
+    static func callFailed(_ l: Language) -> String { l == .zh ? "呼叫失败，请重试" : "Call failed, please retry" }
+    static func requestSentTo(_ name: String, _ l: Language) -> String {
+        l == .zh ? "已向 \(name) 发送请求，待对方确认" : "Request sent to \(name), awaiting confirmation"
+    }
+    static func memberNotFound(_ l: Language) -> String { l == .zh ? "找不到该用户名" : "Username not found" }
+    static func alreadyLinked(_ l: Language) -> String { l == .zh ? "你们已绑定/已发过请求" : "Already linked or requested" }
+    static func blockedRelation(_ l: Language) -> String { l == .zh ? "无法添加：存在拉黑关系" : "Can't add: one of you blocked the other" }
+    static func sendFailed(_ l: Language) -> String { l == .zh ? "发送失败" : "Couldn't send" }
+    static func sendFailedRetry(_ l: Language) -> String { l == .zh ? "发送失败，请重试" : "Couldn't send, please retry" }
+
+    // MARK: 我的
+
+    static func accountHeader(_ l: Language) -> String { l == .zh ? "账号" : "Account" }
+    static func accountAndSecurity(_ l: Language) -> String { l == .zh ? "账号与安全" : "Account & security" }
+    static func switchRole(_ l: Language) -> String { l == .zh ? "切换角色" : "Switch role" }
+    static func logout(_ l: Language) -> String { l == .zh ? "退出登录" : "Sign out" }
+    static func mergedExplain(_ l: Language) -> String {
+        l == .zh ? "「协助者」与「亲友」已合并：你既能在「帮助大家」里帮助陌生求助者，也能在「我的亲人」里接听绑定亲人的呼叫。"
+                 : "\"Helper\" and \"family\" are one role: help strangers in \"Help Others\" and answer linked family calls in \"My Family\"."
+    }
+    static func meNavTitle(_ l: Language) -> String { l == .zh ? "我的" : "Me" }
+
+    // MARK: 动作状态（经 A11y 朗读）
+
+    static func helpingTitle(_ name: String, _ l: Language) -> String { l == .zh ? "正在帮助 \(name)" : "Helping \(name)" }
+    static func claimedByOther(_ l: Language) -> String {
+        l == .zh ? "手慢了，这条求助已被其他志愿者接走。" : "Too late — another volunteer took this request."
+    }
+    static func matching(_ l: Language) -> String { l == .zh ? "正在为你匹配…" : "Matching…" }
+    static func noSameLanguageRequest(_ l: Language) -> String {
+        l == .zh ? "暂时没有符合所选语言的求助。" : "No requests in the selected language right now."
+    }
+    static func nobodyWaiting(_ l: Language) -> String { l == .zh ? "暂时没有等待帮助的人。" : "Nobody waiting right now." }
+    static func matchFailed(_ l: Language) -> String { l == .zh ? "匹配失败，请稍后再试。" : "Matching failed, try again later." }
+    static func matchedTitle(_ l: Language) -> String { l == .zh ? "为你匹配到一位需要帮助的人" : "Matched you with someone who needs help" }
+    static func skipThisOne(_ l: Language) -> String { l == .zh ? "跳过这一位" : "Skip this one" }
+    static func matchResultTitle(_ l: Language) -> String { l == .zh ? "匹配结果" : "Match Result" }
+    static func matchedAnnounce(_ label: String, _ l: Language) -> String {
+        l == .zh ? "为你匹配到：\(label)" : "Matched: \(label)"
+    }
+    static func matchedLabel(name: String, topic: String?, locality: String?, languageName: String?, _ l: Language) -> String {
+        switch l {
+        case .zh:
+            return "求助者 \(name)。"
+                + (topic.flatMap { $0.isEmpty ? nil : "事项 " + $0 + "。" } ?? "")
+                + (locality.flatMap { $0.isEmpty ? nil : "地点 " + $0 + "。" } ?? "")
+                + (languageName.flatMap { $0.isEmpty ? nil : "语言 " + $0 + "。" } ?? "")
+        case .en:
+            return "Requester \(name). "
+                + (topic.flatMap { $0.isEmpty ? nil : "Topic: " + $0 + ". " } ?? "")
+                + (locality.flatMap { $0.isEmpty ? nil : "Area: " + $0 + ". " } ?? "")
+                + (languageName.flatMap { $0.isEmpty ? nil : "Language: " + $0 + ". " } ?? "")
+        }
+    }
+
+    // MARK: 工具
+
+    static func waitText(_ seconds: Int, _ l: Language) -> String {
+        switch l {
+        case .zh:
+            if seconds < 10 { return "刚刚" }
+            if seconds < 60 { return "\(seconds) 秒" }
+            return "\(seconds / 60) 分钟"
+        case .en:
+            if seconds < 10 { return "just now" }
+            if seconds < 60 { return "\(seconds) s" }
+            return "\(seconds / 60) min"
+        }
+    }
+    static func languageName(_ code: String, _ l: Language) -> String {
+        switch code {
+        case "zh": return l == .zh ? "中文" : "Chinese"
+        case "en": return "English"
+        default: return code
+        }
+    }
+}

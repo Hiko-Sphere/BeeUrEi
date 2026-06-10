@@ -36,11 +36,14 @@ struct AssistHomeView: View {
     @AppStorage("match.preferredLanguage") private var preferredLanguage = "" // "" = 不限
     @AppStorage("match.requireLanguage") private var requireLanguageMatch = false
 
+    /// 协助端文案语言（E5）：协助者也可能是英文用户（海外亲友）。
+    private var lang: Language { FeatureSettings().language }
+
     var body: some View {
         TabView {
-            queueTab.tabItem { Label("帮助大家", systemImage: "hand.raised.fill") }
-            familyTab.tabItem { Label("我的亲人", systemImage: "person.2.fill") }
-            meTab.tabItem { Label("我的", systemImage: "person.crop.circle") }
+            queueTab.tabItem { Label(HelperStrings.tabQueue(lang), systemImage: "hand.raised.fill") }
+            familyTab.tabItem { Label(HelperStrings.tabFamily(lang), systemImage: "person.2.fill") }
+            meTab.tabItem { Label(HelperStrings.tabMe(lang), systemImage: "person.crop.circle") }
         }
         .tint(.beeAccent)
         .task { await onAppear() }
@@ -85,17 +88,17 @@ struct AssistHomeView: View {
                                 BeeStatusPill(online: online)
                                 Spacer()
                                 Button { prefsShown = true } label: {
-                                    Label("匹配偏好", systemImage: "slider.horizontal.3").font(.subheadline)
+                                    Label(HelperStrings.matchPrefs(lang), systemImage: "slider.horizontal.3").font(.subheadline)
                                 }
-                                .accessibilityHint("设置随机匹配时优先的语言")
+                                .accessibilityHint(HelperStrings.matchPrefsHint(lang))
                             }
-                            Toggle("在线待命（接听求助与亲人来电）", isOn: $online)
+                            Toggle(HelperStrings.onlineToggleQueue(lang), isOn: $online)
                                 .onChange(of: online) { _, v in setOnline(v) }
                                 .font(.subheadline)
                         }
                     }
 
-                    BeeBigButton("随机匹配一位需要帮助的人",
+                    BeeBigButton(HelperStrings.matchRandom(lang),
                                  systemImage: "shuffle",
                                  subtitle: prefsSubtitle,
                                  tint: .beeHoney) {
@@ -107,19 +110,19 @@ struct AssistHomeView: View {
                         Text(statusText).font(.footnote).foregroundStyle(.secondary)
                     }
 
-                    BeeSectionHeader("待帮助队列", systemImage: "person.2.wave.2.fill").padding(.top, BeeSpacing.sm)
+                    BeeSectionHeader(HelperStrings.queueHeader(lang), systemImage: "person.2.wave.2.fill").padding(.top, BeeSpacing.sm)
 
                     if queue.isEmpty {
                         BeeEmptyState(systemImage: queueError ? "wifi.exclamationmark" : "checkmark.circle",
-                                      title: queueError ? "暂时无法加载" : "暂时没有人等待帮助",
-                                      message: queueError ? "下拉重试，或检查网络。" : "有人发起求助时会出现在这里。下拉刷新。")
+                                      title: queueError ? HelperStrings.queueLoadFailedTitle(lang) : HelperStrings.queueEmptyTitle(lang),
+                                      message: queueError ? HelperStrings.queueLoadFailedMessage(lang) : HelperStrings.queueEmptyMessage(lang))
                     } else {
                         ForEach(queue) { req in queueCard(req) }
                     }
                 }
                 .padding()
             }
-            .navigationTitle("帮助大家")
+            .navigationTitle(HelperStrings.tabQueue(lang))
             .toolbar { ToolbarItem(placement: .primaryAction) { NotificationsBell() } }
             .refreshable { await refreshQueue() }
         }
@@ -141,7 +144,7 @@ struct AssistHomeView: View {
                     if let lang = r.language, !lang.isEmpty { BeeInfoRow(systemImage: "globe", text: languageName(lang)) }
                     HStack {
                         Spacer()
-                        Label("帮助 TA", systemImage: "video.fill")
+                        Label(HelperStrings.helpThem(lang), systemImage: "video.fill")
                             .font(.subheadline.weight(.semibold))
                             .padding(.horizontal, 14).padding(.vertical, 8)
                             .background(Color.beeSuccess, in: Capsule())
@@ -153,38 +156,41 @@ struct AssistHomeView: View {
         .buttonStyle(.plain)
         .disabled(busy)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("求助者 \(r.fromName)。\(r.topic.flatMap { $0.isEmpty ? nil : "事项 " + $0 + "。" } ?? "")\(r.locality.map { "地点 " + $0 + "。" } ?? "")\(r.language.map { "语言 " + languageName($0) + "。" } ?? "")已等待\(waitText(r.waitedSeconds))。")
-        .accessibilityHint("双击接听并帮助 TA")
+        .accessibilityLabel(HelperStrings.queueCardA11y(name: r.fromName, topic: r.topic, locality: r.locality,
+                                                       languageName: r.language.map { languageName($0) },
+                                                       waited: waitText(r.waitedSeconds), lang))
+        .accessibilityHint(HelperStrings.queueCardHint(lang))
         .accessibilityAddTraits(.isButton)
     }
 
     private var prefsSubtitle: String {
         var parts: [String] = []
-        parts.append(preferredLanguage.isEmpty ? "不限语言" : "偏好\(languageName(preferredLanguage))")
-        if requireLanguageMatch && !preferredLanguage.isEmpty { parts.append("仅同语言") }
+        parts.append(preferredLanguage.isEmpty ? HelperStrings.anyLanguage(lang)
+                                               : HelperStrings.prefer(languageName(preferredLanguage), lang))
+        if requireLanguageMatch && !preferredLanguage.isEmpty { parts.append(HelperStrings.sameLanguageOnly(lang)) }
         return parts.joined(separator: " · ")
     }
 
     private var prefsSheet: some View {
         NavigationStack {
             Form {
-                Section("优先语言") {
-                    Picker("优先语言", selection: $preferredLanguage) {
-                        Text("不限").tag("")
+                Section(HelperStrings.preferredLanguageHeader(lang)) {
+                    Picker(HelperStrings.preferredLanguageHeader(lang), selection: $preferredLanguage) {
+                        Text(HelperStrings.anyOption(lang)).tag("")
                         Text("中文").tag("zh")
                         Text("English").tag("en")
                     }
                     .pickerStyle(.inline)
                 }
                 Section {
-                    Toggle("只匹配同语言的求助", isOn: $requireLanguageMatch)
+                    Toggle(HelperStrings.requireSameLanguage(lang), isOn: $requireLanguageMatch)
                         .disabled(preferredLanguage.isEmpty)
                 } footer: {
-                    Text("开启后，随机匹配只会匹配与上面所选语言一致的求助；关闭则优先同语言、其次等待最久者。")
+                    Text(HelperStrings.requireSameLanguageFooter(lang))
                 }
             }
-            .navigationTitle("匹配偏好")
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { prefsShown = false } } }
+            .navigationTitle(HelperStrings.matchPrefs(lang))
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(HelperStrings.done(lang)) { prefsShown = false } } }
         }
     }
 
@@ -194,22 +200,23 @@ struct AssistHomeView: View {
         NavigationStack {
             List {
                 Section {
-                    Toggle("在线待命（接听亲人紧急呼叫）", isOn: $online)
+                    Toggle(HelperStrings.onlineToggleFamily(lang), isOn: $online)
                         .onChange(of: online) { _, v in setOnline(v) }
-                    Text(online ? "亲人发起紧急呼叫时会在此自动弹出来电。" : "已离线，不会接到亲人来电。")
+                    Text(online ? HelperStrings.onlineFooterOn(lang) : HelperStrings.onlineFooterOff(lang))
                         .font(.footnote).foregroundStyle(.secondary)
                 }
 
                 if pendingLinks.contains(where: { $0.isPending }) {
-                    Section("待你接受的绑定请求") {
+                    Section(HelperStrings.pendingHeader(lang)) {
                         ForEach(pendingLinks.filter { $0.isPending }) { l in
                             VStack(alignment: .leading, spacing: 10) {
-                                Text("\(l.ownerName) 想把你加为\(l.relation)\(l.isEmergency ? "（紧急联系人）" : "")")
+                                Text(HelperStrings.wantsToLink(owner: l.ownerName, relation: l.relation,
+                                                               emergency: l.isEmergency, lang))
                                     .font(.subheadline)
                                 HStack {
-                                    Button("接受") { Task { await accept(l) } }
+                                    Button(HelperStrings.accept(lang)) { Task { await accept(l) } }
                                         .buttonStyle(.borderedProminent).disabled(linkBusy.contains(l.id))
-                                    Button("拒绝", role: .destructive) { Task { await reject(l) } }
+                                    Button(HelperStrings.reject(lang), role: .destructive) { Task { await reject(l) } }
                                         .buttonStyle(.bordered).disabled(linkBusy.contains(l.id))
                                 }
                             }
@@ -220,25 +227,25 @@ struct AssistHomeView: View {
 
                 let outgoing = myLinks.filter { $0.outgoing == true }
                 if !outgoing.isEmpty {
-                    Section("我发出的请求（待对方确认）") {
+                    Section(HelperStrings.outgoingHeader(lang)) {
                         ForEach(outgoing) { l in
                             HStack {
                                 Text(l.memberName)
                                 Spacer()
-                                Text("待确认").font(.caption).foregroundStyle(Color.beeWarn)
-                                Button("撤回", role: .destructive) { Task { await cancelOutgoing(l) } }
+                                Text(HelperStrings.pendingBadge(lang)).font(.caption).foregroundStyle(Color.beeWarn)
+                                Button(HelperStrings.withdraw(lang), role: .destructive) { Task { await cancelOutgoing(l) } }
                                     .buttonStyle(.bordered)
                                     .disabled(linkBusy.contains(l.id))
-                                    .accessibilityLabel("撤回发给 \(l.memberName) 的绑定请求")
+                                    .accessibilityLabel(HelperStrings.withdrawA11y(l.memberName, lang))
                             }
                         }
                     }
                 }
 
-                Section("我的亲人 / 求助者") {
+                Section(HelperStrings.familyHeader(lang)) {
                     let accepted = myLinks.filter { $0.isAccepted }
                     if accepted.isEmpty {
-                        Text("还没有建立关系。点右上角「＋」按对方用户名发起，或让对方添加你后在上方确认。")
+                        Text(HelperStrings.noRelationsYet(lang))
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(accepted) { l in
@@ -246,7 +253,7 @@ struct AssistHomeView: View {
                                 AvatarView(dataURL: l.memberAvatar, name: l.memberName, size: 36)
                                 VStack(alignment: .leading) {
                                     Text(l.memberName)
-                                    Text("\(l.relation)\(l.isEmergency ? " · 紧急联系人" : "")")
+                                    Text(l.relation + (l.isEmergency ? HelperStrings.emergencySuffix(lang) : ""))
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
                                 Spacer()
@@ -254,7 +261,7 @@ struct AssistHomeView: View {
                                     Image(systemName: "phone.fill").foregroundStyle(Color.beeSuccess)
                                 }
                                 .buttonStyle(.borderless)
-                                .accessibilityLabel("呼叫 \(l.memberName)")
+                                .accessibilityLabel(HelperStrings.callA11y(l.memberName, lang))
                             }
                         }
                     }
@@ -262,19 +269,20 @@ struct AssistHomeView: View {
 
                 if let addFamilyMsg { Section { Text(addFamilyMsg).foregroundStyle(.secondary) } }
             }
-            .navigationTitle("我的亲人")
+            .navigationTitle(HelperStrings.familyNavTitle(lang))
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button { showAddFamily = true } label: { Image(systemName: "plus") }
-                        .accessibilityLabel("添加亲人或求助者")
+                        .accessibilityLabel(HelperStrings.addFamilyA11y(lang))
                 }
             }
-            .alert("添加亲人 / 求助者", isPresented: $showAddFamily) {
-                TextField("对方用户名", text: $newFamilyUsername).textInputAutocapitalization(.never).autocorrectionDisabled()
-                Button("发送请求") { Task { await addFamily() } }
-                Button("取消", role: .cancel) { newFamilyUsername = "" }
+            .alert(HelperStrings.addFamilyTitle(lang), isPresented: $showAddFamily) {
+                TextField(HelperStrings.usernamePlaceholder(lang), text: $newFamilyUsername)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                Button(HelperStrings.sendRequest(lang)) { Task { await addFamily() } }
+                Button(HelperStrings.cancel(lang), role: .cancel) { newFamilyUsername = "" }
             } message: {
-                Text("输入对方用户名发起绑定请求，对方确认后建立关系。")
+                Text(HelperStrings.addFamilyMessage(lang))
             }
             .refreshable { await loadLinks() }
             .onChange(of: addFamilyMsg) { _, m in if let m, !m.isEmpty { A11y.announce(m) } }
@@ -288,10 +296,10 @@ struct AssistHomeView: View {
         let callId = UUID().uuidString
         do {
             try await APIClient().startEmergencyCall(token: token, callId: callId, targetUserIds: [l.memberId])
-            answering = AnsweringCall(callId: callId, title: "呼叫 \(l.memberName)", isIncoming: false)
+            answering = AnsweringCall(callId: callId, title: HelperStrings.callingTitle(l.memberName, lang), isIncoming: false)
         } catch let APIError.server(msg) {
-            addFamilyMsg = msg == "not_linked" ? "对方未确认绑定，暂不能呼叫" : "呼叫失败，请重试"
-        } catch { addFamilyMsg = "呼叫失败，请重试" }
+            addFamilyMsg = msg == "not_linked" ? HelperStrings.notLinkedYet(lang) : HelperStrings.callFailed(lang)
+        } catch { addFamilyMsg = HelperStrings.callFailed(lang) }
     }
 
     private func addFamily() async {
@@ -299,11 +307,13 @@ struct AssistHomeView: View {
         guard !u.isEmpty, let token = session.token else { return }
         do {
             try await APIClient().addFamilyLink(token: token, username: u, relation: nil, isEmergency: false, phone: nil)
-            addFamilyMsg = "已向 \(u) 发送请求，待对方确认"
+            addFamilyMsg = HelperStrings.requestSentTo(u, lang)
             await loadLinks()
         } catch let APIError.server(msg) {
-            addFamilyMsg = msg == "member_not_found" ? "找不到该用户名" : (msg == "already_linked" ? "你们已绑定/已发过请求" : (msg == "blocked" ? "无法添加：存在拉黑关系" : "发送失败"))
-        } catch { addFamilyMsg = "发送失败，请重试" }
+            addFamilyMsg = msg == "member_not_found" ? HelperStrings.memberNotFound(lang)
+                : (msg == "already_linked" ? HelperStrings.alreadyLinked(lang)
+                   : (msg == "blocked" ? HelperStrings.blockedRelation(lang) : HelperStrings.sendFailed(lang)))
+        } catch { addFamilyMsg = HelperStrings.sendFailedRetry(lang) }
     }
 
     // MARK: 标签三：我的（账号）
@@ -311,26 +321,27 @@ struct AssistHomeView: View {
     private var meTab: some View {
         NavigationStack {
             List {
-                Section("账号") {
+                Section(HelperStrings.accountHeader(lang)) {
                     if let u = session.user {
                         HStack(spacing: BeeSpacing.md) {
                             AvatarView(dataURL: u.avatar, name: u.displayName, size: 52)
                             VStack(alignment: .leading) {
                                 Text(u.displayName).font(.headline)
-                                Text("@\(u.username) · \(roleDisplayName(u.role))").font(.caption).foregroundStyle(.secondary)
+                                Text("@\(u.username) · \(AccountStrings.roleName(u.role, lang))")
+                                    .font(.caption).foregroundStyle(.secondary)
                             }
                         }
                     }
-                    NavigationLink("账号与安全") { LoginView() }
-                    Button("切换角色") { onSwitchRole() }
-                    Button("退出登录", role: .destructive) { session.logout() }
+                    NavigationLink(HelperStrings.accountAndSecurity(lang)) { LoginView() }
+                    Button(HelperStrings.switchRole(lang)) { onSwitchRole() }
+                    Button(HelperStrings.logout(lang), role: .destructive) { session.logout() }
                 }
                 Section {
-                    Text("「协助者」与「亲友」已合并：你既能在「帮助大家」里帮助陌生求助者，也能在「我的亲人」里接听绑定亲人的呼叫。")
+                    Text(HelperStrings.mergedExplain(lang))
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle("我的")
+            .navigationTitle(HelperStrings.meNavTitle(lang))
         }
     }
 
@@ -420,9 +431,9 @@ struct AssistHomeView: View {
         busy = true; defer { busy = false }
         do {
             let detail = try await APIClient().claimHelp(token: token, callId: r.callId)
-            answering = AnsweringCall(callId: detail.callId, title: "正在帮助 \(detail.fromName)", isIncoming: false)
+            answering = AnsweringCall(callId: detail.callId, title: HelperStrings.helpingTitle(detail.fromName, lang), isIncoming: false)
         } catch {
-            statusText = "手慢了，这条求助已被其他志愿者接走。"
+            statusText = HelperStrings.claimedByOther(lang)
             await refreshQueue()
         }
     }
@@ -430,17 +441,17 @@ struct AssistHomeView: View {
     private func matchRandom() async {
         guard !busy, answering == nil, matched == nil, pendingAnswer == nil,
               !IncomingCallCenter.shared.hasIncoming, let token = session.token else { return }
-        busy = true; statusText = "正在为你匹配…"; defer { busy = false }
+        busy = true; statusText = HelperStrings.matching(lang); defer { busy = false }
         do {
-            let lang = preferredLanguage.isEmpty ? nil : preferredLanguage
-            if let detail = try await APIClient().matchHelp(token: token, preferredLanguage: lang, requireLanguageMatch: requireLanguageMatch) {
+            let preferred = preferredLanguage.isEmpty ? nil : preferredLanguage
+            if let detail = try await APIClient().matchHelp(token: token, preferredLanguage: preferred, requireLanguageMatch: requireLanguageMatch) {
                 statusText = nil
                 matched = detail // 先展示详情，由协助者决定是否帮助（匹配已原子认领，跳过会释放回队列）
             } else {
-                statusText = requireLanguageMatch ? "暂时没有符合所选语言的求助。" : "暂时没有等待帮助的人。"
+                statusText = requireLanguageMatch ? HelperStrings.noSameLanguageRequest(lang) : HelperStrings.nobodyWaiting(lang)
             }
         } catch {
-            statusText = "匹配失败，请稍后再试。"
+            statusText = HelperStrings.matchFailed(lang)
         }
     }
 
@@ -448,7 +459,7 @@ struct AssistHomeView: View {
     private func matchedSheet(_ detail: HelpRequestDetail) -> some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: BeeSpacing.md) {
-                Text("为你匹配到一位需要帮助的人").font(.headline)
+                Text(HelperStrings.matchedTitle(lang)).font(.headline)
                 BeeCard {
                     VStack(alignment: .leading, spacing: BeeSpacing.sm) {
                         HStack {
@@ -463,12 +474,12 @@ struct AssistHomeView: View {
                 // 合并为单一可读元素，与首屏求助卡片措辞一致，避免逐条右滑（见无障碍审计）。
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(matchedLabel(detail))
-                BeeBigButton("帮助 TA", systemImage: "video.fill", tint: .beeSuccess, foreground: .white) {
+                BeeBigButton(HelperStrings.helpThem(lang), systemImage: "video.fill", tint: .beeSuccess, foreground: .white) {
                     // 暂存待呈现的通话，关掉 sheet；待 onDismiss 触发后再开 fullScreenCover（见审查 #3）。
-                    pendingAnswer = AnsweringCall(callId: detail.callId, title: "正在帮助 \(detail.fromName)", isIncoming: false)
+                    pendingAnswer = AnsweringCall(callId: detail.callId, title: HelperStrings.helpingTitle(detail.fromName, lang), isIncoming: false)
                     matched = nil
                 }
-                Button("跳过这一位", role: .cancel) {
+                Button(HelperStrings.skipThisOne(lang), role: .cancel) {
                     let callId = detail.callId
                     matched = nil
                     if let token = session.token {
@@ -479,9 +490,9 @@ struct AssistHomeView: View {
                 Spacer()
             }
             .padding()
-            .navigationTitle("匹配结果")
+            .navigationTitle(HelperStrings.matchResultTitle(lang))
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear { A11y.announce("为你匹配到：\(matchedLabel(detail))") }
+            .onAppear { A11y.announce(HelperStrings.matchedAnnounce(matchedLabel(detail), lang)) }
         }
         .presentationDetents([.medium, .large])
     }
@@ -511,25 +522,17 @@ struct AssistHomeView: View {
     // MARK: 工具
 
     private func waitText(_ seconds: Int) -> String {
-        if seconds < 10 { return "刚刚" }
-        if seconds < 60 { return "\(seconds) 秒" }
-        return "\(seconds / 60) 分钟"
+        HelperStrings.waitText(seconds, lang)
     }
 
     /// 匹配详情的统一合并朗读文案（与首屏求助卡片措辞一致）。
     private func matchedLabel(_ d: HelpRequestDetail) -> String {
-        "求助者 \(d.fromName)。"
-            + (d.topic.flatMap { $0.isEmpty ? nil : "事项 " + $0 + "。" } ?? "")
-            + (d.locality.flatMap { $0.isEmpty ? nil : "地点 " + $0 + "。" } ?? "")
-            + (d.language.flatMap { $0.isEmpty ? nil : "语言 " + languageName($0) + "。" } ?? "")
+        HelperStrings.matchedLabel(name: d.fromName, topic: d.topic, locality: d.locality,
+                                   languageName: d.language.map { languageName($0) }, lang)
     }
 
     private func languageName(_ code: String) -> String {
-        switch code {
-        case "zh": return "中文"
-        case "en": return "English"
-        default: return code
-        }
+        HelperStrings.languageName(code, lang)
     }
 }
 

@@ -220,9 +220,9 @@ struct SettingsView: View {
                 }
 
                 Section(SettingsStrings.disclaimerHeader(lang)) {
-                    Text(DisclaimerText.full)
+                    Text(DisclaimerText.full(lang))
                         .font(.body)
-                        .accessibilityLabel(DisclaimerText.full)
+                        .accessibilityLabel(DisclaimerText.full(lang))
                 }
             }
             .navigationTitle(SettingsStrings.navTitle(lang))

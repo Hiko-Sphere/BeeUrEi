@@ -2,9 +2,20 @@ import Foundation
 import MapKit
 import CoreLocation
 
+/// 导航定位/路线服务抽象（F1）：供 NavigationViewModel 注入 mock 单测——
+/// 记路精度门控与回程到达门控是安全攸关胶水逻辑（误报到达/坏精度入轨都是历史审查项）。
+protocol NavigationServicing: AnyObject {
+    var onLocation: ((CLLocation) -> Void)? { get set }
+    var onHeading: ((CLHeading) -> Void)? { get set }
+    func requestAuthAndStart()
+    func stop()
+    func geocode(_ query: String) async -> CLLocationCoordinate2D?
+    func walkingManeuvers(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D) async -> [(coordinate: CLLocationCoordinate2D, instruction: String)]
+}
+
 /// 步行导航的 I/O 适配（海外 MapKit；真机验证）：定位、航向、目的地搜索、步行路线。
 /// 决策逻辑（精度门控/转向播报/方位）在已测核心（LocationAccuracyGate/RouteProgress/Geo/BeaconDirection）。
-final class NavigationService: NSObject {
+final class NavigationService: NSObject, NavigationServicing {
     private let locationManager = CLLocationManager()
 
     var onLocation: ((CLLocation) -> Void)?

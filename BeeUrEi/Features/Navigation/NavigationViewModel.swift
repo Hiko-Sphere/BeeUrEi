@@ -17,12 +17,19 @@ final class NavigationViewModel {
     private(set) var steps: [String] = []     // 国内：路线步骤列表（VoiceOver 可读）
     private(set) var running = false
 
-    @ObservationIgnored private let service = NavigationService()
+    @ObservationIgnored private let service: NavigationServicing
     @ObservationIgnored private let amap = AMapRouteClient()
     @ObservationIgnored private let progress = RouteProgress()
     @ObservationIgnored private let gate = LocationAccuracyGate()
-    @ObservationIgnored private let spatial = SpatialAudioFeedback()
+    @ObservationIgnored private let spatial: SpatialCueing
     @ObservationIgnored private let headTracker = HeadTracker()
+
+    /// F1：定位服务与空间音可注入（mock 驱动记路/回程门控单测，零音频零定位权限）。
+    /// 生产默认实现与初始化时序不变。
+    init(service: NavigationServicing = NavigationService(), spatial: SpatialCueing = SpatialAudioFeedback()) {
+        self.service = service
+        self.spatial = spatial
+    }
     @ObservationIgnored private let offRoute = OffRouteDetector()
 
     @ObservationIgnored private var region: Region = .overseas
@@ -90,6 +97,10 @@ final class NavigationViewModel {
         lastHeadingTime = 0
         running = true
         status = NavStrings.locating(lang)
+        // callout 时钟基线 = 进导航时刻：起步阶段(30/75s)让位给"导航开始/第一步"播报，
+        // 也避免首帧即发地理编码/POI 网络请求（单测/弱网下首帧阻塞）。
+        lastCallout = ProcessInfo.processInfo.systemUptime
+        lastRoadGeocode = ProcessInfo.processInfo.systemUptime
 
         service.onLocation = { [weak self] loc in self?.handle(loc) }
         service.onHeading = { [weak self] h in
@@ -206,7 +217,9 @@ final class NavigationViewModel {
             let toDest = Geo.distanceMeters(fromLat: lat, fromLon: lon, toLat: dest.latitude, toLon: dest.longitude)
             if toDest < 15 {
                 if level == .precise {
-                    status = NavStrings.nearDestination(lang); speak(NavStrings.nearDestination(lang)); stop()
+                    speak(NavStrings.nearDestination(lang))
+                    stop()
+                    status = NavStrings.nearDestination(lang) // 置于 stop() 之后：不被"导航已停止"覆盖（单测揪出）
                 } else {
                     status = NavStrings.approachingDestination(lang)   // 精度不足：不轻易宣布到达并终止
                 }
@@ -425,6 +438,9 @@ final class NavigationViewModel {
         routeReady = true  // 航点已就绪，不走 planRoute
         replanning = false
         running = true
+        // callout 时钟基线同 start()：起步让位 + 不在首帧发网络请求。
+        lastCallout = ProcessInfo.processInfo.systemUptime
+        lastRoadGeocode = ProcessInfo.processInfo.systemUptime
         status = NavStrings.backtrackStatus(waypoints.count, lang)
         speak(NavStrings.backtrackStartSpeak(lang))
         service.onLocation = { [weak self] loc in self?.handle(loc) }

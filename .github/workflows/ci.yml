@@ -61,4 +61,5 @@ jobs:
           xcodebuild -project BeeUrEi.xcodeproj -scheme BeeUrEi \
             -destination "platform=iOS Simulator,name=${DEST:-iPhone 15}" \
             -only-testing BeeUrEiTests \
-            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES test
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=NO test

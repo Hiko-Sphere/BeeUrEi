@@ -62,6 +62,8 @@ final class HomeViewModel {
     @ObservationIgnored private let proximityMapper = ProximityCueMapper()
     @ObservationIgnored private var paused = false // 暂停中(通话/取景)：丢弃在途帧，杜绝暂停后仍冒出"前方…"
     @ObservationIgnored private var zoneHysteresis = ZoneHysteresis() // 分区滞回（PERCEPTION §6）
+    @ObservationIgnored private var processingInterval: TimeInterval = 0.5 // 决策节流间隔（热/电降级会放宽）
+    @ObservationIgnored private let lightMeter = LightMeter()
     @ObservationIgnored private let sonifier = ProximitySonifier()
     @ObservationIgnored private let clearConfirmer = ClearPathConfirmer()
     @ObservationIgnored private let announcePolicy = AnnouncementPolicy()
@@ -176,8 +178,9 @@ final class HomeViewModel {
             lastFpsStamp = frame.timestamp
         }
 
-        // 节流到约 2Hz（避障决策不需要每帧跑）。
-        guard frame.timestamp - lastProcess >= 0.5 else { return }
+        // 节流：正常约 2Hz；过热/低电时按 ThermalPlan/PowerPlan 的 targetFPS 等比放宽间隔
+        // （真正降低检测/决策计算量，而不只是播一句提示，见 PLAN §5.4）。
+        guard frame.timestamp - lastProcess >= processingInterval else { return }
         lastProcess = frame.timestamp
         updateAdvisory()
         thermalText = Self.thermalLabel(ProcessInfo.processInfo.thermalState)
@@ -197,6 +200,20 @@ final class HomeViewModel {
             proximityText = thermalPlan.advisory ?? "设备过热，避障暂停"
             degradeStop()
             return
+        }
+        // 热/电降级真正作用到处理频率：取两方案较低的 targetFPS，按 15fps 基准等比放宽决策间隔
+        // （nominal 0.5s → serious ~0.94s → 电量极低 1.5s），上限 1.5s 保证危险仍能及时发现。
+        let powerPlan = powerPolicy.plan(batteryLevel: Double(UIDevice.current.batteryLevel),
+                                         lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled)
+        let fps = max(1, min(thermalPlan.targetFPS, powerPlan.targetFPS))
+        processingInterval = min(max(0.5 * 15.0 / Double(fps), 0.5), 1.5)
+
+        // 光照告警（§5.5）：过暗时 RGB 识别失效但 LiDAR 测距仍可用——明确告诉盲人能力边界，60s 去抖。
+        if let rgb = ColorSampler.averageRGB(in: frame.pixelBuffer, rect: CGRect(x: 0, y: 0, width: 1, height: 1)),
+           lightMeter.level(brightness: LightMeter.luminance(r: rgb.r, g: rgb.g, b: rgb.b)) == .dark,
+           throttle.shouldAnnounce(key: "light", now: frame.timestamp, minGap: 60) {
+            coordinator.submit(FeedbackEvent(priority: .status,
+                                             speech: "光线较暗，物体识别能力下降，仅保留距离警告，请小心慢行"))
         }
 
         guard currentMode != .suspended, let depth = frame.depth else {

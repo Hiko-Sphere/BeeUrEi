@@ -31,7 +31,9 @@ final class SpatialAudioFeedback: FeedbackSink {
     }
 
     /// 在给定方位角播放短提示音（右为正，单位度），声源置于听者前方 1m 处的该方位。
-    func playCue(azimuthDegrees: Float) {
+    /// distanceMeters：到目标的距离（可选）——越近音量越大（Phase 2 标准「靠近音量增大」），
+    /// 给盲人"快到了"的直觉反馈：>200m 轻(0.45)，线性增强至 ≤15m 最响(1.0)。
+    func playCue(azimuthDegrees: Float, distanceMeters: Double? = nil) {
         guard let toneBuffer else { return }
         // 用 engine.isRunning 判断而非粘滞的 started：来电/Siri/媒体重置会停掉引擎，
         // 此处检测到未运行就重启，避免一次中断后信标永久失声（导航核心反馈，见审查 #10）。
@@ -44,6 +46,12 @@ final class SpatialAudioFeedback: FeedbackSink {
                 started = false
                 return
             }
+        }
+        if let d = distanceMeters, d.isFinite {
+            let t = Float(max(0, min(1, (200 - d) / 185)))   // 200m→0, 15m→1
+            player.volume = 0.45 + 0.55 * t
+        } else {
+            player.volume = 1.0
         }
         let radians = azimuthDegrees * .pi / 180
         player.position = AVAudio3DPoint(x: sin(radians), y: 0, z: -cos(radians))

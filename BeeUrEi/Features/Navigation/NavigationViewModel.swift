@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import AVFoundation
 import CoreLocation
+import MapKit
 
 /// 步行导航视图模型。海外用 MapKit（实时转向播报 + **空间音信标** + **偏航重规划** +
 /// **AirPods 头追踪**，接已测核心）；国内用高德（经后端，key 在 .env）取步行路线并读出步骤。
@@ -42,6 +43,9 @@ final class NavigationViewModel {
     @ObservationIgnored private var lastHeadingTime: TimeInterval = 0   // 最近一次可信航向的时刻(单调钟)；陈旧则抑制信标（见审查 #4）
     @ObservationIgnored private var waypointAdvance = WaypointAdvance() // "越过波谷"几何推进判定（核心，已测；见回归 #1/#2）
     @ObservationIgnored private var offRouteStreak = 0                  // 连续判定偏航的帧数，需≥2 抗单帧抖动（见审查 #3）
+    @ObservationIgnored private var lastCallout: TimeInterval = 0       // 沿途地标 callout 节流
+    @ObservationIgnored private var lastCalloutName = ""                // 上次报过的地标（不重复报同一个）
+    @ObservationIgnored private var calloutBusy = false                 // POI 查询进行中
 
     func start(destination query: String, region: Region) async {
         guard FeatureSettings().navigationEnabled else {
@@ -162,7 +166,17 @@ final class NavigationViewModel {
             lastBeacon = now
             let bearing = Geo.initialBearing(fromLat: lat, fromLon: lon, toLat: target.latitude, toLon: target.longitude)
             let beacon = BeaconDirection(headingDegrees: currentHeading, bearingDegrees: bearing)
-            spatial.playCue(azimuthDegrees: Float(beacon.relativeAzimuthDegrees))
+            // 距离传给信标：越接近目标音量越大（Phase 2「靠近音量增大」）。
+            let targetDist = Geo.distanceMeters(fromLat: lat, fromLon: lon, toLat: target.latitude, toLon: target.longitude)
+            spatial.playCue(azimuthDegrees: Float(beacon.relativeAzimuthDegrees), distanceMeters: targetDist)
+        }
+
+        // 沿途地标 callout（Soundscape 式，Phase 2 交付物⑥）：精度可信时每 75s 报一次"途经 X"。
+        // 经 NavVoice 排队播报（不打断转向指令；避障警告可掐断它）。
+        if level == .precise, now - lastCallout >= 75, !calloutBusy {
+            lastCallout = now
+            calloutBusy = true
+            announceNearbyLandmark(at: loc)
         }
 
         // 已过完所有转向点：接近目的地判定。**到达=高确定性结论，也要过精度门控**——
@@ -284,5 +298,23 @@ final class NavigationViewModel {
         lastSpoken = text
         // 经共享导航语音通道：避障 obstacle/critical 播报会掐断它（跨通道仲裁，Phase 2 标准）。
         NavVoice.shared.speak(text, rate: FeatureSettings().speechRate)
+    }
+
+    /// 沿途地标 callout：查最近 POI，60m 内且与上次不同才报"途经 X"（参考 Soundscape）。
+    private func announceNearbyLandmark(at loc: CLLocation) {
+        let request = MKLocalPointsOfInterestRequest(center: loc.coordinate, radius: 80)
+        MKLocalSearch(request: request).start { [weak self] response, _ in
+            let items = response?.mapItems ?? []
+            Task { @MainActor in
+                guard let self else { return }
+                self.calloutBusy = false
+                guard self.running else { return }
+                guard let item = items.first(where: { ($0.name ?? "").isEmpty == false && $0.name != self.lastCalloutName }),
+                      let name = item.name, let ploc = item.placemark.location,
+                      loc.distance(from: ploc) <= 60 else { return }
+                self.lastCalloutName = name
+                NavVoice.shared.speak("途经\(name)", rate: FeatureSettings().speechRate)
+            }
+        }
     }
 }

@@ -73,6 +73,9 @@ final class FramingAssistViewModel {
             documentGuidance(frame)
             return
         }
+        // 找我的东西：教学/寻找两个阶段都接管帧流。
+        if findPhase == .teaching { teachStep(frame); return }
+        if findPhase == .finding { findStep(frame); return }
 
         // 全帧检测，取最大框作为取景目标。
         let detections = detector.detect(in: frame.pixelBuffer, regionOfInterest: CGRect(x: 0, y: 0, width: 1, height: 1))
@@ -102,6 +105,135 @@ final class FramingAssistViewModel {
                 speak(hint)
             }
         }
+    }
+
+    // MARK: 找我的东西（Seeing AI Find My Things 式，端侧 FeaturePrint）
+
+    enum FindPhase { case idle, teaching, finding }
+    private(set) var findPhase: FindPhase = .idle
+    private(set) var taughtItems: [String] = []
+    var showTeachNaming = false // 拍满三张后弹命名输入
+    @ObservationIgnored private var pendingPrints: [VNFeaturePrintObservation] = []
+    @ObservationIgnored private var lastTeachShot: TimeInterval = 0
+    @ObservationIgnored private var findTarget: (name: String, prints: [VNFeaturePrintObservation])?
+    @ObservationIgnored private var lastFindHit: TimeInterval = 0
+    @ObservationIgnored private var lastFindHeartbeat: TimeInterval = 0
+    @ObservationIgnored private let itemsStore = TaughtItemsStore()
+    /// 同物匹配阈值（FeaturePrint 距离，越小越像）。⚠️ 经验值，待真机按误报率微调。
+    @ObservationIgnored private let matchThreshold: Float = 0.62
+
+    func refreshTaughtItems() { taughtItems = itemsStore.names }
+
+    /// 教学：把物品举在镜头前，每 ~1s 自动拍一张特征，共 3 张后请用户命名。
+    func startTeaching() {
+        docMode = false
+        findPhase = .teaching
+        pendingPrints = []
+        lastTeachShot = 0
+        guidanceText = "教我认东西：把物品举在镜头前"
+        speak("教我认东西。把物品举在镜头前约三十厘米，慢慢转动它，我会自动拍三张。")
+    }
+
+    /// 拍满三张后由命名弹窗回调保存。
+    func saveTaughtItem(named name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !pendingPrints.isEmpty else { findPhase = .idle; return }
+        itemsStore.save(name: trimmed, prints: pendingPrints)
+        pendingPrints = []
+        findPhase = .idle
+        refreshTaughtItems()
+        guidanceText = "已学会：\(trimmed)"
+        speak("学会了。以后可以让我帮你找\(trimmed)。")
+    }
+
+    func deleteTaughtItem(_ name: String) {
+        itemsStore.delete(name: name)
+        refreshTaughtItems()
+    }
+
+    /// 开始寻找某个已学物品。
+    func startFinding(_ name: String) {
+        let prints = itemsStore.prints(for: name)
+        guard !prints.isEmpty else { speak("没有找到\(name)的学习记录"); return }
+        docMode = false
+        findTarget = (name, prints)
+        findPhase = .finding
+        lastFindHit = 0
+        lastFindHeartbeat = 0
+        guidanceText = "寻找：\(name)"
+        speak("开始找\(name)。拿着手机慢慢左右移动扫一圈，对到了我会告诉你方位。")
+    }
+
+    func stopFindFlow() {
+        findPhase = .idle
+        findTarget = nil
+        pendingPrints = []
+        guidanceText = "已停止"
+    }
+
+    /// 教学帧：约 1s 自动拍一张中央区特征，三张后请命名。
+    private func teachStep(_ frame: SensorFrame) {
+        guard frame.timestamp - lastTeachShot >= 1.0 else { return }
+        lastTeachShot = frame.timestamp
+        // 中央 50% 区域：物品举在镜头前的主体区。
+        guard let print = Self.featurePrint(in: frame.pixelBuffer,
+                                            roi: CGRect(x: 0.25, y: 0.25, width: 0.5, height: 0.5)) else { return }
+        pendingPrints.append(print)
+        speak("拍了第\(pendingPrints.count)张")
+        guidanceText = "已拍 \(pendingPrints.count)/3"
+        if pendingPrints.count >= 3 {
+            findPhase = .idle
+            showTeachNaming = true
+            speak("拍好了。请输入这个东西的名字，可以用键盘上的话筒说出来。")
+        }
+    }
+
+    /// 寻找帧：候选区（YOLO 框 + 中央区）逐个比对特征距离；命中报方位与距离。
+    private func findStep(_ frame: SensorFrame) {
+        guard let target = findTarget else { return }
+        // 候选区：YOLO 框（最多 3 个）+ 中央区兜底（YOLO 认不出"钥匙串"这类小物）。
+        var rois: [CGRect] = [CGRect(x: 0.3, y: 0.3, width: 0.4, height: 0.4)]
+        let dets = detector.detect(in: frame.pixelBuffer, regionOfInterest: CGRect(x: 0, y: 0, width: 1, height: 1))
+        for d in dets.prefix(3) {
+            if let b = d.box { rois.append(CGRect(x: b.x, y: b.y, width: b.width, height: b.height)) }
+        }
+        var best: (dist: Float, roi: CGRect)?
+        for roi in rois {
+            guard let print = Self.featurePrint(in: frame.pixelBuffer, roi: roi) else { continue }
+            for taught in target.prints {
+                var d: Float = .greatestFiniteMagnitude
+                guard (try? print.computeDistance(&d, to: taught)) != nil else { continue }
+                if best == nil || d < best!.dist { best = (d, roi) }
+            }
+        }
+        if let best, best.dist < matchThreshold {
+            guard frame.timestamp - lastFindHit >= 2.5 else { return } // 命中去抖
+            lastFindHit = frame.timestamp
+            let clock = ClockDirection(normalizedX: best.roi.midX, horizontalFOVDegrees: 68)
+            // 距离：用候选区中心的 LiDAR 深度（有就报，没有只报方向）。
+            var distText = ""
+            if let depth = frame.depth {
+                let s = DepthSampling.samples(depth: depth.depth, confidence: depth.confidence,
+                                              normalizedX: best.roi.midX, normalizedY: best.roi.midY)
+                if let m = DepthSampler().nearestDistance(depths: s.depths, confidences: s.confidences) {
+                    distText = String(format: "，大约%.1f米", m)
+                }
+            }
+            let where_ = clock.hour == 12 ? "正前方" : "\(clock.hour)点钟方向"
+            guidanceText = "可能找到\(target.name)：\(where_)"
+            speak("可能是\(target.name)，在\(where_)\(distText)")
+        } else if frame.timestamp - lastFindHeartbeat >= 6 {
+            lastFindHeartbeat = frame.timestamp
+            speak("还在找，慢慢移动手机")
+        }
+    }
+
+    /// 计算特征指纹（可限定归一化 ROI，Vision 原点左下）。
+    private static func featurePrint(in buffer: CVPixelBuffer, roi: CGRect?) -> VNFeaturePrintObservation? {
+        let request = VNGenerateImageFeaturePrintRequest()
+        if let roi { request.regionOfInterest = roi }
+        try? VNImageRequestHandler(cvPixelBuffer: buffer, options: [:]).perform([request])
+        return request.results?.first
     }
 
     // MARK: 触摸探索（Seeing AI 式：手指划到哪读哪）
@@ -419,6 +551,8 @@ final class FramingAssistViewModel {
 struct FramingAssistView: View {
     @State private var model = FramingAssistViewModel()
     @State private var torchOn = false
+    @State private var showFindMenu = false
+    @State private var teachName = ""
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     let onClose: () -> Void
 
@@ -472,6 +606,14 @@ struct FramingAssistView: View {
                                   hint: "定格画面后，手指滑到哪里就朗读那里的物体或文字") { model.captureExplore() }
                 }
                 .padding(.horizontal)
+                HStack(spacing: BeeSpacing.sm) {
+                    overlayAction(model.findPhase == .idle ? "找我的东西" : "停止寻找",
+                                  systemImage: model.findPhase == .idle ? "magnifyingglass" : "stop.circle.fill",
+                                  hint: "教 App 认你自己的钥匙、水杯等，再帮你找到它在哪个方向") {
+                        if model.findPhase == .idle { showFindMenu = true } else { model.stopFindFlow() }
+                    }
+                }
+                .padding(.horizontal)
                 .padding(.bottom, 8)
 
                 VStack(spacing: 8) {
@@ -500,8 +642,27 @@ struct FramingAssistView: View {
                 .background(Color.beeInk.opacity(reduceTransparency ? 1 : 0.88))
             }
         }
-        .task { model.start() }
+        .task { model.start(); model.refreshTaughtItems() }
         .onDisappear { model.stop(); Torch.set(false) }
+        // 找我的东西：选择要找的物品 / 教新物品。
+        .confirmationDialog("找我的东西", isPresented: $showFindMenu, titleVisibility: .visible) {
+            ForEach(model.taughtItems, id: \.self) { item in
+                Button("找：\(item)") { model.startFinding(item) }
+            }
+            Button("教我认一个新东西") { model.startTeaching() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("先「教我认一个新东西」拍三张，以后就能让我帮你找它。重新教同名物品会覆盖旧的。")
+        }
+        // 教学拍满三张：命名（键盘话筒可语音输入）。
+        .alert("给它起个名字", isPresented: Binding(get: { model.showTeachNaming },
+                                                    set: { model.showTeachNaming = $0 })) {
+            TextField("如：家门钥匙", text: $teachName)
+            Button("保存") { model.saveTaughtItem(named: teachName); teachName = "" }
+            Button("取消", role: .cancel) { teachName = ""; model.stopFindFlow() }
+        } message: {
+            Text("可以点键盘上的话筒用语音说出名字。")
+        }
         // 触摸探索：定格画面全屏呈现，手指划到哪读哪（Seeing AI 式）。
         .fullScreenCover(isPresented: Binding(get: { model.exploring },
                                               set: { if !$0 { model.exitExplore() } })) {

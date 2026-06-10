@@ -29,6 +29,28 @@ final class FramingStringsTests: XCTestCase {
         }
     }
 
+    func testUIChromeLocalized() {
+        XCTAssertEqual(FramingStrings.uiTitle(.banknote, .zh), "识别纸币")
+        XCTAssertEqual(FramingStrings.uiTitle(.banknote, .en), "Banknote")
+        XCTAssertEqual(FramingStrings.uiTitle(.stopFind, .en), "Stop Finding")
+        XCTAssertEqual(FramingStrings.uiFindItem("钥匙", .zh), "找：钥匙")
+        XCTAssertEqual(FramingStrings.uiFindNearby("chair", .en), "Find nearby chair")
+        // 全部 UI 动作中英标题/hint 非空
+        let actions: [FramingStrings.UIAction] = [.whatsAhead, .readText, .fullPage, .light, .color,
+                                                  .scan, .explore, .banknote, .people, .find, .stopFind, .bus]
+        for a in actions {
+            for l in [Language.zh, .en] {
+                XCTAssertFalse(FramingStrings.uiTitle(a, l).isEmpty)
+                XCTAssertFalse(FramingStrings.uiHint(a, l).isEmpty)
+            }
+        }
+    }
+
+    func testLowConfidencePhrases() {
+        XCTAssertEqual(FramingStrings.maybeThis("椅子", .zh), "可能是椅子")
+        XCTAssertEqual(FramingStrings.recognizedMaybeResult("chair", .en), "Possibly: chair")
+    }
+
     func testBusAndMultiPagePhrases() {
         XCTAssertEqual(FramingStrings.busResult("公交车", "11 点钟方向", "103，开往东站", .zh),
                        "公交车，在11 点钟方向：103，开往东站")

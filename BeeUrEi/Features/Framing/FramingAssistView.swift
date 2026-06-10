@@ -29,7 +29,8 @@ final class FramingAssistViewModel {
         return yolo.isAvailable ? yolo : StubObstacleDetector()
     }()
     // 识别屏全量中英双语（E5）：播报语言/标签/OCR 语言/TTS 嗓音都跟随 App 语言设置（进屏时解析）。
-    @ObservationIgnored private var lang: Language = FeatureSettings().language
+    // View 的静态文案也读它（private(set)），保持同一语言真相来源。
+    @ObservationIgnored private(set) var lang: Language = FeatureSettings().language
     @ObservationIgnored private var labels = LabelCatalog(language: FeatureSettings().language)
     @ObservationIgnored private let framing = FramingGuide()
     @ObservationIgnored private let synth = AVSpeechSynthesizer()
@@ -108,8 +109,14 @@ final class FramingAssistViewModel {
             centeredFrames += 1
             if centeredFrames >= 2 {
                 let name = labels.localizedName(target.object.label)
-                resultText = FramingStrings.recognizedResult(name, lang)
-                speak(FramingStrings.thisIs(name, lang))
+                // 置信度透明（核心 ConfidencePolicy，已测）：低置信不说死，带"可能"。
+                if ConfidencePolicy().isConfident(target.object.confidence) {
+                    resultText = FramingStrings.recognizedResult(name, lang)
+                    speak(FramingStrings.thisIs(name, lang))
+                } else {
+                    resultText = FramingStrings.recognizedMaybeResult(name, lang)
+                    speak(FramingStrings.maybeThis(name, lang))
+                }
                 lastSpoke = frame.timestamp // 防止下一非居中帧立刻打断"这是X"重复方向播报（见审查 #4）
                 centeredFrames = 0
             }
@@ -852,56 +859,56 @@ struct FramingAssistView: View {
                             .padding()
                             .background(.ultraThinMaterial, in: Circle())
                     }
-                    .accessibilityLabel(torchOn ? "关闭手电筒" : "打开手电筒")
+                    .accessibilityLabel(FramingStrings.uiTorch(on: torchOn, model.lang))
                     .padding(.leading)
                     Spacer()
-                    Button("完成") { onClose() }
+                    Button(FramingStrings.uiDone(model.lang)) { onClose() }
                         .padding()
                         .background(.ultraThinMaterial, in: Capsule())
                         .padding()
                 }
                 Spacer()
                 // 主操作：与主页磁贴同语言（蜂蜜大按钮），相机画面上始终清晰。
-                BeeBigButton("前方有什么", systemImage: "eye.fill",
-                             subtitle: "汇总播报识别到的物体", tint: .beeHoney) {
+                BeeBigButton(FramingStrings.uiTitle(.whatsAhead, model.lang), systemImage: "eye.fill",
+                             subtitle: FramingStrings.uiWhatsAheadSubtitle(model.lang), tint: .beeHoney) {
                     model.describeScene()
                 }
                 .padding(.horizontal)
-                .accessibilityHint("汇总播报前方识别到的物体")
+                .accessibilityHint(FramingStrings.uiHint(.whatsAhead, model.lang))
 
                 HStack(spacing: BeeSpacing.sm) {
-                    overlayAction("朗读文字", systemImage: "text.viewfinder",
-                                  hint: "识别并朗读相机里看到的文字") { model.readText() }
-                    overlayAction("读整页", systemImage: "doc.text.viewfinder",
-                                  hint: "引导你把整页纸放进画面，自动拍摄并按顺序朗读全文") { model.toggleDocumentMode() }
-                    overlayAction("光线", systemImage: "sun.max.fill",
-                                  hint: "报告环境明暗和亮光的方向，帮你找窗户或灯") { model.readLight() }
+                    overlayAction(FramingStrings.uiTitle(.readText, model.lang), systemImage: "text.viewfinder",
+                                  hint: FramingStrings.uiHint(.readText, model.lang)) { model.readText() }
+                    overlayAction(FramingStrings.uiTitle(.fullPage, model.lang), systemImage: "doc.text.viewfinder",
+                                  hint: FramingStrings.uiHint(.fullPage, model.lang)) { model.toggleDocumentMode() }
+                    overlayAction(FramingStrings.uiTitle(.light, model.lang), systemImage: "sun.max.fill",
+                                  hint: FramingStrings.uiHint(.light, model.lang)) { model.readLight() }
                 }
                 .padding(.horizontal)
                 HStack(spacing: BeeSpacing.sm) {
-                    overlayAction("识别颜色", systemImage: "paintpalette.fill",
-                                  hint: "说出画面中央的颜色") { model.readColor() }
-                    overlayAction("扫码", systemImage: "qrcode.viewfinder",
-                                  hint: "识别并朗读二维码或条码的内容") { model.readBarcode() }
-                    overlayAction("触摸探索", systemImage: "hand.draw.fill",
-                                  hint: "定格画面后，手指滑到哪里就朗读那里的物体或文字") { model.captureExplore() }
+                    overlayAction(FramingStrings.uiTitle(.color, model.lang), systemImage: "paintpalette.fill",
+                                  hint: FramingStrings.uiHint(.color, model.lang)) { model.readColor() }
+                    overlayAction(FramingStrings.uiTitle(.scan, model.lang), systemImage: "qrcode.viewfinder",
+                                  hint: FramingStrings.uiHint(.scan, model.lang)) { model.readBarcode() }
+                    overlayAction(FramingStrings.uiTitle(.explore, model.lang), systemImage: "hand.draw.fill",
+                                  hint: FramingStrings.uiHint(.explore, model.lang)) { model.captureExplore() }
                 }
                 .padding(.horizontal)
                 HStack(spacing: BeeSpacing.sm) {
-                    overlayAction("识别纸币", systemImage: "banknote.fill",
-                                  hint: "识别人民币纸币的面额") { model.readCurrency() }
-                    overlayAction("周围的人", systemImage: "person.2.fill",
-                                  hint: "数一数前方有几个人，报方位和距离。不识别身份") { model.describePeople() }
-                    overlayAction(model.findPhase == .idle ? "找东西" : "停止寻找",
+                    overlayAction(FramingStrings.uiTitle(.banknote, model.lang), systemImage: "banknote.fill",
+                                  hint: FramingStrings.uiHint(.banknote, model.lang)) { model.readCurrency() }
+                    overlayAction(FramingStrings.uiTitle(.people, model.lang), systemImage: "person.2.fill",
+                                  hint: FramingStrings.uiHint(.people, model.lang)) { model.describePeople() }
+                    overlayAction(FramingStrings.uiTitle(model.findPhase == .idle ? .find : .stopFind, model.lang),
                                   systemImage: model.findPhase == .idle ? "magnifyingglass" : "stop.circle.fill",
-                                  hint: "教 App 认你自己的钥匙、水杯等，或寻找周围的椅子、瓶子等物品") {
+                                  hint: FramingStrings.uiHint(.find, model.lang)) {
                         if model.findPhase == .idle { showFindMenu = true } else { model.stopFindFlow() }
                     }
                 }
                 .padding(.horizontal)
                 HStack(spacing: BeeSpacing.sm) {
-                    overlayAction("公交识别", systemImage: "bus.fill",
-                                  hint: "认出进站的公交车或电车，朗读车头的线路号和终点站") { model.readBus() }
+                    overlayAction(FramingStrings.uiTitle(.bus, model.lang), systemImage: "bus.fill",
+                                  hint: FramingStrings.uiHint(.bus, model.lang)) { model.readBus() }
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 8)
@@ -921,9 +928,9 @@ struct FramingAssistView: View {
                     .accessibilityAddTraits(.updatesFrequently)
 
                     if let copyable = model.copyableResult {
-                        Button("复制内容") { UIPasteboard.general.string = copyable }
+                        Button(FramingStrings.uiCopy(model.lang)) { UIPasteboard.general.string = copyable }
                             .buttonStyle(.bordered).tint(.white)
-                            .accessibilityHint("把识别到的文字或码内容复制到剪贴板")
+                            .accessibilityHint(FramingStrings.uiCopyHint(model.lang))
                     }
                 }
                 .padding()
@@ -935,35 +942,40 @@ struct FramingAssistView: View {
         .task { model.start(); model.refreshTaughtItems() }
         .onDisappear { model.stop(); Torch.set(false) }
         // 找东西：先列已教的个人物品，再列通用类别（Lookout Find 式），最后教新物品。
-        .confirmationDialog("找东西", isPresented: $showFindMenu, titleVisibility: .visible) {
+        .confirmationDialog(FramingStrings.uiFindMenuTitle(model.lang),
+                            isPresented: $showFindMenu, titleVisibility: .visible) {
             ForEach(model.taughtItems, id: \.self) { item in
-                Button("找：\(item)") { model.startFinding(item) }
+                Button(FramingStrings.uiFindItem(item, model.lang)) { model.startFinding(item) }
             }
             ForEach(FramingAssistViewModel.findableCategories, id: \.self) { label in
-                Button("找周围的\(model.categoryName(label))") { model.startCategoryFind(label: label) }
+                Button(FramingStrings.uiFindNearby(model.categoryName(label), model.lang)) {
+                    model.startCategoryFind(label: label)
+                }
             }
-            Button("教我认一个新东西") { model.startTeaching() }
-            Button("取消", role: .cancel) {}
+            Button(FramingStrings.uiTeachNew(model.lang)) { model.startTeaching() }
+            Button(FramingStrings.uiCancel(model.lang), role: .cancel) {}
         } message: {
-            Text("个人物品先「教我认一个新东西」拍三张；椅子、瓶子这类通用物品不用教，直接找。")
+            Text(FramingStrings.uiFindMenuMessage(model.lang))
         }
         // 扫到陌生商品条码：起名字存本地商品库（键盘话筒可语音输入）。
-        .alert("给这个商品起个名字", isPresented: Binding(get: { model.showProductNaming },
-                                                          set: { model.showProductNaming = $0 })) {
-            TextField("如：牛奶、感冒药", text: $productName)
-            Button("保存") { model.saveProductName(productName); productName = "" }
-            Button("取消", role: .cancel) { productName = "" }
+        .alert(FramingStrings.uiProductNameTitle(model.lang),
+               isPresented: Binding(get: { model.showProductNaming },
+                                    set: { model.showProductNaming = $0 })) {
+            TextField(FramingStrings.uiProductNamePlaceholder(model.lang), text: $productName)
+            Button(FramingStrings.uiSave(model.lang)) { model.saveProductName(productName); productName = "" }
+            Button(FramingStrings.uiCancel(model.lang), role: .cancel) { productName = "" }
         } message: {
-            Text("下次扫到同一条码会直接报这个名字。可以点键盘上的话筒用语音输入。")
+            Text(FramingStrings.uiProductNameMessage(model.lang))
         }
         // 教学拍满三张：命名（键盘话筒可语音输入）。
-        .alert("给它起个名字", isPresented: Binding(get: { model.showTeachNaming },
-                                                    set: { model.showTeachNaming = $0 })) {
-            TextField("如：家门钥匙", text: $teachName)
-            Button("保存") { model.saveTaughtItem(named: teachName); teachName = "" }
-            Button("取消", role: .cancel) { teachName = ""; model.stopFindFlow() }
+        .alert(FramingStrings.uiTeachNameTitle(model.lang),
+               isPresented: Binding(get: { model.showTeachNaming },
+                                    set: { model.showTeachNaming = $0 })) {
+            TextField(FramingStrings.uiTeachNamePlaceholder(model.lang), text: $teachName)
+            Button(FramingStrings.uiSave(model.lang)) { model.saveTaughtItem(named: teachName); teachName = "" }
+            Button(FramingStrings.uiCancel(model.lang), role: .cancel) { teachName = ""; model.stopFindFlow() }
         } message: {
-            Text("可以点键盘上的话筒用语音说出名字。")
+            Text(FramingStrings.uiTeachNameMessage(model.lang))
         }
         // 触摸探索：定格画面全屏呈现，手指划到哪读哪（Seeing AI 式）。
         .fullScreenCover(isPresented: Binding(get: { model.exploring },
@@ -1023,11 +1035,12 @@ private struct ExploreCanvas: View {
                             }
                         )
                         .accessibilityElement()
-                        .accessibilityLabel("触摸探索画布。手指在屏幕上滑动，碰到物体或文字会朗读。")
+                        .accessibilityLabel(FramingStrings.uiExploreCanvasLabel(model.lang))
                         .accessibilityAddTraits(.allowsDirectInteraction)
                 }
             }
-            BeeBigButton("完成", systemImage: "checkmark.circle.fill", tint: .beeHoney) { onClose() }
+            BeeBigButton(FramingStrings.uiDone(model.lang), systemImage: "checkmark.circle.fill",
+                         tint: .beeHoney) { onClose() }
                 .padding(.horizontal, BeeSpacing.lg)
                 .padding(.bottom, BeeSpacing.lg)
         }

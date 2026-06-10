@@ -20,6 +20,13 @@ enum FramingStrings {
         l == .zh ? "识别到：\(name)" : "Recognized: \(name)"
     }
     static func thisIs(_ name: String, _ l: Language) -> String { l == .zh ? "这是\(name)" : "This is \(name)" }
+    /// 低置信版本（核心 ConfidencePolicy 判定）："少说但说对"——不确定就明说。
+    static func recognizedMaybeResult(_ name: String, _ l: Language) -> String {
+        l == .zh ? "可能是：\(name)" : "Possibly: \(name)"
+    }
+    static func maybeThis(_ name: String, _ l: Language) -> String {
+        l == .zh ? "可能是\(name)" : "Possibly \(name)"
+    }
 
     // MARK: 找我的东西（教学/寻找）
 
@@ -250,4 +257,126 @@ enum FramingStrings {
     static func colorFailed(_ l: Language) -> String { l == .zh ? "无法识别颜色" : "Couldn't read the color" }
     static func lightResult(_ desc: String, _ l: Language) -> String { l == .zh ? "光线：\(desc)" : "Light: \(desc)" }
     static func lightFailed(_ l: Language) -> String { l == .zh ? "无法检测光线" : "Couldn't measure the light" }
+
+    // MARK: 界面文案（识别屏 View 静态文案——按钮/弹窗/对话框，含 VoiceOver hint）
+
+    enum UIAction { case whatsAhead, readText, fullPage, light, color, scan, explore, banknote, people, find, stopFind, bus }
+
+    static func uiTitle(_ a: UIAction, _ l: Language) -> String {
+        switch l {
+        case .zh:
+            switch a {
+            case .whatsAhead: return "前方有什么"
+            case .readText: return "朗读文字"
+            case .fullPage: return "读整页"
+            case .light: return "光线"
+            case .color: return "识别颜色"
+            case .scan: return "扫码"
+            case .explore: return "触摸探索"
+            case .banknote: return "识别纸币"
+            case .people: return "周围的人"
+            case .find: return "找东西"
+            case .stopFind: return "停止寻找"
+            case .bus: return "公交识别"
+            }
+        case .en:
+            switch a {
+            case .whatsAhead: return "What's Ahead"
+            case .readText: return "Read Text"
+            case .fullPage: return "Full Page"
+            case .light: return "Light"
+            case .color: return "Color"
+            case .scan: return "Scan Code"
+            case .explore: return "Touch Explore"
+            case .banknote: return "Banknote"
+            case .people: return "People Nearby"
+            case .find: return "Find Things"
+            case .stopFind: return "Stop Finding"
+            case .bus: return "Bus Reader"
+            }
+        }
+    }
+
+    static func uiHint(_ a: UIAction, _ l: Language) -> String {
+        switch l {
+        case .zh:
+            switch a {
+            case .whatsAhead: return "汇总播报前方识别到的物体"
+            case .readText: return "识别并朗读相机里看到的文字"
+            case .fullPage: return "引导你把整页纸放进画面，自动拍摄并按顺序朗读全文"
+            case .light: return "报告环境明暗和亮光的方向，帮你找窗户或灯"
+            case .color: return "说出画面中央的颜色"
+            case .scan: return "识别并朗读二维码或条码的内容"
+            case .explore: return "定格画面后，手指滑到哪里就朗读那里的物体或文字"
+            case .banknote: return "识别人民币纸币的面额"
+            case .people: return "数一数前方有几个人，报方位和距离。不识别身份"
+            case .find, .stopFind: return "教 App 认你自己的钥匙、水杯等，或寻找周围的椅子、瓶子等物品"
+            case .bus: return "认出进站的公交车或电车，朗读车头的线路号和终点站"
+            }
+        case .en:
+            switch a {
+            case .whatsAhead: return "Summarize the objects detected ahead"
+            case .readText: return "Recognize and read text seen by the camera"
+            case .fullPage: return "Guides you to fit the whole page, then captures and reads it in order"
+            case .light: return "Report brightness and where the light is, to find windows or lamps"
+            case .color: return "Say the color at the center of the view"
+            case .scan: return "Recognize and read a QR code or barcode"
+            case .explore: return "Freeze the view, then slide your finger to hear what you touch"
+            case .banknote: return "Identify RMB banknote denominations"
+            case .people: return "Count people ahead with direction and distance. No identity recognition"
+            case .find, .stopFind: return "Teach the app your own items, or find nearby chairs, bottles and more"
+            case .bus: return "Spot an arriving bus or tram and read its route number and destination"
+            }
+        }
+    }
+
+    static func uiWhatsAheadSubtitle(_ l: Language) -> String {
+        l == .zh ? "汇总播报识别到的物体" : "Summarize detected objects"
+    }
+    static func uiTorch(on: Bool, _ l: Language) -> String {
+        switch l {
+        case .zh: return on ? "关闭手电筒" : "打开手电筒"
+        case .en: return on ? "Turn off flashlight" : "Turn on flashlight"
+        }
+    }
+    static func uiDone(_ l: Language) -> String { l == .zh ? "完成" : "Done" }
+    static func uiCopy(_ l: Language) -> String { l == .zh ? "复制内容" : "Copy" }
+    static func uiCopyHint(_ l: Language) -> String {
+        l == .zh ? "把识别到的文字或码内容复制到剪贴板" : "Copy the recognized text or code to the clipboard"
+    }
+    static func uiCancel(_ l: Language) -> String { l == .zh ? "取消" : "Cancel" }
+    static func uiSave(_ l: Language) -> String { l == .zh ? "保存" : "Save" }
+
+    // 找东西对话框
+    static func uiFindMenuTitle(_ l: Language) -> String { l == .zh ? "找东西" : "Find things" }
+    static func uiFindItem(_ name: String, _ l: Language) -> String { l == .zh ? "找：\(name)" : "Find: \(name)" }
+    static func uiFindNearby(_ name: String, _ l: Language) -> String {
+        l == .zh ? "找周围的\(name)" : "Find nearby \(name)"
+    }
+    static func uiTeachNew(_ l: Language) -> String { l == .zh ? "教我认一个新东西" : "Teach me a new item" }
+    static func uiFindMenuMessage(_ l: Language) -> String {
+        l == .zh ? "个人物品先「教我认一个新东西」拍三张；椅子、瓶子这类通用物品不用教，直接找。"
+                 : "For your own items, use \"Teach me a new item\" first; common items like chairs and bottles need no teaching."
+    }
+
+    // 教学命名弹窗
+    static func uiTeachNameTitle(_ l: Language) -> String { l == .zh ? "给它起个名字" : "Name it" }
+    static func uiTeachNamePlaceholder(_ l: Language) -> String { l == .zh ? "如：家门钥匙" : "e.g. house keys" }
+    static func uiTeachNameMessage(_ l: Language) -> String {
+        l == .zh ? "可以点键盘上的话筒用语音说出名字。" : "You can dictate the name with the keyboard microphone."
+    }
+
+    // 商品命名弹窗
+    static func uiProductNameTitle(_ l: Language) -> String { l == .zh ? "给这个商品起个名字" : "Name this product" }
+    static func uiProductNamePlaceholder(_ l: Language) -> String { l == .zh ? "如：牛奶、感冒药" : "e.g. milk, cold medicine" }
+    static func uiProductNameMessage(_ l: Language) -> String {
+        l == .zh ? "下次扫到同一条码会直接报这个名字。可以点键盘上的话筒用语音输入。"
+                 : "Next scan of this barcode will say this name. You can dictate with the keyboard microphone."
+    }
+
+    // 触摸探索画布
+    static func uiExploreCanvasLabel(_ l: Language) -> String {
+        l == .zh ? "触摸探索画布。手指在屏幕上滑动，碰到物体或文字会朗读。"
+                 : "Touch-explore canvas. Slide your finger to hear the objects and text you touch."
+    }
 }

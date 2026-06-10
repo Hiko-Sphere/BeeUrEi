@@ -33,7 +33,7 @@ struct NotificationsBell: View {
                 }
             }
         }
-        .accessibilityLabel(center.unreadCount > 0 ? "通知，\(center.unreadCount) 条待处理" : "通知")
+        .accessibilityLabel(HelperStrings.notifBellA11y(center.unreadCount, FeatureSettings().language))
         .sheet(isPresented: $show) { NotificationsView() }
         .task { await center.refresh() }
     }
@@ -44,40 +44,42 @@ struct NotificationsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var center = NotificationsCenter.shared
     @State private var busy: Set<String> = []
+    /// 通知列表文案语言（E5）。
+    private var lang: Language { FeatureSettings().language }
 
     var body: some View {
         NavigationStack {
             List {
                 if center.pendingRequests.isEmpty {
                     Section {
-                        BeeEmptyState(systemImage: "bell.slash.fill", title: "暂无新通知",
-                                      message: "好友请求等待你确认时会出现在这里。")
+                        BeeEmptyState(systemImage: "bell.slash.fill", title: HelperStrings.noNotifTitle(lang),
+                                      message: HelperStrings.noNotifMessage(lang))
                     }
                     .listRowBackground(Color.clear)
                 } else {
-                    Section("待确认的请求") {
+                    Section(HelperStrings.pendingHeader(lang)) {
                         ForEach(center.pendingRequests) { r in
                             VStack(alignment: .leading, spacing: BeeSpacing.sm) {
                                 HStack {
                                     AvatarView(dataURL: r.ownerAvatar, name: r.ownerName, size: 36)
-                                    Text("\(r.ownerName) 想和你建立\(r.relation)关系")
+                                    Text(HelperStrings.wantsRelation(owner: r.ownerName, relation: r.relation, lang))
                                 }
                                 HStack {
-                                    Button("接受") { Task { await accept(r) } }
+                                    Button(HelperStrings.accept(lang)) { Task { await accept(r) } }
                                         .buttonStyle(.borderedProminent).disabled(busy.contains(r.id))
-                                    Button("拒绝", role: .destructive) { Task { await reject(r) } }
+                                    Button(HelperStrings.reject(lang), role: .destructive) { Task { await reject(r) } }
                                         .buttonStyle(.bordered).disabled(busy.contains(r.id))
                                 }
                             }
                             .padding(.vertical, 4)
                             .accessibilityElement(children: .combine)
-                            .accessibilityLabel("\(r.ownerName) 想和你建立\(r.relation)关系")
+                            .accessibilityLabel(HelperStrings.wantsRelation(owner: r.ownerName, relation: r.relation, lang))
                         }
                     }
                 }
             }
-            .navigationTitle("通知")
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+            .navigationTitle(HelperStrings.notifTitle(lang))
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(HelperStrings.done(lang)) { dismiss() } } }
             .refreshable { await center.refresh() }
             .task { await center.refresh() }
         }
@@ -87,7 +89,7 @@ struct NotificationsView: View {
         guard let token = KeychainStore.read(), !busy.contains(r.id) else { return }
         busy.insert(r.id); defer { busy.remove(r.id) }
         try? await APIClient().acceptFamilyLink(token: token, id: r.id)
-        A11y.announce("已接受 \(r.ownerName) 的请求")
+        A11y.announce(HelperStrings.acceptedAnnounce(r.ownerName, lang))
         await center.refresh()
     }
     private func reject(_ r: IncomingLinkInfo) async {

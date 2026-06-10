@@ -1,12 +1,25 @@
 import Foundation
 
+/// 信令通道抽象（F1）：把 CallViewModel 对信令的依赖收敛为协议，可注入 mock 单测——
+/// 通话的隐私门控（新对端默认不发画面）与信令处理是安全攸关逻辑，需要回归保护。
+protocol Signaling: AnyObject {
+    var onMessage: (([String: Any]) -> Void)? { get set }
+    var onClose: (() -> Void)? { get set }
+    func connect(token: String, baseURL: URL)
+    func join(callId: String, role: String)
+    func videoGate(on: Bool)
+    func end()
+    func send(_ obj: [String: Any])
+    func close()
+}
+
 /// 连接自托管后端 /ws 的 WebRTC 信令客户端（URLSessionWebSocketTask）。
 /// 负责 join / offer / answer / ice / video-gate / end 的收发；媒体本身由 MediaEngine 负责。
 ///
 /// 线程安全：`task` 会被多个线程访问——send 来自 WebRTC 信令线程（onLocalCandidate/Description）、
 /// close 来自主线程(hangUp)、receive 完成在 URLSession 内部队列。统一用一个串行队列串行化所有
 /// 对 `task` 的读写，避免数据竞争/use-after-free（见审查 #6）。回调仍切回主线程。
-final class SignalingClient {
+final class SignalingClient: Signaling {
     private var task: URLSessionWebSocketTask?
     private var closed = false // 是否已主动关闭(hangUp)；在 queue 上读写。主动关闭后不再回调 onClose / 不重挂 receive（见审查 #10）
     private let queue = DispatchQueue(label: "com.beeurei.signaling")

@@ -45,15 +45,19 @@ final class CallViewModel {
         }
     }
 
-    @ObservationIgnored private let signaling = SignalingClient()
-    @ObservationIgnored let media: MediaEngine = MediaEngineFactory.make()
+    // F1：信令与媒体可注入（默认生产实现）——通话隐私门控/信令处理由 mock 驱动单测。
+    @ObservationIgnored private let signaling: Signaling
+    @ObservationIgnored let media: MediaEngine
     @ObservationIgnored private var hasOffered = false // 视障侧是否已发过 offer，防对端重连/重复 peer-joined 在已建立 pc 上重发 offer 造成 glare（见审查 #2）
     @ObservationIgnored private var ended = false // hangUp 幂等：任意路径（按钮/界面消失/CallKit 系统挂断）都能安全调用，确保媒体/信令确定性释放（见复审 #1）
 
-    init(role: Role, callId: String, waitingText: String = CallStrings.defaultWaiting(FeatureSettings().language)) {
+    init(role: Role, callId: String, waitingText: String = CallStrings.defaultWaiting(FeatureSettings().language),
+         signaling: Signaling = SignalingClient(), media: MediaEngine = MediaEngineFactory.make()) {
         self.role = role
         self.callId = callId
         self.waitingText = waitingText
+        self.signaling = signaling
+        self.media = media
     }
 
     func start() async {
@@ -133,7 +137,8 @@ final class CallViewModel {
         }
     }
 
-    private func handle(_ msg: [String: Any]) {
+    /// 信令消息处理。internal 供单测直接驱动（生产路径仍经 start() 里的 signaling.onMessage 接线）。
+    func handle(_ msg: [String: Any]) {
         switch msg["type"] as? String {
         case "joined":
             // 我加入时若对端已在房间，记录对端 userId/姓名；我是发起方(视障)则发起 offer。

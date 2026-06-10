@@ -166,6 +166,24 @@ enum HelperStrings {
         }
     }
 
+    // MARK: 通知中心
+
+    static func notifBellA11y(_ count: Int, _ l: Language) -> String {
+        if count > 0 { return l == .zh ? "通知，\(count) 条待处理" : "Notifications, \(count) pending" }
+        return l == .zh ? "通知" : "Notifications"
+    }
+    static func notifTitle(_ l: Language) -> String { l == .zh ? "通知" : "Notifications" }
+    static func noNotifTitle(_ l: Language) -> String { l == .zh ? "暂无新通知" : "No new notifications" }
+    static func noNotifMessage(_ l: Language) -> String {
+        l == .zh ? "好友请求等待你确认时会出现在这里。" : "Friend requests awaiting your approval appear here."
+    }
+    static func wantsRelation(owner: String, relation: String, _ l: Language) -> String {
+        l == .zh ? "\(owner) 想和你建立\(relation)关系" : "\(owner) wants to link with you as \(relation)"
+    }
+    static func acceptedAnnounce(_ name: String, _ l: Language) -> String {
+        l == .zh ? "已接受 \(name) 的请求" : "Accepted \(name)'s request"
+    }
+
     // MARK: 工具
 
     static func waitText(_ seconds: Int, _ l: Language) -> String {

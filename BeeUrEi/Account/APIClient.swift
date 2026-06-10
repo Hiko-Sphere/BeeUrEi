@@ -381,9 +381,14 @@ struct APIClient {
         _ = try? await authedSend("POST", "/api/assist/call/decline", token: token, body: ["callId": callId])
     }
 
-    /// 被叫接听 → 通话记录标记已接听（尽力而为）。
-    func markAnswered(token: String, callId: String) async {
-        _ = try? await authedSend("POST", "/api/assist/call/answered", token: token, body: ["callId": callId])
+    /// 被叫接听 → 首接抢占 + 通话记录标记已接听。
+    /// 返回是否"抢到"了这通群呼（false=已被其他亲友先接，应提示并退出而非加入）。网络失败按抢到处理（不阻断接听）。
+    @discardableResult
+    func markAnswered(token: String, callId: String) async -> Bool {
+        struct R: Codable { let youWon: Bool? }
+        guard let data = try? await authedSend("POST", "/api/assist/call/answered", token: token, body: ["callId": callId]),
+              let r = try? JSONDecoder().decode(R.self, from: data) else { return true }
+        return r.youWon ?? true
     }
 
     /// 求助前：我绑定的协助者/亲友中在线人数（online）与总数（total）。

@@ -10,6 +10,7 @@ export interface PendingCall {
   toUserIds: string[]
   createdAt: number
   declinedBy?: string[] // 已明确"拒绝"的目标（供发起方看到"对方已拒绝"）
+  answeredBy?: string   // 首位接听者（群呼首接抢占：其余目标停止振铃、后接者得到明确反馈）
 }
 
 export class PendingCallRegistry {
@@ -54,11 +55,25 @@ export class PendingCallRegistry {
   }
 
   /// 返回针对该用户、未过期的待接来电（最近的在前）。
+  /// 已被他人接听的呼叫不再出现（群呼首接抢占：其余设备的应用内振铃 3s 内自动消失）。
   incomingFor(userId: string, now: number): PendingCall[] {
     this.prune(now)
     return [...this.calls.values()]
-      .filter((c) => c.toUserIds.includes(userId))
+      .filter((c) => c.toUserIds.includes(userId) && (c.answeredBy === undefined || c.answeredBy === userId))
       .sort((a, b) => b.createdAt - a.createdAt)
+  }
+
+  /// 接听认领（**首接生效**，原子）：第一位目标接听返回其 userId；之后的接听返回先到者的 userId，
+  /// 客户端据此提示"已被其他亲友接听"而非加入失败。非目标返回 null。
+  claimAnswer(callId: string, userId: string, now: number): string | null {
+    this.prune(now)
+    const c = this.calls.get(callId)
+    if (!c || !c.toUserIds.includes(userId)) return null
+    if (c.answeredBy === undefined) {
+      this.calls.set(callId, { ...c, answeredBy: userId })
+      return userId
+    }
+    return c.answeredBy
   }
 
   /// 取消（归属校验，防止任意用户压制他人求助）：
@@ -92,14 +107,14 @@ export class PendingCallRegistry {
     return true
   }
 
-  /// 呼叫状态（发起方轮询）：是否存在、是否所有目标都已拒绝。
-  status(callId: string, now: number): { exists: boolean; declinedAll: boolean } {
+  /// 呼叫状态（发起方/后接者轮询）：是否存在、是否全部拒绝、首位接听者。
+  status(callId: string, now: number): { exists: boolean; declinedAll: boolean; answeredBy: string | null } {
     this.prune(now)
     const c = this.calls.get(callId)
-    if (!c) return { exists: false, declinedAll: false }
+    if (!c) return { exists: false, declinedAll: false, answeredBy: null }
     const declined = new Set(c.declinedBy ?? [])
     const declinedAll = c.toUserIds.length > 0 && c.toUserIds.every((id) => declined.has(id))
-    return { exists: true, declinedAll }
+    return { exists: true, declinedAll, answeredBy: c.answeredBy ?? null }
   }
 
   private prune(now: number): void {

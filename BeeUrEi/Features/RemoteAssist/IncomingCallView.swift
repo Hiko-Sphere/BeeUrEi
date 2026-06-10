@@ -84,7 +84,15 @@ struct IncomingCallView: View {
         guard !busy else { return }
         busy = true
         Task {
-            if let token = KeychainStore.read() { await APIClient().markAnswered(token: token, callId: ring.callId) }
+            // 群呼首接抢占：没抢到则明确告知并退出，而不是加入失败的房间。
+            if let token = KeychainStore.read() {
+                let won = await APIClient().markAnswered(token: token, callId: ring.callId)
+                guard won else {
+                    A11y.announce("已被其他亲友接听")
+                    dismiss()
+                    return
+                }
+            }
             accepted = true // 切换为通话界面（同一全屏呈现内，避免二次模态冲突）
         }
     }

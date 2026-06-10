@@ -163,12 +163,19 @@ export function registerAssistRoutes(
     return { ok: true }
   })
 
-  // 被叫接听：把通话记录标记为已接听（区别于未接）。被叫进入通话界面时调用。
+  // 被叫接听：**首接抢占**（群呼时第一位接听者生效），并把通话记录标记为已接听。
+  // 返回 answeredBy：若是别人，客户端提示"已被其他亲友接听"而非加入失败；
+  // 同时该呼叫从其余目标的 /incoming 消失（应用内振铃自动停）。
   app.post('/api/assist/call/answered', { preHandler: requireAuth() }, async (req, reply) => {
     const id = (req.body as { callId?: string })?.callId
     if (typeof id !== 'string' || !id) return reply.code(400).send({ error: 'invalid_input' })
-    store.updateCallStatus(id, req.user!.sub, 'answered')
-    return { ok: true }
+    const winner = pendingCalls.claimAnswer(id, req.user!.sub, Date.now())
+    const youWon = winner === req.user!.sub || winner === null
+    if (youWon) {
+      // null=非群呼登记内(如公开求助认领路径)：沿用原行为只记通话记录。
+      store.updateCallStatus(id, req.user!.sub, 'answered')
+    }
+    return { ok: true, answeredBy: winner ?? req.user!.sub, youWon }
   })
 
   // 通话记录（呼出/呼入/未接）：我作为主叫或被叫的记录，按时间倒序。

@@ -71,3 +71,32 @@ describe('通话记录 + 双向呼叫', () => {
     await a.close()
   })
 })
+
+describe('群呼首接抢占（信任圈群呼）', () => {
+  it('两位亲友同时被呼：A 先接听 → B 的待接列表消失、B 接听得到 answeredBy=A', async () => {
+    const a = buildApp(new MemoryStore())
+    const blind = await reg(a, 'gBlind', 'blind')
+    const h1 = await reg(a, 'gH1', 'helper')
+    const h2 = await reg(a, 'gH2', 'helper')
+    // 绑定两位（双向确认）
+    for (const [u, t] of [['gH1', h1.token], ['gH2', h2.token]] as const) {
+      const lk = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(blind.token), payload: { username: u } })
+      await a.inject({ method: 'POST', url: `/api/family/links/${lk.json().link.id}/accept`, headers: auth(t) })
+    }
+    await a.inject({ method: 'POST', url: '/api/assist/call', headers: auth(blind.token), payload: { callId: 'grp-1', targetUserIds: [h1.user.id, h2.user.id] } })
+    // 双方都在响铃
+    expect((await a.inject({ method: 'GET', url: '/api/assist/incoming', headers: auth(h1.token) })).json().calls.length).toBe(1)
+    expect((await a.inject({ method: 'GET', url: '/api/assist/incoming', headers: auth(h2.token) })).json().calls.length).toBe(1)
+    // h1 先接听 → 抢占
+    const r1 = await a.inject({ method: 'POST', url: '/api/assist/call/answered', headers: auth(h1.token), payload: { callId: 'grp-1' } })
+    expect(r1.json().answeredBy).toBe(h1.user.id)
+    // h2 的振铃消失；h2 再接听得到先到者
+    expect((await a.inject({ method: 'GET', url: '/api/assist/incoming', headers: auth(h2.token) })).json().calls.length).toBe(0)
+    const r2 = await a.inject({ method: 'POST', url: '/api/assist/call/answered', headers: auth(h2.token), payload: { callId: 'grp-1' } })
+    expect(r2.json().answeredBy).toBe(h1.user.id)
+    // 状态端点对发起方可见接听者
+    const st = await a.inject({ method: 'GET', url: '/api/assist/call/status?callId=grp-1', headers: auth(blind.token) })
+    expect(st.json().answeredBy).toBe(h1.user.id)
+    await a.close()
+  })
+})

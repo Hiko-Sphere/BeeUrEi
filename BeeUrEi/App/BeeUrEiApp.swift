@@ -85,9 +85,15 @@ private struct RootView: View {
                 RemoteAssistService.shared.endCall()
                 incoming.clear()
             }
-            // 打开来电界面即视为"接听"，更新通话记录为已接听。
+            // 打开来电界面即视为"接听"（首接抢占）：群呼没抢到则告知并退出，不加入已满的房间。
             .task {
-                if let token = KeychainStore.read() { await APIClient().markAnswered(token: token, callId: call.callId) }
+                guard let token = KeychainStore.read() else { return }
+                let won = await APIClient().markAnswered(token: token, callId: call.callId)
+                if !won {
+                    A11y.announce("已被其他亲友接听")
+                    RemoteAssistService.shared.endCall()
+                    incoming.clear()
+                }
             }
         }
         // 前台来电铃（应用内手动接听，参照 WhatsApp）。CallKit(后台)接听走上面的 pending → 直接进通话。

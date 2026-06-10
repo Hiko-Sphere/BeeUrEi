@@ -36,6 +36,7 @@ final class FramingAssistViewModel {
     @ObservationIgnored private var lastHint = ""
     @ObservationIgnored private var centeredFrames = 0
     @ObservationIgnored private var latestBuffer: CVPixelBuffer?
+    @ObservationIgnored private var latestDepth: DepthMap?
     @ObservationIgnored private var latestDetections: [DetectedObject] = []
     @ObservationIgnored private var paused = false // 关闭/被来电盖上后：停止播报并丢弃在途帧/异步识别结果
     @ObservationIgnored private var docMode = false        // 文档模式（整页取景引导+自动拍摄）
@@ -65,6 +66,7 @@ final class FramingAssistViewModel {
     private func handle(_ frame: SensorFrame) {
         guard !paused else { return } // 暂停后丢弃在途帧
         latestBuffer = frame.pixelBuffer // 供"朗读文字"用最新帧
+        latestDepth = frame.depth        // 供"周围的人"报距离
         guard frame.timestamp - lastProcess >= 0.4 else { return }
         lastProcess = frame.timestamp
 
@@ -547,6 +549,46 @@ final class FramingAssistViewModel {
         }
     }
 
+    /// 周围的人（Seeing AI People 频道式，端侧纯几何）：只数人数、报方位与 LiDAR 距离。
+    /// 隐私边界：不识别身份、不估年龄表情、不存任何人脸数据——检测完即弃。
+    /// 坐标约定与 YOLO 一致（原始相机缓冲，midX 即方位；深度采样 y 由左下翻到左上）。
+    func describePeople() {
+        guard let live = latestBuffer else { speak("请先把相机对准前方"); return }
+        if tooDarkToProceed() { return }
+        guard let buffer = copyPixelBuffer(live) else { speak("识别失败，请重试"); return } // 深拷贝供异步安全读
+        // 深度同样深拷贝：人脸检测是异步的，回调时 ARKit 原深度图可能已被回收复用。
+        var depthCopy: (depth: CVPixelBuffer, confidence: CVPixelBuffer?)?
+        if let d = latestDepth, let dd = copyPixelBuffer(d.depth) {
+            depthCopy = (dd, d.confidence.flatMap { copyPixelBuffer($0) })
+        }
+        resultText = "正在找人…"
+        let request = VNDetectFaceRectanglesRequest { [weak self] req, _ in
+            let boxes = (req.results as? [VNFaceObservation])?.map(\.boundingBox) ?? []
+            DispatchQueue.main.async {
+                guard let self, !self.paused else { return }
+                let people: [(normalizedX: Double, distanceMeters: Double?)] = boxes.map { box in
+                    var dist: Double?
+                    if let depthCopy {
+                        let s = DepthSampling.samples(depth: depthCopy.depth, confidence: depthCopy.confidence,
+                                                      normalizedX: Double(box.midX),
+                                                      normalizedY: 1 - Double(box.midY)) // Vision 左下 → 深度图左上
+                        if let m = DepthSampler().nearestDistance(depths: s.depths, confidences: s.confidences) {
+                            dist = m
+                        }
+                    }
+                    return (Double(box.midX), dist)
+                }
+                let text = PeopleSummarizer().summary(people: people)
+                self.resultText = text
+                self.copyableResult = nil
+                self.speak(text)
+            }
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? VNImageRequestHandler(cvPixelBuffer: buffer, options: [:]).perform([request])
+        }
+    }
+
     // MARK: 扫码认商品（Seeing AI Products 频道的隐私版：本地商品库，扫一次自己命名）
 
     @ObservationIgnored private let productStore = ProductMemoryStore()
@@ -747,6 +789,8 @@ struct FramingAssistView: View {
                 HStack(spacing: BeeSpacing.sm) {
                     overlayAction("识别纸币", systemImage: "banknote.fill",
                                   hint: "识别人民币纸币的面额") { model.readCurrency() }
+                    overlayAction("周围的人", systemImage: "person.2.fill",
+                                  hint: "数一数前方有几个人，报方位和距离。不识别身份") { model.describePeople() }
                     overlayAction(model.findPhase == .idle ? "找东西" : "停止寻找",
                                   systemImage: model.findPhase == .idle ? "magnifyingglass" : "stop.circle.fill",
                                   hint: "教 App 认你自己的钥匙、水杯等，或寻找周围的椅子、瓶子等物品") {

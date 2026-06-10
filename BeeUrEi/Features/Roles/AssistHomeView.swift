@@ -226,6 +226,10 @@ struct AssistHomeView: View {
                                 Text(l.memberName)
                                 Spacer()
                                 Text("待确认").font(.caption).foregroundStyle(Color.beeWarn)
+                                Button("撤回", role: .destructive) { Task { await cancelOutgoing(l) } }
+                                    .buttonStyle(.bordered)
+                                    .disabled(linkBusy.contains(l.id))
+                                    .accessibilityLabel("撤回发给 \(l.memberName) 的绑定请求")
                             }
                         }
                     }
@@ -490,6 +494,14 @@ struct AssistHomeView: View {
     }
 
     private func reject(_ l: IncomingLinkInfo) async {
+        guard let token = session.token, !linkBusy.contains(l.id) else { return }
+        linkBusy.insert(l.id); defer { linkBusy.remove(l.id) }
+        try? await APIClient().deleteFamilyLink(token: token, id: l.id)
+        await loadLinks()
+    }
+
+    /// 撤回我发出的、对方还没确认的绑定请求（后端 DELETE 双方均可操作）。
+    private func cancelOutgoing(_ l: FamilyLinkInfo) async {
         guard let token = session.token, !linkBusy.contains(l.id) else { return }
         linkBusy.insert(l.id); defer { linkBusy.remove(l.id) }
         try? await APIClient().deleteFamilyLink(token: token, id: l.id)

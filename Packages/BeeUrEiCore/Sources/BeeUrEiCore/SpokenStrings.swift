@@ -206,6 +206,38 @@ public enum SpokenStrings {
         }
     }
 
+    // MARK: 人物（PeopleSummarizer）
+
+    public static func peopleNone(_ lang: Language) -> String {
+        switch lang {
+        case .zh: return "没有看到人"
+        case .en: return "No people in view"
+        }
+    }
+
+    public static func peopleOne(direction: String, distance: String?, _ lang: Language) -> String {
+        switch lang {
+        case .zh: return "看到 1 个人：\(direction)" + (distance.map { "，大约\($0)" } ?? "")
+        case .en: return "1 person: \(direction)" + (distance.map { ", about \($0)" } ?? "")
+        }
+    }
+
+    public static func peopleMany(count: Int, nearestDirection: String, nearestDistance: String?,
+                                  others: [String], _ lang: Language) -> String {
+        switch lang {
+        case .zh:
+            var s = "看到 \(count) 个人。最近的在\(nearestDirection)"
+                + (nearestDistance.map { "，大约\($0)" } ?? "")
+            if !others.isEmpty { s += "；其他在" + others.joined(separator: "、") }
+            return s
+        case .en:
+            var s = "\(count) people. Nearest \(nearestDirection)"
+                + (nearestDistance.map { ", about \($0)" } ?? "")
+            if !others.isEmpty { s += "; others " + others.joined(separator: ", ") }
+            return s
+        }
+    }
+
     // MARK: 颜色（ColorNamer）
 
     public enum ColorKey { case black, white, gray, brown, red, orange, yellow, green, cyan, blue, purple, pink, unknown }

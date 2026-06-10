@@ -46,6 +46,10 @@ final class NavigationViewModel {
     @ObservationIgnored private var lastCallout: TimeInterval = 0       // 沿途地标 callout 节流
     @ObservationIgnored private var lastCalloutName = ""                // 上次报过的地标（不重复报同一个）
     @ObservationIgnored private var calloutBusy = false                 // POI 查询进行中
+    @ObservationIgnored private var roadAnnouncer = RoadAnnouncer()     // 路名变化判定（核心，已测）
+    @ObservationIgnored private var lastRoadGeocode: TimeInterval = 0   // 上次反向地理编码时刻（CLGeocoder 限速）
+    @ObservationIgnored private var roadGeocodeBusy = false             // 反向地理编码进行中
+    @ObservationIgnored private let roadGeocoder = CLGeocoder()
     // 面包屑回程（Soundscape 式）：记路 → 一键原路返回。
     private(set) var recordingTrail = false
     private(set) var trailCount = 0
@@ -184,6 +188,14 @@ final class NavigationViewModel {
             lastCallout = now
             calloutBusy = true
             announceNearbyLandmark(at: loc)
+        }
+
+        // 路名 callout（VoiceVista/Soundscape 式）：走上新路报"进入 X"，帮助保持方向感。
+        // CLGeocoder 有系统级限速：30s 一查 + 单飞；"何时值得说"在核心 RoadAnnouncer（已测防路口漂移连环播）。
+        if level != .none, now - lastRoadGeocode >= 30, !roadGeocodeBusy {
+            lastRoadGeocode = now
+            roadGeocodeBusy = true
+            announceRoadChange(at: loc, now: now)
         }
 
         // 已过完所有转向点：接近目的地判定。**到达=高确定性结论，也要过精度门控**——
@@ -451,6 +463,22 @@ final class NavigationViewModel {
                       loc.distance(from: ploc) <= 60 else { return }
                 self.lastCalloutName = name
                 NavVoice.shared.speak("途经\(name)", rate: FeatureSettings().speechRate)
+            }
+        }
+    }
+
+    /// 路名变化 callout：反向地理编码取当前路名，确实变了才报"进入 X"（核心 RoadAnnouncer，已测）。
+    /// 传给 CLGeocoder 的是原始 WGS-84 定位（系统内部自行处理国内地名展示），不经 GCJ 纠偏。
+    private func announceRoadChange(at loc: CLLocation, now: TimeInterval) {
+        roadGeocoder.reverseGeocodeLocation(loc, preferredLocale: Locale(identifier: "zh_CN")) { [weak self] placemarks, _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.roadGeocodeBusy = false
+                guard self.running else { return }
+                let road = placemarks?.first?.thoroughfare
+                if let name = self.roadAnnouncer.update(road: road, now: now) {
+                    NavVoice.shared.speak("进入\(name)", rate: FeatureSettings().speechRate)
+                }
             }
         }
     }

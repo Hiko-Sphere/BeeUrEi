@@ -30,6 +30,13 @@ export function registerNavRoutes(app: FastifyInstance, _store: Store): void {
 
     const origin = `${originLon},${originLat}` // 高德为 经度,纬度
     const steps = await amapWalking(origin, dest)
-    return { destination: dest, steps }
+    // 目的地坐标（GCJ-02）拆成数值，供 App 实时引导做到达判定。
+    const [dLon, dLat] = dest.split(',').map(Number)
+    return {
+      destination: dest,
+      destinationLat: Number.isFinite(dLat) ? dLat : null,
+      destinationLon: Number.isFinite(dLon) ? dLon : null,
+      steps,
+    }
   })
 }

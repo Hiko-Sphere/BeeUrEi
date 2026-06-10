@@ -22,6 +22,9 @@ final class SpeechFeedback: NSObject, FeedbackSink {
         // 把后续同/低优先级的危险警告永远压住（见审查 #6）。
         guard let text = event.speech, !text.isEmpty else { onFinish?(); return }
 
+        // 跨通道仲裁：避障 obstacle/critical 级先掐断正在念的导航指令（碰撞警告 > 转向指令，Phase 2 标准）。
+        if event.priority >= .obstacle { NavVoice.shared.yieldToSafety() }
+
         // 与 VoiceOver 协作（见 PLAN §7.2）：VoiceOver 开启时用无障碍播报而非直接 TTS，
         // 避免和 VoiceOver 抢话/互相打断。盲人用户通常常开 VoiceOver，这是主路径。
         if UIAccessibility.isVoiceOverRunning {

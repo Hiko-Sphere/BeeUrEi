@@ -19,7 +19,6 @@ final class NavigationViewModel {
     @ObservationIgnored private let amap = AMapRouteClient()
     @ObservationIgnored private let progress = RouteProgress()
     @ObservationIgnored private let gate = LocationAccuracyGate()
-    @ObservationIgnored private let synthesizer = AVSpeechSynthesizer()
     @ObservationIgnored private let spatial = SpatialAudioFeedback()
     @ObservationIgnored private let headTracker = HeadTracker()
     @ObservationIgnored private let offRoute = OffRouteDetector()
@@ -103,6 +102,7 @@ final class NavigationViewModel {
         service.stop()
         headTracker.stop()
         spatial.stop()   // 释放空间音引擎（见审查 #11）
+        NavVoice.shared.stop() // 停掉仍在念的导航指令
         status = "导航已停止"
     }
 
@@ -120,9 +120,16 @@ final class NavigationViewModel {
         if replanning { return }
 
         // 仅海外做实时引导（国内为静态步骤读出）。
-        guard region == .overseas, let dest = destination else { return }
+        // 海外与国内共用同一实时引导引擎（C1）；国内须先把 GPS(WGS-84) 纠偏到高德坐标系(GCJ-02)，
+        // 否则定位点相对路线系统性偏移 100–700 米，逐向引导/偏航检测完全不可用。
+        guard let dest = destination else { return }
         let now = ProcessInfo.processInfo.systemUptime // 单调时钟，避免系统时间回拨冻结信标/偏航节流（见审查 #6）
-        let lat = loc.coordinate.latitude, lon = loc.coordinate.longitude
+        let (lat, lon): (Double, Double) = {
+            let c = loc.coordinate
+            guard region == .china else { return (c.latitude, c.longitude) }
+            let g = ChinaCoord.wgs84ToGcj02(lat: c.latitude, lon: c.longitude)
+            return (g.lat, g.lon)
+        }()
         let level = gate.level(horizontalAccuracyMeters: loc.horizontalAccuracy)
 
         // 偏航检测 → 重新规划（核心 OffRouteDetector，已测）。
@@ -200,14 +207,44 @@ final class NavigationViewModel {
         switch region {
         case .china:
             do {
-                let result = try await amap.walking(originLat: loc.coordinate.latitude,
-                                                    originLon: loc.coordinate.longitude,
-                                                    destination: destinationQuery)
+                // 高德以 GCJ-02 计算路线：起点须把 GPS(WGS-84) 先纠偏，否则起点偏移致整条路线错位（C1）。
+                let gOrigin = ChinaCoord.wgs84ToGcj02(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude)
+                let route = try await amap.walking(originLat: gOrigin.lat,
+                                                   originLon: gOrigin.lon,
+                                                   destination: destinationQuery)
                 guard running, gen == navGeneration else { return } // 已被新导航/停止作废，丢弃旧结果
+                let result = route.steps
                 steps = result.map { "\($0.instruction)（\(Int($0.distanceMeters ?? 0)) 米）" }
+
+                // 实时逐向引导（与海外同一引擎）：每步折线首点=转向点；全折线供偏航检测；目的地坐标供到达判定。
+                let withLine = result.filter { ($0.polyline?.first?.count ?? 0) >= 2 }
+                maneuvers = withLine.compactMap { step in
+                    guard let p = step.polyline?.first, p.count >= 2 else { return nil }
+                    return (CLLocationCoordinate2D(latitude: p[0], longitude: p[1]), step.instruction)
+                }
+                var line: [Coordinate] = result.flatMap { ($0.polyline ?? []).compactMap { p in
+                    p.count >= 2 ? Coordinate(lat: p[0], lon: p[1]) : nil
+                } }
+                if let dLat = route.destinationLat, let dLon = route.destinationLon {
+                    destination = CLLocationCoordinate2D(latitude: dLat, longitude: dLon)
+                } else if let last = line.last {
+                    destination = CLLocationCoordinate2D(latitude: last.lat, longitude: last.lon) // 旧后端兜底
+                }
+                if let dest = destination { line.append(Coordinate(lat: dest.latitude, lon: dest.longitude)) }
+                routeCoords = line
+                stepIndex = 0
+                waypointAdvance.reset()
+                offRouteStreak = 0
+
                 if let first = result.first {
-                    status = "共 \(result.count) 步"
-                    speak("共\(result.count)步。第一步：\(first.instruction)")
+                    if destination != nil, !maneuvers.isEmpty {
+                        status = "导航开始，共 \(result.count) 步"
+                        speak("导航开始，共\(result.count)步。\(first.instruction)")
+                    } else {
+                        // 后端未带折线（旧版本）：退化为静态步骤读出。
+                        status = "共 \(result.count) 步（静态路线）"
+                        speak("共\(result.count)步。第一步：\(first.instruction)")
+                    }
                 } else {
                     status = "未找到步行路线"
                 }
@@ -245,10 +282,7 @@ final class NavigationViewModel {
     private func speak(_ text: String) {
         guard text != lastSpoken else { return }
         lastSpoken = text
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = AVSpeechSynthesisVoice(language: "zh-CN")
-        utterance.rate = AVSpeechUtteranceMinimumSpeechRate
-            + (AVSpeechUtteranceMaximumSpeechRate - AVSpeechUtteranceMinimumSpeechRate) * FeatureSettings().speechRate
-        synthesizer.speak(utterance)
+        // 经共享导航语音通道：避障 obstacle/critical 播报会掐断它（跨通道仲裁，Phase 2 标准）。
+        NavVoice.shared.speak(text, rate: FeatureSettings().speechRate)
     }
 }

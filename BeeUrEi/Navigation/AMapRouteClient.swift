@@ -4,16 +4,21 @@ struct AMapWalkStep: Decodable {
     let instruction: String
     // 可选：后端某步距离若为非数（NaN→JSON null）也不致整条路线解码失败、丢失整条路线（见审查 #8）。
     let distanceMeters: Double?
+    /// 该步折线坐标（GCJ-02，[lat, lon] 对）。首点即该步转向点，供实时逐向引导/偏航检测。
+    /// 可选：旧后端无此字段时仍可解码（退化为静态步骤列表）。
+    let polyline: [[Double]]?
 }
 
-private struct AMapWalkResponse: Decodable {
-    let destination: String
+/// 国内路线：目的地坐标（GCJ-02）+ 各步（含折线），供实时逐向引导。
+struct AMapWalkRoute: Decodable {
+    let destinationLat: Double?
+    let destinationLon: Double?
     let steps: [AMapWalkStep]
 }
 
 /// 国内步行路线客户端：调用自托管后端 `/api/nav/walking`（后端持高德 key，App 不接触 key）。
 struct AMapRouteClient {
-    func walking(originLat: Double, originLon: Double, destination: String) async throws -> [AMapWalkStep] {
+    func walking(originLat: Double, originLon: Double, destination: String) async throws -> AMapWalkRoute {
         guard let token = KeychainStore.read() else { throw APIError.server("请先登录") }
         guard var comps = URLComponents(url: ServerConfig.baseURL.appendingPathComponent("api/nav/walking"),
                                         resolvingAgainstBaseURL: false) else { throw APIError.network }
@@ -34,6 +39,6 @@ struct AMapRouteClient {
         guard let http = resp as? HTTPURLResponse, http.statusCode < 400 else {
             throw APIError.server("路线获取失败")
         }
-        return try JSONDecoder().decode(AMapWalkResponse.self, from: data).steps
+        return try JSONDecoder().decode(AMapWalkRoute.self, from: data)
     }
 }

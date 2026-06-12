@@ -6,5 +6,10 @@
 	     开发构建用 development；上架 App Store 时 Xcode 会按发布证书改为 production（服务器同步把 APNS_HOST 改为 api.push.apple.com）。 -->
 	<key>aps-environment</key>
 	<string>development</string>
+	<!-- Sign in with Apple（付费开发者账号下 Xcode 自动签名会同步到 App ID） -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
 </dict>
 </plist>

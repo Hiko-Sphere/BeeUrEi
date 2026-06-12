@@ -75,6 +75,14 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
 
   app.register(async (instance) => {
     instance.get('/health', async () => ({ status: 'ok', service: 'beeurei-server' }))
+    // Apple 关联域文件（passkey/webcredentials）：iOS 据此把本 App 与 PASSKEY_RP_ID 域关联。
+    // 必须是 application/json、无重定向。App 前缀 = TeamID.BundleID。
+    instance.get('/.well-known/apple-app-site-association', async (_req, reply) => {
+      const teamId = process.env.APPLE_TEAM_ID?.trim() || '7CDDP73WJS'
+      const bundleId = process.env.APPLE_BUNDLE_ID?.trim() || 'com.beeurei.BeeUrEi'
+      reply.type('application/json')
+      return { webcredentials: { apps: [`${teamId}.${bundleId}`] } }
+    })
     instance.get('/api/version', async () => ({ version: '0.1.0' }))
     // Prometheus 抓取端点（D3）。设了 METRICS_TOKEN 则要求 Bearer 鉴权，否则开放（自托管内网场景）。
     instance.get('/metrics', async (req, reply) => {

@@ -12,8 +12,10 @@ import { requireAuth } from '../auth/rbac'
 import { signAccessToken, generateRefreshToken, hashToken, refreshTtlMs } from '../auth/tokens'
 
 // RP（依赖方）配置：必须与 iOS Associated Domains 的 webcredentials 域一致，且该域需托管
-// apple-app-site-association 文件。默认 hikosphere.com（可用 PASSKEY_RP_* 环境变量覆盖）。
-const rpID = process.env.PASSKEY_RP_ID?.trim() || 'hikosphere.com'
+// apple-app-site-association 文件。默认 beeurei-api.hikosphere.com——API 子域由本服务直接
+// 提供 /.well-known/apple-app-site-association（见 app.ts），不依赖根域站点配合；
+// 根域 hikosphere.com 是独立主页，托管不了 AASA（可用 PASSKEY_RP_* 环境变量覆盖）。
+const rpID = process.env.PASSKEY_RP_ID?.trim() || 'beeurei-api.hikosphere.com'
 const rpName = process.env.PASSKEY_RP_NAME?.trim() || 'BeeUrEi'
 // iOS passkey 的 clientDataJSON.origin 为 https://<关联域>。允许逗号分隔多个。
 const expectedOrigins = (process.env.PASSKEY_RP_ORIGIN?.trim() || `https://${rpID}`)

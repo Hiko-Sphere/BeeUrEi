@@ -11,12 +11,12 @@
 	<array>
 		<string>Default</string>
 	</array>
-	<!-- Passkey（WebAuthn）关联域：须与服务器 PASSKEY_RP_ID 一致（默认 hikosphere.com），
-	     且 https://hikosphere.com/.well-known/apple-app-site-association 须返回含本 App 的 webcredentials 条目。
-	     需在 App ID 启用 Associated Domains 能力；未部署 AASA 前 passkey 注册/登录会失败（其余登录方式不受影响）。 -->
+	<!-- Passkey（WebAuthn）关联域：须与服务器 PASSKEY_RP_ID 一致（默认 beeurei-api.hikosphere.com）。
+	     该域的 /.well-known/apple-app-site-association 由后端 Fastify 直接提供（app.ts），含本 App 的
+	     webcredentials 条目（TeamID.BundleID）。需在 App ID 启用 Associated Domains 能力。 -->
 	<key>com.apple.developer.associated-domains</key>
 	<array>
-		<string>webcredentials:hikosphere.com</string>
+		<string>webcredentials:beeurei-api.hikosphere.com</string>
 	</array>
 </dict>
 </plist>

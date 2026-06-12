@@ -170,3 +170,14 @@ describe('新账号 created 标记 + 认证后统一选角色', () => {
     expect(locked.statusCode).toBe(403)
   })
 })
+
+describe('Apple 关联域文件（passkey 前提）', () => {
+  it('GET /.well-known/apple-app-site-association 返回 webcredentials JSON', async () => {
+    const app = buildApp(new MemoryStore())
+    const res = await app.inject({ method: 'GET', url: '/.well-known/apple-app-site-association' })
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['content-type']).toContain('application/json')
+    const apps = (res.json() as any).webcredentials.apps as string[]
+    expect(apps[0]).toMatch(/\.com\.beeurei\.BeeUrEi$/)
+  })
+})

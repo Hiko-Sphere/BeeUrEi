@@ -13,6 +13,8 @@ final class AuthSession {
     /// 刚用「新登录方式」（注册/Apple/邮箱验证码/passkey）完成认证：需在下一步引导自定义 userid + 绑定邮箱。
     /// 普通密码登录与重启恢复不置位（老用户不被反复打扰；换绑仍可在账号页进行）。
     private(set) var requiresSetup = false
+    /// 本次认证**新建了账号**（服务端 created=true）：引导首步先选身份角色（所有注册方式统一在此选）。
+    private(set) var accountCreated = false
     @ObservationIgnored private var isRestoring = false
 
     @ObservationIgnored private let api = APIClient()
@@ -96,16 +98,19 @@ final class AuthSession {
     /// 登录入口的本地校验/授权失败提示（如 Apple 授权取消）——errorMessage 为 private(set)，统一经此设置。
     func presentAuthError(_ message: String) { errorMessage = message }
 
-    /// 补全流程是否需要：刚用新方式认证，且（用户名为自动生成 或 邮箱未验证）。
+    /// 补全流程是否需要：刚用新方式认证，且（新账号待选身份 或 用户名为自动生成 或 邮箱未验证）。
     var needsAccountSetup: Bool {
         guard requiresSetup, let u = user else { return false }
         let needUserid = (u.usernameCustomized == false)
         let needEmail = (u.emailVerified != true)
-        return needUserid || needEmail
+        return accountCreated || needUserid || needEmail
     }
 
+    /// 新账号身份角色已确认（引导首步完成）。
+    func confirmRoleChosen() { accountCreated = false }
+
     /// 补全完成（或用户在账号页另行处理）：清除引导标记。
-    func completeSetup() { requiresSetup = false }
+    func completeSetup() { requiresSetup = false; accountCreated = false }
 
     /// 重新拉取本人信息（改用户名/绑邮箱/绑 Apple/加 passkey 后同步内存态）。
     func refreshMe() async {
@@ -146,6 +151,7 @@ final class AuthSession {
             // 拉 /api/me 取完整本人信息（usernameCustomized/email/appleLinked/hasPasskey），一次性赋值避免闪屏。
             user = (try? await api.me(token: t)) ?? result.user
             requiresSetup = isNewMethod
+            accountCreated = (result.created == true) // 新建账号：引导首步统一选身份角色
         } catch APIError.unauthorized {
             errorMessage = AccountStrings.wrongCredentials(lang)
         } catch let APIError.server(message) {

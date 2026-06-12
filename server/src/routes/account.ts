@@ -63,6 +63,22 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     return { ok: true }
   })
 
+  // 选择/更改身份角色（新账号引导统一在认证后选择，覆盖所有注册方式）。
+  // 仅自助角色（blind/helper/family）之间可切换；admin/developer 由后台分配，不可经此自助变更或夺取。
+  // requireAuth 的角色实时取自存储（非 JWT 声明），改角色无需换发令牌。
+  app.post('/api/account/role', { preHandler: requireAuth() }, async (req, reply) => {
+    const parsed = z.object({ role: z.enum(['blind', 'helper', 'family']) }).safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const user = store.findById(req.user!.sub)
+    if (!user) return reply.code(404).send({ error: 'not_found' })
+    if (!['blind', 'helper', 'family'].includes(user.role)) {
+      return reply.code(403).send({ error: 'role_not_self_service' }) // admin/developer 不可自助降级（防误锁后台）
+    }
+    const updated = store.updateUser(user.id, { role: parsed.data.role })
+    if (!updated) return reply.code(404).send({ error: 'not_found' })
+    return { role: updated.role }
+  })
+
   // 修改/设置用户名（唯一登录标识）：校验格式 + 唯一性（大小写不敏感）；成功后标记 usernameCustomized=true。
   // access token 以 user id 为 sub，改用户名不影响现有令牌。用于 Apple/邮箱登录后自定义唯一 userid。
   app.post('/api/account/username', { preHandler: requireAuth() }, async (req, reply) => {

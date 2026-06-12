@@ -182,6 +182,30 @@ enum AccountStrings {
     static func setupStepUserid(_ l: Language) -> String { l == .zh ? "第 1 步，共 2 步：用户名" : "Step 1 of 2: username" }
     static func setupStepEmail(_ l: Language) -> String { l == .zh ? "绑定邮箱" : "Verify email" }
 
+    // MARK: 新账号引导 — 选择身份（所有注册方式统一在认证后选）
+    static func setupRoleHeader(_ l: Language) -> String { l == .zh ? "你是哪种用户？" : "How will you use BeeUrEi?" }
+    static func setupRoleFooter(_ l: Language) -> String {
+        l == .zh ? "选择后可随时在账号页更改。" : "You can change this anytime in Account."
+    }
+    static func roleBlindCardTitle(_ l: Language) -> String { l == .zh ? "我是视障用户" : "I'm blind or low vision" }
+    static func roleBlindCardSub(_ l: Language) -> String {
+        l == .zh ? "使用避障、导航、识别，并可呼叫亲友协助" : "Use obstacle alerts, navigation, recognition, and call for help"
+    }
+    static func roleHelperCardTitle(_ l: Language) -> String { l == .zh ? "我是亲友或协助者" : "I'm family or a helper" }
+    static func roleHelperCardSub(_ l: Language) -> String {
+        l == .zh ? "接听视障亲友的来电，远程看路协助" : "Answer calls from blind family and assist remotely"
+    }
+    static func roleSaveFailed(_ l: Language) -> String { l == .zh ? "身份保存失败，请重试" : "Couldn't save your choice — try again" }
+
+    // MARK: 登录门（行业标准方法优先式）
+    static func welcomeBack(_ l: Language) -> String { l == .zh ? "欢迎使用 BeeUrEi" : "Welcome to BeeUrEi" }
+    static func continueWithEmail(_ l: Language) -> String { l == .zh ? "用邮箱继续（免密码）" : "Continue with email" }
+    static func continueWithPassword(_ l: Language) -> String { l == .zh ? "用账号密码登录或注册" : "Use password instead" }
+    static func methodFootnote(_ l: Language) -> String {
+        l == .zh ? "新用户用任意方式登录即自动创建账号，下一步选择身份。"
+                 : "New here? Any option creates your account — you'll pick your role next."
+    }
+
     // MARK: 账号页 — 用户名 / 手机号 / Apple / Passkey 换绑
 
     static func usernameSectionHeader(_ l: Language) -> String { l == .zh ? "用户名（登录标识）" : "Username (sign-in ID)" }

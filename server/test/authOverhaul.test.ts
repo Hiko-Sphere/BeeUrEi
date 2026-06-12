@@ -124,3 +124,49 @@ describe('Apple ID 绑定/解绑（现存账号）', () => {
     expect(cantUnlink.statusCode).toBe(400)
   })
 })
+
+describe('新账号 created 标记 + 认证后统一选角色', () => {
+  it('注册/Apple 建号/邮箱码建号返回 created=true；再登录不带 created', async () => {
+    const mailer = new CaptureMailer()
+    const app = buildApp(new MemoryStore(), { mailer, appleVerifier: fakeApple })
+
+    const reg = await app.inject({ method: 'POST', url: '/api/auth/register',
+      payload: { username: 'crflag1', password: 'secret123' } })
+    expect((reg.json() as any).created).toBe(true)
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login',
+      payload: { username: 'crflag1', password: 'secret123' } })
+    expect((login.json() as any).created).toBeUndefined()
+
+    const apple1 = await app.inject({ method: 'POST', url: '/api/auth/apple', payload: { identityToken: 'good:CRSUB' } })
+    expect((apple1.json() as any).created).toBe(true)
+    const apple2 = await app.inject({ method: 'POST', url: '/api/auth/apple', payload: { identityToken: 'good:CRSUB' } })
+    expect((apple2.json() as any).created).toBeUndefined()
+
+    await app.inject({ method: 'POST', url: '/api/auth/email/request-code', payload: { email: 'cr@example.com' } })
+    const v = await app.inject({ method: 'POST', url: '/api/auth/email/verify-code',
+      payload: { email: 'cr@example.com', code: mailer.code() } })
+    expect((v.json() as any).created).toBe(true)
+  })
+
+  it('POST /api/account/role：自助角色可切换；非法值 400；admin 不可自助变更', async () => {
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const reg = await app.inject({ method: 'POST', url: '/api/auth/register',
+      payload: { username: 'roleme1', password: 'secret123' } }) // 默认 blind
+    const t = (reg.json() as any).token as string
+
+    const toHelper = await app.inject({ method: 'POST', url: '/api/account/role', headers: auth(t), payload: { role: 'helper' } })
+    expect(toHelper.statusCode).toBe(200)
+    const me = await app.inject({ method: 'GET', url: '/api/me', headers: auth(t) })
+    expect((me.json() as any).user.role).toBe('helper')
+
+    const bad = await app.inject({ method: 'POST', url: '/api/account/role', headers: auth(t), payload: { role: 'admin' } })
+    expect(bad.statusCode).toBe(400) // enum 拒绝
+
+    // admin 账号不可经此自助变更（防误锁后台）。
+    const uid = (me.json() as any).user.id as string
+    store.updateUser(uid, { role: 'admin' })
+    const locked = await app.inject({ method: 'POST', url: '/api/account/role', headers: auth(t), payload: { role: 'blind' } })
+    expect(locked.statusCode).toBe(403)
+  })
+})

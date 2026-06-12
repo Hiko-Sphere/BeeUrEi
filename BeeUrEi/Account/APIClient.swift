@@ -49,6 +49,7 @@ struct AuthResult: Codable, Sendable {
     let token: String
     let refreshToken: String
     let user: AccountInfo
+    var created: Bool? // true=本次认证新建了账号 → 客户端走"选身份→设 userid→绑邮箱"引导
 }
 
 /// 一条聊天消息（kind=audio/image 时 text 为 data URL；kind=video 时 text 为 mediaId；recalled=已撤回占位）。
@@ -762,6 +763,11 @@ struct APIClient {
     }
 
     // MARK: 账号标识换绑（用户名 / 手机号 / Apple ID）
+
+    /// 选择/更改身份角色（新账号引导统一在认证后选择；仅 blind/helper/family 自助切换）。
+    func setRole(token: String, role: String) async throws {
+        _ = try await authedSend("POST", "/api/account/role", token: token, body: ["role": role])
+    }
 
     /// 修改/设置用户名（唯一登录标识；用于自定义 userid）。
     func setUsername(token: String, username: String) async throws {

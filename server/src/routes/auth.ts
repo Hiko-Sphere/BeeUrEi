@@ -97,7 +97,8 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     }
     store.createUser(user)
     const tokens = issueTokens(store, user)
-    return reply.code(201).send({ ...tokens, user: publicUser(user) })
+    // created=true：客户端据此走"选择身份→设置 userid→绑定邮箱"的新账号引导（角色在引导里选，全方法统一）。
+    return reply.code(201).send({ ...tokens, user: publicUser(user), created: true })
   })
 
   app.post('/api/auth/login', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
@@ -155,7 +156,7 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
       }
       store.createUser(user)
       const tokens = issueTokens(store, user)
-      return reply.code(201).send({ ...tokens, user: publicUser(user) })
+      return reply.code(201).send({ ...tokens, user: publicUser(user), created: true })
     }
     if (user.status === 'disabled') {
       return reply.code(403).send({ error: 'account_disabled' })
@@ -245,6 +246,6 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     }
     store.createUser(user)
     const tokens = issueTokens(store, user)
-    return reply.code(201).send({ ...tokens, user: publicUser(user) })
+    return reply.code(201).send({ ...tokens, user: publicUser(user), created: true })
   })
 }

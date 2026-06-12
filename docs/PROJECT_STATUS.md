@@ -4,7 +4,8 @@
 # BeeUrEi 项目状态与未完成项对照（交接文档）
 
 > **快照（2026-06-10 自驱循环 17 轮后）**：核心 319 + 应用层 72 + 后端 176 = **567 测试全过** · iOS 构建过 · CI 绿
-> · 后端已部署 `beeurei-api.hikosphere.com`（⚠️ 6-10 推送双语/语言端点改动**已提交未部署**，部署命令见下方备忘）。
+> · 后端已部署 `beeurei-api.hikosphere.com`（**6-12 已更新至最新**：聊天/紧急警报/Apple登录/手机号/推送双语全上线，
+> APNs sandbox 推送已启用[voip+alert]，APPLE_BUNDLE_ID 已配；**Apple 开发者账号已就位**——A1/G2 链解锁）。
 > 本日循环成果：识别频道化补齐（识币/扫码商品库/找物/人物/光线/公交/历史）· E5 双端全链路双语（十批收官）
 > · 三大安全子系统（避障/通话/导航）胶水层回归测试 · 频道级 Siri + Magic Tap · 端侧库锁屏保护。
 > 详细上架步骤见 [`docs/SHIP_CHECKLIST.md`](SHIP_CHECKLIST.md)；总计划见 [`docs/BACKLOG.md`](BACKLOG.md)。

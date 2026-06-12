@@ -160,14 +160,24 @@ enum APIError: Error {
 struct APIClient {
     private var baseURL: URL { ServerConfig.baseURL }
 
-    func register(username: String, password: String, role: String?) async throws -> AuthResult {
+    func register(username: String, password: String, role: String?, phone: String? = nil) async throws -> AuthResult {
         var body: [String: Any] = ["username": username, "password": password]
         if let role { body["role"] = role }
+        if let phone, !phone.isEmpty { body["phone"] = phone }
         return try await postAuth("/api/auth/register", body: body)
     }
 
+    /// 登录标识可为用户名或手机号（后端先按用户名、再按归一化手机号匹配）。
     func login(username: String, password: String) async throws -> AuthResult {
         try await postAuth("/api/auth/login", body: ["username": username, "password": password])
+    }
+
+    /// Sign in with Apple：identityToken 由系统授权回调提供，服务端验签后登录/自动建号。
+    func loginWithApple(identityToken: String, displayName: String?, role: String?) async throws -> AuthResult {
+        var body: [String: Any] = ["identityToken": identityToken]
+        if let displayName, !displayName.isEmpty { body["displayName"] = displayName }
+        if let role { body["role"] = role }
+        return try await postAuth("/api/auth/apple", body: body)
     }
 
     func refresh(refreshToken: String) async throws -> AuthResult {

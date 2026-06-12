@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import PhotosUI
+import AuthenticationServices
 
 /// 账号登录 / 注册（接自托管后端）。VoiceOver 友好。
 /// 设计为可被 NavigationLink 推入（不自带 NavigationStack）。
@@ -10,6 +11,7 @@ struct LoginView: View {
     @Environment(AuthSession.self) private var session
     @State private var username = ""
     @State private var password = ""
+    @State private var phone = ""        // 注册可选手机号（之后可用手机号+密码登录）
     @State private var isRegister = false
     @State private var role = "blind"
     @State private var serverURL = ServerConfig.baseURLString
@@ -98,11 +100,15 @@ struct LoginView: View {
                 }
             } else {
                 Section(AccountStrings.accountHeader(lang)) {
-                    TextField(AccountStrings.username(lang), text: $username)
+                    // 登录标识：用户名或手机号皆可（注册时仍是用户名）。
+                    TextField(isRegister ? AccountStrings.username(lang) : AccountStrings.usernameOrPhone(lang),
+                              text: $username)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     SecureField(AccountStrings.password(lang), text: $password)
                     if isRegister {
+                        TextField(AccountStrings.phoneOptional(lang), text: $phone)
+                            .keyboardType(.phonePad)
                         Picker(AccountStrings.rolePicker(lang), selection: $role) {
                             ForEach(roles, id: \.value) { Text($0.label).tag($0.value) }
                         }
@@ -120,6 +126,19 @@ struct LoginView: View {
                     if !isRegister {
                         Button(AccountStrings.forgotPassword(lang)) { showForgot = true }.font(.footnote)
                     }
+                }
+
+                // Sign in with Apple：identityToken 交后端验签登录/自动建号。
+                // 注意：能力需付费开发者账号在 Xcode 勾选 Sign in with Apple；未配置时授权会失败并给出提示。
+                Section {
+                    SignInWithAppleButton(.signIn) { request in
+                        request.requestedScopes = [.fullName] // 不取邮箱也可；姓名仅首次授权提供
+                    } onCompletion: { result in
+                        handleApple(result)
+                    }
+                    .signInWithAppleButtonStyle(.black)
+                    .frame(height: 48)
+                    .accessibilityLabel(lang == .zh ? "通过 Apple 登录" : "Sign in with Apple")
                 }
             }
 
@@ -235,10 +254,35 @@ struct LoginView: View {
     private func submit() {
         Task {
             if isRegister {
-                await session.register(username: username, password: password, role: role)
+                let p = phone.trimmingCharacters(in: .whitespaces)
+                await session.register(username: username, password: password, role: role,
+                                       phone: p.isEmpty ? nil : p)
             } else {
                 await session.login(username: username, password: password)
             }
+        }
+    }
+
+    /// Apple 授权回调：取 identityToken + 首次授权的姓名，交 AuthSession 走后端验签登录。
+    private func handleApple(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .success(let authorization):
+            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                  let data = credential.identityToken,
+                  let token = String(data: data, encoding: .utf8) else {
+                session.presentAuthError(AccountStrings.appleFailed(lang))
+                return
+            }
+            let name = [credential.fullName?.familyName, credential.fullName?.givenName]
+                .compactMap { $0 }.joined()
+            Task {
+                await session.loginWithApple(identityToken: token,
+                                             displayName: name.isEmpty ? nil : name,
+                                             role: role)
+            }
+        case .failure:
+            // 用户取消或未配置 entitlement：给可理解的提示（不弹原始错误码）。
+            session.presentAuthError(AccountStrings.appleFailed(lang))
         }
     }
 }

@@ -5,6 +5,7 @@ import { requireAuth } from '../auth/rbac'
 import { hashPassword, verifyPassword } from '../auth/passwords'
 import { type CodeRegistry } from '../auth/codes'
 import { type Mailer } from '../mail/mailer'
+import { normalizePhone } from '../auth/apple'
 
 const passwordSchema = z.object({
   oldPassword: z.string().min(1),
@@ -45,6 +46,19 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     const parsed = languageSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const updated = store.updateUser(req.user!.sub, { language: parsed.data.language })
+    if (!updated) return reply.code(404).send({ error: 'not_found' })
+    return { ok: true }
+  })
+
+  // 绑定/换绑手机号（手机号+密码登录的标识）：归一化 + 全局唯一（不能占用他人手机号）。
+  app.post('/api/account/phone', { preHandler: requireAuth() }, async (req, reply) => {
+    const parsed = z.object({ phone: z.string().trim().min(6).max(20) }).safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const p = normalizePhone(parsed.data.phone)
+    if (!p) return reply.code(400).send({ error: 'invalid_phone' })
+    const existing = store.findByPhone(p)
+    if (existing && existing.id !== req.user!.sub) return reply.code(409).send({ error: 'phone_taken' })
+    const updated = store.updateUser(req.user!.sub, { phone: p })
     if (!updated) return reply.code(404).send({ error: 'not_found' })
     return { ok: true }
   })

@@ -16,8 +16,9 @@ enum HelperStrings {
     static func matchPrefsHint(_ l: Language) -> String {
         l == .zh ? "设置随机匹配时优先的语言" : "Choose the preferred language for random matching"
     }
-    static func onlineToggleQueue(_ l: Language) -> String {
-        l == .zh ? "在线待命（接听求助与亲人来电）" : "Available (help requests & family calls)"
+    static func onlineNow(_ l: Language) -> String { l == .zh ? "在线" : "Online" }
+    static func onlinePillA11y(_ l: Language) -> String {
+        l == .zh ? "在线中，可接听求助与亲人来电" : "Online — reachable for help requests and family calls"
     }
     static func matchRandom(_ l: Language) -> String {
         l == .zh ? "随机匹配一位需要帮助的人" : "Match me with someone who needs help"
@@ -68,14 +69,9 @@ enum HelperStrings {
 
     // MARK: 我的亲人
 
-    static func onlineToggleFamily(_ l: Language) -> String {
-        l == .zh ? "在线待命（接听亲人紧急呼叫）" : "Available (family emergency calls)"
-    }
-    static func onlineFooterOn(_ l: Language) -> String {
-        l == .zh ? "亲人发起紧急呼叫时会在此自动弹出来电。" : "Family emergency calls will ring here automatically."
-    }
-    static func onlineFooterOff(_ l: Language) -> String {
-        l == .zh ? "已离线，不会接到亲人来电。" : "Offline — you won't receive family calls."
+    static func alwaysOnlineFooter(_ l: Language) -> String {
+        l == .zh ? "打开 App 即自动在线：亲人紧急呼叫会在此直接弹出来电，无需手动待命。"
+                 : "You're online whenever the app is open — family emergency calls ring here automatically."
     }
     static func pendingHeader(_ l: Language) -> String { l == .zh ? "待你接受的绑定请求" : "Requests awaiting your approval" }
     static func wantsToLink(owner: String, relation: String, emergency: Bool, _ l: Language) -> String {

@@ -141,6 +141,30 @@ enum AccountStrings {
     static func networkError(_ l: Language) -> String {
         l == .zh ? "网络错误，请检查服务器地址" : "Network error — check the server address"
     }
+    /// 后端错误码 → 用户可读文案（未知码原样显示，便于排障）。
+    static func serverErrorText(_ code: String, _ l: Language) -> String {
+        switch code {
+        case "username_taken": return l == .zh ? "用户名已被使用" : "Username already taken"
+        case "email_taken": return l == .zh ? "邮箱已被使用" : "Email already in use"
+        case "phone_taken": return l == .zh ? "手机号已被使用" : "Phone number already in use"
+        case "invalid_phone": return l == .zh ? "手机号格式不正确" : "Invalid phone number"
+        case "account_disabled": return l == .zh ? "账号已被停用" : "Account disabled"
+        case "invalid_apple_token": return l == .zh ? "Apple 登录校验失败，请重试" : "Apple sign-in verification failed"
+        case "apple_login_not_configured":
+            return l == .zh ? "服务器尚未配置 Apple 登录" : "Apple sign-in isn't configured on the server"
+        case "invalid_input": return l == .zh ? "输入有误，请检查后重试" : "Invalid input, please check and retry"
+        default: return code
+        }
+    }
+
+    // MARK: 手机号 / Apple 登录
+
+    static func usernameOrPhone(_ l: Language) -> String { l == .zh ? "用户名或手机号" : "Username or phone" }
+    static func phoneOptional(_ l: Language) -> String { l == .zh ? "手机号（选填，可用于登录）" : "Phone (optional, can log in with it)" }
+    static func appleFailed(_ l: Language) -> String {
+        l == .zh ? "Apple 登录未完成（需在 Xcode 配置 Sign in with Apple 能力）"
+                 : "Apple sign-in didn't finish (requires the Sign in with Apple capability)"
+    }
 
     /// 角色显示名。
     static func roleName(_ role: String, _ l: Language) -> String {

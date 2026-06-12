@@ -11,7 +11,6 @@ struct AssistHomeView: View {
     let session: AuthSession
     let onSwitchRole: () -> Void
 
-    @State private var online = true               // 在线待命：默认开（亲人紧急呼叫/被匹配可达）
     @State private var queue: [HelpRequestSummary] = []
     @State private var queueError = false
     @State private var pendingLinks: [IncomingLinkInfo] = []   // 待我确认的请求
@@ -28,6 +27,7 @@ struct AssistHomeView: View {
     @State private var statusText: String?
     @State private var prefsShown = false
     @State private var busy = false
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var hbTask: Task<Void, Never>?
     @State private var pollIncomingTask: Task<Void, Never>?
@@ -54,6 +54,11 @@ struct AssistHomeView: View {
             if inCall { matched = nil; prefsShown = false; showAddFamily = false }
         }
         .onDisappear { stopTasks(goOffline: true) }
+        // 打开 App 即在线（无手动待命开关）：回到前台立即恢复心跳；退后台停发心跳，
+        // 服务端 45s TTL 自然过期离线——短暂切走（看通知）无感，不会闪断。
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { goOnline() } else if phase == .background { pauseHeartbeat() }
+        }
         .sheet(item: $matched, onDismiss: {
             // sheet 真正关闭后再呈现通话，避免同一 tick「关 sheet + 开 fullScreenCover」被吞（见审查 #3）。
             if let p = pendingAnswer { pendingAnswer = nil; answering = p }
@@ -81,20 +86,16 @@ struct AssistHomeView: View {
                 VStack(alignment: .leading, spacing: BeeSpacing.md) {
                     NetworkStatusBar() // 当前网络类型（WiFi/移动数据/有线链接）
 
-                    // 状态卡：在线待命 + 匹配偏好，统一收进一张卡片，简洁清晰。
+                    // 状态卡：打开 App 即在线（无手动待命开关）+ 匹配偏好。
                     BeeCard {
-                        VStack(alignment: .leading, spacing: BeeSpacing.sm) {
-                            HStack {
-                                BeeStatusPill(online: online)
-                                Spacer()
-                                Button { prefsShown = true } label: {
-                                    Label(HelperStrings.matchPrefs(lang), systemImage: "slider.horizontal.3").font(.subheadline)
-                                }
-                                .accessibilityHint(HelperStrings.matchPrefsHint(lang))
+                        HStack {
+                            BeeStatusPill(text: HelperStrings.onlineNow(lang))
+                                .accessibilityLabel(HelperStrings.onlinePillA11y(lang))
+                            Spacer()
+                            Button { prefsShown = true } label: {
+                                Label(HelperStrings.matchPrefs(lang), systemImage: "slider.horizontal.3").font(.subheadline)
                             }
-                            Toggle(HelperStrings.onlineToggleQueue(lang), isOn: $online)
-                                .onChange(of: online) { _, v in setOnline(v) }
-                                .font(.subheadline)
+                            .accessibilityHint(HelperStrings.matchPrefsHint(lang))
                         }
                     }
 
@@ -200,11 +201,15 @@ struct AssistHomeView: View {
         NavigationStack {
             List {
                 Section {
-                    Toggle(HelperStrings.onlineToggleFamily(lang), isOn: $online)
-                        .onChange(of: online) { _, v in setOnline(v) }
-                    Text(online ? HelperStrings.onlineFooterOn(lang) : HelperStrings.onlineFooterOff(lang))
+                    HStack {
+                        BeeStatusPill(text: HelperStrings.onlineNow(lang))
+                        Spacer()
+                    }
+                    Text(HelperStrings.alwaysOnlineFooter(lang))
                         .font(.footnote).foregroundStyle(.secondary)
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(HelperStrings.alwaysOnlineFooter(lang))
 
                 if pendingLinks.contains(where: { $0.isPending }) {
                     Section(HelperStrings.pendingHeader(lang)) {
@@ -350,7 +355,7 @@ struct AssistHomeView: View {
     private func onAppear() async {
         await loadLinks()
         await refreshQueue()
-        setOnline(online)            // 启动心跳 + 来电轮询（若在线）
+        goOnline()                   // 打开 App 即在线：启动心跳 + 来电轮询
         startQueuePolling()
     }
 
@@ -368,22 +373,24 @@ struct AssistHomeView: View {
         catch { queueError = true }
     }
 
-    /// 在线开关：开 → 周期心跳(20s) + 轮询亲人来电(3s)；关 → 下线。
-    private func setOnline(_ on: Bool) {
+    /// 打开 App 即在线：周期心跳(20s，立即先发一次) + 轮询亲人来电(3s)。可重复调用（先撤旧任务）。
+    private func goOnline() {
         hbTask?.cancel(); hbTask = nil
         pollIncomingTask?.cancel(); pollIncomingTask = nil
         guard let token = session.token else { return }
-        if on {
-            hbTask = Task {
-                while !Task.isCancelled {
-                    await APIClient().assistHeartbeat(token: token, available: true)
-                    try? await Task.sleep(for: .seconds(20))
-                }
+        hbTask = Task {
+            while !Task.isCancelled {
+                await APIClient().assistHeartbeat(token: token, available: true)
+                try? await Task.sleep(for: .seconds(20))
             }
-            pollIncomingTask = Task { await pollIncoming(token: token) }
-        } else {
-            Task { await APIClient().assistHeartbeat(token: token, available: false) }
         }
+        pollIncomingTask = Task { await pollIncoming(token: token) }
+    }
+
+    /// 退后台：停发心跳与来电轮询（不显式下线——服务端 45s TTL 自然过期，短暂切走不闪断）。
+    private func pauseHeartbeat() {
+        hbTask?.cancel(); hbTask = nil
+        pollIncomingTask?.cancel(); pollIncomingTask = nil
     }
 
     private func startQueuePolling() {
@@ -418,7 +425,8 @@ struct AssistHomeView: View {
         hbTask?.cancel(); hbTask = nil
         pollIncomingTask?.cancel(); pollIncomingTask = nil
         pollQueueTask?.cancel(); pollQueueTask = nil
-        if goOffline, online, let token = session.token {
+        // 离开协助端界面（切角色/退出登录）才显式下线；其余情况靠服务端 TTL。
+        if goOffline, let token = session.token {
             Task { await APIClient().assistHeartbeat(token: token, available: false) }
         }
     }

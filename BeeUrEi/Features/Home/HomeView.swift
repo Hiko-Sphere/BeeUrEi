@@ -11,6 +11,7 @@ struct HomeView: View {
     @State private var showFraming = false
     @State private var showTutorial = false
     @State private var locationDescriber = LocationDescriber()
+    @State private var weatherSpeaker = WeatherSpeaker()
     @State private var idleTask: Task<Void, Never>? // 屏幕常亮计时（到时允许系统息屏）
     @State private var incoming = IncomingCallCenter.shared // 监听来电（接听别人的呼叫经此在根层呈现）
     @State private var route = AppRoute.shared              // Siri/快捷指令路由（一句话直达）
@@ -94,6 +95,11 @@ struct HomeView: View {
         .fullScreenCover(isPresented: $showFraming) {
             FramingAssistView { showFraming = false }
         }
+        // 主屏 Magic Tap（双指双击）= 一键求助：盲人最紧急的动作不需要找按钮（系统惯例：Magic Tap=最重要操作）。
+        .accessibilityAction(.magicTap) {
+            guard !incoming.hasIncoming else { return }
+            showRemoteAssist = true
+        }
     }
 
     // MARK: 红绿灯全屏色块（Oko 式第三通道）
@@ -155,27 +161,36 @@ struct HomeView: View {
 
     private var actionPanel: some View {
         VStack(spacing: BeeSpacing.sm) {
-            // 首要操作：求助（最大、蜂蜜黄）
+            // 首要操作：求助（最大、蜂蜜黄；全屏任意处 Magic Tap 也直达）。
             BeeBigButton(HomeStrings.helpTitle(lang), systemImage: "hand.raised.fill",
                          subtitle: HomeStrings.helpSubtitle(lang), tint: .beeHoney) {
                 showRemoteAssist = true
             }
+            .accessibilityHint(HomeStrings.magicTapHint(lang))
+            // 两大功能屏：识别 / 导航。
             HStack(spacing: BeeSpacing.sm) {
-                tile(HomeStrings.tileNav(lang), systemImage: "figure.walk") { showNavigation = true }
                 tile(HomeStrings.tileLook(lang), systemImage: "viewfinder",
                      hint: HomeStrings.hintLook(lang)) { showFraming = true }
+                tile(HomeStrings.tileNav(lang), systemImage: "figure.walk") { showNavigation = true }
             }
-            HStack(spacing: BeeSpacing.sm) {
-                tile(HomeStrings.tileWhereAmI(lang), systemImage: "location.fill",
-                     hint: HomeStrings.hintWhereAmI(lang)) { locationDescriber.describe() }
-                tile(HomeStrings.tileAround(lang), systemImage: "dot.circle.viewfinder",
-                     hint: HomeStrings.hintAround(lang)) { locationDescriber.describeAround() }
+            // 环境感知四键（同类动作编为一组：VoiceOver 报"环境感知"分组名，可预期、可记忆）。
+            VStack(spacing: BeeSpacing.sm) {
+                HStack(spacing: BeeSpacing.sm) {
+                    tile(HomeStrings.tileWhereAmI(lang), systemImage: "location.fill",
+                         hint: HomeStrings.hintWhereAmI(lang)) { locationDescriber.describe() }
+                    tile(HomeStrings.tileAround(lang), systemImage: "dot.circle.viewfinder",
+                         hint: HomeStrings.hintAround(lang)) { locationDescriber.describeAround() }
+                }
+                HStack(spacing: BeeSpacing.sm) {
+                    tile(HomeStrings.tileAhead(lang), systemImage: "arrow.up.circle",
+                         hint: HomeStrings.hintAhead(lang)) { locationDescriber.describeAhead() }
+                    // 设置入口固定在右上角齿轮（位置可记忆），磁贴位让给高频的「天气」。
+                    tile(HomeStrings.tileWeather(lang), systemImage: "cloud.sun.fill",
+                         hint: HomeStrings.hintWeather(lang)) { weatherSpeaker.announce() }
+                }
             }
-            HStack(spacing: BeeSpacing.sm) {
-                tile(HomeStrings.tileAhead(lang), systemImage: "arrow.up.circle",
-                     hint: HomeStrings.hintAhead(lang)) { locationDescriber.describeAhead() }
-                tile(HomeStrings.tileSettings(lang), systemImage: "gearshape.fill") { showSettings = true }
-            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(HomeStrings.envGroup(lang))
         }
     }
 
@@ -184,10 +199,11 @@ struct HomeView: View {
     private func tile(_ title: String, systemImage: String, hint: String? = nil, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: BeeSpacing.sm) {
-                Image(systemName: systemImage).font(.system(size: 30, weight: .bold)).foregroundStyle(Color.beeHoney)
-                Text(title).font(.headline).foregroundStyle(.white)
+                Image(systemName: systemImage).font(.system(size: 32, weight: .bold)).foregroundStyle(Color.beeHoney)
+                Text(title).font(.title3.weight(.semibold)).foregroundStyle(.white)
+                    .minimumScaleFactor(0.7).lineLimit(1) // 大字优先；超长（英文）按比例回缩不截断
             }
-            .frame(maxWidth: .infinity, minHeight: 92)
+            .frame(maxWidth: .infinity, minHeight: 100)
             .background(Color.beeInk.opacity(wantsSolidSurfaces ? 1 : 0.88),
                         in: RoundedRectangle(cornerRadius: BeeRadius.card, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: BeeRadius.card, style: .continuous)

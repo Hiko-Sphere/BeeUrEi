@@ -24,7 +24,7 @@ final class HelperStringsTests: XCTestCase {
 
     func testEnglishHasNoChinese() {
         let samples = [
-            HelperStrings.onlineToggleQueue(.en), HelperStrings.queueEmptyMessage(.en),
+            HelperStrings.alwaysOnlineFooter(.en), HelperStrings.queueEmptyMessage(.en),
             HelperStrings.requireSameLanguageFooter(.en), HelperStrings.noRelationsYet(.en),
             HelperStrings.mergedExplain(.en), HelperStrings.claimedByOther(.en),
             HelperStrings.wantsToLink(owner: "Ming", relation: "son", emergency: false, .en),

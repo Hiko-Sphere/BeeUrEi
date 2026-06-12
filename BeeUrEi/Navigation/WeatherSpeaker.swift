@@ -1,0 +1,81 @@
+import Foundation
+import CoreLocation
+
+/// 天气播报（主屏环境感知键之一）：一次性定位 → Open-Meteo（免 key、仅发送坐标，无任何身份信息）
+/// → 核心 WeatherPhrase 组装双语文案 → 语音总线 .query 通道播报（避障/导航播报中不重叠）。
+/// 对盲人出行的关键价值在建议句：雨雪→带伞防滑、冰点→路面结冰提醒。
+final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
+    private let manager = CLLocationManager()
+    private var fetching = false // 防重入：上一次还没播完结果时忽略新点击
+    private var lang: Language { FeatureSettings().language }
+
+    override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyKilometer // 天气只需公里级，省电省时
+    }
+
+    func announce() {
+        guard !fetching else { return }
+        fetching = true
+        speak(WeatherPhrase.fetching(lang))
+        manager.requestWhenInUseAuthorization()
+        manager.requestLocation()
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let loc = locations.last else { return }
+        Task { await fetch(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude) }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        speak(WeatherPhrase.needLocation(lang))
+        fetching = false
+    }
+
+    private func fetch(lat: Double, lon: Double) async {
+        defer { fetching = false }
+        var c = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
+        c.queryItems = [
+            .init(name: "latitude", value: String(format: "%.3f", lat)),   // 坐标降精到 ~百米级，最小化外发
+            .init(name: "longitude", value: String(format: "%.3f", lon)),
+            .init(name: "current", value: "temperature_2m,weather_code,wind_speed_10m"),
+            .init(name: "daily", value: "temperature_2m_max,temperature_2m_min,precipitation_probability_max"),
+            .init(name: "forecast_days", value: "1"),
+            .init(name: "timezone", value: "auto"),
+        ]
+        struct Response: Decodable {
+            struct Current: Decodable {
+                let temperature_2m: Double
+                let weather_code: Int
+                let wind_speed_10m: Double?
+            }
+            struct Daily: Decodable {
+                let temperature_2m_max: [Double]
+                let temperature_2m_min: [Double]
+                let precipitation_probability_max: [Int?]?
+            }
+            let current: Current
+            let daily: Daily?
+        }
+        var request = URLRequest(url: c.url!)
+        request.timeoutInterval = 10
+        guard let (data, resp) = try? await URLSession.shared.data(for: request),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              let r = try? JSONDecoder().decode(Response.self, from: data) else {
+            speak(WeatherPhrase.failed(lang))
+            return
+        }
+        speak(WeatherPhrase.summary(temperature: r.current.temperature_2m,
+                                    code: r.current.weather_code,
+                                    windSpeedKmh: r.current.wind_speed_10m,
+                                    todayMax: r.daily?.temperature_2m_max.first,
+                                    todayMin: r.daily?.temperature_2m_min.first,
+                                    precipProbability: r.daily?.precipitation_probability_max?.first ?? nil,
+                                    language: lang))
+    }
+
+    private func speak(_ text: String) {
+        SpeechHub.shared.speak(text, channel: .query, voiceCode: lang.voiceCode)
+    }
+}

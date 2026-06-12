@@ -28,11 +28,14 @@ import { captureException } from './monitoring/errorReporting'
 import { CodeRegistry } from './auth/codes'
 import { ConsoleMailer, type Mailer } from './mail/mailer'
 import { NoopPushSender, type PushSender } from './push/apns'
+import { createAppleVerifier, type AppleTokenVerifier } from './auth/apple'
 
 export interface AppOptions {
   rateLimitMax?: number
   mailer?: Mailer // 默认 ConsoleMailer（日志打码）；index.ts 可注入 SMTP 邮件器
   pushSender?: PushSender // 默认 Noop（无后台推送）；index.ts 可注入 APNs VoIP 推送（A1）
+  // Apple 登录验证器：默认从 APPLE_BUNDLE_ID 环境变量构造（未配置则端点返回 503）；测试注入 fake。
+  appleVerifier?: AppleTokenVerifier
 }
 
 /// 构建 Fastify 应用（与 listen 分离，便于用 app.inject() 单测）。
@@ -88,7 +91,9 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
       return { ready: true }
     })
     setAuthStore(store) // 让 requireAuth 能实时校验账号状态/tokenVersion（见审查 #1/#2）
-    registerAuthRoutes(instance, store)
+    const bundleId = process.env.APPLE_BUNDLE_ID?.trim()
+    const appleVerifier = options.appleVerifier ?? (bundleId ? createAppleVerifier(bundleId) : undefined)
+    registerAuthRoutes(instance, store, appleVerifier)
     registerRecoveryRoutes(instance, store, codes, mailer) // 找回密码（D1）
     registerAccountRoutes(instance, store, codes, mailer)
     registerPushRoutes(instance, store) // VoIP token 注册（A1）

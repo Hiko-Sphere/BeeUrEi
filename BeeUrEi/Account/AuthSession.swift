@@ -68,9 +68,17 @@ final class AuthSession {
         await run { try await self.api.login(username: username, password: password) }
     }
 
-    func register(username: String, password: String, role: String) async {
-        await run { try await self.api.register(username: username, password: password, role: role) }
+    func register(username: String, password: String, role: String, phone: String? = nil) async {
+        await run { try await self.api.register(username: username, password: password, role: role, phone: phone) }
     }
+
+    /// Apple 登录：验签建号/登录由后端完成；displayName 仅首次授权由系统提供。
+    func loginWithApple(identityToken: String, displayName: String?, role: String?) async {
+        await run { try await self.api.loginWithApple(identityToken: identityToken, displayName: displayName, role: role) }
+    }
+
+    /// 登录入口的本地校验/授权失败提示（如 Apple 授权取消）——errorMessage 为 private(set)，统一经此设置。
+    func presentAuthError(_ message: String) { errorMessage = message }
 
     func logout() {
         // 撤销服务端 refresh token + 解绑本机 VoIP token（尽力而为）——后者避免来电误投到已登出设备（见复审 #3）。
@@ -105,7 +113,7 @@ final class AuthSession {
         } catch APIError.unauthorized {
             errorMessage = AccountStrings.wrongCredentials(lang)
         } catch let APIError.server(message) {
-            errorMessage = message
+            errorMessage = AccountStrings.serverErrorText(message, lang) // 后端 code → 用户可读文案
         } catch {
             errorMessage = AccountStrings.networkError(lang)
         }

@@ -30,6 +30,14 @@ enum HomeStrings {
         l == .zh ? "只播报你面朝方向的地点" : "Announce only the places in the direction you're facing"
     }
     static func tileSettings(_ l: Language) -> String { l == .zh ? "设置" : "Settings" }
+    static func tileWeather(_ l: Language) -> String { l == .zh ? "天气" : "Weather" }
+    static func hintWeather(_ l: Language) -> String {
+        l == .zh ? "播报当地天气与出行建议，如下雨提醒带伞" : "Announce local weather and travel tips, like bringing an umbrella"
+    }
+    static func envGroup(_ l: Language) -> String { l == .zh ? "环境感知" : "Surroundings" }
+    static func magicTapHint(_ l: Language) -> String {
+        l == .zh ? "双指双击可一键求助" : "Two-finger double-tap to call for help"
+    }
 
     // MARK: 红绿灯横幅（Oko 式第三通道）
 

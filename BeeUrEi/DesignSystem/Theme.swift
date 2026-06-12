@@ -135,19 +135,19 @@ struct BeeSectionHeader: View {
     }
 }
 
-/// 在线/离线状态药丸。
+/// 状态药丸（绿点 + 文案；文案由调用方按语言提供）。
 struct BeeStatusPill: View {
-    let online: Bool
+    let text: String
     var body: some View {
         HStack(spacing: 6) {
-            Circle().fill(online ? Color.beeSuccess : Color.secondary).frame(width: 9, height: 9)
-            Text(online ? "在线待命" : "离线").font(.subheadline.weight(.semibold))
+            Circle().fill(Color.beeSuccess).frame(width: 9, height: 9)
+            Text(text).font(.subheadline.weight(.semibold))
         }
         .padding(.horizontal, 12).padding(.vertical, 6)
         .background(.ultraThinMaterial, in: Capsule())
         .overlay(Capsule().strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(online ? "在线待命中" : "当前离线")
+        .accessibilityLabel(text)
     }
 }
 

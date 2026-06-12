@@ -20,6 +20,8 @@ export interface User {
   voipToken?: string // PushKit VoIP 推送 token（A1 后台来电）。仅服务端用于发推，不对外暴露。
   avatar?: string // 头像：小尺寸图片 data URL(base64)。非敏感，进 publicUser 供联系人/队列/通话显示。
   apnsToken?: string // 普通 APNs 提醒推送 token（软件外通知，区别于 voipToken）。
+  phone?: string // 可选手机号（归一化数字串）：可作为登录标识（手机号+密码）。仅本人可见，不进 publicUser。
+  appleSub?: string // Sign in with Apple 的稳定用户标识（identityToken.sub）。仅服务端用于匹配账号。
 }
 
 /// 亲友绑定：视障用户(owner) ↔ 亲友/协助者账号(member)，可标记为紧急联系人。
@@ -101,6 +103,8 @@ export interface Recording {
 export interface Store {
   createUser(user: User): void
   findByUsername(username: string): User | undefined
+  findByPhone(phone: string): User | undefined       // 手机号登录（归一化后精确匹配）
+  findByAppleSub(appleSub: string): User | undefined // Sign in with Apple 账号匹配
   findById(id: string): User | undefined
   allUsers(): User[]
   updateUser(id: string, patch: Partial<User>): User | undefined
@@ -174,6 +178,14 @@ export class MemoryStore implements Store {
     // 大小写不敏感：防止注册"Alice"与"alice"两个混淆账号/冒充；登录也兼容任意大小写（见审查 #4）。
     const key = username.trim().toLowerCase()
     for (const u of this.users.values()) if (u.username.toLowerCase() === key) return u
+    return undefined
+  }
+  findByPhone(phone: string): User | undefined {
+    for (const u of this.users.values()) if (u.phone && u.phone === phone) return u
+    return undefined
+  }
+  findByAppleSub(appleSub: string): User | undefined {
+    for (const u of this.users.values()) if (u.appleSub && u.appleSub === appleSub) return u
     return undefined
   }
   findById(id: string): User | undefined {
@@ -352,12 +364,13 @@ export function publicUser(u: User) {
   return { id: u.id, username: u.username, displayName: u.displayName, role: u.role, status: u.status, avatar: u.avatar ?? null }
 }
 
-/// 本人视图（/api/me）：在 publicUser 基础上加自己的邮箱/语言/验证状态（仅本人可见）。
+/// 本人视图（/api/me）：在 publicUser 基础上加自己的邮箱/手机号/语言/验证状态（仅本人可见）。
 export function selfView(u: User) {
   return {
     ...publicUser(u),
     language: u.language ?? null,
     email: u.email ?? null,
     emailVerified: u.emailVerified ?? false,
+    phone: u.phone ?? null,
   }
 }

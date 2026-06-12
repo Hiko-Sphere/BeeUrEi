@@ -99,15 +99,17 @@ export interface Recording {
   recordedAt: number
 }
 
-/// 聊天消息（仅 accepted 绑定关系之间可互发）。kind=audio 时 text 为音频 data URL（小段语音条）。
+/// 聊天消息（仅 accepted 绑定关系之间可互发）。
+/// kind=audio/image 时 text 为 data URL；kind=recalled 为已撤回占位（text 清空）。
 export interface ChatMessage {
   id: string
   fromId: string
   toId: string
-  kind: 'text' | 'audio'
+  kind: 'text' | 'audio' | 'image' | 'recalled'
   text: string
   createdAt: number
   readAt?: number // 收件人已读时间（已读回执）
+  reaction?: string // 表情回应（WhatsApp 式，单个 emoji，最新覆盖；空=无）
 }
 
 /// 持久化接口——上层只依赖它；可换内存 / JSON 文件 / 未来 SQLite。
@@ -154,6 +156,8 @@ export interface Store {
   deleteRecording(id: string): void
 
   createMessage(m: ChatMessage): void
+  findMessage(id: string): ChatMessage | undefined
+  updateMessage(id: string, patch: Partial<ChatMessage>): ChatMessage | undefined
   /// 双方之间的消息（时间正序）；beforeMs 用于向前翻页（只取早于该时刻的最后 limit 条）。
   messagesBetween(a: string, b: string, limit: number, beforeMs?: number): ChatMessage[]
   /// 我参与的每个对话的最后一条消息（按时间倒序），供会话列表。
@@ -321,6 +325,17 @@ export class MemoryStore implements Store {
   createMessage(m: ChatMessage): void {
     this.messages.set(m.id, m)
     this.afterMutate()
+  }
+  findMessage(id: string): ChatMessage | undefined {
+    return this.messages.get(id)
+  }
+  updateMessage(id: string, patch: Partial<ChatMessage>): ChatMessage | undefined {
+    const cur = this.messages.get(id)
+    if (!cur) return undefined
+    const next = { ...cur, ...patch, id: cur.id }
+    this.messages.set(id, next)
+    this.afterMutate()
+    return next
   }
   messagesBetween(a: string, b: string, limit: number, beforeMs?: number): ChatMessage[] {
     const all = [...this.messages.values()]

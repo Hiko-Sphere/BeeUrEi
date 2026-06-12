@@ -39,7 +39,7 @@ export class SqliteStore implements Store {
       CREATE TABLE IF NOT EXISTS call_records (
         id TEXT PRIMARY KEY, callId TEXT, callerId TEXT, calleeId TEXT, status TEXT, createdAt INTEGER);
       CREATE TABLE IF NOT EXISTS messages (
-        id TEXT PRIMARY KEY, fromId TEXT, toId TEXT, kind TEXT, text TEXT, createdAt INTEGER, readAt INTEGER);
+        id TEXT PRIMARY KEY, fromId TEXT, toId TEXT, kind TEXT, text TEXT, createdAt INTEGER, readAt INTEGER, reaction TEXT);
       CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages (fromId, toId, createdAt);
       CREATE INDEX IF NOT EXISTS idx_messages_to ON messages (toId, readAt);
     `)
@@ -56,6 +56,7 @@ export class SqliteStore implements Store {
     try { this.db.exec('ALTER TABLE users ADD COLUMN apnsToken TEXT') } catch { /* 列已存在 */ } // 普通 APNs 提醒推送 token
     try { this.db.exec('ALTER TABLE users ADD COLUMN phone TEXT') } catch { /* 列已存在 */ } // 手机号登录标识
     try { this.db.exec('ALTER TABLE users ADD COLUMN appleSub TEXT') } catch { /* 列已存在 */ } // Sign in with Apple sub
+    try { this.db.exec('ALTER TABLE messages ADD COLUMN reaction TEXT') } catch { /* 列已存在 */ } // 表情回应
   }
 
   // MARK: refresh tokens
@@ -216,8 +217,19 @@ export class SqliteStore implements Store {
 
   // MARK: messages
   createMessage(m: ChatMessage): void {
-    this.db.prepare('INSERT OR REPLACE INTO messages (id, fromId, toId, kind, text, createdAt, readAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(m.id, m.fromId, m.toId, m.kind, m.text, m.createdAt, m.readAt ?? null)
+    this.db.prepare('INSERT OR REPLACE INTO messages (id, fromId, toId, kind, text, createdAt, readAt, reaction) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(m.id, m.fromId, m.toId, m.kind, m.text, m.createdAt, m.readAt ?? null, m.reaction ?? null)
+  }
+  findMessage(id: string): ChatMessage | undefined {
+    const row = this.db.prepare('SELECT * FROM messages WHERE id = ?').get(id)
+    return row ? this.toMessage(row) : undefined
+  }
+  updateMessage(id: string, patch: Partial<ChatMessage>): ChatMessage | undefined {
+    const cur = this.findMessage(id)
+    if (!cur) return undefined
+    const next = { ...cur, ...patch, id: cur.id }
+    this.createMessage(next)
+    return next
   }
   messagesBetween(a: string, b: string, limit: number, beforeMs?: number): ChatMessage[] {
     const rows = this.db.prepare(
@@ -256,8 +268,9 @@ export class SqliteStore implements Store {
 
   // MARK: row mappers
   private toMessage(r: any): ChatMessage {
-    return { id: r.id, fromId: r.fromId, toId: r.toId, kind: (r.kind as 'text' | 'audio') ?? 'text',
-             text: r.text, createdAt: Number(r.createdAt), readAt: r.readAt != null ? Number(r.readAt) : undefined }
+    return { id: r.id, fromId: r.fromId, toId: r.toId, kind: (r.kind as ChatMessage['kind']) ?? 'text',
+             text: r.text, createdAt: Number(r.createdAt), readAt: r.readAt != null ? Number(r.readAt) : undefined,
+             reaction: r.reaction ?? undefined }
   }
   private toUser(r: any): User {
     return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt), language: r.language ?? undefined, tokenVersion: r.tokenVersion != null ? Number(r.tokenVersion) : 0, email: r.email ?? undefined, emailVerified: r.emailVerified != null ? Number(r.emailVerified) === 1 : undefined, voipToken: r.voipToken ?? undefined, avatar: r.avatar ?? undefined, apnsToken: r.apnsToken ?? undefined, phone: r.phone ?? undefined, appleSub: r.appleSub ?? undefined }

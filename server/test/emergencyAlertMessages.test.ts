@@ -124,4 +124,42 @@ describe('聊天（绑定好友互发）', () => {
       payload: { toId: b.user.id, text: 'hello?' } })
     expect(blocked.statusCode).toBe(403)
   })
+
+  it('图片消息、撤回（仅本人 2 分钟内）、表情回应全链路', async () => {
+    const app = buildApp(new MemoryStore())
+    const a = await reg(app, 'pica', 'blind')
+    const b = await reg(app, 'picb', 'helper')
+    await bind(app, a.token, b.token, 'picb')
+
+    // 图片：合法 data URL 接受；非图片 400。
+    const img = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token),
+      payload: { toId: b.user.id, kind: 'image', text: 'data:image/jpeg;base64,AAAA' } })
+    expect(img.statusCode).toBe(201)
+    const badImg = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token),
+      payload: { toId: b.user.id, kind: 'image', text: 'data:audio/m4a;base64,AAAA' } })
+    expect(badImg.statusCode).toBe(400)
+
+    const sent = (img.json() as any).message
+    // 对方（b）给图片点赞回应（最新覆盖）。
+    const react = await app.inject({ method: 'POST', url: `/api/messages/${sent.id}/reaction`,
+      headers: auth(b.token), payload: { emoji: '👍' } })
+    expect(react.statusCode).toBe(200)
+    expect((react.json() as any).message.reaction).toBe('👍')
+    // 旁人不能回应。
+    const c = await reg(app, 'picc', 'helper')
+    const outsider = await app.inject({ method: 'POST', url: `/api/messages/${sent.id}/reaction`,
+      headers: auth(c.token), payload: { emoji: '😡' } })
+    expect(outsider.statusCode).toBe(403)
+
+    // 撤回：对方不能撤、本人可撤 → 双方看到 recalled 占位、回应清空。
+    const notYours = await app.inject({ method: 'POST', url: `/api/messages/${sent.id}/recall`, headers: auth(b.token) })
+    expect(notYours.statusCode).toBe(403)
+    const recall = await app.inject({ method: 'POST', url: `/api/messages/${sent.id}/recall`, headers: auth(a.token) })
+    expect(recall.statusCode).toBe(200)
+    const list = await app.inject({ method: 'GET', url: `/api/messages?with=${a.user.id}`, headers: auth(b.token) })
+    const m = (list.json() as any).messages.find((x: any) => x.id === sent.id)
+    expect(m.kind).toBe('recalled')
+    expect(m.text).toBe('')
+    expect(m.reaction ?? null).toBeNull()
+  })
 })

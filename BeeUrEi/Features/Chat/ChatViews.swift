@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import UIKit
+import PhotosUI
 
 // MARK: - 会话列表（WhatsApp 式：头像 + 最后一条预览 + 未读角标 + 时间）
 
@@ -9,14 +10,23 @@ struct ConversationsView: View {
     @State private var conversations: [ConversationInfo] = []
     @State private var pollTask: Task<Void, Never>?
     @State private var opened: ConversationInfo?
+    @State private var showNewChat = false
+    @State private var contacts: [FamilyLinkInfo] = [] // accepted 绑定 = 可聊天联系人
     private var lang: Language { FeatureSettings().language }
 
     var body: some View {
         NavigationStack {
             Group {
                 if conversations.isEmpty {
-                    BeeEmptyState(systemImage: "bubble.left.and.bubble.right",
-                                  title: ChatStrings.navTitle(lang), message: ChatStrings.empty(lang))
+                    VStack(spacing: BeeSpacing.lg) {
+                        BeeEmptyState(systemImage: "bubble.left.and.bubble.right",
+                                      title: ChatStrings.navTitle(lang), message: ChatStrings.empty(lang))
+                        // 空态直给"发起新对话"大按钮——没有人先发消息时也能开始聊天。
+                        BeeBigButton(ChatStrings.newChat(lang), systemImage: "plus.bubble.fill", tint: .beeHoney) {
+                            showNewChat = true
+                        }
+                        .padding(.horizontal)
+                    }
                 } else {
                     List(conversations) { conv in
                         Button { opened = conv } label: { row(conv) }
@@ -29,9 +39,50 @@ struct ConversationsView: View {
                 }
             }
             .navigationTitle(ChatStrings.navTitle(lang))
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { showNewChat = true } label: { Image(systemName: "square.and.pencil") }
+                        .accessibilityLabel(ChatStrings.newChat(lang))
+                }
+            }
             .navigationDestination(item: $opened) { conv in
                 ChatView(session: session, peerId: conv.peer.id, peerName: conv.peer.displayName,
                          peerAvatar: conv.peer.avatar)
+            }
+            // 新建对话：从 accepted 绑定联系人中选一位进入聊天。
+            .sheet(isPresented: $showNewChat) {
+                NavigationStack {
+                    Group {
+                        if contacts.isEmpty {
+                            BeeEmptyState(systemImage: "person.2.slash",
+                                          title: ChatStrings.pickContact(lang), message: ChatStrings.noContacts(lang))
+                        } else {
+                            List(contacts) { c in
+                                Button {
+                                    showNewChat = false
+                                    opened = ConversationInfo(
+                                        peer: .init(id: c.memberId, username: "", displayName: c.memberName,
+                                                    avatar: c.memberAvatar),
+                                        last: ChatMessageInfo(id: "new-\(c.memberId)", fromId: "", toId: c.memberId,
+                                                              kind: "text", text: "", createdAt: 0, readAt: nil, reaction: nil),
+                                        unread: 0)
+                                } label: {
+                                    HStack(spacing: BeeSpacing.md) {
+                                        AvatarView(dataURL: c.memberAvatar, name: c.memberName, size: 44)
+                                        VStack(alignment: .leading) {
+                                            Text(c.memberName).font(.headline)
+                                            Text(c.relation).font(.caption).foregroundStyle(.secondary)
+                                        }
+                                    }
+                                }
+                                .accessibilityLabel(c.memberName)
+                            }
+                        }
+                    }
+                    .navigationTitle(ChatStrings.pickContact(lang))
+                    .navigationBarTitleDisplayMode(.inline)
+                }
+                .presentationDetents([.medium, .large])
             }
         }
         .task {
@@ -49,6 +100,9 @@ struct ConversationsView: View {
     private func refresh() async {
         guard let token = session.token else { return }
         if let list = try? await APIClient().conversations(token: token) { conversations = list }
+        if let links = try? await APIClient().familyLinks(token: token) {
+            contacts = links.filter { $0.isAccepted }
+        }
     }
 
     private func row(_ c: ConversationInfo) -> some View {
@@ -103,6 +157,7 @@ struct ChatView: View {
     @State private var pollTask: Task<Void, Never>?
     @State private var recorder = VoiceNoteRecorder()
     @State private var player: AVAudioPlayer?
+    @State private var photoItem: PhotosPickerItem?
     @FocusState private var inputFocused: Bool
     private var lang: Language { FeatureSettings().language }
     private var myId: String { session.user?.id ?? "" }
@@ -147,26 +202,27 @@ struct ChatView: View {
         return HStack {
             if mine { Spacer(minLength: 48) }
             VStack(alignment: mine ? .trailing : .leading, spacing: 3) {
-                Group {
-                    if m.kind == "audio" {
-                        Button {
-                            playVoice(m)
-                        } label: {
-                            Label(ChatStrings.voiceMessage(lang), systemImage: "play.circle.fill")
-                                .font(.body.weight(.semibold))
+                bubbleContent(m, mine: mine)
+                    .padding(.horizontal, m.kind == "image" ? 4 : 14)
+                    .padding(.vertical, m.kind == "image" ? 4 : 10)
+                    .background(mine ? Color.beeHoney : Color(.secondarySystemBackground),
+                                in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .foregroundStyle(mine ? Color.beeInk : Color.primary)
+                    // 表情回应角标（WhatsApp 式贴在气泡角上）。
+                    .overlay(alignment: mine ? .bottomLeading : .bottomTrailing) {
+                        if let r = m.reaction, !r.isEmpty {
+                            Text(r).font(.footnote)
+                                .padding(5)
+                                .background(.thinMaterial, in: Circle())
+                                .offset(y: 12)
+                                .accessibilityLabel(ChatStrings.reactionA11y(r, lang))
                         }
-                        .accessibilityLabel(ChatStrings.playVoice(lang))
-                    } else {
-                        Text(m.text).font(.body)
                     }
-                }
-                .padding(.horizontal, 14).padding(.vertical, 10)
-                .background(mine ? Color.beeHoney : Color(.secondarySystemBackground),
-                            in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .foregroundStyle(mine ? Color.beeInk : Color.primary)
+                    // 长按菜单：表情回应（双方）/ 撤回（自己 2 分钟内）。已撤回的不给菜单。
+                    .contextMenu { if m.kind != "recalled" { bubbleMenu(m, mine: mine) } }
                 HStack(spacing: 4) {
                     Text(ChatStrings.timeFormat(m.createdAt)).font(.caption2).foregroundStyle(.secondary)
-                    if mine {
+                    if mine && m.kind != "recalled" {
                         // 已读回执（iMessage 式）：✓ 已送达 / ✓✓ 已读。
                         Image(systemName: m.readAt != nil ? "checkmark.circle.fill" : "checkmark.circle")
                             .font(.caption2)
@@ -179,11 +235,69 @@ struct ChatView: View {
         }
         .id(m.id)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(ChatStrings.bubbleA11y(
-            from: m.fromId == myId ? ChatStrings.me(lang) : peerName,
-            content: m.kind == "audio" ? ChatStrings.voiceMessage(lang) : m.text,
-            time: ChatStrings.timeFormat(m.createdAt), lang)
-            + (m.fromId == myId ? "，" + (m.readAt != nil ? ChatStrings.read(lang) : ChatStrings.delivered(lang)) : ""))
+        .accessibilityLabel(bubbleA11y(m))
+    }
+
+    @ViewBuilder
+    private func bubbleContent(_ m: ChatMessageInfo, mine: Bool) -> some View {
+        switch m.kind {
+        case "audio":
+            Button { playVoice(m) } label: {
+                Label(ChatStrings.voiceMessage(lang), systemImage: "play.circle.fill")
+                    .font(.body.weight(.semibold))
+            }
+            .accessibilityLabel(ChatStrings.playVoice(lang))
+        case "image":
+            if let img = Self.decodeImage(m.text) {
+                Image(uiImage: img)
+                    .resizable().scaledToFit()
+                    .frame(maxWidth: 220, maxHeight: 280)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            } else {
+                Label(ChatStrings.photo(lang), systemImage: "photo")
+            }
+        case "recalled":
+            Text(ChatStrings.recalled(lang)).font(.body.italic()).foregroundStyle(.secondary)
+        default:
+            Text(m.text).font(.body)
+        }
+    }
+
+    @ViewBuilder
+    private func bubbleMenu(_ m: ChatMessageInfo, mine: Bool) -> some View {
+        // 表情回应行（WhatsApp 常用六枚）。
+        ForEach(ChatStrings.reactionChoices, id: \.self) { emoji in
+            Button(emoji) { react(m, emoji: emoji) }
+        }
+        if let r = m.reaction, !r.isEmpty {
+            Button(ChatStrings.removeReaction(lang)) { react(m, emoji: "") }
+        }
+        if mine, Date().timeIntervalSince1970 * 1000 - Double(m.createdAt) < 120_000 {
+            Button(ChatStrings.recall(lang), role: .destructive) { recall(m) }
+        }
+    }
+
+    private func bubbleA11y(_ m: ChatMessageInfo) -> String {
+        let content: String
+        switch m.kind {
+        case "audio": content = ChatStrings.voiceMessage(lang)
+        case "image": content = ChatStrings.photo(lang)
+        case "recalled": content = ChatStrings.recalled(lang)
+        default: content = m.text
+        }
+        var label = ChatStrings.bubbleA11y(from: m.fromId == myId ? ChatStrings.me(lang) : peerName,
+                                           content: content, time: ChatStrings.timeFormat(m.createdAt), lang)
+        if m.fromId == myId, m.kind != "recalled" {
+            label += "，" + (m.readAt != nil ? ChatStrings.read(lang) : ChatStrings.delivered(lang))
+        }
+        if let r = m.reaction, !r.isEmpty { label += "，" + ChatStrings.reactionA11y(r, lang) }
+        return label
+    }
+
+    static func decodeImage(_ dataURL: String) -> UIImage? {
+        guard let comma = dataURL.firstIndex(of: ","),
+              let data = Data(base64Encoded: String(dataURL[dataURL.index(after: comma)...])) else { return nil }
+        return UIImage(data: data)
     }
 
     // MARK: 输入栏（文本 + 语音条）
@@ -199,6 +313,17 @@ struct ChatView: View {
                     .foregroundStyle(recorder.isRecording ? Color.beeDanger : Color.beeHoney)
             }
             .accessibilityLabel(recorder.isRecording ? ChatStrings.voiceStop(lang) : ChatStrings.voiceStart(lang))
+
+            // 图片消息（压缩后 data URL ≤ 后端 550KB 限制）。
+            PhotosPicker(selection: $photoItem, matching: .images) {
+                Image(systemName: "photo.circle.fill").font(.system(size: 34)).foregroundStyle(Color.beeHoney)
+            }
+            .accessibilityLabel(ChatStrings.sendPhoto(lang))
+            .onChange(of: photoItem) { _, item in
+                guard let item else { return }
+                photoItem = nil
+                Task { await sendPhoto(item) }
+            }
 
             TextField(ChatStrings.inputPlaceholder(lang), text: $draft, axis: .vertical)
                 .lineLimit(1...4)
@@ -255,6 +380,60 @@ struct ChatView: View {
             } catch {
                 errorText = ChatStrings.sendFailed(lang)
                 draft = text // 失败还原草稿，不丢内容
+            }
+        }
+    }
+
+    /// 发送图片：压缩到 ≤ ~380KB JPEG（base64 膨胀 1.33 倍后仍在后端 550KB 限制内）。
+    private func sendPhoto(_ item: PhotosPickerItem) async {
+        guard let token = session.token,
+              let raw = try? await item.loadTransferable(type: Data.self),
+              let image = UIImage(data: raw) else { return }
+        var quality: CGFloat = 0.7
+        var side: CGFloat = 1280
+        var jpeg: Data?
+        for _ in 0..<5 { // 逐级压缩直到大小达标
+            let scaled = Self.resized(image, maxSide: side)
+            jpeg = scaled.jpegData(compressionQuality: quality)
+            if let d = jpeg, d.count <= 380_000 { break }
+            quality -= 0.15; side *= 0.75
+        }
+        guard let data = jpeg else { return }
+        let b64 = "data:image/jpeg;base64," + data.base64EncodedString()
+        if let m = try? await APIClient().sendMessage(token: token, toId: peerId, kind: "image", text: b64) {
+            messages.append(m)
+        } else {
+            errorText = ChatStrings.sendFailed(lang)
+        }
+    }
+
+    private static func resized(_ image: UIImage, maxSide: CGFloat) -> UIImage {
+        let longest = max(image.size.width, image.size.height)
+        guard longest > maxSide else { return image }
+        let scale = maxSide / longest
+        let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        return UIGraphicsImageRenderer(size: size).image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
+    }
+
+    /// 撤回（仅自己 2 分钟内；后端校验是权威）。
+    private func recall(_ m: ChatMessageInfo) {
+        guard let token = session.token else { return }
+        Task {
+            if let updated = await APIClient().recallMessage(token: token, id: m.id) {
+                if let i = messages.firstIndex(where: { $0.id == m.id }) { messages[i] = updated }
+            } else {
+                errorText = ChatStrings.recallFailed(lang)
+            }
+        }
+    }
+
+    /// 表情回应（空=取消）。
+    private func react(_ m: ChatMessageInfo, emoji: String) {
+        guard let token = session.token else { return }
+        Task {
+            if let updated = await APIClient().reactMessage(token: token, id: m.id, emoji: emoji),
+               let i = messages.firstIndex(where: { $0.id == m.id }) {
+                messages[i] = updated
             }
         }
     }

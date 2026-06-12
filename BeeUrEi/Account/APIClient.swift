@@ -40,7 +40,7 @@ struct AuthResult: Codable, Sendable {
     let user: AccountInfo
 }
 
-/// 一条聊天消息（kind=audio 时 text 为音频 data URL）。
+/// 一条聊天消息（kind=audio/image 时 text 为 data URL；recalled=已撤回占位）。
 struct ChatMessageInfo: Codable, Sendable, Identifiable, Equatable {
     let id: String
     let fromId: String
@@ -49,6 +49,7 @@ struct ChatMessageInfo: Codable, Sendable, Identifiable, Equatable {
     let text: String
     let createdAt: Int
     var readAt: Int?
+    var reaction: String? // 表情回应（单 emoji，最新覆盖）
 }
 
 /// 会话列表项：对端公开资料 + 最后一条 + 未读数。
@@ -560,6 +561,20 @@ struct APIClient {
 
     func markMessagesRead(token: String, fromId: String) async {
         _ = try? await authedSend("POST", "/api/messages/read", token: token, body: ["fromId": fromId])
+    }
+
+    /// 撤回自己的消息（2 分钟内）。返回更新后的消息（recalled 占位），失败 nil。
+    func recallMessage(token: String, id: String) async -> ChatMessageInfo? {
+        guard let data = try? await authedSend("POST", "/api/messages/\(id)/recall", token: token, body: [:]) else { return nil }
+        struct R: Codable { let message: ChatMessageInfo }
+        return try? JSONDecoder().decode(R.self, from: data).message
+    }
+
+    /// 表情回应（空字符串=取消）。返回更新后的消息，失败 nil。
+    func reactMessage(token: String, id: String, emoji: String) async -> ChatMessageInfo? {
+        guard let data = try? await authedSend("POST", "/api/messages/\(id)/reaction", token: token, body: ["emoji": emoji]) else { return nil }
+        struct R: Codable { let message: ChatMessageInfo }
+        return try? JSONDecoder().decode(R.self, from: data).message
     }
     func unregisterApnsToken(token: String) async {
         _ = try? await authedSend("DELETE", "/api/push/apns-register", token: token)

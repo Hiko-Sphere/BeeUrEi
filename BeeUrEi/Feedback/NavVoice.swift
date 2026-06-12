@@ -1,28 +1,15 @@
 import Foundation
-import AVFoundation
 
-/// 导航语音通道（单例）。与避障语音(SpeechFeedback)分通道但**受其仲裁**：
-/// 避障 obstacle/critical 级播报会立即掐断正在念的导航指令（Phase 2 成功标准：
-/// 「避障语音能打断导航语音、不互相淹没」）。安全语义：碰撞警告 > 转向指令——
-/// 转向晚几秒只是绕路，障碍警告晚一秒可能撞上。
+/// 导航语音通道：SpeechHub 总线的 .navigation 通道薄封装（保留既有调用面）。
+/// 仲裁规则见 SpeechHub/SpeechGate：避障播报让位（指令积压补播）、来电可打断、
+/// 同通道排队顺读（路线预览逐行依赖）、高于识别/查询通道。
 final class NavVoice {
     static let shared = NavVoice()
-    private let synthesizer = AVSpeechSynthesizer()
     private init() {}
 
     func speak(_ text: String, rate: Float) {
-        let utterance = AVSpeechUtterance(string: text)
-        // 按播报语言选嗓音（zh-CN / en-US）：英文文案用英文嗓音才自然（核心 Language.voiceCode）。
-        utterance.voice = AVSpeechSynthesisVoice(language: FeatureSettings().language.voiceCode)
-        utterance.rate = AVSpeechUtteranceMinimumSpeechRate
-            + (AVSpeechUtteranceMaximumSpeechRate - AVSpeechUtteranceMinimumSpeechRate) * rate
-        synthesizer.speak(utterance)
+        SpeechHub.shared.speak(text, channel: .navigation, rate: rate)
     }
 
-    /// 避障高优先级播报前调用：立即掐断导航语音，给安全警告让路。
-    func yieldToSafety() {
-        if synthesizer.isSpeaking { synthesizer.stopSpeaking(at: .immediate) }
-    }
-
-    func stop() { synthesizer.stopSpeaking(at: .immediate) }
+    func stop() { SpeechHub.shared.stopChannel(.navigation) }
 }

@@ -99,6 +99,7 @@ struct IncomingCallView: View {
                     return
                 }
             }
+            IncomingCallCenter.shared.answeredRinging() // 停铃+撤超时（ringing 保留以驱动本全屏）
             accepted = true // 切换为通话界面（同一全屏呈现内，避免二次模态冲突）
         }
     }

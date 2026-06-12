@@ -14,7 +14,6 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
 
     private let manager = CLLocationManager()
     private let geocoder = CLGeocoder()
-    private let synth = AVSpeechSynthesizer()
     private var isDescribing = false // 防重入：上一次还在解析时忽略新点击（见审查 #3）
     private var mode: Mode = .whereAmI
     private var lastHeading: Double? // 最近真北航向（罗盘），供相对方位计算
@@ -132,16 +131,9 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
         isDescribing = false
     }
 
+    /// 经全局语音总线 .query 通道：避障/导航播报期间不再同时出声（积压待其说完补播）。
+    /// 文案为中文硬编码 → 固定中文嗓音（英文嗓念不出中文）。
     private func speak(_ text: String) {
-        if UIAccessibility.isVoiceOverRunning {
-            UIAccessibility.post(notification: .announcement, argument: text)
-            return
-        }
-        let u = AVSpeechUtterance(string: text)
-        u.voice = AVSpeechSynthesisVoice(language: "zh-CN")
-        u.rate = AVSpeechUtteranceMinimumSpeechRate
-            + (AVSpeechUtteranceMaximumSpeechRate - AVSpeechUtteranceMinimumSpeechRate) * FeatureSettings().speechRate
-        synth.stopSpeaking(at: .immediate)
-        synth.speak(u)
+        SpeechHub.shared.speak(text, channel: .query, voiceCode: "zh-CN")
     }
 }

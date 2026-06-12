@@ -165,4 +165,10 @@ enum CallStrings {
     static func answer(_ l: Language) -> String { l == .zh ? "接听" : "Answer" }
     static func decline(_ l: Language) -> String { l == .zh ? "拒绝" : "Decline" }
     static func answeredElsewhere(_ l: Language) -> String { l == .zh ? "已被其他亲友接听" : "Answered by another family member" }
+    static func incomingAnnounce(_ name: String, _ l: Language) -> String {
+        l == .zh ? "\(name) 来电" : "Incoming call from \(name)"
+    }
+    static func missedCall(_ name: String, _ l: Language) -> String {
+        l == .zh ? "未接来电：\(name)" : "Missed call from \(name)"
+    }
 }

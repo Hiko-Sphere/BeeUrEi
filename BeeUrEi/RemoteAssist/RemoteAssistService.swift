@@ -24,6 +24,14 @@ final class IncomingCallCenter {
     var ringing: IncomingRing?
     /// 是否有任何来电在进行（铃响或已接入）——供主页据此暂停避障/关闭冲突模态。
     var hasIncoming: Bool { pending != nil || ringing != nil }
+
+    /// 来电铃（铃声+振动）。可注入：单测换 mock 静音。
+    @ObservationIgnored var ringtone: RingtonePlaying = RingtonePlayer()
+    /// 响铃超时（秒）：超过未接自动收线并播报"未接来电"。可注入缩短供测试。
+    @ObservationIgnored var ringTimeoutSeconds: TimeInterval = 45
+    @ObservationIgnored private var ringTimeoutTask: Task<Void, Never>?
+    /// 本通铃已被接听（界面切入通话）：超时兜底不得再收线。
+    @ObservationIgnored private var ringAnswered = false
     private init() {}
 
     /// 直接进入通话（CallKit 接听走这里——已在系统界面点过接听，故自动接通）。
@@ -33,12 +41,48 @@ final class IncomingCallCenter {
     }
 
     /// 应用内来电铃（前台：展示来电界面，由用户手动接听/拒绝）。
+    /// 铃声+周期振动 + 语音报来电人（VoiceOver 开启时由来电界面的无障碍公告负责，避免双报）+
+    /// 超时未接自动收线（防来电方网络中断后铃响不止）。
     func ring(callId: String, callerName: String, callerAvatar: String? = nil) {
         guard !hasIncoming else { return }
         ringing = IncomingRing(callId: callId, callerName: callerName, callerAvatar: callerAvatar)
+        ringAnswered = false
+        ringtone.start()
+        if !UIAccessibility.isVoiceOverRunning {
+            SpeechHub.shared.speak(CallStrings.incomingAnnounce(callerName, FeatureSettings().language), channel: .call)
+        }
+        let timeout = ringTimeoutSeconds
+        ringTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(timeout))
+            guard !Task.isCancelled else { return }
+            self?.ringTimedOut(callId: callId)
+        }
     }
 
-    func clear() { pending = nil; ringing = nil }
+    /// 用户在来电界面点了接听（界面原地切入通话）：停铃 + 撤超时，但保留 ringing 驱动全屏呈现。
+    func answeredRinging() {
+        ringAnswered = true
+        ringtone.stop()
+        ringTimeoutTask?.cancel()
+        ringTimeoutTask = nil
+    }
+
+    /// 响铃超时未接：收线并播报"未接来电"（仅当仍是这通铃且未被接听）。
+    func ringTimedOut(callId: String) {
+        guard !ringAnswered, pending == nil, let ring = ringing, ring.callId == callId else { return }
+        let name = ring.callerName
+        clear()
+        SpeechHub.shared.speak(CallStrings.missedCall(name, FeatureSettings().language), channel: .call)
+    }
+
+    func clear() {
+        pending = nil
+        ringing = nil
+        ringAnswered = false
+        ringtone.stop()
+        ringTimeoutTask?.cancel()
+        ringTimeoutTask = nil
+    }
 }
 
 /// 远程协助：CallKit 系统来电 + PushKit VoIP 推送（A1 后台/息屏来电）。

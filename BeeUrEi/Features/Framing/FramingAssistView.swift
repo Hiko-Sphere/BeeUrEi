@@ -33,10 +33,10 @@ final class FramingAssistViewModel {
     @ObservationIgnored private(set) var lang: Language = FeatureSettings().language
     @ObservationIgnored private var labels = LabelCatalog(language: FeatureSettings().language)
     @ObservationIgnored private let framing = FramingGuide()
-    @ObservationIgnored private let synth = AVSpeechSynthesizer()
     @ObservationIgnored private var lastProcess: TimeInterval = 0
-    @ObservationIgnored private var lastSpoke: TimeInterval = 0
-    @ObservationIgnored private var lastHint = ""
+    /// 取景/文档提示节流（核心，已测）：新提示须连续两个处理帧稳定 + 距上次播报 ≥1.2s 才开口，
+    /// 修"稍微移动一点点，正在报的内容立刻被下一帧内容掐断"。
+    @ObservationIgnored private var hintThrottle = HintThrottle()
     @ObservationIgnored private var centeredFrames = 0
     @ObservationIgnored private var latestBuffer: CVPixelBuffer?
     @ObservationIgnored private var latestDepth: DepthMap?
@@ -101,7 +101,7 @@ final class FramingAssistViewModel {
     func stop() {
         paused = true
         source.stop()
-        synth.stopSpeaking(at: .immediate) // 关闭/被来电盖上时立刻闭嘴，避免识别播报串入通话
+        SpeechHub.shared.stopChannel(.query) // 关闭/被来电盖上时立刻闭嘴，避免识别播报串入通话
     }
 
     private func handle(_ frame: SensorFrame) {
@@ -150,15 +150,14 @@ final class FramingAssistViewModel {
                     resultText = FramingStrings.recognizedMaybeResult(name, lang)
                     speak(FramingStrings.maybeThis(name, lang))
                 }
-                lastSpoke = frame.timestamp // 防止下一非居中帧立刻打断"这是X"重复方向播报（见审查 #4）
+                hintThrottle.noteSpoke(at: frame.timestamp) // "这是X"后提示静默 1.2s+，且须重新稳定才开口（见审查 #4）
                 centeredFrames = 0
             }
         } else {
             centeredFrames = 0
-            if hint != lastHint || frame.timestamp - lastSpoke >= 2 {
-                lastHint = hint
-                lastSpoke = frame.timestamp
-                speak(hint)
+            // 提示走稳定节流（连续两帧一致才播），且为可丢弃级——总线忙（结果/导航/避障在播）时直接丢弃。
+            if hintThrottle.shouldSpeak(hint, at: frame.timestamp) {
+                speak(hint, hint: true)
             }
         }
     }
@@ -209,7 +208,7 @@ final class FramingAssistViewModel {
             speak(FramingStrings.foundCategorySpeak(category.name, where_, distText, lang))
         } else if frame.timestamp - lastFindHeartbeat >= 6 {
             lastFindHeartbeat = frame.timestamp
-            speak(FramingStrings.stillSearchingFor(category.name, lang))
+            speak(FramingStrings.stillSearchingFor(category.name, lang), hint: true) // 心跳提示：不打断结果播报
         }
     }
 
@@ -333,7 +332,7 @@ final class FramingAssistViewModel {
             speak(FramingStrings.maybeFoundSpeak(target.name, where_, distText, lang))
         } else if frame.timestamp - lastFindHeartbeat >= 6 {
             lastFindHeartbeat = frame.timestamp
-            speak(FramingStrings.stillSearching(lang))
+            speak(FramingStrings.stillSearching(lang), hint: true) // 心跳提示：不打断结果播报
         }
     }
 
@@ -488,13 +487,11 @@ final class FramingAssistViewModel {
         }
     }
 
-    /// 文档引导提示：去重 + 2.5s 节流，避免连环重复念。
+    /// 文档引导提示：稳定节流（连续两帧一致才播）+ 可丢弃级，不打断整页朗读等结果播报。
     private func docHint(_ text: String, at now: TimeInterval) {
         guidanceText = text
-        if text != lastHint || now - lastSpoke >= 2.5 {
-            lastHint = text
-            lastSpoke = now
-            speak(text)
+        if hintThrottle.shouldSpeak(text, at: now) {
+            speak(text, hint: true)
         }
     }
 
@@ -855,18 +852,11 @@ final class FramingAssistViewModel {
         lang == .en ? ["en-US", "zh-Hans"] : ["zh-Hans", "en-US"]
     }
 
-    private func speak(_ text: String) {
+    /// 经全局语音总线 .query 通道：hint=true 为取景/搜索提示（可丢弃，永不打断结果/导航/避障播报），
+    /// 其余为结果播报（同通道替换语义，与旧行为一致）。
+    private func speak(_ text: String, hint: Bool = false) {
         guard !paused else { return } // 已暂停(关闭/来电)：异步识别回调到达也不再播报
-        if UIAccessibility.isVoiceOverRunning {
-            UIAccessibility.post(notification: .announcement, argument: text)
-            return
-        }
-        let u = AVSpeechUtterance(string: text)
-        u.voice = AVSpeechSynthesisVoice(language: lang.voiceCode)
-        u.rate = AVSpeechUtteranceMinimumSpeechRate
-            + (AVSpeechUtteranceMaximumSpeechRate - AVSpeechUtteranceMinimumSpeechRate) * FeatureSettings().speechRate
-        synth.stopSpeaking(at: .immediate)
-        synth.speak(u)
+        SpeechHub.shared.speak(text, channel: .query, voiceCode: lang.voiceCode, droppable: hint)
     }
 }
 

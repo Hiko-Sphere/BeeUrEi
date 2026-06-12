@@ -24,12 +24,12 @@ final class SpeechFeedback: NSObject, FeedbackSink {
         // 把后续同/低优先级的危险警告永远压住（见审查 #6）。
         guard let text = event.speech, !text.isEmpty else { onFinish?(); return }
 
-        // 跨通道仲裁：避障 obstacle/critical 级先掐断正在念的导航指令（碰撞警告 > 转向指令，Phase 2 标准）。
-        if event.priority >= .obstacle { NavVoice.shared.yieldToSafety() }
-
         // 与 VoiceOver 协作（见 PLAN §7.2）：VoiceOver 开启时用无障碍播报而非直接 TTS，
         // 避免和 VoiceOver 抢话/互相打断。盲人用户通常常开 VoiceOver，这是主路径。
         if UIAccessibility.isVoiceOverRunning {
+            // 任何避障语音开口前，全局语音总线（导航/识别/查询/来电）整体让位——
+            // 修"避障语音的同时还在播导航/查询语音"（被掐内容积压，本条结束后补播）。
+            SpeechHub.shared.safetyWillSpeak()
             // interrupt=true(危险骤升/极近)：用高优先级公告抢占正在朗读的内容，而非排到其后（见审查 #2）。
             if event.interrupt {
                 let attr = NSAttributedString(string: text, attributes: [
@@ -46,6 +46,7 @@ final class SpeechFeedback: NSObject, FeedbackSink {
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.estimatedDuration(text)) { [weak self] in
                 guard let self, gen == self.voGeneration else { return } // 仅最新一条释放
                 self.onFinish?()
+                SpeechHub.shared.safetyDidFinish() // 估时到点：解除总线让位（VO 路径无 didFinish 回调）
             }
             return
         }
@@ -64,6 +65,8 @@ final class SpeechFeedback: NSObject, FeedbackSink {
         let utterance = makeUtterance(text)
         arbiterUtterance = utterance
         utteranceStart = ProcessInfo.processInfo.systemUptime
+        // 全局语音总线让位（置于 stopSpeaking 之后：旧句的 didCancel 释放不会误清本条的让位）。
+        SpeechHub.shared.safetyWillSpeak()
         synthesizer.speak(utterance)
     }
 
@@ -72,6 +75,7 @@ final class SpeechFeedback: NSObject, FeedbackSink {
     func stopAll() {
         voGeneration += 1 // 让挂起的 VO 释放回调失效
         synthesizer.stopSpeaking(at: .immediate)
+        SpeechHub.shared.safetyDidFinish() // VO 估时释放已失效，须在此解除总线让位防锁死
     }
 
     /// 用户主动触发的播报（如点状态条「重复」）——不经仲裁、其结束不释放仲裁通道，
@@ -116,5 +120,6 @@ extension SpeechFeedback: AVSpeechSynthesizerDelegate {
         guard utterance === arbiterUtterance else { return }
         arbiterUtterance = nil
         onFinish?()
+        SpeechHub.shared.safetyDidFinish() // 避障句播完/被取消：解除总线让位，补播积压的导航/查询
     }
 }

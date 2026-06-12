@@ -8,6 +8,7 @@ const auth = (t: string) => ({ authorization: `Bearer ${t}` })
 class FakePush implements PushSender {
   sent: { token: string; title: string; body: string; extra?: Record<string, string> }[] = []
   async send(): Promise<void> {}
+  async sendCallInvite(): Promise<void> {}
   async sendAlert(token: string, title: string, body: string, extra?: Record<string, string>): Promise<void> {
     this.sent.push({ token, title, body, extra })
   }

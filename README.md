@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/Swift-5-FFC42E?logo=swift&logoColor=14161F" alt="Swift 5">
   <img src="https://img.shields.io/badge/on--device%20AI-Core%20ML%20%2B%20ARKit-14161F" alt="On-device AI">
   <img src="https://img.shields.io/badge/backend-Node%20%2B%20Fastify-339933?logo=nodedotjs&logoColor=white" alt="Backend">
-  <img src="https://img.shields.io/badge/tests-577%20passing-2ea44f" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-590%20passing-2ea44f" alt="Tests">
   <img src="https://img.shields.io/badge/i18n-中文%20%2B%20English-FFC42E?logoColor=14161F" alt="Bilingual">
   <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="GPL-3.0">
 </p>
@@ -83,7 +83,7 @@
 │      语音输出统一仲裁 ──┤                                                              │
 │                          └─ SpeechHub 总线(来电>导航>识别/查询，避障开播全员让位)        │
 │                                                                                       │
-│  ── 核心安全逻辑（平台无关 Swift Package，303 单测）──────────────────────────────────  │
+│  ── 核心安全逻辑（平台无关 Swift Package，319 单测）──────────────────────────────────  │
 │  ClockDirection · DepthSampler · ObstacleRanker · FeedbackArbiter · SpeechGate         │
 │  LocationAccuracyGate · WaypointAdvance · CurrencyClassifier · BusDisplayReader ...    │
 └───────────────────────────────────────────────────────────────────────────────────────┘
@@ -123,9 +123,9 @@ Project_BeeUrEi/
 │  ├─ RemoteAssist/          信令客户端、媒体引擎、CallKit/铃声、亲友名单
 │  ├─ Account/               登录、Keychain、API 客户端
 │  └─ Features/              主屏、识别屏（频道全家桶）、导航、通话、设置、引导
-├─ Packages/BeeUrEiCore/     平台无关核心安全逻辑（303 单测）
+├─ Packages/BeeUrEiCore/     平台无关核心安全逻辑（319 单测）
 ├─ Tests/BeeUrEiTests/       应用层回归（通话隐私门控/避障纪律/导航门控/来电/识别状态机，72 测）
-├─ server/                   自托管后端（Node + TS，164 测）
+├─ server/                   自托管后端（Node + TS，199 测）
 ├─ docs/                     PLAN.md（总设计）· PROJECT_STATUS.md（交接）· SHIP_CHECKLIST.md（上架）
 └─ BeeUrEi-Brand-Assets/     品牌资产（图标 / 字标 / 配色）
 ```
@@ -158,12 +158,12 @@ Docker 部署、TURN、APNs 推送等运维步骤见 [docs/SETUP_AND_HANDOFF.md]
 ## 🧪 测试与质量
 
 ```sh
-swift test --package-path Packages/BeeUrEiCore   # 核心安全逻辑：303 测试
+swift test --package-path Packages/BeeUrEiCore   # 核心安全逻辑：319 测试
 xcodebuild test -scheme BeeUrEi ...              # 应用层回归：72 测试（模拟器）
-cd server && npm test                            # 后端：164 测试
+cd server && npm test                            # 后端：199 测试
 ```
 
-- **539 个测试全部通过**，GitHub Actions 每次推送自动复验；后端 `tsc` 类型检查干净。
+- **590 个测试全部通过**，GitHub Actions 每次推送自动复验；后端 `tsc` 类型检查干净。
 - 经**多轮多智能体对抗式代码审查**，累计修复 130+ 个真实缺陷（含信令窃听、避障距离/方向错算、深色地面落差误报、到达判定绕过精度门控、磁干扰信标指错、中断后空间音永久失声、语音通道互相淹没等）并全部补齐回归测试。
 - **三大安全子系统都有专属回归网**：通话隐私门控（新对端默认不发画面/远程控制最小权限）、避障安全纪律（暂停即静默/缺深度即降级）、导航安全门控（差精度不入轨/不误报到达）。
 - 安全攸关的数学/门控全部下沉到核心包并单测——无需模拟器即可在本机秒级验证。

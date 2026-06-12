@@ -34,9 +34,11 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>用于规划步行路线并播报你途经的路口与地标。</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>用于与远程志愿者实时语音交流。</string>
+	<string>用于与远程志愿者实时语音交流、发送语音消息和语音指令。</string>
 	<key>NSMotionUsageDescription</key>
-	<string>用于 AirPods 头部追踪，提升空间音方向提示的准确度。</string>
+	<string>用于 AirPods 头部追踪提升空间音方向准确度，以及检测疑似摔倒以便通知亲友。</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>用于语音指令：说出'我在哪''带我去某地'等即可直达对应功能（优先在设备端识别）。</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

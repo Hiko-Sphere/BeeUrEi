@@ -24,7 +24,6 @@ final class TutorialModel {
     let steps: [TutorialStep]
     let lang: Language // 教程文案与朗读嗓音语言（E5）
     var index = 0
-    @ObservationIgnored private let synth = AVSpeechSynthesizer()
 
     init() {
         let lang = FeatureSettings().language
@@ -71,12 +70,8 @@ final class TutorialModel {
                 UIAccessibility.post(notification: .announcement, argument: spokenText)
             }
         } else {
-            let u = AVSpeechUtterance(string: spokenText)
-            u.voice = AVSpeechSynthesisVoice(language: lang.voiceCode)
-            u.rate = AVSpeechUtteranceMinimumSpeechRate
-                + (AVSpeechUtteranceMaximumSpeechRate - AVSpeechUtteranceMinimumSpeechRate) * FeatureSettings().speechRate
-            synth.stopSpeaking(at: .immediate)
-            synth.speak(u)
+            // 经全局语音总线（语音冲突审计：此前为独立合成器，会与避障/其他播报同时出声）。
+            SpeechHub.shared.speak(spokenText, channel: .query, voiceCode: lang.voiceCode)
         }
     }
 
@@ -86,7 +81,7 @@ final class TutorialModel {
         announceCurrent()
     }
 
-    func stop() { synth.stopSpeaking(at: .immediate) }
+    func stop() { SpeechHub.shared.stopChannel(.query) }
 }
 
 /// 盲人友好的首次上手引导：大字 + 语音朗读 + VoiceOver 合并朗读。

@@ -114,14 +114,16 @@ struct IncomingCallView: View {
     }
 
     /// 来电方取消/超时则自动消失（避免一直响）。
+    /// 轮询 1s：主叫挂断后铃声/振动须尽快停（3s 间隔曾导致"对方已挂断还在震"，见用户反馈）。
     private func startCancelWatch() {
         pollTask = Task {
             while !Task.isCancelled, !accepted {
-                try? await Task.sleep(for: .seconds(3))
+                try? await Task.sleep(for: .seconds(1))
                 if accepted { break }
                 guard let token = KeychainStore.read() else { continue }
                 if let calls = try? await APIClient().incomingCalls(token: token),
                    !calls.contains(where: { $0.callId == ring.callId }) {
+                    IncomingCallCenter.shared.clear() // 立即停铃停振（不等 dismiss 链路兜转）
                     dismiss(); break
                 }
             }

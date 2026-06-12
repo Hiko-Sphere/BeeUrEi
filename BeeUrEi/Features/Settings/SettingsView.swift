@@ -18,6 +18,7 @@ struct SettingsView: View {
     @State private var spatialCuesOn: Bool
     @State private var verbosity: Int
     @State private var clearConfirm: Bool
+    @State private var fallDetectOn: Bool
     @State private var keepAwakeSeconds: Int
     @State private var languagePref: String
     @State private var showTutorial = false
@@ -40,6 +41,7 @@ struct SettingsView: View {
         _spatialCuesOn = State(initialValue: features.spatialObstacleCues)
         _verbosity = State(initialValue: features.verbosity)
         _clearConfirm = State(initialValue: features.clearPathConfirm)
+        _fallDetectOn = State(initialValue: features.fallDetectionEnabled)
         _keepAwakeSeconds = State(initialValue: features.keepAwakeSeconds)
         _languagePref = State(initialValue: features.languagePreference)
     }
@@ -125,6 +127,11 @@ struct SettingsView: View {
                         .onChange(of: clearConfirm) { _, v in
                             var f = FeatureSettings(); f.clearPathConfirm = v
                         }
+                    Toggle(SettingsStrings.fallDetectToggle(lang), isOn: $fallDetectOn)
+                        .onChange(of: fallDetectOn) { _, v in
+                            var f = FeatureSettings(); f.fallDetectionEnabled = v
+                        }
+                        .accessibilityHint(SettingsStrings.fallDetectHint(lang))
                     Button(SettingsStrings.previewSpeech(lang)) {
                         previewSpeech.play(FeedbackEvent(priority: .obstacle, speech: sampleAnnouncement()))
                     }

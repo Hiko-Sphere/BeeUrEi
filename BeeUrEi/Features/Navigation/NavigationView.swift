@@ -100,6 +100,18 @@ struct WalkNavigationView: View {
             }
             .navigationTitle(NavStrings.navScreenTitle(lang))
             .onAppear { favorites = FavoritePlacesStore().all }
+            // 语音指令直达："带我去X"→ 预填并直接开始导航；"原路返回"→ 一键回程。
+            .task {
+                guard let action = AppRoute.shared.pendingNavAction else { return }
+                AppRoute.shared.pendingNavAction = nil
+                switch action {
+                case .search(let dest):
+                    destination = dest
+                    await model.start(destination: dest, region: region)
+                case .backtrack:
+                    model.startBacktrack()
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button(NavStrings.done(lang)) { onClose() } }
             }

@@ -10,6 +10,7 @@ import { registerUserRoutes } from './routes/users'
 import { registerFamilyRoutes } from './routes/family'
 import { registerBlockRoutes } from './routes/blocks'
 import { registerEmergencyRoutes } from './routes/emergency'
+import { registerMessageRoutes } from './routes/messages'
 import { registerSignaling } from './routes/ws'
 import { PresenceRegistry } from './assist/presence'
 import { PendingCallRegistry } from './assist/pendingCalls'
@@ -100,7 +101,8 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerUserRoutes(instance, store)
     registerFamilyRoutes(instance, store, pushSender)
     registerBlockRoutes(instance, store)
-    registerEmergencyRoutes(instance, store)
+    registerEmergencyRoutes(instance, store, pushSender)
+    registerMessageRoutes(instance, store, pushSender)
     registerReportRoutes(instance, store)
     registerAdminRoutes(instance, store)
     registerRecordingRoutes(instance, store)

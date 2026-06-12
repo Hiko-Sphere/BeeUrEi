@@ -40,6 +40,31 @@ struct AuthResult: Codable, Sendable {
     let user: AccountInfo
 }
 
+/// 一条聊天消息（kind=audio 时 text 为音频 data URL）。
+struct ChatMessageInfo: Codable, Sendable, Identifiable, Equatable {
+    let id: String
+    let fromId: String
+    let toId: String
+    let kind: String
+    let text: String
+    let createdAt: Int
+    var readAt: Int?
+}
+
+/// 会话列表项：对端公开资料 + 最后一条 + 未读数。
+struct ConversationInfo: Codable, Sendable, Identifiable {
+    struct Peer: Codable, Sendable {
+        let id: String
+        let username: String
+        let displayName: String
+        let avatar: String?
+    }
+    let peer: Peer
+    let last: ChatMessageInfo
+    let unread: Int
+    var id: String { peer.id }
+}
+
 struct FamilyLinkInfo: Codable, Sendable, Identifiable {
     let id: String
     let memberId: String   // 对方 userId（无论我是 owner 还是 member）
@@ -499,6 +524,42 @@ struct APIClient {
     /// 同步播报语言偏好到后端（推送文案/匹配排序按此选语言；尽力而为）。
     func setLanguage(token: String, language: String) async {
         _ = try? await authedSend("POST", "/api/account/language", token: token, body: ["language": language])
+    }
+
+    /// 摔倒/车祸警报：推送给所有 accepted 绑定亲友。成功返回通知到的人数，失败返回 nil。
+    func postEmergencyAlert(token: String, kind: String, lat: Double?, lon: Double?) async -> Int? {
+        var body: [String: Any] = ["kind": kind]
+        if let lat, let lon { body["lat"] = lat; body["lon"] = lon }
+        guard let data = try? await authedSend("POST", "/api/emergency/alert", token: token, body: body),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return obj["notified"] as? Int ?? 0
+    }
+
+    // MARK: 聊天（绑定亲友/协助者互发）
+
+    func sendMessage(token: String, toId: String, kind: String, text: String) async throws -> ChatMessageInfo {
+        let data = try await authedSend("POST", "/api/messages", token: token,
+                                        body: ["toId": toId, "kind": kind, "text": text])
+        struct R: Codable { let message: ChatMessageInfo }
+        return try JSONDecoder().decode(R.self, from: data).message
+    }
+
+    func messages(token: String, with peerId: String, before: Int? = nil) async throws -> [ChatMessageInfo] {
+        var path = "/api/messages?with=\(peerId)&limit=50"
+        if let before { path += "&before=\(before)" }
+        let data = try await authedGet(path, token: token)
+        struct R: Codable { let messages: [ChatMessageInfo] }
+        return try JSONDecoder().decode(R.self, from: data).messages
+    }
+
+    func conversations(token: String) async throws -> [ConversationInfo] {
+        let data = try await authedGet("/api/conversations", token: token)
+        struct R: Codable { let conversations: [ConversationInfo] }
+        return try JSONDecoder().decode(R.self, from: data).conversations
+    }
+
+    func markMessagesRead(token: String, fromId: String) async {
+        _ = try? await authedSend("POST", "/api/messages/read", token: token, body: ["fromId": fromId])
     }
     func unregisterApnsToken(token: String) async {
         _ = try? await authedSend("DELETE", "/api/push/apns-register", token: token)

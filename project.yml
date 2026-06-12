@@ -74,9 +74,10 @@ targets:
         # 这三段权限文案会原样显示在系统授权弹窗里（见 PLAN.md §7.4）
         NSCameraUsageDescription: "用于通过摄像头实时识别前方障碍并向你语音提示，以及在你呼叫志愿者时传输画面。"
         NSLocationWhenInUseUsageDescription: "用于规划步行路线并播报你途经的路口与地标。"
-        NSMicrophoneUsageDescription: "用于与远程志愿者实时语音交流。"
+        NSMicrophoneUsageDescription: "用于与远程志愿者实时语音交流、发送语音消息和语音指令。"
         NSLocalNetworkUsageDescription: "用于连接你自托管的 BeeUrEi 后端（局域网内）。"
-        NSMotionUsageDescription: "用于 AirPods 头部追踪，提升空间音方向提示的准确度。"
+        NSMotionUsageDescription: "用于 AirPods 头部追踪提升空间音方向准确度，以及检测疑似摔倒以便通知亲友。"
+        NSSpeechRecognitionUsageDescription: "用于语音指令：说出'我在哪''带我去某地'等即可直达对应功能（优先在设备端识别）。"
         # 开发期允许访问局域网内自托管后端的明文 HTTP（生产应改用 HTTPS）。
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true

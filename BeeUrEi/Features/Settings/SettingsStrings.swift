@@ -38,6 +38,13 @@ enum SettingsStrings {
     static func clearConfirmToggle(_ l: Language) -> String {
         l == .zh ? "前方通畅时定期确认" : "Periodic \"path clear\" confirmation"
     }
+    static func fallDetectToggle(_ l: Language) -> String {
+        l == .zh ? "摔倒/撞击自动报警" : "Fall & impact alerts"
+    }
+    static func fallDetectHint(_ l: Language) -> String {
+        l == .zh ? "检测到疑似摔倒或剧烈撞击且 30 秒无人取消时，自动通知绑定的亲友"
+                 : "If a fall or severe impact is detected and not cancelled within 30 seconds, your family is notified"
+    }
     static func previewSpeech(_ l: Language) -> String { l == .zh ? "试听播报" : "Preview announcement" }
     static func previewSpeechHint(_ l: Language) -> String {
         l == .zh ? "用当前语速和详略念一句示例" : "Speaks a sample with the current rate and verbosity"

@@ -2,7 +2,7 @@ import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken } from './store'
+import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, ChatMessage } from './store'
 
 // 用运行时 require + 非静态模块名加载 node:sqlite，避免打包器(vitest/vite)静态解析失败；
 // 由 Node 在运行时解析（需 --experimental-sqlite，已在 npm 脚本里通过 NODE_OPTIONS 开启）。
@@ -38,6 +38,10 @@ export class SqliteStore implements Store {
         id TEXT PRIMARY KEY, blockerId TEXT, blockedId TEXT, createdAt INTEGER);
       CREATE TABLE IF NOT EXISTS call_records (
         id TEXT PRIMARY KEY, callId TEXT, callerId TEXT, calleeId TEXT, status TEXT, createdAt INTEGER);
+      CREATE TABLE IF NOT EXISTS messages (
+        id TEXT PRIMARY KEY, fromId TEXT, toId TEXT, kind TEXT, text TEXT, createdAt INTEGER, readAt INTEGER);
+      CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages (fromId, toId, createdAt);
+      CREATE INDEX IF NOT EXISTS idx_messages_to ON messages (toId, readAt);
     `)
     // 迁移：旧库 links 表补 phone 列、users 表补 language 列（已存在则忽略）。
     try { this.db.exec('ALTER TABLE links ADD COLUMN phone TEXT') } catch { /* 列已存在 */ }
@@ -210,7 +214,51 @@ export class SqliteStore implements Store {
     this.db.prepare('DELETE FROM recordings WHERE id = ?').run(id)
   }
 
+  // MARK: messages
+  createMessage(m: ChatMessage): void {
+    this.db.prepare('INSERT OR REPLACE INTO messages (id, fromId, toId, kind, text, createdAt, readAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(m.id, m.fromId, m.toId, m.kind, m.text, m.createdAt, m.readAt ?? null)
+  }
+  messagesBetween(a: string, b: string, limit: number, beforeMs?: number): ChatMessage[] {
+    const rows = this.db.prepare(
+      `SELECT * FROM (
+         SELECT * FROM messages
+         WHERE ((fromId = ? AND toId = ?) OR (fromId = ? AND toId = ?)) AND (? IS NULL OR createdAt < ?)
+         ORDER BY createdAt DESC LIMIT ?
+       ) ORDER BY createdAt ASC`,
+    ).all(a, b, b, a, beforeMs ?? null, beforeMs ?? null, limit)
+    return rows.map((r) => this.toMessage(r))
+  }
+  latestMessagesPerPeer(userId: string): ChatMessage[] {
+    // 每个对端取最新一条（按对端分组的最大 createdAt）。
+    const rows = this.db.prepare(
+      `SELECT m.* FROM messages m
+       JOIN (
+         SELECT CASE WHEN fromId = ? THEN toId ELSE fromId END AS peer, MAX(createdAt) AS latest
+         FROM messages WHERE fromId = ? OR toId = ?
+         GROUP BY peer
+       ) t ON (CASE WHEN m.fromId = ? THEN m.toId ELSE m.fromId END) = t.peer AND m.createdAt = t.latest
+       WHERE m.fromId = ? OR m.toId = ?
+       ORDER BY m.createdAt DESC`,
+    ).all(userId, userId, userId, userId, userId, userId)
+    return rows.map((r) => this.toMessage(r))
+  }
+  markMessagesRead(readerId: string, fromId: string, at: number): number {
+    const res = this.db.prepare('UPDATE messages SET readAt = ? WHERE toId = ? AND fromId = ? AND readAt IS NULL')
+      .run(at, readerId, fromId)
+    return Number(res.changes)
+  }
+  unreadCount(userId: string, fromId: string): number {
+    const r = this.db.prepare('SELECT COUNT(*) AS n FROM messages WHERE toId = ? AND fromId = ? AND readAt IS NULL')
+      .get(userId, fromId) as any
+    return Number(r?.n ?? 0)
+  }
+
   // MARK: row mappers
+  private toMessage(r: any): ChatMessage {
+    return { id: r.id, fromId: r.fromId, toId: r.toId, kind: (r.kind as 'text' | 'audio') ?? 'text',
+             text: r.text, createdAt: Number(r.createdAt), readAt: r.readAt != null ? Number(r.readAt) : undefined }
+  }
   private toUser(r: any): User {
     return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt), language: r.language ?? undefined, tokenVersion: r.tokenVersion != null ? Number(r.tokenVersion) : 0, email: r.email ?? undefined, emailVerified: r.emailVerified != null ? Number(r.emailVerified) === 1 : undefined, voipToken: r.voipToken ?? undefined, avatar: r.avatar ?? undefined, apnsToken: r.apnsToken ?? undefined, phone: r.phone ?? undefined, appleSub: r.appleSub ?? undefined }
   }

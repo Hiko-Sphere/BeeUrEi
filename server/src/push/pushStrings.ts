@@ -19,4 +19,18 @@ export const pushStrings = {
     l === 'en' ? 'Friend request accepted' : '好友请求已通过',
   friendAcceptedBody: (name: string, l: PushLang): string =>
     l === 'en' ? `${name} accepted your request` : `${name} 接受了你的请求`,
+  emergencyAlertTitle: (name: string, l: PushLang): string =>
+    l === 'en' ? `Emergency: ${name} may need help` : `紧急：${name} 可能需要帮助`,
+  emergencyAlertBody: (kind: 'fall' | 'crash', hasLocation: boolean, l: PushLang): string => {
+    if (l === 'en') {
+      const what = kind === 'crash' ? 'a severe impact (possible crash)' : 'a possible fall'
+      return `The app detected ${what} and no response.${hasLocation ? ' Location attached.' : ''} Please check in or call now.`
+    }
+    const what = kind === 'crash' ? '剧烈撞击（疑似车祸）' : '疑似摔倒'
+    return `App 检测到${what}且无人响应。${hasLocation ? '已附带位置。' : ''}请立即联系或呼叫对方。`
+  },
+  newMessageTitle: (name: string, l: PushLang): string =>
+    l === 'en' ? `Message from ${name}` : `${name} 发来消息`,
+  newMessageBody: (preview: string, l: PushLang): string =>
+    preview === '' ? (l === 'en' ? 'New message' : '新消息') : preview,
 }

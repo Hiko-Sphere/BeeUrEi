@@ -12,6 +12,13 @@ struct HomeView: View {
     @State private var showTutorial = false
     @State private var locationDescriber = LocationDescriber()
     @State private var weatherSpeaker = WeatherSpeaker()
+    @State private var motionMonitor = MotionMonitor()          // 摔倒/撞击监测（设置可关）
+    @State private var emergency = EmergencyAlertCenter.shared
+    @State private var voice = VoiceCommandListener()           // 语音指令（麦克风键）
+    @State private var showMessages = false                     // 聊天（绑定亲友互发）
+    @State private var unreadTotal = 0
+    @State private var unreadPollTask: Task<Void, Never>?
+    @Environment(AuthSession.self) private var session
     @State private var idleTask: Task<Void, Never>? // 屏幕常亮计时（到时允许系统息屏）
     @State private var incoming = IncomingCallCenter.shared // 监听来电（接听别人的呼叫经此在根层呈现）
     @State private var route = AppRoute.shared              // Siri/快捷指令路由（一句话直达）
@@ -35,8 +42,10 @@ struct HomeView: View {
                     .ignoresSafeArea()
             }
             VStack(spacing: BeeSpacing.md) {
-                HStack(alignment: .top) {
+                HStack(alignment: .top, spacing: BeeSpacing.sm) {
                     if case .running = model.state { statusBanner } else { Spacer() }
+                    micButton      // 语音指令（"我在哪/带我去X/给妈妈发消息说…"）
+                    messagesButton // 聊天（未读角标）
                     settingsButton
                 }
                 if DevSettings().enabled { DevOverlayView(model: model) }
@@ -46,13 +55,30 @@ struct HomeView: View {
                 if case .running = model.state { actionPanel }
             }
             .padding()
+            // 摔倒/撞击警报卡：盖在一切之上（安全攸关）。
+            if emergency.phase != .idle { emergencyOverlay }
         }
         .task {
             model.onAppear()
             applyKeepAwake()
             if !TutorialStore().seen { showTutorial = true }
+            // 摔倒/撞击监测：主页存续期间持续运行（含进入识别/导航/通话后台时段，手机在身上）。
+            if FeatureSettings().fallDetectionEnabled {
+                motionMonitor.start { event in EmergencyAlertCenter.shared.trigger(event) }
+            }
+            // 未读消息角标 + 新消息总数变化（详情播报在聊天页内进行）。
+            unreadPollTask = Task {
+                while !Task.isCancelled {
+                    if let token = session.token,
+                       let convs = try? await APIClient().conversations(token: token) {
+                        unreadTotal = convs.reduce(0) { $0 + $1.unread }
+                    }
+                    try? await Task.sleep(for: .seconds(15))
+                }
+            }
         }
-        .onDisappear { model.onDisappear(); releaseKeepAwake() }
+        .onDisappear { model.onDisappear(); releaseKeepAwake(); motionMonitor.stop(); unreadPollTask?.cancel() }
+        .sheet(isPresented: $showMessages) { ConversationsView(session: session) }
         .fullScreenCover(isPresented: $showTutorial) {
             TutorialView { TutorialStore().seen = true; showTutorial = false }
         }
@@ -86,6 +112,10 @@ struct HomeView: View {
         .onChange(of: showFraming) { _, shown in
             if shown { model.pauseSession(); forceKeepAwake() } else { model.resumeSession(); applyKeepAwake() }
         }
+        // 首启教程呈现时也暂停避障（语音冲突审计：否则教程朗读与避障播报同时出声）。
+        .onChange(of: showTutorial) { _, shown in
+            if shown { model.pauseSession() } else { model.resumeSession() }
+        }
         .sheet(isPresented: $showRemoteAssist) {
             RemoteAssistView { showRemoteAssist = false }
         }
@@ -100,6 +130,46 @@ struct HomeView: View {
             guard !incoming.hasIncoming else { return }
             showRemoteAssist = true
         }
+    }
+
+    // MARK: 摔倒/撞击警报卡（全屏、超大按钮、自动朗读）
+
+    private var emergencyOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.86).ignoresSafeArea()
+            VStack(spacing: BeeSpacing.lg) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 56)).foregroundStyle(Color.beeWarn)
+                Text(HomeStrings.fallAlertTitle(lang)).font(.title.bold()).foregroundStyle(.white)
+                switch emergency.phase {
+                case .countdown(_, let seconds):
+                    Text("\(seconds)").font(.system(size: 64, weight: .heavy)).foregroundStyle(Color.beeHoney)
+                        .accessibilityHidden(true) // 数字跳动不打扰 VO；语音提醒已按节点播报
+                    BeeBigButton(HomeStrings.imOK(lang), systemImage: "checkmark.circle.fill", tint: .beeSuccess, foreground: .white) {
+                        emergency.cancel()
+                    }
+                    BeeBigButton(HomeStrings.notifyNow(lang), systemImage: "bell.badge.fill", tint: .beeDanger, foreground: .white) {
+                        emergency.sendNow()
+                    }
+                case .sending:
+                    ProgressView().tint(.white).scaleEffect(1.6)
+                case .sent(let n):
+                    Text(HomeStrings.fallAlertSent(n, lang)).font(.title3).foregroundStyle(.white)
+                        .multilineTextAlignment(.center).padding(.horizontal)
+                case .failed:
+                    Text(HomeStrings.fallAlertFailed(lang)).font(.title3).foregroundStyle(.white)
+                        .multilineTextAlignment(.center).padding(.horizontal)
+                    BeeBigButton(HomeStrings.helpTitle(lang), systemImage: "hand.raised.fill", tint: .beeHoney) {
+                        showRemoteAssist = true
+                    }
+                case .idle:
+                    EmptyView()
+                }
+            }
+            .padding()
+        }
+        // 警报期间 Magic Tap = 我没事（最快的取消通道）。
+        .accessibilityAction(.magicTap) { emergency.cancel() }
     }
 
     // MARK: 红绿灯全屏色块（Oko 式第三通道）
@@ -225,6 +295,96 @@ struct HomeView: View {
         }
         .buttonStyle(BeePressStyle())
         .accessibilityLabel(HomeStrings.tileSettings(lang))
+    }
+
+    /// 语音指令麦克风（固定右上区）：点击说话，再点或停顿 1.5s 自动执行。
+    private var micButton: some View {
+        Button {
+            voice.toggle { command, transcript in handleVoiceCommand(command, transcript: transcript) }
+        } label: {
+            Image(systemName: voice.isListening ? "waveform.circle.fill" : "mic.fill")
+                .font(.title2)
+                .padding(12)
+                .background(voice.isListening ? AnyShapeStyle(Color.beeDanger)
+                            : (wantsSolidSurfaces ? AnyShapeStyle(Color.beeInk) : AnyShapeStyle(.ultraThinMaterial)),
+                            in: Circle())
+                .foregroundStyle(voice.isListening || wantsSolidSurfaces ? .white : Color.primary)
+        }
+        .buttonStyle(BeePressStyle())
+        .accessibilityLabel(HomeStrings.voiceButton(lang))
+        .accessibilityHint(HomeStrings.voiceButtonHint(lang))
+    }
+
+    /// 消息入口（未读角标）。
+    private var messagesButton: some View {
+        Button { showMessages = true } label: {
+            Image(systemName: "bubble.left.and.bubble.right.fill")
+                .font(.title2)
+                .padding(12)
+                .background(wantsSolidSurfaces ? AnyShapeStyle(Color.beeInk) : AnyShapeStyle(.ultraThinMaterial), in: Circle())
+                .foregroundStyle(wantsSolidSurfaces ? .white : Color.primary)
+                .overlay(alignment: .topTrailing) {
+                    if unreadTotal > 0 {
+                        Text("\(min(unreadTotal, 99))")
+                            .font(.caption2.bold()).foregroundStyle(.white)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Color.beeDanger, in: Capsule())
+                            .accessibilityHidden(true)
+                    }
+                }
+        }
+        .buttonStyle(BeePressStyle())
+        .accessibilityLabel(ChatStrings.messagesButton(lang)
+                            + (unreadTotal > 0 ? "，" + ChatStrings.unreadBadgeA11y(unreadTotal, lang) : ""))
+    }
+
+    /// 语音指令路由：解析结果 → 对应功能（确认/失败播报全部走总线，不与避障/导航重叠）。
+    private func handleVoiceCommand(_ command: VoiceCommand, transcript: String) {
+        func speak(_ text: String) { SpeechHub.shared.speak(text, channel: .query, voiceCode: lang.voiceCode) }
+        switch command {
+        case .help: showRemoteAssist = true
+        case .whereAmI: locationDescriber.describe()
+        case .around: locationDescriber.describeAround()
+        case .ahead: locationDescriber.describeAhead()
+        case .weather: weatherSpeaker.announce()
+        case .look: showFraming = true
+        case .readText: route.pendingChannel = .text; showFraming = true
+        case .banknote: route.pendingChannel = .banknote; showFraming = true
+        case .scanCode: route.pendingChannel = .scan; showFraming = true
+        case .navigate(let dest):
+            if let dest { AppRoute.shared.pendingNavAction = .search(dest) }
+            showNavigation = true
+        case .goHome:
+            AppRoute.shared.pendingNavAction = .backtrack
+            showNavigation = true
+        case .messages: showMessages = true
+        case .sendMessage(let to, let text): sendVoiceMessage(to: to, text: text)
+        case .repeatLast: model.repeatLastAnnouncement()
+        case .unknown:
+            speak(transcript.isEmpty ? HomeStrings.voiceHeardNothing(lang)
+                                     : HomeStrings.voiceNotUnderstood(lang))
+        }
+    }
+
+    /// "给X发消息说Y"：按绑定亲友昵称匹配收件人，命中唯一即直接发送并播报结果。
+    private func sendVoiceMessage(to name: String, text: String) {
+        func speak(_ t: String) { SpeechHub.shared.speak(t, channel: .query, voiceCode: lang.voiceCode) }
+        guard let token = session.token else { speak(HomeStrings.voiceNeedLogin(lang)); return }
+        Task {
+            let links = (try? await APIClient().familyLinks(token: token)) ?? []
+            let accepted = links.filter { $0.isAccepted }
+            let matches = accepted.filter { $0.memberName.localizedCaseInsensitiveContains(name) }
+            guard matches.count == 1, let target = matches.first else {
+                speak(HomeStrings.voiceNoContact(name, lang))
+                showMessages = true // 打开消息列表让用户自己选
+                return
+            }
+            if (try? await APIClient().sendMessage(token: token, toId: target.memberId, kind: "text", text: text)) != nil {
+                speak(HomeStrings.voiceSent(target.memberName, lang))
+            } else {
+                speak(ChatStrings.sendFailed(lang))
+            }
+        }
     }
 
     @ViewBuilder

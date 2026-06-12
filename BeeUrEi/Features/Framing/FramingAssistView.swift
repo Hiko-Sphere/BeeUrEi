@@ -73,6 +73,7 @@ final class FramingAssistViewModel {
         case .bus: readBus()
         case .people: describePeople()
         case .light: readLight()
+        case .text: readText() // 语音指令"读文字"直达
         }
     }
     @ObservationIgnored private var paused = false // 关闭/被来电盖上后：停止播报并丢弃在途帧/异步识别结果

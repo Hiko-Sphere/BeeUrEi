@@ -78,6 +78,13 @@ struct FeatureSettings {
         set { defaults.set(max(newValue, 0), forKey: keepAwakeKey) }
     }
 
+    /// 摔倒/剧烈撞击检测（默认开）：检测到疑似摔倒/车祸且倒计时无人取消时，自动通知绑定亲友。
+    private let fallDetectionKey = "feature.fallDetection"
+    var fallDetectionEnabled: Bool {
+        get { defaults.object(forKey: fallDetectionKey) == nil ? true : defaults.bool(forKey: fallDetectionKey) }
+        set { defaults.set(newValue, forKey: fallDetectionKey) }
+    }
+
     /// 播报语言偏好（E5 多语言）："system"=跟随系统、"zh"=中文、"en"=English。默认跟随系统。
     /// 决定盲人实时听到的引导语言（核心 SpokenStrings）与 TTS 选用的嗓音（zh-CN / en-US）。
     private let languageKey = "feature.appLanguage"

@@ -9,9 +9,14 @@ final class AppRoute {
     static let shared = AppRoute()
     enum Destination { case help, lookAround, whereAmI }
     /// 识别屏内的频道直达（Seeing AI"全频道快捷指令"惯例：一句话直达识币/扫码等具体动作）。
-    enum FramingChannel { case banknote, scan, fullPage, bus, people, light }
+    enum FramingChannel { case banknote, scan, fullPage, bus, people, light, text }
     var pending: Destination?
     var pendingChannel: FramingChannel?
+    /// 语音指令：导航屏待执行动作（预填目的地搜索 / 一键原路返回）。
+    enum NavAction: Equatable { case search(String), backtrack }
+    var pendingNavAction: NavAction?
+    /// 语音指令：聊天待发送（"给妈妈发消息说我到了"→ 打开消息并按收件人名预填）。
+    var pendingMessage: (to: String, text: String)?
     private init() {}
 }
 

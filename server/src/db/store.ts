@@ -99,6 +99,17 @@ export interface Recording {
   recordedAt: number
 }
 
+/// 聊天消息（仅 accepted 绑定关系之间可互发）。kind=audio 时 text 为音频 data URL（小段语音条）。
+export interface ChatMessage {
+  id: string
+  fromId: string
+  toId: string
+  kind: 'text' | 'audio'
+  text: string
+  createdAt: number
+  readAt?: number // 收件人已读时间（已读回执）
+}
+
 /// 持久化接口——上层只依赖它；可换内存 / JSON 文件 / 未来 SQLite。
 export interface Store {
   createUser(user: User): void
@@ -141,6 +152,16 @@ export interface Store {
   allRecordings(): Recording[]
   findRecording(id: string): Recording | undefined
   deleteRecording(id: string): void
+
+  createMessage(m: ChatMessage): void
+  /// 双方之间的消息（时间正序）；beforeMs 用于向前翻页（只取早于该时刻的最后 limit 条）。
+  messagesBetween(a: string, b: string, limit: number, beforeMs?: number): ChatMessage[]
+  /// 我参与的每个对话的最后一条消息（按时间倒序），供会话列表。
+  latestMessagesPerPeer(userId: string): ChatMessage[]
+  /// 把 from→reader 的未读消息标记已读，返回条数。
+  markMessagesRead(readerId: string, fromId: string, at: number): number
+  /// 来自 from 发给 user 的未读条数。
+  unreadCount(userId: string, fromId: string): number
 }
 
 /// 内存实现（测试用）。
@@ -152,6 +173,7 @@ export class MemoryStore implements Store {
   protected reports = new Map<string, Report>()
   protected recordings = new Map<string, Recording>()
   protected refreshTokens = new Map<string, RefreshToken>()
+  protected messages = new Map<string, ChatMessage>()
   protected recordingConfig: RecordingConfig = { enabled: false, retentionDays: 7, requireConsent: true }
 
   createRefreshToken(rt: RefreshToken): void {
@@ -296,6 +318,43 @@ export class MemoryStore implements Store {
     if (this.recordings.delete(id)) this.afterMutate()
   }
 
+  createMessage(m: ChatMessage): void {
+    this.messages.set(m.id, m)
+    this.afterMutate()
+  }
+  messagesBetween(a: string, b: string, limit: number, beforeMs?: number): ChatMessage[] {
+    const all = [...this.messages.values()]
+      .filter((m) => (m.fromId === a && m.toId === b) || (m.fromId === b && m.toId === a))
+      .filter((m) => beforeMs == null || m.createdAt < beforeMs)
+      .sort((x, y) => x.createdAt - y.createdAt)
+    return all.slice(Math.max(0, all.length - limit))
+  }
+  latestMessagesPerPeer(userId: string): ChatMessage[] {
+    const latest = new Map<string, ChatMessage>()
+    for (const m of this.messages.values()) {
+      if (m.fromId !== userId && m.toId !== userId) continue
+      const peer = m.fromId === userId ? m.toId : m.fromId
+      const cur = latest.get(peer)
+      if (!cur || m.createdAt > cur.createdAt) latest.set(peer, m)
+    }
+    return [...latest.values()].sort((x, y) => y.createdAt - x.createdAt)
+  }
+  markMessagesRead(readerId: string, fromId: string, at: number): number {
+    let n = 0
+    for (const m of this.messages.values()) {
+      if (m.toId === readerId && m.fromId === fromId && m.readAt == null) { m.readAt = at; n++ }
+    }
+    if (n > 0) this.afterMutate()
+    return n
+  }
+  unreadCount(userId: string, fromId: string): number {
+    let n = 0
+    for (const m of this.messages.values()) {
+      if (m.toId === userId && m.fromId === fromId && m.readAt == null) n++
+    }
+    return n
+  }
+
   protected afterMutate(): void { /* 内存无需持久化 */ }
 }
 
@@ -314,6 +373,7 @@ export class JsonFileStore extends MemoryStore {
           recordings?: Recording[]
           refreshTokens?: RefreshToken[]
           recordingConfig?: RecordingConfig
+          messages?: ChatMessage[]
         }
         for (const u of data.users ?? []) this.users.set(u.id, u)
         for (const l of data.links ?? []) this.links.set(l.id, l)
@@ -323,6 +383,7 @@ export class JsonFileStore extends MemoryStore {
         for (const rec of data.recordings ?? []) this.recordings.set(rec.id, rec)
         for (const rt of data.refreshTokens ?? []) this.refreshTokens.set(rt.tokenHash, rt)
         if (data.recordingConfig) this.recordingConfig = data.recordingConfig
+        for (const m of data.messages ?? []) this.messages.set(m.id, m)
       } catch {
         /* 损坏的文件忽略，从空开始 */
       }
@@ -340,6 +401,7 @@ export class JsonFileStore extends MemoryStore {
       recordings: [...this.recordings.values()],
       refreshTokens: [...this.refreshTokens.values()],
       recordingConfig: this.recordingConfig,
+      messages: [...this.messages.values()],
     }
     writeFileSync(this.path, JSON.stringify(data, null, 2))
   }

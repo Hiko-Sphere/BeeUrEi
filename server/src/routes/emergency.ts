@@ -1,9 +1,19 @@
 import type { FastifyInstance } from 'fastify'
+import { z } from 'zod'
 import { type Store } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { planEmergencyRoute } from '../emergency/routing'
+import { NoopPushSender, type PushSender } from '../push/apns'
+import { pushLang, pushStrings } from '../push/pushStrings'
 
-export function registerEmergencyRoutes(app: FastifyInstance, store: Store): void {
+const alertSchema = z.object({
+  kind: z.enum(['fall', 'crash']),
+  lat: z.number().min(-90).max(90).optional(),
+  lon: z.number().min(-180).max(180).optional(),
+})
+
+export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
+                                        pushSender: PushSender = new NoopPushSender()): void {
   // 发起紧急呼叫：返回按优先级排好的呼叫目标列表（真正接通由 WebRTC 信令负责）。
   app.post('/api/emergency/trigger', { preHandler: requireAuth() }, async (req) => {
     const owner = req.user!
@@ -20,5 +30,34 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store): voi
       }
     })
     return { targets, count: targets.length }
+  })
+
+  // 摔倒/车祸自动警报：检测端确认（倒计时无人取消）后调用——给所有 accepted 绑定的亲友/协助者
+  // 发提醒推送（按收件人语言选文案，带可选坐标）。pending 绑定不通知（未经对方同意，同审查 #6 原则）。
+  app.post('/api/emergency/alert', { preHandler: requireAuth(),
+                                     config: { rateLimit: { max: 6, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const parsed = alertSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const me = store.findById(req.user!.sub)
+    if (!me) return reply.code(404).send({ error: 'not_found' })
+
+    const links = store.linksByOwner(me.id).filter((l) => (l.status ?? 'accepted') === 'accepted')
+    let notified = 0
+    for (const link of links) {
+      const member = store.findById(link.memberId)
+      if (!member?.apnsToken) continue
+      const l = pushLang(member.language)
+      const extra: Record<string, string> = { type: 'emergency_alert', kind: parsed.data.kind, fromId: me.id }
+      if (parsed.data.lat != null && parsed.data.lon != null) {
+        extra.lat = String(parsed.data.lat)
+        extra.lon = String(parsed.data.lon)
+      }
+      await pushSender.sendAlert(member.apnsToken,
+        pushStrings.emergencyAlertTitle(me.displayName, l),
+        pushStrings.emergencyAlertBody(parsed.data.kind, parsed.data.lat != null, l),
+        extra)
+      notified++
+    }
+    return { ok: true, notified, contacts: links.length }
   })
 }

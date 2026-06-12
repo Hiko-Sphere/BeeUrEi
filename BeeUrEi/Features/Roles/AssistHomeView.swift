@@ -43,6 +43,8 @@ struct AssistHomeView: View {
         TabView {
             queueTab.tabItem { Label(HelperStrings.tabQueue(lang), systemImage: "hand.raised.fill") }
             familyTab.tabItem { Label(HelperStrings.tabFamily(lang), systemImage: "person.2.fill") }
+            ConversationsView(session: session)
+                .tabItem { Label(ChatStrings.navTitle(lang), systemImage: "bubble.left.and.bubble.right.fill") }
             meTab.tabItem { Label(HelperStrings.tabMe(lang), systemImage: "person.crop.circle") }
         }
         .tint(.beeAccent)

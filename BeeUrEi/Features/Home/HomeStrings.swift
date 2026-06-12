@@ -35,8 +35,59 @@ enum HomeStrings {
         l == .zh ? "播报当地天气与出行建议，如下雨提醒带伞" : "Announce local weather and travel tips, like bringing an umbrella"
     }
     static func envGroup(_ l: Language) -> String { l == .zh ? "环境感知" : "Surroundings" }
+
+    // MARK: 摔倒/撞击警报
+
+    static func fallAlertSpeak(kind: String, _ l: Language) -> String {
+        let what = kind == "crash" ? (l == .zh ? "剧烈撞击" : "a severe impact")
+                                   : (l == .zh ? "疑似摔倒" : "a possible fall")
+        return l == .zh ? "检测到\(what)。30 秒内无操作将自动通知你的亲友。如果你没事，请点击屏幕上的「我没事」按钮。"
+                        : "Detected \(what). Your family will be notified in 30 seconds. If you're OK, tap the I'm OK button."
+    }
+    static func fallAlertReminder(_ seconds: Int, _ l: Language) -> String {
+        l == .zh ? "还有 \(seconds) 秒将通知亲友。点「我没事」可取消。"
+                 : "\(seconds) seconds until your family is notified. Tap I'm OK to cancel."
+    }
+    static func fallAlertCancelled(_ l: Language) -> String { l == .zh ? "已取消，注意安全。" : "Cancelled. Stay safe." }
+    static func fallAlertSent(_ n: Int, _ l: Language) -> String {
+        n > 0 ? (l == .zh ? "已通知 \(n) 位亲友。" : "Notified \(n) family member\(n > 1 ? "s" : "").")
+              : (l == .zh ? "没有可通知的亲友。请先绑定亲友，或直接呼叫求助。" : "No family to notify. Add family first, or call for help.")
+    }
+    static func fallAlertFailed(_ l: Language) -> String {
+        l == .zh ? "通知发送失败，请直接呼叫求助。" : "Couldn't send the alert. Please call for help directly."
+    }
+    static func fallAlertNeedLogin(_ l: Language) -> String {
+        l == .zh ? "未登录，无法通知亲友。请直接呼叫求助。" : "Not signed in — can't notify family. Please call for help."
+    }
+    static func imOK(_ l: Language) -> String { l == .zh ? "我没事" : "I'm OK" }
+    static func notifyNow(_ l: Language) -> String { l == .zh ? "立即通知亲友" : "Notify family now" }
+    static func fallAlertTitle(_ l: Language) -> String { l == .zh ? "检测到可能的意外" : "Possible accident detected" }
     static func magicTapHint(_ l: Language) -> String {
         l == .zh ? "双指双击可一键求助" : "Two-finger double-tap to call for help"
+    }
+
+    // MARK: 语音指令
+
+    static func voiceButton(_ l: Language) -> String { l == .zh ? "语音指令" : "Voice command" }
+    static func voiceButtonHint(_ l: Language) -> String {
+        l == .zh ? "点击后说出指令，如：我在哪、带我去超市、给妈妈发消息说我到了"
+                 : "Tap and speak, like: where am I, take me to the store, message Mom saying I arrived"
+    }
+    static func voiceNotUnderstood(_ l: Language) -> String {
+        l == .zh ? "没听懂。可以说：求助、我在哪、周围有什么、天气、带我去某地、读文字、识别纸币、给某人发消息。"
+                 : "Didn't catch that. Try: get help, where am I, what's around, weather, take me to a place, read text, or message someone."
+    }
+    static func voiceHeardNothing(_ l: Language) -> String {
+        l == .zh ? "没有听到声音，请再试一次。" : "I didn't hear anything. Please try again."
+    }
+    static func voiceNeedLogin(_ l: Language) -> String {
+        l == .zh ? "请先登录才能发消息。" : "Sign in first to send messages."
+    }
+    static func voiceNoContact(_ name: String, _ l: Language) -> String {
+        l == .zh ? "没有找到叫\(name)的亲友，已打开消息列表。" : "Couldn't find a contact named \(name). Opening messages."
+    }
+    static func voiceSent(_ name: String, _ l: Language) -> String {
+        l == .zh ? "已发送给\(name)。" : "Sent to \(name)."
     }
 
     // MARK: 红绿灯横幅（Oko 式第三通道）

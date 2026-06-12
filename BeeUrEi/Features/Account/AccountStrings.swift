@@ -160,7 +160,14 @@ enum AccountStrings {
     // MARK: 手机号 / Apple 登录
 
     static func usernameOrPhone(_ l: Language) -> String { l == .zh ? "用户名或手机号" : "Username or phone" }
+    static func loginIdentifier(_ l: Language) -> String { l == .zh ? "用户名 / 手机号 / 邮箱" : "Username, phone, or email" }
     static func phoneOptional(_ l: Language) -> String { l == .zh ? "手机号（选填，可用于登录）" : "Phone (optional, can log in with it)" }
+    static func registerMethod(_ l: Language) -> String { l == .zh ? "注册方式" : "Sign-up method" }
+    static func methodPhone(_ l: Language) -> String { l == .zh ? "手机号" : "Phone" }
+    static func methodEmail(_ l: Language) -> String { l == .zh ? "邮箱" : "Email" }
+    static func phoneField(_ l: Language) -> String { l == .zh ? "手机号" : "Phone number" }
+    static func emailField(_ l: Language) -> String { l == .zh ? "邮箱" : "Email" }
+    static func appleContinue(_ l: Language) -> String { l == .zh ? "通过 Apple 登录或注册" : "Continue with Apple" }
     static func appleFailed(_ l: Language) -> String {
         l == .zh ? "Apple 登录未完成（需在 Xcode 配置 Sign in with Apple 能力）"
                  : "Apple sign-in didn't finish (requires the Sign in with Apple capability)"

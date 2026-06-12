@@ -137,6 +137,7 @@ export interface Store {
   createUser(user: User): void
   findByUsername(username: string): User | undefined
   findByPhone(phone: string): User | undefined       // 手机号登录（归一化后精确匹配）
+  findByEmail(email: string): User | undefined       // 邮箱登录（大小写不敏感）
   findByAppleSub(appleSub: string): User | undefined // Sign in with Apple 账号匹配
   findById(id: string): User | undefined
   allUsers(): User[]
@@ -248,6 +249,12 @@ export class MemoryStore implements Store {
   }
   findByPhone(phone: string): User | undefined {
     for (const u of this.users.values()) if (u.phone && u.phone === phone) return u
+    return undefined
+  }
+  findByEmail(email: string): User | undefined {
+    const key = email.trim().toLowerCase()
+    if (key === '') return undefined
+    for (const u of this.users.values()) if ((u.email ?? '').toLowerCase() === key) return u
     return undefined
   }
   findByAppleSub(appleSub: string): User | undefined {

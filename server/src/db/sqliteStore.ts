@@ -100,6 +100,13 @@ export class SqliteStore implements Store {
     const row = this.db.prepare('SELECT * FROM users WHERE phone = ?').get(phone)
     return row ? this.toUser(row) : undefined
   }
+  findByEmail(email: string): User | undefined {
+    const key = email.trim().toLowerCase()
+    if (key === '') return undefined
+    // 邮箱注册/绑定时已统一小写存储；NOCASE 兜底兼容历史大小写混存。
+    const row = this.db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').get(key)
+    return row ? this.toUser(row) : undefined
+  }
   findByAppleSub(appleSub: string): User | undefined {
     const row = this.db.prepare('SELECT * FROM users WHERE appleSub = ?').get(appleSub)
     return row ? this.toUser(row) : undefined

@@ -9,10 +9,13 @@ struct LoginView: View {
     // 用 App 共享的同一个 AuthSession（由 RootView .environment 注入），避免本地另起实例
     // 致登出/删号后内存态不同步（见审查 #5）。
     @Environment(AuthSession.self) private var session
-    @State private var username = ""
+    @State private var username = ""     // 登录=用户名/手机号/邮箱；注册=按 regMethod 解释的标识
     @State private var password = ""
-    @State private var phone = ""        // 注册可选手机号（之后可用手机号+密码登录）
+    @State private var phone = ""        // 用户名注册时的可选手机号（之后可用手机号+密码登录）
     @State private var isRegister = false
+    @State private var regMethod: RegMethod = .username // 注册标识类型（用户名/手机号/邮箱三选一）
+
+    enum RegMethod: CaseIterable { case username, phone, email }
     @State private var role = "blind"
     @State private var serverURL = ServerConfig.baseURLString
     @State private var showChangePassword = false
@@ -100,15 +103,26 @@ struct LoginView: View {
                 }
             } else {
                 Section(AccountStrings.accountHeader(lang)) {
-                    // 登录标识：用户名或手机号皆可（注册时仍是用户名）。
-                    TextField(isRegister ? AccountStrings.username(lang) : AccountStrings.usernameOrPhone(lang),
-                              text: $username)
+                    if isRegister {
+                        // 注册标识三选一：用户名 / 手机号 / 邮箱（手机号、邮箱可直接当账号登录）。
+                        Picker(AccountStrings.registerMethod(lang), selection: $regMethod) {
+                            Text(AccountStrings.username(lang)).tag(RegMethod.username)
+                            Text(AccountStrings.methodPhone(lang)).tag(RegMethod.phone)
+                            Text(AccountStrings.methodEmail(lang)).tag(RegMethod.email)
+                        }
+                        .pickerStyle(.segmented)
+                        .accessibilityLabel(AccountStrings.registerMethod(lang))
+                    }
+                    TextField(identifierPlaceholder, text: $username)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                        .keyboardType(identifierKeyboard)
                     SecureField(AccountStrings.password(lang), text: $password)
                     if isRegister {
-                        TextField(AccountStrings.phoneOptional(lang), text: $phone)
-                            .keyboardType(.phonePad)
+                        if regMethod == .username {
+                            TextField(AccountStrings.phoneOptional(lang), text: $phone)
+                                .keyboardType(.phonePad)
+                        }
                         Picker(AccountStrings.rolePicker(lang), selection: $role) {
                             ForEach(roles, id: \.value) { Text($0.label).tag($0.value) }
                         }
@@ -128,17 +142,17 @@ struct LoginView: View {
                     }
                 }
 
-                // Sign in with Apple：identityToken 交后端验签登录/自动建号。
+                // Sign in with Apple：identityToken 交后端验签——已有账号即登录，新用户自动建号（注册）。
                 // 注意：能力需付费开发者账号在 Xcode 勾选 Sign in with Apple；未配置时授权会失败并给出提示。
                 Section {
-                    SignInWithAppleButton(.signIn) { request in
+                    SignInWithAppleButton(.continue) { request in
                         request.requestedScopes = [.fullName] // 不取邮箱也可；姓名仅首次授权提供
                     } onCompletion: { result in
                         handleApple(result)
                     }
                     .signInWithAppleButtonStyle(.black)
                     .frame(height: 48)
-                    .accessibilityLabel(lang == .zh ? "通过 Apple 登录" : "Sign in with Apple")
+                    .accessibilityLabel(AccountStrings.appleContinue(lang))
                 }
             }
 
@@ -251,14 +265,40 @@ struct LoginView: View {
         }
     }
 
+    /// 注册标识输入框的占位与键盘（登录时统一"用户名/手机号/邮箱"）。
+    private var identifierPlaceholder: String {
+        guard isRegister else { return AccountStrings.loginIdentifier(lang) }
+        switch regMethod {
+        case .username: return AccountStrings.username(lang)
+        case .phone: return AccountStrings.phoneField(lang)
+        case .email: return AccountStrings.emailField(lang)
+        }
+    }
+    private var identifierKeyboard: UIKeyboardType {
+        guard isRegister else { return .default }
+        switch regMethod {
+        case .username: return .default
+        case .phone: return .phonePad
+        case .email: return .emailAddress
+        }
+    }
+
     private func submit() {
+        let identifier = username.trimmingCharacters(in: .whitespaces)
         Task {
             if isRegister {
-                let p = phone.trimmingCharacters(in: .whitespaces)
-                await session.register(username: username, password: password, role: role,
-                                       phone: p.isEmpty ? nil : p)
+                switch regMethod {
+                case .username:
+                    let p = phone.trimmingCharacters(in: .whitespaces)
+                    await session.register(username: identifier, password: password, role: role,
+                                           phone: p.isEmpty ? nil : p)
+                case .phone:
+                    await session.register(username: nil, password: password, role: role, phone: identifier)
+                case .email:
+                    await session.register(username: nil, password: password, role: role, email: identifier)
+                }
             } else {
-                await session.login(username: username, password: password)
+                await session.login(username: identifier, password: password)
             }
         }
     }

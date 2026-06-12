@@ -68,8 +68,11 @@ final class AuthSession {
         await run { try await self.api.login(username: username, password: password) }
     }
 
-    func register(username: String, password: String, role: String, phone: String? = nil) async {
-        await run { try await self.api.register(username: username, password: password, role: role, phone: phone) }
+    /// 注册：用户名/手机号/邮箱至少给一个（手机号或邮箱即可当账号，后端自动生成用户名）。
+    func register(username: String?, password: String, role: String,
+                  phone: String? = nil, email: String? = nil) async {
+        await run { try await self.api.register(username: username, password: password, role: role,
+                                                phone: phone, email: email) }
     }
 
     /// Apple 登录：验签建号/登录由后端完成；displayName 仅首次授权由系统提供。

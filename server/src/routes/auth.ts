@@ -17,18 +17,19 @@ function issueTokens(store: Store, user: User): { token: string; refreshToken: s
 const refreshSchema = z.object({ refreshToken: z.string().min(1) })
 
 const registerSchema = z.object({
-  username: z.string().trim().min(3).max(32), // 去首尾空白，避免" alice"/"alice"混淆（见审查 #4）
+  // 用户名/手机号/邮箱至少给一个（refine 校验）；不给用户名时自动生成（不从手机号/邮箱派生——username 进 publicUser，派生会泄露隐私标识）。
+  username: z.string().trim().min(3).max(32).optional(), // 去首尾空白，避免" alice"/"alice"混淆（见审查 #4）
   password: z.string().min(6).max(128),
   displayName: z.string().min(1).max(64).optional(),
   // 自助注册仅限这些角色；admin/developer 由后台分配。
   role: z.enum(['blind', 'helper', 'family']).optional(),
   language: z.string().min(2).max(8).optional(), // 协助者/亲友语言，用于匹配排序（见审查 #10）
-  email: z.string().email().max(254).optional(), // 可选邮箱：便于日后找回密码（D1）
-  phone: z.string().trim().min(6).max(20).optional(), // 可选手机号：可用手机号+密码登录
-})
+  email: z.string().email().max(254).optional(), // 邮箱：可作注册/登录标识，也用于找回密码（D1）
+  phone: z.string().trim().min(6).max(20).optional(), // 手机号：可作注册/登录标识
+}).refine((d) => d.username || d.phone || d.email, { message: 'identifier_required' })
 
 const loginSchema = z.object({
-  username: z.string().trim(), // 登录标识：用户名或手机号（字段名保持 username 兼容旧客户端）
+  username: z.string().trim(), // 登录标识：用户名/手机号/邮箱（字段名保持 username 兼容旧客户端）
   password: z.string(),
 })
 
@@ -46,13 +47,13 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, appleVeri
     if (!parsed.success) {
       return reply.code(400).send({ error: 'invalid_input', details: parsed.error.flatten() })
     }
-    const { username, password, displayName, role, language, email, phone } = parsed.data
-    if (store.findByUsername(username)) {
+    const { username: rawUsername, password, displayName, role, language, email, phone } = parsed.data
+    if (rawUsername && store.findByUsername(rawUsername)) {
       return reply.code(409).send({ error: 'username_taken' })
     }
-    // 规范化邮箱 + 唯一性（邮箱是账号身份锚，见审查 #13）。
+    // 规范化邮箱 + 唯一性（邮箱是账号身份锚 + 登录标识，见审查 #13）。
     const normEmail = email?.trim().toLowerCase()
-    if (normEmail && store.allUsers().some((u) => (u.email ?? '').toLowerCase() === normEmail)) {
+    if (normEmail && store.findByEmail(normEmail)) {
       return reply.code(409).send({ error: 'email_taken' })
     }
     // 手机号归一化 + 唯一性（手机号也是登录标识，与用户名同等对待）。
@@ -62,6 +63,13 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, appleVeri
       if (!p) return reply.code(400).send({ error: 'invalid_phone' })
       if (store.findByPhone(p)) return reply.code(409).send({ error: 'phone_taken' })
       normPhone = p
+    }
+    // 免用户名注册（手机号/邮箱即账号）：自动生成随机用户名（可在账号页改昵称；
+    // 不从手机号/邮箱派生——username 进 publicUser 对外可见，派生会泄露隐私标识）。
+    let username = rawUsername
+    if (!username) {
+      username = `user_${randomUUID().slice(0, 8)}`
+      while (store.findByUsername(username)) username = `user_${randomUUID().slice(0, 8)}`
     }
     const user: User = {
       id: randomUUID(),
@@ -86,13 +94,15 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, appleVeri
     if (!parsed.success) {
       return reply.code(400).send({ error: 'invalid_input' })
     }
-    // 登录标识兼容用户名与手机号：先按用户名查，再按归一化手机号查。
+    // 登录标识兼容用户名/手机号/邮箱：先按用户名查，再按归一化手机号，最后按邮箱（含 @ 才试）。
     const identifier = parsed.data.username
     const byPhone = (): User | undefined => {
       const p = normalizePhone(identifier)
       return p ? store.findByPhone(p) : undefined
     }
-    const user = store.findByUsername(identifier) ?? byPhone()
+    const byEmail = (): User | undefined =>
+      identifier.includes('@') ? store.findByEmail(identifier) : undefined
+    const user = store.findByUsername(identifier) ?? byPhone() ?? byEmail()
     if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) {
       return reply.code(401).send({ error: 'invalid_credentials' })
     }

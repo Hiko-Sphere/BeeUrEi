@@ -69,6 +69,74 @@ describe('手机号 + 密码登录', () => {
   })
 })
 
+describe('免用户名注册（手机号/邮箱即账号）', () => {
+  it('只给手机号注册 → 自动生成随机用户名（不泄露手机号），手机号可登录', async () => {
+    const app = buildApp(new MemoryStore())
+    const reg = await app.inject({ method: 'POST', url: '/api/auth/register',
+      payload: { password: 'secret123', phone: '136 0013 6000' } })
+    expect(reg.statusCode).toBe(201)
+    const u = (reg.json() as any).user
+    expect(u.username).toMatch(/^user_/)            // 自动生成
+    expect(u.username).not.toContain('13600136000') // 不从手机号派生（username 对外可见）
+
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login',
+      payload: { username: '+13600136000'.replace('+', ''), password: 'secret123' } })
+    expect(login.statusCode).toBe(200)
+    expect((login.json() as any).user.id).toBe(u.id)
+  })
+
+  it('只给邮箱注册 → 邮箱可登录（大小写不敏感）；重复邮箱 409', async () => {
+    const app = buildApp(new MemoryStore())
+    const reg = await app.inject({ method: 'POST', url: '/api/auth/register',
+      payload: { password: 'secret123', email: 'Mei@Example.com' } })
+    expect(reg.statusCode).toBe(201)
+    const u = (reg.json() as any).user
+    expect(u.username).toMatch(/^user_/)
+
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login',
+      payload: { username: 'mei@example.COM', password: 'secret123' } })
+    expect(login.statusCode).toBe(200)
+    expect((login.json() as any).user.id).toBe(u.id)
+
+    const dup = await app.inject({ method: 'POST', url: '/api/auth/register',
+      payload: { password: 'secret123', email: 'MEI@example.com' } })
+    expect(dup.statusCode).toBe(409)
+    expect((dup.json() as any).error).toBe('email_taken')
+  })
+
+  it('用户名/手机号/邮箱一个都不给 → 400；不存在的邮箱登录 401', async () => {
+    const app = buildApp(new MemoryStore())
+    const none = await app.inject({ method: 'POST', url: '/api/auth/register',
+      payload: { password: 'secret123' } })
+    expect(none.statusCode).toBe(400)
+
+    const ghost = await app.inject({ method: 'POST', url: '/api/auth/login',
+      payload: { username: 'nobody@example.com', password: 'secret123' } })
+    expect(ghost.statusCode).toBe(401)
+  })
+
+  it('账号页绑定邮箱后也能用邮箱登录；他人邮箱 409', async () => {
+    const app = buildApp(new MemoryStore())
+    const r1 = await app.inject({ method: 'POST', url: '/api/auth/register',
+      payload: { username: 'mailme', password: 'secret123' } })
+    const t1 = (r1.json() as any).token as string
+    await app.inject({ method: 'POST', url: '/api/auth/register',
+      payload: { password: 'secret123', email: 'used@example.com' } })
+
+    const taken = await app.inject({ method: 'POST', url: '/api/account/email',
+      headers: auth(t1), payload: { email: 'USED@example.com' } })
+    expect(taken.statusCode).toBe(409) // 不能占用他人邮箱
+
+    const ok = await app.inject({ method: 'POST', url: '/api/account/email',
+      headers: auth(t1), payload: { email: 'mine@example.com' } })
+    expect(ok.statusCode).toBe(200)
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login',
+      payload: { username: 'mine@example.com', password: 'secret123' } })
+    expect(login.statusCode).toBe(200)
+    expect((login.json() as any).user.username).toBe('mailme')
+  })
+})
+
 describe('Sign in with Apple', () => {
   const fakeVerifier: AppleTokenVerifier = async (token) =>
     token.startsWith('good:') ? { sub: token.slice(5), email: 'a@icloud.com' } : null

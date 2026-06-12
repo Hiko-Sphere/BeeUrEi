@@ -71,7 +71,8 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     if (!user) return reply.code(404).send({ error: 'not_found' })
     // 规范化 + 唯一性：邮箱是账号身份锚，不能被设成他人已用的邮箱（见审查 #13）。
     const email = parsed.data.email.trim().toLowerCase()
-    if (store.allUsers().some((u) => u.id !== user.id && (u.email ?? '').toLowerCase() === email)) {
+    const existing = store.findByEmail(email)
+    if (existing && existing.id !== user.id) {
       return reply.code(409).send({ error: 'email_taken' })
     }
     store.updateUser(user.id, { email, emailVerified: false })

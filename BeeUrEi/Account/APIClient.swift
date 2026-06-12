@@ -211,14 +211,18 @@ enum APIError: Error {
 struct APIClient {
     private var baseURL: URL { ServerConfig.baseURL }
 
-    func register(username: String, password: String, role: String?, phone: String? = nil) async throws -> AuthResult {
-        var body: [String: Any] = ["username": username, "password": password]
+    /// 注册：用户名/手机号/邮箱至少给一个（手机号或邮箱即可当账号，后端自动生成用户名）。
+    func register(username: String?, password: String, role: String?,
+                  phone: String? = nil, email: String? = nil) async throws -> AuthResult {
+        var body: [String: Any] = ["password": password]
+        if let username, !username.isEmpty { body["username"] = username }
         if let role { body["role"] = role }
         if let phone, !phone.isEmpty { body["phone"] = phone }
+        if let email, !email.isEmpty { body["email"] = email }
         return try await postAuth("/api/auth/register", body: body)
     }
 
-    /// 登录标识可为用户名或手机号（后端先按用户名、再按归一化手机号匹配）。
+    /// 登录标识可为用户名/手机号/邮箱（后端依次匹配）。
     func login(username: String, password: String) async throws -> AuthResult {
         try await postAuth("/api/auth/login", body: ["username": username, "password": password])
     }

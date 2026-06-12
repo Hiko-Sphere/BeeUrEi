@@ -1,11 +1,13 @@
 import SwiftUI
+import AuthenticationServices
 
 /// 登录 / 注册门（共享 AuthSession）。登录成功后由 RootView 自动路由到角色确认页。
 struct AuthGateView: View {
     let session: AuthSession
-    @State private var username = ""
+    @State private var username = ""     // 登录=用户名/手机号/邮箱；注册=按 regMethod 解释的标识
     @State private var password = ""
     @State private var isRegister = false
+    @State private var regMethod: LoginView.RegMethod = .username // 注册标识类型（与账号页同一套）
     @State private var role = "blind"
     @State private var serverURL = ServerConfig.baseURLString
     @State private var showForgot = false
@@ -44,8 +46,19 @@ struct AuthGateView: View {
                 }
 
                 Section(isRegister ? AccountStrings.registerHeader(lang) : AccountStrings.loginHeader(lang)) {
-                    TextField(AccountStrings.username(lang), text: $username)
+                    if isRegister {
+                        // 注册标识三选一：用户名 / 手机号 / 邮箱（手机号、邮箱可直接当账号登录）。
+                        Picker(AccountStrings.registerMethod(lang), selection: $regMethod) {
+                            Text(AccountStrings.username(lang)).tag(LoginView.RegMethod.username)
+                            Text(AccountStrings.methodPhone(lang)).tag(LoginView.RegMethod.phone)
+                            Text(AccountStrings.methodEmail(lang)).tag(LoginView.RegMethod.email)
+                        }
+                        .pickerStyle(.segmented)
+                        .accessibilityLabel(AccountStrings.registerMethod(lang))
+                    }
+                    TextField(identifierPlaceholder, text: $username)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        .keyboardType(identifierKeyboard)
                     SecureField(AccountStrings.password(lang), text: $password)
                     if isRegister {
                         Picker(AccountStrings.rolePicker(lang), selection: $role) {
@@ -70,6 +83,18 @@ struct AuthGateView: View {
                     }
                 }
 
+                // Sign in with Apple：已有账号即登录，新用户自动建号（注册）。
+                Section {
+                    SignInWithAppleButton(.continue) { request in
+                        request.requestedScopes = [.fullName] // 姓名仅首次授权提供
+                    } onCompletion: { result in
+                        handleApple(result)
+                    }
+                    .signInWithAppleButtonStyle(.black)
+                    .frame(height: 48)
+                    .accessibilityLabel(AccountStrings.appleContinue(lang))
+                }
+
                 if DevSettings().enabled {
                     Section(AccountStrings.devServerHeader(lang)) {
                         TextField("如 http://192.168.1.10:8787", text: $serverURL)
@@ -85,11 +110,60 @@ struct AuthGateView: View {
         }
     }
 
+    /// 注册标识输入框的占位与键盘（登录时统一"用户名/手机号/邮箱"）。
+    private var identifierPlaceholder: String {
+        guard isRegister else { return AccountStrings.loginIdentifier(lang) }
+        switch regMethod {
+        case .username: return AccountStrings.username(lang)
+        case .phone: return AccountStrings.phoneField(lang)
+        case .email: return AccountStrings.emailField(lang)
+        }
+    }
+    private var identifierKeyboard: UIKeyboardType {
+        guard isRegister else { return .default }
+        switch regMethod {
+        case .username: return .default
+        case .phone: return .phonePad
+        case .email: return .emailAddress
+        }
+    }
+
     private func submit() async {
+        let identifier = username.trimmingCharacters(in: .whitespaces)
         if isRegister {
-            await session.register(username: username, password: password, role: role)
+            switch regMethod {
+            case .username:
+                await session.register(username: identifier, password: password, role: role)
+            case .phone:
+                await session.register(username: nil, password: password, role: role, phone: identifier)
+            case .email:
+                await session.register(username: nil, password: password, role: role, email: identifier)
+            }
         } else {
-            await session.login(username: username, password: password)
+            await session.login(username: identifier, password: password)
+        }
+    }
+
+    /// Apple 授权回调：取 identityToken + 首次授权的姓名，交 AuthSession 走后端验签登录/建号。
+    private func handleApple(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .success(let authorization):
+            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                  let data = credential.identityToken,
+                  let token = String(data: data, encoding: .utf8) else {
+                session.presentAuthError(AccountStrings.appleFailed(lang))
+                return
+            }
+            let name = [credential.fullName?.familyName, credential.fullName?.givenName]
+                .compactMap { $0 }.joined()
+            Task {
+                await session.loginWithApple(identityToken: token,
+                                             displayName: name.isEmpty ? nil : name,
+                                             role: role)
+            }
+        case .failure:
+            // 用户取消或未配置 entitlement：给可理解的提示（不弹原始错误码）。
+            session.presentAuthError(AccountStrings.appleFailed(lang))
         }
     }
 }

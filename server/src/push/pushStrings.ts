@@ -31,6 +31,8 @@ export const pushStrings = {
   },
   newMessageTitle: (name: string, l: PushLang): string =>
     l === 'en' ? `Message from ${name}` : `${name} 发来消息`,
+  groupMessageTitle: (name: string, group: string, l: PushLang): string =>
+    l === 'en' ? `${name} in ${group}` : `${name} 在「${group}」`,
   newMessageBody: (preview: string, l: PushLang): string =>
     preview === '' ? (l === 'en' ? 'New message' : '新消息') : preview,
 }

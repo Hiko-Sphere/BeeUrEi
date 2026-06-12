@@ -40,7 +40,7 @@ struct AuthResult: Codable, Sendable {
     let user: AccountInfo
 }
 
-/// 一条聊天消息（kind=audio/image 时 text 为 data URL；recalled=已撤回占位）。
+/// 一条聊天消息（kind=audio/image 时 text 为 data URL；kind=video 时 text 为 mediaId；recalled=已撤回占位）。
 struct ChatMessageInfo: Codable, Sendable, Identifiable, Equatable {
     let id: String
     let fromId: String
@@ -50,6 +50,31 @@ struct ChatMessageInfo: Codable, Sendable, Identifiable, Equatable {
     let createdAt: Int
     var readAt: Int?
     var reaction: String? // 表情回应（单 emoji，最新覆盖）
+    var groupId: String?  // 群消息所属群（单聊为 nil）
+}
+
+/// 群组（WhatsApp 式：群主建群/加人/踢人/解散，成员可退群）。
+struct GroupInfo: Codable, Sendable, Identifiable, Equatable {
+    let id: String
+    let name: String
+    let ownerId: String
+    let memberIds: [String]
+    let createdAt: Int
+}
+
+/// 群会话列表项：群 + 成员公开资料 + 最后一条 + 未读数。
+struct GroupConversationInfo: Codable, Sendable, Identifiable {
+    struct Member: Codable, Sendable {
+        let id: String
+        let username: String
+        let displayName: String
+        let avatar: String?
+    }
+    let group: GroupInfo
+    let members: [Member]
+    let last: ChatMessageInfo?
+    let unread: Int
+    var id: String { group.id }
 }
 
 /// 会话列表项：对端公开资料 + 最后一条 + 未读数。
@@ -578,6 +603,97 @@ struct APIClient {
     }
     func unregisterApnsToken(token: String) async {
         _ = try? await authedSend("DELETE", "/api/push/apns-register", token: token)
+    }
+
+    // MARK: 群聊
+
+    /// 建群（初始成员必须都是我的 accepted 绑定好友）。
+    func createGroup(token: String, name: String, memberIds: [String]) async throws -> GroupInfo {
+        let data = try await authedSend("POST", "/api/groups", token: token,
+                                        body: ["name": name, "memberIds": memberIds])
+        struct R: Codable { let group: GroupInfo }
+        return try JSONDecoder().decode(R.self, from: data).group
+    }
+
+    /// 我的群会话列表（最近活跃在前）。
+    func groups(token: String) async throws -> [GroupConversationInfo] {
+        let data = try await authedGet("/api/groups", token: token)
+        struct R: Codable { let groups: [GroupConversationInfo] }
+        return try JSONDecoder().decode(R.self, from: data).groups
+    }
+
+    /// 加人（群主；新成员须是群主好友）。失败返回 nil。
+    func addGroupMember(token: String, groupId: String, userId: String) async -> GroupInfo? {
+        guard let data = try? await authedSend("POST", "/api/groups/\(groupId)/members", token: token,
+                                               body: ["userId": userId]) else { return nil }
+        struct R: Codable { let group: GroupInfo }
+        return try? JSONDecoder().decode(R.self, from: data).group
+    }
+
+    /// 移出成员：群主踢人，或成员移出自己（退群）。
+    func removeGroupMember(token: String, groupId: String, userId: String) async -> Bool {
+        (try? await authedSend("DELETE", "/api/groups/\(groupId)/members/\(userId)", token: token)) != nil
+    }
+
+    /// 解散（群主）。
+    func dissolveGroup(token: String, groupId: String) async -> Bool {
+        (try? await authedSend("DELETE", "/api/groups/\(groupId)", token: token)) != nil
+    }
+
+    /// 群消息（时间正序）。
+    func groupMessages(token: String, groupId: String, before: Int? = nil) async throws -> [ChatMessageInfo] {
+        var path = "/api/messages?group=\(groupId)&limit=50"
+        if let before { path += "&before=\(before)" }
+        let data = try await authedGet(path, token: token)
+        struct R: Codable { let messages: [ChatMessageInfo] }
+        return try JSONDecoder().decode(R.self, from: data).messages
+    }
+
+    /// 发群消息。
+    func sendGroupMessage(token: String, groupId: String, kind: String, text: String) async throws -> ChatMessageInfo {
+        let data = try await authedSend("POST", "/api/messages", token: token,
+                                        body: ["groupId": groupId, "kind": kind, "text": text])
+        struct R: Codable { let message: ChatMessageInfo }
+        return try JSONDecoder().decode(R.self, from: data).message
+    }
+
+    /// 标记群已读（按人记"读到的时间戳"）。
+    func markGroupRead(token: String, groupId: String) async {
+        _ = try? await authedSend("POST", "/api/messages/read", token: token, body: ["groupId": groupId])
+    }
+
+    // MARK: 媒体（视频消息：实体文件走服务器磁盘，不挤 JSON）
+
+    /// 上传视频二进制，返回 mediaId（随后作为 kind=video 消息的 text 发送）。
+    func uploadMedia(token: String, data body: Data, mime: String) async throws -> String {
+        var req = URLRequest(url: baseURL.appendingPathComponent("/api/media"))
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue(mime, forHTTPHeaderField: "Content-Type")
+        let (data, resp): (Data, URLResponse)
+        do { (data, resp) = try await URLSession.shared.upload(for: req, from: body) } catch { throw APIError.network }
+        guard let http = resp as? HTTPURLResponse else { throw APIError.network }
+        if http.statusCode == 401 { throw APIError.unauthorized }
+        if http.statusCode >= 400 {
+            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            throw APIError.server((obj?["error"] as? String) ?? "HTTP \(http.statusCode)")
+        }
+        struct R: Codable { struct M: Codable { let id: String }; let media: M }
+        return try JSONDecoder().decode(R.self, from: data).media.id
+    }
+
+    /// 下载媒体到本地临时文件（按 mediaId 缓存，重复播放不重复下载）。返回本地 URL。
+    func downloadMedia(token: String, id: String) async throws -> URL {
+        let cached = FileManager.default.temporaryDirectory.appendingPathComponent("media-\(id).mp4")
+        if FileManager.default.fileExists(atPath: cached.path) { return cached }
+        var req = URLRequest(url: baseURL.appendingPathComponent("/api/media/\(id)"))
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (tmp, resp): (URL, URLResponse)
+        do { (tmp, resp) = try await URLSession.shared.download(for: req) } catch { throw APIError.network }
+        guard let http = resp as? HTTPURLResponse, http.statusCode < 400 else { throw APIError.network }
+        try? FileManager.default.removeItem(at: cached)
+        try FileManager.default.moveItem(at: tmp, to: cached)
+        return cached
     }
 
     // MARK: 邮箱验证 / 找回密码（D1）

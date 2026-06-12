@@ -99,17 +99,37 @@ export interface Recording {
   recordedAt: number
 }
 
-/// 聊天消息（仅 accepted 绑定关系之间可互发）。
-/// kind=audio/image 时 text 为 data URL；kind=recalled 为已撤回占位（text 清空）。
+/// 聊天消息（单聊=accepted 绑定互发；群聊=群成员互发）。
+/// kind=audio/image 时 text 为 data URL；kind=video 时 text 为 mediaId（服务器磁盘文件）；
+/// kind=recalled 为已撤回占位（text 清空）。
 export interface ChatMessage {
   id: string
   fromId: string
-  toId: string
-  kind: 'text' | 'audio' | 'image' | 'recalled'
+  toId: string        // 单聊收件人；群消息为 ''（以 groupId 寻址）
+  kind: 'text' | 'audio' | 'image' | 'video' | 'recalled'
   text: string
   createdAt: number
-  readAt?: number // 收件人已读时间（已读回执）
+  readAt?: number // 单聊：收件人已读时间（已读回执）。群聊不用此字段（见 groupReads）
   reaction?: string // 表情回应（WhatsApp 式，单个 emoji，最新覆盖；空=无）
+  groupId?: string // 群消息所属群
+}
+
+/// 聊天群组（WhatsApp 式）：群主创建/加人/踢人/解散；成员可退群发言。
+export interface ChatGroup {
+  id: string
+  name: string
+  ownerId: string
+  memberIds: string[] // 含群主
+  createdAt: number
+}
+
+/// 媒体文件元数据（视频消息等大文件，实体存服务器磁盘 media/ 目录）。
+export interface MediaMeta {
+  id: string
+  ownerId: string
+  mime: string
+  size: number
+  createdAt: number
 }
 
 /// 持久化接口——上层只依赖它；可换内存 / JSON 文件 / 未来 SQLite。
@@ -158,14 +178,31 @@ export interface Store {
   createMessage(m: ChatMessage): void
   findMessage(id: string): ChatMessage | undefined
   updateMessage(id: string, patch: Partial<ChatMessage>): ChatMessage | undefined
-  /// 双方之间的消息（时间正序）；beforeMs 用于向前翻页（只取早于该时刻的最后 limit 条）。
+  /// 双方之间的单聊消息（时间正序）；beforeMs 用于向前翻页（只取早于该时刻的最后 limit 条）。
   messagesBetween(a: string, b: string, limit: number, beforeMs?: number): ChatMessage[]
-  /// 我参与的每个对话的最后一条消息（按时间倒序），供会话列表。
+  /// 我参与的每个单聊对话的最后一条消息（按时间倒序），供会话列表。
   latestMessagesPerPeer(userId: string): ChatMessage[]
-  /// 把 from→reader 的未读消息标记已读，返回条数。
+  /// 把 from→reader 的未读单聊消息标记已读，返回条数。
   markMessagesRead(readerId: string, fromId: string, at: number): number
-  /// 来自 from 发给 user 的未读条数。
+  /// 来自 from 发给 user 的未读单聊条数。
   unreadCount(userId: string, fromId: string): number
+
+  // 群聊
+  createGroup(g: ChatGroup): void
+  findGroup(id: string): ChatGroup | undefined
+  groupsFor(userId: string): ChatGroup[]
+  updateGroup(id: string, patch: Partial<ChatGroup>): ChatGroup | undefined
+  deleteGroup(id: string): void // 解散：同时删群消息与已读标记
+  /// 群消息（时间正序，分页同 messagesBetween）。
+  groupMessages(groupId: string, limit: number, beforeMs?: number): ChatMessage[]
+  /// 群按人已读：记录/读取某人在某群"读到的时间戳"（群未读 = 晚于此且非本人发的消息数）。
+  setGroupRead(groupId: string, userId: string, at: number): void
+  groupReadAt(groupId: string, userId: string): number
+
+  // 媒体（视频消息等：元数据在库，实体文件在磁盘 media/）
+  createMedia(m: MediaMeta): void
+  findMedia(id: string): MediaMeta | undefined
+  deleteMedia(id: string): void
 }
 
 /// 内存实现（测试用）。
@@ -178,6 +215,9 @@ export class MemoryStore implements Store {
   protected recordings = new Map<string, Recording>()
   protected refreshTokens = new Map<string, RefreshToken>()
   protected messages = new Map<string, ChatMessage>()
+  protected groups = new Map<string, ChatGroup>()
+  protected groupReads = new Map<string, number>() // `${groupId}:${userId}` → lastReadAt
+  protected media = new Map<string, MediaMeta>()
   protected recordingConfig: RecordingConfig = { enabled: false, retentionDays: 7, requireConsent: true }
 
   createRefreshToken(rt: RefreshToken): void {
@@ -339,6 +379,7 @@ export class MemoryStore implements Store {
   }
   messagesBetween(a: string, b: string, limit: number, beforeMs?: number): ChatMessage[] {
     const all = [...this.messages.values()]
+      .filter((m) => !m.groupId)
       .filter((m) => (m.fromId === a && m.toId === b) || (m.fromId === b && m.toId === a))
       .filter((m) => beforeMs == null || m.createdAt < beforeMs)
       .sort((x, y) => x.createdAt - y.createdAt)
@@ -347,6 +388,7 @@ export class MemoryStore implements Store {
   latestMessagesPerPeer(userId: string): ChatMessage[] {
     const latest = new Map<string, ChatMessage>()
     for (const m of this.messages.values()) {
+      if (m.groupId) continue // 群消息不入单聊会话列表
       if (m.fromId !== userId && m.toId !== userId) continue
       const peer = m.fromId === userId ? m.toId : m.fromId
       const cur = latest.get(peer)
@@ -370,6 +412,58 @@ export class MemoryStore implements Store {
     return n
   }
 
+  // MARK: 群聊
+  createGroup(g: ChatGroup): void {
+    this.groups.set(g.id, g)
+    this.afterMutate()
+  }
+  findGroup(id: string): ChatGroup | undefined {
+    return this.groups.get(id)
+  }
+  groupsFor(userId: string): ChatGroup[] {
+    return [...this.groups.values()].filter((g) => g.memberIds.includes(userId))
+  }
+  updateGroup(id: string, patch: Partial<ChatGroup>): ChatGroup | undefined {
+    const cur = this.groups.get(id)
+    if (!cur) return undefined
+    const next = { ...cur, ...patch, id: cur.id }
+    this.groups.set(id, next)
+    this.afterMutate()
+    return next
+  }
+  deleteGroup(id: string): void {
+    this.groups.delete(id)
+    for (const [k, m] of this.messages) if (m.groupId === id) this.messages.delete(k)
+    for (const k of [...this.groupReads.keys()]) if (k.startsWith(`${id}:`)) this.groupReads.delete(k)
+    this.afterMutate()
+  }
+  groupMessages(groupId: string, limit: number, beforeMs?: number): ChatMessage[] {
+    const all = [...this.messages.values()]
+      .filter((m) => m.groupId === groupId)
+      .filter((m) => beforeMs == null || m.createdAt < beforeMs)
+      .sort((x, y) => x.createdAt - y.createdAt)
+    return all.slice(Math.max(0, all.length - limit))
+  }
+  setGroupRead(groupId: string, userId: string, at: number): void {
+    this.groupReads.set(`${groupId}:${userId}`, at)
+    this.afterMutate()
+  }
+  groupReadAt(groupId: string, userId: string): number {
+    return this.groupReads.get(`${groupId}:${userId}`) ?? 0
+  }
+
+  // MARK: 媒体
+  createMedia(m: MediaMeta): void {
+    this.media.set(m.id, m)
+    this.afterMutate()
+  }
+  findMedia(id: string): MediaMeta | undefined {
+    return this.media.get(id)
+  }
+  deleteMedia(id: string): void {
+    if (this.media.delete(id)) this.afterMutate()
+  }
+
   protected afterMutate(): void { /* 内存无需持久化 */ }
 }
 
@@ -389,6 +483,9 @@ export class JsonFileStore extends MemoryStore {
           refreshTokens?: RefreshToken[]
           recordingConfig?: RecordingConfig
           messages?: ChatMessage[]
+          groups?: ChatGroup[]
+          groupReads?: Record<string, number>
+          media?: MediaMeta[]
         }
         for (const u of data.users ?? []) this.users.set(u.id, u)
         for (const l of data.links ?? []) this.links.set(l.id, l)
@@ -399,6 +496,9 @@ export class JsonFileStore extends MemoryStore {
         for (const rt of data.refreshTokens ?? []) this.refreshTokens.set(rt.tokenHash, rt)
         if (data.recordingConfig) this.recordingConfig = data.recordingConfig
         for (const m of data.messages ?? []) this.messages.set(m.id, m)
+        for (const g of data.groups ?? []) this.groups.set(g.id, g)
+        for (const [k, v] of Object.entries(data.groupReads ?? {})) this.groupReads.set(k, v)
+        for (const md of data.media ?? []) this.media.set(md.id, md)
       } catch {
         /* 损坏的文件忽略，从空开始 */
       }
@@ -417,6 +517,9 @@ export class JsonFileStore extends MemoryStore {
       refreshTokens: [...this.refreshTokens.values()],
       recordingConfig: this.recordingConfig,
       messages: [...this.messages.values()],
+      groups: [...this.groups.values()],
+      groupReads: Object.fromEntries(this.groupReads),
+      media: [...this.media.values()],
     }
     writeFileSync(this.path, JSON.stringify(data, null, 2))
   }

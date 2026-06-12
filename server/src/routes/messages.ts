@@ -4,20 +4,22 @@ import { randomUUID } from 'node:crypto'
 import { type Store, type ChatMessage, isBlockedBetween, publicUser } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { NoopPushSender, type PushSender } from '../push/apns'
-import { pushLang, pushStrings } from '../push/pushStrings'
+import { pushLang, pushStrings, type PushLang } from '../push/pushStrings'
+import { removeMediaFile } from '../media/storage'
 
 const sendSchema = z.object({
-  toId: z.string().min(1),
-  kind: z.enum(['text', 'audio', 'image']).default('text'),
-  // text：正文 ≤4000 字；audio/image：data URL（base64）≤ 550KB（约 20s 语音条 / 压缩图）。
+  toId: z.string().min(1).optional(),    // 单聊收件人（与 groupId 二选一）
+  groupId: z.string().min(1).optional(), // 群消息所属群（与 toId 二选一）
+  kind: z.enum(['text', 'audio', 'image', 'video']).default('text'),
+  // text：正文 ≤4000 字；audio/image：data URL（base64）≤ 550KB；video：mediaId（先 POST /api/media 上传）。
   text: z.string().min(1).max(550_000),
 })
 
 const audioPrefix = /^data:audio\/(m4a|mp4|aac|x-m4a);base64,/
 const imagePrefix = /^data:image\/(png|jpeg|jpg|webp);base64,/
 
-/// 聊天（参照 WhatsApp/iMessage 核心集：文本 + 语音条 + 已读回执 + 未读数 + 推送）。
-/// 互发资格 = 双方存在 **accepted** 绑定（好友体系复用既有"双向同意绑定"），且无任一方向拉黑。
+/// 聊天（参照 WhatsApp/iMessage 核心集：文本 + 语音条 + 图片 + 视频 + 已读回执 + 未读数 + 推送）。
+/// 单聊互发资格 = 双方存在 **accepted** 绑定且无任一方向拉黑；群消息资格 = 群成员。
 export function registerMessageRoutes(app: FastifyInstance, store: Store,
                                       pushSender: PushSender = new NoopPushSender()): void {
   /// 双方是否互为 accepted 绑定（任一方向 owner/member 均可）。
@@ -27,64 +29,116 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
       || store.linksByMember(a).some((l) => l.ownerId === b && ok(l))
   }
 
-  // 发送消息。
+  /// 推送预览文案（语音/图片/视频用占位，文本截 80 字）。
+  function previewOf(kind: ChatMessage['kind'], text: string, l: PushLang): string {
+    if (kind === 'audio') return l === 'en' ? '[Voice message]' : '[语音消息]'
+    if (kind === 'image') return l === 'en' ? '[Photo]' : '[图片]'
+    if (kind === 'video') return l === 'en' ? '[Video]' : '[视频]'
+    return text.slice(0, 80)
+  }
+
+  // 发送消息（单聊传 toId，群聊传 groupId）。
   app.post('/api/messages', { preHandler: requireAuth(),
                               config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = sendSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const me = req.user!.sub
-    const { toId, kind, text } = parsed.data
-    if (toId === me) return reply.code(400).send({ error: 'invalid_input' })
+    const { toId, groupId, kind, text } = parsed.data
+    if ((toId ? 1 : 0) + (groupId ? 1 : 0) !== 1) return reply.code(400).send({ error: 'invalid_input' }) // 恰好一个目标
     if (kind === 'text' && text.length > 4000) return reply.code(400).send({ error: 'message_too_long' })
     if (kind === 'audio' && !audioPrefix.test(text)) return reply.code(400).send({ error: 'invalid_audio' })
     if (kind === 'image' && !imagePrefix.test(text)) return reply.code(400).send({ error: 'invalid_image' })
-    if (!store.findById(toId)) return reply.code(404).send({ error: 'not_found' })
-    if (!linked(me, toId)) return reply.code(403).send({ error: 'not_linked' })       // 仅绑定好友可互发
-    if (isBlockedBetween(store, me, toId)) return reply.code(403).send({ error: 'blocked' })
+    if (kind === 'video') {
+      // text = mediaId：必须是发送者本人刚上传的视频文件。
+      const media = store.findMedia(text)
+      if (!media || media.ownerId !== me || !media.mime.startsWith('video/')) {
+        return reply.code(400).send({ error: 'invalid_video' })
+      }
+    }
 
-    const msg: ChatMessage = { id: randomUUID(), fromId: me, toId, kind, text, createdAt: Date.now() }
+    const sender = store.findById(me)
+
+    if (groupId) {
+      const group = store.findGroup(groupId)
+      if (!group) return reply.code(404).send({ error: 'not_found' })
+      if (!group.memberIds.includes(me)) return reply.code(403).send({ error: 'not_member' })
+
+      const msg: ChatMessage = { id: randomUUID(), fromId: me, toId: '', groupId, kind, text, createdAt: Date.now() }
+      store.createMessage(msg)
+      store.setGroupRead(groupId, me, msg.createdAt) // 自己发的群消息对自己即读
+
+      // 推送给群里其他成员（尽力而为）。
+      if (sender) {
+        for (const memberId of group.memberIds) {
+          if (memberId === me) continue
+          const member = store.findById(memberId)
+          if (!member?.apnsToken) continue
+          const l = pushLang(member.language)
+          await pushSender.sendAlert(member.apnsToken,
+            pushStrings.groupMessageTitle(sender.displayName, group.name, l),
+            pushStrings.newMessageBody(previewOf(kind, text, l), l),
+            { type: 'chat_message', groupId })
+        }
+      }
+      return reply.code(201).send({ message: msg })
+    }
+
+    // 单聊
+    if (toId === me) return reply.code(400).send({ error: 'invalid_input' })
+    if (!store.findById(toId!)) return reply.code(404).send({ error: 'not_found' })
+    if (!linked(me, toId!)) return reply.code(403).send({ error: 'not_linked' })       // 仅绑定好友可互发
+    if (isBlockedBetween(store, me, toId!)) return reply.code(403).send({ error: 'blocked' })
+
+    const msg: ChatMessage = { id: randomUUID(), fromId: me, toId: toId!, kind, text, createdAt: Date.now() }
     store.createMessage(msg)
 
-    // 提醒推送（尽力而为；语音条预览用"[语音]"）。
-    const recipient = store.findById(toId)
-    const sender = store.findById(me)
+    // 提醒推送（尽力而为）。
+    const recipient = store.findById(toId!)
     if (recipient?.apnsToken && sender) {
       const l = pushLang(recipient.language)
-      const preview = kind === 'audio' ? (l === 'en' ? '[Voice message]' : '[语音消息]')
-                    : kind === 'image' ? (l === 'en' ? '[Photo]' : '[图片]')
-                    : text.slice(0, 80)
       await pushSender.sendAlert(recipient.apnsToken,
         pushStrings.newMessageTitle(sender.displayName, l),
-        pushStrings.newMessageBody(preview, l),
+        pushStrings.newMessageBody(previewOf(kind, text, l), l),
         { type: 'chat_message', fromId: me })
     }
     return reply.code(201).send({ message: msg })
   })
 
-  // 与某人的消息列表（时间正序；before 向前翻页）。
+  // 消息列表（时间正序；before 向前翻页）：?with=单聊对端 或 ?group=群 id。
   app.get('/api/messages', { preHandler: requireAuth() }, async (req, reply) => {
-    const q = req.query as { with?: string; before?: string; limit?: string }
-    const peer = q.with
-    if (!peer) return reply.code(400).send({ error: 'invalid_input' })
+    const q = req.query as { with?: string; group?: string; before?: string; limit?: string }
     const me = req.user!.sub
-    if (!linked(me, peer)) return reply.code(403).send({ error: 'not_linked' })
     const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 200)
     const before = q.before ? Number(q.before) : undefined
+    if (q.group) {
+      const group = store.findGroup(q.group)
+      if (!group) return reply.code(404).send({ error: 'not_found' })
+      if (!group.memberIds.includes(me)) return reply.code(403).send({ error: 'not_member' })
+      return { messages: store.groupMessages(q.group, limit, before) }
+    }
+    const peer = q.with
+    if (!peer) return reply.code(400).send({ error: 'invalid_input' })
+    if (!linked(me, peer)) return reply.code(403).send({ error: 'not_linked' })
     return { messages: store.messagesBetween(me, peer, limit, before) }
   })
 
   // 撤回自己发出的消息（WhatsApp 式：双方都看到"已撤回"占位）。限发出后 2 分钟内。
+  // 视频消息撤回同时删除服务器上的媒体文件。
   app.post('/api/messages/:id/recall', { preHandler: requireAuth() }, async (req, reply) => {
     const id = (req.params as { id: string }).id
     const msg = store.findMessage(id)
     if (!msg) return reply.code(404).send({ error: 'not_found' })
     if (msg.fromId !== req.user!.sub) return reply.code(403).send({ error: 'not_yours' })
     if (Date.now() - msg.createdAt > 2 * 60_000) return reply.code(400).send({ error: 'recall_window_passed' })
+    if (msg.kind === 'video' && msg.text !== '') {
+      store.deleteMedia(msg.text)
+      removeMediaFile(msg.text)
+    }
     const updated = store.updateMessage(id, { kind: 'recalled', text: '', reaction: undefined })
     return { message: updated }
   })
 
-  // 表情回应（WhatsApp 式：单 emoji，最新覆盖；空字符串取消）。仅会话双方可操作。
+  // 表情回应（WhatsApp 式：单 emoji，最新覆盖；空字符串取消）。单聊双方或群成员可操作。
   app.post('/api/messages/:id/reaction', { preHandler: requireAuth() }, async (req, reply) => {
     const parsed = z.object({ emoji: z.string().max(16) }).safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
@@ -92,22 +146,37 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     const msg = store.findMessage(id)
     if (!msg) return reply.code(404).send({ error: 'not_found' })
     const me = req.user!.sub
-    if (msg.fromId !== me && msg.toId !== me) return reply.code(403).send({ error: 'not_participant' })
+    if (msg.groupId) {
+      const group = store.findGroup(msg.groupId)
+      if (!group?.memberIds.includes(me)) return reply.code(403).send({ error: 'not_participant' })
+    } else if (msg.fromId !== me && msg.toId !== me) {
+      return reply.code(403).send({ error: 'not_participant' })
+    }
     if (msg.kind === 'recalled') return reply.code(400).send({ error: 'message_recalled' })
     const emoji = parsed.data.emoji.trim()
     const updated = store.updateMessage(id, { reaction: emoji.length === 0 ? undefined : emoji })
     return { message: updated }
   })
 
-  // 标记某人发来的消息已读（已读回执）。
+  // 标记已读：单聊传 fromId（已读回执），群聊传 groupId（按人记"读到的时间戳"）。
   app.post('/api/messages/read', { preHandler: requireAuth() }, async (req, reply) => {
-    const parsed = z.object({ fromId: z.string().min(1) }).safeParse(req.body)
+    const parsed = z.object({ fromId: z.string().min(1).optional(), groupId: z.string().min(1).optional() })
+      .safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
-    const n = store.markMessagesRead(req.user!.sub, parsed.data.fromId, Date.now())
+    const me = req.user!.sub
+    if (parsed.data.groupId) {
+      const group = store.findGroup(parsed.data.groupId)
+      if (!group) return reply.code(404).send({ error: 'not_found' })
+      if (!group.memberIds.includes(me)) return reply.code(403).send({ error: 'not_member' })
+      store.setGroupRead(group.id, me, Date.now())
+      return { ok: true }
+    }
+    if (!parsed.data.fromId) return reply.code(400).send({ error: 'invalid_input' })
+    const n = store.markMessagesRead(me, parsed.data.fromId, Date.now())
     return { ok: true, read: n }
   })
 
-  // 会话列表：每个对端最后一条 + 未读数 + 对端公开资料。
+  // 会话列表：每个对端最后一条 + 未读数 + 对端公开资料（仅单聊；群会话见 GET /api/groups）。
   app.get('/api/conversations', { preHandler: requireAuth() }, async (req) => {
     const me = req.user!.sub
     const conversations = store.latestMessagesPerPeer(me).map((m) => {

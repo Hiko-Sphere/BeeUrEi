@@ -11,6 +11,8 @@ import { registerFamilyRoutes } from './routes/family'
 import { registerBlockRoutes } from './routes/blocks'
 import { registerEmergencyRoutes } from './routes/emergency'
 import { registerMessageRoutes } from './routes/messages'
+import { registerGroupRoutes } from './routes/groups'
+import { registerMediaRoutes } from './routes/media'
 import { registerSignaling } from './routes/ws'
 import { PresenceRegistry } from './assist/presence'
 import { PendingCallRegistry } from './assist/pendingCalls'
@@ -103,6 +105,8 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerBlockRoutes(instance, store)
     registerEmergencyRoutes(instance, store, pushSender)
     registerMessageRoutes(instance, store, pushSender)
+    registerGroupRoutes(instance, store)
+    registerMediaRoutes(instance, store) // 视频等大文件（磁盘存储）
     registerReportRoutes(instance, store)
     registerAdminRoutes(instance, store)
     registerRecordingRoutes(instance, store)

@@ -53,6 +53,51 @@ enum ChatStrings {
         l == .zh ? "对方回应了\(emoji)" : "Reacted with \(emoji)"
     }
     static let reactionChoices = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
+
+    // MARK: 视频消息
+    static func video(_ l: Language) -> String { l == .zh ? "视频" : "Video" }
+    static func videoMessage(_ l: Language) -> String { l == .zh ? "视频消息" : "Video message" }
+    static func playVideo(_ l: Language) -> String { l == .zh ? "播放视频" : "Play video" }
+    static func sendMedia(_ l: Language) -> String { l == .zh ? "发送照片或视频" : "Send a photo or video" }
+    static func videoTooLarge(_ l: Language) -> String {
+        l == .zh ? "视频太大（上限 50MB），请选短一点的视频" : "Video too large (50MB max). Pick a shorter one."
+    }
+    static func uploadingVideo(_ l: Language) -> String { l == .zh ? "正在上传视频…" : "Uploading video…" }
+    static func videoLoadFailed(_ l: Language) -> String { l == .zh ? "视频加载失败" : "Couldn't load video" }
+    static func newVideoSpeak(_ name: String, _ l: Language) -> String {
+        l == .zh ? "\(name) 发来视频" : "Video from \(name)"
+    }
+    static func close(_ l: Language) -> String { l == .zh ? "关闭" : "Close" }
+
+    // MARK: 群聊
+    static func newGroup(_ l: Language) -> String { l == .zh ? "新建群聊" : "New group" }
+    static func groupName(_ l: Language) -> String { l == .zh ? "群名称" : "Group name" }
+    static func groupNamePlaceholder(_ l: Language) -> String { l == .zh ? "比如：一家人" : "e.g. Family" }
+    static func pickMembers(_ l: Language) -> String { l == .zh ? "选择成员（可多选）" : "Pick members" }
+    static func createGroup(_ l: Language) -> String { l == .zh ? "创建群聊" : "Create group" }
+    static func createGroupFailed(_ l: Language) -> String { l == .zh ? "建群失败，请重试" : "Couldn't create group" }
+    static func groupInfo(_ l: Language) -> String { l == .zh ? "群信息" : "Group info" }
+    static func members(_ n: Int, _ l: Language) -> String { l == .zh ? "\(n) 名成员" : "\(n) members" }
+    static func owner(_ l: Language) -> String { l == .zh ? "群主" : "Owner" }
+    static func addMember(_ l: Language) -> String { l == .zh ? "添加成员" : "Add member" }
+    static func removeMember(_ l: Language) -> String { l == .zh ? "移出群聊" : "Remove" }
+    static func leaveGroup(_ l: Language) -> String { l == .zh ? "退出群聊" : "Leave group" }
+    static func dissolveGroup(_ l: Language) -> String { l == .zh ? "解散群聊" : "Dissolve group" }
+    static func dissolveConfirm(_ l: Language) -> String {
+        l == .zh ? "解散后所有群消息将被删除，确定吗？" : "Dissolving deletes all group messages. Are you sure?"
+    }
+    static func leaveConfirm(_ l: Language) -> String {
+        l == .zh ? "退出后将不再收到此群消息，确定吗?" : "You'll stop receiving this group's messages. Leave?"
+    }
+    static func noAddableContacts(_ l: Language) -> String {
+        l == .zh ? "没有可添加的联系人（成员须是你的绑定好友）" : "No contacts to add (members must be your linked contacts)"
+    }
+    static func groupBubbleA11y(from: String, content: String, time: String, _ l: Language) -> String {
+        l == .zh ? "\(from)：\(content)，\(time)" : "\(from): \(content), \(time)"
+    }
+    static func newGroupMessageSpeak(_ name: String, _ group: String, _ preview: String, _ l: Language) -> String {
+        l == .zh ? "\(group)群，\(name)说：\(preview)" : "In \(group), \(name) says: \(preview)"
+    }
     static func timeFormat(_ ms: Int) -> String {
         let d = Date(timeIntervalSince1970: Double(ms) / 1000)
         let f = DateFormatter()

@@ -69,9 +69,10 @@ struct HomeView: View {
             // 未读消息角标 + 新消息总数变化（详情播报在聊天页内进行）。
             unreadPollTask = Task {
                 while !Task.isCancelled {
-                    if let token = session.token,
-                       let convs = try? await APIClient().conversations(token: token) {
-                        unreadTotal = convs.reduce(0) { $0 + $1.unread }
+                    if let token = session.token {
+                        let direct = (try? await APIClient().conversations(token: token))?.reduce(0) { $0 + $1.unread } ?? 0
+                        let group = (try? await APIClient().groups(token: token))?.reduce(0) { $0 + $1.unread } ?? 0
+                        unreadTotal = direct + group
                     }
                     try? await Task.sleep(for: .seconds(15))
                 }

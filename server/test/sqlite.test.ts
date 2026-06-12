@@ -44,6 +44,45 @@ describe('SqliteStore (node:sqlite)', () => {
     expect(store.allRecordings().length).toBe(0)
   })
 
+  it('round-trips groups / group reads / media / group messages', () => {
+    const store = new SqliteStore(':memory:')
+    store.createGroup({ id: 'g1', name: '家人群', ownerId: 'u1', memberIds: ['u1', 'u2'], createdAt: 1000 })
+    expect(store.findGroup('g1')?.memberIds).toEqual(['u1', 'u2'])
+    expect(store.groupsFor('u2').map((g) => g.id)).toEqual(['g1'])
+    expect(store.groupsFor('u3').length).toBe(0)
+    store.updateGroup('g1', { memberIds: ['u1', 'u2', 'u3'], name: '一家人' })
+    expect(store.findGroup('g1')).toMatchObject({ name: '一家人', memberIds: ['u1', 'u2', 'u3'] })
+
+    // 群消息与按人已读。
+    store.createMessage({ id: 'm1', fromId: 'u1', toId: '', groupId: 'g1', kind: 'text', text: '到家了', createdAt: 2000 })
+    store.createMessage({ id: 'm2', fromId: 'u2', toId: '', groupId: 'g1', kind: 'text', text: '好', createdAt: 3000 })
+    expect(store.groupMessages('g1', 10).map((m) => m.id)).toEqual(['m1', 'm2'])
+    expect(store.groupMessages('g1', 10, 3000).map((m) => m.id)).toEqual(['m1']) // 翻页
+    expect(store.groupReadAt('g1', 'u3')).toBe(0)
+    store.setGroupRead('g1', 'u3', 2500)
+    expect(store.groupReadAt('g1', 'u3')).toBe(2500)
+    store.setGroupRead('g1', 'u3', 3500) // 覆盖更新
+    expect(store.groupReadAt('g1', 'u3')).toBe(3500)
+
+    // 群消息不得混入单聊查询（toId=''，且显式按 groupId 过滤）。
+    store.createMessage({ id: 'd1', fromId: 'u1', toId: 'u2', kind: 'text', text: '私聊', createdAt: 4000 })
+    expect(store.messagesBetween('u1', 'u2', 10).map((m) => m.id)).toEqual(['d1'])
+    expect(store.latestMessagesPerPeer('u1').map((m) => m.id)).toEqual(['d1'])
+
+    // 媒体元数据。
+    store.createMedia({ id: 'v1', ownerId: 'u1', mime: 'video/mp4', size: 12345, createdAt: 5000 })
+    expect(store.findMedia('v1')).toMatchObject({ ownerId: 'u1', mime: 'video/mp4', size: 12345 })
+    store.deleteMedia('v1')
+    expect(store.findMedia('v1')).toBeUndefined()
+
+    // 解散：级联删群消息与已读标记，单聊不受影响。
+    store.deleteGroup('g1')
+    expect(store.findGroup('g1')).toBeUndefined()
+    expect(store.groupMessages('g1', 10).length).toBe(0)
+    expect(store.groupReadAt('g1', 'u3')).toBe(0)
+    expect(store.messagesBetween('u1', 'u2', 10).length).toBe(1)
+  })
+
   it('persists across reopen (file-backed)', () => {
     const path = `/tmp/beeurei-test-${Math.floor(performance.now())}.db`
     const a = new SqliteStore(path)

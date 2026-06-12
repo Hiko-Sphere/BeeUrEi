@@ -69,6 +69,22 @@ enum ChatStrings {
     }
     static func close(_ l: Language) -> String { l == .zh ? "关闭" : "Close" }
 
+    // MARK: 位置
+    static func locationMessage(_ l: Language) -> String { l == .zh ? "位置" : "Location" }
+    static func sendLocation(_ l: Language) -> String { l == .zh ? "发送当前位置" : "Send my location" }
+    static func locatingNow(_ l: Language) -> String { l == .zh ? "正在获取位置…" : "Getting your location…" }
+    static func locationFailed(_ l: Language) -> String {
+        l == .zh ? "无法获取位置，请检查定位权限" : "Couldn't get your location — check location permission"
+    }
+    static func openInMaps(_ l: Language) -> String { l == .zh ? "在地图中打开" : "Open in Maps" }
+    static func unknownPlace(_ l: Language) -> String { l == .zh ? "共享的位置" : "Shared location" }
+    static func newLocationSpeak(_ name: String, _ l: Language) -> String {
+        l == .zh ? "\(name) 共享了位置" : "\(name) shared a location"
+    }
+    static func locationA11y(_ place: String, _ l: Language) -> String {
+        l == .zh ? "位置：\(place)，点按可在地图中打开" : "Location: \(place). Tap to open in Maps."
+    }
+
     // MARK: 群聊
     static func newGroup(_ l: Language) -> String { l == .zh ? "新建群聊" : "New group" }
     static func groupName(_ l: Language) -> String { l == .zh ? "群名称" : "Group name" }

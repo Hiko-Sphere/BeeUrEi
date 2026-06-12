@@ -30,6 +30,13 @@ struct LoginView: View {
     @State private var avatarMsg: String?
     @State private var showNickname = false
     @State private var nickInput = ""
+    @State private var showUsername = false
+    @State private var usernameInput = ""
+    @State private var showPhone = false
+    @State private var phoneInput = ""
+    @State private var passkeyList: [PasskeyInfo] = []
+    @State private var securityMsg: String?
+    @State private var passkeyBusy = false
 
     /// 账号页文案语言（E5）。
     private var lang: Language { FeatureSettings().language }
@@ -97,6 +104,59 @@ struct LoginView: View {
                         Text(AccountStrings.noEmailYet(lang)).foregroundStyle(.secondary)
                         Button(AccountStrings.bindEmail(lang)) { showEmail = true }
                     }
+                }
+                // 登录与安全：用户名 / 手机号 / Apple ID 换绑（现存账号也可重新绑定）。
+                Section(AccountStrings.accountSecurityHeader(lang)) {
+                    HStack {
+                        Text(AccountStrings.usernameSectionHeader(lang))
+                        Spacer()
+                        Text("@\(session.user?.username ?? "—")").foregroundStyle(.secondary)
+                    }
+                    Button(AccountStrings.changeUsername(lang)) {
+                        usernameInput = session.user?.username ?? ""; showUsername = true
+                    }
+                    if let phone = detail?.phone, !phone.isEmpty {
+                        HStack { Text(AccountStrings.phoneSectionHeader(lang)); Spacer(); Text(phone).foregroundStyle(.secondary) }
+                        Button(AccountStrings.changePhone(lang)) { phoneInput = phone; showPhone = true }
+                    } else {
+                        Button(AccountStrings.bindPhone(lang)) { phoneInput = ""; showPhone = true }
+                    }
+                    if detail?.appleLinked == true {
+                        HStack {
+                            Label(AccountStrings.appleSectionHeader(lang), systemImage: "apple.logo")
+                            Spacer()
+                            Text(AccountStrings.appleLinkedLabel(lang)).foregroundStyle(Color.beeSuccess).font(.caption)
+                        }
+                        Button(AccountStrings.unlinkAppleAction(lang), role: .destructive) { unlinkApple() }
+                    } else {
+                        SignInWithAppleButton(.continue) { req in
+                            req.requestedScopes = [.fullName]
+                        } onCompletion: { handleAppleLink($0) }
+                        .signInWithAppleButtonStyle(.black)
+                        .frame(height: 44)
+                        .accessibilityLabel(AccountStrings.linkAppleAction(lang))
+                    }
+                }
+
+                Section(AccountStrings.passkeySectionHeader(lang)) {
+                    if passkeyList.isEmpty {
+                        Text(AccountStrings.noPasskeysYet(lang)).font(.footnote).foregroundStyle(.secondary)
+                    } else {
+                        ForEach(passkeyList) { pk in
+                            HStack {
+                                Label(pk.deviceName ?? AccountStrings.passkeyDeviceFallback(lang), systemImage: "key.fill")
+                                Spacer()
+                                Button(AccountStrings.removePasskey(lang), role: .destructive) { removePasskey(pk.id) }
+                                    .font(.caption).buttonStyle(.bordered)
+                            }
+                            .accessibilityElement(children: .combine)
+                        }
+                    }
+                    Button(AccountStrings.addPasskey(lang)) { addPasskey() }
+                        .disabled(passkeyBusy)
+                }
+                if let securityMsg {
+                    Section { Text(securityMsg).foregroundStyle(.secondary) }
                 }
                 if let accountMessage {
                     Section { Text(accountMessage).foregroundStyle(.secondary) }
@@ -172,12 +232,27 @@ struct LoginView: View {
         // 登录/注册失败主动朗读（见无障碍审计）。
         .onChange(of: session.errorMessage) { _, msg in if let msg, !msg.isEmpty { A11y.announce(msg) } }
         .onChange(of: photoItem) { _, item in if let item { Task { await uploadAvatar(item) } } }
+        .onChange(of: securityMsg) { _, m in if let m, !m.isEmpty { A11y.announce(m) } }
         .alert(AccountStrings.nicknameTitle(lang), isPresented: $showNickname) {
             TextField(AccountStrings.nicknamePlaceholder(lang), text: $nickInput)
             Button(AccountStrings.save(lang)) { Task { await saveNickname() } }
             Button(AccountStrings.cancel(lang), role: .cancel) {}
         } message: {
             Text(AccountStrings.nicknameMessage(lang))
+        }
+        .alert(AccountStrings.changeUsernameTitle(lang), isPresented: $showUsername) {
+            TextField(AccountStrings.username(lang), text: $usernameInput)
+                .textInputAutocapitalization(.never)
+            Button(AccountStrings.save(lang)) { Task { await saveUsername() } }
+            Button(AccountStrings.cancel(lang), role: .cancel) {}
+        } message: {
+            Text(AccountStrings.setupUseridFooter(lang))
+        }
+        .alert(AccountStrings.phoneSectionHeader(lang), isPresented: $showPhone) {
+            TextField(AccountStrings.phonePlaceholder(lang), text: $phoneInput)
+                .keyboardType(.phonePad)
+            Button(AccountStrings.save(lang)) { Task { await savePhone() } }
+            Button(AccountStrings.cancel(lang), role: .cancel) {}
         }
         .task { await loadMe() }
         .sheet(isPresented: $showEmail, onDismiss: { Task { await loadMe() } }) {
@@ -209,8 +284,99 @@ struct LoginView: View {
     }
 
     private func loadMe() async {
-        guard session.isLoggedIn, let token = KeychainStore.read() else { detail = nil; return }
+        guard session.isLoggedIn, let token = KeychainStore.read() else { detail = nil; passkeyList = []; return }
         detail = try? await APIClient().me(token: token)
+        passkeyList = (try? await APIClient().passkeys(token: token)) ?? []
+    }
+
+    /// 修改用户名（唯一登录标识；现存账号自定义 userid）。
+    private func saveUsername() async {
+        let name = usernameInput.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty, let token = KeychainStore.read() else { return }
+        do {
+            try await APIClient().setUsername(token: token, username: name)
+            await session.refreshMe()
+            await loadMe()
+            securityMsg = AccountStrings.usernameUpdated(lang)
+        } catch let APIError.server(code) {
+            securityMsg = AccountStrings.accountErrorText(code, lang)
+        } catch { securityMsg = AccountStrings.networkError(lang) }
+    }
+
+    /// 绑定/换绑手机号。
+    private func savePhone() async {
+        let p = phoneInput.trimmingCharacters(in: .whitespaces)
+        guard !p.isEmpty, let token = KeychainStore.read() else { return }
+        do {
+            try await APIClient().setPhone(token: token, phone: p)
+            await loadMe()
+            securityMsg = AccountStrings.phoneUpdated(lang)
+        } catch let APIError.server(code) {
+            securityMsg = AccountStrings.accountErrorText(code, lang)
+        } catch { securityMsg = AccountStrings.networkError(lang) }
+    }
+
+    /// 绑定/换绑 Apple ID：取 identityToken 交后端验签绑定。
+    private func handleAppleLink(_ result: Result<ASAuthorization, Error>) {
+        guard case .success(let authorization) = result,
+              let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+              let data = credential.identityToken,
+              let identityToken = String(data: data, encoding: .utf8),
+              let token = KeychainStore.read() else {
+            securityMsg = AccountStrings.appleFailed(lang); return
+        }
+        Task {
+            do {
+                try await APIClient().linkApple(token: token, identityToken: identityToken)
+                await loadMe()
+                securityMsg = AccountStrings.appleLinkedDone(lang)
+            } catch let APIError.server(code) {
+                securityMsg = AccountStrings.accountErrorText(code, lang)
+            } catch { securityMsg = AccountStrings.networkError(lang) }
+        }
+    }
+
+    /// 解绑 Apple ID（后端校验须保留其它登录方式）。
+    private func unlinkApple() {
+        guard let token = KeychainStore.read() else { return }
+        Task {
+            do {
+                try await APIClient().unlinkApple(token: token)
+                await loadMe()
+                securityMsg = AccountStrings.appleUnlinkedDone(lang)
+            } catch let APIError.server(code) {
+                securityMsg = AccountStrings.accountErrorText(code, lang)
+            } catch { securityMsg = AccountStrings.networkError(lang) }
+        }
+    }
+
+    /// 添加 Passkey：取 options → 系统创建凭据 → 提交验签存储。
+    private func addPasskey() {
+        guard let token = KeychainStore.read() else { return }
+        passkeyBusy = true
+        Task {
+            defer { passkeyBusy = false }
+            do {
+                let options = try await APIClient().passkeyRegisterOptions(token: token)
+                let response = try await PasskeyManager().register(options: options)
+                try await APIClient().passkeyRegisterVerify(token: token, response: response, deviceName: UIDevice.current.name)
+                await loadMe()
+                securityMsg = AccountStrings.passkeyAdded(lang)
+            } catch PasskeyError.cancelled {
+                // 用户取消：静默
+            } catch {
+                securityMsg = AccountStrings.passkeyFailedMsg(lang)
+            }
+        }
+    }
+
+    /// 移除一把 Passkey。
+    private func removePasskey(_ id: String) {
+        guard let token = KeychainStore.read() else { return }
+        Task {
+            try? await APIClient().deletePasskey(token: token, id: id)
+            await loadMe()
+        }
     }
 
     private func saveNickname() async {

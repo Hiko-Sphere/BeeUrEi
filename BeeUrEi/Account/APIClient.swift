@@ -25,13 +25,24 @@ enum ServerConfig {
 struct AccountInfo: Codable, Sendable, Equatable, Identifiable {
     let id: String
     let username: String
-    var displayName: String  // 昵称，可改（用户名 username 才唯一不可改）
+    var displayName: String  // 昵称，可改（用户名 username 是唯一登录标识，可在账号页修改）
     let role: String
     let status: String
-    // 仅本人 /api/me 返回（selfView）；登录/注册/管理员列表为 publicUser，这两项为 nil。
+    // 仅本人 /api/me 返回（selfView）；登录/注册/管理员列表为 publicUser，这些项为 nil。
     var email: String?
     var emailVerified: Bool?
     var avatar: String?   // 头像 data URL（publicUser 也带，供联系人/通话显示）
+    var phone: String?            // 仅 /api/me
+    var usernameCustomized: Bool? // /api/me：false=自动生成名，提示用户设置唯一 userid
+    var appleLinked: Bool?        // /api/me：是否已绑定 Apple ID
+    var hasPasskey: Bool?         // /api/me：是否已注册 passkey
+}
+
+/// 一把 passkey（账号页列表/删除用）。
+struct PasskeyInfo: Codable, Sendable, Identifiable {
+    let id: String
+    var deviceName: String?
+    let createdAt: Double
 }
 
 struct AuthResult: Codable, Sendable {
@@ -237,6 +248,36 @@ struct APIClient {
 
     func refresh(refreshToken: String) async throws -> AuthResult {
         try await postAuth("/api/auth/refresh", body: ["refreshToken": refreshToken])
+    }
+
+    // MARK: 邮箱验证码登录/注册（无密码）
+
+    /// 请求邮箱登录验证码（无论邮箱是否注册都成功，防枚举）。
+    func requestEmailLoginCode(email: String) async throws {
+        _ = try await postNoAuth("/api/auth/email/request-code", body: ["email": email])
+    }
+
+    /// 校验邮箱验证码 → 登录或注册。
+    func loginWithEmailCode(email: String, code: String, role: String? = nil) async throws -> AuthResult {
+        var body: [String: Any] = ["email": email, "code": code]
+        if let role { body["role"] = role }
+        return try await postAuth("/api/auth/email/verify-code", body: body)
+    }
+
+    // MARK: Passkey 登录（WebAuthn）
+
+    /// 取登录 options（返回 flowId + options JSON）。
+    func passkeyLoginOptions() async throws -> (flowId: String, options: [String: Any]) {
+        let data = try await postNoAuth("/api/auth/passkey/login/options", body: [:])
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let flowId = obj["flowId"] as? String,
+              let options = obj["options"] as? [String: Any] else { throw APIError.decoding }
+        return (flowId, options)
+    }
+
+    /// 提交登录断言 → 登录。
+    func loginWithPasskey(flowId: String, response: [String: Any]) async throws -> AuthResult {
+        try await postAuth("/api/auth/passkey/login/verify", body: ["flowId": flowId, "response": response])
     }
 
     /// 撤销 refresh token（登出，尽力而为）。
@@ -710,6 +751,56 @@ struct APIClient {
     /// 校验邮箱验证码。
     func verifyEmail(token: String, code: String) async throws {
         _ = try await authedSend("POST", "/api/account/email/verify", token: token, body: ["code": code])
+    }
+
+    // MARK: 账号标识换绑（用户名 / 手机号 / Apple ID）
+
+    /// 修改/设置用户名（唯一登录标识；用于自定义 userid）。
+    func setUsername(token: String, username: String) async throws {
+        _ = try await authedSend("POST", "/api/account/username", token: token, body: ["username": username])
+    }
+
+    /// 绑定/换绑手机号（手机号+密码登录标识）。
+    func setPhone(token: String, phone: String) async throws {
+        _ = try await authedSend("POST", "/api/account/phone", token: token, body: ["phone": phone])
+    }
+
+    /// 绑定/换绑 Apple ID 到当前账号。
+    func linkApple(token: String, identityToken: String) async throws {
+        _ = try await authedSend("POST", "/api/account/apple", token: token, body: ["identityToken": identityToken])
+    }
+
+    /// 解绑 Apple ID（仅在保留其它登录方式时允许）。
+    func unlinkApple(token: String) async throws {
+        _ = try await authedSend("DELETE", "/api/account/apple", token: token)
+    }
+
+    // MARK: Passkey 注册/管理（WebAuthn）
+
+    /// 取注册 options（交给系统创建凭据）。
+    func passkeyRegisterOptions(token: String) async throws -> [String: Any] {
+        let data = try await authedSend("POST", "/api/auth/passkey/register/options", token: token, body: [:])
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw APIError.decoding }
+        return obj
+    }
+
+    /// 提交注册结果（response 为系统生成的凭据 JSON）。
+    func passkeyRegisterVerify(token: String, response: [String: Any], deviceName: String?) async throws {
+        var body: [String: Any] = ["response": response]
+        if let deviceName, !deviceName.isEmpty { body["deviceName"] = deviceName }
+        _ = try await authedSend("POST", "/api/auth/passkey/register/verify", token: token, body: body)
+    }
+
+    /// 列出我的 passkey。
+    func passkeys(token: String) async throws -> [PasskeyInfo] {
+        struct R: Codable { let passkeys: [PasskeyInfo] }
+        let data = try await authedGet("/api/auth/passkey/list", token: token)
+        return (try? JSONDecoder().decode(R.self, from: data))?.passkeys ?? []
+    }
+
+    /// 删除一把 passkey。
+    func deletePasskey(token: String, id: String) async throws {
+        _ = try await authedSend("DELETE", "/api/auth/passkey/\(id)", token: token)
     }
 
     /// 设置头像（小尺寸 data URL，客户端已压缩）。

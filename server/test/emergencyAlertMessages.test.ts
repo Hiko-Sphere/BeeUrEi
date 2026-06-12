@@ -125,6 +125,29 @@ describe('聊天（绑定好友互发）', () => {
     expect(blocked.statusCode).toBe(403)
   })
 
+  it('位置消息：合法坐标接受、越界/非 JSON 拒绝；会话预览为占位文案', async () => {
+    const push = new FakePush()
+    const app = buildApp(new MemoryStore(), { pushSender: push })
+    const a = await reg(app, 'loca', 'blind')
+    const b = await reg(app, 'locb', 'helper', 'en')
+    await bind(app, a.token, b.token, 'locb')
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(b.token), payload: { token: 'd'.repeat(64) } })
+
+    const ok = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token),
+      payload: { toId: b.user.id, kind: 'location', text: JSON.stringify({ lat: 31.23, lng: 121.47, name: '上海市黄浦区' }) } })
+    expect(ok.statusCode).toBe(201)
+    expect((ok.json() as any).message.kind).toBe('location')
+    expect(push.sent.at(-1)?.body).toBe('[Location]') // 英文收件人推送预览
+
+    const outOfRange = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token),
+      payload: { toId: b.user.id, kind: 'location', text: JSON.stringify({ lat: 200, lng: 0 }) } })
+    expect(outOfRange.statusCode).toBe(400)
+
+    const notJson = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token),
+      payload: { toId: b.user.id, kind: 'location', text: 'not-json' } })
+    expect(notJson.statusCode).toBe(400)
+  })
+
   it('图片消息、撤回（仅本人 2 分钟内）、表情回应全链路', async () => {
     const app = buildApp(new MemoryStore())
     const a = await reg(app, 'pica', 'blind')

@@ -7,6 +7,7 @@ export function registerUserRoutes(app: FastifyInstance, store: Store): void {
     const auth = req.user!
     const full = store.findById(auth.sub)
     if (!full) return reply.code(404).send({ error: 'not_found' })
-    return { user: selfView(full) } // 含本人邮箱/语言/验证状态（D1）
+    // 含本人邮箱/语言/验证状态（D1）+ 是否已注册 passkey（账号页展示/管理）。
+    return { user: { ...selfView(full), hasPasskey: store.passkeysForUser(full.id).length > 0 } }
   })
 }

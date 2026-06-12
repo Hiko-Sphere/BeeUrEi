@@ -1,0 +1,63 @@
+import { describe, it, expect } from 'vitest'
+import { buildApp } from '../src/app'
+import { MemoryStore } from '../src/db/store'
+
+const auth = (t: string) => ({ authorization: `Bearer ${t}` })
+
+async function reg(app: ReturnType<typeof buildApp>, username = 'pk1') {
+  const r = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username, password: 'secret123' } })
+  return (r.json() as any).token as string
+}
+
+// 真正的验签需真实认证器（设备）；这里覆盖端点接线与错误路径（options/鉴权/挑战过期/未知凭据）。
+describe('Passkey（WebAuthn）端点', () => {
+  it('register/options 需鉴权；授权后返回带 challenge 的 options', async () => {
+    const app = buildApp(new MemoryStore())
+    const noauth = await app.inject({ method: 'POST', url: '/api/auth/passkey/register/options' })
+    expect(noauth.statusCode).toBe(401)
+    const token = await reg(app)
+    const res = await app.inject({ method: 'POST', url: '/api/auth/passkey/register/options', headers: auth(token) })
+    expect(res.statusCode).toBe(200)
+    const body = res.json() as any
+    expect(body.challenge).toBeTruthy()
+    expect(body.rp?.id).toBeTruthy()
+    expect(body.user?.name).toBe('pk1')
+  })
+
+  it('register/verify：没有在先的挑战 → 400', async () => {
+    const app = buildApp(new MemoryStore())
+    const token = await reg(app, 'pk2')
+    const res = await app.inject({ method: 'POST', url: '/api/auth/passkey/register/verify', headers: auth(token),
+      payload: { response: { id: 'x', rawId: 'x', type: 'public-key', response: {} } } })
+    expect(res.statusCode).toBe(400)
+  })
+
+  it('login/options 返回 flowId+options；无效 flowId → 400；未知凭据 → 401', async () => {
+    const app = buildApp(new MemoryStore())
+    const opt = await app.inject({ method: 'POST', url: '/api/auth/passkey/login/options' })
+    expect(opt.statusCode).toBe(200)
+    const { flowId, options } = opt.json() as any
+    expect(flowId).toBeTruthy()
+    expect(options.challenge).toBeTruthy()
+
+    const badFlow = await app.inject({ method: 'POST', url: '/api/auth/passkey/login/verify',
+      payload: { flowId: 'nope', response: { id: 'abc' } } })
+    expect(badFlow.statusCode).toBe(400)
+
+    const unknown = await app.inject({ method: 'POST', url: '/api/auth/passkey/login/verify',
+      payload: { flowId, response: { id: 'unknown-credential-id' } } })
+    expect(unknown.statusCode).toBe(401)
+  })
+
+  it('list 默认空且需鉴权；/api/me hasPasskey=false', async () => {
+    const app = buildApp(new MemoryStore())
+    const noauth = await app.inject({ method: 'GET', url: '/api/auth/passkey/list' })
+    expect(noauth.statusCode).toBe(401)
+    const token = await reg(app, 'pk3')
+    const res = await app.inject({ method: 'GET', url: '/api/auth/passkey/list', headers: auth(token) })
+    expect(res.statusCode).toBe(200)
+    expect((res.json() as any).passkeys).toEqual([])
+    const me = await app.inject({ method: 'GET', url: '/api/me', headers: auth(token) })
+    expect((me.json() as any).user.hasPasskey).toBe(false)
+  })
+})

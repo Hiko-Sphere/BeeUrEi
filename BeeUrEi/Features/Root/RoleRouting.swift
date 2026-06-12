@@ -11,6 +11,20 @@ func roleDisplayName(_ role: String) -> String {
     }
 }
 
+/// 记住"上次确认进入时的角色"，让**之前登录过**的用户再次打开 App 时直接进主界面，
+/// 不必每次都经过"进入"确认页（登出/切换角色时清空）。
+struct RoleEntryStore {
+    private let key = "entry.lastRole"
+    var lastRole: String? {
+        get { UserDefaults.standard.string(forKey: key) }
+        nonmutating set {
+            if let newValue { UserDefaults.standard.set(newValue, forKey: key) }
+            else { UserDefaults.standard.removeObject(forKey: key) }
+        }
+    }
+}
+
+
 /// 协助端角色（协助者 / 亲友）：合并后共用同一套界面，同时具备
 /// 「帮助陌生人（志愿者队列+匹配）」与「帮助我绑定的亲人」全部功能。
 func isAssistRole(_ role: String) -> Bool { role == "helper" || role == "family" }

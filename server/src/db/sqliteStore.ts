@@ -2,7 +2,7 @@ import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, ChatMessage, ChatGroup, MediaMeta } from './store'
+import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, ChatMessage, ChatGroup, MediaMeta, Passkey } from './store'
 
 // 用运行时 require + 非静态模块名加载 node:sqlite，避免打包器(vitest/vite)静态解析失败；
 // 由 Node 在运行时解析（需 --experimental-sqlite，已在 npm 脚本里通过 NODE_OPTIONS 开启）。
@@ -48,6 +48,9 @@ export class SqliteStore implements Store {
         groupId TEXT, userId TEXT, lastReadAt INTEGER, PRIMARY KEY (groupId, userId));
       CREATE TABLE IF NOT EXISTS media (
         id TEXT PRIMARY KEY, ownerId TEXT, mime TEXT, size INTEGER, createdAt INTEGER);
+      CREATE TABLE IF NOT EXISTS passkeys (
+        id TEXT PRIMARY KEY, userId TEXT, credentialId TEXT UNIQUE, publicKey TEXT, counter INTEGER, deviceName TEXT, createdAt INTEGER);
+      CREATE INDEX IF NOT EXISTS idx_passkeys_user ON passkeys (userId);
     `)
     // 迁移：旧库 links 表补 phone 列、users 表补 language 列（已存在则忽略）。
     try { this.db.exec('ALTER TABLE links ADD COLUMN phone TEXT') } catch { /* 列已存在 */ }
@@ -62,6 +65,7 @@ export class SqliteStore implements Store {
     try { this.db.exec('ALTER TABLE users ADD COLUMN apnsToken TEXT') } catch { /* 列已存在 */ } // 普通 APNs 提醒推送 token
     try { this.db.exec('ALTER TABLE users ADD COLUMN phone TEXT') } catch { /* 列已存在 */ } // 手机号登录标识
     try { this.db.exec('ALTER TABLE users ADD COLUMN appleSub TEXT') } catch { /* 列已存在 */ } // Sign in with Apple sub
+    try { this.db.exec('ALTER TABLE users ADD COLUMN usernameCustomized INTEGER') } catch { /* 列已存在 */ } // 是否设过自定义用户名
     try { this.db.exec('ALTER TABLE messages ADD COLUMN reaction TEXT') } catch { /* 列已存在 */ } // 表情回应
     try { this.db.exec('ALTER TABLE messages ADD COLUMN groupId TEXT') } catch { /* 列已存在 */ } // 群消息
     // 群消息索引必须在 groupId 列迁移之后建——否则旧库（无此列）在 CREATE INDEX 处直接崩。
@@ -84,12 +88,34 @@ export class SqliteStore implements Store {
     this.db.prepare('DELETE FROM refresh_tokens WHERE userId = ?').run(userId)
   }
 
+  // MARK: passkeys（WebAuthn）
+  createPasskey(p: Passkey): void {
+    this.db.prepare('INSERT OR REPLACE INTO passkeys (id, userId, credentialId, publicKey, counter, deviceName, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(p.id, p.userId, p.credentialId, p.publicKey, p.counter, p.deviceName ?? null, p.createdAt)
+  }
+  findPasskeyByCredentialId(credentialId: string): Passkey | undefined {
+    const row = this.db.prepare('SELECT * FROM passkeys WHERE credentialId = ?').get(credentialId) as any
+    return row ? this.toPasskey(row) : undefined
+  }
+  passkeysForUser(userId: string): Passkey[] {
+    return this.db.prepare('SELECT * FROM passkeys WHERE userId = ? ORDER BY createdAt DESC').all(userId).map((r) => this.toPasskey(r))
+  }
+  updatePasskeyCounter(id: string, counter: number): void {
+    this.db.prepare('UPDATE passkeys SET counter = ? WHERE id = ?').run(counter, id)
+  }
+  deletePasskey(id: string, userId: string): void {
+    this.db.prepare('DELETE FROM passkeys WHERE id = ? AND userId = ?').run(id, userId)
+  }
+  private toPasskey(r: any): Passkey {
+    return { id: r.id, userId: r.userId, credentialId: r.credentialId, publicKey: r.publicKey, counter: Number(r.counter), deviceName: r.deviceName ?? undefined, createdAt: Number(r.createdAt) }
+  }
+
   // MARK: users
   createUser(u: User): void {
     this.db.prepare(
-      `INSERT OR REPLACE INTO users (id, username, passwordHash, displayName, role, status, createdAt, language, tokenVersion, email, emailVerified, voipToken, avatar, apnsToken, phone, appleSub)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(u.id, u.username, u.passwordHash, u.displayName, u.role, u.status, u.createdAt, u.language ?? null, u.tokenVersion ?? 0, u.email ?? null, u.emailVerified ? 1 : 0, u.voipToken ?? null, u.avatar ?? null, u.apnsToken ?? null, u.phone ?? null, u.appleSub ?? null)
+      `INSERT OR REPLACE INTO users (id, username, passwordHash, displayName, role, status, createdAt, language, tokenVersion, email, emailVerified, voipToken, avatar, apnsToken, phone, appleSub, usernameCustomized)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(u.id, u.username, u.passwordHash, u.displayName, u.role, u.status, u.createdAt, u.language ?? null, u.tokenVersion ?? 0, u.email ?? null, u.emailVerified ? 1 : 0, u.voipToken ?? null, u.avatar ?? null, u.apnsToken ?? null, u.phone ?? null, u.appleSub ?? null, u.usernameCustomized ? 1 : 0)
   }
   findByUsername(username: string): User | undefined {
     // 大小写不敏感(COLLATE NOCASE)：防同名混淆/冒充；登录兼容任意大小写（见审查 #4）。
@@ -353,7 +379,7 @@ export class SqliteStore implements Store {
     return { id: r.id, name: r.name, ownerId: r.ownerId, memberIds, createdAt: Number(r.createdAt) }
   }
   private toUser(r: any): User {
-    return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt), language: r.language ?? undefined, tokenVersion: r.tokenVersion != null ? Number(r.tokenVersion) : 0, email: r.email ?? undefined, emailVerified: r.emailVerified != null ? Number(r.emailVerified) === 1 : undefined, voipToken: r.voipToken ?? undefined, avatar: r.avatar ?? undefined, apnsToken: r.apnsToken ?? undefined, phone: r.phone ?? undefined, appleSub: r.appleSub ?? undefined }
+    return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt), language: r.language ?? undefined, tokenVersion: r.tokenVersion != null ? Number(r.tokenVersion) : 0, email: r.email ?? undefined, emailVerified: r.emailVerified != null ? Number(r.emailVerified) === 1 : undefined, voipToken: r.voipToken ?? undefined, avatar: r.avatar ?? undefined, apnsToken: r.apnsToken ?? undefined, phone: r.phone ?? undefined, appleSub: r.appleSub ?? undefined, usernameCustomized: r.usernameCustomized != null ? Number(r.usernameCustomized) === 1 : undefined }
   }
   private toLink(r: any): FamilyLink {
     return { id: r.id, ownerId: r.ownerId, memberId: r.memberId, relation: r.relation, isEmergency: Number(r.isEmergency) === 1, phone: r.phone ?? undefined, createdAt: Number(r.createdAt), status: (r.status as LinkStatus) ?? undefined, requestedBy: r.requestedBy ?? undefined }

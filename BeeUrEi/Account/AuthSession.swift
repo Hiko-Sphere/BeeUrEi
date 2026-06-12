@@ -10,6 +10,9 @@ final class AuthSession {
     private(set) var errorMessage: String?
     private(set) var isWorking = false
     private(set) var restoreFailed = false   // 恢复账号时遇网络错误（供 UI 显示重试/退出，见审查 #15）
+    /// 刚用「新登录方式」（注册/Apple/邮箱验证码/passkey）完成认证：需在下一步引导自定义 userid + 绑定邮箱。
+    /// 普通密码登录与重启恢复不置位（老用户不被反复打扰；换绑仍可在账号页进行）。
+    private(set) var requiresSetup = false
     @ObservationIgnored private var isRestoring = false
 
     @ObservationIgnored private let api = APIClient()
@@ -65,7 +68,7 @@ final class AuthSession {
     }
 
     func login(username: String, password: String) async {
-        await run { try await self.api.login(username: username, password: password) }
+        await run(isNewMethod: false) { try await self.api.login(username: username, password: password) }
     }
 
     /// 注册：用户名/手机号/邮箱至少给一个（手机号或邮箱即可当账号，后端自动生成用户名）。
@@ -80,8 +83,35 @@ final class AuthSession {
         await run { try await self.api.loginWithApple(identityToken: identityToken, displayName: displayName, role: role) }
     }
 
+    /// 邮箱验证码登录/注册（无密码）。
+    func loginWithEmailCode(email: String, code: String, role: String? = nil) async {
+        await run { try await self.api.loginWithEmailCode(email: email, code: code, role: role) }
+    }
+
+    /// Passkey 登录（系统生成断言后由后端验签）。
+    func loginWithPasskey(flowId: String, response: [String: Any]) async {
+        await run { try await self.api.loginWithPasskey(flowId: flowId, response: response) }
+    }
+
     /// 登录入口的本地校验/授权失败提示（如 Apple 授权取消）——errorMessage 为 private(set)，统一经此设置。
     func presentAuthError(_ message: String) { errorMessage = message }
+
+    /// 补全流程是否需要：刚用新方式认证，且（用户名为自动生成 或 邮箱未验证）。
+    var needsAccountSetup: Bool {
+        guard requiresSetup, let u = user else { return false }
+        let needUserid = (u.usernameCustomized == false)
+        let needEmail = (u.emailVerified != true)
+        return needUserid || needEmail
+    }
+
+    /// 补全完成（或用户在账号页另行处理）：清除引导标记。
+    func completeSetup() { requiresSetup = false }
+
+    /// 重新拉取本人信息（改用户名/绑邮箱/绑 Apple/加 passkey 后同步内存态）。
+    func refreshMe() async {
+        guard let token else { return }
+        if let full = try? await api.me(token: token) { user = full }
+    }
 
     func logout() {
         // 撤销服务端 refresh token + 解绑本机 VoIP token（尽力而为）——后者避免来电误投到已登出设备（见复审 #3）。
@@ -95,24 +125,27 @@ final class AuthSession {
         }
         token = nil
         user = nil
+        requiresSetup = false
         KeychainStore.delete()
         KeychainStore.deleteRefresh()
     }
 
-    private func run(_ op: () async throws -> AuthResult) async {
+    private func run(isNewMethod: Bool = true, _ op: () async throws -> AuthResult) async {
         let lang = FeatureSettings().language
         isWorking = true
         errorMessage = nil
         defer { isWorking = false }
         do {
             let result = try await op()
-            token = result.token
-            user = result.user
             KeychainStore.save(result.token)
             KeychainStore.saveRefresh(result.refreshToken)
+            token = result.token
             // 同步语言偏好（尽力而为）：推送文案（来电/好友请求横幅）按后端 users.language 选语言。
             let t = result.token
             Task { await api.setLanguage(token: t, language: lang.rawValue) }
+            // 拉 /api/me 取完整本人信息（usernameCustomized/email/appleLinked/hasPasskey），一次性赋值避免闪屏。
+            user = (try? await api.me(token: t)) ?? result.user
+            requiresSetup = isNewMethod
         } catch APIError.unauthorized {
             errorMessage = AccountStrings.wrongCredentials(lang)
         } catch let APIError.server(message) {

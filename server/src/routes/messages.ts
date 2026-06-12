@@ -10,13 +10,23 @@ import { removeMediaFile } from '../media/storage'
 const sendSchema = z.object({
   toId: z.string().min(1).optional(),    // 单聊收件人（与 groupId 二选一）
   groupId: z.string().min(1).optional(), // 群消息所属群（与 toId 二选一）
-  kind: z.enum(['text', 'audio', 'image', 'video']).default('text'),
-  // text：正文 ≤4000 字；audio/image：data URL（base64）≤ 550KB；video：mediaId（先 POST /api/media 上传）。
+  kind: z.enum(['text', 'audio', 'image', 'video', 'location']).default('text'),
+  // text：正文 ≤4000 字；audio/image：data URL（base64）≤ 550KB；video：mediaId（先 POST /api/media 上传）；
+  // location：JSON {lat,lng,name?}。
   text: z.string().min(1).max(550_000),
 })
 
 const audioPrefix = /^data:audio\/(m4a|mp4|aac|x-m4a);base64,/
 const imagePrefix = /^data:image\/(png|jpeg|jpg|webp);base64,/
+// 位置载荷：合法经纬度 + 可选地址（≤200 字）。客户端编码进 text 字段。
+const locationSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  name: z.string().max(200).optional(),
+})
+function isValidLocation(text: string): boolean {
+  try { return locationSchema.safeParse(JSON.parse(text)).success } catch { return false }
+}
 
 /// 聊天（参照 WhatsApp/iMessage 核心集：文本 + 语音条 + 图片 + 视频 + 已读回执 + 未读数 + 推送）。
 /// 单聊互发资格 = 双方存在 **accepted** 绑定且无任一方向拉黑；群消息资格 = 群成员。
@@ -34,6 +44,7 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     if (kind === 'audio') return l === 'en' ? '[Voice message]' : '[语音消息]'
     if (kind === 'image') return l === 'en' ? '[Photo]' : '[图片]'
     if (kind === 'video') return l === 'en' ? '[Video]' : '[视频]'
+    if (kind === 'location') return l === 'en' ? '[Location]' : '[位置]'
     return text.slice(0, 80)
   }
 
@@ -48,6 +59,7 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     if (kind === 'text' && text.length > 4000) return reply.code(400).send({ error: 'message_too_long' })
     if (kind === 'audio' && !audioPrefix.test(text)) return reply.code(400).send({ error: 'invalid_audio' })
     if (kind === 'image' && !imagePrefix.test(text)) return reply.code(400).send({ error: 'invalid_image' })
+    if (kind === 'location' && !isValidLocation(text)) return reply.code(400).send({ error: 'invalid_location' })
     if (kind === 'video') {
       // text = mediaId：必须是发送者本人刚上传的视频文件。
       const media = store.findMedia(text)

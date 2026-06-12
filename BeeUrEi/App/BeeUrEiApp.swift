@@ -25,7 +25,7 @@ private struct RootView: View {
     private let policy = DisclaimerPolicy()
     @State private var accepted = false
     @State private var session = AuthSession()
-    @State private var enteredRole: String?
+    @State private var enteredRole: String? = RoleEntryStore().lastRole // 老用户重启直接进主界面，跳过"进入"确认页
     @State private var incoming = IncomingCallCenter.shared // CallKit 接听后由它驱动来电界面
 
     var body: some View {
@@ -55,10 +55,19 @@ private struct RootView: View {
                     ProgressView("正在登录…")
                         .task { await session.restore() }
                 }
+            } else if session.needsAccountSetup {
+                // 新登录方式后：引导自定义唯一 userid + 绑定验证邮箱（完成后才进入 App）。
+                AccountSetupView(session: session)
             } else if enteredRole == nil {
-                RoleEntryView(account: session.user!, session: session) { enteredRole = $0 }
+                RoleEntryView(account: session.user!, session: session) { role in
+                    enteredRole = role
+                    RoleEntryStore().lastRole = role // 记住选择：下次打开 App 直接进主界面
+                }
             } else {
-                RoleHomeView(role: enteredRole!, session: session) { enteredRole = nil }
+                RoleHomeView(role: enteredRole!, session: session) {
+                    enteredRole = nil
+                    RoleEntryStore().lastRole = nil // 切换角色：清除记忆，回到角色确认页
+                }
             }
         }
         // 共享同一个 AuthSession 给所有子视图(含 sheet 里的 LoginView)，避免出现第二个独立会话实例
@@ -70,7 +79,13 @@ private struct RootView: View {
             if loggedIn {
                 RemoteAssistService.shared.refreshRegistration()
                 Task { await PushAlerts.shared.uploadIfPossible(); await NotificationsCenter.shared.refresh() }
-            } else { enteredRole = nil }
+            } else { enteredRole = nil; RoleEntryStore().lastRole = nil } // 登出：清除记住的角色
+        }
+        // 账号恢复后纠正记忆：若服务端角色已变（非开发者），更新已记住的角色，避免老用户进错界面。
+        .onChange(of: session.user?.role) { _, role in
+            guard let role, let entered = enteredRole, entered != role, role != "developer" else { return }
+            enteredRole = role
+            RoleEntryStore().lastRole = role
         }
         // 来电统一在此顶层呈现（CallKit 接听 + 协助端轮询都经 IncomingCallCenter，单一通路，见复审 #2）。
         .fullScreenCover(item: Binding(get: { incoming.pending }, set: { incoming.pending = $0 })) { call in

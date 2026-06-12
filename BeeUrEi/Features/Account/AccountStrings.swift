@@ -82,8 +82,8 @@ enum AccountStrings {
     static func nicknamePlaceholder(_ l: Language) -> String { l == .zh ? "昵称" : "Nickname" }
     static func save(_ l: Language) -> String { l == .zh ? "保存" : "Save" }
     static func nicknameMessage(_ l: Language) -> String {
-        l == .zh ? "昵称用于通话、来电界面和联系人显示，可重复。用户名是唯一登录标识，不可修改。"
-                 : "Your nickname shows in calls and contacts and can repeat. The username is your unique sign-in ID and can't change."
+        l == .zh ? "昵称用于通话、来电界面和联系人显示，可重复。用户名是唯一登录标识，可在「登录与安全」中修改。"
+                 : "Your nickname shows in calls and contacts and can repeat. Your username is your unique sign-in ID — change it under Sign-in & security."
     }
     static func currentPassword(_ l: Language) -> String { l == .zh ? "当前密码" : "Current password" }
     static func confirmChange(_ l: Language) -> String { l == .zh ? "确认修改" : "Confirm" }
@@ -134,6 +134,95 @@ enum AccountStrings {
         l == .zh ? "发送失败，请检查邮箱格式或稍后再试。" : "Couldn't send — check the address or try later."
     }
     static func emailVerified(_ l: Language) -> String { l == .zh ? "邮箱已验证。" : "Email verified." }
+
+    // MARK: 多登录方式（邮箱验证码 / Passkey / Apple）
+
+    static func methodEmailCode(_ l: Language) -> String { l == .zh ? "用邮箱验证码登录" : "Sign in with email code" }
+    static func methodPassword(_ l: Language) -> String { l == .zh ? "用密码登录" : "Sign in with password" }
+    static func methodPasskey(_ l: Language) -> String { l == .zh ? "用 Passkey 登录" : "Sign in with a passkey" }
+    static func orDivider(_ l: Language) -> String { l == .zh ? "或" : "or" }
+    static func emailCodeHeader(_ l: Language) -> String { l == .zh ? "邮箱登录 / 注册" : "Email sign-in / sign-up" }
+    static func emailCodeFooter(_ l: Language) -> String {
+        l == .zh ? "输入邮箱，我们发一个验证码。新邮箱会自动创建账号，无需密码。"
+                 : "Enter your email and we'll send a code. New emails create an account automatically — no password."
+    }
+    static func emailPlaceholder(_ l: Language) -> String { l == .zh ? "you@example.com" : "you@example.com" }
+    static func sendLoginCode(_ l: Language) -> String { l == .zh ? "发送验证码" : "Send code" }
+    static func emailCodeLoginSent(_ l: Language) -> String { l == .zh ? "验证码已发送，请查收邮箱。" : "Code sent — check your inbox." }
+    static func continueAction(_ l: Language) -> String { l == .zh ? "继续" : "Continue" }
+    static func passkeyHint(_ l: Language) -> String {
+        l == .zh ? "用面容 / 指纹一键登录，免密码、更安全。" : "Sign in with Face ID / Touch ID — passwordless and more secure."
+    }
+    static func passkeyCancelled(_ l: Language) -> String { l == .zh ? "已取消 Passkey 操作" : "Passkey cancelled" }
+    static func passkeyFailedMsg(_ l: Language) -> String {
+        l == .zh ? "Passkey 未完成（需在设备上完成验证，且 App 已配置关联域）"
+                 : "Passkey didn't finish (complete it on device; the app must be configured with an associated domain)"
+    }
+
+    // MARK: 账号补全（新登录方式后引导）
+
+    static func setupTitle(_ l: Language) -> String { l == .zh ? "完善账号" : "Finish setup" }
+    static func setupUseridHeader(_ l: Language) -> String { l == .zh ? "设置你的用户名" : "Choose your username" }
+    static func setupUseridFooter(_ l: Language) -> String {
+        l == .zh ? "用户名是你唯一的登录标识，亲友可凭它找到你。仅限字母、数字、下划线、点、连字符。"
+                 : "Your username is your unique sign-in ID and how contacts find you. Letters, digits, _ . - only."
+    }
+    static func useridPlaceholder(_ l: Language) -> String { l == .zh ? "如 li_hua" : "e.g. li_hua" }
+    static func useridTaken(_ l: Language) -> String { l == .zh ? "该用户名已被使用，换一个" : "That username is taken — try another" }
+    static func useridInvalid(_ l: Language) -> String {
+        l == .zh ? "用户名需 3–32 位，仅字母数字 . _ -" : "Username must be 3–32 chars: letters, digits, . _ -"
+    }
+    static func setupEmailHeader(_ l: Language) -> String { l == .zh ? "绑定并验证邮箱" : "Verify your email" }
+    static func setupEmailFooter(_ l: Language) -> String {
+        l == .zh ? "用于找回账号与重要通知。我们会发一个验证码到此邮箱。"
+                 : "Used for account recovery and important notices. We'll email you a code."
+    }
+    static func setupSkip(_ l: Language) -> String { l == .zh ? "暂时跳过" : "Skip for now" }
+    static func setupDone(_ l: Language) -> String { l == .zh ? "完成" : "Done" }
+    static func setupStepUserid(_ l: Language) -> String { l == .zh ? "第 1 步，共 2 步：用户名" : "Step 1 of 2: username" }
+    static func setupStepEmail(_ l: Language) -> String { l == .zh ? "绑定邮箱" : "Verify email" }
+
+    // MARK: 账号页 — 用户名 / 手机号 / Apple / Passkey 换绑
+
+    static func usernameSectionHeader(_ l: Language) -> String { l == .zh ? "用户名（登录标识）" : "Username (sign-in ID)" }
+    static func changeUsername(_ l: Language) -> String { l == .zh ? "修改用户名" : "Change username" }
+    static func changeUsernameTitle(_ l: Language) -> String { l == .zh ? "修改用户名" : "Change username" }
+    static func usernameUpdated(_ l: Language) -> String { l == .zh ? "用户名已更新" : "Username updated" }
+    static func phoneSectionHeader(_ l: Language) -> String { l == .zh ? "手机号" : "Phone number" }
+    static func bindPhone(_ l: Language) -> String { l == .zh ? "绑定手机号" : "Link phone" }
+    static func changePhone(_ l: Language) -> String { l == .zh ? "更换手机号" : "Change phone" }
+    static func phonePlaceholder(_ l: Language) -> String { l == .zh ? "手机号" : "Phone number" }
+    static func phoneUpdated(_ l: Language) -> String { l == .zh ? "手机号已更新" : "Phone updated" }
+    static func noPhoneYet(_ l: Language) -> String { l == .zh ? "尚未绑定手机号。" : "No phone linked yet." }
+    static func appleSectionHeader(_ l: Language) -> String { l == .zh ? "Apple ID" : "Apple ID" }
+    static func appleLinkedLabel(_ l: Language) -> String { l == .zh ? "已绑定" : "Linked" }
+    static func linkAppleAction(_ l: Language) -> String { l == .zh ? "绑定 Apple ID" : "Link Apple ID" }
+    static func unlinkAppleAction(_ l: Language) -> String { l == .zh ? "解绑 Apple ID" : "Unlink Apple ID" }
+    static func appleLinkedDone(_ l: Language) -> String { l == .zh ? "已绑定 Apple ID" : "Apple ID linked" }
+    static func appleUnlinkedDone(_ l: Language) -> String { l == .zh ? "已解绑 Apple ID" : "Apple ID unlinked" }
+    static func passkeySectionHeader(_ l: Language) -> String { l == .zh ? "Passkey（无密码登录）" : "Passkeys (passwordless)" }
+    static func addPasskey(_ l: Language) -> String { l == .zh ? "添加 Passkey" : "Add a passkey" }
+    static func passkeyAdded(_ l: Language) -> String { l == .zh ? "Passkey 已添加" : "Passkey added" }
+    static func removePasskey(_ l: Language) -> String { l == .zh ? "移除" : "Remove" }
+    static func noPasskeysYet(_ l: Language) -> String { l == .zh ? "尚未添加 Passkey。" : "No passkeys yet." }
+    static func passkeyDeviceFallback(_ l: Language) -> String { l == .zh ? "此设备" : "This device" }
+    static func accountSecurityHeader(_ l: Language) -> String { l == .zh ? "登录与安全" : "Sign-in & security" }
+
+    /// 账号页操作的后端错误码 → 文案。
+    static func accountErrorText(_ code: String, _ l: Language) -> String {
+        switch code {
+        case "username_taken": return l == .zh ? "用户名已被使用" : "Username already taken"
+        case "invalid_username": return useridInvalid(l)
+        case "apple_taken": return l == .zh ? "该 Apple ID 已绑定到其它账号" : "That Apple ID is linked to another account"
+        case "last_login_method":
+            return l == .zh ? "无法解绑：请先绑定邮箱/手机号或添加 Passkey，以免无法登录"
+                            : "Can't unlink: add an email, phone, or passkey first so you don't get locked out"
+        case "phone_taken": return l == .zh ? "手机号已被使用" : "Phone number already in use"
+        case "invalid_phone": return l == .zh ? "手机号格式不正确" : "Invalid phone number"
+        case "invalid_code": return codeInvalid(l)
+        default: return code
+        }
+    }
 
     // MARK: 登录错误（AuthSession）
 

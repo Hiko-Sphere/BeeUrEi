@@ -6,6 +6,7 @@ import { SqliteStore } from './db/sqliteStore'
 import { setAuthStore } from './auth/rbac'
 import { registerAuthRoutes } from './routes/auth'
 import { registerAccountRoutes } from './routes/account'
+import { registerPasskeyRoutes } from './routes/passkey'
 import { registerUserRoutes } from './routes/users'
 import { registerFamilyRoutes } from './routes/family'
 import { registerBlockRoutes } from './routes/blocks'
@@ -96,9 +97,10 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     setAuthStore(store) // 让 requireAuth 能实时校验账号状态/tokenVersion（见审查 #1/#2）
     const bundleId = process.env.APPLE_BUNDLE_ID?.trim()
     const appleVerifier = options.appleVerifier ?? (bundleId ? createAppleVerifier(bundleId) : undefined)
-    registerAuthRoutes(instance, store, appleVerifier)
+    registerAuthRoutes(instance, store, codes, mailer, appleVerifier)
     registerRecoveryRoutes(instance, store, codes, mailer) // 找回密码（D1）
-    registerAccountRoutes(instance, store, codes, mailer)
+    registerAccountRoutes(instance, store, codes, mailer, appleVerifier)
+    registerPasskeyRoutes(instance, store) // Passkey（WebAuthn）注册/登录
     registerPushRoutes(instance, store) // VoIP token 注册（A1）
     registerUserRoutes(instance, store)
     registerFamilyRoutes(instance, store, pushSender)

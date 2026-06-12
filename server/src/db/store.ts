@@ -22,6 +22,18 @@ export interface User {
   apnsToken?: string // 普通 APNs 提醒推送 token（软件外通知，区别于 voipToken）。
   phone?: string // 可选手机号（归一化数字串）：可作为登录标识（手机号+密码）。仅本人可见，不进 publicUser。
   appleSub?: string // Sign in with Apple 的稳定用户标识（identityToken.sub）。仅服务端用于匹配账号。
+  usernameCustomized?: boolean // 用户是否设置过自定义用户名（自动生成的 user_/apple_ 为 false）。为 false 时客户端提示设置唯一 userid。
+}
+
+/// Passkey（WebAuthn 凭据）：一个用户可注册多把。只存公钥与计数器，私钥永不离开设备安全区。
+export interface Passkey {
+  id: string            // 我们的主键（随机）
+  userId: string
+  credentialId: string  // base64url 凭据 ID（WebAuthn credential.id，全局唯一）
+  publicKey: string     // base64url 存储的 COSE 公钥
+  counter: number       // 签名计数器（防克隆重放）
+  deviceName?: string   // 展示名（如 "iPhone"）
+  createdAt: number
 }
 
 /// 亲友绑定：视障用户(owner) ↔ 亲友/协助者账号(member)，可标记为紧急联系人。
@@ -106,7 +118,7 @@ export interface ChatMessage {
   id: string
   fromId: string
   toId: string        // 单聊收件人；群消息为 ''（以 groupId 寻址）
-  kind: 'text' | 'audio' | 'image' | 'video' | 'recalled'
+  kind: 'text' | 'audio' | 'image' | 'video' | 'location' | 'recalled'
   text: string
   createdAt: number
   readAt?: number // 单聊：收件人已读时间（已读回执）。群聊不用此字段（见 groupReads）
@@ -169,6 +181,13 @@ export interface Store {
   deleteRefreshToken(tokenHash: string): void
   deleteRefreshTokensForUser(userId: string): void
 
+  // Passkey（WebAuthn）
+  createPasskey(p: Passkey): void
+  findPasskeyByCredentialId(credentialId: string): Passkey | undefined
+  passkeysForUser(userId: string): Passkey[]
+  updatePasskeyCounter(id: string, counter: number): void
+  deletePasskey(id: string, userId: string): void
+
   getRecordingConfig(): RecordingConfig
   setRecordingConfig(patch: Partial<RecordingConfig>): RecordingConfig
   createRecording(rec: Recording): void
@@ -215,6 +234,7 @@ export class MemoryStore implements Store {
   protected reports = new Map<string, Report>()
   protected recordings = new Map<string, Recording>()
   protected refreshTokens = new Map<string, RefreshToken>()
+  protected passkeys = new Map<string, Passkey>()
   protected messages = new Map<string, ChatMessage>()
   protected groups = new Map<string, ChatGroup>()
   protected groupReads = new Map<string, number>() // `${groupId}:${userId}` → lastReadAt
@@ -235,6 +255,26 @@ export class MemoryStore implements Store {
     let changed = false
     for (const [k, v] of this.refreshTokens) if (v.userId === userId) { this.refreshTokens.delete(k); changed = true }
     if (changed) this.afterMutate()
+  }
+
+  createPasskey(p: Passkey): void {
+    this.passkeys.set(p.id, p)
+    this.afterMutate()
+  }
+  findPasskeyByCredentialId(credentialId: string): Passkey | undefined {
+    for (const p of this.passkeys.values()) if (p.credentialId === credentialId) return p
+    return undefined
+  }
+  passkeysForUser(userId: string): Passkey[] {
+    return [...this.passkeys.values()].filter((p) => p.userId === userId)
+  }
+  updatePasskeyCounter(id: string, counter: number): void {
+    const p = this.passkeys.get(id)
+    if (p) { p.counter = counter; this.afterMutate() }
+  }
+  deletePasskey(id: string, userId: string): void {
+    const p = this.passkeys.get(id)
+    if (p && p.userId === userId && this.passkeys.delete(id)) this.afterMutate()
   }
 
   createUser(user: User): void {
@@ -493,6 +533,7 @@ export class JsonFileStore extends MemoryStore {
           groups?: ChatGroup[]
           groupReads?: Record<string, number>
           media?: MediaMeta[]
+          passkeys?: Passkey[]
         }
         for (const u of data.users ?? []) this.users.set(u.id, u)
         for (const l of data.links ?? []) this.links.set(l.id, l)
@@ -506,6 +547,7 @@ export class JsonFileStore extends MemoryStore {
         for (const g of data.groups ?? []) this.groups.set(g.id, g)
         for (const [k, v] of Object.entries(data.groupReads ?? {})) this.groupReads.set(k, v)
         for (const md of data.media ?? []) this.media.set(md.id, md)
+        for (const pk of data.passkeys ?? []) this.passkeys.set(pk.id, pk)
       } catch {
         /* 损坏的文件忽略，从空开始 */
       }
@@ -527,6 +569,7 @@ export class JsonFileStore extends MemoryStore {
       groups: [...this.groups.values()],
       groupReads: Object.fromEntries(this.groupReads),
       media: [...this.media.values()],
+      passkeys: [...this.passkeys.values()],
     }
     writeFileSync(this.path, JSON.stringify(data, null, 2))
   }
@@ -559,5 +602,7 @@ export function selfView(u: User) {
     email: u.email ?? null,
     emailVerified: u.emailVerified ?? false,
     phone: u.phone ?? null,
+    usernameCustomized: u.usernameCustomized ?? false, // 为 false 时客户端提示设置唯一 userid
+    appleLinked: !!u.appleSub, // 是否已绑定 Apple ID（用于账号页展示与解绑）
   }
 }

@@ -11,6 +11,8 @@ struct AuthGateView: View {
     @State private var role = "blind"
     @State private var serverURL = ServerConfig.baseURLString
     @State private var showForgot = false
+    @State private var showEmailCode = false
+    @State private var passkeyBusy = false
 
     /// 登录门文案语言（E5）。
     private var lang: Language { FeatureSettings().language }
@@ -83,7 +85,7 @@ struct AuthGateView: View {
                     }
                 }
 
-                // Sign in with Apple：已有账号即登录，新用户自动建号（注册）。
+                // 更多登录方式：Apple / 邮箱验证码 / Passkey（已有账号即登录，新用户自动建号）。
                 Section {
                     SignInWithAppleButton(.continue) { request in
                         request.requestedScopes = [.fullName] // 姓名仅首次授权提供
@@ -93,6 +95,28 @@ struct AuthGateView: View {
                     .signInWithAppleButtonStyle(.black)
                     .frame(height: 48)
                     .accessibilityLabel(AccountStrings.appleContinue(lang))
+
+                    Button {
+                        showEmailCode = true
+                    } label: {
+                        Label(AccountStrings.methodEmailCode(lang), systemImage: "envelope.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered).controlSize(.large)
+                    .accessibilityLabel(AccountStrings.methodEmailCode(lang))
+
+                    Button {
+                        loginWithPasskey()
+                    } label: {
+                        Label(AccountStrings.methodPasskey(lang), systemImage: "person.badge.key.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered).controlSize(.large)
+                    .disabled(passkeyBusy)
+                    .accessibilityLabel(AccountStrings.methodPasskey(lang))
+                    .accessibilityHint(AccountStrings.passkeyHint(lang))
+                } header: {
+                    Text(AccountStrings.orDivider(lang))
                 }
 
                 if DevSettings().enabled {
@@ -107,6 +131,24 @@ struct AuthGateView: View {
             // 登录/注册失败主动朗读，否则盲人点完按钮听不到失败原因（见无障碍审计）。
             .onChange(of: session.errorMessage) { _, msg in if let msg, !msg.isEmpty { A11y.announce(msg) } }
             .sheet(isPresented: $showForgot) { ForgotPasswordView(presetUsername: username) }
+            .sheet(isPresented: $showEmailCode) { EmailCodeLoginView(session: session, role: role) }
+        }
+    }
+
+    /// Passkey 登录：取 options → 系统断言 → 后端验签发 token。
+    private func loginWithPasskey() {
+        passkeyBusy = true
+        Task {
+            defer { passkeyBusy = false }
+            do {
+                let (flowId, options) = try await APIClient().passkeyLoginOptions()
+                let response = try await PasskeyManager().assert(options: options)
+                await session.loginWithPasskey(flowId: flowId, response: response)
+            } catch PasskeyError.cancelled {
+                // 用户取消：静默
+            } catch {
+                session.presentAuthError(AccountStrings.passkeyFailedMsg(lang))
+            }
         }
     }
 
@@ -257,3 +299,87 @@ struct ForgotPasswordView: View {
         }
     }
 }
+
+/// 邮箱验证码登录 / 注册（无密码）：输入邮箱 → 收码 → 验证即登录或自动建号。
+struct EmailCodeLoginView: View {
+    let session: AuthSession
+    @Environment(\.dismiss) private var dismiss
+    @State private var email = ""
+    @State private var code = ""
+    @State private var role: String
+    @State private var stage: Stage = .enter
+    @State private var working = false
+    @State private var message: String?
+    private enum Stage { case enter, verify }
+    private var lang: Language { FeatureSettings().language }
+    private var roles: [(label: String, value: String)] {
+        [(AccountStrings.roleBlind(lang), "blind"), (AccountStrings.roleHelper(lang), "helper")]
+    }
+
+    init(session: AuthSession, role: String) {
+        self.session = session
+        _role = State(initialValue: role)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if stage == .enter {
+                    Section {
+                        TextField(AccountStrings.emailPlaceholder(lang), text: $email)
+                            .keyboardType(.emailAddress).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        Picker(AccountStrings.rolePicker(lang), selection: $role) {
+                            ForEach(roles, id: \.value) { Text($0.label).tag($0.value) }
+                        }
+                    } header: {
+                        Text(AccountStrings.emailCodeHeader(lang))
+                    } footer: {
+                        Text(AccountStrings.emailCodeFooter(lang))
+                    }
+                    Section {
+                        Button(AccountStrings.sendLoginCode(lang)) { Task { await sendCode() } }
+                            .disabled(working || !email.contains("@"))
+                    }
+                } else {
+                    Section(AccountStrings.enterCodeHeader(lang)) {
+                        TextField(AccountStrings.sixDigitCode(lang), text: $code)
+                            .keyboardType(.numberPad)
+                            .accessibilityLabel(AccountStrings.codeA11y(lang))
+                    }
+                    Section {
+                        Button(AccountStrings.continueAction(lang)) { Task { await verify() } }
+                            .disabled(working || code.isEmpty)
+                        Button(AccountStrings.resend(lang)) { Task { await sendCode() } }.font(.footnote)
+                    }
+                }
+                if let message { Section { Text(message).foregroundStyle(.secondary) } }
+            }
+            .navigationTitle(AccountStrings.methodEmailCode(lang))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(AccountStrings.close(lang)) { dismiss() } } }
+            .onChange(of: message) { _, m in if let m, !m.isEmpty { A11y.announce(m) } }
+            .onChange(of: session.isLoggedIn) { _, loggedIn in if loggedIn { dismiss() } } // 登录成功关闭
+        }
+    }
+
+    private func sendCode() async {
+        working = true; defer { working = false }
+        do {
+            try await APIClient().requestEmailLoginCode(email: email.trimmingCharacters(in: .whitespaces))
+            message = AccountStrings.emailCodeLoginSent(lang)
+            stage = .verify
+        } catch APIError.network {
+            message = AccountStrings.sendFailed(lang)
+        } catch {
+            message = AccountStrings.emailCodeLoginSent(lang) // 防枚举：其它情况也提示已发送
+            stage = .verify
+        }
+    }
+
+    private func verify() async {
+        working = true; defer { working = false }
+        await session.loginWithEmailCode(email: email.trimmingCharacters(in: .whitespaces), code: code, role: role)
+        if !session.isLoggedIn, let err = session.errorMessage { message = err } // 失败在表单内提示
+    }
+}
+

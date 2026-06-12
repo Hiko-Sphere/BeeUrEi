@@ -1,0 +1,126 @@
+import { describe, it, expect } from 'vitest'
+import { buildApp } from '../src/app'
+import { MemoryStore } from '../src/db/store'
+import type { Mailer } from '../src/mail/mailer'
+import type { AppleTokenVerifier } from '../src/auth/apple'
+
+const auth = (t: string) => ({ authorization: `Bearer ${t}` })
+
+/// 捕获邮件以读取验证码（路由内部生成码，测试经此拿到明文）。
+class CaptureMailer implements Mailer {
+  last?: { to: string; subject: string; text: string }
+  async send(to: string, subject: string, text: string): Promise<void> { this.last = { to, subject, text } }
+  code(): string { return this.last?.text.match(/\d{4,8}/)?.[0] ?? '' }
+}
+
+/// fake Apple 验证器：token 形如 good:<sub> 或 good:<sub>:<email>。
+const fakeApple: AppleTokenVerifier = async (t) => {
+  if (!t.startsWith('good:')) return null
+  const [, sub, email] = t.split(':')
+  return { sub, email: email || undefined }
+}
+
+describe('邮箱验证码登录/注册（无密码）', () => {
+  it('新邮箱建号（usernameCustomized=false、邮箱已验证），再次发码即登录同账号', async () => {
+    const mailer = new CaptureMailer()
+    const app = buildApp(new MemoryStore(), { mailer })
+
+    const req1 = await app.inject({ method: 'POST', url: '/api/auth/email/request-code', payload: { email: 'New@Example.com' } })
+    expect(req1.statusCode).toBe(200)
+    const v1 = await app.inject({ method: 'POST', url: '/api/auth/email/verify-code',
+      payload: { email: 'new@example.com', code: mailer.code() } })
+    expect(v1.statusCode).toBe(201)
+    const body1 = v1.json() as any
+    expect(body1.token).toBeTruthy()
+    expect(body1.user.username).toMatch(/^user_/)
+
+    const me = await app.inject({ method: 'GET', url: '/api/me', headers: auth(body1.token) })
+    const meBody = (me.json() as any).user
+    expect(meBody.usernameCustomized).toBe(false) // 提示用户自定义 userid
+    expect(meBody.emailVerified).toBe(true)
+    expect(meBody.email).toBe('new@example.com')
+
+    // 已存在邮箱 → 登录同一账号
+    await app.inject({ method: 'POST', url: '/api/auth/email/request-code', payload: { email: 'new@example.com' } })
+    const v2 = await app.inject({ method: 'POST', url: '/api/auth/email/verify-code',
+      payload: { email: 'new@example.com', code: mailer.code() } })
+    expect(v2.statusCode).toBe(200)
+    expect((v2.json() as any).user.id).toBe(body1.user.id)
+
+    // 验证码用后即焚：再次用同码 400
+    const reuse = await app.inject({ method: 'POST', url: '/api/auth/email/verify-code',
+      payload: { email: 'new@example.com', code: mailer.code() } })
+    expect(reuse.statusCode).toBe(400)
+  })
+
+  it('发码端点防枚举：无论邮箱是否存在都返回 ok', async () => {
+    const app = buildApp(new MemoryStore())
+    const r = await app.inject({ method: 'POST', url: '/api/auth/email/request-code', payload: { email: 'ghost@nowhere.com' } })
+    expect(r.statusCode).toBe(200)
+    expect((r.json() as any).ok).toBe(true)
+  })
+})
+
+describe('自定义/修改用户名', () => {
+  it('唯一 + 格式校验，成功后标记 usernameCustomized 并可用新名登录', async () => {
+    const app = buildApp(new MemoryStore())
+    const r = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { password: 'secret123', email: 'u1@example.com' } })
+    const token = (r.json() as any).token
+
+    const me0 = await app.inject({ method: 'GET', url: '/api/me', headers: auth(token) })
+    expect((me0.json() as any).user.usernameCustomized).toBe(false) // 自动生成名
+
+    const set = await app.inject({ method: 'POST', url: '/api/account/username', headers: auth(token), payload: { username: 'cool.name' } })
+    expect(set.statusCode).toBe(200)
+    const me1 = await app.inject({ method: 'GET', url: '/api/me', headers: auth(token) })
+    expect((me1.json() as any).user.usernameCustomized).toBe(true)
+    expect((me1.json() as any).user.username).toBe('cool.name')
+
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'cool.name', password: 'secret123' } })
+    expect(login.statusCode).toBe(200)
+
+    const bad = await app.inject({ method: 'POST', url: '/api/account/username', headers: auth(token), payload: { username: 'has space' } })
+    expect(bad.statusCode).toBe(400)
+
+    const other = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'taken1', password: 'secret123' } })
+    expect(other.statusCode).toBe(201)
+    const dup = await app.inject({ method: 'POST', url: '/api/account/username', headers: auth(token), payload: { username: 'taken1' } })
+    expect(dup.statusCode).toBe(409)
+  })
+})
+
+describe('Apple ID 绑定/解绑（现存账号）', () => {
+  it('绑定顺带绑 Apple 邮箱；他人占用 409；解绑需保留其它登录方式', async () => {
+    const app = buildApp(new MemoryStore(), { appleVerifier: fakeApple })
+    const a = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'alink', password: 'secret123' } })
+    const ta = (a.json() as any).token
+
+    const link = await app.inject({ method: 'POST', url: '/api/account/apple', headers: auth(ta), payload: { identityToken: 'good:SUBA:a@icloud.com' } })
+    expect(link.statusCode).toBe(200)
+    const me = await app.inject({ method: 'GET', url: '/api/me', headers: auth(ta) })
+    expect((me.json() as any).user.appleLinked).toBe(true)
+    expect((me.json() as any).user.email).toBe('a@icloud.com')
+    expect((me.json() as any).user.emailVerified).toBe(true)
+
+    // 账号 B 想绑同一 appleSub → 409
+    const b = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'blink', password: 'secret123' } })
+    const tb = (b.json() as any).token
+    const conflict = await app.inject({ method: 'POST', url: '/api/account/apple', headers: auth(tb), payload: { identityToken: 'good:SUBA' } })
+    expect(conflict.statusCode).toBe(409)
+
+    // A 有已验证邮箱 → 可解绑
+    const unlink = await app.inject({ method: 'DELETE', url: '/api/account/apple', headers: auth(ta) })
+    expect(unlink.statusCode).toBe(200)
+    const me2 = await app.inject({ method: 'GET', url: '/api/me', headers: auth(ta) })
+    expect((me2.json() as any).user.appleLinked).toBe(false)
+  })
+
+  it('Apple-only 账号（无邮箱/手机/passkey）不能解绑，防锁死', async () => {
+    const app = buildApp(new MemoryStore(), { appleVerifier: fakeApple })
+    const c = await app.inject({ method: 'POST', url: '/api/auth/apple', payload: { identityToken: 'good:SUBC' } })
+    expect(c.statusCode).toBe(201)
+    const tc = (c.json() as any).token
+    const cantUnlink = await app.inject({ method: 'DELETE', url: '/api/account/apple', headers: auth(tc) })
+    expect(cantUnlink.statusCode).toBe(400)
+  })
+})

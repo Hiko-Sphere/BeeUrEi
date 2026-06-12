@@ -223,6 +223,7 @@ struct ConversationsView: View {
         case "audio": return "🎤 " + ChatStrings.voiceMessage(lang)
         case "image": return "🖼️ " + ChatStrings.photo(lang)
         case "video": return "🎬 " + ChatStrings.videoMessage(lang)
+        case "location": return "📍 " + ChatStrings.locationMessage(lang)
         case "recalled": return ChatStrings.recalled(lang)
         default: return m.text
         }
@@ -339,8 +340,8 @@ struct ChatView: View {
                     Text(senderName(m.fromId)).font(.caption.bold()).foregroundStyle(Color.beeHoney)
                 }
                 bubbleContent(m, mine: mine)
-                    .padding(.horizontal, m.kind == "image" ? 4 : 14)
-                    .padding(.vertical, m.kind == "image" ? 4 : 10)
+                    .padding(.horizontal, m.kind == "image" || m.kind == "location" ? 4 : 14)
+                    .padding(.vertical, m.kind == "image" || m.kind == "location" ? 4 : 10)
                     .background(mine ? Color.beeHoney : Color(.secondarySystemBackground),
                                 in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .foregroundStyle(mine ? Color.beeInk : Color.primary)
@@ -398,6 +399,12 @@ struct ChatView: View {
                     .font(.body.weight(.semibold))
             }
             .accessibilityLabel(ChatStrings.playVideo(lang))
+        case "location":
+            if let payload = LocationPayload.decode(m.text) {
+                LocationBubble(payload: payload, lang: lang)
+            } else {
+                Label(ChatStrings.locationMessage(lang), systemImage: "mappin.and.ellipse")
+            }
         case "recalled":
             Text(ChatStrings.recalled(lang)).font(.body.italic()).foregroundStyle(.secondary)
         default:
@@ -429,6 +436,7 @@ struct ChatView: View {
         case "audio": content = ChatStrings.voiceMessage(lang)
         case "image": content = ChatStrings.photo(lang)
         case "video": content = ChatStrings.videoMessage(lang)
+        case "location": content = ChatStrings.locationMessage(lang) + "：" + (LocationPayload.decode(m.text)?.name ?? ChatStrings.unknownPlace(lang))
         case "recalled": content = ChatStrings.recalled(lang)
         default: content = m.text
         }
@@ -476,6 +484,15 @@ struct ChatView: View {
                     Task { await sendPhoto(item) }
                 }
             }
+
+            // 发送当前位置（取精确坐标 + 反查地址；接收方可点开地图导航）。
+            Button {
+                sendLocation()
+            } label: {
+                Image(systemName: "location.circle.fill").font(.system(size: 34)).foregroundStyle(Color.beeHoney)
+            }
+            .disabled(sending)
+            .accessibilityLabel(ChatStrings.sendLocation(lang))
 
             TextField(ChatStrings.inputPlaceholder(lang), text: $draft, axis: .vertical)
                 .lineLimit(1...4)
@@ -525,6 +542,7 @@ struct ChatView: View {
                 switch m.kind {
                 case "audio": speak = ChatStrings.newVoiceSpeak(name, lang)
                 case "video": speak = ChatStrings.newVideoSpeak(name, lang)
+                case "location": speak = ChatStrings.newLocationSpeak(name, lang)
                 default:
                     speak = isGroup
                         ? ChatStrings.newGroupMessageSpeak(name, target.title, String(m.text.prefix(60)), lang)
@@ -534,7 +552,17 @@ struct ChatView: View {
             }
             if !fresh.isEmpty { markRead() }
         }
-        messages = list
+        // 合并而非直接替换：服务器为权威，但保留它**尚未返回**的本地已发消息（刚发出、而本次轮询快照
+        // 早于这条消息）。否则乐观插入的消息会被旧快照覆盖而"消失"——这正是"发完看不到消息"的根因。
+        messages = merged(server: list)
+    }
+
+    /// 服务器列表 + 本地待回流的自己已发消息（按 id 去重、按时间排序）。
+    private func merged(server: [ChatMessageInfo]) -> [ChatMessageInfo] {
+        let serverIds = Set(server.map(\.id))
+        let pendingLocal = messages.filter { !serverIds.contains($0.id) && $0.fromId == myId }
+        guard !pendingLocal.isEmpty else { return server }
+        return (server + pendingLocal).sorted { $0.createdAt < $1.createdAt }
     }
 
     private func refreshGroupDetail() async {
@@ -572,6 +600,27 @@ struct ChatView: View {
             } catch {
                 errorText = ChatStrings.sendFailed(lang)
                 draft = text // 失败还原草稿，不丢内容
+            }
+        }
+    }
+
+    /// 发送当前位置：取精确坐标 + 反查地址 → 发 kind=location 消息（payload 为 JSON）。
+    private func sendLocation() {
+        sending = true
+        SpeechHub.shared.speak(ChatStrings.locatingNow(lang), channel: .query, voiceCode: lang.voiceCode)
+        Task {
+            defer { sending = false }
+            guard let payload = await LocationShareFetcher().fetch() else {
+                errorText = ChatStrings.locationFailed(lang)
+                SpeechHub.shared.speak(ChatStrings.locationFailed(lang), channel: .query, voiceCode: lang.voiceCode)
+                return
+            }
+            do {
+                let m = try await send(kind: "location", text: payload.encoded())
+                messages.append(m)
+                errorText = nil
+            } catch {
+                errorText = ChatStrings.sendFailed(lang)
             }
         }
     }

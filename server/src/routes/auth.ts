@@ -5,6 +5,8 @@ import { type Store, type Role, type User, publicUser } from '../db/store'
 import { hashPassword, verifyPassword } from '../auth/passwords'
 import { signAccessToken, generateRefreshToken, hashToken, refreshTtlMs } from '../auth/tokens'
 import { normalizePhone, type AppleTokenVerifier } from '../auth/apple'
+import { type CodeRegistry } from '../auth/codes'
+import { type Mailer } from '../mail/mailer'
 
 /// 签发 access + refresh 一对（refresh 仅存哈希）。
 function issueTokens(store: Store, user: User): { token: string; refreshToken: string } {
@@ -40,7 +42,15 @@ const appleSchema = z.object({
   language: z.string().min(2).max(8).optional(),
 })
 
-export function registerAuthRoutes(app: FastifyInstance, store: Store, appleVerifier?: AppleTokenVerifier): void {
+const emailCodeRequestSchema = z.object({ email: z.string().email().max(254) })
+const emailCodeVerifySchema = z.object({
+  email: z.string().email().max(254),
+  code: z.string().min(4).max(12),
+  role: z.enum(['blind', 'helper', 'family']).optional(),
+  language: z.string().min(2).max(8).optional(),
+})
+
+export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer, appleVerifier?: AppleTokenVerifier): void {
   // 注册/登录/refresh 是凭证暴破与刷号的高危端点，给独立且更严格的限流（防口令暴破/凭证填充/批量刷号，见审查 #3）。
   app.post('/api/auth/register', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = registerSchema.safeParse(req.body)
@@ -83,6 +93,7 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, appleVeri
       email: normEmail,
       emailVerified: normEmail ? false : undefined,
       phone: normPhone,
+      usernameCustomized: !!rawUsername, // 显式给了用户名=已自定义；自动生成的为 false，客户端会提示设置唯一 userid
     }
     store.createUser(user)
     const tokens = issueTokens(store, user)
@@ -140,6 +151,7 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, appleVeri
         email: identity.email?.toLowerCase(),
         emailVerified: identity.email ? true : undefined, // Apple 已验证过邮箱
         appleSub: identity.sub,
+        usernameCustomized: false, // 自动生成 apple_ 用户名，客户端会提示设置唯一 userid
       }
       store.createUser(user)
       const tokens = issueTokens(store, user)
@@ -178,5 +190,61 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, appleVeri
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     store.deleteRefreshToken(hashToken(parsed.data.refreshToken))
     return reply.code(204).send()
+  })
+
+  // 邮箱验证码登录/注册（无密码，“魔法码”式）：发码。无论邮箱是否已注册都返回 ok（防枚举）。
+  // token 未过期时客户端走恢复/刷新不走此码（“token 没过期就不用验证码”）。
+  app.post('/api/auth/email/request-code', { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const parsed = emailCodeRequestSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const email = parsed.data.email.trim().toLowerCase()
+    const user = store.findByEmail(email)
+    const key = user ? `login:${user.id}` : `signup:${email}`
+    const code = codes.issue(key, Date.now())
+    // fire-and-forget：不 await 发信，使“邮箱存在/不存在”两条路径响应时延一致，消除时序柚举侧信道。
+    void mailer
+      .send(email, 'BeeUrEi 登录验证码', `你的登录验证码是：${code}（10 分钟内有效）。若非你本人操作请忽略。`)
+      .catch((e) => console.warn('[mail] 登录码发送失败:', (e as Error).message))
+    return { ok: true }
+  })
+
+  // 邮箱验证码校验：已有账号即登录（并标记邮箱已验证）；无账号则建号（自动用户名，待客户端自定义 userid）。
+  app.post('/api/auth/email/verify-code', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const parsed = emailCodeVerifySchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const email = parsed.data.email.trim().toLowerCase()
+    const existing = store.findByEmail(email)
+    if (existing) {
+      if (existing.status === 'disabled') return reply.code(403).send({ error: 'account_disabled' })
+      if (!codes.verify(`login:${existing.id}`, parsed.data.code, Date.now())) {
+        return reply.code(400).send({ error: 'invalid_code' })
+      }
+      // 成功登录即证明邮箱归属 → 标记已验证。
+      const updated = (existing.emailVerified ? existing : store.updateUser(existing.id, { emailVerified: true })) ?? existing
+      const tokens = issueTokens(store, updated)
+      return reply.send({ ...tokens, user: publicUser(updated) })
+    }
+    // 新邮箱注册：校验 signup 码 → 建号。
+    if (!codes.verify(`signup:${email}`, parsed.data.code, Date.now())) {
+      return reply.code(400).send({ error: 'invalid_code' })
+    }
+    let username = `user_${randomUUID().slice(0, 8)}`
+    while (store.findByUsername(username)) username = `user_${randomUUID().slice(0, 8)}`
+    const user: User = {
+      id: randomUUID(),
+      username,
+      passwordHash: hashPassword(generateRefreshToken()), // 占位随机密码（无密码登录；可后续设密码）
+      displayName: username,
+      role: (parsed.data.role ?? 'blind') as Role,
+      status: 'active',
+      createdAt: Date.now(),
+      language: parsed.data.language,
+      email,
+      emailVerified: true,
+      usernameCustomized: false,
+    }
+    store.createUser(user)
+    const tokens = issueTokens(store, user)
+    return reply.code(201).send({ ...tokens, user: publicUser(user) })
   })
 }

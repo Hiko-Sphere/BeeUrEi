@@ -309,6 +309,11 @@ struct APIClient {
         guard let http = resp as? HTTPURLResponse else { throw APIError.network }
         // 5xx 是后端瞬时故障（token 仍有效）→ 归为可重试的 .network，绝不据此登出/删令牌（见审查 #4）。
         if http.statusCode == 401 { throw APIError.unauthorized } // 登录:凭据错误 / refresh:失效——调用方分别处理（见审查 #2/#4）
+        if http.statusCode == 503,
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let code = obj["error"] as? String {
+            throw APIError.server(code) // 503=后端明确的服务不可用信号（如 mail_unavailable/apple_login_not_configured），带码透传
+        }
         if http.statusCode >= 500 { throw APIError.network }
         if http.statusCode >= 400 {
             let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -331,6 +336,11 @@ struct APIClient {
         do { (data, resp) = try await URLSession.shared.data(for: req) } catch { throw APIError.network }
         guard let http = resp as? HTTPURLResponse else { throw APIError.network }
         if http.statusCode == 401 { throw APIError.unauthorized } // access 失效/被撤销 → 走刷新/登出（见审查 #2/#4）
+        if http.statusCode == 503,
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let code = obj["error"] as? String {
+            throw APIError.server(code) // 503=后端明确的服务不可用信号（如 mail_unavailable/apple_login_not_configured），带码透传
+        }
         if http.statusCode >= 500 { throw APIError.network } // 瞬时后端故障：可重试，不登出（见审查 #4）
         if http.statusCode >= 400 {
             let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -392,6 +402,11 @@ struct APIClient {
         do { (data, resp) = try await URLSession.shared.data(for: req) } catch { throw APIError.network }
         guard let http = resp as? HTTPURLResponse else { throw APIError.network }
         if http.statusCode == 401 { throw APIError.unauthorized } // access 失效/被撤销 → 走刷新/登出（见审查 #2/#4）
+        if http.statusCode == 503,
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let code = obj["error"] as? String {
+            throw APIError.server(code) // 503=后端明确的服务不可用信号（如 mail_unavailable/apple_login_not_configured），带码透传
+        }
         if http.statusCode >= 500 { throw APIError.network } // 瞬时后端故障：可重试，不登出（见审查 #4）
         if http.statusCode >= 400 {
             let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -842,6 +857,11 @@ struct APIClient {
         let (data, resp): (Data, URLResponse)
         do { (data, resp) = try await URLSession.shared.data(for: req) } catch { throw APIError.network }
         guard let http = resp as? HTTPURLResponse else { throw APIError.network }
+        if http.statusCode == 503,
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let code = obj["error"] as? String {
+            throw APIError.server(code) // 503=后端明确的服务不可用信号（如 mail_unavailable/apple_login_not_configured），带码透传
+        }
         if http.statusCode >= 500 { throw APIError.network }
         if http.statusCode >= 400 {
             let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]

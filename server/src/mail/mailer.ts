@@ -29,6 +29,10 @@ export async function makeMailer(): Promise<Mailer> {
       auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
     })
     const from = process.env.SMTP_FROM ?? 'BeeUrEi <no-reply@beeurei.app>'
+    // 启动自检：SMTP 凭据失效（如 163 授权码过期）要在日志里立刻可见，而不是等第一个用户撞 535。
+    transport.verify()
+      .then(() => console.log(`[mail] SMTP 已就绪（${host}）`))
+      .catch((e: Error) => console.warn(`[mail] SMTP 自检失败（${host}）——发码功能将不可用：`, e.message))
     return {
       async send(to: string, subject: string, text: string): Promise<void> {
         await transport.sendMail({ from, to, subject, text })

@@ -551,6 +551,9 @@ struct EmailManageView: View {
             try await APIClient().setEmail(token: token, email: email.trimmingCharacters(in: .whitespaces))
             message = AccountStrings.emailCodeSent(lang)
             stage = .verify
+        } catch let APIError.server(code) {
+            // 精确透传业务错误（如 email_taken=已绑定到别的账号）——不要笼统说"发送失败/格式不对"。
+            message = AccountStrings.accountErrorText(code, lang)
         } catch { message = AccountStrings.emailSendFailed(lang) }
     }
 

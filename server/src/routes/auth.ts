@@ -202,10 +202,14 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     const user = store.findByEmail(email)
     const key = user ? `login:${user.id}` : `signup:${email}`
     const code = codes.issue(key, Date.now())
-    // fire-and-forget：不 await 发信，使“邮箱存在/不存在”两条路径响应时延一致，消除时序柚举侧信道。
-    void mailer
-      .send(email, 'BeeUrEi 登录验证码', `你的登录验证码是：${code}（10 分钟内有效）。若非你本人操作请忽略。`)
-      .catch((e) => console.warn('[mail] 登录码发送失败:', (e as Error).message))
+    // 两条路径（邮箱已注册/未注册）都恰好发一封信再响应——时延对称，无枚举侧信道；
+    // 发信失败明确返回 503（SMTP 故障是全局的，不泄露任何账号信息），不假装"已发送"。
+    try {
+      await mailer.send(email, 'BeeUrEi 登录验证码', `你的登录验证码是：${code}（10 分钟内有效）。若非你本人操作请忽略。`)
+    } catch (e) {
+      console.warn('[mail] 登录码发送失败:', (e as Error).message)
+      return reply.code(503).send({ error: 'mail_unavailable' })
+    }
     return { ok: true }
   })
 

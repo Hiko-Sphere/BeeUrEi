@@ -244,6 +244,13 @@ enum AccountStrings {
         case "phone_taken": return l == .zh ? "手机号已被使用" : "Phone number already in use"
         case "invalid_phone": return l == .zh ? "手机号格式不正确" : "Invalid phone number"
         case "invalid_code": return codeInvalid(l)
+        case "email_taken":
+            return l == .zh ? "该邮箱已绑定到另一个账号。可改用其他邮箱；或退出登录后，用这个邮箱直接登录原来的账号。"
+                            : "That email is linked to another account. Use a different email, or sign out and sign in with that email instead."
+        case "invalid_input": return l == .zh ? "邮箱格式不正确，请检查后重试" : "Invalid email format — please check and retry"
+        case "mail_unavailable":
+            return l == .zh ? "邮件服务暂时不可用（服务器发信失败），请稍后再试或联系管理员"
+                            : "Email service is temporarily unavailable (server couldn't send). Try again later."
         default: return code
         }
     }
@@ -265,6 +272,8 @@ enum AccountStrings {
         case "invalid_apple_token": return l == .zh ? "Apple 登录校验失败，请重试" : "Apple sign-in verification failed"
         case "apple_login_not_configured":
             return l == .zh ? "服务器尚未配置 Apple 登录" : "Apple sign-in isn't configured on the server"
+        case "mail_unavailable":
+            return l == .zh ? "邮件服务暂时不可用（服务器发信失败），请稍后再试" : "Email service is temporarily unavailable. Try again later."
         case "invalid_input": return l == .zh ? "输入有误，请检查后重试" : "Invalid input, please check and retry"
         default: return code
         }

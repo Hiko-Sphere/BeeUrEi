@@ -181,3 +181,31 @@ describe('Apple 关联域文件（passkey 前提）', () => {
     expect(apps[0]).toMatch(/\.com\.beeurei\.BeeUrEi$/)
   })
 })
+
+describe('邮件服务故障的诚实处理', () => {
+  class FailMailer implements Mailer {
+    async send(): Promise<void> { throw new Error('535 authentication failed') }
+  }
+
+  it('绑定邮箱发码失败 → 503 mail_unavailable 且邮箱变更回滚', async () => {
+    const app = buildApp(new MemoryStore(), { mailer: new FailMailer() })
+    const reg = await app.inject({ method: 'POST', url: '/api/auth/register',
+      payload: { username: 'mailfail1', password: 'secret123' } })
+    const t = (reg.json() as any).token as string
+
+    const res = await app.inject({ method: 'POST', url: '/api/account/email', headers: auth(t),
+      payload: { email: 'rollback@example.com' } })
+    expect(res.statusCode).toBe(503)
+    expect((res.json() as any).error).toBe('mail_unavailable')
+    const me = await app.inject({ method: 'GET', url: '/api/me', headers: auth(t) })
+    expect((me.json() as any).user.email ?? null).toBeNull() // 失败不留下"已改未验证"的半截状态
+  })
+
+  it('邮箱码登录发码失败 → 503 mail_unavailable（不假装已发送）', async () => {
+    const app = buildApp(new MemoryStore(), { mailer: new FailMailer() })
+    const res = await app.inject({ method: 'POST', url: '/api/auth/email/request-code',
+      payload: { email: 'whoever@example.com' } })
+    expect(res.statusCode).toBe(503)
+    expect((res.json() as any).error).toBe('mail_unavailable')
+  })
+})

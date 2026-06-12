@@ -142,9 +142,18 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     if (existing && existing.id !== user.id) {
       return reply.code(409).send({ error: 'email_taken' })
     }
+    const prev = { email: user.email, emailVerified: user.emailVerified }
     store.updateUser(user.id, { email, emailVerified: false })
     const code = codes.issue(`verify:${user.id}`, Date.now())
-    await mailer.send(email, 'BeeUrEi 邮箱验证码', `你的邮箱验证码是：${code}（10 分钟内有效）。`)
+    try {
+      await mailer.send(email, 'BeeUrEi 邮箱验证码', `你的邮箱验证码是：${code}（10 分钟内有效）。`)
+    } catch (e) {
+      // 发信失败（SMTP 故障/凭据失效）：回滚邮箱变更并明确告知"邮件服务不可用"——
+      // 不可发 500（客户端会误报网络错误），更不可假装已发送。
+      store.updateUser(user.id, prev)
+      console.warn('[mail] 验证码发送失败:', (e as Error).message)
+      return reply.code(503).send({ error: 'mail_unavailable' })
+    }
     return { ok: true }
   })
 

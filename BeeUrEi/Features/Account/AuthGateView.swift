@@ -425,6 +425,8 @@ struct EmailCodeLoginView: View {
             stage = .verify
         } catch APIError.network {
             message = AccountStrings.sendFailed(lang)
+        } catch let APIError.server(code) where code == "mail_unavailable" {
+            message = AccountStrings.serverErrorText(code, lang) // 邮件服务故障：如实告知，不假装已发送
         } catch {
             message = AccountStrings.emailCodeLoginSent(lang) // 防枚举：其它情况也提示已发送
             stage = .verify

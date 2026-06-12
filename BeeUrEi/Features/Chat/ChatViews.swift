@@ -233,7 +233,8 @@ struct ConversationsView: View {
         guard let last = g.last else { return ChatStrings.members(g.group.memberIds.count, lang) }
         let sender = last.fromId == myId ? ChatStrings.me(lang)
                    : (g.members.first { $0.id == last.fromId }?.displayName ?? "")
-        return sender.isEmpty ? preview(last) : "\(sender)：\(preview(last))"
+        let sep = lang == .zh ? "：" : ": "
+        return sender.isEmpty ? preview(last) : "\(sender)\(sep)\(preview(last))"
     }
 
     private func rowA11y(_ c: ConversationInfo) -> String {
@@ -747,6 +748,13 @@ struct ChatView: View {
         SpeechHub.shared.stopChannel(.query) // 播语音条前让播报安静（同通道语义）
         player = try? AVAudioPlayer(data: data)
         player?.play()
+        // 播放结束后恢复安全播报音频会话（录音侧已有同样恢复；漏掉这边会让后续播报变闷/无声）。
+        if let duration = player?.duration {
+            Task { [weak player] in
+                try? await Task.sleep(for: .seconds(duration + 0.3))
+                if player?.isPlaying != true { AudioSessionManager.configure() }
+            }
+        }
     }
 
     /// 播放视频消息：下载（带缓存）→ 全屏播放器。

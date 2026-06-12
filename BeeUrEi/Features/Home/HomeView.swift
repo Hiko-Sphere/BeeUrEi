@@ -242,7 +242,8 @@ struct HomeView: View {
             HStack(spacing: BeeSpacing.sm) {
                 tile(HomeStrings.tileLook(lang), systemImage: "viewfinder",
                      hint: HomeStrings.hintLook(lang)) { showFraming = true }
-                tile(HomeStrings.tileNav(lang), systemImage: "figure.walk") { showNavigation = true }
+                tile(HomeStrings.tileNav(lang), systemImage: "figure.walk",
+                     hint: HomeStrings.hintNav(lang)) { showNavigation = true }
             }
             // 环境感知四键（同类动作编为一组：VoiceOver 报"环境感知"分组名，可预期、可记忆）。
             VStack(spacing: BeeSpacing.sm) {

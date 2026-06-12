@@ -97,6 +97,7 @@ struct GroupInfoSheet: View {
     @State private var busy = false
     @State private var confirmLeave = false
     @State private var confirmDissolve = false
+    @State private var errorText: String?
     private var lang: Language { FeatureSettings().language }
     private var myId: String { session.user?.id ?? "" }
     private var isOwner: Bool { detail.group.ownerId == myId }
@@ -162,7 +163,12 @@ struct GroupInfoSheet: View {
                         Button(ChatStrings.leaveGroup(lang), role: .destructive) { confirmLeave = true }
                     }
                 }
+                if let errorText {
+                    Section { Text(errorText).foregroundStyle(Color.beeDanger) }
+                }
             }
+            // 群管理操作失败要可感知（盲人用户尤其依赖语音反馈）。
+            .onChange(of: errorText) { _, e in if let e, !e.isEmpty { A11y.announce(e) } }
             .disabled(busy)
             .navigationTitle(detail.group.name)
             .navigationBarTitleDisplayMode(.inline)
@@ -185,7 +191,11 @@ struct GroupInfoSheet: View {
         busy = true
         Task {
             defer { busy = false }
-            _ = await APIClient().addGroupMember(token: token, groupId: detail.group.id, userId: userId)
+            if await APIClient().addGroupMember(token: token, groupId: detail.group.id, userId: userId) == nil {
+                errorText = ChatStrings.groupActionFailed(lang)
+            } else {
+                errorText = nil
+            }
             await onChanged()
         }
     }
@@ -196,6 +206,7 @@ struct GroupInfoSheet: View {
         Task {
             defer { busy = false }
             let ok = await APIClient().removeGroupMember(token: token, groupId: detail.group.id, userId: userId)
+            if !ok { errorText = ChatStrings.groupActionFailed(lang) }
             if closesChat, ok {
                 onClosed()
             } else {
@@ -211,6 +222,8 @@ struct GroupInfoSheet: View {
             defer { busy = false }
             if await APIClient().dissolveGroup(token: token, groupId: detail.group.id) {
                 onClosed()
+            } else {
+                errorText = ChatStrings.groupActionFailed(lang)
             }
         }
     }

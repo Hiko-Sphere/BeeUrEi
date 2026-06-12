@@ -223,7 +223,8 @@ extension RemoteAssistService: PKPushRegistryDelegate {
                       for type: PKPushType,
                       completion: @escaping () -> Void) {
         let dict = payload.dictionaryPayload
-        let caller = dict["caller"] as? String ?? "BeeUrEi 求助"
+        let caller = dict["caller"] as? String
+            ?? (FeatureSettings().language == .zh ? "BeeUrEi 求助" : "BeeUrEi call") // 兜底名随用户语言
         let callId = dict["callId"] as? String ?? (dict["callerID"] as? String ?? "unknown")
         reportIncoming(uuid: UUID(), callId: callId, callerName: caller)
         completion()

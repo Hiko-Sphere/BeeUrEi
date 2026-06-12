@@ -737,6 +737,7 @@ struct APIClient {
     func uploadMedia(token: String, data body: Data, mime: String) async throws -> String {
         var req = URLRequest(url: baseURL.appendingPathComponent("/api/media"))
         req.httpMethod = "POST"
+        req.timeoutInterval = 180 // 大视频上传：明确超时，断网时不无限挂起
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue(mime, forHTTPHeaderField: "Content-Type")
         let (data, resp): (Data, URLResponse)

@@ -105,6 +105,9 @@ enum ChatStrings {
     static func leaveConfirm(_ l: Language) -> String {
         l == .zh ? "退出后将不再收到此群消息，确定吗?" : "You'll stop receiving this group's messages. Leave?"
     }
+    static func groupActionFailed(_ l: Language) -> String {
+        l == .zh ? "操作失败，请重试（仅群主可加人/踢人，群主退群须解散）" : "Action failed — try again (only the owner can add/remove; the owner must dissolve to leave)"
+    }
     static func noAddableContacts(_ l: Language) -> String {
         l == .zh ? "没有可添加的联系人（成员须是你的绑定好友）" : "No contacts to add (members must be your linked contacts)"
     }

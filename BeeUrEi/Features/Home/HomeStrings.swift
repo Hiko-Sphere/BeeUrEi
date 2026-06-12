@@ -12,6 +12,9 @@ enum HomeStrings {
         l == .zh ? "呼叫志愿者或亲友帮你看" : "Call a volunteer or family member to see for you"
     }
     static func tileNav(_ l: Language) -> String { l == .zh ? "步行导航" : "Walk Navigate" }
+    static func hintNav(_ l: Language) -> String {
+        l == .zh ? "输入目的地，语音逐向指路，可原路返回" : "Enter a destination for spoken turn-by-turn guidance and backtracking"
+    }
     static func tileLook(_ l: Language) -> String { l == .zh ? "看一看" : "Look Around" }
     static func hintLook(_ l: Language) -> String {
         l == .zh ? "用相机对准物体，语音说出它是什么" : "Point the camera at something and hear what it is"

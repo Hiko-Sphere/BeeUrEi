@@ -126,7 +126,6 @@ Project_BeeUrEi/
 ├─ Packages/BeeUrEiCore/     平台无关核心安全逻辑（319 单测）
 ├─ Tests/BeeUrEiTests/       应用层回归（通话隐私门控/避障纪律/导航门控/来电/识别状态机，72 测）
 ├─ server/                   自托管后端（Node + TS，199 测）
-├─ docs/                     PLAN.md（总设计）· PROJECT_STATUS.md（交接）· SHIP_CHECKLIST.md（上架）
 └─ BeeUrEi-Brand-Assets/     品牌资产（图标 / 字标 / 配色）
 ```
 
@@ -140,7 +139,7 @@ Project_BeeUrEi/
 open BeeUrEi.xcodeproj        # 工程由 XcodeGen 生成；改 project.yml 后 `xcodegen generate`
 ```
 在 Xcode 选中 target → **Signing & Capabilities** 选你的 Apple ID → 接真机 → `⌘R`。
-（相机/LiDAR 必须真机；模拟器会显示「设备不支持」。新手逐步教程见 [docs/SHIP_CHECKLIST.md](docs/SHIP_CHECKLIST.md)。）
+（相机/LiDAR 必须真机；模拟器会显示「设备不支持」。）
 
 ### 后端（自托管，开箱即跑）
 
@@ -151,7 +150,7 @@ ADMIN_USERNAME=root ADMIN_PASSWORD=你的强密码 npm run dev   # http://localh
 curl http://localhost:8787/health        # → {"status":"ok",...}
 ```
 
-Docker 部署、TURN、APNs 推送等运维步骤见 [docs/SETUP_AND_HANDOFF.md](docs/SETUP_AND_HANDOFF.md)。
+Docker 部署、TURN、APNs 推送等运维：服务器跑 `docker build -t beeurei-api server/` + `docker run --env-file server/.env -v beeurei-data:/app/data -p 127.0.0.1:8787:8787 beeurei-api`，前置 Cloudflare Tunnel。
 
 ---
 
@@ -205,18 +204,11 @@ cd server && npm test                            # 后端：199 测试
 | Phase 3 远程视频 | 信令 + 隐私门控 + 来电铃/CallKit | ✅ · WebRTC 媒体需 SPM 包 + 双真机 ⏳ |
 | Phase 4 打磨上架 | 真机实测 / 视障用户测试 / App Store | ⏳ 外部资源 |
 
-详见 **[docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md)**（当前真实状态与未完成项对照）。
 
 ---
 
 ## 📚 文档
 
-- [docs/SETUP_AND_HANDOFF.md](docs/SETUP_AND_HANDOFF.md) — **落地与运维手册（新手向）**：管理员界面、真实视频/后台来电/TURN/国内导航/监控的逐步落地
-- [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) — **项目状态与未完成项对照**（交接文档）
-- [docs/SHIP_CHECKLIST.md](docs/SHIP_CHECKLIST.md) — **上架与真机落地清单**（从真机跑起来到 App Store 的每一步）
-- [docs/PLAN.md](docs/PLAN.md) — 完整项目计划、架构、风险、分阶段路线图
-- [docs/BACKEND_PLAN.md](docs/BACKEND_PLAN.md) — 后端 API / 数据模型 / 信令协议 / 视频隐私门控
-- [docs/COMPETITIVE_STRATEGY.md](docs/COMPETITIVE_STRATEGY.md) — 竞品对标矩阵与差异化策略
 - [server/README.md](server/README.md) — 后端运行与端点
 
 ---

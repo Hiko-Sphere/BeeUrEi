@@ -113,7 +113,7 @@ final class CallViewModel {
         if role == .blind { startDeclineWatch(token: token) } // 发起方：轮询"对方是否拒绝"
     }
 
-    /// 发起方等待期间轮询呼叫状态；对方全部拒绝则显示"对方已拒绝"。
+    /// 发起方等待期间轮询呼叫状态；对方全部拒绝则**语音提示并自动收线**（双侧都退出来电提示）。
     /// 同时跑 40s 无人接听看门狗（A4）：超时置 unanswered，界面据此提供「转向志愿者求助」回退。
     private func startDeclineWatch(token: String) {
         let cid = callId
@@ -124,6 +124,11 @@ final class CallViewModel {
                 if await APIClient().callDeclined(token: token, callId: cid) {
                     self.declined = true
                     self.statusText = CallStrings.declined(self.lang)
+                    // 语音走全局总线 .call 通道：避障/导航/识别正在播报时不重叠（让位或被让位）。
+                    SpeechHub.shared.speak(CallStrings.declinedSpeak(self.lang), channel: .call)
+                    // 留 2.5s 让红字可见/语音起播，然后自动退出呼叫界面（语音不随界面关闭而中断）。
+                    try? await Task.sleep(for: .seconds(2.5))
+                    if !self.connected, !self.ended { self.callEnded = true } // CallView 观察其变化 → onClose
                     return
                 }
             }

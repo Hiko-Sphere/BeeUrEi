@@ -134,6 +134,9 @@ enum CallStrings {
         l == .zh ? "连接已断开，请重新呼叫" : "Connection closed — please call again"
     }
     static func declined(_ l: Language) -> String { l == .zh ? "对方已拒绝" : "They declined" }
+    static func declinedSpeak(_ l: Language) -> String {
+        l == .zh ? "对方拒绝接听，通话已结束" : "They declined the call. Call ended."
+    }
     static func unanswered(_ l: Language) -> String { l == .zh ? "暂时无人接听" : "No answer yet" }
     static func unansweredAnnounce(_ l: Language) -> String {
         l == .zh ? "暂时无人接听。可以挂断，或改为向志愿者求助。"

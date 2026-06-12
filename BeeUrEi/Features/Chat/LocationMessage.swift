@@ -31,6 +31,42 @@ struct LocationPayload: Codable, Equatable {
         return s
     }
 
+    /// 向后兼容的「文本消息」形式：内嵌一个 Apple 地图链接（坐标 + 地名）。
+    /// 这样无需服务端支持 kind="location"（线上服务器未重新部署时仍可发送）：
+    /// 新客户端解析此链接渲染为地图气泡；旧客户端/收件人看到的是可点的地图链接（优雅降级）。
+    func asText() -> String {
+        let coord = String(format: "%.6f,%.6f", lat, lng)
+        var url = "https://maps.apple.com/?ll=\(coord)"
+        if let name, !name.isEmpty {
+            // 用 .alphanumerics 全量百分号编码，确保 q 值不含空格/&/= 等会破坏解析的字符（中文按字节编码，可逆）。
+            let enc = name.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+            url += "&q=\(enc)"
+            return "📍 \(name)\n\(url)" // 前缀地名仅供旧客户端/推送预览阅读；新客户端只渲染气泡
+        }
+        return "📍\n\(url)"
+    }
+
+    /// 从一条聊天消息识别位置：kind="location"（JSON）或 kind="text"（内嵌 Apple 地图链接）。
+    static func from(_ m: ChatMessageInfo) -> LocationPayload? {
+        if m.kind == "location" { return decode(m.text) }
+        if m.kind == "text" { return fromText(m.text) }
+        return nil
+    }
+
+    /// 从文本里抽取 Apple 地图链接并解析为坐标 + 地名；无链接或越界返回 nil。
+    static func fromText(_ text: String) -> LocationPayload? {
+        guard let r = text.range(of: "https://maps.apple.com/?ll=") else { return nil }
+        let urlStr = String(text[r.lowerBound...].prefix { !$0.isWhitespace }) // 取到首个空白/换行为止
+        guard let comps = URLComponents(string: urlStr),
+              let ll = comps.queryItems?.first(where: { $0.name == "ll" })?.value else { return nil }
+        let parts = ll.split(separator: ",")
+        guard parts.count == 2, let lat = Double(parts[0]), let lng = Double(parts[1]),
+              lat >= -90, lat <= 90, lng >= -180, lng <= 180 else { return nil }
+        let q = comps.queryItems?.first(where: { $0.name == "q" })?.value
+        let name = q.flatMap { $0.removingPercentEncoding ?? $0 } // URLComponents 多已解码，再兜底一次
+        return LocationPayload(lat: lat, lng: lng, name: (name?.isEmpty == false) ? name : nil)
+    }
+
     /// 用 Apple 地图打开并以步行模式导航过去（盲人用户最常见诉求）。
     func openInMaps() {
         let item = MKMapItem(placemark: MKPlacemark(coordinate: coordinate))

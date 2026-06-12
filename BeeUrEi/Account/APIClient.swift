@@ -222,6 +222,14 @@ enum APIError: Error {
 struct APIClient {
     private var baseURL: URL { ServerConfig.baseURL }
 
+    /// 用 path（可含查询串，如 "/api/messages?with=X&limit=50"）构造请求 URL。
+    /// 关键：URL.appendingPathComponent 会把 '?' 百分号编码成 %3F，使查询串被并入路径、
+    /// 服务端收不到 with/group 等参数而 404 —— 这正是"消息历史无法显示"的根因。
+    /// 改用相对 URL 解析（path 以 '/' 开头即 host 根相对）保留查询串；解析失败再退回旧法。
+    private func apiURL(_ path: String) -> URL {
+        URL(string: path, relativeTo: baseURL)?.absoluteURL ?? baseURL.appendingPathComponent(path)
+    }
+
     /// 注册：用户名/手机号/邮箱至少给一个（手机号或邮箱即可当账号，后端自动生成用户名）。
     func register(username: String?, password: String, role: String?,
                   phone: String? = nil, email: String? = nil) async throws -> AuthResult {
@@ -286,7 +294,7 @@ struct APIClient {
     }
 
     private func postAuth(_ path: String, body: [String: Any]) async throws -> AuthResult {
-        var req = URLRequest(url: baseURL.appendingPathComponent(path))
+        var req = URLRequest(url: apiURL(path))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -316,7 +324,7 @@ struct APIClient {
     // MARK: 已登录请求
 
     private func authedGet(_ path: String, token: String) async throws -> Data {
-        var req = URLRequest(url: baseURL.appendingPathComponent(path))
+        var req = URLRequest(url: apiURL(path))
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (data, resp): (Data, URLResponse)
         do { (data, resp) = try await URLSession.shared.data(for: req) } catch { throw APIError.network }
@@ -372,7 +380,7 @@ struct APIClient {
 
     @discardableResult
     private func authedSend(_ method: String, _ path: String, token: String, body: [String: Any]? = nil) async throws -> Data {
-        var req = URLRequest(url: baseURL.appendingPathComponent(path))
+        var req = URLRequest(url: apiURL(path))
         req.httpMethod = method
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         if let body {
@@ -821,7 +829,7 @@ struct APIClient {
     /// 未登录的简单 POST（找回密码等）。返回原始 Data；4xx 抛 .server，5xx/网络抛 .network。
     @discardableResult
     private func postNoAuth(_ path: String, body: [String: Any]) async throws -> Data {
-        var req = URLRequest(url: baseURL.appendingPathComponent(path))
+        var req = URLRequest(url: apiURL(path))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONSerialization.data(withJSONObject: body)

@@ -17,6 +17,7 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
     private var isDescribing = false // 防重入：上一次还在解析时忽略新点击（见审查 #3）
     private var mode: Mode = .whereAmI
     private var lastHeading: Double? // 最近真北航向（罗盘），供相对方位计算
+    private var watchdog: DispatchWorkItem? // 看门狗：定位/解析无回调时复位，避免永久卡死
 
     override init() {
         super.init()
@@ -33,9 +34,38 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
         mode = m
         isDescribing = true
         speak(prompt)
-        manager.requestWhenInUseAuthorization()
+        // 看门狗：20s 无结果就复位（含网络 POI 检索），避免 requestLocation 无回调导致永久卡死后再点无反应。
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.isDescribing else { return }
+            self.finish("定位超时，请检查定位权限与信号后重试")
+        }
+        watchdog = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: work)
         manager.startUpdatingHeading() // 周围/前方需要朝向；我在哪不依赖（拿到也无妨）
-        manager.requestLocation()      // 一次性定位
+        // 按授权状态分支：未决时先请求授权，授权后在 didChangeAuthorization 里再定位
+        // （.notDetermined 时直接 requestLocation 会与授权弹窗竞争而常常无回调）。
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            manager.requestLocation()
+        case .notDetermined:
+            manager.requestWhenInUseAuthorization()
+        case .denied, .restricted:
+            finish("定位权限未开启，请在系统设置中允许定位")
+        @unknown default:
+            manager.requestWhenInUseAuthorization()
+        }
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        guard isDescribing else { return }
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            manager.requestLocation()
+        case .denied, .restricted:
+            finish("定位权限未开启，请在系统设置中允许定位")
+        default:
+            break // .notDetermined：等用户在系统弹窗里决定
+        }
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
@@ -102,6 +132,8 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
 
     /// 播报结果并复位（停罗盘省电）。
     private func finish(_ text: String) {
+        guard isDescribing else { return } // 已复位（如看门狗已触发）则不重复播报
+        watchdog?.cancel(); watchdog = nil
         speak(text)
         manager.stopUpdatingHeading()
         isDescribing = false
@@ -126,9 +158,7 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        speak("定位失败，请检查定位权限与信号")
-        manager.stopUpdatingHeading()
-        isDescribing = false
+        finish("定位失败，请检查定位权限与信号")
     }
 
     /// 经全局语音总线 .query 通道：避障/导航播报期间不再同时出声（积压待其说完补播）。

@@ -219,11 +219,11 @@ struct ConversationsView: View {
     }
 
     private func preview(_ m: ChatMessageInfo) -> String {
+        if LocationPayload.from(m) != nil { return "📍 " + ChatStrings.locationMessage(lang) }
         switch m.kind {
         case "audio": return "🎤 " + ChatStrings.voiceMessage(lang)
         case "image": return "🖼️ " + ChatStrings.photo(lang)
         case "video": return "🎬 " + ChatStrings.videoMessage(lang)
-        case "location": return "📍 " + ChatStrings.locationMessage(lang)
         case "recalled": return ChatStrings.recalled(lang)
         default: return m.text
         }
@@ -340,8 +340,8 @@ struct ChatView: View {
                     Text(senderName(m.fromId)).font(.caption.bold()).foregroundStyle(Color.beeHoney)
                 }
                 bubbleContent(m, mine: mine)
-                    .padding(.horizontal, m.kind == "image" || m.kind == "location" ? 4 : 14)
-                    .padding(.vertical, m.kind == "image" || m.kind == "location" ? 4 : 10)
+                    .padding(.horizontal, m.kind == "image" || LocationPayload.from(m) != nil ? 4 : 14)
+                    .padding(.vertical, m.kind == "image" || LocationPayload.from(m) != nil ? 4 : 10)
                     .background(mine ? Color.beeHoney : Color(.secondarySystemBackground),
                                 in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .foregroundStyle(mine ? Color.beeInk : Color.primary)
@@ -377,38 +377,37 @@ struct ChatView: View {
 
     @ViewBuilder
     private func bubbleContent(_ m: ChatMessageInfo, mine: Bool) -> some View {
-        switch m.kind {
-        case "audio":
-            Button { playVoice(m) } label: {
-                Label(ChatStrings.voiceMessage(lang), systemImage: "play.circle.fill")
-                    .font(.body.weight(.semibold))
+        if let payload = LocationPayload.from(m) {
+            // 位置：地图缩略图气泡（kind=location 的 JSON 或 text 内嵌的地图链接都走这里）。
+            LocationBubble(payload: payload, lang: lang)
+        } else {
+            switch m.kind {
+            case "audio":
+                Button { playVoice(m) } label: {
+                    Label(ChatStrings.voiceMessage(lang), systemImage: "play.circle.fill")
+                        .font(.body.weight(.semibold))
+                }
+                .accessibilityLabel(ChatStrings.playVoice(lang))
+            case "image":
+                if let img = Self.decodeImage(m.text) {
+                    Image(uiImage: img)
+                        .resizable().scaledToFit()
+                        .frame(maxWidth: 220, maxHeight: 280)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                } else {
+                    Label(ChatStrings.photo(lang), systemImage: "photo")
+                }
+            case "video":
+                Button { playVideoMessage(m) } label: {
+                    Label(ChatStrings.videoMessage(lang), systemImage: "play.rectangle.fill")
+                        .font(.body.weight(.semibold))
+                }
+                .accessibilityLabel(ChatStrings.playVideo(lang))
+            case "recalled":
+                Text(ChatStrings.recalled(lang)).font(.body.italic()).foregroundStyle(.secondary)
+            default:
+                Text(m.text).font(.body)
             }
-            .accessibilityLabel(ChatStrings.playVoice(lang))
-        case "image":
-            if let img = Self.decodeImage(m.text) {
-                Image(uiImage: img)
-                    .resizable().scaledToFit()
-                    .frame(maxWidth: 220, maxHeight: 280)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            } else {
-                Label(ChatStrings.photo(lang), systemImage: "photo")
-            }
-        case "video":
-            Button { playVideoMessage(m) } label: {
-                Label(ChatStrings.videoMessage(lang), systemImage: "play.rectangle.fill")
-                    .font(.body.weight(.semibold))
-            }
-            .accessibilityLabel(ChatStrings.playVideo(lang))
-        case "location":
-            if let payload = LocationPayload.decode(m.text) {
-                LocationBubble(payload: payload, lang: lang)
-            } else {
-                Label(ChatStrings.locationMessage(lang), systemImage: "mappin.and.ellipse")
-            }
-        case "recalled":
-            Text(ChatStrings.recalled(lang)).font(.body.italic()).foregroundStyle(.secondary)
-        default:
-            Text(m.text).font(.body)
         }
     }
 
@@ -432,13 +431,16 @@ struct ChatView: View {
 
     private func bubbleA11y(_ m: ChatMessageInfo) -> String {
         let content: String
-        switch m.kind {
-        case "audio": content = ChatStrings.voiceMessage(lang)
-        case "image": content = ChatStrings.photo(lang)
-        case "video": content = ChatStrings.videoMessage(lang)
-        case "location": content = ChatStrings.locationMessage(lang) + "：" + (LocationPayload.decode(m.text)?.name ?? ChatStrings.unknownPlace(lang))
-        case "recalled": content = ChatStrings.recalled(lang)
-        default: content = m.text
+        if let payload = LocationPayload.from(m) {
+            content = ChatStrings.locationMessage(lang) + "：" + (payload.name ?? ChatStrings.unknownPlace(lang))
+        } else {
+            switch m.kind {
+            case "audio": content = ChatStrings.voiceMessage(lang)
+            case "image": content = ChatStrings.photo(lang)
+            case "video": content = ChatStrings.videoMessage(lang)
+            case "recalled": content = ChatStrings.recalled(lang)
+            default: content = m.text
+            }
         }
         let from = m.fromId == myId ? ChatStrings.me(lang) : (isGroup ? senderName(m.fromId) : target.title)
         var label = ChatStrings.bubbleA11y(from: from, content: content,
@@ -539,14 +541,17 @@ struct ChatView: View {
                 // 新到消息语音播报：经总线 .query（不打断避障/导航/来电播报，闲时补播）。
                 let name = isGroup ? senderName(m.fromId) : target.title
                 let speak: String
-                switch m.kind {
-                case "audio": speak = ChatStrings.newVoiceSpeak(name, lang)
-                case "video": speak = ChatStrings.newVideoSpeak(name, lang)
-                case "location": speak = ChatStrings.newLocationSpeak(name, lang)
-                default:
-                    speak = isGroup
-                        ? ChatStrings.newGroupMessageSpeak(name, target.title, String(m.text.prefix(60)), lang)
-                        : ChatStrings.newMessageSpeak(name, String(m.text.prefix(60)), lang)
+                if LocationPayload.from(m) != nil {
+                    speak = ChatStrings.newLocationSpeak(name, lang)
+                } else {
+                    switch m.kind {
+                    case "audio": speak = ChatStrings.newVoiceSpeak(name, lang)
+                    case "video": speak = ChatStrings.newVideoSpeak(name, lang)
+                    default:
+                        speak = isGroup
+                            ? ChatStrings.newGroupMessageSpeak(name, target.title, String(m.text.prefix(60)), lang)
+                            : ChatStrings.newMessageSpeak(name, String(m.text.prefix(60)), lang)
+                    }
                 }
                 SpeechHub.shared.speak(speak, channel: .query, voiceCode: lang.voiceCode)
             }
@@ -604,7 +609,8 @@ struct ChatView: View {
         }
     }
 
-    /// 发送当前位置：取精确坐标 + 反查地址 → 发 kind=location 消息（payload 为 JSON）。
+    /// 发送当前位置：取精确坐标 + 反查地址 → 作为内嵌地图链接的**文本消息**发送。
+    /// 用文本而非 kind=location，使其在未重新部署的线上服务器也能发出（新客户端仍渲染为地图气泡）。
     private func sendLocation() {
         sending = true
         SpeechHub.shared.speak(ChatStrings.locatingNow(lang), channel: .query, voiceCode: lang.voiceCode)
@@ -616,7 +622,7 @@ struct ChatView: View {
                 return
             }
             do {
-                let m = try await send(kind: "location", text: payload.encoded())
+                let m = try await send(kind: "text", text: payload.asText())
                 messages.append(m)
                 errorText = nil
             } catch {

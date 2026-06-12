@@ -7,6 +7,7 @@ import CoreLocation
 final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     private var fetching = false // 防重入：上一次还没播完结果时忽略新点击
+    private var watchdog: DispatchWorkItem? // 看门狗：定位/网络无回调时复位，避免永久卡死（"天气不可用"根因）
     private var lang: Language { FeatureSettings().language }
 
     override init() {
@@ -19,22 +20,60 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
         guard !fetching else { return }
         fetching = true
         speak(WeatherPhrase.fetching(lang))
-        manager.requestWhenInUseAuthorization()
-        manager.requestLocation()
+        // 看门狗：15s 内无任何结果就复位 + 提示，杜绝因 requestLocation 无回调导致 fetching 永久为真、之后再点无反应。
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.fetching else { return }
+            self.fetching = false
+            self.speak(WeatherPhrase.failed(self.lang))
+        }
+        watchdog = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: work)
+        // 关键修复：按授权状态分支。未决时先请求授权，待 didChangeAuthorization 授权后再定位；
+        // 不能在 .notDetermined 时直接 requestLocation()——那次请求会与授权弹窗竞争而常常无回调。
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            manager.requestLocation()
+        case .notDetermined:
+            manager.requestWhenInUseAuthorization()
+        case .denied, .restricted:
+            finishFailure(WeatherPhrase.needLocation(lang))
+        @unknown default:
+            manager.requestWhenInUseAuthorization()
+        }
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        guard fetching else { return } // 仅在等待本次请求时响应授权变化
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            manager.requestLocation() // 授权通过后才真正发起定位
+        case .denied, .restricted:
+            finishFailure(WeatherPhrase.needLocation(lang))
+        default:
+            break // .notDetermined：继续等用户在系统弹窗里决定
+        }
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let loc = locations.last else { return }
+        guard let loc = locations.last else { finishFailure(WeatherPhrase.needLocation(lang)); return }
         Task { await fetch(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude) }
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        speak(WeatherPhrase.needLocation(lang))
+        finishFailure(WeatherPhrase.needLocation(lang))
+    }
+
+    /// 失败复位：取消看门狗、复位 fetching、播报原因。
+    private func finishFailure(_ text: String) {
+        guard fetching else { return }
+        watchdog?.cancel(); watchdog = nil
         fetching = false
+        speak(text)
     }
 
     private func fetch(lat: Double, lon: Double) async {
-        defer { fetching = false }
+        defer { watchdog?.cancel(); watchdog = nil; fetching = false }
+
         var c = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
         c.queryItems = [
             .init(name: "latitude", value: String(format: "%.3f", lat)),   // 坐标降精到 ~百米级，最小化外发

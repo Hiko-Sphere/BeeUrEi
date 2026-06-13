@@ -39,6 +39,25 @@ enum LegalStrings {
     }
     static func agreePrefix(_ l: Language) -> String { l == .zh ? "继续即表示你已阅读并同意" : "By continuing you agree to the" }
     static func and(_ l: Language) -> String { l == .zh ? "与" : "and" }
+
+    // MARK: 注册同意门控（必须同意《隐私政策》《使用条款》方可完成注册）
+    static func consentHeader(_ l: Language) -> String { l == .zh ? "隐私与条款" : "Privacy & Terms" }
+    static func consentIntro(_ l: Language) -> String {
+        l == .zh ? "为保护你的权益，请先阅读并同意我们的《隐私政策》与《使用条款》，然后才能完成账号注册。"
+                 : "To protect you, please read and agree to our Privacy Policy and Terms of Service before your account is created."
+    }
+    static func readDocument(_ doc: LegalDocument, _ l: Language) -> String {
+        l == .zh ? "阅读\(doc.title(l))" : "Read the \(doc.title(l))"
+    }
+    static func consentCheckbox(_ l: Language) -> String {
+        l == .zh ? "我已阅读并同意《隐私政策》与《使用条款》"
+                 : "I have read and agree to the Privacy Policy and Terms of Service"
+    }
+    static func agreeAndContinue(_ l: Language) -> String { l == .zh ? "同意并继续" : "Agree & Continue" }
+    static func consentRequiredHint(_ l: Language) -> String {
+        l == .zh ? "需勾选同意才能继续；如不同意可退出登录。"
+                 : "You must agree to continue; if you do not agree, you can sign out."
+    }
 }
 
 /// 单篇法律文件阅读页：可滚动、VoiceOver 完整可读、可复制。

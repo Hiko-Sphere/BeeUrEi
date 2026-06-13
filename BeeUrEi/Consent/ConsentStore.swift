@@ -7,6 +7,7 @@ final class ConsentStore {
     private let everKey = "consent.hasEverAccepted"
     private let dateKey = "consent.lastAcceptanceRefDate"
     private let briefKey = "consent.briefReminderSpeechEnabled"
+    private let legalKey = "consent.legalAgreedVersion"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -36,4 +37,8 @@ final class ConsentStore {
         defaults.set(true, forKey: everKey)
         defaults.set(now.timeIntervalSinceReferenceDate, forKey: dateKey)
     }
+
+    /// 用户已在本机同意的隐私/条款版本（注册门控用；与服务端记录互为补充）。
+    var legalAgreedVersion: String? { defaults.string(forKey: legalKey) }
+    func recordLegalAgreement(version: String) { defaults.set(version, forKey: legalKey) }
 }

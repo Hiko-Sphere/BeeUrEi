@@ -795,6 +795,11 @@ struct APIClient {
         _ = try await authedSend("POST", "/api/account/role", token: token, body: ["role": role])
     }
 
+    /// 记录用户对《隐私政策》《使用条款》的同意（注册门控 + GDPR 可证明同意）。
+    func recordLegalConsent(token: String, version: String) async throws {
+        _ = try await authedSend("POST", "/api/account/legal-consent", token: token, body: ["version": version])
+    }
+
     /// 修改/设置用户名（唯一登录标识；用于自定义 userid）。
     func setUsername(token: String, username: String) async throws {
         _ = try await authedSend("POST", "/api/account/username", token: token, body: ["username": username])

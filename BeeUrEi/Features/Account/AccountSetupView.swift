@@ -17,14 +17,23 @@ struct AccountSetupView: View {
     @State private var working = false
     @State private var message: String?
     @State private var showLogoutConfirm = false
+    @State private var consentChecked = false
+    @State private var consentDone = false
 
+    // 注册门控：新账号必须先同意《隐私政策》《使用条款》才能继续（早于选身份等步骤）。
+    private var needConsent: Bool { session.accountCreated && !consentDone }
     private var needRole: Bool { session.accountCreated }
     private var needUserid: Bool { session.user?.usernameCustomized == false }
     private var needEmail: Bool { session.user?.emailVerified != true }
     private var onUseridStep: Bool { !needRole && needUserid && !useridDone }
 
-    private enum Step { case role, userid, email }
-    private var step: Step { needRole ? .role : (onUseridStep ? .userid : .email) }
+    private enum Step { case consent, role, userid, email }
+    private var step: Step {
+        if needConsent { return .consent }
+        if needRole { return .role }
+        if onUseridStep { return .userid }
+        return .email
+    }
 
     var body: some View {
         NavigationStack {
@@ -44,6 +53,7 @@ struct AccountSetupView: View {
                 .listRowBackground(Color.clear)
 
                 switch step {
+                case .consent: consentSection
                 case .role: roleSection
                 case .userid: useridSection
                 case .email: emailSection
@@ -75,6 +85,7 @@ struct AccountSetupView: View {
 
     private var headerIcon: String {
         switch step {
+        case .consent: return "lock.shield.fill"
         case .role: return "person.2.circle.fill"
         case .userid: return "person.text.rectangle.fill"
         case .email: return "envelope.badge.shield.half.filled.fill"
@@ -82,6 +93,7 @@ struct AccountSetupView: View {
     }
     private var headerTitle: String {
         switch step {
+        case .consent: return LegalStrings.consentHeader(lang)
         case .role: return AccountStrings.setupRoleHeader(lang)
         case .userid: return AccountStrings.setupUseridHeader(lang)
         case .email: return AccountStrings.setupEmailHeader(lang)
@@ -90,6 +102,7 @@ struct AccountSetupView: View {
     /// "第 x 步，共 n 步"：按实际需要的步数动态计算（VoiceOver 用户能知道进度）。
     private var stepLabel: String {
         var steps: [Step] = []
+        if needConsent || step == .consent { steps.append(.consent) }
         if needRole || step == .role { steps.append(.role) }
         if needUserid { steps.append(.userid) }
         if needEmail { steps.append(.email) }
@@ -98,7 +111,55 @@ struct AccountSetupView: View {
         return lang == .zh ? "第 \(index) 步，共 \(total) 步" : "Step \(index) of \(total)"
     }
 
-    // MARK: ⓪ 选择身份（大卡片，两种自助角色）
+    // MARK: ⓪ 同意《隐私政策》《使用条款》（新账号注册门控——同意后方可继续）
+
+    @ViewBuilder private var consentSection: some View {
+        Section {
+            Text(LegalStrings.consentIntro(lang))
+                .font(.callout).foregroundStyle(.secondary)
+        }
+        Section {
+            NavigationLink {
+                LegalDocumentView(document: .privacy)
+            } label: {
+                Label(LegalStrings.readDocument(.privacy, lang), systemImage: LegalDocument.privacy.systemImage)
+            }
+            NavigationLink {
+                LegalDocumentView(document: .terms)
+            } label: {
+                Label(LegalStrings.readDocument(.terms, lang), systemImage: LegalDocument.terms.systemImage)
+            }
+        } footer: {
+            Text(LegalStrings.versionLine(lang))
+        }
+        Section {
+            Toggle(isOn: $consentChecked) {
+                Text(LegalStrings.consentCheckbox(lang)).font(.callout)
+            }
+            Button(LegalStrings.agreeAndContinue(lang)) { Task { await agreeToLegal() } }
+                .fontWeight(.semibold)
+                .disabled(working || !consentChecked)
+        } footer: {
+            Text(LegalStrings.consentRequiredHint(lang))
+        }
+    }
+
+    /// 记录同意：服务端做可证明同意（版本+时间），成功后再放行；并在本机留一份。
+    /// 注册时本就在线（账号刚在服务端建好），故要求服务端记录成功是合理且更严密的。
+    private func agreeToLegal() async {
+        guard consentChecked, let token = session.token else { return }
+        working = true; defer { working = false }
+        do {
+            try await APIClient().recordLegalConsent(token: token, version: LegalText.version)
+            ConsentStore().recordLegalAgreement(version: LegalText.version)
+            consentDone = true
+            message = nil
+        } catch {
+            message = AccountStrings.networkError(lang)
+        }
+    }
+
+    // MARK: ① 选择身份（大卡片，两种自助角色）
 
     @ViewBuilder private var roleSection: some View {
         Section {

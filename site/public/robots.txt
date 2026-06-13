@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://beeurei.hikosphere.com/sitemap.xml

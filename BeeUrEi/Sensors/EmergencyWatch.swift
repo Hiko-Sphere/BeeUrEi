@@ -90,6 +90,15 @@ final class EmergencyAlertCenter: NSObject, CLLocationManagerDelegate {
     private func send() async {
         guard case .countdown(let kind, _) = phase else { return }
         phase = .sending
+        // 尽力带上坐标：trigger 已发起 requestLocation；若立即发送（sendNow）时还没拿到定位，
+        // 最多等约 3 秒抓一个 fix，拿到即带上。等不到也照发——紧急通知绝不因等 GPS 而延误（见 P2 审计）。
+        if lastFix == nil {
+            for _ in 0..<6 {
+                try? await Task.sleep(for: .milliseconds(500))
+                if lastFix != nil { break }
+                guard case .sending = phase else { return } // 期间被新状态打断则放弃
+            }
+        }
         guard let token = KeychainStore.read() else {
             phase = .failed
             speak(HomeStrings.fallAlertNeedLogin(lang))

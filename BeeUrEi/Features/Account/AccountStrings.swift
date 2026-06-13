@@ -27,6 +27,69 @@ enum AccountStrings {
     static func forgotPassword(_ l: Language) -> String { l == .zh ? "忘记密码？" : "Forgot password?" }
     static func devServerHeader(_ l: Language) -> String { l == .zh ? "服务器地址（开发者）" : "Server address (developer)" }
 
+    // MARK: 启动恢复（有 token，拉 /api/me 恢复账号）
+
+    static func restoreFailedTitle(_ l: Language) -> String { l == .zh ? "连接服务器失败" : "Couldn't reach the server" }
+    static func restoreFailedBody(_ l: Language) -> String { l == .zh ? "请检查网络后重试。" : "Check your network and try again." }
+    static func retry(_ l: Language) -> String { l == .zh ? "重试" : "Retry" }
+    static func signingIn(_ l: Language) -> String { l == .zh ? "正在登录…" : "Signing in…" }
+    static func loadingGeneric(_ l: Language) -> String { l == .zh ? "加载中…" : "Loading…" }
+    static func loadFailedRetry(_ l: Language) -> String {
+        l == .zh ? "加载失败，下拉重试" : "Couldn't load — pull down to retry"
+    }
+
+    // MARK: 黑名单
+
+    static func blocklistExplain(_ l: Language) -> String {
+        l == .zh ? "被你拉黑的人无法向你发起协助/求助请求，匹配也不会把你们配到一起。"
+                 : "People you block can't send you assistance/help requests, and you won't be matched together."
+    }
+    static func blocklistEmptyTitle(_ l: Language) -> String { l == .zh ? "黑名单为空" : "No one blocked" }
+    static func blocklistEmptyMessage(_ l: Language) -> String {
+        l == .zh ? "拉黑的用户会出现在这里，可随时解除。" : "Blocked users appear here. You can unblock anytime."
+    }
+    static func blockedCount(_ n: Int, _ l: Language) -> String { l == .zh ? "已拉黑（\(n)）" : "Blocked (\(n))" }
+    static func unblock(_ l: Language) -> String { l == .zh ? "解除" : "Unblock" }
+    static func blockedRowA11y(_ name: String, _ l: Language) -> String {
+        l == .zh ? "已拉黑 \(name)，双击解除" : "\(name) blocked. Double-tap to unblock."
+    }
+    static func blockUserA11y(_ l: Language) -> String { l == .zh ? "拉黑用户" : "Block a user" }
+    static func addBlockTitle(_ l: Language) -> String { l == .zh ? "拉黑用户" : "Block a user" }
+    static func blockUsernamePlaceholder(_ l: Language) -> String { l == .zh ? "对方用户名" : "Their username" }
+    static func blockAction(_ l: Language) -> String { l == .zh ? "拉黑" : "Block" }
+    static func addBlockMessage(_ l: Language) -> String {
+        l == .zh ? "输入要拉黑的用户名。拉黑后将互不收到对方的请求/匹配。"
+                 : "Enter the username to block. Neither of you will get the other's requests or matches."
+    }
+    static func blockedOk(_ name: String, _ l: Language) -> String { l == .zh ? "已拉黑 \(name)" : "Blocked \(name)" }
+    static func blockFailed(_ l: Language) -> String {
+        l == .zh ? "拉黑失败：找不到该用户名或网络错误" : "Couldn't block: user not found or network error"
+    }
+    static func unblockedOk(_ name: String, _ l: Language) -> String { l == .zh ? "已解除拉黑 \(name)" : "Unblocked \(name)" }
+    static func unblockFailed(_ l: Language) -> String { l == .zh ? "解除失败，请重试" : "Couldn't unblock, please retry" }
+
+    // MARK: 通话记录
+
+    static func callHistoryEmptyTitle(_ l: Language) -> String { l == .zh ? "暂无通话记录" : "No calls yet" }
+    static func callHistoryEmptyMessage(_ l: Language) -> String {
+        l == .zh ? "呼出与呼入的通话都会记录在这里。" : "Outgoing and incoming calls are listed here."
+    }
+    static func callHistoryLoadFailed(_ l: Language) -> String {
+        l == .zh ? "通话记录加载失败，下拉重试。" : "Couldn't load call history — pull down to retry."
+    }
+    /// 通话状态：呼出/呼入 × 已接通/已拒绝/未接。
+    static func callStatus(direction: String, status: String, _ l: Language) -> String {
+        let outgoing = direction == "outgoing"
+        switch status {
+        case "answered": return outgoing ? (l == .zh ? "已接通（呼出）" : "Connected (outgoing)")
+                                          : (l == .zh ? "已接听（呼入）" : "Answered (incoming)")
+        case "declined": return outgoing ? (l == .zh ? "对方已拒绝" : "They declined")
+                                          : (l == .zh ? "已拒绝" : "Declined")
+        default:         return outgoing ? (l == .zh ? "未接通（呼出）" : "No answer (outgoing)")
+                                          : (l == .zh ? "未接来电" : "Missed call")
+        }
+    }
+
     // MARK: 找回密码
 
     static func forgotTitle(_ l: Language) -> String { l == .zh ? "找回密码" : "Reset Password" }
@@ -88,6 +151,11 @@ enum AccountStrings {
     static func currentPassword(_ l: Language) -> String { l == .zh ? "当前密码" : "Current password" }
     static func confirmChange(_ l: Language) -> String { l == .zh ? "确认修改" : "Confirm" }
     static func changePasswordTitle(_ l: Language) -> String { l == .zh ? "修改密码" : "Change Password" }
+    static func logoutConfirmAction(_ l: Language) -> String { l == .zh ? "确认退出登录" : "Confirm sign out" }
+    static func logoutConfirmMessage(_ l: Language) -> String {
+        l == .zh ? "退出后需要重新登录才能使用通话与协助功能。"
+                 : "After signing out you'll need to sign in again to use calls and assistance."
+    }
     static func deleteConfirmTitle(_ l: Language) -> String { l == .zh ? "删除账号" : "Delete account" }
     static func deleteForever(_ l: Language) -> String { l == .zh ? "永久删除我的账号" : "Permanently delete my account" }
     static func deleteConfirmMessage(_ l: Language) -> String {
@@ -228,6 +296,13 @@ enum AccountStrings {
     static func addPasskey(_ l: Language) -> String { l == .zh ? "添加 Passkey" : "Add a passkey" }
     static func passkeyAdded(_ l: Language) -> String { l == .zh ? "Passkey 已添加" : "Passkey added" }
     static func removePasskey(_ l: Language) -> String { l == .zh ? "移除" : "Remove" }
+    static func removePasskeyConfirmTitle(_ l: Language) -> String { l == .zh ? "移除这个 Passkey？" : "Remove this passkey?" }
+    static func removePasskeyConfirmMessage(_ l: Language) -> String {
+        l == .zh ? "移除后，这台设备将无法再用 Passkey 一键登录，需要时可重新添加。"
+                 : "After removing, this device can no longer sign in with this passkey. You can add it again later."
+    }
+    static func passkeyRemoved(_ l: Language) -> String { l == .zh ? "Passkey 已移除" : "Passkey removed" }
+    static func passkeyRemoveFailed(_ l: Language) -> String { l == .zh ? "移除失败，请重试" : "Couldn't remove, please retry" }
     static func noPasskeysYet(_ l: Language) -> String { l == .zh ? "尚未添加 Passkey。" : "No passkeys yet." }
     static func passkeyDeviceFallback(_ l: Language) -> String { l == .zh ? "此设备" : "This device" }
     static func accountSecurityHeader(_ l: Language) -> String { l == .zh ? "登录与安全" : "Sign-in & security" }

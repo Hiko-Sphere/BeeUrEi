@@ -1,0 +1,108 @@
+{
+  "sourceLanguage" : "zh-Hans",
+  "strings" : {
+    "呼叫帮手" : {
+      "comment" : "Siri shortcut: open help / intent title",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Call a helper" } }
+      }
+    },
+    "求助" : {
+      "comment" : "Siri shortcut short title",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Get help" } }
+      }
+    },
+    "打开求助界面，呼叫志愿者或亲友帮你看" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open help to call a volunteer or family to see for you" } }
+      }
+    },
+    "看一看" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Look around" } }
+      }
+    },
+    "打开识别界面：认物体、读文字、辨颜色、扫码" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open recognition: identify objects, read text, name colors, scan codes" } }
+      }
+    },
+    "我在哪" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Where am I" } }
+      }
+    },
+    "语音播报你当前的大概位置和附近地标" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Speak your approximate location and nearby landmarks" } }
+      }
+    },
+    "识别纸币" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Read banknote" } }
+      }
+    },
+    "打开相机识别人民币纸币的面额" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open the camera to read a banknote's denomination" } }
+      }
+    },
+    "扫码" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Scan a code" } }
+      }
+    },
+    "打开相机扫商品条码或二维码并朗读内容" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open the camera to scan a barcode or QR code and read it aloud" } }
+      }
+    },
+    "读整页" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Read a full page" } }
+      }
+    },
+    "引导对准整页纸张，自动拍摄并按顺序朗读全文，可连续多页" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Guide you to frame a full page, auto-capture, and read it aloud in order — page after page" } }
+      }
+    },
+    "公交识别" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Read the bus" } }
+      }
+    },
+    "认出进站的公交车或电车，朗读线路号和终点站" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Identify an arriving bus or tram and read its route number and destination" } }
+      }
+    },
+    "周围的人" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "People nearby" } }
+      }
+    },
+    "数一数前方有几个人，报方位和距离，不识别身份" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Count how many people are ahead, with their direction and distance — no identification" } }
+      }
+    },
+    "光线探测" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Check the light" } }
+      }
+    },
+    "光线" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Light" } }
+      }
+    },
+    "报告环境明暗和亮光的方向，帮你找窗户或灯" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Report brightness and the direction of light to help you find a window or lamp" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

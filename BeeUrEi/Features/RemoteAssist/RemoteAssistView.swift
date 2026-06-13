@@ -49,7 +49,7 @@ struct RemoteAssistView: View {
                         Circle().fill(onlineCount > 0 ? Color.beeSuccess : Color.secondary).frame(width: 10, height: 10)
                         Text(AssistStrings.onlineCount(onlineCount, lang))
                             .font(.subheadline.weight(.medium))
-                        if totalCount > 0 { Text(lang == .zh ? "（共 \(totalCount) 位）" : "(\(totalCount) total)").font(.caption).foregroundStyle(.secondary) }
+                        if totalCount > 0 { Text(AssistStrings.totalCount(totalCount, lang)).font(.caption).foregroundStyle(.secondary) }
                         Spacer()
                     }
                     .padding(.horizontal, BeeSpacing.md).padding(.vertical, 8)
@@ -87,8 +87,7 @@ struct RemoteAssistView: View {
                                 VStack(alignment: .leading, spacing: BeeSpacing.sm) {
                                     HStack {
                                         AvatarView(dataURL: r.ownerAvatar, name: r.ownerName, size: 36)
-                                        Text(lang == .zh ? "\(r.ownerName) 想和你建立\(r.relation)关系"
-                                                         : "\(r.ownerName) wants to link with you as \(r.relation)")
+                                        Text(AssistStrings.wantsRelation(owner: r.ownerName, relation: r.relation, lang))
                                     }
                                     HStack {
                                         Button(AssistStrings.accept(lang)) { Task { await accept(r) } }

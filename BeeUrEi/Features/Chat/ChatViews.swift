@@ -265,6 +265,7 @@ struct ChatView: View {
     @State private var player: AVAudioPlayer?
     @State private var photoItem: PhotosPickerItem?
     @State private var playingVideo: PlayableVideo?
+    @State private var zoomImage: ZoomableImage?    // 点开图片全屏查看
     @State private var groupDetail: GroupConversationInfo? // 群聊：成员表（发言人名字/管理）
     @State private var showGroupInfo = false
     @State private var contacts: [FamilyLinkInfo] = []
@@ -314,6 +315,9 @@ struct ChatView: View {
         }
         .fullScreenCover(item: $playingVideo) { v in
             VideoPlayerSheet(url: v.url, lang: lang)
+        }
+        .fullScreenCover(item: $zoomImage) { z in
+            ImageViewerSheet(image: z.image, lang: lang)
         }
         .task {
             await refreshGroupDetail()
@@ -395,6 +399,9 @@ struct ChatView: View {
                         .resizable().scaledToFit()
                         .frame(maxWidth: 220, maxHeight: 280)
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .onTapGesture { zoomImage = ZoomableImage(image: img) }
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityHint(ChatStrings.openPhotoHint(lang))
                 } else {
                     Label(ChatStrings.photo(lang), systemImage: "photo")
                 }
@@ -470,12 +477,14 @@ struct ChatView: View {
                 Image(systemName: recorder.isRecording ? "stop.circle.fill" : "mic.circle.fill")
                     .font(.system(size: 34))
                     .foregroundStyle(recorder.isRecording ? Color.beeDanger : Color.beeHoney)
+                    .frame(width: 44, height: 44).contentShape(Rectangle())
             }
             .accessibilityLabel(recorder.isRecording ? ChatStrings.voiceStop(lang) : ChatStrings.voiceStart(lang))
 
             // 照片或视频（照片压缩成 data URL；视频上传到服务器磁盘再发 mediaId）。
             PhotosPicker(selection: $photoItem, matching: .any(of: [.images, .videos])) {
                 Image(systemName: "photo.circle.fill").font(.system(size: 34)).foregroundStyle(Color.beeHoney)
+                    .frame(width: 44, height: 44).contentShape(Rectangle())
             }
             .accessibilityLabel(ChatStrings.sendMedia(lang))
             .onChange(of: photoItem) { _, item in
@@ -493,6 +502,7 @@ struct ChatView: View {
                 sendLocation()
             } label: {
                 Image(systemName: "location.circle.fill").font(.system(size: 34)).foregroundStyle(Color.beeHoney)
+                    .frame(width: 44, height: 44).contentShape(Rectangle())
             }
             .disabled(sending)
             .accessibilityLabel(ChatStrings.sendLocation(lang))
@@ -507,6 +517,7 @@ struct ChatView: View {
             } label: {
                 Image(systemName: "arrow.up.circle.fill").font(.system(size: 34))
                     .foregroundStyle(draft.trimmingCharacters(in: .whitespaces).isEmpty ? Color.secondary : Color.beeSuccess)
+                    .frame(width: 44, height: 44).contentShape(Rectangle())
             }
             .disabled(sending || draft.trimmingCharacters(in: .whitespaces).isEmpty)
             .accessibilityLabel(ChatStrings.send(lang))
@@ -605,6 +616,7 @@ struct ChatView: View {
                 errorText = nil
             } catch {
                 errorText = ChatStrings.sendFailed(lang)
+                SpeechHub.shared.speak(ChatStrings.sendFailed(lang), channel: .query, voiceCode: lang.voiceCode)
                 draft = text // 失败还原草稿，不丢内容
             }
         }
@@ -628,6 +640,7 @@ struct ChatView: View {
                 errorText = nil
             } catch {
                 errorText = ChatStrings.sendFailed(lang)
+                SpeechHub.shared.speak(ChatStrings.sendFailed(lang), channel: .query, voiceCode: lang.voiceCode)
             }
         }
     }
@@ -647,10 +660,14 @@ struct ChatView: View {
         }
         guard let data = jpeg else { return }
         let b64 = "data:image/jpeg;base64," + data.base64EncodedString()
+        sending = true
+        defer { sending = false }
         if let m = try? await send(kind: "image", text: b64) {
             messages.append(m)
+            errorText = nil // 成功清掉上一条失败横幅，避免误导
         } else {
             errorText = ChatStrings.sendFailed(lang)
+            SpeechHub.shared.speak(ChatStrings.sendFailed(lang), channel: .query, voiceCode: lang.voiceCode)
         }
     }
 
@@ -659,6 +676,7 @@ struct ChatView: View {
         guard let token = session.token,
               let raw = try? await item.loadTransferable(type: Data.self) else {
             errorText = ChatStrings.sendFailed(lang)
+            SpeechHub.shared.speak(ChatStrings.sendFailed(lang), channel: .query, voiceCode: lang.voiceCode)
             return
         }
         guard raw.count <= 50 * 1024 * 1024 else {
@@ -676,6 +694,7 @@ struct ChatView: View {
             errorText = nil
         } catch {
             errorText = ChatStrings.sendFailed(lang)
+            SpeechHub.shared.speak(ChatStrings.sendFailed(lang), channel: .query, voiceCode: lang.voiceCode)
         }
     }
 
@@ -723,11 +742,16 @@ struct ChatView: View {
             recorder.stop { data in
                 guard let data else { return }
                 let b64 = "data:audio/m4a;base64," + data.base64EncodedString()
+                sending = true
                 Task {
+                    defer { sending = false }
                     if let m = try? await send(kind: "audio", text: b64) {
                         messages.append(m)
+                        errorText = nil
                     } else {
                         errorText = ChatStrings.sendFailed(lang)
+                        // 盲人看不到红字横幅——发送失败要朗读（与文本/图片/视频路径一致，见 P1 审计）。
+                        SpeechHub.shared.speak(ChatStrings.sendFailed(lang), channel: .query, voiceCode: lang.voiceCode)
                     }
                 }
             }
@@ -737,6 +761,8 @@ struct ChatView: View {
                     SpeechHub.shared.speak(ChatStrings.recording(lang), channel: .query, voiceCode: lang.voiceCode)
                 } else {
                     errorText = ChatStrings.micDenied(lang)
+                    // 麦克风权限被拒：盲人点完麦克风毫无反馈——朗读原因（见 P1 审计）。
+                    SpeechHub.shared.speak(ChatStrings.micDenied(lang), channel: .query, voiceCode: lang.voiceCode)
                 }
             }
         }
@@ -768,6 +794,39 @@ struct ChatView: View {
             } catch {
                 errorText = ChatStrings.videoLoadFailed(lang)
             }
+        }
+    }
+}
+
+// MARK: - 图片全屏查看（捏合缩放）
+
+struct ZoomableImage: Identifiable {
+    let id = UUID().uuidString
+    let image: UIImage
+}
+
+/// 收到的照片点开后全屏查看，支持双指捏合缩放（聊天双方多为明眼亲友/协助者）。
+struct ImageViewerSheet: View {
+    let image: UIImage
+    let lang: Language
+    @Environment(\.dismiss) private var dismiss
+    @State private var scale: CGFloat = 1
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Color.black.ignoresSafeArea()
+            Image(uiImage: image)
+                .resizable().scaledToFit()
+                .scaleEffect(scale)
+                .gesture(MagnificationGesture()
+                    .onChanged { scale = max(1, min($0, 4)) }
+                    .onEnded { _ in if scale < 1.05 { withAnimation { scale = 1 } } })
+                .accessibilityLabel(ChatStrings.photo(lang))
+            Button { dismiss() } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 36)).foregroundStyle(.white.opacity(0.9)).padding()
+            }
+            .accessibilityLabel(ChatStrings.close(lang))
         }
     }
 }

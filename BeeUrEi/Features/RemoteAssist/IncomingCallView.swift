@@ -47,7 +47,7 @@ struct IncomingCallView: View {
                         withAnimation(.easeOut(duration: 1.6).repeatForever(autoreverses: false)) { pulsing = true }
                     }
                 Text(ring.callerName).font(.largeTitle.bold()).foregroundStyle(.white)
-                Text(lang == .zh ? "BeeUrEi 视频通话…" : "BeeUrEi video call…")
+                Text(CallStrings.incomingCallSubtitle(lang))
                     .font(.headline).foregroundStyle(.white.opacity(0.75))
                 Spacer()
                 HStack(spacing: 72) {
@@ -64,8 +64,7 @@ struct IncomingCallView: View {
             }
         }
         .task {
-            A11y.announce(lang == .zh ? "\(ring.callerName) 来电，双击接听或拒绝"
-                                      : "Incoming call from \(ring.callerName). Double-tap to answer or decline.")
+            A11y.announce(CallStrings.incomingRingAnnounce(ring.callerName, lang))
             startCancelWatch()
         }
         // VoiceOver 魔法轻点（双指双击）= 接听（系统来电惯例）。

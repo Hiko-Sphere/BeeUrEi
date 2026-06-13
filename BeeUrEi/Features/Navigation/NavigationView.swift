@@ -5,6 +5,9 @@ struct WalkNavigationView: View {
     @State private var model = NavigationViewModel()
     @State private var destination = ""
     @State private var region: NavigationViewModel.Region = .overseas
+    /// 记住上次所选地区（默认按系统区域自动判定：中国大陆→高德，否则海外 MapKit）——
+    /// 避免国内用户用语音"带我去X"时被错误的海外引擎路由（见 P2 审计）。
+    @AppStorage("nav.region") private var regionRaw = ""
     @State private var favorites: [String] = []
     let onClose: () -> Void
 
@@ -20,6 +23,7 @@ struct WalkNavigationView: View {
                         Text(NavStrings.regionChina(lang)).tag(NavigationViewModel.Region.china)
                     }
                     .pickerStyle(.segmented)
+                    .onChange(of: region) { _, r in regionRaw = (r == .china ? "china" : "overseas") } // 记住选择
                 }
 
                 Section(NavStrings.destinationHeader(lang)) {
@@ -29,10 +33,14 @@ struct WalkNavigationView: View {
                         Button(NavStrings.stopPreview(lang), role: .destructive) { model.stopPreview() }
                     } else if !model.running {
                         Button(NavStrings.startNav(lang)) {
-                            let store = FavoritePlacesStore()
-                            store.add(destination)
-                            favorites = store.all
-                            Task { await model.start(destination: destination, region: region) }
+                            let dest = destination
+                            Task {
+                                await model.start(destination: dest, region: region)
+                                // 仅当真的成功建立了路线才存入常用，避免把找不到的垃圾目的地存进收藏（见 P2 审计）。
+                                if model.lastResolvedDestination == dest.trimmingCharacters(in: .whitespacesAndNewlines) {
+                                    let store = FavoritePlacesStore(); store.add(dest); favorites = store.all
+                                }
+                            }
                         }
                         .disabled(destination.isEmpty)
                         Button(NavStrings.previewRoute(lang)) {
@@ -99,7 +107,17 @@ struct WalkNavigationView: View {
                 }
             }
             .navigationTitle(NavStrings.navScreenTitle(lang))
-            .onAppear { favorites = FavoritePlacesStore().all }
+            .onAppear {
+                favorites = FavoritePlacesStore().all
+                // 恢复上次地区；首次按系统区域自动判定（中国大陆→高德）。
+                switch regionRaw {
+                case "china": region = .china
+                case "overseas": region = .overseas
+                default: region = (Locale.current.region?.identifier == "CN") ? .china : .overseas
+                }
+            }
+            // 任何方式关闭（完成/下滑/系统）都彻底停止导航——否则定位、信标音、语音引导会在后台继续（见 P1 审计）。
+            .onDisappear { model.stop() }
             // 语音指令直达："带我去X"→ 预填并直接开始导航；"原路返回"→ 一键回程。
             .task {
                 guard let action = AppRoute.shared.pendingNavAction else { return }

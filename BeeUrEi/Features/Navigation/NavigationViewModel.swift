@@ -16,6 +16,8 @@ final class NavigationViewModel {
     @ObservationIgnored private var lang: Language = FeatureSettings().language // 播报语言（E5，进导航/预览/记路时解析）
     private(set) var steps: [String] = []     // 国内：路线步骤列表（VoiceOver 可读）
     private(set) var running = false
+    /// 最近一次**成功建立路线**的目的地查询串——仅成功后才入收藏，避免把找不到的垃圾目的地存进常用（见 P2 审计）。
+    private(set) var lastResolvedDestination: String?
 
     @ObservationIgnored private let service: NavigationServicing
     @ObservationIgnored private let amap = AMapRouteClient()
@@ -68,11 +70,11 @@ final class NavigationViewModel {
     func start(destination query: String, region: Region) async {
         lang = FeatureSettings().language   // 进导航解析一次（设置页改语言后重开生效）
         guard FeatureSettings().navigationEnabled else {
-            status = NavStrings.enableFirst(lang)
+            failStatus(NavStrings.enableFirst(lang)) // 盲人点完按钮须听到原因（见 P1 审计）
             return
         }
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { status = NavStrings.enterDestination(lang); return }
+        guard !trimmed.isEmpty else { failStatus(NavStrings.enterDestination(lang)); return }
 
         // 重入保护：导航中再次 start(如点了常用目的地)先彻底停止旧导航，避免新旧目的地状态混合（见审查 #5）。
         if running { stop() }
@@ -120,6 +122,7 @@ final class NavigationViewModel {
         // 耳机断连：把听者朝向复位为 0（手机朝向基线），避免信标方向被冻结的旧偏航偏置（见审查 #14）。
         headTracker.onUnavailable = { [weak self] in self?.spatial.setListenerYaw(0) }
         headTracker.start()
+        service.onAuthDenied = { [weak self] in self?.handleLocationDenied() }
         service.requestAuthAndStart()
     }
 
@@ -273,9 +276,11 @@ final class NavigationViewModel {
                 var line: [Coordinate] = result.flatMap { ($0.polyline ?? []).compactMap { p in
                     p.count >= 2 ? Coordinate(lat: p[0], lon: p[1]) : nil
                 } }
-                if let dLat = route.destinationLat, let dLon = route.destinationLon {
+                if let dLat = route.destinationLat, let dLon = route.destinationLon,
+                   NavigationService.isValidDestination(CLLocationCoordinate2D(latitude: dLat, longitude: dLon)) {
                     destination = CLLocationCoordinate2D(latitude: dLat, longitude: dLon)
-                } else if let last = line.last {
+                } else if let last = line.last,
+                          NavigationService.isValidDestination(CLLocationCoordinate2D(latitude: last.lat, longitude: last.lon)) {
                     destination = CLLocationCoordinate2D(latitude: last.lat, longitude: last.lon) // 旧后端兜底
                 }
                 if let dest = destination { line.append(Coordinate(lat: dest.latitude, lon: dest.longitude)) }
@@ -286,6 +291,7 @@ final class NavigationViewModel {
 
                 if previewing { narratePreview(); return } // 预览：不进实时跟踪，逐步试听
                 if let first = result.first {
+                    lastResolvedDestination = destinationQuery // 成功取到路线：可入收藏（见 P2 审计）
                     if destination != nil, !maneuvers.isEmpty {
                         status = NavStrings.navStartedStatus(result.count, lang)
                         speak(NavStrings.navStartedSpeak(result.count, first.instruction, lang))
@@ -295,11 +301,11 @@ final class NavigationViewModel {
                         speak(NavStrings.staticRouteSpeak(result.count, first.instruction, lang))
                     }
                 } else {
-                    status = NavStrings.noWalkingRoute(lang)
+                    failStatus(NavStrings.noWalkingRoute(lang))
                 }
             } catch {
                 guard running, gen == navGeneration else { return } // 过期/已停止任务的失败不得覆盖新会话状态（见审查 round5 #1）
-                status = NavStrings.chinaRouteFailed(lang)
+                failStatus(NavStrings.chinaRouteFailed(lang))
             }
         case .overseas:
             // 重规划时复用已知目的地，不重复 geocode（少一个失败点、避免返回不同坐标，见审查 #2）。
@@ -312,7 +318,7 @@ final class NavigationViewModel {
                 destination = geocoded
             } else {
                 guard running, gen == navGeneration else { return }
-                status = NavStrings.destinationNotFound(lang); return
+                failStatus(NavStrings.destinationNotFound(lang)); return
             }
             let m = await service.walkingManeuvers(from: loc.coordinate, to: dest)
             // 关键：旧目的地的规划任务恢复后不得覆盖正在为新目的地建立的状态（见审查 #1）。
@@ -325,7 +331,13 @@ final class NavigationViewModel {
             routeCoords = m.map { Coordinate(lat: $0.coordinate.latitude, lon: $0.coordinate.longitude) }
                 + [Coordinate(lat: dest.latitude, lon: dest.longitude)]
             if previewing { narratePreview(); return } // 预览：不进实时跟踪，逐步试听
-            status = m.isEmpty ? NavStrings.noWalkingRoute(lang) : NavStrings.navStartedStatus(m.count, lang)
+            if m.isEmpty {
+                failStatus(NavStrings.noWalkingRoute(lang))
+            } else {
+                status = NavStrings.navStartedStatus(m.count, lang)
+                speak(NavStrings.navStartedStatus(m.count, lang))
+                lastResolvedDestination = destinationQuery // 成功建立路线：可入收藏（见 P2 审计）
+            }
         }
     }
 
@@ -334,6 +346,24 @@ final class NavigationViewModel {
         lastSpoken = text
         // 经共享导航语音通道：避障 obstacle/critical 播报会掐断它（跨通道仲裁，Phase 2 标准）。
         NavVoice.shared.speak(text, rate: FeatureSettings().speechRate)
+    }
+
+    /// 设置状态并朗读它（导航失败/前置条件不满足时——盲人看不到屏幕上的 status，必须听到，见 P1 审计）。
+    private func failStatus(_ text: String) {
+        status = text
+        lastSpoken = ""   // 失败提示必报，绕开去重
+        speak(text)
+    }
+
+    /// 定位权限被拒/受限：停下并朗读"请开启定位"，避免永久卡在"正在定位…"（见 P0 审计）。
+    private func handleLocationDenied() {
+        running = false
+        recordingTrail = false
+        previewing = false
+        service.stop()
+        headTracker.stop()
+        spatial.stop()
+        failStatus(NavStrings.locationDenied(lang))
     }
 
     // MARK: 街景预览（出门前虚拟试听整条路线）
@@ -390,13 +420,16 @@ final class NavigationViewModel {
     /// 开始记路：行进中每 ≥8m 记一个航点（去抖原地抖动），供之后一键原路返回。
     func startTrailRecording() {
         lang = FeatureSettings().language
+        let wasNavigating = running
         if running { stop() } // 与导航互斥（共用定位服务）
+        if wasNavigating { speak(NavStrings.navStoppedForNew(lang)) } // 告知"已停止当前导航"，再开始记路（见 P2 审计）
         trail.reset()
         trailCount = 0
         recordingTrail = true
         status = NavStrings.trailRecordingStatus(lang)
         speak(NavStrings.trailStartSpeak(lang))
         service.onLocation = { [weak self] loc in self?.handleTrail(loc) }
+        service.onAuthDenied = { [weak self] in self?.handleLocationDenied() }
         service.requestAuthAndStart()
     }
 
@@ -417,7 +450,9 @@ final class NavigationViewModel {
             return
         }
         if recordingTrail { recordingTrail = false }
+        let wasNavigating = running
         if running { stop() }
+        if wasNavigating { speak(NavStrings.navStoppedForNew(lang)) } // 回程前告知"已停止当前导航"（见 P2 审计）
         navGeneration += 1
         // 轨迹与 GPS 同为 WGS-84 原始坐标：回程不做 GCJ 纠偏（region 置 overseas 即"不转换"）。
         region = .overseas
@@ -458,6 +493,7 @@ final class NavigationViewModel {
         headTracker.onYaw = { [weak self] yaw in self?.spatial.setListenerYaw(Float(yaw)) }
         headTracker.onUnavailable = { [weak self] in self?.spatial.setListenerYaw(0) }
         headTracker.start()
+        service.onAuthDenied = { [weak self] in self?.handleLocationDenied() }
         service.requestAuthAndStart()
     }
 

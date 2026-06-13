@@ -13,6 +13,21 @@ enum FramingStrings {
     }
     static func unsupportedShort(_ l: Language) -> String { l == .zh ? "设备不支持" : "Device not supported" }
     static func starting(_ l: Language) -> String { l == .zh ? "正在启动…" : "Starting…" }
+    static func cameraDenied(_ l: Language) -> String {
+        l == .zh ? "需要相机权限才能识别。请在系统设置中开启相机。"
+                 : "Camera access is needed to recognize things. Enable the camera in Settings."
+    }
+    static func cameraError(_ msg: String, _ l: Language) -> String {
+        l == .zh ? "相机出错：\(msg)" : "Camera error: \(msg)"
+    }
+    static func openSettings(_ l: Language) -> String { l == .zh ? "打开系统设置" : "Open Settings" }
+    static func torchFailed(_ l: Language) -> String {
+        l == .zh ? "手电筒打开失败" : "Couldn't turn on the flashlight"
+    }
+    static func copied(_ l: Language) -> String { l == .zh ? "已复制到剪贴板" : "Copied to clipboard" }
+    static func nothingToExplore(_ l: Language) -> String {
+        l == .zh ? "这一帧没认出物体或文字，请对准后再试" : "Nothing recognized in this frame — aim and try again"
+    }
 
     // MARK: 取景识别
 
@@ -224,6 +239,10 @@ enum FramingStrings {
     static func banknoteResult(_ name: String, _ l: Language) -> String { l == .zh ? "纸币：\(name)" : "Banknote: \(name)" }
     static func banknoteUncertain(_ name: String, _ l: Language) -> String {
         l == .zh ? "可能是\(name)，请换个角度再拍一次确认" : "Possibly \(name) — try another angle to confirm"
+    }
+    /// 不确定时的屏显文案也要带"可能"——不能屏上显得很确定而只有语音含糊（见审计 P2）。
+    static func banknoteUncertainResult(_ name: String, _ l: Language) -> String {
+        l == .zh ? "纸币：可能是\(name)" : "Banknote: possibly \(name)"
     }
     static func banknoteNone(_ l: Language) -> String {
         l == .zh ? "没认出纸币面额。请把纸币平整地举在镜头前约三十厘米再试"

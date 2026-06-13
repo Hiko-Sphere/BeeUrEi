@@ -96,6 +96,21 @@ enum SettingsStrings {
     static func accountHeader(_ l: Language) -> String { l == .zh ? "账号" : "Account" }
     static func loginRegister(_ l: Language) -> String { l == .zh ? "登录 / 注册" : "Sign in / Register" }
     static func familyAndEmergency(_ l: Language) -> String { l == .zh ? "亲友与紧急呼叫" : "Family & emergency calls" }
+    // 语言区：刻意双语并排（看不懂当前语言的用户也要能找到这个切换）。
+    static func languageHeader(_ l: Language) -> String { "语言 / Language" }
+    static func languagePickerLabel(_ l: Language) -> String { "播报语言 / Speech language" }
+    static func languageSystemOption(_ l: Language) -> String { "跟随系统 / System" }
+    static func languageFooter(_ l: Language) -> String {
+        "决定避障实时语音引导的语言与嗓音（中文 / English）。Sets the language and voice for real-time guidance."
+    }
+    static func avoidanceOffConfirmTitle(_ l: Language) -> String { l == .zh ? "关闭实时避障？" : "Turn off obstacle detection?" }
+    static func avoidanceOffConfirmMessage(_ l: Language) -> String {
+        l == .zh ? "关闭后将不再提示前方障碍。这是核心安全功能，确认要关闭吗？"
+                 : "You'll no longer be warned about obstacles ahead. This is a core safety feature — turn it off?"
+    }
+    static func keepOn(_ l: Language) -> String { l == .zh ? "保持开启" : "Keep it on" }
+    static func turnOff(_ l: Language) -> String { l == .zh ? "仍要关闭" : "Turn off" }
+
     static func avoidanceToggle(_ l: Language) -> String { l == .zh ? "实时避障" : "Real-time obstacle detection" }
     static func navigationToggle(_ l: Language) -> String { l == .zh ? "步行导航" : "Walking navigation" }
     static func featuresHeader(_ l: Language) -> String { l == .zh ? "功能" : "Features" }

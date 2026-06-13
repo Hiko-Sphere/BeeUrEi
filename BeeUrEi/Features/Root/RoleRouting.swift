@@ -1,12 +1,12 @@
 import SwiftUI
 
-func roleDisplayName(_ role: String) -> String {
+func roleDisplayName(_ role: String, _ l: Language) -> String {
     switch role {
-    case "blind": return "求助者（视障）"
-    case "helper": return "协助者"
-    case "family": return "亲友"
-    case "admin": return "管理员"
-    case "developer": return "开发者"
+    case "blind": return l == .zh ? "求助者（视障）" : "Blind / low vision"
+    case "helper": return l == .zh ? "协助者" : "Helper"
+    case "family": return l == .zh ? "亲友" : "Family"
+    case "admin": return l == .zh ? "管理员" : "Admin"
+    case "developer": return l == .zh ? "开发者" : "Developer"
     default: return role
     }
 }
@@ -33,15 +33,24 @@ func isAssistRole(_ role: String) -> Bool { role == "helper" || role == "family"
 struct RoleAccountSection: View {
     let session: AuthSession
     let onSwitchRole: () -> Void
+    @State private var showLogoutConfirm = false
+    private var lang: Language { FeatureSettings().language }
 
     var body: some View {
-        Section("账号") {
+        Section(HelperStrings.accountHeader(lang)) {
             if let u = session.user {
-                LabeledContent("用户", value: u.displayName)
-                LabeledContent("角色", value: roleDisplayName(u.role))
+                LabeledContent(lang == .zh ? "用户" : "User", value: u.displayName)
+                LabeledContent(lang == .zh ? "角色" : "Role", value: roleDisplayName(u.role, lang))
             }
-            Button("切换角色") { onSwitchRole() }
-            Button("退出登录", role: .destructive) { session.logout() }
+            Button(HelperStrings.switchRole(lang)) { onSwitchRole() }
+            Button(HelperStrings.logout(lang), role: .destructive) { showLogoutConfirm = true }
+        }
+        // 退出登录是破坏性操作（误触即掉线）——先确认（与各账号入口一致，见审计 P1）。
+        .confirmationDialog(AccountStrings.logout(lang), isPresented: $showLogoutConfirm, titleVisibility: .visible) {
+            Button(AccountStrings.logoutConfirmAction(lang), role: .destructive) { session.logout() }
+            Button(AccountStrings.cancel(lang), role: .cancel) {}
+        } message: {
+            Text(AccountStrings.logoutConfirmMessage(lang))
         }
     }
 }
@@ -51,40 +60,50 @@ struct RoleEntryView: View {
     let account: AccountInfo
     let session: AuthSession
     let onEnter: (String) -> Void
+    @State private var showLogoutConfirm = false
+    private var lang: Language { FeatureSettings().language }
 
     var body: some View {
         VStack(spacing: BeeSpacing.md) {
             Spacer()
             AvatarView(dataURL: account.avatar, name: account.displayName, size: 88) // 登录用户头像
                 .overlay(Circle().strokeBorder(Color.beeHoney.opacity(0.5), lineWidth: 2))
-            Text("你好，\(account.displayName)").font(.title.bold())
+            Text(lang == .zh ? "你好，\(account.displayName)" : "Hello, \(account.displayName)").font(.title.bold())
             // 角色徽章。
-            Text(roleDisplayName(account.role))
+            Text(roleDisplayName(account.role, lang))
                 .font(.subheadline.weight(.semibold))
                 .padding(.horizontal, 14).padding(.vertical, 6)
                 .background(Color.beeHoney.opacity(0.18), in: Capsule())
                 .foregroundStyle(Color.beeAccent)
-                .accessibilityLabel("账号角色：\(roleDisplayName(account.role))")
+                .accessibilityLabel((lang == .zh ? "账号角色：" : "Account role: ") + roleDisplayName(account.role, lang))
 
             Spacer()
 
             if account.role == "developer" {
-                Text("开发者：选择以哪个角色界面进入").font(.subheadline).foregroundStyle(.secondary)
+                Text(lang == .zh ? "开发者：选择以哪个角色界面进入" : "Developer: choose which role's interface to enter")
+                    .font(.subheadline).foregroundStyle(.secondary)
                 // helper 即合并后的协助端（含原 family 全部功能），故不再单列 family。
                 ForEach(["blind", "helper", "admin", "developer"], id: \.self) { r in
-                    Button("以 \(roleDisplayName(r)) 进入") { onEnter(r) }
+                    Button((lang == .zh ? "以 \(roleDisplayName(r, lang)) 进入" : "Enter as \(roleDisplayName(r, lang))")) { onEnter(r) }
                         .buttonStyle(.bordered).controlSize(.large)
                 }
             } else {
-                BeeBigButton("进入", systemImage: "arrow.right.circle.fill",
-                             subtitle: "以\(roleDisplayName(account.role))身份") { onEnter(account.role) }
+                BeeBigButton(lang == .zh ? "进入" : "Enter", systemImage: "arrow.right.circle.fill",
+                             subtitle: (lang == .zh ? "以\(roleDisplayName(account.role, lang))身份"
+                                                    : "as \(roleDisplayName(account.role, lang))")) { onEnter(account.role) }
             }
 
-            Button("退出登录", role: .destructive) { session.logout() }
+            Button(AccountStrings.logout(lang), role: .destructive) { showLogoutConfirm = true }
                 .font(.subheadline)
                 .padding(.top, BeeSpacing.sm)
         }
         .padding(BeeSpacing.lg)
+        .confirmationDialog(AccountStrings.logout(lang), isPresented: $showLogoutConfirm, titleVisibility: .visible) {
+            Button(AccountStrings.logoutConfirmAction(lang), role: .destructive) { session.logout() }
+            Button(AccountStrings.cancel(lang), role: .cancel) {}
+        } message: {
+            Text(AccountStrings.logoutConfirmMessage(lang))
+        }
     }
 }
 

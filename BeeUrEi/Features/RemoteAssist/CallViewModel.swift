@@ -1,11 +1,20 @@
 import Foundation
 import Observation
+import UIKit
 
 /// 通话视图模型：编排信令 + 媒体 + 视频隐私门控。
 @MainActor
 @Observable
 final class CallViewModel {
     enum Role { case blind, helper }
+
+    /// 通话状态播报：VoiceOver 走系统公告；盲人未开 VoiceOver 时用 App TTS 念出（A11y.announce 在未开 VO 时被静默丢弃，见 P1 审计）。
+    private func announce(_ text: String) {
+        A11y.announce(text)
+        if role == .blind, !UIAccessibility.isVoiceOverRunning {
+            SpeechHub.shared.speak(text, channel: .call, voiceCode: lang.voiceCode)
+        }
+    }
 
     let role: Role
     let callId: String
@@ -138,7 +147,7 @@ final class CallViewModel {
             guard let self, !self.connected, !self.ended, !self.declined, !self.callEnded else { return }
             self.unanswered = true
             self.statusText = CallStrings.unanswered(self.lang)
-            A11y.announce(CallStrings.unansweredAnnounce(self.lang))
+            self.announce(CallStrings.unansweredAnnounce(self.lang))
         }
     }
 
@@ -186,7 +195,7 @@ final class CallViewModel {
             guard role == .blind, videoSending else { return }
             if let torch = msg["torch"] as? Bool {
                 media.setTorch(torch)
-                A11y.announce(CallStrings.announceRemoteTorch(on: torch, lang))
+                announce(CallStrings.announceRemoteTorch(on: torch, lang))
             }
             if let zoom = msg["zoom"] as? Double {
                 media.setZoom(zoom)
@@ -206,7 +215,7 @@ final class CallViewModel {
         setVideoSending(false)
         connected = false
         statusText = CallStrings.peerHungUp(lang)
-        A11y.announce(CallStrings.peerHungUp(lang))
+        announce(CallStrings.peerHungUp(lang))
         callEnded = true
     }
 

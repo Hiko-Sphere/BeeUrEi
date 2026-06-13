@@ -84,7 +84,7 @@ struct AuthGateView: View {
             } label: {
                 Label(AccountStrings.continueWithEmail(lang), systemImage: "envelope.fill")
                     .font(.body.weight(.semibold))
-                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .frame(maxWidth: .infinity, minHeight: 52)
             }
             .buttonStyle(.borderedProminent)
             .tint(Color.beeHoney)
@@ -97,7 +97,7 @@ struct AuthGateView: View {
             } label: {
                 Label(AccountStrings.methodPasskey(lang), systemImage: "person.badge.key.fill")
                     .font(.body.weight(.semibold))
-                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .frame(maxWidth: .infinity, minHeight: 52)
             }
             .buttonStyle(.bordered)
             .disabled(passkeyBusy)
@@ -118,7 +118,7 @@ struct AuthGateView: View {
             } label: {
                 Text(AccountStrings.continueWithPassword(lang))
                     .font(.body.weight(.medium))
-                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .frame(maxWidth: .infinity, minHeight: 52)
             }
             .buttonStyle(.bordered)
             .accessibilityLabel(AccountStrings.continueWithPassword(lang))
@@ -212,7 +212,7 @@ struct PasswordAuthView: View {
                 }
 
                 if let err = session.errorMessage {
-                    Section { Text(err).foregroundStyle(.red) }
+                    Section { Text(err).foregroundStyle(Color.beeDanger) }
                 }
 
                 Section {

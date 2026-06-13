@@ -16,6 +16,11 @@ enum NavStrings {
     static func enterDestination(_ l: Language) -> String { l == .zh ? "请输入目的地" : "Please enter a destination" }
     static func locating(_ l: Language) -> String { l == .zh ? "正在定位…" : "Locating…" }
     static func navStopped(_ l: Language) -> String { l == .zh ? "导航已停止" : "Navigation stopped" }
+    static func locationDenied(_ l: Language) -> String {
+        l == .zh ? "需要定位权限才能导航，请在系统设置开启定位。"
+                 : "Location access is needed for navigation. Enable Location in Settings."
+    }
+    static func navStoppedForNew(_ l: Language) -> String { l == .zh ? "已停止当前导航" : "Stopped the current navigation" }
     static func offRoute(_ l: Language) -> String { l == .zh ? "已偏离路线，正在重新规划" : "Off route — replanning" }
     static func nearDestination(_ l: Language) -> String { l == .zh ? "已接近目的地" : "You're near the destination" }
     static func approachingDestination(_ l: Language) -> String {

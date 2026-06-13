@@ -18,7 +18,7 @@ struct FamilyLinksView: View {
     var body: some View {
         List {
             if let errorText {
-                Section { Text(errorText).foregroundStyle(.red) }
+                Section { Text(errorText).foregroundStyle(Color.beeDanger) }
             }
 
             Section(AssistStrings.emergencyHeader(lang)) {
@@ -26,7 +26,7 @@ struct FamilyLinksView: View {
                     Task { await triggerEmergency() }
                 } label: {
                     Label(AssistStrings.emergencyCallFamily(lang), systemImage: "sos.circle.fill")
-                        .foregroundStyle(.red).font(.headline)
+                        .foregroundStyle(Color.beeDanger).font(.headline)
                 }
                 .accessibilityHint(AssistStrings.emergencyCallHint(lang))
                 if let emergencyInfo {
@@ -45,7 +45,7 @@ struct FamilyLinksView: View {
                                 Text(l.relation
                                      + (l.isEmergency ? AssistStrings.emergencySuffix(lang) : "")
                                      + (l.isPending ? AssistStrings.pendingSuffix(lang) : ""))
-                                    .font(.caption).foregroundStyle(l.isPending ? .orange : .secondary)
+                                    .font(.caption).foregroundStyle(l.isPending ? Color.beeWarn : .secondary)
                             }
                             Spacer()
                             if let phone = l.phone, !phone.isEmpty {
@@ -77,6 +77,9 @@ struct FamilyLinksView: View {
             }
         }
         .navigationTitle(AssistStrings.familyNavTitle(lang))
+        // 错误与紧急呼叫状态主动朗读——盲人看不到屏幕上的提示（见 P2 审计）。
+        .onChange(of: errorText) { _, e in if let e, !e.isEmpty { A11y.announce(e) } }
+        .onChange(of: emergencyInfo) { _, m in if let m, !m.isEmpty { A11y.announce(m) } }
         .task { await load() }
         .fullScreenCover(item: $emergencyCall) { s in
             CallView(role: .blind, callId: s.id) {
@@ -103,7 +106,8 @@ struct FamilyLinksView: View {
             newUsername = ""; newRelation = ""; newPhone = ""; isEmergency = false
             await load()
         } catch let APIError.server(msg) {
-            errorText = msg == "member_not_found" ? AssistStrings.memberNotFound(lang) : msg
+            // 不把原始后端错误码（如 "already_linked"）直接念给用户——映射到可读文案（见 P2 审计）。
+            errorText = msg == "member_not_found" ? AssistStrings.memberNotFound(lang) : AssistStrings.addFailed(lang)
         } catch { errorText = AssistStrings.addFailed(lang) }
     }
 

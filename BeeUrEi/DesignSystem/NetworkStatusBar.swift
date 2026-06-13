@@ -4,21 +4,25 @@ import SwiftUI
 /// 信号强弱来自 WebRTC 实测往返时延（iOS 不开放原始信号格数 API），仅在通话中传入 callQuality。
 struct NetworkStatusBar: View {
     var callQuality: CallQuality?
+    var lang: Language
     @State private var net = NetworkMonitor.shared
 
-    init(callQuality: CallQuality? = nil) { self.callQuality = callQuality }
+    init(callQuality: CallQuality? = nil, lang: Language = FeatureSettings().language) {
+        self.callQuality = callQuality
+        self.lang = lang
+    }
 
     var body: some View {
         HStack(spacing: BeeSpacing.sm) {
             Image(systemName: net.systemImage)
-            Text(net.label).font(.subheadline.weight(.medium))
+            Text(net.label(lang)).font(.subheadline.weight(.medium))
             if net.isExpensive {
-                Text("按流量").font(.caption2).foregroundStyle(Color.beeWarn)
+                Text(meteredText).font(.caption2).foregroundStyle(Color.beeWarn)
             }
             Spacer(minLength: BeeSpacing.sm)
             if let q = callQuality {
                 signalBars(q)
-                Text(q.label).font(.caption)
+                Text(CallStrings.signalLabel(q, lang)).font(.caption)
                     .foregroundStyle(q == .weak ? Color.beeDanger : .secondary)
             }
         }
@@ -49,10 +53,12 @@ struct NetworkStatusBar: View {
         }
     }
 
+    private var meteredText: String { lang == .zh ? "按流量" : "Metered" }
+
     private var a11yLabel: String {
-        var s = "当前网络：\(net.label)"
-        if net.isExpensive { s += "，按流量计费" }
-        if let q = callQuality { s += "，\(q.label)" }
+        var s = (lang == .zh ? "当前网络：" : "Current network: ") + net.label(lang)
+        if net.isExpensive { s += lang == .zh ? "，按流量计费" : ", metered connection" }
+        if let q = callQuality { s += "，\(CallStrings.signalLabel(q, lang))" }
         return s
     }
 }

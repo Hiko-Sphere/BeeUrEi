@@ -21,6 +21,7 @@ struct LoginView: View {
     @State private var showChangePassword = false
     @State private var oldPassword = ""
     @State private var newPassword = ""
+    @State private var showLogoutConfirm = false
     @State private var showDeleteConfirm = false
     @State private var accountMessage: String?
     @State private var detail: AccountInfo?     // /api/me（含邮箱/验证状态/头像）
@@ -37,6 +38,8 @@ struct LoginView: View {
     @State private var passkeyList: [PasskeyInfo] = []
     @State private var securityMsg: String?
     @State private var passkeyBusy = false
+    @State private var detailLoadFailed = false           // /api/me 拉取失败：别把已绑定账号显示成空
+    @State private var passkeyToRemove: PasskeyInfo?       // 移除 Passkey 前确认（不可逆）
 
     /// 账号页文案语言（E5）。
     private var lang: Language { FeatureSettings().language }
@@ -83,9 +86,23 @@ struct LoginView: View {
                     NavigationLink(AccountStrings.callHistory(lang)) { CallHistoryView() }
                     NavigationLink(AccountStrings.blocklist(lang)) { BlocklistView() }
                     Button(AccountStrings.changePassword(lang)) { showChangePassword = true }
-                    Button(AccountStrings.logout(lang), role: .destructive) { session.logout() }
+                    Button(AccountStrings.logout(lang), role: .destructive) { showLogoutConfirm = true }
                     Button(AccountStrings.deleteAccount(lang), role: .destructive) { showDeleteConfirm = true }
                 }
+                // 账号明细（邮箱/手机/Apple/Passkey）拉取中或失败时，先别显示"未绑定"误导态——给加载/重试。
+                if detail == nil {
+                    Section {
+                        if detailLoadFailed {
+                            VStack(alignment: .leading, spacing: BeeSpacing.sm) {
+                                Text(AccountStrings.loadFailedRetry(lang)).foregroundStyle(.secondary)
+                                Button(AccountStrings.retry(lang)) { Task { await loadMe() } }
+                            }
+                        } else {
+                            HStack { Spacer(); ProgressView(); Spacer() }
+                        }
+                    }
+                }
+                if detail != nil {
                 Section(AccountStrings.emailHeader(lang)) {
                     if let email = detail?.email, !email.isEmpty {
                         HStack {
@@ -146,7 +163,7 @@ struct LoginView: View {
                             HStack {
                                 Label(pk.deviceName ?? AccountStrings.passkeyDeviceFallback(lang), systemImage: "key.fill")
                                 Spacer()
-                                Button(AccountStrings.removePasskey(lang), role: .destructive) { removePasskey(pk.id) }
+                                Button(AccountStrings.removePasskey(lang), role: .destructive) { passkeyToRemove = pk }
                                     .font(.caption).buttonStyle(.bordered)
                             }
                             .accessibilityElement(children: .combine)
@@ -155,6 +172,7 @@ struct LoginView: View {
                     Button(AccountStrings.addPasskey(lang)) { addPasskey() }
                         .disabled(passkeyBusy)
                 }
+                } // if detail != nil
                 if let securityMsg {
                     Section { Text(securityMsg).foregroundStyle(.secondary) }
                 }
@@ -190,12 +208,14 @@ struct LoginView: View {
                 }
 
                 if let err = session.errorMessage {
-                    Section { Text(err).foregroundStyle(.red) }
+                    Section { Text(err).foregroundStyle(Color.beeDanger) }
                 }
 
                 Section {
                     Button(isRegister ? AccountStrings.registerAndLogin(lang) : AccountStrings.signIn(lang)) { submit() }
-                        .disabled(session.isWorking || username.isEmpty || password.isEmpty)
+                        .disabled(session.isWorking
+                                  || username.trimmingCharacters(in: .whitespaces).isEmpty
+                                  || password.isEmpty)
                     Button(isRegister ? AccountStrings.toLogin(lang) : AccountStrings.toRegister(lang)) { isRegister.toggle() }
                     if !isRegister {
                         Button(AccountStrings.forgotPassword(lang)) { showForgot = true }.font(.footnote)
@@ -233,6 +253,8 @@ struct LoginView: View {
         .onChange(of: session.errorMessage) { _, msg in if let msg, !msg.isEmpty { A11y.announce(msg) } }
         .onChange(of: photoItem) { _, item in if let item { Task { await uploadAvatar(item) } } }
         .onChange(of: securityMsg) { _, m in if let m, !m.isEmpty { A11y.announce(m) } }
+        // 账号操作结果（改昵称失败、改密、删号等）也要朗读给盲人（见 P1 无障碍审计）。
+        .onChange(of: accountMessage) { _, m in if let m, !m.isEmpty { A11y.announce(m) } }
         .alert(AccountStrings.nicknameTitle(lang), isPresented: $showNickname) {
             TextField(AccountStrings.nicknamePlaceholder(lang), text: $nickInput)
             Button(AccountStrings.save(lang)) { Task { await saveNickname() } }
@@ -275,18 +297,46 @@ struct LoginView: View {
                 }
             }
         }
+        // 退出登录是破坏性操作（误触即掉线）——与删号一样先确认（见审计 P1）。
+        .confirmationDialog(AccountStrings.logout(lang), isPresented: $showLogoutConfirm, titleVisibility: .visible) {
+            Button(AccountStrings.logoutConfirmAction(lang), role: .destructive) { session.logout() }
+            Button(AccountStrings.cancel(lang), role: .cancel) {}
+        } message: {
+            Text(AccountStrings.logoutConfirmMessage(lang))
+        }
         .confirmationDialog(AccountStrings.deleteConfirmTitle(lang), isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button(AccountStrings.deleteForever(lang), role: .destructive) { deleteAccount() }
             Button(AccountStrings.cancel(lang), role: .cancel) {}
         } message: {
             Text(AccountStrings.deleteConfirmMessage(lang))
         }
+        // 移除 Passkey 不可逆（移除后该设备需重新添加）——先确认（见审计 P2）。
+        .confirmationDialog(AccountStrings.removePasskeyConfirmTitle(lang),
+                            isPresented: Binding(get: { passkeyToRemove != nil },
+                                                 set: { if !$0 { passkeyToRemove = nil } }),
+                            titleVisibility: .visible) {
+            Button(AccountStrings.removePasskey(lang), role: .destructive) {
+                if let pk = passkeyToRemove { removePasskey(pk.id) }
+                passkeyToRemove = nil
+            }
+            Button(AccountStrings.cancel(lang), role: .cancel) { passkeyToRemove = nil }
+        } message: {
+            Text(AccountStrings.removePasskeyConfirmMessage(lang))
+        }
     }
 
     private func loadMe() async {
         guard session.isLoggedIn, let token = KeychainStore.read() else { detail = nil; passkeyList = []; return }
-        detail = try? await APIClient().me(token: token)
-        passkeyList = (try? await APIClient().passkeys(token: token)) ?? []
+        // 不能在瞬时失败时清空 detail——否则已绑邮箱/手机/Apple/Passkey 的账号会被显示成"全未绑定"，
+        // 用户去重绑会撞 *_taken 错误（见 P1 审计）。失败保留旧值，仅标记 detailLoadFailed。
+        do {
+            detail = try await APIClient().me(token: token)
+            passkeyList = (try? await APIClient().passkeys(token: token)) ?? []
+            detailLoadFailed = false
+        } catch {
+            detailLoadFailed = true
+            if detail == nil { A11y.announce(AccountStrings.loadFailedRetry(lang)) }
+        }
     }
 
     /// 修改用户名（唯一登录标识；现存账号自定义 userid）。
@@ -370,12 +420,19 @@ struct LoginView: View {
         }
     }
 
-    /// 移除一把 Passkey。
+    /// 移除一把 Passkey（失败要反馈，不能静默）。
     private func removePasskey(_ id: String) {
         guard let token = KeychainStore.read() else { return }
         Task {
-            try? await APIClient().deletePasskey(token: token, id: id)
-            await loadMe()
+            do {
+                try await APIClient().deletePasskey(token: token, id: id)
+                await loadMe()
+                securityMsg = AccountStrings.passkeyRemoved(lang)
+            } catch let APIError.server(code) {
+                securityMsg = AccountStrings.accountErrorText(code, lang)
+            } catch {
+                securityMsg = AccountStrings.passkeyRemoveFailed(lang)
+            }
         }
     }
 

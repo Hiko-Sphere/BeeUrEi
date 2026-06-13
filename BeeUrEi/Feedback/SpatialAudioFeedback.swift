@@ -9,6 +9,7 @@ final class SpatialAudioFeedback: FeedbackSink {
     private let player = AVAudioPlayerNode()
     private var toneBuffer: AVAudioPCMBuffer?
     private var started = false
+    private var routeObserver: NSObjectProtocol?
 
     init() {
         engine.attach(environment)
@@ -19,6 +20,11 @@ final class SpatialAudioFeedback: FeedbackSink {
         environment.listenerPosition = AVAudio3DPoint(x: 0, y: 0, z: 0)
         toneBuffer = SpatialAudioFeedback.makeTone(format: format)
         configureSpatialization()
+        // 路由中途变化（边走边插上 AirPods）也要重判耳机/扬声器——否则整段导航停留在非 HRTF 渲染（见 P2 审计）。
+        routeObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.refreshOutputType()
+        }
     }
 
     /// 启用**真正的双耳空间化**——这是此前缺失的关键一环：`AVAudioPlayerNode` 默认渲染算法是

@@ -25,6 +25,16 @@ struct CallView: View {
         self.onClose = onClose
     }
 
+    /// 通话状态播报：VoiceOver 用户走系统公告；盲人若没开 VoiceOver，用 App 自身 TTS 念出来——
+    /// A11y.announce 在未开 VoiceOver 时被系统静默丢弃，盲人侧会听不到任何通话状态（见 P1 审计）。
+    private func announceCall(_ text: String) {
+        guard !text.isEmpty else { return }
+        A11y.announce(text)
+        if model.role == .blind, !UIAccessibility.isVoiceOverRunning {
+            SpeechHub.shared.speak(text, channel: .call, voiceCode: lang.voiceCode)
+        }
+    }
+
     var body: some View {
         Group {
             if model.role == .helper { helperFullScreen } else { blindLayout }
@@ -47,19 +57,19 @@ struct CallView: View {
             Button(CallStrings.cancel(lang), role: .cancel) {}
         } message: { Text(CallStrings.muteConfirmMessage(lang)) }
         .task { await model.start() }
-        .onChange(of: model.statusText) { _, new in A11y.announce(new) }
+        .onChange(of: model.statusText) { _, new in announceCall(new) }
         .onChange(of: model.videoSending) { _, sending in
-            A11y.announce(CallStrings.announceVideo(sending: sending, lang))
+            announceCall(CallStrings.announceVideo(sending: sending, lang))
         }
-        .onChange(of: model.muted) { _, m in A11y.announce(CallStrings.announceMuted(m, lang)) }
-        .onChange(of: model.cameraFront) { _, f in A11y.announce(CallStrings.announceCamera(front: f, lang)) }
+        .onChange(of: model.muted) { _, m in announceCall(CallStrings.announceMuted(m, lang)) }
+        .onChange(of: model.cameraFront) { _, f in announceCall(CallStrings.announceCamera(front: f, lang)) }
         // VoiceOver 魔法轻点（双指双击）= 挂断（系统通话惯例）；盲人侧仍走二次确认防呆。
         .accessibilityAction(.magicTap) {
             if model.role == .blind { showHangupConfirm = true } else { model.hangUp(); onClose() }
         }
         // 一方挂断 → 对方自动挂断并关闭界面。
         .onChange(of: model.callEnded) { _, ended in if ended { onClose() } }
-        .onChange(of: model.reportStatus) { _, s in if let s, !s.isEmpty { A11y.announce(s) } }
+        .onChange(of: model.reportStatus) { _, s in if let s, !s.isEmpty { announceCall(s) } }
         .onAppear { AudioSessionManager.beginCall() }
         .onDisappear { autoHide?.cancel(); model.hangUp(); AudioSessionManager.endCall() }
         .onChange(of: scenePhase) { _, phase in

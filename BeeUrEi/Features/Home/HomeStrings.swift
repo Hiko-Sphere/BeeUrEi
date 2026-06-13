@@ -83,6 +83,10 @@ enum HomeStrings {
     static func voiceHeardNothing(_ l: Language) -> String {
         l == .zh ? "没有听到声音，请再试一次。" : "I didn't hear anything. Please try again."
     }
+    static func voiceMicDenied(_ l: Language) -> String {
+        l == .zh ? "需要麦克风和语音识别权限，请到系统设置开启。"
+                 : "Microphone and speech recognition access are needed. Enable them in Settings."
+    }
     static func voiceNeedLogin(_ l: Language) -> String {
         l == .zh ? "请先登录才能发消息。" : "Sign in first to send messages."
     }
@@ -122,6 +126,7 @@ enum HomeStrings {
                  : "BeeUrEi needs the camera to detect obstacles ahead. Please enable camera access in Settings."
     }
     static func openSettings(_ l: Language) -> String { l == .zh ? "打开设置" : "Open Settings" }
+    static func retry(_ l: Language) -> String { l == .zh ? "重试" : "Retry" }
     static func permAnnounce(_ l: Language) -> String {
         l == .zh ? "相机权限被关闭，避障已停止。请到设置开启相机权限，或呼叫帮手。"
                  : "Camera access is off and obstacle detection has stopped. Enable camera access in Settings, or call a helper."

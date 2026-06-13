@@ -15,6 +15,9 @@ final class ARDepthCameraSource: NSObject, FrameSource, ARSessionProviding {
     var onStateChange: ((FrameSourceState) -> Void)?
     /// 跟踪质量回调（映射到核心 `TrackingQuality`，供 `TrackingGate` 门控降级）。
     var onTracking: ((TrackingQuality) -> Void)?
+    /// 会话被外部中断/恢复（来电、切到用相机的界面、被其它 App 抢占相机、退后台）。
+    /// 中断时帧流停止→上层避障静默停摆，须主动告知盲人"测距暂停"（见 P1 审计）。
+    var onInterruption: ((_ interrupted: Bool) -> Void)?
 
     let session = ARSession()
     private var reportedRunning = false
@@ -28,12 +31,13 @@ final class ARDepthCameraSource: NSObject, FrameSource, ARSessionProviding {
     }
 
     func start() {
+        let lang = FeatureSettings().language
         guard ARWorldTrackingConfiguration.isSupported else {
-            onStateChange?(.unsupported("此设备不支持 ARKit 世界跟踪"))
+            onStateChange?(.unsupported(lang == .zh ? "此设备不支持 ARKit 世界跟踪" : "This device doesn't support ARKit world tracking"))
             return
         }
         guard ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth) else {
-            onStateChange?(.unsupported("此设备没有 LiDAR（缺少 sceneDepth）"))
+            onStateChange?(.unsupported(lang == .zh ? "此设备没有 LiDAR（缺少 sceneDepth）" : "This device has no LiDAR (sceneDepth unavailable)"))
             return
         }
         recoveryAttempts = 0
@@ -126,9 +130,11 @@ extension ARDepthCameraSource: ARSessionDelegate {
     // 被打断（来电、切到用相机的其它界面、被其它 App 抢占相机）→ 暂停；打断结束后重跑恢复。
     func sessionWasInterrupted(_ session: ARSession) {
         reportedRunning = false
+        onInterruption?(true)   // 告知上层：测距已暂停（安全攸关，须播报，见 P1 审计）
     }
     func sessionInterruptionEnded(_ session: ARSession) {
         recoveryAttempts = 0
         run(reset: true)
+        onInterruption?(false)
     }
 }

@@ -41,9 +41,9 @@ enum FrameSourceState: Equatable {
 
 /// 感知输入「端口」（Port）。上层只依赖这个协议，不关心具体来源。
 ///
-/// - 当前实现：`PhoneCameraSource`（手机自带相机/LiDAR）。
-/// - 未来实现：`ExternalDeviceSource`（外接眼镜/耳机的相机+LiDAR 经网络流式接入），
-///   手机届时作为「算力机」。新增来源只需实现本协议，**上层无需改动**。见 docs/PLAN.md §12。
+/// - 当前唯一实现：`ARDepthCameraSource`（手机自带相机 + LiDAR）。
+/// - 端口设计保留扩展点：未来若要接外接眼镜/耳机的相机+LiDAR（手机作"算力机"），
+///   只需新增一个实现本协议的来源，**上层无需改动**。见 docs/PLAN.md §12。
 protocol FrameSource: AnyObject {
     var onFrame: ((SensorFrame) -> Void)? { get set }
     var onStateChange: ((FrameSourceState) -> Void)? { get set }

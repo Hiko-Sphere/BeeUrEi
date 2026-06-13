@@ -34,4 +34,13 @@ public enum Language: String, Sendable, CaseIterable {
         case .en: return "en-US"
         }
     }
+
+    /// 用于 Foundation 本地化（日期格式化 / 反查地名 CLGeocoder.locale）的 Locale 标识。
+    /// 避免各处硬编码 `zh_CN`，让英文用户看到英文日期/地名。
+    public var localeIdentifier: String {
+        switch self {
+        case .zh: return "zh_CN"
+        case .en: return "en_US"
+        }
+    }
 }

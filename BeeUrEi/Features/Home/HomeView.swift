@@ -86,7 +86,23 @@ struct HomeView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView(store: consentStore) { showSettings = false }
         }
-        .onChange(of: showSettings) { _, shown in if !shown { applyKeepAwake() } } // 设置可能改了常亮时长，返回时重新应用
+        .onChange(of: showSettings) { _, shown in
+            if !shown {
+                applyKeepAwake() // 设置可能改了常亮时长，返回时重新应用
+                reconcileFallDetection() // 设置里开/关了摔倒监测：返回即生效，不必重启 App（见 P1 审计）
+            }
+        }
+        // 麦克风/语音识别权限被拒：盲人点完麦克风毫无反馈——主动朗读原因（见 P1 审计）。
+        .onChange(of: voice.phase) { _, phase in
+            if phase == .denied { SpeechHub.shared.speak(HomeStrings.voiceMicDenied(lang), channel: .query, voiceCode: lang.voiceCode) }
+        }
+        // 摔倒/撞击警报是安全攸关、必须盖在最上层：触发时收起本页所有模态，让全屏警报卡可见可操作（见 P1 审计）。
+        .onChange(of: emergency.phase) { _, phase in
+            if phase != .idle {
+                showSettings = false; showRemoteAssist = false; showNavigation = false
+                showFraming = false; showTutorial = false; showMessages = false
+            }
+        }
         // Siri/快捷指令直达（来电优先级更高：来电中忽略路由请求）。
         .onChange(of: route.pending) { _, dest in
             guard let dest, !incoming.hasIncoming else { route.pending = nil; return }
@@ -101,7 +117,7 @@ struct HomeView: View {
         .onChange(of: incoming.hasIncoming) { _, inCall in
             if inCall {
                 model.pauseSession(); forceKeepAwake()
-                showSettings = false; showRemoteAssist = false; showNavigation = false; showFraming = false; showTutorial = false
+                showSettings = false; showRemoteAssist = false; showNavigation = false; showFraming = false; showTutorial = false; showMessages = false
             } else {
                 model.resumeSession(); applyKeepAwake()
             }
@@ -223,6 +239,15 @@ struct HomeView: View {
     private func releaseKeepAwake() {
         idleTask?.cancel(); idleTask = nil
         UIApplication.shared.isIdleTimerDisabled = false
+    }
+
+    /// 从设置返回时按当前开关启停摔倒监测（start 内部以 isAccelerometerActive 去重，重复调用安全）。
+    private func reconcileFallDetection() {
+        if FeatureSettings().fallDetectionEnabled {
+            motionMonitor.start { event in EmergencyAlertCenter.shared.trigger(event) }
+        } else {
+            motionMonitor.stop()
+        }
     }
 
     // MARK: 底部大按钮面板
@@ -408,10 +433,12 @@ struct HomeView: View {
     }
 
     /// 求助入口兜底：相机不可用（设备不支持/出错）时，求助不依赖相机，仍让视障用户能呼叫。
+    /// 用大按钮（与主页操作面板一致），盲人无需精准定位（见 P2 审计）。
     private var helpFallbackButton: some View {
-        Button(HomeStrings.callHelper(lang)) { showRemoteAssist = true }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+        BeeBigButton(HomeStrings.callHelper(lang), systemImage: "hand.raised.fill", tint: .beeHoney) {
+            showRemoteAssist = true
+        }
+        .padding(.horizontal)
     }
 
     private var statusBanner: some View {
@@ -448,17 +475,19 @@ struct HomeView: View {
             Text(HomeStrings.permBody(lang))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
-            Button(HomeStrings.openSettings(lang)) { model.openSettings() }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+            BeeBigButton(HomeStrings.openSettings(lang), systemImage: "gearshape.fill", tint: .beeHoney) {
+                model.openSettings()
+            }
+            .padding(.horizontal)
             // 求助不依赖相机：即使相机被拒，仍让用户能呼叫志愿者/亲友。
-            Button(HomeStrings.callHelper(lang)) { showRemoteAssist = true }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
+            BeeBigButton(HomeStrings.callHelper(lang), systemImage: "hand.raised.fill",
+                         tint: .beeInk, foreground: .white) { showRemoteAssist = true }
+                .padding(.horizontal)
         }
         .padding()
         // 相机变为不可用是安全攸关的状态变化——主动朗读，避免盲人误以为避障仍在工作（见无障碍审计）。
-        .onAppear { A11y.announce(HomeStrings.permAnnounce(lang)) }
+        // 用 SpeechHub（VO 开启走系统公告、未开走 TTS）——A11y.announce 在未开 VoiceOver 时被系统静默丢弃。
+        .onAppear { SpeechHub.shared.speak(HomeStrings.permAnnounce(lang), channel: .query, voiceCode: lang.voiceCode) }
     }
 
     private func unsupportedView(_ message: String) -> some View {
@@ -475,7 +504,7 @@ struct HomeView: View {
             helpFallbackButton
         }
         .padding()
-        .onAppear { A11y.announce(HomeStrings.unsupportedAnnounce(message, lang)) } // 安全攸关，主动朗读（见无障碍审计）
+        .onAppear { SpeechHub.shared.speak(HomeStrings.unsupportedAnnounce(message, lang), channel: .query, voiceCode: lang.voiceCode) } // 安全攸关，主动朗读（见无障碍审计）
     }
 
     private func messageView(_ text: String) -> some View {
@@ -489,10 +518,15 @@ struct HomeView: View {
     private func stateMessageView(_ text: String, showHelp: Bool) -> some View {
         VStack(spacing: 16) {
             Text(text).font(.headline).multilineTextAlignment(.center)
+            // 相机出错可重试（再次启动会话）——比只能求助更直接（见 P2 审计）。
+            BeeBigButton(HomeStrings.retry(lang), systemImage: "arrow.clockwise", tint: .beeHoney) {
+                model.retrySession()
+            }
+            .padding(.horizontal)
             if showHelp { helpFallbackButton }
         }
         .padding()
-        .onAppear { A11y.announce(text) } // 相机出错主动朗读（见无障碍审计）
+        .onAppear { SpeechHub.shared.speak(text, channel: .query, voiceCode: lang.voiceCode) } // 相机出错主动朗读（见无障碍审计）
     }
 }
 

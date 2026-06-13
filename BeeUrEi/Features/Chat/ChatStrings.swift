@@ -42,6 +42,7 @@ enum ChatStrings {
     }
     static func photo(_ l: Language) -> String { l == .zh ? "图片" : "Photo" }
     static func sendPhoto(_ l: Language) -> String { l == .zh ? "发送图片" : "Send a photo" }
+    static func openPhotoHint(_ l: Language) -> String { l == .zh ? "双击全屏查看" : "Double-tap to view full screen" }
     static func recall(_ l: Language) -> String { l == .zh ? "撤回" : "Unsend" }
     static func recalled(_ l: Language) -> String { l == .zh ? "已撤回" : "Message unsent" }
     static func recallFailed(_ l: Language) -> String {
@@ -68,6 +69,7 @@ enum ChatStrings {
         l == .zh ? "\(name) 发来视频" : "Video from \(name)"
     }
     static func close(_ l: Language) -> String { l == .zh ? "关闭" : "Close" }
+    static func cancel(_ l: Language) -> String { l == .zh ? "取消" : "Cancel" }
 
     // MARK: 位置
     static func locationMessage(_ l: Language) -> String { l == .zh ? "位置" : "Location" }
@@ -111,6 +113,15 @@ enum ChatStrings {
     static func noAddableContacts(_ l: Language) -> String {
         l == .zh ? "没有可添加的联系人（成员须是你的绑定好友）" : "No contacts to add (members must be your linked contacts)"
     }
+    // 群操作成功反馈（盲人依赖语音确认）。
+    static func groupCreated(_ name: String, _ l: Language) -> String { l == .zh ? "已创建群聊 \(name)" : "Created group \(name)" }
+    static func memberAdded(_ name: String, _ l: Language) -> String { l == .zh ? "已添加 \(name)" : "Added \(name)" }
+    static func memberRemoved(_ name: String, _ l: Language) -> String { l == .zh ? "已移出 \(name)" : "Removed \(name)" }
+    static func leftGroup(_ l: Language) -> String { l == .zh ? "已退出群聊" : "Left the group" }
+    static func groupDissolved(_ l: Language) -> String { l == .zh ? "群聊已解散" : "Group dissolved" }
+    static func removeMemberConfirm(_ name: String, _ l: Language) -> String {
+        l == .zh ? "把 \(name) 移出群聊？" : "Remove \(name) from the group?"
+    }
     static func groupBubbleA11y(from: String, content: String, time: String, _ l: Language) -> String {
         l == .zh ? "\(from)：\(content)，\(time)" : "\(from): \(content), \(time)"
     }
@@ -120,7 +131,9 @@ enum ChatStrings {
     static func timeFormat(_ ms: Int) -> String {
         let d = Date(timeIntervalSince1970: Double(ms) / 1000)
         let f = DateFormatter()
-        f.dateFormat = Calendar.current.isDateInToday(d) ? "HH:mm" : "M月d日 HH:mm"
+        // 随 App 语言本地化日期（避免对英文用户显示中文"M月d日"）。
+        f.locale = Locale(identifier: FeatureSettings().language.localeIdentifier)
+        f.setLocalizedDateFormatFromTemplate(Calendar.current.isDateInToday(d) ? "Hmm" : "MdHmm")
         return f.string(from: d)
     }
 }

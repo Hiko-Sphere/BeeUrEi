@@ -50,6 +50,7 @@ final class CrossingSignalFeedback {
         }
         player.scheduleBuffer(buffer, at: nil, options: [.interrupts], completionHandler: nil)
         haptic.impactOccurred()
+        haptic.prepare() // 每拍后重新预热 Taptic 引擎，保持持续节奏不衰减/不延迟（见 P2 审计）
     }
 
     private static func tone(format: AVAudioFormat, frequency: Float, durationSeconds: Float = 0.09) -> AVAudioPCMBuffer? {

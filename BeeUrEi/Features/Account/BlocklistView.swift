@@ -8,48 +8,51 @@ struct BlocklistView: View {
     @State private var newUsername = ""
     @State private var message: String?
     @State private var busy: Set<String> = []
+    private var lang: Language { FeatureSettings().language }
 
     var body: some View {
         List {
             Section {
-                Text("被你拉黑的人无法向你发起协助/求助请求，匹配也不会把你们配到一起。")
+                Text(AccountStrings.blocklistExplain(lang))
                     .font(.footnote).foregroundStyle(.secondary)
             }
             if blocks.isEmpty {
                 Section {
-                    BeeEmptyState(systemImage: "hand.raised.slash.fill", title: "黑名单为空",
-                                  message: "拉黑的用户会出现在这里，可随时解除。")
+                    BeeEmptyState(systemImage: "hand.raised.slash.fill", title: AccountStrings.blocklistEmptyTitle(lang),
+                                  message: AccountStrings.blocklistEmptyMessage(lang))
                 }
                 .listRowBackground(Color.clear)
             } else {
-                Section("已拉黑（\(blocks.count)）") {
+                Section(AccountStrings.blockedCount(blocks.count, lang)) {
                     ForEach(blocks) { b in
                         HStack {
                             Text(b.user.displayName)
                             Spacer()
-                            Button("解除") { Task { await unblock(b) } }
+                            Button(AccountStrings.unblock(lang)) { Task { await unblock(b) } }
                                 .buttonStyle(.bordered)
                                 .disabled(busy.contains(b.id))
                         }
                         .accessibilityElement(children: .combine)
-                        .accessibilityLabel("已拉黑 \(b.user.displayName)，双击解除")
+                        .accessibilityLabel(AccountStrings.blockedRowA11y(b.user.displayName, lang))
                     }
                 }
             }
             if let message { Section { Text(message).foregroundStyle(.secondary) } }
         }
-        .navigationTitle("黑名单")
+        .navigationTitle(AccountStrings.blocklist(lang))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { showAdd = true } label: { Image(systemName: "plus") }.accessibilityLabel("拉黑用户")
+                Button { showAdd = true } label: { Image(systemName: "plus") }
+                    .accessibilityLabel(AccountStrings.blockUserA11y(lang))
             }
         }
-        .alert("拉黑用户", isPresented: $showAdd) {
-            TextField("对方用户名", text: $newUsername).textInputAutocapitalization(.never).autocorrectionDisabled()
-            Button("拉黑", role: .destructive) { Task { await block() } }
-            Button("取消", role: .cancel) { newUsername = "" }
+        .alert(AccountStrings.addBlockTitle(lang), isPresented: $showAdd) {
+            TextField(AccountStrings.blockUsernamePlaceholder(lang), text: $newUsername)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+            Button(AccountStrings.blockAction(lang), role: .destructive) { Task { await block() } }
+            Button(AccountStrings.cancel(lang), role: .cancel) { newUsername = "" }
         } message: {
-            Text("输入要拉黑的用户名。拉黑后将互不收到对方的请求/匹配。")
+            Text(AccountStrings.addBlockMessage(lang))
         }
         .task { await load() }
         .refreshable { await load() }
@@ -63,14 +66,19 @@ struct BlocklistView: View {
     private func block() async {
         let u = newUsername.trimmingCharacters(in: .whitespacesAndNewlines); newUsername = ""
         guard !u.isEmpty, let token = KeychainStore.read() else { return }
-        do { try await APIClient().blockUser(token: token, username: u); message = "已拉黑 \(u)"; await load() }
-        catch { message = "拉黑失败：找不到该用户名或网络错误" }
+        do { try await APIClient().blockUser(token: token, username: u); message = AccountStrings.blockedOk(u, lang); await load() }
+        catch { message = AccountStrings.blockFailed(lang) }
     }
     private func unblock(_ b: BlockedUser) async {
         guard let token = KeychainStore.read(), !busy.contains(b.id) else { return }
         busy.insert(b.id); defer { busy.remove(b.id) }
-        await APIClient().unblock(token: token, id: b.id)
-        message = "已解除拉黑 \(b.user.displayName)"
-        await load()
+        // 解除失败不能谎报成功（结果会被 VoiceOver 朗读给盲人）——按真实结果反馈。
+        do {
+            try await APIClient().unblock(token: token, id: b.id)
+            message = AccountStrings.unblockedOk(b.user.displayName, lang)
+            await load()
+        } catch {
+            message = AccountStrings.unblockFailed(lang)
+        }
     }
 }

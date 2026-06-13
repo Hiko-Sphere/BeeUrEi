@@ -465,8 +465,8 @@ struct APIClient {
         let data = try await authedGet("/api/blocks", token: token)
         return (try? JSONDecoder().decode(R.self, from: data))?.blocks ?? []
     }
-    func unblock(token: String, id: String) async {
-        _ = try? await authedSend("DELETE", "/api/blocks/\(id)", token: token)
+    func unblock(token: String, id: String) async throws {
+        _ = try await authedSend("DELETE", "/api/blocks/\(id)", token: token)
     }
 
     func emergencyTargets(token: String) async throws -> [EmergencyTarget] {

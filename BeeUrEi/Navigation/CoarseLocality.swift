@@ -11,9 +11,12 @@ final class CoarseLocality: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     private let geocoder = CLGeocoder()
     private var cont: CheckedContinuation<String?, Never>?
+    private var locale = Locale(identifier: "zh_CN")
 
     /// 取粗粒度地点；超时/失败/未授权返回 nil（调用方据此省略地点字段）。
-    func fetch(timeout: TimeInterval = 4) async -> String? {
+    /// `lang` 决定反查地名的语言（默认随 App 语言，让英文用户得到英文地名）。
+    func fetch(timeout: TimeInterval = 4, lang: Language = FeatureSettings().language) async -> String? {
+        locale = Locale(identifier: lang.localeIdentifier)
         let status = manager.authorizationStatus
         guard status != .denied, status != .restricted else { return nil }
         return await withCheckedContinuation { c in
@@ -43,7 +46,7 @@ final class CoarseLocality: NSObject, CLLocationManagerDelegate {
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let loc = locations.last else { finish(nil); return }
-        geocoder.reverseGeocodeLocation(loc, preferredLocale: Locale(identifier: "zh_CN")) { [weak self] placemarks, _ in
+        geocoder.reverseGeocodeLocation(loc, preferredLocale: locale) { [weak self] placemarks, _ in
             let p = placemarks?.first
             let parts = [p?.administrativeArea, p?.locality, p?.subLocality].compactMap { $0 }
             var seen = Set<String>()

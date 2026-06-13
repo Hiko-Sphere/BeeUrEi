@@ -16,6 +16,7 @@ struct AccountSetupView: View {
     @State private var useridDone = false
     @State private var working = false
     @State private var message: String?
+    @State private var showLogoutConfirm = false
 
     private var needRole: Bool { session.accountCreated }
     private var needUserid: Bool { session.user?.usernameCustomized == false }
@@ -54,8 +55,15 @@ struct AccountSetupView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(AccountStrings.logout(lang), role: .destructive) { session.logout() }
+                    Button(AccountStrings.logout(lang), role: .destructive) { showLogoutConfirm = true }
                 }
+            }
+            // 退出登录是破坏性操作（误触即掉线，需重新登录）——先确认（与各账号入口一致）。
+            .confirmationDialog(AccountStrings.logout(lang), isPresented: $showLogoutConfirm, titleVisibility: .visible) {
+                Button(AccountStrings.logoutConfirmAction(lang), role: .destructive) { session.logout() }
+                Button(AccountStrings.cancel(lang), role: .cancel) {}
+            } message: {
+                Text(AccountStrings.logoutConfirmMessage(lang))
             }
             .onChange(of: message) { _, m in if let m, !m.isEmpty { A11y.announce(m) } }
             .task {

@@ -27,6 +27,7 @@ private struct RootView: View {
     @State private var session = AuthSession()
     @State private var enteredRole: String? = RoleEntryStore().lastRole // 老用户重启直接进主界面，跳过"进入"确认页
     @State private var incoming = IncomingCallCenter.shared // CallKit 接听后由它驱动来电界面
+    private var lang: Language { FeatureSettings().language }
 
     var body: some View {
         Group {
@@ -43,16 +44,19 @@ private struct RootView: View {
                     // 网络/后端暂不可用：给出重试与退出出口，而非永久卡在转圈（见审查 #15）。
                     VStack(spacing: 20) {
                         Image(systemName: "wifi.exclamationmark").font(.system(size: 44)).foregroundStyle(.secondary)
-                        Text("连接服务器失败").font(.title2).bold()
-                        Text("请检查网络后重试。").foregroundStyle(.secondary)
-                        Button("重试") { Task { await session.restore() } }
+                        Text(AccountStrings.restoreFailedTitle(lang)).font(.title2).bold()
+                        Text(AccountStrings.restoreFailedBody(lang)).foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        Button(AccountStrings.retry(lang)) { Task { await session.restore() } }
                             .buttonStyle(.borderedProminent).controlSize(.large)
-                        Button("退出登录") { session.logout() }
-                            .foregroundStyle(.red)
+                        Button(AccountStrings.logout(lang)) { session.logout() }
+                            .foregroundStyle(Color.beeDanger)
                     }
                     .padding()
+                    // 安全/可用性：卡在登录恢复失败对盲人是"无声死局"——主动朗读原因与出口。
+                    .onAppear { A11y.announce(AccountStrings.restoreFailedTitle(lang) + "。" + AccountStrings.restoreFailedBody(lang)) }
                 } else {
-                    ProgressView("正在登录…")
+                    ProgressView(AccountStrings.signingIn(lang))
                         .task { await session.restore() }
                 }
             } else if session.needsAccountSetup {
@@ -105,7 +109,7 @@ private struct RootView: View {
                 guard let token = KeychainStore.read() else { return }
                 let won = await APIClient().markAnswered(token: token, callId: call.callId)
                 if !won {
-                    A11y.announce("已被其他亲友接听")
+                    A11y.announce(CallStrings.answeredElsewhere(lang))
                     RemoteAssistService.shared.endCall()
                     incoming.clear()
                 }

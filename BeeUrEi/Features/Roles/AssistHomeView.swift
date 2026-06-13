@@ -27,6 +27,7 @@ struct AssistHomeView: View {
     @State private var statusText: String?
     @State private var prefsShown = false
     @State private var busy = false
+    @State private var showLogoutConfirm = false
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var hbTask: Task<Void, Never>?
@@ -341,7 +342,7 @@ struct AssistHomeView: View {
                     }
                     NavigationLink(HelperStrings.accountAndSecurity(lang)) { LoginView() }
                     Button(HelperStrings.switchRole(lang)) { onSwitchRole() }
-                    Button(HelperStrings.logout(lang), role: .destructive) { session.logout() }
+                    Button(HelperStrings.logout(lang), role: .destructive) { showLogoutConfirm = true }
                 }
                 Section {
                     Text(HelperStrings.mergedExplain(lang))
@@ -349,6 +350,13 @@ struct AssistHomeView: View {
                 }
             }
             .navigationTitle(HelperStrings.meNavTitle(lang))
+            // 退出登录是破坏性操作（误触即掉线）——先确认（与各账号入口一致，见审计 P1）。
+            .confirmationDialog(AccountStrings.logout(lang), isPresented: $showLogoutConfirm, titleVisibility: .visible) {
+                Button(AccountStrings.logoutConfirmAction(lang), role: .destructive) { session.logout() }
+                Button(AccountStrings.cancel(lang), role: .cancel) {}
+            } message: {
+                Text(AccountStrings.logoutConfirmMessage(lang))
+            }
         }
     }
 
@@ -360,8 +368,6 @@ struct AssistHomeView: View {
         goOnline()                   // 打开 App 即在线：启动心跳 + 来电轮询
         startQueuePolling()
     }
-
-    private func loadAll() async { await loadLinks(); await refreshQueue() }
 
     private func loadLinks() async {
         guard let token = session.token else { return }

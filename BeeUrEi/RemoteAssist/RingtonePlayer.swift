@@ -16,6 +16,11 @@ final class RingtonePlayer: RingtonePlaying {
     private var vibrateTimer: Timer?
 
     func start() {
+        // 显式把会话置为 .playback 并激活——确保来电铃**无视静音开关**响起，且不依赖上一通话是否正确恢复了
+        // 会话（异常结束可能把会话留在 .playAndRecord/未激活态，导致铃声被静音吞掉，见 P2 审计）。
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, options: [.duckOthers])
+        try? session.setActive(true)
         if player == nil {
             player = try? AVAudioPlayer(data: Self.ringtoneWAV())
             player?.numberOfLoops = -1 // 循环体内含静默段，无限循环即"响-停-响"

@@ -7,6 +7,9 @@ options:
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
+  # 源码内字面量是中文，故基准语言=简体中文；英文经 String Catalog（BeeUrEi/Localizable.xcstrings）翻译，
+  # 使 AppIntents/Siri 快捷指令标题在英文设备上显示英文（唤起短语本身已中英双语）。
+  developmentLanguage: zh-Hans
 settings:
   base:
     SWIFT_VERSION: "5.0"          # 用 Swift 5 语言模式，先避开 Swift 6 严格并发对新手的干扰
@@ -58,6 +61,10 @@ targets:
       path: Config/Info.plist
       properties:
         CFBundleDisplayName: BeeUrEi
+        # 声明支持的本地化（中英）：系统据此为 AppIntents/快捷指令等挑选对应语言。
+        CFBundleLocalizations:
+          - zh-Hans
+          - en
         NSHumanReadableCopyright: "© 2026 Hiko Sphere 彦穹科技 · 软件制作人 Li Yanpei Hiko"
         # 仅适配 ARKit 设备（最终 LiDAR 限制由运行时 DeviceSupport.hasLiDAR 把关，见 PLAN §12.1）
         UIRequiredDeviceCapabilities:

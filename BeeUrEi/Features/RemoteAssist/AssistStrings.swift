@@ -27,6 +27,10 @@ enum AssistStrings {
         }
         return l == .zh ? "暂无协助者或亲友在线" : "No helpers or family online"
     }
+    static func totalCount(_ n: Int, _ l: Language) -> String { l == .zh ? "（共 \(n) 位）" : "(\(n) total)" }
+    static func wantsRelation(owner: String, relation: String, _ l: Language) -> String {
+        l == .zh ? "\(owner) 想和你建立\(relation)关系" : "\(owner) wants to link with you as \(relation)"
+    }
     static func callVolunteerTitle(_ l: Language) -> String { l == .zh ? "向志愿者求助" : "Ask a Volunteer" }
     static func callVolunteerSubtitle(_ l: Language) -> String {
         l == .zh ? "让在线的热心志愿者帮你看（陌生人）" : "Let an online volunteer see for you (a stranger)"

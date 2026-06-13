@@ -11,9 +11,7 @@ enum MediaConnState: Equatable {
 /// 通话连接质量（用 WebRTC 实测往返时延表达"信号强弱"——iOS 不开放原始信号格数）。
 enum CallQuality: Equatable {
     case unknown, weak, fair, good
-    var label: String {
-        switch self { case .good: return "信号强"; case .fair: return "信号中"; case .weak: return "信号弱"; case .unknown: return "信号检测中" }
-    }
+    /// 本地化的"信号强弱"文案见 `CallStrings.signalLabel(_:_:)`（UI 层，随语言）。
     /// 显示几格（0–3）。
     var bars: Int { switch self { case .good: return 3; case .fair: return 2; case .weak: return 1; case .unknown: return 0 } }
 }
@@ -48,7 +46,9 @@ protocol MediaEngine: AnyObject {
     func stop()
 }
 
-/// 占位实现：无 WebRTC 包时使用——信令/UI/隐私门控可端到端联调（不传真实媒体）。
+/// 无 WebRTC 包时（如克隆仓库未放入被 gitignore 的 91MB `Frameworks/WebRTC.xcframework`）的兜底。
+/// **不伪装连接**：start 即如实上报媒体失败，让 UI 提示"媒体连接失败"，而不是假装通话已接通。
+/// 真机发行版会带上 xcframework → 走下方 `WebRTCMediaEngine` 真实媒体，本类不参与编译。
 final class StubMediaEngine: MediaEngine {
     var onLocalDescription: ((String, String) -> Void)?
     var onLocalCandidate: ((String, String?, Int32) -> Void)?
@@ -56,7 +56,9 @@ final class StubMediaEngine: MediaEngine {
     var onRemoteVideoTrack: (() -> Void)?
     var onCallQuality: ((CallQuality) -> Void)?
     func setIceServers(_ servers: [IceServerInfo]) {}
-    func start(asCaller: Bool) {}
+    func start(asCaller: Bool) {
+        DispatchQueue.main.async { [weak self] in self?.onMediaStateChange?(.failed) }
+    }
     func createOffer() {}
     func handleRemoteDescription(type: String, sdp: String) {}
     func handleRemoteCandidate(candidate: String, sdpMid: String?, sdpMLineIndex: Int32) {}
@@ -171,9 +173,16 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
         let constraints = RTCMediaConstraints(
             mandatoryConstraints: ["OfferToReceiveAudio": "true", "OfferToReceiveVideo": "true"],
             optionalConstraints: nil)
-        pc?.offer(for: constraints) { [weak self] sdp, _ in
-            guard let self, let sdp else { return }
-            self.pc?.setLocalDescription(sdp) { _ in }
+        pc?.offer(for: constraints) { [weak self] sdp, error in
+            guard let self else { return }
+            // SDP 创建失败别静默——否则盲人主叫会永远停在"正在连接…"。上报 .failed 让 UI 提示重拨（见 P2 审计）。
+            guard let sdp, error == nil else {
+                DispatchQueue.main.async { self.onMediaStateChange?(.failed) }
+                return
+            }
+            self.pc?.setLocalDescription(sdp) { err in
+                if err != nil { DispatchQueue.main.async { self.onMediaStateChange?(.failed) } }
+            }
             self.onLocalDescription?("offer", sdp.sdp)
         }
     }
@@ -182,19 +191,25 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
         let rtcType: RTCSdpType = (type == "offer") ? .offer : .answer
         pc?.setRemoteDescription(RTCSessionDescription(type: rtcType, sdp: sdp)) { [weak self] error in
             guard let self else { return }
-            if error == nil {
-                // remoteDescription 已就位：在主线程 flush 之前缓存的早到候选（见审查 #1）。
-                DispatchQueue.main.async {
-                    self.hasRemoteDescription = true
-                    for c in self.pendingCandidates { self.pc?.add(c) { _ in } }
-                    self.pendingCandidates.removeAll()
-                }
+            guard error == nil else {
+                // setRemoteDescription 失败 = 协商无法继续，别静默——上报 .failed 让 UI 提示重拨（见 P2 审计）。
+                DispatchQueue.main.async { self.onMediaStateChange?(.failed) }
+                return
+            }
+            // remoteDescription 已就位：在主线程 flush 之前缓存的早到候选（见审查 #1）。
+            DispatchQueue.main.async {
+                self.hasRemoteDescription = true
+                for c in self.pendingCandidates { self.pc?.add(c) { _ in } }
+                self.pendingCandidates.removeAll()
             }
             // 收到 offer 且设置成功 → 本端回 answer。
-            guard rtcType == .offer, error == nil else { return }
+            guard rtcType == .offer else { return }
             let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
-            self.pc?.answer(for: constraints) { sdp, _ in
-                guard let sdp else { return }
+            self.pc?.answer(for: constraints) { sdp, answerError in
+                guard let sdp, answerError == nil else {
+                    DispatchQueue.main.async { self.onMediaStateChange?(.failed) }
+                    return
+                }
                 self.pc?.setLocalDescription(sdp) { _ in }
                 self.onLocalDescription?("answer", sdp.sdp)
             }

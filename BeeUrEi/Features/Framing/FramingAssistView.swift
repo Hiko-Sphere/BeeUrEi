@@ -24,10 +24,8 @@ final class FramingAssistViewModel {
     private(set) var copyableResult: String?   // OCR/扫码的原始内容，可复制
 
     @ObservationIgnored private let source = ARDepthCameraSource()
-    @ObservationIgnored private let detector: ObstacleDetecting = {
-        let yolo = YOLOObstacleDetector()
-        return yolo.isAvailable ? yolo : StubObstacleDetector()
-    }()
+    // 真实 YOLO 检测器；模型缺失时自身返回空（识别为空、不崩溃），无需占位实现。
+    @ObservationIgnored private let detector: ObstacleDetecting = YOLOObstacleDetector()
     // 识别屏全量中英双语（E5）：播报语言/标签/OCR 语言/TTS 嗓音都跟随 App 语言设置（进屏时解析）。
     // View 的静态文案也读它（private(set)），保持同一语言真相来源。
     @ObservationIgnored private(set) var lang: Language = FeatureSettings().language
@@ -38,6 +36,8 @@ final class FramingAssistViewModel {
     /// 修"稍微移动一点点，正在报的内容立刻被下一帧内容掐断"。
     @ObservationIgnored private var hintThrottle = HintThrottle()
     @ObservationIgnored private var centeredFrames = 0
+    /// 持续居中防复读：记录已播报的目标标签，目标移出中央或换了目标才允许重报（否则每 ~0.8s 重复"这是X"）。
+    @ObservationIgnored private var centeredSpokenLabel: String?
     @ObservationIgnored private var latestBuffer: CVPixelBuffer?
     @ObservationIgnored private var latestDepth: DepthMap?
     @ObservationIgnored private var latestCamera: CameraGeometry?
@@ -107,6 +107,7 @@ final class FramingAssistViewModel {
 
     private func handle(_ frame: SensorFrame) {
         guard !paused else { return } // 暂停后丢弃在途帧
+        guard !exploring else { return } // 触摸探索画布占屏时，暂停实时取景播报（否则与冻结画布抢话，见 P1 审计）
         latestBuffer = frame.pixelBuffer // 供"朗读文字"用最新帧
         latestDepth = frame.depth        // 供"周围的人"报距离
         latestCamera = frame.camera      // 供方位计算用真实视场角
@@ -141,8 +142,9 @@ final class FramingAssistViewModel {
 
         if guidance == .centered, let target {
             centeredFrames += 1
-            if centeredFrames >= 2 {
-                let name = labels.localizedName(target.object.label)
+            let name = labels.localizedName(target.object.label)
+            // 防复读：同一目标持续居中只报一次（centeredSpokenLabel），换目标或移出中央后才重报。
+            if centeredFrames >= 2, name != centeredSpokenLabel {
                 // 置信度透明（核心 ConfidencePolicy，已测）：低置信不说死，带"可能"。
                 if ConfidencePolicy().isConfident(target.object.confidence) {
                     resultText = FramingStrings.recognizedResult(name, lang)
@@ -152,10 +154,12 @@ final class FramingAssistViewModel {
                     speak(FramingStrings.maybeThis(name, lang))
                 }
                 hintThrottle.noteSpoke(at: frame.timestamp) // "这是X"后提示静默 1.2s+，且须重新稳定才开口（见审查 #4）
+                centeredSpokenLabel = name
                 centeredFrames = 0
             }
         } else {
             centeredFrames = 0
+            centeredSpokenLabel = nil
             // 提示走稳定节流（连续两帧一致才播），且为可丢弃级——总线忙（结果/导航/避障在播）时直接丢弃。
             if hintThrottle.shouldSpeak(hint, at: frame.timestamp) {
                 speak(hint, hint: true)
@@ -183,6 +187,8 @@ final class FramingAssistViewModel {
         findPhase = .finding
         lastFindHit = 0
         lastFindHeartbeat = 0
+        resultText = ""      // 清掉上次识别遗留的结果文本（与进文档模式一致）
+        copyableResult = nil
         guidanceText = FramingStrings.findingGuidance(name, lang)
         speak(FramingStrings.findStartCategory(name, lang))
     }
@@ -236,6 +242,8 @@ final class FramingAssistViewModel {
         findPhase = .teaching
         pendingPrints = []
         lastTeachShot = 0
+        resultText = ""      // 清掉上次识别遗留的结果文本（与进文档模式一致）
+        copyableResult = nil
         guidanceText = FramingStrings.teachGuidance(lang)
         speak(FramingStrings.teachIntro(lang))
     }
@@ -267,6 +275,8 @@ final class FramingAssistViewModel {
         findPhase = .finding
         lastFindHit = 0
         lastFindHeartbeat = 0
+        resultText = ""      // 清掉上次识别遗留的结果文本（与进文档模式一致）
+        copyableResult = nil
         guidanceText = FramingStrings.findingGuidance(name, lang)
         speak(FramingStrings.findStartTaught(name, lang))
     }
@@ -276,6 +286,8 @@ final class FramingAssistViewModel {
         findTarget = nil
         categoryTarget = nil
         pendingPrints = []
+        resultText = ""        // 清掉上次结果，避免停下后屏幕仍留旧结果
+        copyableResult = nil
         guidanceText = FramingStrings.stopped(lang)
     }
 
@@ -373,6 +385,11 @@ final class FramingAssistViewModel {
             }
             DispatchQueue.main.async {
                 guard let self, !self.paused else { return }
+                // 一无所获就别开空白画布，直接提示重对准（见审计 P3）。
+                guard !objectItems.isEmpty || !textItems.isEmpty else {
+                    self.speak(FramingStrings.nothingToExplore(self.lang))
+                    return
+                }
                 self.exploreItems = objectItems + textItems
                 self.exploreImage = UIImage(cgImage: oriented.cgImage)
                 self.exploring = true
@@ -571,10 +588,12 @@ final class FramingAssistViewModel {
         }
     }
 
-    /// "前方有什么"：把最近一帧的检测物体按左/中/右汇总播报（核心 SceneSummarizer，已测）。
+    /// "前方有什么"：对最新一帧**重新检测**后按左/中/右汇总播报（核心 SceneSummarizer，已测）。
+    /// 用 latestBuffer 现检测而非 latestDetections——后者在文档/找东西模式下不更新，会播报陈旧画面（见 P2 审计）。
     func describeScene() {
         if tooDarkToProceed() { return }
-        let objects = latestDetections.map { (label: labels.localizedName($0.label), normalizedX: $0.normalizedX) }
+        let dets = latestBuffer.map { detector.detect(in: $0, regionOfInterest: CGRect(x: 0, y: 0, width: 1, height: 1)) } ?? latestDetections
+        let objects = dets.map { (label: labels.localizedName($0.label), normalizedX: $0.normalizedX) }
         let text = SceneSummarizer().summary(objects: objects, language: lang)
         resultText = text
         copyableResult = nil
@@ -709,7 +728,9 @@ final class FramingAssistViewModel {
                 self.copyableResult = nil
                 if let result {
                     let name = FramingStrings.yuan(result.denomination, self.lang)
-                    self.resultText = FramingStrings.banknoteResult(name, self.lang)
+                    // 屏显与语音一致地表达不确定性——别屏上"确定"、只语音含糊（见 P2 审计）。
+                    self.resultText = result.confident ? FramingStrings.banknoteResult(name, self.lang)
+                                                       : FramingStrings.banknoteUncertainResult(name, self.lang)
                     if result.confident { self.historyStore.add(kind: "banknote", content: name) }
                     self.speak(result.confident ? name : FramingStrings.banknoteUncertain(name, self.lang))
                 } else {
@@ -879,10 +900,19 @@ struct FramingAssistView: View {
                     .accessibilityHidden(true)
             } else {
                 Color.black.ignoresSafeArea()
+                stateOverlay // 相机未运行（被拒/不支持/出错/启动中）：居中说明 + 朗读原因，不再是无声黑屏（见 P1 审计）
             }
+            if case .running = model.state {
             VStack {
                 HStack {
-                    Button { torchOn.toggle(); Torch.set(torchOn) } label: {
+                    Button {
+                        // 只有真开成功才翻状态——否则图标/标签会谎报"已开"而灯是灭的（见审计 P1）。
+                        if Torch.set(!torchOn) {
+                            torchOn.toggle()
+                        } else {
+                            SpeechHub.shared.speak(FramingStrings.torchFailed(model.lang), channel: .query, voiceCode: model.lang.voiceCode)
+                        }
+                    } label: {
                         Image(systemName: torchOn ? "flashlight.on.fill" : "flashlight.off.fill")
                             .font(.title2)
                             .padding()
@@ -965,8 +995,13 @@ struct FramingAssistView: View {
                     .accessibilityAddTraits(.updatesFrequently)
 
                     if let copyable = model.copyableResult {
-                        Button(FramingStrings.uiCopy(model.lang)) { UIPasteboard.general.string = copyable }
+                        Button(FramingStrings.uiCopy(model.lang)) {
+                            UIPasteboard.general.string = copyable
+                            // 盲人复制后需要听到确认（否则不知道有没有复制成功）。
+                            SpeechHub.shared.speak(FramingStrings.copied(model.lang), channel: .query, voiceCode: model.lang.voiceCode)
+                        }
                             .buttonStyle(.bordered).tint(.white)
+                            .frame(minHeight: 44)
                             .accessibilityHint(FramingStrings.uiCopyHint(model.lang))
                     }
                 }
@@ -975,6 +1010,7 @@ struct FramingAssistView: View {
                 // 实底深色结果条：相机画面上白字/蜂蜜字恒高对比（材质会透出画面）。
                 .background(Color.beeInk.opacity(reduceTransparency ? 1 : 0.88))
             }
+            } // if case .running（仅相机运行时显示操作面板）
         }
         .task {
             model.start()
@@ -1031,6 +1067,40 @@ struct FramingAssistView: View {
         .sheet(isPresented: $showHistory) {
             RecognitionHistorySheet(model: model) { showHistory = false }
         }
+    }
+
+    /// 相机不可用时的居中说明（被拒/不支持/出错/启动中）：朗读原因并给出口，避免无声黑屏。
+    private var stateOverlay: some View {
+        let (text, showSettings): (String, Bool) = {
+            switch model.state {
+            case .denied: return (FramingStrings.cameraDenied(model.lang), true)
+            case .unsupported(let m): return (m, false)
+            case .failed(let m): return (FramingStrings.cameraError(m, model.lang), false)
+            default: return (FramingStrings.starting(model.lang), false)
+            }
+        }()
+        return VStack(spacing: BeeSpacing.lg) {
+            HStack {
+                Spacer()
+                Button(FramingStrings.uiDone(model.lang)) { onClose() }
+                    .padding().background(.ultraThinMaterial, in: Capsule()).padding()
+            }
+            Spacer()
+            Image(systemName: "camera.fill").font(.system(size: 48)).foregroundStyle(.white.opacity(0.7))
+                .accessibilityHidden(true)
+            Text(text).font(.title3).foregroundStyle(.white)
+                .multilineTextAlignment(.center).padding(.horizontal, BeeSpacing.lg)
+            if showSettings {
+                Button(FramingStrings.openSettings(model.lang)) {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                }
+                .buttonStyle(.borderedProminent).controlSize(.large).tint(.beeHoney)
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .id(text) // 状态文案变化即重建，刷新下面的朗读
+        .onAppear { SpeechHub.shared.speak(text, channel: .query, voiceCode: model.lang.voiceCode) }
     }
 
     /// 相机浮层的次级操作（深底白字+蜂蜜图标，与主页磁贴一致）。

@@ -4,16 +4,22 @@ import SwiftUI
 struct CallHistoryView: View {
     @State private var calls: [CallRecordInfo] = []
     @State private var loaded = false
+    @State private var loadFailed = false
+    private var lang: Language { FeatureSettings().language }
 
     var body: some View {
         List {
             if calls.isEmpty {
                 Section {
-                    if loaded {
-                        BeeEmptyState(systemImage: "phone.badge.waveform.fill", title: "暂无通话记录",
-                                      message: "呼出与呼入的通话都会记录在这里。")
+                    if !loaded {
+                        HStack { Spacer(); ProgressView(AccountStrings.loadingGeneric(lang)); Spacer() }.padding(.vertical, BeeSpacing.lg)
+                    } else if loadFailed {
+                        // 区分"真的没有记录"与"加载失败"——否则网络错误会被误读成"无通话记录"。
+                        BeeEmptyState(systemImage: "wifi.exclamationmark", title: AccountStrings.restoreFailedTitle(lang),
+                                      message: AccountStrings.callHistoryLoadFailed(lang))
                     } else {
-                        HStack { Spacer(); ProgressView("加载中…"); Spacer() }.padding(.vertical, BeeSpacing.lg)
+                        BeeEmptyState(systemImage: "phone.badge.waveform.fill", title: AccountStrings.callHistoryEmptyTitle(lang),
+                                      message: AccountStrings.callHistoryEmptyMessage(lang))
                     }
                 }
                 .listRowBackground(Color.clear)
@@ -36,14 +42,19 @@ struct CallHistoryView: View {
                 }
             }
         }
-        .navigationTitle("通话记录")
+        .navigationTitle(AccountStrings.callHistory(lang))
         .task { await load() }
         .refreshable { await load() }
     }
 
     private func load() async {
         guard let token = KeychainStore.read() else { loaded = true; return }
-        calls = (try? await APIClient().callHistory(token: token)) ?? []
+        do {
+            calls = try await APIClient().callHistory(token: token)
+            loadFailed = false
+        } catch {
+            loadFailed = true
+        }
         loaded = true
     }
 
@@ -56,17 +67,13 @@ struct CallHistoryView: View {
         return .beeSuccess
     }
     private func statusText(_ c: CallRecordInfo) -> String {
-        switch c.status {
-        case "answered": return c.direction == "outgoing" ? "已接通（呼出）" : "已接听（呼入）"
-        case "declined": return c.direction == "outgoing" ? "对方已拒绝" : "已拒绝"
-        default: return c.direction == "outgoing" ? "未接通（呼出）" : "未接来电"
-        }
+        AccountStrings.callStatus(direction: c.direction, status: c.status, lang)
     }
     private func timeText(_ ms: Double) -> String {
         let date = Date(timeIntervalSince1970: ms / 1000)
         let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = Calendar.current.isDateInToday(date) ? "HH:mm" : "MM-dd HH:mm"
+        f.locale = Locale(identifier: lang.localeIdentifier)
+        f.setLocalizedDateFormatFromTemplate(Calendar.current.isDateInToday(date) ? "Hmm" : "MMddHmm")
         return f.string(from: date)
     }
 }

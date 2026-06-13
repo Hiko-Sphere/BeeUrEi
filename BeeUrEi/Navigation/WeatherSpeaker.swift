@@ -56,7 +56,8 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let loc = locations.last else { finishFailure(WeatherPhrase.needLocation(lang)); return }
-        Task { await fetch(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude) }
+        let l = lang // 在主线程（定位回调）读取语言，避免后台 Task 里读 FeatureSettings 造成数据竞争（见 P2 审计）
+        Task { await fetch(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude, lang: l) }
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
@@ -71,9 +72,18 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
         speak(text)
     }
 
-    private func fetch(lat: Double, lon: Double) async {
-        defer { watchdog?.cancel(); watchdog = nil; fetching = false }
+    /// 网络取天气 → 主线程复位状态并播报（所有共享状态只在主线程改，见 P2 审计）。
+    private func fetch(lat: Double, lon: Double, lang l: Language) async {
+        let phrase = await fetchPhrase(lat: lat, lon: lon, lang: l)
+        await MainActor.run {
+            self.watchdog?.cancel(); self.watchdog = nil
+            self.fetching = false
+            SpeechHub.shared.speak(phrase, channel: .query, voiceCode: l.voiceCode)
+        }
+    }
 
+    /// 纯网络请求，不触碰任何实例状态（线程安全）。返回要播报的文案。
+    private func fetchPhrase(lat: Double, lon: Double, lang l: Language) async -> String {
         var c = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
         c.queryItems = [
             .init(name: "latitude", value: String(format: "%.3f", lat)),   // 坐标降精到 ~百米级，最小化外发
@@ -102,16 +112,15 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
         guard let (data, resp) = try? await URLSession.shared.data(for: request),
               (resp as? HTTPURLResponse)?.statusCode == 200,
               let r = try? JSONDecoder().decode(Response.self, from: data) else {
-            speak(WeatherPhrase.failed(lang))
-            return
+            return WeatherPhrase.failed(l)
         }
-        speak(WeatherPhrase.summary(temperature: r.current.temperature_2m,
-                                    code: r.current.weather_code,
-                                    windSpeedKmh: r.current.wind_speed_10m,
-                                    todayMax: r.daily?.temperature_2m_max.first,
-                                    todayMin: r.daily?.temperature_2m_min.first,
-                                    precipProbability: r.daily?.precipitation_probability_max?.first ?? nil,
-                                    language: lang))
+        return WeatherPhrase.summary(temperature: r.current.temperature_2m,
+                                     code: r.current.weather_code,
+                                     windSpeedKmh: r.current.wind_speed_10m,
+                                     todayMax: r.daily?.temperature_2m_max.first,
+                                     todayMin: r.daily?.temperature_2m_min.first,
+                                     precipProbability: r.daily?.precipitation_probability_max?.first ?? nil,
+                                     language: l)
     }
 
     private func speak(_ text: String) {

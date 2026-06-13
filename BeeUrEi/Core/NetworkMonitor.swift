@@ -40,13 +40,13 @@ final class NetworkMonitor {
         monitor.start(queue: queue)
     }
 
-    var label: String {
+    func label(_ l: Language) -> String {
         switch kind {
         case .wifi: return "WiFi"
-        case .cellular: return "移动数据"
-        case .wired: return "有线链接"
-        case .other: return "网络"
-        case .none: return "无网络"
+        case .cellular: return l == .zh ? "移动数据" : "Cellular"
+        case .wired: return l == .zh ? "有线链接" : "Wired"
+        case .other: return l == .zh ? "网络" : "Network"
+        case .none: return l == .zh ? "无网络" : "No network"
         }
     }
 

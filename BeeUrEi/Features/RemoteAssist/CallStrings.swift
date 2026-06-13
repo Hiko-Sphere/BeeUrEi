@@ -174,4 +174,29 @@ enum CallStrings {
     static func missedCall(_ name: String, _ l: Language) -> String {
         l == .zh ? "未接来电：\(name)" : "Missed call from \(name)"
     }
+
+    // MARK: 来电屏副标题 / 录制同意
+
+    static func incomingCallSubtitle(_ l: Language) -> String { l == .zh ? "BeeUrEi 视频通话…" : "BeeUrEi video call…" }
+    static func incomingRingAnnounce(_ name: String, _ l: Language) -> String {
+        l == .zh ? "\(name) 来电，双击接听或拒绝" : "Incoming call from \(name). Double-tap to answer or decline."
+    }
+    static func recordTitle(_ l: Language) -> String { l == .zh ? "录制本次通话？" : "Record this call?" }
+    static func recordExplain(_ l: Language) -> String {
+        l == .zh ? "为留证或回看，本次通话可被录制。录制需双方同意；录制内容加密保存、到期自动删除，不作他用。"
+                 : "This call may be recorded for evidence or replay. Recording needs both sides' consent; it's encrypted, auto-deleted on expiry, and used for nothing else."
+    }
+    static func recordAgree(_ l: Language) -> String { l == .zh ? "同意录制" : "Allow recording" }
+    static func recordDecline(_ l: Language) -> String { l == .zh ? "不录制" : "Don't record" }
+
+    // MARK: 信号强弱（通话中网络状态条；来自 WebRTC 实测往返时延）
+
+    static func signalLabel(_ quality: CallQuality, _ l: Language) -> String {
+        switch quality {
+        case .good: return l == .zh ? "信号强" : "Strong signal"
+        case .fair: return l == .zh ? "信号中" : "Fair signal"
+        case .weak: return l == .zh ? "信号弱" : "Weak signal"
+        case .unknown: return l == .zh ? "信号检测中" : "Checking signal"
+        }
+    }
 }

@@ -58,12 +58,9 @@ final class HomeViewModel {
          spatial: SpatialCueing = SpatialAudioFeedback(),
          crossingSignal: CrossingSignaling = CrossingSignalFeedback(),
          coordinator: FeedbackCoordinating? = nil) {
-        if let detector {
-            self.detector = detector
-        } else {
-            let yolo = YOLOObstacleDetector()
-            self.detector = yolo.isAvailable ? yolo : StubObstacleDetector()
-        }
+        // 检测器始终用真实 YOLO（Core ML/Vision）；模型缺失时它自身返回空检测，避障自动降级为
+        // 纯 LiDAR 深度兜底——不需要占位实现（见去 demo 化）。
+        self.detector = detector ?? YOLOObstacleDetector()
         self.speech = speech
         self.sonifier = sonifier
         self.spatial = spatial
@@ -133,6 +130,7 @@ final class HomeViewModel {
         source.onStateChange = { [weak self] in self?.state = $0 }
         source.onTracking = { [weak self] quality in self?.handleTracking(quality) }
         source.onFrame = { [weak self] frame in self?.handle(frame) }
+        source.onInterruption = { [weak self] interrupted in self?.handleInterruption(interrupted) }
         // AirPods 头追踪：避障空间音提示随头转动保持世界固定（无耳机自动跳过）。
         headTracker.onYaw = { [weak self] yaw in self?.spatial.setListenerYaw(Float(yaw)) }
         headTracker.onUnavailable = { [weak self] in self?.spatial.setListenerYaw(0) }
@@ -180,6 +178,22 @@ final class HomeViewModel {
         spatial.stop()              // 停空间音（通话期间不抢音频会话）
         speech.stopAll()            // 立刻掐断正在念/排队的"前方…"，避免串入通话
         coordinator.finishCurrent() // 释放仲裁通道，resume 后可正常重新播报
+        degradeStop()               // 复位声呐/跟踪基线
+        // 清掉暂停前的避障文案——否则恢复后、首帧到达前，点状态条"重复播报"会念出已过时的危险警告（见 P2 审计）。
+        proximityText = "—"
+        advisoryText = ""
+    }
+
+    /// 会话被外部中断（来电、被其它界面/ App 抢相机、退后台）：帧流停止 → 避障静默停摆。
+    /// 主动告知盲人"测距暂停"，避免误以为避障仍在工作（见 P1 安全审计）。我方主动暂停（通话/取景）不另行播报。
+    private func handleInterruption(_ interrupted: Bool) {
+        guard !paused else { return }
+        if interrupted {
+            degradeStop()
+            proximityText = SpokenStrings.rangingPaused(lang)
+            advisoryText = ""
+            coordinator.submit(FeedbackEvent(priority: .critical, speech: SpokenStrings.rangingPaused(lang), interrupt: true))
+        }
     }
 
     /// 恢复避障会话（上述界面关闭返回主页时调用）。重跑得到干净的世界跟踪。
@@ -203,6 +217,14 @@ final class HomeViewModel {
         let text = advisoryText.isEmpty ? proximityText : "\(proximityText)。\(advisoryText)"
         guard !text.isEmpty, text != "—" else { return }
         speech.speakUserInitiated(text)
+    }
+
+    /// 相机出错（.failed）后重试：重新启动会话。
+    func retrySession() {
+        guard DeviceSupport.hasLiDAR else { return }
+        paused = false
+        state = .idle
+        source.start()
     }
 
     /// 跳到系统「设置」让用户开启被拒的相机权限。

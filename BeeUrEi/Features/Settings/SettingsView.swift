@@ -22,6 +22,7 @@ struct SettingsView: View {
     @State private var keepAwakeSeconds: Int
     @State private var languagePref: String
     @State private var showTutorial = false
+    @State private var showAvoidanceOffConfirm = false   // 关闭实时避障二次确认（安全攸关）
     @State private var previewSpeech = SpeechFeedback()
     @State private var previewHaptic = HapticFeedback()
 
@@ -65,9 +66,9 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    // 双语标签：英文用户也能變出这个选项（播报语言）。
-                    Picker("播报语言 / Speech language", selection: $languagePref) {
-                        Text("跟随系统 / System").tag("system")
+                    // 语言切换刻意双语并排（看不懂当前语言的用户也要能找到它）。
+                    Picker(SettingsStrings.languagePickerLabel(lang), selection: $languagePref) {
+                        Text(SettingsStrings.languageSystemOption(lang)).tag("system")
                         Text("中文").tag("zh")
                         Text("English").tag("en")
                     }
@@ -81,9 +82,9 @@ struct SettingsView: View {
                         }
                     }
                 } header: {
-                    Text("语言 / Language")
+                    Text(SettingsStrings.languageHeader(lang))
                 } footer: {
-                    Text("决定避障实时语音引导的语言与嗓音（中文/English）。Sets the language and voice for real-time obstacle guidance.")
+                    Text(SettingsStrings.languageFooter(lang))
                 }
 
                 Section {
@@ -194,6 +195,11 @@ struct SettingsView: View {
                     Toggle(SettingsStrings.avoidanceToggle(lang), isOn: $avoidanceOn)
                         .onChange(of: avoidanceOn) { _, v in
                             var f = FeatureSettings(); f.avoidanceEnabled = v
+                            // 关闭实时避障是安全攸关：立刻朗读告知 + 二次确认（误关核心安全功能须可感知，见 P1 审计）。
+                            if !v {
+                                SpeechHub.shared.speak(SpokenStrings.avoidanceOff(lang), channel: .navigation, voiceCode: lang.voiceCode)
+                                showAvoidanceOffConfirm = true
+                            }
                         }
                     Toggle(SettingsStrings.navigationToggle(lang), isOn: $navigationOn)
                         .onChange(of: navigationOn) { _, v in
@@ -229,7 +235,7 @@ struct SettingsView: View {
                 Section(SettingsStrings.aboutHeader(lang)) {
                     LabeledContent(SettingsStrings.orgLabel(lang), value: "Hiko Sphere 彦穹科技")
                     LabeledContent(SettingsStrings.producerLabel(lang), value: "Li Yanpei Hiko")
-                    LabeledContent(SettingsStrings.versionLabel(lang), value: "0.1.0")
+                    LabeledContent(SettingsStrings.versionLabel(lang), value: appVersion)
                 }
 
                 Section(SettingsStrings.disclaimerHeader(lang)) {
@@ -247,7 +253,24 @@ struct SettingsView: View {
             .fullScreenCover(isPresented: $showTutorial) {
                 TutorialView { showTutorial = false }
             }
+            .confirmationDialog(SettingsStrings.avoidanceOffConfirmTitle(lang),
+                                isPresented: $showAvoidanceOffConfirm, titleVisibility: .visible) {
+                Button(SettingsStrings.keepOn(lang)) {
+                    avoidanceOn = true // 反悔：重新开启核心安全功能
+                    var f = FeatureSettings(); f.avoidanceEnabled = true
+                }
+                Button(SettingsStrings.turnOff(lang), role: .destructive) {} // 维持关闭（已在 onChange 持久化）
+            } message: {
+                Text(SettingsStrings.avoidanceOffConfirmMessage(lang))
+            }
         }
+    }
+
+    /// 版本号从打包信息读取，避免硬编码与真实版本脱节（见审计 P3）。
+    private var appVersion: String {
+        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
+        return b.map { "\(v) (\($0))" } ?? v
     }
 
     private func sampleAnnouncement() -> String {

@@ -15,9 +15,5 @@ extension ObstacleDetecting {
     }
 }
 
-/// 占位实现：返回空，保证工程能编译运行。
-final class StubObstacleDetector: ObstacleDetecting {
-    func detect(in pixelBuffer: CVPixelBuffer, regionOfInterest: CGRect?) -> [DetectedObject] {
-        []
-    }
-}
+// 唯一实现是真实的 `YOLOObstacleDetector`（Core ML/Vision）；模型缺失时它返回空检测、
+// 避障自动降级为纯 LiDAR 深度兜底，因此不再需要任何占位/桩实现（去 demo 化）。

@@ -1,19 +1,101 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { type Store, publicUser } from '../db/store'
+import { type Store, type Role, publicUser } from '../db/store'
 import { requireAuth } from '../auth/rbac'
+import type { PresenceRegistry } from '../assist/presence'
 
 const statusSchema = z.object({ status: z.enum(['active', 'disabled']) })
 const roleSchema = z.object({ role: z.enum(['blind', 'helper', 'family', 'admin', 'developer']) })
 
-export function registerAdminRoutes(app: FastifyInstance, store: Store): void {
+const SERVER_VERSION = '0.1.0'
+const START_MS = Date.now()
+
+export function registerAdminRoutes(app: FastifyInstance, store: Store, presence: PresenceRegistry): void {
   const adminOnly = { preHandler: requireAuth(['admin']) }
   // 当前活跃管理员数（用于"最后一名管理员"保护，防把后台锁死）。
   const activeAdminCount = () => store.allUsers().filter((u) => u.role === 'admin' && u.status === 'active').length
+  const nameOf = (id: string) => store.findById(id)?.displayName ?? '—'
 
-  // 列出所有用户。
+  // 后台总览（仪表盘）：用户/角色/在线/举报/录制聚合统计。
+  app.get('/api/admin/overview', adminOnly, async () => {
+    const now = Date.now()
+    const users = store.allUsers()
+    const online = presence.availableUserIds(now)
+    const byRole: Record<string, number> = { blind: 0, helper: 0, family: 0, admin: 0, developer: 0 }
+    let active = 0
+    let disabled = 0
+    for (const u of users) {
+      byRole[u.role] = (byRole[u.role] ?? 0) + 1
+      if (u.status === 'active') active++
+      else disabled++
+    }
+    const reports = store.allReports()
+    const openReports = reports.filter((r) => r.status === 'open').length
+    const onlineHelpers = users.filter(
+      (u) => (u.role === 'helper' || u.role === 'family') && online.has(u.id),
+    ).length
+    return {
+      users: { total: users.length, active, disabled, byRole },
+      online: { total: online.size, helpers: onlineHelpers },
+      reports: { open: openReports, total: reports.length },
+      recordings: { total: store.allRecordings().length, config: store.getRecordingConfig() },
+      version: SERVER_VERSION,
+      uptimeSeconds: Math.floor((now - START_MS) / 1000),
+      nowMs: now,
+    }
+  })
+
+  // 列出所有用户（在 publicUser 基础上补 createdAt/语言/在线/是否绑邮箱手机，便于后台表格；不外泄具体邮箱手机）。
   app.get('/api/admin/users', adminOnly, async () => {
-    return { users: store.allUsers().map(publicUser) }
+    const now = Date.now()
+    return {
+      users: store.allUsers().map((u) => ({
+        ...publicUser(u),
+        createdAt: u.createdAt,
+        language: u.language ?? null,
+        online: presence.isAvailable(u.id, now),
+        hasEmail: !!u.email,
+        hasPhone: !!u.phone,
+        emailVerified: !!u.emailVerified,
+        appleLinked: !!u.appleSub,
+      })),
+    }
+  })
+
+  // 单个用户详情（含邮箱/手机/绑定关系/拉黑数/近期通话）——仅管理员审核可见。
+  app.get('/api/admin/users/:id', adminOnly, async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    const u = store.findById(id)
+    if (!u) return reply.code(404).send({ error: 'not_found' })
+    const now = Date.now()
+    // 绑定关系：盲人侧(owner) 与 协助侧(member) 两个方向合并，标出对方与状态。
+    const links = [
+      ...store.linksByOwner(id).map((l) => ({ direction: 'owner' as const, otherId: l.memberId, otherName: nameOf(l.memberId), relation: l.relation, isEmergency: l.isEmergency, status: l.status ?? 'accepted' })),
+      ...store.linksByMember(id).map((l) => ({ direction: 'member' as const, otherId: l.ownerId, otherName: nameOf(l.ownerId), relation: l.relation, isEmergency: l.isEmergency, status: l.status ?? 'accepted' })),
+    ]
+    const recentCalls = store.callRecordsForUser(id, 20).map((c) => ({
+      callId: c.callId,
+      direction: c.callerId === id ? 'outgoing' : 'incoming',
+      peerName: nameOf(c.callerId === id ? c.calleeId : c.callerId),
+      status: c.status,
+      createdAt: c.createdAt,
+    }))
+    return {
+      user: {
+        ...publicUser(u),
+        createdAt: u.createdAt,
+        language: u.language ?? null,
+        email: u.email ?? null,
+        emailVerified: !!u.emailVerified,
+        phone: u.phone ?? null,
+        appleLinked: !!u.appleSub,
+        passkeys: store.passkeysForUser(id).length,
+        online: presence.isAvailable(id, now),
+      },
+      links,
+      blockedCount: store.blocksInvolving(id).length,
+      recentCalls,
+    }
   })
 
   // 分配/变更角色（含晋升管理员/开发者——自助注册不可，仅 admin 可在此分配）。
@@ -30,7 +112,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store): void {
     if (target.role === 'admin' && target.status === 'active' && parsed.data.role !== 'admin' && activeAdminCount() <= 1) {
       return reply.code(400).send({ error: 'last_admin_protected' })
     }
-    const updated = store.updateUser(id, { role: parsed.data.role })
+    const updated = store.updateUser(id, { role: parsed.data.role as Role })
     return { user: publicUser(updated!) }
   })
 

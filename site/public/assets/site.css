@@ -135,6 +135,9 @@ header.site{position:sticky;top:0;z-index:100;background:color-mix(in srgb,var(-
   .feature .shot{order:-1}
 }
 .feature.reverse .copy{order:2}
+/* 双机并排（聊天行：消息列表 + 新建群聊） */
+.shot .duo{display:flex;gap:.9rem;align-items:center;justify-content:center;width:100%}
+.shot .duo .device{width:48%;max-width:212px;margin-inline:0}
 @media (max-width:820px){.feature.reverse .copy{order:0}}
 
 /* 隐私（编辑式清单，无盒子卡片） */

@@ -30,8 +30,8 @@
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/assets/favicon.svg">
 <link rel="mask-icon" href="/assets/favicon.svg" color="#f2a900">
-<link rel="stylesheet" href="/assets/site.css?v=20260613b">
-<script src="/assets/site.js?v=20260613b"></script>
+<link rel="stylesheet" href="/assets/site.css?v=20260613c">
+<script src="/assets/site.js?v=20260613c"></script>
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -140,11 +140,11 @@
       <p><span lang="zh">每一项都为日常出行设计：避开眼前的障碍，听见周围的世界，需要时一键找人帮你看一眼。</span><span lang="en">Every capability is built for everyday life — steer clear of what’s ahead, hear the world around you, and reach a real person when you need one.</span></p>
     </div>
 
-    <!-- Obstacle -->
+    <!-- Obstacle / home -->
     <div class="feature reveal">
       <div class="copy">
         <h3><span lang="zh">端侧实时避障</span><span lang="en">Real-time obstacle avoidance</span></h3>
-        <p><span lang="zh">用摄像头与 LiDAR/深度感知前方，说出距离与「钟面方向」，让你自己做决定。</span><span lang="en">Uses the camera and LiDAR/depth to sense what’s ahead, speaking the distance and a clock-face direction so you decide.</span></p>
+        <p><span lang="zh">打开就在运行——主屏顶部那行「正前方通畅」就是它的实时状态。用摄像头与 LiDAR/深度感知前方，说出距离与「钟面方向」，让你自己做决定。</span><span lang="en">It runs the moment you open the app — that “path clear ahead” line at the top of the home screen is its live status. Using the camera and LiDAR/depth, it senses what’s ahead and speaks the distance and a clock-face direction, so you decide.</span></p>
         <ul class="pts">
           <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">接近声呐：越近，提示音越急（像倒车雷达）</span><span lang="en">Proximity sonar: beeps speed up as you get closer, like parking sensors</span></span></li>
           <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">空间音方向提示（搭配 AirPods）</span><span lang="en">Spatial-audio direction cues with AirPods</span></span></li>
@@ -152,32 +152,63 @@
         <p class="quote"><span lang="zh">“前方两点钟方向，1.5 米。”</span><span lang="en">“2 o’clock ahead, 1.5 metres.”</span>
           <small><span lang="zh">这就是蜂之眼说话的方式。</span><span lang="en">This is how BeeUrEi speaks.</span></small></p>
       </div>
-      <div class="shot"><div class="device"><img src="/assets/shots/home.jpg" width="760" height="1652" alt="主屏：状态条「正前方通畅」+ 求助 + 看一看 / Home screen: “path clear ahead” status, Get help and See-for-me" loading="lazy"></div></div>
+      <div class="shot"><div class="device"><img src="/assets/shots/home.jpg" width="760" height="1652" alt="主屏：状态条「正前方通畅」+ 求助 + 看一看 / 步行导航 / 我在哪 / 周围有什么 / 前方有什么 / 天气 — BeeUrEi home screen over a live camera view" loading="lazy"></div></div>
+    </div>
+
+    <!-- See for me -->
+    <div class="feature reverse reveal">
+      <div class="copy">
+        <h3><span lang="zh">看一看：朗读文字、识物、辨色</span><span lang="en">See for me: read text, identify objects &amp; colours</span></h3>
+        <p><span lang="zh">从主屏点「看一看」，一个九宫格把摄像头变成多面手：朗读文字与整页、识别颜色、扫码、辨纸币、找东西、识别公交、感知「周围的人」与光线——全部本机完成。</span><span lang="en">Tap “See for me” on the home screen and a single grid turns the camera into an all-rounder: read text or a whole page, identify colours, scan codes, recognise banknotes, find things, read bus numbers, and sense people nearby and ambient light — all on-device.</span></p>
+        <ul class="pts">
+          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">常用识别一屏直达，按钮大而清晰</span><span lang="en">Common tools one tap away, large and clear</span></span></li>
+          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">「前方有什么」一句话汇总眼前场景</span><span lang="en">“What’s ahead” sums up the scene in one sentence</span></span></li>
+        </ul>
+      </div>
+      <div class="shot"><div class="device"><img src="/assets/shots/look.jpg" width="760" height="1652" alt="「看一看」功能页：朗读文字 / 读整页 / 识别颜色 / 扫码 / 识别纸币 / 找东西 / 公交识别 — See-for-me grid over a live camera view" loading="lazy"></div></div>
+    </div>
+
+    <!-- Walking navigation -->
+    <div class="feature reveal">
+      <div class="copy">
+        <h3><span lang="zh">步行导航与原路返回</span><span lang="en">Walking navigation &amp; retrace</span></h3>
+        <p><span lang="zh">输入目的地，跟着语音与「钟面方向」步行；海外用 Apple 地图、中国大陆用高德。进陌生地方先「开始记路」，要回去时「原路返回」，跟着提示音走回出发点。</span><span lang="en">Enter a destination and walk by voice and clock-face directions — Apple Maps abroad, AMap in mainland China. Tap “Start a breadcrumb” before somewhere unfamiliar, then “Retrace” to follow audio cues back to where you started.</span></p>
+        <ul class="pts">
+          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">出门前可「预览路线」先试听一遍</span><span lang="en">Preview the route by ear before you set off</span></span></li>
+          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">常用目的地一键直达</span><span lang="en">Saved places in one tap</span></span></li>
+        </ul>
+      </div>
+      <div class="shot"><div class="device"><img src="/assets/shots/navigation.jpg" width="760" height="1652" alt="步行导航页：地区选择（Apple 地图 / 高德）、目的地、预览路线与原路返回 — Walking navigation with retrace" loading="lazy"></div></div>
     </div>
 
     <!-- Remote assistance -->
     <div class="feature reverse reveal">
       <div class="copy">
         <h3><span lang="zh">一键远程协助</span><span lang="en">One-tap remote assistance</span></h3>
-        <p><span lang="zh">需要人帮忙时，向你选定的亲友或志愿者发起实时视频通话（WebRTC + CallKit），和他们语音交流。</span><span lang="en">When you need a person, start a live video call with a family member or volunteer you choose (WebRTC + CallKit) and talk it through.</span></p>
+        <p><span lang="zh">主屏顶部的「求助」直接呼叫你选定的亲友或志愿者，发起实时视频通话（WebRTC + CallKit），让对方帮你看一眼。</span><span lang="en">The “Get help” button at the top of the home screen calls a family member or volunteer you’ve chosen — a live video call (WebRTC + CallKit) so a real person can take a look.</span></p>
         <ul class="pts">
+          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">求助时画面默认不发送，按住「显示画面」对方才看得到</span><span lang="en">Your camera isn’t shared by default — only while you hold “Show My Camera”</span></span></li>
           <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">来电用系统级 CallKit 呈现，像普通电话一样接听</span><span lang="en">Calls ring through CallKit, answered like any phone call</span></span></li>
           <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">录制须双方明确同意，加密保存、到期自动删除</span><span lang="en">Recording needs both parties’ consent; stored encrypted, auto-deleted on expiry</span></span></li>
         </ul>
       </div>
-      <div class="shot"><div class="device"><img src="/assets/shots/feature-2.jpg" width="760" height="1652" alt="一键求助 / One-tap help" loading="lazy"></div></div>
+      <div class="shot"><div class="device"><img src="/assets/shots/feature-2.jpg" width="760" height="1652" alt="一键求助引导 / One-tap help" loading="lazy"></div></div>
     </div>
 
-    <!-- Private sharing -->
+    <!-- Messaging -->
     <div class="feature reveal">
       <div class="copy">
-        <h3><span lang="zh">按住才发画面</span><span lang="en">Camera off until you press</span></h3>
-        <p><span lang="zh">求助时你的摄像头画面默认不发送。只有当你按住「显示画面」，对方才看得到——隐私始终在你手中。</span><span lang="en">During a call your camera is not shared by default. Only while you hold “Show My Camera” can the other side see — your privacy stays in your hands.</span></p>
+        <h3><span lang="zh">和亲友、协助者保持联系</span><span lang="en">Stay close to family and helpers</span></h3>
+        <p><span lang="zh">内置消息：文字、语音、图片、位置与简短视频消息，还能建群。无障碍优先，随时找人，也随时被找到。</span><span lang="en">Built-in messaging — text, voice, photos, location and short video notes, plus group chats. Accessibility-first, so reaching someone (or being reached) is always easy.</span></p>
         <ul class="pts">
-          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">画面共享由你主动发起、随时可停</span><span lang="en">Sharing is started by you and can stop any time</span></span></li>
+          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">单聊与群聊，消息可朗读</span><span lang="en">One-to-one and group chats, messages read aloud</span></span></li>
+          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">语音、图片、位置与简短视频消息</span><span lang="en">Voice, photos, location and short video notes</span></span></li>
         </ul>
       </div>
-      <div class="shot"><div class="device"><img src="/assets/shots/feature-3.jpg" width="760" height="1652" alt="按住才发画面 / Camera off by default" loading="lazy"></div></div>
+      <div class="shot"><div class="duo">
+        <div class="device"><img src="/assets/shots/messages.jpg" width="760" height="1652" alt="消息：单聊与群聊会话列表 — Messages list with chats and groups" loading="lazy"></div>
+        <div class="device"><img src="/assets/shots/group.jpg" width="760" height="1652" alt="新建群聊：填写群名称、勾选成员 — Creating a group chat" loading="lazy"></div>
+      </div></div>
     </div>
 
     <!-- Make it yours / settings -->
@@ -192,73 +223,30 @@
       <div class="shot"><div class="device"><img src="/assets/shots/settings.jpg" width="760" height="1652" alt="设置页面（盲人优先） / Settings, blind-first" loading="lazy"></div></div>
     </div>
 
-    <!-- 以下三行特性配图待真机实拍：apply.sh 会在 incoming-screenshots/ 有对应文件时
-         压图入 assets/shots/ 并删掉 pending 标记行（解开注释）后重新部署。在此之前保持注释、不上线，
-         避免占位/mock 内容出现在线上。 -->
-    <!--pending:look
-    <div class="feature reveal">
-      <div class="copy">
-        <h3><span lang="zh">看一看：朗读文字、识物、辨色</span><span lang="en">See for me: read text, identify objects &amp; colours</span></h3>
-        <p><span lang="zh">打开「看一看」，一个九宫格把摄像头变成多面手：朗读文字与整页、识别颜色、扫码、辨纸币、找东西、识别公交、感知「周围的人」——全部本机完成。</span><span lang="en">Open “See for me” and a single grid turns the camera into an all-rounder: read text or a whole page, identify colours, scan codes, recognise banknotes, find things, read bus numbers and sense people nearby — all on-device.</span></p>
-        <ul class="pts">
-          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">常用识别一屏直达，操作大而清晰</span><span lang="en">Common tools one tap away, large and clear</span></span></li>
-          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">「前方有什么」一句话汇总眼前场景</span><span lang="en">“What’s ahead” sums up the scene in one sentence</span></span></li>
-        </ul>
-      </div>
-      <div class="shot"><div class="device"><img src="/assets/shots/look.jpg" width="760" height="1652" alt="「看一看」功能页：朗读文字 / 识别颜色 / 扫码 / 识别纸币 / 找东西 / 公交识别 — See-for-me grid" loading="lazy"></div></div>
-    </div>
-    pending:look:end-->
-
-    <!--pending:navigation
-    <div class="feature reverse reveal">
-      <div class="copy">
-        <h3><span lang="zh">步行导航与原路返回</span><span lang="en">Walking navigation &amp; retrace</span></h3>
-        <p><span lang="zh">输入目的地，跟着语音与「钟面方向」步行；海外用 Apple 地图、中国大陆用高德。进陌生地方先「开始记路」，要回去时「原路返回」，跟着提示音走回出发点。</span><span lang="en">Enter a destination and walk by voice and clock-face directions — Apple Maps abroad, AMap in mainland China. Tap “Start a breadcrumb” before somewhere unfamiliar, then “Retrace” to follow audio cues back to where you started.</span></p>
-        <ul class="pts">
-          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">出门前可「预览路线」先试听一遍</span><span lang="en">Preview the route by ear before you set off</span></span></li>
-          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">常用目的地一键直达</span><span lang="en">Saved places in one tap</span></span></li>
-        </ul>
-      </div>
-      <div class="shot"><div class="device"><img src="/assets/shots/navigation.jpg" width="760" height="1652" alt="步行导航页：地区选择、目的地、预览路线与原路返回 — Walking navigation with retrace" loading="lazy"></div></div>
-    </div>
-    pending:navigation:end-->
-
-    <!--pending:messages
-    <div class="feature reveal">
-      <div class="copy">
-        <h3><span lang="zh">和亲友、协助者保持联系</span><span lang="en">Stay close to family and helpers</span></h3>
-        <p><span lang="zh">内置消息：文字、语音、图片、位置与简短视频消息，支持群聊。无障碍优先，随时找人，也随时被找到。</span><span lang="en">Built-in messaging — text, voice, photos, location and short video notes, with group chats. Accessibility-first, so reaching someone (or being reached) is always easy.</span></p>
-        <ul class="pts">
-          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">单聊与群聊，消息可朗读</span><span lang="en">One-to-one and group chats, messages read aloud</span></span></li>
-          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">语音、图片、位置与简短视频消息</span><span lang="en">Voice, photos, location and short video notes</span></span></li>
-        </ul>
-      </div>
-      <div class="shot"><div class="device"><img src="/assets/shots/messages.jpg" width="760" height="1652" alt="消息页：单聊与群聊会话列表 — Messages with one-to-one and group chats" loading="lazy"></div></div>
-    </div>
-    pending:messages:end-->
-
     <!-- More it does (inline, not cards) -->
     <div class="sec-head reveal mt-xl">
       <h2 class="h2-sm"><span lang="zh">它还能做的</span><span lang="en">It also</span></h2>
     </div>
     <div class="roles reveal stagger" role="list">
       <div class="role" role="listitem">
-        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></span>
-        <h3><span lang="zh">场景识别</span><span lang="en">Scene &amp; objects</span></h3>
-        <p><span lang="zh">识物、读字、辨纸币、扫码、识色、找物、感知「附近有人」与光线——全部本机完成。</span><span lang="en">Recognise objects, read text, identify banknotes, scan barcodes, detect colours, find things, sense “people nearby” and ambient light — all on-device.</span></p>
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M12 21s-7-5.6-7-11a7 7 0 0 1 14 0c0 5.4-7 11-7 11z"/><circle cx="12" cy="10" r="2.4"/></svg></span>
+        <h3><span lang="zh">知道你身在何处</span><span lang="en">Always know where you are</span></h3>
+        <p><span lang="zh">「我在哪」播报当前位置与朝向，「周围有什么」环顾四周，「前方有什么」汇总正前方的场景。</span><span lang="en">“Where am I” speaks your location and heading, “What’s around” scans your surroundings, and “What’s ahead” sums up the scene in front of you.</span></p>
       </div>
       <div class="role" role="listitem">
-        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M12 3v6M12 13v.01"/><path d="M10.3 4.2 3.4 17a2 2 0 0 0 1.7 3h13.8a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z"/></svg></span>
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8 5.9 18.1M18.1 5.9 19.8 4.2"/></svg></span>
+        <h3><span lang="zh">天气一问便知</span><span lang="en">Weather at a word</span></h3>
+        <p><span lang="zh">出门前一句话播报当前天气，帮你决定怎么穿、要不要带伞。</span><span lang="en">A one-line spoken weather report before you head out — what to wear, whether to take an umbrella.</span></p>
+      </div>
+      <div class="role" role="listitem">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M10.3 4.2 3.4 17a2 2 0 0 0 1.7 3h13.8a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z"/><path d="M12 9v5M12 17.5v.01"/></svg></span>
         <h3><span lang="zh">摔倒报警 · 紧急呼叫</span><span lang="en">Fall alerts · emergency</span></h3>
         <p><span lang="zh">检测疑似摔倒或剧烈撞击，未及时取消则通知家人；一键紧急呼叫并尽力附带粗略位置。</span><span lang="en">Detects a suspected fall or impact and notifies family if not cancelled; one-tap emergency call with a best-effort coarse location.</span></p>
       </div>
-      <div class="role" role="listitem">
-        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-4 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg></span>
-        <h3><span lang="zh">聊天 · 群聊 · 视频消息</span><span lang="en">Messaging &amp; video notes</span></h3>
-        <p><span lang="zh">与亲友、协助者保持联系：文字、群聊与简短视频消息。</span><span lang="en">Stay close to family and helpers with text, group chats and short video messages.</span></p>
-      </div>
     </div>
   </div>
+</section>
+
 </section>
 
 <!-- PRIVACY -->

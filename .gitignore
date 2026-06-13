@@ -34,3 +34,4 @@ Secrets.plist
 
 # 本地 vendored 二进制框架（WebRTC.xcframework，91MB，绝不入库——见 docs A2）
 Frameworks/
+extrapic/

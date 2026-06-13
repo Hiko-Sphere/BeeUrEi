@@ -23,6 +23,8 @@ export interface User {
   phone?: string // 可选手机号（归一化数字串）：可作为登录标识（手机号+密码）。仅本人可见，不进 publicUser。
   appleSub?: string // Sign in with Apple 的稳定用户标识（identityToken.sub）。仅服务端用于匹配账号。
   usernameCustomized?: boolean // 用户是否设置过自定义用户名（自动生成的 user_/apple_ 为 false）。为 false 时客户端提示设置唯一 userid。
+  legalConsentVersion?: string // 用户同意的隐私政策/使用条款版本（如 "2.0"）。注册须同意方可完成（GDPR 可证明同意）。
+  legalConsentAt?: number // 同意时间戳（ms）。
 }
 
 /// Passkey（WebAuthn 凭据）：一个用户可注册多把。只存公钥与计数器，私钥永不离开设备安全区。
@@ -618,5 +620,7 @@ export function selfView(u: User) {
     phone: u.phone ?? null,
     usernameCustomized: u.usernameCustomized ?? false, // 为 false 时客户端提示设置唯一 userid
     appleLinked: !!u.appleSub, // 是否已绑定 Apple ID（用于账号页展示与解绑）
+    legalConsentVersion: u.legalConsentVersion ?? null, // 已同意的隐私/条款版本（客户端据此门控注册/重新同意）
+    legalConsentAt: u.legalConsentAt ?? null,
   }
 }

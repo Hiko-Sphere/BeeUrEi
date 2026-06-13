@@ -61,4 +61,27 @@ describe('account management', () => {
     expect(d.statusCode).toBe(401)
     await a.close()
   })
+
+  it('records legal consent (version + timestamp), reflected in /api/me; gated by auth/validation', async () => {
+    const a = app()
+    const { token } = await reg(a, 'consent1')
+    // 同意前：/api/me 为空
+    const me0 = await a.inject({ method: 'GET', url: '/api/me', headers: auth(token) })
+    expect(me0.json().user.legalConsentVersion).toBeNull()
+    // 记录同意
+    const res = await a.inject({ method: 'POST', url: '/api/account/legal-consent', headers: auth(token), payload: { version: '2.0' } })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().legalConsentVersion).toBe('2.0')
+    expect(typeof res.json().legalConsentAt).toBe('number')
+    // /api/me 反映已同意（可证明同意：版本 + 时间）
+    const me1 = await a.inject({ method: 'GET', url: '/api/me', headers: auth(token) })
+    expect(me1.json().user.legalConsentVersion).toBe('2.0')
+    expect(me1.json().user.legalConsentAt).toBeGreaterThan(0)
+    // 空版本 → 400；未认证 → 401
+    const bad = await a.inject({ method: 'POST', url: '/api/account/legal-consent', headers: auth(token), payload: { version: '' } })
+    expect(bad.statusCode).toBe(400)
+    const noauth = await a.inject({ method: 'POST', url: '/api/account/legal-consent', payload: { version: '2.0' } })
+    expect(noauth.statusCode).toBe(401)
+    await a.close()
+  })
 })

@@ -50,6 +50,16 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     return { ok: true }
   })
 
+  // 记录对《隐私政策》《使用条款》的同意（注册门控 + GDPR 可证明同意）。客户端在完成注册前调用；
+  // 文档版本随重大更新递增，客户端据此可在版本变化时要求重新同意。
+  app.post('/api/account/legal-consent', { preHandler: requireAuth() }, async (req, reply) => {
+    const parsed = z.object({ version: z.string().trim().min(1).max(16) }).safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const updated = store.updateUser(req.user!.sub, { legalConsentVersion: parsed.data.version, legalConsentAt: Date.now() })
+    if (!updated) return reply.code(404).send({ error: 'not_found' })
+    return { ok: true, legalConsentVersion: updated.legalConsentVersion, legalConsentAt: updated.legalConsentAt }
+  })
+
   // 绑定/换绑手机号（手机号+密码登录的标识）：归一化 + 全局唯一（不能占用他人手机号）。
   app.post('/api/account/phone', { preHandler: requireAuth() }, async (req, reply) => {
     const parsed = z.object({ phone: z.string().trim().min(6).max(20) }).safeParse(req.body)

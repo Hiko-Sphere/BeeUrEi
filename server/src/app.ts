@@ -136,9 +136,11 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   const publicDir = dirname(fileURLToPath(import.meta.url)) + '/../public'
   app.register(fastifyStatic, { root: join(publicDir, 'admin'), prefix: '/admin/' })
   app.get('/admin', async (_req, reply) => reply.redirect('/admin/', 301))
-  // 法律文件公开页（隐私政策 / 使用条款 / EULA）——App Store 上架需可公开访问的隐私政策 URL。
-  app.register(fastifyStatic, { root: join(publicDir, 'legal'), prefix: '/legal/', decorateReply: false })
-  app.get('/legal', async (_req, reply) => reply.redirect('/legal/', 301))
+  // 法律文件已迁至官网同源页面 https://beeurei.hikosphere.com/legal/（不再托管于 API 域）。
+  // 旧链接 301 永久重定向过去，避免外部/历史引用失效；上架隐私政策 URL 请直接填官网地址。
+  const LEGAL_URL = 'https://beeurei.hikosphere.com/legal/'
+  app.get('/legal', async (_req, reply) => reply.redirect(LEGAL_URL, 301))
+  app.get('/legal/', async (_req, reply) => reply.redirect(LEGAL_URL, 301))
 
   // 统一 404 + 错误兜底（清洁 JSON，不泄露堆栈）。
   app.setNotFoundHandler((_req, reply) => reply.code(404).send({ error: 'not_found' }))

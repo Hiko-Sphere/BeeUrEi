@@ -1,239 +1,340 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="BeeUrEi-Brand-Assets/03-wordmark/beeurei-wordmark-horizontal-light-1720.png">
-    <img alt="BeeUrEi" src="BeeUrEi-Brand-Assets/03-wordmark/beeurei-wordmark-horizontal-dark-1720.png" width="440">
-  </picture>
-</p>
+<!-- Maintainer note: set the repo About to the tagline below, Website to https://beeurei.hikosphere.com, and topics: accessibility, ios, blind, low-vision, lidar, webrtc, on-device-ai, swift, voiceover. -->
+<div align="center">
 
-<p align="center">
-  <b>Be Your Eye — turn an iPhone's camera & LiDAR into a second pair of eyes for blind and low-vision people.</b><br/>
-  <sub>On-device real-time obstacle avoidance · walking navigation · scene & object recognition · live human assistance. Free, private, self-hosted.</sub>
-</p>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="BeeUrEi-Brand-Assets/03-wordmark/beeurei-wordmark-horizontal-dark-1720.png">
+  <source media="(prefers-color-scheme: light)" srcset="BeeUrEi-Brand-Assets/03-wordmark/beeurei-wordmark-horizontal-light-1720.png">
+  <img src="BeeUrEi-Brand-Assets/03-wordmark/beeurei-wordmark-horizontal-light-1720.png" alt="BeeUrEi — Be Your Eye" width="420">
+</picture>
 
-<p align="center">
-  <a href="README.md"><b>English</b></a> · <a href="README.zh-CN.md">简体中文</a>
-</p>
+### A second pair of eyes for blind and low-vision people — running on your iPhone.
 
-<p align="center">
-  <img src="https://github.com/Hiko-Sphere/BeeUrEi/actions/workflows/ci.yml/badge.svg" alt="CI">
-  <img src="https://img.shields.io/badge/iOS-17%2B-14161F?logo=apple&logoColor=white" alt="iOS 17+">
-  <img src="https://img.shields.io/badge/Swift-5-FFC42E?logo=swift&logoColor=14161F" alt="Swift 5">
-  <img src="https://img.shields.io/badge/on--device%20AI-Core%20ML%20%2B%20ARKit-14161F" alt="On-device AI">
-  <img src="https://img.shields.io/badge/backend-Node%20%2B%20Fastify-339933?logo=nodedotjs&logoColor=white" alt="Backend">
-  <img src="https://img.shields.io/badge/tests-590%20passing-2ea44f" alt="Tests">
-  <img src="https://img.shields.io/badge/i18n-English%20%2B%20中文-FFC42E?logoColor=14161F" alt="Bilingual">
-  <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue" alt="PolyForm Noncommercial">
-</p>
+**On-device real-time obstacle avoidance · walking navigation · scene & object recognition · live human assistance.**
+The visual AI runs entirely on the device; the camera feed stays on your phone by default.
+
+**English · [简体中文](README.zh-CN.md)**
+
+[![CI](https://github.com/Hiko-Sphere/BeeUrEi/actions/workflows/ci.yml/badge.svg)](https://github.com/Hiko-Sphere/BeeUrEi/actions/workflows/ci.yml)
+![iOS 17+](https://img.shields.io/badge/iOS-17%2B-000?logo=apple)
+![Swift 5](https://img.shields.io/badge/Swift-5-F05138?logo=swift&logoColor=white)
+![On-device AI](https://img.shields.io/badge/AI-on--device-FFC42E?labelColor=14161F)
+![Backend: Node + Fastify](https://img.shields.io/badge/backend-Node%20%2B%20Fastify-3178C6)
+![tests 599](https://img.shields.io/badge/tests-599-3FB950)
+![Bilingual](https://img.shields.io/badge/i18n-EN%20%C2%B7%20%E4%B8%AD%E6%96%87-FFC42E?labelColor=14161F)
+![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-14161F)
+
+[Website](https://beeurei.hikosphere.com) · [Legal & Privacy](https://beeurei.hikosphere.com/legal/) · [Brand Assets](BeeUrEi-Brand-Assets/)
+
+</div>
+
+> **BeeUrEi** (Be Your Eye / 蜂之眼) turns an iPhone's main camera and LiDAR into a second pair of eyes. The bee is the pupil that "sees" the road for you; the faint glow around it is the hum of a LiDAR scan and the swarm guiding your way. Free, privacy-first, and self-hostable. Built by **Hiko Sphere 彦穹科技**; produced by **Li Yanpei Hiko**.
 
 ---
 
-## What is BeeUrEi
+> [!IMPORTANT]
+> **BeeUrEi is a perception-enhancing *assistive tool*, not a safety device.** It does **not** replace the white cane, a guide dog, or Orientation & Mobility (O&M) training, and it **cannot** detect every obstacle. Always keep using them, and never rely on this app as your only means of travelling safely.
 
-**BeeUrEi** (Be Your Eye) is a native iOS app that uses the iPhone's main camera and LiDAR to give blind and low-vision people four core capabilities — **no extra hardware, no subscription, vision AI runs on device.**
+---
 
-- 🛡️ **Real-time obstacle avoidance** — on-device AI continuously reads what's ahead and tells you *what it is, the clock direction, and how far*, via speech + AirPods binaural spatial audio + haptics. Includes drop-off / step-edge detection, a three-channel crossing signal (rhythmic tone + rhythmic vibration + full-screen high-contrast color), and a proximity sonar.
-- 🧭 **Walking navigation** — a spatial-audio *beacon* points the way, with turn-by-turn speech and street-name callouts; **breadcrumb backtrack** records where you walked and guides you back to the start; and three "sense the surroundings" actions — *Where am I / What's around / What's ahead* — with clock bearings and distances.
-- 📷 **Scene & object recognition** — aim and it speaks: identify objects / read text / **read a full document (multi-page)** / **read banknotes** / **scan & remember products** / find your own things (teach it once) / find common items nearby / **people nearby** (count, direction, distance — never identity) / bus routes / light level / touch-to-explore a frozen photo / replay recognition history. All on device — frames never leave the phone.
-- 🤝 **Live human assistance** — one-tap video call to family or volunteers. The blind user's camera is **off by default** and only shared on demand; calls ring with sound + vibration + a spoken caller name; during a call a sighted helper can remotely toggle the flashlight or zoom to see clearly.
+## Table of Contents
 
-> The name: a honeybee *is* the pupil of an eye, "seeing" the road for you; the surrounding glow evokes LiDAR scanning and the bee's hum of guidance.
+- [What BeeUrEi does](#what-beeurei-does)
+- [Why BeeUrEi (vs. similar apps)](#why-beeurei)
+- [Design principles](#design-principles)
+- [Architecture](#architecture)
+- [Tech stack](#tech-stack)
+- [Repository layout](#repository-layout)
+- [Screenshots](#screenshots)
+- [Getting started](#getting-started)
+- [Testing & quality](#testing--quality)
+- [Accessibility & safety](#accessibility--safety)
+- [Privacy](#privacy)
+- [Docs & links](#docs--links)
+- [Status & roadmap](#status--roadmap)
+- [Security disclosure](#security-disclosure)
+- [Contributing](#contributing)
+- [Brand, author & license](#brand-author--license)
 
-### Safety line (please read)
+---
 
-> **BeeUrEi is a perception-enhancing *assistive tool*, not a *safety device*. It does not replace a white cane, a guide dog, or Orientation & Mobility (O&M) training, and it cannot detect every obstacle. Always keep and prioritize them; never rely on this app as your only means of getting around.**
+## What BeeUrEi Does
+
+Four core capabilities, all designed around blind and low-vision use. The vision AI runs **on-device**; the camera feed stays on your phone by default.
+
+#### 1. Real-time obstacle avoidance — *on-device*
+Local AI continuously reads the path ahead and announces **what it is · clock-face direction · how far**, across three channels at once: **speech + AirPods binaural spatial audio + haptics**. Includes **drop-off / step-edge detection**, a **three-channel crossing signal** (rhythmic tone + rhythmic vibration + full-screen high-contrast color), and an **approach sonar**.
+
+#### 2. Walking navigation
+A spatial-audio **beacon** points the way, with turn-by-turn speech and **street-name** call-outs. **Retrace** records the path you walked and guides you back to where you started. Three **"sense around me"** actions — *Where am I / What's around me / What's ahead* — each with clock-face bearing and distance.
+
+#### 3. Scene & object recognition ("Look") — *on-device*
+Read text · read a full multi-page document · identify **banknotes** · scan a barcode and remember the product · teach it once, then **find your own things** · find common nearby objects · **people around you** (count · direction · distance — **never** identity) · bus lines · ambient light level · **touch-to-explore** a frozen photo · review recognition history. All on-device; the image never leaves the phone.
+
+#### 4. Live human assistance
+One tap to video-call **family/friends or volunteers**. On the blind user's side the **camera is off by default** and shared only on demand; incoming calls ring with **sound + vibration + spoken caller name**. During a call, the sighted helper can remotely toggle the **flashlight** and **zoom** to see clearly.
 
 ---
 
 ## Why BeeUrEi
 
-| | BeeUrEi | Seeing AI | Lookout | Be My Eyes | Soundscape-class |
+<a id="why-beeurei"></a>
+Most accessibility apps do **one** of these well. BeeUrEi brings obstacle avoidance, navigation, recognition, and live help together — on-device by default, and self-hostable.
+
+| Capability | **BeeUrEi** | Seeing AI | Lookout | Be My Eyes | Soundscape-class |
 |---|:---:|:---:|:---:|:---:|:---:|
 | Obstacle avoidance (LiDAR ranging + drop-off detection) | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Walking nav + spatial-audio beacon + backtrack | ✅ | ❌ | ❌ | ❌ | ✅ (beacon only) |
-| Full recognition suite (text/banknote/product/find/people/bus/light) | ✅ | ✅ | ✅ | partial | ❌ |
-| Live video assistance | ✅ family + volunteers | ❌ | ❌ | ✅ | ❌ |
-| All three in one app | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Frames never leave the device (recognition fully on-device) | ✅ | ❌ partly cloud | ❌ partly cloud | ❌ cloud | — |
-| Self-hosted backend (your data) | ✅ | ❌ | ❌ | ❌ | ❌ |
-| English + 中文 | ✅ end-to-end | partial | partial | ✅ | ❌ |
-| Source-available | ✅ Noncommercial | ❌ | ❌ | ❌ | partial |
+| Walking nav + spatial-audio beacon + retrace | ✅ | ❌ | ❌ | ❌ | beacon only |
+| Full recognition suite (text / banknote / product / find-my-thing / people / bus / light) | ✅ | ✅ | ✅ | partial | ❌ |
+| Live video assistance | ✅ (family + volunteers) | ❌ | ❌ | ✅ | ❌ |
+| All three (avoid + navigate + recognize) in one app | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Image stays on device (recognition fully on-device) | ✅ | partly cloud | partly cloud | partly cloud | ❌ |
+| Self-hostable backend | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Bilingual (EN · 中文) end to end | ✅ | — | — | — | — |
+| Source available (noncommercial) | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+*Comparison reflects BeeUrEi's design goals and publicly understood positioning of the other apps; it is not a benchmark of accuracy.*
 
 ---
 
-## Design principles
+## Design Principles
 
-| Principle | What it means |
-|---|---|
-| **On-device first** | All vision AI runs locally on the iPhone; frames don't go to the cloud by default — low latency, works offline, private. |
-| **Safety-critical** | The physical & positioning limits of avoidance/navigation are first-class: graded degradation, conservative gating (never says "cross now" on poor GPS), confidence transparency (says "possibly X" when unsure). |
-| **One voice at a time** | A global speech bus arbitrates every announcement: obstacle warning > incoming call > navigation > recognition/queries — **never overlapping**; an interrupted nav instruction is re-spoken after the warning finishes. |
-| **Accessibility is the whole point** | 100% VoiceOver-usable (Magic Tap: recognition screen = describe ahead, incoming call = answer, in-call = hang up); multimodal speech / spatial audio / haptics; high-contrast large type. |
-| **Ports & adapters** | Safety logic lives in a platform-independent, unit-tested Swift package; all I/O (camera/ARKit/speech/location/network) is protocol-driven and injectable. |
-| **Self-hostable** | Backend + WebRTC signaling + TURN are fully self-hostable — zero per-use third-party fees, your data stays yours. |
+- **On-device first** — vision AI runs locally; the camera feed stays on the phone by default.
+- **Safety-critical** — graded degradation and conservative gating. When GPS is poor it will *never* say "cross now"; when unsure it says "possibly an X" instead of guessing.
+- **One sound at a time** — a global speech bus arbitrates priority: **obstacle > incoming call > navigation > recognition**. Nothing overlaps, and a navigation instruction interrupted by a warning is **replayed** afterward.
+- **Accessibility is everything** — 100% VoiceOver-usable, a **Magic Tap** to the most important action on each screen, multimodal speech / spatial audio / haptics, high-contrast large type.
+- **Ports & adapters** — the safety logic lives in a platform-independent, unit-testable Swift Package; all I/O is protocol-driven and injectable.
+- **Self-hostable** — backend + WebRTC signaling + TURN are all self-hostable, with **zero per-use third-party fees**.
 
 ---
 
 ## Architecture
 
+The visual pipeline runs entirely on the iPhone. The backend handles **only networking** (accounts, call routing, signaling) — it does **no AI inference**.
+
 ```
-┌──────────────────────── iPhone (native Swift / SwiftUI) ───────────────────────────┐
-│                                                                                     │
-│  Capture(ARKit+LiDAR) ─▶ FrameSource port ─▶ Perception (Core ML / Vision, on-dev)  │
-│        │                                                  │                          │
-│        ▼                                                  ▼                          │
-│  ARSession depth/image                  obstacles {label · clock · meters} ─▶ stabilize │
-│                                                          │                           │
-│                       ┌─ avoidance channel (FeedbackArbiter priority) ─▶ speech/spatial/haptics │
-│   unified speech bus ─┤                                                              │
-│                       └─ SpeechHub (call > nav > recognition; all yield to avoidance) │
-│                                                                                     │
-│  ── core safety logic (platform-independent Swift Package, 319 unit tests) ───────  │
-│  ClockDirection · DepthSampler · ObstacleRanker · FeedbackArbiter · SpeechGate       │
-│  LocationAccuracyGate · WaypointAdvance · CurrencyClassifier · BusDisplayReader ...  │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-            │ REST + WebSocket signaling (network only — no AI inference)   ▲
-            ▼                                                               │ P2P media (WebRTC)
-┌──────────────── self-hosted backend (Node + TypeScript + Fastify) ──────┐ │  on relay failure
-│ accounts/roles (JWT/RBAC) · family links (mutual consent) · call routing │ │  ┌─────────────┐
-│ public help queue · push (bilingual) · admin/reports · SQLite           │◀┘  │ coturn TURN │
-└──────────────────────────────────────────────────────────────────────────┘    └─────────────┘
+┌──────────────────────────── iPhone (Swift / SwiftUI) ────────────────────────────┐
+│                                                                                   │
+│  ARKit + LiDAR ──▶ FrameSource port ──▶ on-device Core ML / Vision perception      │
+│                                              │                                    │
+│                                              ▼                                    │
+│                          Obstacle { label · clock · meters }                      │
+│                                              │                                    │
+│                                       stabilization                               │
+│                                              │                                    │
+│                                              ▼                                    │
+│                              FeedbackArbiter (priority)                            │
+│                                              │                                    │
+│                       ┌──────────────────────┼──────────────────────┐             │
+│                       ▼                      ▼                      ▼             │
+│                    Speech            Binaural spatial audio       Haptics          │
+│                                                                                   │
+│   SpeechHub (one voice bus):  call > navigation > recognition  ── all yield ──▶ obstacle
+│                                                                                   │
+└───────────────────────────────────────────┬───────────────────────────────────────┘
+                                             │  REST + WebSocket signaling
+                                             │  (network only — no AI inference)
+                                             ▼
+┌──────────────── Self-hosted backend (Node + TypeScript + Fastify) ───────────────┐
+│  Accounts & roles (JWT / RBAC) · family binding (two-way consent) · call routing │
+│  public help queue · bilingual push · admin / reports · SQLite                   │
+└───────────────────────────────────────────┬───────────────────────────────────────┘
+                                             │
+                       WebRTC P2P media  ◀───┴───▶  on direct-connect failure,
+                                                   relayed via self-hosted coturn (TURN)
+```
+
+**Platform-independent safety core** (Swift Package, **319** unit tests): `ClockDirection`, `DepthSampler`, `ObstacleRanker`, `FeedbackArbiter`, `SpeechGate`, `LocationAccuracyGate`, `WaypointAdvance`, `CurrencyClassifier`, `BusDisplayReader`, and more.
+
+---
+
+## Tech Stack
+
+**On-device perception** — ARKit `sceneDepth` (LiDAR ranging), Core ML / Vision (object detection · OCR · barcode · face-box · FeaturePrint).
+**Feedback** — `AVSpeechSynthesizer` (bus-arbitrated), `AVAudioEngine` binaural HRTF spatial audio, Core Haptics, VoiceOver-aware.
+**Navigation** — MapKit walking routes (overseas), licensed map-provider SDK (Chinese mainland, *planned*), CoreLocation, CLGeocoder street names.
+**Remote assistance** — WebRTC P2P, self-hosted WebSocket signaling, self-hosted coturn, CallKit + PushKit (background calls).
+**UI** — SwiftUI (iOS 17+, `@Observable` MVVM), AppIntents (**9** bilingual Siri shortcuts).
+**Backend** — Node.js + TypeScript + Fastify + `node:sqlite` + JWT + WebSocket.
+**Tooling** — XcodeGen, Swift Package, Vitest, GitHub Actions CI.
+
+---
+
+## Repository Layout
+
+```
+BeeUrEi/
+├── BeeUrEi/                  iOS adapter layer + UI
+│   ├── Sensors/ · Capture/   ARKit + LiDAR frame capture
+│   ├── Perception/           on-device Core ML / Vision
+│   ├── Feedback/             speech · spatial audio · haptics
+│   ├── Navigation/           routes · beacons · retrace
+│   ├── RemoteAssist/         WebRTC calls + signaling
+│   ├── Account/ · Consent/    auth, roles, consent flows
+│   └── Features/             scene & object recognition
+├── Packages/BeeUrEiCore/     platform-independent safety core — 319 unit tests
+├── Tests/BeeUrEiTests/       app-layer regression — 72 tests
+├── server/                   self-hosted backend (Node + TS) — 208 tests · 42 test files
+├── site/                     marketing site + /legal/ pages
+├── BeeUrEi-Brand-Assets/     icon · wordmark · palette
+└── .github/workflows/ci.yml  continuous integration
 ```
 
 ---
 
-## Tech stack
+## Screenshots
 
-| Layer | Choices |
-|---|---|
-| On-device perception | ARKit `sceneDepth` (LiDAR ranging) · Core ML / Vision (object detection · OCR · barcodes · face rects · FeaturePrint) |
-| Feedback | AVSpeechSynthesizer (TTS, bus-arbitrated) · AVAudioEngine binaural HRTF spatial audio · Core Haptics · VoiceOver-aware |
-| Navigation | MapKit walking routes (overseas) · licensed map SDK (mainland China, planned) · CoreLocation · CLGeocoder street names |
-| Live assistance | WebRTC P2P · self-hosted WebSocket signaling · self-hosted coturn TURN · CallKit + PushKit (background calls) |
-| UI | SwiftUI (iOS 17+, `@Observable` MVVM) · AppIntents (9 bilingual Siri shortcuts) |
-| Backend | Node.js + TypeScript + Fastify + `node:sqlite` + JWT + WebSocket |
-| Tooling | XcodeGen · Swift Package (core logic) · Vitest (backend) · GitHub Actions CI |
+Real captures from device.
 
----
-
-## Project layout
-
-```
-Project_BeeUrEi/
-├─ BeeUrEi/                  iOS app (adapters + UI)
-│  ├─ Sensors/ Capture/      FrameSource port, ARKit capture, depth sampling
-│  ├─ Perception/            YOLO detector (Core ML / Vision, ROI-focused)
-│  ├─ Feedback/              SpeechHub bus, avoidance speech / spatial audio / haptics, AirPods head tracking
-│  ├─ Navigation/            MapKit walking nav, sense-the-surroundings, breadcrumb backtrack
-│  ├─ RemoteAssist/          signaling client, media engine, CallKit/ringtone, family list
-│  ├─ Account/               sign-in, Keychain, API client
-│  └─ Features/              home, recognition suite, navigation, calls, settings, onboarding
-├─ Packages/BeeUrEiCore/     platform-independent core safety logic (319 unit tests)
-├─ Tests/BeeUrEiTests/       app-layer regression (call privacy gate / avoidance discipline / nav gating / incoming / recognition state machines, 72 tests)
-├─ server/                   self-hosted backend (Node + TS, 199 tests)
-└─ BeeUrEi-Brand-Assets/     brand assets (icon / wordmark / palette)
-```
+| | | |
+|:---:|:---:|:---:|
+| <img src="site/public/assets/shots/home.jpg" alt="Home screen: 'Path ahead is clear', call-for-help button, and the 3×3 action grid" width="230"> | <img src="site/public/assets/shots/look.jpg" alt="Look: the recognition action grid" width="230"> | <img src="site/public/assets/shots/navigation.jpg" alt="Walking navigation" width="230"> |
+| **Home** — "Path ahead is clear" + help + grid | **Look** — recognition grid | **Navigation** — walking route |
+| <img src="site/public/assets/shots/help.jpg" alt="Call for help screen" width="230"> | <img src="site/public/assets/shots/messages.jpg" alt="Messages" width="230"> | <img src="site/public/assets/shots/settings.jpg" alt="Settings" width="230"> |
+| **Help** — call for assistance | **Messages** | **Settings** |
+| <img src="site/public/assets/shots/signin.jpg" alt="Sign-in methods" width="230"> | <img src="site/public/assets/shots/legal.jpg" alt="In-app legal & privacy center" width="230"> | <img src="site/public/assets/shots/safety.jpg" alt="Safety notice" width="230"> |
+| **Sign in** — login methods | **Legal** — in-app legal center | **Safety** — safety notice |
 
 ---
 
-## Getting started
+## Getting Started
 
-### App (needs a LiDAR iPhone: 12 Pro or newer Pro)
+### App
 
-```sh
-xcodegen generate            # regenerate BeeUrEi.xcodeproj after editing project.yml
+Requires a LiDAR-equipped iPhone (12 Pro or a newer Pro). The camera and LiDAR need a **real device** — the simulator reports *device not supported*.
+
+```bash
+xcodegen generate        # (re)generate the Xcode project
 open BeeUrEi.xcodeproj
 ```
-In Xcode select the target → **Signing & Capabilities** → your Apple ID → connect a device → `⌘R`.
-(Camera/LiDAR require a real device; the Simulator shows "device not supported".)
 
-> Real WebRTC media uses a vendored `Frameworks/WebRTC.xcframework` (gitignored, ~91 MB). With it present the real engine is active; without it the app still builds and calls fail honestly (no fake connection).
+In Xcode: select the target → **Signing & Capabilities** → your Apple ID → connect a real device → **⌘R**.
 
-### Backend (self-hosted, runs out of the box)
+Real WebRTC media uses a vendored `Frameworks/WebRTC.xcframework` (gitignored, ~91 MB). With it present, the real engine is enabled; **without it the app still builds, and calls fail honestly** — no faked connection.
 
-```sh
+### Backend (self-hosted, works out of the box)
+
+```bash
 cd server
 npm install
 ADMIN_USERNAME=root ADMIN_PASSWORD=your-strong-password npm run dev   # http://localhost:8787
-curl http://localhost:8787/health        # → {"status":"ok",...}
+curl http://localhost:8787/health    # → {"status":"ok",...}
 ```
 
-For Docker / TURN / APNs push, build `docker build -t beeurei-api server/` and run with `--env-file server/.env`, fronted by a tunnel of your choice.
+**Docker** — first create `server/.env` from the template (`cp server/.env.example server/.env` and fill in your values), then:
+
+```bash
+docker build -t beeurei-api server/
+docker run --env-file server/.env beeurei-api        # front it with any tunnel
+```
+
+Or pass the variables inline instead of an env file:
+
+```bash
+docker run -e ADMIN_USERNAME=root -e ADMIN_PASSWORD=your-strong-password beeurei-api
+```
+
+The production self-hosted backend runs on **AWS (Tokyo) + Cloudflare Tunnel**, with **coturn** for TURN.
 
 ---
 
-## Testing & quality
+## Testing & Quality
 
-```sh
-swift test --package-path Packages/BeeUrEiCore   # core safety logic: 319 tests
-xcodebuild test -scheme BeeUrEi ...              # app-layer regression: 72 tests (Simulator)
-cd server && npm test                            # backend: 199 tests
+```bash
+swift test --package-path Packages/BeeUrEiCore        # core safety logic — 319 tests
+xcodebuild test -scheme BeeUrEi                        # app-layer regression (simulator) — 72 tests
+cd server && npm test                                  # backend — 208 tests
 ```
 
-- **590 tests, all passing**, re-verified by GitHub Actions on every push; backend `tsc` type-check is clean.
-- Hardened by **multiple rounds of multi-agent adversarial code review** — 140+ real defects fixed (signaling eavesdrop, wrong obstacle distance/direction, dark-floor drop-off false positives, arrival bypassing the accuracy gate, magnetic-interference beacon misdirection, permanently-muted spatial audio after an interruption, speech channels drowning each other, silent errors for blind users, missing confirmations) — each with a regression test.
-- **The three safety subsystems each have a dedicated regression net:** call privacy gating (new peer doesn't send video by default / remote control is least-privilege), avoidance discipline (silence on pause / degrade when depth is missing), navigation gating (poor accuracy never enters the route / no false arrival).
-- Safety-critical math/gating lives in the core package and is unit-tested — verifiable on a Mac in seconds, no Simulator required.
+**599 tests across the three suites** (319 core + 72 app-layer + 208 backend). GitHub Actions runs the full suite on every push, and the backend `tsc` type-check is clean. The live **CI badge** above is the authoritative pass/fail signal.
+
+Through several rounds of adversarial, multi-agent code review, **140+ real defects** were fixed — signaling eavesdropping, wrong obstacle distance/direction, false drop-off alarms over dark ground, arrival bypassing the accuracy gate, a magnetically-misled beacon bearing, spatial audio permanently muted after an interruption, voice channels drowning each other out, silent failures to the blind user, missing confirmations — each with a regression test. The three safety-critical subsystems each have a dedicated regression net: **call privacy gating, obstacle-avoidance discipline, and navigation gating.**
 
 ---
 
-## Accessibility & safety
+## Accessibility & Safety
 
-- Fully **VoiceOver**-usable; when VoiceOver is on, speech routes through accessibility announcements so it never fights VoiceOver; **Magic Tap** jumps to the most important action on each screen.
-- **One-voice rule:** the global speech bus arbitrates everything — obstacle warnings always win, calls/nav/recognition each take their place, **never overlapping**; framing hints must be stable before speaking and never cut off a recognition result.
-- **Graded degradation:** unstable LiDAR tracking, overheating, low battery, or poor location accuracy trigger an announced degrade; thermal safety stop.
-- **Confidence transparency:** when recognition is unsure it says "possibly X" rather than asserting.
-- **Disclosure:** full informed consent on first launch (bilingual) + a short, switchable reminder each session.
-- Before release this needs testing **with real blind users** and a safety policy co-designed with O&M professionals.
+- **100% VoiceOver-usable.** When VoiceOver is on, speech routes through the accessibility-announcement channel so it never fights VoiceOver. A **Magic Tap** jumps to the most important action on every screen.
+- **One sound at a time** — obstacle avoidance always wins.
+- **Graded degradation** — if LiDAR is unstable, the device overheats, the battery is low, or location is poor, the app announces the degraded state; thermal protection stops it.
+- **Confidence transparency** — when unsure, it says "possibly an X."
+- **Full informed consent at first launch** (bilingual), plus a short, dismissible reminder each session.
+
+> Before any public release, BeeUrEi must be tested with **real blind users** and have its safety policy co-defined with **O&M experts**.
 
 ---
 
 ## Privacy
 
-- Vision AI is **entirely on-device**: recognition, find-my-things, document reading, banknotes, people detection — frames never leave the phone.
-- "People nearby" reports **count and direction only** — no identity, no stored faces.
-- Live video is **P2P**; the blind user's camera is **off by default** and only shared on demand; a new peer joining resets sharing to off.
-- Recognition history / product memory / taught items are stored **on device only** with file protection (`completeFileProtection`).
-- Calls are **not recorded by default**; if enabled it requires both parties' informed consent.
-- Self-hosted backend: account and call-routing data live on **your own server**.
+- Vision AI is **fully on-device**; the camera feed stays on your phone by default.
+- **"People around you"** reports only count and direction — **no identity, no face stored**.
+- Live video is **P2P**; on the blind user's side the camera is **off by default** and shared only on demand, and it **resets to off** whenever a new member joins.
+- Recognition history, the product library, and taught items are stored **only on the device** (`completeFileProtection`).
+- Calls are **not recorded by default**; recording requires **informed consent from both parties**.
+- Self-hosted backend — account and call-routing data live **on your own server**.
+- **Registration now requires reading and accepting the *Privacy Policy* and *Terms of Use* before it can be completed.**
+
+Full legal text — Privacy / Terms / EULA, bilingual — is on the website at **<https://beeurei.hikosphere.com/legal/>** and in the in-app **Legal & Privacy** center.
 
 ---
 
-## Status & roadmap
+## Docs & Links
 
-| Phase | Scope | Status |
-|---|---|---|
-| Core safety logic | 60+ modules / 319 tests / multi-round adversarial review | ✅ |
-| Phase 1 — real-time avoidance | LiDAR depth + detection + drop-off/crossing + spatial audio | ✅ (on-device tuning pending) |
-| Phase 2 — walking navigation | overseas MapKit + beacon + backtrack + sense-surroundings | ✅ (on-device positioning pending) · mainland map SDK needs a key ⏳ |
-| Recognition suite | text / full-page / banknote / product / find / people / bus / light / history | ✅ (some device verification pending) |
-| Bilingual | full end-to-end English + 中文 (~450 strings + push) | ✅ (English copy pending native review) |
-| Self-hosted backend | accounts / family / calls / signaling / push / admin | ✅ deployed |
-| Phase 3 — live video | signaling + privacy gating + ringtone/CallKit + WebRTC media | ✅ (two-device verification pending) |
-| Phase 4 — polish & ship | device testing / blind-user testing / App Store | ⏳ external resources |
+- **Website** — <https://beeurei.hikosphere.com>
+- **Legal documents** (Privacy · Terms · EULA, bilingual) — <https://beeurei.hikosphere.com/legal/>
+- **Brand assets** (icon · wordmark · palette) — [`BeeUrEi-Brand-Assets/`](BeeUrEi-Brand-Assets/)
+- **Security policy** — [`SECURITY.md`](SECURITY.md)
+- **Contributing guide** — [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- **Code of conduct** — [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
+- **Admin panel** — self-hosted at `/admin`
 
 ---
 
-## Brand
+## Status & Roadmap
 
-Honey `#FFC42E` · Ink `#14161F`. Full icon / wordmark / palette in [`BeeUrEi-Brand-Assets/`](BeeUrEi-Brand-Assets/).
-
-<p align="center">
-  <img src="BeeUrEi-Brand-Assets/02-mark/beeurei-mark-color-512.png" width="96" alt="BeeUrEi mark">
-</p>
+| Area | Status |
+|---|---|
+| Core safety logic | ✅ Done |
+| Phase 1 — real-time obstacle avoidance | ✅ Done (on-device tuning pending) |
+| Phase 2 — walking navigation (overseas) | ✅ Done |
+| Walking navigation — Chinese-mainland map provider | ⏳ Awaiting key |
+| Recognition suite | ✅ Done (some on-device validation pending) |
+| Bilingual (EN · 中文) | ✅ Done (English copy pending native review) |
+| Self-hosted backend | ✅ Done — deployed |
+| Phase 3 — live video | ✅ Done (two-sided validation pending) |
+| Phase 4 — polish & App Store release | ⏳ Awaiting external resources |
 
 ---
 
-## Author
+## Security Disclosure
 
-- **Organization:** Hiko Sphere 彦穹科技
-- **Producer:** Li Yanpei Hiko
+Found a security issue? Please report it **privately** by email to **<beeurei@163.com>** — **do not open a public issue.** We will acknowledge your report and work with you on a fix before any disclosure. See [`SECURITY.md`](SECURITY.md) for full details.
 
-## License
+---
 
-BeeUrEi is released under the **[PolyForm Noncommercial License 1.0.0](LICENSE)**. You may freely **use, study, modify, distribute, and collaborate on** it for any **noncommercial** purpose (personal, research, education, public-interest and accessibility work) — at no cost. **Commercial use is not permitted** (selling it, or charging the blind/low-vision users it exists to serve). This is a public-interest project; for commercial licensing, contact Hiko Sphere 彦穹科技.
+## Contributing
 
-> The software is provided "as is", without warranty of any kind. It is an assistive tool and **does not replace a white cane, a guide dog, or O&M training.**
+Noncommercial contributions are welcome. Before opening a pull request:
 
-<p align="center">
-  <sub>BeeUrEi — Be Your Eye 🐝 ｜ © 2026 Hiko Sphere 彦穹科技 · Li Yanpei Hiko ｜ PolyForm Noncommercial 1.0.0</sub>
-</p>
+1. **Run the tests** and make sure everything is green (`swift test --package-path Packages/BeeUrEiCore`, `xcodebuild test -scheme BeeUrEi`, and `cd server && npm test`).
+2. **Follow the existing style and structure** — keep safety logic in `Packages/BeeUrEiCore` and cover it with tests.
+3. **Submit under the project's license** — PolyForm Noncommercial 1.0.0.
+
+For anything touching the safety-critical subsystems (obstacle avoidance, navigation gating, call privacy), please include a regression test. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full guide and [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) for community expectations.
+
+---
+
+## Brand, Author & License
+
+**Palette** — Honey `#FFC42E` · Ink `#14161F`. Assets in [`BeeUrEi-Brand-Assets/`](BeeUrEi-Brand-Assets/) (wordmark `03-wordmark`, mark `02-mark`).
+
+**Author** — Hiko Sphere 彦穹科技 / produced by Li Yanpei Hiko.
+
+**License** — **PolyForm Noncommercial 1.0.0.** You may freely **use, study, modify, and distribute** BeeUrEi for any **noncommercial** purpose. **Commercial use is prohibited** — including selling it or charging the blind/low-vision users it is meant to serve. The software is provided **"as is", without any warranty**, and is an **assistive tool that does not replace** the white cane, a guide dog, or O&M training. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
+
+© 2026 Hiko Sphere 彦穹科技 · Li Yanpei Hiko.
+
+<div align="center">
+
+*Be your eye. 蜂之眼，替你看路。*
+
+</div>

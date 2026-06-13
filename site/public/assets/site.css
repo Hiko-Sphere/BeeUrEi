@@ -277,3 +277,22 @@ html[data-theme="dark"] .checks .ck.no{color:#ff8a7a}
 .lic-name{font-weight:650;color:var(--ink)}
 .fb-name{color:#fff}
 .fb-sub{color:#bcc0cc}
+
+/* ---------- 法律页 /legal/（复用站点 chrome + 双语切换） ---------- */
+.legal-head{max-width:46rem;padding-block:clamp(2rem,5vw,3rem) 0}
+.legal-head h1{font-size:clamp(1.9rem,1.3rem + 2.4vw,3rem);margin:0 0 .4rem;letter-spacing:-.02em}
+.legal-sub{color:var(--muted);margin:0;font-size:.98rem}
+.legal-toc{display:flex;flex-wrap:wrap;gap:.6rem;margin:1.5rem 0 0;padding:0;list-style:none}
+.legal-toc a{display:inline-block;padding:.55rem 1rem;border-radius:999px;background:color-mix(in srgb,var(--honey) 16%,transparent);border:1px solid color-mix(in srgb,var(--honey) 34%,transparent);color:var(--honey-deep);font-weight:650;font-size:.95rem;text-decoration:none}
+.legal-toc a:hover{background:color-mix(in srgb,var(--honey) 26%,transparent)}
+.legal-main{max-width:46rem}
+.legal-doc{padding-block:clamp(2rem,4vw,3rem);border-top:1px solid var(--line);scroll-margin-top:5rem}
+.legal-doc h2{font-size:clamp(1.5rem,1.2rem + 1.2vw,2.1rem);margin:0 0 .3rem;letter-spacing:-.01em}
+.legal-meta{color:var(--muted);font-size:.88rem;margin:0 0 1.3rem}
+.legal-intro{font-size:1.04rem;color:var(--ink-soft)}
+.legal-intro p{margin:.6rem 0}
+.legal-doc h3{font-size:1.12rem;margin:1.9rem 0 .5rem;color:var(--ink)}
+.legal-doc p{color:var(--ink-soft);margin:.55rem 0;line-height:1.7}
+.legal-doc ul{margin:.5rem 0;padding-inline-start:1.25rem;color:var(--ink-soft)}
+.legal-doc li{margin:.4rem 0;line-height:1.65}
+.legal-doc strong{color:var(--ink);font-weight:700}

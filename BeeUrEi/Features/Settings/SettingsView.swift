@@ -53,196 +53,19 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
+            // 盲人优先信息架构：核心安全置顶 → 语音播报 → 障碍提示 → 显示 → 屏幕 →
+            // 账号 → 帮助 → 法律 → 关于 → 开发者（次要项依次下沉，开发者垫底）。
             Form {
-                Section {
-                    Toggle(SettingsStrings.briefReminderToggle(lang), isOn: $briefReminderOn)
-                        .onChange(of: briefReminderOn) { _, newValue in
-                            store.briefReminderSpeechEnabled = newValue
-                        }
-                } header: {
-                    Text(SettingsStrings.reminderHeader(lang))
-                } footer: {
-                    Text(SettingsStrings.reminderFooter(lang))
-                }
-
-                Section {
-                    // 语言切换刻意双语并排（看不懂当前语言的用户也要能找到它）。
-                    Picker(SettingsStrings.languagePickerLabel(lang), selection: $languagePref) {
-                        Text(SettingsStrings.languageSystemOption(lang)).tag("system")
-                        Text("中文").tag("zh")
-                        Text("English").tag("en")
-                    }
-                    .onChange(of: languagePref) { _, v in
-                        var f = FeatureSettings(); f.languagePreference = v
-                        // 同步到后端（尽力而为）：来电/好友请求等推送文案按 users.language 选语言。
-                        if let token = KeychainStore.read() {
-                            let resolved = Language.resolve(preference: v,
-                                                            systemCode: Locale.preferredLanguages.first)
-                            Task { await APIClient().setLanguage(token: token, language: resolved.rawValue) }
-                        }
-                    }
-                } header: {
-                    Text(SettingsStrings.languageHeader(lang))
-                } footer: {
-                    Text(SettingsStrings.languageFooter(lang))
-                }
-
-                Section {
-                    Toggle(SettingsStrings.conciseToggle(lang), isOn: $concise)
-                        .onChange(of: concise) { _, v in
-                            var f = FeatureSettings(); f.conciseAnnouncements = v
-                        }
-                    VStack(alignment: .leading) {
-                        Text(SettingsStrings.speechRate(lang))
-                        Slider(value: $rate, in: 0...1, step: 0.05) {
-                            Text(SettingsStrings.speechRate(lang))
-                        } minimumValueLabel: {
-                            Text(SettingsStrings.slow(lang))
-                        } maximumValueLabel: {
-                            Text(SettingsStrings.fast(lang))
-                        }
-                        .onChange(of: rate) { _, v in
-                            var f = FeatureSettings(); f.speechRate = Float(v)
-                        }
-                        .accessibilityLabel(SettingsStrings.speechRate(lang))
-                        .accessibilityValue("\(Int(rate * 100)) %")
-                    }
-                    Toggle(SettingsStrings.sonarToggle(lang), isOn: $sonarOn)
-                        .onChange(of: sonarOn) { _, v in
-                            var f = FeatureSettings(); f.proximitySonar = v
-                        }
-                    Toggle(SettingsStrings.spatialToggle(lang), isOn: $spatialCuesOn)
-                        .onChange(of: spatialCuesOn) { _, v in
-                            var f = FeatureSettings(); f.spatialObstacleCues = v
-                        }
-                        .accessibilityHint(SettingsStrings.spatialHint(lang))
-                    Picker(SettingsStrings.verbosityPicker(lang), selection: $verbosity) {
-                        Text(SettingsStrings.verbosityQuiet(lang)).tag(0)
-                        Text(SettingsStrings.verbosityNormal(lang)).tag(1)
-                        Text(SettingsStrings.verbosityDetailed(lang)).tag(2)
-                    }
-                    .onChange(of: verbosity) { _, v in
-                        var f = FeatureSettings(); f.verbosity = v
-                    }
-                    Toggle(SettingsStrings.clearConfirmToggle(lang), isOn: $clearConfirm)
-                        .onChange(of: clearConfirm) { _, v in
-                            var f = FeatureSettings(); f.clearPathConfirm = v
-                        }
-                    Toggle(SettingsStrings.fallDetectToggle(lang), isOn: $fallDetectOn)
-                        .onChange(of: fallDetectOn) { _, v in
-                            var f = FeatureSettings(); f.fallDetectionEnabled = v
-                        }
-                        .accessibilityHint(SettingsStrings.fallDetectHint(lang))
-                    Button(SettingsStrings.previewSpeech(lang)) {
-                        previewSpeech.play(FeedbackEvent(priority: .obstacle, speech: sampleAnnouncement()))
-                    }
-                    .accessibilityHint(SettingsStrings.previewSpeechHint(lang))
-                } header: {
-                    Text(SettingsStrings.speechHeader(lang))
-                } footer: {
-                    Text(SettingsStrings.speechFooter(lang))
-                }
-
-                Section {
-                    Picker(SettingsStrings.keepAwakePicker(lang), selection: $keepAwakeSeconds) {
-                        Text(SettingsStrings.keepAwakeForever(lang)).tag(0)
-                        Text(SettingsStrings.keepAwakeAfter(300, lang)).tag(300)
-                        Text(SettingsStrings.keepAwakeAfter(120, lang)).tag(120)
-                        Text(SettingsStrings.keepAwakeAfter(60, lang)).tag(60)
-                        Text(SettingsStrings.keepAwakeAfter(30, lang)).tag(30)
-                    }
-                    .onChange(of: keepAwakeSeconds) { _, v in
-                        var f = FeatureSettings(); f.keepAwakeSeconds = v
-                    }
-                } header: {
-                    Text(SettingsStrings.screenHeader(lang))
-                } footer: {
-                    Text(SettingsStrings.screenFooter(lang))
-                }
-
-                Section {
-                    Toggle(SettingsStrings.highContrastToggle(lang), isOn: $highContrastOn)
-                        .onChange(of: highContrastOn) { _, v in
-                            var f = FeatureSettings(); f.highContrast = v
-                        }
-                    Button(SettingsStrings.previewHaptic(lang)) {
-                        previewHaptic.play(FeedbackEvent(priority: .obstacle, speech: nil))
-                    }
-                    .accessibilityHint(SettingsStrings.previewHapticHint(lang))
-                    Button(SettingsStrings.resetDefaults(lang), role: .destructive) {
-                        FeatureSettings.resetToDefaults()
-                        let f = FeatureSettings()
-                        concise = f.conciseAnnouncements
-                        rate = Double(f.speechRate)
-                        verbosity = f.verbosity
-                        clearConfirm = f.clearPathConfirm
-                        highContrastOn = f.highContrast
-                        sonarOn = f.proximitySonar
-                    }
-                    .accessibilityHint(SettingsStrings.resetDefaultsHint(lang))
-                } header: {
-                    Text(SettingsStrings.a11yHeader(lang))
-                } footer: {
-                    Text(SettingsStrings.a11yFooter(lang))
-                }
-
-                Section(SettingsStrings.accountHeader(lang)) {
-                    NavigationLink(SettingsStrings.loginRegister(lang)) { LoginView() }
-                    NavigationLink(SettingsStrings.familyAndEmergency(lang)) { FamilyLinksView() }
-                }
-
-                Section {
-                    Toggle(SettingsStrings.avoidanceToggle(lang), isOn: $avoidanceOn)
-                        .onChange(of: avoidanceOn) { _, v in
-                            var f = FeatureSettings(); f.avoidanceEnabled = v
-                            // 关闭实时避障是安全攸关：立刻朗读告知 + 二次确认（误关核心安全功能须可感知，见 P1 审计）。
-                            if !v {
-                                SpeechHub.shared.speak(SpokenStrings.avoidanceOff(lang), channel: .navigation, voiceCode: lang.voiceCode)
-                                showAvoidanceOffConfirm = true
-                            }
-                        }
-                    Toggle(SettingsStrings.navigationToggle(lang), isOn: $navigationOn)
-                        .onChange(of: navigationOn) { _, v in
-                            var f = FeatureSettings(); f.navigationEnabled = v
-                        }
-                } header: {
-                    Text(SettingsStrings.featuresHeader(lang))
-                } footer: {
-                    Text(SettingsStrings.featuresFooter(lang))
-                }
-
-                Section {
-                    Toggle(SettingsStrings.devModeToggle(lang), isOn: $devModeOn)
-                        .onChange(of: devModeOn) { _, v in
-                            var d = DevSettings(); d.enabled = v
-                        }
-                    if devModeOn {
-                        Toggle(SettingsStrings.dynamicROIToggle(lang), isOn: $dynamicROIOn)
-                            .onChange(of: dynamicROIOn) { _, v in
-                                var d = DevSettings(); d.dynamicROIEnabled = v
-                            }
-                    }
-                } header: {
-                    Text(SettingsStrings.devHeader(lang))
-                } footer: {
-                    Text(SettingsStrings.devFooter(lang))
-                }
-
-                Section(SettingsStrings.helpHeader(lang)) {
-                    Button(SettingsStrings.replayTutorial(lang)) { showTutorial = true }
-                }
-
-                Section(SettingsStrings.aboutHeader(lang)) {
-                    LabeledContent(SettingsStrings.orgLabel(lang), value: "Hiko Sphere 彦穹科技")
-                    LabeledContent(SettingsStrings.producerLabel(lang), value: "Li Yanpei Hiko")
-                    LabeledContent(SettingsStrings.versionLabel(lang), value: appVersion)
-                }
-
-                Section(SettingsStrings.disclaimerHeader(lang)) {
-                    Text(DisclaimerText.full(lang))
-                        .font(.body)
-                        .accessibilityLabel(DisclaimerText.full(lang))
-                }
+                coreSafetySection
+                voiceSection
+                obstacleSection
+                displaySection
+                screenSection
+                accountSection
+                helpSection
+                legalSection
+                aboutSection
+                developerSection
             }
             .navigationTitle(SettingsStrings.navTitle(lang))
             .toolbar {
@@ -263,6 +86,227 @@ struct SettingsView: View {
             } message: {
                 Text(SettingsStrings.avoidanceOffConfirmMessage(lang))
             }
+        }
+    }
+
+    // MARK: - 分区（拆成计算属性：盲人优先排序 + 规避 SwiftUI 单表达式类型检查超时）
+
+    /// 1) 核心安全——最重要，置顶。实时避障 / 步行导航 / 摔倒报警。
+    @ViewBuilder private var coreSafetySection: some View {
+        Section {
+            Toggle(SettingsStrings.avoidanceToggle(lang), isOn: $avoidanceOn)
+                .onChange(of: avoidanceOn) { _, v in
+                    var f = FeatureSettings(); f.avoidanceEnabled = v
+                    // 关闭实时避障是安全攸关：立刻朗读告知 + 二次确认（误关核心安全功能须可感知，见 P1 审计）。
+                    if !v {
+                        SpeechHub.shared.speak(SpokenStrings.avoidanceOff(lang), channel: .navigation, voiceCode: lang.voiceCode)
+                        showAvoidanceOffConfirm = true
+                    }
+                }
+            Toggle(SettingsStrings.navigationToggle(lang), isOn: $navigationOn)
+                .onChange(of: navigationOn) { _, v in
+                    var f = FeatureSettings(); f.navigationEnabled = v
+                }
+            Toggle(SettingsStrings.fallDetectToggle(lang), isOn: $fallDetectOn)
+                .onChange(of: fallDetectOn) { _, v in
+                    var f = FeatureSettings(); f.fallDetectionEnabled = v
+                }
+                .accessibilityHint(SettingsStrings.fallDetectHint(lang))
+        } header: {
+            Text(SettingsStrings.coreSafetyHeader(lang))
+        } footer: {
+            Text(SettingsStrings.coreSafetyFooter(lang))
+        }
+    }
+
+    /// 2) 语音播报——日常最常调：语言 / 语速 / 详略 / 简短 / 试听。
+    @ViewBuilder private var voiceSection: some View {
+        Section {
+            // 语言切换刻意双语并排（看不懂当前语言的用户也要能找到它）。
+            Picker(SettingsStrings.languagePickerLabel(lang), selection: $languagePref) {
+                Text(SettingsStrings.languageSystemOption(lang)).tag("system")
+                Text("中文").tag("zh")
+                Text("English").tag("en")
+            }
+            .onChange(of: languagePref) { _, v in
+                var f = FeatureSettings(); f.languagePreference = v
+                // 同步到后端（尽力而为）：来电/好友请求等推送文案按 users.language 选语言。
+                if let token = KeychainStore.read() {
+                    let resolved = Language.resolve(preference: v,
+                                                    systemCode: Locale.preferredLanguages.first)
+                    Task { await APIClient().setLanguage(token: token, language: resolved.rawValue) }
+                }
+            }
+            VStack(alignment: .leading) {
+                Text(SettingsStrings.speechRate(lang))
+                Slider(value: $rate, in: 0...1, step: 0.05) {
+                    Text(SettingsStrings.speechRate(lang))
+                } minimumValueLabel: {
+                    Text(SettingsStrings.slow(lang))
+                } maximumValueLabel: {
+                    Text(SettingsStrings.fast(lang))
+                }
+                .onChange(of: rate) { _, v in
+                    var f = FeatureSettings(); f.speechRate = Float(v)
+                }
+                .accessibilityLabel(SettingsStrings.speechRate(lang))
+                .accessibilityValue("\(Int(rate * 100)) %")
+            }
+            Picker(SettingsStrings.verbosityPicker(lang), selection: $verbosity) {
+                Text(SettingsStrings.verbosityQuiet(lang)).tag(0)
+                Text(SettingsStrings.verbosityNormal(lang)).tag(1)
+                Text(SettingsStrings.verbosityDetailed(lang)).tag(2)
+            }
+            .onChange(of: verbosity) { _, v in
+                var f = FeatureSettings(); f.verbosity = v
+            }
+            Toggle(SettingsStrings.conciseToggle(lang), isOn: $concise)
+                .onChange(of: concise) { _, v in
+                    var f = FeatureSettings(); f.conciseAnnouncements = v
+                }
+            Button(SettingsStrings.previewSpeech(lang)) {
+                previewSpeech.play(FeedbackEvent(priority: .obstacle, speech: sampleAnnouncement()))
+            }
+            .accessibilityHint(SettingsStrings.previewSpeechHint(lang))
+        } header: {
+            Text(SettingsStrings.voiceHeader(lang))
+        } footer: {
+            Text(SettingsStrings.voiceFooter(lang))
+        }
+    }
+
+    /// 3) 障碍提示——可选的额外感知：开始提醒 / 声呐 / 空间音 / 通畅确认。
+    @ViewBuilder private var obstacleSection: some View {
+        Section {
+            Toggle(SettingsStrings.briefReminderToggle(lang), isOn: $briefReminderOn)
+                .onChange(of: briefReminderOn) { _, newValue in
+                    store.briefReminderSpeechEnabled = newValue
+                }
+            Toggle(SettingsStrings.sonarToggle(lang), isOn: $sonarOn)
+                .onChange(of: sonarOn) { _, v in
+                    var f = FeatureSettings(); f.proximitySonar = v
+                }
+            Toggle(SettingsStrings.spatialToggle(lang), isOn: $spatialCuesOn)
+                .onChange(of: spatialCuesOn) { _, v in
+                    var f = FeatureSettings(); f.spatialObstacleCues = v
+                }
+                .accessibilityHint(SettingsStrings.spatialHint(lang))
+            Toggle(SettingsStrings.clearConfirmToggle(lang), isOn: $clearConfirm)
+                .onChange(of: clearConfirm) { _, v in
+                    var f = FeatureSettings(); f.clearPathConfirm = v
+                }
+        } header: {
+            Text(SettingsStrings.obstacleHeader(lang))
+        } footer: {
+            Text(SettingsStrings.obstacleFooter(lang))
+        }
+    }
+
+    /// 4) 触觉与显示——低视力相关：高对比状态条 + 试触振动。
+    @ViewBuilder private var displaySection: some View {
+        Section {
+            Toggle(SettingsStrings.highContrastToggle(lang), isOn: $highContrastOn)
+                .onChange(of: highContrastOn) { _, v in
+                    var f = FeatureSettings(); f.highContrast = v
+                }
+            Button(SettingsStrings.previewHaptic(lang)) {
+                previewHaptic.play(FeedbackEvent(priority: .obstacle, speech: nil))
+            }
+            .accessibilityHint(SettingsStrings.previewHapticHint(lang))
+        } header: {
+            Text(SettingsStrings.displayHeader(lang))
+        } footer: {
+            Text(SettingsStrings.a11yFooter(lang))
+        }
+    }
+
+    /// 5) 屏幕与省电——避障常亮时长。
+    @ViewBuilder private var screenSection: some View {
+        Section {
+            Picker(SettingsStrings.keepAwakePicker(lang), selection: $keepAwakeSeconds) {
+                Text(SettingsStrings.keepAwakeForever(lang)).tag(0)
+                Text(SettingsStrings.keepAwakeAfter(300, lang)).tag(300)
+                Text(SettingsStrings.keepAwakeAfter(120, lang)).tag(120)
+                Text(SettingsStrings.keepAwakeAfter(60, lang)).tag(60)
+                Text(SettingsStrings.keepAwakeAfter(30, lang)).tag(30)
+            }
+            .onChange(of: keepAwakeSeconds) { _, v in
+                var f = FeatureSettings(); f.keepAwakeSeconds = v
+            }
+        } header: {
+            Text(SettingsStrings.screenHeader(lang))
+        } footer: {
+            Text(SettingsStrings.screenFooter(lang))
+        }
+    }
+
+    /// 6) 账号与亲友——登录 / 亲友与紧急呼叫。
+    @ViewBuilder private var accountSection: some View {
+        Section(SettingsStrings.accountHeader(lang)) {
+            NavigationLink(SettingsStrings.loginRegister(lang)) { LoginView() }
+            NavigationLink(SettingsStrings.familyAndEmergency(lang)) { FamilyLinksView() }
+        }
+    }
+
+    /// 7) 帮助——重看教程 + 恢复默认（破坏性，放此处而非和安全开关混在一起）。
+    @ViewBuilder private var helpSection: some View {
+        Section(SettingsStrings.helpHeader(lang)) {
+            Button(SettingsStrings.replayTutorial(lang)) { showTutorial = true }
+            Button(SettingsStrings.resetDefaults(lang), role: .destructive) {
+                FeatureSettings.resetToDefaults()
+                let f = FeatureSettings()
+                concise = f.conciseAnnouncements
+                rate = Double(f.speechRate)
+                verbosity = f.verbosity
+                clearConfirm = f.clearPathConfirm
+                highContrastOn = f.highContrast
+                sonarOn = f.proximitySonar
+            }
+            .accessibilityHint(SettingsStrings.resetDefaultsHint(lang))
+        }
+    }
+
+    /// 8) 法律与隐私——法律中心（隐私政策 / 使用条款 / EULA / 安全须知）。
+    @ViewBuilder private var legalSection: some View {
+        Section {
+            NavigationLink {
+                LegalCenterView()
+            } label: {
+                Label(LegalStrings.legalCenter(lang), systemImage: "lock.shield")
+            }
+        } header: {
+            Text(SettingsStrings.disclaimerHeader(lang))
+        } footer: {
+            Text(LegalStrings.versionLine(lang))
+        }
+    }
+
+    /// 9) 关于——组织 / 制作人 / 版本。
+    @ViewBuilder private var aboutSection: some View {
+        Section(SettingsStrings.aboutHeader(lang)) {
+            LabeledContent(SettingsStrings.orgLabel(lang), value: "Hiko Sphere 彦穹科技")
+            LabeledContent(SettingsStrings.producerLabel(lang), value: "Li Yanpei Hiko")
+            LabeledContent(SettingsStrings.versionLabel(lang), value: appVersion)
+        }
+    }
+
+    /// 10) 开发者——次要项垫底，避免干扰盲人日常使用。
+    @ViewBuilder private var developerSection: some View {
+        Section {
+            Toggle(SettingsStrings.devModeToggle(lang), isOn: $devModeOn)
+                .onChange(of: devModeOn) { _, v in
+                    var d = DevSettings(); d.enabled = v
+                }
+            if devModeOn {
+                Toggle(SettingsStrings.dynamicROIToggle(lang), isOn: $dynamicROIOn)
+                    .onChange(of: dynamicROIOn) { _, v in
+                        var d = DevSettings(); d.dynamicROIEnabled = v
+                    }
+            }
+        } header: {
+            Text(SettingsStrings.devHeader(lang))
+        } footer: {
+            Text(SettingsStrings.devFooter(lang))
         }
     }
 

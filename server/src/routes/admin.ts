@@ -153,4 +153,42 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     if (!updated) return reply.code(404).send({ error: 'not_found' })
     return { report: updated }
   })
+
+  // 全站绑定关系（盲人 ↔ 协助者/亲友）总览：解析双方显示名与角色，便于排查"加不上人/紧急联系人"等问题。
+  app.get('/api/admin/links', adminOnly, async () => {
+    const roleOf = (id: string) => store.findById(id)?.role ?? null
+    return {
+      links: store.allLinks().map((l) => ({
+        id: l.id,
+        ownerId: l.ownerId,
+        ownerName: nameOf(l.ownerId),
+        ownerRole: roleOf(l.ownerId),
+        memberId: l.memberId,
+        memberName: nameOf(l.memberId),
+        memberRole: roleOf(l.memberId),
+        relation: l.relation,
+        isEmergency: l.isEmergency,
+        status: l.status ?? 'accepted',
+        createdAt: l.createdAt,
+      })),
+    }
+  })
+
+  // 全站通话记录（最近 N 条，时间倒序）：解析主叫/被叫显示名，便于审核滥用与排障。
+  app.get('/api/admin/calls', adminOnly, async (req) => {
+    const q = req.query as { limit?: string }
+    const limit = Math.min(Math.max(Number.parseInt(q.limit ?? '200', 10) || 200, 1), 500)
+    return {
+      calls: store.allCallRecords(limit).map((c) => ({
+        id: c.id,
+        callId: c.callId,
+        callerId: c.callerId,
+        callerName: nameOf(c.callerId),
+        calleeId: c.calleeId,
+        calleeName: nameOf(c.calleeId),
+        status: c.status,
+        createdAt: c.createdAt,
+      })),
+    }
+  })
 }

@@ -13,7 +13,10 @@ const state = {
   reports: [],
   recordings: [],
   recConfig: null,
+  links: [],
+  calls: [],
   usersQuery: '', usersRole: 'all', usersStatus: 'all',
+  linksQuery: '', callsQuery: '',
   refreshTimer: null,
 };
 // fix lang init (ternary precedence above): recompute cleanly
@@ -49,8 +52,12 @@ const I18N = {
     err_cannot_disable_self: '不能封禁自己', err_not_found: '对象不存在', err_invalid_input: '输入有误',
     err_forbidden: '无权操作', err_unauthorized: '登录已过期，请重新登录', err_network: '网络错误，请重试',
     sessionExpired: '登录已过期，请重新登录', loading: '加载中…',
+    relationships: '关系', calls: '通话', owner: '视障用户', member: '协助者 / 亲友', relationCol: '关系',
+    emergency: '紧急', exportCsv: '导出 CSV', noLinks: '暂无绑定关系', caller: '主叫', callee: '被叫', time: '时间',
+    callCount: '通话记录', searchLinks: '搜索姓名…', searchCalls: '搜索姓名…',
+    linkAccepted: '已绑定', linkPending: '待确认', linkDeclined: '已拒绝',
     roles: { blind: '视障用户', helper: '协助者', family: '亲友', admin: '管理员', developer: '开发者' },
-    callStatus: { answered: '已接通', declined: '已拒绝', missed: '未接' },
+    callStatus: { answered: '已接通', declined: '已拒绝', missed: '未接', ended: '已结束', ongoing: '进行中', ringing: '振铃中' },
     dir: { incoming: '呼入', outgoing: '呼出' },
   },
   en: {
@@ -79,8 +86,12 @@ const I18N = {
     err_cannot_disable_self: 'Can’t ban yourself', err_not_found: 'Not found', err_invalid_input: 'Invalid input',
     err_forbidden: 'Forbidden', err_unauthorized: 'Session expired — sign in again', err_network: 'Network error, try again',
     sessionExpired: 'Session expired — sign in again', loading: 'Loading…',
+    relationships: 'Relations', calls: 'Calls', owner: 'Blind user', member: 'Helper / family', relationCol: 'Relation',
+    emergency: 'Emergency', exportCsv: 'Export CSV', noLinks: 'No relationships yet', caller: 'Caller', callee: 'Callee', time: 'Time',
+    callCount: 'Call records', searchLinks: 'Search name…', searchCalls: 'Search name…',
+    linkAccepted: 'Linked', linkPending: 'Pending', linkDeclined: 'Declined',
     roles: { blind: 'Blind / low-vision', helper: 'Helper', family: 'Family', admin: 'Admin', developer: 'Developer' },
-    callStatus: { answered: 'Answered', declined: 'Declined', missed: 'Missed' },
+    callStatus: { answered: 'Answered', declined: 'Declined', missed: 'Missed', ended: 'Ended', ongoing: 'Ongoing', ringing: 'Ringing' },
     dir: { incoming: 'Incoming', outgoing: 'Outgoing' },
   },
 };
@@ -221,7 +232,7 @@ async function onLogin(e) {
 }
 
 // ---------------------------------------------------------------- shell + router
-const ROUTES = ['', 'users', 'reports', 'recordings'];
+const ROUTES = ['', 'users', 'relationships', 'calls', 'reports', 'recordings'];
 function currentRoute() { const h = (location.hash || '#/').replace(/^#\/?/, ''); return ROUTES.includes(h) ? h : ''; }
 
 function renderChrome() {
@@ -230,6 +241,8 @@ function renderChrome() {
   const nav = [
     ['', '📊', t('dashboard')],
     ['users', '👤', t('users')],
+    ['relationships', '🔗', t('relationships')],
+    ['calls', '📞', t('calls')],
     ['reports', '🚩', t('reports'), openReports],
     ['recordings', '⏺', t('recordings')],
   ].map(([r, ico, label, badge]) => `
@@ -237,7 +250,7 @@ function renderChrome() {
       <span class="ico" aria-hidden="true">${ico}</span><span>${esc(label)}</span>
       ${badge ? `<span class="badge">${badge}</span>` : ''}
     </button>`).join('');
-  const titleMap = { '': t('dashboard'), users: t('users'), reports: t('reports'), recordings: t('recordings') };
+  const titleMap = { '': t('dashboard'), users: t('users'), relationships: t('relationships'), calls: t('calls'), reports: t('reports'), recordings: t('recordings') };
   app().innerHTML = `
     <div class="shell">
       <aside class="sidebar" id="sidebar">
@@ -427,6 +440,112 @@ async function openUserDrawer(uid) {
   }
 }
 
+// ---------------------------------------------------------------- csv export
+function downloadCSV(filename, rows) {
+  const csv = rows.map((r) => r.map((c) => {
+    const s = String(c ?? '');
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(',')).join('\r\n');
+  // 前置 BOM：Excel 据此识别 UTF-8，避免中文乱码。
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+  a.remove(); URL.revokeObjectURL(url);
+}
+
+// ---------------------------------------------------------------- relationships (links)
+async function loadLinks() {
+  showLoading();
+  try { state.links = (await api('/api/admin/links')).links || []; renderLinks(); }
+  catch (err) { viewEl().innerHTML = `<div class="err-banner">${esc(errText(err.code))}</div>`; }
+}
+function filteredLinks() {
+  const q = state.linksQuery.trim().toLowerCase();
+  const list = q ? state.links.filter((l) => (l.ownerName || '').toLowerCase().includes(q) || (l.memberName || '').toLowerCase().includes(q)) : state.links;
+  return [...list].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+}
+function linkStatusPill(s) {
+  const map = { accepted: ['ok', t('linkAccepted')], pending: ['off', t('linkPending')], declined: ['role-admin', t('linkDeclined')] };
+  const [cls, label] = map[s] || ['off', s];
+  return `<span class="pill ${cls}">${esc(label)}</span>`;
+}
+function renderLinks() {
+  const list = filteredLinks();
+  const rows = list.map((l) => `
+    <tr>
+      <td><div class="nm">${esc(l.ownerName)}</div><div class="un">${esc(roleName(l.ownerRole) || '—')}</div></td>
+      <td><div class="nm">${esc(l.memberName)}</div><div class="un">${esc(roleName(l.memberRole) || '—')}</div></td>
+      <td>${esc(l.relation || '—')}</td>
+      <td>${l.isEmergency ? `<span class="pill role-admin">⚠️ ${esc(t('emergency'))}</span>` : '—'}</td>
+      <td>${linkStatusPill(l.status)}</td>
+      <td style="color:var(--text-dim);font-size:13px">${esc(fmtDate(l.createdAt))}</td>
+    </tr>`).join('');
+  viewEl().innerHTML = `
+    <div class="toolbar">
+      <div class="search"><input id="lq" type="search" placeholder="${esc(t('searchLinks'))}" value="${esc(state.linksQuery)}" /></div>
+      <button class="btn ghost" data-action="reloadLinks">↻ ${esc(t('refresh'))}</button>
+      <button class="btn ghost" data-action="exportLinks" ${list.length ? '' : 'disabled'}>⬇ ${esc(t('exportCsv'))}</button>
+    </div>
+    <div class="table-wrap">
+      ${list.length ? `<table><thead><tr>
+        <th>${esc(t('owner'))}</th><th>${esc(t('member'))}</th><th>${esc(t('relationCol'))}</th><th>${esc(t('emergency'))}</th><th>${esc(t('status'))}</th><th>${esc(t('created'))}</th>
+      </tr></thead><tbody>${rows}</tbody></table>`
+      : `<div class="empty"><div class="ico">🔗</div><p>${esc(t('noLinks'))}</p></div>`}
+    </div>`;
+  $('#lq').addEventListener('input', (e) => { state.linksQuery = e.target.value; renderLinks(); $('#lq').focus(); });
+  viewEl().querySelector('[data-action="reloadLinks"]').addEventListener('click', loadLinks);
+  viewEl().querySelector('[data-action="exportLinks"]').addEventListener('click', () => {
+    downloadCSV('beeurei-relationships.csv', [
+      [t('owner'), t('role'), t('member'), t('role'), t('relationCol'), t('emergency'), t('status'), t('created')],
+      ...filteredLinks().map((l) => [l.ownerName, roleName(l.ownerRole), l.memberName, roleName(l.memberRole), l.relation || '', l.isEmergency ? 'yes' : 'no', l.status, fmtDate(l.createdAt)]),
+    ]);
+  });
+}
+
+// ---------------------------------------------------------------- calls (site-wide)
+async function loadCalls() {
+  showLoading();
+  try { state.calls = (await api('/api/admin/calls?limit=300')).calls || []; renderCalls(); }
+  catch (err) { viewEl().innerHTML = `<div class="err-banner">${esc(errText(err.code))}</div>`; }
+}
+function filteredCalls() {
+  const q = state.callsQuery.trim().toLowerCase();
+  return q ? state.calls.filter((c) => (c.callerName || '').toLowerCase().includes(q) || (c.calleeName || '').toLowerCase().includes(q)) : state.calls;
+}
+function callStatusName(s) { return (I18N[state.lang].callStatus[s]) || s; }
+function renderCalls() {
+  const list = filteredCalls();
+  const rows = list.map((c) => `
+    <tr>
+      <td><div class="nm">${esc(c.callerName)}</div></td>
+      <td><span style="color:var(--text-faint)">→</span></td>
+      <td><div class="nm">${esc(c.calleeName)}</div></td>
+      <td>${esc(callStatusName(c.status))}</td>
+      <td style="color:var(--text-dim);font-size:13px">${esc(fmtDate(c.createdAt))}</td>
+    </tr>`).join('');
+  viewEl().innerHTML = `
+    <div class="toolbar">
+      <div class="search"><input id="cq" type="search" placeholder="${esc(t('searchCalls'))}" value="${esc(state.callsQuery)}" /></div>
+      <button class="btn ghost" data-action="reloadCalls">↻ ${esc(t('refresh'))}</button>
+      <button class="btn ghost" data-action="exportCalls" ${list.length ? '' : 'disabled'}>⬇ ${esc(t('exportCsv'))}</button>
+    </div>
+    <div class="table-wrap">
+      ${list.length ? `<table><thead><tr>
+        <th>${esc(t('caller'))}</th><th></th><th>${esc(t('callee'))}</th><th>${esc(t('status'))}</th><th>${esc(t('time'))}</th>
+      </tr></thead><tbody>${rows}</tbody></table>`
+      : `<div class="empty"><div class="ico">📞</div><p>${esc(t('noCalls'))}</p></div>`}
+    </div>`;
+  $('#cq').addEventListener('input', (e) => { state.callsQuery = e.target.value; renderCalls(); $('#cq').focus(); });
+  viewEl().querySelector('[data-action="reloadCalls"]').addEventListener('click', loadCalls);
+  viewEl().querySelector('[data-action="exportCalls"]').addEventListener('click', () => {
+    downloadCSV('beeurei-calls.csv', [
+      [t('caller'), t('callee'), t('status'), t('time')],
+      ...filteredCalls().map((c) => [c.callerName, c.calleeName, callStatusName(c.status), fmtDate(c.createdAt)]),
+    ]);
+  });
+}
+
 // ---------------------------------------------------------------- reports
 async function loadReports() {
   showLoading();
@@ -528,6 +647,8 @@ function route() {
   const r = currentRoute();
   if (r === '') loadDashboard();
   else if (r === 'users') loadUsers();
+  else if (r === 'relationships') loadLinks();
+  else if (r === 'calls') loadCalls();
   else if (r === 'reports') loadReports();
   else if (r === 'recordings') loadRecordings();
 }

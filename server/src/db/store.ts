@@ -159,6 +159,7 @@ export interface Store {
   createLink(link: FamilyLink): void
   linksByOwner(ownerId: string): FamilyLink[]
   linksByMember(memberId: string): FamilyLink[]
+  allLinks(): FamilyLink[] // 管理后台总览
   findLink(id: string): FamilyLink | undefined
   deleteLink(id: string): void
 
@@ -170,6 +171,7 @@ export interface Store {
   createCallRecord(rec: CallRecord): void
   updateCallStatus(callId: string, calleeId: string, status: CallRecordStatus): void
   callRecordsForUser(userId: string, limit?: number): CallRecord[] // 我作为主叫或被叫，按时间倒序
+  allCallRecords(limit?: number): CallRecord[] // 管理后台：全站通话，按时间倒序
 
   createReport(report: Report): void
   allReports(): Report[]
@@ -329,6 +331,9 @@ export class MemoryStore implements Store {
   linksByMember(memberId: string): FamilyLink[] {
     return [...this.links.values()].filter((l) => l.memberId === memberId)
   }
+  allLinks(): FamilyLink[] {
+    return [...this.links.values()]
+  }
   findLink(id: string): FamilyLink | undefined {
     return this.links.get(id)
   }
@@ -364,6 +369,11 @@ export class MemoryStore implements Store {
   callRecordsForUser(userId: string, limit = 100): CallRecord[] {
     return [...this.callRecords.values()]
       .filter((r) => r.callerId === userId || r.calleeId === userId)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit)
+  }
+  allCallRecords(limit = 200): CallRecord[] {
+    return [...this.callRecords.values()]
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, limit)
   }

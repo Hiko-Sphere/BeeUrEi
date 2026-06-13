@@ -133,9 +133,12 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
 
   // 管理后台 Web 面板（静态 SPA，纯前端、零运行时依赖、与 API 同源）。
   // 服务 server/public/admin → /admin/；用 hash 路由，无需服务端 SPA 回退。
-  const adminRoot = join(dirname(fileURLToPath(import.meta.url)), '../public/admin')
-  app.register(fastifyStatic, { root: adminRoot, prefix: '/admin/' })
+  const publicDir = dirname(fileURLToPath(import.meta.url)) + '/../public'
+  app.register(fastifyStatic, { root: join(publicDir, 'admin'), prefix: '/admin/' })
   app.get('/admin', async (_req, reply) => reply.redirect('/admin/', 301))
+  // 法律文件公开页（隐私政策 / 使用条款 / EULA）——App Store 上架需可公开访问的隐私政策 URL。
+  app.register(fastifyStatic, { root: join(publicDir, 'legal'), prefix: '/legal/', decorateReply: false })
+  app.get('/legal', async (_req, reply) => reply.redirect('/legal/', 301))
 
   // 统一 404 + 错误兜底（清洁 JSON，不泄露堆栈）。
   app.setNotFoundHandler((_req, reply) => reply.code(404).send({ error: 'not_found' }))

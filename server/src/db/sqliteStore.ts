@@ -168,6 +168,9 @@ export class SqliteStore implements Store {
   linksByMember(memberId: string): FamilyLink[] {
     return this.db.prepare('SELECT * FROM links WHERE memberId = ?').all(memberId).map((r) => this.toLink(r))
   }
+  allLinks(): FamilyLink[] {
+    return this.db.prepare('SELECT * FROM links ORDER BY createdAt DESC').all().map((r) => this.toLink(r))
+  }
   findLink(id: string): FamilyLink | undefined {
     const row = this.db.prepare('SELECT * FROM links WHERE id = ?').get(id)
     return row ? this.toLink(row) : undefined
@@ -204,6 +207,11 @@ export class SqliteStore implements Store {
   callRecordsForUser(userId: string, limit = 100): CallRecord[] {
     return this.db.prepare('SELECT * FROM call_records WHERE callerId = ? OR calleeId = ? ORDER BY createdAt DESC LIMIT ?')
       .all(userId, userId, limit)
+      .map((r: any) => ({ id: r.id, callId: r.callId, callerId: r.callerId, calleeId: r.calleeId, status: r.status as CallRecordStatus, createdAt: Number(r.createdAt) }))
+  }
+  allCallRecords(limit = 200): CallRecord[] {
+    return this.db.prepare('SELECT * FROM call_records ORDER BY createdAt DESC LIMIT ?')
+      .all(limit)
       .map((r: any) => ({ id: r.id, callId: r.callId, callerId: r.callerId, calleeId: r.calleeId, status: r.status as CallRecordStatus, createdAt: Number(r.createdAt) }))
   }
 

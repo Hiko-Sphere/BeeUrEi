@@ -109,6 +109,40 @@ describe('admin + reports', () => {
     await app.close()
   })
 
+  it('admin lists site-wide relationships and calls with resolved names', async () => {
+    const { store, app } = withAdmin()
+    const adminToken = await login(app, 'root', 'rootpass1')
+    const adminAuth = { authorization: `Bearer ${adminToken}` }
+
+    const blind = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'blindy', password: 'secret123' } })
+    const blindId = blind.json().user.id
+    const helper = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'helpy', password: 'secret123' } })
+    const helperId = helper.json().user.id
+
+    store.createLink({ id: 'lk1', ownerId: blindId, memberId: helperId, relation: '女儿', isEmergency: true, createdAt: Date.now(), status: 'accepted' })
+    store.createCallRecord({ id: 'cr1', callId: 'call-abc', callerId: blindId, calleeId: helperId, status: 'answered', createdAt: Date.now() })
+
+    const links = await app.inject({ method: 'GET', url: '/api/admin/links', headers: adminAuth })
+    expect(links.statusCode).toBe(200)
+    expect(links.json().links.length).toBe(1)
+    expect(links.json().links[0].ownerName).toBe('blindy')
+    expect(links.json().links[0].memberName).toBe('helpy')
+    expect(links.json().links[0].isEmergency).toBe(true)
+
+    const calls = await app.inject({ method: 'GET', url: '/api/admin/calls', headers: adminAuth })
+    expect(calls.statusCode).toBe(200)
+    expect(calls.json().calls.length).toBe(1)
+    expect(calls.json().calls[0].callerName).toBe('blindy')
+    expect(calls.json().calls[0].calleeName).toBe('helpy')
+    expect(calls.json().calls[0].status).toBe('answered')
+
+    // 非管理员被拒
+    const helperToken = helper.json().token
+    const forbidden = await app.inject({ method: 'GET', url: '/api/admin/links', headers: { authorization: `Bearer ${helperToken}` } })
+    expect(forbidden.statusCode).toBe(403)
+    await app.close()
+  })
+
   it('防后台锁死：管理员不能自封；不能封禁/降级最后一名管理员（见审查 #10/#11）', async () => {
     const { app } = withAdmin()
     const adminToken = await login(app, 'root', 'rootpass1')

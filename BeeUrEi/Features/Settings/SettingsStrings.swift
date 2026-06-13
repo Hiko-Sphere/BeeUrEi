@@ -4,6 +4,25 @@ import Foundation
 /// 完整安全须知（DisclaimerText.full）为法律文本，翻译需单独校对，暂保持中文（已在状态文档标注）。
 enum SettingsStrings {
 
+    // MARK: 分区标题（盲人优先：核心安全置顶，其余按"语音→障碍提示→显示→账号→其他"递减）
+
+    static func coreSafetyHeader(_ l: Language) -> String { l == .zh ? "核心安全" : "Core safety" }
+    static func coreSafetyFooter(_ l: Language) -> String {
+        l == .zh ? "这些是最重要的安全功能。实时避障默认开启；关闭前会再次与你确认。导航功能仍在开发中。"
+                 : "The most important safety features. Obstacle detection is on by default; you'll be asked to confirm before turning it off. Navigation is still in development."
+    }
+    static func voiceHeader(_ l: Language) -> String { l == .zh ? "语音播报" : "Voice & speech" }
+    static func voiceFooter(_ l: Language) -> String {
+        l == .zh ? "决定避障实时引导的语言、语速与详略；简短播报更快说完、降低认知负荷。可随时「试听播报」确认效果。"
+                 : "Sets the language, rate and detail of real-time guidance. Concise announcements finish faster. Use \"Preview\" to hear the result."
+    }
+    static func obstacleHeader(_ l: Language) -> String { l == .zh ? "障碍提示" : "Obstacle cues" }
+    static func obstacleFooter(_ l: Language) -> String {
+        l == .zh ? "可选的额外提示。接近声呐像倒车雷达，越近蜂鸣越急；空间音从障碍所在方向发声（推荐 AirPods）。"
+                 : "Optional extra cues. The sonar works like a parking sensor — beeps speed up as obstacles get closer; spatial audio plays from the obstacle's direction (AirPods recommended)."
+    }
+    static func displayHeader(_ l: Language) -> String { l == .zh ? "触觉与显示" : "Haptics & display" }
+
     // MARK: 语音提醒
 
     static func briefReminderToggle(_ l: Language) -> String {

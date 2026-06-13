@@ -168,4 +168,82 @@ describe('admin + reports', () => {
     expect(demoteLast.statusCode).toBe(400)
     await app.close()
   })
+
+  it('admin lists site-wide blocks and overview exposes 30-day growth', async () => {
+    const { store, app } = withAdmin()
+    const adminToken = await login(app, 'root', 'rootpass1')
+    const adminAuth = { authorization: `Bearer ${adminToken}` }
+
+    const blocker: User = { id: 'u1', username: 'frank', passwordHash: hashPassword('secret123'), displayName: 'Frank', role: 'blind', status: 'active', createdAt: Date.now() }
+    const blocked: User = { id: 'u2', username: 'gina', passwordHash: hashPassword('secret123'), displayName: 'Gina', role: 'helper', status: 'active', createdAt: Date.now() }
+    store.createUser(blocker)
+    store.createUser(blocked)
+    store.createBlock({ id: 'bk1', blockerId: 'u1', blockedId: 'u2', createdAt: Date.now() })
+
+    const blocks = await app.inject({ method: 'GET', url: '/api/admin/blocks', headers: adminAuth })
+    expect(blocks.statusCode).toBe(200)
+    expect(blocks.json().blocks.length).toBe(1)
+    expect(blocks.json().blocks[0].blockerName).toBe('Frank')
+    expect(blocks.json().blocks[0].blockedName).toBe('Gina')
+
+    const ov = await app.inject({ method: 'GET', url: '/api/admin/overview', headers: adminAuth })
+    const growth = ov.json().growth
+    expect(growth).toBeDefined()
+    expect(growth.trend.length).toBe(30) // 最近 30 个自然日
+    expect(growth.newUsers30d).toBeGreaterThanOrEqual(3) // root + frank + gina
+
+    // 非管理员被拒
+    const ginaToken = await login(app, 'gina', 'secret123')
+    const forbidden = await app.inject({ method: 'GET', url: '/api/admin/blocks', headers: { authorization: `Bearer ${ginaToken}` } })
+    expect(forbidden.statusCode).toBe(403)
+    await app.close()
+  })
+
+  it('admin support actions: verify-email / unlink-apple / clear-passkeys / force-logout', async () => {
+    const { store, app } = withAdmin()
+    const adminToken = await login(app, 'root', 'rootpass1')
+    const adminAuth = { authorization: `Bearer ${adminToken}` }
+
+    const frank: User = {
+      id: 'u1', username: 'frank', passwordHash: hashPassword('secret123'), displayName: 'Frank',
+      role: 'blind', status: 'active', createdAt: Date.now(),
+      email: 'frank@example.com', emailVerified: false, appleSub: 'apple-sub-1', tokenVersion: 0,
+    }
+    const gina: User = { id: 'u2', username: 'gina', passwordHash: hashPassword('secret123'), displayName: 'Gina', role: 'helper', status: 'active', createdAt: Date.now() }
+    store.createUser(frank)
+    store.createUser(gina)
+    store.createPasskey({ id: 'pk1', userId: 'u1', credentialId: 'cred1', publicKey: 'pub', counter: 0, createdAt: Date.now() })
+
+    // 标记邮箱已验证
+    const verify = await app.inject({ method: 'POST', url: '/api/admin/users/u1/verify-email', headers: adminAuth, payload: { verified: true } })
+    expect(verify.statusCode).toBe(200)
+    expect(verify.json().emailVerified).toBe(true)
+    expect(store.findById('u1')!.emailVerified).toBe(true)
+    // 无邮箱用户不可标记 → 400
+    const noEmail = await app.inject({ method: 'POST', url: '/api/admin/users/u2/verify-email', headers: adminAuth, payload: { verified: true } })
+    expect(noEmail.statusCode).toBe(400)
+
+    // 解绑 Apple，再次解绑 → 400 not_linked
+    const unlink = await app.inject({ method: 'POST', url: '/api/admin/users/u1/unlink-apple', headers: adminAuth })
+    expect(unlink.statusCode).toBe(200)
+    expect(store.findById('u1')!.appleSub).toBeUndefined()
+    const unlink2 = await app.inject({ method: 'POST', url: '/api/admin/users/u1/unlink-apple', headers: adminAuth })
+    expect(unlink2.statusCode).toBe(400)
+
+    // 清除 Passkey
+    const clear = await app.inject({ method: 'POST', url: '/api/admin/users/u1/clear-passkeys', headers: adminAuth })
+    expect(clear.statusCode).toBe(200)
+    expect(clear.json().cleared).toBe(1)
+    expect(store.passkeysForUser('u1').length).toBe(0)
+
+    // 强制下线：旧 access token 立即失效（tokenVersion 递增）
+    const frankToken = await login(app, 'frank', 'secret123')
+    const me1 = await app.inject({ method: 'GET', url: '/api/me', headers: { authorization: `Bearer ${frankToken}` } })
+    expect(me1.statusCode).toBe(200)
+    const fl = await app.inject({ method: 'POST', url: '/api/admin/users/u1/force-logout', headers: adminAuth })
+    expect(fl.statusCode).toBe(200)
+    const me2 = await app.inject({ method: 'GET', url: '/api/me', headers: { authorization: `Bearer ${frankToken}` } })
+    expect(me2.statusCode).toBe(401) // 旧令牌被 tokenVersion 击穿
+    await app.close()
+  })
 })

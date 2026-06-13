@@ -167,6 +167,7 @@ export interface Store {
   deleteBlock(id: string): void
   findBlock(id: string): Block | undefined
   blocksInvolving(userId: string): Block[] // blockerId==userId 或 blockedId==userId 的所有拉黑记录
+  allBlocks(): Block[] // 管理后台：全站拉黑记录
 
   createCallRecord(rec: CallRecord): void
   updateCallStatus(callId: string, calleeId: string, status: CallRecordStatus): void
@@ -353,6 +354,9 @@ export class MemoryStore implements Store {
   }
   blocksInvolving(userId: string): Block[] {
     return [...this.blocks.values()].filter((b) => b.blockerId === userId || b.blockedId === userId)
+  }
+  allBlocks(): Block[] {
+    return [...this.blocks.values()].sort((a, b) => b.createdAt - a.createdAt)
   }
 
   createCallRecord(rec: CallRecord): void {

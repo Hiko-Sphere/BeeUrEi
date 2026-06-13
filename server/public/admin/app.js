@@ -15,8 +15,9 @@ const state = {
   recConfig: null,
   links: [],
   calls: [],
+  blocks: [],
   usersQuery: '', usersRole: 'all', usersStatus: 'all',
-  linksQuery: '', callsQuery: '',
+  linksQuery: '', callsQuery: '', blocksQuery: '',
   refreshTimer: null,
 };
 // fix lang init (ternary precedence above): recompute cleanly
@@ -56,6 +57,17 @@ const I18N = {
     emergency: '紧急', exportCsv: '导出 CSV', noLinks: '暂无绑定关系', caller: '主叫', callee: '被叫', time: '时间',
     callCount: '通话记录', searchLinks: '搜索姓名…', searchCalls: '搜索姓名…',
     linkAccepted: '已绑定', linkPending: '待确认', linkDeclined: '已拒绝',
+    newUsers7d: '近 7 天新增', newUsers30d: '近 30 天新增', regTrend: '注册趋势（近 30 天）',
+    blocks: '拉黑', blocker: '拉黑方', blocked: '被拉黑', noBlocks: '暂无拉黑记录', searchBlocks: '搜索姓名…',
+    support: '账号支持', markVerified: '标记邮箱已验证', markUnverified: '撤销邮箱验证', unlinkApple: '解绑 Apple',
+    clearPasskeys: '清除 Passkey', forceLogout: '强制下线',
+    confirmMarkVerified: '确认将该用户邮箱标记为「已验证」？', confirmMarkUnverified: '确认撤销该用户的邮箱验证状态？',
+    confirmUnlinkApple: '确认解绑该用户的 Apple 账号？解绑后该用户需用正确的 Apple 账号重新绑定。',
+    confirmClearPasskeys: '确认清除该用户的全部 Passkey？清除后该用户需用密码登录并重新注册 Passkey。',
+    confirmForceLogout: '确认强制该用户下线？其所有设备上的登录将立即失效，需重新登录。',
+    emailMarkedVerified: '已标记邮箱为已验证', emailMarkedUnverified: '已撤销邮箱验证',
+    appleUnlinked: '已解绑 Apple', passkeysCleared: '已清除 Passkey（%s 把）', forcedLogout: '已强制下线',
+    err_no_email: '该用户未绑定邮箱', err_not_linked: '该用户未绑定 Apple',
     roles: { blind: '视障用户', helper: '协助者', family: '亲友', admin: '管理员', developer: '开发者' },
     callStatus: { answered: '已接通', declined: '已拒绝', missed: '未接', ended: '已结束', ongoing: '进行中', ringing: '振铃中' },
     dir: { incoming: '呼入', outgoing: '呼出' },
@@ -79,7 +91,7 @@ const I18N = {
     retentionDays: 'Retention', retentionDesc: 'Recording metadata is auto-deleted after this many days.', days: 'days', save: 'Save', saved: 'Saved',
     recList: 'Recordings', deleteRec: 'Delete', confirmDeleteRec: 'Delete this recording record?', noRecordings: 'No recordings',
     detail: 'User detail', email: 'Email', phone: 'Phone', language: 'Language', verified: 'Verified', notVerified: 'Unverified',
-    none: 'Not set', appleId: 'Apple ID', linked: 'Linked', notLinked: 'Not linked', passkeys: 'Passkeys', online2: 'Status',
+    none: 'Not set', appleId: 'Apple ID', linked: 'Linked', notLinked: 'Not linked', passkeys: 'Passkeys', online2: 'Presence',
     linkedRelations: 'Linked relations', blockedRelations: 'Blocks', recentCalls: 'Recent calls', noCalls: 'No calls',
     close: 'Close', never: 'never', justNow: 'just now',
     err_last_admin_protected: 'Can’t act on the last admin', err_cannot_change_own_role: 'Can’t change your own role',
@@ -90,6 +102,17 @@ const I18N = {
     emergency: 'Emergency', exportCsv: 'Export CSV', noLinks: 'No relationships yet', caller: 'Caller', callee: 'Callee', time: 'Time',
     callCount: 'Call records', searchLinks: 'Search name…', searchCalls: 'Search name…',
     linkAccepted: 'Linked', linkPending: 'Pending', linkDeclined: 'Declined',
+    newUsers7d: 'New · 7d', newUsers30d: 'New · 30d', regTrend: 'Registrations (last 30 days)',
+    blocks: 'Blocks', blocker: 'Blocker', blocked: 'Blocked', noBlocks: 'No blocks', searchBlocks: 'Search name…',
+    support: 'Account support', markVerified: 'Mark email verified', markUnverified: 'Unverify email', unlinkApple: 'Unlink Apple',
+    clearPasskeys: 'Clear passkeys', forceLogout: 'Force sign-out',
+    confirmMarkVerified: 'Mark this user’s email as verified?', confirmMarkUnverified: 'Revoke this user’s email verification?',
+    confirmUnlinkApple: 'Unlink this user’s Apple account? They’ll need to re-link with the correct Apple account.',
+    confirmClearPasskeys: 'Clear all of this user’s passkeys? They’ll need to sign in with a password and re-register.',
+    confirmForceLogout: 'Force this user to sign out? Sessions on all their devices expire immediately.',
+    emailMarkedVerified: 'Email marked verified', emailMarkedUnverified: 'Email verification revoked',
+    appleUnlinked: 'Apple unlinked', passkeysCleared: 'Passkeys cleared (%s)', forcedLogout: 'Signed out everywhere',
+    err_no_email: 'User has no email', err_not_linked: 'User has no Apple link',
     roles: { blind: 'Blind / low-vision', helper: 'Helper', family: 'Family', admin: 'Admin', developer: 'Developer' },
     callStatus: { answered: 'Answered', declined: 'Declined', missed: 'Missed', ended: 'Ended', ongoing: 'Ongoing', ringing: 'Ringing' },
     dir: { incoming: 'Incoming', outgoing: 'Outgoing' },
@@ -109,10 +132,10 @@ function initials(name) {
   const n = (name || '?').trim();
   return n ? n.slice(0, 1).toUpperCase() : '?';
 }
-function avatarHTML(u, size) {
-  const sz = size ? `style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.42)}px"` : '';
-  if (u.avatar) return `<img class="avatar" ${sz} src="${esc(u.avatar)}" alt="" />`;
-  return `<span class="avatar" ${sz} aria-hidden="true">${esc(initials(u.displayName || u.username))}</span>`;
+function avatarHTML(u, big) {
+  const cls = 'avatar' + (big ? ' lg' : '');
+  if (u.avatar) return `<img class="${cls}" src="${esc(u.avatar)}" alt="" />`;
+  return `<span class="${cls}" aria-hidden="true">${esc(initials(u.displayName || u.username))}</span>`;
 }
 function fmtDate(ms) {
   if (!ms) return '—';
@@ -202,7 +225,7 @@ function renderLogin(errMsg) {
           <input id="p" name="password" type="password" autocomplete="current-password" required />
         </div>
         <button class="btn primary block" type="submit" id="loginBtn">${esc(t('signIn'))}</button>
-        <div style="text-align:center;margin-top:14px">
+        <div class="login-actions">
           <button class="btn ghost sm" type="button" data-action="lang">${state.lang === 'zh' ? 'English' : '中文'}</button>
           <button class="btn ghost sm" type="button" data-action="theme">${themeIcon()}</button>
         </div>
@@ -232,7 +255,7 @@ async function onLogin(e) {
 }
 
 // ---------------------------------------------------------------- shell + router
-const ROUTES = ['', 'users', 'relationships', 'calls', 'reports', 'recordings'];
+const ROUTES = ['', 'users', 'relationships', 'calls', 'blocks', 'reports', 'recordings'];
 function currentRoute() { const h = (location.hash || '#/').replace(/^#\/?/, ''); return ROUTES.includes(h) ? h : ''; }
 
 function renderChrome() {
@@ -243,6 +266,7 @@ function renderChrome() {
     ['users', '👤', t('users')],
     ['relationships', '🔗', t('relationships')],
     ['calls', '📞', t('calls')],
+    ['blocks', '🚫', t('blocks')],
     ['reports', '🚩', t('reports'), openReports],
     ['recordings', '⏺', t('recordings')],
   ].map(([r, ico, label, badge]) => `
@@ -250,7 +274,7 @@ function renderChrome() {
       <span class="ico" aria-hidden="true">${ico}</span><span>${esc(label)}</span>
       ${badge ? `<span class="badge">${badge}</span>` : ''}
     </button>`).join('');
-  const titleMap = { '': t('dashboard'), users: t('users'), relationships: t('relationships'), calls: t('calls'), reports: t('reports'), recordings: t('recordings') };
+  const titleMap = { '': t('dashboard'), users: t('users'), relationships: t('relationships'), calls: t('calls'), blocks: t('blocks'), reports: t('reports'), recordings: t('recordings') };
   app().innerHTML = `
     <div class="shell">
       <aside class="sidebar" id="sidebar">
@@ -304,17 +328,34 @@ function renderDashboard() {
   const max = Math.max(1, ...roleOrder.map((r) => o.users.byRole[r] || 0));
   const bars = roleOrder.map((r) => {
     const n = o.users.byRole[r] || 0;
-    return `<div class="bar-row"><span>${esc(roleName(r))}</span><span class="bar-track"><span class="bar-fill" style="width:${Math.round((n / max) * 100)}%"></span></span><span class="n">${n}</span></div>`;
+    return `<div class="bar-row"><span>${esc(roleName(r))}</span><span class="bar-track"><span class="bar-fill" data-pct="${Math.round((n / max) * 100)}"></span></span><span class="n">${n}</span></div>`;
   }).join('');
+  const g = o.growth || { newUsers7d: 0, newUsers30d: 0, trend: [] };
+  const trend = g.trend || [];
+  const tmax = Math.max(1, ...trend.map((d) => d.count));
+  const cols = trend.map((d) => {
+    const h = Math.round((d.count / tmax) * 100);
+    return `<span class="col" title="${esc(d.date)} · ${d.count}"><i data-h="${h}"></i></span>`;
+  }).join('');
+  const trendCard = trend.length ? `
+    <div class="section">
+      <h3>${esc(t('regTrend'))}</h3>
+      <div class="card">
+        <div class="trend">${cols}</div>
+        <div class="trend-axis"><span>${esc(trend[0].date)}</span><span>${esc(trend[trend.length - 1].date)}</span></div>
+      </div>
+    </div>` : '';
   viewEl().innerHTML = `
     <div class="cards">
       ${statCard(t('totalUsers'), o.users.total)}
       ${statCard(t('active'), o.users.active, '', 'success')}
       ${statCard(t('disabled'), o.users.disabled, '', o.users.disabled ? 'danger' : '')}
       ${statCard(t('online'), o.online.total, t('onlineHelpers') + ': ' + o.online.helpers)}
+      ${statCard(t('newUsers7d'), g.newUsers7d, t('newUsers30d') + ': ' + g.newUsers30d, g.newUsers7d ? 'success' : '')}
       ${statCard(t('openReports'), o.reports.open, (state.lang === 'en' ? 'of ' : '共 ') + o.reports.total, o.reports.open ? 'danger' : '')}
       ${statCard(t('recordingsCount'), o.recordings.total)}
     </div>
+    ${trendCard}
     <div class="section">
       <h3>${esc(t('byRole'))}</h3>
       <div class="card"><div class="bars">${bars}</div></div>
@@ -323,6 +364,12 @@ function renderDashboard() {
       <h3>${esc(t('version'))} · ${esc(t('uptime'))}</h3>
       <div class="card"><div class="kv"><dt>${esc(t('version'))}</dt><dd>v${esc(o.version)}</dd><dt>${esc(t('uptime'))}</dt><dd>${esc(fmtUptime(o.uptimeSeconds))}</dd></div></div>
     </div>`;
+  applyDims(viewEl()); // 动态尺寸经 CSSOM 落定（CSP style-src 'self' 禁内联 style）
+}
+// 把 data-pct / data-h 落成实际宽高——CSSOM 赋值不受 CSP 内联样式限制。
+function applyDims(root) {
+  root.querySelectorAll('[data-pct]').forEach((el) => { el.style.width = el.dataset.pct + '%'; });
+  root.querySelectorAll('[data-h]').forEach((el) => { el.style.height = el.dataset.h + '%'; });
 }
 
 // ---------------------------------------------------------------- users
@@ -353,7 +400,7 @@ function renderUsers() {
       <td>${rolePill(u.role)}</td>
       <td>${u.status === 'active' ? `<span class="pill ok">${esc(t('active'))}</span>` : `<span class="pill role-admin">${esc(t('disabled'))}</span>`}</td>
       <td><span class="dot ${u.online ? 'on' : 'gone'}" title="${u.online ? esc(t('online')) : ''}"></span></td>
-      <td style="color:var(--text-dim);font-size:13px">${esc(fmtDate(u.createdAt))}</td>
+      <td class="cell-date">${esc(fmtDate(u.createdAt))}</td>
       <td><div class="actions" data-stop="1">
         <select class="sel sm role-select" data-uid="${esc(u.id)}" aria-label="${esc(t('changeRole'))}">
           ${['blind', 'helper', 'family', 'admin', 'developer'].map((r) => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${esc(roleName(r))}</option>`).join('')}
@@ -369,10 +416,11 @@ function renderUsers() {
       <select class="sel" id="fRole">${roleOpts}</select>
       <select class="sel" id="fStatus">${statusOpts}</select>
       <button class="btn ghost" data-action="reloadUsers">↻ ${esc(t('refresh'))}</button>
+      <button class="btn ghost" data-action="exportUsers" ${list.length ? '' : 'disabled'}>⬇ ${esc(t('exportCsv'))}</button>
     </div>
     <div class="table-wrap">
       ${list.length ? `<table><thead><tr>
-        <th>${esc(t('users'))}</th><th>${esc(t('role'))}</th><th>${esc(t('status'))}</th><th>${esc(t('lastActive'))}</th><th>${esc(t('created'))}</th><th style="text-align:end">${esc(t('actions'))}</th>
+        <th>${esc(t('users'))}</th><th>${esc(t('role'))}</th><th>${esc(t('status'))}</th><th>${esc(t('lastActive'))}</th><th>${esc(t('created'))}</th><th class="ta-end">${esc(t('actions'))}</th>
       </tr></thead><tbody>${rows}</tbody></table>`
       : `<div class="empty"><div class="ico">🗂️</div><p>${esc(t('noUsers'))}</p></div>`}
     </div>`;
@@ -380,6 +428,13 @@ function renderUsers() {
   $('#fRole').addEventListener('change', (e) => { state.usersRole = e.target.value; renderUsers(); });
   $('#fStatus').addEventListener('change', (e) => { state.usersStatus = e.target.value; renderUsers(); });
   viewEl().querySelector('[data-action="reloadUsers"]').addEventListener('click', loadUsers);
+  viewEl().querySelector('[data-action="exportUsers"]').addEventListener('click', () => {
+    const yn = (b) => (b ? (state.lang === 'en' ? 'yes' : '是') : (state.lang === 'en' ? 'no' : '否'));
+    downloadCSV('beeurei-users.csv', [
+      [t('username'), '@', t('role'), t('status'), t('email'), t('verified'), t('phone'), t('appleId'), t('language'), t('online'), t('created')],
+      ...filteredUsers().map((u) => [u.displayName || '', u.username, roleName(u.role), u.status === 'active' ? t('active') : t('disabled'), yn(u.hasEmail), yn(u.emailVerified), yn(u.hasPhone), yn(u.appleLinked), u.language || '', yn(u.online), fmtDate(u.createdAt)]),
+    ]);
+  });
   viewEl().querySelectorAll('tr.clickable').forEach((tr) => tr.addEventListener('click', (e) => {
     if (e.target.closest('[data-stop]')) return; openUserDrawer(tr.dataset.uid);
   }));
@@ -408,36 +463,81 @@ async function onStatus(uid, status) {
 async function openUserDrawer(uid) {
   const mask = document.createElement('div'); mask.className = 'drawer-mask';
   const drawer = document.createElement('aside'); drawer.className = 'drawer'; drawer.setAttribute('role', 'dialog'); drawer.setAttribute('aria-modal', 'true');
-  drawer.innerHTML = `<div class="drawer-head"><b>${esc(t('detail'))}</b><div class="grow" style="flex:1"></div><button class="btn ghost sm" data-close>${esc(t('close'))}</button></div><div class="drawer-body"><div class="loading"><span class="spinner"></span></div></div>`;
+  drawer.innerHTML = `<div class="drawer-head"><b>${esc(t('detail'))}</b><div class="grow1"></div><button class="btn ghost sm" data-close>${esc(t('close'))}</button></div><div class="drawer-body"><div class="loading"><span class="spinner"></span></div></div>`;
   document.body.appendChild(mask); document.body.appendChild(drawer);
-  const close = () => { mask.remove(); drawer.remove(); };
+  const close = () => { mask.remove(); drawer.remove(); document.removeEventListener('keydown', onKey); };
+  function onKey(e) { if (e.key === 'Escape') close(); }
   mask.addEventListener('click', close);
   drawer.querySelector('[data-close]').addEventListener('click', close);
-  document.addEventListener('keydown', function onKey(e) { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); } });
+  document.addEventListener('keydown', onKey);
   try {
     const d = await api(`/api/admin/users/${uid}`);
-    const u = d.user;
-    const links = (d.links || []).map((l) => `<div class="mini"><b>${esc(l.otherName)}</b> · ${esc(l.relation || '—')} ${l.isEmergency ? '· ⚠️' : ''} <span class="pill ${l.status === 'accepted' ? 'ok' : 'off'}" style="float:right">${esc(l.status === 'accepted' ? (state.lang === 'en' ? 'linked' : '已绑定') : (state.lang === 'en' ? 'pending' : '待确认'))}</span></div>`).join('') || `<div class="mini" style="color:var(--text-faint)">—</div>`;
-    const calls = (d.recentCalls || []).map((c) => `<div class="mini">${esc(t('dir')[c.direction] || c.direction)} · ${esc(c.peerName)} · <span style="color:var(--text-dim)">${esc(t('callStatus')[c.status] || c.status)}</span><span style="float:right;color:var(--text-faint);font-size:12px">${esc(fmtDate(c.createdAt))}</span></div>`).join('') || `<div class="empty" style="padding:18px"><p>${esc(t('noCalls'))}</p></div>`;
-    drawer.querySelector('.drawer-body').innerHTML = `
-      <div class="user-cell" style="margin-bottom:16px">${avatarHTML(u, 56)}<div><div class="nm" style="font-size:18px">${esc(u.displayName || '—')}</div><div class="un">@${esc(u.username)}</div></div></div>
-      <dl class="kv">
-        <dt>${esc(t('role'))}</dt><dd>${rolePill(u.role)}</dd>
-        <dt>${esc(t('status'))}</dt><dd>${u.status === 'active' ? `<span class="pill ok">${esc(t('active'))}</span>` : `<span class="pill role-admin">${esc(t('disabled'))}</span>`}</dd>
-        <dt>${esc(t('online2'))}</dt><dd><span class="dot ${u.online ? 'on' : 'gone'}"></span> ${u.online ? esc(t('online')) : '—'}</dd>
-        <dt>${esc(t('email'))}</dt><dd>${u.email ? esc(u.email) + (u.emailVerified ? ` <span class="pill ok">${esc(t('verified'))}</span>` : ` <span class="pill off">${esc(t('notVerified'))}</span>`) : `<span style="color:var(--text-faint)">${esc(t('none'))}</span>`}</dd>
-        <dt>${esc(t('phone'))}</dt><dd>${u.phone ? esc(u.phone) : `<span style="color:var(--text-faint)">${esc(t('none'))}</span>`}</dd>
-        <dt>${esc(t('language'))}</dt><dd>${u.language ? esc(u.language) : '—'}</dd>
-        <dt>${esc(t('appleId'))}</dt><dd>${u.appleLinked ? esc(t('linked')) : `<span style="color:var(--text-faint)">${esc(t('notLinked'))}</span>`}</dd>
-        <dt>${esc(t('passkeys'))}</dt><dd>${u.passkeys || 0}</dd>
-        <dt>${esc(t('blockedRelations'))}</dt><dd>${d.blockedCount || 0}</dd>
-        <dt>${esc(t('created'))}</dt><dd>${esc(fmtDate(u.createdAt))}</dd>
-      </dl>
-      <div class="section"><h3>${esc(t('linkedRelations'))} (${(d.links || []).length})</h3><div class="mini-list">${links}</div></div>
-      <div class="section"><h3>${esc(t('recentCalls'))}</h3><div class="mini-list">${calls}</div></div>`;
+    const u = d.user; // 客服操作后就地改写本对象并重绘，避免整页刷新
+    const body = drawer.querySelector('.drawer-body');
+    const linksHTML = (d.links || []).map((l) => `<div class="mini"><b>${esc(l.otherName)}</b> · ${esc(l.relation || '—')} ${l.isEmergency ? '· ⚠️' : ''} <span class="pill ${l.status === 'accepted' ? 'ok' : 'off'} fr">${esc(l.status === 'accepted' ? (state.lang === 'en' ? 'linked' : '已绑定') : (state.lang === 'en' ? 'pending' : '待确认'))}</span></div>`).join('') || `<div class="mini text-faint">—</div>`;
+    const callsHTML = (d.recentCalls || []).map((c) => `<div class="mini">${esc(t('dir')[c.direction] || c.direction)} · ${esc(c.peerName)} · <span class="text-dim">${esc(t('callStatus')[c.status] || c.status)}</span><span class="when">${esc(fmtDate(c.createdAt))}</span></div>`).join('') || `<div class="empty pad"><p>${esc(t('noCalls'))}</p></div>`;
+    function supportButtons() {
+      const btns = [];
+      if (u.email) btns.push(`<button class="btn sm" data-sup="verify">${esc(u.emailVerified ? t('markUnverified') : t('markVerified'))}</button>`);
+      if (u.appleLinked) btns.push(`<button class="btn sm" data-sup="unlink">${esc(t('unlinkApple'))}</button>`);
+      if (u.passkeys > 0) btns.push(`<button class="btn sm" data-sup="clearpk">${esc(t('clearPasskeys'))}</button>`);
+      btns.push(`<button class="btn danger sm" data-sup="logout">${esc(t('forceLogout'))}</button>`);
+      return btns.join('');
+    }
+    function paint() {
+      body.innerHTML = `
+        <div class="user-cell drawer-user">${avatarHTML(u, true)}<div><div class="nm">${esc(u.displayName || '—')}</div><div class="un">@${esc(u.username)}</div></div></div>
+        <dl class="kv">
+          <dt>${esc(t('role'))}</dt><dd>${rolePill(u.role)}</dd>
+          <dt>${esc(t('status'))}</dt><dd>${u.status === 'active' ? `<span class="pill ok">${esc(t('active'))}</span>` : `<span class="pill role-admin">${esc(t('disabled'))}</span>`}</dd>
+          <dt>${esc(t('online2'))}</dt><dd><span class="dot ${u.online ? 'on' : 'gone'}"></span> ${u.online ? esc(t('online')) : '—'}</dd>
+          <dt>${esc(t('email'))}</dt><dd>${u.email ? esc(u.email) + (u.emailVerified ? ` <span class="pill ok">${esc(t('verified'))}</span>` : ` <span class="pill off">${esc(t('notVerified'))}</span>`) : `<span class="text-faint">${esc(t('none'))}</span>`}</dd>
+          <dt>${esc(t('phone'))}</dt><dd>${u.phone ? esc(u.phone) : `<span class="text-faint">${esc(t('none'))}</span>`}</dd>
+          <dt>${esc(t('language'))}</dt><dd>${u.language ? esc(u.language) : '—'}</dd>
+          <dt>${esc(t('appleId'))}</dt><dd>${u.appleLinked ? esc(t('linked')) : `<span class="text-faint">${esc(t('notLinked'))}</span>`}</dd>
+          <dt>${esc(t('passkeys'))}</dt><dd>${u.passkeys || 0}</dd>
+          <dt>${esc(t('blockedRelations'))}</dt><dd>${d.blockedCount || 0}</dd>
+          <dt>${esc(t('created'))}</dt><dd>${esc(fmtDate(u.createdAt))}</dd>
+        </dl>
+        <div class="section"><h3>${esc(t('support'))}</h3><div class="support">${supportButtons()}</div></div>
+        <div class="section"><h3>${esc(t('linkedRelations'))} (${(d.links || []).length})</h3><div class="mini-list">${linksHTML}</div></div>
+        <div class="section"><h3>${esc(t('recentCalls'))}</h3><div class="mini-list">${callsHTML}</div></div>`;
+      body.querySelectorAll('[data-sup]').forEach((b) => b.addEventListener('click', () => onSupport(b.dataset.sup, u, paint)));
+    }
+    paint();
   } catch (err) {
     drawer.querySelector('.drawer-body').innerHTML = `<div class="err-banner">${esc(errText(err.code))}</div>`;
   }
+}
+// 客服操作：确认 → 调接口 → 就地更新内存中的 user 字段 → 重绘抽屉 + 顶部统计/列表保持一致。
+async function onSupport(action, u, repaint) {
+  try {
+    if (action === 'verify') {
+      const next = !u.emailVerified;
+      if (!(await confirmDialog(next ? t('confirmMarkVerified') : t('confirmMarkUnverified')))) return;
+      const r = await api(`/api/admin/users/${u.id}/verify-email`, { method: 'POST', body: { verified: next } });
+      u.emailVerified = !!r.emailVerified;
+      const su = state.users.find((x) => x.id === u.id); if (su) su.emailVerified = u.emailVerified;
+      toast(u.emailVerified ? t('emailMarkedVerified') : t('emailMarkedUnverified'), 'success');
+    } else if (action === 'unlink') {
+      if (!(await confirmDialog(t('confirmUnlinkApple')))) return;
+      await api(`/api/admin/users/${u.id}/unlink-apple`, { method: 'POST' });
+      u.appleLinked = false;
+      const su = state.users.find((x) => x.id === u.id); if (su) su.appleLinked = false;
+      toast(t('appleUnlinked'), 'success');
+    } else if (action === 'clearpk') {
+      if (!(await confirmDialog(t('confirmClearPasskeys')))) return;
+      const r = await api(`/api/admin/users/${u.id}/clear-passkeys`, { method: 'POST' });
+      const n = u.passkeys || 0; u.passkeys = r.passkeys || 0;
+      toast(t('passkeysCleared').replace('%s', String(r.cleared ?? n)), 'success');
+    } else if (action === 'logout') {
+      if (!(await confirmDialog(t('confirmForceLogout')))) return;
+      await api(`/api/admin/users/${u.id}/force-logout`, { method: 'POST' });
+      toast(t('forcedLogout'), 'success');
+    }
+    if (typeof repaint === 'function') repaint();
+    if (currentRoute() === 'users') renderUsers();
+  } catch (err) { toast(errText(err.code), 'error'); }
 }
 
 // ---------------------------------------------------------------- csv export
@@ -479,7 +579,7 @@ function renderLinks() {
       <td>${esc(l.relation || '—')}</td>
       <td>${l.isEmergency ? `<span class="pill role-admin">⚠️ ${esc(t('emergency'))}</span>` : '—'}</td>
       <td>${linkStatusPill(l.status)}</td>
-      <td style="color:var(--text-dim);font-size:13px">${esc(fmtDate(l.createdAt))}</td>
+      <td class="cell-date">${esc(fmtDate(l.createdAt))}</td>
     </tr>`).join('');
   viewEl().innerHTML = `
     <div class="toolbar">
@@ -519,10 +619,10 @@ function renderCalls() {
   const rows = list.map((c) => `
     <tr>
       <td><div class="nm">${esc(c.callerName)}</div></td>
-      <td><span style="color:var(--text-faint)">→</span></td>
+      <td><span class="arrow">→</span></td>
       <td><div class="nm">${esc(c.calleeName)}</div></td>
       <td>${esc(callStatusName(c.status))}</td>
-      <td style="color:var(--text-dim);font-size:13px">${esc(fmtDate(c.createdAt))}</td>
+      <td class="cell-date">${esc(fmtDate(c.createdAt))}</td>
     </tr>`).join('');
   viewEl().innerHTML = `
     <div class="toolbar">
@@ -546,6 +646,47 @@ function renderCalls() {
   });
 }
 
+// ---------------------------------------------------------------- blocks (site-wide)
+async function loadBlocks() {
+  showLoading();
+  try { state.blocks = (await api('/api/admin/blocks')).blocks || []; renderBlocks(); }
+  catch (err) { viewEl().innerHTML = `<div class="err-banner">${esc(errText(err.code))}</div>`; }
+}
+function filteredBlocks() {
+  const q = state.blocksQuery.trim().toLowerCase();
+  return q ? state.blocks.filter((b) => (b.blockerName || '').toLowerCase().includes(q) || (b.blockedName || '').toLowerCase().includes(q)) : state.blocks;
+}
+function renderBlocks() {
+  const list = filteredBlocks();
+  const rows = list.map((b) => `
+    <tr>
+      <td><div class="nm">${esc(b.blockerName)}</div></td>
+      <td><span class="arrow">🚫</span></td>
+      <td><div class="nm">${esc(b.blockedName)}</div></td>
+      <td class="cell-date">${esc(fmtDate(b.createdAt))}</td>
+    </tr>`).join('');
+  viewEl().innerHTML = `
+    <div class="toolbar">
+      <div class="search"><input id="bq" type="search" placeholder="${esc(t('searchBlocks'))}" value="${esc(state.blocksQuery)}" /></div>
+      <button class="btn ghost" data-action="reloadBlocks">↻ ${esc(t('refresh'))}</button>
+      <button class="btn ghost" data-action="exportBlocks" ${list.length ? '' : 'disabled'}>⬇ ${esc(t('exportCsv'))}</button>
+    </div>
+    <div class="table-wrap">
+      ${list.length ? `<table><thead><tr>
+        <th>${esc(t('blocker'))}</th><th></th><th>${esc(t('blocked'))}</th><th>${esc(t('time'))}</th>
+      </tr></thead><tbody>${rows}</tbody></table>`
+      : `<div class="empty"><div class="ico">🚫</div><p>${esc(t('noBlocks'))}</p></div>`}
+    </div>`;
+  $('#bq').addEventListener('input', (e) => { state.blocksQuery = e.target.value; renderBlocks(); $('#bq').focus(); });
+  viewEl().querySelector('[data-action="reloadBlocks"]').addEventListener('click', loadBlocks);
+  viewEl().querySelector('[data-action="exportBlocks"]').addEventListener('click', () => {
+    downloadCSV('beeurei-blocks.csv', [
+      [t('blocker'), t('blocked'), t('time')],
+      ...filteredBlocks().map((b) => [b.blockerName, b.blockedName, fmtDate(b.createdAt)]),
+    ]);
+  });
+}
+
 // ---------------------------------------------------------------- reports
 async function loadReports() {
   showLoading();
@@ -558,7 +699,7 @@ function renderReports() {
   const row = (r) => `
     <div class="rep">
       <div class="body">
-        <div class="who">${esc(r.reporterName)} <span style="color:var(--text-faint)">→</span> ${esc(r.targetName)}</div>
+        <div class="who">${esc(r.reporterName)} <span class="arrow">→</span> ${esc(r.targetName)}</div>
         <div class="reason">${esc(r.reason || '—')}</div>
         <div class="meta">${esc(fmtDate(r.createdAt))}${r.callId ? ' · call ' + esc(r.callId.slice(0, 8)) : ''}</div>
       </div>
@@ -599,8 +740,8 @@ function renderRecordings() {
         <div class="form-row"><div><div class="lab">${esc(t('requireConsent'))}</div><div class="desc">${esc(t('requireConsentDesc'))}</div></div>
           <label class="switch"><input type="checkbox" id="cConsent" ${c.requireConsent ? 'checked' : ''}/><span class="track"></span></label></div>
         <div class="form-row"><div><div class="lab">${esc(t('retentionDays'))}</div><div class="desc">${esc(t('retentionDesc'))}</div></div>
-          <div><input class="num" type="number" id="cDays" min="1" max="3650" value="${Number(c.retentionDays) || 30}"/> <span style="color:var(--text-dim)">${esc(t('days'))}</span></div></div>
-        <div style="margin-top:14px;text-align:end"><button class="btn primary" id="saveRec">${esc(t('save'))}</button></div>
+          <div><input class="num" type="number" id="cDays" min="1" max="3650" value="${Number(c.retentionDays) || 30}"/> <span class="days-unit">${esc(t('days'))}</span></div></div>
+        <div class="save-row"><button class="btn primary" id="saveRec">${esc(t('save'))}</button></div>
       </div>
     </div>
     <div class="section"><h3>${esc(t('recList'))} (${state.recordings.length})</h3>
@@ -626,10 +767,10 @@ function confirmDialog(message) {
   return new Promise((resolve) => {
     const mask = document.createElement('div'); mask.className = 'drawer-mask'; mask.style.zIndex = '70';
     const box = document.createElement('div');
-    box.style.cssText = 'position:fixed;inset:0;display:grid;place-items:center;z-index:71;padding:20px';
-    box.innerHTML = `<div class="card" role="alertdialog" aria-modal="true" style="max-width:380px;width:100%">
-      <p style="margin:0 0 18px;font-size:15px">${esc(message)}</p>
-      <div style="display:flex;gap:10px;justify-content:flex-end">
+    box.className = 'modal-overlay';
+    box.innerHTML = `<div class="card confirm-card" role="alertdialog" aria-modal="true">
+      <p class="confirm-msg">${esc(message)}</p>
+      <div class="confirm-actions">
         <button class="btn" data-no>${esc(state.lang === 'en' ? 'Cancel' : '取消')}</button>
         <button class="btn ink" data-yes>${esc(state.lang === 'en' ? 'Confirm' : '确认')}</button>
       </div></div>`;
@@ -649,6 +790,7 @@ function route() {
   else if (r === 'users') loadUsers();
   else if (r === 'relationships') loadLinks();
   else if (r === 'calls') loadCalls();
+  else if (r === 'blocks') loadBlocks();
   else if (r === 'reports') loadReports();
   else if (r === 'recordings') loadRecordings();
 }

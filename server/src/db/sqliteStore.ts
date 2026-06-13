@@ -195,6 +195,10 @@ export class SqliteStore implements Store {
     return this.db.prepare('SELECT * FROM blocks WHERE blockerId = ? OR blockedId = ?').all(userId, userId)
       .map((r: any) => ({ id: r.id, blockerId: r.blockerId, blockedId: r.blockedId, createdAt: Number(r.createdAt) }))
   }
+  allBlocks(): Block[] {
+    return this.db.prepare('SELECT * FROM blocks ORDER BY createdAt DESC').all()
+      .map((r: any) => ({ id: r.id, blockerId: r.blockerId, blockedId: r.blockedId, createdAt: Number(r.createdAt) }))
+  }
 
   // MARK: call records
   createCallRecord(rec: CallRecord): void {

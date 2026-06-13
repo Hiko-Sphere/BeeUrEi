@@ -34,11 +34,32 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     const onlineHelpers = users.filter(
       (u) => (u.role === 'helper' || u.role === 'family') && online.has(u.id),
     ).length
+    // 注册增长：最近 30 个自然日（UTC）每日新增 + 近 7/30 天滚动新增，供仪表盘趋势图与判断活跃度。
+    const DAY = 86_400_000
+    const dayKey = (ms: number) => new Date(ms).toISOString().slice(0, 10)
+    const trend: { date: string; count: number }[] = []
+    const trendIdx = new Map<string, number>()
+    for (let i = 29; i >= 0; i--) {
+      const key = dayKey(now - i * DAY)
+      trendIdx.set(key, trend.length)
+      trend.push({ date: key, count: 0 })
+    }
+    let newUsers7d = 0
+    let newUsers30d = 0
+    const cutoff7 = now - 7 * DAY
+    const cutoff30 = now - 30 * DAY
+    for (const u of users) {
+      if (u.createdAt >= cutoff7) newUsers7d++
+      if (u.createdAt >= cutoff30) newUsers30d++
+      const i = trendIdx.get(dayKey(u.createdAt))
+      if (i !== undefined) trend[i].count++
+    }
     return {
       users: { total: users.length, active, disabled, byRole },
       online: { total: online.size, helpers: onlineHelpers },
       reports: { open: openReports, total: reports.length },
       recordings: { total: store.allRecordings().length, config: store.getRecordingConfig() },
+      growth: { newUsers7d, newUsers30d, trend },
       version: SERVER_VERSION,
       uptimeSeconds: Math.floor((now - START_MS) / 1000),
       nowMs: now,
@@ -190,5 +211,63 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
         createdAt: c.createdAt,
       })),
     }
+  })
+
+  // 全站拉黑记录（时间倒序）：解析拉黑方/被拉黑方显示名，便于排查"求助队列里看不到某人/被对方屏蔽"等问题。
+  app.get('/api/admin/blocks', adminOnly, async () => {
+    return {
+      blocks: store.allBlocks().map((b) => ({
+        id: b.id,
+        blockerId: b.blockerId,
+        blockerName: nameOf(b.blockerId),
+        blockedId: b.blockedId,
+        blockedName: nameOf(b.blockedId),
+        createdAt: b.createdAt,
+      })),
+    }
+  })
+
+  // —— 账号支持操作（客服）——
+  // 人工标记/撤销邮箱已验证：用户邮箱收不到验证码但已人工核实身份时，管理员代为标记，避免卡在"未验证"。
+  const verifyEmailSchema = z.object({ verified: z.boolean() })
+  app.post('/api/admin/users/:id/verify-email', adminOnly, async (req, reply) => {
+    const parsed = verifyEmailSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const id = (req.params as { id: string }).id
+    const target = store.findById(id)
+    if (!target) return reply.code(404).send({ error: 'not_found' })
+    if (!target.email) return reply.code(400).send({ error: 'no_email' }) // 无邮箱可标记，避免产生"已验证却无邮箱"的脏态
+    const updated = store.updateUser(id, { emailVerified: parsed.data.verified })
+    return { user: publicUser(updated!), emailVerified: !!updated!.emailVerified }
+  })
+
+  // 解绑 Apple：用户换 Apple ID / 误绑他人 Apple 账号时清除绑定，使其可重新用正确的 Apple 账号绑定。
+  app.post('/api/admin/users/:id/unlink-apple', adminOnly, async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    const target = store.findById(id)
+    if (!target) return reply.code(404).send({ error: 'not_found' })
+    if (!target.appleSub) return reply.code(400).send({ error: 'not_linked' })
+    const updated = store.updateUser(id, { appleSub: undefined })
+    return { user: publicUser(updated!), appleLinked: !!updated!.appleSub }
+  })
+
+  // 清除全部 Passkey：用户换设备/丢失设备导致无法用 Passkey 登录时，管理员清空其凭据，使其改用密码登录后重新注册 Passkey。
+  app.post('/api/admin/users/:id/clear-passkeys', adminOnly, async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    const target = store.findById(id)
+    if (!target) return reply.code(404).send({ error: 'not_found' })
+    const keys = store.passkeysForUser(id)
+    for (const k of keys) store.deletePasskey(k.id, id)
+    return { cleared: keys.length, passkeys: store.passkeysForUser(id).length }
+  })
+
+  // 强制下线：递增 tokenVersion 使已签发的 access token 立即失效，并撤销全部 refresh token（疑似盗号/客服请求时用）。
+  app.post('/api/admin/users/:id/force-logout', adminOnly, async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    const target = store.findById(id)
+    if (!target) return reply.code(404).send({ error: 'not_found' })
+    store.deleteRefreshTokensForUser(id)
+    const updated = store.updateUser(id, { tokenVersion: (target.tokenVersion ?? 0) + 1 })
+    return { user: publicUser(updated!), tokenVersion: updated!.tokenVersion ?? 0 }
   })
 }

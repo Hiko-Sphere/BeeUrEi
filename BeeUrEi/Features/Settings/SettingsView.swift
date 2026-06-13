@@ -1,50 +1,35 @@
 import SwiftUI
 
-/// 设置页：开关「开始避障时的简短语音提醒」+ 随时重听完整安全须知（见 docs/PLAN.md §1.3）。
-/// 简短提醒可关；但首次/定期的完整知情同意不可省（由 OnboardingView + DisclaimerPolicy 把关）。
+/// 设置页（盲人优先 v2）：主屏只放高优先级、日常会用的项（核心安全 / 语音 / 账户 / 法律与帮助），
+/// 把次要、设一次就好的项（障碍提示细节 / 外观 / 屏幕 / 开发者 / 关于）收进「更多设置」二级页，
+/// 解决「主次不清、太长」的问题。核心安全置顶；法律文件入口显著。
 struct SettingsView: View {
     let store: ConsentStore
     let onClose: () -> Void
 
-    @State private var briefReminderOn: Bool
+    // 主屏（高优先级）状态
     @State private var avoidanceOn: Bool
     @State private var navigationOn: Bool
-    @State private var devModeOn: Bool
-    @State private var dynamicROIOn: Bool
-    @State private var concise: Bool
-    @State private var rate: Double
-    @State private var highContrastOn: Bool
-    @State private var sonarOn: Bool
-    @State private var spatialCuesOn: Bool
-    @State private var verbosity: Int
-    @State private var clearConfirm: Bool
     @State private var fallDetectOn: Bool
-    @State private var keepAwakeSeconds: Int
     @State private var languagePref: String
+    @State private var rate: Double
+    @State private var verbosity: Int
+    @State private var concise: Bool
     @State private var showTutorial = false
     @State private var showAvoidanceOffConfirm = false   // 关闭实时避障二次确认（安全攸关）
     @State private var previewSpeech = SpeechFeedback()
-    @State private var previewHaptic = HapticFeedback()
 
     init(store: ConsentStore, onClose: @escaping () -> Void) {
         self.store = store
         self.onClose = onClose
-        _briefReminderOn = State(initialValue: store.briefReminderSpeechEnabled)
-        let features = FeatureSettings()
-        _avoidanceOn = State(initialValue: features.avoidanceEnabled)
-        _navigationOn = State(initialValue: features.navigationEnabled)
-        _devModeOn = State(initialValue: DevSettings().enabled)
-        _dynamicROIOn = State(initialValue: DevSettings().dynamicROIEnabled)
-        _concise = State(initialValue: features.conciseAnnouncements)
-        _rate = State(initialValue: Double(features.speechRate))
-        _highContrastOn = State(initialValue: features.highContrast)
-        _sonarOn = State(initialValue: features.proximitySonar)
-        _spatialCuesOn = State(initialValue: features.spatialObstacleCues)
-        _verbosity = State(initialValue: features.verbosity)
-        _clearConfirm = State(initialValue: features.clearPathConfirm)
-        _fallDetectOn = State(initialValue: features.fallDetectionEnabled)
-        _keepAwakeSeconds = State(initialValue: features.keepAwakeSeconds)
-        _languagePref = State(initialValue: features.languagePreference)
+        let f = FeatureSettings()
+        _avoidanceOn = State(initialValue: f.avoidanceEnabled)
+        _navigationOn = State(initialValue: f.navigationEnabled)
+        _fallDetectOn = State(initialValue: f.fallDetectionEnabled)
+        _languagePref = State(initialValue: f.languagePreference)
+        _rate = State(initialValue: Double(f.speechRate))
+        _verbosity = State(initialValue: f.verbosity)
+        _concise = State(initialValue: f.conciseAnnouncements)
     }
 
     /// 设置页文案语言（E5）：每次渲染解析；切换「播报语言」后界面即时跟随。
@@ -53,19 +38,13 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            // 盲人优先信息架构：核心安全置顶 → 语音播报 → 障碍提示 → 显示 → 屏幕 →
-            // 账号 → 帮助 → 法律 → 关于 → 开发者（次要项依次下沉，开发者垫底）。
+            // 主屏只保留高优先项；其余进入「更多设置」。
             Form {
                 coreSafetySection
                 voiceSection
-                obstacleSection
-                displaySection
-                screenSection
                 accountSection
-                helpSection
-                legalSection
-                aboutSection
-                developerSection
+                legalHelpSection
+                moreSection
             }
             .navigationTitle(SettingsStrings.navTitle(lang))
             .toolbar {
@@ -89,15 +68,14 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - 分区（拆成计算属性：盲人优先排序 + 规避 SwiftUI 单表达式类型检查超时）
+    // MARK: - 主屏分区
 
-    /// 1) 核心安全——最重要，置顶。实时避障 / 步行导航 / 摔倒报警。
+    /// 1) 核心安全——最重要，置顶。
     @ViewBuilder private var coreSafetySection: some View {
         Section {
             Toggle(SettingsStrings.avoidanceToggle(lang), isOn: $avoidanceOn)
                 .onChange(of: avoidanceOn) { _, v in
                     var f = FeatureSettings(); f.avoidanceEnabled = v
-                    // 关闭实时避障是安全攸关：立刻朗读告知 + 二次确认（误关核心安全功能须可感知，见 P1 审计）。
                     if !v {
                         SpeechHub.shared.speak(SpokenStrings.avoidanceOff(lang), channel: .navigation, voiceCode: lang.voiceCode)
                         showAvoidanceOffConfirm = true
@@ -122,7 +100,6 @@ struct SettingsView: View {
     /// 2) 语音播报——日常最常调：语言 / 语速 / 详略 / 简短 / 试听。
     @ViewBuilder private var voiceSection: some View {
         Section {
-            // 语言切换刻意双语并排（看不懂当前语言的用户也要能找到它）。
             Picker(SettingsStrings.languagePickerLabel(lang), selection: $languagePref) {
                 Text(SettingsStrings.languageSystemOption(lang)).tag("system")
                 Text("中文").tag("zh")
@@ -130,7 +107,6 @@ struct SettingsView: View {
             }
             .onChange(of: languagePref) { _, v in
                 var f = FeatureSettings(); f.languagePreference = v
-                // 同步到后端（尽力而为）：来电/好友请求等推送文案按 users.language 选语言。
                 if let token = KeychainStore.read() {
                     let resolved = Language.resolve(preference: v,
                                                     systemCode: Locale.preferredLanguages.first)
@@ -175,7 +151,111 @@ struct SettingsView: View {
         }
     }
 
-    /// 3) 障碍提示——可选的额外感知：开始提醒 / 声呐 / 空间音 / 通畅确认。
+    /// 3) 账户与亲友。
+    @ViewBuilder private var accountSection: some View {
+        Section(SettingsStrings.accountHeader(lang)) {
+            NavigationLink(SettingsStrings.loginRegister(lang)) { LoginView() }
+            NavigationLink(SettingsStrings.familyAndEmergency(lang)) { FamilyLinksView() }
+        }
+    }
+
+    /// 4) 法律与帮助——法律文件入口显著置于此；含重看教程与恢复默认。
+    @ViewBuilder private var legalHelpSection: some View {
+        Section {
+            NavigationLink {
+                LegalCenterView()
+            } label: {
+                Label(LegalStrings.legalCenter(lang), systemImage: "lock.shield")
+            }
+            Button {
+                showTutorial = true
+            } label: {
+                Label(SettingsStrings.replayTutorial(lang), systemImage: "play.circle")
+            }
+            Button(role: .destructive) {
+                FeatureSettings.resetToDefaults()
+                let f = FeatureSettings()
+                concise = f.conciseAnnouncements
+                rate = Double(f.speechRate)
+                verbosity = f.verbosity
+            } label: {
+                Label(SettingsStrings.resetDefaults(lang), systemImage: "arrow.counterclockwise")
+            }
+            .accessibilityHint(SettingsStrings.resetDefaultsHint(lang))
+        } header: {
+            Text(SettingsStrings.legalHelpHeader(lang))
+        } footer: {
+            Text(LegalStrings.versionLine(lang))
+        }
+    }
+
+    /// 5) 更多设置——次要项收进二级页，保持主屏简洁、主次分明。
+    @ViewBuilder private var moreSection: some View {
+        Section {
+            NavigationLink {
+                AdvancedSettingsView(store: store)
+            } label: {
+                Label(SettingsStrings.moreSettings(lang), systemImage: "slider.horizontal.3")
+            }
+        } footer: {
+            Text(SettingsStrings.moreSettingsHint(lang))
+        }
+    }
+
+    /// 版本号从打包信息读取，避免硬编码与真实版本脱节（见审计 P3）。
+    private var appVersion: String { beeAppVersion() }
+
+    private func sampleAnnouncement() -> String {
+        let language = FeatureSettings().language
+        let o = Obstacle(label: LabelCatalog(language: language).localizedName("person"),
+                         clock: ClockDirection(angleDegrees: 30), distanceMeters: 1.5, confidence: 1)
+        return SpeechComposer().announce(o, concise: FeatureSettings().conciseAnnouncements, language: language)
+    }
+}
+
+/// 「更多设置」二级页：障碍提示细节 / 触觉与显示 / 屏幕与省电 / 开发者 / 关于。
+/// 这些是次要、设一次即可的项，从主屏下沉于此，让盲人在主屏更快找到核心开关。
+struct AdvancedSettingsView: View {
+    let store: ConsentStore
+
+    @State private var briefReminderOn: Bool
+    @State private var sonarOn: Bool
+    @State private var spatialCuesOn: Bool
+    @State private var clearConfirm: Bool
+    @State private var highContrastOn: Bool
+    @State private var keepAwakeSeconds: Int
+    @State private var devModeOn: Bool
+    @State private var dynamicROIOn: Bool
+    @State private var previewHaptic = HapticFeedback()
+
+    init(store: ConsentStore) {
+        self.store = store
+        let f = FeatureSettings()
+        _briefReminderOn = State(initialValue: store.briefReminderSpeechEnabled)
+        _sonarOn = State(initialValue: f.proximitySonar)
+        _spatialCuesOn = State(initialValue: f.spatialObstacleCues)
+        _clearConfirm = State(initialValue: f.clearPathConfirm)
+        _highContrastOn = State(initialValue: f.highContrast)
+        _keepAwakeSeconds = State(initialValue: f.keepAwakeSeconds)
+        _devModeOn = State(initialValue: DevSettings().enabled)
+        _dynamicROIOn = State(initialValue: DevSettings().dynamicROIEnabled)
+    }
+
+    private var lang: Language { FeatureSettings().language }
+
+    var body: some View {
+        Form {
+            obstacleSection
+            displaySection
+            screenSection
+            developerSection
+            aboutSection
+        }
+        .navigationTitle(SettingsStrings.moreSettings(lang))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// 障碍提示——可选的额外感知：开始提醒 / 声呐 / 空间音 / 通畅确认。
     @ViewBuilder private var obstacleSection: some View {
         Section {
             Toggle(SettingsStrings.briefReminderToggle(lang), isOn: $briefReminderOn)
@@ -202,7 +282,7 @@ struct SettingsView: View {
         }
     }
 
-    /// 4) 触觉与显示——低视力相关：高对比状态条 + 试触振动。
+    /// 触觉与显示——低视力相关：高对比状态条 + 试触振动。
     @ViewBuilder private var displaySection: some View {
         Section {
             Toggle(SettingsStrings.highContrastToggle(lang), isOn: $highContrastOn)
@@ -220,7 +300,7 @@ struct SettingsView: View {
         }
     }
 
-    /// 5) 屏幕与省电——避障常亮时长。
+    /// 屏幕与省电——避障常亮时长。
     @ViewBuilder private var screenSection: some View {
         Section {
             Picker(SettingsStrings.keepAwakePicker(lang), selection: $keepAwakeSeconds) {
@@ -240,57 +320,7 @@ struct SettingsView: View {
         }
     }
 
-    /// 6) 账号与亲友——登录 / 亲友与紧急呼叫。
-    @ViewBuilder private var accountSection: some View {
-        Section(SettingsStrings.accountHeader(lang)) {
-            NavigationLink(SettingsStrings.loginRegister(lang)) { LoginView() }
-            NavigationLink(SettingsStrings.familyAndEmergency(lang)) { FamilyLinksView() }
-        }
-    }
-
-    /// 7) 帮助——重看教程 + 恢复默认（破坏性，放此处而非和安全开关混在一起）。
-    @ViewBuilder private var helpSection: some View {
-        Section(SettingsStrings.helpHeader(lang)) {
-            Button(SettingsStrings.replayTutorial(lang)) { showTutorial = true }
-            Button(SettingsStrings.resetDefaults(lang), role: .destructive) {
-                FeatureSettings.resetToDefaults()
-                let f = FeatureSettings()
-                concise = f.conciseAnnouncements
-                rate = Double(f.speechRate)
-                verbosity = f.verbosity
-                clearConfirm = f.clearPathConfirm
-                highContrastOn = f.highContrast
-                sonarOn = f.proximitySonar
-            }
-            .accessibilityHint(SettingsStrings.resetDefaultsHint(lang))
-        }
-    }
-
-    /// 8) 法律与隐私——法律中心（隐私政策 / 使用条款 / EULA / 安全须知）。
-    @ViewBuilder private var legalSection: some View {
-        Section {
-            NavigationLink {
-                LegalCenterView()
-            } label: {
-                Label(LegalStrings.legalCenter(lang), systemImage: "lock.shield")
-            }
-        } header: {
-            Text(SettingsStrings.disclaimerHeader(lang))
-        } footer: {
-            Text(LegalStrings.versionLine(lang))
-        }
-    }
-
-    /// 9) 关于——组织 / 制作人 / 版本。
-    @ViewBuilder private var aboutSection: some View {
-        Section(SettingsStrings.aboutHeader(lang)) {
-            LabeledContent(SettingsStrings.orgLabel(lang), value: "Hiko Sphere 彦穹科技")
-            LabeledContent(SettingsStrings.producerLabel(lang), value: "Li Yanpei Hiko")
-            LabeledContent(SettingsStrings.versionLabel(lang), value: appVersion)
-        }
-    }
-
-    /// 10) 开发者——次要项垫底，避免干扰盲人日常使用。
+    /// 开发者——次要项垫底。
     @ViewBuilder private var developerSection: some View {
         Section {
             Toggle(SettingsStrings.devModeToggle(lang), isOn: $devModeOn)
@@ -310,19 +340,21 @@ struct SettingsView: View {
         }
     }
 
-    /// 版本号从打包信息读取，避免硬编码与真实版本脱节（见审计 P3）。
-    private var appVersion: String {
-        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
-        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
-        return b.map { "\(v) (\($0))" } ?? v
+    /// 关于——组织 / 制作人 / 版本。
+    @ViewBuilder private var aboutSection: some View {
+        Section(SettingsStrings.aboutHeader(lang)) {
+            LabeledContent(SettingsStrings.orgLabel(lang), value: "Hiko Sphere 彦穹科技")
+            LabeledContent(SettingsStrings.producerLabel(lang), value: "Li Yanpei Hiko")
+            LabeledContent(SettingsStrings.versionLabel(lang), value: beeAppVersion())
+        }
     }
+}
 
-    private func sampleAnnouncement() -> String {
-        let language = FeatureSettings().language
-        let o = Obstacle(label: LabelCatalog(language: language).localizedName("person"),
-                         clock: ClockDirection(angleDegrees: 30), distanceMeters: 1.5, confidence: 1)
-        return SpeechComposer().announce(o, concise: FeatureSettings().conciseAnnouncements, language: language)
-    }
+/// App 版本号（主屏与「更多设置」共用）：从打包信息读取，避免硬编码脱节。
+func beeAppVersion() -> String {
+    let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+    let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
+    return b.map { "\(v) (\($0))" } ?? v
 }
 
 #Preview {

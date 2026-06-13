@@ -22,6 +22,12 @@ enum SettingsStrings {
                  : "Optional extra cues. The sonar works like a parking sensor — beeps speed up as obstacles get closer; spatial audio plays from the obstacle's direction (AirPods recommended)."
     }
     static func displayHeader(_ l: Language) -> String { l == .zh ? "触觉与显示" : "Haptics & display" }
+    static func legalHelpHeader(_ l: Language) -> String { l == .zh ? "法律与帮助" : "Legal & help" }
+    static func moreSettings(_ l: Language) -> String { l == .zh ? "更多设置" : "More settings" }
+    static func moreSettingsHint(_ l: Language) -> String {
+        l == .zh ? "障碍提示细节、触觉与显示、屏幕与省电、开发者、关于。"
+                 : "Obstacle cues, haptics & display, screen & battery, developer, and about."
+    }
 
     // MARK: 语音提醒
 

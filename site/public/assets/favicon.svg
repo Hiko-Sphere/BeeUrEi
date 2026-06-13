@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="BeeUrEi 蜂之眼">
-  <path d="M50 4 92 27v46L50 96 8 73V27z" fill="#f2a900"/>
-  <g fill="none" stroke="#14161f" stroke-width="5" stroke-linejoin="round">
-    <ellipse cx="50" cy="50" rx="15" ry="20"/>
-    <path d="M35 44h30M35 56h30"/>
-  </g>
-  <path d="M50 30c-9 0-16-7-16-7s7 12 16 12 16-12 16-12-7 7-16 7z" fill="#14161f"/>
-</svg>

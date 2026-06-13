@@ -99,8 +99,9 @@ struct FamilyLinksView: View {
     private func add() async {
         guard let token = KeychainStore.read() else { errorText = AssistStrings.loginShort(lang); return }
         do {
-            try await api.addFamilyLink(token: token,
-                                        username: newUsername.trimmingCharacters(in: .whitespaces),
+            // 用户名 / 邮箱 / 手机号均可：先精确查人，再按 userId 添加（newPhone 是对方的真实电话，用于 tel:// 兜底）。
+            let target = try await api.lookupUser(token: token, query: newUsername.trimmingCharacters(in: .whitespaces))
+            try await api.addFamilyLink(token: token, userId: target.id,
                                         relation: newRelation, isEmergency: isEmergency,
                                         phone: newPhone.trimmingCharacters(in: .whitespaces))
             newUsername = ""; newRelation = ""; newPhone = ""; isEmergency = false

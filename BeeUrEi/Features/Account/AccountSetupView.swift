@@ -163,7 +163,16 @@ struct AccountSetupView: View {
         Section {
             Button(AccountStrings.continueAction(lang)) { Task { await submitUserid() } }
                 .disabled(working || userid.trimmingCharacters(in: .whitespaces).count < 3)
+            // 用户名可选：自动生成的用户名也能用，允许跳过直接进入 App（见用户反馈：不该被反复卡在设置）。
+            Button(AccountStrings.setupSkip(lang)) { skipToEmailOrFinish() }
+                .font(.footnote)
         }
+    }
+
+    /// 跳过用户名：若还需绑邮箱则进邮箱步，否则直接完成。
+    private func skipToEmailOrFinish() {
+        useridDone = true
+        if !needEmail { session.completeSetup() }
     }
 
     // MARK: ② 绑定验证邮箱（必绑：Apple 登录的邮箱已自动绑定并验证，不会走到这步）
@@ -179,6 +188,9 @@ struct AccountSetupView: View {
             Section {
                 Button(AccountStrings.sendLoginCode(lang)) { Task { await sendEmailCode() } }
                     .disabled(working || !email.contains("@"))
+                // 邮箱可选：可稍后在账号页绑定/验证，允许跳过直接进入 App。
+                Button(AccountStrings.setupSkip(lang)) { session.completeSetup() }
+                    .font(.footnote)
             }
         } else {
             Section(AccountStrings.enterCodeHeader(lang)) {

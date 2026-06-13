@@ -5,6 +5,7 @@ import { createPublicKey, verify as cryptoVerify } from 'node:crypto'
 export interface AppleIdentity {
   sub: string // Apple 的稳定用户标识（同一 App 下不变）
   email?: string
+  emailVerified?: boolean // Apple 的 email_verified 声明（'true'/true 即已验证）；仅据此自动并号
 }
 export type AppleTokenVerifier = (identityToken: string) => Promise<AppleIdentity | null>
 
@@ -43,7 +44,14 @@ export function createAppleVerifier(audience: string): AppleTokenVerifier {
       if (!aud.includes(audience)) return null
       if (typeof payload.exp !== 'number' || payload.exp * 1000 < Date.now()) return null
       if (typeof payload.sub !== 'string' || !payload.sub) return null
-      return { sub: payload.sub, email: typeof payload.email === 'string' ? payload.email : undefined }
+      // Apple 的 email_verified 可能是布尔或字符串 'true'/'false'。
+      const ev = payload.email_verified
+      const emailVerified = ev === true || ev === 'true'
+      return {
+        sub: payload.sub,
+        email: typeof payload.email === 'string' ? payload.email : undefined,
+        emailVerified,
+      }
     } catch {
       return null
     }

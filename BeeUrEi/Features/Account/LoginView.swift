@@ -40,6 +40,8 @@ struct LoginView: View {
     @State private var passkeyBusy = false
     @State private var detailLoadFailed = false           // /api/me 拉取失败：别把已绑定账号显示成空
     @State private var passkeyToRemove: PasskeyInfo?       // 移除 Passkey 前确认（不可逆）
+    @State private var showRoleChange = false              // 更改身份确认
+    @State private var pendingRole: String?                // 待切换的目标身份
 
     /// 账号页文案语言（E5）。
     private var lang: Language { FeatureSettings().language }
@@ -89,6 +91,15 @@ struct LoginView: View {
                     Button(AccountStrings.logout(lang), role: .destructive) { showLogoutConfirm = true }
                     Button(AccountStrings.deleteAccount(lang), role: .destructive) { showDeleteConfirm = true }
                 }
+                // 身份/角色（仅自助角色可改；admin/developer 由后台管理）。更改后 RootView 会按新角色自动切换界面。
+                if let r = session.user?.role, r == "blind" || r == "helper" || r == "family" {
+                    Section {
+                        LabeledContent(AccountStrings.identityHeader(lang), value: AccountStrings.roleName(r, lang))
+                        Button(AccountStrings.changeRole(lang)) { showRoleChange = true }
+                    } footer: {
+                        Text(AccountStrings.identityFooter(lang))
+                    }
+                }
                 // 账号明细（邮箱/手机/Apple/Passkey）拉取中或失败时，先别显示"未绑定"误导态——给加载/重试。
                 if detail == nil {
                     Section {
@@ -102,77 +113,7 @@ struct LoginView: View {
                         }
                     }
                 }
-                if detail != nil {
-                Section(AccountStrings.emailHeader(lang)) {
-                    if let email = detail?.email, !email.isEmpty {
-                        HStack {
-                            Text(email)
-                            Spacer()
-                            if detail?.emailVerified == true {
-                                Label(AccountStrings.verified(lang), systemImage: "checkmark.seal.fill")
-                                    .foregroundStyle(Color.beeSuccess).font(.caption)
-                            } else {
-                                Text(AccountStrings.unverified(lang)).foregroundStyle(Color.beeWarn).font(.caption)
-                            }
-                        }
-                        Button(detail?.emailVerified == true ? AccountStrings.changeEmail(lang)
-                                                             : AccountStrings.changeOrVerifyEmail(lang)) { showEmail = true }
-                    } else {
-                        Text(AccountStrings.noEmailYet(lang)).foregroundStyle(.secondary)
-                        Button(AccountStrings.bindEmail(lang)) { showEmail = true }
-                    }
-                }
-                // 登录与安全：用户名 / 手机号 / Apple ID 换绑（现存账号也可重新绑定）。
-                Section(AccountStrings.accountSecurityHeader(lang)) {
-                    HStack {
-                        Text(AccountStrings.usernameSectionHeader(lang))
-                        Spacer()
-                        Text("@\(session.user?.username ?? "—")").foregroundStyle(.secondary)
-                    }
-                    Button(AccountStrings.changeUsername(lang)) {
-                        usernameInput = session.user?.username ?? ""; showUsername = true
-                    }
-                    if let phone = detail?.phone, !phone.isEmpty {
-                        HStack { Text(AccountStrings.phoneSectionHeader(lang)); Spacer(); Text(phone).foregroundStyle(.secondary) }
-                        Button(AccountStrings.changePhone(lang)) { phoneInput = phone; showPhone = true }
-                    } else {
-                        Button(AccountStrings.bindPhone(lang)) { phoneInput = ""; showPhone = true }
-                    }
-                    if detail?.appleLinked == true {
-                        HStack {
-                            Label(AccountStrings.appleSectionHeader(lang), systemImage: "apple.logo")
-                            Spacer()
-                            Text(AccountStrings.appleLinkedLabel(lang)).foregroundStyle(Color.beeSuccess).font(.caption)
-                        }
-                        Button(AccountStrings.unlinkAppleAction(lang), role: .destructive) { unlinkApple() }
-                    } else {
-                        SignInWithAppleButton(.continue) { req in
-                            req.requestedScopes = [.fullName]
-                        } onCompletion: { handleAppleLink($0) }
-                        .signInWithAppleButtonStyle(.black)
-                        .frame(height: 44)
-                        .accessibilityLabel(AccountStrings.linkAppleAction(lang))
-                    }
-                }
-
-                Section(AccountStrings.passkeySectionHeader(lang)) {
-                    if passkeyList.isEmpty {
-                        Text(AccountStrings.noPasskeysYet(lang)).font(.footnote).foregroundStyle(.secondary)
-                    } else {
-                        ForEach(passkeyList) { pk in
-                            HStack {
-                                Label(pk.deviceName ?? AccountStrings.passkeyDeviceFallback(lang), systemImage: "key.fill")
-                                Spacer()
-                                Button(AccountStrings.removePasskey(lang), role: .destructive) { passkeyToRemove = pk }
-                                    .font(.caption).buttonStyle(.bordered)
-                            }
-                            .accessibilityElement(children: .combine)
-                        }
-                    }
-                    Button(AccountStrings.addPasskey(lang)) { addPasskey() }
-                        .disabled(passkeyBusy)
-                }
-                } // if detail != nil
+                if detail != nil { accountDetailSections }
                 if let securityMsg {
                     Section { Text(securityMsg).foregroundStyle(.secondary) }
                 }
@@ -270,11 +211,10 @@ struct LoginView: View {
         } message: {
             Text(AccountStrings.setupUseridFooter(lang))
         }
-        .alert(AccountStrings.phoneSectionHeader(lang), isPresented: $showPhone) {
-            TextField(AccountStrings.phonePlaceholder(lang), text: $phoneInput)
-                .keyboardType(.phonePad)
-            Button(AccountStrings.save(lang)) { Task { await savePhone() } }
-            Button(AccountStrings.cancel(lang), role: .cancel) {}
+        .sheet(isPresented: $showPhone) {
+            PhoneBindSheet(title: AccountStrings.phoneSectionHeader(lang), initialPhone: phoneInput) { full in
+                Task { await savePhone(full) }
+            }
         }
         .task { await loadMe() }
         .sheet(isPresented: $showEmail, onDismiss: { Task { await loadMe() } }) {
@@ -310,6 +250,18 @@ struct LoginView: View {
         } message: {
             Text(AccountStrings.deleteConfirmMessage(lang))
         }
+        // 更改身份（视障 ↔ 协助者/亲友）：选定后再确认（界面会随之切换）。
+        .confirmationDialog(AccountStrings.changeRole(lang), isPresented: $showRoleChange, titleVisibility: .visible) {
+            Button(AccountStrings.roleBlindCardTitle(lang)) { confirmRole("blind") }
+            Button(AccountStrings.roleHelperCardTitle(lang)) { confirmRole("helper") }
+            Button(AccountStrings.cancel(lang), role: .cancel) {}
+        }
+        .confirmationDialog(pendingRole.map { AccountStrings.roleChangeConfirm(AccountStrings.roleName($0, lang), lang) } ?? "",
+                            isPresented: Binding(get: { pendingRole != nil }, set: { if !$0 { pendingRole = nil } }),
+                            titleVisibility: .visible) {
+            Button(AccountStrings.confirmChange(lang)) { if let r = pendingRole { pendingRole = nil; changeRole(r) } }
+            Button(AccountStrings.cancel(lang), role: .cancel) { pendingRole = nil }
+        }
         // 移除 Passkey 不可逆（移除后该设备需重新添加）——先确认（见审计 P2）。
         .confirmationDialog(AccountStrings.removePasskeyConfirmTitle(lang),
                             isPresented: Binding(get: { passkeyToRemove != nil },
@@ -322,6 +274,78 @@ struct LoginView: View {
             Button(AccountStrings.cancel(lang), role: .cancel) { passkeyToRemove = nil }
         } message: {
             Text(AccountStrings.removePasskeyConfirmMessage(lang))
+        }
+    }
+
+    /// 账号明细（邮箱 / 登录与安全 / Passkey）三段——抽出以避免 Form 主体表达式过大致类型推断超时。
+    @ViewBuilder private var accountDetailSections: some View {
+        Section(AccountStrings.emailHeader(lang)) {
+            if let email = detail?.email, !email.isEmpty {
+                HStack {
+                    Text(email)
+                    Spacer()
+                    if detail?.emailVerified == true {
+                        Label(AccountStrings.verified(lang), systemImage: "checkmark.seal.fill")
+                            .foregroundStyle(Color.beeSuccess).font(.caption)
+                    } else {
+                        Text(AccountStrings.unverified(lang)).foregroundStyle(Color.beeWarn).font(.caption)
+                    }
+                }
+                Button(detail?.emailVerified == true ? AccountStrings.changeEmail(lang)
+                                                     : AccountStrings.changeOrVerifyEmail(lang)) { showEmail = true }
+            } else {
+                Text(AccountStrings.noEmailYet(lang)).foregroundStyle(.secondary)
+                Button(AccountStrings.bindEmail(lang)) { showEmail = true }
+            }
+        }
+        // 登录与安全：用户名 / 手机号 / Apple ID 换绑（现存账号也可重新绑定）。
+        Section(AccountStrings.accountSecurityHeader(lang)) {
+            HStack {
+                Text(AccountStrings.usernameSectionHeader(lang))
+                Spacer()
+                Text("@\(session.user?.username ?? "—")").foregroundStyle(.secondary)
+            }
+            Button(AccountStrings.changeUsername(lang)) {
+                usernameInput = session.user?.username ?? ""; showUsername = true
+            }
+            if let phone = detail?.phone, !phone.isEmpty {
+                HStack { Text(AccountStrings.phoneSectionHeader(lang)); Spacer(); Text(phone).foregroundStyle(.secondary) }
+                Button(AccountStrings.changePhone(lang)) { phoneInput = phone; showPhone = true }
+            } else {
+                Button(AccountStrings.bindPhone(lang)) { phoneInput = ""; showPhone = true }
+            }
+            if detail?.appleLinked == true {
+                HStack {
+                    Label(AccountStrings.appleSectionHeader(lang), systemImage: "apple.logo")
+                    Spacer()
+                    Text(AccountStrings.appleLinkedLabel(lang)).foregroundStyle(Color.beeSuccess).font(.caption)
+                }
+                Button(AccountStrings.unlinkAppleAction(lang), role: .destructive) { unlinkApple() }
+            } else {
+                SignInWithAppleButton(.continue) { req in
+                    req.requestedScopes = [.fullName]
+                } onCompletion: { handleAppleLink($0) }
+                .signInWithAppleButtonStyle(.black)
+                .frame(height: 44)
+                .accessibilityLabel(AccountStrings.linkAppleAction(lang))
+            }
+        }
+        Section(AccountStrings.passkeySectionHeader(lang)) {
+            if passkeyList.isEmpty {
+                Text(AccountStrings.noPasskeysYet(lang)).font(.footnote).foregroundStyle(.secondary)
+            } else {
+                ForEach(passkeyList) { pk in
+                    HStack {
+                        Label(pk.deviceName ?? AccountStrings.passkeyDeviceFallback(lang), systemImage: "key.fill")
+                        Spacer()
+                        Button(AccountStrings.removePasskey(lang), role: .destructive) { passkeyToRemove = pk }
+                            .font(.caption).buttonStyle(.bordered)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            }
+            Button(AccountStrings.addPasskey(lang)) { addPasskey() }
+                .disabled(passkeyBusy)
         }
     }
 
@@ -353,9 +377,9 @@ struct LoginView: View {
         } catch { securityMsg = AccountStrings.networkError(lang) }
     }
 
-    /// 绑定/换绑手机号。
-    private func savePhone() async {
-        let p = phoneInput.trimmingCharacters(in: .whitespaces)
+    /// 绑定/换绑手机号（含区号，来自 PhoneBindSheet 的完整 E.164 号码）。
+    private func savePhone(_ raw: String) async {
+        let p = raw.trimmingCharacters(in: .whitespaces)
         guard !p.isEmpty, let token = KeychainStore.read() else { return }
         do {
             try await APIClient().setPhone(token: token, phone: p)
@@ -474,6 +498,26 @@ struct LoginView: View {
                 session.logout()
             } catch {
                 accountMessage = AccountStrings.passwordChangeFailed(lang)
+            }
+        }
+    }
+
+    /// 选定目标身份后弹二次确认（与当前相同则忽略）。
+    private func confirmRole(_ role: String) {
+        guard session.user?.role != role else { return }
+        pendingRole = role
+    }
+
+    /// 更改账号身份：写后端 + 刷新本人信息（RootView 监听 user.role 变化自动切到对应界面）。
+    private func changeRole(_ role: String) {
+        guard let token = KeychainStore.read() else { return }
+        Task {
+            do {
+                try await APIClient().setRole(token: token, role: role)
+                await session.refreshMe()
+                accountMessage = AccountStrings.roleChangedTo(AccountStrings.roleName(role, lang), lang)
+            } catch {
+                accountMessage = AccountStrings.roleChangeFailed(lang)
             }
         }
     }

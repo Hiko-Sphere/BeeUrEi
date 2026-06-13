@@ -150,8 +150,11 @@ final class AuthSession {
             Task { await api.setLanguage(token: t, language: lang.rawValue) }
             // 拉 /api/me 取完整本人信息（usernameCustomized/email/appleLinked/hasPasskey），一次性赋值避免闪屏。
             user = (try? await api.me(token: t)) ?? result.user
-            requiresSetup = isNewMethod
-            accountCreated = (result.created == true) // 新建账号：引导首步统一选身份角色
+            // 仅**本次新建账号**才进引导（选身份→设 userid→绑邮箱，可跳过）。
+            // 老账号无论用 Apple / Passkey / 邮箱验证码 / 密码登录都直接进 App——
+            // 修复"绑过 Apple 后重登被跳去注册""passkey 登录被当成注册新用户"（用户反馈 #2/#4）。
+            accountCreated = (result.created == true)
+            requiresSetup = accountCreated
         } catch APIError.unauthorized {
             errorMessage = AccountStrings.wrongCredentials(lang)
         } catch let APIError.server(message) {

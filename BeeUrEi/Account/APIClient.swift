@@ -445,10 +445,20 @@ struct APIClient {
         _ = try await authedSend("DELETE", "/api/family/links/\(id)", token: token)
     }
 
-    /// 按 userId 发起加好友请求（通话中加对方为常用亲友/协助者）。
-    func addFamilyLink(token: String, userId: String, relation: String? = nil) async throws {
-        var body: [String: Any] = ["userId": userId]
+    /// 按**精确**标识查人（用户名 / 邮箱 / 手机号）——用于"按邮箱或手机号添加"。查无则抛 not_found。
+    func lookupUser(token: String, query: String) async throws -> AccountInfo {
+        struct R: Codable { let user: AccountInfo }
+        let q = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+        let data = try await authedGet("/api/users/lookup?q=\(q)", token: token)
+        guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.server("member_not_found") }
+        return r.user
+    }
+
+    /// 按 userId 发起加好友请求（通话中加对方，或经 lookup 解析邮箱/手机号后添加）。
+    func addFamilyLink(token: String, userId: String, relation: String? = nil, isEmergency: Bool = false, phone: String? = nil) async throws {
+        var body: [String: Any] = ["userId": userId, "isEmergency": isEmergency]
         if let relation, !relation.isEmpty { body["relation"] = relation }
+        if let phone, !phone.isEmpty { body["phone"] = phone }
         _ = try await authedSend("POST", "/api/family/links", token: token, body: body)
     }
 

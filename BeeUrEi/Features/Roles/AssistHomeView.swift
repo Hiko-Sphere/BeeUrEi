@@ -314,8 +314,10 @@ struct AssistHomeView: View {
         let u = newFamilyUsername.trimmingCharacters(in: .whitespacesAndNewlines); newFamilyUsername = ""
         guard !u.isEmpty, let token = session.token else { return }
         do {
-            try await APIClient().addFamilyLink(token: token, username: u, relation: nil, isEmergency: false, phone: nil)
-            addFamilyMsg = HelperStrings.requestSentTo(u, lang)
+            // 用户名 / 邮箱 / 手机号均可：先精确查人，再发起请求。
+            let target = try await APIClient().lookupUser(token: token, query: u)
+            try await APIClient().addFamilyLink(token: token, userId: target.id)
+            addFamilyMsg = HelperStrings.requestSentTo(target.displayName, lang)
             await loadLinks()
         } catch let APIError.server(msg) {
             addFamilyMsg = msg == "member_not_found" ? HelperStrings.memberNotFound(lang)

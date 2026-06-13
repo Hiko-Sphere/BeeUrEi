@@ -251,7 +251,9 @@ struct RemoteAssistView: View {
         newUsername = ""
         guard !username.isEmpty, let token = KeychainStore.read() else { return }
         do {
-            try await APIClient().addFamilyLink(token: token, username: username, relation: nil, isEmergency: false, phone: nil)
+            // 支持用户名 / 邮箱 / 手机号添加：先精确查人，再按 userId 发起请求。
+            let target = try await APIClient().lookupUser(token: token, query: username)
+            try await APIClient().addFamilyLink(token: token, userId: target.id)
             await load()
         } catch let APIError.server(msg) {
             statusText = msg == "member_not_found" ? AssistStrings.memberNotFound(lang) : AssistStrings.addFailed(lang)

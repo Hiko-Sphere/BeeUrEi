@@ -96,7 +96,7 @@ enum HelperStrings {
     static func familyNavTitle(_ l: Language) -> String { l == .zh ? "我的亲人" : "My Family" }
     static func addFamilyA11y(_ l: Language) -> String { l == .zh ? "添加亲人或求助者" : "Add family or requester" }
     static func addFamilyTitle(_ l: Language) -> String { l == .zh ? "添加亲人 / 求助者" : "Add family / requester" }
-    static func usernamePlaceholder(_ l: Language) -> String { l == .zh ? "对方用户名" : "Their username" }
+    static func usernamePlaceholder(_ l: Language) -> String { l == .zh ? "用户名 / 邮箱 / 手机号" : "Username, email, or phone" }
     static func sendRequest(_ l: Language) -> String { l == .zh ? "发送请求" : "Send request" }
     static func cancel(_ l: Language) -> String { l == .zh ? "取消" : "Cancel" }
     static func addFamilyMessage(_ l: Language) -> String {

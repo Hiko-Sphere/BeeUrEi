@@ -284,6 +284,11 @@ enum AccountStrings {
     static func bindPhone(_ l: Language) -> String { l == .zh ? "绑定手机号" : "Link phone" }
     static func changePhone(_ l: Language) -> String { l == .zh ? "更换手机号" : "Change phone" }
     static func phonePlaceholder(_ l: Language) -> String { l == .zh ? "手机号" : "Phone number" }
+    static func countryCode(_ l: Language) -> String { l == .zh ? "国家 / 地区" : "Country / region" }
+    static func phoneSheetFooter(_ l: Language) -> String {
+        l == .zh ? "选择国家/地区区号并输入手机号；可用于手机号登录与亲友查找。"
+                 : "Pick your country/region code and enter your number; usable for phone sign-in and contact lookup."
+    }
     static func phoneUpdated(_ l: Language) -> String { l == .zh ? "手机号已更新" : "Phone updated" }
     static func noPhoneYet(_ l: Language) -> String { l == .zh ? "尚未绑定手机号。" : "No phone linked yet." }
     static func appleSectionHeader(_ l: Language) -> String { l == .zh ? "Apple ID" : "Apple ID" }
@@ -306,6 +311,21 @@ enum AccountStrings {
     static func noPasskeysYet(_ l: Language) -> String { l == .zh ? "尚未添加 Passkey。" : "No passkeys yet." }
     static func passkeyDeviceFallback(_ l: Language) -> String { l == .zh ? "此设备" : "This device" }
     static func accountSecurityHeader(_ l: Language) -> String { l == .zh ? "登录与安全" : "Sign-in & security" }
+
+    // MARK: 身份 / 角色（账号页可改：视障 ↔ 协助者/亲友）
+    static func identityHeader(_ l: Language) -> String { l == .zh ? "我的身份" : "My role" }
+    static func identityFooter(_ l: Language) -> String {
+        l == .zh ? "决定你进入的是「视障避障」界面还是「协助者/亲友」界面。更改后会立即切换界面。"
+                 : "Determines whether you use the blind-assistance interface or the helper/family interface. Changing it switches the interface immediately."
+    }
+    static func changeRole(_ l: Language) -> String { l == .zh ? "更改身份" : "Change role" }
+    static func roleChangeConfirm(_ name: String, _ l: Language) -> String {
+        l == .zh ? "把你的身份改为「\(name)」？界面会随之切换。" : "Change your role to “\(name)”? The interface will switch."
+    }
+    static func roleChangedTo(_ name: String, _ l: Language) -> String {
+        l == .zh ? "身份已改为\(name)" : "Role changed to \(name)"
+    }
+    static func roleChangeFailed(_ l: Language) -> String { l == .zh ? "更改身份失败，请重试" : "Couldn't change role, please retry" }
 
     /// 账号页操作的后端错误码 → 文案。
     static func accountErrorText(_ code: String, _ l: Language) -> String {

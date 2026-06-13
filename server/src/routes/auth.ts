@@ -135,10 +135,25 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     if (!identity) return reply.code(401).send({ error: 'invalid_apple_token' })
 
     let user = store.findByAppleSub(identity.sub)
+    // 关键修复：appleSub 未匹配时，先按 **Apple 已验证的邮箱** 找现有账号——
+    // 若该邮箱已属某账号（且尚未绑 Apple），则把本 Apple 并入该账号并登录，而不是另建新号。
+    // 这正是 Sign in with Apple 的标准并号行为：Apple 已验证邮箱归属，安全。（见用户反馈 bug #1）
+    if (!user && identity.email && identity.emailVerified) {
+      const byEmail = store.findByEmail(identity.email.toLowerCase())
+      if (byEmail && !byEmail.appleSub) {
+        if (byEmail.status === 'disabled') return reply.code(403).send({ error: 'account_disabled' })
+        const linked = store.updateUser(byEmail.id, { appleSub: identity.sub, emailVerified: true }) ?? byEmail
+        const tokens = issueTokens(store, linked)
+        return reply.send({ ...tokens, user: publicUser(linked) }) // 登录已有账号，不是新建（无 created）
+      }
+    }
     if (!user) {
       // 新 Apple 用户自动建号：生成不冲突的用户名（可日后在账号页修改）。
       let username = `apple_${identity.sub.slice(-8)}`
       while (store.findByUsername(username)) username = `apple_${randomUUID().slice(0, 8)}`
+      // 仅当该邮箱未被占用时才写入新号（email 列非唯一，避免造成重复邮箱账号；上面已优先并号）。
+      const appleEmail = identity.email?.toLowerCase()
+      const emailFree = appleEmail ? !store.findByEmail(appleEmail) : false
       user = {
         id: randomUUID(),
         username,
@@ -149,8 +164,8 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
         status: 'active',
         createdAt: Date.now(),
         language: parsed.data.language,
-        email: identity.email?.toLowerCase(),
-        emailVerified: identity.email ? true : undefined, // Apple 已验证过邮箱
+        email: emailFree ? appleEmail : undefined,
+        emailVerified: emailFree ? true : undefined, // Apple 已验证过邮箱
         appleSub: identity.sub,
         usernameCustomized: false, // 自动生成 apple_ 用户名，客户端会提示设置唯一 userid
       }

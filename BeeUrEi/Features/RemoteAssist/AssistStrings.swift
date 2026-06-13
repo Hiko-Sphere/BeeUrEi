@@ -50,7 +50,7 @@ enum AssistStrings {
     static func done(_ l: Language) -> String { l == .zh ? "完成" : "Done" }
     static func addFamilyA11y(_ l: Language) -> String { l == .zh ? "添加亲友" : "Add family" }
     static func addFamilyTitle(_ l: Language) -> String { l == .zh ? "添加亲友" : "Add family" }
-    static func usernamePlaceholder(_ l: Language) -> String { l == .zh ? "对方用户名" : "Their username" }
+    static func usernamePlaceholder(_ l: Language) -> String { l == .zh ? "用户名 / 邮箱 / 手机号" : "Username, email, or phone" }
     static func add(_ l: Language) -> String { l == .zh ? "添加" : "Add" }
     static func cancel(_ l: Language) -> String { l == .zh ? "取消" : "Cancel" }
     static func addFamilyMessage(_ l: Language) -> String {

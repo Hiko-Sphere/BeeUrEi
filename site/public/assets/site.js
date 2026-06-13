@@ -12,6 +12,12 @@
   function prefersDark() {
     return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
   }
+  function prefersReduced() {
+    return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }
+
+  // 仅在尊重动效时标记 reveal-ready；否则 CSS 不隐藏，内容直接可见（无 JS 同理）。
+  if (!prefersReduced()) root.classList.add("reveal-ready");
 
   // ---- 语言：本地存储 > 浏览器 > 中文 ----
   var lang = readLS(LS_LANG);
@@ -69,5 +75,20 @@
 
     var y = document.getElementById("year");
     if (y) y.textContent = String(new Date().getFullYear());
+
+    // 滚动渐显：进入视口即 .in；无 IO 支持时直接全部显示（兜底）。
+    if (root.classList.contains("reveal-ready")) {
+      var els = document.querySelectorAll(".reveal");
+      if ("IntersectionObserver" in window) {
+        var io = new IntersectionObserver(function (entries) {
+          entries.forEach(function (e) {
+            if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+          });
+        }, { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
+        els.forEach(function (el) { io.observe(el); });
+      } else {
+        els.forEach(function (el) { el.classList.add("in"); });
+      }
+    }
   });
 })();

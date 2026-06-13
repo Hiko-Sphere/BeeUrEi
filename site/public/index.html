@@ -30,39 +30,15 @@
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/assets/favicon.svg">
 <link rel="mask-icon" href="/assets/favicon.svg" color="#f2a900">
-
 <link rel="stylesheet" href="/assets/site.css">
 <script src="/assets/site.js"></script>
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@graph": [
-    {
-      "@type": "Organization",
-      "@id": "https://beeurei.hikosphere.com/#org",
-      "name": "Hiko Sphere 彦穹科技",
-      "url": "https://beeurei.hikosphere.com",
-      "logo": "https://beeurei.hikosphere.com/assets/favicon.svg",
-      "founder": { "@type": "Person", "name": "Li Yanpei Hiko" }
-    },
-    {
-      "@type": "WebSite",
-      "@id": "https://beeurei.hikosphere.com/#website",
-      "name": "BeeUrEi 蜂之眼",
-      "url": "https://beeurei.hikosphere.com",
-      "inLanguage": ["zh-Hans", "en"],
-      "publisher": { "@id": "https://beeurei.hikosphere.com/#org" }
-    },
-    {
-      "@type": "MobileApplication",
-      "name": "BeeUrEi 蜂之眼",
-      "operatingSystem": "iOS",
-      "applicationCategory": "HealthApplication",
-      "description": "On-device real-time obstacle avoidance, scene recognition, live remote assistance and emergency calls for blind and low-vision people. Privacy-first; all vision AI runs on the device.",
-      "inLanguage": ["zh-Hans", "en"],
-      "license": "https://polyformproject.org/licenses/noncommercial/1.0.0/",
-      "publisher": { "@id": "https://beeurei.hikosphere.com/#org" }
-    }
+    { "@type": "Organization", "@id": "https://beeurei.hikosphere.com/#org", "name": "Hiko Sphere 彦穹科技", "url": "https://beeurei.hikosphere.com", "logo": "https://beeurei.hikosphere.com/assets/favicon.svg", "founder": { "@type": "Person", "name": "Li Yanpei Hiko" } },
+    { "@type": "WebSite", "@id": "https://beeurei.hikosphere.com/#website", "name": "BeeUrEi 蜂之眼", "url": "https://beeurei.hikosphere.com", "inLanguage": ["zh-Hans", "en"], "publisher": { "@id": "https://beeurei.hikosphere.com/#org" } },
+    { "@type": "MobileApplication", "name": "BeeUrEi 蜂之眼", "operatingSystem": "iOS", "applicationCategory": "HealthApplication", "description": "On-device real-time obstacle avoidance, scene recognition, live remote assistance and emergency calls for blind and low-vision people. Privacy-first; all vision AI runs on the device.", "inLanguage": ["zh-Hans", "en"], "license": "https://polyformproject.org/licenses/noncommercial/1.0.0/", "publisher": { "@id": "https://beeurei.hikosphere.com/#org" } }
   ]
 }
 </script>
@@ -73,12 +49,9 @@
 <header class="site">
   <div class="wrap nav">
     <a class="brand" href="#top" aria-label="BeeUrEi 蜂之眼 — 首页 / home">
-      <svg class="logo" viewBox="0 0 100 100" role="img" aria-hidden="true" focusable="false">
+      <svg class="logo" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
         <path d="M50 4 92 27v46L50 96 8 73V27z" fill="#f2a900"/>
-        <g fill="none" stroke="#14161f" stroke-width="5" stroke-linejoin="round">
-          <ellipse cx="50" cy="50" rx="15" ry="20"/>
-          <path d="M35 44h30M35 56h30"/>
-        </g>
+        <g fill="none" stroke="#14161f" stroke-width="5" stroke-linejoin="round"><ellipse cx="50" cy="50" rx="15" ry="20"/><path d="M35 44h30M35 56h30"/></g>
         <path d="M50 30c-9 0-16-7-16-7s7 12 16 12 16-12 16-12-7 7-16 7z" fill="#14161f"/>
       </svg>
       <span class="brand-name">BeeUrEi <small>蜂之眼</small></span>
@@ -87,9 +60,9 @@
       <ul>
         <li><a href="#features"><span lang="zh">功能</span><span lang="en">Features</span></a></li>
         <li><a href="#privacy"><span lang="zh">隐私</span><span lang="en">Privacy</span></a></li>
+        <li><a href="#access"><span lang="zh">无障碍</span><span lang="en">Accessibility</span></a></li>
         <li><a href="#roles"><span lang="zh">角色</span><span lang="en">Roles</span></a></li>
-        <li><a href="#safety"><span lang="zh">安全声明</span><span lang="en">Safety</span></a></li>
-        <li><a href="#maker"><span lang="zh">关于</span><span lang="en">About</span></a></li>
+        <li><a href="#faq"><span lang="zh">常见问题</span><span lang="en">FAQ</span></a></li>
       </ul>
     </nav>
     <div class="controls">
@@ -98,9 +71,9 @@
         <span lang="zh">English</span><span lang="en">中文</span>
       </button>
       <button class="toggle" id="themeToggle" type="button" aria-pressed="false">
-        <svg class="ic" id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8 6 18M18 6l1.8-1.8"/></svg>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8 6 18M18 6l1.8-1.8"/></svg>
         <span class="sr-only" lang="zh">切换深浅色主题</span><span class="sr-only" lang="en">Toggle light or dark theme</span>
-        <span aria-hidden="true" lang="zh" class="t-label">主题</span><span aria-hidden="true" lang="en" class="t-label">Theme</span>
+        <span aria-hidden="true" lang="zh">主题</span><span aria-hidden="true" lang="en">Theme</span>
       </button>
     </div>
   </div>
@@ -113,23 +86,17 @@
 <section class="hero" aria-labelledby="hero-h1">
   <svg class="comb" viewBox="0 0 1200 600" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
     <defs>
-      <pattern id="hex" width="84" height="48" patternUnits="userSpaceOnUse" patternTransform="scale(1.4)">
-        <path d="M21 0 63 0 84 24 63 48 21 48 0 24Z" fill="none" stroke="currentColor" stroke-width="1.1" opacity=".5"/>
-      </pattern>
-      <radialGradient id="fade" cx="78%" cy="30%" r="70%">
-        <stop offset="0%" stop-color="white" stop-opacity="1"/>
-        <stop offset="100%" stop-color="white" stop-opacity="0"/>
-      </radialGradient>
+      <pattern id="hex" width="84" height="48" patternUnits="userSpaceOnUse" patternTransform="scale(1.4)"><path d="M21 0 63 0 84 24 63 48 21 48 0 24Z" fill="none" stroke="currentColor" stroke-width="1.1" opacity=".5"/></pattern>
+      <radialGradient id="fade" cx="74%" cy="28%" r="72%"><stop offset="0%" stop-color="white" stop-opacity="1"/><stop offset="100%" stop-color="white" stop-opacity="0"/></radialGradient>
       <mask id="m"><rect width="1200" height="600" fill="url(#fade)"/></mask>
     </defs>
     <rect width="1200" height="600" fill="url(#hex)" mask="url(#m)"/>
   </svg>
   <div class="wrap hero-grid">
-    <div class="hero-copy">
+    <div class="hero-copy reveal">
       <span class="eyebrow">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 2 22 7.5v9L12 22 2 16.5v-9z" opacity=".25"/><circle cx="12" cy="12" r="3.4"/></svg>
-        <span lang="zh">为视障人士打造的原生 iOS 应用</span>
-        <span lang="en">A native iOS app for blind &amp; low-vision people</span>
+        <span lang="zh">为视障人士打造的原生 iOS 应用</span><span lang="en">A native iOS app for blind &amp; low-vision people</span>
       </span>
       <h1 id="hero-h1">
         <span lang="zh">让 iPhone 摄像头，<br>成为你<span class="accent">前行的眼睛</span>。</span>
@@ -140,217 +107,154 @@
         <span lang="en">Real-time obstacle avoidance, scene understanding, live human assistance and emergency calls — perception returned to you, independence kept by you.</span>
       </p>
       <div class="cta-row">
-        <a class="btn btn-primary" href="#features">
-          <span lang="zh">了解功能</span><span lang="en">Explore the features</span>
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true" focusable="false"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-        </a>
-        <a class="btn btn-ghost" href="#privacy">
-          <span lang="zh">隐私如何保护</span><span lang="en">How privacy works</span>
-        </a>
+        <a class="btn btn-primary" href="#features"><span lang="zh">了解功能</span><span lang="en">Explore the features</span>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true" focusable="false"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+        <a class="btn btn-ghost" href="#privacy"><span lang="zh">隐私如何保护</span><span lang="en">How privacy works</span></a>
       </div>
       <p class="hero-note">
         <span lang="zh">所有视觉 AI 都在你的设备本地运行，画面默认不离开手机。</span>
         <span lang="en">All vision AI runs on your device. Camera frames don’t leave the phone by default.</span>
       </p>
     </div>
-    <div class="hero-art" aria-hidden="true">
-      <svg viewBox="0 0 360 460" aria-hidden="true" focusable="false">
-        <defs>
-          <linearGradient id="phone" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#14161f"/>
-            <stop offset="1" stop-color="#3b3f4d"/>
-          </linearGradient>
-          <radialGradient id="depth" cx="50%" cy="42%" r="60%">
-            <stop offset="0" stop-color="#f2a900"/>
-            <stop offset="100%" stop-color="#f2a900" stop-opacity="0"/>
-          </radialGradient>
-        </defs>
-        <!-- phone body -->
-        <rect x="84" y="20" width="192" height="400" rx="38" fill="url(#phone)" stroke="#f2a900" stroke-width="2.5"/>
-        <rect x="96" y="40" width="168" height="360" rx="28" fill="#0e0f15"/>
-        <!-- depth rings -->
-        <g fill="none" stroke="#f2a900">
-          <circle cx="180" cy="170" r="22" stroke-width="3"/>
-          <circle cx="180" cy="170" r="44" stroke-width="2.4" opacity=".7"/>
-          <circle cx="180" cy="170" r="66" stroke-width="1.8" opacity=".45"/>
-          <circle cx="180" cy="170" r="88" stroke-width="1.4" opacity=".25"/>
-        </g>
-        <circle cx="180" cy="170" r="9" fill="#f2a900"/>
-        <!-- clock direction dial -->
-        <g transform="translate(180 300)">
-          <circle r="58" fill="none" stroke="#4a4f5c" stroke-width="2"/>
-          <g stroke="#6b7180" stroke-width="2">
-            <path d="M0 -58 0 -50"/><path d="M0 58 0 50"/><path d="M-58 0 -50 0"/><path d="M58 0 50 0"/>
-            <path d="M29 -50 25 -43"/><path d="M50 -29 43 -25"/><path d="M50 29 43 25"/><path d="M29 50 25 43"/>
-            <path d="M-29 -50 -25 -43"/><path d="M-50 -29 -43 -25"/><path d="M-50 29 -43 25"/><path d="M-29 50 -25 43"/>
-          </g>
-          <!-- pointer to 2 o'clock -->
-          <path d="M0 0 L40 -23" stroke="#f2a900" stroke-width="4.5" stroke-linecap="round"/>
-          <circle r="6" fill="#f2a900"/>
-        </g>
-        <!-- sound waves -->
-        <g fill="none" stroke="#f2a900" stroke-width="3.4" stroke-linecap="round" opacity=".85">
-          <path d="M300 200a24 24 0 0 1 0 60"/>
-          <path d="M316 184a48 48 0 0 1 0 92" opacity=".6"/>
-          <path d="M332 168a72 72 0 0 1 0 124" opacity=".35"/>
-        </g>
-        <circle cx="180" cy="408" r="0" />
-      </svg>
+    <div class="hero-shot reveal">
+      <div class="device"><img src="/assets/shots/feature-obstacle.jpg" width="760" height="1652" alt="BeeUrEi 实时避障引导界面 / BeeUrEi obstacle-detection guidance screen" loading="eager"></div>
     </div>
   </div>
 </section>
 
-<!-- FEATURES -->
-<section id="features" class="band alt" aria-labelledby="features-h">
+<!-- FACTS (real, not metrics) -->
+<div class="wrap">
+  <div class="facts reveal stagger">
+    <div class="fact"><b><span lang="zh">端侧 AI</span><span lang="en">On-device AI</span></b><span><span lang="zh">视觉处理不离开手机</span><span lang="en">Vision never leaves your phone</span></span></div>
+    <div class="fact"><b><span lang="zh">中文 + English</span><span lang="en">中文 + English</span></b><span><span lang="zh">界面与实时引导双语</span><span lang="en">Bilingual UI &amp; live guidance</span></span></div>
+    <div class="fact"><b><span lang="zh">非商用开源</span><span lang="en">Noncommercial &amp; open</span></b><span><span lang="zh">可自由使用 · 学习 · 修改</span><span lang="en">Free to use, study, modify</span></span></div>
+  </div>
+</div>
+
+<!-- FEATURES (editorial rows) -->
+<section id="features" class="band" aria-labelledby="features-h">
   <div class="wrap">
-    <div class="sec-head">
-      <p class="sec-kicker"><span lang="zh">核心能力</span><span lang="en">What it does</span></p>
-      <h2 id="features-h"><span lang="zh">一套围绕「出行」与「感知」的完整能力</span><span lang="en">A complete toolkit for moving through the world</span></h2>
-      <p><span lang="zh">每一项都为日常出行设计：从避开眼前的障碍，到读出一段文字、辨认一张纸币，再到一键找到信任的人帮你看一眼。</span><span lang="en">Each capability is built for everyday life — from steering clear of what’s ahead, to reading text aloud and identifying a banknote, to a one-tap video call with someone you trust.</span></p>
+    <div class="sec-head reveal">
+      <p class="kicker"><span lang="zh">核心能力</span><span lang="en">What it does</span></p>
+      <h2 id="features-h"><span lang="zh">为「出行」与「感知」而生</span><span lang="en">Built for moving through the world</span></h2>
+      <p><span lang="zh">每一项都为日常出行设计：避开眼前的障碍，听见周围的世界，需要时一键找人帮你看一眼。</span><span lang="en">Every capability is built for everyday life — steer clear of what’s ahead, hear the world around you, and reach a real person when you need one.</span></p>
     </div>
 
-    <div class="cards">
-      <!-- obstacle -->
-      <article class="card">
-        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M12 3 3 8v8l9 5 9-5V8z"/><path d="M12 12 3 8M12 12l9-4M12 12v9"/></svg></span>
+    <!-- Obstacle -->
+    <div class="feature reveal">
+      <div class="copy">
         <h3><span lang="zh">端侧实时避障</span><span lang="en">Real-time obstacle avoidance</span></h3>
-        <p><span lang="zh">用摄像头与 LiDAR/深度感知障碍物，说出距离与时钟方向，例如「前方两点钟方向，1.5 米」。</span><span lang="en">Uses the camera and LiDAR/depth to sense obstacles and speak the distance and clock-face direction — e.g. “2 o’clock ahead, 1.5 metres.”</span></p>
-        <ul>
-          <li><span lang="zh">可选接近声呐：越近，提示音越急促（类似倒车雷达）</span><span lang="en">Optional proximity sonar: beeps speed up as you get closer, like parking sensors</span></li>
-          <li><span lang="zh">可选空间音频方向提示（搭配 AirPods）</span><span lang="en">Optional spatial-audio direction cues with AirPods</span></li>
+        <p><span lang="zh">用摄像头与 LiDAR/深度感知前方，说出距离与「钟面方向」，让你自己做决定。</span><span lang="en">Uses the camera and LiDAR/depth to sense what’s ahead, speaking the distance and a clock-face direction so you decide.</span></p>
+        <ul class="pts">
+          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">接近声呐：越近，提示音越急（像倒车雷达）</span><span lang="en">Proximity sonar: beeps speed up as you get closer, like parking sensors</span></span></li>
+          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">空间音方向提示（搭配 AirPods）</span><span lang="en">Spatial-audio direction cues with AirPods</span></span></li>
         </ul>
-      </article>
-
-      <!-- navigation -->
-      <article class="card">
-        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M12 2 4 22l8-5 8 5z"/></svg></span>
-        <h3><span lang="zh">步行导航</span><span lang="en">Walking navigation</span> <span class="tag"><span lang="zh">开发中</span><span lang="en">In development</span></span></h3>
-        <p><span lang="zh">为行人量身的逐向语音导航：海外使用 Apple 地图，中国大陆使用持牌地图服务商。</span><span lang="en">Pedestrian turn-by-turn guidance: Apple Maps overseas, and a licensed map provider in mainland China.</span></p>
-      </article>
-
-      <!-- scene -->
-      <article class="card">
-        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L19 6h0a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.5"/></svg></span>
-        <h3><span lang="zh">场景识别</span><span lang="en">Scene &amp; object understanding</span></h3>
-        <p><span lang="zh">全部在设备本地完成：识别物体、朗读文字、辨认纸币、扫描条码、识别颜色、寻找物品、感知「附近有人」与环境光线。</span><span lang="en">All on-device: recognise objects, read text aloud, identify banknotes, scan barcodes, detect colours, find-my-things, sense “people nearby” and ambient light.</span></p>
-      </article>
-
-      <!-- remote -->
-      <article class="card">
-        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="M15.5 10.5 21.5 7v10l-6-3.5z"/></svg></span>
-        <h3><span lang="zh">远程协助</span><span lang="en">Remote assistance</span></h3>
-        <p><span lang="zh">一键向你选定的帮手、家人或志愿者发起实时视频通话（WebRTC + CallKit）。如需录制，必须经双方明确同意。</span><span lang="en">One tap starts a live video call with a helper, family member or volunteer you choose (WebRTC + CallKit). Recording requires both parties’ explicit consent.</span></p>
-      </article>
-
-      <!-- fall -->
-      <article class="card">
-        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M12 3v6M12 13v.01"/><path d="M10.3 4.2 3.4 17a2 2 0 0 0 1.7 3h13.8a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z"/></svg></span>
-        <h3><span lang="zh">摔倒 / 撞击自动报警</span><span lang="en">Fall &amp; impact alerts</span></h3>
-        <p><span lang="zh">检测疑似摔倒或剧烈撞击，若未在限时内取消，自动通知已关联的家人。</span><span lang="en">Detects a suspected fall or severe impact; if you don’t cancel in time, it notifies your linked family.</span></p>
-      </article>
-
-      <!-- emergency -->
-      <article class="card">
-        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M5 4h3l2 5-2.5 1.5a12 12 0 0 0 5 5L19 13l5 2v3a2 2 0 0 1-2 2A17 17 0 0 1 3 6a2 2 0 0 1 2-2z" transform="translate(-1)"/></svg></span>
-        <h3><span lang="zh">紧急呼叫家人</span><span lang="en">Emergency call to family</span></h3>
-        <p><span lang="zh">紧急情况下一键呼叫家人，并尽力附带一个粗略位置。</span><span lang="en">One tap calls family in an emergency, attaching a best-effort coarse location.</span></p>
-      </article>
-
-      <!-- messaging -->
-      <article class="card">
-        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-4 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg></span>
-        <h3><span lang="zh">聊天 · 群聊 · 视频消息</span><span lang="en">Messaging, group chat &amp; video messages</span></h3>
-        <p><span lang="zh">与帮手和家人保持联系：文字聊天、群聊，以及简短的视频消息。</span><span lang="en">Stay in touch with helpers and family: text chat, group chats and short video messages.</span></p>
-      </article>
+        <p class="quote"><span lang="zh">“前方两点钟方向，1.5 米。”</span><span lang="en">“2 o’clock ahead, 1.5 metres.”</span>
+          <small><span lang="zh">这就是蜂之眼说话的方式。</span><span lang="en">This is how BeeUrEi speaks.</span></small></p>
+      </div>
+      <div class="shot"><div class="device"><img src="/assets/shots/feature-obstacle.jpg" width="760" height="1652" alt="实时避障引导 / Obstacle-detection guidance" loading="lazy"></div></div>
     </div>
 
-    <!-- how it speaks -->
-    <figure class="speaks" aria-labelledby="speaks-cap">
-      <svg class="q" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 3a9 9 0 0 0-9 9v4a2 2 0 0 0 2 2h2v-6H5v-0a7 7 0 0 1 14 0v0h-2v6h2a2 2 0 0 0 2-2v-4a9 9 0 0 0-9-9z"/></svg>
-      <div>
-        <p class="said" id="speaks-cap">
-          <span lang="zh">“前方两点钟方向，1.5 米。”</span>
-          <span lang="en">“2 o’clock ahead, 1.5 metres.”</span>
-        </p>
-        <p class="ctx"><span lang="zh">这就是蜂之眼说话的方式——清楚的方向、清楚的距离，让你自己做决定。</span><span lang="en">This is how BeeUrEi speaks — a clear direction, a clear distance, leaving the decision to you.</span></p>
+    <!-- Remote assistance -->
+    <div class="feature reverse reveal">
+      <div class="copy">
+        <h3><span lang="zh">一键远程协助</span><span lang="en">One-tap remote assistance</span></h3>
+        <p><span lang="zh">需要人帮忙时，向你选定的亲友或志愿者发起实时视频通话（WebRTC + CallKit），和他们语音交流。</span><span lang="en">When you need a person, start a live video call with a family member or volunteer you choose (WebRTC + CallKit) and talk it through.</span></p>
+        <ul class="pts">
+          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">来电用系统级 CallKit 呈现，像普通电话一样接听</span><span lang="en">Calls ring through CallKit, answered like any phone call</span></span></li>
+          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">录制须双方明确同意，加密保存、到期自动删除</span><span lang="en">Recording needs both parties’ consent; stored encrypted, auto-deleted on expiry</span></span></li>
+        </ul>
       </div>
-    </figure>
+      <div class="shot"><div class="device"><img src="/assets/shots/feature-2.jpg" width="760" height="1652" alt="一键求助 / One-tap help" loading="lazy"></div></div>
+    </div>
+
+    <!-- Private sharing -->
+    <div class="feature reveal">
+      <div class="copy">
+        <h3><span lang="zh">按住才发画面</span><span lang="en">Camera off until you press</span></h3>
+        <p><span lang="zh">求助时你的摄像头画面默认不发送。只有当你按住「显示画面」，对方才看得到——隐私始终在你手中。</span><span lang="en">During a call your camera is not shared by default. Only while you hold “Show My Camera” can the other side see — your privacy stays in your hands.</span></p>
+        <ul class="pts">
+          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">画面共享由你主动发起、随时可停</span><span lang="en">Sharing is started by you and can stop any time</span></span></li>
+        </ul>
+      </div>
+      <div class="shot"><div class="device"><img src="/assets/shots/feature-3.jpg" width="760" height="1652" alt="按住才发画面 / Camera off by default" loading="lazy"></div></div>
+    </div>
+
+    <!-- Make it yours / settings -->
+    <div class="feature reverse reveal">
+      <div class="copy">
+        <h3><span lang="zh">按你的习惯来</span><span lang="en">Make it yours</span></h3>
+        <p><span lang="zh">设置以盲人优先重排：最重要的安全开关置顶，语音语速、详略、简短播报一目了然，次要项收进「更多设置」。</span><span lang="en">Settings put blind users first — the most important safety switches sit at the top; speech rate, verbosity and concise mode are right there, with secondary options tucked into “More settings”.</span></p>
+        <ul class="pts">
+          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">VoiceOver 全程优先，文字大小跟随系统</span><span lang="en">VoiceOver-first throughout; text scales with the system</span></span></li>
+        </ul>
+      </div>
+      <div class="shot"><div class="device"><img src="/assets/shots/settings.jpg" width="760" height="1652" alt="设置页面（盲人优先） / Settings, blind-first" loading="lazy"></div></div>
+    </div>
+
+    <!-- More it does (inline, not cards) -->
+    <div class="sec-head reveal mt-xl">
+      <h2 class="h2-sm"><span lang="zh">它还能做的</span><span lang="en">It also</span></h2>
+    </div>
+    <div class="roles reveal stagger" role="list">
+      <div class="role" role="listitem">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></span>
+        <h3><span lang="zh">场景识别</span><span lang="en">Scene &amp; objects</span></h3>
+        <p><span lang="zh">识物、读字、辨纸币、扫码、识色、找物、感知「附近有人」与光线——全部本机完成。</span><span lang="en">Recognise objects, read text, identify banknotes, scan barcodes, detect colours, find things, sense “people nearby” and ambient light — all on-device.</span></p>
+      </div>
+      <div class="role" role="listitem">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M12 3v6M12 13v.01"/><path d="M10.3 4.2 3.4 17a2 2 0 0 0 1.7 3h13.8a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z"/></svg></span>
+        <h3><span lang="zh">摔倒报警 · 紧急呼叫</span><span lang="en">Fall alerts · emergency</span></h3>
+        <p><span lang="zh">检测疑似摔倒或剧烈撞击，未及时取消则通知家人；一键紧急呼叫并尽力附带粗略位置。</span><span lang="en">Detects a suspected fall or impact and notifies family if not cancelled; one-tap emergency call with a best-effort coarse location.</span></p>
+      </div>
+      <div class="role" role="listitem">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-4 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg></span>
+        <h3><span lang="zh">聊天 · 群聊 · 视频消息</span><span lang="en">Messaging &amp; video notes</span></h3>
+        <p><span lang="zh">与亲友、协助者保持联系：文字、群聊与简短视频消息。</span><span lang="en">Stay close to family and helpers with text, group chats and short video messages.</span></p>
+      </div>
+    </div>
   </div>
 </section>
 
 <!-- PRIVACY -->
-<section id="privacy" class="band" aria-labelledby="privacy-h">
-  <div class="wrap split">
-    <div>
-      <p class="sec-kicker"><span lang="zh">隐私优先</span><span lang="en">Privacy-first</span></p>
+<section id="privacy" class="band alt" aria-labelledby="privacy-h">
+  <div class="wrap feature">
+    <div class="copy reveal">
+      <p class="kicker"><span lang="zh">隐私即安全</span><span lang="en">Privacy is safety</span></p>
       <h2 id="privacy-h"><span lang="zh">看见世界，不被世界窥看</span><span lang="en">See the world without being watched</span></h2>
-      <p class="measure-soft">
-        <span lang="zh">隐私不是附加项，而是这款应用的底层设计。所有视觉 AI 都在你的 iPhone 本地完成，画面默认不离开手机。</span>
-        <span lang="en">Privacy isn’t an add-on here — it’s the foundation. All vision AI runs locally on your iPhone, and camera frames don’t leave the phone by default.</span>
-      </p>
-      <ul class="privacy-list">
-        <li>
-          <span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span>
-          <div><strong><span lang="zh">视觉 AI 全部在设备本地运行</span><span lang="en">All vision AI runs on-device</span></strong><span><span lang="zh">摄像头画面默认不离开你的手机。</span><span lang="en">Camera frames stay on your phone by default.</span></span></div>
-        </li>
-        <li>
-          <span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span>
-          <div><strong><span lang="zh">只有你主动发起协助时才共享视频</span><span lang="en">Video is shared only when you start assistance</span></strong><span><span lang="zh">而且只共享给你亲自选择的人。</span><span lang="en">And only with the person you choose.</span></span></div>
-        </li>
-        <li>
-          <span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span>
-          <div><strong><span lang="zh">不做人脸身份识别</span><span lang="en">No face identification</span></strong><span><span lang="zh">不出售数据、不记录精确位置历史、不做广告画像。</span><span lang="en">No data selling, no precise-location history, no ad profiling.</span></span></div>
-        </li>
-        <li>
-          <span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span>
-          <div><strong><span lang="zh">后端、信令与 TURN 全部自托管</span><span lang="en">Self-hosted backend, signaling &amp; TURN</span></strong><span><span lang="zh">数据通路掌握在自己手里。</span><span lang="en">The whole data path is run by us, not third parties.</span></span></div>
-        </li>
+      <ul class="checks">
+        <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><div><strong><span lang="zh">视觉 AI 全部在设备本地运行</span><span lang="en">All vision AI runs on-device</span></strong><span><span lang="zh">摄像头画面默认不离开你的手机，不上传、不留存、不用于训练。</span><span lang="en">Camera frames stay on your phone by default — never uploaded, stored, or used for training.</span></span></div></li>
+        <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><div><strong><span lang="zh">只有你主动发起协助时才共享视频</span><span lang="en">Video is shared only when you start assistance</span></strong><span><span lang="zh">而且只共享给你亲自选择的人。</span><span lang="en">And only with the person you choose.</span></span></div></li>
+        <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><div><strong><span lang="zh">后端、信令与 TURN 全部自托管</span><span lang="en">Self-hosted backend, signaling &amp; TURN</span></strong><span><span lang="zh">数据通路掌握在自己手里。</span><span lang="en">The whole data path is run by us, not third parties.</span></span></div></li>
+        <li><span class="ck no"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M6 6 18 18M18 6 6 18"/></svg></span><div><strong><span lang="zh">我们不做的事</span><span lang="en">What we never do</span></strong><span><span lang="zh">不识别人脸、不出售数据、不收集精确位置历史、不做广告画像、无第三方追踪。</span><span lang="en">No face identification, no data selling, no precise-location history, no ad profiling, no third-party trackers.</span></span></div></li>
       </ul>
+      <p class="mt-md"><a href="https://beeurei-api.hikosphere.com/legal/" rel="noopener"><span lang="zh">阅读完整隐私政策 →</span><span lang="en">Read the full Privacy Policy →</span></a></p>
     </div>
-    <aside class="panel" aria-labelledby="consent-h">
-      <h3 id="consent-h">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#f2a900" stroke-width="2" aria-hidden="true" focusable="false" class="lock-ico"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-        <span lang="zh">你始终掌握主动权</span><span lang="en">You stay in control</span>
-      </h3>
-      <ul>
-        <li><span lang="zh">视频协助由你发起、向你选定的人，随时可结束。</span><span lang="en">Video assistance is started by you, to a person you pick, and can end any time.</span></li>
-        <li><span lang="zh">录制默认关闭，须通话双方明确同意，并加密保存、到期自动删除。</span><span lang="en">Recording is off by default, needs both parties’ explicit consent, and is stored encrypted then auto-deleted on expiry.</span></li>
-        <li><span lang="zh">紧急呼叫只附带尽力而为的粗略位置。</span><span lang="en">Emergency calls attach only a best-effort coarse location.</span></li>
-        <li><span lang="zh">没有第三方分析、追踪或广告 SDK。</span><span lang="en">No third-party analytics, trackers or ad SDKs.</span></li>
-      </ul>
-    </aside>
+    <div class="shot reveal"><div class="device"><img src="/assets/shots/legal.jpg" width="760" height="1652" alt="App 内法律与隐私中心 / In-app Legal &amp; Privacy centre" loading="lazy"></div></div>
+  </div>
+</section>
+
+<!-- ACCESSIBILITY -->
+<section id="access" class="band" aria-labelledby="access-h">
+  <div class="wrap">
+    <div class="commit reveal">
+      <span class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" focusable="false"><circle cx="12" cy="4" r="2"/><path d="M3 7h18M12 7v6M8 21l4-8 4 8"/></svg></span>
+      <div>
+        <p class="kicker"><span lang="zh">无障碍承诺</span><span lang="en">Accessibility commitment</span></p>
+        <h2 id="access-h"><span lang="zh">可以完全凭听觉与触觉使用</span><span lang="en">Fully usable by ear and touch</span></h2>
+        <p><span lang="zh">蜂之眼以 VoiceOver 优先设计，无需视力即可操作；界面与实时引导均为简体中文 / English 双语，文字大小跟随系统设置，关键安全功能默认开启。这个官网本身也遵循 WCAG 2.2 标准——因为为视障人士做的产品，连介绍它的网页都应当人人可用。</span><span lang="en">BeeUrEi is built VoiceOver-first and is fully operable without sight. Its interface and real-time guidance are bilingual (简体中文 / English), text scales with your system settings, and the key safety features are on by default. This website itself follows WCAG 2.2 — because a product made for blind people should have a page everyone can use, too.</span></p>
+      </div>
+    </div>
   </div>
 </section>
 
 <!-- ROLES + SIGN-IN -->
 <section id="roles" class="band alt" aria-labelledby="roles-h">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="sec-kicker"><span lang="zh">为彼此而建</span><span lang="en">Built for each other</span></p>
+  <div class="wrap feature">
+    <div class="copy reveal">
+      <p class="kicker"><span lang="zh">为彼此而建</span><span lang="en">Built for each other</span></p>
       <h2 id="roles-h"><span lang="zh">三种角色，一张互助的网</span><span lang="en">Three roles, one circle of support</span></h2>
-      <p><span lang="zh">视障用户、帮手与家人各有专属体验，连成一张可以彼此照应的网络。</span><span lang="en">Blind and low-vision users, helpers and family each get an experience of their own, woven into a network that looks out for one another.</span></p>
-    </div>
-    <div class="roles">
-      <article class="role">
-        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M3.5 12c2.8-3.2 14.2-3.2 17 0M3.5 12c2.8 3.2 14.2 3.2 17 0"/><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/></svg></span>
-        <h3><span lang="zh">视障 / 低视力用户</span><span lang="en">Blind / low-vision user</span></h3>
-        <p><span lang="zh">把摄像头变成感知工具：避障、识物、读字、求助，一切以语音为先。</span><span lang="en">Turns the camera into a sensing tool: avoid, identify, read and ask for help — voice-first throughout.</span></p>
-      </article>
-      <article class="role">
-        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/></svg></span>
-        <h3><span lang="zh">帮手 / 志愿者</span><span lang="en">Helper / volunteer</span></h3>
-        <p><span lang="zh">接到视频请求时伸出援手——看一眼、读一句、指个方向。</span><span lang="en">Lend a hand on a video request — take a look, read a line, point the way.</span></p>
-      </article>
-      <article class="role">
-        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M12 21s-7-4.6-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.4-7 10-7 10z"/></svg></span>
-        <h3><span lang="zh">家人</span><span lang="en">Family</span></h3>
-        <p><span lang="zh">保持联系并接收摔倒报警与紧急呼叫，安心不打扰。</span><span lang="en">Stay connected and receive fall alerts and emergency calls — peace of mind, without hovering.</span></p>
-      </article>
-    </div>
-
-    <div class="signin-block">
-      <h3 class="signin-h"><span lang="zh">多种登录方式</span><span lang="en">Several ways to sign in</span></h3>
-      <p class="signin-sub"><span lang="zh">选你最顺手的方式，无障碍优先。</span><span lang="en">Pick whatever suits you — accessibility first.</span></p>
+      <p class="measure46"><span lang="zh">视障用户、协助者与家人各有专属体验，连成可以彼此照应的网络。登录方式由你挑，无障碍优先。</span><span lang="en">Blind users, helpers and family each get their own experience, woven into a network that looks out for one another. Pick whatever sign-in suits you — accessibility first.</span></p>
       <div class="chips">
         <span class="chip"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M16.4 12.6c0-2 1.6-3 1.7-3a3.7 3.7 0 0 0-2.9-1.6c-1.2-.1-2.4.7-3 .7s-1.6-.7-2.6-.7A3.9 3.9 0 0 0 6.3 10c-1.4 2.5-.4 6.1 1 8.1.7 1 1.5 2.1 2.5 2 1-.1 1.4-.7 2.6-.7s1.5.7 2.6.6c1.1 0 1.8-1 2.5-2a8.6 8.6 0 0 0 1.1-2.3 3.6 3.6 0 0 1-2.2-3.1zM14.5 6.5c.6-.7 1-1.7.9-2.7-.8 0-1.9.6-2.5 1.3-.5.6-1 1.6-.9 2.6.9.1 1.8-.5 2.5-1.2z"/></svg><span lang="zh">通过 Apple 登录</span><span lang="en">Sign in with Apple</span></span>
         <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M4 7l8 6 8-6"/></svg><span lang="zh">邮箱验证码</span><span lang="en">Email code</span></span>
@@ -359,27 +263,72 @@
         <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg><span lang="zh">手机号</span><span lang="en">Phone number</span></span>
       </div>
     </div>
+    <div class="shot reveal"><div class="device"><img src="/assets/shots/signin.jpg" width="760" height="1652" alt="登录方式：Apple / 邮箱 / 通行密钥 / 密码 / 手机号 — Sign-in options" loading="lazy"></div></div>
   </div>
-</section>
 
-<!-- SAFETY -->
-<section id="safety" class="band" aria-labelledby="safety-h">
   <div class="wrap">
-    <div class="safety">
-      <svg class="warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M10.3 3.2 1.7 18a2 2 0 0 0 1.7 3h17.2a2 2 0 0 0 1.7-3L13.7 3.2a2 2 0 0 0-3.4 0z"/><path d="M12 9v5M12 17.5v.01"/></svg>
-      <div>
-        <h2 id="safety-h"><span lang="zh">重要安全声明</span><span lang="en">An important safety note</span></h2>
-        <p><span lang="zh">BeeUrEi 蜂之眼是一款<strong>增强感知的辅助工具，而非安全设备</strong>。它<strong>不能替代</strong>白手杖、导盲犬或定向行走（O&amp;M）训练，也<strong>无法检测出每一个障碍物</strong>。请始终把它作为现有出行方法的补充，而不是替代。</span>
-        <span lang="en">BeeUrEi is a perception-<strong>enhancing assistive tool, not a safety device</strong>. It does <strong>not replace</strong> a white cane, a guide dog, or orientation &amp; mobility training, and it <strong>cannot detect every obstacle</strong>. Always use it to complement your existing mobility methods — never to replace them.</span></p>
+    <div class="roles reveal stagger mt-lg" role="list">
+      <div class="role" role="listitem">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M3.5 12c2.8-3.2 14.2-3.2 17 0M3.5 12c2.8 3.2 14.2 3.2 17 0"/><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/></svg></span>
+        <h3><span lang="zh">视障 / 低视力用户</span><span lang="en">Blind / low-vision user</span></h3>
+        <p><span lang="zh">把摄像头变成感知工具：避障、识物、读字、求助，一切以语音为先。</span><span lang="en">Turns the camera into a sensing tool — avoid, identify, read and ask for help, voice-first.</span></p>
+      </div>
+      <div class="role" role="listitem">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/></svg></span>
+        <h3><span lang="zh">协助者 / 志愿者</span><span lang="en">Helper / volunteer</span></h3>
+        <p><span lang="zh">接到视频请求时伸出援手——看一眼、读一句、指个方向。</span><span lang="en">Lend a hand on a video request — take a look, read a line, point the way.</span></p>
+      </div>
+      <div class="role" role="listitem">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M12 21s-7-4.6-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.4-7 10-7 10z"/></svg></span>
+        <h3><span lang="zh">家人</span><span lang="en">Family</span></h3>
+        <p><span lang="zh">保持联系并接收摔倒报警与紧急呼叫，安心不打扰。</span><span lang="en">Stay connected and receive fall alerts and emergency calls — peace of mind, without hovering.</span></p>
       </div>
     </div>
   </div>
 </section>
 
+<!-- SAFETY -->
+<section class="band" aria-labelledby="safety-h">
+  <div class="wrap feature">
+    <div class="shot reveal"><div class="device"><img src="/assets/shots/safety.jpg" width="760" height="1652" alt="App 启动时的安全须知 / In-app Safety Notice" loading="lazy"></div></div>
+    <div class="copy reveal">
+      <div class="safety">
+        <svg class="warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M10.3 3.2 1.7 18a2 2 0 0 0 1.7 3h17.2a2 2 0 0 0 1.7-3L13.7 3.2a2 2 0 0 0-3.4 0z"/><path d="M12 9v5M12 17.5v.01"/></svg>
+        <div>
+          <h2 id="safety-h"><span lang="zh">重要安全声明</span><span lang="en">An important safety note</span></h2>
+          <p><span lang="zh">BeeUrEi 蜂之眼是一款<strong>增强感知的辅助工具，而非安全设备</strong>。它<strong>不能替代</strong>白手杖、导盲犬或定向行走（O&amp;M）训练，也<strong>无法检测出每一个障碍物</strong>。请始终把它作为现有出行方法的补充，而非替代。</span><span lang="en">BeeUrEi is a perception-<strong>enhancing assistive tool, not a safety device</strong>. It does <strong>not replace</strong> a white cane, a guide dog, or orientation &amp; mobility training, and it <strong>cannot detect every obstacle</strong>. Always use it to complement your existing mobility methods — never to replace them.</span></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq" class="band alt" aria-labelledby="faq-h">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <p class="kicker"><span lang="zh">常见问题</span><span lang="en">FAQ</span></p>
+      <h2 id="faq-h"><span lang="zh">你可能想知道</span><span lang="en">You might be wondering</span></h2>
+    </div>
+    <div class="faq reveal stagger">
+      <details><summary><span><span lang="zh">需要哪种 iPhone？</span><span lang="en">Which iPhone do I need?</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="ans"><span lang="zh">实时避障依赖 LiDAR，需要带激光雷达的 iPhone（iPhone 12 Pro 及更新的 Pro 机型）。其余功能（识别、远程协助、消息等）在更多机型上也可使用。</span><span lang="en">Real-time obstacle avoidance relies on LiDAR, so it needs a LiDAR-equipped iPhone (iPhone 12 Pro or newer Pro models). Other features — recognition, remote assistance, messaging — work on more devices.</span></div></details>
+      <details><summary><span><span lang="zh">需要联网吗？</span><span lang="en">Does it need the internet?</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="ans"><span lang="zh">避障与识别在本机离线运行，不需要联网。远程协助、消息与紧急通知是联网功能。</span><span lang="en">Obstacle avoidance and recognition run on-device and work offline. Remote assistance, messaging and emergency notifications use the network.</span></div></details>
+      <details><summary><span><span lang="zh">我的摄像头画面会被上传吗？</span><span lang="en">Are my camera frames uploaded?</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="ans"><span lang="zh">默认不会。所有视觉 AI 在本机完成；只有你主动向选定的人发起远程协助、并按住「显示画面」时，画面才会实时传输。</span><span lang="en">No, not by default. All vision AI happens on-device; frames are transmitted only when you actively start remote assistance with someone you choose and hold “Show My Camera”.</span></div></details>
+      <details><summary><span><span lang="zh">它能替代白手杖或导盲犬吗？</span><span lang="en">Can it replace a cane or guide dog?</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="ans"><span lang="zh">不能。它是增强感知的辅助工具，不是安全设备，无法检测出每一个障碍。请始终保留并优先使用白手杖、导盲犬与定向行走训练。</span><span lang="en">No. It is a perception-enhancing aid, not a safety device, and cannot detect every obstacle. Always keep and prioritise your white cane, guide dog and O&amp;M training.</span></div></details>
+      <details><summary><span><span lang="zh">多少钱？什么时候上架？</span><span lang="en">What does it cost? When is it out?</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="ans"><span lang="zh">蜂之眼采用 PolyForm 非商用许可，面向其服务的视障用户不收费。目前尚未上架 App Store，正在准备中，敬请关注。</span><span lang="en">BeeUrEi uses a PolyForm Noncommercial licence and is not charged to the blind users it serves. It isn’t on the App Store yet — it’s in preparation. Stay tuned.</span></div></details>
+    </div>
+  </div>
+</section>
+
 <!-- CTA -->
-<section class="band alt" aria-labelledby="cta-h">
-  <div class="wrap cta-band">
-    <span class="status-pill"><span class="dot" aria-hidden="true"></span><span lang="zh">即将上架 App Store</span><span lang="en">Coming soon to the App Store</span></span>
+<section class="band" aria-labelledby="cta-h">
+  <div class="wrap cta-band reveal">
+    <span class="status-pill"><span class="pdot" aria-hidden="true"></span><span lang="zh">即将上架 App Store</span><span lang="en">Coming soon to the App Store</span></span>
     <h2 id="cta-h"><span lang="zh">独立，是可以被技术守护的</span><span lang="en">Independence, quietly supported by technology</span></h2>
     <p><span lang="zh">蜂之眼尚未上架 App Store。如果你认同这件事，欢迎一起把它做得更好。</span><span lang="en">BeeUrEi isn’t on the App Store yet. If this resonates with you, we’d love to build it better together.</span></p>
     <div class="cta-row">
@@ -389,38 +338,22 @@
   </div>
 </section>
 
-<!-- MAKER -->
-<section id="maker" class="band" aria-labelledby="maker-h">
+<!-- ABOUT -->
+<section id="about" class="band alt" aria-labelledby="about-h">
   <div class="wrap">
-    <div class="sec-head">
-      <p class="sec-kicker"><span lang="zh">关于</span><span lang="en">About</span></p>
-      <h2 id="maker-h"><span lang="zh">由谁打造，遵循什么许可</span><span lang="en">Who makes it, and on what licence</span></h2>
-    </div>
-    <div class="maker">
-      <div class="panel">
-        <h3><span lang="zh">制作团队</span><span lang="en">The maker</span></h3>
-        <dl>
-          <dt><span lang="zh">机构</span><span lang="en">Organisation</span></dt>
-          <dd>Hiko Sphere 彦穹科技</dd>
-          <dt><span lang="zh">作者</span><span lang="en">Producer</span></dt>
-          <dd>Li Yanpei Hiko</dd>
-        </dl>
-        <p><span lang="zh">欢迎交流与合作。</span><span lang="en">Open to conversation and collaboration.</span></p>
-      </div>
-      <div class="panel">
-        <h3><span lang="zh">开源许可</span><span lang="en">Licence</span></h3>
+    <div class="sec-head reveal"><p class="kicker"><span lang="zh">关于</span><span lang="en">About</span></p><h2 id="about-h"><span lang="zh">由谁打造，遵循什么许可</span><span lang="en">Who makes it, and on what licence</span></h2></div>
+    <div class="about-grid reveal">
+      <div><h3><span lang="zh">制作团队</span><span lang="en">The maker</span></h3>
+        <dl><dt><span lang="zh">机构</span><span lang="en">Organisation</span></dt><dd>Hiko Sphere 彦穹科技</dd><dt><span lang="zh">作者</span><span lang="en">Producer</span></dt><dd>Li Yanpei Hiko</dd></dl>
+        <p><span lang="zh">欢迎交流与合作。</span><span lang="en">Open to conversation and collaboration.</span></p></div>
+      <div><h3><span lang="zh">开源许可</span><span lang="en">Licence</span></h3>
         <p class="lic-name">PolyForm Noncommercial 1.0.0</p>
-        <p><span lang="zh">可以自由使用、研究、修改与分发；但<strong>不得用于商业用途</strong>。</span><span lang="en">Free to use, study, modify and distribute — but <strong>no commercial use</strong>.</span></p>
-      </div>
-      <div class="panel">
-        <h3><span lang="zh">无障碍承诺</span><span lang="en">Accessibility commitment</span></h3>
-        <p><span lang="zh">App 以 VoiceOver 优先设计，可完全凭语音与触控操作，无需视力；界面与实时引导均为简体中文 / English 双语，文字大小跟随系统设置。</span><span lang="en">The app is built VoiceOver-first — fully operable by voice and touch, without sight. Interface and real-time guidance are bilingual (简体中文 / English) and text scales with your system settings.</span></p>
-      </div>
-      <div class="panel">
-        <h3><span lang="zh">法律文件</span><span lang="en">Legal documents</span></h3>
-        <p><span lang="zh">隐私政策、服务条款与最终用户许可协议（EULA）均可在线查阅。</span><span lang="en">The Privacy Policy, Terms of Service and EULA are all available online.</span></p>
-        <p class="mt-sm"><a href="https://beeurei-api.hikosphere.com/legal/" rel="noopener"><span lang="zh">查看法律文件 →</span><span lang="en">View legal documents →</span></a></p>
-      </div>
+        <p><span lang="zh">可以自由使用、研究、修改与分发；但<strong>不得用于商业用途</strong>。</span><span lang="en">Free to use, study, modify and distribute — but <strong>no commercial use</strong>.</span></p></div>
+      <div><h3><span lang="zh">无障碍</span><span lang="en">Accessibility</span></h3>
+        <p><span lang="zh">App 以 VoiceOver 优先、双语设计，可完全凭语音与触控操作。</span><span lang="en">The app is VoiceOver-first and bilingual, fully operable by voice and touch.</span></p></div>
+      <div><h3><span lang="zh">法律文件</span><span lang="en">Legal documents</span></h3>
+        <p><span lang="zh">隐私政策、服务条款与 EULA 均可在线查阅，App 内「法律与隐私」中心也可阅读。</span><span lang="en">Privacy Policy, Terms and EULA are available online and in the in-app “Legal &amp; Privacy” centre.</span></p>
+        <p class="mt-sm"><a href="https://beeurei-api.hikosphere.com/legal/" rel="noopener"><span lang="zh">查看法律文件 →</span><span lang="en">View legal documents →</span></a></p></div>
     </div>
   </div>
 </section>
@@ -432,11 +365,7 @@
     <div class="foot-grid">
       <div class="foot-brand">
         <a class="brand" href="#top" aria-label="BeeUrEi 蜂之眼 — 回到顶部 / back to top">
-          <svg class="logo" viewBox="0 0 100 100" role="img" aria-hidden="true" focusable="false">
-            <path d="M50 4 92 27v46L50 96 8 73V27z" fill="#f2a900"/>
-            <g fill="none" stroke="#14161f" stroke-width="5" stroke-linejoin="round"><ellipse cx="50" cy="50" rx="15" ry="20"/><path d="M35 44h30M35 56h30"/></g>
-            <path d="M50 30c-9 0-16-7-16-7s7 12 16 12 16-12 16-12-7 7-16 7z" fill="#14161f"/>
-          </svg>
+          <svg class="logo" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><path d="M50 4 92 27v46L50 96 8 73V27z" fill="#f2a900"/><g fill="none" stroke="#14161f" stroke-width="5" stroke-linejoin="round"><ellipse cx="50" cy="50" rx="15" ry="20"/><path d="M35 44h30M35 56h30"/></g><path d="M50 30c-9 0-16-7-16-7s7 12 16 12 16-12 16-12-7 7-16 7z" fill="#14161f"/></svg>
           <span class="brand-name fb-name">BeeUrEi <small class="fb-sub">蜂之眼</small></span>
         </a>
         <p><span lang="zh">让 iPhone 摄像头成为视障人士的实时之眼。隐私优先，端侧运行。</span><span lang="en">An iPhone camera that sees in real time for blind and low-vision people. Privacy-first, on-device.</span></p>
@@ -446,12 +375,12 @@
         <ul>
           <li><a href="#features"><span lang="zh">功能</span><span lang="en">Features</span></a></li>
           <li><a href="#privacy"><span lang="zh">隐私</span><span lang="en">Privacy</span></a></li>
+          <li><a href="#access"><span lang="zh">无障碍</span><span lang="en">Accessibility</span></a></li>
           <li><a href="#roles"><span lang="zh">角色与登录</span><span lang="en">Roles &amp; sign-in</span></a></li>
-          <li><a href="#safety"><span lang="zh">安全声明</span><span lang="en">Safety note</span></a></li>
-          <li><a href="#maker"><span lang="zh">关于与许可</span><span lang="en">About &amp; licence</span></a></li>
+          <li><a href="#faq"><span lang="zh">常见问题</span><span lang="en">FAQ</span></a></li>
         </ul>
       </nav>
-      <nav aria-label="法律与联系 / Legal and contact">
+      <nav aria-label="法律 / Legal">
         <h3><span lang="zh">法律</span><span lang="en">Legal</span></h3>
         <ul>
           <li><a href="https://beeurei-api.hikosphere.com/legal/" rel="noopener"><span lang="zh">隐私政策</span><span lang="en">Privacy Policy</span></a></li>
@@ -469,6 +398,5 @@
     </div>
   </div>
 </footer>
-
 </body>
 </html>

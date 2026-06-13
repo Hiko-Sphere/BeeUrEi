@@ -1,11 +1,13 @@
 import Foundation
 
 /// 法律文件（中英）：隐私政策 / 使用条款 / 最终用户许可协议（EULA）。
-/// ⚠️ 这是依据本 App 真实行为撰写的认真文本，但**不构成法律意见**；正式上架前请由法务/母语者审校。
+/// 由 BeeUrEi 真实行为撰写、经多轮对抗式审校的认真文本；**不构成法律意见**，正式上架前请由法务审定，
+/// 并补全占位项（提供者注册地址、管辖法域、必要时设独立隐私联系邮箱）。
 /// 与之配套的安全免责声明见 `DisclaimerText`（"辅助工具，非安全设备"）。
+/// 网页同源版本：https://beeurei.hikosphere.com/legal/
 enum LegalText {
     /// 文件版本/生效日期（更新内容时同步修改；客户端与网页一致）。
-    static let version = "1.0"
+    static let version = "2.0"
     static let effectiveDate = "2026-06-13"
 
     static func privacyPolicy(_ l: Language) -> String { l == .zh ? privacyZh : privacyEn }
@@ -13,232 +15,1250 @@ enum LegalText {
     static func eula(_ l: Language) -> String { l == .zh ? eulaZh : eulaEn }
 
     // MARK: - 隐私政策
-
     private static let privacyZh = """
-    BeeUrEi 隐私政策
-    生效日期：2026-06-13　·　版本 1.0
-    提供者：Hiko Sphere 彦穹科技（软件制作人 Li Yanpei Hiko）
+BeeUrEi 蜂之眼 隐私政策
+版本 2.0　·　生效日期 2026-06-13
 
-    我们把隐私当作安全的一部分来设计。核心原则：摄像头画面默认不离开你的手机；只有你主动发起远程协助时才把画面传给你选定的对方。
+我们把隐私当作安全的一部分来设计。BeeUrEi（蜂之眼）由 Hiko Sphere 彦穹科技（软件制作人 Li Yanpei Hiko）提供，是一款为视障/低视力人士打造的原生 iOS App，提供端侧实时避障、场景识别（看一看）、步行导航、一键远程真人协助、聊天/群聊、摔倒检测与紧急呼叫。
 
-    1. 端侧处理（画面不上云）
-    避障、识别物体、读文字、识别纸币、扫码、辨颜色、找物、"周围的人"、光线探测等所有视觉 AI 推理都在你的 iPhone 本地完成。相机画面与深度数据仅用于本地实时分析，不上传、不留存、不用于训练。
+本隐私政策说明我们处理哪些个人数据、为何处理、与谁共享、保留多久，以及你对自己数据享有的权利。我们的核心承诺很简单：摄像头画面默认不离开你的手机；只有在你于通话中主动按住「显示画面」时，画面才会实时传给你自己选定的对方。
 
-    2. 我们处理的数据
-    • 账号信息：用户名、昵称、头像；以及你选择绑定的邮箱、手机号、Apple ID。用于登录、找回账号与联系人查找。
-    • 关系与通讯：你建立的亲友/协助者绑定关系、聊天消息、通话路由信息（谁在什么时间呼叫谁）。消息为送达双方而存储。
-    • 推送令牌：用于来电与重要通知的 APNs / VoIP 令牌。
-    • 设备语言：用于选择播报与推送的语言。
-    • 粗粒度位置（可选）：发起求助时可附带"省/市/区"级别地点帮助协助者了解你大概在哪；导航与"我在哪"在本地使用精确定位但不上传精确坐标。
-    • 诊断（可选）：崩溃与错误报告用于修复问题。
+本文中英双语逐条对应、含义一致。如两种语言之间出现歧义，以更有利于保护用户的解读为准。
 
-    3. 我们不收集
-    我们不出售你的任何数据。我们不收集你的精确位置历史、不做广告画像、不对"周围的人"识别身份或存储人脸。
+重要安全提示：BeeUrEi 是「感知增强的辅助工具」，不是安全设备，也不是医疗设备，不能替代白手杖、导盲犬、定向行走（Orientation & Mobility, O&M）训练或你自己的判断；它无法检测出每一个障碍，也可能漏报、误报或延迟。摔倒检测与紧急呼叫为「尽力而为」，依赖网络、电量与权限，可能失败或延迟，不能替代拨打当地急救电话。完整的安全、紧急与远程协助免责声明，详见我们的《使用条款》「安全」一节及 App 内安全声明界面（你可在 App 的「设置 → 法律与安全」中打开），请在使用前阅读。
 
-    4. 第三方
-    • Sign in with Apple（可选登录方式，受 Apple 隐私政策约束）。
-    • 导航：海外用 Apple 地图；中国大陆用持牌图商（经我们后端转发，仅发送必要坐标）。
-    • 天气：Open-Meteo（仅发送降精度坐标，不含身份信息）。
-    • 推送：Apple APNs。
-    后端、信令与 TURN 中继均由我们自托管，数据存放在我们自己的服务器上。
+1. 我们是谁与本政策的适用范围
+数据控制者：Hiko Sphere 彦穹科技（软件制作人 Li Yanpei Hiko）。就本政策所述个人数据的处理目的与方式，我们是数据控制者（在适用法律下）。
 
-    5. 录制
-    通话默认不录制。仅在你与对方均明确同意时方可录制；录制内容加密保存、到期自动删除，仅用于留证/回看。
+本政策适用于 BeeUrEi 蜂之眼 iOS App、其后端服务，以及官网 beeurei.hikosphere.com（关于网站本身的说明见第 12 节）。
 
-    6. 你的权利
-    你可以随时在 App 内查看与修改账号信息，解除绑定关系，或永久删除账号（删除会移除你的账号、绑定关系与登录信息，不可恢复）。
+联系方式：
+• 邮箱：beeurei@163.com
+• 官网：beeurei.hikosphere.com
 
-    7. 儿童
-    本 App 不面向 13 周岁以下儿童，且不会故意收集其个人信息。
+如你对本政策或我们处理你数据的方式有任何疑问、请求或投诉，请通过上述邮箱联系我们。
 
-    8. 安全
-    传输使用 TLS；密码经加盐哈希存储；本机敏感数据（识别历史、商品库、教学物品等）启用文件保护。
+2. 端侧处理原则（画面不上云）
+端侧优先是 BeeUrEi 的基本设计。以下所有视觉 AI 推理都在你的 iPhone 本地完成：避障、识别物体、读字、识别纸币、扫码、辨色、找物、「周围的人」、光线探测。
 
-    9. 变更
-    隐私政策更新时我们会更新本页版本与生效日期，重大变更会在 App 内提示。
+相机画面与深度数据仅用于本地实时分析；默认不上传服务器、不留存、不用于训练任何模型。
 
-    10. 联系
-    隐私相关问题请联系 Hiko Sphere 彦穹科技。
-    """
+唯一的例外是远程协助：当你在通话中主动按住「显示画面」时，且仅在此期间，画面才会实时传给你自己选定的对方，用于让对方看到你眼前的场景以提供帮助。你松开后即停止传输。
 
+关于传输路径：通话媒体（音视频）默认以端到端方式在你与对方之间直接传输。当无法建立点对点直连时，通话媒体会经由我们自托管的 TURN 中继服务器在传输途中转发；该中继仅作转发之用，不存储、不查看通话内容。
+
+「周围的人」功能仅在本地估计是否有人及其大致方位，不识别任何人的身份、不存储人脸。
+
+3. 我们处理哪些数据（类别 → 目的 → 合法性基础 → 接收方）
+下面按类别列出我们处理的个人数据、对应目的、GDPR 第 6 条下的合法性基础，以及该类数据可能涉及的接收方。各接收方的具体用途与所在地见第 6、7 节。
+
+• 账号信息——用户名、昵称、头像、角色、注册时间、界面语言。目的：创建并运营你的账号、提供服务。密码以加盐哈希（bcrypt）方式存储，我们无法读取你的明文密码。合法性基础：合同必要（Art 6(1)(b)）。接收方：仅我们及基础设施提供方 AWS（托管）。
+
+• 可选标识——邮箱（含验证状态）、手机号、Sign in with Apple 标识。目的：登录、找回账号、按邮箱/手机号查找联系人。合法性基础：你提供这些可选标识属于同意（Art 6(1)(a)）；用其支撑你已请求的登录、找回与「按邮箱/手机号查找联系人」功能为合同必要（Art 6(1)(b)）——查找联系人本身是你主动请求的服务功能，故以合同必要为基础。可发现性提示：如果你提供了邮箱或手机号，已经知道它的其他用户便可据此找到你；你可随时在 App 内删除这些标识，以停止被他们据此发现。接收方：投递验证码/找回邮件时，收件邮箱会披露给 SMTP 邮件服务商（NetEase 163）；Sign in with Apple 标识涉及 Apple。
+
+• 认证数据——Passkey（WebAuthn 公钥与计数器）、刷新令牌（仅存哈希）、令牌版本（用于使旧令牌失效）。目的：安全登录与会话管理、即时吊销失窃凭证。合法性基础：合同必要（Art 6(1)(b)）与保障账号安全的正当利益（Art 6(1)(f)）。接收方：仅我们及 AWS（托管）。
+
+• 推送令牌——VoIP 令牌（PushKit，用于唤醒 App 通过 CallKit 系统来电界面接听来电）与普通 APNs 令牌（用于提醒）。目的：向你投递来电与通知。合法性基础：合同必要（Art 6(1)(b)）。接收方：Apple（APNs）。
+
+• 关系数据——亲友/协助者绑定（关系称谓、是否紧急联系人、确认状态）。绑定关系只有在对方确认后才会生效。目的：让你与亲友/协助者互相呼叫与协助。由于绑定必然涉及第二个人的数据，我们除以合同必要为基础外，还以「为双方共同请求的协助功能而处理」的正当利益为基础。合法性基础：合同必要（Art 6(1)(b)）与提供该协助功能的正当利益（Art 6(1)(f)）。接收方：仅我们及 AWS（托管）。
+
+• 通讯数据——聊天消息（文本/语音/图片/视频/位置；视频等大文件存于服务器磁盘）、群聊、已读回执、表情回应、通话路由记录（谁在何时呼叫谁及接听状态）。目的：把消息送达给收发双方、支撑通话。消息为送达双方而存储。合法性基础：对你所收发的通讯，处理基于合同必要（Art 6(1)(b)）；当处理涉及另一用户的数据时，则基于我们与其他用户「运营一个可正常工作的消息服务」的正当利益（Art 6(1)(f)）。接收方：消息内容不与任何处理者共享，仅在我们自托管的后端（部署于 AWS）上为送达双方而存储。
+
+• 安全与审核数据——拉黑、举报记录。目的：维护社区安全、防止骚扰与滥用、处理举报。合法性基础：保障平台与用户安全的正当利益（Art 6(1)(f)）。接收方：仅我们及 AWS（托管）。
+
+• 录制——见第 4 节。合法性基础：同意（Art 6(1)(a)）。接收方：录制内容不与任何处理者共享，仅存于我们自托管的后端（部署于 AWS）。
+
+• 位置数据——导航与「我在哪」在本地使用精确定位，但不上传精确坐标。当你发起求助或紧急呼叫时，可附带「省/市/区」级粗略位置帮助对方了解你大概在哪。目的：步行导航与让协助者/紧急联系人知道你大致方位。合法性基础：分享粗略位置属于同意（Art 6(1)(a)）；在紧急情形下，处理可基于你或他人的重大利益（Art 6(1)(d)）。接收方：为提供导航，必要坐标会发送给地图/天气服务商（见第 6 节）——海外用 Apple 地图、中国大陆用高德（AMap）、天气用 Open-Meteo（仅降精度坐标，无身份信息）；粗略求助位置会展示给你选定的协助者或紧急联系人。
+
+• 诊断数据（可选）——崩溃与错误报告。仅在你选择开启时才会收集。目的：发现并修复缺陷、提升稳定性。合法性基础：同意（Art 6(1)(a)）。如你不同意，我们不会收集崩溃或错误报告。接收方：错误监控服务商 Sentry（诊断数据中可能附带账号标识）。
+
+特殊类别数据（健康/残障）：我们的部分处理可能涉及与健康或残障相关的数据（GDPR 第 9 条下的特殊类别）——例如本服务专为视障/低视力人士设计这一事实本身，以及摔倒检测、紧急功能，或在远程协助中共享的画面可能附带反映健康状况的信息。出现此类处理时，我们依据你的明示同意（Art 9(2)(a)）；在紧急情形下，依据保护你或他人重大利益的必要（Art 9(2)(c)）。我们不会将此类数据用于任何其他目的。
+
+提供数据的必要性（Art 13(2)(e)）：创建账号需要用户名与密码；不提供则无法向你提供本服务。其余所有标识（邮箱、手机号、Sign in with Apple）均为可选——但若不提供，部分找回与联系人查找功能将无法使用。
+
+此外，在我们负有法律义务时（例如应有效的法律要求保存或披露数据），相应处理的合法性基础为遵守法律义务（Art 6(1)(c)）。
+
+4. 录制
+通话默认不录制。
+
+仅在通话双方均明确同意时方可开始录制。录制的元数据包含同意方与录制原因。
+
+录制内容到期后自动删除：默认保留 30 天（管理员可在合理范围内配置该保留期）。
+
+录制处理的合法性基础是同意（Art 6(1)(a)）。你可以随时拒绝录制。任一方均可在录制进行中将其终止；你也可以随时撤回对今后任何录制的同意。撤回同意不影响撤回前已在同意基础上完成的录制的合法性。
+
+5. 我们不做的事
+为消除疑虑，我们明确承诺：
+
+• 我们不出售你的任何数据。
+• 我们不收集你的精确位置历史。
+• 我们不为广告而对你做用户画像。
+• 「周围的人」功能不识别任何人的身份、不存储人脸。
+• 我们不嵌入任何第三方广告追踪 SDK。
+• 我们不做产生法律效果或对你有类似重大影响的自动化决策（包括用户画像）。
+
+6. 数据共享与第三方处理者
+我们不出售数据，也不为营销目的与他人共享数据。后端、信令服务与 TURN 中继均由我们自托管。我们仅在为提供服务所必需时，向以下第三方处理者或服务提供方披露必要的数据，且每一方都仅出于下述特定用途。
+
+为厘清各方实际接收的数据范围：消息内容、录制内容、联系人列表均不与任何处理者共享。各处理者所收到的数据严格限于——Apple：Sign in with Apple 登录标识与推送令牌；NetEase 163：收件邮箱；高德（AMap）：仅必要坐标；Open-Meteo：仅降精度坐标；Sentry：诊断数据（其中可能附带账号标识）；AWS：作为我们的基础设施提供方，承载全部托管数据。
+
+依据 CCPA/CPRA 及适用法律，为运营服务而向下列服务提供方披露数据，不构成「出售」，也不构成以营销为目的的「共享」。
+
+• Apple——Sign in with Apple（可选登录）、APNs（推送通知）、Apple 地图 / MapKit（海外步行导航）、CallKit（系统级来电界面）、App Store（App 分发）。受 Apple 的隐私政策约束。
+
+• 高德（AMap）——中国大陆持牌导航图商。为在中国大陆提供导航，相关请求经我们后端转发，仅发送必要的坐标，不含身份信息。
+
+• Open-Meteo——天气服务。仅发送降精度坐标，不含任何身份信息。
+
+• Sentry——错误监控。处理崩溃与错误诊断数据，用于定位与修复问题。
+
+• NetEase 163（SMTP 邮件服务商）——投递验证码与账号找回邮件。投递时会向其披露收件邮箱。
+
+• AWS——基础设施托管（见第 7 节）。
+
+部分上述处理者位于欧洲经济区（EEA）以外；相应的跨境传输机制见第 7 节。此外，在法律要求时，我们可能为遵守有效的法律程序、保护我们或他人的权利与安全而披露数据。
+
+7. 跨境传输
+我们的后端、信令与 TURN 中继自托管于 Amazon Web Services（AWS）位于日本东京区域（ap-northeast-1）的基础设施上。因此，你的数据主要在日本存储与处理。
+
+日本受欧盟充分性认定（EU adequacy decision）覆盖，即欧盟委员会已认定日本对个人数据提供与欧盟实质等同的保护水平（该认定附有适用于从欧盟传入数据的「补充规则」(Supplementary Rules)，并以日本《个人信息保护法》(APPI) 下的私营部门接收方为限）。AWS 作为基础设施提供方是处理者，充分性保护源于该法律框架而非仅服务器所在地。因此，从欧洲经济区向日本的传输一般无需额外的传输保障措施。向位于其他地区的处理者的转传输，见下文。
+
+当接收方位于欧洲经济区（EEA）以外且不受充分性认定覆盖时（例如位于美国的 Sentry 与 Apple，或位于中国大陆的持牌图商），我们依据 GDPR 第 46 条采取适当保障措施——主要是欧盟委员会的标准合同条款（Standard Contractual Clauses, SCC）——或在适用时援引第 49 条的减损（derogation），例如为履行你所请求的导航等服务所必需的传输。中国大陆并无欧盟充分性认定：向高德（AMap）发送的仅为必要的降精度坐标、不含任何身份信息，且该传输依上述第 46 条保障措施或第 49 条减损进行；我们不将后端转发理解为消除了该传输的跨境性质。你可通过 beeurei@163.com 索取相关保障措施的副本。
+
+如你使用我们的服务时身处其他法域，你的数据可能被传输至上述托管地，并可能由第 6 节所列处理者在其各自运营地处理；我们会依适用法律采取适当保障措施。
+
+8. 留存期限
+我们只在实现相应目的所必需的期间内保留个人数据。
+
+• 账号数据——保留至你删除账号为止。
+• 消息与通话记录——在账号有效期内保留，用于向收发双方持续提供会话；你删除相关内容或删除账号时，即从你这一侧移除（关于已送达给对方的副本，见下文）。
+• 录制——按保留期自动删除（默认 30 天，见第 4 节）。
+• 诊断数据（如你已开启）——保留至多 90 天后删除。
+• 验证码——短时有效，过期即失效。
+• 备份——按滚动周期覆盖，覆盖周期不超过 35 天。
+
+关于账号删除与对方持有的副本：当你永久删除账号时，我们会移除你的账号、你建立的绑定关系、你这一侧收发的消息存储，以及你的登录凭证（此操作不可恢复）。但对于已经送达给其他参与者的消息（无论一对一还是群聊），这些消息会作为对方账号中各自的副本继续存在于对方账号内，我们无法替对方删除；这与「为送达双方而处理通讯」所依据的合同必要/正当利益基础一致。对方持有的副本，按对方账号自身的留存与删除规则处理。
+
+某些数据可能因法律义务或在备份中按上述周期被短暂保留，随后删除。
+
+9. 安全措施
+我们采取与风险相称的技术与组织措施保护你的数据，包括：
+
+• 传输加密——所有客户端与服务器之间的通信使用 TLS。
+• 密码保护——密码以加盐哈希（bcrypt）存储，绝不以明文保存。
+• 令牌保护——刷新令牌仅以哈希形式存储；支持 Passkey（WebAuthn）实现抗钓鱼登录。
+• 即时吊销——JWT 携带令牌版本，可即时吊销失窃或失效的会话。
+• 限流——对敏感接口实施速率限制以抵御滥用。
+• 端侧保护——本机敏感数据（如识别历史、商品库、教学物品）启用 iOS 文件保护。
+• 通话中继——当无法直连时，通话媒体经由我们自托管的 TURN 中继仅在传输途中转发，不存储、不查看其内容（见第 2 节）。
+
+没有任何系统能保证绝对安全，但我们持续努力保护你的数据。
+
+10. 你的权利及如何行使
+在 App 内，你可以随时查看与修改账号信息、解除亲友/协助者绑定，以及永久删除账号（不可恢复）。
+
+在 GDPR 下，你享有以下权利：访问、更正、删除（被遗忘权）、限制处理、数据可携、反对处理，以及在处理基于同意时撤回同意（撤回不影响撤回前处理的合法性）。你也有权向监管机构投诉（见第 14 节）。
+
+加州居民（CCPA/CPRA）：如你是美国加州居民，你享有以下权利：知情与访问我们收集的个人信息、删除、更正、拒绝「出售」或「共享」你的个人信息、限制对敏感个人信息的使用，以及不因行使这些权利而受到歧视。法定披露事项如下：我们收集的个人信息类别、来源类别、业务/商业目的以及接收方类别，详见第 3 节与第 6 节；各类别的留存期限或判定标准详见第 8 节。我们在过去十二（12）个月内未曾「出售」或「共享」个人信息，并且我们不进行此类出售或共享。我们不提供涉及个人信息的财务激励。你可以委托授权代理人代你提交请求；为核实身份，我们可能要求代理人提供你的书面授权证明。
+
+如何行使：你可在 App 内直接完成查看、修改、解绑与删除账号；其他权利请通过 beeurei@163.com 联系我们。为保护你的账号，我们可能需要先核实你的身份。我们将在适用法律规定的期限内回应。行使这些权利免费（除非请求明显缺乏依据或过度）。
+
+11. 儿童
+BeeUrEi 不面向儿童。我们的服务不面向 13 周岁以下儿童（依美国《儿童在线隐私保护法》COPPA），在适用 GDPR-K 的地区不面向 16 周岁以下儿童。
+
+我们不会故意收集儿童的个人信息。如你认为有儿童在未获适当同意的情况下向我们提供了个人信息，请通过 beeurei@163.com 联系我们，我们将及时删除相关信息。
+
+12. 本网站的本地存储（无 Cookie 追踪）
+我们的官网 beeurei.hikosphere.com 仅使用浏览器的 localStorage 记住你的两项偏好：界面语言，以及深色/浅色主题。
+
+本网站不使用追踪 Cookie，也不加载任何第三方分析脚本或广告脚本。这些偏好仅存于你的浏览器本地，不会发送给我们或任何第三方。
+
+13. 本政策的变更
+我们可能不时更新本隐私政策，以反映服务、法律或行业实践的变化。
+
+更新时，我们会在本页同步修改版本号与生效日期。如有重大变更，我们会在 App 内提示你。建议你定期查看本政策。继续使用本服务即表示你已知悉更新后的政策。
+
+如某项变更涉及依赖你同意的处理（例如录制、粗略位置分享、诊断数据），我们会重新征求你的同意，而不会以「继续使用」替代之。
+
+14. 联系我们与投诉权
+如对本隐私政策、我们的数据实践或你的权利有任何疑问或请求，请联系：
+
+• 数据控制者：Hiko Sphere 彦穹科技（软件制作人 Li Yanpei Hiko）
+• 邮箱：beeurei@163.com
+• 官网：beeurei.hikosphere.com
+
+投诉权：如你认为我们对你个人数据的处理违反了适用的数据保护法，你有权向你所在国家或地区的数据保护监管机构投诉。我们也欢迎你先直接联系我们，以便我们尝试为你解决问题。
+
+管辖法律：除非适用法律另有强制性规定，本政策受提供者注册地法律管辖。这不影响你依据经常居住地强制性消费者保护法所享有的权利。〔上架前须知：此处「提供者注册地」为占位，发布前须替换为 Hiko Sphere 彦穹科技的真实注册法域；在替换前不得向用户发布。〕
+"""
     private static let privacyEn = """
-    BeeUrEi Privacy Policy
-    Effective: 2026-06-13　·　Version 1.0
-    Provider: Hiko Sphere (Producer: Li Yanpei Hiko)
+BeeUrEi Privacy Policy
+Version 2.0　·　Effective 2026-06-13
 
-    We treat privacy as part of safety. Core principle: your camera frames do not leave your phone by default; video is shared only when you actively start remote assistance with someone you choose.
+We treat privacy as part of safety. BeeUrEi is a native iOS app for blind and low-vision users, provided by Hiko Sphere (software producer: Li Yanpei Hiko). It offers on-device real-time obstacle avoidance, scene recognition ("Look"), walking navigation, one-tap live human assistance, chat and group chat, fall detection, and emergency calling.
 
-    1. On-device processing (frames stay on device)
-    All vision AI — obstacle avoidance, object/text/banknote/barcode/color recognition, find-my-things, "people nearby", light detection — runs locally on your iPhone. Camera and depth data are used only for local real-time analysis; they are not uploaded, stored, or used for training.
+This Privacy Policy explains what personal data we process, why, with whom we share it, how long we keep it, and the rights you have over your data. Our core commitment is simple: your camera frames do not leave your phone by default; video is shared in real time only when you actively press and hold "Show video" during a call, and only with the person you yourself have chosen.
 
-    2. Data we process
-    • Account: username, display name, avatar; plus any email, phone, or Apple ID you choose to link. Used for sign-in, account recovery, and contact lookup.
-    • Relationships & communication: the family/helper links you create, chat messages, and call-routing metadata (who called whom and when). Messages are stored to deliver them to both parties.
-    • Push tokens: APNs / VoIP tokens for incoming calls and important notifications.
-    • Device language: to choose the language of speech and notifications.
-    • Coarse location (optional): when you request help, an approximate province/city/district may be attached so a helper knows roughly where you are. Navigation and "Where am I" use precise location locally but do not upload precise coordinates.
-    • Diagnostics (optional): crash and error reports to fix problems.
+The Chinese and English versions of this document correspond clause by clause and carry the same meaning. Where any ambiguity arises between the two languages, the interpretation more protective of users prevails.
 
-    3. What we do not collect
-    We do not sell any of your data. We do not collect your precise location history, build advertising profiles, or identify people or store faces in "people nearby".
+Important safety note: BeeUrEi is a perception-enhancing assistive tool. It is not a safety device and not a medical device, and it does not replace a white cane, a guide dog, Orientation & Mobility (O&M) training, or your own judgment; it cannot detect every obstacle and may miss, mis-report, or be delayed. Fall detection and emergency calling are best-effort, depend on network, battery, and permissions, may fail or be delayed, and do not replace calling your local emergency number. The full safety, emergency, and remote-assistance disclaimers are set out in the "Safety" section of our Terms of Service and in the in-app safety notice (which you can open under "Settings → Legal & Safety" in the app); please read them before use.
 
-    4. Third parties
-    • Sign in with Apple (optional sign-in, governed by Apple's privacy policy).
-    • Navigation: Apple Maps overseas; a licensed map provider in mainland China (proxied via our backend, sending only the necessary coordinates).
-    • Weather: Open-Meteo (only reduced-precision coordinates, no identity).
-    • Push: Apple APNs.
-    Backend, signaling, and TURN relay are self-hosted; data resides on our own servers.
+1. Who we are and the scope of this policy
+Data controller: Hiko Sphere (software producer: Li Yanpei Hiko). For the purposes and means of processing the personal data described here, we are the data controller (under applicable law).
 
-    5. Recording
-    Calls are not recorded by default. Recording requires explicit consent from both parties; recordings are encrypted, auto-deleted on expiry, and used only for evidence/review.
+This policy applies to the BeeUrEi iOS app, its backend services, and the official website beeurei.hikosphere.com (the website itself is addressed in Section 12).
 
-    6. Your rights
-    You can view and edit your account, remove links, or permanently delete your account at any time in the app (deletion removes your account, links, and sign-in data and cannot be undone).
+Contact:
+• Email: beeurei@163.com
+• Website: beeurei.hikosphere.com
 
-    7. Children
-    The app is not directed to children under 13 and does not knowingly collect their personal information.
+If you have any question, request, or complaint about this policy or how we handle your data, please contact us at the email above.
 
-    8. Security
-    Transport uses TLS; passwords are salted-hashed; on-device sensitive data (recognition history, product memory, taught items) uses file protection.
+2. On-device processing principle (frames stay on device)
+On-device-first is fundamental to BeeUrEi's design. All of the following vision AI inference runs locally on your iPhone: obstacle avoidance, object recognition, text reading, banknote recognition, barcode scanning, color identification, finding objects, "people nearby," and light detection.
 
-    9. Changes
-    We update the version and effective date here when the policy changes, and prompt in-app for material changes.
+Camera frames and depth data are used only for local, real-time analysis. By default they are not uploaded to any server, not retained, and not used to train any model.
 
-    10. Contact
-    For privacy questions, contact Hiko Sphere.
-    """
+The only exception is remote assistance: when, and only while, you actively press and hold "Show video" during a call, your camera feed is streamed in real time to the person you yourself have chosen, so they can see the scene in front of you and help. Streaming stops the moment you release.
+
+On the transport path: call media (audio and video) is sent directly between you and the other party, peer-to-peer, by default. When a direct peer-to-peer connection is not possible, call media is relayed through our self-hosted TURN server in transit only; the relay forwards the media and does not store or inspect call content.
+
+The "people nearby" feature only locally estimates whether people are present and roughly where; it does not identify anyone and does not store faces.
+
+3. What data we process (category → purpose → legal basis → recipients)
+Below we list, by category, the personal data we process, the purpose, the legal basis under Article 6 GDPR, and the recipients that may be involved for that category. Each recipient's specific purpose and location are set out in Sections 6 and 7.
+
+• Account information — username, display name, avatar, role, registration time, interface language. Purpose: create and operate your account and provide the service. Passwords are stored as salted hashes (bcrypt); we cannot read your plaintext password. Legal basis: performance of a contract (Art 6(1)(b)). Recipients: us only and our infrastructure provider AWS (hosting).
+
+• Optional identifiers — email (with verification status), phone number, Sign in with Apple identifier. Purpose: sign-in, account recovery, and finding contacts by email/phone. Legal basis: consent for providing these optional identifiers (Art 6(1)(a)); using them to support the sign-in, recovery, and contact-finding features you requested is performance of a contract (Art 6(1)(b)) — finding contacts is itself a service feature you actively request, so it rests on contract necessity. Discoverability note: if you provide an email or phone number, other users who already know it can find you by it; you can remove these identifiers in the app at any time to stop being discoverable by them. Recipients: when verification-code/recovery emails are delivered, the recipient email address is disclosed to our SMTP email provider (NetEase 163); the Sign in with Apple identifier involves Apple.
+
+• Authentication data — passkeys (WebAuthn public key and counter), refresh tokens (stored only as hashes), and token version (used to invalidate old tokens). Purpose: secure sign-in and session management, and instant revocation of compromised credentials. Legal basis: performance of a contract (Art 6(1)(b)) and our legitimate interest in account security (Art 6(1)(f)). Recipients: us only and AWS (hosting).
+
+• Push tokens — VoIP push tokens (PushKit), used to wake the app to deliver incoming calls via the CallKit system call interface, and standard APNs tokens (for reminders). Purpose: deliver incoming calls and notifications to you. Legal basis: performance of a contract (Art 6(1)(b)). Recipients: Apple (APNs).
+
+• Relationship data — family/helper links (relationship label, whether an emergency contact, confirmation status). A link becomes active only after the other person confirms it. Purpose: let you and your family/helpers call and assist one another. Because a link inherently involves a second person's data, we rely not only on contract necessity but also on our legitimate interest in providing the assistance feature both users requested. Legal basis: performance of a contract (Art 6(1)(b)) and our legitimate interest in providing that assistance feature (Art 6(1)(f)). Recipients: us only and AWS (hosting).
+
+• Communication data — chat messages (text/voice/image/video/location; large files such as video are stored on server disk), group chats, read receipts, emoji reactions, and call-routing records (who called whom, when, and the answer status). Purpose: deliver messages to both sender and recipient and support calls. Messages are stored in order to deliver them to both parties. Legal basis: for the communications you send and receive, processing rests on performance of a contract (Art 6(1)(b)); to the extent processing involves another user's data, it rests on our and other users' legitimate interest in operating a functioning messaging service (Art 6(1)(f)). Recipients: message content is not shared with any processor; it is stored only on our self-hosted backend (deployed on AWS) to deliver it to both parties.
+
+• Safety and moderation data — block and report records. Purpose: keep the community safe, prevent harassment and abuse, and handle reports. Legal basis: our legitimate interest in the safety of the platform and its users (Art 6(1)(f)). Recipients: us only and AWS (hosting).
+
+• Recordings — see Section 4. Legal basis: consent (Art 6(1)(a)). Recipients: recordings are not shared with any processor; they are stored only on our self-hosted backend (deployed on AWS).
+
+• Location data — navigation and "Where am I" use precise location locally, but precise coordinates are not uploaded. When you start a help request or emergency call, an approximate province/city/district-level location may be attached so the other party knows roughly where you are. Purpose: walking navigation and letting helpers/emergency contacts know your rough whereabouts. Legal basis: consent for sharing the coarse location (Art 6(1)(a)); in an emergency, processing may rely on your or another person's vital interests (Art 6(1)(d)). Recipients: to provide navigation, the necessary coordinates are sent to map/weather providers (see Section 6) — Apple Maps overseas, AMap (Gaode) in mainland China, and Open-Meteo for weather (reduced-precision coordinates only, no identity); your coarse help-request location is shown to the helper or emergency contact you have chosen.
+
+• Diagnostic data (optional) — crash and error reports. Collected only if you opt in. Purpose: detect and fix defects and improve stability. Legal basis: consent (Art 6(1)(a)). If you do not consent, we do not collect crash or error reports. Recipients: our error-monitoring provider Sentry (diagnostic data may incidentally include an account identifier).
+
+Special-category data (health/disability): some of our processing may involve data concerning health or disability (a special category under Article 9 GDPR) — for example, the very fact that this service is designed for blind and low-vision users, as well as fall detection, emergency features, or information that incidentally reflects a health condition in video shared during remote assistance. Where this occurs, we rely on your explicit consent (Art 9(2)(a)) and, in emergencies, on the necessity of protecting your or another person's vital interests (Art 9(2)(c)). We do not use such data for any other purpose.
+
+Whether providing data is required (Art 13(2)(e)): a username and password are required to create an account; without them the service cannot be provided. All other identifiers (email, phone, Sign in with Apple) are optional — though some recovery and contact-finding features will be unavailable without them.
+
+In addition, where we are under a legal obligation (for example, to retain or disclose data in response to a valid legal request), the legal basis for that processing is compliance with a legal obligation (Art 6(1)(c)).
+
+4. Recording
+Calls are not recorded by default.
+
+Recording can begin only when both parties to the call have given explicit consent. The recording metadata includes who consented and the reason for recording.
+
+Recordings are automatically deleted on expiry: the default retention is 30 days (an administrator may configure this retention period within reasonable limits).
+
+The legal basis for processing recordings is consent (Art 6(1)(a)). You may decline recording at any time. Either party may stop an in-progress recording, and you may withdraw your consent to any future recording at any time. Withdrawal does not affect the lawfulness of recording already made with consent before withdrawal.
+
+5. What we do not do
+For the avoidance of doubt, we expressly commit that:
+
+• We do not sell any of your data.
+• We do not collect a history of your precise location.
+• We do not build advertising profiles of you.
+• The "people nearby" feature does not identify anyone and does not store faces.
+• We do not embed any third-party advertising or tracking SDKs.
+• We do not carry out automated decision-making, including profiling, that produces legal effects concerning you or similarly significantly affects you.
+
+6. Data sharing and third-party processors
+We do not sell data and do not share data for others' marketing. Our backend, signaling service, and TURN relay are self-hosted. We disclose only the necessary data to the following third-party processors or service providers, solely as needed to provide the service, and each only for the specific purpose stated.
+
+To make clear what each party actually receives: no message content, recordings, or contact lists are shared with any processor. The data each processor receives is strictly limited to — Apple: the Sign in with Apple sign-in identifier and push tokens; NetEase 163: the recipient email address; AMap (Gaode): the necessary coordinates only; Open-Meteo: reduced-precision coordinates only; Sentry: diagnostic data (which may incidentally include an account identifier); AWS: as our infrastructure provider, all hosted data.
+
+Disclosing data to the service providers below to operate the service is not a "sale," and not a "share" for marketing purposes, under CCPA/CPRA or applicable law.
+
+• Apple — Sign in with Apple (optional sign-in), APNs (push notifications), Apple Maps / MapKit (overseas walking navigation), CallKit (system-level incoming-call screen), and the App Store (app distribution). Governed by Apple's privacy policy.
+
+• AMap (Gaode) — licensed mainland-China navigation map provider. To provide navigation in mainland China, the relevant requests are proxied through our backend and only the necessary coordinates are sent, with no identity information.
+
+• Open-Meteo — weather service. Only reduced-precision coordinates are sent, with no identity information.
+
+• Sentry — error monitoring. Processes crash and error diagnostic data to locate and fix problems.
+
+• NetEase 163 (SMTP email provider) — delivers verification-code and account-recovery emails. Your recipient email address is disclosed to it for delivery.
+
+• AWS — infrastructure hosting (see Section 7).
+
+Some of the processors above are located outside the European Economic Area (EEA); the corresponding cross-border transfer mechanisms are set out in Section 7. In addition, where required by law, we may disclose data to comply with valid legal process and to protect the rights and safety of ourselves or others.
+
+7. International transfers
+Our backend, signaling, and TURN relay are self-hosted on Amazon Web Services (AWS) infrastructure in the Tokyo region of Japan (ap-northeast-1). Your data is therefore primarily stored and processed in Japan.
+
+Japan benefits from an EU adequacy decision, meaning the European Commission has recognized that Japan provides a level of protection for personal data essentially equivalent to that within the EU (subject to the "Supplementary Rules" applicable to data transferred from the EU, and limited to private-sector recipients covered by Japan's Act on the Protection of Personal Information (APPI)). AWS, as our infrastructure provider, acts as a processor; the adequacy protection flows from that legal framework, not merely from server location. Transfers of personal data from the European Economic Area to Japan therefore generally do not require additional transfer safeguards. Onward transfers to processors located elsewhere are addressed below.
+
+Where a recipient is outside the EEA and not covered by an adequacy decision (for example Sentry and Apple in the United States, or the licensed map provider in mainland China), we rely on appropriate safeguards under Article 46 GDPR — primarily the European Commission's Standard Contractual Clauses (SCCs) — or, where applicable, a derogation under Article 49 (such as transfers necessary for the performance of the navigation or other service you requested). Mainland China is not covered by any EU adequacy decision: only the necessary reduced-precision coordinates, with no identity information, are sent to AMap (Gaode), and that transfer is made under the Article 46 safeguards or the Article 49 derogation described above; we do not treat proxying through our backend as removing the cross-border character of that transfer. You may request a copy of the relevant safeguards at beeurei@163.com.
+
+If you use our service from another jurisdiction, your data may be transferred to the hosting location above and may be processed by the processors listed in Section 6 in their respective places of operation; we apply appropriate safeguards as required by applicable law.
+
+8. Retention periods
+We keep personal data only for as long as necessary to fulfill the relevant purpose.
+
+• Account data — kept until you delete your account.
+• Messages and call records — kept for the life of the account to keep delivering the conversation to both parties; removed from your side when you delete the relevant content or delete your account (for copies already delivered to the other party, see below).
+• Recordings — automatically deleted per the retention period (default 30 days; see Section 4).
+• Diagnostic data (if you have opted in) — retained for up to 90 days, then deleted.
+• Verification codes — short-lived and expire after a brief validity window.
+• Backups — overwritten on a rolling cycle not exceeding 35 days.
+
+Account deletion and copies held by the other party: when you permanently delete your account, we remove your account, the links you created, the store of messages you sent and received on your side, and your sign-in credentials (this cannot be undone). However, messages already delivered to other participants (whether one-to-one or in a group) remain in those recipients' accounts as their own copies, which we cannot delete on their behalf; this is consistent with the contract / legitimate-interest basis for processing communications in order to deliver them to both parties. Copies held by other parties are governed by those parties' own retention and deletion.
+
+Some data may be retained briefly due to legal obligations, or in backups on the cycle stated above, and then deleted.
+
+9. Security measures
+We apply technical and organizational measures appropriate to the risk to protect your data, including:
+
+• Encryption in transit — all communication between clients and servers uses TLS.
+• Password protection — passwords are stored as salted hashes (bcrypt) and never in plaintext.
+• Token protection — refresh tokens are stored only as hashes; passkeys (WebAuthn) are supported for phishing-resistant sign-in.
+• Instant revocation — JWTs carry a token version, allowing stolen or invalidated sessions to be revoked immediately.
+• Rate limiting — sensitive endpoints are rate-limited to resist abuse.
+• On-device protection — sensitive on-device data (such as recognition history, product memory, and taught items) uses iOS file protection.
+• Call relay — when a direct connection is not possible, call media is forwarded through our self-hosted TURN relay in transit only, without storing or inspecting its content (see Section 2).
+
+No system can be guaranteed absolutely secure, but we work continuously to protect your data.
+
+10. Your rights and how to exercise them
+In the app, you can at any time view and edit your account information, remove family/helper links, and permanently delete your account (this cannot be undone).
+
+Under the GDPR, you have the rights to: access, rectification, erasure ("right to be forgotten"), restriction of processing, data portability, objection to processing, and—where processing is based on consent—to withdraw consent (withdrawal does not affect the lawfulness of processing before withdrawal). You also have the right to lodge a complaint with a supervisory authority (see Section 14).
+
+California residents (CCPA/CPRA): if you are a California resident, you have the rights to know about and access the personal information we collect, delete it, correct it, opt out of the "sale" or "sharing" of your personal information, limit the use of sensitive personal information, and not be discriminated against for exercising these rights. The required disclosures are as follows: the categories of personal information we collect, the categories of sources, the business/commercial purposes, and the categories of recipients are described in Sections 3 and 6; the retention period or criteria for each category are described in Section 8. We have not "sold" or "shared" personal information in the preceding twelve (12) months, and we do not engage in such sale or sharing. We do not offer financial incentives involving personal information. You may use an authorized agent to submit requests on your behalf; to verify identity, we may require the agent to provide proof of your written authorization.
+
+How to exercise: you can view, edit, unlink, and delete your account directly in the app; for other rights, contact us at beeurei@163.com. To protect your account, we may first need to verify your identity. We will respond within the time limits set by applicable law. Exercising these rights is free (unless a request is manifestly unfounded or excessive).
+
+11. Children
+BeeUrEi is not directed to children. Our service is not directed to children under 13 (under the U.S. Children's Online Privacy Protection Act, COPPA), nor to children under 16 in regions where GDPR-K applies.
+
+We do not knowingly collect personal information from children. If you believe a child has provided us personal information without appropriate consent, please contact us at beeurei@163.com and we will delete it promptly.
+
+12. The website's local storage (no cookie tracking)
+Our website beeurei.hikosphere.com uses only the browser's localStorage to remember two preferences: your interface language and your dark/light theme.
+
+The website uses no tracking cookies and loads no third-party analytics or advertising scripts. These preferences are stored locally in your browser only and are not sent to us or any third party.
+
+13. Changes to this policy
+We may update this Privacy Policy from time to time to reflect changes in our service, the law, or industry practice.
+
+When we do, we update the version number and effective date on this page. For material changes, we will prompt you in-app. We encourage you to review this policy periodically. Continued use of the service means you are aware of the updated policy.
+
+Where a change concerns processing that relies on your consent (for example recording, coarse-location sharing, or diagnostic data), we will ask for your consent again rather than rely on continued use.
+
+14. Contact us and your right to complain
+If you have any question or request about this Privacy Policy, our data practices, or your rights, please contact:
+
+• Data controller: Hiko Sphere (software producer: Li Yanpei Hiko)
+• Email: beeurei@163.com
+• Website: beeurei.hikosphere.com
+
+Right to complain: if you believe our processing of your personal data infringes applicable data protection law, you have the right to lodge a complaint with the data protection supervisory authority in your country or region. We also welcome you to contact us first so we can try to resolve the matter for you.
+
+Governing law: except where applicable law mandates otherwise, this policy is governed by the laws of the Provider's place of registration. This does not affect the rights you have under the mandatory consumer-protection law of your place of habitual residence. [Pre-release note: "the Provider's place of registration" is a placeholder and must be replaced with the actual registered jurisdiction of Hiko Sphere before publication; do not ship to users until it is filled in.]
+"""
 
     // MARK: - 使用条款
-
     private static let termsZh = """
-    BeeUrEi 使用条款
-    生效日期：2026-06-13　·　版本 1.0
+BeeUrEi 蜂之眼 使用条款
+版本 2.0　·　生效日期 2026-06-13
 
-    欢迎使用 BeeUrEi（"本 App"），由 Hiko Sphere 彦穹科技提供。使用即表示你同意本条款与《隐私政策》。
+生效日期：2026-06-13　·　版本 2.0
+提供者：Hiko Sphere 彦穹科技（软件制作人 Li Yanpei Hiko）
+官网：beeurei.hikosphere.com　·　联系邮箱：beeurei@163.com
 
-    1. 服务说明
-    本 App 为视障人士提供实时避障、步行导航、场景识别与远程真人协助。
+欢迎使用 BeeUrEi 蜂之眼（以下称"本 App"或"服务"）。本《使用条款》（以下称"本条款"）是你与 Hiko Sphere 彦穹科技（以下称"我们""本提供者"）之间具有法律约束力的协议，约束你对本 App 及相关服务的访问与使用。
 
-    2. 安全须知（最重要）
-    本 App 是"感知增强的辅助工具"，不是"安全保障设备"。它不能替代白手杖、导盲犬或定向行走（O&M）训练，也不保证检测出所有障碍（尤其是低矮路桩、台阶边缘、坑洞、玻璃门、悬空物、移动车辆）。摄像头/LiDAR 受光线、发热、设备性能影响，可能漏报或误报。请始终保留并优先使用白手杖/导盲犬，切勿将本 App 作为出行的唯一依据。你自行承担使用风险。
+本 App 通过 iPhone 摄像头为视障/低视力人士提供端侧实时避障、场景识别（看一看）、步行导航、一键远程真人协助、聊天/群聊、摔倒检测与紧急呼叫等功能。
 
-    3. 账号
-    你需对账号下的活动负责，并对登录凭证保密。禁止冒用他人身份、共享账号用于滥用。
+请在使用前完整阅读本条款，并特别注意第 3 节"安全须知"、第 4 节"紧急与摔倒功能免责"、第 7 节"远程协助与用户互动免责"、第 12 节"担保免责"与第 13 节"责任限制"——这些条款限定了你的安全预期与我们的法律责任，对你的权利至关重要。
 
-    4. 行为规范
-    使用远程协助、聊天与求助队列时，禁止骚扰、欺诈、传播违法或侵权内容。我们可对违规账号封禁，并提供举报与拉黑机制。
+本条款与《隐私政策》《最终用户许可协议（EULA）》共同构成你与我们之间的完整协议。若你不同意本条款，请勿使用本 App。
 
-    5. 远程协助与志愿者
-    协助者/志愿者为独立个人，其建议仅供参考；对其行为我们不作担保。请勿在通话中泄露敏感信息（如密码、验证码）。
+为方便你理解，本文中以非加粗、易读的语言书写；但其法律效力不因表述通俗而减损。
 
-    6. 用户内容
-    你对自己发送的消息/图片/位置负责。为提供服务我们会按《隐私政策》存储与传输这些内容。
+1. 接受条款与资格（年龄要求）
+通过下载、安装、注册账号或以任何方式使用本 App，你即表示已阅读、理解并同意接受本条款及《隐私政策》《EULA》的约束。
 
-    7. 知识产权与许可
-    本软件依 PolyForm Noncommercial 1.0.0 许可（可非商业使用/学习/修改/分发，禁止商用）。BeeUrEi 名称与品牌资产归 Hiko Sphere 彦穹科技所有。
+你声明并保证：你具有订立有约束力合同的法律行为能力；你不在适用法律或贸易管制名单禁止使用本服务的地区或人员之列。
 
-    8. 免责与责任限制
-    在法律允许的最大范围内，本 App 按"现状"提供，不附带任何明示或暗示担保；对因使用或无法使用本 App 造成的任何损害，我们不承担责任。
+年龄要求：本 App 不面向且不得由 13 周岁以下儿童（依美国《儿童在线隐私保护法》COPPA）使用；在适用《通用数据保护条例》儿童条款（GDPR-K）的地区，不得由 16 周岁以下（或当地法律规定的更低数字同意年龄以下）的人使用。使用本 App 即表示你确认自己已达到上述适用的最低年龄。我们不会故意收集前述儿童的个人信息；若我们获知存在此类信息，将予以删除。
 
-    9. 终止
-    你可随时停止使用并删除账号。违反条款的账号可被暂停或终止。
+监护人代为设置：若某位低于数字同意年龄的人由其父母或法定监护人代为设置或使用本 App，则该父母或监护人须代该儿童作出并负责相关同意，并对其使用承担监护或代理责任，确保其使用符合本条款——此与《通用数据保护条例》第 8 条相一致。同样地，若你代未成年人或受照护者协助设置或使用本 App，你须为其使用承担监护或代理责任。
 
-    10. 变更与适用法律
-    我们可更新条款并在 App 内提示。条款的解释与争议解决适用提供者所在地法律。
+2. 服务说明
+本 App 是为视障/低视力人士设计的端侧原生 iOS 应用，主要功能包括：
 
-    11. 联系
-    Hiko Sphere 彦穹科技。
-    """
+• 实时避障：通过摄像头（及设备深度/LiDAR）在本机分析前方障碍并以语音/震动提示。
+• 场景识别（看一看）：本地识别物体、读取文字、识别纸币、扫码、辨色、找物、探测光线、感知"周围的人"；其中"周围的人"仅探测是否有人存在，不识别任何人的身份、也不存储人脸。
+• 步行导航与"我在哪"：基于本机精确定位提供步行路线与方位播报。
+• 一键远程真人协助：将你与你选定的亲友或协助者接通，进行实时语音通话；仅当你主动按住"显示画面"时才把摄像头画面实时传给对方。
+• 聊天与群聊：文本、语音、图片、视频、位置消息及群组沟通。
+• 摔倒检测与紧急呼叫：在检测到疑似摔倒或你主动触发时，向你的紧急联系人发起呼叫/提醒。
 
+所有视觉 AI 推理均在你的 iPhone 本地完成。本 App 持续迭代，我们可在不实质削弱核心无障碍功能的前提下增改功能。本服务现阶段免费提供，且依其开源许可不得被商用收费。
+
+3. 安全须知（最重要——请务必先读）
+【重要安全提示——务必阅读】
+
+请在依赖本 App 出行前，认真阅读并理解本节。本节内容对你的人身安全至关重要。
+
+BeeUrEi 是"感知增强的辅助工具"，它不是安全设备，也不是医疗设备。它不能替代、也不旨在替代白手杖、导盲犬、定向行走（O&M）训练、明眼人协助，或你自己的判断与既有出行方法。
+
+本 App 无法检测出每一个障碍。它尤其可能无法可靠识别：低矮路桩、台阶边缘、下沉路面/坑洞、玻璃门与透明物体、悬空或头部高度的障碍物、快速移动或正在驶近的车辆。其表现受光线、天气、设备发热与性能、镜头遮挡或污损、网络状况及电量影响，可能出现漏报、误报或延迟。
+
+导航与方位信息可能不准确或过时；切勿盲目跟随本 App 的指引走入车流、跨越路口或进入任何危险区域。任何提示都应以你自身的感知与判断为最终依据。
+
+【请始终保留白手杖与导盲犬】你必须始终随身保留并优先使用白手杖、导盲犬及你既有的、经过训练的出行方法。本 App 仅作为这些方法的补充，绝不能成为你出行的唯一依据。
+
+在法律允许的最大范围内，你理解并同意：你自担使用本 App 进行移动与出行的全部风险。
+
+4. 紧急与摔倒功能免责
+【紧急功能并非急救系统——务必阅读】
+
+摔倒检测与紧急呼叫为"尽力而为"的便利功能，并非可靠的生命安全或医疗警报系统。
+
+这些功能依赖多项不受我们完全控制的条件，包括但不限于：网络连接、设备电量、系统与应用权限授予、推送服务（含 Apple APNs/VoIP）及第三方的及时送达、传感器读数的准确性，以及你的紧急联系人是否在线并作出响应。因此，摔倒检测可能漏检或误触发，紧急呼叫可能失败、延迟或无法送达。
+
+本功能不能替代、也不旨在替代专业的医疗警报系统、医疗看护服务或拨打当地官方急救电话。
+
+【遇紧急情况请直接拨打官方急救号码】遇到紧急情况，请始终直接拨打你所在地的官方急救号码（如中国大陆 120/110/119，欧盟 112，美国 911 等），不要依赖本 App 代为求助。
+
+在法律允许的最大范围内，对于摔倒检测或紧急呼叫未能触发、未能送达、延迟或不准确所导致的任何后果，我们不承担责任。
+
+5. 账号与安全
+使用部分功能需注册账号。你可使用用户名加密码、Sign in with Apple，或在你的设备上设置 Passkey 登录。我们将密码以加盐哈希（bcrypt）方式存储，刷新令牌仅以哈希形式存储，并采用带令牌版本的机制以便即时吊销旧凭证。
+
+你须对账号下发生的所有活动负责，并对你的登录凭证（密码、验证码、Passkey 等）妥善保密。你应提供真实、准确的注册信息，并在变动时及时更新。
+
+你不得冒用他人身份、未经授权访问他人账号、将账号转让或共享给他人用于滥用，亦不得以自动化手段批量创建账号。
+
+如发现账号被未经授权使用或存在安全事件，请立即通过 beeurei@163.com 与我们联系并更改凭证。
+
+你可随时在 App 内查看与修改账号信息、解除亲友/协助者绑定，或永久删除账号（删除不可恢复，详见《隐私政策》）。
+
+6. 行为规范（可接受使用）
+在使用远程协助、聊天/群聊、求助队列及其他互动功能时，你同意遵守以下规范。你不得：
+
+• 骚扰、威胁、辱骂、跟踪或欺凌他人，或针对他人的残障、种族、性别、宗教等进行歧视性攻击。
+• 实施欺诈、钓鱼、诈骗，或试图骗取他人的密码、验证码、钱款或敏感信息。
+• 发布、传输违法、淫秽、暴力、仇恨或侵犯他人知识产权、隐私权或其他权利的内容。
+• 利用本服务协助实施任何违法或侵权行为，或危害他人人身安全。
+• 干扰、破坏或试图未经授权访问本服务、服务器或相关网络；进行逆向攻击、注入、压力测试、爬取或规避安全与限流措施。
+• 利用自动化程序滥用功能，或将服务用于其开源许可禁止的商业目的。
+
+我们提供举报与拉黑机制。我们可（但无义务）审核被举报内容，并对违反本节的账号采取移除内容、警告、限制功能、暂停或终止等措施。对于面向志愿者/协助者的滥用行为，我们尤其会从严处理，以保护脆弱用户群体。
+
+7. 远程协助与用户互动免责
+远程协助功能将你与亲友或协助者/志愿者接通。这些协助者是独立的个人，并非我们的雇员、代理人或代表。
+
+他们提供的描述、判断与建议仅供你参考，可能存在错误、遗漏或延迟。我们不对任何协助者的身份、资质、行为、可靠性或其所给建议的准确性作出保证，也不对你与其互动所产生的任何后果负责。是否采纳协助者的建议，由你自行判断并承担风险——尤其涉及出行、过马路、用药或其他安全相关决定时。
+
+在通话中，请勿向任何人透露你的密码、验证码、银行或支付信息等敏感内容；任何索要此类信息的请求都应被视为可疑。仅当你主动按住"显示画面"时，摄像头画面才会传给你选定的对方；请仅向你信任的人展示画面，并注意画面中可能包含的隐私信息。
+
+协助者义务：协助者对其在协助过程中所见所闻（包括你的画面、语音及其中可能涉及的位置、健康等敏感信息），仅得用于为你提供协助，不得录制、留存、转发或以其他方式滥用；任何此类行为均违反第 6 节，可能导致账号被终止。
+
+本 App 内用户之间的聊天、群聊及其他互动内容由用户自行产生，不代表我们的立场；我们不对用户生成内容的合法性、真实性或安全性负责，但保留依第 6 节进行审核与处置的权利。
+
+8. 用户内容与你授予我们的有限许可
+"用户内容"指你通过本 App 创建、上传、发送或传输的内容，包括聊天与群聊中的文本、语音、图片、视频、位置消息，以及（经双方明确同意时的）通话录制等。
+
+你保留对自己用户内容的全部权利。你声明并保证：你拥有发布与传输该内容的必要权利，且该内容不违反法律或本条款。
+
+为运营、提供与维护本服务之必要目的，你授予我们一项有限的、非独占的、免许可费的、全球范围的许可，使我们得以承载、存储、复制、传输与展示你的用户内容——例如将消息投递给指定的接收方、在群聊参与者之间显示、为送达双方而存储消息（视频等大文件存于我们的服务器磁盘），以及在经双方同意时按保留期保存通话录制。与《隐私政策》一致，通话录制仅在通话双方明确同意时方可进行，并在其保留期届满时自动删除。
+
+本许可仅为运营服务之目的而存在，不授予我们将你的内容用于广告、对外出售或训练 AI 模型的权利；当你删除内容或账号、或内容按其保留期到期时，本许可在技术可行范围内随之终止（备份与法律义务所需的有限保留除外）。
+
+你对自己发送的全部用户内容负责。我们不对用户内容承担背书责任，但可依第 6 节及适用法律进行审核与处置。
+
+9. 隐私
+我们把隐私当作安全的一部分来设计。所有视觉 AI 推理均在你的 iPhone 本地完成；相机画面与深度数据不会上传至或存储于我们的服务器，也绝不用于训练。摄像头画面唯一离开你设备的情形，是在通话中实时、端到端地传给你选定的对方，且仅在你主动按住"显示画面"期间——在无法建立直连时，该传输会经我们自托管的 TURN 中继转发。
+
+我们如何收集、使用、披露与保护你的个人信息，以及你依《通用数据保护条例》（GDPR）、《加州消费者隐私法/加州隐私权法》（CCPA/CPRA）等享有的权利，均详见我们的《隐私政策》。该政策已通过引用并入本条款，构成其组成部分。
+
+《隐私政策》就每一类数据，载明其在 GDPR 项下处理的合法性基础；国际数据传输的依据（包括：我们基础设施所托管的日本，受欧盟委员会充分性认定（adequacy decision）覆盖）；各类数据的保留期限；以及第三方处理者的完整清单及其用途。
+
+你可行使访问、更正、删除、限制、可携、反对与撤回同意等权利，并（在加州）享有知情、删除、更正、拒绝出售/共享、限制敏感个人信息使用与不受歧视等权利，具体如《隐私政策》所述；其中账号的查看、修改与删除可在 App 内完成，其余请求可发送至 beeurei@163.com。
+
+《隐私政策》可在本 App 内及官网 beeurei.hikosphere.com 查阅。
+
+10. 第三方服务
+本 App 的部分功能依赖第三方服务。这些服务由其各自的提供方按其自身条款与隐私政策运营，我们不对其控制或负责。这些第三方包括：
+
+• Apple：Sign in with Apple（可选登录）、APNs（推送）、Apple 地图/MapKit（海外导航）、CallKit（系统来电）、App Store（分发）。
+• 中国大陆导航：持牌图商（高德/AMap），经我们后端转发，仅发送必要坐标。
+• 天气：Open-Meteo（仅降精度坐标，无身份信息）。
+• 错误监控：Sentry（处理崩溃/错误诊断数据）。
+• 邮件投递：经 SMTP 服务商（NetEase 163）投递验证码/找回邮件（投递时向其披露收件邮箱）。
+• 基础设施：AWS（托管）。我们的后端、信令与 TURN 中继均自托管于 AWS 东京区域（ap-northeast-1，日本）。日本受欧盟委员会充分性认定（adequacy decision）覆盖，该认定为个人数据自欧盟/欧洲经济区向我们基础设施的传输提供合法依据；来自其他地区的传输则依据《隐私政策》所述的保障措施。
+
+各第三方处理者的用途与数据范围详见《隐私政策》。你使用相关功能即受相应第三方条款约束；对于第三方服务的可用性、表现或行为，我们不作担保、不承担责任。
+
+11. 知识产权与 PolyForm 非商用许可
+本 App 的软件代码依 PolyForm Noncommercial 1.0.0 许可发布。在该许可下，你可出于非商业目的使用、学习、修改与分发本软件；但禁止任何商业用途，包括出售本软件，或向其所服务的视障用户收费。PolyForm Noncommercial 1.0.0 的完整条款随软件提供，并以该许可文本为准。
+
+据此，非营利组织、慈善机构、教育机构、政府机关等将本 App 免费提供给视障用户使用，属于该许可项下允许的非商业用途；而出售本软件或向用户收取费用则不被允许。
+
+你须保留软件中的版权、署名与许可声明，不得移除或遮蔽。
+
+"BeeUrEi""蜂之眼"名称、标识、徽标及其他品牌资产归 Hiko Sphere 彦穹科技所有，不在上述开源许可范围内；未经我们事先书面许可，你不得将其用于可能引起混淆或暗示背书的用途。
+
+除许可与法律明确授予者外，本条款不向你转让任何对软件或品牌的权利。第三方组件（如 WebRTC、各 SDK 等）受其各自许可约束。
+
+12. 担保免责（按"现状"提供）
+在适用法律允许的最大范围内，本 App 及服务按"现状"与"现有"提供，不附带任何明示、默示或法定的担保。
+
+我们明确否认一切默示担保，包括但不限于：适销性、特定用途适用性、所有权、不侵权，以及由交易过程或行业惯例所产生的担保。我们不保证本 App 将不间断、及时、安全、无错误或无中断地运行，不保证缺陷将被修正，不保证识别、检测、导航、紧急或协助功能的准确性、完整性、可靠性或对你特定目的的适配性。
+
+你理解：本 App 是辅助工具而非安全或医疗设备（见第 3、4 节），其输出可能不准确、不完整或延迟，你应始终结合自身判断与既有出行方法使用。
+
+部分法域不允许排除某些默示担保，故上述部分排除可能对你不适用；此时相关担保在该法域法律允许的最短期限内有效。本节不影响你居住地强制性消费者保护法赋予的、不可被合同排除的法定权利。
+
+13. 责任限制
+在适用法律允许的最大范围内：
+
+对于因使用或无法使用本 App 或服务而产生或与之相关的任何间接、附带、特殊、后果性、惩戒性或惩罚性损害，或任何利润、收入、数据、商誉或预期节省的损失，我们及我们的关联方、许可人与供应商概不承担责任，无论该损害基于合同、侵权（含过失）、严格责任或其他法律理论，亦无论我们是否被告知此类损害的可能性。
+
+在不影响第 3、4、7 节免责的前提下，对于因依赖本 App 的避障、识别、导航、摔倒检测、紧急呼叫或远程协助功能而导致的人身伤害、财产损失或其他损害，我们在法律允许范围内不承担责任。
+
+在任何情况下，对于因本条款或本 App 产生的全部索赔，我们的累计总责任上限为：（a）你在产生责任的事件发生前十二（12）个月内为本 App 实际向我们支付的金额；或（b）五十美元（US$50，或等值当地货币）——两者以较高者为准。鉴于本服务现阶段免费提供，上述（a）项金额通常为零，因而适用的责任上限将为五十美元（US$50）。
+
+上述排除与上限是你我之间风险分配的基础，也是我们得以免费提供本服务的前提。
+
+某些法域不允许排除或限制某些损害（例如对人身伤亡的责任、欺诈或重大过失的责任，或消费者法定权利项下的责任）。在此类法域内，我们的责任仅在该法律允许的最大范围内被排除或限制，本节不影响你不可被合同排除的强制性法定权利。为免疑义，上述责任上限与排除均不适用于法律不允许限制的人身伤亡责任。
+
+14. 赔偿
+在适用法律允许的范围内，对于因下列情形引起或与之相关的任何第三方索赔、要求、诉讼、损失、责任、损害、成本与合理费用（含合理律师费），你同意为我们及我们的关联方、制作人、许可人与代理人进行抗辩、赔偿并使其免受损害：
+
+• 你对本 App 或服务的使用违反本条款或适用法律；
+• 你的用户内容，或你通过本服务发布、发送或传输的内容；
+• 你对他人权利（包括知识产权、隐私权或其他权利）的侵犯；
+• 你在远程协助或聊天/群聊中与其他用户或协助者的互动。
+
+我们保留对受你赔偿事项进行独家抗辩与控制的权利（由你承担费用），此时你应配合我们的抗辩。未经我们事先书面同意，你不得就任何此类索赔达成会使我们承担责任或义务的和解。
+
+本节为消费者用户在其居住地强制性消费者保护法所限定的范围内适用，不扩张超出该等法律允许的赔偿义务。
+
+15. 终止
+你可随时停止使用本 App，并在 App 内永久删除你的账号；删除将移除你的账号、绑定关系与登录信息，且不可恢复（具体见《隐私政策》）。
+
+若你违反本条款（尤其是第 6 节行为规范），或为保护其他用户（特别是脆弱用户与志愿者）、维护服务安全或遵守法律之必要，我们可在合理情况下事先或事后通知你，暂停、限制或终止你对本服务的访问或你的账号。对于严重违规或法律要求的情形，我们可立即终止。
+
+终止后，本条款中依其性质应继续有效的条款仍然有效，包括但不限于：第 8 节（已授予的许可，在为运营服务所必需的范围内）、第 11 至 14 节（知识产权、担保免责、责任限制、赔偿）、第 16 节（适用法律与争议解决）及第 18 节（一般条款）。
+
+终止不免除你在终止前已产生的义务，亦不影响你依强制性消费者保护法享有的权利。
+
+16. 适用法律与争议解决
+本条款的订立、解释、效力与争议解决，受提供者注册地（the Provider's place of registration）的法律管辖，不适用其法律冲突规则。
+
+重要保留：上述法律选择不剥夺、亦不影响你依你经常居住地的强制性消费者保护法所享有的、不可被合同排除的权利与保护。若该等强制性法律提供更高保护，则以其为准。
+
+争议解决：在提起正式法律程序前，你同意先通过 beeurei@163.com 与我们善意协商，争取友好解决。多数问题可经此快速处理。
+
+若协商未果，争议应提交至提供者注册地有管辖权的法院解决；但若适用的强制性消费者法赋予你在自己居住地法院起诉或要求适用特定争议解决机制的权利，则该等权利予以保留。
+
+在法律允许的范围内，任何争议应以个体名义提出，而非作为集体诉讼、集体仲裁或代表人诉讼的一部分；此项约定不适用于强制性法律不允许放弃集体救济的法域。
+
+17. Apple App Store 附加条款
+若你通过 Apple App Store 获取本 App，则以下附加条款适用，并在与本条款其余部分冲突时就该等冲突事项优先适用：
+
+• 许可范围：本 App 依一项不可转让的许可授予你在你拥有或控制的 Apple 品牌设备上使用，并须遵守《Apple 媒体服务条款》中的使用规则（如适用，包括家人共享/家庭购买共享）。
+• 本条款仅在你与提供者（Hiko Sphere 彦穹科技）之间订立，而非与 Apple Inc.（"Apple"）订立；提供者独自对本 App 及其内容负责。
+• Apple 没有任何对本 App 提供维护与支持服务的义务。
+• 在适用法律允许范围内，Apple 对本 App 不承担任何担保义务；若本 App 未能符合任何适用的担保，你可通知 Apple，Apple 将（如适用）退还你为本 App 支付的购买价款（鉴于本 App 免费提供，任何此类退款实际为零）；在法律允许的最大范围内，Apple 对本 App 不承担其他任何担保义务。
+• 对于你或第三方就本 App 提出的任何索赔（包括但不限于产品责任索赔、本 App 不符合任何适用法律或监管要求的索赔，以及消费者保护、隐私或类似法律下的索赔，包括在适用时与本 App 所使用的 Apple 框架相关的索赔），由提供者而非 Apple 负责处理。
+• 对于任何第三方主张本 App 或你对本 App 的占有与使用侵犯其知识产权的索赔，由提供者而非 Apple 负责调查、抗辩、和解与了结。
+• 你声明你不在受美国政府禁运或被列为"支持恐怖主义"的国家，且不在任何美国政府禁止或限制的名单上。
+• 你使用本 App 还须遵守适用的第三方使用条款。
+• Apple 及其子公司是本条款的第三方受益人，并有权（且视为已接受该权利）作为第三方受益人对你执行本条款。
+
+本节与本 App《EULA》中相应的 Apple 条款相呼应；如有不一致，在不减损本节 Apple 所要求条款的前提下，以更有利于保护用户的条款为准。
+
+18. 一般条款
+完整协议：本条款连同《隐私政策》《EULA》及通过引用并入的内容，构成你与我们就本 App 与服务达成的完整协议，并取代此前所有相关口头或书面的约定。
+
+可分割性：若本条款的任何条款被有管辖权的机构认定为无效或不可执行，该条款将在必要的最小范围内予以限缩或剔除，其余条款仍完全有效。
+
+弃权：我们未行使或未执行本条款任一权利或条款，不构成对该权利或条款的放弃；任何放弃仅在以书面作出并由我们签署时方为有效。
+
+转让：未经我们事先书面同意，你不得转让或转移本条款下的任何权利或义务；任何擅自转让无效。我们可在合理通知后，将本条款转让予关联方或因合并、收购、重组而产生的继受方，且不得因此实质削弱你的权利。
+
+不存在合伙关系：本条款不在你我之间设立任何合伙、合资、雇佣或代理关系。
+
+通知：我们可通过 App 内提示、推送通知，或发送至你绑定邮箱的方式向你发出通知；你可通过 beeurei@163.com 向我们发出通知。
+
+语言：本条款以中英双语提供，两种语言旨在含义一致。若因翻译产生歧义，应在不违反你居住地强制性法律的前提下，按最能体现条款目的与本协议整体精神的方式解释。
+
+不可抗力：对于因超出我们合理控制的事件（如自然灾害、战争、网络或电力中断、第三方服务故障、政府行为等）导致的履行迟延或失败，我们不承担责任。
+
+19. 条款变更
+我们可不时更新本条款，以反映功能、法律或实践的变化。更新时，我们会修改本页顶部的版本号与生效日期，并在客户端与官网保持一致。
+
+对于重大变更，我们会在生效前以合理方式提前通知你，例如在 App 内显著提示或通过你绑定的邮箱告知，使你有机会审阅。
+
+变更生效后你继续使用本 App，即视为接受更新后的条款；若你不同意，请停止使用并可删除账号。我们不会以追溯方式剥夺你依先前条款已经取得的权利。
+
+建议你定期查阅本条款。历史版本可经 beeurei@163.com 索取。
+
+20. 联系我们
+如对本条款有任何疑问、意见或行使权利的请求，请通过以下方式联系我们：
+
+提供者：Hiko Sphere 彦穹科技（软件制作人 Li Yanpei Hiko）
+电子邮箱：beeurei@163.com
+官网：beeurei.hikosphere.com
+
+我们会在合理期限内回复你的咨询。涉及隐私权利行使的请求，另见《隐私政策》中的相应说明。
+"""
     private static let termsEn = """
-    BeeUrEi Terms of Service
-    Effective: 2026-06-13　·　Version 1.0
+BeeUrEi Terms of Service
+Version 2.0　·　Effective 2026-06-13
 
-    Welcome to BeeUrEi ("the App"), provided by Hiko Sphere. By using it you agree to these Terms and the Privacy Policy.
+Effective date: 2026-06-13　·　Version 2.0
+Provider: Hiko Sphere (Producer: Li Yanpei Hiko)
+Website: beeurei.hikosphere.com　·　Contact: beeurei@163.com
 
-    1. The service
-    The App provides real-time obstacle avoidance, walking navigation, scene recognition, and live human assistance for blind and low-vision users.
+Welcome to BeeUrEi (the "App" or the "Service"). These Terms of Service (the "Terms") form a legally binding agreement between you and Hiko Sphere ("we," "us," the "Provider") and govern your access to and use of the App and related services.
 
-    2. Safety notice (most important)
-    The App is a perception-enhancing assistive tool, not a safety device. It does not replace a white cane, a guide dog, or Orientation & Mobility (O&M) training, and it cannot detect every obstacle (especially low bollards, step edges, potholes, glass doors, overhanging objects, moving vehicles). Camera/LiDAR are affected by lighting, heat, and device performance and may miss or misreport. Always keep and prioritize your white cane/guide dog, and never rely on the App as your only means of getting around. You use it at your own risk.
+The App uses your iPhone camera to provide on-device real-time obstacle avoidance, scene recognition ("Look"), walking navigation, one-tap live human assistance, chat and group chat, fall detection, and emergency calling for blind and low-vision users.
 
-    3. Accounts
-    You are responsible for activity under your account and for keeping your credentials confidential. Impersonation or account sharing for abuse is prohibited.
+Please read these Terms in full before using the App, paying particular attention to Section 3 (Safety Notice), Section 4 (Emergency & Fall-Detection Disclaimer), Section 7 (Remote-Assistance & User-Interaction Disclaimer), Section 12 (Disclaimer of Warranties), and Section 13 (Limitation of Liability). These sections define your safety expectations and our legal responsibility and are critical to your rights.
 
-    4. Acceptable use
-    When using remote assistance, chat, and the help queue, harassment, fraud, and unlawful or infringing content are prohibited. We may ban violators and provide reporting and blocking tools.
+Together with the Privacy Policy and the End-User License Agreement (EULA), these Terms constitute the entire agreement between you and us. If you do not agree to these Terms, do not use the App.
 
-    5. Remote assistance & volunteers
-    Helpers/volunteers are independent individuals; their guidance is advisory and we make no warranty about their conduct. Do not disclose sensitive information (passwords, verification codes) during calls.
+For your understanding, this document is written in plain, readable language; its legal effect is not diminished by its accessibility.
 
-    6. User content
-    You are responsible for messages/images/locations you send. We store and transmit them to provide the service per the Privacy Policy.
+1. Acceptance & Eligibility (Age)
+By downloading, installing, registering an account, or otherwise using the App, you confirm that you have read, understood, and agree to be bound by these Terms, the Privacy Policy, and the EULA.
 
-    7. Intellectual property & license
-    The software is licensed under PolyForm Noncommercial 1.0.0 (noncommercial use/study/modify/distribute; no commercial use). The BeeUrEi name and brand assets belong to Hiko Sphere.
+You represent and warrant that you have the legal capacity to enter into a binding contract, and that you are not a person or in a territory barred from using the Service under applicable law or trade-control lists.
 
-    8. Disclaimer & limitation of liability
-    To the maximum extent permitted by law, the App is provided "as is" without warranties of any kind, and we are not liable for any damages arising from use of or inability to use the App.
+Age requirement: The App is not directed to and may not be used by children under 13 (per the U.S. Children's Online Privacy Protection Act, COPPA). In regions where the GDPR children's provisions (GDPR-K) apply, it may not be used by anyone under 16 (or the lower age of digital consent set by local law). By using the App, you confirm that you meet the applicable minimum age above. We do not knowingly collect personal information from such children; if we learn we have, we will delete it.
 
-    9. Termination
-    You may stop using the App and delete your account at any time. Accounts violating these Terms may be suspended or terminated.
+Guardian setup: Where a person below the age of digital consent is set up to use the App by a parent or legal guardian, that parent or guardian must provide, and is responsible for, the consent on the child's behalf and assumes guardian or agent responsibility for that use, ensuring it complies with these Terms — consistent with Article 8 of the GDPR. Likewise, if you assist in setting up or using the App on behalf of a minor or a person in your care, you assume guardian or agent responsibility for that use.
 
-    10. Changes & governing law
-    We may update these Terms and will prompt in-app. Interpretation and disputes are governed by the laws of the provider's jurisdiction.
+2. Description of the Service
+The App is an on-device native iOS application designed for blind and low-vision users. Its principal features include:
 
-    11. Contact
-    Hiko Sphere.
-    """
+• Real-time obstacle avoidance: analyzing obstacles ahead on-device via the camera (and device depth/LiDAR) and alerting you by speech and haptics.
+• Scene recognition ("Look"): locally recognizing objects, reading text, identifying banknotes, scanning codes, distinguishing colors, finding things, detecting light, and sensing "people nearby"; the people-nearby feature detects the presence of people only and does not identify anyone or store faces.
+• Walking navigation and "Where am I": providing walking routes and orientation announcements based on on-device precise location.
+• One-tap live human assistance: connecting you with a family member or helper you choose for a real-time voice call; your camera video is shared in real time only while you actively press and hold "Show video."
+• Chat and group chat: text, voice, image, video, and location messages, and group communication.
+• Fall detection and emergency calling: initiating calls/alerts to your emergency contacts when a possible fall is detected or you trigger it.
+
+All vision AI inference runs locally on your iPhone. The App evolves over time, and we may add or change features provided we do not materially diminish core accessibility functions. The Service is currently provided free of charge and, under its open-source license, may not be commercialized for a fee.
+
+3. Safety Notice (Most Important — Read First)
+[IMPORTANT SAFETY NOTICE — READ THIS]
+
+Please read and understand this section carefully before relying on the App to get around. This section is critical to your physical safety.
+
+BeeUrEi is a perception-enhancing assistive tool. It is NOT a safety device and NOT a medical device. It does not, and is not intended to, replace a white cane, a guide dog, Orientation & Mobility (O&M) training, sighted assistance, or your own judgment and established travel methods.
+
+The App CANNOT detect every obstacle. In particular, it may fail to reliably detect: low bollards; step edges; sunken surfaces or potholes; glass doors and transparent objects; overhanging or head-height obstacles; and fast-moving or approaching vehicles. Its performance is affected by lighting, weather, device heat and performance, a blocked or dirty lens, network conditions, and battery level, and it may produce missed detections, false alarms, or delays.
+
+Navigation and orientation information may be inaccurate or out of date. NEVER blindly follow the App's guidance into traffic, across a crossing, or into any hazardous area. Every prompt is subject to your own perception and judgment as the final authority.
+
+[ALWAYS KEEP YOUR WHITE CANE AND GUIDE DOG] You must always keep on hand and prioritize your white cane, your guide dog, and your established, trained travel methods. The App is only a supplement to these methods and must NEVER be your sole means of getting around.
+
+To the maximum extent permitted by law, you understand and agree that you use the App for movement and travel entirely at your own risk.
+
+4. Emergency & Fall-Detection Disclaimer
+[EMERGENCY FEATURES ARE NOT AN EMERGENCY SERVICE — READ THIS]
+
+Fall detection and emergency calling are "best-effort" convenience features. They are NOT a reliable life-safety or medical-alert system.
+
+These features depend on conditions not fully within our control, including but not limited to: network connectivity; device battery; granting of system and app permissions; timely delivery by push services (including Apple APNs/VoIP) and third parties; the accuracy of sensor readings; and whether your emergency contacts are online and respond. As a result, fall detection may miss or falsely trigger, and an emergency call may fail, be delayed, or not be delivered.
+
+This feature does not, and is not intended to, replace a professional medical-alert system, medical-care service, or a call to your local official emergency number.
+
+[IN AN EMERGENCY, CALL YOUR OFFICIAL EMERGENCY NUMBER DIRECTLY] In an emergency, always call your local official emergency number directly (for example, 120/110/119 in mainland China, 112 in the EU, 911 in the U.S.). Do not rely on the App to summon help for you.
+
+To the maximum extent permitted by law, we are not liable for any consequences arising from fall detection or emergency calling failing to trigger, failing to deliver, being delayed, or being inaccurate.
+
+5. Accounts & Security
+Some features require a registered account. You may sign in with a username and password, with Sign in with Apple, or by setting up a Passkey on your device. We store passwords as salted hashes (bcrypt), store refresh tokens only as hashes, and use a token-version mechanism to revoke old credentials immediately.
+
+You are responsible for all activity under your account and for keeping your credentials (passwords, verification codes, Passkeys, etc.) confidential. You must provide true and accurate registration information and keep it updated.
+
+You must not impersonate others, access another person's account without authorization, transfer or share your account with others for abuse, or create accounts in bulk by automated means.
+
+If you discover unauthorized use of your account or a security incident, contact us immediately at beeurei@163.com and change your credentials.
+
+You may at any time view and edit your account, remove family/helper links, or permanently delete your account in the App (deletion is irreversible; see the Privacy Policy).
+
+6. Code of Conduct (Acceptable Use)
+When using remote assistance, chat/group chat, the help queue, and other interactive features, you agree to follow this code of conduct. You must not:
+
+• Harass, threaten, abuse, stalk, or bully others, or make discriminatory attacks based on disability, race, gender, religion, or similar.
+• Commit fraud, phishing, or scams, or attempt to trick others out of passwords, verification codes, money, or sensitive information.
+• Post or transmit unlawful, obscene, violent, or hateful content, or content that infringes others' intellectual property, privacy, or other rights.
+• Use the Service to facilitate any unlawful or infringing act or to endanger another person's physical safety.
+• Interfere with, disrupt, or attempt unauthorized access to the Service, servers, or related networks; or conduct reverse attacks, injection, stress testing, scraping, or circumvention of security and rate-limiting measures.
+• Abuse features through automation, or use the Service for commercial purposes prohibited by its open-source license.
+
+We provide reporting and blocking tools. We may (but are not obligated to) review reported content and take measures against accounts that violate this section, including content removal, warnings, feature restrictions, suspension, or termination. We treat abuse directed at volunteers/helpers especially strictly to protect a vulnerable user community.
+
+7. Remote-Assistance & User-Interaction Disclaimer
+The remote-assistance feature connects you with family members or helpers/volunteers. These helpers are independent individuals and are not our employees, agents, or representatives.
+
+The descriptions, judgments, and advice they provide are for your reference only and may contain errors, omissions, or delays. We make no warranty as to any helper's identity, qualifications, conduct, reliability, or the accuracy of their advice, and we are not responsible for any consequences of your interactions with them. Whether to act on a helper's advice is your own decision and risk — especially for travel, crossing streets, medication, or other safety-related decisions.
+
+During calls, do not disclose your passwords, verification codes, bank or payment details, or other sensitive information to anyone; any request for such information should be treated as suspicious. Your camera video is shared with the person you chose only while you actively press and hold "Show video"; share video only with people you trust, and be mindful of private information that may appear in the frame.
+
+Helper obligations: Helpers must use anything they see or hear during assistance — including your video, your voice, and any sensitive information they may reveal, such as location or health information — only to help you, and must not record, retain, share, or otherwise misuse it; doing so violates Section 6 and may result in account termination.
+
+Chat, group chat, and other interactions between users in the App are generated by users and do not represent our views; we are not responsible for the legality, truthfulness, or safety of user-generated content, but we reserve the right to review and act on it under Section 6.
+
+8. User Content & the Limited License You Grant Us
+"User Content" means content you create, upload, send, or transmit through the App, including text, voice, image, video, and location messages in chat and group chat, and call recordings (where both parties have explicitly consented).
+
+You retain all rights in your User Content. You represent and warrant that you have the rights necessary to post and transmit it and that it does not violate the law or these Terms.
+
+For the purpose, and only to the extent necessary, of operating, providing, and maintaining the Service, you grant us a limited, non-exclusive, royalty-free, worldwide license to host, store, reproduce, transmit, and display your User Content — for example, to deliver messages to the intended recipients, to display them among group-chat participants, to store messages so they can be delivered to both parties (large files such as video are stored on our server disk), and, where both parties consent, to retain call recordings for their retention period. Consistent with the Privacy Policy, call recordings are made only with the explicit consent of both parties and are automatically deleted at the end of their retention period.
+
+This license exists solely to operate the Service. It does not grant us the right to use your content for advertising, to sell it to third parties, or to train AI models. When you delete content or your account, or when content reaches the end of its retention period, this license terminates so far as technically feasible (except for limited retention required for backups and legal obligations).
+
+You are responsible for all User Content you send. We do not endorse User Content but may review and act on it under Section 6 and applicable law.
+
+9. Privacy
+We treat privacy as part of safety by design. All vision AI inference runs locally on your iPhone; camera frames and depth data are not uploaded to, or stored on, our servers and are never used for training. The only time camera video leaves your device is during a call, in real time and end-to-end with the person you choose, and only while you actively press and hold "Show video" — where a direct peer connection is unavailable, that transmission is relayed via our self-hosted TURN relay.
+
+How we collect, use, disclose, and protect your personal information, and the rights you have under the General Data Protection Regulation (GDPR), the California Consumer Privacy Act / California Privacy Rights Act (CCPA/CPRA), and similar laws, are described in detail in our Privacy Policy, which is incorporated into these Terms by reference and forms part of them.
+
+The Privacy Policy sets out, for each category of data, the lawful basis for processing under the GDPR; the basis for international data transfers (including that Japan, where our infrastructure is hosted, benefits from a European Commission adequacy decision); the retention period for each category; and the complete list of third-party processors and their purposes.
+
+You can exercise your rights of access, rectification, erasure, restriction, portability, objection, and withdrawal of consent, and (in California) the rights to know, delete, correct, opt out of sale or sharing, limit the use of sensitive personal information, and non-discrimination, as described in the Privacy Policy; account viewing, editing, and deletion are available in the App, and other requests can be sent to beeurei@163.com.
+
+The Privacy Policy is available within the App and at beeurei.hikosphere.com.
+
+10. Third-Party Services
+Some features of the App rely on third-party services. These services are operated by their respective providers under their own terms and privacy policies, over which we have no control and for which we are not responsible. These third parties include:
+
+• Apple: Sign in with Apple (optional sign-in), APNs (push), Apple Maps/MapKit (overseas navigation), CallKit (system calls), and the App Store (distribution).
+• Mainland China navigation: a licensed map provider (AMap/Gaode), proxied via our backend, sending only the necessary coordinates.
+• Weather: Open-Meteo (reduced-precision coordinates only, no identity).
+• Error monitoring: Sentry (processing crash/error diagnostic data).
+• Email delivery: verification and recovery emails delivered via an SMTP provider (NetEase 163), to which the recipient email address is disclosed upon delivery.
+• Infrastructure: AWS (hosting). Our backend, signaling, and TURN relay are self-hosted on AWS in the Tokyo region (ap-northeast-1, Japan). Japan benefits from a European Commission adequacy decision, which provides the legal basis for transfers of personal data from the EU/EEA to our infrastructure; transfers from other regions rely on the safeguards described in the Privacy Policy.
+
+The purpose and data scope of each third-party processor are described in the Privacy Policy. By using the relevant features you are subject to the applicable third-party terms; we make no warranty and accept no liability for the availability, performance, or conduct of third-party services.
+
+11. Intellectual Property & the PolyForm Noncommercial License
+The App's software code is released under the PolyForm Noncommercial 1.0.0 license. Under that license, you may use, study, modify, and distribute the software for noncommercial purposes; any commercial use is prohibited, including selling the software or charging the blind users it serves. The full terms of PolyForm Noncommercial 1.0.0 are provided with the software and govern.
+
+Accordingly, deployment by a nonprofit, charitable, educational, or government organization that provides the App to blind users free of charge is a permitted noncommercial use under that license; selling the software or charging users a fee is not.
+
+You must keep the copyright, attribution, and license notices in the software and may not remove or obscure them.
+
+The "BeeUrEi" name, the Chinese name "蜂之眼," the marks, logos, and other brand assets belong to Hiko Sphere and are outside the scope of the above open-source license; you may not use them in any way likely to cause confusion or imply endorsement without our prior written permission.
+
+Except as expressly granted by the license and by law, these Terms transfer no rights in the software or brand to you. Third-party components (such as WebRTC and various SDKs) are governed by their respective licenses.
+
+12. Disclaimer of Warranties ("As Is")
+To the maximum extent permitted by applicable law, the App and the Service are provided "as is" and "as available," without warranties of any kind, whether express, implied, or statutory.
+
+We expressly disclaim all implied warranties, including but not limited to merchantability, fitness for a particular purpose, title, non-infringement, and any warranties arising from a course of dealing or trade usage. We do not warrant that the App will operate uninterrupted, timely, secure, or error-free, that defects will be corrected, or that the recognition, detection, navigation, emergency, or assistance features will be accurate, complete, reliable, or suitable for your particular purpose.
+
+You understand that the App is an assistive tool, not a safety or medical device (see Sections 3 and 4), that its outputs may be inaccurate, incomplete, or delayed, and that you must always use it together with your own judgment and established travel methods.
+
+Some jurisdictions do not allow the exclusion of certain implied warranties, so some of the above exclusions may not apply to you; in that case, such warranties are limited to the shortest period permitted by the law of that jurisdiction. This section does not affect statutory rights granted to you by the mandatory consumer-protection law of your place of residence that cannot be excluded by contract.
+
+13. Limitation of Liability
+To the maximum extent permitted by applicable law:
+
+Neither we nor our affiliates, licensors, or suppliers will be liable for any indirect, incidental, special, consequential, exemplary, or punitive damages, or for any loss of profits, revenue, data, goodwill, or anticipated savings, arising out of or relating to your use of or inability to use the App or the Service, whether based on contract, tort (including negligence), strict liability, or any other legal theory, and whether or not we were advised of the possibility of such damages.
+
+Without limiting the disclaimers in Sections 3, 4, and 7, we are not liable, to the extent permitted by law, for personal injury, property damage, or other harm resulting from reliance on the App's obstacle-avoidance, recognition, navigation, fall-detection, emergency-calling, or remote-assistance features.
+
+In no event will our total cumulative liability for all claims arising out of these Terms or the App exceed the greater of (a) the amount you actually paid us for the App in the twelve (12) months before the event giving rise to the liability, or (b) fifty U.S. dollars (US$50, or the equivalent in local currency). Because the Service is currently provided free of charge, the amount under (a) will typically be zero, so the applicable cap will be fifty U.S. dollars (US$50).
+
+These exclusions and caps are a fundamental basis of the allocation of risk between you and us, and a condition on which we are able to provide the Service free of charge.
+
+Some jurisdictions do not allow the exclusion or limitation of certain damages (for example, liability for death or personal injury, for fraud or gross negligence, or under statutory consumer rights). In such jurisdictions, our liability is excluded or limited only to the maximum extent permitted by that law, and this section does not affect your mandatory statutory rights that cannot be excluded by contract. For the avoidance of doubt, the cap and exclusions above do NOT apply to liability for death or personal injury that the law does not permit to be limited.
+
+14. Indemnification
+To the extent permitted by applicable law, you agree to defend, indemnify, and hold harmless us and our affiliates, the producer, licensors, and agents from and against any third-party claims, demands, actions, losses, liabilities, damages, costs, and reasonable expenses (including reasonable attorneys' fees) arising out of or relating to:
+
+• your use of the App or Service in violation of these Terms or applicable law;
+• your User Content or content you post, send, or transmit through the Service;
+• your infringement of another's rights (including intellectual property, privacy, or other rights); or
+• your interactions with other users or helpers in remote assistance or chat/group chat.
+
+We reserve the right to assume the exclusive defense and control of any matter subject to indemnification by you (at your expense), in which case you will cooperate with our defense. You may not settle any such claim in a way that imposes liability or obligation on us without our prior written consent.
+
+For consumer users, this section applies only to the extent allowed by the mandatory consumer-protection law of their place of residence and does not extend indemnity obligations beyond what those laws permit.
+
+15. Termination
+You may stop using the App at any time and permanently delete your account in the App; deletion removes your account, links, and sign-in data and cannot be undone (see the Privacy Policy).
+
+If you breach these Terms (especially the Section 6 code of conduct), or as necessary to protect other users (particularly vulnerable users and volunteers), to maintain the security of the Service, or to comply with law, we may, with prior or subsequent notice where reasonable, suspend, restrict, or terminate your access to the Service or your account. For serious violations or where required by law, we may terminate immediately.
+
+Upon termination, the provisions of these Terms that by their nature should survive will remain in effect, including but not limited to Section 8 (the license granted, to the extent necessary to operate the Service), Sections 11 through 14 (intellectual property, disclaimer of warranties, limitation of liability, indemnification), Section 16 (governing law and dispute resolution), and Section 18 (general provisions).
+
+Termination does not relieve you of obligations accrued before termination and does not affect rights you have under mandatory consumer-protection law.
+
+16. Governing Law & Dispute Resolution
+The formation, interpretation, validity, and dispute resolution of these Terms are governed by the law of the Provider's place of registration, without regard to its conflict-of-laws rules.
+
+Important reservation: This choice of law does not deprive you of, or affect, the rights and protections that cannot be excluded by contract under the mandatory consumer-protection law of your place of habitual residence. Where such mandatory law provides greater protection, it prevails.
+
+Dispute resolution: Before commencing formal legal proceedings, you agree first to contact us at beeurei@163.com and negotiate in good faith to reach an amicable resolution. Most issues can be resolved quickly this way.
+
+If negotiation fails, disputes will be resolved by the competent courts at the Provider's place of registration; however, if applicable mandatory consumer law gives you the right to bring proceedings in the courts of your own place of residence or to a particular dispute-resolution mechanism, that right is reserved.
+
+To the extent permitted by law, any dispute will be brought on an individual basis and not as part of a class action, class arbitration, or representative proceeding; this provision does not apply in jurisdictions whose mandatory law does not permit waiver of collective remedies.
+
+17. Apple App Store Additional Terms
+If you obtained the App through the Apple App Store, the following additional terms apply and prevail over the rest of these Terms as to any conflict on those matters:
+
+• Scope of license: The App is licensed to you on a non-transferable basis for use on any Apple-branded products that you own or control, and is subject to the Usage Rules in the Apple Media Services Terms and Conditions (including, where applicable, Family Sharing).
+• These Terms are concluded between you and the Provider (Hiko Sphere) only, and not with Apple Inc. ("Apple"); the Provider alone is responsible for the App and its content.
+• Apple has no obligation whatsoever to furnish any maintenance and support services for the App.
+• To the extent permitted by applicable law, Apple has no warranty obligation with respect to the App; in the event of any failure of the App to conform to any applicable warranty, you may notify Apple, and Apple will refund the purchase price (if any) you paid for the App (because the App is provided free of charge, any such refund will be zero); to the maximum extent permitted by law, Apple will have no other warranty obligation with respect to the App.
+• The Provider, not Apple, is responsible for addressing any claims by you or any third party relating to the App, including but not limited to product-liability claims, claims that the App fails to conform to any applicable legal or regulatory requirement, and claims arising under consumer-protection, privacy, or similar laws (including, where applicable, claims relating to any Apple frameworks the App uses).
+• The Provider, not Apple, is responsible for the investigation, defense, settlement, and discharge of any third-party claim that the App or your possession and use of it infringes that third party's intellectual property rights.
+• You represent that you are not located in a country subject to a U.S. Government embargo or designated as a "terrorist supporting" country, and that you are not listed on any U.S. Government list of prohibited or restricted parties.
+• Your use of the App must also comply with applicable third-party terms of use.
+• Apple and its subsidiaries are third-party beneficiaries of these Terms and, upon your acceptance, will have the right (and are deemed to have accepted the right) to enforce these Terms against you as a third-party beneficiary.
+
+This section corresponds to the corresponding Apple terms in the App's EULA; in case of inconsistency, the more user-protective terms prevail, except that the Apple-required terms in this Section apply as written.
+
+18. General Provisions
+Entire agreement: These Terms, together with the Privacy Policy, the EULA, and materials incorporated by reference, constitute the entire agreement between you and us regarding the App and the Service and supersede all prior oral or written understandings on the subject.
+
+Severability: If any provision of these Terms is held invalid or unenforceable by a competent authority, that provision will be limited or removed to the minimum extent necessary, and the remaining provisions will remain in full force and effect.
+
+Waiver: Our failure to exercise or enforce any right or provision of these Terms is not a waiver of that right or provision; any waiver is effective only if made in writing and signed by us.
+
+Assignment: You may not assign or transfer any rights or obligations under these Terms without our prior written consent; any unauthorized assignment is void. We may, on reasonable notice, assign these Terms to an affiliate or to a successor arising from a merger, acquisition, or reorganization, without materially diminishing your rights.
+
+No partnership: These Terms do not create any partnership, joint venture, employment, or agency relationship between you and us.
+
+Notices: We may give you notice through in-app prompts, push notifications, or messages to your linked email address; you may give us notice at beeurei@163.com.
+
+Language: These Terms are provided in both Chinese and English, which are intended to be consistent in meaning. If a translation creates an ambiguity, the Terms will be interpreted, without overriding the mandatory law of your place of residence, in the manner that best reflects their purpose and the overall intent of this agreement.
+
+Force majeure: We are not liable for any delay or failure in performance caused by events beyond our reasonable control (such as natural disasters, war, network or power outages, third-party service failures, or government actions).
+
+19. Changes to These Terms
+We may update these Terms from time to time to reflect changes in features, law, or practice. When we do, we will revise the version number and effective date at the top of this document and keep them consistent across the client and the website.
+
+For material changes, we will give you reasonable advance notice before they take effect — for example, by a prominent in-app prompt or a message to your linked email — so that you have an opportunity to review them.
+
+Your continued use of the App after a change takes effect constitutes acceptance of the updated Terms; if you do not agree, please stop using the App, and you may delete your account. We will not retroactively deprive you of rights you have already acquired under prior Terms.
+
+We recommend that you review these Terms periodically. Prior versions are available on request at beeurei@163.com.
+
+20. Contact Us
+If you have any questions or comments about these Terms, or wish to exercise your rights, please contact us:
+
+Provider: Hiko Sphere (Producer: Li Yanpei Hiko)
+Email: beeurei@163.com
+Website: beeurei.hikosphere.com
+
+We will respond to your inquiry within a reasonable time. For requests to exercise privacy rights, please also see the corresponding guidance in the Privacy Policy.
+"""
 
     // MARK: - 最终用户许可协议（EULA）
-
     private static let eulaZh = """
-    BeeUrEi 最终用户许可协议（EULA）
-    生效日期：2026-06-13　·　版本 1.0
+BeeUrEi 蜂之眼 — 最终用户许可协议（EULA）
+版本 2.0　·　生效日期 2026-06-13
 
-    本协议是你与 Hiko Sphere 彦穹科技之间就 BeeUrEi 软件达成的许可协议。
+本最终用户许可协议（以下简称"本协议"或"EULA"）是你（最终用户，以下简称"你"）与 Hiko Sphere 彦穹科技（软件制作人 Li Yanpei Hiko，以下简称"提供者""我们""我方"）之间，就 BeeUrEi 蜂之眼 iOS 应用程序及其相关文档与更新（统称"许可应用"或"本 App"）订立的具有法律约束力的协议。
 
-    1. 许可授予
-    依 PolyForm Noncommercial 1.0.0，授予你在你拥有或控制的 Apple 设备上，出于非商业目的安装与使用本 App 的非独占、不可转让许可。
+本 App 是一款原生 iOS 应用，为视障/低视力人士提供端侧实时避障、场景识别（看一看）、步行导航、一键远程真人协助、聊天/群聊、摔倒检测与紧急呼叫等功能。官网：beeurei.hikosphere.com。联系邮箱：beeurei@163.com。
 
-    2. 范围
-    你可使用、学习、修改与分发本软件用于非商业用途；不得用于商业目的（出售，或向其服务的视障用户收费）。
+版本：2.0　·　生效日期：2026-06-13。
 
-    3. 限制
-    不得移除版权与署名声明；不得将本软件用于违法用途。
+本 App 通过 Apple App Store 分发。依据 Apple 的政策，本协议为提供者与你之间订立，Apple 并非本协议一方。本协议中关于许可、担保、维护支持、责任与合规的条款，旨在与 Apple《许可应用最终用户许可协议（标准 EULA / LSA）》中要求开发者最低限度纳入的内容保持一致并予以满足；如本协议任何条款与 Apple 标准 EULA 不一致，则就该不一致之处，以更有利于保护你的条款为准。
 
-    4. 第三方条款
-    通过 Apple App Store 获取时，本协议同时受 Apple《最终用户许可协议（标准 EULA）》约束；如有冲突，以保护用户的更严格条款为准。
+重要提示：本 App 是"感知增强的辅助工具"，不是安全设备，也不是医疗设备。它无法检测出每一个障碍，可能漏报、误报或延迟，切勿盲目跟随其导航走入车流；请始终保留并优先使用白手杖/导盲犬与你既有的出行方法，本 App 仅作补充，由你自担使用风险。摔倒检测与紧急呼叫为"尽力而为"，可能失败或延迟，不能替代拨打当地急救电话；紧急情况请直接拨打当地急救号码。在安装或使用本 App 前，请务必阅读并理解下文第 9 条（无担保）与第 15 条（责任限制），以及《使用条款》中的安全免责、紧急功能免责与远程协助免责。点按"同意"、安装、或使用本 App，即表示你已阅读、理解并同意受本协议约束；若你不同意，请勿安装或使用本 App。
 
-    5. 无担保 / 责任限制
-    见《使用条款》第 8 条。本 App 是辅助工具，不是安全设备。
+1. 当事人与接受
+本协议的当事人是你与提供者 Hiko Sphere 彦穹科技（软件制作人 Li Yanpei Hiko）。本 App 由提供者授权给你使用，而非出售给你。
 
-    6. 联系
-    Hiko Sphere 彦穹科技。
-    """
+Apple Inc. 及其子公司（统称"Apple"）不是本协议的当事人，对本 App 不负任何责任，但 Apple 享有本协议第 13 条所述第三方受益人地位。
 
+年龄：你确认你已达到在你所在司法管辖区独立使用本 App 及（如适用）对个人数据处理作出有效同意所需的最低年龄；在任何情况下你须至少年满 13 周岁。若你所在地区规定的最低年龄更高（在欧盟/EEA 依当地法为 13 至 16 周岁不等），则以更高者为准。若你未达该年龄，请勿使用本 App。
+
+你进一步确认：你具备订立本协议的完全民事行为能力；你不位于任何受美国政府禁运的国家或地区，亦未被列入任何被禁止或受限制的当事人名单（详见第 12 条）。
+
+点按"同意"、下载、安装、访问或使用本 App，即构成你对本协议的接受。若你代表某一组织接受本协议，你声明你已获得使本组织受本协议约束的授权；本 App 的使用范围以第 2、3、4 条及 PolyForm Noncommercial 1.0.0 所界定的非商业用途为限。
+
+2. 许可授予
+在你遵守本协议的前提下，提供者依据开源许可证 PolyForm Noncommercial 1.0.0，授予你一项有限的、非独占的、不可转让、不可转授的许可，允许你出于非商业目的，下载、安装并使用本 App（其可在设备上运行的形态）。本协议项下针对该许可应用（可运行形态）的许可为可撤销，但这不影响、也不限制你依 PolyForm Noncommercial 1.0.0 就本软件源代码享有的、依该开源许可证条款存续的权利。
+
+依据 Apple《许可应用 EULA》中的"使用规则"，本许可的使用范围限于：
+• 你拥有或控制的、且符合 Apple 当时适用要求的 Apple 品牌设备；以及
+• Apple《App Store 服务条款》及/或 Apple 媒体服务条款中规定的"使用规则"所允许的范围（例如，经由"家人共享"或批量购买所允许的设备共享）。
+
+分发与定价：本 App 通过 App Store 免费提供给最终用户。PolyForm Noncommercial 1.0.0 中的非商业限制约束的是被许可方对源代码/软件的再使用，并非提供者对自身分发的定价限制。
+
+PolyForm Noncommercial 1.0.0 另行授予你出于非商业目的使用、学习、修改并分发本软件源代码的权利。该开源许可证的条款独立适用于源代码；就经由 App Store 分发的、可在设备上运行的"许可应用"形态而言，则同时适用本协议（含 Apple 使用规则）。
+
+本许可仅授予本协议明确列出的权利。提供者及其许可方保留未明确授予的一切权利。
+
+3. 许可范围与使用规则
+你可以：
+• 在你拥有或控制的 Apple 设备上，出于非商业目的安装并运行本 App；
+• 依据 PolyForm Noncommercial 1.0.0，出于非商业目的使用、学习、修改并分发本软件；以及
+• 在 Apple"使用规则"允许的范围内，与同一"家人共享"群组成员共享本 App。
+
+本协议中"非商业"之含义以 PolyForm Noncommercial 1.0.0 的定义为准（即不以商业利益或金钱报酬为主要目的）；该开源许可证项下允许的非营利、教育或研究用途不受本条措辞限制。
+
+你必须遵守 Apple 适用的"使用规则"。本协议项下你对本 App 的任何使用，均须同时符合 Apple《App Store 服务条款》及 Apple 媒体服务条款。
+
+本 App 的许可与你的使用，以你遵守本协议、《使用条款》与《隐私政策》为条件。三者共同构成你与提供者之间就本 App 的完整约定；如本协议与《使用条款》就同一事项规定不一致，除本协议明确另有约定外，以对你更有利的条款为准。文件间的优先级见第 16 条。
+
+4. 限制
+除本协议、PolyForm Noncommercial 1.0.0 或适用强制性法律明确允许外，你不得：
+• 将本软件用于任何以商业利益或金钱报酬为主要目的的用途；本限制以 PolyForm Noncommercial 1.0.0 的"非商业"定义为准（该开源许可证允许的非营利、教育或研究用途不受限制）；
+• 移除、遮蔽或更改本 App 或源代码中的任何版权、商标、署名或其他权利声明；
+• 将本 App 用于任何违法目的，或以任何违反本协议、《使用条款》或适用法律的方式使用；
+• 规避、停用或干扰本 App 或我方服务的任何安全、限流或认证机制；
+• 以可能损害、过载、干扰我方后端、信令或 TURN 中继基础设施，或可能危及他人安全的方式使用本 App；或
+• 以违反第 12 条所述出口管制或制裁法律的方式使用、出口或再出口本 App。
+
+任何反向工程、反编译或反汇编，仅在适用强制性法律明确允许且不可排除的范围内方为许可。
+
+你对本 App 的任何不合规使用，可导致本许可依第 14 条终止，且不影响提供者的其他权利或救济。
+
+5. 所有权与知识产权
+本 App 系授权给你使用，而非出售给你。本协议、PolyForm Noncommercial 1.0.0 或 Apple 使用规则明确授予你的有限权利除外，提供者及其许可方保留对本 App 及其所有副本的一切权利、所有权与利益，包括但不限于全部知识产权。
+
+"BeeUrEi""蜂之眼""Hiko Sphere""彦穹科技"等名称、标志、图标与品牌资产，归提供者所有，未经事先书面许可，不得使用。PolyForm Noncommercial 1.0.0 授予你的源代码相关权利，不包括对上述商标或品牌资产的任何使用许可。
+
+本 App 可能包含或使用第三方材料与开源组件，其各自的所有权与许可条款见第 6 条。
+
+你不因本协议取得对本 App 任何部分的任何所有权。你依本协议或 PolyForm Noncommercial 1.0.0 创作的任何衍生作品，仍受相应许可条款约束。
+
+6. 第三方材料与服务
+本 App 集成或依赖下列第三方服务以实现其功能。你对相关功能的使用，可能同时受各第三方自身条款与隐私政策约束。我们仅按《隐私政策》披露的目的与最小必要范围与其交互。其中，Apple 就 Sign in with Apple、APNs、Apple 地图、CallKit 等所作处理通常为其作为独立控制者进行；Sentry、SMTP 邮件投递商，以及经我方后端转发坐标的图商，通常为代我方处理的处理者。各方的具体角色与传输依据详见《隐私政策》。
+
+• Apple：Sign in with Apple（可选登录）、APNs（推送）、Apple 地图 / MapKit（海外导航）、CallKit（系统来电界面）、App Store（应用分发）。
+• 中国大陆导航：持牌图商（高德/AMap），经我方后端转发，仅发送必要坐标。
+• 天气：Open-Meteo（仅发送降精度坐标，不含身份信息）。
+• 错误监控：Sentry（处理崩溃与错误诊断数据；该诊断为经你同意、可在设置中关闭的可选功能）。
+• 邮件投递：经 SMTP 服务商（NetEase 163）投递验证码与账号找回邮件（投递时会向其披露收件邮箱）。
+• 基础设施：AWS（托管；自托管于东京 ap-northeast-1，日本）。
+
+跨境传输：部分服务涉及个人数据的跨境传输。我方后端、信令与 TURN 中继自托管于日本（AWS 东京，ap-northeast-1）；日本已获欧盟委员会充分性认定。其余传输依据详见《隐私政策》。
+
+通话录制：通话默认不予录制；仅在通话双方明确同意时方可录制，录制将按《隐私政策》所载保留期（默认 30 天）自动删除。
+
+上述第三方材料与服务"按现状"提供。提供者不对任何第三方服务的可用性、准确性、可靠性或安全性作出担保，且对第三方的作为或不作为不承担责任。第三方导航与定位可能不准确，请勿盲目跟随（详见《使用条款》与第 9 条）。
+
+第三方条款：你同意，在使用本 App 涉及任何第三方服务时遵守该第三方适用的服务条款（例如，使用依赖移动数据网络的通话功能时，不得违反你与运营商之间的无线数据服务协议）。你进一步确认：若本 App 任何部分（如经由 CallKit 的通话功能）使用第三方服务，而该第三方服务的条款要求提供者使其用户成为该条款的受益人或受其约束，则在适用范围内你同意受其约束。
+
+7. 数据使用之同意
+你同意提供者可按《隐私政策》所述目的与范围，收集并使用与本 App 相关的技术数据及相关信息（包括但不限于关于你的设备、系统与应用软件及外围设备的技术信息），用于向你提供软件更新、产品支持及其他与本 App 相关的服务。提供者仅在为改进其产品或向你提供服务、且符合《隐私政策》所披露之目的的前提下使用该等信息，不会以任何可识别你个人身份的形式公开使用。
+
+端侧优先：本 App 的全部视觉 AI 推理（避障、识别物体、读文字、识别纸币、扫码、辨色、找物、"周围的人"、光线探测）在 iPhone 本地完成。相机画面与深度数据仅用于本地实时分析，默认不上传、不留存、不用于训练。仅当你在通话中主动按住"显示画面"时，画面才实时传给你自己选定的对方。
+
+本条不取代《隐私政策》。如何处理你的个人数据、依据何种合法性基础、保留多久以及你享有的权利，均以第 8 条所引《隐私政策》为准。
+
+8. 隐私与数据保护
+你对本 App 的使用涉及个人数据处理。我们如何收集、使用、依据何种合法性基础处理、向哪些处理者披露、向何处跨境传输、保留多久，以及你享有的访问、更正、删除、限制、可携、反对、撤回同意等权利及其行使方式，均载于《隐私政策》（beeurei.hikosphere.com/privacy 及 App 内）。
+
+安装或使用本 App 前请阅读《隐私政策》；你对本 App 的使用即表示你已知悉其中所述的数据处理。《隐私政策》是你与提供者之间约定的组成部分；就个人数据处理事项，以《隐私政策》为准（见第 16 条优先级）。
+
+本条不减损你依适用数据保护法（包括《通用数据保护条例》及《加州消费者隐私法》/《加州隐私权法》）所享有的任何权利。
+
+9. 无担保
+请仔细阅读本条。在适用法律允许的最大范围内：
+
+本 App 及其全部功能"按现状""按可用状态"提供，不附带任何明示、默示或法定担保。提供者明确否认一切默示担保，包括但不限于对适销性、特定用途适用性、所有权及不侵权的担保，以及任何因交易过程或行业惯例产生的担保。
+
+提供者不保证本 App 满足你的需求、不间断、及时、安全或无错误运行，亦不保证其结果准确或可靠。本 App 是"感知增强的辅助工具"，不是安全设备，也不是医疗设备；它无法检测出每一个障碍（尤其是低矮路桩、台阶边缘、下沉区或坑洞、玻璃门、悬空物，以及快速移动或迎面驶来的车辆），并可能因光线、天气、设备发热与性能、镜头遮挡、电量等因素而出现漏报、误报或延迟。导航可能不准确，切勿盲目跟随而走入车流。请始终保留并优先使用白手杖 / 导盲犬与你既有的出行方法；本 App 仅作补充，由你自担使用风险。
+
+摔倒检测与紧急呼叫为"尽力而为"，依赖网络、电量、权限与第三方送达，可能失败或延迟，不能替代专业医疗警报系统或拨打当地急救电话——紧急情况请直接拨打当地急救号码。
+
+关于 Apple：如本 App 未能符合任何适用担保，你可通知 Apple，Apple 将向你退还（如适用）该 App 的购买价款；在法律允许的最大范围内，Apple 对本 App 不承担任何其他担保义务，任何因未能符合担保而产生的其他索赔、损失、责任、损害、费用或开支，均由提供者依第 11 条负责。
+
+部分法域不允许排除默示担保或对法定权利的限制，故上述部分排除可能对你不适用；此种情形下，相关担保在适用法律要求的最短期限内有效。本条不影响你经常居住地强制性消费者保护法赋予的、不可放弃的权利。
+
+10. 维护与支持
+提供者独自负责本 App 的任何维护与支持服务（如有）。Apple 没有任何义务就本 App 提供任何维护或支持服务。
+
+提供者不承诺提供任何特定级别的维护或支持，亦不承诺提供更新、升级或缺陷修复。如提供者提供更新，本协议条款适用于该等更新，除非该更新随附单独的许可协议，此时以该单独协议为准。
+
+如你就维护或支持有任何问题或需求，请通过官网 beeurei.hikosphere.com 或邮箱 beeurei@163.com 联系提供者（通讯地址见第 16 条），请勿就此联系 Apple。
+
+11. 产品责任主张
+提供者（而非 Apple）负责处理你或任何第三方就本 App，或就你持有及/或使用本 App 而提出的任何主张，包括但不限于：
+• 产品责任主张；
+• 任何关于本 App 未能符合任何适用法律或法规要求的主张；
+• 因消费者保护、隐私或类似法律产生的主张，包括与本 App 使用 HealthKit、HomeKit 或类似框架（若适用）相关的主张；以及
+• 任何关于本 App 侵犯第三方知识产权的主张（该类主张的处理另见下文）。
+
+本协议不得将提供者对你的责任限制至超过适用法律所允许的范围。
+
+知识产权侵权主张：如有任何第三方主张本 App 或你对本 App 的持有及使用侵犯其知识产权，提供者（而非 Apple）将独自负责对任何此类知识产权侵权主张的调查、抗辩、和解与了结。
+
+12. 法律合规与出口管制
+你声明并保证：(a) 你不位于任何受美国政府禁运，或被美国政府认定为"支持恐怖主义"的国家或地区；且 (b) 你未被列入任何美国政府的被禁止或受限制当事人名单。
+
+你同意遵守本 App 使用所涉的全部适用法律，包括但不限于使用地或下载地的任何当地法律，以及一切适用的出口管制、再出口管制与经济制裁法律法规。你不得为任何被适用法律禁止的目的使用、出口或再出口本 App。
+
+你进一步同意：在使用本 App 提供的避障、导航、通讯、远程协助、摔倒检测与紧急功能时，遵守适用于你的全部交通、安全与其他法律法规。
+
+13. Apple 作为第三方受益人
+你与提供者均确认并同意：Apple 及其子公司是本协议的第三方受益人。一经你接受本协议条款，Apple 即有权（并视为已接受该权利）作为第三方受益人，针对你执行本协议。
+
+尽管有上述约定，提供者就本 App 的许可、内容、运营、维护、支持、担保及责任承担全部责任；Apple 不承担任何相关义务。
+
+14. 终止
+本协议自你接受之时起生效，并持续有效至依本条终止。
+
+你可随时终止本协议：删除本 App，并停止以任何方式使用它。你也可在 App 内永久删除你的账号（此操作不可恢复）。
+
+如你违反本协议任何条款，本协议项下授予你的（针对许可应用可运行形态的）许可将自动终止，无需另行通知。在适用法律允许的范围内，提供者亦可因任何重大原因，在合理通知后中止或终止本许可。
+
+本许可终止后，你必须停止一切对本 App 的使用，并删除本 App 的全部副本。下列条款在本协议终止后继续有效：第 1 条（资格、出口与制裁方面的声明与保证）、第 4 条（限制中应继续适用的部分）、第 5 条（所有权）、第 6 条（就第三方免责与第三方条款而言）、第 9 条（无担保）、第 11 条（产品责任主张）、第 12 条（法律合规与出口管制）、第 13 条（Apple 第三方受益人）、第 15 条（责任限制）以及第 16 条（适用法律、其他约定与联系）。
+
+本协议的终止不影响 PolyForm Noncommercial 1.0.0 项下你就源代码可能继续享有的权利，该开源许可证的存续与终止由其自身条款决定。
+
+15. 责任限制
+本条与《使用条款》中的免责与责任限制条款相互呼应、共同适用。在适用法律允许的最大范围内：
+
+本 App 是"感知增强的辅助工具"，不是安全设备，也不是医疗设备；不能替代白手杖、导盲犬、定向行走（O&M）训练、明眼人协助或你自己的判断。你确认并同意：你自担使用风险，并对你在使用本 App 时的出行安全与决策负责。
+
+在适用法律允许的最大范围内，提供者及其许可方在任何情况下均不就以下任何损害向你承担责任：任何间接的、附带的、特殊的、后果性的、惩戒性或惩罚性损害；任何利润、收入、数据、商誉的损失；或任何人身伤害或财产损害，只要其源于或与你对本 App 的使用或无法使用相关，包括因漏报、误报、延迟、定位或导航不准确、紧急或摔倒检测功能失败或延迟，或因依赖远程协助者建议而产生的任何损害——即使提供者已被告知此类损害的可能性。
+
+在适用法律允许的最大范围内，提供者就本协议或本 App 对你承担的累计总责任，不超过你为本 App 实际支付的金额（鉴于本 App 对最终用户免费，该金额通常为零）。
+
+远程协助：协助者 / 志愿者为独立个人，其建议仅供参考；提供者不对其行为或建议作担保，亦不承担责任。请勿在通话中透露密码、验证码等敏感信息。通话默认不予录制；仅在通话双方明确同意时方可录制，录制将按《隐私政策》所载保留期（默认 30 天）自动删除。
+
+关于 Apple：在任何情形下，Apple 均不对你或任何第三方因本 App 产生的任何索赔、损失、责任、损害、费用或开支负责；与本 App 相关的全部此类责任由提供者依本协议承担。
+
+部分法域不允许排除或限制附带或后果性损害，或不允许限制人身伤害责任，故上述部分限制可能对你不适用。本条不限制或排除：(i) 任何不可依法排除的责任（包括因过失导致的死亡或人身伤害、欺诈或欺诈性虚假陈述）；以及 (ii) 你经常居住地强制性消费者保护法赋予的、不可放弃的任何权利。
+
+16. 适用法律、其他约定与联系
+适用法律：本协议受提供者注册地法律管辖并据其解释，但不影响你经常居住地强制性消费者保护法赋予你的权利。除适用强制性法律另有要求外，本协议排除其法律冲突规则的适用，亦排除《联合国国际货物销售合同公约》的适用。（注：提供者注册地法域将于法律实体注册地确定后在此填明。）
+
+文件优先级：就个人数据的处理（合法性基础、目的、留存、跨境传输与你的权利），以《隐私政策》为准；就 App Store 使用规则，以 Apple 适用条款为准；就源代码许可，以 PolyForm Noncommercial 1.0.0 为准；其余以本协议为准。前述以不低于适用强制性消费者保护法赋予你的保护为限；在该强制性消费者法层面，如本协议与《使用条款》就同一事项规定不一致，仍以对你更有利的条款为准。
+
+可分割性：如本协议任何条款被认定为无效或不可执行，该条款将在必要的最小范围内被解释或限缩，其余条款仍完全有效。
+
+不弃权：提供者未行使或延迟行使本协议项下任何权利，不构成对该权利的放弃。
+
+转让：未经提供者事先书面同意，你不得转让本协议或本协议项下任何权利。提供者可在合理通知后转让本协议。
+
+完整协议：本协议连同《使用条款》《隐私政策》及 PolyForm Noncommercial 1.0.0，构成你与提供者之间就本 App 的完整约定，并取代此前一切相关的口头或书面沟通。
+
+语言：本协议以中英双语提供，两种文本含义一致。若两种文本出现歧义，应在符合本协议目的及适用强制性法律的前提下，作有利于你的解释。
+
+联系：本协议或本 App 的任何问题、主张或请求，请联系——
+提供者：Hiko Sphere 彦穹科技（软件制作人 Li Yanpei Hiko）
+官网：beeurei.hikosphere.com
+邮箱：beeurei@163.com
+地址：[提供者注册地址，待法律实体注册后填入]
+请勿就本协议相关事项联系 Apple。
+"""
     private static let eulaEn = """
-    BeeUrEi End-User License Agreement (EULA)
-    Effective: 2026-06-13　·　Version 1.0
+BeeUrEi — End-User License Agreement (EULA)
+Version 2.0　·　Effective 2026-06-13
 
-    This is a license agreement between you and Hiko Sphere for the BeeUrEi software.
+This End-User License Agreement ("Agreement" or "EULA") is a legally binding agreement between you (the end user, "you") and Hiko Sphere (Producer: Li Yanpei Hiko) (the "Provider", "we", or "us") governing the BeeUrEi iOS application together with its related documentation and updates (collectively, the "Licensed Application" or the "App").
 
-    1. License grant
-    Under PolyForm Noncommercial 1.0.0, you are granted a non-exclusive, non-transferable license to install and use the App for noncommercial purposes on Apple devices you own or control.
+The App is a native iOS application that provides on-device real-time obstacle avoidance, scene recognition ("Look"), walking navigation, one-tap live human assistance, chat and group chat, fall detection, and emergency calling for blind and low-vision users. Website: beeurei.hikosphere.com. Contact email: beeurei@163.com.
 
-    2. Scope
-    You may use, study, modify, and distribute the software for noncommercial purposes; you may not use it for commercial purposes (selling it, or charging the blind users it serves).
+Version: 2.0 · Effective date: 2026-06-13.
 
-    3. Restrictions
-    Do not remove copyright/attribution notices; do not use the software for unlawful purposes.
+The App is distributed through the Apple App Store. Consistent with Apple's policies, this Agreement is concluded between the Provider and you, and Apple is not a party to it. The provisions of this Agreement concerning license, warranty, maintenance and support, liability, and compliance are intended to be consistent with, and to satisfy, the minimum terms that Apple requires developers to include under Apple's Licensed Application End User License Agreement (the standard EULA / LSA). To the extent any term of this Agreement is inconsistent with Apple's standard EULA, the term more protective of you shall prevail as to that inconsistency.
 
-    4. Third-party terms
-    When obtained via the Apple App Store, this agreement is also subject to Apple's Licensed Application End User License Agreement (standard EULA); in case of conflict, the stricter user-protective terms prevail.
+Important: the App is a perception-enhancing assistive tool. It is not a safety device and it is not a medical device. It cannot detect every obstacle, may miss, misreport, or be delayed, and you must never follow its navigation blindly into traffic; always keep and prioritize your white cane or guide dog and your existing means of getting around — the App is only a supplement, used at your own risk. Fall detection and emergency calling are best-effort, may fail or be delayed, and do not replace calling your local emergency number; in an emergency, dial your local emergency number directly. Before installing or using the App, please read and understand Section 9 (No Warranty) and Section 15 (Limitation of Liability) below, together with the safety, emergency-feature, and remote-assistance disclaimers in the Terms of Service. By tapping "Agree", installing, or using the App, you acknowledge that you have read, understood, and agree to be bound by this Agreement; if you do not agree, do not install or use the App.
 
-    5. No warranty / limitation of liability
-    See Terms of Service section 8. The App is an assistive tool, not a safety device.
+1. Parties and Acceptance
+The parties to this Agreement are you and the Provider, Hiko Sphere (Producer: Li Yanpei Hiko). The App is licensed, not sold, to you by the Provider.
 
-    6. Contact
-    Hiko Sphere.
-    """
+Apple Inc. and its subsidiaries (collectively, "Apple") are not parties to this Agreement and have no responsibility for the App, except that Apple is a third-party beneficiary as set out in Section 13.
+
+Age: you confirm that you have reached the minimum age required, in your jurisdiction, to use the App on your own and (where applicable) to give valid consent to the processing of personal data; in any case, you must be at least 13 years old. Where a higher minimum age applies in your region (in the EU/EEA this is between 13 and 16, depending on local law), the higher age applies. If you have not reached that age, do not use the App.
+
+You further confirm that you have full legal capacity to enter into this Agreement; that you are not located in any country subject to a U.S. Government embargo; and that you are not on any prohibited or restricted-party list (see Section 12).
+
+Tapping "Agree", or downloading, installing, accessing, or using the App, constitutes your acceptance of this Agreement. If you accept on behalf of an organization, you represent that you are authorized to bind that organization; the App is licensed for the noncommercial use defined in Sections 2, 3, and 4 and in PolyForm Noncommercial 1.0.0.
+
+2. License Grant
+Subject to your compliance with this Agreement, the Provider grants you a limited, non-exclusive, non-transferable, non-sublicensable license, under the open-source license PolyForm Noncommercial 1.0.0, to download, install, and use the App (in its on-device, runnable form) for noncommercial purposes. The license to the Licensed Application (its runnable form) under this Agreement is revocable, but this does not affect or limit any rights you have in the software's source code under PolyForm Noncommercial 1.0.0, which survive in accordance with that open-source license.
+
+In accordance with the "Usage Rules" in Apple's Licensed Application EULA, the scope of this license is limited to:
+• any Apple-branded products that you own or control and that meet Apple's then-applicable requirements; and
+• as permitted by the Usage Rules set out in the Apple App Store Terms of Service and/or Apple Media Services Terms (for example, device sharing permitted via Family Sharing or volume purchasing).
+
+Distribution and pricing: the App is made available to end users free of charge through the App Store. The noncommercial restriction in PolyForm Noncommercial 1.0.0 governs a licensee's re-use of the source code and software; it is not a restriction on the Provider's own pricing of its distribution.
+
+PolyForm Noncommercial 1.0.0 separately grants you the right to use, study, modify, and distribute the software's source code for noncommercial purposes. That open-source license governs the source code independently; the on-device, runnable form of the Licensed Application distributed through the App Store is governed concurrently by this Agreement (including Apple's Usage Rules).
+
+This license grants only the rights expressly stated in this Agreement. The Provider and its licensors reserve all rights not expressly granted.
+
+3. Scope of License and Usage Rules
+You may:
+• install and run the App on Apple devices you own or control for noncommercial purposes;
+• use, study, modify, and distribute the software for noncommercial purposes under PolyForm Noncommercial 1.0.0; and
+• share the App with members of the same Family Sharing group to the extent permitted by Apple's Usage Rules.
+
+"Noncommercial" in this Agreement has the meaning given in PolyForm Noncommercial 1.0.0 (that is, use that does not have commercial advantage or monetary compensation as its primary purpose); nonprofit, educational, or research uses permitted under that license are not restricted by the wording of this Section.
+
+You must comply with Apple's applicable Usage Rules. Any use of the App under this Agreement must also conform to the Apple App Store Terms of Service and the Apple Media Services Terms.
+
+The licensing of the App and your use of it are conditioned on your compliance with this Agreement, the Terms of Service, and the Privacy Policy. Together these constitute the entire agreement between you and the Provider regarding the App; where this Agreement and the Terms of Service address the same subject inconsistently, the term more favorable to you prevails unless this Agreement expressly provides otherwise. The order of precedence among these documents is set out in Section 16.
+
+4. Restrictions
+Except as expressly permitted by this Agreement, by PolyForm Noncommercial 1.0.0, or by applicable mandatory law, you may not:
+• use the software for any purpose whose primary purpose is commercial advantage or monetary compensation; this restriction follows the "Noncommercial" definition in PolyForm Noncommercial 1.0.0 (nonprofit, educational, or research uses permitted under that license are not restricted);
+• remove, obscure, or alter any copyright, trademark, attribution, or other proprietary notice in the App or its source code;
+• use the App for any unlawful purpose, or in any manner that violates this Agreement, the Terms of Service, or applicable law;
+• circumvent, disable, or interfere with any security, rate-limiting, or authentication mechanism of the App or our services;
+• use the App in any way that could damage, overload, or impair our backend, signaling, or TURN relay infrastructure, or that could endanger the safety of others; or
+• use, export, or re-export the App in violation of the export-control or sanctions laws referenced in Section 12.
+
+Reverse engineering, decompiling, or disassembling is permitted only to the extent expressly required by applicable mandatory law that may not be excluded.
+
+Any non-compliant use of the App may result in termination of this license under Section 14, without prejudice to the Provider's other rights or remedies.
+
+5. Ownership and Intellectual Property
+The App is licensed, not sold, to you. Except for the limited rights expressly granted to you by this Agreement, by PolyForm Noncommercial 1.0.0, or by Apple's Usage Rules, the Provider and its licensors retain all right, title, and interest in and to the App and all copies of it, including, without limitation, all intellectual property rights.
+
+The names, logos, icons, and brand assets "BeeUrEi", "蜂之眼", "Hiko Sphere", and "彦穹科技" belong to the Provider and may not be used without prior written permission. The source-code rights granted to you under PolyForm Noncommercial 1.0.0 do not include any license to use those trademarks or brand assets.
+
+The App may include or use third-party materials and open-source components, the respective ownership and license terms of which are described in Section 6.
+
+You acquire no ownership of any part of the App under this Agreement. Any derivative works you create under this Agreement or PolyForm Noncommercial 1.0.0 remain subject to the applicable license terms.
+
+6. Third-Party Materials and Services
+The App integrates with or relies on the following third-party services to provide its features. Your use of the related features may also be governed by each third party's own terms and privacy policies. We interact with them only for the purposes disclosed in the Privacy Policy and on a minimum-necessary basis. Apple typically acts as an independent controller for its processing in connection with Sign in with Apple, APNs, Apple Maps, and CallKit; Sentry, the SMTP email-delivery provider, and the map provider to which coordinates are proxied via our backend typically act as processors on our behalf. The specific roles of each party and the bases for transfers are described in the Privacy Policy.
+
+• Apple: Sign in with Apple (optional sign-in); APNs (push notifications); Apple Maps / MapKit (overseas navigation); CallKit (system call interface); App Store (app distribution).
+• Mainland-China navigation: a licensed map provider (AMap / 高德), proxied via our backend, sending only the necessary coordinates.
+• Weather: Open-Meteo (reduced-precision coordinates only, no identity information).
+• Error monitoring: Sentry (processing crash and error diagnostic data; this diagnostics feature is optional, requires your consent, and can be turned off in settings).
+• Email delivery: verification-code and account-recovery emails delivered via an SMTP provider (NetEase 163), which receives the recipient email address upon delivery.
+• Infrastructure: AWS (hosting; self-hosted in Tokyo, ap-northeast-1, Japan).
+
+Cross-border transfers: some services involve cross-border transfers of personal data. Our backend, signaling, and TURN relay are self-hosted in Japan (AWS Tokyo, ap-northeast-1); Japan has received an adequacy decision from the European Commission. The bases for other transfers are described in the Privacy Policy.
+
+Call recording: calls are not recorded by default; recording is permitted only with the express consent of both parties to the call, and recordings are automatically deleted after the retention period stated in the Privacy Policy (30 days by default).
+
+These third-party materials and services are provided "as is". The Provider makes no warranty as to the availability, accuracy, reliability, or security of any third-party service and is not responsible for any third party's acts or omissions. Third-party navigation and positioning may be inaccurate; do not follow them blindly (see the Terms of Service and Section 9).
+
+Third-party terms: you agree to comply with the applicable terms of any third-party service used in connection with the App (for example, you must not be in violation of your wireless data service agreement when using calling features that rely on a mobile data network). You further acknowledge that, where any part of the App (such as calling via CallKit) uses a third-party service whose terms require the Provider to make its users beneficiaries of, or bound by, those terms, you agree to be bound to the extent applicable.
+
+7. Consent to Use of Data
+You consent that the Provider may collect and use technical data and related information about you in connection with the App (including, without limitation, technical information about your device, system and application software, and peripherals), as described in the Privacy Policy, in order to provide you with software updates, product support, and other services relating to the App. The Provider uses such information only to improve its products or to provide services to you, and consistent with the purposes disclosed in the Privacy Policy, and will not make public use of it in any form that personally identifies you.
+
+On-device first: all of the App's vision AI inference (obstacle avoidance, object/text/banknote recognition, barcode scanning, color detection, find-my-things, "people nearby", light detection) runs locally on the iPhone. Camera frames and depth data are used only for local, real-time analysis; by default they are not uploaded, retained, or used for training. Video frames are streamed in real time to someone you yourself select only when, during a call, you actively press and hold "Show Video".
+
+This Section does not replace the Privacy Policy. How your personal data is processed, on what legal bases, how long it is retained, and the rights you hold are governed by the Privacy Policy referenced in Section 8.
+
+8. Privacy and Data Protection
+Your use of the App involves the processing of personal data. How we collect, use, and process it; the legal bases on which we rely; which processors we disclose it to; where we transfer it across borders; how long we retain it; and the rights you hold — including access, rectification, erasure, restriction, portability, objection, and withdrawal of consent — and how to exercise them, are set out in the Privacy Policy (beeurei.hikosphere.com/privacy and in the App).
+
+Please read the Privacy Policy before installing or using the App; your use of the App means you are aware of the data processing described in it. The Privacy Policy forms part of the agreement between you and the Provider; on matters of personal-data processing, the Privacy Policy prevails (see the order of precedence in Section 16).
+
+This Section does not diminish any rights you have under applicable data-protection law, including the General Data Protection Regulation (GDPR) and the California Consumer Privacy Act / California Privacy Rights Act (CCPA/CPRA).
+
+9. No Warranty
+Please read this Section carefully. To the maximum extent permitted by applicable law:
+
+The App and all of its features are provided "as is" and "as available", without warranty of any kind, whether express, implied, or statutory. The Provider expressly disclaims all implied warranties, including, without limitation, the implied warranties of merchantability, fitness for a particular purpose, title, and non-infringement, and any warranty arising from a course of dealing or usage of trade.
+
+The Provider does not warrant that the App will meet your requirements, or operate uninterrupted, timely, secure, or error-free, or that its results will be accurate or reliable. The App is a perception-enhancing assistive tool; it is not a safety device and it is not a medical device. It cannot detect every obstacle (especially low bollards, step edges, drop-offs or potholes, glass doors, overhanging objects, and fast-moving or oncoming vehicles) and may miss, misreport, or be delayed due to lighting, weather, device heat and performance, lens obstruction, battery level, and similar factors. Navigation may be inaccurate; never follow it blindly into traffic. Always keep and prioritize your white cane or guide dog and your existing means of getting around; the App is only a supplement, used at your own risk.
+
+Fall detection and emergency calling are provided on a best-effort basis; they depend on network, battery, permissions, and third-party delivery, may fail or be delayed, and do not replace a professional medical alert system or calling your local emergency number — in an emergency, dial your local emergency number directly.
+
+Regarding Apple: in the event of any failure of the App to conform to any applicable warranty, you may notify Apple, and Apple will refund the purchase price of the App to you, if any; to the maximum extent permitted by applicable law, Apple will have no other warranty obligation whatsoever with respect to the App, and any other claims, losses, liabilities, damages, costs, or expenses attributable to any failure to conform to any warranty will be the Provider's responsibility under Section 11.
+
+Some jurisdictions do not allow the exclusion of implied warranties or limitations on statutory rights, so some of the above exclusions may not apply to you; in that case, such warranties are limited to the shortest period permitted by applicable law. This Section does not affect any non-waivable rights granted to you by mandatory consumer-protection law in your place of habitual residence.
+
+10. Maintenance and Support
+The Provider is solely responsible for providing any maintenance and support services for the App, if any. Apple has no obligation whatsoever to furnish any maintenance and support services with respect to the App.
+
+The Provider does not promise any particular level of maintenance or support, nor does it promise to provide updates, upgrades, or bug fixes. If the Provider provides updates, the terms of this Agreement apply to those updates, unless the update is accompanied by a separate license, in which case that separate license governs.
+
+If you have any questions or needs regarding maintenance or support, contact the Provider via the website beeurei.hikosphere.com or by email at beeurei@163.com (postal address in Section 16); do not contact Apple for these matters.
+
+11. Product Claims
+The Provider, not Apple, is responsible for addressing any claims of yours or of any third party relating to the App or your possession and/or use of the App, including, without limitation:
+• product liability claims;
+• any claim that the App fails to conform to any applicable legal or regulatory requirement;
+• claims arising under consumer-protection, privacy, or similar legislation, including in connection with the App's use of the HealthKit, HomeKit, or similar frameworks, if applicable; and
+• any claim that the App infringes a third party's intellectual property rights (such claims are addressed below).
+
+Nothing in this Agreement limits the Provider's liability to you beyond what is permitted by applicable law.
+
+Intellectual-property infringement claims: in the event of any third-party claim that the App or your possession and use of the App infringes that third party's intellectual property rights, the Provider, not Apple, will be solely responsible for the investigation, defense, settlement, and discharge of any such intellectual property infringement claim.
+
+12. Legal Compliance and Export Control
+You represent and warrant that (a) you are not located in a country that is subject to a U.S. Government embargo, or that has been designated by the U.S. Government as a "terrorist supporting" country; and (b) you are not listed on any U.S. Government list of prohibited or restricted parties.
+
+You agree to comply with all applicable laws relating to your use of the App, including, without limitation, any local laws of the place where you use or download the App, and all applicable export-control, re-export-control, and economic-sanctions laws and regulations. You may not use, export, or re-export the App for any purpose prohibited by applicable law.
+
+You further agree to comply with all traffic, safety, and other laws and regulations applicable to you when using the obstacle-avoidance, navigation, communication, remote-assistance, fall-detection, and emergency features the App provides.
+
+13. Apple as Third-Party Beneficiary
+You and the Provider acknowledge and agree that Apple and Apple's subsidiaries are third-party beneficiaries of this Agreement. Upon your acceptance of the terms of this Agreement, Apple will have the right (and will be deemed to have accepted the right) to enforce this Agreement against you as a third-party beneficiary.
+
+Notwithstanding the foregoing, the Provider remains solely responsible for the licensing, content, operation, maintenance, support, warranty, and liability relating to the App; Apple assumes no obligation in connection therewith.
+
+14. Termination
+This Agreement is effective from your acceptance and continues until terminated under this Section.
+
+You may terminate this Agreement at any time by deleting the App and ceasing all use of it. You may also permanently delete your account within the App (this action cannot be undone).
+
+If you breach any provision of this Agreement, the license granted to you under this Agreement (to the runnable form of the Licensed Application) will terminate automatically, without notice. To the extent permitted by applicable law, the Provider may also suspend or terminate this license for any material cause upon reasonable notice.
+
+Upon termination of this license, you must cease all use of the App and delete all copies of it. The following provisions survive termination: Section 1 (the representations and warranties as to eligibility, export, and sanctions), Section 4 (to the extent restrictions should continue to apply), Section 5 (Ownership), Section 6 (as to third-party disclaimers and third-party terms), Section 9 (No Warranty), Section 11 (Product Claims), Section 12 (Legal Compliance and Export Control), Section 13 (Apple Third-Party Beneficiary), Section 15 (Limitation of Liability), and Section 16 (Governing Law, Miscellaneous, and Contact).
+
+Termination of this Agreement does not affect any rights you may continue to have in the source code under PolyForm Noncommercial 1.0.0, whose survival and termination are governed by its own terms.
+
+15. Limitation of Liability
+This Section operates together with, and reinforces, the disclaimers and limitation-of-liability provisions in the Terms of Service. To the maximum extent permitted by applicable law:
+
+The App is a perception-enhancing assistive tool; it is not a safety device and it is not a medical device, and it does not replace a white cane, a guide dog, Orientation & Mobility (O&M) training, sighted assistance, or your own judgment. You acknowledge and agree that you use it at your own risk and remain responsible for your travel safety and decisions while using the App.
+
+To the maximum extent permitted by applicable law, in no event will the Provider or its licensors be liable to you for any indirect, incidental, special, consequential, exemplary, or punitive damages; any loss of profits, revenue, data, or goodwill; or any personal injury or property damage, in each case arising out of or in connection with your use of or inability to use the App, including damages arising from missed or false detections, delays, inaccurate positioning or navigation, failure or delay of the emergency or fall-detection features, or reliance on a remote helper's advice — even if the Provider has been advised of the possibility of such damages.
+
+To the maximum extent permitted by applicable law, the Provider's total cumulative liability to you under this Agreement or relating to the App will not exceed the amount you actually paid for the App (which, given that the App is free to end users, is typically zero).
+
+Remote assistance: helpers and volunteers are independent individuals; their guidance is advisory only, and the Provider makes no warranty about, and accepts no liability for, their conduct or advice. Do not disclose sensitive information such as passwords or verification codes during calls. Calls are not recorded by default; recording is permitted only with the express consent of both parties to the call, and recordings are automatically deleted after the retention period stated in the Privacy Policy (30 days by default).
+
+Regarding Apple: in no event will Apple be responsible to you or any third party for any claims, losses, liabilities, damages, costs, or expenses arising from the App; all such liability relating to the App is the Provider's under this Agreement.
+
+Some jurisdictions do not allow the exclusion or limitation of incidental or consequential damages, or limitation of liability for personal injury, so some of the above limitations may not apply to you. This Section does not limit or exclude (i) any liability that cannot lawfully be excluded (including death or personal injury caused by negligence, fraud, or fraudulent misrepresentation); or (ii) any non-waivable rights granted to you by mandatory consumer-protection law in your place of habitual residence.
+
+16. Governing Law, Miscellaneous, and Contact
+Governing law: this Agreement is governed by and construed under the laws of the Provider's place of registration, without affecting the rights granted to you by mandatory consumer-protection law in your place of habitual residence. Except where applicable mandatory law requires otherwise, this Agreement excludes its conflict-of-laws rules and excludes the United Nations Convention on Contracts for the International Sale of Goods. (Note: the Provider's place-of-registration jurisdiction will be stated here once the legal entity's place of registration is determined.)
+
+Order of precedence: on the processing of personal data (legal bases, purposes, retention, cross-border transfers, and your rights), the Privacy Policy prevails; on App Store usage rules, Apple's applicable terms prevail; on the source-code license, PolyForm Noncommercial 1.0.0 prevails; on all other matters, this Agreement prevails. The foregoing applies subject to no less protection than is granted to you by applicable mandatory consumer-protection law; at the level of such mandatory consumer law, where this Agreement and the Terms of Service address the same subject inconsistently, the term more favorable to you still prevails.
+
+Severability: if any provision of this Agreement is held invalid or unenforceable, that provision will be interpreted or limited to the minimum extent necessary, and the remaining provisions will remain in full force and effect.
+
+No waiver: the Provider's failure or delay in exercising any right under this Agreement is not a waiver of that right.
+
+Assignment: you may not assign this Agreement or any rights under it without the Provider's prior written consent. The Provider may assign this Agreement upon reasonable notice.
+
+Entire agreement: this Agreement, together with the Terms of Service, the Privacy Policy, and PolyForm Noncommercial 1.0.0, constitutes the entire agreement between you and the Provider regarding the App and supersedes all prior related oral or written communications.
+
+Language: this Agreement is provided in Chinese and English with consistent meaning. In case of any ambiguity between the two texts, it shall be interpreted in your favor, consistent with the purpose of this Agreement and applicable mandatory law.
+
+Contact: for any question, claim, or request regarding this Agreement or the App, contact —
+Provider: Hiko Sphere (Producer: Li Yanpei Hiko)
+Website: beeurei.hikosphere.com
+Email: beeurei@163.com
+Address: [Provider's registered address, to be inserted once the legal entity is registered]
+Do not contact Apple regarding matters under this Agreement.
+"""
 }

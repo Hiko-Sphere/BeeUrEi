@@ -19,7 +19,7 @@ The visual AI runs entirely on the device; the camera feed stays on your phone b
 ![Swift 5](https://img.shields.io/badge/Swift-5-F05138?logo=swift&logoColor=white)
 ![On-device AI](https://img.shields.io/badge/AI-on--device-FFC42E?labelColor=14161F)
 ![Backend: Node + Fastify](https://img.shields.io/badge/backend-Node%20%2B%20Fastify-3178C6)
-![tests 603](https://img.shields.io/badge/tests-603-3FB950)
+![tests 682](https://img.shields.io/badge/tests-682-3FB950)
 ![Bilingual](https://img.shields.io/badge/i18n-EN%20%C2%B7%20%E4%B8%AD%E6%96%87-FFC42E?labelColor=14161F)
 ![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-14161F)
 
@@ -72,7 +72,10 @@ A spatial-audio **beacon** points the way, with turn-by-turn speech and **street
 Read text · read a full multi-page document · identify **banknotes** · scan a barcode and remember the product · teach it once, then **find your own things** · find common nearby objects · **people around you** (count · direction · distance — **never** identity) · bus lines · ambient light level · **touch-to-explore** a frozen photo · review recognition history. All on-device; the image never leaves the phone.
 
 #### 4. Live human assistance
-One tap to video-call **family/friends or volunteers**. On the blind user's side the **camera is off by default** and shared only on demand; incoming calls ring with **sound + vibration + spoken caller name**. During a call, the sighted helper can remotely toggle the **flashlight** and **zoom** to see clearly.
+One tap to video-call **family/friends or volunteers**. On the blind user's side the **camera is off by default** and shared only on demand; incoming calls ring with **sound + vibration + spoken caller name**. During a call, the sighted helper can remotely toggle the **flashlight** and **zoom** to see clearly. A call can be **recorded only with both parties' consent** (server-verified), and you can **play back or delete** your own recordings — each tagged with time, participants, duration, and place.
+
+#### Trust, safety & governance
+For a vulnerable user base, safety is a feature. **Reporting** (optionally with a recording attached as evidence), **blocking**, and a moderation ladder are built in; report outcomes are **delivered to both parties** through a persistent in-app inbox. For abuse prevention, an administrator can **observe a live call** (and speak into it, or force-end it) — but **never covertly: both parties are notified in real time** with a non-dismissible banner and a spoken announcement, and old clients that can't show that notice are never observed. Every privileged action is **audited**.
 
 ---
 
@@ -137,7 +140,8 @@ The visual pipeline runs entirely on the iPhone. The backend handles **only netw
                                              ▼
 ┌──────────────── Self-hosted backend (Node + TypeScript + Fastify) ───────────────┐
 │  Accounts & roles (JWT / RBAC) · family binding (two-way consent) · call routing │
-│  public help queue · bilingual push · admin / reports · SQLite                   │
+│  help queue · push + in-app inbox · recording (consent · legal-hold · playback)  │
+│  admin observer mesh (notified) · reports + evidence · moderation · SQLite        │
 └───────────────────────────────────────────┬───────────────────────────────────────┘
                                              │
                        WebRTC P2P media  ◀───┴───▶  on direct-connect failure,
@@ -242,13 +246,13 @@ The production self-hosted backend runs on **AWS (Tokyo) + Cloudflare Tunnel**, 
 
 ```bash
 swift test --package-path Packages/BeeUrEiCore        # core safety logic — 319 tests
-xcodebuild test -scheme BeeUrEi                        # app-layer regression (simulator) — 72 tests
-cd server && npm test                                  # backend — 212 tests
+xcodebuild test -scheme BeeUrEi                        # app-layer regression (simulator) — 74 tests
+cd server && npm test                                  # backend — 289 tests
 ```
 
-**603 tests across the three suites** (319 core + 72 app-layer + 212 backend). GitHub Actions runs the full suite on every push, and the backend `tsc` type-check is clean. The live **CI badge** above is the authoritative pass/fail signal.
+**682 tests across the three suites** (319 core + 74 app-layer + 289 backend). GitHub Actions runs the full suite on every push, and the backend `tsc` type-check is clean. The live **CI badge** above is the authoritative pass/fail signal.
 
-Through several rounds of adversarial, multi-agent code review, **140+ real defects** were fixed — signaling eavesdropping, wrong obstacle distance/direction, false drop-off alarms over dark ground, arrival bypassing the accuracy gate, a magnetically-misled beacon bearing, spatial audio permanently muted after an interruption, voice channels drowning each other out, silent failures to the blind user, missing confirmations — each with a regression test. The three safety-critical subsystems each have a dedicated regression net: **call privacy gating, obstacle-avoidance discipline, and navigation gating.**
+Through several rounds of adversarial, multi-agent code review, **160+ real defects** were fixed — signaling eavesdropping, recording media reachable through the wrong endpoint, a moderation notification leaking the counterparty's sanction, a play token surviving session revocation, wrong obstacle distance/direction, false drop-off alarms over dark ground, arrival bypassing the accuracy gate, a magnetically-misled beacon bearing, spatial audio permanently muted after an interruption, silent failures to the blind user — each with a regression test. The safety-critical subsystems each have a dedicated regression net: **call privacy gating, the admin-observer admission/relay, recording consent & playback authorization, obstacle-avoidance discipline, and navigation gating.**
 
 ---
 
@@ -270,7 +274,8 @@ Through several rounds of adversarial, multi-agent code review, **140+ real defe
 - **"People around you"** reports only count and direction — **no identity, no face stored**.
 - Live video is **P2P**; on the blind user's side the camera is **off by default** and shared only on demand, and it **resets to off** whenever a new member joins.
 - Recognition history, the product library, and taught items are stored **only on the device** (`completeFileProtection`).
-- Calls are **not recorded by default**; recording requires **informed consent from both parties**.
+- Calls are **not recorded by default**; recording requires **server-verified informed consent from both parties**, auto-deletes after a short retention window (7 days by default), and stays accessible to you for playback or deletion.
+- For abuse prevention, an administrator may **observe a live call — never covertly**: both parties are notified in real time (banner + spoken announcement), and the observation channel is isolated from the 1:1 media. Privileged access is **audited**.
 - Self-hosted backend — account and call-routing data live **on your own server**.
 - **Registration now requires reading and accepting the *Privacy Policy* and *Terms of Use* before it can be completed.**
 
@@ -281,7 +286,8 @@ Full legal text — Privacy / Terms / EULA, bilingual — is on the website at *
 ## Docs & Links
 
 - **Website** — <https://beeurei.hikosphere.com>
-- **Legal documents** (Privacy · Terms · EULA, bilingual) — <https://beeurei.hikosphere.com/legal/>
+- **Legal documents** (Privacy · Terms · EULA, bilingual, v3.0) — <https://beeurei.hikosphere.com/legal/>
+- **Technical disclosure** (技术交底, full architecture & security model) — [`docs/技术交底.md`](docs/技术交底.md)
 - **Brand assets** (icon · wordmark · palette) — [`BeeUrEi-Brand-Assets/`](BeeUrEi-Brand-Assets/)
 - **Security policy** — [`SECURITY.md`](SECURITY.md)
 - **Contributing guide** — [`CONTRIBUTING.md`](CONTRIBUTING.md)

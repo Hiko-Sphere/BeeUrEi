@@ -5,6 +5,7 @@ import { type Store, type Role, type AdminAuditEntry, publicUser } from '../db/s
 import { requireAuth } from '../auth/rbac'
 import { hashPassword } from '../auth/passwords'
 import { normalizePhone } from '../auth/apple'
+import { cascadeDeleteUser } from '../db/cascade'
 import type { PresenceRegistry } from '../assist/presence'
 
 const statusSchema = z.object({ status: z.enum(['active', 'disabled']) })
@@ -443,11 +444,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     if (target.role === 'admin' && target.status === 'active' && activeAdminCount() <= 1) {
       return reply.code(400).send({ error: 'last_admin_protected' })
     }
-    for (const l of store.linksByOwner(id)) store.deleteLink(l.id)
-    for (const l of store.linksByMember(id)) store.deleteLink(l.id)
-    for (const pk of store.passkeysForUser(id)) store.deletePasskey(pk.id, id)
-    store.deleteRefreshTokensForUser(id)
-    store.deleteUser(id)
+    cascadeDeleteUser(store, id) // 级联清群/消息/绑定/Passkey/会话（保留审核与审计记录）
     audit(req.user!.sub, 'user.delete', 'user', id, `username=${target.username}`)
     return { ok: true }
   })

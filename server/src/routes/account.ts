@@ -8,6 +8,7 @@ import { type Mailer } from '../mail/mailer'
 import { emailVerificationMail } from '../mail/templates'
 import { CodeSendLimiter } from '../auth/sendLimiter'
 import { normalizePhone, type AppleTokenVerifier } from '../auth/apple'
+import { cascadeDeleteUser } from '../db/cascade'
 
 const passwordSchema = z.object({
   oldPassword: z.string().min(1),
@@ -211,12 +212,8 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
 
   // 删除账号（App Store 要求）：删除用户 + 其亲友绑定(双向) + refresh token。
   app.delete('/api/account', { preHandler: requireAuth() }, async (req, reply) => {
-    const id = req.user!.sub
-    for (const l of store.linksByOwner(id)) store.deleteLink(l.id)
-    for (const l of store.linksByMember(id)) store.deleteLink(l.id)
-    for (const pk of store.passkeysForUser(id)) store.deletePasskey(pk.id, id)
-    store.deleteRefreshTokensForUser(id)
-    store.deleteUser(id)
+    // 自助删号（GDPR 删除权）：级联清群/消息/绑定/Passkey/会话，不留孤儿数据。
+    cascadeDeleteUser(store, req.user!.sub)
     return reply.code(204).send()
   })
 }

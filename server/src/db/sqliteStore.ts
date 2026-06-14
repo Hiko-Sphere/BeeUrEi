@@ -361,6 +361,9 @@ export class SqliteStore implements Store {
       .get(userId, fromId) as any
     return Number(r?.n ?? 0)
   }
+  deleteMessagesForUser(userId: string): void {
+    this.db.prepare('DELETE FROM messages WHERE fromId = ? OR toId = ?').run(userId, userId)
+  }
 
   // MARK: 群聊
   createGroup(g: ChatGroup): void {

@@ -243,7 +243,7 @@ export function registerAssistRoutes(
   })
 
   // 志愿者认领指定求助：原子操作，一条求助只能被一位志愿者拿到。成功后双方可加入 callId 房间。
-  app.post('/api/assist/help/claim', { preHandler: requireAuth() }, async (req, reply) => {
+  app.post('/api/assist/help/claim', { preHandler: [requireAuth(), requireFeature(store, 'helpRequests')] }, async (req, reply) => {
     const parsed = helpClaimSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     // 黑名单：不能认领与自己互拉黑者的求助。
@@ -258,7 +258,7 @@ export function registerAssistRoutes(
   })
 
   // 志愿者随机/偏好匹配一条公开求助并直接认领。无可匹配则 request 为 null（非错误）。
-  app.post('/api/assist/help/match', { preHandler: requireAuth() }, async (req, reply) => {
+  app.post('/api/assist/help/match', { preHandler: [requireAuth(), requireFeature(store, 'helpRequests')] }, async (req, reply) => {
     const parsed = helpMatchSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const matched = openHelp.matchOne(

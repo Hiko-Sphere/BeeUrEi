@@ -298,6 +298,8 @@ export interface Store {
   markMessagesRead(readerId: string, fromId: string, at: number): number
   /// 来自 from 发给 user 的未读单聊条数。
   unreadCount(userId: string, fromId: string): number
+  /// 删除某用户收发的全部消息（单聊双向 + 其在群里的发言）——账号删除级联用。
+  deleteMessagesForUser(userId: string): void
 
   // 群聊
   createGroup(g: ChatGroup): void
@@ -592,6 +594,11 @@ export class MemoryStore implements Store {
       if (m.toId === userId && m.fromId === fromId && m.readAt == null) n++
     }
     return n
+  }
+  deleteMessagesForUser(userId: string): void {
+    let changed = false
+    for (const [k, m] of this.messages) if (m.fromId === userId || m.toId === userId) { this.messages.delete(k); changed = true }
+    if (changed) this.afterMutate()
   }
 
   // MARK: 群聊

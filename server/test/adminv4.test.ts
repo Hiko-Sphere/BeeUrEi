@@ -196,3 +196,54 @@ describe('Admin v4：全字段查看 + 编辑用户', () => {
     expect(actions).toContain('user.resetPassword')
   })
 })
+
+describe('Admin v4 评审修复：补全功能开关 + 删号级联', () => {
+  it('关闭 messaging 后撤回也被拦（recall 受 messaging 开关约束）', async () => {
+    const { app } = withAdmin()
+    const aa = await adminAuth(app)
+    const u = await makeUser(app, 'recaller')
+    await app.inject({ method: 'PUT', url: '/api/admin/config', headers: aa, payload: { features: { messaging: false } } })
+    const r = await app.inject({ method: 'POST', url: '/api/messages/anyid/recall', headers: auth(u.token) })
+    expect(r.statusCode).toBe(403)
+    expect(r.json().error).toBe('feature_disabled')
+  })
+
+  it('关闭 helpRequests 后认领/匹配都被拦', async () => {
+    const { app } = withAdmin()
+    const aa = await adminAuth(app)
+    const u = await makeUser(app, 'volunteer1')
+    await app.inject({ method: 'PUT', url: '/api/admin/config', headers: aa, payload: { features: { helpRequests: false } } })
+    const claim = await app.inject({ method: 'POST', url: '/api/assist/help/claim', headers: auth(u.token), payload: { callId: 'x' } })
+    expect(claim.statusCode).toBe(403)
+    expect(claim.json().error).toBe('feature_disabled')
+    const match = await app.inject({ method: 'POST', url: '/api/assist/help/match', headers: auth(u.token), payload: {} })
+    expect(match.statusCode).toBe(403)
+    expect(match.json().error).toBe('feature_disabled')
+  })
+
+  it('删号级联：清空该用户单聊消息 + 自建群解散 + 参与群退出', async () => {
+    const { app, store } = withAdmin()
+    const aa = await adminAuth(app)
+    const a = await makeUser(app, 'cascA')
+    const b = await makeUser(app, 'cascB')
+    // 建立可互发消息的绑定（accepted）
+    store.createLink({ id: 'lk1', ownerId: a.id, memberId: b.id, relation: '朋友', isEmergency: false, status: 'accepted', createdAt: Date.now() })
+    // a 给 b 发一条单聊
+    store.createMessage({ id: 'm1', fromId: a.id, toId: b.id, kind: 'text', text: 'hi', createdAt: Date.now() })
+    // a 自建一个含 b 的群；另有一个 b 建的群含 a
+    store.createGroup({ id: 'gA', name: 'A群', ownerId: a.id, memberIds: [a.id, b.id], createdAt: Date.now() })
+    store.createGroup({ id: 'gB', name: 'B群', ownerId: b.id, memberIds: [b.id, a.id], createdAt: Date.now() })
+
+    const del = await app.inject({ method: 'DELETE', url: `/api/admin/users/${a.id}`, headers: aa })
+    expect(del.statusCode).toBe(200)
+    expect(store.findById(a.id)).toBeUndefined()
+    // a 的单聊消息清空
+    expect(store.messagesBetween(a.id, b.id, 50).length).toBe(0)
+    // a 自建的群被解散
+    expect(store.findGroup('gA')).toBeUndefined()
+    // b 的群里 a 已被移除，群仍在
+    const gB = store.findGroup('gB')
+    expect(gB).toBeTruthy()
+    expect(gB!.memberIds).not.toContain(a.id)
+  })
+})

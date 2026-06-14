@@ -108,7 +108,7 @@ struct HomeView: View {
             guard let dest, !incoming.hasIncoming else { route.pending = nil; return }
             route.pending = nil
             switch dest {
-            case .help: showRemoteAssist = true
+            case .help: requestRemoteHelp()
             case .lookAround: showFraming = true
             case .whereAmI: locationDescriber.describe()
             }
@@ -145,7 +145,7 @@ struct HomeView: View {
         // 主屏 Magic Tap（双指双击）= 一键求助：盲人最紧急的动作不需要找按钮（系统惯例：Magic Tap=最重要操作）。
         .accessibilityAction(.magicTap) {
             guard !incoming.hasIncoming else { return }
-            showRemoteAssist = true
+            requestRemoteHelp()
         }
     }
 
@@ -177,7 +177,7 @@ struct HomeView: View {
                     Text(HomeStrings.fallAlertFailed(lang)).font(.title3).foregroundStyle(.white)
                         .multilineTextAlignment(.center).padding(.horizontal)
                     BeeBigButton(HomeStrings.helpTitle(lang), systemImage: "hand.raised.fill", tint: .beeHoney) {
-                        showRemoteAssist = true
+                        requestRemoteHelp()
                     }
                 case .idle:
                     EmptyView()
@@ -257,6 +257,14 @@ struct HomeView: View {
 
     /// 求助入口：呼叫亲友(calls)或公开求助志愿者(helpRequests)，任一开启即可用；两者皆关才禁用。
     private var helpEnabled: Bool { session.features.calls || session.features.helpRequests }
+
+    /// 所有求助入口（按钮/Magic Tap/语音/摔倒后/Siri）统一经此守门：两种远程协助皆被管理员关闭时，
+    /// 朗读"暂时关闭"而非弹出空求助界面把用户困住。摔倒自动报警(EmergencyAlertCenter，不受开关影响)始终生效，
+    /// 故此守门不削弱安全网。
+    private func requestRemoteHelp() {
+        if helpEnabled { showRemoteAssist = true }
+        else { SpeechHub.shared.speak(HomeStrings.featureOff(lang), channel: .query, voiceCode: lang.voiceCode) }
+    }
 
     private var actionPanel: some View {
         VStack(spacing: BeeSpacing.sm) {
@@ -380,7 +388,7 @@ struct HomeView: View {
     private func handleVoiceCommand(_ command: VoiceCommand, transcript: String) {
         func speak(_ text: String) { SpeechHub.shared.speak(text, channel: .query, voiceCode: lang.voiceCode) }
         switch command {
-        case .help: showRemoteAssist = true
+        case .help: requestRemoteHelp()
         case .whereAmI: locationDescriber.describe()
         case .around: locationDescriber.describeAround()
         case .ahead: locationDescriber.describeAhead()
@@ -447,7 +455,7 @@ struct HomeView: View {
     /// 用大按钮（与主页操作面板一致），盲人无需精准定位（见 P2 审计）。
     private var helpFallbackButton: some View {
         BeeBigButton(HomeStrings.callHelper(lang), systemImage: "hand.raised.fill", tint: .beeHoney) {
-            showRemoteAssist = true
+            requestRemoteHelp()
         }
         .padding(.horizontal)
     }
@@ -492,7 +500,7 @@ struct HomeView: View {
             .padding(.horizontal)
             // 求助不依赖相机：即使相机被拒，仍让用户能呼叫志愿者/亲友。
             BeeBigButton(HomeStrings.callHelper(lang), systemImage: "hand.raised.fill",
-                         tint: .beeInk, foreground: .white) { showRemoteAssist = true }
+                         tint: .beeInk, foreground: .white) { requestRemoteHelp() }
                 .padding(.horizontal)
         }
         .padding()

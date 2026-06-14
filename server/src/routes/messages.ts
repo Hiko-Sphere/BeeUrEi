@@ -137,7 +137,7 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
 
   // 撤回自己发出的消息（WhatsApp 式：双方都看到"已撤回"占位）。限发出后 2 分钟内。
   // 视频消息撤回同时删除服务器上的媒体文件。
-  app.post('/api/messages/:id/recall', { preHandler: requireAuth() }, async (req, reply) => {
+  app.post('/api/messages/:id/recall', { preHandler: [requireAuth(), requireFeature(store, 'messaging')] }, async (req, reply) => {
     const id = (req.params as { id: string }).id
     const msg = store.findMessage(id)
     if (!msg) return reply.code(404).send({ error: 'not_found' })

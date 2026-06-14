@@ -49,7 +49,9 @@ const I18N = {
     recPolicy: '录制策略', allowRecording: '允许录制', allowRecordingDesc: '全局开关：关闭时任何端都无法发起录制。',
     requireConsent: '录制需各方同意', requireConsentDesc: '开启后，录制必须取得被录制方的明确同意。',
     retentionDays: '保留天数', retentionDesc: '到期自动删除录制元数据。', days: '天', save: '保存', saved: '已保存',
-    recList: '录制记录', deleteRec: '删除', confirmDeleteRec: '确认删除这条录制记录？', noRecordings: '暂无录制记录',
+    recList: '录制记录', deleteRec: '删除', confirmDeleteRec: '确认彻底删除这条录制（含媒体文件，不可恢复）？', noRecordings: '暂无录制记录',
+    playRec: '播放', recParticipants: '参与者', recDuration: '时长', recLocation: '地点', recUserDeleted: '用户已删除·留存中', recNoMedia: '媒体不可用', playFailed: '无法播放该录制', closeBtn: '关闭',
+    evidence: '附带录制证据', viewEvidence: '查看证据录制',
     detail: '用户详情', email: '邮箱', phone: '手机号', language: '语言', verified: '已验证', notVerified: '未验证',
     none: '未设置', appleId: 'Apple ID', linked: '已绑定', notLinked: '未绑定', passkeys: 'Passkey', online2: '在线状态',
     linkedRelations: '绑定关系', blockedRelations: '拉黑记录', recentCalls: '近期通话', noCalls: '暂无通话记录',
@@ -120,6 +122,7 @@ const I18N = {
     // 实时通话
     liveCalls: '实时通话', liveCallsDesc: '当前进行中的通话。可强制结束；点参与者查看/封禁。监看(声音画面)需在 App 端进行且会通知用户。',
     liveDuration: '时长', liveParticipants: '参与者', liveForceEnd: '强制结束', liveConfirmEnd: '确认强制结束这通通话？双方都会收到挂断。', liveCallEnded: '通话已结束', noLiveCalls: '当前没有进行中的通话', liveObserved: '管理员监看中', liveRefresh: '自动刷新中',
+    observe: '旁观', observeTitle: '旁观通话', observeConnecting: '正在接入旁观…', observeWaiting: '等待对方音视频…', observeSpeak: '开麦说话', observeMute: '静音', observeLeave: '结束旁观', observeForceEnd: '强制结束', observeNoVideo: '（未共享画面）', observeMicDenied: '麦克风不可用', observeNotObservable: '该通话参与方的 App 版本不支持被旁观（需双方升级到最新版）', observeExists: '已有管理员在旁观该通话', observeNotActive: '该通话已结束', observeFailed: '旁观接入失败', observeNotice: '旁观会实时通知通话双方（横幅+语音），合规监管。',
     auditActions: {
       'user.role': '修改角色', 'user.disable': '封禁用户', 'user.enable': '解封用户',
       'user.verifyEmail': '标记邮箱已验证', 'user.unverifyEmail': '撤销邮箱验证', 'user.unlinkApple': '解绑 Apple',
@@ -148,7 +151,9 @@ const I18N = {
     recPolicy: 'Recording policy', allowRecording: 'Allow recording', allowRecordingDesc: 'Master switch: when off, no side can start a recording.',
     requireConsent: 'Require everyone’s consent', requireConsentDesc: 'When on, recording requires the recorded party’s explicit consent.',
     retentionDays: 'Retention', retentionDesc: 'Recording metadata is auto-deleted after this many days.', days: 'days', save: 'Save', saved: 'Saved',
-    recList: 'Recordings', deleteRec: 'Delete', confirmDeleteRec: 'Delete this recording record?', noRecordings: 'No recordings',
+    recList: 'Recordings', deleteRec: 'Delete', confirmDeleteRec: 'Permanently delete this recording (incl. media file, cannot be undone)?', noRecordings: 'No recordings',
+    playRec: 'Play', recParticipants: 'Participants', recDuration: 'Duration', recLocation: 'Location', recUserDeleted: 'User-deleted · retained', recNoMedia: 'Media unavailable', playFailed: "Couldn't play this recording", closeBtn: 'Close',
+    evidence: 'Recording evidence', viewEvidence: 'View evidence recording',
     detail: 'User detail', email: 'Email', phone: 'Phone', language: 'Language', verified: 'Verified', notVerified: 'Unverified',
     none: 'Not set', appleId: 'Apple ID', linked: 'Linked', notLinked: 'Not linked', passkeys: 'Passkeys', online2: 'Presence',
     linkedRelations: 'Linked relations', blockedRelations: 'Blocks', recentCalls: 'Recent calls', noCalls: 'No calls',
@@ -219,6 +224,7 @@ const I18N = {
     // Live calls
     liveCalls: 'Live calls', liveCallsDesc: 'Calls in progress. You can force-end; click a participant to view/ban. Observing (audio/video) happens in the app and notifies the users.',
     liveDuration: 'Duration', liveParticipants: 'Participants', liveForceEnd: 'Force end', liveConfirmEnd: 'Force-end this call? Both sides will be hung up.', liveCallEnded: 'Call ended', noLiveCalls: 'No calls in progress', liveObserved: 'Admin observing', liveRefresh: 'Auto-refreshing',
+    observe: 'Observe', observeTitle: 'Observe call', observeConnecting: 'Connecting observer…', observeWaiting: 'Waiting for audio/video…', observeSpeak: 'Speak', observeMute: 'Mute', observeLeave: 'Stop observing', observeForceEnd: 'Force end', observeNoVideo: '(no video shared)', observeMicDenied: 'Microphone unavailable', observeNotObservable: "Participants' app version doesn't support being observed (both must update)", observeExists: 'An admin is already observing this call', observeNotActive: 'This call has ended', observeFailed: 'Failed to connect observer', observeNotice: 'Observing notifies both parties in real time (banner + voice) — compliant supervision.',
     auditActions: {
       'user.role': 'Change role', 'user.disable': 'Ban user', 'user.enable': 'Unban user',
       'user.verifyEmail': 'Mark email verified', 'user.unverifyEmail': 'Unverify email', 'user.unlinkApple': 'Unlink Apple',
@@ -280,7 +286,10 @@ function errText(code) { return I18N[state.lang]['err_' + code] || code || t('er
 
 // ---------------------------------------------------------------- api
 async function api(path, { method = 'GET', body, auth = true } = {}) {
-  const headers = { 'content-type': 'application/json' };
+  // 仅在确有 body 时才声明 application/json——否则 Fastify 对"空 body + json"直接 400
+  // （影响所有无 body 的 POST，如强制结束通话/标记已读，见反馈）。
+  const headers = {};
+  if (body !== undefined) headers['content-type'] = 'application/json';
   if (auth && state.token) headers.authorization = 'Bearer ' + state.token;
   let res;
   try {
@@ -1075,6 +1084,7 @@ function renderLiveCalls() {
         <span class="text-dim">${esc(t('liveParticipants'))}: ${c.members.length}</span>
         ${c.hasAdminObserver ? `<span class="pill role-admin">${esc(t('liveObserved'))}</span>` : ''}
         <span class="grow1"></span>
+        ${c.hasAdminObserver ? '' : `<button class="btn sm" data-observe="${esc(c.callId)}">👁 ${esc(t('observe'))}</button>`}
         <button class="btn danger sm" data-end="${esc(c.callId)}">${esc(t('liveForceEnd'))}</button>
       </div>
       <div class="live-members">${c.members.map(memberChip).join('')}</div>
@@ -1093,6 +1103,172 @@ function renderLiveCalls() {
     try { await api(`/api/admin/calls/${b.dataset.end}/end`, { method: 'POST' }); toast(t('liveCallEnded'), 'success'); loadLiveCalls(); }
     catch (err) { toast(errText(err.code), 'error'); }
   }));
+  viewEl().querySelectorAll('[data-observe]').forEach((b) => b.addEventListener('click', () => {
+    const c = state.live.find((x) => x.callId === b.dataset.observe);
+    if (c) startObserver(c);
+  }));
+}
+
+// ---------------------------------------------------------------- web observer (WebRTC)
+// 浏览器内旁观通话：与 iOS 旁观一致，经 /ws 用 obs-* 定向握手接收各参与者音视频，可开麦说话、强制结束。
+// 合规：服务端在管理员加入时即通知通话双方（横幅+语音），绝非隐蔽。
+function startObserver(call) {
+  const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const pcs = {};            // peerId -> RTCPeerConnection
+  const tiles = {};          // peerId -> { wrap, video, label } DOM
+  const pendingIce = {};     // peerId -> [candidate] (在 setRemoteDescription 前缓冲)
+  const hasRemote = {};      // peerId -> bool
+  let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+  let ws = null, localStream = null, speaking = false, muted = false, closed = false;
+
+  // —— UI 覆盖层 ——
+  const mask = document.createElement('div'); mask.className = 'drawer-mask'; mask.style.zIndex = '70';
+  const box = document.createElement('div'); box.className = 'modal-overlay';
+  box.innerHTML = `<div class="card observe-card" role="dialog" aria-modal="true" aria-label="${esc(t('observeTitle'))}">
+    <div class="observe-head">
+      <span class="live-dot" aria-hidden="true"></span>
+      <b>${esc(t('observeTitle'))}</b>
+      <span class="observe-status text-dim">${esc(t('observeConnecting'))}</span>
+      <span class="grow1"></span>
+      <span class="text-dim observe-note">${esc(t('observeNotice'))}</span>
+    </div>
+    <div class="observe-grid"></div>
+    <div class="observe-actions">
+      <button class="btn" data-speak>🎤 ${esc(t('observeSpeak'))}</button>
+      <button class="btn" data-mute hidden>🔇 ${esc(t('observeMute'))}</button>
+      <span class="grow1"></span>
+      <button class="btn danger" data-forceend>${esc(t('observeForceEnd'))}</button>
+      <button class="btn ink" data-leave>${esc(t('observeLeave'))}</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mask); document.body.appendChild(box);
+  const grid = box.querySelector('.observe-grid');
+  const statusEl = box.querySelector('.observe-status');
+  const setStatus = (s) => { statusEl.textContent = s; };
+
+  function ensureTile(peerId, name) {
+    if (tiles[peerId]) { if (name) tiles[peerId].label.textContent = name; return tiles[peerId]; }
+    const wrap = document.createElement('div'); wrap.className = 'observe-tile';
+    const video = document.createElement('video'); video.autoplay = true; video.playsInline = true;
+    const label = document.createElement('div'); label.className = 'observe-label'; label.textContent = name || peerId;
+    const hint = document.createElement('div'); hint.className = 'observe-hint'; hint.textContent = t('observeWaiting');
+    wrap.appendChild(video); wrap.appendChild(hint); wrap.appendChild(label); grid.appendChild(wrap);
+    const tile = { wrap, video, label, hint };
+    tiles[peerId] = tile; return tile;
+  }
+  function dropTile(peerId) { const x = tiles[peerId]; if (x) { x.wrap.remove(); delete tiles[peerId]; } }
+
+  function ensurePC(peerId) {
+    if (pcs[peerId]) return pcs[peerId];
+    const pc = new RTCPeerConnection({ iceServers });
+    pcs[peerId] = pc;
+    pc.onicecandidate = (e) => { if (e.candidate && ws && ws.readyState === 1) send({ type: 'obs-ice', to: peerId, candidate: e.candidate.candidate, sdpMid: e.candidate.sdpMid, sdpMLineIndex: e.candidate.sdpMLineIndex }); };
+    pc.ontrack = (e) => { const tile = ensureTile(peerId); if (tile.video.srcObject !== e.streams[0]) tile.video.srcObject = e.streams[0]; if (e.track.kind === 'video') tile.hint.hidden = true; };
+    if (localStream) localStream.getTracks().forEach((tr) => pc.addTrack(tr, localStream)); // 开麦后新建的 PC 直接带麦
+    return pc;
+  }
+
+  function send(obj) { try { ws.send(JSON.stringify(obj)); } catch { /* socket closed */ } }
+
+  async function onObsOffer(peerId, sdp) {
+    const pc = ensurePC(peerId);
+    await pc.setRemoteDescription({ type: 'offer', sdp });
+    hasRemote[peerId] = true; flushIce(peerId);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    send({ type: 'obs-answer', to: peerId, sdp: answer.sdp });
+    setStatus(t('observeTitle'));
+  }
+  async function onObsAnswer(peerId, sdp) {
+    const pc = pcs[peerId]; if (!pc) return;
+    await pc.setRemoteDescription({ type: 'answer', sdp });
+    hasRemote[peerId] = true; flushIce(peerId);
+  }
+  function onObsIce(peerId, c) {
+    const cand = new RTCIceCandidate({ candidate: c.candidate, sdpMid: c.sdpMid, sdpMLineIndex: c.sdpMLineIndex });
+    if (hasRemote[peerId] && pcs[peerId]) pcs[peerId].addIceCandidate(cand).catch(() => {});
+    else (pendingIce[peerId] = pendingIce[peerId] || []).push(cand);
+  }
+  function flushIce(peerId) { (pendingIce[peerId] || []).forEach((c) => pcs[peerId] && pcs[peerId].addIceCandidate(c).catch(() => {})); pendingIce[peerId] = []; }
+
+  // 开麦说话：取麦克风 → 加到所有现有 PC → 各自重协商（admin 作为 offerer，对端 iOS 应答）。
+  async function enableSpeak() {
+    try { localStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch { toast(t('observeMicDenied'), 'error'); return; }
+    speaking = true;
+    box.querySelector('[data-speak]').hidden = true;
+    box.querySelector('[data-mute]').hidden = false;
+    for (const [peerId, pc] of Object.entries(pcs)) {
+      localStream.getAudioTracks().forEach((tr) => pc.addTrack(tr, localStream));
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        send({ type: 'obs-offer', to: peerId, sdp: offer.sdp });
+      } catch { /* ignore single-peer renegotiation failure */ }
+    }
+  }
+  function toggleMute() {
+    muted = !muted;
+    if (localStream) localStream.getAudioTracks().forEach((tr) => (tr.enabled = !muted));
+    const mb = box.querySelector('[data-mute]');
+    mb.textContent = (muted ? '🎙 ' : '🔇 ') + (muted ? t('observeSpeak') : t('observeMute'));
+  }
+
+  function teardown() {
+    if (closed) return; closed = true;
+    try { if (ws) ws.close(); } catch {}
+    Object.values(pcs).forEach((pc) => { try { pc.close(); } catch {} });
+    if (localStream) localStream.getTracks().forEach((tr) => tr.stop());
+    document.removeEventListener('keydown', onKey);
+    mask.remove(); box.remove();
+    loadLiveCalls();
+  }
+  function onKey(e) { if (e.key === 'Escape') teardown(); }
+  document.addEventListener('keydown', onKey);
+  mask.addEventListener('click', teardown);
+  box.querySelector('[data-leave]').addEventListener('click', teardown);
+  box.querySelector('[data-speak]').addEventListener('click', enableSpeak);
+  box.querySelector('[data-mute]').addEventListener('click', toggleMute);
+  box.querySelector('[data-forceend]').addEventListener('click', async () => {
+    if (!(await confirmDialog(t('liveConfirmEnd')))) return;
+    try { await api(`/api/admin/calls/${call.callId}/end`, { method: 'POST' }); } catch (err) { toast(errText(err.code), 'error'); }
+    teardown();
+  });
+
+  // —— 连接 ——
+  (async () => {
+    try { const r = await api('/api/assist/turn'); if (r && r.iceServers && r.iceServers.length) iceServers = r.iceServers; } catch { /* fall back to public STUN */ }
+    ws = new WebSocket(wsProto + '//' + location.host + '/ws?token=' + encodeURIComponent(state.token));
+    ws.onopen = () => send({ type: 'join', callId: call.callId, role: 'admin', observe: true, caps: ['adminObserver'] });
+    ws.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch { return; }
+      switch (m.type) {
+        case 'joined':
+          (m.peers || []).forEach((p) => { if (p.role !== 'admin') ensureTile(p.userId, p.userName || p.userId); });
+          setStatus(t('observeWaiting'));
+          break;
+        case 'peer-joined':
+          if (m.role !== 'admin') ensureTile(m.userId, m.userName || m.userId); // 晚到参与者（其会向我发 obs-offer）
+          break;
+        case 'obs-offer': if (m.from) onObsOffer(m.from, m.sdp); break;
+        case 'obs-answer': if (m.from) onObsAnswer(m.from, m.sdp); break;
+        case 'obs-ice': if (m.from) onObsIce(m.from, m); break;
+        case 'peer-left': if (m.userId) { const pc = pcs[m.userId]; if (pc) { try { pc.close(); } catch {} delete pcs[m.userId]; } dropTile(m.userId); } break;
+        case 'end': toast(t('liveCallEnded')); teardown(); break;
+      }
+    };
+    ws.onclose = (ev) => {
+      if (closed) return;
+      const reason = (ev.reason || '').toString();
+      const msg = reason === 'call_not_observable' ? t('observeNotObservable')
+        : reason === 'observer_exists' ? t('observeExists')
+        : reason === 'call_not_active' ? t('observeNotActive')
+        : (ev.code === 1000 ? null : t('observeFailed'));
+      if (msg) toast(msg, 'error');
+      teardown();
+    };
+    ws.onerror = () => { /* surfaced via onclose */ };
+  })();
   viewEl().querySelectorAll('.live-member').forEach((el) => el.addEventListener('click', () => openUserDrawer(el.dataset.uid)));
 }
 
@@ -1111,11 +1287,14 @@ function renderReports() {
       <div class="body">
         <div class="who">${esc(r.reporterName)} <span class="arrow">→</span> ${esc(r.targetName)}</div>
         <div class="reason">${esc(r.reason || '—')}</div>
-        <div class="meta">${esc(fmtDate(r.createdAt))}${r.callId ? ' · call ' + esc(r.callId.slice(0, 8)) : ''}${r.status !== 'open' && r.resolvedByName ? ' · ' + esc(t('resolvedBy')) + ' ' + esc(r.resolvedByName) : ''}</div>
+        <div class="meta">${esc(fmtDate(r.createdAt))}${r.callId ? ' · call ' + esc(r.callId.slice(0, 8)) : ''}${r.evidenceRecordingId ? ' · ' + esc(t('evidence')) : ''}${r.status !== 'open' && r.resolvedByName ? ' · ' + esc(t('resolvedBy')) + ' ' + esc(r.resolvedByName) : ''}</div>
       </div>
-      ${r.status === 'open'
-        ? `<button class="btn sm primary" data-moderate="${esc(r.id)}">${esc(t('moderate'))}</button>`
-        : `<span class="pill ${decPillCls[r.decision] || 'ok'}">${esc(r.decision ? decisionLabel(r.decision) : t('resolved'))}</span>`}
+      <div class="rep-actions">
+        ${r.evidenceRecordingId ? `<button class="btn sm" data-playev="${esc(r.evidenceRecordingId)}">${esc(t('viewEvidence'))}</button>` : ''}
+        ${r.status === 'open'
+          ? `<button class="btn sm primary" data-moderate="${esc(r.id)}">${esc(t('moderate'))}</button>`
+          : `<span class="pill ${decPillCls[r.decision] || 'ok'}">${esc(r.decision ? decisionLabel(r.decision) : t('resolved'))}</span>`}
+      </div>
     </div>`;
   viewEl().innerHTML = !state.reports.length
     ? `<div class="empty"><div class="ico">✅</div><p>${esc(t('noReports'))}</p></div>`
@@ -1125,6 +1304,7 @@ function renderReports() {
     const r = state.reports.find((x) => x.id === b.dataset.moderate);
     if (r) openModerateDialog(r);
   }));
+  viewEl().querySelectorAll('[data-playev]').forEach((b) => b.addEventListener('click', () => playRecordingModal(b.dataset.playev)));
 }
 
 // 审核处置模态：展示举报 → 必填理由 → 选择 忽略/警告/暂停/封禁 → 调 /moderate → 落审计并刷新。
@@ -1299,10 +1479,19 @@ async function loadRecordings() {
 }
 function renderRecordings() {
   const c = state.recConfig || { enabled: false, requireConsent: true, retentionDays: 30 };
-  const recRows = state.recordings.map((r) => `
-    <div class="rep"><div class="body"><div class="who">call ${esc((r.callId || '').slice(0, 12))}</div>
-      <div class="meta">${esc(fmtDate(r.recordedAt))}${r.reason ? ' · ' + esc(r.reason) : ''}</div></div>
-      <button class="btn danger sm" data-delrec="${esc(r.id)}">${esc(t('deleteRec'))}</button></div>`).join('');
+  const recRows = state.recordings.map((r) => {
+    const names = (r.participantNames || []).join(', ');
+    const dur = (r.durationSec != null) ? ` · ${t('recDuration')} ${Math.floor(r.durationSec / 60)}:${String(r.durationSec % 60).padStart(2, '0')}` : '';
+    const loc = r.locationLabel ? ` · ${t('recLocation')} ${esc(r.locationLabel)}` : '';
+    const deleted = r.deletedAt ? ` <span class="pill off">${esc(t('recUserDeleted'))}</span>` : '';
+    const playBtn = r.hasMedia
+      ? `<button class="btn sm" data-playrec="${esc(r.id)}">${esc(t('playRec'))}</button>`
+      : `<span class="muted-note">${esc(t('recNoMedia'))}</span>`;
+    return `<div class="rep"><div class="body">
+        <div class="who">${esc(names || ('call ' + (r.callId || '').slice(0, 12)))}${deleted}</div>
+        <div class="meta">${esc(fmtDate(r.recordedAt))}${dur}${loc}${r.reason ? ' · ' + esc(r.reason) : ''}</div></div>
+        <div class="rep-actions">${playBtn}<button class="btn danger sm" data-delrec="${esc(r.id)}">${esc(t('deleteRec'))}</button></div></div>`;
+  }).join('');
   viewEl().innerHTML = `
     <div class="section"><h3>${esc(t('recPolicy'))}</h3>
       <div class="card">
@@ -1328,6 +1517,30 @@ function renderRecordings() {
     try { await api(`/api/recordings/${b.dataset.delrec}`, { method: 'DELETE' }); loadRecordings(); }
     catch (err) { toast(errText(err.code), 'error'); }
   }));
+  viewEl().querySelectorAll('[data-playrec]').forEach((b) => b.addEventListener('click', () => playRecordingModal(b.dataset.playrec)));
+}
+
+// 播放录制：先取短时签名媒体令牌（Bearer 无法随 <video src> 传），再以 ?t= 加载同源 <video>。
+// 关闭时清空 src 停止下载。CSP：default-src 'self' 已允许同源媒体，无需放宽。
+async function playRecordingModal(recordingId) {
+  let token;
+  try { token = (await api(`/api/recordings/${recordingId}/play-token`)).token; }
+  catch (err) { toast(errText(err.code) || t('playFailed'), 'error'); return; }
+  const mask = document.createElement('div'); mask.className = 'drawer-mask'; mask.style.zIndex = '70';
+  const box = document.createElement('div'); box.className = 'modal-overlay';
+  box.innerHTML = `<div class="card video-card" role="dialog" aria-modal="true" aria-label="${esc(t('playRec'))}">
+    <video class="rec-video" controls autoplay playsinline src="/api/recordings/${encodeURIComponent(recordingId)}/media?t=${encodeURIComponent(token)}"></video>
+    <div class="confirm-actions"><button class="btn ink" data-close>${esc(t('closeBtn'))}</button></div>
+  </div>`;
+  document.body.appendChild(mask); document.body.appendChild(box);
+  const close = () => {
+    const v = box.querySelector('video'); if (v) { v.pause(); v.removeAttribute('src'); v.load(); }
+    mask.remove(); box.remove(); document.removeEventListener('keydown', onKey);
+  };
+  function onKey(e) { if (e.key === 'Escape') close(); }
+  document.addEventListener('keydown', onKey);
+  mask.addEventListener('click', close);
+  box.querySelector('[data-close]').addEventListener('click', close);
 }
 
 // keep the reports badge fresh after resolving

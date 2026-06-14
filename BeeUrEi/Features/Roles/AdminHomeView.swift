@@ -11,6 +11,10 @@ struct AdminHomeView: View {
     @State private var activeCalls: [ActiveCallInfo] = []   // 进行中通话实时总览（5s 轮询）
     @State private var observingCallId: String?              // 正在旁观的通话（驱动全屏 CallView）
     @State private var forceEndTarget: String?               // 待确认强制结束的通话
+    @State private var recordings: [RecordingInfo] = []      // 全站录制（含用户已软删除·留存中）
+    @State private var recPlaying: PlayableVideo?            // 正在播放的录制
+    @State private var recPlayError: String?
+    @State private var recPurgeTarget: RecordingInfo?        // 待确认彻底删除的录制
     @State private var errorText: String?
     @State private var loading = false
     @State private var busyIds: Set<String> = []   // 在途的封禁/解封/处理目标，防重复点击竞态（见审查 #1）
@@ -105,6 +109,8 @@ struct AdminHomeView: View {
                     }
                 }
 
+                adminRecordingsSection
+
                 RoleAccountSection(session: session, onSwitchRole: onSwitchRole)
             }
             .navigationTitle(lang == .zh ? "管理员" : "Admin")
@@ -113,6 +119,17 @@ struct AdminHomeView: View {
             .task { await load() }
             .onAppear { startLivePolling() }
             .onDisappear { livePoll?.cancel(); livePoll = nil }
+            .fullScreenCover(item: $recPlaying) { v in VideoPlayerSheet(url: v.url, lang: lang) }
+            .alert(RecordingStrings.playFailed(lang), isPresented: Binding(get: { recPlayError != nil }, set: { if !$0 { recPlayError = nil } })) {
+                Button(AccountStrings.ok(lang), role: .cancel) { recPlayError = nil }
+            } message: { if let recPlayError { Text(recPlayError) } }
+            .alert(lang == .zh ? "彻底删除这条录制？" : "Permanently delete this recording?",
+                   isPresented: Binding(get: { recPurgeTarget != nil }, set: { if !$0 { recPurgeTarget = nil } })) {
+                Button(lang == .zh ? "彻底删除" : "Delete permanently", role: .destructive) {
+                    if let t = recPurgeTarget { Task { await purgeRecording(t) } }; recPurgeTarget = nil
+                }
+                Button(AccountStrings.cancel(lang), role: .cancel) { recPurgeTarget = nil }
+            } message: { Text(lang == .zh ? "媒体文件将被永久删除，无法恢复。" : "The media file will be permanently removed and cannot be recovered.") }
             // 旁观某通话：全屏 CallView（合规：参与方会收到"管理员正在监看"横幅 + 语音）。
             .fullScreenCover(isPresented: Binding(get: { observingCallId != nil }, set: { if !$0 { observingCallId = nil } })) {
                 if let cid = observingCallId {
@@ -185,6 +202,52 @@ struct AdminHomeView: View {
         String(format: "%d:%02d", s / 60, s % 60)
     }
 
+    // MARK: 全站录制（查看/播放/留存/彻底删除）
+
+    @ViewBuilder private var adminRecordingsSection: some View {
+        Section {
+            if recordings.isEmpty {
+                Text(lang == .zh ? "暂无录制" : "No recordings").foregroundStyle(.secondary)
+            } else {
+                ForEach(recordings) { rec in
+                    RecordingRow(rec: rec, lang: lang, showOwner: true,
+                                 onPlay: { Task { await playRecording(rec) } },
+                                 busy: busyIds.contains(rec.id))
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) { recPurgeTarget = rec } label: { Label(lang == .zh ? "彻底删除" : "Delete", systemImage: "trash") }
+                        }
+                }
+            }
+        } header: {
+            Text(lang == .zh ? "通话录制（\(recordings.count)）" : "Call recordings (\(recordings.count))")
+        } footer: {
+            Text(lang == .zh ? "含用户已删除但仍在保留期内的录制（标注「用户已删除·留存中」）。" : "Includes recordings users deleted but still within the retention window (marked “User-deleted · retained”).")
+        }
+    }
+
+    private func playRecording(_ rec: RecordingInfo) async {
+        guard rec.hasMedia else { recPlayError = RecordingStrings.mediaGone(lang); return }
+        guard let token = session.token, !busyIds.contains(rec.id) else { return }
+        busyIds.insert(rec.id); defer { busyIds.remove(rec.id) }
+        do {
+            let url = try await api.downloadRecording(token: token, id: rec.id)
+            recPlaying = PlayableVideo(id: rec.id, url: url)
+        } catch {
+            if !handleAuthError(error) { recPlayError = RecordingStrings.playFailed(lang) }
+        }
+    }
+
+    private func purgeRecording(_ rec: RecordingInfo) async {
+        guard let token = session.token, !busyIds.contains(rec.id) else { return }
+        busyIds.insert(rec.id); defer { busyIds.remove(rec.id) }
+        do {
+            try await api.adminDeleteRecording(token: token, id: rec.id)
+            recordings.removeAll { $0.id == rec.id }
+        } catch {
+            if !handleAuthError(error) { errorText = actionFailed }
+        }
+    }
+
     /// access token 过期(401)统一处理：登出回登录页，而非把鉴权过期误报成业务/权限错误（见复审 #3）。
     /// 返回 true 表示已作为 401 处理，调用方不必再设业务错误文案。
     private func handleAuthError(_ error: Error) -> Bool {
@@ -202,8 +265,10 @@ struct AdminHomeView: View {
             let r = try await api.adminReports(token: token)
             let c = try? await api.recordingConfig(token: token)
             let calls = try? await api.adminActiveCalls(token: token)
+            let recs = try? await api.adminRecordings(token: token)
             users = u; reports = r; recConfig = c
             if let calls { activeCalls = calls }
+            if let recs { recordings = recs }
             errorText = nil
         } catch {
             if handleAuthError(error) { return }

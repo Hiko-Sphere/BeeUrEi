@@ -94,6 +94,20 @@ export interface Report {
   decision?: ReportDecision // 审核处置结果（resolved 时记录）
   resolvedBy?: string       // 处置管理员 id
   resolvedAt?: number
+  evidenceRecordingId?: string // 举报证据：关联的通话录制（举报人须为该录制的参与者方可附上）
+}
+
+/// 站内通知（持久化收件箱）：可靠投递事件结果（如"举报已处置"），不依赖易丢的推送。
+/// 推送（APNs sendAlert）仅作为离线提醒；权威与可回看的来源是这张表。
+export interface Notification {
+  id: string
+  userId: string            // 收件人
+  kind: string              // 'report_resolved' 等
+  title: string
+  body: string
+  data?: Record<string, string> // 附带结构化数据（如 reportId/decision），供客户端跳转/展示
+  createdAt: number
+  readAt?: number           // 已读时间（未读=undefined）
 }
 
 /// 管理审计日志：每条后台**变更**操作留痕（可追责、可证明合规）。
@@ -257,6 +271,15 @@ export interface Recording {
   reason: string
   recordedAt: number
   mediaId?: string // 关联的媒体文件（/api/media）：录制实体；删录制时一并删媒体（见 sweepExpiredRecordings/DELETE）
+  // 详细元数据（"时间地点人 + 时长"）：
+  participants?: string[]  // 参与者 userId（owner + 同意被录的对端）——"人"
+  durationSec?: number     // 通话时长（秒）
+  lat?: number             // 录制方位置纬度（仅当定位已授权时采集）——"地"
+  lon?: number             // 录制方位置经度
+  locationLabel?: string   // 可读地名（反向地理编码，可选）
+  // 软删除/合规留存：用户可对自己的录制软删除（对其隐藏），但管理员在留存期内仍可查看（取证/合规）。
+  // 真正的物理清除仍由 sweepExpiredRecordings 在 recordedAt+retentionDays 时统一执行。
+  deletedAt?: number       // 用户软删除时间戳（undefined=未删）
 }
 
 /// 聊天消息（单聊=accepted 绑定互发；群聊=群成员互发）。
@@ -356,8 +379,20 @@ export interface Store {
   setRecordingConfig(patch: Partial<RecordingConfig>): RecordingConfig
   createRecording(rec: Recording): void
   allRecordings(): Recording[]
+  recordingsForUser(ownerId: string): Recording[] // 某用户自己的录制（不含其软删除的），时间倒序——用户端"我的录音"
   findRecording(id: string): Recording | undefined
+  recordingByMediaId(mediaId: string): Recording | undefined // 该媒体是否为某录制实体（通用媒体端点据此拒绝外泄录制）
+  updateRecording(id: string, patch: Partial<Recording>): Recording | undefined // 软删除/补元数据
+  reportsCitingRecording(recordingId: string): Report[] // 引用某录制作为证据的举报（留存保护用）
   deleteRecording(id: string): void
+
+  // 站内通知（持久化收件箱）
+  createNotification(n: Notification): void
+  notificationsForUser(userId: string, limit?: number): Notification[] // 时间倒序
+  findNotification(id: string): Notification | undefined
+  markNotificationRead(id: string, userId: string): void // 仅本人可标记
+  markAllNotificationsRead(userId: string): number
+  unreadNotificationCount(userId: string): number
 
   createMessage(m: ChatMessage): void
   findMessage(id: string): ChatMessage | undefined
@@ -405,6 +440,7 @@ export class MemoryStore implements Store {
   protected groups = new Map<string, ChatGroup>()
   protected groupReads = new Map<string, number>() // `${groupId}:${userId}` → lastReadAt
   protected media = new Map<string, MediaMeta>()
+  protected notifications = new Map<string, Notification>()
   protected recordingConfig: RecordingConfig = { enabled: false, retentionDays: 7, requireConsent: true }
   protected auditLog: AdminAuditEntry[] = []
   protected warnings = new Map<string, Warning>()
@@ -611,11 +647,64 @@ export class MemoryStore implements Store {
   allRecordings(): Recording[] {
     return [...this.recordings.values()]
   }
+  recordingsForUser(ownerId: string): Recording[] {
+    return [...this.recordings.values()]
+      .filter((r) => r.ownerId === ownerId && r.deletedAt == null)
+      .sort((a, b) => b.recordedAt - a.recordedAt)
+  }
   findRecording(id: string): Recording | undefined {
     return this.recordings.get(id)
   }
+  recordingByMediaId(mediaId: string): Recording | undefined {
+    for (const r of this.recordings.values()) if (r.mediaId === mediaId) return r
+    return undefined
+  }
+  updateRecording(id: string, patch: Partial<Recording>): Recording | undefined {
+    const r = this.recordings.get(id)
+    if (!r) return undefined
+    const next = { ...r, ...patch, id: r.id }
+    this.recordings.set(id, next)
+    this.afterMutate()
+    return next
+  }
+  reportsCitingRecording(recordingId: string): Report[] {
+    return [...this.reports.values()].filter((r) => r.evidenceRecordingId === recordingId)
+  }
   deleteRecording(id: string): void {
     if (this.recordings.delete(id)) this.afterMutate()
+  }
+
+  // MARK: 站内通知
+  createNotification(n: Notification): void {
+    this.notifications.set(n.id, n)
+    this.afterMutate()
+  }
+  notificationsForUser(userId: string, limit = 100): Notification[] {
+    return [...this.notifications.values()]
+      .filter((n) => n.userId === userId)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit)
+  }
+  findNotification(id: string): Notification | undefined {
+    return this.notifications.get(id)
+  }
+  markNotificationRead(id: string, userId: string): void {
+    const n = this.notifications.get(id)
+    if (n && n.userId === userId && n.readAt == null) { n.readAt = Date.now(); this.afterMutate() }
+  }
+  markAllNotificationsRead(userId: string): number {
+    let count = 0
+    const now = Date.now()
+    for (const n of this.notifications.values()) {
+      if (n.userId === userId && n.readAt == null) { n.readAt = now; count++ }
+    }
+    if (count > 0) this.afterMutate()
+    return count
+  }
+  unreadNotificationCount(userId: string): number {
+    let n = 0
+    for (const x of this.notifications.values()) if (x.userId === userId && x.readAt == null) n++
+    return n
   }
 
   createMessage(m: ChatMessage): void {
@@ -751,6 +840,7 @@ export class JsonFileStore extends MemoryStore {
           auditLog?: AdminAuditEntry[]
           warnings?: Warning[]
           appConfig?: AppConfig
+          notifications?: Notification[]
         }
         for (const u of data.users ?? []) this.users.set(u.id, u)
         for (const l of data.links ?? []) this.links.set(l.id, l)
@@ -768,6 +858,7 @@ export class JsonFileStore extends MemoryStore {
         if (data.auditLog) this.auditLog = data.auditLog
         for (const w of data.warnings ?? []) this.warnings.set(w.id, w)
         if (data.appConfig) this.appConfig = data.appConfig
+        for (const n of data.notifications ?? []) this.notifications.set(n.id, n)
       } catch {
         /* 损坏的文件忽略，从空开始 */
       }
@@ -793,6 +884,7 @@ export class JsonFileStore extends MemoryStore {
       auditLog: this.auditLog,
       warnings: [...this.warnings.values()],
       appConfig: this.appConfig,
+      notifications: [...this.notifications.values()],
     }
     writeFileSync(this.path, JSON.stringify(data, null, 2))
   }

@@ -105,6 +105,7 @@ enum AccountStrings {
     static func confirmReset(_ l: Language) -> String { l == .zh ? "确认重置密码" : "Confirm reset" }
     static func resendCode(_ l: Language) -> String { l == .zh ? "重新发送验证码" : "Resend code" }
     static func cancel(_ l: Language) -> String { l == .zh ? "取消" : "Cancel" }
+    static func ok(_ l: Language) -> String { l == .zh ? "好" : "OK" }
     static func codeSent(_ l: Language) -> String {
         l == .zh ? "如果该账号绑定了邮箱，验证码已发送。请查收后填写下方验证码。"
                  : "If this account has a linked email, a code has been sent. Check your inbox and enter it below."
@@ -127,6 +128,7 @@ enum AccountStrings {
     static func editNickname(_ l: Language) -> String { l == .zh ? "改昵称" : "Edit nickname" }
     static func accountHeader(_ l: Language) -> String { l == .zh ? "账号" : "Account" }
     static func callHistory(_ l: Language) -> String { l == .zh ? "通话记录" : "Call history" }
+    static func myRecordings(_ l: Language) -> String { l == .zh ? "我的录音" : "My recordings" }
     static func blocklist(_ l: Language) -> String { l == .zh ? "黑名单" : "Blocklist" }
     static func changePassword(_ l: Language) -> String { l == .zh ? "修改密码" : "Change password" }
     static func logout(_ l: Language) -> String { l == .zh ? "退出登录" : "Sign out" }

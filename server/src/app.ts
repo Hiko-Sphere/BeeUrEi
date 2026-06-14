@@ -27,6 +27,7 @@ import { SignalingHub } from './signaling/hub'
 import { registerReportRoutes } from './routes/reports'
 import { registerAdminRoutes } from './routes/admin'
 import { registerRecordingRoutes } from './routes/recordings'
+import { registerNotificationRoutes } from './routes/notifications'
 import { RecordingConsentRegistry } from './recording/consentRegistry'
 import { registerDevRoutes } from './routes/dev'
 import { registerNavRoutes } from './routes/nav'
@@ -129,8 +130,9 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerGroupRoutes(instance, store)
     registerMediaRoutes(instance, store) // 视频等大文件（磁盘存储）
     registerReportRoutes(instance, store)
-    registerAdminRoutes(instance, store, presence, hub, callControl)
+    registerAdminRoutes(instance, store, presence, hub, callControl, pushSender)
     registerRecordingRoutes(instance, store, recordingConsent, pendingCalls, openHelp)
+    registerNotificationRoutes(instance, store) // 站内通知收件箱（举报处理结果等）
     registerDevRoutes(instance, store)
     registerNavRoutes(instance, store)
     registerAppConfigRoutes(instance, store) // 客户端读取功能开关（控制每一个按键）

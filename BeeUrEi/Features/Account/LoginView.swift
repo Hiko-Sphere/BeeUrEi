@@ -86,6 +86,7 @@ struct LoginView: View {
 
                 Section(AccountStrings.accountHeader(lang)) {
                     NavigationLink(AccountStrings.callHistory(lang)) { CallHistoryView() }
+                    NavigationLink(AccountStrings.myRecordings(lang)) { MyRecordingsView() }
                     NavigationLink(AccountStrings.blocklist(lang)) { BlocklistView() }
                     Button(AccountStrings.changePassword(lang)) { showChangePassword = true }
                     Button(AccountStrings.logout(lang), role: .destructive) { showLogoutConfirm = true }

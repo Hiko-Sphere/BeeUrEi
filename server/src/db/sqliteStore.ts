@@ -2,7 +2,7 @@ import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, ChatMessage, ChatGroup, MediaMeta, Passkey, AdminAuditEntry, Warning, AppConfig, AppConfigPatch } from './store'
+import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, ChatMessage, ChatGroup, MediaMeta, Passkey, AdminAuditEntry, Warning, AppConfig, AppConfigPatch, Notification } from './store'
 import { normalizeAppConfig, mergeAppConfig } from './store'
 
 // 用运行时 require + 非静态模块名加载 node:sqlite，避免打包器(vitest/vite)静态解析失败；
@@ -91,6 +91,18 @@ export class SqliteStore implements Store {
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_audit_at ON admin_audit (at)')
     this.db.exec('CREATE TABLE IF NOT EXISTS warnings (id TEXT PRIMARY KEY, userId TEXT, reason TEXT, byAdminId TEXT, reportId TEXT, at INTEGER)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_warn_user ON warnings (userId, at)')
+    // 录制详细元数据（时间地点人+时长）+ 用户软删除（合规留存）。
+    try { this.db.exec('ALTER TABLE recordings ADD COLUMN participants TEXT') } catch { /* 列已存在 */ } // JSON string[]
+    try { this.db.exec('ALTER TABLE recordings ADD COLUMN durationSec INTEGER') } catch { /* 列已存在 */ }
+    try { this.db.exec('ALTER TABLE recordings ADD COLUMN lat REAL') } catch { /* 列已存在 */ }
+    try { this.db.exec('ALTER TABLE recordings ADD COLUMN lon REAL') } catch { /* 列已存在 */ }
+    try { this.db.exec('ALTER TABLE recordings ADD COLUMN locationLabel TEXT') } catch { /* 列已存在 */ }
+    try { this.db.exec('ALTER TABLE recordings ADD COLUMN deletedAt INTEGER') } catch { /* 列已存在 */ } // 用户软删除（管理员留存期内仍可见）
+    // 举报证据：关联录制。
+    try { this.db.exec('ALTER TABLE reports ADD COLUMN evidenceRecordingId TEXT') } catch { /* 列已存在 */ }
+    // 站内通知（持久化收件箱）。
+    this.db.exec('CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, userId TEXT, kind TEXT, title TEXT, body TEXT, dataJson TEXT, createdAt INTEGER, readAt INTEGER)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications (userId, createdAt)')
   }
 
   // MARK: refresh tokens
@@ -247,9 +259,9 @@ export class SqliteStore implements Store {
   // MARK: reports
   createReport(r: Report): void {
     this.db.prepare(
-      `INSERT OR REPLACE INTO reports (id, reporterId, targetUserId, callId, reason, status, createdAt, decision, resolvedBy, resolvedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(r.id, r.reporterId, r.targetUserId, r.callId ?? null, r.reason, r.status, r.createdAt, r.decision ?? null, r.resolvedBy ?? null, r.resolvedAt ?? null)
+      `INSERT OR REPLACE INTO reports (id, reporterId, targetUserId, callId, reason, status, createdAt, decision, resolvedBy, resolvedAt, evidenceRecordingId)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(r.id, r.reporterId, r.targetUserId, r.callId ?? null, r.reason, r.status, r.createdAt, r.decision ?? null, r.resolvedBy ?? null, r.resolvedAt ?? null, r.evidenceRecordingId ?? null)
   }
   allReports(): Report[] {
     return this.db.prepare('SELECT * FROM reports').all().map((r) => this.toReport(r))
@@ -306,19 +318,65 @@ export class SqliteStore implements Store {
   }
   createRecording(rec: Recording): void {
     this.db.prepare(
-      `INSERT OR REPLACE INTO recordings (id, callId, ownerId, consentBy, reason, recordedAt, mediaId)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run(rec.id, rec.callId, rec.ownerId, JSON.stringify(rec.consentBy), rec.reason, rec.recordedAt, rec.mediaId ?? null)
+      `INSERT OR REPLACE INTO recordings (id, callId, ownerId, consentBy, reason, recordedAt, mediaId, participants, durationSec, lat, lon, locationLabel, deletedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      rec.id, rec.callId, rec.ownerId, JSON.stringify(rec.consentBy), rec.reason, rec.recordedAt, rec.mediaId ?? null,
+      rec.participants ? JSON.stringify(rec.participants) : null,
+      rec.durationSec ?? null, rec.lat ?? null, rec.lon ?? null, rec.locationLabel ?? null, rec.deletedAt ?? null,
+    )
   }
   allRecordings(): Recording[] {
     return this.db.prepare('SELECT * FROM recordings').all().map((r) => this.toRecording(r))
+  }
+  recordingsForUser(ownerId: string): Recording[] {
+    return this.db.prepare('SELECT * FROM recordings WHERE ownerId = ? AND deletedAt IS NULL ORDER BY recordedAt DESC')
+      .all(ownerId).map((r) => this.toRecording(r))
   }
   findRecording(id: string): Recording | undefined {
     const row = this.db.prepare('SELECT * FROM recordings WHERE id = ?').get(id)
     return row ? this.toRecording(row) : undefined
   }
+  recordingByMediaId(mediaId: string): Recording | undefined {
+    const row = this.db.prepare('SELECT * FROM recordings WHERE mediaId = ? LIMIT 1').get(mediaId)
+    return row ? this.toRecording(row) : undefined
+  }
+  updateRecording(id: string, patch: Partial<Recording>): Recording | undefined {
+    const cur = this.findRecording(id)
+    if (!cur) return undefined
+    const next = { ...cur, ...patch, id: cur.id }
+    this.createRecording(next)
+    return next
+  }
+  reportsCitingRecording(recordingId: string): Report[] {
+    return this.db.prepare('SELECT * FROM reports WHERE evidenceRecordingId = ?').all(recordingId).map((r) => this.toReport(r))
+  }
   deleteRecording(id: string): void {
     this.db.prepare('DELETE FROM recordings WHERE id = ?').run(id)
+  }
+
+  // MARK: 站内通知
+  createNotification(n: Notification): void {
+    this.db.prepare('INSERT OR REPLACE INTO notifications (id, userId, kind, title, body, dataJson, createdAt, readAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(n.id, n.userId, n.kind, n.title, n.body, n.data ? JSON.stringify(n.data) : null, n.createdAt, n.readAt ?? null)
+  }
+  notificationsForUser(userId: string, limit = 100): Notification[] {
+    return this.db.prepare('SELECT * FROM notifications WHERE userId = ? ORDER BY createdAt DESC LIMIT ?').all(userId, limit).map((r) => this.toNotification(r))
+  }
+  findNotification(id: string): Notification | undefined {
+    const row = this.db.prepare('SELECT * FROM notifications WHERE id = ?').get(id)
+    return row ? this.toNotification(row) : undefined
+  }
+  markNotificationRead(id: string, userId: string): void {
+    this.db.prepare('UPDATE notifications SET readAt = ? WHERE id = ? AND userId = ? AND readAt IS NULL').run(Date.now(), id, userId)
+  }
+  markAllNotificationsRead(userId: string): number {
+    const res = this.db.prepare('UPDATE notifications SET readAt = ? WHERE userId = ? AND readAt IS NULL').run(Date.now(), userId)
+    return Number(res.changes ?? 0)
+  }
+  unreadNotificationCount(userId: string): number {
+    const row = this.db.prepare('SELECT COUNT(*) AS n FROM notifications WHERE userId = ? AND readAt IS NULL').get(userId) as { n: number }
+    return Number(row?.n ?? 0)
   }
 
   // MARK: messages
@@ -452,9 +510,21 @@ export class SqliteStore implements Store {
     return { id: r.id, ownerId: r.ownerId, memberId: r.memberId, relation: r.relation, isEmergency: Number(r.isEmergency) === 1, phone: r.phone ?? undefined, createdAt: Number(r.createdAt), status: (r.status as LinkStatus) ?? undefined, requestedBy: r.requestedBy ?? undefined }
   }
   private toReport(r: any): Report {
-    return { id: r.id, reporterId: r.reporterId, targetUserId: r.targetUserId, callId: r.callId ?? undefined, reason: r.reason, status: r.status as ReportStatus, createdAt: Number(r.createdAt), decision: r.decision ?? undefined, resolvedBy: r.resolvedBy ?? undefined, resolvedAt: r.resolvedAt != null ? Number(r.resolvedAt) : undefined }
+    return { id: r.id, reporterId: r.reporterId, targetUserId: r.targetUserId, callId: r.callId ?? undefined, reason: r.reason, status: r.status as ReportStatus, createdAt: Number(r.createdAt), decision: r.decision ?? undefined, resolvedBy: r.resolvedBy ?? undefined, resolvedAt: r.resolvedAt != null ? Number(r.resolvedAt) : undefined, evidenceRecordingId: r.evidenceRecordingId ?? undefined }
   }
   private toRecording(r: any): Recording {
-    return { id: r.id, callId: r.callId, ownerId: r.ownerId, consentBy: parseJsonOr<string[]>(r.consentBy, []), reason: r.reason, recordedAt: Number(r.recordedAt), mediaId: r.mediaId ?? undefined }
+    return {
+      id: r.id, callId: r.callId, ownerId: r.ownerId, consentBy: parseJsonOr<string[]>(r.consentBy, []),
+      reason: r.reason, recordedAt: Number(r.recordedAt), mediaId: r.mediaId ?? undefined,
+      participants: parseJsonOrUndefined<string[]>(r.participants),
+      durationSec: r.durationSec != null ? Number(r.durationSec) : undefined,
+      lat: r.lat != null ? Number(r.lat) : undefined,
+      lon: r.lon != null ? Number(r.lon) : undefined,
+      locationLabel: r.locationLabel ?? undefined,
+      deletedAt: r.deletedAt != null ? Number(r.deletedAt) : undefined,
+    }
+  }
+  private toNotification(r: any): Notification {
+    return { id: r.id, userId: r.userId, kind: r.kind, title: r.title, body: r.body, data: parseJsonOrUndefined<Record<string, string>>(r.dataJson), createdAt: Number(r.createdAt), readAt: r.readAt != null ? Number(r.readAt) : undefined }
   }
 }

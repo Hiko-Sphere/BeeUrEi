@@ -9,6 +9,9 @@ import { cascadeDeleteUser } from '../db/cascade'
 import type { PresenceRegistry } from '../assist/presence'
 import { type SignalingHub } from '../signaling/hub'
 import { type CallControlBridge } from '../signaling/callControl'
+import { type PushSender, NoopPushSender } from '../push/apns'
+import { pushLang, pushStrings } from '../push/pushStrings'
+import { notifyUser } from '../notifications/notify'
 
 const statusSchema = z.object({ status: z.enum(['active', 'disabled']) })
 const roleSchema = z.object({ role: z.enum(['blind', 'helper', 'family', 'admin', 'developer']) })
@@ -33,11 +36,29 @@ const configSchema = z.object({
 const SERVER_VERSION = '0.1.0'
 const START_MS = Date.now()
 
-export function registerAdminRoutes(app: FastifyInstance, store: Store, presence: PresenceRegistry, hub?: SignalingHub, callControl?: CallControlBridge): void {
+export function registerAdminRoutes(app: FastifyInstance, store: Store, presence: PresenceRegistry, hub?: SignalingHub, callControl?: CallControlBridge, push: PushSender = new NoopPushSender()): void {
   const adminOnly = { preHandler: requireAuth(['admin']) }
   // 当前活跃管理员数（用于"最后一名管理员"保护，防把后台锁死）。
   const activeAdminCount = () => store.allUsers().filter((u) => u.role === 'admin' && u.status === 'active').length
   const nameOf = (id: string) => store.findById(id)?.displayName ?? '—'
+
+  // 举报处理后通知通话双方（持久站内通知 + 离线推送）。隐私：两条文案都不点名对方、
+  // 举报人不被告知对对方的具体处罚。decision 为空（旧 /resolve 路径）时给通用文案。
+  const notifyReportResolved = (report: { id: string; reporterId: string; targetUserId: string; decision?: string }) => {
+    // 每个收件人**单独**构造结构化数据：举报人的通知绝不含 decision——否则其可经 GET /api/notifications
+    // 读到对对方的具体处罚（'banned' 等），破坏"举报人不知对方处罚"的隐私承诺（见复审 NOTIFY-LEAK）。
+    const reporter = store.findById(report.reporterId)
+    if (reporter) {
+      const l = pushLang(reporter.language)
+      notifyUser(store, push, report.reporterId, 'report_resolved', pushStrings.reportResolvedTitle(l), pushStrings.reportResolvedReporterBody(report.decision, l), { reportId: report.id })
+    }
+    const target = store.findById(report.targetUserId)
+    if (target) {
+      const l = pushLang(target.language)
+      // 被举报人可被告知关于自己的结果（含 decision）。
+      notifyUser(store, push, report.targetUserId, 'report_resolved', pushStrings.reportResolvedTitle(l), pushStrings.reportResolvedTargetBody(report.decision, l), { reportId: report.id, ...(report.decision ? { decision: report.decision } : {}) })
+    }
+  }
   // 审计：每个有副作用的后台操作都落一条不可抵赖的日志（谁、何时、对谁、做了什么）。
   const audit = (adminId: string, action: string, targetType: AdminAuditEntry['targetType'], targetId: string, detail?: string) =>
     store.createAuditEntry({ id: randomUUID(), adminId, action, targetType, targetId, detail, at: Date.now() })
@@ -344,9 +365,13 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
   // 处理举报（仅标记已解决，不附带处置——保留向后兼容；正式审核走 /moderate）。
   app.post('/api/admin/reports/:id/resolve', adminOnly, async (req, reply) => {
     const id = (req.params as { id: string }).id
+    const before = store.findReport(id)
+    if (!before) return reply.code(404).send({ error: 'not_found' })
     const updated = store.updateReport(id, { status: 'resolved', resolvedBy: req.user!.sub, resolvedAt: Date.now() })
     if (!updated) return reply.code(404).send({ error: 'not_found' })
     audit(req.user!.sub, 'report.resolve', 'report', id)
+    // 仅在首次由 open → resolved 时通知双方一次（防重复处置重复打扰，见复审 DOUBLE-NOTIFY）。
+    if (before.status !== 'resolved') notifyReportResolved(updated)
     return { report: updated }
   })
 
@@ -383,6 +408,9 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     }
     const updated = store.updateReport(id, { status: 'resolved', decision, resolvedBy: adminId, resolvedAt: Date.now() })
     audit(adminId, `report.${action}`, 'report', id, `target=${targetId} reason=${reason}`)
+    // 通知通话双方处理结果。在"决定变化"时通知（含从旧 /resolve 的无 decision 态 → 有 decision），
+    // 这样先 /resolve 再 /moderate 封禁时被举报人仍能收到"账号已被封禁"，而非停留在无内容的"已处理"（见复审 NOTIFY-MODERATE）。
+    if (updated && (report.status !== 'resolved' || report.decision !== decision)) notifyReportResolved(updated)
     return { report: updated, decision }
   })
 

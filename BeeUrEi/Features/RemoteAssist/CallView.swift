@@ -44,13 +44,11 @@ struct CallView: View {
             default: blindLayout
             }
         }
-        .confirmationDialog(CallStrings.reportDialogTitle(lang), isPresented: $showReport, titleVisibility: .visible) {
-            ForEach(CallStrings.reportReasons(lang), id: \.self) { reason in
-                Button(reason, role: .destructive) { Task { await model.report(reason: reason) } }
-            }
-            Button(CallStrings.cancel(lang), role: .cancel) {}
-        } message: {
-            Text(CallStrings.reportDialogMessage(lang))
+        // 举报弹层（sheet 而非 confirmationDialog——需容纳"附录制为证据"开关）。
+        .sheet(isPresented: $showReport) {
+            ReportSheet(lang: lang, canAttach: model.hasRecordingEvidence,
+                        onSubmit: { reason, attach in showReport = false; Task { await model.report(reason: reason, attachRecording: attach) } },
+                        onCancel: { showReport = false })
         }
         // 防呆：盲人挂断/静音需二次确认，避免摸索手机时误触（取消静音可立即生效）。
         .alert(CallStrings.hangupConfirmTitle(lang), isPresented: $showHangupConfirm) {
@@ -459,6 +457,43 @@ struct CallView: View {
         }
         .padding(.top, 18).padding(.bottom, 36)
         .frame(maxWidth: .infinity)
+    }
+}
+
+/// 举报弹层：选择理由（点选即提交）+ 可选"附本次通话录制作为证据"开关。
+/// 用 sheet/Form 而非 confirmationDialog——后者无法承载开关；对 VoiceOver 也更清晰。
+struct ReportSheet: View {
+    let lang: Language
+    let canAttach: Bool
+    let onSubmit: (_ reason: String, _ attach: Bool) -> Void
+    let onCancel: () -> Void
+    @State private var attach = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if canAttach {
+                    Section {
+                        Toggle(CallStrings.attachRecordingEvidence(lang), isOn: $attach)
+                    } footer: { Text(CallStrings.attachRecordingEvidenceHint(lang)) }
+                }
+                Section {
+                    ForEach(CallStrings.reportReasons(lang), id: \.self) { reason in
+                        Button(role: .destructive) { onSubmit(reason, attach) } label: {
+                            HStack {
+                                Text(reason).foregroundStyle(Color.beeDanger)
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+                            }
+                        }
+                        .accessibilityHint(CallStrings.reportTapHint(lang))
+                    }
+                } header: { Text(CallStrings.reportDialogTitle(lang)) } footer: { Text(CallStrings.reportDialogMessage(lang)) }
+            }
+            .navigationTitle(CallStrings.reportShort(lang))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(CallStrings.cancel(lang)) { onCancel() } } }
+        }
     }
 }
 

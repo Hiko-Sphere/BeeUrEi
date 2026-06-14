@@ -52,6 +52,9 @@ export function registerMediaRoutes(app: FastifyInstance, store: Store): void {
     const id = (req.params as { id: string }).id
     const meta = store.findMedia(id)
     if (!meta || !mediaFileExists(meta.id)) return reply.code(404).send({ error: 'not_found' })
+    // 通话录制的媒体严禁经此通用端点（好友/同群授权 + 不识别软删除）外泄——
+    // 录制捕获了被录方音视频，必须走录制作用域端点（owner∨admin，且尊重 deletedAt）。返回 404 不泄漏存在性。
+    if (store.recordingByMediaId(id)) return reply.code(404).send({ error: 'not_found' })
     const me = req.user!.sub
     if (me !== meta.ownerId && !linked(me, meta.ownerId) && !sharesGroup(me, meta.ownerId)) {
       return reply.code(403).send({ error: 'forbidden' })

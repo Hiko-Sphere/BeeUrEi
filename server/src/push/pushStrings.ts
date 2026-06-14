@@ -35,4 +35,28 @@ export const pushStrings = {
     l === 'en' ? `${name} in ${group}` : `${name} 在「${group}」`,
   newMessageBody: (preview: string, l: PushLang): string =>
     preview === '' ? (l === 'en' ? 'New message' : '新消息') : preview,
+
+  // —— 举报处理结果（通知通话双方）——
+  // 隐私：举报人只被告知"已处理/是否采取措施"，**不**透露对对方施加的具体处罚；
+  // 被举报人只被告知**关于自己**的结果。两条文案都不点名另一方。
+  reportResolvedTitle: (l: PushLang): string =>
+    l === 'en' ? 'Report update' : '举报处理结果',
+  // 给举报人：dismissed=未发现违规；其它=已采取措施。
+  reportResolvedReporterBody: (decision: string | undefined, l: PushLang): string => {
+    if (decision === 'dismissed') return l === 'en' ? 'We reviewed your report and found no violation.' : '我们已审核你的举报，未发现违规。'
+    if (decision === 'warned' || decision === 'suspended' || decision === 'banned') {
+      return l === 'en' ? 'We reviewed your report and took action. Thank you.' : '我们已审核你的举报并采取了相应措施，感谢反馈。'
+    }
+    return l === 'en' ? 'Your report has been reviewed.' : '你的举报已处理。'
+  },
+  // 给被举报人：告知关于自己的结果。
+  reportResolvedTargetBody: (decision: string | undefined, l: PushLang): string => {
+    switch (decision) {
+      case 'warned': return l === 'en' ? 'A report about you was reviewed. You have received a warning.' : '一项涉及你的举报已处理：你已被警告。'
+      case 'suspended': return l === 'en' ? 'A report about you was reviewed. Your account has been suspended.' : '一项涉及你的举报已处理：你的账号已被暂停。'
+      case 'banned': return l === 'en' ? 'A report about you was reviewed. Your account has been banned.' : '一项涉及你的举报已处理：你的账号已被封禁。'
+      case 'dismissed': return l === 'en' ? 'A report about you was reviewed. No action was taken.' : '一项涉及你的举报已处理：未作处置。'
+      default: return l === 'en' ? 'A report involving you has been resolved.' : '一项涉及你的举报已处理。'
+    }
+  },
 }

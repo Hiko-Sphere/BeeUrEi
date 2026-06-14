@@ -159,6 +159,23 @@ tbody tr.clickable:hover { background: var(--surface-2); }
 .rep .who { font-weight: 600; }
 .rep .reason { color: var(--text-dim); margin-top: 3px; }
 .rep .meta { font-size: 12px; color: var(--text-faint); margin-top: 4px; }
+.rep-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.muted-note { font-size: 12px; color: var(--text-faint); }
+
+/* ---------- Recording playback (video modal) ---------- */
+.video-card { max-width: 720px; width: 100%; }
+.rec-video { width: 100%; max-height: 70vh; border-radius: 10px; background: #000; display: block; }
+
+/* ---------- Web observer (live call WebRTC) ---------- */
+.observe-card { max-width: 900px; width: 100%; }
+.observe-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.observe-note { font-size: 12px; }
+.observe-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; min-height: 160px; }
+.observe-tile { position: relative; aspect-ratio: 4 / 3; background: #000; border-radius: 10px; overflow: hidden; }
+.observe-tile video { width: 100%; height: 100%; object-fit: cover; background: #000; }
+.observe-label { position: absolute; left: 8px; bottom: 8px; padding: 2px 8px; font-size: 12px; font-weight: 600; color: #fff; background: rgba(0,0,0,0.55); border-radius: 6px; }
+.observe-hint { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(255,255,255,0.7); font-size: 13px; }
+.observe-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
 
 /* ---------- Forms (recordings config) ---------- */
 .form-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border); }

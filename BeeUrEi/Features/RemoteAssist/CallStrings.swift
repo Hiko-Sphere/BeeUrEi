@@ -214,6 +214,10 @@ enum CallStrings {
     static func observerLeave(_ l: Language) -> String { l == .zh ? "结束监看" : "Stop monitoring" }
     static func observerForceEnd(_ l: Language) -> String { l == .zh ? "强制结束通话" : "Force-end call" }
     static func observerNoVideo(_ l: Language) -> String { l == .zh ? "（未共享画面）" : "(no video shared)" }
+    // 举报弹层 + 附录制证据
+    static func reportTapHint(_ l: Language) -> String { l == .zh ? "点按以此理由提交举报" : "Tap to submit a report with this reason" }
+    static func attachRecordingEvidence(_ l: Language) -> String { l == .zh ? "附上本次通话录制作为证据" : "Attach this call's recording as evidence" }
+    static func attachRecordingEvidenceHint(_ l: Language) -> String { l == .zh ? "仅在本次通话已录制时可用；录制将提供给管理员审核。" : "Available only if this call was recorded; the recording will be shared with moderators for review." }
 
     // MARK: 信号强弱（通话中网络状态条；来自 WebRTC 实测往返时延）
 

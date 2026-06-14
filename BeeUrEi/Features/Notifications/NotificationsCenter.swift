@@ -1,18 +1,32 @@
 import SwiftUI
 
-/// 应用内通知中心：聚合"待我确认的好友/协助请求"，给出未读角标与列表。
+/// 应用内通知中心：聚合"待我确认的好友/协助请求" + 持久化通知收件箱（如举报处理结果），
+/// 给出未读角标与列表。收件箱是可靠来源（推送只是离线提醒，可能丢/未配置）。
 @MainActor
 @Observable
 final class NotificationsCenter {
     static let shared = NotificationsCenter()
     private(set) var pendingRequests: [IncomingLinkInfo] = []
-    var unreadCount: Int { pendingRequests.count }
+    private(set) var feed: [NotificationInfo] = []   // 站内通知收件箱（时间倒序）
+    private(set) var feedUnread = 0
+    var unreadCount: Int { pendingRequests.count + feedUnread }
 
     func refresh() async {
-        guard let token = KeychainStore.read() else { pendingRequests = []; return }
+        guard let token = KeychainStore.read() else { pendingRequests = []; feed = []; feedUnread = 0; return }
         if let inc = try? await APIClient().incomingLinks(token: token) {
             pendingRequests = inc.filter { $0.isPending }
         }
+        if let n = try? await APIClient().getNotifications(token: token) {
+            feed = n.items; feedUnread = n.unread
+        }
+    }
+
+    /// 把收件箱全部标记已读（打开通知列表即视为看过）——清角标。失败不影响 UI。
+    func markFeedRead() async {
+        guard feedUnread > 0, let token = KeychainStore.read() else { return }
+        try? await APIClient().markAllNotificationsRead(token: token)
+        feedUnread = 0
+        feed = feed.map { var x = $0; if x.readAt == nil { x = NotificationInfo(id: x.id, userId: x.userId, kind: x.kind, title: x.title, body: x.body, data: x.data, createdAt: x.createdAt, readAt: Date().timeIntervalSince1970 * 1000) }; return x }
     }
 }
 
@@ -50,13 +64,35 @@ struct NotificationsView: View {
     var body: some View {
         NavigationStack {
             List {
-                if center.pendingRequests.isEmpty {
+                if center.pendingRequests.isEmpty && center.feed.isEmpty {
                     Section {
                         BeeEmptyState(systemImage: "bell.slash.fill", title: HelperStrings.noNotifTitle(lang),
                                       message: HelperStrings.noNotifMessage(lang))
                     }
                     .listRowBackground(Color.clear)
-                } else {
+                }
+                // 持久化通知收件箱（举报处理结果等）。
+                if !center.feed.isEmpty {
+                    Section(HelperStrings.updatesHeader(lang)) {
+                        ForEach(center.feed) { n in
+                            HStack(alignment: .top, spacing: BeeSpacing.sm) {
+                                if n.isUnread {
+                                    Circle().fill(Color.beeHoney).frame(width: 8, height: 8).padding(.top, 6)
+                                        .accessibilityHidden(true)
+                                }
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(n.title).font(.subheadline.weight(.semibold))
+                                    Text(n.body).font(.footnote).foregroundStyle(.secondary)
+                                    Text(RecordingStrings.timeText(n.createdAt, lang)).font(.caption2).foregroundStyle(.tertiary)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("\(n.title). \(n.body)")
+                        }
+                    }
+                }
+                if !center.pendingRequests.isEmpty {
                     Section(HelperStrings.pendingHeader(lang)) {
                         ForEach(center.pendingRequests) { r in
                             VStack(alignment: .leading, spacing: BeeSpacing.sm) {
@@ -82,6 +118,7 @@ struct NotificationsView: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(HelperStrings.done(lang)) { dismiss() } } }
             .refreshable { await center.refresh() }
             .task { await center.refresh() }
+            .onDisappear { Task { await center.markFeedRead() } } // 打开过即视为看过收件箱 → 清角标
         }
     }
 

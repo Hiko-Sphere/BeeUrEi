@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import UIKit
+import CoreLocation
 
 /// 通话视图模型：编排信令 + 媒体 + 视频隐私门控。
 @MainActor
@@ -52,6 +53,9 @@ final class CallViewModel {
     private(set) var awaitingRecordConsent = false             // 本端已请求录制，等待对端同意
     private(set) var incomingRecordRequest = false            // 对端请求录制，待本端在 RecordingConsentView 选择
     private(set) var recordStatus: String?                     // 录制相关的临时状态文案
+    private(set) var lastRecordingId: String?                  // 本次通话最近一条录制的 id（可作为举报证据附上）
+    var hasRecordingEvidence: Bool { lastRecordingId != nil }  // 是否有可作证据的录制（举报弹层据此显示"附录制"开关）
+    @ObservationIgnored private var recordingStartedAt: Date?  // 录制开始时刻（算时长用）
     @ObservationIgnored private let recorder = CallRecorder()
     /// 是否可发起录制：策略开启 + 设备支持 + 已接通且知道对端 + 当前未在录/未在等同意。
     var canStartRecording: Bool {
@@ -421,13 +425,15 @@ final class CallViewModel {
     }
 
     /// 举报对方（信任与安全）。
-    func report(reason: String) async {
+    func report(reason: String, attachRecording: Bool = false) async {
         guard let token = KeychainStore.read(), let target = peerUserId else {
             reportStatus = CallStrings.cantReport(lang)
             return
         }
         do {
-            try await APIClient().submitReport(token: token, targetUserId: target, callId: callId, reason: reason)
+            // 可附本次通话录制作为证据（仅当存在录制且用户勾选）。
+            try await APIClient().submitReport(token: token, targetUserId: target, callId: callId, reason: reason,
+                                               evidenceRecordingId: attachRecording ? lastRecordingId : nil)
             reportStatus = CallStrings.reported(lang)
         } catch {
             reportStatus = CallStrings.reportFailed(lang)
@@ -476,6 +482,7 @@ final class CallViewModel {
         do {
             try await recorder.start()
             isRecording = true
+            recordingStartedAt = Date() // 算时长
             recordStatus = nil
             signaling.send(["type": "record-state", "recording": true])
             announce(CallStrings.recordStartedAnnounce(lang))
@@ -489,16 +496,30 @@ final class CallViewModel {
     /// 停止采集 → 上传 .mov → 登记录制元数据（consentBy 由服务端据同意登记表权威填充）。临时文件用后即删。
     private func finishAndUpload() async {
         guard let token = KeychainStore.read() else { return }
+        let started = recordingStartedAt
+        recordingStartedAt = nil
         do {
             let url = try await recorder.stop()
             defer { try? FileManager.default.removeItem(at: url) }
             let data = try Data(contentsOf: url)
             let mediaId = try await APIClient().uploadMedia(token: token, data: data, mime: "video/quicktime")
-            try await APIClient().createRecording(token: token, callId: callId, reason: "call", mediaId: mediaId)
+            // 详细元数据：时长（录制起止差）+ 位置（best-effort，仅已授权时；不弹新框）。
+            let durationSec = started.map { max(0, Int(Date().timeIntervalSince($0))) }
+            let loc = await bestEffortLocation()
+            let rid = try await APIClient().createRecording(token: token, callId: callId, reason: "call", mediaId: mediaId,
+                                                            durationSec: durationSec, lat: loc?.lat, lon: loc?.lng, locationLabel: loc?.name)
+            if let rid { lastRecordingId = rid } // 供"附为举报证据"引用
             announce(CallStrings.recordStoppedAnnounce(lang))
         } catch {
             announce(CallStrings.recordSaveFailed(lang))
         }
+    }
+
+    /// 录制位置（best-effort）："时间地点人"中的"地"。仅在定位**已授权**时采集——绝不在通话中弹新授权框。
+    private func bestEffortLocation() async -> LocationPayload? {
+        let status = CLLocationManager().authorizationStatus
+        guard status == .authorizedWhenInUse || status == .authorizedAlways else { return nil }
+        return await LocationShareFetcher().fetch(timeout: 5)
     }
 
     /// 结束通话并释放媒体/信令。幂等：可被「挂断按钮」「界面消失(含 CallKit 系统挂断)」重复调用（见复审 #1）。

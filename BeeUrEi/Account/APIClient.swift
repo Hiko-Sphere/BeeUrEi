@@ -303,6 +303,37 @@ struct ActiveCallInfo: Codable, Sendable, Identifiable {
     }
 }
 
+/// 一条通话录制（含详细元数据：时间/地点/人/时长）。用户端"我的录音"与管理员录制总览共用。
+struct RecordingInfo: Codable, Sendable, Identifiable {
+    let id: String
+    let callId: String
+    let ownerId: String
+    let ownerName: String
+    let reason: String
+    let recordedAt: Double          // 录制时间（ms）
+    let durationSec: Int?           // 时长（秒）
+    let lat: Double?
+    let lon: Double?
+    let locationLabel: String?      // 可读地名
+    let participantIds: [String]
+    let participantNames: [String]  // 参与者显示名（"人"）
+    let hasMedia: Bool              // 媒体文件是否仍在（可播放）
+    let deletedAt: Double?          // 用户已软删除时间（仅管理员视图非空：标注"已删·留存中"）
+}
+
+/// 一条站内通知（持久化收件箱）：如"举报已处理"。
+struct NotificationInfo: Codable, Sendable, Identifiable {
+    let id: String
+    let userId: String
+    let kind: String
+    let title: String
+    let body: String
+    let data: [String: String]?
+    let createdAt: Double
+    let readAt: Double?
+    var isUnread: Bool { readAt == nil }
+}
+
 enum APIError: Error {
     case server(String)
     case decoding
@@ -1016,9 +1047,10 @@ struct APIClient {
     }
 
     /// 通话中/后举报对方（信任与安全）。
-    func submitReport(token: String, targetUserId: String, callId: String?, reason: String) async throws {
+    func submitReport(token: String, targetUserId: String, callId: String?, reason: String, evidenceRecordingId: String? = nil) async throws {
         var body: [String: Any] = ["targetUserId": targetUserId, "reason": reason]
         if let callId { body["callId"] = callId }
+        if let evidenceRecordingId { body["evidenceRecordingId"] = evidenceRecordingId }
         _ = try await authedSend("POST", "/api/reports", token: token, body: body)
     }
 
@@ -1041,15 +1073,91 @@ struct APIClient {
     }
 
     /// 通话内登记一条录制（先经 uploadMedia 拿到 mediaId）。consentBy 由**服务端**据同意登记表权威判定，
-    /// 客户端不再自报，杜绝伪造对端同意。
-    func createRecording(token: String, callId: String, reason: String, mediaId: String?) async throws {
+    /// 客户端不再自报，杜绝伪造对端同意。返回新建录制的 id（供"附为举报证据"引用）。
+    /// 可附详细元数据：时长（秒）、位置（已授权时）——"时间地点人"中的"地"和"时长"。
+    @discardableResult
+    func createRecording(token: String, callId: String, reason: String, mediaId: String?,
+                         durationSec: Int? = nil, lat: Double? = nil, lon: Double? = nil, locationLabel: String? = nil) async throws -> String? {
         var body: [String: Any] = ["callId": callId, "reason": reason]
         if let mediaId { body["mediaId"] = mediaId }
-        _ = try await authedSend("POST", "/api/recordings", token: token, body: body)
+        if let durationSec { body["durationSec"] = durationSec }
+        if let lat { body["lat"] = lat }
+        if let lon { body["lon"] = lon }
+        if let locationLabel { body["locationLabel"] = locationLabel }
+        let data = try await authedSend("POST", "/api/recordings", token: token, body: body)
+        struct R: Codable { struct Rec: Codable { let id: String }; let recording: Rec }
+        return (try? JSONDecoder().decode(R.self, from: data))?.recording.id
     }
 
     /// 被录方授予/撤回录制同意（服务端权威）：在 RecordingConsentView 选择后调用。
     func grantRecordingConsent(token: String, callId: String, granted: Bool) async throws {
         _ = try await authedSend("POST", "/api/recordings/consent", token: token, body: ["callId": callId, "granted": granted])
+    }
+
+    // MARK: 录制回看（用户端"我的录音" + 管理员总览）
+
+    /// 我的录音（仅本人作为录制者、未被本人删除的）。
+    func myRecordings(token: String) async throws -> [RecordingInfo] {
+        struct R: Codable { let recordings: [RecordingInfo] }
+        let data = try await authedGet("/api/recordings/mine", token: token)
+        guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.decoding }
+        return r.recordings
+    }
+
+    /// 管理员录制总览（含用户已软删除项，留存期内仍可查看）。
+    func adminRecordings(token: String) async throws -> [RecordingInfo] {
+        struct R: Codable { let recordings: [RecordingInfo] }
+        let data = try await authedGet("/api/recordings", token: token)
+        guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.decoding }
+        return r.recordings
+    }
+
+    /// 用户软删除自己的录制（对其隐藏；管理员在留存期内仍可查看）。
+    func deleteMyRecording(token: String, id: String) async throws {
+        _ = try await authedSend("DELETE", "/api/recordings/mine/\(id)", token: token)
+    }
+
+    /// 清除本地缓存的录制文件（删除后调用，兑现"删除"意图，不留本机残留）。
+    func evictCachedRecording(id: String) {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("recording-\(id).mov")
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    /// 管理员彻底删除一条录制（含媒体文件，真删）。
+    func adminDeleteRecording(token: String, id: String) async throws {
+        _ = try await authedSend("DELETE", "/api/recordings/\(id)", token: token)
+    }
+
+    /// 下载录制媒体到本地临时文件（按 id 缓存）。走录制作用域端点（参与者/管理员授权），用 .mov 扩展名（ReplayKit 输出）。
+    func downloadRecording(token: String, id: String) async throws -> URL {
+        let cached = FileManager.default.temporaryDirectory.appendingPathComponent("recording-\(id).mov")
+        if FileManager.default.fileExists(atPath: cached.path) { return cached }
+        var req = URLRequest(url: baseURL.appendingPathComponent("/api/recordings/\(id)/media"))
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (tmp, resp): (URL, URLResponse)
+        do { (tmp, resp) = try await URLSession.shared.download(for: req) } catch { throw APIError.network }
+        guard let http = resp as? HTTPURLResponse else { throw APIError.network }
+        if http.statusCode == 401 { throw APIError.unauthorized }
+        guard http.statusCode < 400 else { throw APIError.network }
+        try? FileManager.default.removeItem(at: cached)
+        try FileManager.default.moveItem(at: tmp, to: cached)
+        return cached
+    }
+
+    // MARK: 站内通知
+
+    func getNotifications(token: String) async throws -> (items: [NotificationInfo], unread: Int) {
+        struct R: Codable { let notifications: [NotificationInfo]; let unread: Int }
+        let data = try await authedGet("/api/notifications", token: token)
+        guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.decoding }
+        return (r.notifications, r.unread)
+    }
+
+    func markNotificationRead(token: String, id: String) async throws {
+        _ = try await authedSend("POST", "/api/notifications/\(id)/read", token: token)
+    }
+
+    func markAllNotificationsRead(token: String) async throws {
+        _ = try await authedSend("POST", "/api/notifications/read-all", token: token)
     }
 }

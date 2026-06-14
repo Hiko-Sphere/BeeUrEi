@@ -169,6 +169,7 @@ enum HelperStrings {
         return l == .zh ? "通知" : "Notifications"
     }
     static func notifTitle(_ l: Language) -> String { l == .zh ? "通知" : "Notifications" }
+    static func updatesHeader(_ l: Language) -> String { l == .zh ? "通知与处理结果" : "Updates" }
     static func noNotifTitle(_ l: Language) -> String { l == .zh ? "暂无新通知" : "No new notifications" }
     static func noNotifMessage(_ l: Language) -> String {
         l == .zh ? "好友请求等待你确认时会出现在这里。" : "Friend requests awaiting your approval appear here."

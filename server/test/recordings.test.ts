@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { randomUUID } from 'node:crypto'
 import { buildApp } from '../src/app'
 import { MemoryStore, type User, type Recording } from '../src/db/store'
 import { hashPassword } from '../src/auth/passwords'
@@ -11,6 +12,12 @@ function admin(): User {
 async function adminToken(app: ReturnType<typeof buildApp>) {
   const r = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'root', password: 'rootpass1' } })
   return r.json().token as string
+}
+
+/// 注册一通真实待接来电（callId 的参与者 = caller + peer），使录制同意端点的参与权校验通过。
+async function setupCall(app: ReturnType<typeof buildApp>, store: MemoryStore, callerToken: string, callerId: string, peerId: string, callId: string) {
+  store.createLink({ id: randomUUID(), ownerId: callerId, memberId: peerId, relation: 'friend', isEmergency: false, status: 'accepted', createdAt: Date.now() })
+  await app.inject({ method: 'POST', url: '/api/assist/call', headers: { authorization: `Bearer ${callerToken}` }, payload: { callId, targetUserIds: [peerId] } })
 }
 
 describe('recording retention util', () => {
@@ -47,15 +54,18 @@ describe('recordings API', () => {
     const noConsent = await app.inject({ method: 'POST', url: '/api/recordings', headers: userAuth, payload: { callId: 'c1' } })
     expect(noConsent.statusCode).toBe(400) // consent_required（无服务端同意记录）
 
+    // 注册真实通话 c1（参与者 = user1 + peer1）。
+    const peer = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'peer1', password: 'secret123' } })
+    const peerId = peer.json().user.id, peerToken = peer.json().token
+    await setupCall(app, store, userToken, userId, peerId, 'c1')
+
     // 自我同意无效：发起者自己给 callId 授予同意，consenters 排除发起者 → 仍无有效同意。
     await app.inject({ method: 'POST', url: '/api/recordings/consent', headers: userAuth, payload: { callId: 'c1', granted: true } })
     const selfOnly = await app.inject({ method: 'POST', url: '/api/recordings', headers: userAuth, payload: { callId: 'c1' } })
     expect(selfOnly.statusCode).toBe(400)
 
-    // 被录方(非发起者)经鉴权端点授予同意 → 通过；consentBy 由服务端权威填充为该同意者。
-    const peer = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'peer1', password: 'secret123' } })
-    const peerId = peer.json().user.id
-    await app.inject({ method: 'POST', url: '/api/recordings/consent', headers: { authorization: `Bearer ${peer.json().token}` }, payload: { callId: 'c1', granted: true } })
+    // 被录方(非发起者、真实参与者)经鉴权端点授予同意 → 通过；consentBy 由服务端权威填充。
+    await app.inject({ method: 'POST', url: '/api/recordings/consent', headers: { authorization: `Bearer ${peerToken}` }, payload: { callId: 'c1', granted: true } })
     const ok = await app.inject({ method: 'POST', url: '/api/recordings', headers: userAuth, payload: { callId: 'c1' } })
     expect(ok.statusCode).toBe(201)
     expect(ok.json().recording.consentBy).toEqual([peerId]) // 服务端权威，非客户端自报
@@ -98,7 +108,8 @@ describe('recordings media-link + 级联 + 后台清理（录制功能补完）'
     const uid = reg.json().user.id, utok = reg.json().token
     const reg2 = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'peer1', password: 'secret123' } })
     const peerId = reg2.json().user.id, ptok = reg2.json().token
-    // 被录方授予同意（服务端权威）。
+    // 注册真实通话 + 被录方授予同意（服务端权威）。
+    await setupCall(app, store, utok, uid, peerId, 'c1')
     await app.inject({ method: 'POST', url: '/api/recordings/consent', headers: { authorization: `Bearer ${ptok}` }, payload: { callId: 'c1', granted: true } })
 
     const mine: MediaMeta = { id: 'media-mine', ownerId: uid, mime: 'video/quicktime', size: 100, createdAt: Date.now() }
@@ -121,8 +132,11 @@ describe('recordings media-link + 级联 + 后台清理（录制功能补完）'
     await enableRecording(app, at)
     const reg = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'rec2', password: 'secret123' } })
     const uid = reg.json().user.id, utok = reg.json().token
-    // 对端(admin)授予同意。
-    await app.inject({ method: 'POST', url: '/api/recordings/consent', headers: { authorization: `Bearer ${at}` }, payload: { callId: 'c', granted: true } })
+    const reg2 = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'peer2', password: 'secret123' } })
+    const peerId = reg2.json().user.id, ptok = reg2.json().token
+    // 真实通话 + 对端授予同意。
+    await setupCall(app, store, utok, uid, peerId, 'c')
+    await app.inject({ method: 'POST', url: '/api/recordings/consent', headers: { authorization: `Bearer ${ptok}` }, payload: { callId: 'c', granted: true } })
     store.createMedia({ id: 'm2', ownerId: uid, mime: 'video/quicktime', size: 1, createdAt: Date.now() })
     const created = await app.inject({ method: 'POST', url: '/api/recordings', headers: { authorization: `Bearer ${utok}` }, payload: { callId: 'c', mediaId: 'm2' } })
     const rid = created.json().recording.id
@@ -173,6 +187,26 @@ describe('录制知情同意（服务端权威）', () => {
     const spoof = await app.inject({ method: 'POST', url: '/api/recordings', headers: { authorization: `Bearer ${utok}` }, payload: { callId: 'cx', consentBy: ['victim-id'] } })
     expect(spoof.statusCode).toBe(400)
     expect(spoof.json().error).toBe('consent_required')
+    await app.close()
+  })
+
+  it('非参与者不能为他人的通话授予同意（403 not_a_participant），杜绝串通绕过同意', async () => {
+    const store = new MemoryStore()
+    store.createUser(admin())
+    store.setRecordingConfig({ enabled: true, requireConsent: true })
+    const app = buildApp(store)
+    // 真实通话 c9 的参与者 = alice + bob。
+    const a = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'alice9', password: 'secret123' } })
+    const b = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'bob9', password: 'secret123' } })
+    await setupCall(app, store, a.json().token, a.json().user.id, b.json().user.id, 'c9')
+    // mallory 不在该通话里，试图为 c9 授予同意 → 403。
+    const m = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'mallory9', password: 'secret123' } })
+    const bad = await app.inject({ method: 'POST', url: '/api/recordings/consent', headers: { authorization: `Bearer ${m.json().token}` }, payload: { callId: 'c9', granted: true } })
+    expect(bad.statusCode).toBe(403)
+    expect(bad.json().error).toBe('not_a_participant')
+    // alice(发起者)录制：mallory 的（被拒的）同意不存在，bob 也没同意 → consent_required。
+    const rec = await app.inject({ method: 'POST', url: '/api/recordings', headers: { authorization: `Bearer ${a.json().token}` }, payload: { callId: 'c9' } })
+    expect(rec.statusCode).toBe(400)
     await app.close()
   })
 })

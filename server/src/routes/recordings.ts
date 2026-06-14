@@ -6,6 +6,8 @@ import { requireAuth } from '../auth/rbac'
 import { sweepExpiredRecordings } from '../recording/retention'
 import { removeMediaFile } from '../media/storage'
 import { RecordingConsentRegistry } from '../recording/consentRegistry'
+import { type PendingCallRegistry } from '../assist/pendingCalls'
+import { type OpenHelpRegistry } from '../assist/openHelp'
 
 const configSchema = z.object({
   enabled: z.boolean().optional(),
@@ -21,14 +23,27 @@ const createSchema = z.object({
 
 const consentSchema = z.object({ callId: z.string().min(1), granted: z.boolean() })
 
-export function registerRecordingRoutes(app: FastifyInstance, store: Store, consent: RecordingConsentRegistry = new RecordingConsentRegistry()): void {
+export function registerRecordingRoutes(app: FastifyInstance, store: Store, consent: RecordingConsentRegistry,
+                                        pendingCalls: PendingCallRegistry, openHelp: OpenHelpRegistry): void {
   const adminOnly = { preHandler: requireAuth(['admin']) }
 
   // 被录方授予/撤回录制同意（服务端权威）：录制登记时据此核验，不信任发起者自报的同意。
   app.post('/api/recordings/consent', { preHandler: requireAuth() }, async (req, reply) => {
     const parsed = consentSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
-    if (parsed.data.granted) consent.grant(parsed.data.callId, req.user!.sub, Date.now())
+    // 只有该通话的**真实参与者**才能就此 callId 授予同意——否则任意登录用户可为自己不在的通话伪造同意，
+    // 让发起者+串通的第三方在被录方不知情下录制（见录制评审 high）。与 ws.ts join 同一参与权校验。
+    // 在途登记(pendingCalls 180s/openHelp 4h)覆盖通话早期；亲友通话另有持久 CallRecord 兜底，
+    // 使"通话进行 >3 分钟后才点录制"也能正确校验参与权（不被在途登记过期误拒）。
+    const now = Date.now()
+    const me = req.user!.sub
+    const callId = parsed.data.callId
+    const inRegistry = (pendingCalls.participants(callId, now) ?? openHelp.participants(callId, now))?.includes(me) ?? false
+    const inCallRecord = store.callRecordsForUser(me).some((r) => r.callId === callId)
+    if (!inRegistry && !inCallRecord) {
+      return reply.code(403).send({ error: 'not_a_participant' })
+    }
+    if (parsed.data.granted) consent.grant(parsed.data.callId, req.user!.sub, now)
     else consent.revoke(parsed.data.callId, req.user!.sub)
     return { ok: true }
   })

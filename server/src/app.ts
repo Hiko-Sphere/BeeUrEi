@@ -128,7 +128,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerMediaRoutes(instance, store) // 视频等大文件（磁盘存储）
     registerReportRoutes(instance, store)
     registerAdminRoutes(instance, store, presence)
-    registerRecordingRoutes(instance, store, recordingConsent)
+    registerRecordingRoutes(instance, store, recordingConsent, pendingCalls, openHelp)
     registerDevRoutes(instance, store)
     registerNavRoutes(instance, store)
     registerAppConfigRoutes(instance, store) // 客户端读取功能开关（控制每一个按键）

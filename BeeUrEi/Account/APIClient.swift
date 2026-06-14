@@ -36,6 +36,7 @@ struct AccountInfo: Codable, Sendable, Equatable, Identifiable {
     var usernameCustomized: Bool? // /api/me：false=自动生成名，提示用户设置唯一 userid
     var appleLinked: Bool?        // /api/me：是否已绑定 Apple ID
     var hasPasskey: Bool?         // /api/me：是否已注册 passkey
+    var legalConsentVersion: String? // /api/me：已同意的隐私/条款版本；与当前版本不符则需（重新）同意
 }
 
 /// 一把 passkey（账号页列表/删除用）。

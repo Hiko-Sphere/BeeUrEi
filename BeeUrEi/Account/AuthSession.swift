@@ -98,9 +98,18 @@ final class AuthSession {
     /// 登录入口的本地校验/授权失败提示（如 Apple 授权取消）——errorMessage 为 private(set)，统一经此设置。
     func presentAuthError(_ message: String) { errorMessage = message }
 
-    /// 补全流程是否需要：刚用新方式认证，且（新账号待选身份 或 用户名为自动生成 或 邮箱未验证）。
+    /// 是否需要（重新）同意隐私/条款：任何已登录用户，其已同意版本与当前文本版本不符即需同意。
+    /// 覆盖两类：① 新注册（同意版本为 nil）；② 既有用户在法律文本版本升级后首次进入。
+    var needsLegalConsent: Bool {
+        guard let u = user else { return false }
+        return (u.legalConsentVersion ?? "") != LegalText.version
+    }
+
+    /// 补全流程是否需要：① 法律同意过期（对所有已登录用户生效）；或 ② 刚用新方式认证且需选身份/设 userid/绑邮箱。
     var needsAccountSetup: Bool {
-        guard requiresSetup, let u = user else { return false }
+        guard let u = user else { return false }
+        if needsLegalConsent { return true } // 同意门控优先，且不依赖 requiresSetup（覆盖既有用户重新同意）
+        guard requiresSetup else { return false }
         let needUserid = (u.usernameCustomized == false)
         let needEmail = (u.emailVerified != true)
         return accountCreated || needUserid || needEmail
@@ -108,6 +117,9 @@ final class AuthSession {
 
     /// 新账号身份角色已确认（引导首步完成）。
     func confirmRoleChosen() { accountCreated = false }
+
+    /// 记录已同意当前法律版本（服务端记录成功后调用）：就地更新内存态，立即消除 needsLegalConsent，不依赖 refreshMe。
+    func markLegalConsented(version: String) { user?.legalConsentVersion = version }
 
     /// 补全完成（或用户在账号页另行处理）：清除引导标记。
     func completeSetup() { requiresSetup = false; accountCreated = false }

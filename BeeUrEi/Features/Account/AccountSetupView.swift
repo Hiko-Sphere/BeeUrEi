@@ -20,8 +20,8 @@ struct AccountSetupView: View {
     @State private var consentChecked = false
     @State private var consentDone = false
 
-    // 注册门控：新账号必须先同意《隐私政策》《使用条款》才能继续（早于选身份等步骤）。
-    private var needConsent: Bool { session.accountCreated && !consentDone }
+    // 同意门控：新账号必须先同意；既有用户在法律版本升级后也须重新同意（早于选身份等步骤）。
+    private var needConsent: Bool { (session.accountCreated || session.needsLegalConsent) && !consentDone }
     private var needRole: Bool { session.accountCreated }
     private var needUserid: Bool { session.user?.usernameCustomized == false }
     private var needEmail: Bool { session.user?.emailVerified != true }
@@ -78,7 +78,7 @@ struct AccountSetupView: View {
             .onChange(of: message) { _, m in if let m, !m.isEmpty { A11y.announce(m) } }
             .task {
                 if let e = session.user?.email, !e.isEmpty, email.isEmpty { email = e } // Apple 邮箱预填
-                if !needRole && !needUserid && !needEmail { session.completeSetup() } // 防御：无需补全则直接放行
+                if !needConsent && !needRole && !needUserid && !needEmail { session.completeSetup() } // 防御：无需补全则直接放行（但不可跳过同意）
             }
         }
     }
@@ -152,8 +152,11 @@ struct AccountSetupView: View {
         do {
             try await APIClient().recordLegalConsent(token: token, version: LegalText.version)
             ConsentStore().recordLegalAgreement(version: LegalText.version)
+            session.markLegalConsented(version: LegalText.version) // 立即消除 needsLegalConsent
             consentDone = true
             message = nil
+            // 仅需重新同意（无须再选身份/设 userid/绑邮箱）则直接完成，回到 App。
+            if !needRole && !needUserid && !needEmail { session.completeSetup() }
         } catch {
             message = AccountStrings.networkError(lang)
         }

@@ -346,6 +346,12 @@ enum AccountStrings {
         case "mail_unavailable":
             return l == .zh ? "邮件服务暂时不可用（服务器发信失败），请稍后再试或联系管理员"
                             : "Email service is temporarily unavailable (server couldn't send). Try again later."
+        case "code_cooldown":
+            return l == .zh ? "发送过于频繁，请稍候约 1 分钟再重新获取验证码。"
+                            : "Too soon — please wait about a minute before requesting another code."
+        case "code_too_many":
+            return l == .zh ? "获取验证码的次数过多，请稍后再试。"
+                            : "Too many code requests — please try again later."
         default: return code
         }
     }

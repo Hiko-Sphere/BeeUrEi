@@ -6,6 +6,7 @@ import { hashPassword, verifyPassword } from '../auth/passwords'
 import { type CodeRegistry } from '../auth/codes'
 import { type Mailer } from '../mail/mailer'
 import { emailVerificationMail } from '../mail/templates'
+import { CodeSendLimiter } from '../auth/sendLimiter'
 import { normalizePhone, type AppleTokenVerifier } from '../auth/apple'
 
 const passwordSchema = z.object({
@@ -23,7 +24,7 @@ const avatarSchema = z.object({
   avatar: z.string().regex(/^data:image\/(png|jpeg|jpg|webp);base64,/).max(600_000),
 })
 
-export function registerAccountRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer, appleVerifier?: AppleTokenVerifier): void {
+export function registerAccountRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer, appleVerifier?: AppleTokenVerifier, codeSend: CodeSendLimiter = new CodeSendLimiter()): void {
   // 修改密码：验证旧密码 → 设新密码 → 递增 tokenVersion(令已签发的 access token 立即失效) → 撤销所有 refresh token。
   // 递增 tokenVersion 是关键：否则被盗号者手里的 access token 在改密后仍可用最长 1h，改密自救形同虚设（见审查 #2）。
   app.post('/api/account/password', { preHandler: requireAuth() }, async (req, reply) => {
@@ -153,6 +154,13 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     if (existing && existing.id !== user.id) {
       return reply.code(409).send({ error: 'email_taken' })
     }
+    // 发送侧节流（防连点/轰炸）：按用户节流，超限则拒绝且不改邮箱。
+    const sendKey = `send:verify:${user.id}`
+    const dec = codeSend.check(sendKey, Date.now())
+    if (!dec.ok) {
+      reply.header('Retry-After', String(dec.retryAfterSec))
+      return reply.code(429).send({ error: dec.reason === 'cooldown' ? 'code_cooldown' : 'code_too_many', retryAfterSec: dec.retryAfterSec })
+    }
     const prev = { email: user.email, emailVerified: user.emailVerified }
     store.updateUser(user.id, { email, emailVerified: false })
     const code = codes.issue(`verify:${user.id}`, Date.now())
@@ -166,6 +174,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
       console.warn('[mail] 验证码发送失败:', (e as Error).message)
       return reply.code(503).send({ error: 'mail_unavailable' })
     }
+    codeSend.record(sendKey, Date.now())
     return { ok: true }
   })
 

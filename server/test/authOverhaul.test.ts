@@ -3,6 +3,10 @@ import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
 import type { Mailer } from '../src/mail/mailer'
 import type { AppleTokenVerifier } from '../src/auth/apple'
+import { CodeSendLimiter } from '../src/auth/sendLimiter'
+
+// 这些用例本就要为同一收件人连发多次码（验证"再次发码即登录同账号"等），故注入无冷却节流器隔离发送节流逻辑。
+const noThrottle = () => new CodeSendLimiter(0, 60_000, 1000)
 
 const auth = (t: string) => ({ authorization: `Bearer ${t}` })
 
@@ -23,7 +27,7 @@ const fakeApple: AppleTokenVerifier = async (t) => {
 describe('邮箱验证码登录/注册（无密码）', () => {
   it('新邮箱建号（usernameCustomized=false、邮箱已验证），再次发码即登录同账号', async () => {
     const mailer = new CaptureMailer()
-    const app = buildApp(new MemoryStore(), { mailer })
+    const app = buildApp(new MemoryStore(), { mailer, codeSend: noThrottle() })
 
     const req1 = await app.inject({ method: 'POST', url: '/api/auth/email/request-code', payload: { email: 'New@Example.com' } })
     expect(req1.statusCode).toBe(200)
@@ -54,7 +58,7 @@ describe('邮箱验证码登录/注册（无密码）', () => {
   })
 
   it('发码端点防枚举：无论邮箱是否存在都返回 ok', async () => {
-    const app = buildApp(new MemoryStore())
+    const app = buildApp(new MemoryStore(), { codeSend: noThrottle() })
     const r = await app.inject({ method: 'POST', url: '/api/auth/email/request-code', payload: { email: 'ghost@nowhere.com' } })
     expect(r.statusCode).toBe(200)
     expect((r.json() as any).ok).toBe(true)
@@ -63,7 +67,7 @@ describe('邮箱验证码登录/注册（无密码）', () => {
 
 describe('自定义/修改用户名', () => {
   it('唯一 + 格式校验，成功后标记 usernameCustomized 并可用新名登录', async () => {
-    const app = buildApp(new MemoryStore())
+    const app = buildApp(new MemoryStore(), { codeSend: noThrottle() })
     const r = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { password: 'secret123', email: 'u1@example.com' } })
     const token = (r.json() as any).token
 
@@ -91,7 +95,7 @@ describe('自定义/修改用户名', () => {
 
 describe('Apple ID 绑定/解绑（现存账号）', () => {
   it('绑定顺带绑 Apple 邮箱；他人占用 409；解绑需保留其它登录方式', async () => {
-    const app = buildApp(new MemoryStore(), { appleVerifier: fakeApple })
+    const app = buildApp(new MemoryStore(), { appleVerifier: fakeApple, codeSend: noThrottle() })
     const a = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'alink', password: 'secret123' } })
     const ta = (a.json() as any).token
 
@@ -116,7 +120,7 @@ describe('Apple ID 绑定/解绑（现存账号）', () => {
   })
 
   it('Apple-only 账号（无邮箱/手机/passkey）不能解绑，防锁死', async () => {
-    const app = buildApp(new MemoryStore(), { appleVerifier: fakeApple })
+    const app = buildApp(new MemoryStore(), { appleVerifier: fakeApple, codeSend: noThrottle() })
     const c = await app.inject({ method: 'POST', url: '/api/auth/apple', payload: { identityToken: 'good:SUBC' } })
     expect(c.statusCode).toBe(201)
     const tc = (c.json() as any).token
@@ -173,7 +177,7 @@ describe('新账号 created 标记 + 认证后统一选角色', () => {
 
 describe('Apple 关联域文件（passkey 前提）', () => {
   it('GET /.well-known/apple-app-site-association 返回 webcredentials JSON', async () => {
-    const app = buildApp(new MemoryStore())
+    const app = buildApp(new MemoryStore(), { codeSend: noThrottle() })
     const res = await app.inject({ method: 'GET', url: '/.well-known/apple-app-site-association' })
     expect(res.statusCode).toBe(200)
     expect(res.headers['content-type']).toContain('application/json')

@@ -8,6 +8,7 @@ import { normalizePhone, type AppleTokenVerifier } from '../auth/apple'
 import { type CodeRegistry } from '../auth/codes'
 import { type Mailer } from '../mail/mailer'
 import { loginCodeMail } from '../mail/templates'
+import { CodeSendLimiter } from '../auth/sendLimiter'
 
 /// 签发 access + refresh 一对（refresh 仅存哈希）。
 function issueTokens(store: Store, user: User): { token: string; refreshToken: string } {
@@ -51,7 +52,7 @@ const emailCodeVerifySchema = z.object({
   language: z.string().min(2).max(8).optional(),
 })
 
-export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer, appleVerifier?: AppleTokenVerifier): void {
+export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer, appleVerifier?: AppleTokenVerifier, codeSend: CodeSendLimiter = new CodeSendLimiter()): void {
   // 注册/登录/refresh 是凭证暴破与刷号的高危端点，给独立且更严格的限流（防口令暴破/凭证填充/批量刷号，见审查 #3）。
   app.post('/api/auth/register', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = registerSchema.safeParse(req.body)
@@ -215,6 +216,13 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     const parsed = emailCodeRequestSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const email = parsed.data.email.trim().toLowerCase()
+    // 发送侧节流（防连点/轰炸）：按收件邮箱节流——已注册/未注册两条路径都发码，故节流对称，不泄露账号是否存在。
+    const sendKey = `send:login:${email}`
+    const dec = codeSend.check(sendKey, Date.now())
+    if (!dec.ok) {
+      reply.header('Retry-After', String(dec.retryAfterSec))
+      return reply.code(429).send({ error: dec.reason === 'cooldown' ? 'code_cooldown' : 'code_too_many', retryAfterSec: dec.retryAfterSec })
+    }
     const user = store.findByEmail(email)
     const key = user ? `login:${user.id}` : `signup:${email}`
     const code = codes.issue(key, Date.now())
@@ -227,6 +235,7 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
       console.warn('[mail] 登录码发送失败:', (e as Error).message)
       return reply.code(503).send({ error: 'mail_unavailable' })
     }
+    codeSend.record(sendKey, Date.now()) // 仅在成功发送后计入节流（发信失败不锁冷却）
     return { ok: true }
   })
 

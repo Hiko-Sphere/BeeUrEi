@@ -5,6 +5,7 @@ import { hashPassword } from '../auth/passwords'
 import { type CodeRegistry } from '../auth/codes'
 import { type Mailer } from '../mail/mailer'
 import { passwordResetMail } from '../mail/templates'
+import { CodeSendLimiter } from '../auth/sendLimiter'
 
 const forgotSchema = z.object({ username: z.string().trim().min(1) })
 const resetSchema = z.object({
@@ -16,11 +17,19 @@ const resetSchema = z.object({
 /// 找回密码（D1）：忘记密码 → 向账号绑定邮箱发验证码 → 凭码重置。
 /// 安全：① 不做用户枚举（无论用户/邮箱是否存在都返回 200）② 验证码哈希存储、限次、10 分钟过期
 /// ③ 重置成功递增 tokenVersion 并撤销所有 refresh token（与改密一致，令旧令牌立即失效）。
-export function registerRecoveryRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer): void {
+export function registerRecoveryRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer, codeSend: CodeSendLimiter = new CodeSendLimiter()): void {
   // 发起找回：若该用户存在且绑定了邮箱，则发码。始终返回 ok，避免据响应判断账号/邮箱是否存在。
   app.post('/api/auth/forgot-password', { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = forgotSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    // 发送侧节流：按**提交的标识**统一节流（无论账号是否存在都 check+record），429 对所有人一致，保持反枚举。
+    const sendKey = `send:reset:${parsed.data.username.trim().toLowerCase()}`
+    const dec = codeSend.check(sendKey, Date.now())
+    if (!dec.ok) {
+      reply.header('Retry-After', String(dec.retryAfterSec))
+      return reply.code(429).send({ error: dec.reason === 'cooldown' ? 'code_cooldown' : 'code_too_many', retryAfterSec: dec.retryAfterSec })
+    }
+    codeSend.record(sendKey, Date.now())
     const user = store.findByUsername(parsed.data.username)
     // 仅向**已验证**邮箱发码：未验证邮箱可能是拼错/他人地址，不应作为账号恢复锚点（见审查 #8）。
     if (user?.email && user.emailVerified) {

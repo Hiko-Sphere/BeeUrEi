@@ -5,6 +5,7 @@ import { requireAuth } from '../auth/rbac'
 import { hashPassword, verifyPassword } from '../auth/passwords'
 import { type CodeRegistry } from '../auth/codes'
 import { type Mailer } from '../mail/mailer'
+import { emailVerificationMail } from '../mail/templates'
 import { normalizePhone, type AppleTokenVerifier } from '../auth/apple'
 
 const passwordSchema = z.object({
@@ -156,7 +157,8 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     store.updateUser(user.id, { email, emailVerified: false })
     const code = codes.issue(`verify:${user.id}`, Date.now())
     try {
-      await mailer.send(email, 'BeeUrEi 邮箱验证码', `你的邮箱验证码是：${code}（10 分钟内有效）。`)
+      const m = emailVerificationMail(code)
+      await mailer.send(email, m.subject, m.text, m.html)
     } catch (e) {
       // 发信失败（SMTP 故障/凭据失效）：回滚邮箱变更并明确告知"邮件服务不可用"——
       // 不可发 500（客户端会误报网络错误），更不可假装已发送。

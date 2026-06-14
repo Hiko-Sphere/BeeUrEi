@@ -4,6 +4,7 @@ import { type Store } from '../db/store'
 import { hashPassword } from '../auth/passwords'
 import { type CodeRegistry } from '../auth/codes'
 import { type Mailer } from '../mail/mailer'
+import { passwordResetMail } from '../mail/templates'
 
 const forgotSchema = z.object({ username: z.string().trim().min(1) })
 const resetSchema = z.object({
@@ -26,8 +27,9 @@ export function registerRecoveryRoutes(app: FastifyInstance, store: Store, codes
       const code = codes.issue(`reset:${user.id}`, Date.now())
       // fire-and-forget：不 await 发信，使"账号存在/不存在"两条路径响应时延一致，消除时序枚举侧信道（见审查 #9）。
       // catch 必须保留（避免 unhandledRejection），但记日志而非静默吞掉，便于排查发信故障（见复审 #7）。
+      const m = passwordResetMail(code)
       void mailer
-        .send(user.email, 'BeeUrEi 重置密码验证码', `你的重置密码验证码是：${code}（10 分钟内有效）。若非你本人操作请忽略。`)
+        .send(user.email, m.subject, m.text, m.html)
         .catch((e) => console.warn('[mail] 重置码发送失败:', (e as Error).message))
     }
     return { ok: true }

@@ -2,14 +2,15 @@
 /// 默认 ConsoleMailer：把邮件内容打到服务器日志——自托管/开发下**完全可用**（管理员从日志读验证码），
 /// 无需任何外部服务商。配置 SMTP_* 环境变量并安装 nodemailer 后，makeMailer 自动切到真实 SMTP 发信。
 export interface Mailer {
-  send(to: string, subject: string, text: string): Promise<void>
+  /// html 可选：提供则发 multipart（text + html），客户端优先渲染 html、纯文本兜底。
+  send(to: string, subject: string, text: string, html?: string): Promise<void>
 }
 
-/// 控制台邮件器：打印到日志。零依赖、零外部服务。
+/// 控制台邮件器：打印到日志。零依赖、零外部服务（管理员可从日志读验证码）。
 export class ConsoleMailer implements Mailer {
   // 允许注入 sink 以便单测捕获（默认 console.log）。
   constructor(private readonly sink: (line: string) => void = (l) => console.log(l)) {}
-  async send(to: string, subject: string, text: string): Promise<void> {
+  async send(to: string, subject: string, text: string, _html?: string): Promise<void> {
     this.sink(`[MAIL] → ${to} | ${subject} | ${text}`)
   }
 }
@@ -34,8 +35,8 @@ export async function makeMailer(): Promise<Mailer> {
       .then(() => console.log(`[mail] SMTP 已就绪（${host}）`))
       .catch((e: Error) => console.warn(`[mail] SMTP 自检失败（${host}）——发码功能将不可用：`, e.message))
     return {
-      async send(to: string, subject: string, text: string): Promise<void> {
-        await transport.sendMail({ from, to, subject, text })
+      async send(to: string, subject: string, text: string, html?: string): Promise<void> {
+        await transport.sendMail({ from, to, subject, text, ...(html ? { html } : {}) })
       },
     }
   } catch {

@@ -99,17 +99,30 @@ struct RemoteMaintenance: Codable, Sendable, Equatable {
         message = ((try? c.decodeIfPresent(String.self, forKey: .message)) ?? nil) ?? ""
     }
 }
-/// 整个 /api/app-config 响应（功能开关 + 公告 + 维护）。各块缺失按默认（fail-open）。
+/// 全站录制策略（/api/app-config.recording）：默认关闭、需双方同意（fail-safe：缺省即最严格）。
+struct RemoteRecordingPolicy: Codable, Sendable, Equatable {
+    var enabled = false
+    var requireConsent = true
+    init() {}
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = ((try? c.decodeIfPresent(Bool.self, forKey: .enabled)) ?? nil) ?? false
+        requireConsent = ((try? c.decodeIfPresent(Bool.self, forKey: .requireConsent)) ?? nil) ?? true
+    }
+}
+/// 整个 /api/app-config 响应（功能开关 + 公告 + 维护 + 录制策略）。各块缺失按默认（fail-open；录制 fail-safe）。
 struct RemoteAppConfig: Codable, Sendable, Equatable {
     var features = RemoteFeatureFlags()
     var announcement = RemoteAnnouncement()
     var maintenance = RemoteMaintenance()
+    var recording = RemoteRecordingPolicy()
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         features = ((try? c.decodeIfPresent(RemoteFeatureFlags.self, forKey: .features)) ?? nil) ?? RemoteFeatureFlags()
         announcement = ((try? c.decodeIfPresent(RemoteAnnouncement.self, forKey: .announcement)) ?? nil) ?? RemoteAnnouncement()
         maintenance = ((try? c.decodeIfPresent(RemoteMaintenance.self, forKey: .maintenance)) ?? nil) ?? RemoteMaintenance()
+        recording = ((try? c.decodeIfPresent(RemoteRecordingPolicy.self, forKey: .recording)) ?? nil) ?? RemoteRecordingPolicy()
     }
 }
 
@@ -995,5 +1008,18 @@ struct APIClient {
         let data = try await authedSend("PUT", "/api/recordings/config", token: token, body: body)
         guard let c = try? JSONDecoder().decode(RecordingConfig.self, from: data) else { throw APIError.decoding }
         return c
+    }
+
+    /// 通话内登记一条录制（先经 uploadMedia 拿到 mediaId）。consentBy 由**服务端**据同意登记表权威判定，
+    /// 客户端不再自报，杜绝伪造对端同意。
+    func createRecording(token: String, callId: String, reason: String, mediaId: String?) async throws {
+        var body: [String: Any] = ["callId": callId, "reason": reason]
+        if let mediaId { body["mediaId"] = mediaId }
+        _ = try await authedSend("POST", "/api/recordings", token: token, body: body)
+    }
+
+    /// 被录方授予/撤回录制同意（服务端权威）：在 RecordingConsentView 选择后调用。
+    func grantRecordingConsent(token: String, callId: String, granted: Bool) async throws {
+        _ = try await authedSend("POST", "/api/recordings/consent", token: token, body: ["callId": callId, "granted": granted])
     }
 }

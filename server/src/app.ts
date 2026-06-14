@@ -26,6 +26,7 @@ import { SignalingHub } from './signaling/hub'
 import { registerReportRoutes } from './routes/reports'
 import { registerAdminRoutes } from './routes/admin'
 import { registerRecordingRoutes } from './routes/recordings'
+import { RecordingConsentRegistry } from './recording/consentRegistry'
 import { registerDevRoutes } from './routes/dev'
 import { registerNavRoutes } from './routes/nav'
 import { registerRecoveryRoutes } from './routes/recovery'
@@ -62,6 +63,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   openHelp.setConflictCheck((id, now) => pendingCalls.hasActive(id, now))
   const metrics = new Metrics(Date.now())
   const codes = new CodeRegistry()
+  const recordingConsent = new RecordingConsentRegistry() // 录制知情同意（服务端权威）
   const codeSend = options.codeSend ?? new CodeSendLimiter() // 发送侧节流：同一收件人 60s 冷却 + 窗口上限（防连点/邮件轰炸）
   const mailer = options.mailer ?? new ConsoleMailer()
   const pushSender = options.pushSender ?? new NoopPushSender()
@@ -126,7 +128,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerMediaRoutes(instance, store) // 视频等大文件（磁盘存储）
     registerReportRoutes(instance, store)
     registerAdminRoutes(instance, store, presence)
-    registerRecordingRoutes(instance, store)
+    registerRecordingRoutes(instance, store, recordingConsent)
     registerDevRoutes(instance, store)
     registerNavRoutes(instance, store)
     registerAppConfigRoutes(instance, store) // 客户端读取功能开关（控制每一个按键）

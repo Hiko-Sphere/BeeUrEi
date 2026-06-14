@@ -3,7 +3,9 @@ import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import { type Store, type Recording } from '../db/store'
 import { requireAuth } from '../auth/rbac'
-import { expiredRecordingIds } from '../recording/retention'
+import { sweepExpiredRecordings } from '../recording/retention'
+import { removeMediaFile } from '../media/storage'
+import { RecordingConsentRegistry } from '../recording/consentRegistry'
 
 const configSchema = z.object({
   enabled: z.boolean().optional(),
@@ -13,12 +15,23 @@ const configSchema = z.object({
 
 const createSchema = z.object({
   callId: z.string().min(1),
-  consentBy: z.array(z.string()).default([]),
   reason: z.string().max(200).optional(),
+  mediaId: z.string().min(1).optional(), // 录制实体（先经 /api/media 上传 .mov 拿到），可选
 })
 
-export function registerRecordingRoutes(app: FastifyInstance, store: Store): void {
+const consentSchema = z.object({ callId: z.string().min(1), granted: z.boolean() })
+
+export function registerRecordingRoutes(app: FastifyInstance, store: Store, consent: RecordingConsentRegistry = new RecordingConsentRegistry()): void {
   const adminOnly = { preHandler: requireAuth(['admin']) }
+
+  // 被录方授予/撤回录制同意（服务端权威）：录制登记时据此核验，不信任发起者自报的同意。
+  app.post('/api/recordings/consent', { preHandler: requireAuth() }, async (req, reply) => {
+    const parsed = consentSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    if (parsed.data.granted) consent.grant(parsed.data.callId, req.user!.sub, Date.now())
+    else consent.revoke(parsed.data.callId, req.user!.sub)
+    return { ok: true }
+  })
 
   app.get('/api/recordings/config', adminOnly, async () => store.getRecordingConfig())
 
@@ -35,36 +48,41 @@ export function registerRecordingRoutes(app: FastifyInstance, store: Store): voi
     const parsed = createSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const owner = req.user!
-    // 知情同意必须来自**被录制的对方参与者**，而非发起者自我同意——否则协助者/亲友可把自己的 id
-    // 填进 consentBy 就绕过、在视障用户不知情下录制（见审查 #4）。要求至少有一个非发起者的同意。
-    // 注：完整方案应校验 callId 对应通话的真实参与者集合（待通话参与者模型）。
-    const othersConsented = parsed.data.consentBy.some((id) => id !== owner.sub)
-    if (cfg.requireConsent && !othersConsented) {
+    // 知情同意**服务端权威**：consentBy 由服务端从同意登记表取（被录方经鉴权端点亲自授予），
+    // 而非信任发起者自报——杜绝被改造客户端伪造对端同意。要求至少有一名非发起者的有效同意。
+    const consenters = consent.consenters(parsed.data.callId, owner.sub, Date.now())
+    if (cfg.requireConsent && consenters.length === 0) {
       return reply.code(400).send({ error: 'consent_required' })
+    }
+    // mediaId 必须是上传者本人的媒体（防把他人媒体挂到自己的录制上）。
+    if (parsed.data.mediaId) {
+      const media = store.findMedia(parsed.data.mediaId)
+      if (!media || media.ownerId !== owner.sub) return reply.code(400).send({ error: 'invalid_media' })
     }
     const rec: Recording = {
       id: randomUUID(),
       callId: parsed.data.callId,
       ownerId: owner.sub,
-      consentBy: parsed.data.consentBy,
+      consentBy: consenters, // 服务端核验后的真实同意者
       reason: parsed.data.reason ?? '',
       recordedAt: Date.now(),
+      mediaId: parsed.data.mediaId,
     }
     store.createRecording(rec)
     return reply.code(201).send({ recording: rec })
   })
 
-  // 列出录制（先按保留期清理过期项 → 到期自动删除）。
+  // 列出录制（先清过期项：删元数据 + 级联删媒体文件）。
   app.get('/api/recordings', adminOnly, async () => {
-    const cfg = store.getRecordingConfig()
-    const expired = expiredRecordingIds(store.allRecordings(), cfg.retentionDays, Date.now())
-    for (const id of expired) store.deleteRecording(id)
-    return { recordings: store.allRecordings(), purged: expired.length }
+    const purged = sweepExpiredRecordings(store, Date.now())
+    return { recordings: store.allRecordings(), purged }
   })
 
   app.delete('/api/recordings/:id', adminOnly, async (req, reply) => {
     const id = (req.params as { id: string }).id
-    if (!store.findRecording(id)) return reply.code(404).send({ error: 'not_found' })
+    const rec = store.findRecording(id)
+    if (!rec) return reply.code(404).send({ error: 'not_found' })
+    if (rec.mediaId) { removeMediaFile(rec.mediaId); store.deleteMedia(rec.mediaId) } // 级联删媒体
     store.deleteRecording(id)
     return reply.code(204).send()
   })

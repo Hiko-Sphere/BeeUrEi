@@ -78,6 +78,7 @@ export class SqliteStore implements Store {
     try { this.db.exec('ALTER TABLE users ADD COLUMN legalConsentVersion TEXT') } catch { /* 列已存在 */ } // 同意的隐私/条款版本（注册门控+GDPR 可证明同意）
     try { this.db.exec('ALTER TABLE users ADD COLUMN legalConsentAt INTEGER') } catch { /* 列已存在 */ } // 同意时间戳
     try { this.db.exec('ALTER TABLE users ADD COLUMN featureOverrides TEXT') } catch { /* 列已存在 */ } // 单用户功能覆盖（JSON）
+    try { this.db.exec('ALTER TABLE recordings ADD COLUMN mediaId TEXT') } catch { /* 列已存在 */ } // 录制关联的媒体文件
     try { this.db.exec('ALTER TABLE messages ADD COLUMN reaction TEXT') } catch { /* 列已存在 */ } // 表情回应
     try { this.db.exec('ALTER TABLE messages ADD COLUMN groupId TEXT') } catch { /* 列已存在 */ } // 群消息
     // 群消息索引必须在 groupId 列迁移之后建——否则旧库（无此列）在 CREATE INDEX 处直接崩。
@@ -305,9 +306,9 @@ export class SqliteStore implements Store {
   }
   createRecording(rec: Recording): void {
     this.db.prepare(
-      `INSERT OR REPLACE INTO recordings (id, callId, ownerId, consentBy, reason, recordedAt)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(rec.id, rec.callId, rec.ownerId, JSON.stringify(rec.consentBy), rec.reason, rec.recordedAt)
+      `INSERT OR REPLACE INTO recordings (id, callId, ownerId, consentBy, reason, recordedAt, mediaId)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(rec.id, rec.callId, rec.ownerId, JSON.stringify(rec.consentBy), rec.reason, rec.recordedAt, rec.mediaId ?? null)
   }
   allRecordings(): Recording[] {
     return this.db.prepare('SELECT * FROM recordings').all().map((r) => this.toRecording(r))
@@ -454,6 +455,6 @@ export class SqliteStore implements Store {
     return { id: r.id, reporterId: r.reporterId, targetUserId: r.targetUserId, callId: r.callId ?? undefined, reason: r.reason, status: r.status as ReportStatus, createdAt: Number(r.createdAt), decision: r.decision ?? undefined, resolvedBy: r.resolvedBy ?? undefined, resolvedAt: r.resolvedAt != null ? Number(r.resolvedAt) : undefined }
   }
   private toRecording(r: any): Recording {
-    return { id: r.id, callId: r.callId, ownerId: r.ownerId, consentBy: parseJsonOr<string[]>(r.consentBy, []), reason: r.reason, recordedAt: Number(r.recordedAt) }
+    return { id: r.id, callId: r.callId, ownerId: r.ownerId, consentBy: parseJsonOr<string[]>(r.consentBy, []), reason: r.reason, recordedAt: Number(r.recordedAt), mediaId: r.mediaId ?? undefined }
   }
 }

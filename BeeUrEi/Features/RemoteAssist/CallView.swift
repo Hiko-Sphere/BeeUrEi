@@ -56,6 +56,11 @@ struct CallView: View {
             Button(CallStrings.mute(lang), role: .destructive) { model.setMuted(true) }
             Button(CallStrings.cancel(lang), role: .cancel) {}
         } message: { Text(CallStrings.muteConfirmMessage(lang)) }
+        // 对端请求录制 → 本端知情同意弹窗（必须明确选择，不允许下滑略过）。
+        .sheet(isPresented: Binding(get: { model.incomingRecordRequest }, set: { if !$0 { model.respondToRecordRequest(false) } })) {
+            RecordingConsentView { accepted in model.respondToRecordRequest(accepted) }
+                .interactiveDismissDisabled()
+        }
         .task { await model.start() }
         .onChange(of: model.statusText) { _, new in announceCall(new) }
         .onChange(of: model.videoSending) { _, sending in
@@ -124,6 +129,7 @@ struct CallView: View {
                         .foregroundStyle(model.declined ? Color.beeDanger : .white.opacity(0.9))
                         .accessibilityAddTraits(.updatesFrequently)
                 }
+                recordingBadge
             }
             .padding(.horizontal).padding(.top, 8).padding(.bottom, 28)
             .frame(maxWidth: .infinity)
@@ -153,11 +159,21 @@ struct CallView: View {
                         .accessibilityLabel(CallStrings.zoomA11y(Int(model.remoteZoom), lang))
                     }
                 }
-                HStack(spacing: 48) {
+                HStack(spacing: 40) {
                     circleButton(model.muted ? "mic.slash.fill" : "mic.fill",
                                  label: model.muted ? CallStrings.unmute(lang) : CallStrings.mute(lang),
                                  tint: model.muted ? Color.beeWarn : Color.white.opacity(0.22)) {
                         model.setMuted(!model.muted); scheduleAutoHide()
+                    }
+                    // 录制（策略开启时）：发起需对端同意；录制中为停止（红）。请求同意期间禁用避免重复发起。
+                    if model.recordingPolicy.enabled {
+                        circleButton(model.isRecording ? "stop.circle.fill" : "record.circle",
+                                     label: model.isRecording ? CallStrings.recordStop(lang) : CallStrings.recordStart(lang),
+                                     tint: model.isRecording ? Color.beeDanger : Color.white.opacity(0.22)) {
+                            tapRecord(); scheduleAutoHide()
+                        }
+                        .disabled(model.awaitingRecordConsent)
+                        .opacity(model.awaitingRecordConsent ? 0.5 : 1)
                     }
                     circleButton("phone.down.fill", label: CallStrings.hangup(lang), tint: Color.beeDanger) {
                         model.hangUp(); onClose()
@@ -190,6 +206,26 @@ struct CallView: View {
         .accessibilityLabel(label)
     }
 
+    /// 录制指示徽标（本端或对端正在录制时显示，被录方始终知情）。
+    @ViewBuilder private var recordingBadge: some View {
+        if model.isRecording || model.peerRecording {
+            HStack(spacing: 6) {
+                Image(systemName: "record.circle.fill").foregroundStyle(Color.beeDanger)
+                    .symbolEffect(.pulse, options: .repeating)
+                Text(CallStrings.recordingNow(lang)).font(.caption.weight(.bold)).foregroundStyle(.white)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(Color.black.opacity(0.55), in: Capsule())
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(CallStrings.recordingNow(lang))
+        }
+    }
+
+    /// 点录制/停录（走 VM 的同意握手）。
+    private func tapRecord() {
+        if model.isRecording { model.stopRecording() } else { model.requestRecording() }
+    }
+
     private func toggleControls() {
         withAnimation { controlsVisible.toggle() }
         if controlsVisible { scheduleAutoHide() } else { autoHide?.cancel() }
@@ -219,7 +255,19 @@ struct CallView: View {
                 .foregroundStyle(model.declined ? Color.beeDanger : .primary)
                 .accessibilityAddTraits(.updatesFrequently)
 
+            recordingBadge
+
             blindControls // 是否开启后置摄像头让协助者看到（隐私门控）
+
+            // 录制（策略开启时）：发起需对端同意；录制中按钮变为"停止录制"（红）。
+            if model.recordingPolicy.enabled {
+                BeeBigButton(model.isRecording ? CallStrings.recordStop(lang) : CallStrings.recordStart(lang),
+                             systemImage: model.isRecording ? "stop.circle.fill" : "record.circle",
+                             tint: model.isRecording ? .beeDanger : .beeInk, foreground: .white) {
+                    tapRecord()
+                }
+                .disabled(model.awaitingRecordConsent)
+            }
 
             // A4：无人接听/被拒 → 一键转向公开志愿者求助（不让盲人卡死在没人接的呼叫里）。
             if (model.unanswered || model.declined), let fallback = onFallbackToVolunteer {

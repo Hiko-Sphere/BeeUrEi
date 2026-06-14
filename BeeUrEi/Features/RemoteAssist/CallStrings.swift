@@ -188,6 +188,20 @@ enum CallStrings {
     }
     static func recordAgree(_ l: Language) -> String { l == .zh ? "同意录制" : "Allow recording" }
     static func recordDecline(_ l: Language) -> String { l == .zh ? "不录制" : "Don't record" }
+    // 录制控制（通话内）
+    static func recordStart(_ l: Language) -> String { l == .zh ? "录制" : "Record" }
+    static func recordStop(_ l: Language) -> String { l == .zh ? "停止录制" : "Stop recording" }
+    static func recordingNow(_ l: Language) -> String { l == .zh ? "录制中" : "Recording" }
+    static func recordRequesting(_ l: Language) -> String { l == .zh ? "正在请求对方同意录制…" : "Asking the other side to allow recording…" }
+    static func recordStartedAnnounce(_ l: Language) -> String { l == .zh ? "已开始录制本次通话" : "Recording started" }
+    static func recordStoppedAnnounce(_ l: Language) -> String { l == .zh ? "已停止录制并保存" : "Recording stopped and saved" }
+    static func recordPeerStarted(_ l: Language) -> String { l == .zh ? "对方已开始录制本次通话" : "The other side started recording this call" }
+    static func recordPeerStopped(_ l: Language) -> String { l == .zh ? "对方已停止录制" : "The other side stopped recording" }
+    static func recordPeerAsking(_ l: Language) -> String { l == .zh ? "对方请求录制本次通话，请选择是否同意" : "The other side asks to record this call — please choose" }
+    static func recordDeclinedByPeer(_ l: Language) -> String { l == .zh ? "对方不同意录制" : "The other side declined recording" }
+    static func recordUnavailable(_ l: Language) -> String { l == .zh ? "本设备暂不支持通话录制" : "Call recording isn't available on this device" }
+    static func recordDisabled(_ l: Language) -> String { l == .zh ? "录制功能未开启" : "Recording is turned off" }
+    static func recordSaveFailed(_ l: Language) -> String { l == .zh ? "录制保存失败" : "Couldn't save the recording" }
 
     // MARK: 信号强弱（通话中网络状态条；来自 WebRTC 实测往返时延）
 

@@ -7,7 +7,8 @@ import { type Store } from '../db/store'
 import { type PendingCallRegistry } from '../assist/pendingCalls'
 import { type OpenHelpRegistry } from '../assist/openHelp'
 
-const RELAY_TYPES = new Set(['offer', 'answer', 'ice', 'video-gate', 'end', 'control'])
+// record-request/consent/state：通话录制的知情同意握手（发起→对端同意→双方录制指示），点对点转发。
+const RELAY_TYPES = new Set(['offer', 'answer', 'ice', 'video-gate', 'end', 'control', 'record-request', 'record-consent', 'record-state'])
 
 /// WebRTC 信令：/ws?token=<JWT>。客户端先发 {type:'join', callId, role}，
 /// 之后 offer/answer/ice/video-gate/end 会被转发给同房间的另一端。

@@ -256,6 +256,7 @@ export interface Recording {
   consentBy: string[]
   reason: string
   recordedAt: number
+  mediaId?: string // 关联的媒体文件（/api/media）：录制实体；删录制时一并删媒体（见 sweepExpiredRecordings/DELETE）
 }
 
 /// 聊天消息（单聊=accepted 绑定互发；群聊=群成员互发）。

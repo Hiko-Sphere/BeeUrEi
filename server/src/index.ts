@@ -3,6 +3,7 @@ import { seedAdmin } from './bootstrap/seedAdmin'
 import { makeMailer } from './mail/mailer'
 import { makePushSender } from './push/apns'
 import { initErrorReporting } from './monitoring/errorReporting'
+import { sweepExpiredRecordings } from './recording/retention'
 
 // 从 .env 读取密钥/配置（AMAP_API_KEY / ADMIN_* / JWT_SECRET / SMTP_* / SENTRY_DSN / METRICS_TOKEN）。Node 21+ 内置。
 try {
@@ -24,6 +25,15 @@ async function main(): Promise<void> {
 
   const addr = await app.listen({ port, host: '0.0.0.0' })
   console.log(`BeeUrEi server listening on ${addr}`)
+
+  // 录制留存清理：后台每小时清一次过期录制(连同媒体文件)，不依赖管理员去列表页才触发（Q6 真实留存）。
+  const sweep = () => {
+    try { const n = sweepExpiredRecordings(store, Date.now()); if (n) console.log(`[recordings] 清理过期录制 ${n} 条`) }
+    catch (e) { console.warn('[recordings] 清理失败:', (e as Error).message) }
+  }
+  sweep() // 启动即清一次
+  const sweepTimer = setInterval(sweep, 60 * 60 * 1000)
+  sweepTimer.unref?.() // 不阻止进程退出
 
   // 优雅关闭：收到 SIGTERM/SIGINT 时先关闭 server（完成在途请求）再退出。
   for (const sig of ['SIGTERM', 'SIGINT'] as const) {

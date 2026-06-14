@@ -37,6 +37,20 @@ final class CallViewModel {
     private(set) var callEnded = false                   // 对方已挂断/离开 → 本端自动挂断并关闭界面
     var canReport: Bool { peerUserId != nil }
 
+    // MARK: 通话录制（Q6，知情同意握手 + ReplayKit 采集）
+    private(set) var recordingPolicy = RemoteRecordingPolicy()  // 全站录制策略（开播时拉取；默认 fail-safe 关闭+需同意）
+    private(set) var isRecording = false                        // 本端正在录制
+    private(set) var peerRecording = false                      // 对端正在录制本次通话
+    private(set) var awaitingRecordConsent = false             // 本端已请求录制，等待对端同意
+    private(set) var incomingRecordRequest = false            // 对端请求录制，待本端在 RecordingConsentView 选择
+    private(set) var recordStatus: String?                     // 录制相关的临时状态文案
+    @ObservationIgnored private let recorder = CallRecorder()
+    /// 是否可发起录制：策略开启 + 设备支持 + 已接通且知道对端 + 当前未在录/未在等同意。
+    var canStartRecording: Bool {
+        recordingPolicy.enabled && recorder.isAvailable && connected && peerUserId != nil
+            && !isRecording && !awaitingRecordConsent && !callEnded
+    }
+
     /// 切换静音（禁用/启用本端麦克风音频轨）。
     func setMuted(_ on: Bool) {
         muted = on
@@ -115,6 +129,8 @@ final class CallViewModel {
         if let servers = try? await APIClient().iceServers(token: token) {
             media.setIceServers(servers)
         }
+        // 录制策略（全站开关 + 是否需同意）：决定是否显示录制按钮、是否走同意握手。失败按默认（关闭+需同意）。
+        if let cfg = try? await APIClient().appConfig(token: token) { recordingPolicy = cfg.recording }
         media.start(asCaller: role == .blind)
         signaling.connect(token: token, baseURL: ServerConfig.baseURL)
         signaling.join(callId: callId, role: role == .blind ? "blind" : "helper")
@@ -199,6 +215,27 @@ final class CallViewModel {
             }
             if let zoom = msg["zoom"] as? Double {
                 media.setZoom(zoom)
+            }
+        case "record-request":
+            // 对端请求录制（要录到含本端画面/语音的通话）→ 弹出知情同意，由本端决定是否同意。
+            guard !incomingRecordRequest, !peerRecording else { return }
+            incomingRecordRequest = true
+            announce(CallStrings.recordPeerAsking(lang))
+        case "record-consent":
+            // 对端对**我方**的录制请求作出答复。
+            guard awaitingRecordConsent, let accepted = msg["accepted"] as? Bool else { return }
+            awaitingRecordConsent = false
+            recordStatus = nil
+            if accepted {
+                Task { await beginRecording() }
+            } else {
+                announce(CallStrings.recordDeclinedByPeer(lang))
+            }
+        case "record-state":
+            // 对端开始/停止了录制 → 更新指示并播报（让被录方始终知情）。
+            if let on = msg["recording"] as? Bool {
+                peerRecording = on
+                announce(on ? CallStrings.recordPeerStarted(lang) : CallStrings.recordPeerStopped(lang))
             }
         case "end", "peer-left":
             // 一方挂断/离开 → 本端自动挂断并关闭界面（见“同时自动挂断”需求）。
@@ -301,10 +338,79 @@ final class CallViewModel {
         }
     }
 
+    // MARK: 录制控制（发起方）
+
+    /// 发起录制：策略需同意则走"请求→对端同意→开录"握手；否则直接开录。consentBy 含对端 id（满足服务端校验）。
+    func requestRecording() {
+        guard recordingPolicy.enabled else { announce(CallStrings.recordDisabled(lang)); return }
+        guard recorder.isAvailable else { announce(CallStrings.recordUnavailable(lang)); return }
+        guard canStartRecording, peerUserId != nil else { return }
+        if recordingPolicy.requireConsent {
+            awaitingRecordConsent = true
+            recordStatus = CallStrings.recordRequesting(lang)
+            signaling.send(["type": "record-request"])
+            announce(CallStrings.recordRequesting(lang))
+        } else {
+            Task { await beginRecording() }
+        }
+    }
+
+    /// 对端请求录制时本端的答复（RecordingConsentView 的回调）：把同意/拒绝**经鉴权端点告知服务端**
+    /// （服务端权威核验），同时回传 P2P 让对端尽快开录/收到拒绝。幂等：仅在确有待答复请求时执行一次。
+    func respondToRecordRequest(_ accepted: Bool) {
+        guard incomingRecordRequest else { return }
+        incomingRecordRequest = false
+        let cid = callId
+        if let token = KeychainStore.read() {
+            Task { try? await APIClient().grantRecordingConsent(token: token, callId: cid, granted: accepted) }
+        }
+        signaling.send(["type": "record-consent", "accepted": accepted])
+    }
+
+    /// 停止录制 → 通知对端 → 上传并登记。
+    func stopRecording() {
+        guard isRecording else { return }
+        isRecording = false
+        signaling.send(["type": "record-state", "recording": false])
+        Task { await finishAndUpload() }
+    }
+
+    /// 真正开始 ReplayKit 录制；成功后通知对端并播报。失败诚实播报，不留"假装在录"。
+    private func beginRecording() async {
+        do {
+            try await recorder.start()
+            isRecording = true
+            recordStatus = nil
+            signaling.send(["type": "record-state", "recording": true])
+            announce(CallStrings.recordStartedAnnounce(lang))
+        } catch CallRecorder.RecorderError.unavailable {
+            announce(CallStrings.recordUnavailable(lang))
+        } catch {
+            announce(CallStrings.recordSaveFailed(lang))
+        }
+    }
+
+    /// 停止采集 → 上传 .mov → 登记录制元数据（consentBy 由服务端据同意登记表权威填充）。临时文件用后即删。
+    private func finishAndUpload() async {
+        guard let token = KeychainStore.read() else { return }
+        do {
+            let url = try await recorder.stop()
+            defer { try? FileManager.default.removeItem(at: url) }
+            let data = try Data(contentsOf: url)
+            let mediaId = try await APIClient().uploadMedia(token: token, data: data, mime: "video/quicktime")
+            try await APIClient().createRecording(token: token, callId: callId, reason: "call", mediaId: mediaId)
+            announce(CallStrings.recordStoppedAnnounce(lang))
+        } catch {
+            announce(CallStrings.recordSaveFailed(lang))
+        }
+    }
+
     /// 结束通话并释放媒体/信令。幂等：可被「挂断按钮」「界面消失(含 CallKit 系统挂断)」重复调用（见复审 #1）。
     func hangUp() {
         guard !ended else { return }
         ended = true
+        // 录制中挂断：先停录并尽力上传（HTTP 独立于信令/媒体，关闭后仍可完成），不丢证据。
+        if isRecording { isRecording = false; Task { await finishAndUpload() } }
         signaling.end()
         media.stop()
         signaling.close()

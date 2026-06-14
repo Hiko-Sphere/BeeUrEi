@@ -242,6 +242,51 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     }
   })
 
+  // —— GDPR/合规：导出某用户的全部个人数据（DSAR 数据访问请求）——
+  // 刻意**不含聊天正文**：管理员一向不读消息，导出走管理员也不应破坏此隐私属性
+  // （用户自己的消息导出应由 App 内自助流程提供）。这里给个人档案 + 全部关联 + 计数。
+  app.get('/api/admin/users/:id/export', adminOnly, async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    const u = store.findById(id)
+    if (!u) return reply.code(404).send({ error: 'not_found' })
+    const now = Date.now()
+    const allReports = store.allReports()
+    const involving = store.blocksInvolving(id)
+    const data = {
+      exportedAt: now,
+      exportedByAdminId: req.user!.sub,
+      note: 'Chat message bodies are intentionally excluded to preserve conversation privacy; admins do not read messages. Tokens and password hashes are never exported.',
+      profile: {
+        id: u.id, username: u.username, displayName: u.displayName, role: u.role, status: u.status,
+        createdAt: u.createdAt, language: u.language ?? null,
+        email: u.email ?? null, emailVerified: !!u.emailVerified, phone: u.phone ?? null,
+        appleLinked: !!u.appleSub, usernameCustomized: !!u.usernameCustomized,
+        legalConsentVersion: u.legalConsentVersion ?? null, legalConsentAt: u.legalConsentAt ?? null,
+        hasAvatar: !!u.avatar, featureOverrides: u.featureOverrides ?? {},
+      },
+      familyLinks: [
+        ...store.linksByOwner(id).map((l) => ({ direction: 'owner', other: nameOf(l.memberId), relation: l.relation, isEmergency: l.isEmergency, status: l.status ?? 'accepted', createdAt: l.createdAt })),
+        ...store.linksByMember(id).map((l) => ({ direction: 'member', other: nameOf(l.ownerId), relation: l.relation, isEmergency: l.isEmergency, status: l.status ?? 'accepted', createdAt: l.createdAt })),
+      ],
+      blocks: {
+        blocking: involving.filter((b) => b.blockerId === id).map((b) => ({ other: nameOf(b.blockedId), createdAt: b.createdAt })),
+        blockedBy: involving.filter((b) => b.blockedId === id).map((b) => ({ other: nameOf(b.blockerId), createdAt: b.createdAt })),
+      },
+      reports: {
+        filedByUser: allReports.filter((r) => r.reporterId === id).map((r) => ({ target: nameOf(r.targetUserId), reason: r.reason, status: r.status, decision: r.decision ?? null, createdAt: r.createdAt })),
+        againstUser: allReports.filter((r) => r.targetUserId === id).map((r) => ({ reporter: nameOf(r.reporterId), reason: r.reason, status: r.status, decision: r.decision ?? null, createdAt: r.createdAt })),
+      },
+      warnings: store.warningsForUser(id).map((w) => ({ reason: w.reason, byAdmin: nameOf(w.byAdminId), at: w.at })),
+      recordings: store.allRecordings().filter((r) => r.ownerId === id).map((r) => ({ callId: r.callId, reason: r.reason, recordedAt: r.recordedAt })),
+      callRecords: store.callRecordsForUser(id, 1000).map((c) => ({ direction: c.callerId === id ? 'outgoing' : 'incoming', peer: nameOf(c.callerId === id ? c.calleeId : c.callerId), status: c.status, createdAt: c.createdAt })),
+      passkeys: store.passkeysForUser(id).map((p) => ({ deviceName: p.deviceName ?? null, createdAt: p.createdAt })),
+      activeSessions: store.countSessionsForUser(id, now),
+    }
+    audit(req.user!.sub, 'user.export', 'user', id)
+    reply.header('content-disposition', `attachment; filename="beeurei-user-${id}.json"`)
+    return data
+  })
+
   // 分配/变更角色（含晋升管理员/开发者——自助注册不可，仅 admin 可在此分配）。
   // requireAuth 每次都读库中最新 role，故变更服务端**立即生效**；客户端下次 /me 或重新登录后界面切换。
   app.post('/api/admin/users/:id/role', adminOnly, async (req, reply) => {

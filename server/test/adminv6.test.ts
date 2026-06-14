@@ -89,3 +89,41 @@ describe('Admin v6：单用户功能覆盖（精准处置，不波及全站）',
     expect(audit.json().entries.map((e: any) => e.action)).toContain('user.features')
   })
 })
+
+describe('Admin v7：GDPR 个人数据导出', () => {
+  it('导出含档案+关联，排除密码哈希与聊天正文，留审计 user.export', async () => {
+    const { app, store } = withAdmin()
+    const aa = await adminAuth(app)
+    const u = await makeUser(app, 'export1')
+    store.updateUser(u.id, { email: 'e@x.com', phone: '13800138000' })
+    // 加一条警告以验证关联导出
+    store.createWarning({ id: 'w7', userId: u.id, reason: '测试', byAdminId: 'admin1', at: Date.now() })
+
+    const r = await app.inject({ method: 'GET', url: `/api/admin/users/${u.id}/export`, headers: aa })
+    expect(r.statusCode).toBe(200)
+    const b = r.json()
+    expect(b.profile.username).toBe('export1')
+    expect(b.profile.email).toBe('e@x.com')
+    expect(b.warnings.length).toBe(1)
+    expect(b).toHaveProperty('familyLinks')
+    expect(b).toHaveProperty('blocks')
+    expect(b).toHaveProperty('reports')
+    expect(b.note).toMatch(/message/i)
+    // 绝不导出敏感凭证
+    const raw = JSON.stringify(b)
+    expect(raw).not.toContain('passwordHash')
+    expect(raw).not.toContain('voipToken')
+    // content-disposition 附件头
+    expect(r.headers['content-disposition']).toMatch(/attachment/)
+    // 审计
+    const audit = await app.inject({ method: 'GET', url: '/api/admin/audit', headers: aa })
+    expect(audit.json().entries.map((e: any) => e.action)).toContain('user.export')
+  })
+
+  it('导出不存在用户 → 404', async () => {
+    const { app } = withAdmin()
+    const aa = await adminAuth(app)
+    const r = await app.inject({ method: 'GET', url: '/api/admin/users/nope/export', headers: aa })
+    expect(r.statusCode).toBe(404)
+  })
+})

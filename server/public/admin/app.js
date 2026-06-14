@@ -115,13 +115,13 @@ const I18N = {
     contentFilterTitle: '内容过滤（防违规违法）', cfEnabled: '启用内容过滤', cfDesc: '命中违禁词的消息/群名/昵称会被拒收。每行一个词，大小写不敏感，子串匹配。默认空=不生效。',
     cfTerms: '违禁词（每行一个）', saveBtn: '保存', err_content_blocked: '内容含违禁词，已拦截', err_maintenance: '系统维护中',
     // v6：单用户功能覆盖
-    featOverrides: '功能覆盖（仅此用户）', featOverridesDesc: '对该用户单独关停某功能（精准处置滥用者，不影响其他人）。开=随全站，关=对其强制禁用。', featuresSaved: '功能覆盖已更新',
+    featOverrides: '功能覆盖（仅此用户）', featOverridesDesc: '对该用户单独关停某功能（精准处置滥用者，不影响其他人）。开=随全站，关=对其强制禁用。', featuresSaved: '功能覆盖已更新', exportData: '导出数据', dataExported: '数据已导出',
     auditActions: {
       'user.role': '修改角色', 'user.disable': '封禁用户', 'user.enable': '解封用户',
       'user.verifyEmail': '标记邮箱已验证', 'user.unverifyEmail': '撤销邮箱验证', 'user.unlinkApple': '解绑 Apple',
       'user.clearPasskeys': '清除 Passkey', 'user.forceLogout': '强制下线', 'report.resolve': '处理举报',
       'report.dismiss': '审核·忽略', 'report.warn': '审核·警告', 'report.suspend': '审核·暂停', 'report.ban': '审核·封禁',
-      'config.update': '修改全站配置', 'user.edit': '编辑资料', 'user.resetPassword': '重设密码', 'user.delete': '删除用户', 'user.features': '功能覆盖',
+      'config.update': '修改全站配置', 'user.edit': '编辑资料', 'user.resetPassword': '重设密码', 'user.delete': '删除用户', 'user.features': '功能覆盖', 'user.export': '导出数据',
     },
     roles: { blind: '视障用户', helper: '协助者', family: '亲友', admin: '管理员', developer: '开发者' },
     callStatus: { answered: '已接通', declined: '已拒绝', missed: '未接', ended: '已结束', ongoing: '进行中', ringing: '振铃中' },
@@ -211,13 +211,13 @@ const I18N = {
     contentFilterTitle: 'Content filter (block violations)', cfEnabled: 'Enable content filter', cfDesc: 'Messages/group names/display names containing a banned term are rejected. One term per line, case-insensitive, substring match. Empty = no effect.',
     cfTerms: 'Banned terms (one per line)', saveBtn: 'Save', err_content_blocked: 'Content contains a banned term', err_maintenance: 'Under maintenance',
     // v6: per-user feature overrides
-    featOverrides: 'Feature overrides (this user)', featOverridesDesc: 'Disable specific features for just this user (precise abuse handling, no global impact). On = follow global, Off = force-disabled for them.', featuresSaved: 'Feature overrides updated',
+    featOverrides: 'Feature overrides (this user)', featOverridesDesc: 'Disable specific features for just this user (precise abuse handling, no global impact). On = follow global, Off = force-disabled for them.', featuresSaved: 'Feature overrides updated', exportData: 'Export data', dataExported: 'Data exported',
     auditActions: {
       'user.role': 'Change role', 'user.disable': 'Ban user', 'user.enable': 'Unban user',
       'user.verifyEmail': 'Mark email verified', 'user.unverifyEmail': 'Unverify email', 'user.unlinkApple': 'Unlink Apple',
       'user.clearPasskeys': 'Clear passkeys', 'user.forceLogout': 'Force sign-out', 'report.resolve': 'Resolve report',
       'report.dismiss': 'Moderate · dismiss', 'report.warn': 'Moderate · warn', 'report.suspend': 'Moderate · suspend', 'report.ban': 'Moderate · ban',
-      'config.update': 'Update site config', 'user.edit': 'Edit profile', 'user.resetPassword': 'Reset password', 'user.delete': 'Delete user', 'user.features': 'Feature override',
+      'config.update': 'Update site config', 'user.edit': 'Edit profile', 'user.resetPassword': 'Reset password', 'user.delete': 'Delete user', 'user.features': 'Feature override', 'user.export': 'Export data',
     },
     roles: { blind: 'Blind / low-vision', helper: 'Helper', family: 'Family', admin: 'Admin', developer: 'Developer' },
     callStatus: { answered: 'Answered', declined: 'Declined', missed: 'Missed', ended: 'Ended', ongoing: 'Ongoing', ringing: 'Ringing' },
@@ -692,6 +692,7 @@ async function openUserDrawer(uid) {
       if (u.appleLinked) btns.push(`<button class="btn sm" data-sup="unlink">${esc(t('unlinkApple'))}</button>`);
       if ((u.passkeyCount || 0) > 0) btns.push(`<button class="btn sm" data-sup="clearpk">${esc(t('clearPasskeys'))}</button>`);
       btns.push(`<button class="btn sm" data-sup="resetpw">${esc(t('resetPassword'))}</button>`);
+      btns.push(`<button class="btn sm" data-sup="export">⬇ ${esc(t('exportData'))}</button>`);
       btns.push(`<button class="btn danger sm" data-sup="logout">${esc(t('forceLogout'))}</button>`);
       return btns.join('');
     }
@@ -804,6 +805,10 @@ async function onSupport(action, u, repaint, closeDrawer) {
       await api(`/api/admin/users/${u.id}/reset-password`, { method: 'POST', body: { newPassword: pw } });
       u.sessions = 0;
       toast(t('passwordResetDone'), 'success');
+    } else if (action === 'export') {
+      const data = await api(`/api/admin/users/${u.id}/export`);
+      downloadJSON(`beeurei-user-${u.username}.json`, data);
+      toast(t('dataExported'), 'success');
     } else if (action === 'delete') {
       if (!(await confirmDialog(t('confirmDeleteUser')))) return;
       await api(`/api/admin/users/${u.id}`, { method: 'DELETE' });
@@ -884,6 +889,14 @@ function downloadCSV(filename, rows) {
   }).join(',')).join('\r\n');
   // 前置 BOM：Excel 据此识别 UTF-8，避免中文乱码。
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+  a.remove(); URL.revokeObjectURL(url);
+}
+// JSON 导出（GDPR 数据导出用）：缩进 2、UTF-8。
+function downloadJSON(filename, obj) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename; document.body.appendChild(a); a.click();

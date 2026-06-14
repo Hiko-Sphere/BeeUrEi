@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { type Store, type User } from '../db/store'
+import { type Store, type User, matchBannedTerm } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { hashPassword, verifyPassword } from '../auth/passwords'
 import { type CodeRegistry } from '../auth/codes'
@@ -196,6 +196,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
   app.post('/api/account/profile', { preHandler: requireAuth() }, async (req, reply) => {
     const parsed = profileSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    if (matchBannedTerm(store.getAppConfig(), parsed.data.displayName)) return reply.code(403).send({ error: 'content_blocked' })
     if (!store.findById(req.user!.sub)) return reply.code(404).send({ error: 'not_found' })
     const updated = store.updateUser(req.user!.sub, { displayName: parsed.data.displayName })
     return { displayName: updated?.displayName }

@@ -13,6 +13,9 @@ export function registerAppConfigRoutes(app: FastifyInstance, store: Store): voi
       features: cfg.features,
       registrationEnabled: cfg.registrationEnabled,
       recording: { enabled: rec.enabled, requireConsent: rec.requireConsent },
+      announcement: cfg.announcement, // 全站公告横幅（App 顶部展示）
+      maintenance: cfg.maintenance,   // 维护模式横幅
+      // 刻意不下发 contentFilter.terms：违禁词表仅服务端持有，不泄露给客户端。
     }
   })
 }

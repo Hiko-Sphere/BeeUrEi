@@ -20,7 +20,13 @@ const featuresSchema = z.object({
   messaging: z.boolean(), calls: z.boolean(), helpRequests: z.boolean(), groups: z.boolean(),
   familyLinks: z.boolean(), mediaUpload: z.boolean(), navigation: z.boolean(), sceneScan: z.boolean(),
 }).partial()
-const configSchema = z.object({ registrationEnabled: z.boolean(), features: featuresSchema }).partial()
+const announcementSchema = z.object({ active: z.boolean(), message: z.string().max(500), level: z.enum(['info', 'warning']) }).partial()
+const maintenanceSchema = z.object({ active: z.boolean(), message: z.string().max(500) }).partial()
+const contentFilterSchema = z.object({ enabled: z.boolean(), terms: z.array(z.string().trim().min(1).max(100)).max(500) }).partial()
+const configSchema = z.object({
+  registrationEnabled: z.boolean(), features: featuresSchema,
+  announcement: announcementSchema, maintenance: maintenanceSchema, contentFilter: contentFilterSchema,
+}).partial()
 
 const SERVER_VERSION = '0.1.0'
 const START_MS = Date.now()
@@ -84,11 +90,42 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     }
   })
 
-  // 列出所有用户（在 publicUser 基础上补 createdAt/语言/在线/是否绑邮箱手机，便于后台表格；不外泄具体邮箱手机）。
-  app.get('/api/admin/users', adminOnly, async () => {
+  // 列出用户：服务端搜索/筛选/排序/分页（万级用户也不撑爆前端）。返回 { users, total, limit, offset }。
+  // 兼容旧前端：不带任何 query 时默认返回全部（limit 很大）。
+  app.get('/api/admin/users', adminOnly, async (req) => {
     const now = Date.now()
+    const q = req.query as { q?: string; role?: string; status?: string; sort?: string; limit?: string; offset?: string }
+    const term = (q.q ?? '').trim().toLowerCase()
+    const roleF = q.role && q.role !== 'all' ? q.role : null
+    const statusF = q.status && q.status !== 'all' ? q.status : null
+    const limit = Math.min(Math.max(Number.parseInt(q.limit ?? '10000', 10) || 10000, 1), 10000)
+    const offset = Math.max(Number.parseInt(q.offset ?? '0', 10) || 0, 0)
+    // 搜索匹配：用户名/昵称/邮箱/手机（管理员可见，便于客服按联系方式定位）。
+    let list = store.allUsers().filter((u) => {
+      if (roleF && u.role !== roleF) return false
+      if (statusF && u.status !== statusF) return false
+      if (term) {
+        const hay = `${u.username} ${u.displayName} ${u.email ?? ''} ${u.phone ?? ''}`.toLowerCase()
+        if (!hay.includes(term)) return false
+      }
+      return true
+    })
+    // 排序：created（默认倒序）/ name / role / status。
+    const sort = q.sort ?? 'created_desc'
+    const cmp: Record<string, (a: typeof list[number], b: typeof list[number]) => number> = {
+      created_desc: (a, b) => (b.createdAt || 0) - (a.createdAt || 0),
+      created_asc: (a, b) => (a.createdAt || 0) - (b.createdAt || 0),
+      name_asc: (a, b) => (a.displayName || a.username).localeCompare(b.displayName || b.username),
+      name_desc: (a, b) => (b.displayName || b.username).localeCompare(a.displayName || a.username),
+      role_asc: (a, b) => a.role.localeCompare(b.role),
+      status_asc: (a, b) => a.status.localeCompare(b.status),
+    }
+    list = [...list].sort(cmp[sort] ?? cmp.created_desc)
+    const total = list.length
+    const page = list.slice(offset, offset + limit)
     return {
-      users: store.allUsers().map((u) => ({
+      total, limit, offset,
+      users: page.map((u) => ({
         ...publicUser(u),
         createdAt: u.createdAt,
         language: u.language ?? null,
@@ -99,6 +136,40 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
         appleLinked: !!u.appleSub,
       })),
     }
+  })
+
+  // 批量操作：对多个用户一次性 封禁/解封/改角色/删除。逐个施加既有保护（不能动自己、最后管理员、级联删），
+  // 返回每个 id 的结果（ok/原因），整体不因单个失败而中断。
+  const bulkSchema = z.object({
+    ids: z.array(z.string().min(1)).min(1).max(500),
+    action: z.enum(['disable', 'enable', 'delete', 'role']),
+    role: z.enum(['blind', 'helper', 'family', 'admin', 'developer']).optional(),
+  })
+  app.post('/api/admin/users/bulk', adminOnly, async (req, reply) => {
+    const parsed = bulkSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const { ids, action, role } = parsed.data
+    if (action === 'role' && !role) return reply.code(400).send({ error: 'role_required' })
+    const adminId = req.user!.sub
+    const results: { id: string; ok: boolean; error?: string }[] = []
+    for (const id of [...new Set(ids)]) {
+      const target = store.findById(id)
+      if (!target) { results.push({ id, ok: false, error: 'not_found' }); continue }
+      // 逐个保护，与单条端点一致。
+      if ((action === 'disable' || action === 'delete') && id === adminId) { results.push({ id, ok: false, error: 'cannot_target_self' }); continue }
+      if (action === 'role' && id === adminId) { results.push({ id, ok: false, error: 'cannot_change_own_role' }); continue }
+      const losesActiveAdmin = target.role === 'admin' && target.status === 'active' &&
+        (action === 'delete' || action === 'disable' || (action === 'role' && role !== 'admin'))
+      if (losesActiveAdmin && activeAdminCount() <= 1) { results.push({ id, ok: false, error: 'last_admin_protected' }); continue }
+      try {
+        if (action === 'disable') { store.deleteRefreshTokensForUser(id); store.updateUser(id, { status: 'disabled', tokenVersion: (target.tokenVersion ?? 0) + 1 }); audit(adminId, 'user.disable', 'user', id, 'bulk') }
+        else if (action === 'enable') { store.updateUser(id, { status: 'active' }); audit(adminId, 'user.enable', 'user', id, 'bulk') }
+        else if (action === 'role') { store.updateUser(id, { role: role as Role }); audit(adminId, 'user.role', 'user', id, `bulk → ${role}`) }
+        else if (action === 'delete') { cascadeDeleteUser(store, id); audit(adminId, 'user.delete', 'user', id, `bulk username=${target.username}`) }
+        results.push({ id, ok: true })
+      } catch { results.push({ id, ok: false, error: 'failed' }) }
+    }
+    return { results, succeeded: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length }
   })
 
   // 单个用户详情——**全字段 + 全关联**，仅管理员可见。绝不外泄 passwordHash / 原始 token / appleSub 明文，
@@ -469,9 +540,12 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     const parsed = configSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const data = parsed.data
-    // 拒绝空补丁：既无 registrationEnabled，又无任何 feature 键。
-    const hasFeat = data.features && Object.keys(data.features).length > 0
-    if (data.registrationEnabled === undefined && !hasFeat) return reply.code(400).send({ error: 'invalid_input' })
+    // 拒绝空补丁：任何一个可改区块都没有就 400。
+    const nonEmpty = (o?: object) => o && Object.keys(o).length > 0
+    if (data.registrationEnabled === undefined && !nonEmpty(data.features) &&
+        !nonEmpty(data.announcement) && !nonEmpty(data.maintenance) && !nonEmpty(data.contentFilter)) {
+      return reply.code(400).send({ error: 'invalid_input' })
+    }
     const next = store.setAppConfig(data)
     audit(req.user!.sub, 'config.update', 'config', 'app', JSON.stringify(data))
     return { config: next }

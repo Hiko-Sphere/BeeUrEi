@@ -9,6 +9,9 @@ final class AuthSession {
     private(set) var token: String?
     /// 全站功能开关（管理员后台可逐项关闭）。fail-open：拉取前/失败时保持全开，绝不误关功能。
     private(set) var features: RemoteFeatureFlags = .allOn
+    /// 全站公告 / 维护模式横幅（管理员后台推送）。
+    private(set) var announcement: RemoteAnnouncement = .init()
+    private(set) var maintenance: RemoteMaintenance = .init()
     private(set) var errorMessage: String?
     private(set) var isWorking = false
     private(set) var restoreFailed = false   // 恢复账号时遇网络错误（供 UI 显示重试/退出，见审查 #15）
@@ -134,10 +137,14 @@ final class AuthSession {
         await refreshAppConfig()
     }
 
-    /// 拉取全站功能开关（登录/恢复/重进前台时）。fail-open：失败保持现状（默认全开），不影响主流程。
+    /// 拉取全站配置（登录/恢复/重进前台时）。fail-open：失败保持现状（默认全开/无横幅），不影响主流程。
     func refreshAppConfig() async {
         guard let token else { return }
-        if let f = try? await api.appConfig(token: token) { features = f }
+        if let cfg = try? await api.appConfig(token: token) {
+            features = cfg.features
+            announcement = cfg.announcement
+            maintenance = cfg.maintenance
+        }
     }
 
     func logout() {

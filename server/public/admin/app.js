@@ -19,6 +19,8 @@ const state = {
   audit: [],
   appConfig: null,
   usersQuery: '', usersRole: 'all', usersStatus: 'all',
+  usersSort: 'created_desc', usersOffset: 0, usersLimit: 50, usersTotal: 0,
+  usersSelected: new Set(), usersSearchTimer: null,
   linksQuery: '', callsQuery: '', blocksQuery: '',
   refreshTimer: null,
 };
@@ -100,6 +102,18 @@ const I18N = {
     sessionsLabel: '活跃会话', tokenVersionLabel: '令牌版本', usernameCustomizedLabel: '自定义用户名', legalConsentLabel: '合规同意', avatarLabel: '头像', voipLabel: 'VoIP 推送', apnsLabel: 'APNs 推送', yes: '是', no: '否',
     reportsByLabel: '发起的举报', reportsAgainstLabel: '收到的举报', recordingsOwnLabel: '录制', blockingLabel: '已拉黑', blockedByLabel: '被拉黑',
     err_username_taken: '用户名已被占用', err_email_taken: '邮箱已被占用', err_phone_taken: '手机号已被占用', err_invalid_username: '用户名格式不合法（仅字母数字 _.-）', err_invalid_phone: '手机号不合法', err_cannot_delete_self: '不能删除自己',
+    // v5：分页/排序/批量
+    sortBy: '排序', sort_created_desc: '注册时间（新→旧）', sort_created_asc: '注册时间（旧→新）', sort_name_asc: '昵称 A→Z', sort_role_asc: '按角色', sort_status_asc: '按状态',
+    pagePrev: '上一页', pageNext: '下一页', pageInfo: '第 %a–%b / 共 %t', selectAll: '全选本页', selectedN: '已选 %n',
+    bulkBan: '批量封禁', bulkUnban: '批量解封', bulkRole: '批量改角色', bulkDelete: '批量删除', clearSel: '清除选择',
+    bulkConfirmBan: '确认封禁所选 %n 个用户？', bulkConfirmUnban: '确认解封所选 %n 个用户？',
+    bulkConfirmDelete: '确认永久删除所选 %n 个用户？将级联清除其数据，不可恢复。', bulkConfirmRole: '确认把所选 %n 个用户角色改为「%s」？',
+    bulkDone: '完成：成功 %s，失败 %f', pickRole: '选择角色',
+    // v5：公告 / 维护 / 内容过滤
+    announce: '全站公告', announceActive: '启用公告', announceMsg: '公告内容', announceLevel: '级别', lvl_info: '信息', lvl_warning: '警告',
+    maintenance: '维护模式', maintActive: '启用维护模式', maintDesc: '开启后所有功能写操作返回 503，App 显示维护横幅；登录与后台不受影响。', maintMsg: '维护提示',
+    contentFilterTitle: '内容过滤（防违规违法）', cfEnabled: '启用内容过滤', cfDesc: '命中违禁词的消息/群名/昵称会被拒收。每行一个词，大小写不敏感，子串匹配。默认空=不生效。',
+    cfTerms: '违禁词（每行一个）', saveBtn: '保存', err_content_blocked: '内容含违禁词，已拦截', err_maintenance: '系统维护中',
     auditActions: {
       'user.role': '修改角色', 'user.disable': '封禁用户', 'user.enable': '解封用户',
       'user.verifyEmail': '标记邮箱已验证', 'user.unverifyEmail': '撤销邮箱验证', 'user.unlinkApple': '解绑 Apple',
@@ -182,6 +196,18 @@ const I18N = {
     sessionsLabel: 'Active sessions', tokenVersionLabel: 'Token version', usernameCustomizedLabel: 'Custom username', legalConsentLabel: 'Legal consent', avatarLabel: 'Avatar', voipLabel: 'VoIP push', apnsLabel: 'APNs push', yes: 'yes', no: 'no',
     reportsByLabel: 'Reports filed', reportsAgainstLabel: 'Reports received', recordingsOwnLabel: 'Recordings', blockingLabel: 'Blocking', blockedByLabel: 'Blocked by',
     err_username_taken: 'Username taken', err_email_taken: 'Email taken', err_phone_taken: 'Phone taken', err_invalid_username: 'Invalid username (letters, digits, _.- only)', err_invalid_phone: 'Invalid phone', err_cannot_delete_self: 'Cannot delete yourself',
+    // v5: pagination / sort / bulk
+    sortBy: 'Sort', sort_created_desc: 'Joined (newest)', sort_created_asc: 'Joined (oldest)', sort_name_asc: 'Name A→Z', sort_role_asc: 'By role', sort_status_asc: 'By status',
+    pagePrev: 'Prev', pageNext: 'Next', pageInfo: '%a–%b of %t', selectAll: 'Select page', selectedN: '%n selected',
+    bulkBan: 'Ban', bulkUnban: 'Unban', bulkRole: 'Set role', bulkDelete: 'Delete', clearSel: 'Clear',
+    bulkConfirmBan: 'Ban the %n selected users?', bulkConfirmUnban: 'Unban the %n selected users?',
+    bulkConfirmDelete: 'Permanently delete the %n selected users? Their data is cascade-deleted; cannot be undone.', bulkConfirmRole: 'Change the %n selected users’ role to “%s”?',
+    bulkDone: 'Done: %s ok, %f failed', pickRole: 'Pick a role',
+    // v5: announcement / maintenance / content filter
+    announce: 'Announcement', announceActive: 'Enable announcement', announceMsg: 'Message', announceLevel: 'Level', lvl_info: 'Info', lvl_warning: 'Warning',
+    maintenance: 'Maintenance mode', maintActive: 'Enable maintenance mode', maintDesc: 'When on, all feature writes return 503 and the app shows a maintenance banner; sign-in and admin are unaffected.', maintMsg: 'Maintenance message',
+    contentFilterTitle: 'Content filter (block violations)', cfEnabled: 'Enable content filter', cfDesc: 'Messages/group names/display names containing a banned term are rejected. One term per line, case-insensitive, substring match. Empty = no effect.',
+    cfTerms: 'Banned terms (one per line)', saveBtn: 'Save', err_content_blocked: 'Content contains a banned term', err_maintenance: 'Under maintenance',
     auditActions: {
       'user.role': 'Change role', 'user.disable': 'Ban user', 'user.enable': 'Unban user',
       'user.verifyEmail': 'Mark email verified', 'user.unverifyEmail': 'Unverify email', 'user.unlinkApple': 'Unlink Apple',
@@ -454,30 +480,44 @@ function applyDims(root) {
   root.querySelectorAll('[data-h]').forEach((el) => { el.style.height = el.dataset.h + '%'; });
 }
 
-// ---------------------------------------------------------------- users
+// ---------------------------------------------------------------- users（服务端搜索/筛选/排序/分页 + 批量）
+function usersQueryString() {
+  const p = new URLSearchParams();
+  if (state.usersQuery.trim()) p.set('q', state.usersQuery.trim());
+  if (state.usersRole !== 'all') p.set('role', state.usersRole);
+  if (state.usersStatus !== 'all') p.set('status', state.usersStatus);
+  p.set('sort', state.usersSort);
+  p.set('limit', String(state.usersLimit));
+  p.set('offset', String(state.usersOffset));
+  return p.toString();
+}
 async function loadUsers() {
   showLoading();
-  try { state.users = (await api('/api/admin/users')).users || []; renderUsers(); }
-  catch (err) { viewEl().innerHTML = `<div class="err-banner">${esc(errText(err.code))}</div>`; }
+  try {
+    const r = await api('/api/admin/users?' + usersQueryString());
+    state.users = r.users || [];
+    state.usersTotal = r.total ?? state.users.length;
+    renderUsers();
+  } catch (err) { viewEl().innerHTML = `<div class="err-banner">${esc(errText(err.code))}</div>`; }
 }
-function filteredUsers() {
-  const q = state.usersQuery.trim().toLowerCase();
-  return state.users.filter((u) => {
-    if (state.usersRole !== 'all' && u.role !== state.usersRole) return false;
-    if (state.usersStatus !== 'all' && u.status !== state.usersStatus) return false;
-    if (q && !((u.displayName || '').toLowerCase().includes(q) || (u.username || '').toLowerCase().includes(q))) return false;
-    return true;
-  }).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-}
+// 改了搜索/筛选/排序 → 回到第一页并从服务端重取（搜索带 300ms 防抖）。
+function reloadUsersFromStart() { state.usersOffset = 0; state.usersSelected.clear(); loadUsers(); }
 function rolePill(r) { return `<span class="pill role-${esc(r)}">${esc(roleName(r))}</span>`; }
 function renderUsers() {
-  const list = filteredUsers();
+  const list = state.users;
+  const sel = state.usersSelected;
   const roleOpts = ['all', 'blind', 'helper', 'family', 'admin', 'developer']
     .map((r) => `<option value="${r}" ${state.usersRole === r ? 'selected' : ''}>${r === 'all' ? esc(t('allRoles')) : esc(roleName(r))}</option>`).join('');
   const statusOpts = [['all', t('allStatus')], ['active', t('active')], ['disabled', t('disabled')]]
     .map(([v, l]) => `<option value="${v}" ${state.usersStatus === v ? 'selected' : ''}>${esc(l)}</option>`).join('');
+  const sortOpts = ['created_desc', 'created_asc', 'name_asc', 'role_asc', 'status_asc']
+    .map((s) => `<option value="${s}" ${state.usersSort === s ? 'selected' : ''}>${esc(t('sort_' + s))}</option>`).join('');
+  const pageStart = list.length ? state.usersOffset + 1 : 0;
+  const pageEnd = state.usersOffset + list.length;
+  const allOnPageSelected = list.length > 0 && list.every((u) => sel.has(u.id));
   const rows = list.map((u) => `
-    <tr class="clickable" data-uid="${esc(u.id)}">
+    <tr class="clickable ${sel.has(u.id) ? 'sel' : ''}" data-uid="${esc(u.id)}">
+      <td data-stop="1"><input type="checkbox" class="rowsel" data-uid="${esc(u.id)}" ${sel.has(u.id) ? 'checked' : ''} aria-label="${esc(u.username)}"/></td>
       <td><div class="user-cell">${avatarHTML(u)}<div><div class="nm">${esc(u.displayName || '—')}</div><div class="un">@${esc(u.username)}</div></div></div></td>
       <td>${rolePill(u.role)}</td>
       <td>${u.status === 'active' ? `<span class="pill ok">${esc(t('active'))}</span>` : `<span class="pill role-admin">${esc(t('disabled'))}</span>`}</td>
@@ -492,29 +532,62 @@ function renderUsers() {
           : `<button class="btn sm" data-act="unban" data-uid="${esc(u.id)}">${esc(t('unban'))}</button>`}
       </div></td>
     </tr>`).join('');
+  const bulkBar = sel.size > 0 ? `
+    <div class="bulk-bar">
+      <span class="bulk-n">${esc(t('selectedN').replace('%n', String(sel.size)))}</span>
+      <button class="btn sm" data-bulk="enable">${esc(t('bulkUnban'))}</button>
+      <button class="btn danger sm" data-bulk="disable">${esc(t('bulkBan'))}</button>
+      <button class="btn sm" data-bulk="role">${esc(t('bulkRole'))}</button>
+      <button class="btn danger sm" data-bulk="delete">${esc(t('bulkDelete'))}</button>
+      <button class="btn ghost sm" data-bulk="clear">${esc(t('clearSel'))}</button>
+    </div>` : '';
   viewEl().innerHTML = `
     <div class="toolbar">
       <div class="search"><input id="q" type="search" placeholder="${esc(t('search'))}" value="${esc(state.usersQuery)}" /></div>
       <select class="sel" id="fRole">${roleOpts}</select>
       <select class="sel" id="fStatus">${statusOpts}</select>
+      <select class="sel" id="fSort">${sortOpts}</select>
       <button class="btn ghost" data-action="reloadUsers">↻ ${esc(t('refresh'))}</button>
       <button class="btn ghost" data-action="exportUsers" ${list.length ? '' : 'disabled'}>⬇ ${esc(t('exportCsv'))}</button>
     </div>
+    ${bulkBar}
     <div class="table-wrap">
       ${list.length ? `<table><thead><tr>
+        <th><input type="checkbox" id="selAll" ${allOnPageSelected ? 'checked' : ''} aria-label="${esc(t('selectAll'))}"/></th>
         <th>${esc(t('users'))}</th><th>${esc(t('role'))}</th><th>${esc(t('status'))}</th><th>${esc(t('lastActive'))}</th><th>${esc(t('created'))}</th><th class="ta-end">${esc(t('actions'))}</th>
       </tr></thead><tbody>${rows}</tbody></table>`
       : `<div class="empty"><div class="ico">🗂️</div><p>${esc(t('noUsers'))}</p></div>`}
+    </div>
+    <div class="pager">
+      <button class="btn ghost sm" id="pgPrev" ${state.usersOffset <= 0 ? 'disabled' : ''}>← ${esc(t('pagePrev'))}</button>
+      <span class="page-info">${esc(t('pageInfo').replace('%a', String(pageStart)).replace('%b', String(pageEnd)).replace('%t', String(state.usersTotal)))}</span>
+      <button class="btn ghost sm" id="pgNext" ${pageEnd >= state.usersTotal ? 'disabled' : ''}>${esc(t('pageNext'))} →</button>
     </div>`;
-  $('#q').addEventListener('input', (e) => { state.usersQuery = e.target.value; renderUsers(); $('#q').focus(); });
-  $('#fRole').addEventListener('change', (e) => { state.usersRole = e.target.value; renderUsers(); });
-  $('#fStatus').addEventListener('change', (e) => { state.usersStatus = e.target.value; renderUsers(); });
+  $('#q').addEventListener('input', (e) => {
+    state.usersQuery = e.target.value;
+    if (state.usersSearchTimer) clearTimeout(state.usersSearchTimer);
+    state.usersSearchTimer = setTimeout(reloadUsersFromStart, 300);
+  });
+  $('#fRole').addEventListener('change', (e) => { state.usersRole = e.target.value; reloadUsersFromStart(); });
+  $('#fStatus').addEventListener('change', (e) => { state.usersStatus = e.target.value; reloadUsersFromStart(); });
+  $('#fSort').addEventListener('change', (e) => { state.usersSort = e.target.value; reloadUsersFromStart(); });
+  $('#pgPrev')?.addEventListener('click', () => { state.usersOffset = Math.max(0, state.usersOffset - state.usersLimit); loadUsers(); });
+  $('#pgNext')?.addEventListener('click', () => { state.usersOffset += state.usersLimit; loadUsers(); });
+  $('#selAll')?.addEventListener('change', (e) => {
+    if (e.target.checked) list.forEach((u) => sel.add(u.id)); else list.forEach((u) => sel.delete(u.id));
+    renderUsers();
+  });
+  viewEl().querySelectorAll('.rowsel').forEach((c) => c.addEventListener('change', (e) => {
+    if (e.target.checked) sel.add(e.target.dataset.uid); else sel.delete(e.target.dataset.uid);
+    renderUsers();
+  }));
+  viewEl().querySelectorAll('[data-bulk]').forEach((b) => b.addEventListener('click', () => onBulk(b.dataset.bulk)));
   viewEl().querySelector('[data-action="reloadUsers"]').addEventListener('click', loadUsers);
   viewEl().querySelector('[data-action="exportUsers"]').addEventListener('click', () => {
     const yn = (b) => (b ? (state.lang === 'en' ? 'yes' : '是') : (state.lang === 'en' ? 'no' : '否'));
     downloadCSV('beeurei-users.csv', [
       [t('username'), '@', t('role'), t('status'), t('email'), t('verified'), t('phone'), t('appleId'), t('language'), t('online'), t('created')],
-      ...filteredUsers().map((u) => [u.displayName || '', u.username, roleName(u.role), u.status === 'active' ? t('active') : t('disabled'), yn(u.hasEmail), yn(u.emailVerified), yn(u.hasPhone), yn(u.appleLinked), u.language || '', yn(u.online), fmtDate(u.createdAt)]),
+      ...list.map((u) => [u.displayName || '', u.username, roleName(u.role), u.status === 'active' ? t('active') : t('disabled'), yn(u.hasEmail), yn(u.emailVerified), yn(u.hasPhone), yn(u.appleLinked), u.language || '', yn(u.online), fmtDate(u.createdAt)]),
     ]);
   });
   viewEl().querySelectorAll('tr.clickable').forEach((tr) => tr.addEventListener('click', (e) => {
@@ -523,6 +596,46 @@ function renderUsers() {
   viewEl().querySelectorAll('.role-select').forEach((s) => s.addEventListener('change', (e) => onRoleChange(e.target.dataset.uid, e.target.value, e.target)));
   viewEl().querySelectorAll('[data-act="ban"]').forEach((b) => b.addEventListener('click', () => onStatus(b.dataset.uid, 'disabled')));
   viewEl().querySelectorAll('[data-act="unban"]').forEach((b) => b.addEventListener('click', () => onStatus(b.dataset.uid, 'active')));
+}
+// 批量操作：确认 → 调 /bulk → 报告成功/失败 → 重载当页。
+async function onBulk(action) {
+  const ids = [...state.usersSelected];
+  if (action === 'clear') { state.usersSelected.clear(); renderUsers(); return; }
+  if (ids.length === 0) return;
+  const n = ids.length;
+  let role;
+  if (action === 'role') {
+    role = await promptRole();
+    if (!role) return;
+    if (!(await confirmDialog(t('bulkConfirmRole').replace('%n', String(n)).replace('%s', roleName(role))))) return;
+  } else {
+    const msgKey = action === 'disable' ? 'bulkConfirmBan' : action === 'enable' ? 'bulkConfirmUnban' : 'bulkConfirmDelete';
+    if (!(await confirmDialog(t(msgKey).replace('%n', String(n))))) return;
+  }
+  try {
+    const r = await api('/api/admin/users/bulk', { method: 'POST', body: { ids, action, ...(role ? { role } : {}) } });
+    toast(t('bulkDone').replace('%s', String(r.succeeded)).replace('%f', String(r.failed)), r.failed ? 'error' : 'success');
+    state.usersSelected.clear();
+    loadUsers(); loadOverviewBadge();
+  } catch (err) { toast(errText(err.code), 'error'); }
+}
+// 角色选择弹窗（批量改角色用），返回角色或 null。
+function promptRole() {
+  return new Promise((resolve) => {
+    const mask = document.createElement('div'); mask.className = 'drawer-mask'; mask.style.zIndex = '70';
+    const box = document.createElement('div'); box.className = 'modal-overlay';
+    const opts = ['blind', 'helper', 'family', 'admin', 'developer']
+      .map((r) => `<button class="btn block role-pick" data-role="${r}">${esc(roleName(r))}</button>`).join('');
+    box.innerHTML = `<div class="card confirm-card" role="dialog" aria-modal="true">
+      <p class="confirm-msg">${esc(t('pickRole'))}</p>
+      <div class="role-picks">${opts}</div>
+      <div class="confirm-actions"><button class="btn ghost" data-no>${esc(state.lang === 'en' ? 'Cancel' : '取消')}</button></div></div>`;
+    document.body.appendChild(mask); document.body.appendChild(box);
+    const done = (v) => { mask.remove(); box.remove(); resolve(v); };
+    mask.addEventListener('click', () => done(null));
+    box.querySelector('[data-no]').addEventListener('click', () => done(null));
+    box.querySelectorAll('.role-pick').forEach((b) => b.addEventListener('click', () => done(b.dataset.role)));
+  });
 }
 async function onRoleChange(uid, role, selectEl) {
   const u = state.users.find((x) => x.id === uid); if (!u || u.role === role) return;
@@ -1012,6 +1125,9 @@ const SAFETY_LOCKED = ['emergency', 'blocks', 'reports']; // 刻意不可关停
 function renderControls() {
   const c = state.appConfig || { registrationEnabled: true, features: {} };
   const feats = c.features || {};
+  const a = c.announcement || { active: false, message: '', level: 'info' };
+  const m = c.maintenance || { active: false, message: '' };
+  const cf = c.contentFilter || { enabled: false, terms: [] };
   const featRow = (k) => `
     <div class="form-row"><div><div class="lab">${esc(featLabel(k))}</div><div class="desc">${esc(featDesc(k))}</div></div>
       <label class="switch"><input type="checkbox" data-feat="${esc(k)}" ${feats[k] !== false ? 'checked' : ''}/><span class="track"></span></label></div>`;
@@ -1033,10 +1149,44 @@ function renderControls() {
     <div class="section"><h3>${esc(t('safetyLocked'))}</h3>
       <p class="section-sub">${esc(t('safetyLockedDesc'))}</p>
       <div class="card">${SAFETY_LOCKED.map(lockedRow).join('')}</div>
+    </div>
+    <div class="section"><h3>${esc(t('announce'))}</h3>
+      <div class="card">
+        <div class="form-row"><div class="lab">${esc(t('announceActive'))}</div>
+          <label class="switch"><input type="checkbox" id="aActive" ${a.active ? 'checked' : ''}/><span class="track"></span></label></div>
+        <div class="field"><label for="aMsg">${esc(t('announceMsg'))}</label><input id="aMsg" type="text" maxlength="500" value="${esc(a.message || '')}"/></div>
+        <div class="field"><label for="aLevel">${esc(t('announceLevel'))}</label>
+          <select class="sel" id="aLevel"><option value="info" ${a.level !== 'warning' ? 'selected' : ''}>${esc(t('lvl_info'))}</option><option value="warning" ${a.level === 'warning' ? 'selected' : ''}>${esc(t('lvl_warning'))}</option></select></div>
+        <div class="save-row"><button class="btn primary" id="saveAnnounce">${esc(t('saveBtn'))}</button></div>
+      </div>
+    </div>
+    <div class="section"><h3>${esc(t('maintenance'))}</h3>
+      <p class="section-sub">${esc(t('maintDesc'))}</p>
+      <div class="card">
+        <div class="form-row"><div class="lab">${esc(t('maintActive'))}</div>
+          <label class="switch"><input type="checkbox" id="mActive" ${m.active ? 'checked' : ''}/><span class="track"></span></label></div>
+        <div class="field"><label for="mMsg">${esc(t('maintMsg'))}</label><input id="mMsg" type="text" maxlength="500" value="${esc(m.message || '')}"/></div>
+        <div class="save-row"><button class="btn primary" id="saveMaint">${esc(t('saveBtn'))}</button></div>
+      </div>
+    </div>
+    <div class="section"><h3>${esc(t('contentFilterTitle'))}</h3>
+      <p class="section-sub">${esc(t('cfDesc'))}</p>
+      <div class="card">
+        <div class="form-row"><div class="lab">${esc(t('cfEnabled'))}</div>
+          <label class="switch"><input type="checkbox" id="cfEnabled" ${cf.enabled ? 'checked' : ''}/><span class="track"></span></label></div>
+        <div class="field"><label for="cfTerms">${esc(t('cfTerms'))}</label><textarea id="cfTerms" class="mod-reason" rows="5">${esc((cf.terms || []).join('\n'))}</textarea></div>
+        <div class="save-row"><button class="btn primary" id="saveCf">${esc(t('saveBtn'))}</button></div>
+      </div>
     </div>`;
   $('#cReg').addEventListener('change', (e) => saveConfig({ registrationEnabled: e.target.checked }, e.target));
   viewEl().querySelectorAll('[data-feat]').forEach((el) => el.addEventListener('change', (e) =>
     saveConfig({ features: { [e.target.dataset.feat]: e.target.checked } }, e.target)));
+  $('#saveAnnounce').addEventListener('click', () => saveConfig({ announcement: { active: $('#aActive').checked, message: $('#aMsg').value, level: $('#aLevel').value } }));
+  $('#saveMaint').addEventListener('click', () => saveConfig({ maintenance: { active: $('#mActive').checked, message: $('#mMsg').value } }));
+  $('#saveCf').addEventListener('click', () => {
+    const terms = $('#cfTerms').value.split('\n').map((s) => s.trim()).filter(Boolean);
+    saveConfig({ contentFilter: { enabled: $('#cfEnabled').checked, terms } });
+  });
 }
 // 单项开关变更即保存（乐观；失败回滚 checkbox）。
 async function saveConfig(patch, el) {

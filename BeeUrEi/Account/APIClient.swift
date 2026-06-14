@@ -75,6 +75,44 @@ struct RemoteFeatureFlags: Codable, Sendable, Equatable {
     }
 }
 
+/// 全站公告（管理员推送的横幅）。
+struct RemoteAnnouncement: Codable, Sendable, Equatable {
+    var active = false
+    var message = ""
+    var level = "info" // info | warning
+    init() {}
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        active = ((try? c.decodeIfPresent(Bool.self, forKey: .active)) ?? nil) ?? false
+        message = ((try? c.decodeIfPresent(String.self, forKey: .message)) ?? nil) ?? ""
+        level = ((try? c.decodeIfPresent(String.self, forKey: .level)) ?? nil) ?? "info"
+    }
+}
+/// 维护模式横幅。
+struct RemoteMaintenance: Codable, Sendable, Equatable {
+    var active = false
+    var message = ""
+    init() {}
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        active = ((try? c.decodeIfPresent(Bool.self, forKey: .active)) ?? nil) ?? false
+        message = ((try? c.decodeIfPresent(String.self, forKey: .message)) ?? nil) ?? ""
+    }
+}
+/// 整个 /api/app-config 响应（功能开关 + 公告 + 维护）。各块缺失按默认（fail-open）。
+struct RemoteAppConfig: Codable, Sendable, Equatable {
+    var features = RemoteFeatureFlags()
+    var announcement = RemoteAnnouncement()
+    var maintenance = RemoteMaintenance()
+    init() {}
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        features = ((try? c.decodeIfPresent(RemoteFeatureFlags.self, forKey: .features)) ?? nil) ?? RemoteFeatureFlags()
+        announcement = ((try? c.decodeIfPresent(RemoteAnnouncement.self, forKey: .announcement)) ?? nil) ?? RemoteAnnouncement()
+        maintenance = ((try? c.decodeIfPresent(RemoteMaintenance.self, forKey: .maintenance)) ?? nil) ?? RemoteMaintenance()
+    }
+}
+
 /// 一条聊天消息（kind=audio/image 时 text 为 data URL；kind=video 时 text 为 mediaId；recalled=已撤回占位）。
 struct ChatMessageInfo: Codable, Sendable, Identifiable, Equatable {
     let id: String
@@ -379,12 +417,11 @@ struct APIClient {
         return r.user
     }
 
-    /// 拉取全站功能开关。失败由调用方按 fail-open 处理（保持全开），不影响登录主流程。
-    func appConfig(token: String) async throws -> RemoteFeatureFlags {
-        struct R: Codable { let features: RemoteFeatureFlags }
+    /// 拉取全站配置（功能开关 + 公告 + 维护）。失败由调用方按 fail-open 处理，不影响登录主流程。
+    func appConfig(token: String) async throws -> RemoteAppConfig {
         let data = try await authedGet("/api/app-config", token: token)
-        guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.decoding }
-        return r.features
+        guard let r = try? JSONDecoder().decode(RemoteAppConfig.self, from: data) else { throw APIError.decoding }
+        return r
     }
 
     func adminUsers(token: String) async throws -> [AccountInfo] {

@@ -107,13 +107,53 @@ struct RoleEntryView: View {
     }
 }
 
-/// 按角色分发到对应主界面。
+/// 全站公告 / 维护模式横幅（管理员后台推送，经 /api/app-config 下发）。
+/// 维护优先于公告；都没有则不占空间。盲人侧出现时主动朗读（SpeechHub：VO 开走公告、未开走 TTS）。
+struct GlobalBanner: View {
+    @Environment(AuthSession.self) private var session
+    private var lang: Language { FeatureSettings().language }
+
+    var body: some View {
+        if session.maintenance.active {
+            let msg = session.maintenance.message.isEmpty
+                ? (lang == .zh ? "系统维护中，部分功能暂时不可用" : "Under maintenance — some features are temporarily unavailable")
+                : session.maintenance.message
+            banner(text: msg, bg: Color.beeDanger, icon: "wrench.and.screwdriver.fill")
+        } else if session.announcement.active && !session.announcement.message.isEmpty {
+            banner(text: session.announcement.message,
+                   bg: session.announcement.level == "warning" ? Color.beeWarn : Color.beeAccent,
+                   icon: "megaphone.fill")
+        }
+    }
+
+    @ViewBuilder private func banner(text: String, bg: Color, icon: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon).font(.subheadline.bold())
+            Text(text).font(.subheadline.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, BeeSpacing.md).padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(bg)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(text)
+        .onAppear { SpeechHub.shared.speak(text, channel: .query, voiceCode: lang.voiceCode) }
+    }
+}
+
+/// 按角色分发到对应主界面。顶部统一叠加全站横幅（公告/维护）——
+/// 用 safeAreaInset：无横幅时零占位，有横幅时把主内容下推，相机全屏页也不会被遮挡。
 struct RoleHomeView: View {
     let role: String
     let session: AuthSession
     let onSwitchRole: () -> Void
 
     var body: some View {
+        content.safeAreaInset(edge: .top, spacing: 0) { GlobalBanner() }
+    }
+
+    @ViewBuilder private var content: some View {
         switch role {
         // 协助者与亲友合并：同一「协助端」界面，两个角色的全部功能都在内（见 [[isAssistRole]]）。
         case "helper", "family": AssistHomeView(session: session, onSwitchRole: onSwitchRole)

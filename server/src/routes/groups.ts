@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import { type Store, publicUser } from '../db/store'
+import { type Store, publicUser, matchBannedTerm } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
 import { removeMediaFile } from '../media/storage'
@@ -28,6 +28,7 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store): void {
                             config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = createSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    if (matchBannedTerm(store.getAppConfig(), parsed.data.name)) return reply.code(403).send({ error: 'content_blocked' })
     const me = req.user!.sub
     const memberIds = [...new Set(parsed.data.memberIds)].filter((id) => id !== me)
     if (memberIds.length === 0) return reply.code(400).send({ error: 'invalid_input' })

@@ -130,37 +130,97 @@ export type FeatureKey =
 
 export const FEATURE_KEYS: FeatureKey[] = ['messaging', 'calls', 'helpRequests', 'groups', 'familyLinks', 'mediaUpload', 'navigation', 'sceneScan']
 
+/// 全站公告（管理员推送给所有 App 用户的横幅）。
+export interface Announcement {
+  active: boolean
+  message: string
+  level: 'info' | 'warning'
+}
+/// 维护模式：开启后服务端拒绝所有功能写操作（503），App 显示维护横幅；登录/账号自管理/后台不受影响。
+export interface MaintenanceMode {
+  active: boolean
+  message: string
+}
+/// 内容过滤（主动审核，防违规违法）：管理员维护违禁词；命中则拒收（消息/群名/昵称）。默认空=不生效。
+export interface ContentFilter {
+  enabled: boolean
+  terms: string[]
+}
+
 /// 全站运行配置（管理员可控的"开关")。
 export interface AppConfig {
   registrationEnabled: boolean // 是否开放注册（关闭后新账号注册/邮箱码建号被拒）
   features: Record<FeatureKey, boolean> // 各功能开关；默认全开
+  announcement: Announcement     // 全站公告横幅
+  maintenance: MaintenanceMode   // 维护模式
+  contentFilter: ContentFilter   // 内容违禁词过滤
 }
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
   registrationEnabled: true,
   features: { messaging: true, calls: true, helpRequests: true, groups: true, familyLinks: true, mediaUpload: true, navigation: true, sceneScan: true },
+  announcement: { active: false, message: '', level: 'info' },
+  maintenance: { active: false, message: '' },
+  contentFilter: { enabled: false, terms: [] },
 }
 
-/// 配置补丁：features 可只带部分键（逐键合并）。
+/// 配置补丁：嵌套对象可只带部分键（逐键合并）。
 export interface AppConfigPatch {
   registrationEnabled?: boolean
   features?: Partial<Record<FeatureKey, boolean>>
+  announcement?: Partial<Announcement>
+  maintenance?: Partial<MaintenanceMode>
+  contentFilter?: Partial<ContentFilter>
 }
 
-/// 归一化：补齐缺失键，使历史只存了 registrationEnabled 的旧配置平滑升级（向后兼容，无需迁移脚本）。
+/// 归一化：补齐缺失键，使历史旧配置（无 features/announcement 等）平滑升级（向后兼容，无需迁移脚本）。
 export function normalizeAppConfig(raw: Partial<AppConfig> | undefined | null): AppConfig {
   const rawFeat = (raw?.features ?? {}) as Partial<Record<FeatureKey, boolean>>
   const features = { ...DEFAULT_APP_CONFIG.features }
   for (const k of FEATURE_KEYS) if (typeof rawFeat[k] === 'boolean') features[k] = rawFeat[k]!
-  return { registrationEnabled: raw?.registrationEnabled ?? true, features }
+  const a = (raw?.announcement ?? {}) as Partial<Announcement>
+  const m = (raw?.maintenance ?? {}) as Partial<MaintenanceMode>
+  const cf = (raw?.contentFilter ?? {}) as Partial<ContentFilter>
+  return {
+    registrationEnabled: raw?.registrationEnabled ?? true,
+    features,
+    announcement: {
+      active: a.active ?? false,
+      message: typeof a.message === 'string' ? a.message : '',
+      level: a.level === 'warning' ? 'warning' : 'info',
+    },
+    maintenance: {
+      active: m.active ?? false,
+      message: typeof m.message === 'string' ? m.message : '',
+    },
+    contentFilter: {
+      enabled: cf.enabled ?? false,
+      terms: Array.isArray(cf.terms) ? cf.terms.filter((t: unknown): t is string => typeof t === 'string') : [],
+    },
+  }
 }
 
-/// 合并 AppConfig 补丁：features 逐键合并（而非整体替换），其余浅合并。
+/// 合并 AppConfig 补丁：嵌套对象逐键合并（而非整体替换），其余浅合并。
 export function mergeAppConfig(base: AppConfig, patch: AppConfigPatch): AppConfig {
   return normalizeAppConfig({
     registrationEnabled: patch.registrationEnabled ?? base.registrationEnabled,
     features: { ...base.features, ...(patch.features ?? {}) },
+    announcement: { ...base.announcement, ...(patch.announcement ?? {}) },
+    maintenance: { ...base.maintenance, ...(patch.maintenance ?? {}) },
+    contentFilter: { ...base.contentFilter, ...(patch.contentFilter ?? {}) },
   })
+}
+
+/// 内容过滤检查：返回命中的违禁词（小写子串匹配，大小写不敏感），未命中返回 null。
+/// 关闭或空词表时恒返回 null（默认零影响，仅管理员显式配置后才生效）。
+export function matchBannedTerm(cfg: AppConfig, text: string): string | null {
+  if (!cfg.contentFilter.enabled || cfg.contentFilter.terms.length === 0 || !text) return null
+  const lower = text.toLowerCase()
+  for (const term of cfg.contentFilter.terms) {
+    const t = term.trim().toLowerCase()
+    if (t && lower.includes(t)) return term
+  }
+  return null
 }
 
 /// refresh token（仅存哈希，轮换+撤销）。

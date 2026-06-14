@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import { type Store, type ChatMessage, isBlockedBetween, publicUser } from '../db/store'
+import { type Store, type ChatMessage, isBlockedBetween, publicUser, matchBannedTerm } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
 import { NoopPushSender, type PushSender } from '../push/apns'
@@ -58,6 +58,8 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     const { toId, groupId, kind, text } = parsed.data
     if ((toId ? 1 : 0) + (groupId ? 1 : 0) !== 1) return reply.code(400).send({ error: 'invalid_input' }) // 恰好一个目标
     if (kind === 'text' && text.length > 4000) return reply.code(400).send({ error: 'message_too_long' })
+    // 内容过滤（主动审核）：text 类消息命中违禁词则拒收（默认空词表=不生效）。
+    if (kind === 'text' && matchBannedTerm(store.getAppConfig(), text)) return reply.code(403).send({ error: 'content_blocked' })
     if (kind === 'audio' && !audioPrefix.test(text)) return reply.code(400).send({ error: 'invalid_audio' })
     if (kind === 'image' && !imagePrefix.test(text)) return reply.code(400).send({ error: 'invalid_image' })
     if (kind === 'location' && !isValidLocation(text)) return reply.code(400).send({ error: 'invalid_location' })

@@ -279,3 +279,13 @@ tbody tr.clickable:hover { background: var(--surface-2); }
 .edit-form .chk { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin: 4px 0 14px; }
 .danger-zone h3 { color: var(--danger); }
 .danger-zone { border-top: 1px solid var(--border); padding-top: 6px; }
+
+/* v5: bulk bar + pagination + role picker */
+.bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; padding: 10px 12px;
+  background: color-mix(in srgb, var(--honey) 14%, var(--surface)); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.bulk-bar .bulk-n { font-weight: 700; font-size: 13px; margin-inline-end: 4px; }
+tr.sel { background: color-mix(in srgb, var(--honey) 12%, transparent); }
+.rowsel, #selAll { width: 18px; height: 18px; cursor: pointer; }
+.pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px; }
+.pager .page-info { font-size: 13px; color: var(--text-dim); }
+.role-picks { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }

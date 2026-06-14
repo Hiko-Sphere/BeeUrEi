@@ -6,6 +6,7 @@ import { SignalingHub, type Member } from '../signaling/hub'
 import { type Store } from '../db/store'
 import { type PendingCallRegistry } from '../assist/pendingCalls'
 import { type OpenHelpRegistry } from '../assist/openHelp'
+import { type CallControlBridge } from '../signaling/callControl'
 
 // record-request/consent/state：通话录制的知情同意握手（发起→对端同意→双方录制指示），点对点转发。
 const RELAY_TYPES = new Set(['offer', 'answer', 'ice', 'video-gate', 'end', 'control', 'record-request', 'record-consent', 'record-state'])
@@ -13,11 +14,23 @@ const RELAY_TYPES = new Set(['offer', 'answer', 'ice', 'video-gate', 'end', 'con
 /// WebRTC 信令：/ws?token=<JWT>。客户端先发 {type:'join', callId, role}，
 /// 之后 offer/answer/ice/video-gate/end 会被转发给同房间的另一端。
 /// video-gate {on} 用于视障侧通知协助者"画面已开/关"（见 BACKEND_PLAN §5）。
-export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store: Store, pendingCalls: PendingCallRegistry, openHelp: OpenHelpRegistry): void {
+export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store: Store, pendingCalls: PendingCallRegistry, openHelp: OpenHelpRegistry, callControl?: CallControlBridge): void {
   app.register(fastifyWebsocket)
   app.register(async (f) => {
     // clientId → socket（转发用）。adapter 层，故用 any 规避 ws 类型摩擦。
     const sockets = new Map<string, { send: (s: string) => void; readyState: number }>()
+
+    // 管理员 REST → 推送到通话房间：强制结束。向房间各端发 end（注明 by:admin），返回端数。
+    if (callControl) {
+      callControl.endCall = (callId, byAdminId) => {
+        let n = 0
+        for (const p of hub.peersInCall(callId)) {
+          const s = sockets.get(p.clientId)
+          if (s && s.readyState === 1) { s.send(JSON.stringify({ type: 'end', by: 'admin', adminId: byAdminId })); n++ }
+        }
+        return n
+      }
+    }
 
     f.get('/ws', { websocket: true }, (socket: any, req) => {
       const token = (req.query as { token?: string }).token
@@ -76,7 +89,7 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
             socket.close(4003, 'call_full')
             return
           }
-          joined = { clientId, userId: auth.sub, role: msg.role ?? 'unknown', callId }
+          joined = { clientId, userId: auth.sub, role: msg.role ?? 'unknown', callId, joinedAt: now }
           const peers = hub.join(joined)
           const meRec = store.findById(auth.sub)
           socket.send(JSON.stringify({

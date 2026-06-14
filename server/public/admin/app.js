@@ -17,6 +17,7 @@ const state = {
   calls: [],
   blocks: [],
   audit: [],
+  live: [], liveTimer: null, liveNow: 0,
   appConfig: null,
   usersQuery: '', usersRole: 'all', usersStatus: 'all',
   usersSort: 'created_desc', usersOffset: 0, usersLimit: 50, usersTotal: 0,
@@ -116,6 +117,9 @@ const I18N = {
     cfTerms: '违禁词（每行一个）', saveBtn: '保存', err_content_blocked: '内容含违禁词，已拦截', err_maintenance: '系统维护中',
     // v6：单用户功能覆盖
     featOverrides: '功能覆盖（仅此用户）', featOverridesDesc: '对该用户单独关停某功能（精准处置滥用者，不影响其他人）。开=随全站，关=对其强制禁用。', featuresSaved: '功能覆盖已更新', exportData: '导出数据', dataExported: '数据已导出',
+    // 实时通话
+    liveCalls: '实时通话', liveCallsDesc: '当前进行中的通话。可强制结束；点参与者查看/封禁。监看(声音画面)需在 App 端进行且会通知用户。',
+    liveDuration: '时长', liveParticipants: '参与者', liveForceEnd: '强制结束', liveConfirmEnd: '确认强制结束这通通话？双方都会收到挂断。', liveCallEnded: '通话已结束', noLiveCalls: '当前没有进行中的通话', liveObserved: '管理员监看中', liveRefresh: '自动刷新中',
     auditActions: {
       'user.role': '修改角色', 'user.disable': '封禁用户', 'user.enable': '解封用户',
       'user.verifyEmail': '标记邮箱已验证', 'user.unverifyEmail': '撤销邮箱验证', 'user.unlinkApple': '解绑 Apple',
@@ -212,6 +216,9 @@ const I18N = {
     cfTerms: 'Banned terms (one per line)', saveBtn: 'Save', err_content_blocked: 'Content contains a banned term', err_maintenance: 'Under maintenance',
     // v6: per-user feature overrides
     featOverrides: 'Feature overrides (this user)', featOverridesDesc: 'Disable specific features for just this user (precise abuse handling, no global impact). On = follow global, Off = force-disabled for them.', featuresSaved: 'Feature overrides updated', exportData: 'Export data', dataExported: 'Data exported',
+    // Live calls
+    liveCalls: 'Live calls', liveCallsDesc: 'Calls in progress. You can force-end; click a participant to view/ban. Observing (audio/video) happens in the app and notifies the users.',
+    liveDuration: 'Duration', liveParticipants: 'Participants', liveForceEnd: 'Force end', liveConfirmEnd: 'Force-end this call? Both sides will be hung up.', liveCallEnded: 'Call ended', noLiveCalls: 'No calls in progress', liveObserved: 'Admin observing', liveRefresh: 'Auto-refreshing',
     auditActions: {
       'user.role': 'Change role', 'user.disable': 'Ban user', 'user.enable': 'Unban user',
       'user.verifyEmail': 'Mark email verified', 'user.unverifyEmail': 'Unverify email', 'user.unlinkApple': 'Unlink Apple',
@@ -365,7 +372,7 @@ async function onLogin(e) {
 }
 
 // ---------------------------------------------------------------- shell + router
-const ROUTES = ['', 'users', 'relationships', 'calls', 'blocks', 'reports', 'audit', 'recordings', 'controls'];
+const ROUTES = ['', 'users', 'relationships', 'live', 'calls', 'blocks', 'reports', 'audit', 'recordings', 'controls'];
 function currentRoute() { const h = (location.hash || '#/').replace(/^#\/?/, ''); return ROUTES.includes(h) ? h : ''; }
 
 function renderChrome() {
@@ -375,6 +382,7 @@ function renderChrome() {
     ['', '📊', t('dashboard')],
     ['users', '👤', t('users')],
     ['relationships', '🔗', t('relationships')],
+    ['live', '🔴', t('liveCalls')],
     ['calls', '📞', t('calls')],
     ['blocks', '🚫', t('blocks')],
     ['reports', '🚩', t('reports'), openReports],
@@ -386,7 +394,7 @@ function renderChrome() {
       <span class="ico" aria-hidden="true">${ico}</span><span>${esc(label)}</span>
       ${badge ? `<span class="badge">${badge}</span>` : ''}
     </button>`).join('');
-  const titleMap = { '': t('dashboard'), users: t('users'), relationships: t('relationships'), calls: t('calls'), blocks: t('blocks'), reports: t('reports'), audit: t('auditLog'), recordings: t('recordings'), controls: t('siteControls') };
+  const titleMap = { '': t('dashboard'), users: t('users'), relationships: t('relationships'), live: t('liveCalls'), calls: t('calls'), blocks: t('blocks'), reports: t('reports'), audit: t('auditLog'), recordings: t('recordings'), controls: t('siteControls') };
   app().innerHTML = `
     <div class="shell">
       <aside class="sidebar" id="sidebar">
@@ -1036,6 +1044,58 @@ function renderBlocks() {
   });
 }
 
+// ---------------------------------------------------------------- live calls（实时通话）
+function fmtCallDuration(sec) {
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+async function loadLiveCalls() {
+  showLoading();
+  try {
+    const r = await api('/api/admin/calls/active');
+    state.live = r.calls || []; state.liveNow = r.nowMs || Date.now();
+    renderLiveCalls();
+    // 实时性：每 5s 自动刷新（仅在本路由时）。沿用 dashboard 的单一持久定时器约定。
+    if (!state.liveTimer) state.liveTimer = setInterval(async () => {
+      if (currentRoute() === 'live') {
+        try { const rr = await api('/api/admin/calls/active'); state.live = rr.calls || []; state.liveNow = rr.nowMs || Date.now(); renderLiveCalls(); } catch {}
+      }
+    }, 5000);
+  } catch (err) { viewEl().innerHTML = `<div class="err-banner">${esc(errText(err.code))}</div>`; }
+}
+function renderLiveCalls() {
+  const list = state.live;
+  const roleDot = (m) => `<span class="dot ${m.online ? 'on' : 'gone'}" title="${m.online ? esc(t('online')) : ''}"></span>`;
+  const memberChip = (m) => `<button class="live-member" data-uid="${esc(m.userId)}">${roleDot(m)} <span class="nm">${esc(m.name)}</span> <span class="pill role-${esc(m.role)}">${esc(roleName(m.role))}</span></button>`;
+  const card = (c) => `
+    <div class="card live-call">
+      <div class="live-head">
+        <span class="live-dot" aria-hidden="true"></span>
+        <b>${esc(fmtCallDuration(c.durationSec))}</b>
+        <span class="text-dim">${esc(t('liveParticipants'))}: ${c.members.length}</span>
+        ${c.hasAdminObserver ? `<span class="pill role-admin">${esc(t('liveObserved'))}</span>` : ''}
+        <span class="grow1"></span>
+        <button class="btn danger sm" data-end="${esc(c.callId)}">${esc(t('liveForceEnd'))}</button>
+      </div>
+      <div class="live-members">${c.members.map(memberChip).join('')}</div>
+    </div>`;
+  viewEl().innerHTML = `
+    <div class="toolbar">
+      <span class="section-sub">${esc(t('liveCallsDesc'))}</span>
+      <span class="grow1"></span>
+      <button class="btn ghost" data-action="reloadLive">↻ ${esc(t('refresh'))}</button>
+    </div>
+    ${list.length ? `<div class="live-list">${list.map(card).join('')}</div>`
+      : `<div class="empty"><div class="ico">📞</div><p>${esc(t('noLiveCalls'))}</p></div>`}`;
+  viewEl().querySelector('[data-action="reloadLive"]').addEventListener('click', loadLiveCalls);
+  viewEl().querySelectorAll('[data-end]').forEach((b) => b.addEventListener('click', async () => {
+    if (!(await confirmDialog(t('liveConfirmEnd')))) return;
+    try { await api(`/api/admin/calls/${b.dataset.end}/end`, { method: 'POST' }); toast(t('liveCallEnded'), 'success'); loadLiveCalls(); }
+    catch (err) { toast(errText(err.code), 'error'); }
+  }));
+  viewEl().querySelectorAll('.live-member').forEach((el) => el.addEventListener('click', () => openUserDrawer(el.dataset.uid)));
+}
+
 // ---------------------------------------------------------------- reports
 async function loadReports() {
   showLoading();
@@ -1302,6 +1362,7 @@ function route() {
   else if (r === 'relationships') loadLinks();
   else if (r === 'calls') loadCalls();
   else if (r === 'blocks') loadBlocks();
+  else if (r === 'live') loadLiveCalls();
   else if (r === 'reports') loadReports();
   else if (r === 'audit') loadAudit();
   else if (r === 'recordings') loadRecordings();

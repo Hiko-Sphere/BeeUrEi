@@ -1,107 +1,310 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "@%@" : {
+
+    },
+    "@%@ · %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "@%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "%@" : {
+
+    },
+    "%@ · %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "%@ %@ %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@ %3$@"
+          }
+        }
+      }
+    },
+    "%@ %@ %@ · %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@ %3$@ · %4$@"
+          }
+        }
+      }
+    },
+    "%@. %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@. %2$@"
+          }
+        }
+      }
+    },
+    "%@x" : {
+
+    },
+    "English" : {
+
+    },
+    "ROI 检测区" : {
+
+    },
+    "中文" : {
+
+    },
+    "从这里进入任一角色界面预览；下滑可关闭返回。" : {
+
+    },
+    "光线" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Light"
+          }
+        }
+      }
+    },
+    "光线探测" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check the light"
+          }
+        }
+      }
+    },
+    "公交识别" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read the bus"
+          }
+        }
+      }
+    },
+    "周围的人" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "People nearby"
+          }
+        }
+      }
+    },
     "呼叫帮手" : {
       "comment" : "Siri shortcut: open help / intent title",
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Call a helper" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Call a helper"
+          }
+        }
+      }
+    },
+    "开发者叠层（温度/帧率/ROI）在避障界面：从上方「以 求助者 界面进入」并在设置开启开发者模式。" : {
+
+    },
+    "开发者模式" : {
+
+    },
+    "引导对准整页纸张，自动拍摄并按顺序朗读全文，可连续多页" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guide you to frame a full page, auto-capture, and read it aloud in order — page after page"
+          }
+        }
+      }
+    },
+    "我在哪" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Where am I"
+          }
+        }
+      }
+    },
+    "打开求助界面，呼叫志愿者或亲友帮你看" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open help to call a volunteer or family to see for you"
+          }
+        }
+      }
+    },
+    "打开相机扫商品条码或二维码并朗读内容" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open the camera to scan a barcode or QR code and read it aloud"
+          }
+        }
+      }
+    },
+    "打开相机识别人民币纸币的面额" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open the camera to read a banknote's denomination"
+          }
+        }
+      }
+    },
+    "打开识别界面：认物体、读文字、辨颜色、扫码" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open recognition: identify objects, read text, name colors, scan codes"
+          }
+        }
+      }
+    },
+    "扫码" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scan a code"
+          }
+        }
+      }
+    },
+    "报告环境明暗和亮光的方向，帮你找窗户或灯" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Report brightness and the direction of light to help you find a window or lamp"
+          }
+        }
+      }
+    },
+    "提示：自定义 API 地址在登录页（开发者模式下可见）。" : {
+
+    },
+    "数一数前方有几个人，报方位和距离，不识别身份" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Count how many people are ahead, with their direction and distance — no identification"
+          }
+        }
       }
     },
     "求助" : {
       "comment" : "Siri shortcut short title",
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Get help" } }
-      }
-    },
-    "打开求助界面，呼叫志愿者或亲友帮你看" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open help to call a volunteer or family to see for you" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Get help"
+          }
+        }
       }
     },
     "看一看" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Look around" } }
-      }
-    },
-    "打开识别界面：认物体、读文字、辨颜色、扫码" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open recognition: identify objects, read text, name colors, scan codes" } }
-      }
-    },
-    "我在哪" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Where am I" } }
-      }
-    },
-    "语音播报你当前的大概位置和附近地标" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Speak your approximate location and nearby landmarks" } }
-      }
-    },
-    "识别纸币" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Read banknote" } }
-      }
-    },
-    "打开相机识别人民币纸币的面额" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open the camera to read a banknote's denomination" } }
-      }
-    },
-    "扫码" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Scan a code" } }
-      }
-    },
-    "打开相机扫商品条码或二维码并朗读内容" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open the camera to scan a barcode or QR code and read it aloud" } }
-      }
-    },
-    "读整页" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Read a full page" } }
-      }
-    },
-    "引导对准整页纸张，自动拍摄并按顺序朗读全文，可连续多页" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Guide you to frame a full page, auto-capture, and read it aloud in order — page after page" } }
-      }
-    },
-    "公交识别" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Read the bus" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Look around"
+          }
+        }
       }
     },
     "认出进站的公交车或电车，朗读线路号和终点站" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Identify an arriving bus or tram and read its route number and destination" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Identify an arriving bus or tram and read its route number and destination"
+          }
+        }
       }
     },
-    "周围的人" : {
+    "识别纸币" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "People nearby" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read banknote"
+          }
+        }
       }
     },
-    "数一数前方有几个人，报方位和距离，不识别身份" : {
+    "语音播报你当前的大概位置和附近地标" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Count how many people are ahead, with their direction and distance — no identification" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speak your approximate location and nearby landmarks"
+          }
+        }
       }
     },
-    "光线探测" : {
+    "读整页" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Check the light" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read a full page"
+          }
+        }
       }
     },
-    "光线" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Light" } }
-      }
-    },
-    "报告环境明暗和亮光的方向，帮你找窗户或灯" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Report brightness and the direction of light to help you find a window or lamp" } }
-      }
+    "默认 %@。本地联调可改为运行后端的电脑局域网地址（不是 localhost）。" : {
+
     }
   },
   "version" : "1.0"

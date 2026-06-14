@@ -18,6 +18,7 @@ import { registerMessageRoutes } from './routes/messages'
 import { registerGroupRoutes } from './routes/groups'
 import { registerMediaRoutes } from './routes/media'
 import { registerSignaling } from './routes/ws'
+import { CallControlBridge } from './signaling/callControl'
 import { PresenceRegistry } from './assist/presence'
 import { PendingCallRegistry } from './assist/pendingCalls'
 import { OpenHelpRegistry } from './assist/openHelp'
@@ -57,6 +58,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   const presence = new PresenceRegistry()
   const pendingCalls = new PendingCallRegistry()
   const openHelp = new OpenHelpRegistry()
+  const callControl = new CallControlBridge() // 管理员 REST → 通话房间（强制结束等）；由信令层填实现
   // 两类会话(定向亲友呼叫 / 公开求助)共享 callId 字符串空间。互相做跨表去重，
   // 防止任意用户用同名 callId 在另一表抢注、影子覆盖参与权、窃听/锁出他人通话（见审查 #1/#7）。
   pendingCalls.setConflictCheck((id, now) => openHelp.hasActive(id, now))
@@ -127,7 +129,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerGroupRoutes(instance, store)
     registerMediaRoutes(instance, store) // 视频等大文件（磁盘存储）
     registerReportRoutes(instance, store)
-    registerAdminRoutes(instance, store, presence)
+    registerAdminRoutes(instance, store, presence, hub, callControl)
     registerRecordingRoutes(instance, store, recordingConsent, pendingCalls, openHelp)
     registerDevRoutes(instance, store)
     registerNavRoutes(instance, store)
@@ -136,7 +138,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   })
 
   // WebSocket 信令（自带子插件作用域）。
-  registerSignaling(app, hub, store, pendingCalls, openHelp)
+  registerSignaling(app, hub, store, pendingCalls, openHelp, callControl)
 
   // 管理后台 Web 面板（静态 SPA，纯前端、零运行时依赖、与 API 同源）。
   // 服务 server/public/admin → /admin/；用 hash 路由，无需服务端 SPA 回退。

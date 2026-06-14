@@ -7,6 +7,8 @@ import { hashPassword } from '../auth/passwords'
 import { normalizePhone } from '../auth/apple'
 import { cascadeDeleteUser } from '../db/cascade'
 import type { PresenceRegistry } from '../assist/presence'
+import { type SignalingHub } from '../signaling/hub'
+import { type CallControlBridge } from '../signaling/callControl'
 
 const statusSchema = z.object({ status: z.enum(['active', 'disabled']) })
 const roleSchema = z.object({ role: z.enum(['blind', 'helper', 'family', 'admin', 'developer']) })
@@ -31,7 +33,7 @@ const configSchema = z.object({
 const SERVER_VERSION = '0.1.0'
 const START_MS = Date.now()
 
-export function registerAdminRoutes(app: FastifyInstance, store: Store, presence: PresenceRegistry): void {
+export function registerAdminRoutes(app: FastifyInstance, store: Store, presence: PresenceRegistry, hub?: SignalingHub, callControl?: CallControlBridge): void {
   const adminOnly = { preHandler: requireAuth(['admin']) }
   // 当前活跃管理员数（用于"最后一名管理员"保护，防把后台锁死）。
   const activeAdminCount = () => store.allUsers().filter((u) => u.role === 'admin' && u.status === 'active').length
@@ -420,6 +422,36 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
         createdAt: c.createdAt,
       })),
     }
+  })
+
+  // 进行中通话实时总览：当前各通话的参与者、角色、已通话时长。供管理员实时监管。
+  app.get('/api/admin/calls/active', adminOnly, async () => {
+    const now = Date.now()
+    const calls = hub ? hub.activeCalls() : []
+    return {
+      nowMs: now,
+      calls: calls.map((c) => ({
+        callId: c.callId,
+        startedAt: c.startedAt,
+        durationSec: Math.max(0, Math.floor((now - c.startedAt) / 1000)),
+        hasAdminObserver: c.hasAdminObserver,
+        members: c.members.map((m) => ({
+          userId: m.userId,
+          role: m.role,
+          name: nameOf(m.userId),
+          online: presence.isAvailable(m.userId, now),
+        })),
+      })),
+    }
+  })
+
+  // 强制结束某通话（违规处置）：向房间各端推 end，双方正常收线。入审计。
+  app.post('/api/admin/calls/:callId/end', adminOnly, async (req, reply) => {
+    const callId = (req.params as { callId: string }).callId
+    const ended = callControl ? callControl.endCall(callId, req.user!.sub) : 0
+    if (ended === 0) return reply.code(404).send({ error: 'not_active' })
+    audit(req.user!.sub, 'call.forceEnd', 'call', callId, `ended ${ended} endpoint(s)`)
+    return { ok: true, ended }
   })
 
   // 全站拉黑记录（时间倒序）：解析拉黑方/被拉黑方显示名，便于排查"求助队列里看不到某人/被对方屏蔽"等问题。

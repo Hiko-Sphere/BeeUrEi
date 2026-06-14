@@ -19,7 +19,7 @@ The visual AI runs entirely on the device; the camera feed stays on your phone b
 ![Swift 5](https://img.shields.io/badge/Swift-5-F05138?logo=swift&logoColor=white)
 ![On-device AI](https://img.shields.io/badge/AI-on--device-FFC42E?labelColor=14161F)
 ![Backend: Node + Fastify](https://img.shields.io/badge/backend-Node%20%2B%20Fastify-3178C6)
-![tests 599](https://img.shields.io/badge/tests-599-3FB950)
+![tests 603](https://img.shields.io/badge/tests-603-3FB950)
 ![Bilingual](https://img.shields.io/badge/i18n-EN%20%C2%B7%20%E4%B8%AD%E6%96%87-FFC42E?labelColor=14161F)
 ![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-14161F)
 
@@ -174,7 +174,7 @@ BeeUrEi/
 │   └── Features/             scene & object recognition
 ├── Packages/BeeUrEiCore/     platform-independent safety core — 319 unit tests
 ├── Tests/BeeUrEiTests/       app-layer regression — 72 tests
-├── server/                   self-hosted backend (Node + TS) — 208 tests · 42 test files
+├── server/                   self-hosted backend (Node + TS) — 212 tests · 42 test files
 ├── site/                     marketing site + /legal/ pages
 ├── BeeUrEi-Brand-Assets/     icon · wordmark · palette
 └── .github/workflows/ci.yml  continuous integration
@@ -243,10 +243,10 @@ The production self-hosted backend runs on **AWS (Tokyo) + Cloudflare Tunnel**, 
 ```bash
 swift test --package-path Packages/BeeUrEiCore        # core safety logic — 319 tests
 xcodebuild test -scheme BeeUrEi                        # app-layer regression (simulator) — 72 tests
-cd server && npm test                                  # backend — 208 tests
+cd server && npm test                                  # backend — 212 tests
 ```
 
-**599 tests across the three suites** (319 core + 72 app-layer + 208 backend). GitHub Actions runs the full suite on every push, and the backend `tsc` type-check is clean. The live **CI badge** above is the authoritative pass/fail signal.
+**603 tests across the three suites** (319 core + 72 app-layer + 212 backend). GitHub Actions runs the full suite on every push, and the backend `tsc` type-check is clean. The live **CI badge** above is the authoritative pass/fail signal.
 
 Through several rounds of adversarial, multi-agent code review, **140+ real defects** were fixed — signaling eavesdropping, wrong obstacle distance/direction, false drop-off alarms over dark ground, arrival bypassing the accuracy gate, a magnetically-misled beacon bearing, spatial audio permanently muted after an interruption, voice channels drowning each other out, silent failures to the blind user, missing confirmations — each with a regression test. The three safety-critical subsystems each have a dedicated regression net: **call privacy gating, obstacle-avoidance discipline, and navigation gating.**
 

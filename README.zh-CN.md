@@ -19,7 +19,7 @@
 ![Swift 5](https://img.shields.io/badge/Swift-5-F05138?logo=swift&logoColor=white)
 ![端侧 AI](https://img.shields.io/badge/AI-%E7%AB%AF%E4%BE%A7%E8%BF%90%E8%A1%8C-FFC42E?labelColor=14161F)
 ![后端 Node + Fastify](https://img.shields.io/badge/%E5%90%8E%E7%AB%AF-Node%20%2B%20Fastify-3178C6)
-![测试 599](https://img.shields.io/badge/%E6%B5%8B%E8%AF%95-599-3FB950)
+![测试 603](https://img.shields.io/badge/%E6%B5%8B%E8%AF%95-603-3FB950)
 ![双语](https://img.shields.io/badge/%E5%8F%8C%E8%AF%AD-EN%20%C2%B7%20%E4%B8%AD%E6%96%87-FFC42E?labelColor=14161F)
 ![许可 PolyForm Noncommercial](https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF-PolyForm%20Noncommercial%201.0.0-14161F)
 
@@ -169,7 +169,7 @@ BeeUrEi/
 │   └── Features/             场景与物体识别
 ├── Packages/BeeUrEiCore/     平台无关安全核心 —— 319 单测
 ├── Tests/BeeUrEiTests/       应用层回归 —— 72 测
-├── server/                   自托管后端（Node + TS）—— 208 测 · 42 个测试文件
+├── server/                   自托管后端（Node + TS）—— 212 测 · 42 个测试文件
 ├── site/                     官网静态站 + /legal/ 法律页
 ├── BeeUrEi-Brand-Assets/     图标 · 字标 · 配色
 └── .github/workflows/ci.yml  持续集成
@@ -238,10 +238,10 @@ docker run -e ADMIN_USERNAME=root -e ADMIN_PASSWORD=你的强密码 beeurei-api
 ```bash
 swift test --package-path Packages/BeeUrEiCore        # 核心安全逻辑 —— 319 测
 xcodebuild test -scheme BeeUrEi                        # 应用层回归（模拟器）—— 72 测
-cd server && npm test                                  # 后端 —— 208 测
+cd server && npm test                                  # 后端 —— 212 测
 ```
 
-**三套测试合计 599 项**（核心 319 + 应用层 72 + 后端 208）。GitHub Actions 每次推送都跑全量套件，后端 `tsc` 类型检查干净。上方的 **CI 徽章**是权威的通过 / 失败信号。
+**三套测试合计 603 项**（核心 319 + 应用层 72 + 后端 212）。GitHub Actions 每次推送都跑全量套件，后端 `tsc` 类型检查干净。上方的 **CI 徽章**是权威的通过 / 失败信号。
 
 经多轮多智能体对抗式代码审查，修复 **140+ 真实缺陷**——信令窃听、障碍距离 / 方向错误、暗地面下沉误报、到达绕过精度门、磁干扰致信标误向、被打断后空间音永久静音、语音通道互相淹没、对盲人静默失败、缺确认——每一项都配回归测试。三大安全子系统各有专门回归网：**通话隐私门控、避障纪律、导航门控。**
 

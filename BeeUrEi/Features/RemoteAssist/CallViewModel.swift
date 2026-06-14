@@ -6,7 +6,15 @@ import UIKit
 @MainActor
 @Observable
 final class CallViewModel {
-    enum Role { case blind, helper }
+    enum Role { case blind, helper, adminObserver } // adminObserver：管理员旁观（合规监管，会通知双方）
+
+    // MARK: 管理员旁观状态
+    private(set) var adminObserving = false        // 参与方：当前有管理员在监看本次通话（据此显示不可关闭的告知横幅+语音）
+    private(set) var adminObserverName: String?     // 监看的管理员显示名
+    /// 管理员侧：被监看的参与者（含是否已收到其视频帧），供观察界面渲染。
+    private(set) var observedPeers: [ObservedPeer] = []
+    struct ObservedPeer: Identifiable { let id: String; var name: String; var role: String; var hasVideo: Bool }
+    @ObservationIgnored private var adminObserverId: String? // 参与方：监看本通话的管理员 userId（区分 peer-left 是管理员退出还是对端挂断）
 
     /// 通话状态播报：VoiceOver 走系统公告；盲人未开 VoiceOver 时用 App TTS 念出（A11y.announce 在未开 VO 时被静默丢弃，见 P1 审计）。
     private func announce(_ text: String) {
@@ -112,12 +120,28 @@ final class CallViewModel {
         }
         media.onRemoteVideoTrack = { [weak self] in self?.remoteVideoAvailable = true }
         media.onCallQuality = { [weak self] q in self?.callQuality = q }
+        // 旁观媒体（与 1:1 主通道隔离）：本端 obs SDP/ICE 经信令**定向**发给对应 peer。
+        media.onObserverLocalDescription = { [weak self] peerId, type, sdp in
+            self?.signaling.send(["type": type == "offer" ? "obs-offer" : "obs-answer", "to": peerId, "sdp": sdp])
+        }
+        media.onObserverLocalCandidate = { [weak self] peerId, candidate, sdpMid, sdpMLineIndex in
+            var m: [String: Any] = ["type": "obs-ice", "to": peerId, "candidate": candidate, "sdpMLineIndex": Int(sdpMLineIndex)]
+            if let sdpMid { m["sdpMid"] = sdpMid }
+            self?.signaling.send(m)
+        }
+        media.onObserverRemoteVideoTrack = { [weak self] peerId in
+            guard let self, let i = self.observedPeers.firstIndex(where: { $0.id == peerId }) else { return }
+            self.observedPeers[i].hasVideo = true
+        }
 
         signaling.onMessage = { [weak self] msg in self?.handle(msg) }
         signaling.onClose = { [weak self] in
             guard let self else { return }
             self.connected = false
             self.statusText = CallStrings.signalingClosed(self.lang)
+            // 管理员旁观者：信令断开即监看结束（可能是被服务端拒绝准入，如已有旁观/通话已结束/能力不符）。
+            // 旁观端无本地媒体需保全，直接自动收起界面，避免卡在"信令已断开"（见复审 LC-5）。
+            if self.role == .adminObserver { self.callEnded = true; return }
             // 隐私 fail-safe：信令断开时强制关画面、停相机（setVideoSending(false) 会 disable 视频轨并 stopCapture），
             // 绝不让相机在断线后仍采集/外发（见审查 #5/#8）。
             // 但**不** media.stop() 拆除 pc：信令断开多为瞬时(移动网切换/服务器 reload)，P2P 媒体本身可能仍存活；
@@ -133,9 +157,15 @@ final class CallViewModel {
         if let cfg = try? await APIClient().appConfig(token: token) { recordingPolicy = cfg.recording }
         media.start(asCaller: role == .blind)
         signaling.connect(token: token, baseURL: ServerConfig.baseURL)
-        signaling.join(callId: callId, role: role == .blind ? "blind" : "helper")
-        statusText = waitingText // 寻找志愿者/呼叫亲友显示各自的等待文案，不再笼统说"已加入"
-        if role == .blind { startDeclineWatch(token: token) } // 发起方：轮询"对方是否拒绝"
+        if role == .adminObserver {
+            setMuted(true)                       // 旁观默认静音：先监看，需要时再开麦说话
+            signaling.joinAsObserver(callId: callId)
+            statusText = CallStrings.observerConnecting(lang)
+        } else {
+            signaling.join(callId: callId, role: role == .blind ? "blind" : "helper")
+            statusText = waitingText // 寻找志愿者/呼叫亲友显示各自的等待文案，不再笼统说"已加入"
+            if role == .blind { startDeclineWatch(token: token) } // 发起方：轮询"对方是否拒绝"
+        }
     }
 
     /// 发起方等待期间轮询呼叫状态；对方全部拒绝则**语音提示并自动收线**（双侧都退出来电提示）。
@@ -171,8 +201,29 @@ final class CallViewModel {
     func handle(_ msg: [String: Any]) {
         switch msg["type"] as? String {
         case "joined":
+            // 管理员旁观者加入：登记被监看的参与者，等其向我发 obs-offer（既有参与者向新加入者发起）。
+            if role == .adminObserver {
+                connected = true
+                let peers = (msg["peers"] as? [[String: Any]]) ?? []
+                observedPeers = peers.compactMap { p in
+                    guard let id = p["userId"] as? String else { return nil }
+                    return ObservedPeer(id: id, name: (p["userName"] as? String) ?? id, role: (p["role"] as? String) ?? "", hasVideo: false)
+                }
+                for p in observedPeers { media.addObserverPeer(p.id, offer: false) }
+                statusText = CallStrings.observerWatching(lang)
+                return
+            }
             // 我加入时若对端已在房间，记录对端 userId/姓名；我是发起方(视障)则发起 offer。
-            if let peers = msg["peers"] as? [[String: Any]], let first = peers.first {
+            let peers = (msg["peers"] as? [[String: Any]]) ?? []
+            // 若已有管理员在监看：登记并向其发 obs-offer，但**不**当作通话对端。
+            if let adminP = peers.first(where: { ($0["role"] as? String) == "admin" }) {
+                adminObserverId = adminP["userId"] as? String
+                adminObserving = true
+                adminObserverName = adminP["userName"] as? String
+                if let aid = adminObserverId { media.addObserverPeer(aid, offer: true) }
+                announce(CallStrings.adminObservingAnnounce(lang)) // 进入时若已被监看，同样告知（合规：参与方必知情）
+            }
+            if let first = peers.first(where: { ($0["role"] as? String) != "admin" }) {
                 peerUserId = first["userId"] as? String ?? peerUserId
                 peerName = first["userName"] as? String ?? peerName
                 peerAvatar = first["userAvatar"] as? String ?? peerAvatar
@@ -184,6 +235,28 @@ final class CallViewModel {
                 if role == .blind, !hasOffered { hasOffered = true; media.createOffer() }
             }
         case "peer-joined":
+            // 管理员加入监看本次通话（合规：参与方必被告知）。不当作通话对端，向其发 obs-offer 推送本端音视频。
+            if (msg["role"] as? String) == "admin" {
+                let newId = msg["userId"] as? String
+                // 防御：若先前监看的管理员未发 peer-left 即被新管理员替换，先撤旧旁观 PC，避免其残留接收画面（见复审 LC-6）。
+                if let old = adminObserverId, old != newId { media.removeObserverPeer(old) }
+                adminObserverId = newId
+                adminObserving = true
+                adminObserverName = msg["userName"] as? String
+                if let aid = adminObserverId { media.addObserverPeer(aid, offer: true) }
+                announce(CallStrings.adminObservingAnnounce(lang))
+                return
+            }
+            // 管理员侧：有（晚到的）参与者加入 → 登记并向其发 obs-offer。
+            if role == .adminObserver {
+                if let id = msg["userId"] as? String {
+                    if !observedPeers.contains(where: { $0.id == id }) {
+                        observedPeers.append(ObservedPeer(id: id, name: (msg["userName"] as? String) ?? id, role: (msg["role"] as? String) ?? "", hasVideo: false))
+                    }
+                    media.addObserverPeer(id, offer: true)
+                }
+                return
+            }
             // 新对端接入：默认不发画面，须重新按住才发——避免沿用上一个对端时的发送状态把画面直接推给新对端（隐私默认关，见审查 #4）。
             setVideoSending(false)
             connected = true
@@ -237,9 +310,32 @@ final class CallViewModel {
                 peerRecording = on
                 announce(on ? CallStrings.recordPeerStarted(lang) : CallStrings.recordPeerStopped(lang))
             }
+        case "obs-offer":
+            if let from = msg["from"] as? String, let sdp = msg["sdp"] as? String { media.handleObserverDescription(from: from, type: "offer", sdp: sdp) }
+        case "obs-answer":
+            if let from = msg["from"] as? String, let sdp = msg["sdp"] as? String { media.handleObserverDescription(from: from, type: "answer", sdp: sdp) }
+        case "obs-ice":
+            if let from = msg["from"] as? String, let candidate = msg["candidate"] as? String {
+                media.handleObserverCandidate(from: from, candidate: candidate, sdpMid: msg["sdpMid"] as? String, sdpMLineIndex: Int32((msg["sdpMLineIndex"] as? Int) ?? 0))
+            }
         case "end", "peer-left":
-            // 一方挂断/离开 → 本端自动挂断并关闭界面（见“同时自动挂断”需求）。
-            // 'end' 是对方主动挂断的即时通知；'peer-left' 是其连接关闭后服务端补发，二者取先到者。
+            let leaver = msg["userId"] as? String
+            // 明确结束（对端挂断 / 管理员强制结束）→ 所有人（含旁观管理员）退出。
+            if (msg["type"] as? String) == "end" { endByPeer(); return }
+            // 以下为 peer-left（连接关闭后补发）：
+            // 管理员退出监看 → 仅清监看态并撤其旁观 PC，通话继续（不可把"管理员走了"当成"对端挂断"）。
+            if let leaver, leaver == adminObserverId {
+                adminObserving = false; adminObserverName = nil; adminObserverId = nil
+                media.removeObserverPeer(leaver)
+                announce(CallStrings.adminLeftAnnounce(lang))
+                return
+            }
+            // 管理员侧：某参与者离开 → 撤其旁观 PC；参与者全离开则结束观察。
+            if role == .adminObserver {
+                if let leaver { media.removeObserverPeer(leaver); observedPeers.removeAll { $0.id == leaver } }
+                if observedPeers.isEmpty { callEnded = true }
+                return
+            }
             endByPeer()
         default:
             break
@@ -411,8 +507,22 @@ final class CallViewModel {
         ended = true
         // 录制中挂断：先停录并尽力上传（HTTP 独立于信令/媒体，关闭后仍可完成），不丢证据。
         if isRecording { isRecording = false; Task { await finishAndUpload() } }
-        signaling.end()
+        // 管理员旁观者「结束监看」/界面消失只应离场，**绝不**给参与者发 end 结束他人通话——
+        // 强制结束是单独的显式动作（forceEndObservedCall）。
+        if role != .adminObserver { signaling.end() }
         media.stop()
         signaling.close()
+    }
+
+    /// 管理员旁观者：强制结束被监看的整通通话（合规：参与方已被告知正在监看，且会收到结束）。
+    /// 走鉴权 REST（服务端 callControl.endCall 权威地向房间各端发 end）——可靠地结束，
+    /// 不依赖本端 WS 帧与 close 的时序（本端 socket 立即关闭可能丢掉未发出的 end，见复审 LC-1）。
+    func forceEndObservedCall() {
+        guard role == .adminObserver, !ended else { return }
+        let cid = callId
+        if let token = KeychainStore.read() {
+            Task { try? await APIClient().adminEndCall(token: token, callId: cid) }
+        }
+        hangUp() // 释放本端旁观资源（adminObserver 的 hangUp 不再发 WS end）
     }
 }

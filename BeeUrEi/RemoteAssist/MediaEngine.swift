@@ -44,6 +44,20 @@ protocol MediaEngine: AnyObject {
     func setTorch(_ on: Bool)       // 手电筒（协助者远程开/关，暗光看不清时）
     func setZoom(_ factor: Double)  // 变焦（协助者远程放大看细节）
     func stop()
+
+    // MARK: 管理员旁观（合规监管，会通知双方）——与 1:1 主通道**隔离**的额外 PC，共享同一本地音视频轨。
+    /// 旁观握手 SDP（带目标 peerId）→ 经信令以 obs-offer/obs-answer 定向发送。
+    var onObserverLocalDescription: ((_ peerId: String, _ type: String, _ sdp: String) -> Void)? { get set }
+    /// 旁观握手 ICE（带目标 peerId）→ 经信令以 obs-ice 定向发送。
+    var onObserverLocalCandidate: ((_ peerId: String, _ candidate: String, _ sdpMid: String?, _ sdpMLineIndex: Int32) -> Void)? { get set }
+    /// 收到某旁观对端的远端视频轨（管理员侧渲染参与者画面用）。
+    var onObserverRemoteVideoTrack: ((_ peerId: String) -> Void)? { get set }
+    /// 新增一个旁观对端。offer=true 时本端主动发 offer（"既有参与者向新加入的管理员发 offer"）。
+    func addObserverPeer(_ peerId: String, offer: Bool)
+    func handleObserverDescription(from peerId: String, type: String, sdp: String)
+    func handleObserverCandidate(from peerId: String, candidate: String, sdpMid: String?, sdpMLineIndex: Int32)
+    func removeObserverPeer(_ peerId: String)
+    // 注：setObserverRenderer(_:for:) 用 RTCVideoRenderer（WebRTC 类型），仅在具体类 WebRTCMediaEngine 上提供（同 setRemoteRenderer）。
 }
 
 /// 无 WebRTC 包时（如克隆仓库未放入被 gitignore 的 91MB `Frameworks/WebRTC.xcframework`）的兜底。
@@ -68,6 +82,13 @@ final class StubMediaEngine: MediaEngine {
     func setTorch(_ on: Bool) {}
     func setZoom(_ factor: Double) {}
     func stop() {}
+    var onObserverLocalDescription: ((String, String, String) -> Void)?
+    var onObserverLocalCandidate: ((String, String, String?, Int32) -> Void)?
+    var onObserverRemoteVideoTrack: ((String) -> Void)?
+    func addObserverPeer(_ peerId: String, offer: Bool) {}
+    func handleObserverDescription(from peerId: String, type: String, sdp: String) {}
+    func handleObserverCandidate(from peerId: String, candidate: String, sdpMid: String?, sdpMLineIndex: Int32) {}
+    func removeObserverPeer(_ peerId: String) {}
 }
 
 /// 默认引擎工厂：装了 WebRTC 包用真实引擎，否则用 stub。
@@ -95,7 +116,18 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
     var onMediaStateChange: ((MediaConnState) -> Void)?
     var onRemoteVideoTrack: (() -> Void)?
     var onCallQuality: ((CallQuality) -> Void)?
+    var onObserverLocalDescription: ((String, String, String) -> Void)?
+    var onObserverLocalCandidate: ((String, String, String?, Int32) -> Void)?
+    var onObserverRemoteVideoTrack: ((String) -> Void)?
     private var statsTimer: Timer?
+
+    // 旁观（管理员）专用：与主 pc 隔离的额外 PC（按 peerId），共享同一本地音视频轨。主 1:1 路径完全不受影响。
+    private var observerPCs: [String: RTCPeerConnection] = [:]
+    private var observerDelegates: [String: ObserverPCDelegate] = [:] // RTCPeerConnection 仅弱引用 delegate，须自留强引用
+    private var observerHasRemote: [String: Bool] = [:]
+    private var observerPending: [String: [RTCIceCandidate]] = [:]
+    private var observerRemoteTracks: [String: RTCVideoTrack] = [:]
+    private var observerRenderers: [String: RTCVideoRenderer] = [:]
 
     private static let factory: RTCPeerConnectionFactory = {
         RTCInitializeSSL()
@@ -295,6 +327,90 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
         pc = nil
         pendingCandidates.removeAll()
         hasRemoteDescription = false
+        // 关闭所有旁观 PC。
+        for (_, opc) in observerPCs { opc.close() }
+        observerPCs.removeAll(); observerDelegates.removeAll(); observerHasRemote.removeAll()
+        observerPending.removeAll(); observerRemoteTracks.removeAll(); observerRenderers.removeAll()
+    }
+
+    // MARK: 旁观（管理员）——隔离的额外 PC，共享本端音视频轨；不触碰主 pc。
+    func addObserverPeer(_ peerId: String, offer: Bool) {
+        guard observerPCs[peerId] == nil else { return }
+        let config = RTCConfiguration()
+        config.iceServers = iceConfig.isEmpty
+            ? [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
+            : iceConfig.map { RTCIceServer(urlStrings: $0.urls, username: $0.username ?? "", credential: $0.credential ?? "") }
+        config.sdpSemantics = .unifiedPlan
+        let delegate = ObserverPCDelegate(peerId: peerId, engine: self)
+        let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
+        guard let opc = Self.factory.peerConnection(with: config, constraints: constraints, delegate: delegate) else { return }
+        observerPCs[peerId] = opc
+        observerDelegates[peerId] = delegate
+        if let a = localAudioTrack { opc.add(a, streamIds: ["obs0"]) }   // 共享本端语音（含管理员说话）
+        if let v = localVideoTrack { opc.add(v, streamIds: ["obs0"]) }   // 共享本端视频（仅参与者；isEnabled 随分享门控，管理员见即所见）
+        if offer {
+            let oc = RTCMediaConstraints(mandatoryConstraints: ["OfferToReceiveAudio": "true", "OfferToReceiveVideo": "true"], optionalConstraints: nil)
+            opc.offer(for: oc) { [weak self] sdp, err in
+                guard let self, let sdp, err == nil else { return }
+                opc.setLocalDescription(sdp) { _ in }
+                self.onObserverLocalDescription?(peerId, "offer", sdp.sdp)
+            }
+        }
+    }
+
+    func handleObserverDescription(from peerId: String, type: String, sdp: String) {
+        guard let opc = observerPCs[peerId] else { return }
+        let rtcType: RTCSdpType = (type == "offer") ? .offer : .answer
+        opc.setRemoteDescription(RTCSessionDescription(type: rtcType, sdp: sdp)) { [weak self] error in
+            guard let self, error == nil else { return }
+            DispatchQueue.main.async {
+                self.observerHasRemote[peerId] = true
+                for c in self.observerPending[peerId] ?? [] { opc.add(c) { _ in } }
+                self.observerPending[peerId] = []
+            }
+            guard rtcType == .offer else { return }
+            let oc = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
+            opc.answer(for: oc) { sdp, aerr in
+                guard let sdp, aerr == nil else { return }
+                opc.setLocalDescription(sdp) { _ in }
+                self.onObserverLocalDescription?(peerId, "answer", sdp.sdp)
+            }
+        }
+    }
+
+    func handleObserverCandidate(from peerId: String, candidate: String, sdpMid: String?, sdpMLineIndex: Int32) {
+        let c = RTCIceCandidate(sdp: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid)
+        if observerHasRemote[peerId] == true { observerPCs[peerId]?.add(c) { _ in } }
+        else { observerPending[peerId, default: []].append(c) }
+    }
+
+    func setObserverRenderer(_ renderer: RTCVideoRenderer, for peerId: String) {
+        DispatchQueue.main.async {
+            self.observerRenderers[peerId] = renderer
+            self.observerRemoteTracks[peerId]?.add(renderer)
+        }
+    }
+
+    func removeObserverPeer(_ peerId: String) {
+        observerPCs[peerId]?.close()
+        observerPCs[peerId] = nil; observerDelegates[peerId] = nil; observerHasRemote[peerId] = nil
+        observerPending[peerId] = nil; observerRemoteTracks[peerId] = nil; observerRenderers[peerId] = nil
+    }
+
+    // 旁观 PC 的 delegate 回调（在 WebRTC 信令线程）：转回引擎，带 peerId。
+    fileprivate func observerDidGenerate(_ peerId: String, _ candidate: RTCIceCandidate) {
+        onObserverLocalCandidate?(peerId, candidate.sdp, candidate.sdpMid, candidate.sdpMLineIndex)
+    }
+    fileprivate func observerDidAddTrack(_ peerId: String, _ track: RTCVideoTrack) {
+        DispatchQueue.main.async {
+            // 重协商/换轨：先把渲染器从旧轨摘除，避免它继续收旧轨的帧或重复挂载（见复审 LC-4）。
+            if let r = self.observerRenderers[peerId], let old = self.observerRemoteTracks[peerId], old !== track {
+                old.remove(r)
+            }
+            self.observerRemoteTracks[peerId] = track
+            if let r = self.observerRenderers[peerId] { track.add(r) }
+            self.onObserverRemoteVideoTrack?(peerId)
+        }
     }
 
     /// 每 2s 拉一次 WebRTC 统计，用活跃候选对的往返时延映射"信号强弱"。
@@ -393,5 +509,25 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
     func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {}
     func peerConnection(_ peerConnection: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {}
     func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {}
+}
+
+/// 每个旁观 PC 一个 delegate（携带 peerId），把回调转回引擎并标明是哪个对端。
+/// RTCPeerConnection 仅弱引用 delegate，故引擎用 observerDelegates 字典强持有。
+private final class ObserverPCDelegate: NSObject, RTCPeerConnectionDelegate {
+    let peerId: String
+    weak var engine: WebRTCMediaEngine?
+    init(peerId: String, engine: WebRTCMediaEngine) { self.peerId = peerId; self.engine = engine }
+    func peerConnection(_ pc: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) { engine?.observerDidGenerate(peerId, candidate) }
+    func peerConnection(_ pc: RTCPeerConnection, didAdd rtpReceiver: RTCRtpReceiver, streams: [RTCMediaStream]) {
+        if let t = rtpReceiver.track as? RTCVideoTrack { engine?.observerDidAddTrack(peerId, t) }
+    }
+    func peerConnection(_ pc: RTCPeerConnection, didChange stateChanged: RTCSignalingState) {}
+    func peerConnection(_ pc: RTCPeerConnection, didAdd stream: RTCMediaStream) {}
+    func peerConnection(_ pc: RTCPeerConnection, didRemove stream: RTCMediaStream) {}
+    func peerConnectionShouldNegotiate(_ pc: RTCPeerConnection) {}
+    func peerConnection(_ pc: RTCPeerConnection, didChange newState: RTCIceConnectionState) {}
+    func peerConnection(_ pc: RTCPeerConnection, didChange newState: RTCIceGatheringState) {}
+    func peerConnection(_ pc: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {}
+    func peerConnection(_ pc: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {}
 }
 #endif

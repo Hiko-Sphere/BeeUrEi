@@ -202,6 +202,18 @@ enum CallStrings {
     static func recordUnavailable(_ l: Language) -> String { l == .zh ? "本设备暂不支持通话录制" : "Call recording isn't available on this device" }
     static func recordDisabled(_ l: Language) -> String { l == .zh ? "录制功能未开启" : "Recording is turned off" }
     static func recordSaveFailed(_ l: Language) -> String { l == .zh ? "录制保存失败" : "Couldn't save the recording" }
+    // 管理员旁观（合规监管，会通知双方）
+    static func adminObservingBanner(_ l: Language) -> String { l == .zh ? "管理员正在监看本次通话" : "An admin is monitoring this call" }
+    static func adminObservingAnnounce(_ l: Language) -> String { l == .zh ? "管理员已加入并正在监看本次通话" : "An admin has joined and is monitoring this call" }
+    static func adminLeftAnnounce(_ l: Language) -> String { l == .zh ? "管理员已结束监看" : "The admin stopped monitoring" }
+    static func observerConnecting(_ l: Language) -> String { l == .zh ? "正在接入监看…" : "Connecting to monitor…" }
+    static func observerWatching(_ l: Language) -> String { l == .zh ? "正在监看通话" : "Monitoring the call" }
+    static func observerTitle(_ l: Language) -> String { l == .zh ? "监看通话" : "Monitor call" }
+    static func observerSpeak(_ l: Language) -> String { l == .zh ? "开麦说话" : "Speak" }
+    static func observerStopSpeak(_ l: Language) -> String { l == .zh ? "关麦（仅听）" : "Stop speaking" }
+    static func observerLeave(_ l: Language) -> String { l == .zh ? "结束监看" : "Stop monitoring" }
+    static func observerForceEnd(_ l: Language) -> String { l == .zh ? "强制结束通话" : "Force-end call" }
+    static func observerNoVideo(_ l: Language) -> String { l == .zh ? "（未共享画面）" : "(no video shared)" }
 
     // MARK: 信号强弱（通话中网络状态条；来自 WebRTC 实测往返时延）
 

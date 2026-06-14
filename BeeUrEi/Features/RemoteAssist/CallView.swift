@@ -8,6 +8,7 @@ struct CallView: View {
     @State private var showReport = false
     @State private var showHangupConfirm = false   // 盲人挂断防呆
     @State private var showMuteConfirm = false      // 盲人静音防呆（取消静音不需确认）
+    @State private var showForceEndConfirm = false  // 管理员旁观：强制结束他人通话二次确认
     @State private var controlsVisible = true       // 协助者全屏控件显隐
     @State private var autoHide: Task<Void, Never>?
     @Environment(\.scenePhase) private var scenePhase
@@ -37,7 +38,11 @@ struct CallView: View {
 
     var body: some View {
         Group {
-            if model.role == .helper { helperFullScreen } else { blindLayout }
+            switch model.role {
+            case .adminObserver: observerLayout
+            case .helper: helperFullScreen
+            default: blindLayout
+            }
         }
         .confirmationDialog(CallStrings.reportDialogTitle(lang), isPresented: $showReport, titleVisibility: .visible) {
             ForEach(CallStrings.reportReasons(lang), id: \.self) { reason in
@@ -56,6 +61,11 @@ struct CallView: View {
             Button(CallStrings.mute(lang), role: .destructive) { model.setMuted(true) }
             Button(CallStrings.cancel(lang), role: .cancel) {}
         } message: { Text(CallStrings.muteConfirmMessage(lang)) }
+        // 管理员旁观：强制结束他人通话需二次确认（参与方会收到结束并已被告知正在监看）。
+        .alert(CallStrings.observerForceEnd(lang), isPresented: $showForceEndConfirm) {
+            Button(CallStrings.observerForceEnd(lang), role: .destructive) { model.forceEndObservedCall(); onClose() }
+            Button(CallStrings.cancel(lang), role: .cancel) {}
+        }
         // 对端请求录制 → 本端知情同意弹窗（必须明确选择，不允许下滑略过）。
         .sheet(isPresented: Binding(get: { model.incomingRecordRequest }, set: { if !$0 { model.respondToRecordRequest(false) } })) {
             RecordingConsentView { accepted in model.respondToRecordRequest(accepted) }
@@ -120,6 +130,7 @@ struct CallView: View {
             // 顶部渐隐遮罩（类 FaceTime）：信息浮于画面之上而不压一块生硬黑条。
             VStack(spacing: 6) {
                 NetworkStatusBar(callQuality: model.callQuality)
+                adminBanner // 合规告知：管理员正在监看（不可关闭）
                 HStack(spacing: 8) {
                     if let name = model.peerName, !name.isEmpty, model.remoteVideoFrames {
                         AvatarView(dataURL: model.peerAvatar, name: name, size: 24)
@@ -221,6 +232,25 @@ struct CallView: View {
         }
     }
 
+    /// 合规告知横幅：管理员正在监看本次通话——参与方不可关闭，盲人侧另有语音播报。
+    @ViewBuilder private var adminBanner: some View {
+        if model.adminObserving {
+            HStack(spacing: 8) {
+                Image(systemName: "eye.fill").font(.footnote.weight(.bold))
+                Text(CallStrings.adminObservingBanner(lang)).font(.footnote.weight(.bold))
+                if let n = model.adminObserverName, !n.isEmpty {
+                    Text("· \(n)").font(.footnote)
+                }
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .frame(maxWidth: .infinity)
+            .background(Color.beeDanger, in: Capsule())
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(model.adminObserverName.map { "\(CallStrings.adminObservingBanner(lang)) · \($0)" } ?? CallStrings.adminObservingBanner(lang))
+        }
+    }
+
     /// 点录制/停录（走 VM 的同意握手）。
     private func tapRecord() {
         if model.isRecording { model.stopRecording() } else { model.requestRecording() }
@@ -246,6 +276,7 @@ struct CallView: View {
     private var blindLayout: some View {
         VStack(spacing: 20) {
             NetworkStatusBar(callQuality: model.callQuality)
+            adminBanner // 合规告知：管理员正在监看（不可关闭，盲人侧已语音播报）
             if let name = model.peerName, !name.isEmpty {
                 AvatarView(dataURL: model.peerAvatar, name: name, size: 96)
                 Text(name).font(.headline)
@@ -332,6 +363,103 @@ struct CallView: View {
             }
         }
     }
+
+    // MARK: 管理员旁观：监看参与者音视频 + 可开麦说话 / 强制结束（合规：参与方已被告知并语音播报）
+
+    private var observerLayout: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            VStack(spacing: 0) {
+                VStack(spacing: 6) {
+                    NetworkStatusBar(callQuality: model.callQuality)
+                    HStack(spacing: 8) {
+                        Image(systemName: "eye.fill").font(.subheadline.weight(.bold))
+                        Text(model.statusText).font(.subheadline.weight(.semibold))
+                            .accessibilityAddTraits(.updatesFrequently)
+                    }
+                    .foregroundStyle(.white)
+                }
+                .padding(.top, 10).padding(.bottom, 12)
+                .frame(maxWidth: .infinity)
+
+                if model.observedPeers.isEmpty {
+                    Spacer()
+                    Text(CallStrings.observerConnecting(lang))
+                        .font(.headline).foregroundStyle(.white.opacity(0.8))
+                    Spacer()
+                } else {
+                    ScrollView {
+                        LazyVGrid(columns: observerColumns, spacing: 10) {
+                            ForEach(model.observedPeers) { peer in observerTile(peer) }
+                        }
+                        .padding(.horizontal, 10).padding(.bottom, 8)
+                    }
+                }
+
+                observerControls
+            }
+        }
+        .statusBarHidden(true)
+    }
+
+    private var observerColumns: [GridItem] {
+        model.observedPeers.count <= 1 ? [GridItem(.flexible())]
+            : [GridItem(.flexible(), spacing: 10), GridItem(.flexible())]
+    }
+
+    /// 单个被监看参与者的画面块：有画面则渲染视频，否则显示头像 + "未共享画面"。
+    private func observerTile(_ peer: CallViewModel.ObservedPeer) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.06))
+            #if canImport(WebRTC)
+            if peer.hasVideo, let engine = model.media as? WebRTCMediaEngine {
+                ObserverVideoView(engine: engine, peerId: peer.id)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+            #endif
+            if !peer.hasVideo {
+                VStack(spacing: 8) {
+                    AvatarView(dataURL: nil, name: peer.name, size: 64)
+                    Text(CallStrings.observerNoVideo(lang))
+                        .font(.caption).foregroundStyle(.white.opacity(0.7))
+                }
+            }
+            VStack {
+                Spacer()
+                HStack(spacing: 6) {
+                    Text(peer.name).font(.caption.weight(.semibold)).foregroundStyle(.white)
+                    Spacer()
+                }
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .background(LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .top, endPoint: .bottom))
+            }
+        }
+        .frame(height: model.observedPeers.count <= 1 ? 360 : 220)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(peer.name) · \(peer.hasVideo ? CallStrings.showingPeerVideo(lang) : CallStrings.observerNoVideo(lang))")
+    }
+
+    private var observerControls: some View {
+        HStack(spacing: 36) {
+            // 开麦/关麦：旁观默认静音"仅听"，需要时开麦对参与者说话（双方都听得到）。
+            circleButton(model.muted ? "mic.slash.fill" : "mic.fill",
+                         label: model.muted ? CallStrings.observerSpeak(lang) : CallStrings.observerStopSpeak(lang),
+                         tint: model.muted ? Color.white.opacity(0.22) : Color.beeHoney) {
+                model.setMuted(!model.muted)
+            }
+            // 结束监看：仅离场，不影响参与者通话。
+            circleButton("eye.slash.fill", label: CallStrings.observerLeave(lang), tint: Color.white.opacity(0.22)) {
+                model.hangUp(); onClose()
+            }
+            // 强制结束整通通话（二次确认）。
+            circleButton("phone.down.fill", label: CallStrings.observerForceEnd(lang), tint: Color.beeDanger) {
+                showForceEndConfirm = true
+            }
+        }
+        .padding(.top, 18).padding(.bottom, 36)
+        .frame(maxWidth: .infinity)
+    }
 }
 
 #if canImport(WebRTC)
@@ -364,5 +492,19 @@ struct RemoteVideoView: UIViewRepresentable {
             DispatchQueue.main.async { self.onFrames() }
         }
     }
+}
+
+/// 渲染某个被监看参与者的远端视频（管理员旁观侧）。与主通道隔离的旁观 PC 提供画面。
+struct ObserverVideoView: UIViewRepresentable {
+    let engine: WebRTCMediaEngine
+    let peerId: String
+
+    func makeUIView(context: Context) -> RTCMTLVideoView {
+        let view = RTCMTLVideoView()
+        view.videoContentMode = .scaleAspectFill
+        engine.setObserverRenderer(view, for: peerId)
+        return view
+    }
+    func updateUIView(_ uiView: RTCMTLVideoView, context: Context) {}
 }
 #endif

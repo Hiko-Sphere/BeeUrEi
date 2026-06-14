@@ -286,6 +286,23 @@ struct ReportInfo: Codable, Sendable, Identifiable {
     let targetName: String?
 }
 
+/// 进行中的一通通话（管理员实时总览/旁观用）。
+struct ActiveCallInfo: Codable, Sendable, Identifiable {
+    let callId: String
+    let startedAt: Double
+    let durationSec: Int
+    let hasAdminObserver: Bool
+    let members: [Member]
+    var id: String { callId }
+    struct Member: Codable, Sendable, Identifiable {
+        let userId: String
+        let role: String
+        let name: String?
+        let online: Bool
+        var id: String { userId }
+    }
+}
+
 enum APIError: Error {
     case server(String)
     case decoding
@@ -449,6 +466,19 @@ struct APIClient {
         let data = try await authedGet("/api/admin/reports", token: token)
         guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.decoding }
         return r.reports
+    }
+
+    /// 进行中通话实时总览（供管理员旁观/强制结束）。
+    func adminActiveCalls(token: String) async throws -> [ActiveCallInfo] {
+        struct R: Codable { let calls: [ActiveCallInfo] }
+        let data = try await authedGet("/api/admin/calls/active", token: token)
+        guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.decoding }
+        return r.calls
+    }
+
+    /// 强制结束某通话（违规处置）。
+    func adminEndCall(token: String, callId: String) async throws {
+        _ = try await authedSend("POST", "/api/admin/calls/\(callId)/end", token: token)
     }
 
     func setUserStatus(token: String, userId: String, status: String) async throws {

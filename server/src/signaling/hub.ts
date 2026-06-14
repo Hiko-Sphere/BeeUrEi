@@ -6,6 +6,7 @@ export interface Member {
   role: string
   callId: string
   joinedAt?: number // 加入房间时刻（ms）；用于活跃通话"已通话时长"。register 时由 ws 层补。
+  caps?: string[]   // 客户端能力位（如 'adminObserver'）；仅当房间所有参与者都支持时才允许管理员旁观，保护旧版 App。
 }
 
 /// 一通进行中的通话（供管理员实时总览）。

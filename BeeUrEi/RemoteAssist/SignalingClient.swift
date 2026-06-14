@@ -7,6 +7,7 @@ protocol Signaling: AnyObject {
     var onClose: (() -> Void)? { get set }
     func connect(token: String, baseURL: URL)
     func join(callId: String, role: String)
+    func joinAsObserver(callId: String) // 管理员旁观：role=admin, observe=true（合规监管，会通知双方）
     func videoGate(on: Bool)
     func end()
     func send(_ obj: [String: Any])
@@ -41,7 +42,9 @@ final class SignalingClient: Signaling {
         }
     }
 
-    func join(callId: String, role: String) { send(["type": "join", "callId": callId, "role": role]) }
+    // caps：声明本端支持管理员旁观——服务端据此门控（仅当通话双方都支持时才允许管理员旁观，保护旧版 App）。
+    func join(callId: String, role: String) { send(["type": "join", "callId": callId, "role": role, "caps": ["adminObserver"]]) }
+    func joinAsObserver(callId: String) { send(["type": "join", "callId": callId, "role": "admin", "observe": true, "caps": ["adminObserver"]]) }
     func videoGate(on: Bool) { send(["type": "video-gate", "on": on]) }
     func end() { send(["type": "end"]) }
 

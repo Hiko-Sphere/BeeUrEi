@@ -11,8 +11,10 @@ private final class MockSignaling: Signaling {
     var sent: [[String: Any]] = []
     var endCount = 0
     var closeCount = 0
+    var observerJoins: [String] = []
     func connect(token: String, baseURL: URL) {}
     func join(callId: String, role: String) { joined.append((callId, role)) }
+    func joinAsObserver(callId: String) { observerJoins.append(callId) }
     func videoGate(on: Bool) { videoGates.append(on) }
     func end() { endCount += 1 }
     func send(_ obj: [String: Any]) { sent.append(obj) }
@@ -44,6 +46,14 @@ private final class MockMediaEngine: MediaEngine {
     func setTorch(_ on: Bool) { torch = on }
     func setZoom(_ factor: Double) { zoom = factor }
     func stop() { stopCount += 1 }
+    var onObserverLocalDescription: ((String, String, String) -> Void)?
+    var onObserverLocalCandidate: ((String, String, String?, Int32) -> Void)?
+    var onObserverRemoteVideoTrack: ((String) -> Void)?
+    var observerPeers: [(id: String, offer: Bool)] = []
+    func addObserverPeer(_ peerId: String, offer: Bool) { observerPeers.append((peerId, offer)) }
+    func handleObserverDescription(from peerId: String, type: String, sdp: String) {}
+    func handleObserverCandidate(from peerId: String, candidate: String, sdpMid: String?, sdpMLineIndex: Int32) {}
+    func removeObserverPeer(_ peerId: String) {}
 }
 
 @MainActor
@@ -130,6 +140,22 @@ final class CallViewModelTests: XCTestCase {
         XCTAssertEqual(signaling.endCount, 1)
         XCTAssertEqual(signaling.closeCount, 1)
         XCTAssertEqual(media.stopCount, 1)
+    }
+
+    func testObserverLeaveDoesNotEndParticipantsCall() {
+        // 安全攸关：管理员旁观者「结束监看」/界面消失只应离场，绝不向参与者发 end 结束他人通话（见复审 LC-1）。
+        let vm = makeVM(role: .adminObserver)
+        vm.hangUp()
+        XCTAssertEqual(signaling.endCount, 0)   // 不发 end
+        XCTAssertEqual(media.stopCount, 1)      // 但本端媒体/信令照常释放
+        XCTAssertEqual(signaling.closeCount, 1)
+    }
+
+    func testParticipantHangUpEndsCall() {
+        // 对照：普通参与者挂断必须发 end，双方收线。
+        let vm = makeVM(role: .blind)
+        vm.hangUp()
+        XCTAssertEqual(signaling.endCount, 1)
     }
 
     func testVideoGateStatusFollowsPeerState() {

@@ -8,10 +8,14 @@ struct AdminHomeView: View {
     @State private var users: [AccountInfo] = []
     @State private var reports: [ReportInfo] = []
     @State private var recConfig: RecordingConfig?
+    @State private var activeCalls: [ActiveCallInfo] = []   // 进行中通话实时总览（5s 轮询）
+    @State private var observingCallId: String?              // 正在旁观的通话（驱动全屏 CallView）
+    @State private var forceEndTarget: String?               // 待确认强制结束的通话
     @State private var errorText: String?
     @State private var loading = false
     @State private var busyIds: Set<String> = []   // 在途的封禁/解封/处理目标，防重复点击竞态（见审查 #1）
     @State private var savingRec = false             // 录制配置写入中，防两个开关并发覆盖（见审查 #2）
+    @State private var livePoll: Task<Void, Never>?  // 进行中通话轮询任务（界面可见时运行）
 
     @State private var api = APIClient()
     private var lang: Language { FeatureSettings().language }
@@ -30,7 +34,10 @@ struct AdminHomeView: View {
                     LabeledContent(lang == .zh ? "用户总数" : "Total users", value: "\(users.count)")
                     LabeledContent(lang == .zh ? "已封禁" : "Banned", value: "\(bannedCount)")
                     LabeledContent(lang == .zh ? "待处理举报" : "Open reports", value: "\(openReports)")
+                    LabeledContent(lang == .zh ? "进行中通话" : "Live calls", value: "\(activeCalls.count)")
                 }
+
+                liveCallsSection
 
                 Section((lang == .zh ? "用户（\(users.count)）" : "Users (\(users.count))")) {
                     ForEach(users) { u in
@@ -104,7 +111,78 @@ struct AdminHomeView: View {
             .refreshable { await load() }
             .overlay { if loading && users.isEmpty { ProgressView() } }
             .task { await load() }
+            .onAppear { startLivePolling() }
+            .onDisappear { livePoll?.cancel(); livePoll = nil }
+            // 旁观某通话：全屏 CallView（合规：参与方会收到"管理员正在监看"横幅 + 语音）。
+            .fullScreenCover(isPresented: Binding(get: { observingCallId != nil }, set: { if !$0 { observingCallId = nil } })) {
+                if let cid = observingCallId {
+                    CallView(role: .adminObserver, callId: cid) {
+                        observingCallId = nil
+                        Task { await refreshActiveCalls() }
+                    }
+                }
+            }
+            // 强制结束二次确认。
+            .alert(lang == .zh ? "强制结束通话？" : "Force-end this call?",
+                   isPresented: Binding(get: { forceEndTarget != nil }, set: { if !$0 { forceEndTarget = nil } })) {
+                Button(lang == .zh ? "强制结束" : "Force-end", role: .destructive) {
+                    if let cid = forceEndTarget { Task { await forceEnd(cid) } }
+                    forceEndTarget = nil
+                }
+                Button(lang == .zh ? "取消" : "Cancel", role: .cancel) { forceEndTarget = nil }
+            } message: {
+                Text(lang == .zh ? "双方会立即收线。" : "Both parties will be disconnected immediately.")
+            }
         }
+    }
+
+    // MARK: 进行中通话（实时总览 + 旁观 + 强制结束）
+
+    @ViewBuilder private var liveCallsSection: some View {
+        Section {
+            if activeCalls.isEmpty {
+                Text(lang == .zh ? "当前没有进行中的通话" : "No calls in progress").foregroundStyle(.secondary)
+            } else {
+                ForEach(activeCalls) { call in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(call.members.map { $0.name ?? $0.userId }.joined(separator: " · "))
+                                .font(.subheadline.weight(.semibold))
+                            Spacer()
+                            Text(fmtDuration(call.durationSec))
+                                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        }
+                        Text(call.members.map { roleDisplayName($0.role, lang) }.joined(separator: ", "))
+                            .font(.caption).foregroundStyle(.secondary)
+                        HStack(spacing: 12) {
+                            if call.hasAdminObserver {
+                                Label(lang == .zh ? "已有管理员监看" : "Being monitored", systemImage: "eye.fill")
+                                    .font(.caption).foregroundStyle(Color.beeHoney)
+                            } else {
+                                Button { observingCallId = call.callId } label: {
+                                    Label(lang == .zh ? "监看" : "Monitor", systemImage: "eye")
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                            Button(role: .destructive) { forceEndTarget = call.callId } label: {
+                                Label(lang == .zh ? "强制结束" : "Force-end", systemImage: "phone.down.fill")
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(busyIds.contains(call.callId))
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        } header: {
+            Text(lang == .zh ? "进行中的通话（\(activeCalls.count)）" : "Live calls (\(activeCalls.count))")
+        } footer: {
+            Text(lang == .zh ? "监看时双方会看到「管理员正在监看」提示并收到语音播报。" : "When monitoring, both parties see an ‘admin is monitoring’ notice and hear a voice announcement.")
+        }
+    }
+
+    private func fmtDuration(_ s: Int) -> String {
+        String(format: "%d:%02d", s / 60, s % 60)
     }
 
     /// access token 过期(401)统一处理：登出回登录页，而非把鉴权过期误报成业务/权限错误（见复审 #3）。
@@ -123,7 +201,9 @@ struct AdminHomeView: View {
             let u = try await api.adminUsers(token: token)
             let r = try await api.adminReports(token: token)
             let c = try? await api.recordingConfig(token: token)
+            let calls = try? await api.adminActiveCalls(token: token)
             users = u; reports = r; recConfig = c
+            if let calls { activeCalls = calls }
             errorText = nil
         } catch {
             if handleAuthError(error) { return }
@@ -132,6 +212,38 @@ struct AdminHomeView: View {
     }
 
     private var actionFailed: String { lang == .zh ? "操作失败" : "Action failed" }
+
+    /// 仅刷新进行中通话（轻量，5s 轮询调用）——失败静默，不覆盖既有错误/数据。
+    private func refreshActiveCalls() async {
+        guard let token = session.token else { return }
+        if let calls = try? await api.adminActiveCalls(token: token) { activeCalls = calls }
+    }
+
+    /// 进行中通话轮询：界面可见时每 5s 刷新一次，离开即停。
+    private func startLivePolling() {
+        livePoll?.cancel()
+        livePoll = Task {
+            while !Task.isCancelled {
+                await refreshActiveCalls()
+                try? await Task.sleep(for: .seconds(5))
+            }
+        }
+    }
+
+    /// 强制结束某通话（双方收线）。
+    private func forceEnd(_ callId: String) async {
+        guard let token = session.token, !busyIds.contains(callId) else { return }
+        busyIds.insert(callId); defer { busyIds.remove(callId) }
+        do {
+            try await api.adminEndCall(token: token, callId: callId)
+            await refreshActiveCalls()
+        } catch {
+            if handleAuthError(error) { return }
+            if case let APIError.server(msg) = error {
+                errorText = msg == "not_active" ? (lang == .zh ? "该通话已结束" : "That call already ended") : actionFailed
+            } else { errorText = actionFailed }
+        }
+    }
 
     private func setRec(enabled: Bool? = nil, consent: Bool? = nil) async {
         guard let token = session.token, !savingRec else { return } // 串行化，防两个开关并发覆盖（见审查 #2）

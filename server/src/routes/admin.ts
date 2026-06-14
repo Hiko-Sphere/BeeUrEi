@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import { type Store, type Role, type AdminAuditEntry, publicUser } from '../db/store'
+import { type Store, type Role, type AdminAuditEntry, type FeatureKey, FEATURE_KEYS, publicUser } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { hashPassword } from '../auth/passwords'
 import { normalizePhone } from '../auth/apple'
@@ -220,6 +220,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
         passkeyCount: passkeys.length,
         sessions: store.countSessionsForUser(id, now),
         online: presence.isAvailable(id, now),
+        featureOverrides: u.featureOverrides ?? {}, // 单用户功能覆盖（仅记录被强制关停的键）
       },
       links,
       blocking,
@@ -490,6 +491,29 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     const updated = store.updateUser(id, patch)
     audit(req.user!.sub, 'user.edit', 'user', id, changed.join(', '))
     return { user: publicUser(updated!) }
+  })
+
+  // —— 单用户功能覆盖（对某个用户单独关停某功能；精准处置滥用者，不波及全站）——
+  // body.overrides：某键 false=对该用户强制关；true/null=清除覆盖（随全站）。逐键合并。
+  const featuresPatchSchema = z.object({
+    overrides: z.record(z.enum(FEATURE_KEYS as [FeatureKey, ...FeatureKey[]]), z.boolean().nullable()),
+  })
+  app.put('/api/admin/users/:id/features', adminOnly, async (req, reply) => {
+    const parsed = featuresPatchSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const id = (req.params as { id: string }).id
+    const target = store.findById(id)
+    if (!target) return reply.code(404).send({ error: 'not_found' })
+    const next: Partial<Record<FeatureKey, boolean>> = { ...(target.featureOverrides ?? {}) }
+    const changed: string[] = []
+    for (const [k, v] of Object.entries(parsed.data.overrides) as [FeatureKey, boolean | null][]) {
+      if (v === false) { next[k] = false; changed.push(`${k}:off`) }
+      else { delete next[k]; changed.push(`${k}:clear`) } // true/null = 跟随全站
+    }
+    const overrides = Object.keys(next).length ? next : undefined
+    const updated = store.updateUser(id, { featureOverrides: overrides })
+    audit(req.user!.sub, 'user.features', 'user', id, changed.join(', '))
+    return { user: publicUser(updated!), featureOverrides: updated!.featureOverrides ?? {} }
   })
 
   // —— 管理员代设密码（客服找回；setupVersion 递增使旧令牌失效并撤销会话）——

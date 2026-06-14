@@ -114,12 +114,14 @@ const I18N = {
     maintenance: '维护模式', maintActive: '启用维护模式', maintDesc: '开启后所有功能写操作返回 503，App 显示维护横幅；登录与后台不受影响。', maintMsg: '维护提示',
     contentFilterTitle: '内容过滤（防违规违法）', cfEnabled: '启用内容过滤', cfDesc: '命中违禁词的消息/群名/昵称会被拒收。每行一个词，大小写不敏感，子串匹配。默认空=不生效。',
     cfTerms: '违禁词（每行一个）', saveBtn: '保存', err_content_blocked: '内容含违禁词，已拦截', err_maintenance: '系统维护中',
+    // v6：单用户功能覆盖
+    featOverrides: '功能覆盖（仅此用户）', featOverridesDesc: '对该用户单独关停某功能（精准处置滥用者，不影响其他人）。开=随全站，关=对其强制禁用。', featuresSaved: '功能覆盖已更新',
     auditActions: {
       'user.role': '修改角色', 'user.disable': '封禁用户', 'user.enable': '解封用户',
       'user.verifyEmail': '标记邮箱已验证', 'user.unverifyEmail': '撤销邮箱验证', 'user.unlinkApple': '解绑 Apple',
       'user.clearPasskeys': '清除 Passkey', 'user.forceLogout': '强制下线', 'report.resolve': '处理举报',
       'report.dismiss': '审核·忽略', 'report.warn': '审核·警告', 'report.suspend': '审核·暂停', 'report.ban': '审核·封禁',
-      'config.update': '修改全站配置', 'user.edit': '编辑资料', 'user.resetPassword': '重设密码', 'user.delete': '删除用户',
+      'config.update': '修改全站配置', 'user.edit': '编辑资料', 'user.resetPassword': '重设密码', 'user.delete': '删除用户', 'user.features': '功能覆盖',
     },
     roles: { blind: '视障用户', helper: '协助者', family: '亲友', admin: '管理员', developer: '开发者' },
     callStatus: { answered: '已接通', declined: '已拒绝', missed: '未接', ended: '已结束', ongoing: '进行中', ringing: '振铃中' },
@@ -208,12 +210,14 @@ const I18N = {
     maintenance: 'Maintenance mode', maintActive: 'Enable maintenance mode', maintDesc: 'When on, all feature writes return 503 and the app shows a maintenance banner; sign-in and admin are unaffected.', maintMsg: 'Maintenance message',
     contentFilterTitle: 'Content filter (block violations)', cfEnabled: 'Enable content filter', cfDesc: 'Messages/group names/display names containing a banned term are rejected. One term per line, case-insensitive, substring match. Empty = no effect.',
     cfTerms: 'Banned terms (one per line)', saveBtn: 'Save', err_content_blocked: 'Content contains a banned term', err_maintenance: 'Under maintenance',
+    // v6: per-user feature overrides
+    featOverrides: 'Feature overrides (this user)', featOverridesDesc: 'Disable specific features for just this user (precise abuse handling, no global impact). On = follow global, Off = force-disabled for them.', featuresSaved: 'Feature overrides updated',
     auditActions: {
       'user.role': 'Change role', 'user.disable': 'Ban user', 'user.enable': 'Unban user',
       'user.verifyEmail': 'Mark email verified', 'user.unverifyEmail': 'Unverify email', 'user.unlinkApple': 'Unlink Apple',
       'user.clearPasskeys': 'Clear passkeys', 'user.forceLogout': 'Force sign-out', 'report.resolve': 'Resolve report',
       'report.dismiss': 'Moderate · dismiss', 'report.warn': 'Moderate · warn', 'report.suspend': 'Moderate · suspend', 'report.ban': 'Moderate · ban',
-      'config.update': 'Update site config', 'user.edit': 'Edit profile', 'user.resetPassword': 'Reset password', 'user.delete': 'Delete user',
+      'config.update': 'Update site config', 'user.edit': 'Edit profile', 'user.resetPassword': 'Reset password', 'user.delete': 'Delete user', 'user.features': 'Feature override',
     },
     roles: { blind: 'Blind / low-vision', helper: 'Helper', family: 'Family', admin: 'Admin', developer: 'Developer' },
     callStatus: { answered: 'Answered', declined: 'Declined', missed: 'Missed', ended: 'Ended', ongoing: 'Ongoing', ringing: 'Ringing' },
@@ -734,6 +738,12 @@ async function openUserDrawer(uid) {
         ${editing ? editHTML() : infoHTML()}
         ${editing ? '' : `
         <div class="section"><h3>${esc(t('support'))}</h3><div class="support">${supportButtons()}</div></div>
+        <div class="section"><h3>${esc(t('featOverrides'))}</h3>
+          <p class="section-sub">${esc(t('featOverridesDesc'))}</p>
+          <div class="card">${FEATURE_ORDER.map((k) => `
+            <div class="form-row"><div class="lab">${esc(featLabel(k))}</div>
+              <label class="switch"><input type="checkbox" data-fov="${esc(k)}" ${(u.featureOverrides || {})[k] === false ? '' : 'checked'}/><span class="track"></span></label></div>`).join('')}</div>
+        </div>
         <div class="section"><h3>${esc(t('warnings'))} (${warnings.length})</h3><div class="mini-list">${warningsHTML}</div></div>
         <div class="section"><h3>${esc(t('linkedRelations'))} (${(d.links || []).length})</h3><div class="mini-list">${linksHTML}</div></div>
         <div class="section"><h3>${esc(t('blockingLabel'))} (${(d.blocking || []).length}) · ${esc(t('blockedByLabel'))} (${(d.blockedBy || []).length})</h3><div class="mini-list">${blockingHTML}${blockedByHTML}</div></div>
@@ -751,6 +761,8 @@ async function openUserDrawer(uid) {
           if (b.dataset.sup === 'edit') { editing = true; paint(); return; }
           onSupport(b.dataset.sup, u, paint, close);
         }));
+        body.querySelectorAll('[data-fov]').forEach((c) => c.addEventListener('change', (e) =>
+          onFeatureOverride(u, e.target.dataset.fov, e.target.checked, e.target)));
       }
     }
     paint();
@@ -806,6 +818,14 @@ async function onSupport(action, u, repaint, closeDrawer) {
   } catch (err) { toast(errText(err.code), 'error'); }
 }
 
+// 单用户功能覆盖：勾选=随全站(清除覆盖→null)，取消勾选=对该用户强制关(false)。乐观，失败回滚。
+async function onFeatureOverride(u, key, enabled, el) {
+  try {
+    const r = await api(`/api/admin/users/${u.id}/features`, { method: 'PUT', body: { overrides: { [key]: enabled ? null : false } } });
+    u.featureOverrides = r.featureOverrides || {};
+    toast(t('featuresSaved'), 'success');
+  } catch (err) { if (el) el.checked = !enabled; toast(errText(err.code), 'error'); }
+}
 // 保存用户资料编辑：只提交相对当前值有变化的字段（空串=清除→null）。
 async function onSaveEdit(u, body, done) {
   const val = (id) => (body.querySelector('#' + id)?.value ?? '').trim();

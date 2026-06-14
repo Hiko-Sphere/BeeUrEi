@@ -25,6 +25,9 @@ export interface User {
   usernameCustomized?: boolean // 用户是否设置过自定义用户名（自动生成的 user_/apple_ 为 false）。为 false 时客户端提示设置唯一 userid。
   legalConsentVersion?: string // 用户同意的隐私政策/使用条款版本（如 "2.0"）。注册须同意方可完成（GDPR 可证明同意）。
   legalConsentAt?: number // 同意时间戳（ms）。
+  // 单用户功能覆盖（管理员可对**某个用户**单独关停某功能，用于精准处置滥用者，不波及全站）。
+  // 仅能"强制关"：某键为 false 即对该用户关闭；缺省/为 true 则随全站开关。见 effectiveFeatures。
+  featureOverrides?: Partial<Record<FeatureKey, boolean>>
 }
 
 /// Passkey（WebAuthn 凭据）：一个用户可注册多把。只存公钥与计数器，私钥永不离开设备安全区。
@@ -209,6 +212,14 @@ export function mergeAppConfig(base: AppConfig, patch: AppConfigPatch): AppConfi
     maintenance: { ...base.maintenance, ...(patch.maintenance ?? {}) },
     contentFilter: { ...base.contentFilter, ...(patch.contentFilter ?? {}) },
   })
+}
+
+/// 某用户的**有效功能开关** = 全站开关 AND 该用户未被单独强制关停。
+/// 覆盖只能"force off"（override 某键为 false 即关）；不能反向打开全站已关的功能。
+export function effectiveFeatures(cfg: AppConfig, overrides?: Partial<Record<FeatureKey, boolean>>): Record<FeatureKey, boolean> {
+  const out = { ...cfg.features }
+  if (overrides) for (const k of FEATURE_KEYS) if (overrides[k] === false) out[k] = false
+  return out
 }
 
 /// 内容过滤检查：返回命中的违禁词（小写子串匹配，大小写不敏感），未命中返回 null。

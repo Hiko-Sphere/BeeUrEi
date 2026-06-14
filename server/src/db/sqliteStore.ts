@@ -11,6 +11,14 @@ const nodeRequire = createRequire(import.meta.url)
 const sqliteModuleName = ['node', 'sqlite'].join(':')
 const { DatabaseSync } = nodeRequire(sqliteModuleName) as { DatabaseSync: typeof DatabaseSyncType }
 
+/// 容错 JSON 解析：损坏/非法 JSON（如直接改库或磁盘损坏）返回 fallback 而非抛出，
+/// 避免一行坏数据让整条请求 500。配置类用 fallback=默认对象，可空字段用 undefined。
+function parseJsonOr<T>(raw: unknown, fallback: T): T {
+  if (typeof raw !== 'string' || raw === '') return fallback
+  try { return (JSON.parse(raw) as T) ?? fallback } catch { return fallback }
+}
+function parseJsonOrUndefined<T>(raw: unknown): T | undefined { return parseJsonOr<T | undefined>(raw, undefined) }
+
 /// SQLite 持久化（用 Node 内置 `node:sqlite`，零原生依赖；需 --experimental-sqlite）。
 /// 与 Store 接口对齐，可平滑替换 JSON 文件存储。
 export class SqliteStore implements Store {
@@ -260,8 +268,8 @@ export class SqliteStore implements Store {
   // MARK: recordings + config
   getRecordingConfig(): RecordingConfig {
     const row = this.db.prepare('SELECT v FROM config WHERE k = ?').get('recording') as { v: string } | undefined
-    if (!row) return { enabled: false, retentionDays: 7, requireConsent: true }
-    return JSON.parse(row.v) as RecordingConfig
+    const dflt: RecordingConfig = { enabled: false, retentionDays: 7, requireConsent: true }
+    return row ? parseJsonOr<RecordingConfig>(row.v, dflt) : dflt
   }
   setRecordingConfig(patch: Partial<RecordingConfig>): RecordingConfig {
     const next = { ...this.getRecordingConfig(), ...patch }
@@ -288,7 +296,7 @@ export class SqliteStore implements Store {
   }
   getAppConfig(): AppConfig {
     const row = this.db.prepare('SELECT v FROM config WHERE k = ?').get('app') as { v: string } | undefined
-    return normalizeAppConfig(row ? (JSON.parse(row.v) as Partial<AppConfig>) : null)
+    return normalizeAppConfig(row ? parseJsonOr<Partial<AppConfig> | null>(row.v, null) : null)
   }
   setAppConfig(patch: AppConfigPatch): AppConfig {
     const next = mergeAppConfig(this.getAppConfig(), patch)
@@ -437,7 +445,7 @@ export class SqliteStore implements Store {
     return { id: r.id, name: r.name, ownerId: r.ownerId, memberIds, createdAt: Number(r.createdAt) }
   }
   private toUser(r: any): User {
-    return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt), language: r.language ?? undefined, tokenVersion: r.tokenVersion != null ? Number(r.tokenVersion) : 0, email: r.email ?? undefined, emailVerified: r.emailVerified != null ? Number(r.emailVerified) === 1 : undefined, voipToken: r.voipToken ?? undefined, avatar: r.avatar ?? undefined, apnsToken: r.apnsToken ?? undefined, phone: r.phone ?? undefined, appleSub: r.appleSub ?? undefined, usernameCustomized: r.usernameCustomized != null ? Number(r.usernameCustomized) === 1 : undefined, legalConsentVersion: r.legalConsentVersion ?? undefined, legalConsentAt: r.legalConsentAt != null ? Number(r.legalConsentAt) : undefined, featureOverrides: r.featureOverrides ? (JSON.parse(r.featureOverrides) ?? undefined) : undefined }
+    return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt), language: r.language ?? undefined, tokenVersion: r.tokenVersion != null ? Number(r.tokenVersion) : 0, email: r.email ?? undefined, emailVerified: r.emailVerified != null ? Number(r.emailVerified) === 1 : undefined, voipToken: r.voipToken ?? undefined, avatar: r.avatar ?? undefined, apnsToken: r.apnsToken ?? undefined, phone: r.phone ?? undefined, appleSub: r.appleSub ?? undefined, usernameCustomized: r.usernameCustomized != null ? Number(r.usernameCustomized) === 1 : undefined, legalConsentVersion: r.legalConsentVersion ?? undefined, legalConsentAt: r.legalConsentAt != null ? Number(r.legalConsentAt) : undefined, featureOverrides: parseJsonOrUndefined(r.featureOverrides) }
   }
   private toLink(r: any): FamilyLink {
     return { id: r.id, ownerId: r.ownerId, memberId: r.memberId, relation: r.relation, isEmergency: Number(r.isEmergency) === 1, phone: r.phone ?? undefined, createdAt: Number(r.createdAt), status: (r.status as LinkStatus) ?? undefined, requestedBy: r.requestedBy ?? undefined }
@@ -446,6 +454,6 @@ export class SqliteStore implements Store {
     return { id: r.id, reporterId: r.reporterId, targetUserId: r.targetUserId, callId: r.callId ?? undefined, reason: r.reason, status: r.status as ReportStatus, createdAt: Number(r.createdAt), decision: r.decision ?? undefined, resolvedBy: r.resolvedBy ?? undefined, resolvedAt: r.resolvedAt != null ? Number(r.resolvedAt) : undefined }
   }
   private toRecording(r: any): Recording {
-    return { id: r.id, callId: r.callId, ownerId: r.ownerId, consentBy: JSON.parse(r.consentBy ?? '[]'), reason: r.reason, recordedAt: Number(r.recordedAt) }
+    return { id: r.id, callId: r.callId, ownerId: r.ownerId, consentBy: parseJsonOr<string[]>(r.consentBy, []), reason: r.reason, recordedAt: Number(r.recordedAt) }
   }
 }

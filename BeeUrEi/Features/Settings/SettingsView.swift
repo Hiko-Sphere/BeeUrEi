@@ -155,6 +155,11 @@ struct SettingsView: View {
     @ViewBuilder private var accountSection: some View {
         Section(SettingsStrings.accountHeader(lang)) {
             NavigationLink(SettingsStrings.loginRegister(lang)) { LoginView() }
+            NavigationLink {
+                MyRecordingsView()
+            } label: {
+                Label(AccountStrings.myRecordings(lang), systemImage: "waveform.circle")
+            }
             NavigationLink(SettingsStrings.familyAndEmergency(lang)) { FamilyLinksView() }
         }
     }

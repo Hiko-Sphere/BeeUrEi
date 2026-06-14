@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import { type Store, isBlockedBetween, blockedUserIdSet } from '../db/store'
 import { requireAuth } from '../auth/rbac'
+import { requireFeature } from '../auth/featureGate'
 import { SignalingHub } from '../signaling/hub'
 import { PresenceRegistry } from '../assist/presence'
 import { rankHelpers, type Candidate } from '../assist/matcher'
@@ -99,7 +100,7 @@ export function registerAssistRoutes(
   })
 
   // 视障侧发起呼叫：登记 callId 与目标用户，供在线协助者/亲友轮询发现并加入（免推送前台会合）。
-  app.post('/api/assist/call', { preHandler: requireAuth() }, async (req, reply) => {
+  app.post('/api/assist/call', { preHandler: [requireAuth(), requireFeature(store, 'calls')] }, async (req, reply) => {
     const parsed = callSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const from = req.user!
@@ -215,7 +216,7 @@ export function registerAssistRoutes(
 
   // 视障侧广播一条公开求助：登记 callId + 粗粒度信息，供在线志愿者浏览/匹配并加入 callId 房间。
   // language 缺省取账号语言。重复广播（同一发起人同一 callId）幂等更新。
-  app.post('/api/assist/help/request', { preHandler: requireAuth() }, async (req, reply) => {
+  app.post('/api/assist/help/request', { preHandler: [requireAuth(), requireFeature(store, 'helpRequests')] }, async (req, reply) => {
     const parsed = helpRequestSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const me = store.findById(req.user!.sub)

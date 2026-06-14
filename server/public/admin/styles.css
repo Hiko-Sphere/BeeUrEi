@@ -270,3 +270,12 @@ tbody tr.clickable:hover { background: var(--surface-2); }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--text-faint); }
 .audit-detail { font-size: 12px; color: var(--text-dim); max-width: 320px; word-break: break-word; }
 .warn-mini .when { display: block; float: none; margin-top: 5px; }
+
+/* feature controls + user editor (v4) */
+.section-sub { margin: -2px 0 10px; font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+.form-row.locked { opacity: .9; }
+.edit-form { margin-top: 4px; }
+.edit-form .field { margin-bottom: 12px; }
+.edit-form .chk { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin: 4px 0 14px; }
+.danger-zone h3 { color: var(--danger); }
+.danger-zone { border-top: 1px solid var(--border); padding-top: 6px; }

@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import { type Store, type Role, type AdminAuditEntry, publicUser } from '../db/store'
 import { requireAuth } from '../auth/rbac'
+import { hashPassword } from '../auth/passwords'
+import { normalizePhone } from '../auth/apple'
 import type { PresenceRegistry } from '../assist/presence'
 
 const statusSchema = z.object({ status: z.enum(['active', 'disabled']) })
@@ -12,7 +14,12 @@ const moderateSchema = z.object({
   action: z.enum(['dismiss', 'warn', 'suspend', 'ban']),
   reason: z.string().trim().min(1).max(1000),
 })
-const configSchema = z.object({ registrationEnabled: z.boolean() })
+// 功能开关补丁：每个键可选（逐键合并）。安全攸关的 紧急/拉黑/举报 不在此列——刻意不可关停。
+const featuresSchema = z.object({
+  messaging: z.boolean(), calls: z.boolean(), helpRequests: z.boolean(), groups: z.boolean(),
+  familyLinks: z.boolean(), mediaUpload: z.boolean(), navigation: z.boolean(), sceneScan: z.boolean(),
+}).partial()
+const configSchema = z.object({ registrationEnabled: z.boolean(), features: featuresSchema }).partial()
 
 const SERVER_VERSION = '0.1.0'
 const START_MS = Date.now()
@@ -93,7 +100,8 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     }
   })
 
-  // 单个用户详情（含邮箱/手机/绑定关系/拉黑数/近期通话）——仅管理员审核可见。
+  // 单个用户详情——**全字段 + 全关联**，仅管理员可见。绝不外泄 passwordHash / 原始 token / appleSub 明文，
+  // 改以"是否绑定"的布尔呈现；其余字段（含 tokenVersion、合规版本、会话数）全量给出，便于审核与排障。
   app.get('/api/admin/users/:id', adminOnly, async (req, reply) => {
     const id = (req.params as { id: string }).id
     const u = store.findById(id)
@@ -111,6 +119,16 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       status: c.status,
       createdAt: c.createdAt,
     }))
+    // 拉黑：拆成"我拉黑了谁 / 谁拉黑了我"两向。
+    const involvingBlocks = store.blocksInvolving(id)
+    const blocking = involvingBlocks.filter((b) => b.blockerId === id).map((b) => ({ id: b.id, otherName: nameOf(b.blockedId), createdAt: b.createdAt }))
+    const blockedBy = involvingBlocks.filter((b) => b.blockedId === id).map((b) => ({ id: b.id, otherName: nameOf(b.blockerId), createdAt: b.createdAt }))
+    // 举报：该用户发起的 / 针对该用户的。
+    const allReports = store.allReports()
+    const reportsBy = allReports.filter((r) => r.reporterId === id).map((r) => ({ id: r.id, targetName: nameOf(r.targetUserId), reason: r.reason, status: r.status, decision: r.decision ?? null, createdAt: r.createdAt }))
+    const reportsAgainst = allReports.filter((r) => r.targetUserId === id).map((r) => ({ id: r.id, reporterName: nameOf(r.reporterId), reason: r.reason, status: r.status, decision: r.decision ?? null, createdAt: r.createdAt }))
+    const recordings = store.allRecordings().filter((r) => r.ownerId === id).map((r) => ({ id: r.id, callId: r.callId, reason: r.reason, recordedAt: r.recordedAt }))
+    const passkeys = store.passkeysForUser(id).map((p) => ({ id: p.id, deviceName: p.deviceName ?? null, createdAt: p.createdAt, counter: p.counter }))
     return {
       user: {
         ...publicUser(u),
@@ -120,12 +138,26 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
         emailVerified: !!u.emailVerified,
         phone: u.phone ?? null,
         appleLinked: !!u.appleSub,
-        passkeys: store.passkeysForUser(id).length,
+        usernameCustomized: !!u.usernameCustomized,
+        tokenVersion: u.tokenVersion ?? 0,
+        legalConsentVersion: u.legalConsentVersion ?? null,
+        legalConsentAt: u.legalConsentAt ?? null,
+        hasAvatar: !!u.avatar,
+        hasVoipToken: !!u.voipToken,
+        hasApnsToken: !!u.apnsToken,
+        passkeyCount: passkeys.length,
+        sessions: store.countSessionsForUser(id, now),
         online: presence.isAvailable(id, now),
       },
       links,
-      blockedCount: store.blocksInvolving(id).length,
+      blocking,
+      blockedBy,
+      blockedCount: involvingBlocks.length,
       recentCalls,
+      reportsBy,
+      reportsAgainst,
+      recordings,
+      passkeys,
       // 审核记录：该用户收到的警告（轻处置）历史，供审核员判断是否升级处置。
       warnings: store.warningsForUser(id).map((w) => ({
         id: w.id,
@@ -334,6 +366,92 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     return { user: publicUser(updated!), tokenVersion: updated!.tokenVersion ?? 0 }
   })
 
+  // —— 编辑用户资料（管理员对每个字段的直接控制）——
+  // 角色/状态仍走各自带"最后管理员"保护的专用端点，不在此重复，避免绕过防锁死。
+  const patchSchema = z.object({
+    displayName: z.string().trim().min(1).max(64),
+    username: z.string().trim().min(3).max(32),
+    email: z.string().email().max(254).nullable(),       // null = 清除邮箱
+    phone: z.string().trim().min(6).max(20).nullable(),  // null = 清除手机号
+    language: z.string().trim().min(2).max(8).nullable(),
+    clearAvatar: z.boolean(),
+  }).partial()
+  app.patch('/api/admin/users/:id', adminOnly, async (req, reply) => {
+    const parsed = patchSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const id = (req.params as { id: string }).id
+    const u = store.findById(id)
+    if (!u) return reply.code(404).send({ error: 'not_found' })
+    const d = parsed.data
+    if (Object.keys(d).length === 0) return reply.code(400).send({ error: 'invalid_input' })
+    const patch: Record<string, unknown> = {}
+    const changed: string[] = []
+    if (d.displayName !== undefined) { patch.displayName = d.displayName; changed.push('displayName') }
+    if (d.username !== undefined) {
+      if (!/^[A-Za-z0-9_.-]+$/.test(d.username)) return reply.code(400).send({ error: 'invalid_username' })
+      const taken = store.findByUsername(d.username)
+      if (taken && taken.id !== id) return reply.code(409).send({ error: 'username_taken' })
+      patch.username = d.username; patch.usernameCustomized = true; changed.push('username')
+    }
+    if (d.email !== undefined) {
+      if (d.email === null) { patch.email = undefined; patch.emailVerified = undefined; changed.push('email:cleared') }
+      else {
+        const norm = d.email.trim().toLowerCase()
+        const taken = store.findByEmail(norm)
+        if (taken && taken.id !== id) return reply.code(409).send({ error: 'email_taken' })
+        patch.email = norm; patch.emailVerified = false; changed.push('email') // 改邮箱即视为未验证，需另行标记/验证
+      }
+    }
+    if (d.phone !== undefined) {
+      if (d.phone === null) { patch.phone = undefined; changed.push('phone:cleared') }
+      else {
+        const np = normalizePhone(d.phone)
+        if (!np) return reply.code(400).send({ error: 'invalid_phone' })
+        const taken = store.findByPhone(np)
+        if (taken && taken.id !== id) return reply.code(409).send({ error: 'phone_taken' })
+        patch.phone = np; changed.push('phone')
+      }
+    }
+    if (d.language !== undefined) { patch.language = d.language ?? undefined; changed.push('language') }
+    if (d.clearAvatar === true) { patch.avatar = undefined; changed.push('avatar:cleared') }
+    if (changed.length === 0) return reply.code(400).send({ error: 'invalid_input' })
+    const updated = store.updateUser(id, patch)
+    audit(req.user!.sub, 'user.edit', 'user', id, changed.join(', '))
+    return { user: publicUser(updated!) }
+  })
+
+  // —— 管理员代设密码（客服找回；setupVersion 递增使旧令牌失效并撤销会话）——
+  const resetPwSchema = z.object({ newPassword: z.string().min(6).max(128) })
+  app.post('/api/admin/users/:id/reset-password', adminOnly, async (req, reply) => {
+    const parsed = resetPwSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const id = (req.params as { id: string }).id
+    const target = store.findById(id)
+    if (!target) return reply.code(404).send({ error: 'not_found' })
+    store.deleteRefreshTokensForUser(id) // 改密即撤销所有会话
+    store.updateUser(id, { passwordHash: hashPassword(parsed.data.newPassword), tokenVersion: (target.tokenVersion ?? 0) + 1 })
+    audit(req.user!.sub, 'user.resetPassword', 'user', id)
+    return { ok: true }
+  })
+
+  // —— 删除用户（高危）：级联清绑定/Passkey/会话，含"不能删自己/唯一活跃管理员"保护 ——
+  app.delete('/api/admin/users/:id', adminOnly, async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    if (id === req.user!.sub) return reply.code(400).send({ error: 'cannot_delete_self' })
+    const target = store.findById(id)
+    if (!target) return reply.code(404).send({ error: 'not_found' })
+    if (target.role === 'admin' && target.status === 'active' && activeAdminCount() <= 1) {
+      return reply.code(400).send({ error: 'last_admin_protected' })
+    }
+    for (const l of store.linksByOwner(id)) store.deleteLink(l.id)
+    for (const l of store.linksByMember(id)) store.deleteLink(l.id)
+    for (const pk of store.passkeysForUser(id)) store.deletePasskey(pk.id, id)
+    store.deleteRefreshTokensForUser(id)
+    store.deleteUser(id)
+    audit(req.user!.sub, 'user.delete', 'user', id, `username=${target.username}`)
+    return { ok: true }
+  })
+
   // —— 审计日志（不可抵赖）——
   // 后台所有有副作用的操作（改角色/封禁/审核处置/改配置等）的时间倒序流水，解析操作管理员显示名。
   app.get('/api/admin/audit', adminOnly, async (req) => {
@@ -351,10 +469,14 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
   app.get('/api/admin/config', adminOnly, async () => ({ config: store.getAppConfig() }))
 
   app.put('/api/admin/config', adminOnly, async (req, reply) => {
-    const parsed = configSchema.partial().safeParse(req.body)
-    if (!parsed.success || Object.keys(parsed.data).length === 0) return reply.code(400).send({ error: 'invalid_input' })
-    const next = store.setAppConfig(parsed.data)
-    audit(req.user!.sub, 'config.update', 'config', 'app', JSON.stringify(parsed.data))
+    const parsed = configSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const data = parsed.data
+    // 拒绝空补丁：既无 registrationEnabled，又无任何 feature 键。
+    const hasFeat = data.features && Object.keys(data.features).length > 0
+    if (data.registrationEnabled === undefined && !hasFeat) return reply.code(400).send({ error: 'invalid_input' })
+    const next = store.setAppConfig(data)
+    audit(req.user!.sub, 'config.update', 'config', 'app', JSON.stringify(data))
     return { config: next }
   })
 }

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { type Store } from '../db/store'
 import { requireAuth } from '../auth/rbac'
+import { requireFeature } from '../auth/featureGate'
 import { amapConfigured, amapGeocode, amapWalking } from '../nav/amapClient'
 
 // 坐标校验：从原始字符串校验而非 z.coerce.number()——后者会把空串/空白静默 coerce 成 0，
@@ -18,8 +19,8 @@ const querySchema = z.object({
 })
 
 /// 国内步行导航：用高德 Web 服务（key 仅后端持有），App 通过本接口取路线。
-export function registerNavRoutes(app: FastifyInstance, _store: Store): void {
-  app.get('/api/nav/walking', { preHandler: requireAuth() }, async (req, reply) => {
+export function registerNavRoutes(app: FastifyInstance, store: Store): void {
+  app.get('/api/nav/walking', { preHandler: [requireAuth(), requireFeature(store, 'navigation')] }, async (req, reply) => {
     if (!amapConfigured()) return reply.code(503).send({ error: 'amap_not_configured' })
     const parsed = querySchema.safeParse(req.query)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })

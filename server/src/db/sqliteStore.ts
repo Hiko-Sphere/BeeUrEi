@@ -2,7 +2,8 @@ import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, ChatMessage, ChatGroup, MediaMeta, Passkey, AdminAuditEntry, Warning, AppConfig } from './store'
+import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, ChatMessage, ChatGroup, MediaMeta, Passkey, AdminAuditEntry, Warning, AppConfig, AppConfigPatch } from './store'
+import { normalizeAppConfig, mergeAppConfig } from './store'
 
 // 用运行时 require + 非静态模块名加载 node:sqlite，避免打包器(vitest/vite)静态解析失败；
 // 由 Node 在运行时解析（需 --experimental-sqlite，已在 npm 脚本里通过 NODE_OPTIONS 开启）。
@@ -96,6 +97,10 @@ export class SqliteStore implements Store {
   }
   deleteRefreshTokensForUser(userId: string): void {
     this.db.prepare('DELETE FROM refresh_tokens WHERE userId = ?').run(userId)
+  }
+  countSessionsForUser(userId: string, nowMs: number): number {
+    const row = this.db.prepare('SELECT COUNT(*) AS n FROM refresh_tokens WHERE userId = ? AND expiresAt > ?').get(userId, nowMs) as { n: number }
+    return Number(row.n)
   }
 
   // MARK: passkeys（WebAuthn）
@@ -282,10 +287,10 @@ export class SqliteStore implements Store {
   }
   getAppConfig(): AppConfig {
     const row = this.db.prepare('SELECT v FROM config WHERE k = ?').get('app') as { v: string } | undefined
-    return row ? (JSON.parse(row.v) as AppConfig) : { registrationEnabled: true }
+    return normalizeAppConfig(row ? (JSON.parse(row.v) as Partial<AppConfig>) : null)
   }
-  setAppConfig(patch: Partial<AppConfig>): AppConfig {
-    const next = { ...this.getAppConfig(), ...patch }
+  setAppConfig(patch: AppConfigPatch): AppConfig {
+    const next = mergeAppConfig(this.getAppConfig(), patch)
     this.db.prepare('INSERT OR REPLACE INTO config (k, v) VALUES (?, ?)').run('app', JSON.stringify(next))
     return next
   }

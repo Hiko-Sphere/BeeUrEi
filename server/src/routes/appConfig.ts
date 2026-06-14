@@ -1,0 +1,18 @@
+import type { FastifyInstance } from 'fastify'
+import type { Store } from '../db/store'
+import { requireAuth } from '../auth/rbac'
+
+/// 客户端读取全站功能开关（登录后）。App 据此隐藏/禁用被关闭功能的入口按钮，
+/// 盲人侧点按时朗读"该功能暂时关闭"。这是"控制每一个按键"的客户端落地；
+/// 服务端的 requireFeature 仍是硬强制（客户端忽略也拦得住），两者互补。
+export function registerAppConfigRoutes(app: FastifyInstance, store: Store): void {
+  app.get('/api/app-config', { preHandler: requireAuth() }, async () => {
+    const cfg = store.getAppConfig()
+    const rec = store.getRecordingConfig()
+    return {
+      features: cfg.features,
+      registrationEnabled: cfg.registrationEnabled,
+      recording: { enabled: rec.enabled, requireConsent: rec.requireConsent },
+    }
+  })
+}

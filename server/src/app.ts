@@ -30,6 +30,7 @@ import { registerDevRoutes } from './routes/dev'
 import { registerNavRoutes } from './routes/nav'
 import { registerRecoveryRoutes } from './routes/recovery'
 import { registerPushRoutes } from './routes/push'
+import { registerAppConfigRoutes } from './routes/appConfig'
 import { Metrics } from './metrics/metrics'
 import { captureException } from './monitoring/errorReporting'
 import { CodeRegistry } from './auth/codes'
@@ -128,6 +129,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerRecordingRoutes(instance, store)
     registerDevRoutes(instance, store)
     registerNavRoutes(instance, store)
+    registerAppConfigRoutes(instance, store) // 客户端读取功能开关（控制每一个按键）
     registerAssistRoutes(instance, store, hub, presence, pendingCalls, openHelp, pushSender, metrics)
   })
 

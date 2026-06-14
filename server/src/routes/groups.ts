@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import { type Store, publicUser } from '../db/store'
 import { requireAuth } from '../auth/rbac'
+import { requireFeature } from '../auth/featureGate'
 import { removeMediaFile } from '../media/storage'
 
 const createSchema = z.object({
@@ -23,7 +24,7 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store): void {
   }
 
   // 建群：发起人为群主，初始成员必须都是群主的好友。
-  app.post('/api/groups', { preHandler: requireAuth(),
+  app.post('/api/groups', { preHandler: [requireAuth(), requireFeature(store, 'groups')],
                             config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = createSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
@@ -63,7 +64,7 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store): void {
   })
 
   // 加人（群主）：新成员须是群主好友。
-  app.post('/api/groups/:id/members', { preHandler: requireAuth() }, async (req, reply) => {
+  app.post('/api/groups/:id/members', { preHandler: [requireAuth(), requireFeature(store, 'groups')] }, async (req, reply) => {
     const parsed = z.object({ userId: z.string().min(1) }).safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const group = store.findGroup((req.params as { id: string }).id)

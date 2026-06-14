@@ -86,12 +86,26 @@ const I18N = {
     // 全站控制
     controls: '全站控制', siteControls: '全站运行开关', registration: '开放注册',
     registrationDesc: '关闭后，任何人都无法新建账号（已有账号登录不受影响）。', recPolicyLink: '录制策略在「录制」页设置。',
+    // 功能开关（Admin v4）
+    siteFeatures: '功能开关', siteFeaturesDesc: '逐项控制 App 的每个功能。关闭后服务端立即拒绝该操作，客户端也会隐藏对应按钮。',
+    safetyLocked: '安全功能（始终开启）', safetyLockedDesc: '紧急报警、拉黑、举报为安全攸关功能，刻意不可关闭，以保护用户安全与审核闭环。',
+    alwaysOn: '始终开启',
+    featLabels: { messaging: '消息', calls: '远程协助通话', helpRequests: '公开求助', groups: '群组', familyLinks: '亲友绑定', mediaUpload: '媒体上传', navigation: '步行导航', sceneScan: '看一看（场景识别）', emergency: '紧急报警', blocks: '拉黑', reports: '举报' },
+    featDescs: { messaging: '私聊/群聊发送消息', calls: '发起远程协助音视频呼叫', helpRequests: '发起/认领公开求助', groups: '创建群组、管理成员', familyLinks: '绑定亲友/协助者', mediaUpload: '上传图片/视频', navigation: '步行路径导航', sceneScan: '端侧场景识别（仅客户端隐藏）' },
+    // 用户编辑（Admin v4）
+    editUser: '编辑资料', cancelEdit: '取消', profileSaved: '资料已保存',
+    fldDisplayName: '昵称', fldUsername: '用户名', fldEmail: '邮箱', fldPhone: '手机号', fldLanguage: '语言（如 zh/en）', clearAvatarBtn: '清除头像',
+    resetPassword: '重设密码', newPasswordPh: '新密码（至少 6 位）', confirmResetPassword: '确认为该用户设置新密码？这会撤销其所有设备的登录。', passwordResetDone: '密码已重设',
+    deleteUser: '删除用户', confirmDeleteUser: '确认永久删除该用户？将级联清除其全部绑定、Passkey 与会话，且不可恢复。', userDeleted: '用户已删除', dangerZone: '危险操作',
+    sessionsLabel: '活跃会话', tokenVersionLabel: '令牌版本', usernameCustomizedLabel: '自定义用户名', legalConsentLabel: '合规同意', avatarLabel: '头像', voipLabel: 'VoIP 推送', apnsLabel: 'APNs 推送', yes: '是', no: '否',
+    reportsByLabel: '发起的举报', reportsAgainstLabel: '收到的举报', recordingsOwnLabel: '录制', blockingLabel: '已拉黑', blockedByLabel: '被拉黑',
+    err_username_taken: '用户名已被占用', err_email_taken: '邮箱已被占用', err_phone_taken: '手机号已被占用', err_invalid_username: '用户名格式不合法（仅字母数字 _.-）', err_invalid_phone: '手机号不合法', err_cannot_delete_self: '不能删除自己',
     auditActions: {
       'user.role': '修改角色', 'user.disable': '封禁用户', 'user.enable': '解封用户',
       'user.verifyEmail': '标记邮箱已验证', 'user.unverifyEmail': '撤销邮箱验证', 'user.unlinkApple': '解绑 Apple',
       'user.clearPasskeys': '清除 Passkey', 'user.forceLogout': '强制下线', 'report.resolve': '处理举报',
       'report.dismiss': '审核·忽略', 'report.warn': '审核·警告', 'report.suspend': '审核·暂停', 'report.ban': '审核·封禁',
-      'config.update': '修改全站配置',
+      'config.update': '修改全站配置', 'user.edit': '编辑资料', 'user.resetPassword': '重设密码', 'user.delete': '删除用户',
     },
     roles: { blind: '视障用户', helper: '协助者', family: '亲友', admin: '管理员', developer: '开发者' },
     callStatus: { answered: '已接通', declined: '已拒绝', missed: '未接', ended: '已结束', ongoing: '进行中', ringing: '振铃中' },
@@ -154,12 +168,26 @@ const I18N = {
     // Site controls
     controls: 'Controls', siteControls: 'Site-wide switches', registration: 'Open registration',
     registrationDesc: 'When off, no one can create a new account (existing accounts can still sign in).', recPolicyLink: 'Recording policy is on the Recordings page.',
+    // Feature switches (Admin v4)
+    siteFeatures: 'Feature switches', siteFeaturesDesc: 'Control every app function individually. When off, the server rejects the action and the app hides the matching button.',
+    safetyLocked: 'Safety features (always on)', safetyLockedDesc: 'Emergency alerts, blocking, and reporting are safety-critical and deliberately cannot be turned off — to protect users and the moderation loop.',
+    alwaysOn: 'Always on',
+    featLabels: { messaging: 'Messaging', calls: 'Remote-assist calls', helpRequests: 'Public help', groups: 'Groups', familyLinks: 'Family links', mediaUpload: 'Media upload', navigation: 'Walking navigation', sceneScan: 'Look (scene scan)', emergency: 'Emergency alerts', blocks: 'Blocking', reports: 'Reporting' },
+    featDescs: { messaging: 'Send 1:1 / group messages', calls: 'Start remote-assist calls', helpRequests: 'Start / claim public help', groups: 'Create groups, manage members', familyLinks: 'Link family / helpers', mediaUpload: 'Upload images / video', navigation: 'Walking route guidance', sceneScan: 'On-device scene scan (client-hidden)' },
+    // User editor (Admin v4)
+    editUser: 'Edit profile', cancelEdit: 'Cancel', profileSaved: 'Profile saved',
+    fldDisplayName: 'Display name', fldUsername: 'Username', fldEmail: 'Email', fldPhone: 'Phone', fldLanguage: 'Language (e.g. zh/en)', clearAvatarBtn: 'Clear avatar',
+    resetPassword: 'Reset password', newPasswordPh: 'New password (min 6 chars)', confirmResetPassword: 'Set a new password for this user? It signs them out on all devices.', passwordResetDone: 'Password reset',
+    deleteUser: 'Delete user', confirmDeleteUser: 'Permanently delete this user? Their links, passkeys, and sessions are cascade-deleted. This cannot be undone.', userDeleted: 'User deleted', dangerZone: 'Danger zone',
+    sessionsLabel: 'Active sessions', tokenVersionLabel: 'Token version', usernameCustomizedLabel: 'Custom username', legalConsentLabel: 'Legal consent', avatarLabel: 'Avatar', voipLabel: 'VoIP push', apnsLabel: 'APNs push', yes: 'yes', no: 'no',
+    reportsByLabel: 'Reports filed', reportsAgainstLabel: 'Reports received', recordingsOwnLabel: 'Recordings', blockingLabel: 'Blocking', blockedByLabel: 'Blocked by',
+    err_username_taken: 'Username taken', err_email_taken: 'Email taken', err_phone_taken: 'Phone taken', err_invalid_username: 'Invalid username (letters, digits, _.- only)', err_invalid_phone: 'Invalid phone', err_cannot_delete_self: 'Cannot delete yourself',
     auditActions: {
       'user.role': 'Change role', 'user.disable': 'Ban user', 'user.enable': 'Unban user',
       'user.verifyEmail': 'Mark email verified', 'user.unverifyEmail': 'Unverify email', 'user.unlinkApple': 'Unlink Apple',
       'user.clearPasskeys': 'Clear passkeys', 'user.forceLogout': 'Force sign-out', 'report.resolve': 'Resolve report',
       'report.dismiss': 'Moderate · dismiss', 'report.warn': 'Moderate · warn', 'report.suspend': 'Moderate · suspend', 'report.ban': 'Moderate · ban',
-      'config.update': 'Update site config',
+      'config.update': 'Update site config', 'user.edit': 'Edit profile', 'user.resetPassword': 'Reset password', 'user.delete': 'Delete user',
     },
     roles: { blind: 'Blind / low-vision', helper: 'Helper', family: 'Family', admin: 'Admin', developer: 'Developer' },
     callStatus: { answered: 'Answered', declined: 'Declined', missed: 'Missed', ended: 'Ended', ongoing: 'Ongoing', ringing: 'Ringing' },
@@ -170,6 +198,8 @@ function t(key) { return I18N[state.lang][key] ?? I18N.zh[key] ?? key; }
 function roleName(r) { return (I18N[state.lang].roles[r]) || r; }
 function auditActionName(a) { return (I18N[state.lang].auditActions[a]) || a; }
 function decisionLabel(d) { return d ? t('dec_' + d) : '—'; }
+function featLabel(k) { return (I18N[state.lang].featLabels[k]) || k; }
+function featDesc(k) { return (I18N[state.lang].featDescs[k]) || ''; }
 function localeCode() { return state.lang === 'en' ? 'en-US' : 'zh-CN'; }
 
 // ---------------------------------------------------------------- dom helpers
@@ -526,22 +556,31 @@ async function openUserDrawer(uid) {
     const d = await api(`/api/admin/users/${uid}`);
     const u = d.user; // 客服操作后就地改写本对象并重绘，避免整页刷新
     const body = drawer.querySelector('.drawer-body');
-    const linksHTML = (d.links || []).map((l) => `<div class="mini"><b>${esc(l.otherName)}</b> · ${esc(l.relation || '—')} ${l.isEmergency ? '· ⚠️' : ''} <span class="pill ${l.status === 'accepted' ? 'ok' : 'off'} fr">${esc(l.status === 'accepted' ? (state.lang === 'en' ? 'linked' : '已绑定') : (state.lang === 'en' ? 'pending' : '待确认'))}</span></div>`).join('') || `<div class="mini text-faint">—</div>`;
+    let editing = false;
+    const yn = (b) => (b ? t('yes') : t('no'));
+    const emptyMini = (txt) => `<div class="mini text-faint">${esc(txt || '—')}</div>`;
+    const linksHTML = (d.links || []).map((l) => `<div class="mini"><b>${esc(l.otherName)}</b> · ${esc(l.relation || '—')} ${l.isEmergency ? '· ⚠️' : ''} <span class="pill ${l.status === 'accepted' ? 'ok' : 'off'} fr">${esc(l.status === 'accepted' ? (state.lang === 'en' ? 'linked' : '已绑定') : (state.lang === 'en' ? 'pending' : '待确认'))}</span></div>`).join('') || emptyMini();
     const callsHTML = (d.recentCalls || []).map((c) => `<div class="mini">${esc(t('dir')[c.direction] || c.direction)} · ${esc(c.peerName)} · <span class="text-dim">${esc(t('callStatus')[c.status] || c.status)}</span><span class="when">${esc(fmtDate(c.createdAt))}</span></div>`).join('') || `<div class="empty pad"><p>${esc(t('noCalls'))}</p></div>`;
     const warnings = d.warnings || [];
-    const warningsHTML = warnings.map((w) => `<div class="mini warn-mini"><span class="pill off">⚠</span> ${esc(w.reason)}<span class="when">${esc(t('warnedBy'))} ${esc(w.byAdminName)} · ${esc(fmtDate(w.at))}</span></div>`).join('') || `<div class="mini text-faint">${esc(t('noWarnings'))}</div>`;
+    const warningsHTML = warnings.map((w) => `<div class="mini warn-mini"><span class="pill off">⚠</span> ${esc(w.reason)}<span class="when">${esc(t('warnedBy'))} ${esc(w.byAdminName)} · ${esc(fmtDate(w.at))}</span></div>`).join('') || emptyMini(t('noWarnings'));
+    const blockingHTML = (d.blocking || []).map((b) => `<div class="mini">🚫 ${esc(b.otherName)}<span class="when">${esc(fmtDate(b.createdAt))}</span></div>`).join('') || emptyMini();
+    const blockedByHTML = (d.blockedBy || []).map((b) => `<div class="mini">${esc(b.otherName)} 🚫<span class="when">${esc(fmtDate(b.createdAt))}</span></div>`).join('') || emptyMini();
+    const repBy = (d.reportsBy || []).map((r) => `<div class="mini">→ ${esc(r.targetName)} · ${esc(r.reason)} <span class="pill ${r.status === 'open' ? 'off' : 'ok'} fr">${esc(r.decision ? decisionLabel(r.decision) : (r.status === 'open' ? t('open') : t('resolved')))}</span></div>`).join('') || emptyMini();
+    const repAg = (d.reportsAgainst || []).map((r) => `<div class="mini">${esc(r.reporterName)} → · ${esc(r.reason)} <span class="pill ${r.status === 'open' ? 'off' : 'ok'} fr">${esc(r.decision ? decisionLabel(r.decision) : (r.status === 'open' ? t('open') : t('resolved')))}</span></div>`).join('') || emptyMini();
+    const recsHTML = (d.recordings || []).map((r) => `<div class="mini">call ${esc((r.callId || '').slice(0, 10))} · ${esc(r.reason || '—')}<span class="when">${esc(fmtDate(r.recordedAt))}</span></div>`).join('') || emptyMini();
+    const passkeysHTML = (d.passkeys || []).map((p) => `<div class="mini">🔑 ${esc(p.deviceName || p.id.slice(0, 8))}<span class="when">${esc(fmtDate(p.createdAt))}</span></div>`).join('') || emptyMini();
     function supportButtons() {
-      const btns = [];
+      const btns = [`<button class="btn sm" data-sup="edit">✎ ${esc(t('editUser'))}</button>`];
       if (u.email) btns.push(`<button class="btn sm" data-sup="verify">${esc(u.emailVerified ? t('markUnverified') : t('markVerified'))}</button>`);
       if (u.appleLinked) btns.push(`<button class="btn sm" data-sup="unlink">${esc(t('unlinkApple'))}</button>`);
-      if (u.passkeys > 0) btns.push(`<button class="btn sm" data-sup="clearpk">${esc(t('clearPasskeys'))}</button>`);
+      if ((u.passkeyCount || 0) > 0) btns.push(`<button class="btn sm" data-sup="clearpk">${esc(t('clearPasskeys'))}</button>`);
+      btns.push(`<button class="btn sm" data-sup="resetpw">${esc(t('resetPassword'))}</button>`);
       btns.push(`<button class="btn danger sm" data-sup="logout">${esc(t('forceLogout'))}</button>`);
       return btns.join('');
     }
-    function paint() {
-      body.innerHTML = `
-        <div class="user-cell drawer-user">${avatarHTML(u, true)}<div><div class="nm">${esc(u.displayName || '—')}</div><div class="un">@${esc(u.username)}</div></div></div>
-        <dl class="kv">
+    // 只读资料卡。
+    function infoHTML() {
+      return `<dl class="kv">
           <dt>${esc(t('role'))}</dt><dd>${rolePill(u.role)}</dd>
           <dt>${esc(t('status'))}</dt><dd>${u.status === 'active' ? `<span class="pill ok">${esc(t('active'))}</span>` : `<span class="pill role-admin">${esc(t('disabled'))}</span>`}</dd>
           <dt>${esc(t('online2'))}</dt><dd><span class="dot ${u.online ? 'on' : 'gone'}"></span> ${u.online ? esc(t('online')) : '—'}</dd>
@@ -549,15 +588,57 @@ async function openUserDrawer(uid) {
           <dt>${esc(t('phone'))}</dt><dd>${u.phone ? esc(u.phone) : `<span class="text-faint">${esc(t('none'))}</span>`}</dd>
           <dt>${esc(t('language'))}</dt><dd>${u.language ? esc(u.language) : '—'}</dd>
           <dt>${esc(t('appleId'))}</dt><dd>${u.appleLinked ? esc(t('linked')) : `<span class="text-faint">${esc(t('notLinked'))}</span>`}</dd>
-          <dt>${esc(t('passkeys'))}</dt><dd>${u.passkeys || 0}</dd>
-          <dt>${esc(t('blockedRelations'))}</dt><dd>${d.blockedCount || 0}</dd>
+          <dt>${esc(t('passkeys'))}</dt><dd>${u.passkeyCount || 0}</dd>
+          <dt>${esc(t('sessionsLabel'))}</dt><dd>${u.sessions ?? 0}</dd>
+          <dt>${esc(t('tokenVersionLabel'))}</dt><dd>${u.tokenVersion ?? 0}</dd>
+          <dt>${esc(t('usernameCustomizedLabel'))}</dt><dd>${yn(u.usernameCustomized)}</dd>
+          <dt>${esc(t('avatarLabel'))}</dt><dd>${yn(u.hasAvatar)}</dd>
+          <dt>${esc(t('voipLabel'))}</dt><dd>${yn(u.hasVoipToken)}</dd>
+          <dt>${esc(t('apnsLabel'))}</dt><dd>${yn(u.hasApnsToken)}</dd>
+          <dt>${esc(t('legalConsentLabel'))}</dt><dd>${u.legalConsentVersion ? esc(u.legalConsentVersion) + (u.legalConsentAt ? ' · ' + esc(fmtDate(u.legalConsentAt)) : '') : '—'}</dd>
           <dt>${esc(t('created'))}</dt><dd>${esc(fmtDate(u.createdAt))}</dd>
-        </dl>
-        <div class="section"><h3>${esc(t('warnings'))} (${warnings.length})</h3><div class="mini-list">${warningsHTML}</div></div>
+        </dl>`;
+    }
+    // 可编辑表单（CSP 友好：用 class，不内联 style）。
+    function editHTML() {
+      const f = (id, label, val, type) => `<div class="field"><label for="${id}">${esc(label)}</label><input id="${id}" type="${type || 'text'}" value="${esc(val ?? '')}" autocapitalize="none" spellcheck="false"/></div>`;
+      return `<div class="edit-form">
+        ${f('eDisplay', t('fldDisplayName'), u.displayName)}
+        ${f('eUsername', t('fldUsername'), u.username)}
+        ${f('eEmail', t('fldEmail'), u.email)}
+        ${f('ePhone', t('fldPhone'), u.phone)}
+        ${f('eLang', t('fldLanguage'), u.language)}
+        ${u.hasAvatar ? `<label class="chk"><input type="checkbox" id="eClearAvatar"/> ${esc(t('clearAvatarBtn'))}</label>` : ''}
+        <div class="confirm-actions">
+          <button class="btn ghost" data-edit="cancel">${esc(t('cancelEdit'))}</button>
+          <button class="btn primary" data-edit="save">${esc(t('save'))}</button>
+        </div>
+      </div>`;
+    }
+    function paint() {
+      body.innerHTML = `
+        <div class="user-cell drawer-user">${avatarHTML(u, true)}<div><div class="nm">${esc(u.displayName || '—')}</div><div class="un">@${esc(u.username)}</div></div></div>
+        ${editing ? editHTML() : infoHTML()}
+        ${editing ? '' : `
         <div class="section"><h3>${esc(t('support'))}</h3><div class="support">${supportButtons()}</div></div>
+        <div class="section"><h3>${esc(t('warnings'))} (${warnings.length})</h3><div class="mini-list">${warningsHTML}</div></div>
         <div class="section"><h3>${esc(t('linkedRelations'))} (${(d.links || []).length})</h3><div class="mini-list">${linksHTML}</div></div>
-        <div class="section"><h3>${esc(t('recentCalls'))}</h3><div class="mini-list">${callsHTML}</div></div>`;
-      body.querySelectorAll('[data-sup]').forEach((b) => b.addEventListener('click', () => onSupport(b.dataset.sup, u, paint)));
+        <div class="section"><h3>${esc(t('blockingLabel'))} (${(d.blocking || []).length}) · ${esc(t('blockedByLabel'))} (${(d.blockedBy || []).length})</h3><div class="mini-list">${blockingHTML}${blockedByHTML}</div></div>
+        <div class="section"><h3>${esc(t('reportsByLabel'))} (${(d.reportsBy || []).length})</h3><div class="mini-list">${repBy}</div></div>
+        <div class="section"><h3>${esc(t('reportsAgainstLabel'))} (${(d.reportsAgainst || []).length})</h3><div class="mini-list">${repAg}</div></div>
+        <div class="section"><h3>${esc(t('passkeys'))} (${(d.passkeys || []).length})</h3><div class="mini-list">${passkeysHTML}</div></div>
+        <div class="section"><h3>${esc(t('recordingsOwnLabel'))} (${(d.recordings || []).length})</h3><div class="mini-list">${recsHTML}</div></div>
+        <div class="section"><h3>${esc(t('recentCalls'))}</h3><div class="mini-list">${callsHTML}</div></div>
+        <div class="section danger-zone"><h3>${esc(t('dangerZone'))}</h3><div class="support"><button class="btn danger sm" data-sup="delete">🗑 ${esc(t('deleteUser'))}</button></div></div>`}`;
+      if (editing) {
+        body.querySelector('[data-edit="cancel"]').addEventListener('click', () => { editing = false; paint(); });
+        body.querySelector('[data-edit="save"]').addEventListener('click', () => onSaveEdit(u, body, () => { editing = false; paint(); }));
+      } else {
+        body.querySelectorAll('[data-sup]').forEach((b) => b.addEventListener('click', () => {
+          if (b.dataset.sup === 'edit') { editing = true; paint(); return; }
+          onSupport(b.dataset.sup, u, paint, close);
+        }));
+      }
     }
     paint();
   } catch (err) {
@@ -565,7 +646,7 @@ async function openUserDrawer(uid) {
   }
 }
 // 客服操作：确认 → 调接口 → 就地更新内存中的 user 字段 → 重绘抽屉 + 顶部统计/列表保持一致。
-async function onSupport(action, u, repaint) {
+async function onSupport(action, u, repaint, closeDrawer) {
   try {
     if (action === 'verify') {
       const next = !u.emailVerified;
@@ -583,16 +664,83 @@ async function onSupport(action, u, repaint) {
     } else if (action === 'clearpk') {
       if (!(await confirmDialog(t('confirmClearPasskeys')))) return;
       const r = await api(`/api/admin/users/${u.id}/clear-passkeys`, { method: 'POST' });
-      const n = u.passkeys || 0; u.passkeys = r.passkeys || 0;
+      const n = u.passkeyCount || 0; u.passkeyCount = r.passkeys || 0;
       toast(t('passkeysCleared').replace('%s', String(r.cleared ?? n)), 'success');
     } else if (action === 'logout') {
       if (!(await confirmDialog(t('confirmForceLogout')))) return;
       await api(`/api/admin/users/${u.id}/force-logout`, { method: 'POST' });
+      u.sessions = 0;
       toast(t('forcedLogout'), 'success');
+    } else if (action === 'resetpw') {
+      const pw = await promptDialog(t('resetPassword'), t('newPasswordPh'), 'password');
+      if (pw === null) return;
+      if (pw.length < 6) { toast(t('err_invalid_input'), 'error'); return; }
+      if (!(await confirmDialog(t('confirmResetPassword')))) return;
+      await api(`/api/admin/users/${u.id}/reset-password`, { method: 'POST', body: { newPassword: pw } });
+      u.sessions = 0;
+      toast(t('passwordResetDone'), 'success');
+    } else if (action === 'delete') {
+      if (!(await confirmDialog(t('confirmDeleteUser')))) return;
+      await api(`/api/admin/users/${u.id}`, { method: 'DELETE' });
+      toast(t('userDeleted'), 'success');
+      state.users = state.users.filter((x) => x.id !== u.id);
+      if (currentRoute() === 'users') renderUsers();
+      if (typeof closeDrawer === 'function') closeDrawer();
+      return; // 用户已删，不再重绘抽屉
     }
     if (typeof repaint === 'function') repaint();
     if (currentRoute() === 'users') renderUsers();
   } catch (err) { toast(errText(err.code), 'error'); }
+}
+
+// 保存用户资料编辑：只提交相对当前值有变化的字段（空串=清除→null）。
+async function onSaveEdit(u, body, done) {
+  const val = (id) => (body.querySelector('#' + id)?.value ?? '').trim();
+  const patch = {};
+  const displayName = val('eDisplay'); if (displayName && displayName !== (u.displayName || '')) patch.displayName = displayName;
+  const username = val('eUsername'); if (username && username !== (u.username || '')) patch.username = username;
+  const email = val('eEmail'); if (email !== (u.email || '')) patch.email = email === '' ? null : email;
+  const phone = val('ePhone'); if (phone !== (u.phone || '')) patch.phone = phone === '' ? null : phone;
+  const language = val('eLang'); if (language !== (u.language || '')) patch.language = language === '' ? null : language;
+  if (body.querySelector('#eClearAvatar')?.checked) patch.clearAvatar = true;
+  if (Object.keys(patch).length === 0) { done(); return; }
+  try {
+    const r = await api(`/api/admin/users/${u.id}`, { method: 'PATCH', body: patch });
+    // 用返回的 publicUser 同步内存对象（含 displayName/username/role/status/avatar），其余明细下次打开重取。
+    Object.assign(u, { displayName: r.user.displayName, username: r.user.username });
+    if (patch.email !== undefined) { u.email = patch.email === null ? null : patch.email; u.emailVerified = patch.email === null ? false : false; }
+    if (patch.phone !== undefined) u.phone = patch.phone === null ? null : patch.phone;
+    if (patch.language !== undefined) u.language = patch.language === null ? null : patch.language;
+    if (patch.clearAvatar) { u.hasAvatar = false; u.avatar = undefined; }
+    const su = state.users.find((x) => x.id === u.id);
+    if (su) { su.displayName = u.displayName; su.username = u.username; }
+    toast(t('profileSaved'), 'success');
+    done();
+    if (currentRoute() === 'users') renderUsers();
+  } catch (err) { toast(errText(err.code), 'error'); }
+}
+
+// 简单输入弹窗（返回字符串或 null=取消）。CSP 友好。
+function promptDialog(title, placeholder, type) {
+  return new Promise((resolve) => {
+    const mask = document.createElement('div'); mask.className = 'drawer-mask'; mask.style.zIndex = '70';
+    const box = document.createElement('div'); box.className = 'modal-overlay';
+    box.innerHTML = `<div class="card confirm-card" role="dialog" aria-modal="true">
+      <p class="confirm-msg">${esc(title)}</p>
+      <div class="field"><input id="promptInput" type="${type || 'text'}" placeholder="${esc(placeholder || '')}" autocapitalize="none" spellcheck="false"/></div>
+      <div class="confirm-actions">
+        <button class="btn" data-no>${esc(state.lang === 'en' ? 'Cancel' : '取消')}</button>
+        <button class="btn ink" data-yes>${esc(state.lang === 'en' ? 'OK' : '确定')}</button>
+      </div></div>`;
+    document.body.appendChild(mask); document.body.appendChild(box);
+    const done = (v) => { mask.remove(); box.remove(); resolve(v); };
+    mask.addEventListener('click', () => done(null));
+    box.querySelector('[data-no]').addEventListener('click', () => done(null));
+    box.querySelector('[data-yes]').addEventListener('click', () => done(box.querySelector('#promptInput').value));
+    const inp = box.querySelector('#promptInput');
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') done(inp.value); });
+    inp.focus();
+  });
 }
 
 // ---------------------------------------------------------------- csv export
@@ -859,8 +1007,17 @@ async function loadControls() {
   try { state.appConfig = (await api('/api/admin/config')).config; renderControls(); }
   catch (err) { viewEl().innerHTML = `<div class="err-banner">${esc(errText(err.code))}</div>`; }
 }
+const FEATURE_ORDER = ['messaging', 'calls', 'helpRequests', 'groups', 'familyLinks', 'mediaUpload', 'navigation', 'sceneScan'];
+const SAFETY_LOCKED = ['emergency', 'blocks', 'reports']; // 刻意不可关停
 function renderControls() {
-  const c = state.appConfig || { registrationEnabled: true };
+  const c = state.appConfig || { registrationEnabled: true, features: {} };
+  const feats = c.features || {};
+  const featRow = (k) => `
+    <div class="form-row"><div><div class="lab">${esc(featLabel(k))}</div><div class="desc">${esc(featDesc(k))}</div></div>
+      <label class="switch"><input type="checkbox" data-feat="${esc(k)}" ${feats[k] !== false ? 'checked' : ''}/><span class="track"></span></label></div>`;
+  const lockedRow = (k) => `
+    <div class="form-row locked"><div><div class="lab">${esc(featLabel(k))}</div></div>
+      <span class="pill ok">${esc(t('alwaysOn'))}</span></div>`;
   viewEl().innerHTML = `
     <div class="section"><h3>${esc(t('siteControls'))}</h3>
       <div class="card">
@@ -868,12 +1025,24 @@ function renderControls() {
           <label class="switch"><input type="checkbox" id="cReg" ${c.registrationEnabled ? 'checked' : ''}/><span class="track"></span></label></div>
         <div class="form-row"><div class="desc">${esc(t('recPolicyLink'))}</div></div>
       </div>
+    </div>
+    <div class="section"><h3>${esc(t('siteFeatures'))}</h3>
+      <p class="section-sub">${esc(t('siteFeaturesDesc'))}</p>
+      <div class="card">${FEATURE_ORDER.map(featRow).join('')}</div>
+    </div>
+    <div class="section"><h3>${esc(t('safetyLocked'))}</h3>
+      <p class="section-sub">${esc(t('safetyLockedDesc'))}</p>
+      <div class="card">${SAFETY_LOCKED.map(lockedRow).join('')}</div>
     </div>`;
-  $('#cReg').addEventListener('change', async (e) => {
-    const next = e.target.checked;
-    try { state.appConfig = (await api('/api/admin/config', { method: 'PUT', body: { registrationEnabled: next } })).config; toast(t('saved'), 'success'); }
-    catch (err) { e.target.checked = !next; toast(errText(err.code), 'error'); }
-  });
+  $('#cReg').addEventListener('change', (e) => saveConfig({ registrationEnabled: e.target.checked }, e.target));
+  viewEl().querySelectorAll('[data-feat]').forEach((el) => el.addEventListener('change', (e) =>
+    saveConfig({ features: { [e.target.dataset.feat]: e.target.checked } }, e.target)));
+}
+// 单项开关变更即保存（乐观；失败回滚 checkbox）。
+async function saveConfig(patch, el) {
+  const prev = el ? !el.checked : null;
+  try { state.appConfig = (await api('/api/admin/config', { method: 'PUT', body: patch })).config; toast(t('saved'), 'success'); }
+  catch (err) { if (el) el.checked = prev; toast(errText(err.code), 'error'); }
 }
 
 // ---------------------------------------------------------------- recordings

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import { type Store, type ChatMessage, isBlockedBetween, publicUser } from '../db/store'
 import { requireAuth } from '../auth/rbac'
+import { requireFeature } from '../auth/featureGate'
 import { NoopPushSender, type PushSender } from '../push/apns'
 import { pushLang, pushStrings, type PushLang } from '../push/pushStrings'
 import { removeMediaFile } from '../media/storage'
@@ -49,7 +50,7 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
   }
 
   // 发送消息（单聊传 toId，群聊传 groupId）。
-  app.post('/api/messages', { preHandler: requireAuth(),
+  app.post('/api/messages', { preHandler: [requireAuth(), requireFeature(store, 'messaging')],
                               config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = sendSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
@@ -151,7 +152,7 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
   })
 
   // 表情回应（WhatsApp 式：单 emoji，最新覆盖；空字符串取消）。单聊双方或群成员可操作。
-  app.post('/api/messages/:id/reaction', { preHandler: requireAuth() }, async (req, reply) => {
+  app.post('/api/messages/:id/reaction', { preHandler: [requireAuth(), requireFeature(store, 'messaging')] }, async (req, reply) => {
     const parsed = z.object({ emoji: z.string().max(16) }).safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const id = (req.params as { id: string }).id

@@ -114,9 +114,53 @@ export interface Warning {
   at: number
 }
 
+/// 可被管理员全站开关的功能键。每个键都**真正在对应路由强制**（关闭即 403 feature_disabled），
+/// 并由 iOS 经 GET /api/app-config 读取后隐藏/禁用对应按钮——不是摆设。
+/// 刻意排除的安全攸关功能：紧急报警、拉黑、举报——永不可一键关停（关停会危及用户或破坏审核闭环）。
+/// 账号自管理（改密码/邮箱/手机/角色/用户名等）也不在此列——绝不把用户锁在自己账号外。
+export type FeatureKey =
+  | 'messaging'    // 私聊/群聊发消息（含撤回/表态/已读）
+  | 'calls'        // 远程协助音视频呼叫
+  | 'helpRequests' // 公开求助队列（发起/认领/匹配）
+  | 'groups'       // 群组创建/成员管理
+  | 'familyLinks'  // 亲友/协助者绑定
+  | 'mediaUpload'  // 大文件（图片/视频）上传
+  | 'navigation'   // 步行导航（高德路径）
+  | 'sceneScan'    // 端侧"看一看"场景识别（仅客户端据此隐藏，无服务端调用可拦）
+
+export const FEATURE_KEYS: FeatureKey[] = ['messaging', 'calls', 'helpRequests', 'groups', 'familyLinks', 'mediaUpload', 'navigation', 'sceneScan']
+
 /// 全站运行配置（管理员可控的"开关")。
 export interface AppConfig {
   registrationEnabled: boolean // 是否开放注册（关闭后新账号注册/邮箱码建号被拒）
+  features: Record<FeatureKey, boolean> // 各功能开关；默认全开
+}
+
+export const DEFAULT_APP_CONFIG: AppConfig = {
+  registrationEnabled: true,
+  features: { messaging: true, calls: true, helpRequests: true, groups: true, familyLinks: true, mediaUpload: true, navigation: true, sceneScan: true },
+}
+
+/// 配置补丁：features 可只带部分键（逐键合并）。
+export interface AppConfigPatch {
+  registrationEnabled?: boolean
+  features?: Partial<Record<FeatureKey, boolean>>
+}
+
+/// 归一化：补齐缺失键，使历史只存了 registrationEnabled 的旧配置平滑升级（向后兼容，无需迁移脚本）。
+export function normalizeAppConfig(raw: Partial<AppConfig> | undefined | null): AppConfig {
+  const rawFeat = (raw?.features ?? {}) as Partial<Record<FeatureKey, boolean>>
+  const features = { ...DEFAULT_APP_CONFIG.features }
+  for (const k of FEATURE_KEYS) if (typeof rawFeat[k] === 'boolean') features[k] = rawFeat[k]!
+  return { registrationEnabled: raw?.registrationEnabled ?? true, features }
+}
+
+/// 合并 AppConfig 补丁：features 逐键合并（而非整体替换），其余浅合并。
+export function mergeAppConfig(base: AppConfig, patch: AppConfigPatch): AppConfig {
+  return normalizeAppConfig({
+    registrationEnabled: patch.registrationEnabled ?? base.registrationEnabled,
+    features: { ...base.features, ...(patch.features ?? {}) },
+  })
 }
 
 /// refresh token（仅存哈希，轮换+撤销）。
@@ -221,12 +265,13 @@ export interface Store {
 
   // 全站运行配置
   getAppConfig(): AppConfig
-  setAppConfig(patch: Partial<AppConfig>): AppConfig
+  setAppConfig(patch: AppConfigPatch): AppConfig
 
   createRefreshToken(rt: RefreshToken): void
   findRefreshToken(tokenHash: string): RefreshToken | undefined
   deleteRefreshToken(tokenHash: string): void
   deleteRefreshTokensForUser(userId: string): void
+  countSessionsForUser(userId: string, nowMs: number): number // 未过期 refresh token 数（活跃会话数，供后台展示）
 
   // Passkey（WebAuthn）
   createPasskey(p: Passkey): void
@@ -289,7 +334,7 @@ export class MemoryStore implements Store {
   protected recordingConfig: RecordingConfig = { enabled: false, retentionDays: 7, requireConsent: true }
   protected auditLog: AdminAuditEntry[] = []
   protected warnings = new Map<string, Warning>()
-  protected appConfig: AppConfig = { registrationEnabled: true }
+  protected appConfig: AppConfig = { ...DEFAULT_APP_CONFIG, features: { ...DEFAULT_APP_CONFIG.features } }
 
   createRefreshToken(rt: RefreshToken): void {
     this.refreshTokens.set(rt.tokenHash, rt)
@@ -305,6 +350,11 @@ export class MemoryStore implements Store {
     let changed = false
     for (const [k, v] of this.refreshTokens) if (v.userId === userId) { this.refreshTokens.delete(k); changed = true }
     if (changed) this.afterMutate()
+  }
+  countSessionsForUser(userId: string, nowMs: number): number {
+    let n = 0
+    for (const v of this.refreshTokens.values()) if (v.userId === userId && v.expiresAt > nowMs) n++
+    return n
   }
 
   createPasskey(p: Passkey): void {
@@ -464,12 +514,12 @@ export class MemoryStore implements Store {
     return [...this.warnings.values()].filter((w) => w.userId === userId).sort((a, b) => b.at - a.at)
   }
   getAppConfig(): AppConfig {
-    return { ...this.appConfig }
+    return normalizeAppConfig(this.appConfig)
   }
-  setAppConfig(patch: Partial<AppConfig>): AppConfig {
-    this.appConfig = { ...this.appConfig, ...patch }
+  setAppConfig(patch: AppConfigPatch): AppConfig {
+    this.appConfig = mergeAppConfig(normalizeAppConfig(this.appConfig), patch)
     this.afterMutate()
-    return { ...this.appConfig }
+    return normalizeAppConfig(this.appConfig)
   }
 
   getRecordingConfig(): RecordingConfig {

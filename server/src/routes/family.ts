@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import { type Store, type FamilyLink, isBlockedBetween } from '../db/store'
 import { requireAuth } from '../auth/rbac'
+import { requireFeature } from '../auth/featureGate'
 import { type PushSender, NoopPushSender } from '../push/apns'
 import { pushLang, pushStrings } from '../push/pushStrings'
 
@@ -17,7 +18,7 @@ const addLinkSchema = z.object({
 export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: PushSender = new NoopPushSender()): void {
   // 发起加亲友/协助者请求（**双向**：盲人或协助者/亲友任一方都可发起，由另一方确认才建立关系）。
   // owner 恒为视障侧（保证匹配/紧急用 linksByOwner(blind) 成立）；requestedBy 记录发起方。
-  app.post('/api/family/links', { preHandler: requireAuth() }, async (req, reply) => {
+  app.post('/api/family/links', { preHandler: [requireAuth(), requireFeature(store, 'familyLinks')] }, async (req, reply) => {
     const parsed = addLinkSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const meId = req.user!.sub
@@ -59,7 +60,7 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: P
   })
 
   // 确认请求：只有"被请求方"（不是发起者）可接受。接受后才参与匹配/呼叫/紧急。
-  app.post('/api/family/links/:id/accept', { preHandler: requireAuth() }, async (req, reply) => {
+  app.post('/api/family/links/:id/accept', { preHandler: [requireAuth(), requireFeature(store, 'familyLinks')] }, async (req, reply) => {
     const meId = req.user!.sub
     const id = (req.params as { id: string }).id
     const link = store.findLink(id)

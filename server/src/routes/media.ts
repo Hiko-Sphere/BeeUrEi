@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { writeFileSync, createReadStream, statSync } from 'node:fs'
 import { type Store, type MediaMeta } from '../db/store'
 import { requireAuth } from '../auth/rbac'
+import { requireFeature } from '../auth/featureGate'
 import { ensureMediaDir, mediaPath, mediaFileExists } from '../media/storage'
 
 /// 单个媒体文件上限 50MB（约 1 分钟 720p H.264）；路由 bodyLimit 略放宽容纳传输开销。
@@ -31,7 +32,7 @@ export function registerMediaRoutes(app: FastifyInstance, store: Store): void {
     return store.groupsFor(me).some((g) => g.memberIds.includes(owner))
   }
 
-  app.post('/api/media', { preHandler: requireAuth(),
+  app.post('/api/media', { preHandler: [requireAuth(), requireFeature(store, 'mediaUpload')],
                            bodyLimit: MAX_MEDIA_BYTES + 1024 * 1024,
                            config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const mime = (req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase()

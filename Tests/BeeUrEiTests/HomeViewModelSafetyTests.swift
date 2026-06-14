@@ -112,11 +112,14 @@ final class HomeViewModelSafetyTests: XCTestCase {
     func testPausedSessionDropsInFlightFrames() {
         let vm = makeVM()
         vm.pauseSession()
+        // pauseSession 本身会**静音**声呐（degradeStop→update(nil)），故记下基线再喂在途帧。
+        let updatesAfterPause = sonifier.updates.count
         vm.handle(makeFrame(timestamp: 10, depthMeters: 0.6)) // 极近障碍的在途帧
-        // 暂停纪律：丢弃——不得产出状态、不得提交播报、不得驱动声呐（通话串音根因防护）。
+        // 暂停纪律：在途帧被丢弃——不产出状态、不提交播报、不新增任何声呐驱动（通话串音根因防护）。
         XCTAssertEqual(vm.proximityText, "—")
         XCTAssertTrue(coordinator.submitted.isEmpty)
-        XCTAssertTrue(sonifier.updates.isEmpty)
+        XCTAssertEqual(sonifier.updates.count, updatesAfterPause, "暂停后在途帧不得新增声呐更新")
+        XCTAssertNil(sonifier.updates.last ?? nil, "暂停期间声呐应停在静音(nil)，绝不驱动'有近物'陈旧蜂鸣")
     }
 
     func testPauseStopsSonarImmediately() {

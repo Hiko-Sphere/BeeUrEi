@@ -2,7 +2,7 @@ import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, ChatMessage, ChatGroup, MediaMeta, Passkey } from './store'
+import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, ChatMessage, ChatGroup, MediaMeta, Passkey, AdminAuditEntry, Warning, AppConfig } from './store'
 
 // 用运行时 require + 非静态模块名加载 node:sqlite，避免打包器(vitest/vite)静态解析失败；
 // 由 Node 在运行时解析（需 --experimental-sqlite，已在 npm 脚本里通过 NODE_OPTIONS 开启）。
@@ -72,6 +72,14 @@ export class SqliteStore implements Store {
     try { this.db.exec('ALTER TABLE messages ADD COLUMN groupId TEXT') } catch { /* 列已存在 */ } // 群消息
     // 群消息索引必须在 groupId 列迁移之后建——否则旧库（无此列）在 CREATE INDEX 处直接崩。
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_messages_group ON messages (groupId, createdAt)')
+    // Admin v3：审核处置 + 审计日志 + 用户警告
+    try { this.db.exec('ALTER TABLE reports ADD COLUMN decision TEXT') } catch { /* 列已存在 */ }
+    try { this.db.exec('ALTER TABLE reports ADD COLUMN resolvedBy TEXT') } catch { /* 列已存在 */ }
+    try { this.db.exec('ALTER TABLE reports ADD COLUMN resolvedAt INTEGER') } catch { /* 列已存在 */ }
+    this.db.exec('CREATE TABLE IF NOT EXISTS admin_audit (id TEXT PRIMARY KEY, adminId TEXT, action TEXT, targetType TEXT, targetId TEXT, detail TEXT, at INTEGER)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_audit_at ON admin_audit (at)')
+    this.db.exec('CREATE TABLE IF NOT EXISTS warnings (id TEXT PRIMARY KEY, userId TEXT, reason TEXT, byAdminId TEXT, reportId TEXT, at INTEGER)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_warn_user ON warnings (userId, at)')
   }
 
   // MARK: refresh tokens
@@ -224,9 +232,9 @@ export class SqliteStore implements Store {
   // MARK: reports
   createReport(r: Report): void {
     this.db.prepare(
-      `INSERT OR REPLACE INTO reports (id, reporterId, targetUserId, callId, reason, status, createdAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run(r.id, r.reporterId, r.targetUserId, r.callId ?? null, r.reason, r.status, r.createdAt)
+      `INSERT OR REPLACE INTO reports (id, reporterId, targetUserId, callId, reason, status, createdAt, decision, resolvedBy, resolvedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(r.id, r.reporterId, r.targetUserId, r.callId ?? null, r.reason, r.status, r.createdAt, r.decision ?? null, r.resolvedBy ?? null, r.resolvedAt ?? null)
   }
   allReports(): Report[] {
     return this.db.prepare('SELECT * FROM reports').all().map((r) => this.toReport(r))
@@ -252,6 +260,33 @@ export class SqliteStore implements Store {
   setRecordingConfig(patch: Partial<RecordingConfig>): RecordingConfig {
     const next = { ...this.getRecordingConfig(), ...patch }
     this.db.prepare('INSERT OR REPLACE INTO config (k, v) VALUES (?, ?)').run('recording', JSON.stringify(next))
+    return next
+  }
+
+  // MARK: admin audit / warnings / app config（Admin v3）
+  createAuditEntry(e: AdminAuditEntry): void {
+    this.db.prepare('INSERT OR REPLACE INTO admin_audit (id, adminId, action, targetType, targetId, detail, at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(e.id, e.adminId, e.action, e.targetType, e.targetId, e.detail ?? null, e.at)
+  }
+  allAuditEntries(limit = 200): AdminAuditEntry[] {
+    return this.db.prepare('SELECT * FROM admin_audit ORDER BY at DESC LIMIT ?').all(limit)
+      .map((r: any) => ({ id: r.id, adminId: r.adminId, action: r.action, targetType: r.targetType, targetId: r.targetId, detail: r.detail ?? undefined, at: Number(r.at) }))
+  }
+  createWarning(w: Warning): void {
+    this.db.prepare('INSERT OR REPLACE INTO warnings (id, userId, reason, byAdminId, reportId, at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(w.id, w.userId, w.reason, w.byAdminId, w.reportId ?? null, w.at)
+  }
+  warningsForUser(userId: string): Warning[] {
+    return this.db.prepare('SELECT * FROM warnings WHERE userId = ? ORDER BY at DESC').all(userId)
+      .map((r: any) => ({ id: r.id, userId: r.userId, reason: r.reason, byAdminId: r.byAdminId, reportId: r.reportId ?? undefined, at: Number(r.at) }))
+  }
+  getAppConfig(): AppConfig {
+    const row = this.db.prepare('SELECT v FROM config WHERE k = ?').get('app') as { v: string } | undefined
+    return row ? (JSON.parse(row.v) as AppConfig) : { registrationEnabled: true }
+  }
+  setAppConfig(patch: Partial<AppConfig>): AppConfig {
+    const next = { ...this.getAppConfig(), ...patch }
+    this.db.prepare('INSERT OR REPLACE INTO config (k, v) VALUES (?, ?)').run('app', JSON.stringify(next))
     return next
   }
   createRecording(rec: Recording): void {
@@ -399,7 +434,7 @@ export class SqliteStore implements Store {
     return { id: r.id, ownerId: r.ownerId, memberId: r.memberId, relation: r.relation, isEmergency: Number(r.isEmergency) === 1, phone: r.phone ?? undefined, createdAt: Number(r.createdAt), status: (r.status as LinkStatus) ?? undefined, requestedBy: r.requestedBy ?? undefined }
   }
   private toReport(r: any): Report {
-    return { id: r.id, reporterId: r.reporterId, targetUserId: r.targetUserId, callId: r.callId ?? undefined, reason: r.reason, status: r.status as ReportStatus, createdAt: Number(r.createdAt) }
+    return { id: r.id, reporterId: r.reporterId, targetUserId: r.targetUserId, callId: r.callId ?? undefined, reason: r.reason, status: r.status as ReportStatus, createdAt: Number(r.createdAt), decision: r.decision ?? undefined, resolvedBy: r.resolvedBy ?? undefined, resolvedAt: r.resolvedAt != null ? Number(r.resolvedAt) : undefined }
   }
   private toRecording(r: any): Recording {
     return { id: r.id, callId: r.callId, ownerId: r.ownerId, consentBy: JSON.parse(r.consentBy ?? '[]'), reason: r.reason, recordedAt: Number(r.recordedAt) }

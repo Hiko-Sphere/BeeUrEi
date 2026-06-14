@@ -59,6 +59,8 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     if (!parsed.success) {
       return reply.code(400).send({ error: 'invalid_input', details: parsed.error.flatten() })
     }
+    // 全站注册开关（管理员可在后台关闭）：关闭后拒绝新建账号；已有账号登录不受影响。
+    if (!store.getAppConfig().registrationEnabled) return reply.code(403).send({ error: 'registration_disabled' })
     const { username: rawUsername, password, displayName, role, language, email, phone } = parsed.data
     if (rawUsername && store.findByUsername(rawUsername)) {
       return reply.code(409).send({ error: 'username_taken' })
@@ -150,6 +152,8 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
       }
     }
     if (!user) {
+      // 注册关闭时拒绝新建 Apple 账号（已有 appleSub/可并号的邮箱在上面分支已登录，不受影响）。
+      if (!store.getAppConfig().registrationEnabled) return reply.code(403).send({ error: 'registration_disabled' })
       // 新 Apple 用户自动建号：生成不冲突的用户名（可日后在账号页修改）。
       let username = `apple_${identity.sub.slice(-8)}`
       while (store.findByUsername(username)) username = `apple_${randomUUID().slice(0, 8)}`
@@ -255,7 +259,8 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
       const tokens = issueTokens(store, updated)
       return reply.send({ ...tokens, user: publicUser(updated) })
     }
-    // 新邮箱注册：校验 signup 码 → 建号。
+    // 新邮箱注册：校验 signup 码 → 建号。注册关闭时拒绝新建（已有邮箱登录走上面分支不受影响）。
+    if (!store.getAppConfig().registrationEnabled) return reply.code(403).send({ error: 'registration_disabled' })
     if (!codes.verify(`signup:${email}`, parsed.data.code, Date.now())) {
       return reply.code(400).send({ error: 'invalid_code' })
     }

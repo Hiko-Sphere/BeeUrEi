@@ -16,6 +16,8 @@ const state = {
   links: [],
   calls: [],
   blocks: [],
+  audit: [],
+  appConfig: null,
   usersQuery: '', usersRole: 'all', usersStatus: 'all',
   linksQuery: '', callsQuery: '', blocksQuery: '',
   refreshTimer: null,
@@ -68,6 +70,29 @@ const I18N = {
     emailMarkedVerified: '已标记邮箱为已验证', emailMarkedUnverified: '已撤销邮箱验证',
     appleUnlinked: '已解绑 Apple', passkeysCleared: '已清除 Passkey（%s 把）', forcedLogout: '已强制下线',
     err_no_email: '该用户未绑定邮箱', err_not_linked: '该用户未绑定 Apple',
+    err_target_not_found: '被举报用户不存在', err_registration_disabled: '注册已关闭',
+    // 审核处置
+    moderation: '审核', moderate: '审核处置', modTitle: '审核处置举报',
+    modDismiss: '忽略', modWarn: '警告', modSuspend: '暂停', modBan: '封禁',
+    modDismissDesc: '判定无需处置，关闭该举报。', modWarnDesc: '记一条警告，不封号。',
+    modSuspendDesc: '封禁账号并强制下线（可日后解封）。', modBanDesc: '封禁账号并强制下线（最重处置）。',
+    modReason: '处置理由（必填，将记入审计）', modReasonPh: '简述判定依据与处置原因…',
+    modReasonRequired: '请填写处置理由', moderated: '已处置', decision: '处置',
+    dec_dismissed: '已忽略', dec_warned: '已警告', dec_suspended: '已暂停', dec_banned: '已封禁',
+    resolvedBy: '处置人', warnings: '警告记录', noWarnings: '无警告记录', warnedBy: '处置人',
+    // 审计日志
+    audit: '审计日志', auditLog: '后台操作审计', noAudit: '暂无审计记录',
+    auditAdmin: '管理员', auditAction: '操作', auditTarget: '对象', auditDetail: '详情', auditWhen: '时间',
+    // 全站控制
+    controls: '全站控制', siteControls: '全站运行开关', registration: '开放注册',
+    registrationDesc: '关闭后，任何人都无法新建账号（已有账号登录不受影响）。', recPolicyLink: '录制策略在「录制」页设置。',
+    auditActions: {
+      'user.role': '修改角色', 'user.disable': '封禁用户', 'user.enable': '解封用户',
+      'user.verifyEmail': '标记邮箱已验证', 'user.unverifyEmail': '撤销邮箱验证', 'user.unlinkApple': '解绑 Apple',
+      'user.clearPasskeys': '清除 Passkey', 'user.forceLogout': '强制下线', 'report.resolve': '处理举报',
+      'report.dismiss': '审核·忽略', 'report.warn': '审核·警告', 'report.suspend': '审核·暂停', 'report.ban': '审核·封禁',
+      'config.update': '修改全站配置',
+    },
     roles: { blind: '视障用户', helper: '协助者', family: '亲友', admin: '管理员', developer: '开发者' },
     callStatus: { answered: '已接通', declined: '已拒绝', missed: '未接', ended: '已结束', ongoing: '进行中', ringing: '振铃中' },
     dir: { incoming: '呼入', outgoing: '呼出' },
@@ -113,6 +138,29 @@ const I18N = {
     emailMarkedVerified: 'Email marked verified', emailMarkedUnverified: 'Email verification revoked',
     appleUnlinked: 'Apple unlinked', passkeysCleared: 'Passkeys cleared (%s)', forcedLogout: 'Signed out everywhere',
     err_no_email: 'User has no email', err_not_linked: 'User has no Apple link',
+    err_target_not_found: 'Reported user not found', err_registration_disabled: 'Registration is closed',
+    // Moderation
+    moderation: 'Moderation', moderate: 'Moderate', modTitle: 'Moderate report',
+    modDismiss: 'Dismiss', modWarn: 'Warn', modSuspend: 'Suspend', modBan: 'Ban',
+    modDismissDesc: 'No action needed — close this report.', modWarnDesc: 'Record a warning, no ban.',
+    modSuspendDesc: 'Ban the account and force sign-out (can unban later).', modBanDesc: 'Ban the account and force sign-out (most severe).',
+    modReason: 'Reason (required, recorded in the audit log)', modReasonPh: 'Briefly state the basis and reason…',
+    modReasonRequired: 'Please provide a reason', moderated: 'Moderated', decision: 'Decision',
+    dec_dismissed: 'Dismissed', dec_warned: 'Warned', dec_suspended: 'Suspended', dec_banned: 'Banned',
+    resolvedBy: 'By', warnings: 'Warnings', noWarnings: 'No warnings', warnedBy: 'By',
+    // Audit log
+    audit: 'Audit', auditLog: 'Admin action audit', noAudit: 'No audit records',
+    auditAdmin: 'Admin', auditAction: 'Action', auditTarget: 'Target', auditDetail: 'Detail', auditWhen: 'When',
+    // Site controls
+    controls: 'Controls', siteControls: 'Site-wide switches', registration: 'Open registration',
+    registrationDesc: 'When off, no one can create a new account (existing accounts can still sign in).', recPolicyLink: 'Recording policy is on the Recordings page.',
+    auditActions: {
+      'user.role': 'Change role', 'user.disable': 'Ban user', 'user.enable': 'Unban user',
+      'user.verifyEmail': 'Mark email verified', 'user.unverifyEmail': 'Unverify email', 'user.unlinkApple': 'Unlink Apple',
+      'user.clearPasskeys': 'Clear passkeys', 'user.forceLogout': 'Force sign-out', 'report.resolve': 'Resolve report',
+      'report.dismiss': 'Moderate · dismiss', 'report.warn': 'Moderate · warn', 'report.suspend': 'Moderate · suspend', 'report.ban': 'Moderate · ban',
+      'config.update': 'Update site config',
+    },
     roles: { blind: 'Blind / low-vision', helper: 'Helper', family: 'Family', admin: 'Admin', developer: 'Developer' },
     callStatus: { answered: 'Answered', declined: 'Declined', missed: 'Missed', ended: 'Ended', ongoing: 'Ongoing', ringing: 'Ringing' },
     dir: { incoming: 'Incoming', outgoing: 'Outgoing' },
@@ -120,6 +168,8 @@ const I18N = {
 };
 function t(key) { return I18N[state.lang][key] ?? I18N.zh[key] ?? key; }
 function roleName(r) { return (I18N[state.lang].roles[r]) || r; }
+function auditActionName(a) { return (I18N[state.lang].auditActions[a]) || a; }
+function decisionLabel(d) { return d ? t('dec_' + d) : '—'; }
 function localeCode() { return state.lang === 'en' ? 'en-US' : 'zh-CN'; }
 
 // ---------------------------------------------------------------- dom helpers
@@ -255,7 +305,7 @@ async function onLogin(e) {
 }
 
 // ---------------------------------------------------------------- shell + router
-const ROUTES = ['', 'users', 'relationships', 'calls', 'blocks', 'reports', 'recordings'];
+const ROUTES = ['', 'users', 'relationships', 'calls', 'blocks', 'reports', 'audit', 'recordings', 'controls'];
 function currentRoute() { const h = (location.hash || '#/').replace(/^#\/?/, ''); return ROUTES.includes(h) ? h : ''; }
 
 function renderChrome() {
@@ -268,13 +318,15 @@ function renderChrome() {
     ['calls', '📞', t('calls')],
     ['blocks', '🚫', t('blocks')],
     ['reports', '🚩', t('reports'), openReports],
+    ['audit', '🧾', t('audit')],
     ['recordings', '⏺', t('recordings')],
+    ['controls', '🎛️', t('controls')],
   ].map(([r, ico, label, badge]) => `
     <button class="nav-item ${r === route ? 'active' : ''}" data-route="${r}">
       <span class="ico" aria-hidden="true">${ico}</span><span>${esc(label)}</span>
       ${badge ? `<span class="badge">${badge}</span>` : ''}
     </button>`).join('');
-  const titleMap = { '': t('dashboard'), users: t('users'), relationships: t('relationships'), calls: t('calls'), blocks: t('blocks'), reports: t('reports'), recordings: t('recordings') };
+  const titleMap = { '': t('dashboard'), users: t('users'), relationships: t('relationships'), calls: t('calls'), blocks: t('blocks'), reports: t('reports'), audit: t('auditLog'), recordings: t('recordings'), controls: t('siteControls') };
   app().innerHTML = `
     <div class="shell">
       <aside class="sidebar" id="sidebar">
@@ -476,6 +528,8 @@ async function openUserDrawer(uid) {
     const body = drawer.querySelector('.drawer-body');
     const linksHTML = (d.links || []).map((l) => `<div class="mini"><b>${esc(l.otherName)}</b> · ${esc(l.relation || '—')} ${l.isEmergency ? '· ⚠️' : ''} <span class="pill ${l.status === 'accepted' ? 'ok' : 'off'} fr">${esc(l.status === 'accepted' ? (state.lang === 'en' ? 'linked' : '已绑定') : (state.lang === 'en' ? 'pending' : '待确认'))}</span></div>`).join('') || `<div class="mini text-faint">—</div>`;
     const callsHTML = (d.recentCalls || []).map((c) => `<div class="mini">${esc(t('dir')[c.direction] || c.direction)} · ${esc(c.peerName)} · <span class="text-dim">${esc(t('callStatus')[c.status] || c.status)}</span><span class="when">${esc(fmtDate(c.createdAt))}</span></div>`).join('') || `<div class="empty pad"><p>${esc(t('noCalls'))}</p></div>`;
+    const warnings = d.warnings || [];
+    const warningsHTML = warnings.map((w) => `<div class="mini warn-mini"><span class="pill off">⚠</span> ${esc(w.reason)}<span class="when">${esc(t('warnedBy'))} ${esc(w.byAdminName)} · ${esc(fmtDate(w.at))}</span></div>`).join('') || `<div class="mini text-faint">${esc(t('noWarnings'))}</div>`;
     function supportButtons() {
       const btns = [];
       if (u.email) btns.push(`<button class="btn sm" data-sup="verify">${esc(u.emailVerified ? t('markUnverified') : t('markVerified'))}</button>`);
@@ -499,6 +553,7 @@ async function openUserDrawer(uid) {
           <dt>${esc(t('blockedRelations'))}</dt><dd>${d.blockedCount || 0}</dd>
           <dt>${esc(t('created'))}</dt><dd>${esc(fmtDate(u.createdAt))}</dd>
         </dl>
+        <div class="section"><h3>${esc(t('warnings'))} (${warnings.length})</h3><div class="mini-list">${warningsHTML}</div></div>
         <div class="section"><h3>${esc(t('support'))}</h3><div class="support">${supportButtons()}</div></div>
         <div class="section"><h3>${esc(t('linkedRelations'))} (${(d.links || []).length})</h3><div class="mini-list">${linksHTML}</div></div>
         <div class="section"><h3>${esc(t('recentCalls'))}</h3><div class="mini-list">${callsHTML}</div></div>`;
@@ -696,25 +751,129 @@ async function loadReports() {
 function renderReports() {
   const open = state.reports.filter((r) => r.status === 'open');
   const resolved = state.reports.filter((r) => r.status !== 'open');
+  const decPillCls = { dismissed: 'ok', warned: 'off', suspended: 'role-admin', banned: 'role-admin' };
   const row = (r) => `
     <div class="rep">
       <div class="body">
         <div class="who">${esc(r.reporterName)} <span class="arrow">→</span> ${esc(r.targetName)}</div>
         <div class="reason">${esc(r.reason || '—')}</div>
-        <div class="meta">${esc(fmtDate(r.createdAt))}${r.callId ? ' · call ' + esc(r.callId.slice(0, 8)) : ''}</div>
+        <div class="meta">${esc(fmtDate(r.createdAt))}${r.callId ? ' · call ' + esc(r.callId.slice(0, 8)) : ''}${r.status !== 'open' && r.resolvedByName ? ' · ' + esc(t('resolvedBy')) + ' ' + esc(r.resolvedByName) : ''}</div>
       </div>
       ${r.status === 'open'
-        ? `<button class="btn sm primary" data-resolve="${esc(r.id)}">${esc(t('resolve'))}</button>`
-        : `<span class="pill ok">${esc(t('resolved'))}</span>`}
+        ? `<button class="btn sm primary" data-moderate="${esc(r.id)}">${esc(t('moderate'))}</button>`
+        : `<span class="pill ${decPillCls[r.decision] || 'ok'}">${esc(r.decision ? decisionLabel(r.decision) : t('resolved'))}</span>`}
     </div>`;
   viewEl().innerHTML = !state.reports.length
     ? `<div class="empty"><div class="ico">✅</div><p>${esc(t('noReports'))}</p></div>`
     : `${open.length ? `<div class="section"><h3>${esc(t('open'))} (${open.length})</h3><div class="table-wrap">${open.map(row).join('')}</div></div>` : ''}
        ${resolved.length ? `<div class="section"><h3>${esc(t('resolved'))} (${resolved.length})</h3><div class="table-wrap">${resolved.map(row).join('')}</div></div>` : ''}`;
-  viewEl().querySelectorAll('[data-resolve]').forEach((b) => b.addEventListener('click', async () => {
-    try { await api(`/api/admin/reports/${b.dataset.resolve}/resolve`, { method: 'POST' }); toast(t('reportResolved'), 'success'); loadReports(); loadOverviewBadge(); }
-    catch (err) { toast(errText(err.code), 'error'); }
+  viewEl().querySelectorAll('[data-moderate]').forEach((b) => b.addEventListener('click', () => {
+    const r = state.reports.find((x) => x.id === b.dataset.moderate);
+    if (r) openModerateDialog(r);
   }));
+}
+
+// 审核处置模态：展示举报 → 必填理由 → 选择 忽略/警告/暂停/封禁 → 调 /moderate → 落审计并刷新。
+function openModerateDialog(report) {
+  const mask = document.createElement('div'); mask.className = 'drawer-mask'; mask.style.zIndex = '70';
+  const box = document.createElement('div'); box.className = 'modal-overlay';
+  const actions = [
+    ['dismiss', 'modDismiss', 'modDismissDesc', 'btn'],
+    ['warn', 'modWarn', 'modWarnDesc', 'btn ink'],
+    ['suspend', 'modSuspend', 'modSuspendDesc', 'btn danger'],
+    ['ban', 'modBan', 'modBanDesc', 'btn danger'],
+  ].map(([act, label, desc, cls]) => `
+    <button class="${cls} mod-act" data-act="${act}">
+      <span class="mod-act-label">${esc(t(label))}</span>
+      <span class="mod-act-desc">${esc(t(desc))}</span>
+    </button>`).join('');
+  box.innerHTML = `<div class="card mod-card" role="dialog" aria-modal="true" aria-label="${esc(t('modTitle'))}">
+    <h3 class="mod-title">${esc(t('modTitle'))}</h3>
+    <div class="mod-summary"><b>${esc(report.reporterName)}</b> <span class="arrow">→</span> <b>${esc(report.targetName)}</b>
+      <div class="reason">${esc(report.reason || '—')}</div></div>
+    <label class="mod-reason-label" for="modReason">${esc(t('modReason'))}</label>
+    <textarea id="modReason" class="mod-reason" rows="3" placeholder="${esc(t('modReasonPh'))}"></textarea>
+    <div class="mod-actions">${actions}</div>
+    <div class="confirm-actions"><button class="btn ghost" data-no>${esc(state.lang === 'en' ? 'Cancel' : '取消')}</button></div>
+  </div>`;
+  document.body.appendChild(mask); document.body.appendChild(box);
+  const close = () => { mask.remove(); box.remove(); document.removeEventListener('keydown', onKey); };
+  function onKey(e) { if (e.key === 'Escape') close(); }
+  document.addEventListener('keydown', onKey);
+  mask.addEventListener('click', close);
+  box.querySelector('[data-no]').addEventListener('click', close);
+  box.querySelectorAll('.mod-act').forEach((b) => b.addEventListener('click', async () => {
+    const reason = box.querySelector('#modReason').value.trim();
+    if (!reason) { box.querySelector('#modReason').focus(); toast(t('modReasonRequired'), 'error'); return; }
+    box.querySelectorAll('.mod-act').forEach((x) => (x.disabled = true));
+    try {
+      await api(`/api/admin/reports/${report.id}/moderate`, { method: 'POST', body: { action: b.dataset.act, reason } });
+      toast(t('moderated'), 'success'); close();
+      loadReports(); loadOverviewBadge();
+    } catch (err) {
+      box.querySelectorAll('.mod-act').forEach((x) => (x.disabled = false));
+      toast(errText(err.code), 'error');
+    }
+  }));
+  box.querySelector('#modReason').focus();
+}
+
+// ---------------------------------------------------------------- audit log
+async function loadAudit() {
+  showLoading();
+  try { state.audit = (await api('/api/admin/audit?limit=500')).entries || []; renderAudit(); }
+  catch (err) { viewEl().innerHTML = `<div class="err-banner">${esc(errText(err.code))}</div>`; }
+}
+function renderAudit() {
+  const rows = state.audit.map((e) => `
+    <tr>
+      <td class="cell-date">${esc(fmtDate(e.at))}</td>
+      <td><div class="nm">${esc(e.adminName || '—')}</div></td>
+      <td>${esc(auditActionName(e.action))}</td>
+      <td><span class="pill off">${esc(e.targetType)}</span> <span class="mono">${esc((e.targetId || '').slice(0, 12))}</span></td>
+      <td class="audit-detail">${esc(e.detail || '—')}</td>
+    </tr>`).join('');
+  viewEl().innerHTML = `
+    <div class="toolbar">
+      <button class="btn ghost" data-action="reloadAudit">↻ ${esc(t('refresh'))}</button>
+      <button class="btn ghost" data-action="exportAudit" ${state.audit.length ? '' : 'disabled'}>⬇ ${esc(t('exportCsv'))}</button>
+    </div>
+    <div class="table-wrap">
+      ${state.audit.length ? `<table><thead><tr>
+        <th>${esc(t('auditWhen'))}</th><th>${esc(t('auditAdmin'))}</th><th>${esc(t('auditAction'))}</th><th>${esc(t('auditTarget'))}</th><th>${esc(t('auditDetail'))}</th>
+      </tr></thead><tbody>${rows}</tbody></table>`
+      : `<div class="empty"><div class="ico">🧾</div><p>${esc(t('noAudit'))}</p></div>`}
+    </div>`;
+  viewEl().querySelector('[data-action="reloadAudit"]').addEventListener('click', loadAudit);
+  viewEl().querySelector('[data-action="exportAudit"]').addEventListener('click', () => {
+    downloadCSV('beeurei-audit.csv', [
+      [t('auditWhen'), t('auditAdmin'), t('auditAction'), 'targetType', 'targetId', t('auditDetail')],
+      ...state.audit.map((e) => [fmtDate(e.at), e.adminName || '', auditActionName(e.action), e.targetType, e.targetId, e.detail || '']),
+    ]);
+  });
+}
+
+// ---------------------------------------------------------------- controls (site-wide switches)
+async function loadControls() {
+  showLoading();
+  try { state.appConfig = (await api('/api/admin/config')).config; renderControls(); }
+  catch (err) { viewEl().innerHTML = `<div class="err-banner">${esc(errText(err.code))}</div>`; }
+}
+function renderControls() {
+  const c = state.appConfig || { registrationEnabled: true };
+  viewEl().innerHTML = `
+    <div class="section"><h3>${esc(t('siteControls'))}</h3>
+      <div class="card">
+        <div class="form-row"><div><div class="lab">${esc(t('registration'))}</div><div class="desc">${esc(t('registrationDesc'))}</div></div>
+          <label class="switch"><input type="checkbox" id="cReg" ${c.registrationEnabled ? 'checked' : ''}/><span class="track"></span></label></div>
+        <div class="form-row"><div class="desc">${esc(t('recPolicyLink'))}</div></div>
+      </div>
+    </div>`;
+  $('#cReg').addEventListener('change', async (e) => {
+    const next = e.target.checked;
+    try { state.appConfig = (await api('/api/admin/config', { method: 'PUT', body: { registrationEnabled: next } })).config; toast(t('saved'), 'success'); }
+    catch (err) { e.target.checked = !next; toast(errText(err.code), 'error'); }
+  });
 }
 
 // ---------------------------------------------------------------- recordings
@@ -792,7 +951,9 @@ function route() {
   else if (r === 'calls') loadCalls();
   else if (r === 'blocks') loadBlocks();
   else if (r === 'reports') loadReports();
+  else if (r === 'audit') loadAudit();
   else if (r === 'recordings') loadRecordings();
+  else if (r === 'controls') loadControls();
 }
 function render() {
   document.documentElement.lang = state.lang === 'en' ? 'en' : 'zh-Hans';

@@ -79,6 +79,7 @@ export interface CallRecord {
 
 /// 举报（通话后一键举报 → 管理员审核）。
 export type ReportStatus = 'open' | 'resolved'
+export type ReportDecision = 'dismissed' | 'warned' | 'suspended' | 'banned'
 export interface Report {
   id: string
   reporterId: string
@@ -87,6 +88,35 @@ export interface Report {
   reason: string
   status: ReportStatus
   createdAt: number
+  decision?: ReportDecision // 审核处置结果（resolved 时记录）
+  resolvedBy?: string       // 处置管理员 id
+  resolvedAt?: number
+}
+
+/// 管理审计日志：每条后台**变更**操作留痕（可追责、可证明合规）。
+export interface AdminAuditEntry {
+  id: string
+  adminId: string
+  action: string      // 如 user.ban / user.role / report.moderate / config.update
+  targetType: string  // user | report | config | recording
+  targetId: string
+  detail?: string     // 补充（如 reason、from→to）
+  at: number
+}
+
+/// 用户警告（内容审核的轻处置：警告但不封号）。
+export interface Warning {
+  id: string
+  userId: string
+  reason: string
+  byAdminId: string
+  reportId?: string
+  at: number
+}
+
+/// 全站运行配置（管理员可控的"开关")。
+export interface AppConfig {
+  registrationEnabled: boolean // 是否开放注册（关闭后新账号注册/邮箱码建号被拒）
 }
 
 /// refresh token（仅存哈希，轮换+撤销）。
@@ -181,6 +211,18 @@ export interface Store {
   findReport(id: string): Report | undefined
   updateReport(id: string, patch: Partial<Report>): Report | undefined
 
+  // 管理审计日志
+  createAuditEntry(e: AdminAuditEntry): void
+  allAuditEntries(limit?: number): AdminAuditEntry[] // 时间倒序
+
+  // 用户警告（审核轻处置）
+  createWarning(w: Warning): void
+  warningsForUser(userId: string): Warning[] // 时间倒序
+
+  // 全站运行配置
+  getAppConfig(): AppConfig
+  setAppConfig(patch: Partial<AppConfig>): AppConfig
+
   createRefreshToken(rt: RefreshToken): void
   findRefreshToken(tokenHash: string): RefreshToken | undefined
   deleteRefreshToken(tokenHash: string): void
@@ -245,6 +287,9 @@ export class MemoryStore implements Store {
   protected groupReads = new Map<string, number>() // `${groupId}:${userId}` → lastReadAt
   protected media = new Map<string, MediaMeta>()
   protected recordingConfig: RecordingConfig = { enabled: false, retentionDays: 7, requireConsent: true }
+  protected auditLog: AdminAuditEntry[] = []
+  protected warnings = new Map<string, Warning>()
+  protected appConfig: AppConfig = { registrationEnabled: true }
 
   createRefreshToken(rt: RefreshToken): void {
     this.refreshTokens.set(rt.tokenHash, rt)
@@ -403,6 +448,30 @@ export class MemoryStore implements Store {
     return next
   }
 
+  createAuditEntry(e: AdminAuditEntry): void {
+    this.auditLog.push(e)
+    if (this.auditLog.length > 10_000) this.auditLog.splice(0, this.auditLog.length - 10_000) // 防无限增长
+    this.afterMutate()
+  }
+  allAuditEntries(limit = 200): AdminAuditEntry[] {
+    return [...this.auditLog].sort((a, b) => b.at - a.at).slice(0, limit)
+  }
+  createWarning(w: Warning): void {
+    this.warnings.set(w.id, w)
+    this.afterMutate()
+  }
+  warningsForUser(userId: string): Warning[] {
+    return [...this.warnings.values()].filter((w) => w.userId === userId).sort((a, b) => b.at - a.at)
+  }
+  getAppConfig(): AppConfig {
+    return { ...this.appConfig }
+  }
+  setAppConfig(patch: Partial<AppConfig>): AppConfig {
+    this.appConfig = { ...this.appConfig, ...patch }
+    this.afterMutate()
+    return { ...this.appConfig }
+  }
+
   getRecordingConfig(): RecordingConfig {
     return { ...this.recordingConfig }
   }
@@ -550,6 +619,9 @@ export class JsonFileStore extends MemoryStore {
           groupReads?: Record<string, number>
           media?: MediaMeta[]
           passkeys?: Passkey[]
+          auditLog?: AdminAuditEntry[]
+          warnings?: Warning[]
+          appConfig?: AppConfig
         }
         for (const u of data.users ?? []) this.users.set(u.id, u)
         for (const l of data.links ?? []) this.links.set(l.id, l)
@@ -564,6 +636,9 @@ export class JsonFileStore extends MemoryStore {
         for (const [k, v] of Object.entries(data.groupReads ?? {})) this.groupReads.set(k, v)
         for (const md of data.media ?? []) this.media.set(md.id, md)
         for (const pk of data.passkeys ?? []) this.passkeys.set(pk.id, pk)
+        if (data.auditLog) this.auditLog = data.auditLog
+        for (const w of data.warnings ?? []) this.warnings.set(w.id, w)
+        if (data.appConfig) this.appConfig = data.appConfig
       } catch {
         /* 损坏的文件忽略，从空开始 */
       }
@@ -586,6 +661,9 @@ export class JsonFileStore extends MemoryStore {
       groupReads: Object.fromEntries(this.groupReads),
       media: [...this.media.values()],
       passkeys: [...this.passkeys.values()],
+      auditLog: this.auditLog,
+      warnings: [...this.warnings.values()],
+      appConfig: this.appConfig,
     }
     writeFileSync(this.path, JSON.stringify(data, null, 2))
   }

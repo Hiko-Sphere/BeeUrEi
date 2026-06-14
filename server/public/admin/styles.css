@@ -252,3 +252,21 @@ tbody tr.clickable:hover { background: var(--surface-2); }
 .confirm-card { max-width: 400px; width: 100%; }
 .confirm-msg { margin: 0 0 18px; font-size: 15px; line-height: 1.5; }
 .confirm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+/* moderation modal */
+.mod-card { max-width: 460px; width: 100%; }
+.mod-title { margin: 0 0 12px; font-size: 16px; }
+.mod-summary { background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 14px; margin-bottom: 14px; }
+.mod-summary .reason { margin-top: 6px; color: var(--text-dim); font-size: 13px; line-height: 1.45; }
+.mod-reason-label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+.mod-reason { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); margin-bottom: 14px; }
+.mod-reason:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mod-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.mod-act { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: start; padding: 10px 12px; height: auto; }
+.mod-act-label { font-weight: 800; font-size: 14px; }
+.mod-act-desc { font-weight: 500; font-size: 11px; opacity: .85; line-height: 1.35; }
+
+/* audit log */
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--text-faint); }
+.audit-detail { font-size: 12px; color: var(--text-dim); max-width: 320px; word-break: break-word; }
+.warn-mini .when { display: block; float: none; margin-top: 5px; }

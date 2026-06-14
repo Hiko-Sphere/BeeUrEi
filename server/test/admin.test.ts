@@ -247,3 +247,119 @@ describe('admin + reports', () => {
     await app.close()
   })
 })
+
+describe('Admin v3：审核处置 + 审计 + 全站控制', () => {
+  // 提交一条针对 target 的举报，返回 reportId（reporter 为另一注册用户）。
+  async function seedReport(app: ReturnType<typeof buildApp>, reporterUser: string, targetId: string) {
+    const reg = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: reporterUser, password: 'secret123' } })
+    const token = reg.json().token as string
+    const rep = await app.inject({ method: 'POST', url: '/api/reports', headers: { authorization: `Bearer ${token}` }, payload: { targetUserId: targetId, reason: '违规内容' } })
+    return rep.json().report.id as string
+  }
+
+  it('moderate warn：记警告、不封号，用户详情可见警告', async () => {
+    const { app } = withAdmin()
+    const adminAuth = { authorization: `Bearer ${await login(app, 'root', 'rootpass1')}` }
+    const reg = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'badguy', password: 'secret123' } })
+    const targetId = reg.json().user.id as string
+    const reportId = await seedReport(app, 'reporter1', targetId)
+
+    const mod = await app.inject({ method: 'POST', url: `/api/admin/reports/${reportId}/moderate`, headers: adminAuth, payload: { action: 'warn', reason: '首次轻微违规' } })
+    expect(mod.statusCode).toBe(200)
+    expect(mod.json().decision).toBe('warned')
+
+    // 警告不封号：仍能登录
+    const stillIn = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'badguy', password: 'secret123' } })
+    expect(stillIn.statusCode).toBe(200)
+
+    // 用户详情含该警告
+    const detail = await app.inject({ method: 'GET', url: `/api/admin/users/${targetId}`, headers: adminAuth })
+    expect(detail.json().warnings.length).toBe(1)
+    expect(detail.json().warnings[0].reason).toBe('首次轻微违规')
+
+    // 举报标记 resolved + decision
+    const reports = await app.inject({ method: 'GET', url: '/api/admin/reports', headers: adminAuth })
+    const r = reports.json().reports.find((x: any) => x.id === reportId)
+    expect(r.status).toBe('resolved')
+    expect(r.decision).toBe('warned')
+    expect(r.resolvedByName).toBe('root')
+    await app.close()
+  })
+
+  it('moderate ban：封号 + 强制下线，旧 token 失效且无法登录', async () => {
+    const { app } = withAdmin()
+    const adminAuth = { authorization: `Bearer ${await login(app, 'root', 'rootpass1')}` }
+    const reg = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'abuser', password: 'secret123' } })
+    const targetId = reg.json().user.id as string
+    const targetToken = reg.json().token as string
+    const reportId = await seedReport(app, 'reporter2', targetId)
+
+    const mod = await app.inject({ method: 'POST', url: `/api/admin/reports/${reportId}/moderate`, headers: adminAuth, payload: { action: 'ban', reason: '严重违规' } })
+    expect(mod.statusCode).toBe(200)
+    expect(mod.json().decision).toBe('banned')
+
+    // 旧 access token 立即失效
+    const me = await app.inject({ method: 'GET', url: '/api/me', headers: { authorization: `Bearer ${targetToken}` } })
+    expect(me.statusCode).toBe(401)
+    // 无法登录
+    const login2 = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'abuser', password: 'secret123' } })
+    expect(login2.statusCode).toBe(403)
+    await app.close()
+  })
+
+  it('moderate ban：不能处置唯一活跃管理员（防锁死后台）', async () => {
+    const { app, store } = withAdmin()
+    const adminAuth = { authorization: `Bearer ${await login(app, 'root', 'rootpass1')}` }
+    // 伪造一条针对 admin 自身的举报
+    const reportId = await seedReport(app, 'reporter3', 'admin1')
+    const mod = await app.inject({ method: 'POST', url: `/api/admin/reports/${reportId}/moderate`, headers: adminAuth, payload: { action: 'ban', reason: 'x' } })
+    expect(mod.statusCode).toBe(400)
+    expect(store.findById('admin1')!.status).toBe('active')
+    await app.close()
+  })
+
+  it('审计日志：处置/封禁/改配置都留痕，时间倒序且带管理员名', async () => {
+    const { app } = withAdmin()
+    const adminAuth = { authorization: `Bearer ${await login(app, 'root', 'rootpass1')}` }
+    const reg = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'subj', password: 'secret123' } })
+    const targetId = reg.json().user.id as string
+    await app.inject({ method: 'POST', url: `/api/admin/users/${targetId}/status`, headers: adminAuth, payload: { status: 'disabled' } })
+
+    const audit = await app.inject({ method: 'GET', url: '/api/admin/audit', headers: adminAuth })
+    expect(audit.statusCode).toBe(200)
+    const entries = audit.json().entries as any[]
+    expect(entries.length).toBeGreaterThanOrEqual(1)
+    expect(entries[0].action).toBe('user.disable')
+    expect(entries[0].adminName).toBe('root')
+    await app.close()
+  })
+
+  it('全站注册开关：关闭后拒绝注册/邮箱建号/Apple 建号，已有账号仍可登录', async () => {
+    const { app } = withAdmin()
+    const adminAuth = { authorization: `Bearer ${await login(app, 'root', 'rootpass1')}` }
+    // 先建一个用户以验证“已有账号登录不受影响”
+    await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'early', password: 'secret123' } })
+
+    // 关闭注册
+    const put = await app.inject({ method: 'PUT', url: '/api/admin/config', headers: adminAuth, payload: { registrationEnabled: false } })
+    expect(put.statusCode).toBe(200)
+    expect(put.json().config.registrationEnabled).toBe(false)
+    const get = await app.inject({ method: 'GET', url: '/api/admin/config', headers: adminAuth })
+    expect(get.json().config.registrationEnabled).toBe(false)
+
+    // 新注册被拒
+    const blocked = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'late', password: 'secret123' } })
+    expect(blocked.statusCode).toBe(403)
+    expect(blocked.json().error).toBe('registration_disabled')
+
+    // 已有账号仍能登录
+    const ok = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'early', password: 'secret123' } })
+    expect(ok.statusCode).toBe(200)
+
+    // 重新开放后可注册
+    await app.inject({ method: 'PUT', url: '/api/admin/config', headers: adminAuth, payload: { registrationEnabled: true } })
+    const reopened = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'late', password: 'secret123' } })
+    expect(reopened.statusCode).toBe(201)
+    await app.close()
+  })
+})

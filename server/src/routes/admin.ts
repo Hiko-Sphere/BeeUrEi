@@ -1,11 +1,18 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { type Store, type Role, publicUser } from '../db/store'
+import { randomUUID } from 'node:crypto'
+import { type Store, type Role, type AdminAuditEntry, publicUser } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import type { PresenceRegistry } from '../assist/presence'
 
 const statusSchema = z.object({ status: z.enum(['active', 'disabled']) })
 const roleSchema = z.object({ role: z.enum(['blind', 'helper', 'family', 'admin', 'developer']) })
+// 审核处置阶梯：忽略 / 警告（不封）/ 暂停（封禁+强制下线）/ 封禁（封禁+强制下线，记为最重处置）。
+const moderateSchema = z.object({
+  action: z.enum(['dismiss', 'warn', 'suspend', 'ban']),
+  reason: z.string().trim().min(1).max(1000),
+})
+const configSchema = z.object({ registrationEnabled: z.boolean() })
 
 const SERVER_VERSION = '0.1.0'
 const START_MS = Date.now()
@@ -15,6 +22,9 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
   // 当前活跃管理员数（用于"最后一名管理员"保护，防把后台锁死）。
   const activeAdminCount = () => store.allUsers().filter((u) => u.role === 'admin' && u.status === 'active').length
   const nameOf = (id: string) => store.findById(id)?.displayName ?? '—'
+  // 审计：每个有副作用的后台操作都落一条不可抵赖的日志（谁、何时、对谁、做了什么）。
+  const audit = (adminId: string, action: string, targetType: AdminAuditEntry['targetType'], targetId: string, detail?: string) =>
+    store.createAuditEntry({ id: randomUUID(), adminId, action, targetType, targetId, detail, at: Date.now() })
 
   // 后台总览（仪表盘）：用户/角色/在线/举报/录制聚合统计。
   app.get('/api/admin/overview', adminOnly, async () => {
@@ -116,6 +126,14 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       links,
       blockedCount: store.blocksInvolving(id).length,
       recentCalls,
+      // 审核记录：该用户收到的警告（轻处置）历史，供审核员判断是否升级处置。
+      warnings: store.warningsForUser(id).map((w) => ({
+        id: w.id,
+        reason: w.reason,
+        byAdminName: nameOf(w.byAdminId),
+        reportId: w.reportId ?? null,
+        at: w.at,
+      })),
     }
   })
 
@@ -133,7 +151,9 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     if (target.role === 'admin' && target.status === 'active' && parsed.data.role !== 'admin' && activeAdminCount() <= 1) {
       return reply.code(400).send({ error: 'last_admin_protected' })
     }
+    const from = target.role
     const updated = store.updateUser(id, { role: parsed.data.role as Role })
+    audit(req.user!.sub, 'user.role', 'user', id, `${from} → ${parsed.data.role}`)
     return { user: publicUser(updated!) }
   })
 
@@ -153,26 +173,65 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       return reply.code(400).send({ error: 'last_admin_protected' })
     }
     const updated = store.updateUser(id, { status: parsed.data.status })
+    audit(req.user!.sub, parsed.data.status === 'disabled' ? 'user.disable' : 'user.enable', 'user', id)
     return { user: publicUser(updated!) }
   })
 
-  // 举报列表（解析举报人/被举报人显示名，便于审核）。
+  // 举报列表（解析举报人/被举报人显示名 + 处置结果，便于审核与回溯）。
   app.get('/api/admin/reports', adminOnly, async () => {
     return {
       reports: store.allReports().map((r) => ({
         ...r,
         reporterName: store.findById(r.reporterId)?.displayName ?? '未知',
         targetName: store.findById(r.targetUserId)?.displayName ?? '未知',
+        resolvedByName: r.resolvedBy ? (store.findById(r.resolvedBy)?.displayName ?? '—') : null,
       })),
     }
   })
 
-  // 处理举报（标记已解决）。
+  // 处理举报（仅标记已解决，不附带处置——保留向后兼容；正式审核走 /moderate）。
   app.post('/api/admin/reports/:id/resolve', adminOnly, async (req, reply) => {
     const id = (req.params as { id: string }).id
-    const updated = store.updateReport(id, { status: 'resolved' })
+    const updated = store.updateReport(id, { status: 'resolved', resolvedBy: req.user!.sub, resolvedAt: Date.now() })
     if (!updated) return reply.code(404).send({ error: 'not_found' })
+    audit(req.user!.sub, 'report.resolve', 'report', id)
     return { report: updated }
+  })
+
+  // 审核处置（内容审核核心）：对一条举报作出 忽略/警告/暂停/封禁 决定，
+  // 一次调用同时（1）落处置结果到举报（2）对被举报用户施加相应后果（3）落审计日志。
+  app.post('/api/admin/reports/:id/moderate', adminOnly, async (req, reply) => {
+    const parsed = moderateSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const id = (req.params as { id: string }).id
+    const report = store.findReport(id)
+    if (!report) return reply.code(404).send({ error: 'not_found' })
+    const { action, reason } = parsed.data
+    const targetId = report.targetUserId
+    const target = store.findById(targetId)
+    if (!target) return reply.code(404).send({ error: 'target_not_found' })
+    const adminId = req.user!.sub
+
+    // 不能对自己或（封禁动作下）唯一活跃管理员动手，防误锁后台。
+    if ((action === 'suspend' || action === 'ban')) {
+      if (targetId === adminId) return reply.code(400).send({ error: 'cannot_disable_self' })
+      if (target.role === 'admin' && target.status === 'active' && activeAdminCount() <= 1) {
+        return reply.code(400).send({ error: 'last_admin_protected' })
+      }
+    }
+
+    const decision = action === 'dismiss' ? 'dismissed' : action === 'warn' ? 'warned' : action === 'suspend' ? 'suspended' : 'banned'
+    if (action === 'warn') {
+      // 轻处置：记一条用户警告，不封号。
+      store.createWarning({ id: randomUUID(), userId: targetId, reason, byAdminId: adminId, reportId: id, at: Date.now() })
+    } else if (action === 'suspend' || action === 'ban') {
+      // 重处置：封禁 + 强制下线（已签发 token 立即失效、撤销 refresh token），防被封后仍在线。
+      store.deleteRefreshTokensForUser(targetId)
+      store.updateUser(targetId, { status: 'disabled', tokenVersion: (target.tokenVersion ?? 0) + 1 })
+    }
+    const updated = store.updateReport(id, { status: 'resolved', decision, resolvedBy: adminId, resolvedAt: Date.now() })
+    audit(adminId, `report.${action}`, 'report', id, `target=${targetId} reason=${reason}`)
+    return { report: updated, decision }
   })
 
   // 全站绑定关系（盲人 ↔ 协助者/亲友）总览：解析双方显示名与角色，便于排查"加不上人/紧急联系人"等问题。
@@ -238,6 +297,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     if (!target) return reply.code(404).send({ error: 'not_found' })
     if (!target.email) return reply.code(400).send({ error: 'no_email' }) // 无邮箱可标记，避免产生"已验证却无邮箱"的脏态
     const updated = store.updateUser(id, { emailVerified: parsed.data.verified })
+    audit(req.user!.sub, parsed.data.verified ? 'user.verifyEmail' : 'user.unverifyEmail', 'user', id)
     return { user: publicUser(updated!), emailVerified: !!updated!.emailVerified }
   })
 
@@ -248,6 +308,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     if (!target) return reply.code(404).send({ error: 'not_found' })
     if (!target.appleSub) return reply.code(400).send({ error: 'not_linked' })
     const updated = store.updateUser(id, { appleSub: undefined })
+    audit(req.user!.sub, 'user.unlinkApple', 'user', id)
     return { user: publicUser(updated!), appleLinked: !!updated!.appleSub }
   })
 
@@ -258,6 +319,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     if (!target) return reply.code(404).send({ error: 'not_found' })
     const keys = store.passkeysForUser(id)
     for (const k of keys) store.deletePasskey(k.id, id)
+    if (keys.length) audit(req.user!.sub, 'user.clearPasskeys', 'user', id, `count=${keys.length}`)
     return { cleared: keys.length, passkeys: store.passkeysForUser(id).length }
   })
 
@@ -268,6 +330,31 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     if (!target) return reply.code(404).send({ error: 'not_found' })
     store.deleteRefreshTokensForUser(id)
     const updated = store.updateUser(id, { tokenVersion: (target.tokenVersion ?? 0) + 1 })
+    audit(req.user!.sub, 'user.forceLogout', 'user', id)
     return { user: publicUser(updated!), tokenVersion: updated!.tokenVersion ?? 0 }
+  })
+
+  // —— 审计日志（不可抵赖）——
+  // 后台所有有副作用的操作（改角色/封禁/审核处置/改配置等）的时间倒序流水，解析操作管理员显示名。
+  app.get('/api/admin/audit', adminOnly, async (req) => {
+    const q = req.query as { limit?: string }
+    const limit = Math.min(Math.max(Number.parseInt(q.limit ?? '200', 10) || 200, 1), 1000)
+    return {
+      entries: store.allAuditEntries(limit).map((e) => ({
+        ...e,
+        adminName: nameOf(e.adminId),
+      })),
+    }
+  })
+
+  // —— 全站运行配置（管理员可控开关）——
+  app.get('/api/admin/config', adminOnly, async () => ({ config: store.getAppConfig() }))
+
+  app.put('/api/admin/config', adminOnly, async (req, reply) => {
+    const parsed = configSchema.partial().safeParse(req.body)
+    if (!parsed.success || Object.keys(parsed.data).length === 0) return reply.code(400).send({ error: 'invalid_input' })
+    const next = store.setAppConfig(parsed.data)
+    audit(req.user!.sub, 'config.update', 'config', 'app', JSON.stringify(parsed.data))
+    return { config: next }
   })
 }

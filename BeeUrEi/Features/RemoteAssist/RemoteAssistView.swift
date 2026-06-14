@@ -31,6 +31,7 @@ struct RemoteAssistView: View {
     @State private var totalCount = 0      // 绑定总数
     @State private var onlineTask: Task<Void, Never>?
     @State private var pendingVolunteerFallback = false // A4：亲友无人接听→关旧通话后自动转志愿者
+    @Environment(AuthSession.self) private var session // 全站功能开关：关停时禁用对应呼叫按钮
     let onClose: () -> Void
 
     /// 求助屏文案语言（E5）：每次渲染解析，与各屏同一真相来源。
@@ -65,7 +66,9 @@ struct RemoteAssistView: View {
                                  tint: .beeHoney) {
                         showTopicPicker = true
                     }
-                    .disabled(calling)
+                    .opacity(session.features.helpRequests ? 1 : 0.5)
+                    .disabled(calling || !session.features.helpRequests)
+                    .accessibilityHint(session.features.helpRequests ? "" : HomeStrings.featureOff(lang))
 
                     // 次行动：呼叫亲友（一键）
                     BeeBigButton(AssistStrings.callFamilyTitle(lang),
@@ -74,7 +77,9 @@ struct RemoteAssistView: View {
                                  tint: .beeInk, foreground: .white) {
                         Task { await callForHelp() }
                     }
-                    .disabled(calling)
+                    .opacity(session.features.calls ? 1 : 0.5)
+                    .disabled(calling || !session.features.calls)
+                    .accessibilityHint(session.features.calls ? "" : HomeStrings.featureOff(lang))
 
                     if let statusText {
                         Text(statusText).font(.subheadline).foregroundStyle(.secondary)

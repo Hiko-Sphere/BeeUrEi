@@ -7,6 +7,8 @@ import Observation
 final class AuthSession {
     private(set) var user: AccountInfo?
     private(set) var token: String?
+    /// 全站功能开关（管理员后台可逐项关闭）。fail-open：拉取前/失败时保持全开，绝不误关功能。
+    private(set) var features: RemoteFeatureFlags = .allOn
     private(set) var errorMessage: String?
     private(set) var isWorking = false
     private(set) var restoreFailed = false   // 恢复账号时遇网络错误（供 UI 显示重试/退出，见审查 #15）
@@ -41,6 +43,7 @@ final class AuthSession {
         defer { isRestoring = false }
         do {
             user = try await api.me(token: token)
+            await refreshAppConfig()
             return
         } catch APIError.unauthorized {
             // 仅 401（access 真失效/被撤销）才继续 refresh（下方）。
@@ -128,6 +131,13 @@ final class AuthSession {
     func refreshMe() async {
         guard let token else { return }
         if let full = try? await api.me(token: token) { user = full }
+        await refreshAppConfig()
+    }
+
+    /// 拉取全站功能开关（登录/恢复/重进前台时）。fail-open：失败保持现状（默认全开），不影响主流程。
+    func refreshAppConfig() async {
+        guard let token else { return }
+        if let f = try? await api.appConfig(token: token) { features = f }
     }
 
     func logout() {
@@ -162,6 +172,7 @@ final class AuthSession {
             Task { await api.setLanguage(token: t, language: lang.rawValue) }
             // 拉 /api/me 取完整本人信息（usernameCustomized/email/appleLinked/hasPasskey），一次性赋值避免闪屏。
             user = (try? await api.me(token: t)) ?? result.user
+            await refreshAppConfig() // 同步全站功能开关，进 App 前按开关隐藏/禁用按钮
             // 仅**本次新建账号**才进引导（选身份→设 userid→绑邮箱，可跳过）。
             // 老账号无论用 Apple / Passkey / 邮箱验证码 / 密码登录都直接进 App——
             // 修复"绑过 Apple 后重登被跳去注册""passkey 登录被当成注册新用户"（用户反馈 #2/#4）。

@@ -108,7 +108,9 @@ struct AssistHomeView: View {
                                  tint: .beeHoney) {
                         Task { await matchRandom() }
                     }
-                    .disabled(busy)
+                    .opacity(session.features.helpRequests ? 1 : 0.5)
+                    .disabled(busy || !session.features.helpRequests)
+                    .accessibilityHint(session.features.helpRequests ? "" : HomeStrings.featureOff(lang))
 
                     if let statusText {
                         Text(statusText).font(.footnote).foregroundStyle(.secondary)

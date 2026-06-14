@@ -255,6 +255,9 @@ struct HomeView: View {
     /// 主屏文案语言（E5）：每次渲染解析，与各屏同一真相来源。
     private var lang: Language { FeatureSettings().language }
 
+    /// 求助入口：呼叫亲友(calls)或公开求助志愿者(helpRequests)，任一开启即可用；两者皆关才禁用。
+    private var helpEnabled: Bool { session.features.calls || session.features.helpRequests }
+
     private var actionPanel: some View {
         VStack(spacing: BeeSpacing.sm) {
             // 首要操作：求助（最大、蜂蜜黄；全屏任意处 Magic Tap 也直达）。
@@ -262,13 +265,15 @@ struct HomeView: View {
                          subtitle: HomeStrings.helpSubtitle(lang), tint: .beeHoney) {
                 showRemoteAssist = true
             }
-            .accessibilityHint(HomeStrings.magicTapHint(lang))
+            .opacity(helpEnabled ? 1 : 0.5)
+            .disabled(!helpEnabled)
+            .accessibilityHint(helpEnabled ? HomeStrings.magicTapHint(lang) : HomeStrings.featureOff(lang))
             // 两大功能屏：识别 / 导航。
             HStack(spacing: BeeSpacing.sm) {
                 tile(HomeStrings.tileLook(lang), systemImage: "viewfinder",
-                     hint: HomeStrings.hintLook(lang)) { showFraming = true }
+                     hint: HomeStrings.hintLook(lang), enabled: session.features.sceneScan) { showFraming = true }
                 tile(HomeStrings.tileNav(lang), systemImage: "figure.walk",
-                     hint: HomeStrings.hintNav(lang)) { showNavigation = true }
+                     hint: HomeStrings.hintNav(lang), enabled: session.features.navigation) { showNavigation = true }
             }
             // 环境感知四键（同类动作编为一组：VoiceOver 报"环境感知"分组名，可预期、可记忆）。
             VStack(spacing: BeeSpacing.sm) {
@@ -293,7 +298,8 @@ struct HomeView: View {
 
     /// 方块磁贴按钮：深底白字 + 蜂蜜黄图标，保证在任意相机画面上都清晰可读；超大点按区。
     /// 「降低透明度/增强对比」时实底化（材质/半透明会透出相机画面致对比不足）。
-    private func tile(_ title: String, systemImage: String, hint: String? = nil, action: @escaping () -> Void) -> some View {
+    /// `enabled=false`（功能被管理员全站关闭）：磁贴变暗 + 禁用 + VoiceOver 读"该功能暂时关闭"。
+    private func tile(_ title: String, systemImage: String, hint: String? = nil, enabled: Bool = true, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: BeeSpacing.sm) {
                 Image(systemName: systemImage).font(.system(size: 32, weight: .bold)).foregroundStyle(Color.beeHoney)
@@ -308,8 +314,10 @@ struct HomeView: View {
             .contentShape(RoundedRectangle(cornerRadius: BeeRadius.card, style: .continuous))
         }
         .buttonStyle(BeePressStyle())
+        .opacity(enabled ? 1 : 0.5)
+        .disabled(!enabled)
         .accessibilityLabel(title)
-        .modifier(OptionalA11yHint(hint: hint))
+        .modifier(OptionalA11yHint(hint: enabled ? hint : HomeStrings.featureOff(lang)))
     }
 
     private var settingsButton: some View {
@@ -361,8 +369,11 @@ struct HomeView: View {
                 }
         }
         .buttonStyle(BeePressStyle())
+        .opacity(session.features.messaging ? 1 : 0.5)
+        .disabled(!session.features.messaging)
         .accessibilityLabel(ChatStrings.messagesButton(lang)
                             + (unreadTotal > 0 ? "，" + ChatStrings.unreadBadgeA11y(unreadTotal, lang) : ""))
+        .accessibilityHint(session.features.messaging ? "" : HomeStrings.featureOff(lang))
     }
 
     /// 语音指令路由：解析结果 → 对应功能（确认/失败播报全部走总线，不与避障/导航重叠）。

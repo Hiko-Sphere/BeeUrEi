@@ -53,6 +53,28 @@ struct AuthResult: Codable, Sendable {
     var created: Bool? // true=本次认证新建了账号 → 客户端走"选身份→设 userid→绑邮箱"引导
 }
 
+/// 全站功能开关（GET /api/app-config）。管理员可在后台逐项关闭某功能；App 据此隐藏/禁用对应按钮。
+/// **fail-open**：默认全开，且任一键缺失按 true 解码——拉取失败/字段缺失绝不误关功能（避免误伤盲人）。
+struct RemoteFeatureFlags: Codable, Sendable, Equatable {
+    var messaging = true
+    var calls = true
+    var helpRequests = true
+    var groups = true
+    var familyLinks = true
+    var mediaUpload = true
+    var navigation = true
+    var sceneScan = true
+    static let allOn = RemoteFeatureFlags()
+
+    init() {}
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func b(_ k: CodingKeys) -> Bool { ((try? c.decodeIfPresent(Bool.self, forKey: k)) ?? nil) ?? true }
+        messaging = b(.messaging); calls = b(.calls); helpRequests = b(.helpRequests); groups = b(.groups)
+        familyLinks = b(.familyLinks); mediaUpload = b(.mediaUpload); navigation = b(.navigation); sceneScan = b(.sceneScan)
+    }
+}
+
 /// 一条聊天消息（kind=audio/image 时 text 为 data URL；kind=video 时 text 为 mediaId；recalled=已撤回占位）。
 struct ChatMessageInfo: Codable, Sendable, Identifiable, Equatable {
     let id: String
@@ -355,6 +377,14 @@ struct APIClient {
         let data = try await authedGet("/api/me", token: token)
         guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.decoding }
         return r.user
+    }
+
+    /// 拉取全站功能开关。失败由调用方按 fail-open 处理（保持全开），不影响登录主流程。
+    func appConfig(token: String) async throws -> RemoteFeatureFlags {
+        struct R: Codable { let features: RemoteFeatureFlags }
+        let data = try await authedGet("/api/app-config", token: token)
+        guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.decoding }
+        return r.features
     }
 
     func adminUsers(token: String) async throws -> [AccountInfo] {

@@ -7,6 +7,11 @@ enum HomeStrings {
 
     // MARK: 磁贴
 
+    /// 功能被管理员全站关闭时的提示（按钮禁用，VoiceOver 读出此 hint）。
+    static func featureOff(_ l: Language) -> String {
+        l == .zh ? "该功能暂时关闭" : "This feature is temporarily unavailable"
+    }
+
     static func helpTitle(_ l: Language) -> String { l == .zh ? "求助" : "Get Help" }
     static func helpSubtitle(_ l: Language) -> String {
         l == .zh ? "呼叫志愿者或亲友帮你看" : "Call a volunteer or family member to see for you"

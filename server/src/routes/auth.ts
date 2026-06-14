@@ -7,6 +7,7 @@ import { signAccessToken, generateRefreshToken, hashToken, refreshTtlMs } from '
 import { normalizePhone, type AppleTokenVerifier } from '../auth/apple'
 import { type CodeRegistry } from '../auth/codes'
 import { type Mailer } from '../mail/mailer'
+import { loginCodeMail } from '../mail/templates'
 
 /// 签发 access + refresh 一对（refresh 仅存哈希）。
 function issueTokens(store: Store, user: User): { token: string; refreshToken: string } {
@@ -220,7 +221,8 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     // 两条路径（邮箱已注册/未注册）都恰好发一封信再响应——时延对称，无枚举侧信道；
     // 发信失败明确返回 503（SMTP 故障是全局的，不泄露任何账号信息），不假装"已发送"。
     try {
-      await mailer.send(email, 'BeeUrEi 登录验证码', `你的登录验证码是：${code}（10 分钟内有效）。若非你本人操作请忽略。`)
+      const m = loginCodeMail(code)
+      await mailer.send(email, m.subject, m.text, m.html)
     } catch (e) {
       console.warn('[mail] 登录码发送失败:', (e as Error).message)
       return reply.code(503).send({ error: 'mail_unavailable' })

@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { emailVerificationMail, passwordResetMail } from '../src/mail/templates'
+import { loginCodeMail, emailVerificationMail, passwordResetMail } from '../src/mail/templates'
 
-describe('交易邮件模板（验证码 / 重置密码）', () => {
+describe('交易邮件模板（登录码 / 邮箱验证 / 重置密码）', () => {
   const cases = [
+    ['login code', loginCodeMail],
     ['email verification', emailVerificationMail],
     ['password reset', passwordResetMail],
   ] as const
@@ -40,7 +41,8 @@ describe('交易邮件模板（验证码 / 重置密码）', () => {
     })
   }
 
-  it('两类邮件主题不同，便于收件人区分', () => {
-    expect(emailVerificationMail('1').subject).not.toBe(passwordResetMail('1').subject)
+  it('三类邮件主题互不相同，便于收件人区分', () => {
+    const subjects = [loginCodeMail('1').subject, emailVerificationMail('1').subject, passwordResetMail('1').subject]
+    expect(new Set(subjects).size).toBe(3)
   })
 })

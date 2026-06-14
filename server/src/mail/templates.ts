@@ -91,6 +91,20 @@ function render(c: Copy, code: string): Mail {
   return { subject, text, html }
 }
 
+/// 登录验证码（邮箱验证码登录 / 首次登录即注册）。
+export function loginCodeMail(code: string): Mail {
+  return render({
+    subjectZh: 'BeeUrEi 登录验证码', subjectEn: 'Your BeeUrEi sign-in code',
+    titleZh: '登录 BeeUrEi', titleEn: 'Sign in to BeeUrEi',
+    leadZh: '请在 BeeUrEi 中输入下面的验证码完成登录（首次登录将为你创建账号）：',
+    leadEn: 'Enter this code in BeeUrEi to sign in. (On your first sign-in, an account is created for you.)',
+    noteZh: '若不是你本人操作，请忽略本邮件。',
+    noteEn: 'If you didn’t request this, you can safely ignore this email.',
+    preheaderZh: '你的 BeeUrEi 登录验证码（10 分钟内有效）',
+    preheaderEn: 'Your BeeUrEi sign-in code (expires in 10 minutes)',
+  }, code)
+}
+
 /// 邮箱验证码（绑定/验证邮箱）。
 export function emailVerificationMail(code: string): Mail {
   return render({

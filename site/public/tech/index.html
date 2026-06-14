@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="zh-Hans" data-lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BeeUrEi 蜂之眼 — 技术交底 / Technical Disclosure</title>
+<meta name="description" content="BeeUrEi 蜂之眼的技术交底：系统架构、端侧 AI、WebRTC 信令、管理员旁观、通话录制、后端数据模型、认证安全与隐私合规的工程级披露。">
+<meta name="theme-color" content="#f2a900" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14161f" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://beeurei.hikosphere.com/tech/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="BeeUrEi 蜂之眼">
+<meta property="og:title" content="BeeUrEi 蜂之眼 — 法律文件 / Legal">
+<meta property="og:description" content="隐私政策、使用条款与 EULA（中英双语）。Privacy, Terms and EULA (bilingual).">
+<meta property="og:url" content="https://beeurei.hikosphere.com/legal/">
+<meta property="og:image" content="https://beeurei.hikosphere.com/assets/og.png">
+<link rel="icon" href="/assets/logo.svg?v=20260613d" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/app-icon-180.png">
+<link rel="mask-icon" href="/assets/logo-mono.svg" color="#f2a900">
+<link rel="stylesheet" href="/assets/site.css?v=20260613e">
+<script src="/assets/site.js?v=20260613d"></script>
+</head>
+<body>
+<a class="skip" href="#main"><span lang="zh">跳到主要内容</span><span lang="en">Skip to main content</span></a>
+<header class="site">
+  <div class="wrap nav">
+    <a class="brand" href="/" aria-label="BeeUrEi 蜂之眼 — 首页 / home">
+      <img class="logo" src="/assets/logo.svg?v=20260613d" alt="" width="34" height="34">
+      <span class="brand-name">BeeUrEi <small>蜂之眼</small></span>
+    </a>
+    <nav aria-label="主导航 / Primary">
+      <ul>
+        <li><a href="/#features"><span lang="zh">功能</span><span lang="en">Features</span></a></li>
+        <li><a href="/#privacy"><span lang="zh">隐私</span><span lang="en">Privacy</span></a></li>
+        <li><a href="/tech/"><span lang="zh">技术交底</span><span lang="en">Tech</span></a></li>
+        <li><a href="https://github.com/Hiko-Sphere/BeeUrEi" rel="noopener">GitHub</a></li>
+        <li><a href="/"><span lang="zh">返回首页</span><span lang="en">Home</span></a></li>
+      </ul>
+    </nav>
+    <div class="controls">
+      <button class="toggle" id="langToggle" type="button" aria-pressed="false">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+        <span lang="zh">English</span><span lang="en">中文</span>
+      </button>
+      <button class="toggle" id="themeToggle" type="button" aria-pressed="false">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8 6 18M18 6l1.8-1.8"/></svg>
+        <span class="sr-only" lang="zh">切换深浅色主题</span><span class="sr-only" lang="en">Toggle light or dark theme</span>
+        <span aria-hidden="true" lang="zh">主题</span><span aria-hidden="true" lang="en">Theme</span>
+      </button>
+    </div>
+  </div>
+</header>
+<main id="main">
+  <div class="wrap legal-head">
+    <h1><span lang="zh">技术交底</span><span lang="en">Technical Disclosure</span></h1>
+    <p class="legal-sub"><span lang="zh">系统架构与安全模型的工程级披露 · 与源码一致 · <a href="https://github.com/Hiko-Sphere/BeeUrEi" rel="noopener">GitHub 源码</a></span><span lang="en">Engineering-level disclosure of the architecture &amp; security model · matches the source · <a href="https://github.com/Hiko-Sphere/BeeUrEi" rel="noopener">Source on GitHub</a> · this document is written in Chinese.</span></p>
+  </div>
+  <div class="wrap legal-main">
+    <article class="legal-doc tech-doc">
+<blockquote>
+<p>版本 1.0 · 2026-06-14 · 提供者 Hiko Sphere 彦穹科技（软件制作人 Li Yanpei Hiko）</p>
+<p>本文是 BeeUrEi 蜂之眼系统的工程级技术交底，面向工程、审计与知识产权场景，全面、细致地披露系统的架构、关键技术方案、数据模型、协议、算法与安全/隐私设计。文中所有描述均与仓库内真实代码一致，并尽量给出文件路径、类型名与端点，便于核对。除非特别说明，"客户端"指 iOS App，"后端"指自托管的 Node/TypeScript Fastify 服务。</p>
+</blockquote>
+<hr />
+<h2 id="目录">目录</h2>
+<ol>
+<li><a href="#一系统总览与架构">系统总览与架构</a></li>
+<li><a href="#二端侧感知与视觉-ai-管线">端侧感知与视觉 AI 管线</a></li>
+<li><a href="#三实时通话与-webrtc-信令">实时通话与 WebRTC 信令</a></li>
+<li><a href="#四管理员合规旁观网格">管理员合规旁观网格</a></li>
+<li><a href="#五通话录制采集同意留存与回看">通话录制：采集、同意、留存与回看</a></li>
+<li><a href="#六后端架构与数据模型">后端架构与数据模型</a></li>
+<li><a href="#七认证授权与安全模型">认证、授权与安全模型</a></li>
+<li><a href="#八通知举报与内容治理">通知、举报与内容治理</a></li>
+<li><a href="#九隐私与合规工程">隐私与合规工程</a></li>
+<li><a href="#十部署运维与质量保障">部署、运维与质量保障</a></li>
+</ol>
+<hr />
+<h2 id="一系统总览与架构">一、系统总览与架构</h2>
+<h3 id="11-产品定位">1.1 产品定位</h3>
+<p>BeeUrEi（蜂之眼，"Be Your Eye"）是一款为视障/低视力人士打造的原生 iOS 应用，把 iPhone 的主摄像头与 LiDAR 变为"第二双眼睛"。核心能力：</p>
+<ul>
+<li><strong>端侧实时避障</strong>：相机+深度数据在本机分析前方障碍，以语音/震动（声化）实时提示。</li>
+<li><strong>场景识别（看一看）</strong>：本地识别物体、读字、识别纸币、扫码、辨色、找物、感知"周围的人"、探测光线。</li>
+<li><strong>步行导航与"我在哪"</strong>：基于本机精确定位的路线与方位播报。</li>
+<li><strong>一键远程真人协助</strong>：把视障用户与其选定的亲友/志愿者接通为实时语音通话；仅当用户主动按住"显示画面"时才把摄像头画面端到端传给对方。</li>
+<li><strong>聊天/群聊</strong>：文本/语音/图片/视频/位置消息。</li>
+<li><strong>摔倒检测与紧急呼叫</strong>：检测到疑似摔倒或用户主动触发时呼叫紧急联系人。</li>
+</ul>
+<h3 id="12-设计原则">1.2 设计原则</h3>
+<table>
+<thead>
+<tr>
+<th>原则</th>
+<th>工程体现</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>端侧优先</strong></td>
+<td>全部视觉 AI 推理在本机完成；相机画面默认不离开设备；唯一例外是用户主动按住"显示画面"时的 P2P 直传。</td>
+</tr>
+<tr>
+<td><strong>隐私即安全</strong></td>
+<td>视障用户尤其脆弱：默认不发画面、知情同意、合规告知、数据最小化贯穿全栈。</td>
+</tr>
+<tr>
+<td><strong>无障碍优先</strong></td>
+<td>盲人侧不依赖 VoiceOver 也能听到状态——自带 TTS 总线（<code>SpeechHub</code>）；防误触二次确认；魔法轻点挂断。</td>
+</tr>
+<tr>
+<td><strong>可自托管 / 非商用</strong></td>
+<td>后端零原生依赖（<code>node:sqlite</code>）；代码 PolyForm Noncommercial 1.0.0，禁止向视障用户收费。</td>
+</tr>
+</tbody>
+</table>
+<h3 id="13-总体架构">1.3 总体架构</h3>
+<p>系统由四个相互独立、边界清晰的组件构成：</p>
+<pre><code>┌─────────────────┐        WebRTC P2P 媒体(默认直连/TURN中继)        ┌─────────────────┐
+│   iOS 客户端 A   │ &lt;══════════════════════════════════════════════&gt; │   iOS 客户端 B   │
+│ (视障/盲人侧)    │                                                  │ (协助者/亲友侧)  │
+└────────┬────────┘                                                  └────────┬────────┘
+         │  HTTPS REST + WSS 信令                                              │
+         └───────────────────────────┬──────────────────────────────────────┘
+                                      ▼
+                       ┌──────────────────────────────┐        ┌──────────────────────┐
+                       │  自托管后端 (Fastify/TS)      │ &lt;────&gt; │ 管理后台 SPA (/admin) │
+                       │  REST + /ws 信令 + node:sqlite│        │  纯前端 vanilla JS    │
+                       └──────────────┬───────────────┘        └──────────────────────┘
+                                      │
+                       ┌──────────────┴───────────────┐
+                       │ coturn TURN 中继 · 媒体磁盘    │
+                       └──────────────────────────────┘
+            官网 beeurei.hikosphere.com (独立静态站点，含法律文件 /legal/)
+</code></pre>
+<ul>
+<li><strong>iOS 客户端</strong>：Swift / SwiftUI，<code>@Observable @MainActor</code> 视图模型；WebRTC（stasel/WebRTC xcframework）；ReplayKit 录制；CoreLocation / ARKit / AVFoundation。</li>
+<li><strong>后端</strong>：Fastify 5 + TypeScript（ESM，<code>tsx</code> 运行，<code>--experimental-sqlite</code>）；REST API + <code>/ws</code> WebSocket 信令；<code>Store</code> 抽象（内存/JSON 文件/SQLite 可替换）。装配见 <code>server/src/app.ts</code>。</li>
+<li><strong>管理后台 SPA</strong>：<code>server/public/admin/</code>，纯前端零运行时依赖，与 API 同源，hash 路由，严格 CSP。</li>
+<li><strong>官网</strong>：<code>site/</code>，nginx 静态托管，与 API 异源隔离；承载隐私政策/条款/EULA。</li>
+</ul>
+<h3 id="14-后端路由装配serversrcappts">1.4 后端路由装配（<code>server/src/app.ts</code>）</h3>
+<p><code>buildApp(store)</code> 在一个继承了限流钩子的子插件作用域内注册全部 HTTP 路由：认证/找回/账号/Passkey/推送/用户/亲友/拉黑/紧急/消息/群组/媒体/举报/管理/录制/<strong>通知</strong>/开发/导航/应用配置/求助；<code>/ws</code> 信令在独立子插件作用域注册（<code>registerSignaling</code>）。可注入项（<code>pushSender</code>/<code>mailer</code>/<code>appleVerifier</code>/<code>store</code>）便于单测与多环境。</p>
+<hr />
+<h2 id="二端侧感知与视觉-ai-管线">二、端侧感知与视觉 AI 管线</h2>
+<h3 id="21-采集与感知">2.1 采集与感知</h3>
+<p>避障管线：相机帧 + 深度（LiDAR/ARKit）→ 本机推理 → <strong>声化（sonification）</strong>：把"前方障碍的方位与距离"映射为空间化的声音/震动提示。整条管线在设备本地实时运行，相机帧与深度数据<strong>不上传、不留存、不用于训练</strong>。</p>
+<p><strong>暂停丢帧的安全语义</strong>：当会话被暂停（如切后台、相机中断、ARKit interruption）时，管线会 <code>pauseSession → degradeStop</code>，并以 <code>sonifier.update(nil)</code> 主动静音——避免在传感器数据已失效后仍按旧帧播放误导性的提示。该行为有回归测试 <code>HomeViewModelSafetyTests.testPausedSessionDropsInFlightFrames</code> 守护（断言暂停后不再产生新的非 nil 声化更新，且最后一次为静音）。</p>
+<h3 id="22-场景识别看一看">2.2 场景识别（看一看）</h3>
+<p>本地能力集合：物体识别、读字（OCR）、纸币识别、扫码、辨色、找物、"周围的人"、光线探测。其中<strong>"周围的人"仅在本地估计是否有人及其大致方位，不识别任何人的身份、不存储人脸</strong>——这是一条明确的隐私不变量，也写入隐私政策。</p>
+<p>陈旧结果防呆、相机状态播报、暗光提示开手电、复制确认等交互细节，均围绕"盲人用户听得到、不误触、不被陈旧信息误导"展开。</p>
+<h3 id="23-传感器与紧急">2.3 传感器与紧急</h3>
+<p><code>BeeUrEi/Sensors/EmergencyWatch.swift</code> 的 <code>EmergencyAlertCenter</code>（<code>CLLocationManagerDelegate</code>）实现摔倒/撞击检测与紧急呼叫：触发时<strong>提前发起一次定位</strong>（<code>requestLocation</code>），在发送告警时尽力附上坐标；若 <code>sendNow</code> 时定位尚未返回，则按"尽力而为"发送（不阻塞）。紧急功能在法律与产品上都被明确定性为"尽力而为"的便利功能，不替代官方急救号码。</p>
+<h3 id="24-盲人侧语音总线">2.4 盲人侧语音总线</h3>
+<p><code>SpeechHub</code>（单例）是盲人侧的关键无障碍设施：当未开启 VoiceOver 时，<code>A11y.announce</code> 会被系统静默丢弃，导致盲人听不到通话状态/避障播报；因此盲人侧统一改走 <code>SpeechHub.shared.speak(..., channel:)</code>。语音按通道（如 <code>.call</code>）优先级让位/被让位，避免避障、导航、识别、通话状态互相打断。</p>
+<hr />
+<h2 id="三实时通话与-webrtc-信令">三、实时通话与 WebRTC 信令</h2>
+<h3 id="31-媒体引擎beeureiremoteassistmediaengineswift">3.1 媒体引擎（<code>BeeUrEi/RemoteAssist/MediaEngine.swift</code>）</h3>
+<p><code>MediaEngine</code> 协议抽象"真实音视频"，注入式以便单测；具体实现 <code>WebRTCMediaEngine</code>（需 stasel/WebRTC xcframework），无包时回退 <code>StubMediaEngine</code>（<strong>不伪装连接</strong>，<code>start</code> 即如实上报媒体失败，杜绝"假装已接通"）。</p>
+<p>视频隐私模型：
+- 协助者（<code>asCaller=false</code>）：不发视频、收对方视频 + 双向语音。
+- 视障侧（<code>asCaller=true</code>）：默认只加一条 <code>isEnabled=false</code> 的视频轨、<strong>且不开相机采集</strong>；仅当 <code>setLocalVideoSending(true)</code> 时才 <code>startCapture</code> 并启高画质（最高 ~2.5 Mbps / 720p，<code>degradationPreference=balanced</code> 拥塞自动降级）。停发即 <code>stopCapture</code>，确保相机只在用户主动发画面期间运转、隐私指示灯与"未发送"一致。</p>
+<p>关键工程细节：远端候选缓存（<code>pendingCandidates</code>，须先 <code>setRemoteDescription</code> 成功再 <code>add</code> 候选，否则被静默丢弃）、<code>onMediaStateChange</code> 把"信令已连接但媒体没通"暴露给 UI、<code>pollStats</code> 每 2s 以活跃候选对 RTT 映射"信号强弱"。音频会话经 <code>RTCAudioSession</code> 配为 <code>.playAndRecord/.voiceChat</code>、默认走扬声器（盲人免持）。</p>
+<h3 id="32-信令房间serversrcsignalinghubts">3.2 信令房间（<code>server/src/signaling/hub.ts</code>）</h3>
+<p><code>SignalingHub</code> 是纯逻辑、可单测的房间登记表：<code>join/leave/peersInCall/isOnline/activeCalls</code>。一个 <code>callId</code> 即一个房间。<code>Member</code> 含 <code>clientId/userId/role/callId/joinedAt?/caps?</code>。<code>activeCalls()</code> 按 callId 聚合参与者、取最早加入为开始时间、标记是否有管理员旁观，供管理后台实时总览。</p>
+<h3 id="33-ws-信令协议serversrcrouteswsts">3.3 <code>/ws</code> 信令协议（<code>server/src/routes/ws.ts</code>）</h3>
+<p>客户端连接 <code>/ws?token=&lt;JWT&gt;</code>，首帧发 <code>{type:'join', callId, role, caps}</code>，随后中继 <code>offer/answer/ice/video-gate/end/control/record-*/obs-*</code>。</p>
+<p><strong>参与权校验（防窃听/劫持）</strong>：<code>join</code> 时校验该 <code>callId</code> 的真实参与者——来源为定向亲友呼叫登记（<code>pendingCalls</code>，180s TTL）或公开求助队列（<code>openHelp</code>，认领后含志愿者），两表跨表去重防影子覆盖；非参与者一律 <code>close(4003)</code>。1:1 房间最多两名<strong>参与者</strong>（旁观管理员不计入）。</p>
+<p>呼叫建立时序（亲友呼叫）：</p>
+<pre><code>盲人A                          后端(/ws + pendingCalls)                协助者B
+  │  POST /api/assist/call (callId, targetUserIds) ──────────────────────► 登记 pendingCalls
+  │  (APNs/VoIP 唤起 B 的 CallKit 来电) ─────────────────────────────────► [来电界面]
+  │  WS join(callId, role=blind, caps) ──►校验参与权──► joined           │
+  │                                       ◄── WS join(callId, role=helper)│
+  │  ◄── peer-joined ───────────────────────────────► peer-joined ──────►│
+  │  createOffer → offer ──► 中继(过滤非本通话/旁观) ──► offer ──────────►│
+  │  ◄──────────────────────── answer ◄─── 中继 ◄────────── answer ──────│
+  │  ◄═══════════════ ICE/媒体直连(或 TURN 中继) ═══════════════════════►│
+</code></pre>
+<h3 id="34-iceturn">3.4 ICE/TURN</h3>
+<p><code>GET /api/assist/turn</code>（鉴权）下发 STUN + <strong>短时效 TURN 凭据</strong>（基于 <code>TURN_SECRET</code> 的时限用户名/密码，TTL 6h）。无法 P2P 直连时，媒体经自托管 coturn 在传输途中转发——<strong>仅转发，不存储、不查看</strong>。</p>
+<hr />
+<h2 id="四管理员合规旁观网格">四、管理员合规旁观网格</h2>
+<h3 id="41-设计目标与合规边界">4.1 设计目标与合规边界</h3>
+<p>为保障安全、保护脆弱用户并防止滥用，管理员可对一通进行中的通话进行<strong>合规旁观</strong>：观看/收听音视频、在通话中开麦说话、必要时强制结束。<strong>核心合规不变量：绝非隐蔽——开始旁观时实时通知通话双方</strong>（不可关闭的告知横幅 + 盲人侧语音播报）。该设计在产品上拒绝了"不通知用户"的隐蔽监听方案。</p>
+<h3 id="42-服务端准入serversrcrouteswsts">4.2 服务端准入（<code>server/src/routes/ws.ts</code>）</h3>
+<p>管理员发 <code>{role:'admin', observe:true, caps:['adminObserver']}</code>，服务端门控：</p>
+<ol>
+<li><strong>DB 角色校验</strong>：<code>store.findById(auth.sub).role === 'admin'</code>（不信任客户端自报），否则 <code>close(4003,'not_admin')</code>。</li>
+<li>房间须有进行中通话（<code>peersInCall</code> 非空），否则 <code>call_not_active</code>。</li>
+<li>同房间至多一名旁观者，否则 <code>observer_exists</code>。</li>
+<li><strong>能力门控</strong>：<code>existing.every(p =&gt; p.caps.includes('adminObserver'))</code>——<strong>所有</strong>现有参与者都声明支持旁观告知才允许，否则 <code>call_not_observable</code>。这保护旧版客户端：无法显示告知横幅的客户端不会被旁观。</li>
+<li>准入后向双方发 <code>peer-joined {role:'admin', ...}</code>，触发其客户端显示告知横幅 + 语音。</li>
+</ol>
+<p>并发安全加固（对抗式复审定稿）：普通 <code>join</code> 分支<strong>净化客户端自报角色</strong>（仅接受 <code>blind/helper</code>），杜绝参与者自报 <code>role:'admin'</code> 伪造"管理员监看"告知或污染实时总览。</p>
+<h3 id="43-obs--定向中继与媒体隔离">4.3 obs-* 定向中继与媒体隔离</h3>
+<p>旁观媒体走独立的 <code>obs-offer/obs-answer/obs-ice</code> 信令，<strong>带 <code>to</code> 字段定向</strong>到具体参与者；中继规则：</p>
+<pre><code class="language-js">let targets = peersInCall(callId, sender)
+if (msg.to) targets = targets.filter(p =&gt; p.userId === msg.to)        // obs-* 定向
+else if (msg.type in {offer,answer,ice}) targets = targets.filter(p =&gt; p.role !== 'admin')  // 1:1 主媒体不泄漏给旁观管理员
+</code></pre>
+<p>即：1:1 主媒体（盲人↔协助者）<strong>绝不</strong>发给旁观管理员；管理员的音视频走独立 obs 通道。</p>
+<h3 id="44-ios-旁观-pc-网格mediaengineswift">4.4 iOS 旁观 PC 网格（<code>MediaEngine.swift</code>）</h3>
+<p>管理员侧为每个被旁观参与者建一条<strong>与主 pc 隔离</strong>的 <code>observerPCs[peerId]</code>，共享同一本地音视频轨；<code>ObserverPCDelegate</code> 须强引用（RTCPeerConnection 仅弱引用 delegate）。参与者侧把自己的音视频轨加到对管理员的 obs PC，<strong>按 <code>isEnabled</code> 门控</strong>——所以"管理员见即所见"：用户没分享画面，管理员就看不到画面（只有音频）。</p>
+<p>旁观握手方向：既有参与者向新加入的管理员发 offer（<code>addObserverPeer(adminId, offer:true)</code>），管理员应答（<code>offer:false</code>）。离场（<code>stopObserving</code>/界面消失）<strong>不向参与者发 <code>end</code></strong>（不结束他人通话）；强制结束是单独动作，走鉴权 REST <code>POST /api/admin/calls/:id/end</code>（可靠，不依赖本端 WS 帧时序）。</p>
+<h3 id="45-浏览器内-web-旁观serverpublicadminappjs-startobserver">4.5 浏览器内 Web 旁观（<code>server/public/admin/app.js</code> · <code>startObserver</code>）</h3>
+<p>管理后台 SPA 内置一个 vanilla-JS WebRTC 旁观客户端：取 ICE（<code>/api/assist/turn</code>）→ 开 <code>wss://…/ws?token=</code> → 发 observe join → 处理 <code>joined/peer-joined/obs-*/peer-left/end</code> → 为每个参与者建 <code>RTCPeerConnection</code> 应答其 obs-offer、<code>ontrack</code> 渲染到视频块 → 可开麦说话（<code>getUserMedia</code> 音频 + 重协商）、强制结束、结束旁观。被服务端拒绝（<code>call_not_observable</code> 等）时优雅提示并收起。</p>
+<hr />
+<h2 id="五通话录制采集同意留存与回看">五、通话录制：采集、同意、留存与回看</h2>
+<h3 id="51-采集beeureiremoteassistcallrecorderswift">5.1 采集（<code>BeeUrEi/RemoteAssist/CallRecorder.swift</code>）</h3>
+<p>基于 ReplayKit（<code>RPScreenRecorder</code>）采集通话画面（含双方音视频呈现），输出 <code>.mov</code>。<code>isAvailable</code> 仅真机为真。</p>
+<h3 id="52-服务端权威知情同意serversrcrecordingconsentregistryts">5.2 服务端权威知情同意（<code>server/src/recording/consentRegistry.ts</code>）</h3>
+<p><strong>同意不可由发起者伪造</strong>：被录方须经鉴权端点 <code>POST /api/recordings/consent</code> 亲自授予；服务端 <code>RecordingConsentRegistry</code> 登记（callId→granter→expiry，6h TTL）。授予者须为该通话的<strong>真实参与者</strong>（与信令同一参与权校验：<code>pendingCalls</code>/<code>openHelp</code>/持久 <code>CallRecord</code> 兜底）——杜绝串通的第三方为不在的通话伪造同意。<code>POST /api/recordings</code> 创建录制时，<code>consentBy</code> 由服务端从同意登记表取（<code>consenters()</code> 排除发起者），策略要求同意时至少一名有效同意者。</p>
+<h3 id="53-元数据时间地点人-时长">5.3 元数据（"时间地点人 + 时长"）</h3>
+<p><code>Recording</code>（<code>server/src/db/store.ts</code>）字段：<code>id/callId/ownerId/consentBy[]/reason/recordedAt/mediaId?</code> + <code>participants?</code>（发起者+同意者，去重持久化）+ <code>durationSec?</code> + <code>lat?/lon?/locationLabel?</code> + <code>deletedAt?</code>。位置由客户端在 <code>finishAndUpload</code> 时<strong>仅在定位已授权时</strong>采集（<code>bestEffortLocation</code>，绝不为录制弹新授权框）；时长由录制起止差计算。</p>
+<h3 id="54-软删除-合规留存">5.4 软删除 / 合规留存</h3>
+<ul>
+<li><strong>用户软删除</strong> <code>DELETE /api/recordings/mine/:id</code>：仅 owner 可调，<strong>只置 <code>deletedAt</code></strong>（对用户隐藏），<strong>不删媒体文件</strong>。</li>
+<li><code>recordingsForUser</code> 过滤 <code>deletedAt</code>（用户看不到）；<code>allRecordings</code> 保留（管理员仍可见，标注"用户已删除·留存中"）。</li>
+<li><strong>物理清除</strong>统一由 <code>sweepExpiredRecordings</code>（<code>server/src/recording/retention.ts</code>）按 <code>recordedAt + retentionDays</code>（默认 7 天）执行；软删除<strong>不重置</strong>该时钟。</li>
+<li><strong>取证留存</strong>：被未结举报引用为证据的录制即使过期也不清除（<code>reportsCitingRecording(id).some(status !== 'resolved')</code>），直到举报处置完毕。</li>
+</ul>
+<h3 id="55-回看流式端点serversrcroutesrecordingsts">5.5 回看流式端点（<code>server/src/routes/recordings.ts</code>）</h3>
+<p><code>GET /api/recordings/:id/media</code>：HTTP <strong>Range</strong> 流式（206 局部 / 200 全量，416 不可满足），便于拖动。<strong>双路鉴权</strong>：① <code>Authorization: Bearer</code>（App，且回库核验 status active + tokenVersion 匹配）；② 短时签名<strong>媒体令牌</strong> <code>?t=</code>（Web <code>&lt;video&gt;</code> 不能带头）。授权 = owner（且未软删除）∨ admin（admin 可看软删除项，且<strong>查看入审计</strong> <code>recording.view</code>）。</p>
+<p><strong>安全加固（复审）</strong>：录制媒体<strong>严禁经通用 <code>/api/media/:id</code> 外泄</strong>——通用端点对 <code>store.recordingByMediaId(id)</code> 命中者一律返回 404，强制走录制作用域端点（杜绝"owner 的好友经好友授权下载录制"）。媒体令牌绑定 <code>recordingId + 用户 + tokenVersion</code>，60s 过期（单一真源 <code>MEDIA_TOKEN_TTL_SEC</code>），改密/封禁/强制下线即失效。</p>
+<h3 id="56-客户端回看-ui">5.6 客户端回看 UI</h3>
+<ul>
+<li>用户端"我的录音"（<code>BeeUrEi/Features/Account/MyRecordingsView.swift</code>）：列出本人录制（时间/地点/人/时长），下载到本地 <code>.mov</code> 后用 <code>AVPlayer</code>（复用 <code>VideoPlayerSheet</code>）回放；可软删除（删后清本机缓存副本）。</li>
+<li>管理端（<code>AdminHomeView</code>）：全站录制总览（含已软删除）+ 回放 + 彻底删除（被未结举报引用者 409 拒绝 + 删除入审计）。</li>
+<li>管理 Web：<code>&lt;video&gt;</code> + 短时令牌播放。</li>
+</ul>
+<hr />
+<h2 id="六后端架构与数据模型">六、后端架构与数据模型</h2>
+<h3 id="61-store-抽象与可替换实现">6.1 Store 抽象与可替换实现</h3>
+<p><code>Store</code> 接口（<code>server/src/db/store.ts</code>）把上层与持久化解耦：
+- <code>MemoryStore</code>（测试）→ <code>JsonFileStore extends MemoryStore</code>（零依赖文件持久化）→ <code>SqliteStore</code>（生产，<code>node:sqlite</code>）。
+- 任何数据模型变更须<strong>同时</strong>改：接口 + MemoryStore + JsonFileStore 的载入/保存 + SqliteStore 的 DDL/迁移/INSERT/行映射——漏一处即静默丢字段。</p>
+<h3 id="62-加性迁移serversrcdbsqlitestorets">6.2 加性迁移（<code>server/src/db/sqliteStore.ts</code>）</h3>
+<p><code>CREATE TABLE IF NOT EXISTS</code> + 每个后加列用 <code>try { db.exec('ALTER TABLE x ADD COLUMN y T') } catch {}</code>——旧库就地升级、零迁移脚本、完全向后兼容。数组/对象列以 JSON TEXT 存、用容错的 <code>parseJsonOr</code> 解析（一行坏数据不致整请求 500）。</p>
+<h3 id="63-数据模型主要表">6.3 数据模型（主要表）</h3>
+<table>
+<thead>
+<tr>
+<th>表</th>
+<th>关键字段</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>users</code></td>
+<td>id, username, passwordHash(bcrypt), displayName, role, status, tokenVersion, email?, phone?, appleSub?, apnsToken?, voipToken?, avatar?, legalConsentVersion?, featureOverrides?(JSON)</td>
+<td>账号；密码加盐哈希；<code>tokenVersion</code> 即时吊销；<code>featureOverrides</code> 单用户功能覆盖</td>
+</tr>
+<tr>
+<td><code>links</code></td>
+<td>ownerId, memberId, relation, isEmergency, status(pending/accepted), requestedBy</td>
+<td>亲友/协助者双向绑定，须对方确认</td>
+</tr>
+<tr>
+<td><code>blocks</code></td>
+<td>blockerId, blockedId</td>
+<td>拉黑（互不出现）</td>
+</tr>
+<tr>
+<td><code>call_records</code></td>
+<td>callId, callerId, calleeId, status</td>
+<td>通话路由记录</td>
+</tr>
+<tr>
+<td><code>reports</code></td>
+<td>reporterId, targetUserId, callId?, reason, status, decision?, resolvedBy?, <strong>evidenceRecordingId?</strong></td>
+<td>举报 + 处置 + 录制证据</td>
+</tr>
+<tr>
+<td><code>recordings</code></td>
+<td>callId, ownerId, consentBy(JSON), reason, recordedAt, mediaId?, <strong>participants(JSON)/durationSec/lat/lon/locationLabel/deletedAt</strong></td>
+<td>录制元数据</td>
+</tr>
+<tr>
+<td><code>media</code></td>
+<td>id, ownerId, mime, size, createdAt</td>
+<td>媒体元数据（实体在磁盘 <code>MEDIA_DIR/&lt;id&gt;</code>）</td>
+</tr>
+<tr>
+<td><code>messages</code></td>
+<td>fromId, toId, kind, text, createdAt, readAt?, reaction?, groupId?</td>
+<td>单聊/群聊消息</td>
+</tr>
+<tr>
+<td><code>groups</code>/<code>group_reads</code></td>
+<td>name, ownerId, memberIds(JSON) / lastReadAt</td>
+<td>群聊与按人已读</td>
+</tr>
+<tr>
+<td><code>passkeys</code></td>
+<td>userId, credentialId, publicKey, counter</td>
+<td>WebAuthn 凭据</td>
+</tr>
+<tr>
+<td><code>refresh_tokens</code></td>
+<td>tokenHash, userId, expiresAt</td>
+<td>仅存哈希</td>
+</tr>
+<tr>
+<td><code>admin_audit</code></td>
+<td>adminId, action, targetType, targetId, detail?, at</td>
+<td>后台变更审计</td>
+</tr>
+<tr>
+<td><code>warnings</code></td>
+<td>userId, reason, byAdminId, reportId?, at</td>
+<td>用户警告</td>
+</tr>
+<tr>
+<td><strong><code>notifications</code></strong></td>
+<td>userId, kind, title, body, dataJson?, createdAt, readAt?</td>
+<td>站内通知收件箱</td>
+</tr>
+<tr>
+<td><code>config</code> (KV)</td>
+<td>k, v(JSON)</td>
+<td><code>app</code>=AppConfig、<code>recording</code>=RecordingConfig</td>
+</tr>
+</tbody>
+</table>
+<p><code>AppConfig</code>（功能开关 messaging/calls/.../sceneScan、公告、维护模式、内容过滤）与单用户 <code>featureOverrides</code> 通过 <code>effectiveFeatures(cfg,overrides)</code> 合并；<code>featureGate</code> 据此门控每个功能端点（维护 503 / 功能关 403）。账号删除经 <code>cascadeDeleteUser</code> 级联（群/消息/绑定/passkey/会话；保留举报/警告/录制等审计与取证）。</p>
+<hr />
+<h2 id="七认证授权与安全模型">七、认证、授权与安全模型</h2>
+<h3 id="71-令牌与会话serversrcauthtokensts">7.1 令牌与会话（<code>server/src/auth/tokens.ts</code>）</h3>
+<ul>
+<li><strong>JWT access</strong>（1h）携带 <code>sub/role/tv</code>；<strong>不透明 refresh</strong>（30d，仅哈希入库）。</li>
+<li><strong><code>tokenVersion</code> 即时吊销</strong>：改密、封禁、强制下线即递增，使该用户已签发的 access token 全部失效（<code>requireAuth</code> 回库比对 <code>tv</code>）。</li>
+<li><strong>JWT_SECRET fail-closed</strong>：缺失或过短即拒绝启动，绝不使用硬编码兜底密钥。</li>
+</ul>
+<h3 id="72-授权serversrcauthrbacts">7.2 授权（<code>server/src/auth/rbac.ts</code>）</h3>
+<p><code>requireAuth([roles])</code> preHandler：验签 → 回库核验账号存在、status active、tokenVersion 匹配 → 角色门控。<code>requireFeature(store, feature)</code> 叠加全站/单用户功能门控。</p>
+<h3 id="73-其它安全机制">7.3 其它安全机制</h3>
+<ul>
+<li><strong>Passkey/WebAuthn</strong>：抗钓鱼登录，私钥不离设备安全区。</li>
+<li><strong>bcrypt</strong> 加盐哈希密码。</li>
+<li><strong>短时媒体令牌</strong>：见 §5.5，绑定 recordingId+用户+tokenVersion，60s。</li>
+<li><strong>速率限制</strong>：全局 + 敏感端点（发码 60s 冷却 + 窗口上限、媒体上传 10/min）。</li>
+<li><strong>CSP</strong>：管理后台 <code>default-src/style-src 'self'</code>，无内联样式（动态尺寸走 CSSOM）；录制媒体经同源 <code>&lt;video&gt;</code> 播放，CSP 无需放宽。</li>
+<li><strong>信令防窃听</strong>：参与权校验 + 房间容量 + obs-* 隔离（§3.3 / §4）。</li>
+<li><strong>录制媒体不外泄</strong>：通用 <code>/api/media</code> 拒绝录制媒体（§5.5）。</li>
+<li><strong>审计</strong>：所有后台变更与管理员查看录制入 <code>admin_audit</code>。</li>
+</ul>
+<h3 id="74-安全不变量清单节选">7.4 安全不变量清单（节选）</h3>
+<ol>
+<li>客户端自报角色绝不授予特权（admin 只能经 DB 校验路径获得）。</li>
+<li>录制同意只能由真实被录参与者亲授，服务端权威。</li>
+<li>1:1 主媒体绝不发给旁观管理员；旁观必通知双方。</li>
+<li>录制媒体只能经 owner∨admin 的录制端点访问；软删除对用户隐藏、对 admin 在留存期内保留。</li>
+<li>举报证据仅录制拥有者可附；被未结举报引用的录制不被清理。</li>
+<li>举报处理结果通知中，举报人不获知对对方的具体处罚（per-recipient 数据）。</li>
+</ol>
+<hr />
+<h2 id="八通知举报与内容治理">八、通知、举报与内容治理</h2>
+<h3 id="81-举报与处置serversrcroutesreportsadmints">8.1 举报与处置（<code>server/src/routes/{reports,admin}.ts</code>）</h3>
+<p>举报 <code>POST /api/reports</code>（可附 <code>evidenceRecordingId</code>，<strong>仅拥有者可附</strong>，去重时不吞掉不同的新证据）。管理员处置阶梯 <code>POST /api/admin/reports/:id/moderate</code>：<code>dismiss/warn/suspend/ban</code> → 落处置结果 + 对被举报人施加后果（警告/封禁+撤销会话）+ 审计；含"不能处置自己/最后一名管理员"保护。</p>
+<h3 id="82-处置通知双方serversrcnotificationsnotifyts">8.2 处置通知双方（<code>server/src/notifications/notify.ts</code>）</h3>
+<p><strong>持久化收件箱 + 离线推送</strong>：<code>notifyUser</code> 先写 <code>notifications</code> 表（权威、登录后必见），再 best-effort <code>sendAlert</code>（APNs，未配置/离线则 Noop）。处置时通知举报人与被举报人。<strong>隐私设计</strong>：每收件人单独构造结构化数据——举报人的通知<strong>不含 <code>decision</code></strong>（不泄漏对对方的具体处罚），被举报人可知关于自己的结果；文案双语、按收件人语言。通知写入用 try/catch 包裹，绝不让通知失败 500 掉已提交的处置。<code>GET /api/notifications</code> 严格作用域到 <code>req.user.sub</code>。</p>
+<h3 id="83-其它治理">8.3 其它治理</h3>
+<p>拉黑、内容过滤（敏感词）、全站功能开关/公告/维护模式、管理员实时通话总览与强制结束、管理后台 SPA 概览/用户/关系/通话/录制/举报/审计视图，均见 <code>server/src/routes/admin.ts</code> 与 <code>server/public/admin/</code>。</p>
+<hr />
+<h2 id="九隐私与合规工程">九、隐私与合规工程</h2>
+<h3 id="91-端侧优先与数据最小化">9.1 端侧优先与数据最小化</h3>
+<p>视觉推理全本地；相机帧默认不离设备、不留存、不训练；唯一例外是用户主动按住"显示画面"的 P2P 直传。"周围的人"不识别身份不存人脸。位置：导航/我在哪本地用精确定位但不上传精确坐标；求助/紧急只附粗略（省/市/区）位置；录制位置仅在已授权时采集。</p>
+<h3 id="92-知情同意与告知">9.2 知情同意与告知</h3>
+<p>录制需双方同意（服务端权威）；管理员旁观必实时告知双方；诊断数据（Sentry）须显式开启。撤回同意不影响撤回前合法处理。</p>
+<h3 id="93-留存与删除">9.3 留存与删除</h3>
+<p>自动清理（录制默认 7 天、诊断 ≤90 天、验证码短时、备份 ≤35 天滚动覆盖）；软删除/合规留存（§5.4）；账号删除级联（§6.3）。</p>
+<h3 id="94-法律映射">9.4 法律映射</h3>
+<p>每类数据在隐私政策中载明 GDPR 第 6 条合法性基础；数据主体权利（访问/更正/删除/限制/可携/反对/撤回）+ CCPA/CPRA 权利；跨境传输（基础设施在日本，受欧盟充分性认定覆盖；其它接收方依 SCC/减损）；特殊类别数据（健康/残障）依明示同意/重大利益。第三方处理者：Apple（登录/推送/地图/CallKit/分发）、高德 AMap（中国大陆导航，仅必要坐标）、Open-Meteo（仅降精度坐标）、Sentry（诊断）、NetEase 163（SMTP）、AWS（托管）。法律文件 v3.0 与本系统当前能力（录制/旁观/证据/通知）逐项对应，见 <code>site/public/legal/</code> 与 <code>BeeUrEi/Consent/LegalText.swift</code>。</p>
+<hr />
+<h2 id="十部署运维与质量保障">十、部署、运维与质量保障</h2>
+<h3 id="101-部署拓扑">10.1 部署拓扑</h3>
+<ul>
+<li>后端容器 <code>beeurei-api</code>（Docker，<code>node:sqlite</code> + 媒体磁盘，数据卷 <code>beeurei-data</code>）运行于 AWS 东京 <code>ap-northeast-1</code>。</li>
+<li>coturn <code>beeurei-coturn</code>（host 网络，UDP/TCP 3478 + UDP 49160-49200）。</li>
+<li>官网/管理后台静态资源容器化（nginx）。</li>
+<li>对外经 <strong>Cloudflare Tunnel</strong>（token 托管）暴露 <code>beeurei-api.hikosphere.com</code>、<code>beeurei.hikosphere.com</code>；TLS 终止于 Cloudflare。</li>
+<li>管理后台 <code>/admin/</code>（与 API 同源）；法律文件迁至官网同源 <code>/legal/</code>。</li>
+</ul>
+<h3 id="102-环境与密钥">10.2 环境与密钥</h3>
+<p><code>JWT_SECRET</code>（fail-closed）、<code>TURN_SECRET</code>（与 coturn 一致）、APNs <code>.p8</code>（VoIP 与 alert 共用，topic 区分 <code>.voip</code>）、SMTP（163，端口 994）、<code>SENTRY_DSN</code>、<code>METRICS_TOKEN</code>、<code>ADMIN_USERNAME/PASSWORD</code>（引导管理员）、<code>DB_DRIVER/DB_PATH/MEDIA_DIR</code>。改 <code>.env</code> 后须 <code>stop/rm/run</code> 重建容器（restart 不重读 env-file）。</p>
+<h3 id="103-推送链路">10.3 推送链路</h3>
+<p>来电经 APNs <strong>VoIP</strong>（PushKit）唤起 CallKit 系统来电界面 + 普通 <strong>alert</strong> 兜底；提醒类（好友请求/举报结果等）经 alert。</p>
+<h3 id="104-可观测性">10.4 可观测性</h3>
+<p><code>/metrics</code>（Prometheus 文本，可选 <code>METRICS_TOKEN</code> Bearer）、<code>/health</code> 与 <code>/api/ready</code>（触达存储）、Sentry 错误监控。后台定时器每小时跑录制留存清理（不依赖管理员访问）。</p>
+<h3 id="105-测试与质量保障">10.5 测试与质量保障</h3>
+<ul>
+<li><strong>服务端</strong>：<code>vitest</code>，约 <strong>289</strong> 项（含信令参与权/旁观准入/录制同意/回看 Range+授权/软删除+合规留存/举报证据/通知/迁移等安全回归）。</li>
+<li><strong>iOS</strong>：<code>XCTest</code>，约 <strong>74</strong> 项（含通话隐私门控、旁观离场不结束他人通话、感知暂停丢帧等安全攸关断言）。</li>
+<li><strong>对抗式多智能体复审</strong>：关键特性（旁观、录制回看/治理）均经"多维度查找 → 逐条独立复核（默认 isReal=false）"的对抗式复审，仅采纳确证项；本轮录制+举报特性确证并修复 11 项（含 2 HIGH：录制媒体经通用端点外泄、举报人通知泄漏对方处罚）。</li>
+</ul>
+<hr />
+<blockquote>
+<p>本技术交底随系统演进更新。如需核对任一细节，请以仓库内对应源码为准。</p>
+</blockquote>
+    </article>
+  </div>
+</main>
+<footer class="site">
+  <div class="wrap">
+    <div class="foot-bottom">
+      <span>© <span id="year">2026</span> Hiko Sphere 彦穹科技 · Li Yanpei Hiko</span>
+      <span class="license-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9.5"/><path d="M9 10a3 3 0 1 1 0 4M12.5 10a3 3 0 1 1 0 4"/></svg>
+        <span lang="zh">PolyForm 非商业许可 1.0.0</span><span lang="en">PolyForm Noncommercial 1.0.0</span>
+      </span>
+    </div>
+  </div>
+</footer>
+</body>
+</html>

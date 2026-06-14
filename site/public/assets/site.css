@@ -213,7 +213,7 @@ header.site{position:sticky;top:0;z-index:100;background:color-mix(in srgb,var(-
 footer.site{background:var(--ink);color:#e9e7e0;padding-block:clamp(2.6rem,5vw,3.8rem)}
 @media (prefers-color-scheme:dark){footer.site{background:#08090d;border-top:1px solid var(--line)}}
 footer.site a{color:#ffd76b}
-.foot-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:2rem}
+.foot-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:2rem}
 @media (max-width:720px){.foot-grid{grid-template-columns:1fr 1fr}.foot-brand{grid-column:1/-1}}
 @media (max-width:440px){.foot-grid{grid-template-columns:1fr}}
 .foot-brand .brand{color:#fff}
@@ -296,3 +296,15 @@ html[data-theme="dark"] .checks .ck.no{color:#ff8a7a}
 .legal-doc ul{margin:.5rem 0;padding-inline-start:1.25rem;color:var(--ink-soft)}
 .legal-doc li{margin:.4rem 0;line-height:1.65}
 .legal-doc strong{color:var(--ink);font-weight:700}
+/* Technical disclosure: wider column + code blocks + data tables */
+.legal-main:has(.tech-doc){max-width:60rem}
+.tech-doc h4{font-size:1rem;margin:1.2rem 0 .4rem;color:var(--ink)}
+.tech-doc a{color:var(--brand,#b8860b);text-decoration:underline;text-underline-offset:2px}
+.tech-doc pre{background:var(--code-bg,rgba(127,127,127,.10));border:1px solid var(--line);border-radius:10px;padding:.9rem 1rem;overflow-x:auto;margin:1rem 0;line-height:1.55}
+.tech-doc pre code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.82rem;color:var(--ink);white-space:pre;background:none;border:0;padding:0}
+.tech-doc code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.85em;background:var(--code-bg,rgba(127,127,127,.12));border-radius:5px;padding:.08em .35em;color:var(--ink)}
+.tech-doc table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.92rem;display:block;overflow-x:auto}
+.tech-doc th,.tech-doc td{border:1px solid var(--line);padding:.5rem .7rem;text-align:left;vertical-align:top;color:var(--ink-soft)}
+.tech-doc th{background:var(--code-bg,rgba(127,127,127,.08));color:var(--ink);font-weight:700;white-space:nowrap}
+.tech-doc blockquote{margin:1rem 0;padding:.6rem 1rem;border-inline-start:3px solid var(--line);color:var(--muted);font-size:.95rem}
+.tech-doc hr{border:0;border-top:1px solid var(--line);margin:2rem 0}

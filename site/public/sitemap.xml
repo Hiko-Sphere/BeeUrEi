@@ -10,4 +10,16 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://beeurei.hikosphere.com/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://beeurei.hikosphere.com/"/>
   </url>
+  <url>
+    <loc>https://beeurei.hikosphere.com/legal/</loc>
+    <lastmod>2026-06-14</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://beeurei.hikosphere.com/tech/</loc>
+    <lastmod>2026-06-14</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
 </urlset>

@@ -51,6 +51,7 @@ The visual AI runs entirely on the device; the camera feed stays on your phone b
 - [Privacy](#privacy)
 - [Docs & links](#docs--links)
 - [Status & roadmap](#status--roadmap)
+- [FAQ](#faq)
 - [Security disclosure](#security-disclosure)
 - [Contributing](#contributing)
 - [Brand, author & license](#brand-author--license)
@@ -302,6 +303,34 @@ Full legal text — Privacy / Terms / EULA, bilingual — is on the website at *
 | Self-hosted backend | ✅ Done — deployed |
 | Phase 3 — live video | ✅ Done (two-sided validation pending) |
 | Phase 4 — polish & App Store release | ⏳ Awaiting external resources |
+
+---
+
+## FAQ
+
+**Which iPhone do I need?**
+Real-time obstacle avoidance relies on LiDAR, so it needs a LiDAR-equipped iPhone (iPhone 12 Pro or a newer Pro model). The other features — recognition, navigation, messaging, and live assistance — work on more devices.
+
+**Does it need an internet connection?**
+Obstacle avoidance and all recognition run on-device and work offline. Walking navigation, live human assistance, messaging, and emergency notifications use the network.
+
+**Are my camera frames uploaded?**
+No, not by default. All vision AI runs on-device. Frames are sent only when you actively start a remote-assistance call with someone you chose and hold "Show video" — and even then, peer-to-peer.
+
+**Can it replace a white cane or guide dog?**
+No. BeeUrEi is a perception-enhancing assistive tool, not a safety device, and it cannot detect every obstacle. Always keep and prioritize your white cane, guide dog, and O&M training.
+
+**Do I have to agree to anything to sign up?**
+Yes — creating an account requires reading and agreeing to the Privacy Policy and Terms of Service; your consent (version + time) is recorded so it can be demonstrated.
+
+**Can I run the backend myself?**
+Yes — the backend, WebSocket signaling, and TURN relay are fully self-hostable, with no per-use third-party fees. See [Getting Started](#getting-started).
+
+**Is it on the App Store yet?**
+Not yet — it is in preparation. The core is built and tested; on-device tuning and blind-user testing come next.
+
+**Why a noncommercial license?**
+BeeUrEi is a public-interest project for the blind and low-vision people it serves. It is free to use, study, modify, and share for noncommercial purposes; selling it (or charging those users) is not permitted.
 
 ---
 

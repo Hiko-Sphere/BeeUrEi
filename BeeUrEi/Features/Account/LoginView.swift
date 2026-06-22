@@ -100,6 +100,15 @@ struct LoginView: View {
                     } label: {
                         Label(SessionStrings.title(lang), systemImage: "laptopcomputer.and.iphone")
                     }
+                    NavigationLink {
+                        KYCFlowView(token: KeychainStore.read() ?? "", spoken: session.user?.role == "blind", onChanged: { Task { await loadMe() } })
+                    } label: {
+                        LabeledContent {
+                            Text(detail?.verified == true ? KYCStrings.statusValue("verified", lang) : "")
+                        } label: {
+                            Label(KYCStrings.rowLabel(lang), systemImage: "checkmark.seal")
+                        }
+                    }
                     Button(AccountStrings.logout(lang), role: .destructive) { showLogoutConfirm = true }
                     Button(AccountStrings.deleteAccount(lang), role: .destructive) { showDeleteConfirm = true }
                 }

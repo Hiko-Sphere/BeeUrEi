@@ -38,6 +38,7 @@ struct AccountInfo: Codable, Sendable, Equatable, Identifiable {
     var hasPasskey: Bool?         // /api/me：是否已注册 passkey
     var twoFactorEnabled: Bool?   // /api/me：是否已开启两步验证（账号页展示开关态）
     var legalConsentVersion: String? // /api/me：已同意的隐私/条款版本；与当前版本不符则需（重新）同意
+    var verified: Bool?           // publicUser/selfView：实名认证（KYC）是否已通过——仅布尔徽章，绝不含姓名
 }
 
 /// 一把 passkey（账号页列表/删除用）。
@@ -64,6 +65,20 @@ struct SessionInfo: Codable, Sendable, Identifiable {
     var id: String { sessionId }
 }
 private struct SessionsResult: Codable { let sessions: [SessionInfo] }
+
+/// 实名认证（KYC）状态（账号页展示；绝不含姓名/证件号/图片）。
+struct VerificationStatusInfo: Codable, Sendable {
+    let status: String                 // none | pending | verified | rejected
+    var idType: String?
+    var attempt: Int?
+    var submittedAt: Double?
+    var decidedAt: Double?
+    var rejectReasonCode: String?
+    var rejectReasonNote: String?
+    var docsUploaded: [String]?
+    var canResubmit: Bool?
+}
+private struct VerificationSubmitResult: Codable { let id: String; let attempt: Int? }
 
 struct AuthResult: Codable, Sendable {
     let token: String
@@ -1122,6 +1137,43 @@ struct APIClient {
     /// 登出其它所有设备（保留当前这台）。
     func revokeOtherSessions(token: String) async throws {
         _ = try await authedSend("POST", "/api/account/sessions/revoke-others", token: token)
+    }
+
+    // MARK: 实名认证（KYC）
+
+    /// 当前实名状态（不含任何 PII）。
+    func verificationStatus(token: String) async throws -> VerificationStatusInfo {
+        let data = try await authedGet("/api/account/verification", token: token)
+        guard let r = try? JSONDecoder().decode(VerificationStatusInfo.self, from: data) else { throw APIError.decoding }
+        return r
+    }
+    /// 发起一次实名提交（封存姓名/证件号），返回 verification id 供逐张上传证件。
+    func submitVerification(token: String, legalName: String, idType: String, idNumberLast4: String, idNumber: String?, consentVersion: String) async throws -> String {
+        var body: [String: Any] = ["legalName": legalName, "idType": idType, "idNumberLast4": idNumberLast4, "consentVersion": consentVersion]
+        if let idNumber, !idNumber.isEmpty { body["idNumber"] = idNumber }
+        let data = try await authedSend("POST", "/api/account/verification", token: token, body: body)
+        guard let r = try? JSONDecoder().decode(VerificationSubmitResult.self, from: data) else { throw APIError.decoding }
+        return r.id
+    }
+    /// 上传一张证件图（原始 JPEG 二进制；服务端再嗅探/剥 EXIF/加密落隔离盘）。kind: front|back|selfie。
+    func uploadVerificationDoc(token: String, id: String, kind: String, jpeg: Data) async throws {
+        var req = URLRequest(url: baseURL.appendingPathComponent("/api/account/verification/\(id)/doc/\(kind)"))
+        req.httpMethod = "POST"
+        req.timeoutInterval = 120
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+        let (data, resp): (Data, URLResponse)
+        do { (data, resp) = try await URLSession.shared.upload(for: req, from: jpeg) } catch { throw APIError.network }
+        guard let http = resp as? HTTPURLResponse else { throw APIError.network }
+        if http.statusCode == 401 { throw APIError.unauthorized }
+        if http.statusCode >= 400 {
+            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            throw APIError.server((obj?["error"] as? String) ?? "HTTP \(http.statusCode)")
+        }
+    }
+    /// 撤回一份待审核的提交。
+    func withdrawVerification(token: String) async throws {
+        _ = try await authedSend("DELETE", "/api/account/verification", token: token)
     }
 
     /// 通话中/后举报对方（信任与安全）。

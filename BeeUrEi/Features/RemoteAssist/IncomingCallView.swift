@@ -64,12 +64,13 @@ struct IncomingCallView: View {
             }
         }
         .task {
+            ScreenWake.acquire("ring")   // 响铃期间屏不灭，盲人有充足时间接听
             A11y.announce(CallStrings.incomingRingAnnounce(ring.callerName, lang))
             startCancelWatch()
         }
         // VoiceOver 魔法轻点（双指双击）= 接听（系统来电惯例）。
         .accessibilityAction(.magicTap) { accept() }
-        .onDisappear { pollTask?.cancel() }
+        .onDisappear { pollTask?.cancel(); ScreenWake.release("ring") }
     }
 
     private func circle(_ icon: String, _ tint: Color, _ action: @escaping () -> Void) -> some View {

@@ -498,7 +498,12 @@ final class HomeViewModel {
         advisoryText = text
         // 降级提示是安全相关：内容变化且非空时主动朗读一次（去重防刷屏），
         // 否则盲人焦点不在状态条上时不知避障已降级/暂停仍照常行走（见无障碍审计）。
-        if !text.isEmpty, text != lastAnnouncedAdvisory { A11y.announce(text) }
+        // 必须走反馈仲裁通道（与避障播报同一端侧 TTS 总线），不能用 A11y.announce——后者仅在
+        // VoiceOver 开启时出声，而盲人常关 VoiceOver、靠本 App 自带语音走路，安全降级提示绝不能漏。
+        // 用 .status 优先级：让位于真正的障碍/危险播报，但盖过环境闲聊，于通道空闲时说出。
+        if !text.isEmpty, text != lastAnnouncedAdvisory {
+            coordinator.submit(FeedbackEvent(priority: .status, speech: text, interrupt: false))
+        }
         lastAnnouncedAdvisory = text
     }
     private var lastAnnouncedAdvisory = ""

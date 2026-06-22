@@ -136,9 +136,9 @@ struct RemoteAssistView: View {
                 Text(AssistStrings.topicMessage(lang))
             }
         }
-        .task { await load(); startOnlinePolling() }
+        .task { ScreenWake.acquire("assist"); await load(); startOnlinePolling() }   // 求助/呼叫等待期间屏不灭
         .refreshable { await load() }
-        .onDisappear { onlineTask?.cancel(); onlineTask = nil }
+        .onDisappear { onlineTask?.cancel(); onlineTask = nil; ScreenWake.release("assist") }
         // 所有求助/呼叫/错误状态变化主动朗读——盲人点完按钮后才能得到语音反馈，不会以为没反应反复点（见无障碍审计）。
         .onChange(of: statusText) { _, new in if let new, !new.isEmpty { A11y.announce(new) } }
         .fullScreenCover(item: $activeCall, onDismiss: {

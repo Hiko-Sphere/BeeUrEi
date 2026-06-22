@@ -32,8 +32,11 @@ struct LiveLocationView: View {
         }
         .navigationTitle(LiveLocationStrings.navTitle(lang))
         .navigationBarTitleDisplayMode(.inline)
-        .task { if let token = session.token { manager.startViewing(token: token, isBlind: isBlind) } }
-        .onDisappear { manager.stopViewing() }
+        .task {
+            ScreenWake.acquire("location")   // 实时位置共享查看期间屏不灭
+            if let token = session.token { manager.startViewing(token: token, isBlind: isBlind) }
+        }
+        .onDisappear { manager.stopViewing(); ScreenWake.release("location") }
         .onChange(of: manager.contacts.count) { _, _ in fitCamera() }
     }
 

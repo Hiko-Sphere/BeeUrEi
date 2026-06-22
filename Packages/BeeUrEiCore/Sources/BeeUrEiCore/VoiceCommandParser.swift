@@ -10,6 +10,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case ahead                      // 前方有什么
     case weather                    // 天气
     case look                       // 打开识别（看一看）
+    case guideMe                    // 开始导盲/避障（进入实时避障模式）
     case navigate(String?)          // 导航（可带目的地）
     case goHome                     // 原路返回
     case readText                   // 朗读文字
@@ -44,6 +45,8 @@ public enum VoiceCommandParser {
         if has(["纸币", "钱", "钞票", "多少元", "banknote", "money", "currency", "bill"]) { return .banknote }
         if has(["扫码", "二维码", "条形码", "条码", "scan", "barcode", "qr"]) { return .scanCode }
         if has(["消息", "聊天", "信息", "message", "chat", "inbox"]) { return .messages }
+        // 导盲/避障须在通用「看一看」之前匹配（"识别障碍/避障"含"识别"会被 look 抢走）。
+        if has(["导盲", "避障", "开始导盲", "实时避障", "obstacle", "guide me", "start guide", "avoidance"]) { return .guideMe }
         if has(["看一看", "识别", "这是什么", "拍一下", "look", "what is this", "identify", "recognize"]) { return .look }
         if has(["再说一遍", "重复", "刚才说什么", "repeat", "say again", "say that again"]) { return .repeatLast }
         // 导航意图（带目的地提取）：「带我去/导航去/去 北京西站」 / "navigate to / take me to X"

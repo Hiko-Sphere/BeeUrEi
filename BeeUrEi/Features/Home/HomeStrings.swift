@@ -12,6 +12,55 @@ enum HomeStrings {
         l == .zh ? "该功能暂时关闭" : "This feature is temporarily unavailable"
     }
 
+    // MARK: 主页 Hub（首屏不再自动进入导盲；改为平静的功能中枢）
+
+    /// 顶部状态药丸：就绪/待命（区别于"避障运行中"）。
+    static func ready(_ l: Language) -> String { l == .zh ? "就绪" : "Ready" }
+
+    /// 时段问候（含昵称，可空）。
+    static func greeting(_ name: String?, hour: Int, _ l: Language) -> String {
+        let part: String
+        if l == .zh { part = hour < 6 ? "夜深了" : hour < 12 ? "早上好" : hour < 18 ? "下午好" : "晚上好" }
+        else { part = hour < 6 ? "Good night" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening" }
+        guard let name, !name.isEmpty else { return part }
+        return l == .zh ? "\(part)，\(name)" : "\(part), \(name)"
+    }
+    static func greetingHint(_ l: Language) -> String {
+        l == .zh ? "想做点什么？两指双击屏幕可随时求助。" : "What would you like to do? Two-finger double-tap anytime for help."
+    }
+
+    /// 出行 / 看见 / 联系 三个分区标题（中英并列副标见 UI）。
+    static func sectionMove(_ l: Language) -> String { l == .zh ? "出行" : "Move" }
+    static func sectionSee(_ l: Language) -> String { l == .zh ? "看见" : "See" }
+    static func sectionConnect(_ l: Language) -> String { l == .zh ? "联系" : "Connect" }
+
+    /// 导盲/避障入口（首屏不再自动开启；显式进入）。
+    static func tileObstacle(_ l: Language) -> String { l == .zh ? "导盲避障" : "Obstacle Guide" }
+    static func hintObstacle(_ l: Language) -> String {
+        l == .zh ? "进入实时避障：相机识别前方障碍并语音提示，需要带 LiDAR 的设备"
+                 : "Enter live obstacle guidance: the camera detects obstacles ahead with spoken alerts (LiDAR device required)"
+    }
+    static func tileLocShare(_ l: Language) -> String { l == .zh ? "实时位置" : "Live Location" }
+    static func hintLocShare(_ l: Language) -> String {
+        l == .zh ? "与亲友/协助者互相共享当前位置" : "Share your live location with family and helpers"
+    }
+
+    /// 落地一次性朗读：问候 + 求助提醒。
+    static func greetingSpeak(_ name: String?, hour: Int, _ l: Language) -> String {
+        "\(greeting(name, hour: hour, l))。\(greetingHint(l))"
+    }
+
+    // MARK: 导盲模式（独立全屏）控件
+
+    static func exitGuide(_ l: Language) -> String { l == .zh ? "退出避障" : "Exit guide" }
+    static func repeatLabel(_ l: Language) -> String { l == .zh ? "重复" : "Repeat" }
+    static func guideStartedSpeak(_ l: Language) -> String {
+        l == .zh ? "已进入实时避障，正在识别前方障碍。" : "Obstacle guidance is on, detecting what's ahead."
+    }
+    static func nothingToRepeat(_ l: Language) -> String {
+        l == .zh ? "现在没有需要重复的播报。" : "There's nothing to repeat right now."
+    }
+
     static func helpTitle(_ l: Language) -> String { l == .zh ? "求助" : "Get Help" }
     static func helpSubtitle(_ l: Language) -> String {
         l == .zh ? "呼叫志愿者或亲友帮你看" : "Call a volunteer or family member to see for you"

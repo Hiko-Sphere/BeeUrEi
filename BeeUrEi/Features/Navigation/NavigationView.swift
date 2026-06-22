@@ -108,6 +108,7 @@ struct WalkNavigationView: View {
             }
             .navigationTitle(NavStrings.navScreenTitle(lang))
             .onAppear {
+                ScreenWake.acquire("nav")   // 步行导航期间屏不灭（同 Apple/Google 地图）
                 favorites = FavoritePlacesStore().all
                 // 恢复上次地区；首次按系统区域自动判定（中国大陆→高德）。
                 switch regionRaw {
@@ -117,7 +118,7 @@ struct WalkNavigationView: View {
                 }
             }
             // 任何方式关闭（完成/下滑/系统）都彻底停止导航——否则定位、信标音、语音引导会在后台继续（见 P1 审计）。
-            .onDisappear { model.stop() }
+            .onDisappear { model.stop(); ScreenWake.release("nav") }
             // 语音指令直达："带我去X"→ 预填并直接开始导航；"原路返回"→ 一键回程。
             .task {
                 guard let action = AppRoute.shared.pendingNavAction else { return }

@@ -83,8 +83,8 @@ struct CallView: View {
         // 一方挂断 → 对方自动挂断并关闭界面。
         .onChange(of: model.callEnded) { _, ended in if ended { onClose() } }
         .onChange(of: model.reportStatus) { _, s in if let s, !s.isEmpty { announceCall(s) } }
-        .onAppear { AudioSessionManager.beginCall() }
-        .onDisappear { autoHide?.cancel(); model.hangUp(); AudioSessionManager.endCall() }
+        .onAppear { AudioSessionManager.beginCall(); ScreenWake.acquire("call") }   // 通话期间屏不灭（引用计数，独立于底层导盲页）
+        .onDisappear { autoHide?.cancel(); model.hangUp(); AudioSessionManager.endCall(); ScreenWake.release("call") }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { model.setVideoSending(false) }
         }

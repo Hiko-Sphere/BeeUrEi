@@ -1013,13 +1013,14 @@ struct FramingAssistView: View {
             } // if case .running（仅相机运行时显示操作面板）
         }
         .task {
+            ScreenWake.acquire("framing")   // 取景识别相机界面期间屏不灭
             model.start()
             model.refreshTaughtItems()
             // Siri 频道直达：取走待执行频道（无快捷指令进入时为 nil，无副作用）。
             model.queueChannel(AppRoute.shared.pendingChannel)
             AppRoute.shared.pendingChannel = nil
         }
-        .onDisappear { model.stop(); Torch.set(false) }
+        .onDisappear { model.stop(); Torch.set(false); ScreenWake.release("framing") }
         // VoiceOver 魔法轻点（双指双击）= 主操作"前方有什么"（Seeing AI 同款惯例）。
         .accessibilityAction(.magicTap) { model.describeScene() }
         // 找东西：先列已教的个人物品，再列通用类别（Lookout Find 式），最后教新物品。

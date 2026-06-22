@@ -7,7 +7,7 @@ import Observation
 @Observable
 final class AppRoute {
     static let shared = AppRoute()
-    enum Destination { case help, lookAround, whereAmI }
+    enum Destination { case help, lookAround, whereAmI, obstacle }
     /// 识别屏内的频道直达（Seeing AI"全频道快捷指令"惯例：一句话直达识币/扫码等具体动作）。
     enum FramingChannel { case banknote, scan, fullPage, bus, people, light, text }
     var pending: Destination?
@@ -49,6 +49,17 @@ struct WhereAmIIntent: AppIntent {
     static let openAppWhenRun = true
     @MainActor func perform() async throws -> some IntentResult {
         AppRoute.shared.pending = .whereAmI
+        return .result()
+    }
+}
+
+/// 「嘿 Siri，用蜂有眼开始导盲」——直达实时避障模式（首屏不再自动进入，故提供一句话直达）。
+struct StartGuideIntent: AppIntent {
+    static let title: LocalizedStringResource = "开始导盲"
+    static let description = IntentDescription("进入实时避障模式，用相机识别前方障碍并语音提示")
+    static let openAppWhenRun = true
+    @MainActor func perform() async throws -> some IntentResult {
+        AppRoute.shared.pending = .obstacle
         return .result()
     }
 }
@@ -133,6 +144,10 @@ struct BeeAppShortcuts: AppShortcutsProvider {
                     phrases: ["用\(.applicationName)呼叫帮手", "在\(.applicationName)求助", "\(.applicationName)帮我看",
                               "Call a helper with \(.applicationName)", "Get help with \(.applicationName)"],
                     shortTitle: "求助", systemImageName: "hand.raised.fill")
+        AppShortcut(intent: StartGuideIntent(),
+                    phrases: ["用\(.applicationName)开始导盲", "用\(.applicationName)避障", "让\(.applicationName)帮我避障",
+                              "Start guide with \(.applicationName)", "Avoid obstacles with \(.applicationName)"],
+                    shortTitle: "开始导盲", systemImageName: "figure.walk")
         AppShortcut(intent: LookAroundIntent(),
                     phrases: ["用\(.applicationName)看一看", "让\(.applicationName)认一下这是什么",
                               "Look around with \(.applicationName)", "What is this in \(.applicationName)"],

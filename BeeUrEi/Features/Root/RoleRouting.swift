@@ -159,7 +159,7 @@ struct RoleHomeView: View {
         case "helper", "family": AssistHomeView(session: session, onSwitchRole: onSwitchRole)
         case "admin": AdminHomeView(session: session, onSwitchRole: onSwitchRole)
         case "developer": DeveloperHomeView(session: session, onSwitchRole: onSwitchRole)
-        default: HomeView() // 视障：实时避障主界面
+        default: HubView() // 视障：功能中枢（首屏不再自动进入导盲；导盲为显式入口）
         }
     }
 }

@@ -358,14 +358,16 @@ struct AssistHomeView: View {
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                         }
+                        .accessibilityElement(children: .combine)
                     }
-                    NavigationLink(HelperStrings.accountAndSecurity(lang)) { LoginView() }
+                    // 统一设置页（账号与安全、语言与外观、匹配偏好、法律与帮助都在内）。
+                    NavigationLink {
+                        HelperSettingsView(session: session)
+                    } label: {
+                        Label(HelperStrings.settingsTitle(lang), systemImage: "gearshape")
+                    }
                     Button(HelperStrings.switchRole(lang)) { onSwitchRole() }
                     Button(HelperStrings.logout(lang), role: .destructive) { showLogoutConfirm = true }
-                }
-                Section {
-                    Text(HelperStrings.mergedExplain(lang))
-                        .font(.footnote).foregroundStyle(.secondary)
                 }
             }
             .navigationTitle(HelperStrings.meNavTitle(lang))

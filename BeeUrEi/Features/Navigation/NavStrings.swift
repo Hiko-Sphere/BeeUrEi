@@ -115,6 +115,14 @@ enum NavStrings {
     static func regionHeader(_ l: Language) -> String { l == .zh ? "地区" : "Region" }
     static func regionOverseas(_ l: Language) -> String { l == .zh ? "海外（MapKit）" : "Overseas (MapKit)" }
     static func regionChina(_ l: Language) -> String { l == .zh ? "中国大陆（高德）" : "Mainland China (AMap)" }
+    /// 跟随系统区域自动判定（中国大陆→高德，其余→MapKit）。设置页地区选择器的默认项。
+    static func regionAuto(_ l: Language) -> String { l == .zh ? "自动（按系统区域）" : "Automatic (by system region)" }
+    /// 设置页地区选择器的行标签（与分区标题「地区」区分，避免 VoiceOver 连读两个「地区」）。
+    static func regionPickerLabel(_ l: Language) -> String { l == .zh ? "地图来源" : "Map source" }
+    static func regionFooter(_ l: Language) -> String {
+        l == .zh ? "决定步行导航用哪家地图：中国大陆用高德，海外用 Apple 地图。通常自动判定即可，很少需要手动更改。"
+                 : "Chooses the map source for walking navigation: AMap in mainland China, Apple Maps overseas. Auto-detected by default; rarely needs changing."
+    }
     static func destinationHeader(_ l: Language) -> String { l == .zh ? "目的地" : "Destination" }
     static func destinationPlaceholder(_ l: Language) -> String {
         l == .zh ? "如：地铁站、超市名称" : "e.g. metro station, supermarket"

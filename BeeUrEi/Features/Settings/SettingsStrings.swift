@@ -6,6 +6,36 @@ enum SettingsStrings {
 
     // MARK: 分区标题（盲人优先：核心安全置顶，其余按"语音→障碍提示→显示→账号→其他"递减）
 
+    // MARK: 顶部身份卡 / 分区（设置 v3：身份置顶 → 安全 → 语音 → 外观与屏幕 → 法律与帮助）
+
+    /// 顶部身份卡尾注（管理头像/昵称/邮箱/手机号/登录方式与安全，均在账号与安全页内）。
+    static func identityFooter(_ l: Language) -> String {
+        l == .zh ? "管理头像、昵称、邮箱、手机号、登录方式与账号安全。"
+                 : "Manage your avatar, nickname, email, phone, sign-in methods and account security."
+    }
+    /// 未登录时身份卡主副标题。
+    static func signInPrompt(_ l: Language) -> String { l == .zh ? "登录 / 注册" : "Sign in / Register" }
+    static func signInSubtitle(_ l: Language) -> String {
+        l == .zh ? "登录后可使用通话、亲友、录音等功能" : "Sign in to use calls, family, recordings and more"
+    }
+    /// 安全分区（避障/导航/摔倒 + 亲友与紧急联系挪到一处）。
+    static func safetyHeader(_ l: Language) -> String { l == .zh ? "安全" : "Safety" }
+    static func safetyFooter(_ l: Language) -> String {
+        l == .zh ? "这些设置保护你的安全。避障与摔倒警报在你行走时运行；关闭避障会先与你确认；检测到摔倒会通知你在「亲友与紧急联系」里设置的家人。"
+                 : "These keep you safe. Obstacle and fall alerts run while you walk; turning avoidance off asks first; a detected fall notifies the family you set under \"Family & emergency\"."
+    }
+    /// 外观与屏幕分区（高对比 + 常亮时长 + 试触，从「更多设置」上移）。
+    static func displayScreenHeader(_ l: Language) -> String { l == .zh ? "外观与屏幕" : "Display & screen" }
+    static func displayScreenFooter(_ l: Language) -> String {
+        l == .zh ? "高对比大字状态条便于低视力查看；文字大小同时跟随系统设置。屏幕常亮默认「永久」，避障使用期间不息屏；可改为若干秒后允许息屏省电（息屏后避障暂停，点亮即恢复）。"
+                 : "The high-contrast large status bar helps low vision; text size also follows the system setting. The screen stays on (\"Never dim\") during obstacle detection by default; allow auto-sleep after a delay to save battery (detection pauses while asleep and resumes when you wake the screen)."
+    }
+    /// 恢复默认的诚实范围说明（resetToDefaults 仅还原 6 个语音/显示偏好键）。
+    static func resetScopeFooter(_ l: Language) -> String {
+        l == .zh ? "「恢复默认」仅还原语音与显示偏好（简短、语速、详略、通畅确认、高对比、接近声呐），不会改动避障、导航、摔倒、屏幕常亮与语言设置。"
+                 : "\"Reset to defaults\" restores only voice & display preferences (concise, rate, verbosity, path-clear, high contrast, sonar). It does not touch obstacle, navigation, fall detection, keep-awake or language settings."
+    }
+
     static func coreSafetyHeader(_ l: Language) -> String { l == .zh ? "核心安全" : "Core safety" }
     static func coreSafetyFooter(_ l: Language) -> String {
         l == .zh ? "这些是最重要的安全功能。实时避障默认开启；关闭前会再次与你确认。导航功能仍在开发中。"

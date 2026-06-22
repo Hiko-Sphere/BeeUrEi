@@ -129,6 +129,20 @@ enum HelperStrings {
     }
     static func meNavTitle(_ l: Language) -> String { l == .zh ? "我的" : "Me" }
 
+    // MARK: 设置（协助端统一设置页 v3：身份/语言与外观/匹配偏好/法律与帮助）
+
+    static func settingsTitle(_ l: Language) -> String { l == .zh ? "设置" : "Settings" }
+    static func languageAppearanceHeader(_ l: Language) -> String { l == .zh ? "语言与外观" : "Language & appearance" }
+    static func languageAppearanceFooter(_ l: Language) -> String {
+        l == .zh ? "选择 BeeUrEi 用于界面按钮与语音提示的语言。"
+                 : "Choose the language BeeUrEi uses for buttons and spoken prompts."
+    }
+    static func appLanguageLabel(_ l: Language) -> String { l == .zh ? "界面与播报语言" : "App language" }
+    static func onlineStatusLabel(_ l: Language) -> String { l == .zh ? "在线状态" : "Online status" }
+    static func matchPrefsHeader(_ l: Language) -> String { l == .zh ? "匹配偏好" : "Match preferences" }
+    static func legalHelpHeader(_ l: Language) -> String { l == .zh ? "法律与帮助" : "Legal & help" }
+    static func aboutHeader(_ l: Language) -> String { l == .zh ? "关于" : "About" }
+
     // MARK: 动作状态（经 A11y 朗读）
 
     static func helpingTitle(_ name: String, _ l: Language) -> String { l == .zh ? "正在帮助 \(name)" : "Helping \(name)" }

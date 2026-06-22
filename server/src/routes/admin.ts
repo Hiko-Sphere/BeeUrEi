@@ -12,6 +12,9 @@ import { type CallControlBridge } from '../signaling/callControl'
 import { type PushSender, NoopPushSender } from '../push/apns'
 import { pushLang, pushStrings } from '../push/pushStrings'
 import { notifyUser } from '../notifications/notify'
+import { openField, open as openSealed } from '../kyc/crypto'
+import { readKycBlob, removeKycBlob, kycBlobExists } from '../kyc/storage'
+import type { KycDocKind } from '../db/store'
 
 const statusSchema = z.object({ status: z.enum(['active', 'disabled']) })
 const roleSchema = z.object({ role: z.enum(['blind', 'helper', 'family', 'admin', 'developer']) })
@@ -32,6 +35,11 @@ const configSchema = z.object({
   registrationEnabled: z.boolean(), features: featuresSchema,
   announcement: announcementSchema, maintenance: maintenanceSchema, contentFilter: contentFilterSchema,
 }).partial()
+// 实名审核拒绝原因（timeout/revoked 为系统/撤销专用，不在管理员可选项内）。
+const kycRejectSchema = z.object({
+  reasonCode: z.enum(['blurry', 'glare', 'name_mismatch', 'face_mismatch', 'expired', 'unsupported_doc', 'incomplete', 'suspected_fraud', 'other']),
+  note: z.string().trim().max(280).optional(),
+})
 
 const SERVER_VERSION = '0.1.0'
 const START_MS = Date.now()
@@ -106,11 +114,142 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       online: { total: online.size, helpers: onlineHelpers },
       reports: { open: openReports, total: reports.length },
       recordings: { total: store.allRecordings().length, config: store.getRecordingConfig() },
+      verifications: { pending: store.countPendingVerifications(), total: store.allVerifications().length },
       growth: { newUsers7d, newUsers30d, trend },
       version: SERVER_VERSION,
       uptimeSeconds: Math.floor((now - START_MS) / 1000),
       nowMs: now,
     }
+  })
+
+  // —— 实名认证（KYC）人工审核 ——
+  // 队列：仅元数据，绝不含姓名/证件号/图片。默认 status=pending。
+  app.get('/api/admin/verifications', adminOnly, async (req) => {
+    const q = req.query as { status?: string }
+    const status = q.status === 'verified' || q.status === 'rejected' || q.status === 'pending' ? q.status : 'pending'
+    const list = store.listVerifications(status as 'pending' | 'verified' | 'rejected', 200)
+    return {
+      verifications: list.map((v) => ({
+        id: v.id, userId: v.userId, userName: nameOf(v.userId), status: v.status,
+        idType: v.idType, idLast4: v.idLast4 ?? null, submittedVia: v.submittedVia, attempt: v.attempt,
+        docsUploaded: (v.blobs ?? []).map((b) => b.kind),
+        legalHold: !!v.legalHold, submittedAt: v.submittedAt, decidedAt: v.decidedAt ?? null,
+        decidedBy: v.decidedBy ?? null, rejectReasonCode: v.rejectReasonCode ?? null,
+      })),
+      pending: store.countPendingVerifications(),
+    }
+  })
+
+  // 审核详情：**唯一**产出明文姓名/证件号的端点。每次调用审计 kyc.view（谁看了谁的证件）。
+  app.get('/api/admin/verifications/:id', adminOnly, async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    const v = store.findVerification(id)
+    if (!v) return reply.code(404).send({ error: 'not_found' })
+    let legalName: string | null = null
+    let idNumber: string | null = null
+    try { if (v.nameSealed) legalName = openField(v.nameSealed, { submissionId: v.id, kind: 'name' }) } catch { /* 已清除或不可解 */ }
+    try { if (v.idNumberSealed) idNumber = openField(v.idNumberSealed, { submissionId: v.id, kind: 'idNumber' }) } catch { /* 已清除 */ }
+    audit(req.user!.sub, 'kyc.view', 'kyc', id, `name disclosed · ${v.idType}`)
+    return {
+      id: v.id, userId: v.userId, userName: nameOf(v.userId), status: v.status,
+      idType: v.idType, idLast4: v.idLast4 ?? null, legalName, idNumber,
+      docsUploaded: (v.blobs ?? []).map((b) => b.kind),
+      submittedVia: v.submittedVia, attempt: v.attempt, consentVersion: v.consentVersion ?? null,
+      legalHold: !!v.legalHold, submittedAt: v.submittedAt, decidedAt: v.decidedAt ?? null,
+      decidedBy: v.decidedBy ?? null, rejectReasonCode: v.rejectReasonCode ?? null, rejectReasonNote: v.rejectReasonNote ?? null,
+    }
+  })
+
+  // 审核详情中的单张证件图片：解密 → 流式返回。审计 kyc.view-doc。no-store 不缓存；无 token-in-URL（SPA 带 Authorization 头取 blob）。
+  app.get('/api/admin/verifications/:id/doc/:kind', adminOnly, async (req, reply) => {
+    const { id, kind } = req.params as { id: string; kind: string }
+    const v = store.findVerification(id)
+    if (!v) return reply.code(404).send({ error: 'not_found' })
+    const ref = (v.blobs ?? []).find((b) => b.kind === kind)
+    if (!ref || !kycBlobExists(ref.blobId)) return reply.code(404).send({ error: 'not_found' }) // 已按留存清除
+    let plain: Buffer
+    try {
+      plain = openSealed(ref.sealed, readKycBlob(ref.blobId), { submissionId: v.id, kind: kind as KycDocKind })
+    } catch {
+      return reply.code(404).send({ error: 'not_found' })
+    }
+    audit(req.user!.sub, 'kyc.view-doc', 'kyc', id, kind)
+    reply.header('content-type', ref.mime)
+    reply.header('cache-control', 'private, no-store')
+    reply.header('content-disposition', 'inline')
+    return reply.send(plain)
+  })
+
+  // 通过：状态→verified、置用户徽章、清证件号+图片（保留加密姓名作徽章法律依据）、审计、通知。
+  app.post('/api/admin/verifications/:id/approve', adminOnly, async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    const adminId = req.user!.sub
+    const v = store.findVerification(id)
+    if (!v) return reply.code(404).send({ error: 'not_found' })
+    if (v.userId === adminId) return reply.code(403).send({ error: 'cannot_review_self' })
+    if (v.status !== 'pending') return reply.code(409).send({ error: 'not_pending' })
+    const blobs = v.blobs ?? []
+    const decided = store.decideVerification(id, {
+      status: 'verified', decidedBy: adminId, decidedAt: Date.now(), idNumberSealed: undefined, blobs: undefined,
+    })
+    if (!decided) return reply.code(409).send({ error: 'not_pending' }) // 竞态败者——不重复副作用
+    for (const b of blobs) removeKycBlob(b.blobId)
+    store.updateUser(v.userId, { identityVerified: true })
+    audit(adminId, 'kyc.approve', 'kyc', id, `attempt ${v.attempt}`)
+    const u = store.findById(v.userId)
+    if (u) { const l = pushLang(u.language); notifyUser(store, push, v.userId, 'kyc_verified', pushStrings.kycVerifiedTitle(l), pushStrings.kycVerifiedBody(l), { status: 'verified' }) }
+    return reply.send({ ok: true, status: 'verified' })
+  })
+
+  // 拒绝：状态→rejected、清姓名+证件号+图片、审计、通知（含原因码）。
+  app.post('/api/admin/verifications/:id/reject', adminOnly, async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    const adminId = req.user!.sub
+    const parsed = kycRejectSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const v = store.findVerification(id)
+    if (!v) return reply.code(404).send({ error: 'not_found' })
+    if (v.userId === adminId) return reply.code(403).send({ error: 'cannot_review_self' })
+    if (v.status !== 'pending') return reply.code(409).send({ error: 'not_pending' })
+    const blobs = v.blobs ?? []
+    const decided = store.decideVerification(id, {
+      status: 'rejected', decidedBy: adminId, decidedAt: Date.now(),
+      rejectReasonCode: parsed.data.reasonCode, rejectReasonNote: parsed.data.note,
+      nameSealed: undefined, idNumberSealed: undefined, blobs: undefined,
+    })
+    if (!decided) return reply.code(409).send({ error: 'not_pending' })
+    for (const b of blobs) removeKycBlob(b.blobId)
+    audit(adminId, 'kyc.reject', 'kyc', id, parsed.data.reasonCode)
+    const u = store.findById(v.userId)
+    if (u) { const l = pushLang(u.language); notifyUser(store, push, v.userId, 'kyc_rejected', pushStrings.kycRejectedTitle(l), pushStrings.kycRejectReason(parsed.data.reasonCode, l), { status: 'rejected', reasonCode: parsed.data.reasonCode }) }
+    return reply.send({ ok: true, status: 'rejected' })
+  })
+
+  // 撤销已通过的徽章（如发现冒用）：verified→rejected(revoked)、清姓名、撤销徽章、审计、通知。
+  app.post('/api/admin/verifications/:id/revoke', adminOnly, async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    const adminId = req.user!.sub
+    const v = store.findVerification(id)
+    if (!v) return reply.code(404).send({ error: 'not_found' })
+    if (v.status !== 'verified') return reply.code(409).send({ error: 'not_verified' })
+    store.updateVerification(id, { status: 'rejected', rejectReasonCode: 'revoked', decidedBy: adminId, decidedAt: Date.now(), nameSealed: undefined, idNumberSealed: undefined, blobs: undefined })
+    for (const b of v.blobs ?? []) removeKycBlob(b.blobId)
+    store.updateUser(v.userId, { identityVerified: false })
+    audit(adminId, 'kyc.revoke', 'kyc', id)
+    const u = store.findById(v.userId)
+    if (u) { const l = pushLang(u.language); notifyUser(store, push, v.userId, 'kyc_rejected', pushStrings.kycRejectedTitle(l), pushStrings.kycRejectReason('revoked', l), { status: 'rejected', reasonCode: 'revoked' }) }
+    return reply.send({ ok: true })
+  })
+
+  // 法务保留开关：豁免留存清扫与级联删号清除（取证）。
+  app.post('/api/admin/verifications/:id/hold', adminOnly, async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    const v = store.findVerification(id)
+    if (!v) return reply.code(404).send({ error: 'not_found' })
+    const on = !v.legalHold
+    store.updateVerification(id, { legalHold: on })
+    audit(req.user!.sub, 'kyc.hold', 'kyc', id, on ? 'on' : 'off')
+    return reply.send({ ok: true, legalHold: on })
   })
 
   // 列出用户：服务端搜索/筛选/排序/分页（万级用户也不撑爆前端）。返回 { users, total, limit, offset }。

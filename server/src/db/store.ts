@@ -877,8 +877,9 @@ export class MemoryStore implements Store {
     return [...this.verifications.values()]
   }
   deleteVerificationsForUser(userId: string): void {
+    // 法务保留(legalHold)的记录刻意保留为取证证据（与级联删号保留 举报/警告 同理）；其余删除。
     let changed = false
-    for (const [id, v] of this.verifications) if (v.userId === userId) { this.verifications.delete(id); changed = true }
+    for (const [id, v] of this.verifications) if (v.userId === userId && !v.legalHold) { this.verifications.delete(id); changed = true }
     if (changed) this.afterMutate()
   }
   deleteRecording(id: string): void {

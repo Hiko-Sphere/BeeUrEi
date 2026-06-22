@@ -494,7 +494,8 @@ export class SqliteStore implements Store {
     return this.db.prepare('SELECT * FROM verifications').all().map((r) => this.toVerification(r))
   }
   deleteVerificationsForUser(userId: string): void {
-    this.db.prepare('DELETE FROM verifications WHERE userId = ?').run(userId)
+    // 法务保留(legalHold)的记录刻意保留为取证证据（与级联删号保留 举报/警告 同理）；其余删除。
+    this.db.prepare('DELETE FROM verifications WHERE userId = ? AND (legalHold IS NULL OR legalHold = 0)').run(userId)
   }
 
   // MARK: 站内通知

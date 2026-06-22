@@ -59,4 +59,43 @@ export const pushStrings = {
       default: return l === 'en' ? 'A report involving you has been resolved.' : '一项涉及你的举报已处理。'
     }
   },
+
+  // —— 实名认证（KYC）审核结果 ——
+  kycVerifiedTitle: (l: PushLang): string =>
+    l === 'en' ? 'Identity verified' : '实名认证已通过',
+  kycVerifiedBody: (l: PushLang): string =>
+    l === 'en' ? 'Your identity has been verified. The verified badge now appears on your profile.' : '你的实名认证已通过，账号已显示「已认证」徽章。',
+  kycRejectedTitle: (l: PushLang): string =>
+    l === 'en' ? 'Identity verification not approved' : '实名认证未通过',
+  // 拒绝原因 → 用户可读句子（双语）。引导用户如何修正后重新提交。
+  kycRejectReason: (code: string | undefined, l: PushLang): string => {
+    const zh: Record<string, string> = {
+      blurry: '证件照片不够清晰，请在光线充足处重拍。',
+      glare: '证件照片有反光，请避开强光后重拍。',
+      name_mismatch: '填写姓名与证件不一致，请核对后重新提交。',
+      face_mismatch: '自拍与证件照片不匹配，请由本人重新拍摄。',
+      expired: '证件已过期，请使用有效证件。',
+      unsupported_doc: '证件类型不被支持，请更换证件。',
+      incomplete: '提交资料不完整，请补齐后重新提交。',
+      suspected_fraud: '审核未通过。如有疑问请联系支持。',
+      timeout: '提交超过审核时限已关闭，请重新提交。',
+      revoked: '实名认证已被撤销。如有疑问请联系支持。',
+      other: '审核未通过，请重新提交。',
+    }
+    const en: Record<string, string> = {
+      blurry: 'The document photo was too blurry. Please retake it in good lighting.',
+      glare: 'The document photo had glare. Please retake it without reflections.',
+      name_mismatch: 'The name did not match the document. Please check and resubmit.',
+      face_mismatch: 'The selfie did not match the document. Please retake it yourself.',
+      expired: 'The document has expired. Please use a valid document.',
+      unsupported_doc: 'The document type is not supported. Please use another document.',
+      incomplete: 'The submission was incomplete. Please complete it and resubmit.',
+      suspected_fraud: 'Verification was not approved. Contact support if you have questions.',
+      timeout: 'The submission timed out and was closed. Please resubmit.',
+      revoked: 'Your identity verification was revoked. Contact support if you have questions.',
+      other: 'Verification was not approved. Please resubmit.',
+    }
+    const map = l === 'en' ? en : zh
+    return map[code ?? 'other'] ?? map.other
+  },
 }

@@ -9,6 +9,7 @@ import { SqliteStore } from './db/sqliteStore'
 import { setAuthStore } from './auth/rbac'
 import { registerAuthRoutes } from './routes/auth'
 import { registerAccountRoutes } from './routes/account'
+import { registerKycRoutes } from './routes/kyc'
 import { registerPasskeyRoutes } from './routes/passkey'
 import { registerUserRoutes } from './routes/users'
 import { registerFamilyRoutes } from './routes/family'
@@ -150,6 +151,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerAuthRoutes(instance, store, codes, mailer, appleVerifier, codeSend)
     registerRecoveryRoutes(instance, store, codes, mailer, codeSend) // 找回密码（D1）
     registerAccountRoutes(instance, store, codes, mailer, appleVerifier, codeSend)
+    registerKycRoutes(instance, store) // 实名认证（KYC）：提交/查询（admin 审核端点在 admin 路由）
     registerPasskeyRoutes(instance, store) // Passkey（WebAuthn）注册/登录
     registerPushRoutes(instance, store) // VoIP token 注册（A1）
     registerUserRoutes(instance, store)

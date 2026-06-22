@@ -243,10 +243,18 @@ describe('KYC security invariants (MemoryStore)', () => {
     const adminToken = await login(app, 'root', 'rootpass1')
     // admin 自己提交
     const id = await submitKyc(app, adminToken, 'Self Admin')
+    // 决策端点
     const ap = await app.inject({ method: 'POST', url: `/api/admin/verifications/${id}/approve`, headers: auth(adminToken) })
     expect(ap.statusCode).toBe(403)
     const rj = await app.inject({ method: 'POST', url: `/api/admin/verifications/${id}/reject`, headers: auth(adminToken), payload: { reasonCode: 'other' } })
     expect(rj.statusCode).toBe(403)
+    // 解密查看端点（详情/证件图）与 hold 也禁止自审
+    const detail = await app.inject({ method: 'GET', url: `/api/admin/verifications/${id}`, headers: auth(adminToken) })
+    expect(detail.statusCode).toBe(403)
+    const doc = await app.inject({ method: 'GET', url: `/api/admin/verifications/${id}/doc/front`, headers: auth(adminToken) })
+    expect(doc.statusCode).toBe(403)
+    const hold = await app.inject({ method: 'POST', url: `/api/admin/verifications/${id}/hold`, headers: auth(adminToken) })
+    expect(hold.statusCode).toBe(403)
     await app.close()
   })
 

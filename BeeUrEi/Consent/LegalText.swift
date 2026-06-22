@@ -7,8 +7,8 @@ import Foundation
 /// 网页同源版本：https://beeurei.hikosphere.com/legal/
 enum LegalText {
     /// 文件版本/生效日期（更新内容时同步修改；客户端与网页一致）。
-    static let version = "3.0"
-    static let effectiveDate = "2026-06-14"
+    static let version = "3.1"
+    static let effectiveDate = "2026-06-23"
 
     static func privacyPolicy(_ l: Language) -> String { l == .zh ? privacyZh : privacyEn }
     static func termsOfService(_ l: Language) -> String { l == .zh ? termsZh : termsEn }
@@ -71,6 +71,8 @@ BeeUrEi 蜂之眼 隐私政策
 • 录制——见第 4 节（含捕获的音视频、时间 / 地点 / 人 / 时长等元数据、回看、删除与合规留存、作为举报证据，以及管理员监管）。合法性基础：进行录制为同意（Art 6(1)(a)）；管理员为安全 / 滥用防范 / 举报处理而访问录制及合规留存为正当利益（Art 6(1)(f)）。接收方：录制内容不与任何第三方处理者共享，仅存于我们自托管的后端（部署于 AWS），并可由我们经授权的管理员 / 审核人员依第 4 节访问。
 
 • 位置数据——导航与「我在哪」在本地使用精确定位，默认不上传精确坐标。当你发起求助或紧急呼叫时，可附带「省/市/区」级粗略位置帮助对方了解你大概在哪。此外，如果你主动开启「实时位置共享」，你的当前精确位置会实时分享给你已建立绑定（且未被任一方拉黑）的亲友/协助者并展示给他们，以便他们看到你的实时位置以提供协助；该位置仅临时保存「当前点」（不形成轨迹历史、不落盘），在你关闭共享、或一段时间无更新/到期后即对他人不再可见。目的：步行导航、让协助者/紧急联系人知道你大致方位，以及（你主动开启时）与已绑定联系人实时互看位置。合法性基础：分享粗略位置与开启实时位置共享均属于同意（Art 6(1)(a)），由你逐次主动开启、可随时停止；在紧急情形下，处理可基于你或他人的重大利益（Art 6(1)(d)）。接收方：为提供导航，必要坐标会发送给地图/天气服务商（见第 6 节）——海外用 Apple 地图、中国大陆用高德（AMap）、天气用 Open-Meteo（仅降精度坐标，无身份信息）；粗略求助位置会展示给你选定的协助者或紧急联系人；实时共享的精确位置仅展示给你已绑定的亲友/协助者，不发送给任何第三方处理者。此外，若你已授予定位权限，通话录制可能附带录制设备的粗略位置作为元数据（见第 4 节）；我们不会为录制单独请求定位权限。
+
+• 实名认证数据（可选，仅当你主动发起实名认证时）——你的法定姓名、一张政府签发证件的照片、一张本人自拍，以及证件号后 4 位。这些属于敏感个人信息，仅在你主动开启实名认证并明确同意后才收集。我们以人工方式审核（绝非自动通过）：由我们经授权的审核人员对照证件与自拍核验是否为你本人，决定通过或拒绝。安全保护：证件号与证件 / 自拍图片均以 AES-256-GCM 加密「封存」后存储——每条记录用独立的随机数据密钥加密，该密钥再由一把与登录令牌密钥相互独立的专用主密钥包裹；图片密文存于隔离目录，绝不进入通用媒体接口、绝不对其他用户可见；解密仅发生于审核人员的审核动作，且每次访问（查看姓名、查看每张证件图）都留有不可抵赖的审计记录。你本人无法在提交后取回原始证件图片。目的：核验真实身份、向你的联系人展示「已认证」可信徽章、防止冒名与滥用。合法性基础：同意（Art 6(1)(a)，并就敏感数据适用 Art 9(2)(a)）。接收方：仅我们经授权的审核人员及 AWS（托管）；我们不使用任何第三方身份核验处理者，证件数据不与任何第三方共享。留存：见第 8 节——拒绝即刻清除证件图片与姓名 / 证件号；通过后图片在短暂宽限期后清除，仅保留加密的姓名作为徽章的法律依据；超时未审的提交按期自动关闭并清除。你可随时撤回一份待审核的提交。
 
 • 诊断数据（可选）——崩溃与错误报告。仅在你选择开启时才会收集。目的：发现并修复缺陷、提升稳定性。合法性基础：同意（Art 6(1)(a)）。如你不同意，我们不会收集崩溃或错误报告。接收方：错误监控服务商 Sentry（诊断数据中可能附带账号标识）。
 
@@ -149,6 +151,7 @@ BeeUrEi 蜂之眼 隐私政策
 • 账号数据——保留至你删除账号为止。
 • 消息与通话记录——在账号有效期内保留，用于向收发双方持续提供会话；你删除相关内容或删除账号时，即从你这一侧移除（关于已送达给对方的副本，见下文）。
 • 录制——按保留期自动删除（默认 7 天，见第 4 节）。被你删除的录制会对你隐藏，但在保留期届满前仍可能由管理员访问（合规留存）；被尚未处理完毕的举报引用为证据的录制，保留至该举报处理完毕。
+• 实名认证数据（如你已提交）——被拒绝时，证件图片与姓名 / 证件号即刻清除（仅留状态与拒绝原因）；通过后，证件图片在短暂宽限期（默认 7 天）后清除，仅保留加密的姓名作为「已认证」徽章的法律依据；待审提交超过 30 天未审的，自动关闭并清除证件。被尚未处理完毕的举报引用为证据或被置于法务保留的，保留至处理完毕。
 • 诊断数据（如你已开启）——保留至多 90 天后删除。
 • 验证码——短时有效，过期即失效。
 • 备份——按滚动周期覆盖，覆盖周期不超过 35 天。
@@ -264,6 +267,8 @@ Below we list, by category, the personal data we process, the purpose, the legal
 
 • Location data — navigation and "Where am I" use precise location locally, and precise coordinates are not uploaded by default. When you start a help request or emergency call, an approximate province/city/district-level location may be attached so the other party knows roughly where you are. In addition, if you actively turn on "Live location sharing," your current precise location is shared in real time with, and shown to, your accepted-linked family/helpers (where neither party has blocked the other) so they can see your live location to assist you; only the current point is held transiently (no location history is formed and nothing is written to disk), and it stops being visible to others as soon as you turn sharing off or after a period without updates / on expiry. Purpose: walking navigation, letting helpers/emergency contacts know your rough whereabouts, and (when you choose to turn it on) seeing each other's live location with your linked contacts. Legal basis: consent for sharing the coarse location and for enabling live location sharing (Art 6(1)(a)), which you turn on each time and can stop at any moment; in an emergency, processing may rely on your or another person's vital interests (Art 6(1)(d)). Recipients: to provide navigation, the necessary coordinates are sent to map/weather providers (see Section 6) — Apple Maps overseas, AMap (Gaode) in mainland China, and Open-Meteo for weather (reduced-precision coordinates only, no identity); your coarse help-request location is shown to the helper or emergency contact you have chosen; a precise live-shared location is shown only to your linked family/helpers and is not sent to any third-party processor. In addition, if you have already granted location permission, a call recording may carry an approximate location of the recording device as metadata (see Section 4); we do not request location permission just to record.
 
+• Identity-verification data (optional, only if you choose to verify your identity) — your legal name, a photo of one government-issued ID, a selfie, and the last 4 digits of the ID number. This is sensitive personal information, collected only after you start identity verification and give explicit consent. We review it manually (never auto-approved): an authorized reviewer compares the document to the selfie to confirm it is you, and approves or rejects. Protection: the ID number and the document/selfie images are sealed with AES-256-GCM — each record is encrypted under its own random data key, which is in turn wrapped by a dedicated master key kept separate from the sign-in token key; image ciphertext lives in an isolated directory, never enters the general media endpoint, and is never visible to other users; decryption happens only when a reviewer reviews it, and every access (viewing the name, viewing each document image) is recorded in a non-repudiable audit log. You cannot retrieve your original document images after submission. Purpose: verify real identity, show a trusted "Verified" badge to your contacts, and prevent impersonation and abuse. Legal basis: consent (Art 6(1)(a), and for sensitive data Art 9(2)(a)). Recipients: our authorized reviewers only and AWS (hosting); we use no third-party identity-verification processor and do not share document data with any third party. Retention: see Section 8 — on rejection the images and name/ID number are purged immediately; on approval images are purged after a short grace period, keeping only the encrypted name as the legal basis for the badge; submissions left unreviewed time out and are cleared. You can withdraw a pending submission at any time.
+
 • Diagnostic data (optional) — crash and error reports. Collected only if you opt in. Purpose: detect and fix defects and improve stability. Legal basis: consent (Art 6(1)(a)). If you do not consent, we do not collect crash or error reports. Recipients: our error-monitoring provider Sentry (diagnostic data may incidentally include an account identifier).
 
 Special-category data (health/disability): some of our processing may involve data concerning health or disability (a special category under Article 9 GDPR) — for example, the very fact that this service is designed for blind and low-vision users, as well as fall detection, emergency features, or information that incidentally reflects a health condition in video shared during remote assistance. Where this occurs, we rely on your explicit consent (Art 9(2)(a)) and, in emergencies, on the necessity of protecting your or another person's vital interests (Art 9(2)(c)). We do not use such data for any other purpose.
@@ -341,6 +346,7 @@ We keep personal data only for as long as necessary to fulfill the relevant purp
 • Account data — kept until you delete your account.
 • Messages and call records — kept for the life of the account to keep delivering the conversation to both parties; removed from your side when you delete the relevant content or delete your account (for copies already delivered to the other party, see below).
 • Recordings — automatically deleted per the retention period (default 7 days; see Section 4). A recording you delete is hidden from you but may remain accessible to administrators until the retention period expires (legal hold); a recording cited as evidence by an unresolved report is kept until that report is resolved.
+• Identity-verification data (if you have submitted it) — on rejection, the document images and the name/ID number are purged immediately (only the status and reject reason remain); on approval, the document images are purged after a short grace period (7 days by default), keeping only the encrypted name as the legal basis for the "Verified" badge; a pending submission left unreviewed for over 30 days is automatically closed and its documents purged. A verification cited as evidence by an unresolved report or placed under legal hold is retained until that matter is resolved.
 • Diagnostic data (if you have opted in) — retained for up to 90 days, then deleted.
 • Verification codes — short-lived and expire after a brief validity window.
 • Backups — overwritten on a rolling cycle not exceeding 35 days.

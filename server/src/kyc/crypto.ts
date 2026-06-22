@@ -32,23 +32,27 @@ export interface Sealed {
   ct?: string // base64 密文——仅小字段（姓名/证件号）内联；图片把密文写盘，此处留空
 }
 
-function wrapDek(dek: Buffer): string {
+/// AAD 把密文绑定到 {submissionId|kind|keyId}——一段密文无法被挪用/替换到别的记录或字段。
+function aadBuf(aad: { submissionId: string; kind: string }, keyId: string): Buffer {
+  return Buffer.from(`${aad.submissionId}|${aad.kind}|${keyId}`)
+}
+
+// 包裹层也绑定同一 AAD（纵深防御）：单靠正文 GCM 的 AAD 之外，wrappedDek 本身也拒绝被挪到别的记录/字段，
+// 不依赖"解密方一定用本记录自身 id"这一调用约定。
+function wrapDek(dek: Buffer, aad: { submissionId: string; kind: string }): string {
   const iv = randomBytes(12)
   const c = createCipheriv('aes-256-gcm', MASTER, iv)
+  c.setAAD(aadBuf(aad, MASTER_KEY_ID))
   const ct = Buffer.concat([c.update(dek), c.final()])
   return Buffer.concat([iv, c.getAuthTag(), ct]).toString('base64')
 }
 
-function unwrapDek(wrapped: string): Buffer {
+function unwrapDek(wrapped: string, aad: { submissionId: string; kind: string }, keyId: string): Buffer {
   const b = Buffer.from(wrapped, 'base64')
   const d = createDecipheriv('aes-256-gcm', MASTER, b.subarray(0, 12))
+  d.setAAD(aadBuf(aad, keyId))
   d.setAuthTag(b.subarray(12, 28))
   return Buffer.concat([d.update(b.subarray(28)), d.final()])
-}
-
-/// AAD 把密文绑定到 {submissionId|kind|keyId}——一段密文无法被挪用/替换到别的记录或字段。
-function aadBuf(aad: { submissionId: string; kind: string }, keyId: string): Buffer {
-  return Buffer.from(`${aad.submissionId}|${aad.kind}|${keyId}`)
 }
 
 /// 加密任意字节（用于图片）：返回库中信封 + 落盘密文。
@@ -64,7 +68,7 @@ export function seal(
   const tag = c.getAuthTag()
   const sealed: Sealed = {
     keyId: MASTER_KEY_ID,
-    wrappedDek: wrapDek(dek),
+    wrappedDek: wrapDek(dek, aad),
     iv: iv.toString('base64'),
     tag: tag.toString('base64'),
   }
@@ -78,7 +82,7 @@ export function open(
   ciphertext: Buffer,
   aad: { submissionId: string; kind: string },
 ): Buffer {
-  const dek = unwrapDek(sealed.wrappedDek)
+  const dek = unwrapDek(sealed.wrappedDek, aad, sealed.keyId)
   const d = createDecipheriv('aes-256-gcm', dek, Buffer.from(sealed.iv, 'base64'))
   d.setAAD(aadBuf(aad, sealed.keyId))
   d.setAuthTag(Buffer.from(sealed.tag, 'base64'))

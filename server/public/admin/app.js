@@ -1672,16 +1672,22 @@ async function openVerifReview(id) {
     <div class="confirm-actions"><button class="btn ink" data-close>${esc(t('closeBtn'))}</button></div>
   </div>`;
   document.body.appendChild(mask); document.body.appendChild(box);
-  const close = () => { objectUrls.forEach((u) => URL.revokeObjectURL(u)); mask.remove(); box.remove(); document.removeEventListener('keydown', onKey); };
+  let closed = false;
+  const close = () => { closed = true; objectUrls.forEach((u) => URL.revokeObjectURL(u)); mask.remove(); box.remove(); document.removeEventListener('keydown', onKey); };
   function onKey(e) { if (e.key === 'Escape') close(); }
   document.addEventListener('keydown', onKey);
   mask.addEventListener('click', close);
   box.querySelector('[data-close]').addEventListener('click', close);
 
-  // 异步加载证件图（带鉴权 → object URL）。
+  // 异步加载证件图（带鉴权 → object URL）。若加载完成时弹窗已关闭，立刻撤销该 URL——
+  // 否则晚到的（已解密证件图）blob URL 会漏过 close() 的同步撤销，泄漏到标签页生命周期（见复审 LOW）。
   box.querySelectorAll('img.kyc-img[data-kind]').forEach(async (img) => {
-    try { const u = await fetchDocBlob(id, img.dataset.kind); objectUrls.push(u); img.src = u; }
-    catch { img.replaceWith(Object.assign(document.createElement('div'), { className: 'kyc-img empty-doc', textContent: t('idDocLoadFail') })); }
+    try {
+      const u = await fetchDocBlob(id, img.dataset.kind);
+      if (closed) { URL.revokeObjectURL(u); return; }
+      objectUrls.push(u); img.src = u;
+    }
+    catch { if (!closed) img.replaceWith(Object.assign(document.createElement('div'), { className: 'kyc-img empty-doc', textContent: t('idDocLoadFail') })); }
   });
 
   // 核对项全勾选才放开「通过」。

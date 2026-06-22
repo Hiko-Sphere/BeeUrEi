@@ -145,6 +145,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     const id = (req.params as { id: string }).id
     const v = store.findVerification(id)
     if (!v) return reply.code(404).send({ error: 'not_found' })
+    if (v.userId === req.user!.sub) return reply.code(403).send({ error: 'cannot_review_self' }) // 自审禁止：不得解密查看本人提交
     let legalName: string | null = null
     let idNumber: string | null = null
     try { if (v.nameSealed) legalName = openField(v.nameSealed, { submissionId: v.id, kind: 'name' }) } catch { /* 已清除或不可解 */ }
@@ -165,6 +166,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     const { id, kind } = req.params as { id: string; kind: string }
     const v = store.findVerification(id)
     if (!v) return reply.code(404).send({ error: 'not_found' })
+    if (v.userId === req.user!.sub) return reply.code(403).send({ error: 'cannot_review_self' }) // 自审禁止：不得解密查看本人证件图
     const ref = (v.blobs ?? []).find((b) => b.kind === kind)
     if (!ref || !kycBlobExists(ref.blobId)) return reply.code(404).send({ error: 'not_found' }) // 已按留存清除
     let plain: Buffer
@@ -231,6 +233,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     const adminId = req.user!.sub
     const v = store.findVerification(id)
     if (!v) return reply.code(404).send({ error: 'not_found' })
+    if (v.userId === adminId) return reply.code(403).send({ error: 'cannot_review_self' }) // 自审禁止：不得撤销本人认证
     if (v.status !== 'verified') return reply.code(409).send({ error: 'not_verified' })
     store.updateVerification(id, { status: 'rejected', rejectReasonCode: 'revoked', decidedBy: adminId, decidedAt: Date.now(), nameSealed: undefined, idNumberSealed: undefined, blobs: undefined })
     for (const b of v.blobs ?? []) removeKycBlob(b.blobId)
@@ -246,6 +249,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     const id = (req.params as { id: string }).id
     const v = store.findVerification(id)
     if (!v) return reply.code(404).send({ error: 'not_found' })
+    if (v.userId === req.user!.sub) return reply.code(403).send({ error: 'cannot_review_self' }) // 自审禁止：不得对本人记录置法务保留
     const on = !v.legalHold
     store.updateVerification(id, { legalHold: on })
     audit(req.user!.sub, 'kyc.hold', 'kyc', id, on ? 'on' : 'off')

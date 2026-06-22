@@ -356,6 +356,16 @@ else if (msg.type in {offer,answer,ice}) targets = targets.filter(p =&gt; p.role
 <li>举报证据仅录制拥有者可附；被未结举报引用的录制不被清理。</li>
 <li>举报处理结果通知中，举报人不获知对对方的具体处罚（per-recipient 数据）。</li>
 </ol>
+<h3 id="75-实名认证kyc人工审核">7.5 实名认证（KYC，人工审核 · <code>server/src/kyc/*</code>）</h3>
+<p>诚实约束：真正的自动证件核验需第三方持牌服务，故本系统做成<strong>真人后台审核</strong>——用户提交实名 + 证件 + 自拍 → 管理员对照人工审核 → 通过/拒绝；<strong>绝无 mock 自动通过</strong>。</p>
+<ul>
+<li><strong>信封加密</strong>（<code>kyc/crypto.ts</code>）：每条记录一把随机 256-bit DEK，正文（姓名/证件号/图片）以 AES-256-GCM 加密；DEK 再由独立主密钥 <code>KYC_ENC_KEY</code> 包裹。正文与包裹两层 GCM 都绑定 AAD=<code>submissionId|kind|keyId</code>，密文/密钥无法被挪用到别的记录。<code>KYC_ENC_KEY</code> 与 <code>JWT_SECRET</code> 必须不同且 fail-closed——令牌密钥泄露不能顺带解密任何证件。</li>
+<li><strong>隔离落盘</strong>（<code>kyc/storage.ts</code>）：证件密文存独立目录 <code>KYC_DIR</code>（0700，UUID 名），绝不进 <code>media</code> 表、绝不经 <code>/api/media</code>；仅 admin 审核端点解密读取。</li>
+<li><strong>图片归一化</strong>（<code>kyc/imageNormalize.ts</code>）：magic-byte 嗅探 + 剥离 EXIF/GPS（JPEG APP1/APP13/COM、PNG 文本块）+ 拒绝畸形/多格式文件；客户端另在上传前重编码为 JPEG。</li>
+<li><strong>无 PII 外泄</strong>：<code>publicUser</code>/<code>selfView</code> 仅含 <code>verified</code> 布尔徽章；姓名/证件号/图片只在唯一的 admin 审核端点解密，每次访问（<code>kyc.view</code>/<code>kyc.view-doc</code>）必入审计；用户提交后无端点可取回原图或回读姓名。</li>
+<li><strong>留存</strong>（<code>kyc/retention.ts</code>）：拒绝即清证件 + 姓名 + 证件号；通过保留加密姓名、7 天宽限后清证件；停滞 30 天自动拒 + 清；级联删号清证件（法务保留豁免）。</li>
+<li><strong>决策恰好一次 + 职责分离</strong>：<code>decideVerification</code> 条件更新（竞态仅一人生效）+ 一人一活跃记录（部分唯一索引）；管理员不得审核/查看/撤销/保留本人提交（全部 403）。</li>
+</ul>
 <hr />
 <h2 id="八通知举报与内容治理">八、通知、举报与内容治理</h2>
 <h3 id="81-举报与处置serversrcroutesreportsadmints">8.1 举报与处置（<code>server/src/routes/{reports,admin}.ts</code>）</h3>

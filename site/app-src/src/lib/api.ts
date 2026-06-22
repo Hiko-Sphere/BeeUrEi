@@ -2,7 +2,7 @@ import { apiURL } from './config'
 
 // ---------- 模型（与服务端对齐） ----------
 export interface User { id: string; username: string; displayName: string; role: string; status: string; avatar?: string | null }
-export interface SelfView extends User { language?: string | null; email?: string | null; emailVerified?: boolean; phone?: string | null; usernameCustomized?: boolean; appleLinked?: boolean }
+export interface SelfView extends User { language?: string | null; email?: string | null; emailVerified?: boolean; phone?: string | null; usernameCustomized?: boolean; appleLinked?: boolean; twoFactorEnabled?: boolean }
 export interface IncomingLink { id: string; ownerId: string; ownerName: string; ownerAvatar?: string | null; relation: string; isEmergency?: boolean; status?: string }
 export interface FamilyLink { id: string; memberId: string; memberName: string; memberAvatar?: string | null; relation: string; isEmergency: boolean; phone?: string | null; status?: string; outgoing?: boolean }
 export interface CallRecordInfo { id: string; callId: string; direction?: string; status: string; peerName?: string; peerAvatar?: string | null; createdAt: number }
@@ -98,12 +98,13 @@ const del = (p: string) => rawFetch('DELETE', p, undefined, true)
 // ---------- API ----------
 export const api = {
   // 认证
-  async login(identifier: string, password: string): Promise<{ token: string; refreshToken: string; user: User }> {
+  async login(identifier: string, password: string, totpCode?: string): Promise<{ token: string; refreshToken: string; user: User }> {
     // 标识可为用户名 / 手机号 / 邮箱，后端按字段判定；统一传 username（后端兼容）。
     const body: Record<string, string> = { password }
     if (identifier.includes('@')) body.email = identifier
     else if (/^\+?[0-9]{5,}$/.test(identifier.replace(/[\s-]/g, ''))) body.phone = identifier.replace(/[\s-]/g, '')
     else body.username = identifier
+    if (totpCode) body.totpCode = totpCode // 开了两步验证的账号补交 TOTP / 恢复码
     return rawFetch('POST', '/api/auth/login', body, false) as Promise<{ token: string; refreshToken: string; user: User }>
   },
   async register(username: string, password: string, role: string): Promise<{ token: string; refreshToken: string; user: User; created?: boolean }> {
@@ -118,6 +119,13 @@ export const api = {
   setPhone: (phone: string) => post('/api/account/phone', { phone }),
   setUsername: (username: string) => post('/api/account/username', { username }),
   deleteAccount: () => del('/api/account'),
+
+  // 两步验证（2FA / TOTP）
+  twoFAStatus: () => get('/api/account/2fa') as Promise<{ enabled: boolean; recoveryCodesRemaining: number }>,
+  twoFASetup: () => post('/api/account/2fa/setup') as Promise<{ secret: string; otpauthUri: string }>,
+  twoFAEnable: (code: string) => post('/api/account/2fa/enable', { code }) as Promise<{ recoveryCodes: string[] }>,
+  twoFADisable: (code: string) => post('/api/account/2fa/disable', { code }),
+  twoFARecovery: (code: string) => post('/api/account/2fa/recovery-codes', { code }) as Promise<{ recoveryCodes: string[] }>,
 
   // 亲友 / 联系人
   incomingLinks: () => get('/api/family/incoming') as Promise<{ links: IncomingLink[] }>,

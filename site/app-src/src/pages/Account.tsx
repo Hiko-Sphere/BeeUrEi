@@ -13,6 +13,7 @@ export function AccountPage() {
   const [displayName, setDisplayName] = useState('')
   const [savingName, setSavingName] = useState(false)
   const [pwOpen, setPwOpen] = useState(false)
+  const [tfaOpen, setTfaOpen] = useState(false)
 
   useEffect(() => { void api.me().then((m) => { setSelf(m); setDisplayName(m.displayName) }).catch(() => {}) }, [])
 
@@ -97,7 +98,13 @@ export function AccountPage() {
       {/* 安全 */}
       <Card className="p-5">
         <div className="mb-3 text-sm font-semibold">{t('安全', 'Security')}</div>
-        <Button variant="soft" onClick={() => setPwOpen(true)}>{t('修改密码', 'Change password')}</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="soft" onClick={() => setPwOpen(true)}>{t('修改密码', 'Change password')}</Button>
+          <Button variant="soft" onClick={() => setTfaOpen(true)}>
+            {t('两步验证', 'Two-factor')}
+            <span className="ml-1.5 text-xs text-faint">{self?.twoFactorEnabled ? t('已开启', 'On') : t('未开启', 'Off')}</span>
+          </Button>
+        </div>
       </Card>
 
       {/* 危险区 */}
@@ -111,6 +118,107 @@ export function AccountPage() {
       </Card>
 
       {pwOpen && <PasswordDialog onClose={() => setPwOpen(false)} />}
+      {tfaOpen && <TwoFactorDialog onClose={() => setTfaOpen(false)} onChanged={async () => { await refreshMe(); try { setSelf(await api.me()) } catch { /* ignore */ } }} />}
+    </div>
+  )
+}
+
+/// 两步验证管理弹窗：未开启→显示密钥(可复制 + otpauth 链接) + 输码开启 + 展示一次性恢复码；
+/// 已开启→剩余码数 / 重新生成 / 关闭（均需再次验证）。
+function TwoFactorDialog({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
+  const { t } = useI18n()
+  const toast = useToast()
+  const [status, setStatus] = useState<{ enabled: boolean; recoveryCodesRemaining: number } | null>(null)
+  const [setup, setSetup] = useState<{ secret: string; otpauthUri: string } | null>(null)
+  const [enableCode, setEnableCode] = useState('')
+  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => { void api.twoFAStatus().then(setStatus).catch(() => setStatus({ enabled: false, recoveryCodesRemaining: 0 })) }, [])
+
+  const copy = (text: string, label: string) => { void navigator.clipboard.writeText(text).then(() => toast(label, 'ok')).catch(() => {}) }
+  const codeErr = (e: unknown) => setErr(e instanceof APIError && e.code === 'invalid_code' ? t('验证码不对，请重试', "That code didn't work — try again") : t('操作失败，请重试', 'Something went wrong'))
+
+  const beginSetup = async () => { setBusy(true); setErr(null); try { setSetup(await api.twoFASetup()); setEnableCode('') } catch { setErr(t('操作失败，请重试', 'Something went wrong')) } finally { setBusy(false) } }
+  const confirmEnable = async () => {
+    setBusy(true); setErr(null)
+    try { const r = await api.twoFAEnable(enableCode.trim()); setSetup(null); setRecoveryCodes(r.recoveryCodes); toast(t('两步验证已开启', 'Two-factor is on'), 'ok'); onChanged() }
+    catch (e) { codeErr(e) } finally { setBusy(false) }
+  }
+  const disable = async () => {
+    const code = prompt(t('输入当前验证码或一个恢复码以关闭两步验证', 'Enter a current code or a recovery code to turn off two-factor'))
+    if (!code) return
+    setBusy(true); setErr(null)
+    try { await api.twoFADisable(code.trim()); toast(t('两步验证已关闭', 'Two-factor is off'), 'ok'); onChanged(); setStatus({ enabled: false, recoveryCodesRemaining: 0 }) }
+    catch (e) { codeErr(e) } finally { setBusy(false) }
+  }
+  const regenerate = async () => {
+    const code = prompt(t('输入当前验证码或一个恢复码以重新生成', 'Enter a current code or a recovery code to regenerate'))
+    if (!code) return
+    setBusy(true); setErr(null)
+    try { const r = await api.twoFARecovery(code.trim()); setRecoveryCodes(r.recoveryCodes) }
+    catch (e) { codeErr(e) } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={onClose}>
+      <div className="slide-up w-full max-w-sm rounded-2xl surface border border-[var(--line)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-semibold">{t('两步验证', 'Two-factor authentication')}</h3>
+
+        {recoveryCodes ? (
+          <div className="mt-4 flex flex-col gap-3">
+            <p className="text-sm text-soft">{t('把这些一次性恢复码存到安全的地方。丢失验证器时，每个码可代替验证码登录一次。关闭后将不再显示。', 'Save these one-time recovery codes somewhere safe. Each signs you in once if you lose your authenticator. They won’t be shown again.')}</p>
+            <pre className="rounded-xl surface-2 p-3 text-sm leading-7 tracking-wider">{recoveryCodes.join('\n')}</pre>
+            <div className="flex gap-2">
+              <Button variant="soft" className="flex-1" onClick={() => copy(recoveryCodes.join('\n'), t('恢复码已复制', 'Recovery codes copied'))}>{t('全部复制', 'Copy all')}</Button>
+              <Button className="flex-1" onClick={onClose}>{t('完成', 'Done')}</Button>
+            </div>
+          </div>
+        ) : setup ? (
+          <div className="mt-4 flex flex-col gap-4">
+            <p className="text-sm text-soft">{t('把下面的密钥添加到身份验证器 App（如 Google Authenticator、1Password）。', 'Add the key below to an authenticator app (e.g. Google Authenticator, 1Password).')}</p>
+            <div>
+              <div className="mb-1 text-xs text-faint">{t('密钥', 'Key')}</div>
+              <code className="block break-all rounded-xl surface-2 p-3 text-sm tracking-wider">{setup.secret}</code>
+              <div className="mt-2 flex gap-2">
+                <Button variant="soft" onClick={() => copy(setup.secret, t('密钥已复制', 'Key copied'))}>{t('复制密钥', 'Copy key')}</Button>
+                <a className="rounded-xl border border-[var(--line)] px-3 py-2 text-sm text-soft hover:surface-2" href={setup.otpauthUri}>{t('添加到 App', 'Add to app')}</a>
+              </div>
+            </div>
+            <Field label={t('验证器显示的 6 位验证码', '6-digit code from your authenticator')}>
+              <Input value={enableCode} onChange={(e) => setEnableCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="123456" />
+            </Field>
+            {err && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{err}</div>}
+            <div className="flex gap-2">
+              <Button variant="soft" className="flex-1" onClick={() => setSetup(null)}>{t('取消', 'Cancel')}</Button>
+              <Button className="flex-1" loading={busy} onClick={confirmEnable} disabled={enableCode.trim().length < 6}>{t('确认开启', 'Turn on')}</Button>
+            </div>
+          </div>
+        ) : status === null ? (
+          <p className="mt-4 text-sm text-faint">{t('加载中…', 'Loading…')}</p>
+        ) : status.enabled ? (
+          <div className="mt-4 flex flex-col gap-3">
+            <p className="text-sm text-soft">{t('已开启。登录时除密码外还需输入验证器的验证码。', 'On. Signing in requires a code from your authenticator in addition to your password.')}</p>
+            <p className="text-xs text-faint">{t(`剩余 ${status.recoveryCodesRemaining} 个恢复码`, `${status.recoveryCodesRemaining} recovery codes left`)}</p>
+            {err && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{err}</div>}
+            <div className="flex flex-col gap-2">
+              <Button variant="soft" loading={busy} onClick={regenerate}>{t('重新生成恢复码', 'Regenerate recovery codes')}</Button>
+              <Button variant="danger" loading={busy} onClick={disable}>{t('关闭两步验证', 'Turn off two-factor')}</Button>
+              <Button variant="soft" onClick={onClose}>{t('完成', 'Done')}</Button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4 flex flex-col gap-3">
+            <p className="text-sm text-soft">{t('开启后，登录时除密码外还需输入身份验证器 App 的验证码——即使密码泄露也更安全。', 'When on, signing in needs a code from your authenticator app in addition to your password — safer even if your password leaks.')}</p>
+            {err && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{err}</div>}
+            <div className="flex gap-2">
+              <Button variant="soft" className="flex-1" onClick={onClose}>{t('取消', 'Cancel')}</Button>
+              <Button className="flex-1" loading={busy} onClick={beginSetup}>{t('开启两步验证', 'Turn on')}</Button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

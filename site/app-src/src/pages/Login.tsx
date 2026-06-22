@@ -18,6 +18,8 @@ export function LoginPage() {
   const [role, setRole] = useState<'helper' | 'family'>('helper')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [twoFA, setTwoFA] = useState(false)     // 登录遇两步验证挑战：显示验证码输入
+  const [totpCode, setTotpCode] = useState('')
 
   const errorText = (code: string): string => {
     switch (code) {
@@ -36,11 +38,14 @@ export function LoginPage() {
     setBusy(true)
     try {
       const res = mode === 'login'
-        ? await api.login(identifier.trim(), password)
+        ? await api.login(identifier.trim(), password, twoFA ? totpCode.trim() : undefined)
         : await api.register(username.trim(), password, role)
       signIn(res.token, res.refreshToken, res.user)
     } catch (err) {
-      setError(errorText(err instanceof APIError ? err.code : 'unknown'))
+      const code = err instanceof APIError ? err.code : 'unknown'
+      if (code === 'two_factor_required') { setTwoFA(true); setError(null) }       // 第一因子已过，需补验证码
+      else if (code === 'invalid_2fa') { setTwoFA(true); setError(t('验证码不对，请重试', "That code didn't work — please try again")) }
+      else setError(errorText(code))
     } finally {
       setBusy(false)
     }
@@ -70,6 +75,17 @@ export function LoginPage() {
             <button onClick={() => { setMode('register'); setError(null) }} className={`rounded-lg py-2 font-medium transition ${mode === 'register' ? 'surface shadow-sm' : 'text-faint'}`}>{t('注册', 'Register')}</button>
           </div>
 
+          {twoFA ? (
+            <form onSubmit={submit} className="flex flex-col gap-4">
+              <p className="text-sm text-soft">{t('打开你的身份验证器 App，输入 6 位验证码继续登录；也可输入一次性恢复码。', 'Open your authenticator app and enter the 6-digit code to finish signing in. You can also use a one-time recovery code.')}</p>
+              <Field label={t('验证码 / 恢复码', 'Code / recovery code')}>
+                <Input value={totpCode} onChange={(e) => setTotpCode(e.target.value)} autoComplete="one-time-code" autoCapitalize="characters" required placeholder="123456" />
+              </Field>
+              {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">{error}</div>}
+              <Button type="submit" loading={busy} className="mt-1 w-full py-3 text-base">{t('验证并登录', 'Verify & sign in')}</Button>
+              <button type="button" onClick={() => { setTwoFA(false); setTotpCode(''); setError(null) }} className="text-sm text-faint hover:text-soft">{t('返回', 'Back')}</button>
+            </form>
+          ) : (
           <form onSubmit={submit} className="flex flex-col gap-4">
             {mode === 'login' ? (
               <Field label={t('用户名 / 邮箱 / 手机号', 'Username / Email / Phone')}>
@@ -100,6 +116,7 @@ export function LoginPage() {
 
             <Button type="submit" loading={busy} className="mt-1 w-full py-3 text-base">{mode === 'login' ? t('登录', 'Sign in') : t('创建账户', 'Create account')}</Button>
           </form>
+          )}
         </div>
 
         <p className="mt-6 text-center text-xs leading-relaxed text-faint">

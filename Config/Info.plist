@@ -32,6 +32,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>用于通过摄像头实时识别前方障碍并向你语音提示，以及在你呼叫志愿者时传输画面。</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>用于「应用锁」：开启后用 Face ID 验证本人才能打开 App，保护你的账号、实时位置、录音与亲友信息。</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 Hiko Sphere 彦穹科技 · 软件制作人 Li Yanpei Hiko</string>
 	<key>NSLocalNetworkUsageDescription</key>

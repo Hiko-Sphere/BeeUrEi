@@ -27,7 +27,18 @@ private struct RootView: View {
     @State private var session = AuthSession()
     @State private var enteredRole: String? = RoleEntryStore().lastRole // 老用户重启直接进主界面，跳过"进入"确认页
     @State private var incoming = IncomingCallCenter.shared // CallKit 接听后由它驱动来电界面
+    @State private var appLock = AppLock.shared            // 应用锁（生物识别/设备密码）
+    @State private var emergency = EmergencyAlertCenter.shared // 摔倒警报：锁屏须为其让位（盲人能取消误报）
+    @Environment(\.scenePhase) private var scenePhase
     private var lang: Language { FeatureSettings().language }
+
+    /// 安全遮罩应处模式：App 不活跃→隐私遮罩（防 App 切换器快照泄露）；
+    /// 已锁定且已登录、无来电、无摔倒警报→锁屏；否则不遮挡。由独立高层级窗口承载（盖在 sheet/快照之上）。
+    private var securityMode: SecurityScreen.Mode {
+        if appLock.enabled && scenePhase != .active { return .privacy }
+        if appLock.isLocked && session.isLoggedIn && !incoming.hasIncoming && emergency.phase == .idle { return .lock }
+        return .hidden
+    }
 
     var body: some View {
         Group {
@@ -78,6 +89,11 @@ private struct RootView: View {
         // 导致登出/删号/改密后内存态不同步（见审查 #5）。
         .environment(session)
         .tint(.beeAccent) // 全局强调色：浅色墨蓝/深色蜂蜜，两端皆高对比、无障碍友好
+        // 切到后台即锁（若已开启）：回前台必须重新验证本人。仅 .background（避免 .inactive 瞬态误锁；隐私遮罩另由 securityMode 处理）。
+        .onChange(of: scenePhase) { _, phase in if phase == .background { appLock.lockOnBackground() } }
+        // 安全遮罩（锁屏 / 隐私遮罩）：用独立高层级窗口，盖在任何 sheet/快照之上——模式变化即驱动。
+        .onChange(of: securityMode) { _, m in SecurityScreen.shared.update(m) }
+        .onAppear { SecurityScreen.shared.update(securityMode) }
         // 退出登录后回到登录页，并清掉已选角色，避免下次登录沿用旧角色；登录后绑定 VoIP token（A1）。
         .onChange(of: session.isLoggedIn) { _, loggedIn in
             if loggedIn {

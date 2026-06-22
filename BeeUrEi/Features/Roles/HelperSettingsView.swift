@@ -24,6 +24,7 @@ struct HelperSettingsView: View {
     var body: some View {
         Form {
             accountSection
+            AppLockSection()      // 应用锁（Face ID/Touch ID）：保护账号与会话
             languageSection
             matchSection
             legalSection

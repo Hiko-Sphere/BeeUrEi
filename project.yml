@@ -86,6 +86,7 @@ targets:
         NSLocalNetworkUsageDescription: "用于连接你自托管的 BeeUrEi 后端（局域网内）。"
         NSMotionUsageDescription: "用于 AirPods 头部追踪提升空间音方向准确度，以及检测疑似摔倒以便通知亲友。"
         NSSpeechRecognitionUsageDescription: "用于语音指令：说出'我在哪''带我去某地'等即可直达对应功能（优先在设备端识别）。"
+        NSFaceIDUsageDescription: "用于「应用锁」：开启后用 Face ID 验证本人才能打开 App，保护你的账号、实时位置、录音与亲友信息。"
         # 开发期允许访问局域网内自托管后端的明文 HTTP（生产应改用 HTTPS）。
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true

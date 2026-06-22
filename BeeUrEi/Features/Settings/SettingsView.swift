@@ -52,6 +52,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 identitySection      // 0) 身份与账号（置顶）
+                AppLockSection()     // 应用锁（Face ID/Touch ID）：保护账号与首屏敏感数据
                 safetySection        // 1) 安全
                 voiceSection         // 2) 语音播报
                 displayScreenSection // 3) 外观与屏幕

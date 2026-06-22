@@ -44,6 +44,17 @@ enum HomeStrings {
     static func hintLocShare(_ l: Language) -> String {
         l == .zh ? "与亲友/协助者互相共享当前位置" : "Share your live location with family and helpers"
     }
+    /// 亲友与紧急呼叫（管理亲友、设紧急联系人、呼叫家人）——从设置移到首屏的主要功能。
+    static func tileFamily(_ l: Language) -> String { l == .zh ? "亲友与紧急" : "Family & SOS" }
+    static func hintFamily(_ l: Language) -> String {
+        l == .zh ? "管理亲友、设置紧急联系人、直接呼叫家人；摔倒报警也会通知这里的家人"
+                 : "Manage family, set emergency contacts and call relatives; fall alerts notify the family set here"
+    }
+    /// 我的录音（查看与回放通话录音）——从设置移到首屏的主要功能。
+    static func tileRecordings(_ l: Language) -> String { l == .zh ? "我的录音" : "My recordings" }
+    static func hintRecordings(_ l: Language) -> String {
+        l == .zh ? "查看与回放你的通话录音" : "View and replay your call recordings"
+    }
 
     /// 落地一次性朗读：问候 + 求助提醒。
     static func greetingSpeak(_ name: String?, hour: Int, _ l: Language) -> String {

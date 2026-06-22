@@ -82,25 +82,13 @@ struct SettingsView: View {
     // MARK: - 0) 身份与账号（置顶身份卡 + 我的录音 / 实时位置 直达）
 
     @ViewBuilder private var identitySection: some View {
+        // 实时位置、我的录音、亲友与紧急呼叫已移出设置，作为「主要功能」放在首屏 Hub（见 HubView）。
         Section {
             NavigationLink { LoginView() } label: { identityCardLabel }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(identityA11yLabel)
                 .accessibilityHint(AccountStrings.navTitle(lang))
                 .accessibilityAddTraits(.isButton)   // .combine 会吞掉 NavigationLink 的可点语义，须显式补回
-            // 高频项保留为主屏直达（避免多埋两层进账号页）。
-            NavigationLink {
-                MyRecordingsView()
-            } label: {
-                Label(AccountStrings.myRecordings(lang), systemImage: "waveform.circle")
-            }
-            if session.features.locationSharing {   // 与协助端一致：功能关时不显示入口（而非进去看空状态）
-                NavigationLink {
-                    LiveLocationView(isBlind: true)
-                } label: {
-                    Label(LiveLocationStrings.entryTitle(lang), systemImage: "location.fill.viewfinder")
-                }
-            }
         } footer: {
             Text(SettingsStrings.identityFooter(lang))
         }
@@ -157,8 +145,7 @@ struct SettingsView: View {
                     var f = FeatureSettings(); f.fallDetectionEnabled = v
                 }
                 .accessibilityHint(SettingsStrings.fallDetectHint(lang))
-            // 摔倒检测的接收人就设在这里——与触发器同处（行业惯例：紧急联系人紧邻警报开关）。
-            NavigationLink(SettingsStrings.familyAndEmergency(lang)) { FamilyLinksView() }
+            // 「亲友与紧急呼叫」已移到首屏 Hub 作为主要功能（摔倒会通知那里设置的家人）。
         } header: {
             Text(SettingsStrings.safetyHeader(lang))
         } footer: {

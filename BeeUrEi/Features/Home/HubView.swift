@@ -14,6 +14,8 @@ struct HubView: View {
     @State private var showMessages = false
     @State private var showSettings = false
     @State private var showLocation = false
+    @State private var showFamily = false        // 亲友与紧急呼叫（从设置移到首屏主要功能）
+    @State private var showRecordings = false     // 我的录音（从设置移到首屏主要功能）
     @State private var showTutorial = false
     @State private var locationDescriber = LocationDescriber()
     @State private var weatherSpeaker = WeatherSpeaker()
@@ -76,6 +78,18 @@ struct HubView: View {
         .sheet(isPresented: $showNavigation) { WalkNavigationView { showNavigation = false } }
         .sheet(isPresented: $showMessages) { ConversationsView(session: session) }
         .sheet(isPresented: $showLocation) { NavigationStack { LiveLocationView(isBlind: true) } }
+        .sheet(isPresented: $showFamily) {
+            NavigationStack {
+                FamilyLinksView()
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button(SettingsStrings.done(lang)) { showFamily = false } } }
+            }
+        }
+        .sheet(isPresented: $showRecordings) {
+            NavigationStack {
+                MyRecordingsView()
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button(SettingsStrings.done(lang)) { showRecordings = false } } }
+            }
+        }
         .sheet(isPresented: $showSettings) { SettingsView(store: consentStore) { showSettings = false } }
     }
 
@@ -176,7 +190,7 @@ struct HubView: View {
         .accessibilityLabel(HomeStrings.sectionSee(lang))
     }
 
-    // 6) 联系：消息 + 实时位置。
+    // 6) 联系：消息 + 实时位置 + 亲友与紧急 + 我的录音（后两者从设置移上来，作为主要功能）。
     private var connectSection: some View {
         VStack(alignment: .leading, spacing: BeeSpacing.sm) {
             sectionHeader(HomeStrings.sectionConnect(lang), "CONNECT")
@@ -187,6 +201,12 @@ struct HubView: View {
                 tile(HomeStrings.tileLocShare(lang), systemImage: "location.fill.viewfinder",
                      hint: HomeStrings.hintLocShare(lang),
                      disabledReason: session.features.locationSharing ? nil : HomeStrings.featureOff(lang)) { showLocation = true }
+            }
+            HStack(spacing: BeeSpacing.sm) {
+                tile(HomeStrings.tileFamily(lang), systemImage: "person.2.fill",
+                     hint: HomeStrings.hintFamily(lang)) { showFamily = true }
+                tile(HomeStrings.tileRecordings(lang), systemImage: "waveform.circle.fill",
+                     hint: HomeStrings.hintRecordings(lang)) { showRecordings = true }
             }
         }
         .accessibilityElement(children: .contain)
@@ -338,6 +358,7 @@ struct HubView: View {
     private func collapseAll() {
         showObstacle = false; showRemoteAssist = false; showNavigation = false
         showFraming = false; showMessages = false; showSettings = false; showLocation = false; showTutorial = false
+        showFamily = false; showRecordings = false
     }
 
     private func onAppear() async {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, APIError, type SelfView } from '../lib/api'
+import { api, APIError, type SelfView, type SessionInfo } from '../lib/api'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { roleLabel } from '../components/Layout'
@@ -14,6 +14,7 @@ export function AccountPage() {
   const [savingName, setSavingName] = useState(false)
   const [pwOpen, setPwOpen] = useState(false)
   const [tfaOpen, setTfaOpen] = useState(false)
+  const [sessionsOpen, setSessionsOpen] = useState(false)
 
   useEffect(() => { void api.me().then((m) => { setSelf(m); setDisplayName(m.displayName) }).catch(() => {}) }, [])
 
@@ -104,6 +105,7 @@ export function AccountPage() {
             {t('两步验证', 'Two-factor')}
             <span className="ml-1.5 text-xs text-faint">{self?.twoFactorEnabled ? t('已开启', 'On') : t('未开启', 'Off')}</span>
           </Button>
+          <Button variant="soft" onClick={() => setSessionsOpen(true)}>{t('登录设备', 'Devices')}</Button>
         </div>
       </Card>
 
@@ -119,6 +121,65 @@ export function AccountPage() {
 
       {pwOpen && <PasswordDialog onClose={() => setPwOpen(false)} />}
       {tfaOpen && <TwoFactorDialog onClose={() => setTfaOpen(false)} onChanged={async () => { await refreshMe(); try { setSelf(await api.me()) } catch { /* ignore */ } }} />}
+      {sessionsOpen && <SessionsDialog onClose={() => setSessionsOpen(false)} />}
+    </div>
+  )
+}
+
+/// 登录设备 / 会话管理弹窗：列出各设备，可远程登出某台或「其它所有设备」。
+function SessionsDialog({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n()
+  const toast = useToast()
+  const [sessions, setSessions] = useState<SessionInfo[] | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const reload = async () => { try { setSessions((await api.sessions()).sessions) } catch { setSessions([]) } }
+  useEffect(() => { void reload() }, [])
+
+  const lastSeen = (ms?: number) => {
+    if (!ms) return t('活动时间未知', 'Last active: unknown')
+    const s = Math.max(0, (Date.now() - ms) / 1000)
+    if (s < 60) return t('最近活动：刚刚', 'Active just now')
+    if (s < 3600) return t(`最近活动：${Math.floor(s / 60)} 分钟前`, `Active ${Math.floor(s / 60)} min ago`)
+    if (s < 86400) return t(`最近活动：${Math.floor(s / 3600)} 小时前`, `Active ${Math.floor(s / 3600)} h ago`)
+    return t(`最近活动：${Math.floor(s / 86400)} 天前`, `Active ${Math.floor(s / 86400)} d ago`)
+  }
+  const revoke = async (id: string) => { setBusy(id); try { await api.revokeSession(id); await reload(); toast(t('已登出该设备', 'Device signed out'), 'ok') } catch { toast(t('操作失败', 'Failed'), 'error') } finally { setBusy(null) } }
+  const revokeOthers = async () => {
+    if (!confirm(t('除这台外，其它所有设备都会被立即登出。继续？', 'All devices except this one will be signed out immediately. Continue?'))) return
+    setBusy('others'); try { await api.revokeOtherSessions(); await reload(); toast(t('已登出其它设备', 'Other devices signed out'), 'ok') } catch { toast(t('操作失败', 'Failed'), 'error') } finally { setBusy(null) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={onClose}>
+      <div className="slide-up w-full max-w-md rounded-2xl surface border border-[var(--line)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-semibold">{t('登录设备', 'Devices')}</h3>
+        <p className="mt-1 text-sm text-faint">{t('看到不认识的设备就登出它——会立即失去访问权限。', "Sign out any device you don't recognize — it loses access immediately.")}</p>
+        <div className="mt-4 flex max-h-[50dvh] flex-col gap-2 overflow-auto">
+          {sessions === null ? (
+            <p className="text-sm text-faint">{t('加载中…', 'Loading…')}</p>
+          ) : sessions.map((s) => (
+            <div key={s.sessionId} className="flex items-center gap-3 rounded-xl surface-2 px-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-sm font-medium">{s.deviceLabel || t('未知设备', 'Unknown device')}</span>
+                  {s.current && <span className="rounded bg-[var(--color-honey)]/15 px-1.5 py-0.5 text-[10px] font-bold text-honey">{t('本机', 'This device')}</span>}
+                </div>
+                <div className="text-xs text-faint">{lastSeen(s.lastSeenAt)}</div>
+              </div>
+              {!s.current && (
+                <button onClick={() => revoke(s.sessionId)} disabled={busy === s.sessionId} className="shrink-0 text-sm font-medium text-danger hover:underline disabled:opacity-50">{t('登出', 'Sign out')}</button>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="mt-5 flex gap-3">
+          {sessions?.some((s) => !s.current) && (
+            <Button variant="danger" className="flex-1" loading={busy === 'others'} onClick={revokeOthers}>{t('登出其它设备', 'Sign out others')}</Button>
+          )}
+          <Button variant="soft" className="flex-1" onClick={onClose}>{t('完成', 'Done')}</Button>
+        </div>
+      </div>
     </div>
   )
 }

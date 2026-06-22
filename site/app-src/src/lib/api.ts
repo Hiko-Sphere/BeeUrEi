@@ -3,6 +3,7 @@ import { apiURL } from './config'
 // ---------- 模型（与服务端对齐） ----------
 export interface User { id: string; username: string; displayName: string; role: string; status: string; avatar?: string | null }
 export interface SelfView extends User { language?: string | null; email?: string | null; emailVerified?: boolean; phone?: string | null; usernameCustomized?: boolean; appleLinked?: boolean; twoFactorEnabled?: boolean }
+export interface SessionInfo { sessionId: string; deviceLabel?: string; createdAt?: number; lastSeenAt?: number; expiresAt: number; current: boolean }
 export interface IncomingLink { id: string; ownerId: string; ownerName: string; ownerAvatar?: string | null; relation: string; isEmergency?: boolean; status?: string }
 export interface FamilyLink { id: string; memberId: string; memberName: string; memberAvatar?: string | null; relation: string; isEmergency: boolean; phone?: string | null; status?: string; outgoing?: boolean }
 export interface CallRecordInfo { id: string; callId: string; direction?: string; status: string; peerName?: string; peerAvatar?: string | null; createdAt: number }
@@ -119,6 +120,11 @@ export const api = {
   setPhone: (phone: string) => post('/api/account/phone', { phone }),
   setUsername: (username: string) => post('/api/account/username', { username }),
   deleteAccount: () => del('/api/account'),
+
+  // 登录设备 / 会话管理
+  sessions: () => get('/api/account/sessions') as Promise<{ sessions: SessionInfo[] }>,
+  revokeSession: (sessionId: string) => post('/api/account/sessions/revoke', { sessionId }),
+  revokeOtherSessions: () => post('/api/account/sessions/revoke-others'),
 
   // 两步验证（2FA / TOTP）
   twoFAStatus: () => get('/api/account/2fa') as Promise<{ enabled: boolean; recoveryCodesRemaining: number }>,

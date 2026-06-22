@@ -95,6 +95,11 @@ struct LoginView: View {
                         LabeledContent(TwoFactorStrings.rowLabel(lang),
                                        value: (detail?.twoFactorEnabled == true) ? TwoFactorStrings.statusOn(lang) : TwoFactorStrings.statusOff(lang))
                     }
+                    NavigationLink {
+                        SessionsView(token: KeychainStore.read() ?? "")
+                    } label: {
+                        Label(SessionStrings.title(lang), systemImage: "laptopcomputer.and.iphone")
+                    }
                     Button(AccountStrings.logout(lang), role: .destructive) { showLogoutConfirm = true }
                     Button(AccountStrings.deleteAccount(lang), role: .destructive) { showDeleteConfirm = true }
                 }

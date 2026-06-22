@@ -53,6 +53,18 @@ struct TwoFAStatus: Codable, Sendable { let enabled: Bool; let recoveryCodesRema
 struct TwoFASetup: Codable, Sendable { let secret: String; let otpauthUri: String }
 private struct TwoFACodesResult: Codable { let recoveryCodes: [String] }
 
+/// 一个登录会话/设备（账号页「登录设备」列表）。
+struct SessionInfo: Codable, Sendable, Identifiable {
+    let sessionId: String
+    var deviceLabel: String?
+    var createdAt: Double?
+    var lastSeenAt: Double?
+    let expiresAt: Double
+    var current: Bool
+    var id: String { sessionId }
+}
+private struct SessionsResult: Codable { let sessions: [SessionInfo] }
+
 struct AuthResult: Codable, Sendable {
     let token: String
     let refreshToken: String
@@ -1094,6 +1106,22 @@ struct APIClient {
         let data = try await authedSend("POST", "/api/account/2fa/recovery-codes", token: token, body: ["code": code])
         guard let r = try? JSONDecoder().decode(TwoFACodesResult.self, from: data) else { throw APIError.decoding }
         return r.recoveryCodes
+    }
+
+    // MARK: 登录设备 / 会话管理
+
+    func sessions(token: String) async throws -> [SessionInfo] {
+        let data = try await authedGet("/api/account/sessions", token: token)
+        guard let r = try? JSONDecoder().decode(SessionsResult.self, from: data) else { throw APIError.decoding }
+        return r.sessions
+    }
+    /// 远程登出某台设备。
+    func revokeSession(token: String, sessionId: String) async throws {
+        _ = try await authedSend("POST", "/api/account/sessions/revoke", token: token, body: ["sessionId": sessionId])
+    }
+    /// 登出其它所有设备（保留当前这台）。
+    func revokeOtherSessions(token: String) async throws {
+        _ = try await authedSend("POST", "/api/account/sessions/revoke-others", token: token)
     }
 
     /// 通话中/后举报对方（信任与安全）。

@@ -14,6 +14,8 @@ final class AuthSession {
     private(set) var maintenance: RemoteMaintenance = .init()
     private(set) var errorMessage: String?
     private(set) var isWorking = false
+    /// 登录遇两步验证挑战：第一因子已过、需补交 TOTP / 一次性恢复码。UI 据此弹出验证码输入，经 submitTwoFactor(code) 重试。
+    private(set) var twoFactor: TwoFactorChallenge?
     private(set) var restoreFailed = false   // 恢复账号时遇网络错误（供 UI 显示重试/退出，见审查 #15）
     /// 刚用「新登录方式」（注册/Apple/邮箱验证码/passkey）完成认证：需在下一步引导自定义 userid + 绑定邮箱。
     /// 普通密码登录与重启恢复不置位（老用户不被反复打扰；换绑仍可在账号页进行）。
@@ -75,9 +77,21 @@ final class AuthSession {
         }
     }
 
-    func login(username: String, password: String) async {
-        await run(isNewMethod: false) { try await self.api.login(username: username, password: password) }
+    func login(username: String, password: String, totpCode: String? = nil) async {
+        await run(isNewMethod: false,
+                  twoFactorRetry: { [weak self] code in await self?.login(username: username, password: password, totpCode: code) }) {
+            try await self.api.login(username: username, password: password, totpCode: totpCode)
+        }
     }
+
+    /// 提交两步验证码（TOTP 或一次性恢复码）继续登录。
+    func submitTwoFactor(code: String) async {
+        let c = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !c.isEmpty, let tf = twoFactor else { return }
+        await tf.retry(c)
+    }
+    /// 放弃两步验证（返回登录入口）。
+    func cancelTwoFactor() { twoFactor = nil }
 
     /// 注册：用户名/手机号/邮箱至少给一个（手机号或邮箱即可当账号，后端自动生成用户名）。
     func register(username: String?, password: String, role: String,
@@ -91,9 +105,11 @@ final class AuthSession {
         await run { try await self.api.loginWithApple(identityToken: identityToken, displayName: displayName, role: role) }
     }
 
-    /// 邮箱验证码登录/注册（无密码）。
-    func loginWithEmailCode(email: String, code: String, role: String? = nil) async {
-        await run { try await self.api.loginWithEmailCode(email: email, code: code, role: role) }
+    /// 邮箱验证码登录/注册（无密码）。开了 2FA 的账号会再要求 TOTP/恢复码（经 submitTwoFactor 补交）。
+    func loginWithEmailCode(email: String, code: String, role: String? = nil, totpCode: String? = nil) async {
+        await run(twoFactorRetry: { [weak self] tc in await self?.loginWithEmailCode(email: email, code: code, role: role, totpCode: tc) }) {
+            try await self.api.loginWithEmailCode(email: email, code: code, role: role, totpCode: totpCode)
+        }
     }
 
     /// Passkey 登录（系统生成断言后由后端验签）。
@@ -165,13 +181,16 @@ final class AuthSession {
         KeychainStore.deleteRefresh()
     }
 
-    private func run(isNewMethod: Bool = true, _ op: () async throws -> AuthResult) async {
+    private func run(isNewMethod: Bool = true,
+                     twoFactorRetry: ((String) async -> Void)? = nil,
+                     _ op: () async throws -> AuthResult) async {
         let lang = FeatureSettings().language
         isWorking = true
         errorMessage = nil
         defer { isWorking = false }
         do {
             let result = try await op()
+            twoFactor = nil // 成功：清掉两步验证挑战
             KeychainStore.save(result.token)
             KeychainStore.saveRefresh(result.refreshToken)
             token = result.token
@@ -186,6 +205,9 @@ final class AuthSession {
             // 修复"绑过 Apple 后重登被跳去注册""passkey 登录被当成注册新用户"（用户反馈 #2/#4）。
             accountCreated = (result.created == true)
             requiresSetup = accountCreated
+        } catch let APIError.server(message) where (message == "two_factor_required" || message == "invalid_2fa") && twoFactorRetry != nil {
+            // 第一因子已过、需两步验证：弹验证码输入（不当作错误）；invalid_2fa=上次补码错误。
+            twoFactor = TwoFactorChallenge(retry: twoFactorRetry!, invalidCode: message == "invalid_2fa")
         } catch APIError.unauthorized {
             errorMessage = AccountStrings.wrongCredentials(lang)
         } catch let APIError.server(message) {
@@ -194,4 +216,11 @@ final class AuthSession {
             errorMessage = AccountStrings.networkError(lang)
         }
     }
+}
+
+/// 两步验证挑战：登录第一因子已过、需补交 TOTP / 一次性恢复码。`retry` 用所给验证码再次尝试登录。
+@MainActor
+struct TwoFactorChallenge {
+    let retry: (String) async -> Void
+    var invalidCode: Bool   // 上次补码错误（UI 提示"验证码不对，请重试"）
 }

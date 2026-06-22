@@ -237,6 +237,10 @@ struct PasswordAuthView: View {
             .onChange(of: session.errorMessage) { _, msg in if let msg, !msg.isEmpty { A11y.announce(msg) } }
             .onChange(of: session.isLoggedIn) { _, loggedIn in if loggedIn { dismiss() } } // 登录成功自动关闭
             .sheet(isPresented: $showForgot) { ForgotPasswordView(presetUsername: username) }
+            // 开了两步验证的账号：第一因子通过后弹验证码输入（嵌套 sheet）。
+            .sheet(isPresented: Binding(get: { session.twoFactor != nil }, set: { if !$0 { session.cancelTwoFactor() } })) {
+                TwoFactorChallengeView(session: session)
+            }
         }
     }
 
@@ -414,6 +418,10 @@ struct EmailCodeLoginView: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(AccountStrings.close(lang)) { dismiss() } } }
             .onChange(of: message) { _, m in if let m, !m.isEmpty { A11y.announce(m) } }
             .onChange(of: session.isLoggedIn) { _, loggedIn in if loggedIn { dismiss() } } // 登录成功关闭
+            // 开了两步验证的账号：邮箱码（第一因子）通过后弹验证码输入。
+            .sheet(isPresented: Binding(get: { session.twoFactor != nil }, set: { if !$0 { session.cancelTwoFactor() } })) {
+                TwoFactorChallengeView(session: session)
+            }
         }
     }
 

@@ -271,12 +271,18 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     const existing = store.findByEmail(email)
     if (existing) {
       if (existing.status === 'disabled') return reply.code(403).send({ error: 'account_disabled' })
+      // 已开 2FA：先 peek 邮箱码有效性（不消费）再验第二因子；2FA 未过时不作废邮箱码，便于补码重试。
+      // 否则（未开 2FA）直接 verify 消费即可。两条路径都在放行前真正消费掉邮箱码（一次性）。
+      if (existing.totpEnabled) {
+        if (!codes.peek(`login:${existing.id}`, parsed.data.code, Date.now())) {
+          return reply.code(400).send({ error: 'invalid_code' })
+        }
+        const tf = passTwoFactor(store, existing, parsed.data.totpCode, Date.now())
+        if (!tf.ok) return twoFactorReply(reply, tf.reason!)
+      }
       if (!codes.verify(`login:${existing.id}`, parsed.data.code, Date.now())) {
         return reply.code(400).send({ error: 'invalid_code' })
       }
-      // 邮箱码（第一因子）通过后，已开 2FA 的账号仍须二次验证，避免邮箱成为 2FA 绕过通道。
-      const tf = passTwoFactor(store, existing, parsed.data.totpCode, Date.now())
-      if (!tf.ok) return twoFactorReply(reply, tf.reason!)
       // 成功登录即证明邮箱归属 → 标记已验证。
       const updated = (existing.emailVerified ? existing : store.updateUser(existing.id, { emailVerified: true })) ?? existing
       const tokens = issueTokens(store, updated)

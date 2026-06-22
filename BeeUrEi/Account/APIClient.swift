@@ -36,6 +36,7 @@ struct AccountInfo: Codable, Sendable, Equatable, Identifiable {
     var usernameCustomized: Bool? // /api/me：false=自动生成名，提示用户设置唯一 userid
     var appleLinked: Bool?        // /api/me：是否已绑定 Apple ID
     var hasPasskey: Bool?         // /api/me：是否已注册 passkey
+    var twoFactorEnabled: Bool?   // /api/me：是否已开启两步验证（账号页展示开关态）
     var legalConsentVersion: String? // /api/me：已同意的隐私/条款版本；与当前版本不符则需（重新）同意
 }
 
@@ -45,6 +46,12 @@ struct PasskeyInfo: Codable, Sendable, Identifiable {
     var deviceName: String?
     let createdAt: Double
 }
+
+/// 两步验证状态（账号页展示）。
+struct TwoFAStatus: Codable, Sendable { let enabled: Bool; let recoveryCodesRemaining: Int }
+/// 开始绑定 2FA 的返回：base32 密钥 + otpauth URI（盲人可复制密钥手动添加，或点链接自动添加）。
+struct TwoFASetup: Codable, Sendable { let secret: String; let otpauthUri: String }
+private struct TwoFACodesResult: Codable { let recoveryCodes: [String] }
 
 struct AuthResult: Codable, Sendable {
     let token: String
@@ -366,9 +373,11 @@ struct APIClient {
         return try await postAuth("/api/auth/register", body: body)
     }
 
-    /// 登录标识可为用户名/手机号/邮箱（后端依次匹配）。
-    func login(username: String, password: String) async throws -> AuthResult {
-        try await postAuth("/api/auth/login", body: ["username": username, "password": password])
+    /// 登录标识可为用户名/手机号/邮箱（后端依次匹配）。开了 2FA 的账号补交 totpCode（TOTP 或一次性恢复码）。
+    func login(username: String, password: String, totpCode: String? = nil) async throws -> AuthResult {
+        var body: [String: Any] = ["username": username, "password": password]
+        if let totpCode, !totpCode.isEmpty { body["totpCode"] = totpCode }
+        return try await postAuth("/api/auth/login", body: body)
     }
 
     /// Sign in with Apple：identityToken 由系统授权回调提供，服务端验签后登录/自动建号。
@@ -390,10 +399,11 @@ struct APIClient {
         _ = try await postNoAuth("/api/auth/email/request-code", body: ["email": email])
     }
 
-    /// 校验邮箱验证码 → 登录或注册。
-    func loginWithEmailCode(email: String, code: String, role: String? = nil) async throws -> AuthResult {
+    /// 校验邮箱验证码 → 登录或注册。开了 2FA 的账号补交 totpCode（邮箱码也须二次验证）。
+    func loginWithEmailCode(email: String, code: String, role: String? = nil, totpCode: String? = nil) async throws -> AuthResult {
         var body: [String: Any] = ["email": email, "code": code]
         if let role { body["role"] = role }
+        if let totpCode, !totpCode.isEmpty { body["totpCode"] = totpCode }
         return try await postAuth("/api/auth/email/verify-code", body: body)
     }
 
@@ -432,7 +442,15 @@ struct APIClient {
         }
         guard let http = resp as? HTTPURLResponse else { throw APIError.network }
         // 5xx 是后端瞬时故障（token 仍有效）→ 归为可重试的 .network，绝不据此登出/删令牌（见审查 #4）。
-        if http.statusCode == 401 { throw APIError.unauthorized } // 登录:凭据错误 / refresh:失效——调用方分别处理（见审查 #2/#4）
+        if http.statusCode == 401 {
+            // 两步验证挑战不是凭据失效：透传错误码（two_factor_required / invalid_2fa），让登录流程提示输码重试；
+            // 其余 401（凭据错误 / refresh 失效）仍归为 .unauthorized 由调用方分别处理。
+            if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let code = obj["error"] as? String, code == "two_factor_required" || code == "invalid_2fa" {
+                throw APIError.server(code)
+            }
+            throw APIError.unauthorized
+        }
         if http.statusCode == 503,
            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let code = obj["error"] as? String {
@@ -1046,6 +1064,36 @@ struct APIClient {
     /// 删除账号（App Store 要求）。
     func deleteAccount(token: String) async throws {
         _ = try await authedSend("DELETE", "/api/account", token: token)
+    }
+
+    // MARK: 两步验证（2FA / TOTP）
+
+    func twoFactorStatus(token: String) async throws -> TwoFAStatus {
+        let data = try await authedGet("/api/account/2fa", token: token)
+        guard let r = try? JSONDecoder().decode(TwoFAStatus.self, from: data) else { throw APIError.decoding }
+        return r
+    }
+    /// 开始绑定：生成待启用密钥（返回密钥 + otpauth URI）。
+    func twoFactorSetup(token: String) async throws -> TwoFASetup {
+        let data = try await authedSend("POST", "/api/account/2fa/setup", token: token)
+        guard let r = try? JSONDecoder().decode(TwoFASetup.self, from: data) else { throw APIError.decoding }
+        return r
+    }
+    /// 确认启用：验码 → 返回一次性恢复码（只此一次）。
+    func twoFactorEnable(token: String, code: String) async throws -> [String] {
+        let data = try await authedSend("POST", "/api/account/2fa/enable", token: token, body: ["code": code])
+        guard let r = try? JSONDecoder().decode(TwoFACodesResult.self, from: data) else { throw APIError.decoding }
+        return r.recoveryCodes
+    }
+    /// 关闭 2FA（须再次验证本人：TOTP 或恢复码）。
+    func twoFactorDisable(token: String, code: String) async throws {
+        _ = try await authedSend("POST", "/api/account/2fa/disable", token: token, body: ["code": code])
+    }
+    /// 重新生成恢复码（旧码作废；须再次验证本人）。
+    func twoFactorRegenerateRecovery(token: String, code: String) async throws -> [String] {
+        let data = try await authedSend("POST", "/api/account/2fa/recovery-codes", token: token, body: ["code": code])
+        guard let r = try? JSONDecoder().decode(TwoFACodesResult.self, from: data) else { throw APIError.decoding }
+        return r.recoveryCodes
     }
 
     /// 通话中/后举报对方（信任与安全）。

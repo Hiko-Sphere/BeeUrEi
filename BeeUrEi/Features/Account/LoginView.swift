@@ -89,6 +89,12 @@ struct LoginView: View {
                     NavigationLink(AccountStrings.myRecordings(lang)) { MyRecordingsView() }
                     NavigationLink(AccountStrings.blocklist(lang)) { BlocklistView() }
                     Button(AccountStrings.changePassword(lang)) { showChangePassword = true }
+                    NavigationLink {
+                        TwoFactorSetupView(token: KeychainStore.read() ?? "", onChanged: { Task { await loadMe() } })
+                    } label: {
+                        LabeledContent(TwoFactorStrings.rowLabel(lang),
+                                       value: (detail?.twoFactorEnabled == true) ? TwoFactorStrings.statusOn(lang) : TwoFactorStrings.statusOff(lang))
+                    }
                     Button(AccountStrings.logout(lang), role: .destructive) { showLogoutConfirm = true }
                     Button(AccountStrings.deleteAccount(lang), role: .destructive) { showDeleteConfirm = true }
                 }

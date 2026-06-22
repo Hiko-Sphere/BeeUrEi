@@ -49,6 +49,17 @@ export class CodeRegistry {
     return true
   }
 
+  /// 校验但**不消费**：用于"第一因子(邮箱码)已对，但还需第二因子(2FA)才放行"的场景，
+  /// 避免 2FA 未过时把邮箱码提前作废、导致补交验证码后无法重试。匹配失败仍计入尝试次数（防暴破）。
+  peek(key: string, code: string, now: number): boolean {
+    const e = this.map.get(key)
+    if (!e) return false
+    if (now > e.expiresAt) { this.map.delete(key); return false }
+    if (e.attempts >= this.maxAttempts) { this.map.delete(key); return false }
+    if (e.codeHash !== this.hash(code)) { e.attempts++; return false }
+    return true // 命中但不删除
+  }
+
   has(key: string): boolean {
     return this.map.has(key)
   }

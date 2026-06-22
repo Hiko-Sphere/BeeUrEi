@@ -57,6 +57,12 @@ enum HomeStrings {
     static func guideStartedSpeak(_ l: Language) -> String {
         l == .zh ? "已进入实时避障，正在识别前方障碍。" : "Obstacle guidance is on, detecting what's ahead."
     }
+    /// 避障内「快捷操作」入口（与主页一致的看一看/导航/天气/环境/消息/位置/设置）。
+    static func quickActionsTitle(_ l: Language) -> String { l == .zh ? "快捷操作" : "Quick actions" }
+    static func quickActionsHint(_ l: Language) -> String {
+        l == .zh ? "打开看一看、导航、天气、周围、消息、实时位置、设置等快捷操作"
+                 : "Open quick actions: look around, navigation, weather, surroundings, messages, live location, settings"
+    }
     static func nothingToRepeat(_ l: Language) -> String {
         l == .zh ? "现在没有需要重复的播报。" : "There's nothing to repeat right now."
     }

@@ -52,6 +52,17 @@ const I18N = {
     recList: '录制记录', deleteRec: '删除', confirmDeleteRec: '确认彻底删除这条录制（含媒体文件，不可恢复）？', noRecordings: '暂无录制记录',
     playRec: '播放', recParticipants: '参与者', recDuration: '时长', recLocation: '地点', recUserDeleted: '用户已删除·留存中', recNoMedia: '媒体不可用', playFailed: '无法播放该录制', closeBtn: '关闭',
     evidence: '附带录制证据', viewEvidence: '查看证据录制',
+    idReview: '实名审核', idQueue: '待审核', idStatusAll: '全部', idStatusPending: '待审核', idStatusVerified: '已通过', idStatusRejected: '已拒绝',
+    idApplicant: '申请人', idDocType: '证件类型', idSubmittedVia: '提交方式', idAttempt: '次数', idSubmittedAt: '提交时间', idDecidedAt: '审核时间', idDecidedBy: '审核人',
+    idViaSelf: '本人', idViaAssisted: '亲友协助', noVerifications: '暂无实名申请',
+    idReview1: '审核：核对证件与自拍', idLegalName: '证件姓名', idNumber: '证件号', idLast4: '尾号', idDocFront: '证件正面', idDocBack: '证件反面', idSelfie: '自拍',
+    idCompareHint: '请核对：① 填写姓名与证件是否一致；② 证件是否真实/未过期/未篡改；③ 自拍与证件是否同一人；④ 证件是否清晰可读。',
+    idChkName: '姓名与证件一致', idChkValid: '证件真实·未过期·未篡改', idChkFace: '自拍与证件同一人', idChkClear: '证件清晰可读',
+    idApprove: '通过', idReject: '拒绝', idRevoke: '撤销认证', idHold: '法务保留', idHoldOn: '已保留', idHoldOff: '未保留',
+    idRejectReason: '拒绝原因', idRejectNote: '补充说明（可选）', idConfirmRevoke: '确认撤销该用户的实名认证？徽章将被移除。',
+    idApproveBlocked: '请先勾选全部核对项再通过', idDocType_national_id: '身份证', idDocType_passport: '护照', idDocType_drivers_license: '驾照', idDocType_residence_permit: '居住证',
+    idReason_blurry: '照片模糊', idReason_glare: '反光', idReason_name_mismatch: '姓名不符', idReason_face_mismatch: '人脸不符', idReason_expired: '证件过期', idReason_unsupported_doc: '证件不支持', idReason_incomplete: '资料不完整', idReason_suspected_fraud: '疑似伪造', idReason_other: '其他',
+    idDocLoadFail: '证件图片加载失败', idNoDoc: '未上传', idDecided: '已审核', idVerifiedBadge: '已认证',
     detail: '用户详情', email: '邮箱', phone: '手机号', language: '语言', verified: '已验证', notVerified: '未验证',
     none: '未设置', appleId: 'Apple ID', linked: '已绑定', notLinked: '未绑定', passkeys: 'Passkey', online2: '在线状态',
     linkedRelations: '绑定关系', blockedRelations: '拉黑记录', recentCalls: '近期通话', noCalls: '暂无通话记录',
@@ -154,6 +165,17 @@ const I18N = {
     recList: 'Recordings', deleteRec: 'Delete', confirmDeleteRec: 'Permanently delete this recording (incl. media file, cannot be undone)?', noRecordings: 'No recordings',
     playRec: 'Play', recParticipants: 'Participants', recDuration: 'Duration', recLocation: 'Location', recUserDeleted: 'User-deleted · retained', recNoMedia: 'Media unavailable', playFailed: "Couldn't play this recording", closeBtn: 'Close',
     evidence: 'Recording evidence', viewEvidence: 'View evidence recording',
+    idReview: 'Identity review', idQueue: 'Queue', idStatusAll: 'All', idStatusPending: 'Pending', idStatusVerified: 'Verified', idStatusRejected: 'Rejected',
+    idApplicant: 'Applicant', idDocType: 'Document', idSubmittedVia: 'Via', idAttempt: 'Attempt', idSubmittedAt: 'Submitted', idDecidedAt: 'Decided', idDecidedBy: 'Reviewer',
+    idViaSelf: 'Self', idViaAssisted: 'Assisted', noVerifications: 'No identity submissions',
+    idReview1: 'Review: compare document and selfie', idLegalName: 'Name on document', idNumber: 'ID number', idLast4: 'Last 4', idDocFront: 'Document front', idDocBack: 'Document back', idSelfie: 'Selfie',
+    idCompareHint: 'Check: ① name matches the document; ② document is genuine / not expired / not altered; ③ selfie is the same person as the document; ④ document is legible.',
+    idChkName: 'Name matches document', idChkValid: 'Document genuine · not expired · not altered', idChkFace: 'Selfie matches document', idChkClear: 'Document legible',
+    idApprove: 'Approve', idReject: 'Reject', idRevoke: 'Revoke', idHold: 'Legal hold', idHoldOn: 'On hold', idHoldOff: 'Not held',
+    idRejectReason: 'Reject reason', idRejectNote: 'Note (optional)', idConfirmRevoke: 'Revoke this user’s verification? The badge will be removed.',
+    idApproveBlocked: 'Tick all checklist items before approving', idDocType_national_id: 'National ID', idDocType_passport: 'Passport', idDocType_drivers_license: 'Driver’s license', idDocType_residence_permit: 'Residence permit',
+    idReason_blurry: 'Blurry', idReason_glare: 'Glare', idReason_name_mismatch: 'Name mismatch', idReason_face_mismatch: 'Face mismatch', idReason_expired: 'Expired', idReason_unsupported_doc: 'Unsupported document', idReason_incomplete: 'Incomplete', idReason_suspected_fraud: 'Suspected fraud', idReason_other: 'Other',
+    idDocLoadFail: 'Failed to load document image', idNoDoc: 'Not uploaded', idDecided: 'Decided', idVerifiedBadge: 'Verified',
     detail: 'User detail', email: 'Email', phone: 'Phone', language: 'Language', verified: 'Verified', notVerified: 'Unverified',
     none: 'Not set', appleId: 'Apple ID', linked: 'Linked', notLinked: 'Not linked', passkeys: 'Passkeys', online2: 'Presence',
     linkedRelations: 'Linked relations', blockedRelations: 'Blocks', recentCalls: 'Recent calls', noCalls: 'No calls',
@@ -387,6 +409,7 @@ function currentRoute() { const h = (location.hash || '#/').replace(/^#\/?/, '')
 function renderChrome() {
   const route = currentRoute();
   const openReports = state.overview ? state.overview.reports.open : 0;
+  const pendingVerif = state.overview && state.overview.verifications ? state.overview.verifications.pending : 0;
   const nav = [
     ['', '📊', t('dashboard')],
     ['users', '👤', t('users')],
@@ -395,6 +418,7 @@ function renderChrome() {
     ['calls', '📞', t('calls')],
     ['blocks', '🚫', t('blocks')],
     ['reports', '🚩', t('reports'), openReports],
+    ['verifications', '🪪', t('idReview'), pendingVerif],
     ['audit', '🧾', t('audit')],
     ['recordings', '⏺', t('recordings')],
     ['controls', '🎛️', t('controls')],
@@ -403,7 +427,7 @@ function renderChrome() {
       <span class="ico" aria-hidden="true">${ico}</span><span>${esc(label)}</span>
       ${badge ? `<span class="badge">${badge}</span>` : ''}
     </button>`).join('');
-  const titleMap = { '': t('dashboard'), users: t('users'), relationships: t('relationships'), live: t('liveCalls'), calls: t('calls'), blocks: t('blocks'), reports: t('reports'), audit: t('auditLog'), recordings: t('recordings'), controls: t('siteControls') };
+  const titleMap = { '': t('dashboard'), users: t('users'), relationships: t('relationships'), live: t('liveCalls'), calls: t('calls'), blocks: t('blocks'), reports: t('reports'), verifications: t('idReview'), audit: t('auditLog'), recordings: t('recordings'), controls: t('siteControls') };
   app().innerHTML = `
     <div class="shell">
       <aside class="sidebar" id="sidebar">
@@ -1543,6 +1567,153 @@ async function playRecordingModal(recordingId) {
   box.querySelector('[data-close]').addEventListener('click', close);
 }
 
+// ---------------------------------------------------------------- identity verification (KYC)
+async function loadVerifications() {
+  showLoading();
+  state.verifFilter = state.verifFilter || 'pending';
+  try {
+    const r = await api('/api/admin/verifications?status=' + encodeURIComponent(state.verifFilter));
+    state.verifications = r.verifications || [];
+    renderVerifications();
+  } catch (err) { viewEl().innerHTML = `<div class="err-banner">${esc(errText(err.code))}</div>`; }
+}
+function verifStatusPill(s) {
+  const cls = s === 'verified' ? 'on' : s === 'rejected' ? 'off' : '';
+  const label = s === 'verified' ? t('idStatusVerified') : s === 'rejected' ? t('idStatusRejected') : t('idStatusPending');
+  return `<span class="pill ${cls}">${esc(label)}</span>`;
+}
+function docTypeName(idType) { return t('idDocType_' + idType) || idType; }
+function renderVerifications() {
+  const filters = ['pending', 'all', 'verified', 'rejected'].map((f) => {
+    const lbl = f === 'pending' ? t('idStatusPending') : f === 'all' ? t('idStatusAll') : f === 'verified' ? t('idStatusVerified') : t('idStatusRejected');
+    return `<button class="seg ${state.verifFilter === f ? 'active' : ''}" data-vf="${f}">${esc(lbl)}</button>`;
+  }).join('');
+  const rows = state.verifications.map((v) => {
+    const via = v.submittedVia === 'assisted' ? t('idViaAssisted') : t('idViaSelf');
+    const hold = v.legalHold ? ` <span class="pill">⚖︎ ${esc(t('idHoldOn'))}</span>` : '';
+    const decided = v.decidedAt ? ` · ${esc(t('idDecided'))} ${esc(fmtDate(v.decidedAt))}` : '';
+    return `<div class="rep" data-vrow="${esc(v.id)}" tabindex="0" role="button">
+        <div class="body">
+          <div class="who">${esc(v.userName)} ${verifStatusPill(v.status)}${hold}</div>
+          <div class="meta">${esc(docTypeName(v.idType))}${v.idLast4 ? ' ····' + esc(v.idLast4) : ''} · ${esc(via)} · ${esc(t('idAttempt'))} ${v.attempt} · ${esc(fmtDate(v.submittedAt))}${decided}${v.rejectReasonCode ? ' · ' + esc(t('idReason_' + v.rejectReasonCode) || v.rejectReasonCode) : ''}</div>
+        </div>
+        <div class="rep-actions"><span class="muted-note">${(v.docsUploaded || []).length} 📄</span></div>
+      </div>`;
+  }).join('');
+  viewEl().innerHTML = `
+    <div class="section">
+      <div class="seg-row">${filters}</div>
+      <div class="table-wrap">${state.verifications.length ? rows : `<div class="empty"><div class="ico">🪪</div><p>${esc(t('noVerifications'))}</p></div>`}</div>
+    </div>`;
+  viewEl().querySelectorAll('[data-vf]').forEach((b) => b.addEventListener('click', () => { state.verifFilter = b.dataset.vf; loadVerifications(); }));
+  viewEl().querySelectorAll('[data-vrow]').forEach((el) => {
+    const open = () => openVerifReview(el.dataset.vrow);
+    el.addEventListener('click', open);
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+  });
+}
+
+// 取一张证件图：带 Authorization 头 fetch → object URL（no token-in-URL；用完撤销）。
+async function fetchDocBlob(id, kind) {
+  const res = await fetch(`/api/admin/verifications/${encodeURIComponent(id)}/doc/${encodeURIComponent(kind)}`, { headers: { authorization: 'Bearer ' + state.token } });
+  if (!res.ok) throw new Error('doc');
+  return URL.createObjectURL(await res.blob());
+}
+
+async function openVerifReview(id) {
+  let d;
+  try { d = await api('/api/admin/verifications/' + encodeURIComponent(id)); }
+  catch (err) { toast(errText(err.code), 'error'); return; }
+  const objectUrls = [];
+  const docs = d.docsUploaded || [];
+  const pending = d.status === 'pending';
+  const checklist = pending ? `
+    <div class="kyc-checklist">
+      <label><input type="checkbox" class="kchk"/> ${esc(t('idChkName'))}</label>
+      <label><input type="checkbox" class="kchk"/> ${esc(t('idChkValid'))}</label>
+      <label><input type="checkbox" class="kchk"/> ${esc(t('idChkFace'))}</label>
+      <label><input type="checkbox" class="kchk"/> ${esc(t('idChkClear'))}</label>
+    </div>` : '';
+  const reasons = ['blurry', 'glare', 'name_mismatch', 'face_mismatch', 'expired', 'unsupported_doc', 'incomplete', 'suspected_fraud', 'other'];
+  const reasonOpts = reasons.map((rc) => `<option value="${rc}">${esc(t('idReason_' + rc))}</option>`).join('');
+  const docCell = (kind, label) => docs.includes(kind)
+    ? `<div class="kyc-doc"><div class="kyc-doc-lab">${esc(label)}</div><img class="kyc-img" data-kind="${kind}" alt="${esc(label)}"/></div>`
+    : `<div class="kyc-doc"><div class="kyc-doc-lab">${esc(label)}</div><div class="kyc-img empty-doc">${esc(t('idNoDoc'))}</div></div>`;
+  const actions = pending ? `
+      <div class="kyc-decide">
+        <div class="kyc-reject"><select class="kyc-reason">${reasonOpts}</select>
+          <input class="inp kyc-note" type="text" maxlength="280" placeholder="${esc(t('idRejectNote'))}"/>
+          <button class="btn danger" data-act="reject">${esc(t('idReject'))}</button></div>
+        <button class="btn primary" data-act="approve" disabled>${esc(t('idApprove'))}</button>
+      </div>`
+    : (d.status === 'verified'
+      ? `<div class="kyc-decide"><button class="btn danger" data-act="revoke">${esc(t('idRevoke'))}</button></div>`
+      : `<div class="kyc-decide"><span class="muted-note">${esc(t('idStatusRejected'))}${d.rejectReasonCode ? ' · ' + esc(t('idReason_' + d.rejectReasonCode) || d.rejectReasonCode) : ''}</span></div>`);
+  const holdBtn = `<button class="btn ghost sm" data-act="hold">${d.legalHold ? '⚖︎ ' + esc(t('idHoldOn')) : esc(t('idHold'))}</button>`;
+
+  const mask = document.createElement('div'); mask.className = 'drawer-mask'; mask.style.zIndex = '70';
+  const box = document.createElement('div'); box.className = 'modal-overlay';
+  box.innerHTML = `<div class="card kyc-card" role="dialog" aria-modal="true" aria-label="${esc(t('idReview1'))}">
+    <div class="kyc-head"><h3>${esc(t('idReview1'))}</h3>${holdBtn}</div>
+    <div class="kyc-grid">
+      ${docCell('selfie', t('idSelfie'))}
+      ${docCell('front', t('idDocFront'))}
+      ${docs.includes('back') ? docCell('back', t('idDocBack')) : ''}
+    </div>
+    <div class="kyc-fields">
+      <div><span class="lab">${esc(t('idApplicant'))}</span> <b>${esc(d.userName)}</b></div>
+      <div><span class="lab">${esc(t('idLegalName'))}</span> <b>${esc(d.legalName || '—')}</b></div>
+      <div><span class="lab">${esc(t('idDocType'))}</span> ${esc(docTypeName(d.idType))}</div>
+      <div><span class="lab">${esc(t('idNumber'))}</span> ${esc(d.idNumber || (d.idLast4 ? '····' + d.idLast4 : '—'))}</div>
+    </div>
+    <p class="kyc-hint">${esc(t('idCompareHint'))}</p>
+    ${checklist}
+    ${actions}
+    <div class="confirm-actions"><button class="btn ink" data-close>${esc(t('closeBtn'))}</button></div>
+  </div>`;
+  document.body.appendChild(mask); document.body.appendChild(box);
+  const close = () => { objectUrls.forEach((u) => URL.revokeObjectURL(u)); mask.remove(); box.remove(); document.removeEventListener('keydown', onKey); };
+  function onKey(e) { if (e.key === 'Escape') close(); }
+  document.addEventListener('keydown', onKey);
+  mask.addEventListener('click', close);
+  box.querySelector('[data-close]').addEventListener('click', close);
+
+  // 异步加载证件图（带鉴权 → object URL）。
+  box.querySelectorAll('img.kyc-img[data-kind]').forEach(async (img) => {
+    try { const u = await fetchDocBlob(id, img.dataset.kind); objectUrls.push(u); img.src = u; }
+    catch { img.replaceWith(Object.assign(document.createElement('div'), { className: 'kyc-img empty-doc', textContent: t('idDocLoadFail') })); }
+  });
+
+  // 核对项全勾选才放开「通过」。
+  const approveBtn = box.querySelector('[data-act="approve"]');
+  if (approveBtn) {
+    const chks = [...box.querySelectorAll('.kchk')];
+    const refresh = () => { approveBtn.disabled = !chks.every((c) => c.checked); };
+    chks.forEach((c) => c.addEventListener('change', refresh));
+    approveBtn.title = t('idApproveBlocked');
+  }
+  const decide = async (path, body) => {
+    try { await api(path, { method: 'POST', body }); toast(t('saved'), 'success'); close(); await loadVerifications(); await refreshVerifBadge(); }
+    catch (err) { toast(errText(err.code), 'error'); }
+  };
+  approveBtn?.addEventListener('click', () => decide(`/api/admin/verifications/${encodeURIComponent(id)}/approve`));
+  box.querySelector('[data-act="reject"]')?.addEventListener('click', () => {
+    const reasonCode = box.querySelector('.kyc-reason').value;
+    const note = box.querySelector('.kyc-note').value.trim();
+    decide(`/api/admin/verifications/${encodeURIComponent(id)}/reject`, note ? { reasonCode, note } : { reasonCode });
+  });
+  box.querySelector('[data-act="revoke"]')?.addEventListener('click', async () => {
+    if (!(await confirmDialog(t('idConfirmRevoke')))) return;
+    decide(`/api/admin/verifications/${encodeURIComponent(id)}/revoke`);
+  });
+  box.querySelector('[data-act="hold"]')?.addEventListener('click', async () => {
+    try { await api(`/api/admin/verifications/${encodeURIComponent(id)}/hold`, { method: 'POST' }); close(); await loadVerifications(); }
+    catch (err) { toast(errText(err.code), 'error'); }
+  });
+}
+
+async function refreshVerifBadge() { try { state.overview = await api('/api/admin/overview'); renderChrome(); } catch {} }
+
 // keep the reports badge fresh after resolving
 async function loadOverviewBadge() { try { state.overview = await api('/api/admin/overview'); renderChrome(); route(); } catch {} }
 
@@ -1577,6 +1748,7 @@ function route() {
   else if (r === 'blocks') loadBlocks();
   else if (r === 'live') loadLiveCalls();
   else if (r === 'reports') loadReports();
+  else if (r === 'verifications') loadVerifications();
   else if (r === 'audit') loadAudit();
   else if (r === 'recordings') loadRecordings();
   else if (r === 'controls') loadControls();

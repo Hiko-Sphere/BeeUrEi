@@ -318,3 +318,33 @@ tr.sel { background: color-mix(in srgb, var(--honey) 12%, transparent); }
   border-radius: 999px; background: var(--surface-2); color: var(--text); font-size: 13px; cursor: pointer; }
 .live-member:hover { border-color: var(--honey); }
 .live-member .nm { font-weight: 600; }
+
+/* ---- identity verification (KYC) review ---- */
+.seg-row { display: inline-flex; gap: 2px; padding: 3px; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 999px; margin-bottom: 14px; }
+.seg { border: none; background: transparent; color: var(--text-dim); font: inherit; font-size: 13px; font-weight: 600;
+  padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+.seg:hover { color: var(--text); }
+.seg.active { background: var(--honey); color: #1a1206; }
+.kyc-card { max-width: 760px; width: min(94vw, 760px); max-height: 90vh; overflow-y: auto; }
+.kyc-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.kyc-head h3 { margin: 0; }
+.kyc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.kyc-doc { display: flex; flex-direction: column; gap: 6px; }
+.kyc-doc-lab { font-size: 12px; color: var(--text-dim); font-weight: 600; }
+.kyc-img { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: #000; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); }
+.kyc-img.empty-doc { display: flex; align-items: center; justify-content: center; background: var(--surface-2);
+  color: var(--text-faint); font-size: 13px; }
+.kyc-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 18px; margin-bottom: 12px; }
+.kyc-fields .lab { color: var(--text-dim); font-size: 13px; margin-right: 4px; }
+.kyc-hint { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 10px 12px; font-size: 13px; color: var(--text-dim); margin: 0 0 14px; line-height: 1.5; }
+.kyc-checklist { display: grid; gap: 8px; margin-bottom: 16px; }
+.kyc-checklist label { display: flex; align-items: center; gap: 9px; font-size: 14px; color: var(--text); cursor: pointer; }
+.kyc-checklist input { width: 18px; height: 18px; accent-color: var(--honey); }
+.kyc-decide { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.kyc-reject { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 260px; }
+.kyc-reason { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--text); font: inherit; }
+.kyc-note { flex: 1; min-width: 80px; }

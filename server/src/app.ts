@@ -55,6 +55,33 @@ export interface AppOptions {
 /// 测试传入 MemoryStore；生产/开发默认 SQLite 持久化（见 makeDefaultStore）。
 export function buildApp(store: Store = makeDefaultStore(), options: AppOptions = {}): FastifyInstance {
   const app = Fastify({ logger: false })
+
+  // CORS：协助者/亲友网页端在 beeurei.hikosphere.com，跨源调用本 API（beeurei-api.hikosphere.com）。
+  // 仅放行白名单源（默认官网域 + 本地开发），按请求回显具体 Origin（绝不用 '*'）。鉴权走 Bearer 头（非 Cookie），
+  // 故无需 allow-credentials。WebSocket(/ws) 握手不受 CORS 限制；<video>/<img> 跨源媒体亦无需 CORS。
+  const corsOrigins = new Set(
+    (process.env.CORS_ORIGINS ?? 'https://beeurei.hikosphere.com')
+      .split(',').map((s) => s.trim()).filter(Boolean),
+  )
+  corsOrigins.add('http://localhost:5173')
+  corsOrigins.add('http://127.0.0.1:5173')
+  app.addHook('onRequest', async (req, reply) => {
+    const origin = req.headers.origin
+    if (origin && corsOrigins.has(origin)) {
+      reply.header('access-control-allow-origin', origin)
+      reply.header('vary', 'Origin')
+      if (req.method === 'OPTIONS') {
+        reply.header('access-control-allow-methods', 'GET,POST,PUT,DELETE,OPTIONS')
+        reply.header('access-control-allow-headers', (req.headers['access-control-request-headers'] as string) || 'authorization,content-type')
+        reply.header('access-control-max-age', '86400')
+        return reply.code(204).send()
+      }
+    } else if (req.method === 'OPTIONS') {
+      // 非白名单源的预检：照常回应但**不**带放行头，浏览器据此自行拦截真实请求。
+      return reply.code(204).send()
+    }
+  })
+
   const hub = new SignalingHub()
   const presence = new PresenceRegistry()
   const pendingCalls = new PendingCallRegistry()

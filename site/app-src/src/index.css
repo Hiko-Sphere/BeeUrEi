@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+/* Dark mode via a .dark class on <html> (see lib/theme.ts). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* BeeUrEi brand tokens (mirrors the marketing site / app). */
+@theme {
+  --color-honey: #f2a900;
+  --color-honey-soft: #ffce5c;
+  --color-ink: #14161f;
+  --color-danger: #e5484d;
+  --color-warn: #f2a900;
+  --color-ok: #3fb950;
+  --font-sans: "Inter", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+:root {
+  --bg: #f7f5f0;
+  --surface: #ffffff;
+  --surface-2: #f1efe9;
+  --line: #e6e2d8;
+  --text: #1a1c24;
+  --text-soft: #54596a;
+  --text-faint: #8b8f9e;
+}
+.dark {
+  --bg: #0f1117;
+  --surface: #171a22;
+  --surface-2: #1f232d;
+  --line: #2a2f3a;
+  --text: #eef0f5;
+  --text-soft: #aeb3c2;
+  --text-faint: #767c8c;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+* { -webkit-tap-highlight-color: transparent; }
+
+.surface { background: var(--surface); }
+.surface-2 { background: var(--surface-2); }
+.border-line { border-color: var(--line); }
+.text-soft { color: var(--text-soft); }
+.text-faint { color: var(--text-faint); }
+
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-honey);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@keyframes pulse-ring { 0%,100% { opacity: .5 } 50% { opacity: 1 } }
+.ring-live { animation: pulse-ring 1.4s ease-in-out infinite; }
+@keyframes spin { to { transform: rotate(360deg) } }
+.spin { animation: spin .8s linear infinite; }
+@keyframes slide-up { from { transform: translateY(8px); opacity: 0 } to { transform: none; opacity: 1 } }
+.slide-up { animation: slide-up .18s ease-out; }

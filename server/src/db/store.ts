@@ -32,6 +32,7 @@ export interface User {
   // totpEnabled=true 才在登录时强制验证码（setup 后、enable 前 secret 已写但 enabled 仍假=待启用）。
   totpSecret?: string
   totpEnabled?: boolean
+  totpLastCounter?: number // 上次已接受的 TOTP 时间步计数：拒绝 <= 此值的码，使每个 TOTP 单次有效（防 ±窗口内重放）
 }
 
 /// 一次性恢复码（2FA）：丢失验证器时用。库里只存 SHA-256 哈希，明文仅生成时给用户一次。
@@ -384,6 +385,7 @@ export interface Store {
   // 2FA 恢复码（一次性）：启用 2FA 时整批替换；登录时按哈希消费一个。
   replaceRecoveryCodes(userId: string, hashes: string[]): void // 整批替换（清旧 + 写新）
   consumeRecoveryCode(userId: string, codeHash: string, nowMs: number): boolean // 命中未用的码即标记已用并返回 true
+  hasUnusedRecoveryCode(userId: string, codeHash: string): boolean // 仅检查存在未用的匹配码（不消费）——用于"两因子都成立后再消费"
   countUnusedRecoveryCodes(userId: string): number // 剩余可用恢复码数（账号页展示）
   deleteRecoveryCodesForUser(userId: string): void // 关闭 2FA 时清空
 
@@ -510,6 +512,10 @@ export class MemoryStore implements Store {
     let n = 0
     for (const v of this.recoveryCodes.values()) if (v.userId === userId && v.usedAt == null) n++
     return n
+  }
+  hasUnusedRecoveryCode(userId: string, codeHash: string): boolean {
+    for (const v of this.recoveryCodes.values()) if (v.userId === userId && v.usedAt == null && v.codeHash === codeHash) return true
+    return false
   }
   deleteRecoveryCodesForUser(userId: string): void {
     let changed = false

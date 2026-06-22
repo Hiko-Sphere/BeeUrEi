@@ -46,10 +46,16 @@ describe('2FA (TOTP)', () => {
     expect(wrong.statusCode).toBe(401)
     expect((wrong.json() as any).error).toBe('invalid_2fa')
 
-    // 正确验证码 → 登录成功
-    const ok = await a.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'tfa1', password: 'secret123', totpCode: totpAt(secret, Date.now()) } })
+    // 正确验证码 → 登录成功（用下一时间步的码，避免与「启用」所用码同一步被单次防重放拦下）
+    const freshCode = totpAt(secret, Date.now() + 30_000)
+    const ok = await a.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'tfa1', password: 'secret123', totpCode: freshCode } })
     expect(ok.statusCode).toBe(200)
     expect((ok.json() as any).token).toBeTruthy()
+
+    // 单次使用防重放：同一个 TOTP 码不可再次登录
+    const replay = await a.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'tfa1', password: 'secret123', totpCode: freshCode } })
+    expect(replay.statusCode).toBe(401)
+    expect((replay.json() as any).error).toBe('invalid_2fa')
     await a.close()
   })
 
@@ -83,8 +89,8 @@ describe('2FA (TOTP)', () => {
     const bad = await a.inject({ method: 'POST', url: '/api/account/2fa/disable', headers: auth(token), payload: { code: '000000' } })
     expect(bad.statusCode).toBe(400)
 
-    // 正确码关闭
-    const off = await a.inject({ method: 'POST', url: '/api/account/2fa/disable', headers: auth(token), payload: { code: totpAt(secret, Date.now()) } })
+    // 正确码关闭（用下一时间步的码，避开与「启用」同一步的单次防重放）
+    const off = await a.inject({ method: 'POST', url: '/api/account/2fa/disable', headers: auth(token), payload: { code: totpAt(secret, Date.now() + 30_000) } })
     expect(off.statusCode).toBe(200)
 
     // 关闭后登录无需验证码

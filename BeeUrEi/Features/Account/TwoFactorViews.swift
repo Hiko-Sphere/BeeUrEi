@@ -63,8 +63,9 @@ struct TwoFactorSetupView: View {
     @State private var codeAction: CodeAction?
     @State private var promptCode = ""
 
-    enum CodeAction: Identifiable { case disable, regenerate; var id: Int { hashValue } }
+    enum CodeAction { case disable, regenerate }
     private var lang: Language { FeatureSettings().language }
+    private var codeActionTitle: String { codeAction == .regenerate ? TwoFactorStrings.regenerate(lang) : TwoFactorStrings.disable(lang) }
     private let api = APIClient()
 
     var body: some View {
@@ -85,7 +86,13 @@ struct TwoFactorSetupView: View {
         .navigationTitle(TwoFactorStrings.title(lang))
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadStatus() }
-        .alert(item: $codeAction) { action in codePromptAlert(action) }
+        // 关闭 / 重新生成：现代文本输入弹窗（旧式 Alert 不支持输入框，会让此流程形同虚设、无法操作）。
+        .alert(codeActionTitle, isPresented: Binding(get: { codeAction != nil }, set: { if !$0 { codeAction = nil } })) {
+            TextField(TwoFactorStrings.codeField(lang), text: $promptCode)
+                .keyboardType(.asciiCapable).textInputAutocapitalization(.characters)
+            Button(TwoFactorStrings.verify(lang)) { if let a = codeAction { codeAction = nil; Task { await runCodeAction(a) } } }
+            Button(TwoFactorStrings.cancel(lang), role: .cancel) { codeAction = nil }
+        } message: { Text(TwoFactorStrings.disablePrompt(lang)) }
         .overlay(alignment: .bottom) { if let toast { ToastView(text: toast) } }
         .onChange(of: toast) { _, t in if let t { A11y.announce(t) } }
     }
@@ -158,17 +165,8 @@ struct TwoFactorSetupView: View {
                 Button(TwoFactorStrings.done(lang)) { recoveryCodes = nil; Task { await loadStatus() } }
             }
         }
-    }
-
-    // MARK: 关闭 / 重生成 的验证码弹窗
-
-    private func codePromptAlert(_ action: CodeAction) -> Alert {
-        Alert(
-            title: Text(action == .disable ? TwoFactorStrings.disable(lang) : TwoFactorStrings.regenerate(lang)),
-            message: Text(TwoFactorStrings.disablePrompt(lang)),
-            primaryButton: .destructive(Text(TwoFactorStrings.verify(lang))) { Task { await runCodeAction(action) } },
-            secondaryButton: .cancel(Text(TwoFactorStrings.cancel(lang)))
-        )
+        // 一次性恢复码只显示这一次：主动朗读提醒盲人**现在就保存**（footer VoiceOver 不会自动读）。
+        .onAppear { A11y.announce(TwoFactorStrings.recoveryTitle(lang) + "。" + TwoFactorStrings.recoveryIntro(lang)) }
     }
 
     // MARK: 逻辑

@@ -80,6 +80,7 @@ export class SqliteStore implements Store {
     try { this.db.exec('ALTER TABLE users ADD COLUMN featureOverrides TEXT') } catch { /* 列已存在 */ } // 单用户功能覆盖（JSON）
     try { this.db.exec('ALTER TABLE users ADD COLUMN totpSecret TEXT') } catch { /* 列已存在 */ } // 2FA TOTP base32 密钥（仅服务端校验）
     try { this.db.exec('ALTER TABLE users ADD COLUMN totpEnabled INTEGER') } catch { /* 列已存在 */ } // 2FA 是否已启用
+    try { this.db.exec('ALTER TABLE users ADD COLUMN totpLastCounter INTEGER') } catch { /* 列已存在 */ } // TOTP 单次使用防重放
     try { this.db.exec('ALTER TABLE recordings ADD COLUMN mediaId TEXT') } catch { /* 列已存在 */ } // 录制关联的媒体文件
     try { this.db.exec('ALTER TABLE messages ADD COLUMN reaction TEXT') } catch { /* 列已存在 */ } // 表情回应
     try { this.db.exec('ALTER TABLE messages ADD COLUMN groupId TEXT') } catch { /* 列已存在 */ } // 群消息
@@ -147,6 +148,9 @@ export class SqliteStore implements Store {
     const row = this.db.prepare('SELECT COUNT(*) AS n FROM recovery_codes WHERE userId = ? AND usedAt IS NULL').get(userId) as { n: number }
     return Number(row.n)
   }
+  hasUnusedRecoveryCode(userId: string, codeHash: string): boolean {
+    return !!this.db.prepare('SELECT 1 FROM recovery_codes WHERE userId = ? AND codeHash = ? AND usedAt IS NULL LIMIT 1').get(userId, codeHash)
+  }
   deleteRecoveryCodesForUser(userId: string): void {
     this.db.prepare('DELETE FROM recovery_codes WHERE userId = ?').run(userId)
   }
@@ -176,9 +180,9 @@ export class SqliteStore implements Store {
   // MARK: users
   createUser(u: User): void {
     this.db.prepare(
-      `INSERT OR REPLACE INTO users (id, username, passwordHash, displayName, role, status, createdAt, language, tokenVersion, email, emailVerified, voipToken, avatar, apnsToken, phone, appleSub, usernameCustomized, legalConsentVersion, legalConsentAt, featureOverrides, totpSecret, totpEnabled)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(u.id, u.username, u.passwordHash, u.displayName, u.role, u.status, u.createdAt, u.language ?? null, u.tokenVersion ?? 0, u.email ?? null, u.emailVerified ? 1 : 0, u.voipToken ?? null, u.avatar ?? null, u.apnsToken ?? null, u.phone ?? null, u.appleSub ?? null, u.usernameCustomized ? 1 : 0, u.legalConsentVersion ?? null, u.legalConsentAt ?? null, u.featureOverrides ? JSON.stringify(u.featureOverrides) : null, u.totpSecret ?? null, u.totpEnabled ? 1 : 0)
+      `INSERT OR REPLACE INTO users (id, username, passwordHash, displayName, role, status, createdAt, language, tokenVersion, email, emailVerified, voipToken, avatar, apnsToken, phone, appleSub, usernameCustomized, legalConsentVersion, legalConsentAt, featureOverrides, totpSecret, totpEnabled, totpLastCounter)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(u.id, u.username, u.passwordHash, u.displayName, u.role, u.status, u.createdAt, u.language ?? null, u.tokenVersion ?? 0, u.email ?? null, u.emailVerified ? 1 : 0, u.voipToken ?? null, u.avatar ?? null, u.apnsToken ?? null, u.phone ?? null, u.appleSub ?? null, u.usernameCustomized ? 1 : 0, u.legalConsentVersion ?? null, u.legalConsentAt ?? null, u.featureOverrides ? JSON.stringify(u.featureOverrides) : null, u.totpSecret ?? null, u.totpEnabled ? 1 : 0, u.totpLastCounter ?? null)
   }
   findByUsername(username: string): User | undefined {
     // 大小写不敏感(COLLATE NOCASE)：防同名混淆/冒充；登录兼容任意大小写（见审查 #4）。
@@ -530,7 +534,7 @@ export class SqliteStore implements Store {
     return { id: r.id, name: r.name, ownerId: r.ownerId, memberIds, createdAt: Number(r.createdAt) }
   }
   private toUser(r: any): User {
-    return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt), language: r.language ?? undefined, tokenVersion: r.tokenVersion != null ? Number(r.tokenVersion) : 0, email: r.email ?? undefined, emailVerified: r.emailVerified != null ? Number(r.emailVerified) === 1 : undefined, voipToken: r.voipToken ?? undefined, avatar: r.avatar ?? undefined, apnsToken: r.apnsToken ?? undefined, phone: r.phone ?? undefined, appleSub: r.appleSub ?? undefined, usernameCustomized: r.usernameCustomized != null ? Number(r.usernameCustomized) === 1 : undefined, legalConsentVersion: r.legalConsentVersion ?? undefined, legalConsentAt: r.legalConsentAt != null ? Number(r.legalConsentAt) : undefined, featureOverrides: parseJsonOrUndefined(r.featureOverrides), totpSecret: r.totpSecret ?? undefined, totpEnabled: r.totpEnabled != null ? Number(r.totpEnabled) === 1 : undefined }
+    return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt), language: r.language ?? undefined, tokenVersion: r.tokenVersion != null ? Number(r.tokenVersion) : 0, email: r.email ?? undefined, emailVerified: r.emailVerified != null ? Number(r.emailVerified) === 1 : undefined, voipToken: r.voipToken ?? undefined, avatar: r.avatar ?? undefined, apnsToken: r.apnsToken ?? undefined, phone: r.phone ?? undefined, appleSub: r.appleSub ?? undefined, usernameCustomized: r.usernameCustomized != null ? Number(r.usernameCustomized) === 1 : undefined, legalConsentVersion: r.legalConsentVersion ?? undefined, legalConsentAt: r.legalConsentAt != null ? Number(r.legalConsentAt) : undefined, featureOverrides: parseJsonOrUndefined(r.featureOverrides), totpSecret: r.totpSecret ?? undefined, totpEnabled: r.totpEnabled != null ? Number(r.totpEnabled) === 1 : undefined, totpLastCounter: r.totpLastCounter != null ? Number(r.totpLastCounter) : undefined }
   }
   private toLink(r: any): FamilyLink {
     return { id: r.id, ownerId: r.ownerId, memberId: r.memberId, relation: r.relation, isEmergency: Number(r.isEmergency) === 1, phone: r.phone ?? undefined, createdAt: Number(r.createdAt), status: (r.status as LinkStatus) ?? undefined, requestedBy: r.requestedBy ?? undefined }

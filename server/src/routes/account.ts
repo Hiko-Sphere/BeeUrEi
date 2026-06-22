@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { type Store, type User, matchBannedTerm } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { hashPassword, verifyPassword } from '../auth/passwords'
-import { generateTotpSecret, verifyTotp, otpauthURI, generateRecoveryCodes, hashRecoveryCode } from '../auth/totp'
+import { generateTotpSecret, totpMatchedCounter, otpauthURI, generateRecoveryCodes, hashRecoveryCode } from '../auth/totp'
 import { type CodeRegistry } from '../auth/codes'
 import { type Mailer } from '../mail/mailer'
 import { emailVerificationMail } from '../mail/templates'
@@ -52,8 +52,13 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     if (!user.totpSecret) return false
     const c = (code ?? '').trim()
     if (!c) return false
-    if (verifyTotp(user.totpSecret, c, now)) return true
-    return store.consumeRecoveryCode(user.id, hashRecoveryCode(c), now)
+    const counter = totpMatchedCounter(user.totpSecret, c, now)
+    if (counter != null) {
+      if (user.totpLastCounter != null && counter <= user.totpLastCounter) return false // 单次防重放
+      store.updateUser(user.id, { totpLastCounter: counter })
+      return true
+    }
+    return store.consumeRecoveryCode(user.id, hashRecoveryCode(c), now) // 恢复码兜底
   }
   const twoFASchema = z.object({ code: z.string().min(1).max(64) })
 
@@ -83,10 +88,12 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     if (!user) return reply.code(404).send({ error: 'not_found' })
     if (user.totpEnabled) return reply.code(409).send({ error: 'already_enabled' })
     if (!user.totpSecret) return reply.code(400).send({ error: 'not_setup' })
-    if (!verifyTotp(user.totpSecret, parsed.data.code, Date.now())) return reply.code(400).send({ error: 'invalid_code' })
+    const counter = totpMatchedCounter(user.totpSecret, parsed.data.code, Date.now())
+    if (counter == null) return reply.code(400).send({ error: 'invalid_code' })
     const codes = generateRecoveryCodes()
     store.replaceRecoveryCodes(user.id, codes.map(hashRecoveryCode))
-    store.updateUser(user.id, { totpEnabled: true })
+    // 同时记录启用所用的时间步：避免同一码在 90s 内被重放到首次登录（单次使用从启用即生效）。
+    store.updateUser(user.id, { totpEnabled: true, totpLastCounter: counter })
     return { ok: true, recoveryCodes: codes }
   })
 

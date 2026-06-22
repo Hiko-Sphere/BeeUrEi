@@ -42,15 +42,22 @@ export function totpAt(secretB32: string, timeMs: number, step = 30, digits = 6)
   return (bin % 10 ** digits).toString().padStart(digits, '0')
 }
 
-/// 校验 TOTP：允许 ±window 个时间步（默认 ±1，容忍最多 30s 时钟漂移）。常数时间比较防计时侧信道。
-export function verifyTotp(secretB32: string, code: string, timeMs: number, window = 1): boolean {
+/// 校验 TOTP 并返回**匹配到的时间步计数**（counter），未匹配返回 null。
+/// 允许 ±window 个时间步（默认 ±1，容忍最多 30s 时钟漂移）；常数时间比较防计时侧信道。
+/// 返回 counter 供调用方做"单次使用"防重放（RFC 6238 §5.2：拒绝 counter <= 上次已接受值）。
+export function totpMatchedCounter(secretB32: string, code: string, timeMs: number, window = 1): number | null {
   const clean = (code ?? '').replace(/\s/g, '')
-  if (!/^\d{6}$/.test(clean)) return false
+  if (!/^\d{6}$/.test(clean)) return null
   for (let w = -window; w <= window; w++) {
-    const expected = totpAt(secretB32, timeMs + w * 30_000)
-    if (timingSafeEqual(Buffer.from(expected), Buffer.from(clean))) return true
+    const t = timeMs + w * 30_000
+    if (timingSafeEqual(Buffer.from(totpAt(secretB32, t)), Buffer.from(clean))) return Math.floor(t / 1000 / 30)
   }
-  return false
+  return null
+}
+
+/// 校验 TOTP（布尔）。不做防重放——需防重放的登录路径请用 totpMatchedCounter + 单次计数守卫。
+export function verifyTotp(secretB32: string, code: string, timeMs: number, window = 1): boolean {
+  return totpMatchedCounter(secretB32, code, timeMs, window) != null
 }
 
 /// otpauth:// URI（供验证器 App 扫码或点链接添加；盲人也可直接复制密钥手动添加）。

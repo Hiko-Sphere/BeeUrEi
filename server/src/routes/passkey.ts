@@ -60,7 +60,10 @@ export function registerPasskeyRoutes(app: FastifyInstance, store: Store): void 
       userDisplayName: user.displayName,
       attestationType: 'none',
       excludeCredentials: existing.map((p) => ({ id: p.credentialId })),
-      authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' },
+      // userVerification 必须（而非 preferred）：passkey 经生物识别/设备密码完成「用户验证」后，
+      // 本身即「持有(authenticator) + 验证(UV)」的强多因子凭据——这样 passkey 登录可被视为已满足两步验证
+      // （与 Apple 联合登录同理，是 2FA 的认可豁免），而非绕过用户开启的 TOTP。
+      authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
     })
     challenges.set(`reg:${user.id}`, options.challenge)
     return options
@@ -81,7 +84,7 @@ export function registerPasskeyRoutes(app: FastifyInstance, store: Store): void 
         expectedChallenge,
         expectedOrigin: expectedOrigins,
         expectedRPID: rpID,
-        requireUserVerification: false,
+        requireUserVerification: true, // 强制 UV：登记的 passkey 必须可做用户验证，方可作为强多因子凭据
       })
     } catch {
       return reply.code(400).send({ error: 'verification_failed' })
@@ -106,7 +109,7 @@ export function registerPasskeyRoutes(app: FastifyInstance, store: Store): void 
 
   // 登录 options（无用户名/可发现凭据）：返回 flowId + options。
   app.post('/api/auth/passkey/login/options', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (_req, reply) => {
-    const options = await generateAuthenticationOptions({ rpID, userVerification: 'preferred' })
+    const options = await generateAuthenticationOptions({ rpID, userVerification: 'required' })
     const flowId = randomUUID()
     challenges.set(`login:${flowId}`, options.challenge)
     return reply.send({ flowId, options })
@@ -137,7 +140,10 @@ export function registerPasskeyRoutes(app: FastifyInstance, store: Store): void 
           publicKey: new Uint8Array(Buffer.from(passkey.publicKey, 'base64url')),
           counter: passkey.counter,
         },
-        requireUserVerification: false,
+        // 强制 UV：只接受经用户验证（生物识别/设备密码）的断言——这才是「持有+验证」的强多因子登录，
+        // 等价满足两步验证（开了 TOTP 的账号也可用 passkey 登录而无需再输 TOTP；注册在 requireAuth 之后，
+        // 攻击者仅有密码也无法登记 passkey，故不构成 2FA 绕过）。
+        requireUserVerification: true,
       })
     } catch {
       return reply.code(401).send({ error: 'verification_failed' })

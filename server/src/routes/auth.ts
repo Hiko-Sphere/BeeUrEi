@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { type Store, type Role, type User, selfView } from '../db/store'
 import { hashPassword, verifyPassword } from '../auth/passwords'
 import { signAccessToken, generateRefreshToken, hashToken, refreshTtlMs } from '../auth/tokens'
-import { verifyTotp, hashRecoveryCode } from '../auth/totp'
+import { totpMatchedCounter, hashRecoveryCode } from '../auth/totp'
 import { normalizePhone, type AppleTokenVerifier } from '../auth/apple'
 import { type CodeRegistry } from '../auth/codes'
 import { type Mailer } from '../mail/mailer'
@@ -27,8 +27,14 @@ function passTwoFactor(store: Store, user: User, code: string | undefined, now: 
   if (!user.totpEnabled || !user.totpSecret) return { ok: true }
   const c = (code ?? '').trim()
   if (!c) return { ok: false, reason: 'required' }
-  if (verifyTotp(user.totpSecret, c, now)) return { ok: true }
-  if (store.consumeRecoveryCode(user.id, hashRecoveryCode(c), now)) return { ok: true } // 恢复码兜底
+  const counter = totpMatchedCounter(user.totpSecret, c, now)
+  if (counter != null) {
+    // 单次使用防重放：拒绝 <= 上次已接受的时间步；接受则记录新计数，使该码（及其窗口内重复）不可再用。
+    if (user.totpLastCounter != null && counter <= user.totpLastCounter) return { ok: false, reason: 'invalid' }
+    store.updateUser(user.id, { totpLastCounter: counter })
+    return { ok: true }
+  }
+  if (store.consumeRecoveryCode(user.id, hashRecoveryCode(c), now)) return { ok: true } // 恢复码兜底（本就一次性）
   return { ok: false, reason: 'invalid' }
 }
 function twoFactorReply(reply: any, reason: 'required' | 'invalid') {
@@ -166,6 +172,9 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
       const byEmail = store.findByEmail(identity.email.toLowerCase())
       if (byEmail && !byEmail.appleSub) {
         if (byEmail.status === 'disabled') return reply.code(403).send({ error: 'account_disabled' })
+        // 该邮箱账号已开两步验证：不做隐式 Apple 并号登录——否则 Apple 成了绕过用户 TOTP 的通道。
+        // 让用户先用密码+TOTP 正常登录，再在「账号与安全」主动绑定 Apple（POST /api/account/apple，已 requireAuth）。
+        if (byEmail.totpEnabled) return reply.code(409).send({ error: 'two_factor_link_required' })
         const linked = store.updateUser(byEmail.id, { appleSub: identity.sub, emailVerified: true }) ?? byEmail
         const tokens = issueTokens(store, linked)
         return reply.send({ ...tokens, user: selfView(linked) }) // 登录已有账号，不是新建（无 created）
@@ -271,16 +280,25 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     const existing = store.findByEmail(email)
     if (existing) {
       if (existing.status === 'disabled') return reply.code(403).send({ error: 'account_disabled' })
-      // 已开 2FA：先 peek 邮箱码有效性（不消费）再验第二因子；2FA 未过时不作废邮箱码，便于补码重试。
-      // 否则（未开 2FA）直接 verify 消费即可。两条路径都在放行前真正消费掉邮箱码（一次性）。
-      if (existing.totpEnabled) {
+      // 已开 2FA：先 peek 邮箱码（不消费）→ 验第二因子（TOTP 非消费 / 恢复码先只检查不消费）→
+      // 两因子都成立后先 verify 消费邮箱码，**成功后再**消费恢复码——避免登录失败却白烧一枚一次性恢复码。
+      // 未开 2FA 则直接 verify 消费。两条路径都在放行前真正消费掉邮箱码（一次性）。
+      if (existing.totpEnabled && existing.totpSecret) {
         if (!codes.peek(`login:${existing.id}`, parsed.data.code, Date.now())) {
           return reply.code(400).send({ error: 'invalid_code' })
         }
-        const tf = passTwoFactor(store, existing, parsed.data.totpCode, Date.now())
-        if (!tf.ok) return twoFactorReply(reply, tf.reason!)
-      }
-      if (!codes.verify(`login:${existing.id}`, parsed.data.code, Date.now())) {
+        const c = (parsed.data.totpCode ?? '').trim()
+        if (!c) return twoFactorReply(reply, 'required')
+        const counter = totpMatchedCounter(existing.totpSecret, c, Date.now())
+        const totpOk = counter != null && (existing.totpLastCounter == null || counter > existing.totpLastCounter) // 含单次防重放
+        const useRecovery = !totpOk && counter == null && store.hasUnusedRecoveryCode(existing.id, hashRecoveryCode(c))
+        if (!totpOk && !useRecovery) return twoFactorReply(reply, 'invalid')
+        if (!codes.verify(`login:${existing.id}`, parsed.data.code, Date.now())) {
+          return reply.code(400).send({ error: 'invalid_code' })
+        }
+        if (totpOk) store.updateUser(existing.id, { totpLastCounter: counter! })
+        if (useRecovery) store.consumeRecoveryCode(existing.id, hashRecoveryCode(c), Date.now())
+      } else if (!codes.verify(`login:${existing.id}`, parsed.data.code, Date.now())) {
         return reply.code(400).send({ error: 'invalid_code' })
       }
       // 成功登录即证明邮箱归属 → 标记已验证。

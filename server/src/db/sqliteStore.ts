@@ -2,7 +2,7 @@ import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, SessionInfo, ChatMessage, ChatGroup, MediaMeta, Passkey, AdminAuditEntry, Warning, AppConfig, AppConfigPatch, Notification } from './store'
+import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, SessionInfo, ChatMessage, ChatGroup, MediaMeta, Passkey, AdminAuditEntry, Warning, AppConfig, AppConfigPatch, Notification, Verification, VerificationStatus, KycBlobRef } from './store'
 import { normalizeAppConfig, mergeAppConfig } from './store'
 
 // 用运行时 require + 非静态模块名加载 node:sqlite，避免打包器(vitest/vite)静态解析失败；
@@ -116,6 +116,23 @@ export class SqliteStore implements Store {
     try { this.db.exec('ALTER TABLE refresh_tokens ADD COLUMN lastSeenAt INTEGER') } catch { /* 列已存在 */ }
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_refresh_user ON refresh_tokens (userId)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_refresh_session ON refresh_tokens (userId, sessionId)')
+    // 实名认证（KYC）：用户布尔徽章 + verifications 表（敏感字段 nameSealed/idNumberSealed/blobs 存 AES-256-GCM 信封 JSON）。
+    try { this.db.exec('ALTER TABLE users ADD COLUMN identityVerified INTEGER') } catch { /* 列已存在 */ }
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS verifications (
+        id TEXT PRIMARY KEY, userId TEXT, status TEXT, idType TEXT, idLast4 TEXT,
+        nameSealed TEXT, idNumberSealed TEXT, blobs TEXT,
+        submittedVia TEXT, submittedById TEXT, consentToken TEXT, consentVersion TEXT,
+        legalHold INTEGER, submittedAt INTEGER, decidedBy TEXT, decidedAt INTEGER,
+        rejectReasonCode TEXT, rejectReasonNote TEXT, attempt INTEGER);
+      CREATE INDEX IF NOT EXISTS idx_verif_user ON verifications (userId, submittedAt);
+      CREATE INDEX IF NOT EXISTS idx_verif_status ON verifications (status, submittedAt);
+    `)
+    // 一人一活跃记录（pending|verified）的数据库兜底——与应用层守卫双保险，防并发双提交。
+    try {
+      this.db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS uniq_verif_active
+        ON verifications (userId) WHERE status IN ('pending','verified')`)
+    } catch { /* 已存在 */ }
   }
 
   // MARK: refresh tokens
@@ -204,9 +221,9 @@ export class SqliteStore implements Store {
   // MARK: users
   createUser(u: User): void {
     this.db.prepare(
-      `INSERT OR REPLACE INTO users (id, username, passwordHash, displayName, role, status, createdAt, language, tokenVersion, email, emailVerified, voipToken, avatar, apnsToken, phone, appleSub, usernameCustomized, legalConsentVersion, legalConsentAt, featureOverrides, totpSecret, totpEnabled, totpLastCounter)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(u.id, u.username, u.passwordHash, u.displayName, u.role, u.status, u.createdAt, u.language ?? null, u.tokenVersion ?? 0, u.email ?? null, u.emailVerified ? 1 : 0, u.voipToken ?? null, u.avatar ?? null, u.apnsToken ?? null, u.phone ?? null, u.appleSub ?? null, u.usernameCustomized ? 1 : 0, u.legalConsentVersion ?? null, u.legalConsentAt ?? null, u.featureOverrides ? JSON.stringify(u.featureOverrides) : null, u.totpSecret ?? null, u.totpEnabled ? 1 : 0, u.totpLastCounter ?? null)
+      `INSERT OR REPLACE INTO users (id, username, passwordHash, displayName, role, status, createdAt, language, tokenVersion, email, emailVerified, voipToken, avatar, apnsToken, phone, appleSub, usernameCustomized, legalConsentVersion, legalConsentAt, featureOverrides, totpSecret, totpEnabled, totpLastCounter, identityVerified)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(u.id, u.username, u.passwordHash, u.displayName, u.role, u.status, u.createdAt, u.language ?? null, u.tokenVersion ?? 0, u.email ?? null, u.emailVerified ? 1 : 0, u.voipToken ?? null, u.avatar ?? null, u.apnsToken ?? null, u.phone ?? null, u.appleSub ?? null, u.usernameCustomized ? 1 : 0, u.legalConsentVersion ?? null, u.legalConsentAt ?? null, u.featureOverrides ? JSON.stringify(u.featureOverrides) : null, u.totpSecret ?? null, u.totpEnabled ? 1 : 0, u.totpLastCounter ?? null, u.identityVerified ? 1 : 0)
   }
   findByUsername(username: string): User | undefined {
     // 大小写不敏感(COLLATE NOCASE)：防同名混淆/冒充；登录兼容任意大小写（见审查 #4）。
@@ -408,6 +425,77 @@ export class SqliteStore implements Store {
   deleteRecording(id: string): void {
     this.db.prepare('DELETE FROM recordings WHERE id = ?').run(id)
   }
+  // MARK: verifications (KYC)
+  createVerification(v: Verification): void {
+    this.db.prepare(
+      `INSERT OR REPLACE INTO verifications (id, userId, status, idType, idLast4, nameSealed, idNumberSealed, blobs, submittedVia, submittedById, consentToken, consentVersion, legalHold, submittedAt, decidedBy, decidedAt, rejectReasonCode, rejectReasonNote, attempt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      v.id, v.userId, v.status, v.idType, v.idLast4 ?? null,
+      v.nameSealed ? JSON.stringify(v.nameSealed) : null,
+      v.idNumberSealed ? JSON.stringify(v.idNumberSealed) : null,
+      v.blobs ? JSON.stringify(v.blobs) : null,
+      v.submittedVia, v.submittedById, v.consentToken ?? null, v.consentVersion ?? null,
+      v.legalHold ? 1 : 0, v.submittedAt, v.decidedBy ?? null, v.decidedAt ?? null,
+      v.rejectReasonCode ?? null, v.rejectReasonNote ?? null, v.attempt,
+    )
+  }
+  getActiveVerificationForUser(userId: string): Verification | undefined {
+    const row = this.db.prepare(
+      "SELECT * FROM verifications WHERE userId = ? AND status IN ('pending','verified') ORDER BY submittedAt DESC LIMIT 1",
+    ).get(userId)
+    return row ? this.toVerification(row) : undefined
+  }
+  latestVerificationForUser(userId: string): Verification | undefined {
+    const row = this.db.prepare('SELECT * FROM verifications WHERE userId = ? ORDER BY submittedAt DESC LIMIT 1').get(userId)
+    return row ? this.toVerification(row) : undefined
+  }
+  findVerification(id: string): Verification | undefined {
+    const row = this.db.prepare('SELECT * FROM verifications WHERE id = ?').get(id)
+    return row ? this.toVerification(row) : undefined
+  }
+  listVerifications(status?: VerificationStatus, limit?: number): Verification[] {
+    const rows = status
+      ? this.db.prepare('SELECT * FROM verifications WHERE status = ? ORDER BY submittedAt DESC' + (limit != null ? ' LIMIT ?' : '')).all(...(limit != null ? [status, limit] : [status]))
+      : this.db.prepare('SELECT * FROM verifications ORDER BY submittedAt DESC' + (limit != null ? ' LIMIT ?' : '')).all(...(limit != null ? [limit] : []))
+    return rows.map((r) => this.toVerification(r))
+  }
+  updateVerification(id: string, patch: Partial<Verification>): Verification | undefined {
+    const cur = this.findVerification(id)
+    if (!cur) return undefined
+    const next = { ...cur, ...patch, id: cur.id }
+    this.createVerification(next)
+    return next
+  }
+  decideVerification(id: string, patch: Partial<Verification>): Verification | undefined {
+    // 条件更新：仅当当前仍为 pending 才落更。WHERE status='pending' 让两位管理员竞态时恰好一人 changes===1。
+    const cur = this.findVerification(id)
+    if (!cur || cur.status !== 'pending') return undefined
+    const next = { ...cur, ...patch, id: cur.id }
+    const info = this.db.prepare(
+      `UPDATE verifications SET status=?, nameSealed=?, idNumberSealed=?, blobs=?, legalHold=?, decidedBy=?, decidedAt=?, rejectReasonCode=?, rejectReasonNote=?
+       WHERE id=? AND status='pending'`,
+    ).run(
+      next.status,
+      next.nameSealed ? JSON.stringify(next.nameSealed) : null,
+      next.idNumberSealed ? JSON.stringify(next.idNumberSealed) : null,
+      next.blobs ? JSON.stringify(next.blobs) : null,
+      next.legalHold ? 1 : 0,
+      next.decidedBy ?? null, next.decidedAt ?? null,
+      next.rejectReasonCode ?? null, next.rejectReasonNote ?? null, id,
+    )
+    return Number(info.changes) === 1 ? next : undefined
+  }
+  countPendingVerifications(): number {
+    const row = this.db.prepare("SELECT COUNT(*) AS n FROM verifications WHERE status = 'pending'").get() as { n: number }
+    return Number(row.n)
+  }
+  allVerifications(): Verification[] {
+    return this.db.prepare('SELECT * FROM verifications').all().map((r) => this.toVerification(r))
+  }
+  deleteVerificationsForUser(userId: string): void {
+    this.db.prepare('DELETE FROM verifications WHERE userId = ?').run(userId)
+  }
 
   // MARK: 站内通知
   createNotification(n: Notification): void {
@@ -558,7 +646,7 @@ export class SqliteStore implements Store {
     return { id: r.id, name: r.name, ownerId: r.ownerId, memberIds, createdAt: Number(r.createdAt) }
   }
   private toUser(r: any): User {
-    return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt), language: r.language ?? undefined, tokenVersion: r.tokenVersion != null ? Number(r.tokenVersion) : 0, email: r.email ?? undefined, emailVerified: r.emailVerified != null ? Number(r.emailVerified) === 1 : undefined, voipToken: r.voipToken ?? undefined, avatar: r.avatar ?? undefined, apnsToken: r.apnsToken ?? undefined, phone: r.phone ?? undefined, appleSub: r.appleSub ?? undefined, usernameCustomized: r.usernameCustomized != null ? Number(r.usernameCustomized) === 1 : undefined, legalConsentVersion: r.legalConsentVersion ?? undefined, legalConsentAt: r.legalConsentAt != null ? Number(r.legalConsentAt) : undefined, featureOverrides: parseJsonOrUndefined(r.featureOverrides), totpSecret: r.totpSecret ?? undefined, totpEnabled: r.totpEnabled != null ? Number(r.totpEnabled) === 1 : undefined, totpLastCounter: r.totpLastCounter != null ? Number(r.totpLastCounter) : undefined }
+    return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt), language: r.language ?? undefined, tokenVersion: r.tokenVersion != null ? Number(r.tokenVersion) : 0, email: r.email ?? undefined, emailVerified: r.emailVerified != null ? Number(r.emailVerified) === 1 : undefined, voipToken: r.voipToken ?? undefined, avatar: r.avatar ?? undefined, apnsToken: r.apnsToken ?? undefined, phone: r.phone ?? undefined, appleSub: r.appleSub ?? undefined, usernameCustomized: r.usernameCustomized != null ? Number(r.usernameCustomized) === 1 : undefined, legalConsentVersion: r.legalConsentVersion ?? undefined, legalConsentAt: r.legalConsentAt != null ? Number(r.legalConsentAt) : undefined, featureOverrides: parseJsonOrUndefined(r.featureOverrides), totpSecret: r.totpSecret ?? undefined, totpEnabled: r.totpEnabled != null ? Number(r.totpEnabled) === 1 : undefined, totpLastCounter: r.totpLastCounter != null ? Number(r.totpLastCounter) : undefined, identityVerified: r.identityVerified != null ? Number(r.identityVerified) === 1 : undefined }
   }
   private toLink(r: any): FamilyLink {
     return { id: r.id, ownerId: r.ownerId, memberId: r.memberId, relation: r.relation, isEmergency: Number(r.isEmergency) === 1, phone: r.phone ?? undefined, createdAt: Number(r.createdAt), status: (r.status as LinkStatus) ?? undefined, requestedBy: r.requestedBy ?? undefined }
@@ -580,5 +668,25 @@ export class SqliteStore implements Store {
   }
   private toNotification(r: any): Notification {
     return { id: r.id, userId: r.userId, kind: r.kind, title: r.title, body: r.body, data: parseJsonOrUndefined<Record<string, string>>(r.dataJson), createdAt: Number(r.createdAt), readAt: r.readAt != null ? Number(r.readAt) : undefined }
+  }
+  private toVerification(r: any): Verification {
+    return {
+      id: r.id, userId: r.userId, status: r.status as VerificationStatus, idType: r.idType,
+      idLast4: r.idLast4 ?? undefined,
+      nameSealed: parseJsonOrUndefined(r.nameSealed),
+      idNumberSealed: parseJsonOrUndefined(r.idNumberSealed),
+      blobs: parseJsonOrUndefined<KycBlobRef[]>(r.blobs),
+      submittedVia: (r.submittedVia ?? 'self') as 'self' | 'assisted',
+      submittedById: r.submittedById ?? r.userId,
+      consentToken: r.consentToken ?? undefined,
+      consentVersion: r.consentVersion ?? undefined,
+      legalHold: r.legalHold != null ? Number(r.legalHold) === 1 : undefined,
+      submittedAt: Number(r.submittedAt),
+      decidedBy: r.decidedBy ?? undefined,
+      decidedAt: r.decidedAt != null ? Number(r.decidedAt) : undefined,
+      rejectReasonCode: r.rejectReasonCode ?? undefined,
+      rejectReasonNote: r.rejectReasonNote ?? undefined,
+      attempt: r.attempt != null ? Number(r.attempt) : 1,
+    }
   }
 }

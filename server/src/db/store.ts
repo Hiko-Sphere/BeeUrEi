@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { dirname } from 'node:path'
+import type { Sealed } from '../kyc/crypto' // 仅类型导入（编译期擦除）——不触发 crypto 的 KYC_ENC_KEY 启动校验
 
 /// 角色（见 PLAN §14.2）。admin/developer 不可自助注册，由后台分配。
 export type Role = 'blind' | 'helper' | 'family' | 'admin' | 'developer'
@@ -33,6 +34,9 @@ export interface User {
   totpSecret?: string
   totpEnabled?: boolean
   totpLastCounter?: number // 上次已接受的 TOTP 时间步计数：拒绝 <= 此值的码，使每个 TOTP 单次有效（防 ±窗口内重放）
+  // 实名认证（KYC，管理员人工审核通过）。仅此布尔进对外视图——真实姓名/证件绝不经此外泄，
+  // 明文姓名仅在 admin 审核详情端点解密一次（审计留痕），证件图片落隔离加密目录、审核后按留存策略清除。
+  identityVerified?: boolean
 }
 
 /// 一次性恢复码（2FA）：丢失验证器时用。库里只存 SHA-256 哈希，明文仅生成时给用户一次。
@@ -128,7 +132,7 @@ export interface AdminAuditEntry {
   id: string
   adminId: string
   action: string      // 如 user.ban / user.role / report.moderate / config.update
-  targetType: string  // user | report | config | recording
+  targetType: string  // user | report | config | recording | kyc
   targetId: string
   detail?: string     // 补充（如 reason、from→to）
   at: number
@@ -309,6 +313,48 @@ export interface Recording {
   deletedAt?: number       // 用户软删除时间戳（undefined=未删）
 }
 
+/// 实名认证（KYC）：真实姓名 + 政府证件 + 自拍 → 管理员人工审核 → 通过/拒绝。
+/// 无第三方自动核验、无 mock 自动通过：审核完全由真人管理员完成。
+/// 状态机：pending → verified | rejected；拒绝后可重新提交（新建一条 pending）。
+/// 同一用户同一时刻只允许一条「活跃」记录（pending 或 verified）——应用层守卫 + sqlite 部分唯一索引双保险。
+export type VerificationStatus = 'pending' | 'verified' | 'rejected'
+export type KycDocKind = 'front' | 'back' | 'selfie'
+export type KycIdType = 'national_id' | 'passport' | 'drivers_license' | 'residence_permit'
+
+/// 一张证件图片的引用：密文落 KYC_DIR 磁盘（文件名=blobId），信封参数 sealed 存库。
+export interface KycBlobRef {
+  kind: KycDocKind
+  blobId: string // 服务端 UUID = 磁盘文件名
+  sealed: Sealed // AES-256-GCM 信封（kyc/crypto），不含 ct（密文在磁盘）
+  mime: string // 'image/jpeg' | 'image/png'（归一化后）
+}
+
+export interface Verification {
+  id: string
+  userId: string
+  status: VerificationStatus
+  idType: KycIdType
+  idLast4?: string // 明文，非 PII，仅用于客服核对/去重展示
+  // —— 加密小字段（决策后按策略清空）——
+  nameSealed?: Sealed // AES-256-GCM(法定姓名)；通过后保留（徽章法律依据），拒绝即清
+  idNumberSealed?: Sealed // AES-256-GCM(完整证件号)；任何决策后立即清
+  // —— 加密证件图片（密文落盘，引用存此）——
+  blobs?: KycBlobRef[] // 正面(+反面) + 自拍；决策后清空（文件删除）
+  // —— 提交来源（v1 恒为 self；列已就绪，v1.1 亲友协助提交为 additive 扩展）——
+  submittedVia: 'self' | 'assisted'
+  submittedById: string // v1 === userId
+  consentToken?: string // v1.1 亲友协助提交的一次性同意令牌
+  consentVersion?: string // 提交时已确认的 KYC 同意版本
+  // —— 审核 ——
+  legalHold?: boolean // 管理员法务保留：豁免留存清除（取证）
+  submittedAt: number
+  decidedBy?: string // 审核管理员 id（或 'system' 表示留存清扫自动拒）
+  decidedAt?: number
+  rejectReasonCode?: string // 枚举（blurry/glare/name_mismatch/... | timeout | revoked）
+  rejectReasonNote?: string
+  attempt: number // 第几次提交（1,2,3…），重新提交递增
+}
+
 /// 聊天消息（单聊=accepted 绑定互发；群聊=群成员互发）。
 /// kind=audio/image 时 text 为 data URL；kind=video 时 text 为 mediaId（服务器磁盘文件）；
 /// kind=recalled 为已撤回占位（text 清空）。
@@ -425,6 +471,18 @@ export interface Store {
   reportsCitingRecording(recordingId: string): Report[] // 引用某录制作为证据的举报（留存保护用）
   deleteRecording(id: string): void
 
+  // 实名认证（KYC）
+  createVerification(v: Verification): void
+  getActiveVerificationForUser(userId: string): Verification | undefined // 活跃记录（pending|verified），最新一条——一人一活跃守卫
+  latestVerificationForUser(userId: string): Verification | undefined // 含 rejected 的最新一条——展示拒绝原因/可否重提
+  findVerification(id: string): Verification | undefined
+  listVerifications(status?: VerificationStatus, limit?: number): Verification[] // 审核队列，submittedAt 倒序
+  updateVerification(id: string, patch: Partial<Verification>): Verification | undefined
+  decideVerification(id: string, patch: Partial<Verification>): Verification | undefined // 条件更新：仅当 status==='pending' 才生效；竞态败者返回 undefined（恰好一次决策）
+  countPendingVerifications(): number
+  allVerifications(): Verification[] // 留存清扫用
+  deleteVerificationsForUser(userId: string): void // 级联删除用
+
   // 站内通知（持久化收件箱）
   createNotification(n: Notification): void
   notificationsForUser(userId: string, limit?: number): Notification[] // 时间倒序
@@ -473,6 +531,7 @@ export class MemoryStore implements Store {
   protected callRecords = new Map<string, CallRecord>()
   protected reports = new Map<string, Report>()
   protected recordings = new Map<string, Recording>()
+  protected verifications = new Map<string, Verification>()
   protected refreshTokens = new Map<string, RefreshToken>()
   protected recoveryCodes = new Map<string, RecoveryCode>() // 2FA 一次性恢复码（仅哈希），键为 id
   protected passkeys = new Map<string, Passkey>()
@@ -770,6 +829,58 @@ export class MemoryStore implements Store {
   reportsCitingRecording(recordingId: string): Report[] {
     return [...this.reports.values()].filter((r) => r.evidenceRecordingId === recordingId)
   }
+  createVerification(v: Verification): void {
+    this.verifications.set(v.id, v)
+    this.afterMutate()
+  }
+  getActiveVerificationForUser(userId: string): Verification | undefined {
+    return [...this.verifications.values()]
+      .filter((v) => v.userId === userId && (v.status === 'pending' || v.status === 'verified'))
+      .sort((a, b) => b.submittedAt - a.submittedAt)[0]
+  }
+  latestVerificationForUser(userId: string): Verification | undefined {
+    return [...this.verifications.values()]
+      .filter((v) => v.userId === userId)
+      .sort((a, b) => b.submittedAt - a.submittedAt)[0]
+  }
+  findVerification(id: string): Verification | undefined {
+    return this.verifications.get(id)
+  }
+  listVerifications(status?: VerificationStatus, limit?: number): Verification[] {
+    const all = [...this.verifications.values()]
+      .filter((v) => (status ? v.status === status : true))
+      .sort((a, b) => b.submittedAt - a.submittedAt)
+    return limit != null ? all.slice(0, limit) : all
+  }
+  updateVerification(id: string, patch: Partial<Verification>): Verification | undefined {
+    const v = this.verifications.get(id)
+    if (!v) return undefined
+    const next = { ...v, ...patch, id: v.id }
+    this.verifications.set(id, next)
+    this.afterMutate()
+    return next
+  }
+  decideVerification(id: string, patch: Partial<Verification>): Verification | undefined {
+    const v = this.verifications.get(id)
+    if (!v || v.status !== 'pending') return undefined // 条件更新：只对 pending 生效；竞态败者返回 undefined
+    const next = { ...v, ...patch, id: v.id }
+    this.verifications.set(id, next)
+    this.afterMutate()
+    return next
+  }
+  countPendingVerifications(): number {
+    let n = 0
+    for (const v of this.verifications.values()) if (v.status === 'pending') n++
+    return n
+  }
+  allVerifications(): Verification[] {
+    return [...this.verifications.values()]
+  }
+  deleteVerificationsForUser(userId: string): void {
+    let changed = false
+    for (const [id, v] of this.verifications) if (v.userId === userId) { this.verifications.delete(id); changed = true }
+    if (changed) this.afterMutate()
+  }
   deleteRecording(id: string): void {
     if (this.recordings.delete(id)) this.afterMutate()
   }
@@ -930,6 +1041,7 @@ export class JsonFileStore extends MemoryStore {
           callRecords?: CallRecord[]
           reports?: Report[]
           recordings?: Recording[]
+          verifications?: Verification[]
           refreshTokens?: RefreshToken[]
           recoveryCodes?: RecoveryCode[]
           recordingConfig?: RecordingConfig
@@ -949,6 +1061,7 @@ export class JsonFileStore extends MemoryStore {
         for (const c of data.callRecords ?? []) this.callRecords.set(c.id, c)
         for (const r of data.reports ?? []) this.reports.set(r.id, r)
         for (const rec of data.recordings ?? []) this.recordings.set(rec.id, rec)
+        for (const v of data.verifications ?? []) this.verifications.set(v.id, v)
         for (const rt of data.refreshTokens ?? []) this.refreshTokens.set(rt.tokenHash, rt)
         for (const rc of data.recoveryCodes ?? []) this.recoveryCodes.set(rc.id, rc)
         if (data.recordingConfig) this.recordingConfig = data.recordingConfig
@@ -976,6 +1089,7 @@ export class JsonFileStore extends MemoryStore {
       callRecords: [...this.callRecords.values()],
       reports: [...this.reports.values()],
       recordings: [...this.recordings.values()],
+      verifications: [...this.verifications.values()],
       refreshTokens: [...this.refreshTokens.values()],
       recoveryCodes: [...this.recoveryCodes.values()],
       recordingConfig: this.recordingConfig,
@@ -1009,7 +1123,7 @@ export function isBlockedBetween(store: Store, a: string, b: string): boolean {
 
 /// 对外暴露的安全用户字段（不含 passwordHash / email；用于管理员列表、亲友等场景）。
 export function publicUser(u: User) {
-  return { id: u.id, username: u.username, displayName: u.displayName, role: u.role, status: u.status, avatar: u.avatar ?? null }
+  return { id: u.id, username: u.username, displayName: u.displayName, role: u.role, status: u.status, avatar: u.avatar ?? null, verified: u.identityVerified ?? false }
 }
 
 /// 本人视图（/api/me）：在 publicUser 基础上加自己的邮箱/手机号/语言/验证状态（仅本人可见）。

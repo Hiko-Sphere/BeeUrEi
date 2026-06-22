@@ -7,9 +7,9 @@ import {
   generateAuthenticationOptions,
   verifyAuthenticationResponse,
 } from '@simplewebauthn/server'
-import { type Store, type User, type Passkey, selfView } from '../db/store'
+import { type Store, type Passkey, selfView } from '../db/store'
 import { requireAuth } from '../auth/rbac'
-import { signAccessToken, generateRefreshToken, hashToken, refreshTtlMs } from '../auth/tokens'
+import { issueTokens, deviceLabelFromReq } from '../auth/session'
 
 // RP（依赖方）配置：必须与 iOS Associated Domains 的 webcredentials 域一致，且该域需托管
 // apple-app-site-association 文件。默认 beeurei-api.hikosphere.com——API 子域由本服务直接
@@ -33,13 +33,6 @@ class ChallengeStore {
     if (!e || e.expiresAt < Date.now()) return undefined
     return e.challenge
   }
-}
-
-function issueTokens(store: Store, user: User): { token: string; refreshToken: string } {
-  const token = signAccessToken({ sub: user.id, role: user.role, tv: user.tokenVersion ?? 0 })
-  const refreshToken = generateRefreshToken()
-  store.createRefreshToken({ tokenHash: hashToken(refreshToken), userId: user.id, expiresAt: Date.now() + refreshTtlMs })
-  return { token, refreshToken }
 }
 
 /// Passkey（WebAuthn）注册与登录。用 @simplewebauthn/server 做权威验签。
@@ -150,7 +143,7 @@ export function registerPasskeyRoutes(app: FastifyInstance, store: Store): void 
     }
     if (!verification.verified) return reply.code(401).send({ error: 'verification_failed' })
     store.updatePasskeyCounter(passkey.id, verification.authenticationInfo.newCounter)
-    const tokens = issueTokens(store, user)
+    const tokens = issueTokens(store, user, { deviceLabel: deviceLabelFromReq(req.headers, (req.body as { deviceName?: string } | undefined)?.deviceName) })
     return reply.send({ ...tokens, user: selfView(user) })
   })
 

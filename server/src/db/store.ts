@@ -267,6 +267,19 @@ export interface RefreshToken {
   tokenHash: string
   userId: string
   expiresAt: number
+  sessionId?: string  // 会话 ID：跨 refresh 轮换保持不变，标识一台设备的登录会话（「登录设备」列表/按设备登出）
+  deviceLabel?: string // 设备友好标签（如 "iPhone"/"Chrome · Mac"），展示用
+  createdAt?: number   // 会话创建（首次登录）时间
+  lastSeenAt?: number  // 最近一次活动（refresh）时间
+}
+
+/// 一个登录会话（去 token 哈希后对外展示）。
+export interface SessionInfo {
+  sessionId: string
+  deviceLabel?: string
+  createdAt?: number
+  lastSeenAt?: number
+  expiresAt: number
 }
 
 /// 录制策略（Q6）：默认不录、需同意、到期自动删。
@@ -381,6 +394,11 @@ export interface Store {
   deleteRefreshToken(tokenHash: string): void
   deleteRefreshTokensForUser(userId: string): void
   countSessionsForUser(userId: string, nowMs: number): number // 未过期 refresh token 数（活跃会话数，供后台展示）
+  // 登录设备/会话管理
+  sessionsForUser(userId: string, nowMs: number): SessionInfo[] // 该用户未过期的会话（按 sessionId，最近活动倒序）
+  hasActiveSession(userId: string, sessionId: string, nowMs: number): boolean // 该会话是否仍有未过期 refresh token（撤销即令其 access 立即失效）
+  revokeSession(userId: string, sessionId: string): void // 删除该会话的所有 refresh token（远程登出某设备）
+  revokeOtherSessions(userId: string, keepSessionId: string): void // 删除除当前外的所有会话（登出其它设备）
 
   // 2FA 恢复码（一次性）：启用 2FA 时整批替换；登录时按哈希消费一个。
   replaceRecoveryCodes(userId: string, hashes: string[]): void // 整批替换（清旧 + 写新）
@@ -487,6 +505,32 @@ export class MemoryStore implements Store {
     let n = 0
     for (const v of this.refreshTokens.values()) if (v.userId === userId && v.expiresAt > nowMs) n++
     return n
+  }
+  sessionsForUser(userId: string, nowMs: number): SessionInfo[] {
+    const out = new Map<string, SessionInfo>()
+    for (const v of this.refreshTokens.values()) {
+      if (v.userId !== userId || v.expiresAt <= nowMs || !v.sessionId) continue
+      const prev = out.get(v.sessionId)
+      // 同会话理论上轮换后只剩一条；保险起见取最近活动的一条。
+      if (!prev || (v.lastSeenAt ?? 0) > (prev.lastSeenAt ?? 0)) {
+        out.set(v.sessionId, { sessionId: v.sessionId, deviceLabel: v.deviceLabel, createdAt: v.createdAt, lastSeenAt: v.lastSeenAt, expiresAt: v.expiresAt })
+      }
+    }
+    return [...out.values()].sort((a, b) => (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0))
+  }
+  hasActiveSession(userId: string, sessionId: string, nowMs: number): boolean {
+    for (const v of this.refreshTokens.values()) if (v.userId === userId && v.sessionId === sessionId && v.expiresAt > nowMs) return true
+    return false
+  }
+  revokeSession(userId: string, sessionId: string): void {
+    let changed = false
+    for (const [k, v] of this.refreshTokens) if (v.userId === userId && v.sessionId === sessionId) { this.refreshTokens.delete(k); changed = true }
+    if (changed) this.afterMutate()
+  }
+  revokeOtherSessions(userId: string, keepSessionId: string): void {
+    let changed = false
+    for (const [k, v] of this.refreshTokens) if (v.userId === userId && v.sessionId !== keepSessionId) { this.refreshTokens.delete(k); changed = true }
+    if (changed) this.afterMutate()
   }
 
   replaceRecoveryCodes(userId: string, hashes: string[]): void {

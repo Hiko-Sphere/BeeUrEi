@@ -25,6 +25,7 @@ export interface TokenPayload {
   sub: string
   role: string
   tv?: number // tokenVersion：与库中用户的 tokenVersion 比对；改密/封禁递增即令旧 access token 立即失效（见审查 #1/#2）
+  sid?: string // 会话 ID：标识这台设备的登录会话，跨 refresh 轮换保持不变。用于「登录设备」列表与按设备远程登出（撤销该会话即令其 access token 立即失效）。
 }
 
 export function signAccessToken(payload: TokenPayload): string {
@@ -36,7 +37,8 @@ export function verifyAccessToken(token: string): TokenPayload | null {
     const decoded = jwt.verify(token, SECRET) as jwt.JwtPayload
     if (typeof decoded.sub !== 'string' || typeof decoded.role !== 'string') return null
     const tv = typeof decoded.tv === 'number' ? decoded.tv : 0
-    return { sub: decoded.sub, role: decoded.role, tv }
+    const sid = typeof decoded.sid === 'string' ? decoded.sid : undefined
+    return { sub: decoded.sub, role: decoded.role, tv, sid }
   } catch {
     return null
   }

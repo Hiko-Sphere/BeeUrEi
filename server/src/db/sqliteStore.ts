@@ -2,7 +2,7 @@ import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, ChatMessage, ChatGroup, MediaMeta, Passkey, AdminAuditEntry, Warning, AppConfig, AppConfigPatch, Notification } from './store'
+import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, SessionInfo, ChatMessage, ChatGroup, MediaMeta, Passkey, AdminAuditEntry, Warning, AppConfig, AppConfigPatch, Notification } from './store'
 import { normalizeAppConfig, mergeAppConfig } from './store'
 
 // 用运行时 require + 非静态模块名加载 node:sqlite，避免打包器(vitest/vite)静态解析失败；
@@ -109,16 +109,23 @@ export class SqliteStore implements Store {
     // 2FA 一次性恢复码（仅存 SHA-256 哈希）。
     this.db.exec('CREATE TABLE IF NOT EXISTS recovery_codes (id TEXT PRIMARY KEY, userId TEXT, codeHash TEXT, usedAt INTEGER)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_recovery_user ON recovery_codes (userId)')
+    // 登录会话/设备：在 refresh_tokens 上加会话标识与设备/时间元数据（增量迁移）。
+    try { this.db.exec('ALTER TABLE refresh_tokens ADD COLUMN sessionId TEXT') } catch { /* 列已存在 */ }
+    try { this.db.exec('ALTER TABLE refresh_tokens ADD COLUMN deviceLabel TEXT') } catch { /* 列已存在 */ }
+    try { this.db.exec('ALTER TABLE refresh_tokens ADD COLUMN createdAt INTEGER') } catch { /* 列已存在 */ }
+    try { this.db.exec('ALTER TABLE refresh_tokens ADD COLUMN lastSeenAt INTEGER') } catch { /* 列已存在 */ }
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_refresh_user ON refresh_tokens (userId)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_refresh_session ON refresh_tokens (userId, sessionId)')
   }
 
   // MARK: refresh tokens
   createRefreshToken(rt: RefreshToken): void {
-    this.db.prepare('INSERT OR REPLACE INTO refresh_tokens (tokenHash, userId, expiresAt) VALUES (?, ?, ?)')
-      .run(rt.tokenHash, rt.userId, rt.expiresAt)
+    this.db.prepare('INSERT OR REPLACE INTO refresh_tokens (tokenHash, userId, expiresAt, sessionId, deviceLabel, createdAt, lastSeenAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(rt.tokenHash, rt.userId, rt.expiresAt, rt.sessionId ?? null, rt.deviceLabel ?? null, rt.createdAt ?? null, rt.lastSeenAt ?? null)
   }
   findRefreshToken(tokenHash: string): RefreshToken | undefined {
     const row = this.db.prepare('SELECT * FROM refresh_tokens WHERE tokenHash = ?').get(tokenHash) as any
-    return row ? { tokenHash: row.tokenHash, userId: row.userId, expiresAt: Number(row.expiresAt) } : undefined
+    return row ? { tokenHash: row.tokenHash, userId: row.userId, expiresAt: Number(row.expiresAt), sessionId: row.sessionId ?? undefined, deviceLabel: row.deviceLabel ?? undefined, createdAt: row.createdAt != null ? Number(row.createdAt) : undefined, lastSeenAt: row.lastSeenAt != null ? Number(row.lastSeenAt) : undefined } : undefined
   }
   deleteRefreshToken(tokenHash: string): void {
     this.db.prepare('DELETE FROM refresh_tokens WHERE tokenHash = ?').run(tokenHash)
@@ -129,6 +136,23 @@ export class SqliteStore implements Store {
   countSessionsForUser(userId: string, nowMs: number): number {
     const row = this.db.prepare('SELECT COUNT(*) AS n FROM refresh_tokens WHERE userId = ? AND expiresAt > ?').get(userId, nowMs) as { n: number }
     return Number(row.n)
+  }
+  sessionsForUser(userId: string, nowMs: number): SessionInfo[] {
+    const rows = this.db.prepare(
+      `SELECT sessionId, MAX(deviceLabel) AS deviceLabel, MIN(createdAt) AS createdAt, MAX(lastSeenAt) AS lastSeenAt, MAX(expiresAt) AS expiresAt
+       FROM refresh_tokens WHERE userId = ? AND expiresAt > ? AND sessionId IS NOT NULL
+       GROUP BY sessionId ORDER BY lastSeenAt DESC`,
+    ).all(userId, nowMs) as any[]
+    return rows.map((r) => ({ sessionId: r.sessionId, deviceLabel: r.deviceLabel ?? undefined, createdAt: r.createdAt != null ? Number(r.createdAt) : undefined, lastSeenAt: r.lastSeenAt != null ? Number(r.lastSeenAt) : undefined, expiresAt: Number(r.expiresAt) }))
+  }
+  hasActiveSession(userId: string, sessionId: string, nowMs: number): boolean {
+    return !!this.db.prepare('SELECT 1 FROM refresh_tokens WHERE userId = ? AND sessionId = ? AND expiresAt > ? LIMIT 1').get(userId, sessionId, nowMs)
+  }
+  revokeSession(userId: string, sessionId: string): void {
+    this.db.prepare('DELETE FROM refresh_tokens WHERE userId = ? AND sessionId = ?').run(userId, sessionId)
+  }
+  revokeOtherSessions(userId: string, keepSessionId: string): void {
+    this.db.prepare('DELETE FROM refresh_tokens WHERE userId = ? AND sessionId != ?').run(userId, keepSessionId)
   }
 
   // MARK: 2FA 恢复码

@@ -123,6 +123,32 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     return { ok: true, recoveryCodes: codes }
   })
 
+  // MARK: 登录设备 / 会话管理
+
+  // 列出我的登录会话（每台设备一条），标注当前这台。
+  app.get('/api/account/sessions', { preHandler: requireAuth() }, async (req) => {
+    const list = store.sessionsForUser(req.user!.sub, Date.now())
+    return { sessions: list.map((s) => ({ ...s, current: !!req.user!.sid && s.sessionId === req.user!.sid })) }
+  })
+
+  const sessionSchema = z.object({ sessionId: z.string().min(1) })
+
+  // 远程登出某台设备（删除其会话；其 access token 经 requireAuth 的会话存活检查立即失效）。
+  app.post('/api/account/sessions/revoke', { preHandler: requireAuth() }, async (req, reply) => {
+    const parsed = sessionSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    store.revokeSession(req.user!.sub, parsed.data.sessionId)
+    return { ok: true }
+  })
+
+  // 登出其它所有设备（保留当前这台）。
+  app.post('/api/account/sessions/revoke-others', { preHandler: requireAuth() }, async (req, reply) => {
+    const sid = req.user!.sid
+    if (!sid) return reply.code(400).send({ error: 'no_session' }) // 旧 token 无 sid，无法识别"当前"
+    store.revokeOtherSessions(req.user!.sub, sid)
+    return { ok: true }
+  })
+
   // 更新语言偏好：推送文案与求助匹配排序按此选语言。
   app.post('/api/account/language', { preHandler: requireAuth() }, async (req, reply) => {
     const parsed = languageSchema.safeParse(req.body)

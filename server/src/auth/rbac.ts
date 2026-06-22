@@ -42,11 +42,17 @@ export function requireAuth(roles?: Role[]) {
       reply.code(401).send({ error: 'token_revoked' })
       return reply
     }
+    // 会话级撤销：该 access token 所属会话已被「按设备登出」删除（其 refresh token 已不存在）→ 立即失效，
+    // 把"远程登出某设备对在线 access token 的生效延迟"从 1h TTL 降为 0。无 sid 的旧 token 跳过（向后兼容）。
+    if (token.sid && authStore && !authStore.hasActiveSession(token.sub, token.sid, Date.now())) {
+      reply.code(401).send({ error: 'session_revoked' })
+      return reply
+    }
     if (roles && !roles.includes(current.role)) {
       reply.code(403).send({ error: 'forbidden' })
       return reply
     }
     // 用库中最新的 role（防止改角色后旧 token 沿用旧角色）。
-    req.user = { sub: token.sub, role: current.role, tv: current.tokenVersion ?? 0 }
+    req.user = { sub: token.sub, role: current.role, tv: current.tokenVersion ?? 0, sid: token.sid }
   }
 }

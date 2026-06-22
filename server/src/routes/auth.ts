@@ -3,21 +3,14 @@ import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import { type Store, type Role, type User, selfView } from '../db/store'
 import { hashPassword, verifyPassword } from '../auth/passwords'
-import { signAccessToken, generateRefreshToken, hashToken, refreshTtlMs } from '../auth/tokens'
+import { hashToken, generateRefreshToken } from '../auth/tokens'
+import { issueTokens, deviceLabelFromReq } from '../auth/session'
 import { totpMatchedCounter, hashRecoveryCode } from '../auth/totp'
 import { normalizePhone, type AppleTokenVerifier } from '../auth/apple'
 import { type CodeRegistry } from '../auth/codes'
 import { type Mailer } from '../mail/mailer'
 import { loginCodeMail } from '../mail/templates'
 import { CodeSendLimiter } from '../auth/sendLimiter'
-
-/// 签发 access + refresh 一对（refresh 仅存哈希）。
-function issueTokens(store: Store, user: User): { token: string; refreshToken: string } {
-  const token = signAccessToken({ sub: user.id, role: user.role, tv: user.tokenVersion ?? 0 })
-  const refreshToken = generateRefreshToken()
-  store.createRefreshToken({ tokenHash: hashToken(refreshToken), userId: user.id, expiresAt: Date.now() + refreshTtlMs })
-  return { token, refreshToken }
-}
 
 const refreshSchema = z.object({ refreshToken: z.string().min(1) })
 
@@ -123,7 +116,7 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
       usernameCustomized: !!rawUsername, // 显式给了用户名=已自定义；自动生成的为 false，客户端会提示设置唯一 userid
     }
     store.createUser(user)
-    const tokens = issueTokens(store, user)
+    const tokens = issueTokens(store, user, { deviceLabel: deviceLabelFromReq(req.headers, (req.body as { deviceName?: string } | undefined)?.deviceName) })
     // created=true：客户端据此走"选择身份→设置 userid→绑定邮箱"的新账号引导（角色在引导里选，全方法统一）。
     return reply.code(201).send({ ...tokens, user: selfView(user), created: true })
   })
@@ -151,7 +144,7 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     // 两步验证：密码已校验通过后，再要求 TOTP/恢复码（已开启时）。
     const tf = passTwoFactor(store, user, parsed.data.totpCode, Date.now())
     if (!tf.ok) return twoFactorReply(reply, tf.reason!)
-    const tokens = issueTokens(store, user)
+    const tokens = issueTokens(store, user, { deviceLabel: deviceLabelFromReq(req.headers, (req.body as { deviceName?: string } | undefined)?.deviceName) })
     return reply.send({ ...tokens, user: selfView(user) })
   })
 
@@ -176,7 +169,7 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
         // 让用户先用密码+TOTP 正常登录，再在「账号与安全」主动绑定 Apple（POST /api/account/apple，已 requireAuth）。
         if (byEmail.totpEnabled) return reply.code(409).send({ error: 'two_factor_link_required' })
         const linked = store.updateUser(byEmail.id, { appleSub: identity.sub, emailVerified: true }) ?? byEmail
-        const tokens = issueTokens(store, linked)
+        const tokens = issueTokens(store, linked, { deviceLabel: deviceLabelFromReq(req.headers, (req.body as { deviceName?: string } | undefined)?.deviceName) })
         return reply.send({ ...tokens, user: selfView(linked) }) // 登录已有账号，不是新建（无 created）
       }
     }
@@ -205,13 +198,13 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
         usernameCustomized: false, // 自动生成 apple_ 用户名，客户端会提示设置唯一 userid
       }
       store.createUser(user)
-      const tokens = issueTokens(store, user)
+      const tokens = issueTokens(store, user, { deviceLabel: deviceLabelFromReq(req.headers, (req.body as { deviceName?: string } | undefined)?.deviceName) })
       return reply.code(201).send({ ...tokens, user: selfView(user), created: true })
     }
     if (user.status === 'disabled') {
       return reply.code(403).send({ error: 'account_disabled' })
     }
-    const tokens = issueTokens(store, user)
+    const tokens = issueTokens(store, user, { deviceLabel: deviceLabelFromReq(req.headers, (req.body as { deviceName?: string } | undefined)?.deviceName) })
     return reply.send({ ...tokens, user: selfView(user) })
   })
 
@@ -231,7 +224,8 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
       return reply.code(401).send({ error: 'invalid_refresh_token' })
     }
     store.deleteRefreshToken(hash) // 轮换
-    const tokens = issueTokens(store, user)
+    // 续期：延续同一会话（sessionId 不变），更新 lastSeenAt，保留设备标签与创建时间——使「登录设备」列表稳定。
+    const tokens = issueTokens(store, user, { sid: rt.sessionId, deviceLabel: rt.deviceLabel, createdAt: rt.createdAt })
     return reply.send({ ...tokens, user: selfView(user) })
   })
 
@@ -303,7 +297,7 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
       }
       // 成功登录即证明邮箱归属 → 标记已验证。
       const updated = (existing.emailVerified ? existing : store.updateUser(existing.id, { emailVerified: true })) ?? existing
-      const tokens = issueTokens(store, updated)
+      const tokens = issueTokens(store, updated, { deviceLabel: deviceLabelFromReq(req.headers, (req.body as { deviceName?: string } | undefined)?.deviceName) })
       return reply.send({ ...tokens, user: selfView(updated) })
     }
     // 新邮箱注册：校验 signup 码 → 建号。注册关闭时拒绝新建（已有邮箱登录走上面分支不受影响）。
@@ -327,7 +321,7 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
       usernameCustomized: false,
     }
     store.createUser(user)
-    const tokens = issueTokens(store, user)
+    const tokens = issueTokens(store, user, { deviceLabel: deviceLabelFromReq(req.headers, (req.body as { deviceName?: string } | undefined)?.deviceName) })
     return reply.code(201).send({ ...tokens, user: selfView(user), created: true })
   })
 }

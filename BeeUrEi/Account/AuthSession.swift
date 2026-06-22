@@ -157,6 +157,7 @@ final class AuthSession {
                 if let rt { await api.revokeRefresh(token: token, refreshToken: rt) }
             }
         }
+        LiveLocationManager.shared.reset() // 停止位置共享/轮询，清联系人，防跨账号泄漏
         token = nil
         user = nil
         requiresSetup = false

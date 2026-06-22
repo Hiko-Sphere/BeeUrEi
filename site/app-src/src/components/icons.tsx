@@ -25,6 +25,7 @@ export const IconPlus = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><path
 export const IconSend = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><path d="M4 12 20 4l-6 16-3-7-7-1Z" /></svg>)
 export const IconCheck = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><path d="m5 13 4 4L19 7" /></svg>)
 export const IconX = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><path d="M6 6l12 12M18 6 6 18" /></svg>)
+export const IconPin = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11Z" /><circle cx="12" cy="10" r="2.6" /></svg>)
 export const IconLogo = (p: SVGProps<SVGSVGElement>) => (
   <svg width={p.width ?? 28} height={p.height ?? 28} viewBox="0 0 48 48" fill="none" {...p}>
     <path d="M24 4c8 0 14 5 14 13 0 6-4 9-4 13 0 6-4 11-10 11s-10-5-10-11c0-4-4-7-4-13C10 9 16 4 24 4Z" fill="var(--color-honey)" />

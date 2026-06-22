@@ -37,7 +37,11 @@ struct AMapRouteClient {
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard let http = resp as? HTTPURLResponse, http.statusCode < 400 else {
-            throw APIError.server("路线获取失败")
+            // 透传后端错误码（destination_not_found / amap_error / amap_not_configured / nav_unavailable），
+            // 供上层区分"找不到目的地"与"导航服务配置/不可用"，给盲人正确的失败原因（而非一律"路线获取失败"）。
+            struct ErrBody: Decodable { let error: String? }
+            let code = (try? JSONDecoder().decode(ErrBody.self, from: data))?.error ?? "nav_unavailable"
+            throw APIError.server(code)
         }
         return try JSONDecoder().decode(AMapWalkRoute.self, from: data)
     }

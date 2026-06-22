@@ -7,7 +7,7 @@ import {
   generateAuthenticationOptions,
   verifyAuthenticationResponse,
 } from '@simplewebauthn/server'
-import { type Store, type User, type Passkey, publicUser } from '../db/store'
+import { type Store, type User, type Passkey, selfView } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { signAccessToken, generateRefreshToken, hashToken, refreshTtlMs } from '../auth/tokens'
 
@@ -145,7 +145,7 @@ export function registerPasskeyRoutes(app: FastifyInstance, store: Store): void 
     if (!verification.verified) return reply.code(401).send({ error: 'verification_failed' })
     store.updatePasskeyCounter(passkey.id, verification.authenticationInfo.newCounter)
     const tokens = issueTokens(store, user)
-    return reply.send({ ...tokens, user: publicUser(user) })
+    return reply.send({ ...tokens, user: selfView(user) })
   })
 
   // 列出我的 passkey（账号管理）。

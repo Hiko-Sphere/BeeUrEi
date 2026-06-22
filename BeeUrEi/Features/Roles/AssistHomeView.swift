@@ -216,6 +216,21 @@ struct AssistHomeView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(HelperStrings.alwaysOnlineFooter(lang))
 
+                if session.features.locationSharing {
+                    Section {
+                        NavigationLink {
+                            LiveLocationView(isBlind: false)
+                        } label: {
+                            Label {
+                                VStack(alignment: .leading) {
+                                    Text(LiveLocationStrings.entryTitle(lang))
+                                    Text(LiveLocationStrings.entrySubtitle(lang)).font(.caption).foregroundStyle(.secondary)
+                                }
+                            } icon: { Image(systemName: "location.fill.viewfinder").foregroundStyle(Color.beeHoney) }
+                        }
+                    }
+                }
+
                 if pendingLinks.contains(where: { $0.isPending }) {
                     Section(HelperStrings.pendingHeader(lang)) {
                         ForEach(pendingLinks.filter { $0.isPending }) { l in

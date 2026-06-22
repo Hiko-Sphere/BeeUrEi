@@ -160,6 +160,11 @@ struct SettingsView: View {
             } label: {
                 Label(AccountStrings.myRecordings(lang), systemImage: "waveform.circle")
             }
+            NavigationLink {
+                LiveLocationView(isBlind: true)
+            } label: {
+                Label(LiveLocationStrings.entryTitle(lang), systemImage: "location.fill.viewfinder")
+            }
             NavigationLink(SettingsStrings.familyAndEmergency(lang)) { FamilyLinksView() }
         }
     }

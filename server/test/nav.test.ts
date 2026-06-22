@@ -41,10 +41,11 @@ describe('AMap walking nav proxy', () => {
   it('returns parsed steps when configured (mocked AMap)', async () => {
     process.env.AMAP_API_KEY = 'testkey'
     vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
+      ok: true, status: 200,
       json: async () =>
         url.includes('geocode')
-          ? { geocodes: [{ location: '116.397,39.908' }] }
-          : { route: { paths: [{ steps: [{ instruction: '向北步行', distance: '120' }, { instruction: '到达目的地', distance: '0' }] }] } },
+          ? { status: '1', infocode: '10000', geocodes: [{ location: '116.397,39.908' }] }
+          : { status: '1', infocode: '10000', route: { paths: [{ steps: [{ instruction: '向北步行', distance: '120' }, { instruction: '到达目的地', distance: '0' }] }] } },
     })))
     const app = buildApp(new MemoryStore())
     const t = await token(app)
@@ -58,6 +59,42 @@ describe('AMap walking nav proxy', () => {
     expect(body.destination).toBe('116.397,39.908')
     expect(body.steps[0]).toMatchObject({ instruction: '向北步行', distanceMeters: 120 })
     expect(body.steps.length).toBe(2)
+    await app.close()
+  })
+
+  it('AMap key 平台不符 → 502 amap_error + infocode（区别于 destination_not_found，不误导用户改地址）', async () => {
+    process.env.AMAP_API_KEY = 'ios_sdk_key'
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true, status: 200,
+      json: async () => ({ status: '0', info: 'USERKEY_PLAT_NOMATCH', infocode: '10009' }),
+    })))
+    const app = buildApp(new MemoryStore())
+    const t = await token(app)
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/nav/walking?originLat=39.9&originLon=116.4&destination=天安门',
+      headers: { authorization: `Bearer ${t}` },
+    })
+    expect(res.statusCode).toBe(502)
+    expect(res.json()).toMatchObject({ error: 'amap_error', infocode: '10009' })
+    await app.close()
+  })
+
+  it('地址真的查不到（status=1 但 geocodes 空）→ 404 destination_not_found', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true, status: 200,
+      json: async () => ({ status: '1', infocode: '10000', geocodes: [] }),
+    })))
+    const app = buildApp(new MemoryStore())
+    const t = await token(app)
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/nav/walking?originLat=39.9&originLon=116.4&destination=不存在的地方xyz',
+      headers: { authorization: `Bearer ${t}` },
+    })
+    expect(res.statusCode).toBe(404)
+    expect(res.json()).toMatchObject({ error: 'destination_not_found' })
     await app.close()
   })
 })

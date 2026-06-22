@@ -15,6 +15,7 @@ export interface ChatGroup { id: string; name: string; ownerId: string; memberId
 export interface GroupSummary { group: ChatGroup; members: User[]; last: ChatMessage | null; unread: number }
 export interface RecordingInfo { id: string; callId: string; ownerId: string; ownerName: string; reason: string; recordedAt: number; durationSec?: number | null; lat?: number | null; lon?: number | null; locationLabel?: string | null; participantIds: string[]; participantNames: string[]; hasMedia: boolean; deletedAt?: number | null }
 export interface NotificationInfo { id: string; userId: string; kind: string; title: string; body: string; data?: Record<string, string> | null; createdAt: number; readAt?: number | null }
+export interface ContactLocation { userId: string; displayName: string; avatar?: string | null; role: string; lat: number; lng: number; accuracy?: number | null; heading?: number | null; updatedAt: number }
 export interface AppConfig {
   features: Record<string, boolean>
   registrationEnabled: boolean
@@ -145,6 +146,12 @@ export const api = {
   heartbeat: (available = true) => post('/api/assist/heartbeat', { available }),
   helpQueue: () => get('/api/assist/help/queue') as Promise<{ requests: HelpRequest[]; count: number }>,
   claimHelp: (callId: string) => post('/api/assist/help/claim', { callId }) as Promise<{ request: { callId: string; fromName: string; fromAvatar?: string | null; language?: string | null; locality?: string | null; topic?: string | null } }>,
+
+  // 实时位置共享（与亲友/协助者互相可见；纯内存、按已接受绑定授权）
+  updateLocation: (body: { lat: number; lng: number; accuracy?: number; heading?: number; ttlSec?: number }) =>
+    post('/api/locations/update', body) as Promise<{ ok: boolean; sharingUntil: number }>,
+  stopSharingLocation: () => post('/api/locations/stop'),
+  contactLocations: () => get('/api/locations/contacts') as Promise<{ sharing: boolean; sharingUntil: number; contacts: ContactLocation[] }>,
 
   // 录制（知情同意握手 + 创建元数据；策略经 app-config 下发）
   recordingConsent: (callId: string, granted: boolean) => post('/api/recordings/consent', { callId, granted }),

@@ -64,6 +64,7 @@ struct RemoteFeatureFlags: Codable, Sendable, Equatable {
     var mediaUpload = true
     var navigation = true
     var sceneScan = true
+    var locationSharing = true
     static let allOn = RemoteFeatureFlags()
 
     init() {}
@@ -72,6 +73,7 @@ struct RemoteFeatureFlags: Codable, Sendable, Equatable {
         func b(_ k: CodingKeys) -> Bool { ((try? c.decodeIfPresent(Bool.self, forKey: k)) ?? nil) ?? true }
         messaging = b(.messaging); calls = b(.calls); helpRequests = b(.helpRequests); groups = b(.groups)
         familyLinks = b(.familyLinks); mediaUpload = b(.mediaUpload); navigation = b(.navigation); sceneScan = b(.sceneScan)
+        locationSharing = b(.locationSharing)
     }
 }
 
@@ -1160,4 +1162,45 @@ struct APIClient {
     func markAllNotificationsRead(token: String) async throws {
         _ = try await authedSend("POST", "/api/notifications/read-all", token: token)
     }
+
+    // MARK: 实时位置共享（与亲友/协助者互相可见；服务端纯内存、按已接受绑定授权）
+
+    /// 上报当前位置 + （重）激活共享。返回本次共享截止时刻（毫秒）。
+    @discardableResult
+    func updateLocation(token: String, lat: Double, lng: Double, accuracy: Double?, heading: Double?, ttlSec: Int? = nil) async throws -> Double {
+        var body: [String: Any] = ["lat": lat, "lng": lng]
+        if let accuracy, accuracy.isFinite, accuracy >= 0 { body["accuracy"] = accuracy }
+        if let heading, heading.isFinite, heading >= 0, heading <= 360 { body["heading"] = heading }
+        if let ttlSec { body["ttlSec"] = ttlSec }
+        let data = try await authedSend("POST", "/api/locations/update", token: token, body: body)
+        struct R: Codable { let sharingUntil: Double }
+        return (try? JSONDecoder().decode(R.self, from: data))?.sharingUntil ?? 0
+    }
+
+    /// 立即停止共享自己的位置。
+    func stopSharingLocation(token: String) async throws {
+        _ = try await authedSend("POST", "/api/locations/stop", token: token)
+    }
+
+    /// 拉取：我的共享状态 + 正在共享的联系人当前位置。
+    func contactLocations(token: String) async throws -> (sharing: Bool, sharingUntil: Double, contacts: [ContactLocationInfo]) {
+        struct R: Codable { let sharing: Bool; let sharingUntil: Double; let contacts: [ContactLocationInfo] }
+        let data = try await authedGet("/api/locations/contacts", token: token)
+        guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.decoding }
+        return (r.sharing, r.sharingUntil, r.contacts)
+    }
+}
+
+/// 正在共享位置的联系人（来自 GET /api/locations/contacts）。
+struct ContactLocationInfo: Codable, Identifiable {
+    let userId: String
+    let displayName: String
+    let avatar: String?
+    let role: String
+    let lat: Double
+    let lng: Double
+    let accuracy: Double?
+    let heading: Double?
+    let updatedAt: Double
+    var id: String { userId }
 }

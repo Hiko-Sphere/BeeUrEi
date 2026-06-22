@@ -72,15 +72,16 @@ targets:
           - arkit
         # 品牌化启动界面：墨蓝背景 + 居中蜂鸣 Logo（BeeUrEi/LaunchScreen.storyboard）。
         UILaunchStoryboardName: LaunchScreen
-        # 后台音频（通话期间锁屏仍可对讲）+ voip（A1 后台来电唤醒，需配合 PushKit/CallKit 与 APNs）。
+        # 后台音频（通话期间锁屏仍可对讲）+ voip（A1 后台来电唤醒）+ location（实时位置共享时熄屏/口袋仍持续上报）。
         UIBackgroundModes:
           - audio
           - voip
+          - location
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         # 这三段权限文案会原样显示在系统授权弹窗里（见 PLAN.md §7.4）
         NSCameraUsageDescription: "用于通过摄像头实时识别前方障碍并向你语音提示，以及在你呼叫志愿者时传输画面。"
-        NSLocationWhenInUseUsageDescription: "用于规划步行路线并播报你途经的路口与地标。"
+        NSLocationWhenInUseUsageDescription: "用于规划步行路线并播报你途经的路口与地标，以及在你开启时与亲友/协助者实时共享位置。"
         NSMicrophoneUsageDescription: "用于与远程志愿者实时语音交流、发送语音消息和语音指令。"
         NSLocalNetworkUsageDescription: "用于连接你自托管的 BeeUrEi 后端（局域网内）。"
         NSMotionUsageDescription: "用于 AirPods 头部追踪提升空间音方向准确度，以及检测疑似摔倒以便通知亲友。"

@@ -45,7 +45,15 @@ final class SpeechHub: NSObject {
     private func speakOnMain(_ text: String, channel: SpeechChannel, rate: Float?, voice: String?, droppable: Bool) {
         if UIAccessibility.isVoiceOverRunning {
             if droppable, safetyHold || synthesizer.isSpeaking { return }
-            UIAccessibility.post(notification: .announcement, argument: text)
+            // VoiceOver 串行播报：用公告优先级表达通道优先级，让时间攸关的内容（转向指令/识别结果）
+            // 不被信息性 callout（途经地标/进入路名，droppable）拖在队尾。
+            // droppable → .low：VoiceOver 正忙时直接丢弃（信息性可弃）；非 droppable → .default：排队必读。
+            // 避障的紧急警告仍以 .high 公告凌驾其上（SpeechFeedback），安全优先级不变。
+            let priority: UIAccessibilityPriority = droppable ? .low : .default
+            let announcement = NSAttributedString(string: text, attributes: [
+                .accessibilitySpeechAnnouncementPriority: priority,
+            ])
+            UIAccessibility.post(notification: .announcement, argument: announcement)
             return
         }
         let cur = synthesizer.isSpeaking ? current.map { (channel: $0.channel, droppable: $0.droppable) } : nil

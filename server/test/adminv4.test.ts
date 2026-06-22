@@ -27,7 +27,8 @@ describe('AppConfig 归一化/合并（向后兼容 + 逐键合并）', () => {
     const n = normalizeAppConfig({ registrationEnabled: false } as any)
     expect(n.registrationEnabled).toBe(false)
     expect(n.features.messaging).toBe(true)
-    expect(Object.keys(n.features).length).toBe(8)
+    expect(n.features.locationSharing).toBe(true)
+    expect(Object.keys(n.features).length).toBe(9)
   })
   it('merge 只改一个 feature 键，其它保持', () => {
     const merged = mergeAppConfig(DEFAULT_APP_CONFIG, { features: { messaging: false } })

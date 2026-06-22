@@ -305,7 +305,17 @@ final class NavigationViewModel {
                 }
             } catch {
                 guard running, gen == navGeneration else { return } // 过期/已停止任务的失败不得覆盖新会话状态（见审查 round5 #1）
-                failStatus(NavStrings.chinaRouteFailed(lang))
+                // 区分失败原因，给盲人正确的播报（而非一律"路线获取失败"误导其改地址）：
+                // destination_not_found=地址查不到；amap_error/amap_not_configured/nav_unavailable=服务侧问题。
+                if case let APIError.server(code) = error {
+                    switch code {
+                    case "destination_not_found": failStatus(NavStrings.destinationNotFound(lang))
+                    case "amap_error", "amap_not_configured", "nav_unavailable": failStatus(NavStrings.navServiceUnavailable(lang))
+                    default: failStatus(NavStrings.chinaRouteFailed(lang))
+                    }
+                } else {
+                    failStatus(NavStrings.chinaRouteFailed(lang))
+                }
             }
         case .overseas:
             // 重规划时复用已知目的地，不重复 geocode（少一个失败点、避免返回不同坐标，见审查 #2）。
@@ -520,7 +530,7 @@ final class NavigationViewModel {
                       let name = item.name, let ploc = item.placemark.location,
                       loc.distance(from: ploc) <= 60 else { return }
                 self.lastCalloutName = name
-                NavVoice.shared.speak(NavStrings.passingBy(name, self.lang), rate: FeatureSettings().speechRate)
+                NavVoice.shared.speakCallout(NavStrings.passingBy(name, self.lang)) // 信息性：让位于转向指令，繁忙时丢弃
             }
         }
     }
@@ -535,7 +545,7 @@ final class NavigationViewModel {
                 guard self.running else { return }
                 let road = placemarks?.first?.thoroughfare
                 if let name = self.roadAnnouncer.update(road: road, now: now) {
-                    NavVoice.shared.speak(NavStrings.enteringRoad(name, self.lang), rate: FeatureSettings().speechRate)
+                    NavVoice.shared.speakCallout(NavStrings.enteringRoad(name, self.lang)) // 信息性：让位于转向指令
                 }
             }
         }

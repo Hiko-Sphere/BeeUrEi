@@ -144,8 +144,9 @@ export type FeatureKey =
   | 'mediaUpload'  // 大文件（图片/视频）上传
   | 'navigation'   // 步行导航（高德路径）
   | 'sceneScan'    // 端侧"看一看"场景识别（仅客户端据此隐藏，无服务端调用可拦）
+  | 'locationSharing' // 与亲友/协助者实时共享位置
 
-export const FEATURE_KEYS: FeatureKey[] = ['messaging', 'calls', 'helpRequests', 'groups', 'familyLinks', 'mediaUpload', 'navigation', 'sceneScan']
+export const FEATURE_KEYS: FeatureKey[] = ['messaging', 'calls', 'helpRequests', 'groups', 'familyLinks', 'mediaUpload', 'navigation', 'sceneScan', 'locationSharing']
 
 /// 全站公告（管理员推送给所有 App 用户的横幅）。
 export interface Announcement {
@@ -175,7 +176,7 @@ export interface AppConfig {
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
   registrationEnabled: true,
-  features: { messaging: true, calls: true, helpRequests: true, groups: true, familyLinks: true, mediaUpload: true, navigation: true, sceneScan: true },
+  features: { messaging: true, calls: true, helpRequests: true, groups: true, familyLinks: true, mediaUpload: true, navigation: true, sceneScan: true, locationSharing: true },
   announcement: { active: false, message: '', level: 'info' },
   maintenance: { active: false, message: '' },
   contentFilter: { enabled: false, terms: [] },

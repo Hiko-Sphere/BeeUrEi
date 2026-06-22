@@ -6,7 +6,7 @@ import { api, type AppConfig } from '../lib/api'
 import { getTheme, setTheme, type Theme } from '../lib/theme'
 import { Avatar, Pill } from './ui'
 import { CallProvider } from '../pages/call/CallController'
-import { IconHome, IconPhone, IconChat, IconUsers, IconFilm, IconBell, IconUser, IconShield, IconLogo } from './icons'
+import { IconHome, IconPhone, IconChat, IconUsers, IconFilm, IconBell, IconUser, IconShield, IconLogo, IconPin } from './icons'
 
 const HEARTBEAT_MS = 25_000
 const LS_AVAIL = 'beeurei.web.available'
@@ -57,6 +57,7 @@ export function Layout({ children }: { children: ReactNode }) {
     { to: '/calls', label: t('通话', 'Calls'), icon: <IconPhone /> },
     { to: '/chat', label: t('消息', 'Chat'), icon: <IconChat /> },
     { to: '/family', label: t('亲友', 'Contacts'), icon: <IconUsers /> },
+    { to: '/locations', label: t('位置', 'Location'), icon: <IconPin /> },
     { to: '/recordings', label: t('录音', 'Recordings'), icon: <IconFilm /> },
     { to: '/notifications', label: t('通知', 'Alerts'), icon: <IconBell />, badge: unread },
     { to: '/account', label: t('账户', 'Account'), icon: <IconUser /> },
@@ -121,11 +122,11 @@ export function Layout({ children }: { children: ReactNode }) {
           <main className="min-w-0 flex-1">{children}</main>
         </div>
 
-        {/* 底部标签栏（移动） */}
-        <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-7 border-t border-[var(--line)] surface md:hidden" style={{ gridTemplateColumns: `repeat(${Math.min(nav.length, 7)},minmax(0,1fr))` }}>
-          {nav.slice(0, 7).map((n) => (
+        {/* 底部标签栏（移动）：横向可滚动，容纳全部入口，绝不裁切（任意角色项数都可达）。 */}
+        <nav className="fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t border-[var(--line)] surface md:hidden">
+          {nav.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.to === '/'}
-              className={({ isActive }) => `relative flex flex-col items-center gap-0.5 py-2 text-[10px] ${isActive ? 'text-honey' : 'text-faint'}`}>
+              className={({ isActive }) => `relative flex min-w-[3.6rem] flex-1 flex-col items-center gap-0.5 py-2 text-[10px] ${isActive ? 'text-honey' : 'text-faint'}`}>
               <span className="relative">{n.icon}{!!n.badge && n.badge > 0 && <span className="absolute -right-2 -top-1 rounded-full bg-danger px-1 text-[9px] font-bold text-white">{n.badge > 99 ? '99+' : n.badge}</span>}</span>
               {n.label}
             </NavLink>

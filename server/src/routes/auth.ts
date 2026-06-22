@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import { type Store, type Role, type User, publicUser } from '../db/store'
+import { type Store, type Role, type User, selfView } from '../db/store'
 import { hashPassword, verifyPassword } from '../auth/passwords'
 import { signAccessToken, generateRefreshToken, hashToken, refreshTtlMs } from '../auth/tokens'
 import { normalizePhone, type AppleTokenVerifier } from '../auth/apple'
@@ -102,7 +102,7 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     store.createUser(user)
     const tokens = issueTokens(store, user)
     // created=true：客户端据此走"选择身份→设置 userid→绑定邮箱"的新账号引导（角色在引导里选，全方法统一）。
-    return reply.code(201).send({ ...tokens, user: publicUser(user), created: true })
+    return reply.code(201).send({ ...tokens, user: selfView(user), created: true })
   })
 
   app.post('/api/auth/login', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
@@ -126,7 +126,7 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
       return reply.code(403).send({ error: 'account_disabled' })
     }
     const tokens = issueTokens(store, user)
-    return reply.send({ ...tokens, user: publicUser(user) })
+    return reply.send({ ...tokens, user: selfView(user) })
   })
 
   // Sign in with Apple：客户端送 identityToken，服务端验签（Apple JWKS + iss/aud/exp）后按 sub 登录/建号。
@@ -148,7 +148,7 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
         if (byEmail.status === 'disabled') return reply.code(403).send({ error: 'account_disabled' })
         const linked = store.updateUser(byEmail.id, { appleSub: identity.sub, emailVerified: true }) ?? byEmail
         const tokens = issueTokens(store, linked)
-        return reply.send({ ...tokens, user: publicUser(linked) }) // 登录已有账号，不是新建（无 created）
+        return reply.send({ ...tokens, user: selfView(linked) }) // 登录已有账号，不是新建（无 created）
       }
     }
     if (!user) {
@@ -177,13 +177,13 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
       }
       store.createUser(user)
       const tokens = issueTokens(store, user)
-      return reply.code(201).send({ ...tokens, user: publicUser(user), created: true })
+      return reply.code(201).send({ ...tokens, user: selfView(user), created: true })
     }
     if (user.status === 'disabled') {
       return reply.code(403).send({ error: 'account_disabled' })
     }
     const tokens = issueTokens(store, user)
-    return reply.send({ ...tokens, user: publicUser(user) })
+    return reply.send({ ...tokens, user: selfView(user) })
   })
 
   // 用 refresh token 换新的一对 token（轮换：旧 refresh 立即作废）。
@@ -203,7 +203,7 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     }
     store.deleteRefreshToken(hash) // 轮换
     const tokens = issueTokens(store, user)
-    return reply.send({ ...tokens, user: publicUser(user) })
+    return reply.send({ ...tokens, user: selfView(user) })
   })
 
   // 登出：撤销该 refresh token。
@@ -257,7 +257,7 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
       // 成功登录即证明邮箱归属 → 标记已验证。
       const updated = (existing.emailVerified ? existing : store.updateUser(existing.id, { emailVerified: true })) ?? existing
       const tokens = issueTokens(store, updated)
-      return reply.send({ ...tokens, user: publicUser(updated) })
+      return reply.send({ ...tokens, user: selfView(updated) })
     }
     // 新邮箱注册：校验 signup 码 → 建号。注册关闭时拒绝新建（已有邮箱登录走上面分支不受影响）。
     if (!store.getAppConfig().registrationEnabled) return reply.code(403).send({ error: 'registration_disabled' })
@@ -281,6 +281,6 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     }
     store.createUser(user)
     const tokens = issueTokens(store, user)
-    return reply.code(201).send({ ...tokens, user: publicUser(user), created: true })
+    return reply.code(201).send({ ...tokens, user: selfView(user), created: true })
   })
 }

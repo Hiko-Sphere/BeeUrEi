@@ -7,6 +7,7 @@ import { HomePage } from './pages/Home'
 import { CallsPage } from './pages/Calls'
 import { ChatPage } from './pages/Chat'
 import { FamilyPage } from './pages/Family'
+import { LocationsPage } from './pages/Locations'
 import { RecordingsPage } from './pages/Recordings'
 import { NotificationsPage } from './pages/Notifications'
 import { AccountPage } from './pages/Account'
@@ -32,6 +33,7 @@ export function App() {
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/chat/:peerId" element={<ChatPage />} />
         <Route path="/family" element={<FamilyPage />} />
+        <Route path="/locations" element={<LocationsPage />} />
         <Route path="/recordings" element={<RecordingsPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/account" element={<AccountPage />} />

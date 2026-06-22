@@ -32,6 +32,10 @@ enum NavStrings {
                  : "Couldn't fetch the route in China (sign in and connect to the backend)"
     }
     static func destinationNotFound(_ l: Language) -> String { l == .zh ? "找不到目的地" : "Destination not found" }
+    /// 高德服务侧错误（最常见：后端 AMAP_API_KEY 不是「Web服务」类型）。与"找不到目的地"区分，避免误导用户改地址。
+    static func navServiceUnavailable(_ l: Language) -> String {
+        l == .zh ? "导航服务暂时不可用，请稍后再试" : "Navigation service is temporarily unavailable, please try again later"
+    }
 
     // MARK: 导航开始
 

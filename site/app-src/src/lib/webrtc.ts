@@ -6,7 +6,7 @@
 // 信令协议与服务端 /ws（src/routes/ws.ts）严格一致：join / offer / answer / ice / video-gate /
 // control / record-request / record-consent / record-state / end / peer-left / obs-offer / obs-answer / obs-ice。
 import { wsURL } from './config'
-import { api, uploadMedia } from './api'
+import { api, uploadMedia, APIError } from './api'
 
 export type MediaState = 'connecting' | 'connected' | 'failed' | 'disconnected'
 export type Quality = 'unknown' | 'weak' | 'fair' | 'good'
@@ -26,6 +26,7 @@ export interface CallCallbacks {
   onRecordRequest?(): void
   onRecordConsentResult?(accepted: boolean): void
   onRecordingStateChange?(recording: boolean): void
+  onRecordingError?(reason: string): void
   onLastRecordingId?(id: string): void
   onMicDenied?(): void
   onEnded?(reason: 'peer' | 'admin' | 'signaling'): void
@@ -352,10 +353,14 @@ export class CallEngine {
       void this.beginRecording()
     }
   }
-  /// 对端请求录制本端 → 经鉴权端点权威告知服务端 + 回传 P2P 让对端尽快开录。
+  /// 对端请求录制本端 → 先经鉴权端点把同意**落到服务端**，成功后再回传 P2P 让对端开录——
+  /// 顺序很关键：确保对端 createRecording 时服务端已有这条同意，否则会被 400 consent_required 拒（见录制复审）。
   respondToRecordRequest(accepted: boolean) {
-    void api.recordingConsent(this.callId, accepted).catch(() => {})
-    this.send({ type: 'record-consent', accepted })
+    void (async () => {
+      try { await api.recordingConsent(this.callId, accepted) }
+      catch { /* 落库失败仍回传结果；对端若拿不到有效同意，其 createRecording 会被服务端拒，不会留假记录 */ }
+      this.send({ type: 'record-consent', accepted })
+    })()
   }
   private async beginRecording() {
     if (this.recording) return
@@ -413,7 +418,7 @@ export class CallEngine {
     const startedAt = this.recordStartedAt
     try { void this.audioCtx?.close() } catch { /* ignore */ }
     this.audioCtx = null
-    if (!chunks.length) return
+    if (!chunks.length) { this.cb.onRecordingError?.('empty'); return }
     const mime = this.recordMime || 'video/webm'
     const blob = new Blob(chunks, { type: mime })
     try {
@@ -421,7 +426,10 @@ export class CallEngine {
       const durationSec = Math.max(0, Math.round((performance.now() - startedAt) / 1000))
       const r = await api.createRecording({ callId: this.callId, reason: 'call', mediaId, durationSec })
       if (r?.recording?.id) this.cb.onLastRecordingId?.(r.recording.id)
-    } catch { /* 上传失败：不留假记录 */ }
+    } catch (e) {
+      // 不留假记录，但**告知用户**保存失败及原因（之前静默吞掉，用户只看到"没有录音"无从排查）。
+      this.cb.onRecordingError?.(e instanceof APIError ? e.code : 'upload_failed')
+    }
   }
 
   // ---------- 质量统计 ----------

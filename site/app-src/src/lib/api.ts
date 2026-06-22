@@ -223,7 +223,12 @@ export interface AdminActiveCall { callId: string; startedAt: number; durationSe
 // 上传媒体（聊天图片/视频/语音）：原始二进制 + content-type。
 export async function uploadMedia(blob: Blob, mime: string): Promise<string> {
   const res = await fetch(apiURL('/api/media'), { method: 'POST', headers: { 'content-type': mime, ...(tokenStore.token ? { authorization: 'Bearer ' + tokenStore.token } : {}) }, body: blob })
-  if (!res.ok) throw new APIError('upload_failed', res.status)
+  if (!res.ok) {
+    // 透传服务端错误码（unsupported_media_type / media_too_large / consent_required 等），便于排查与给用户准确反馈。
+    let code = 'upload_failed'
+    try { const j = await res.json() as { error?: string }; if (j?.error) code = j.error } catch { /* 非 JSON 错误体 */ }
+    throw new APIError(code, res.status)
+  }
   const j = await res.json() as { media: { id: string } }
   return j.media.id
 }

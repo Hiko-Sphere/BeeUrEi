@@ -9,14 +9,18 @@ import { ensureMediaDir, mediaPath, mediaFileExists } from '../media/storage'
 /// 单个媒体文件上限 50MB（约 1 分钟 720p H.264）；路由 bodyLimit 略放宽容纳传输开销。
 export const MAX_MEDIA_BYTES = 50 * 1024 * 1024
 
-const allowedMimes = new Set(['video/mp4', 'video/quicktime'])
+// iOS 录制/视频消息为 .mov(quicktime)/.mp4；浏览器 MediaRecorder 通话录制为 webm（Chrome）或 mp4（Safari），
+// 纯音频录制为 webm/mp4 音频。都需接受，否则网页端录制上传被拒、无法保存（见录制反馈）。
+const allowedMimes = new Set(['video/mp4', 'video/quicktime', 'video/webm', 'audio/webm', 'audio/mp4'])
+const mediaContentTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'audio/webm', 'audio/mp4']
 
 /// 媒体上传/下载（视频消息）：实体文件存服务器磁盘（自托管，不依赖外部对象存储）。
 /// 上传：POST /api/media，请求体为原始二进制（Content-Type: video/mp4 或 video/quicktime）。
 /// 下载：GET /api/media/:id，仅本人 / 好友 / 同群成员可取（消息可达性 = 文件可达性）。
 export function registerMediaRoutes(app: FastifyInstance, store: Store): void {
-  // 视频二进制按 Buffer 接收（仅这两个 content-type 走此解析器，不影响 JSON 路由）。
-  app.addContentTypeParser(['video/mp4', 'video/quicktime'],
+  // 媒体二进制按 Buffer 接收（仅这些 content-type 走此解析器，不影响 JSON 路由）。
+  // 字符串匹配按前缀生效，故 'video/webm;codecs=vp9,opus' 等带 codecs 参数的也会命中。
+  app.addContentTypeParser(mediaContentTypes,
     { parseAs: 'buffer', bodyLimit: MAX_MEDIA_BYTES + 1024 * 1024 },
     (_req, body, done) => done(null, body))
 

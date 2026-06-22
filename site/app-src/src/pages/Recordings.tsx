@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type RecordingInfo } from '../lib/api'
+import { api, APIError, type RecordingInfo } from '../lib/api'
 import { apiURL } from '../lib/config'
 import { useI18n } from '../lib/i18n'
 import { Card, Button, Pill, Spinner, EmptyState, useToast, fmtTime, fmtDuration } from '../components/ui'
@@ -21,7 +21,12 @@ export function RecordingsPage() {
     try {
       const { token } = await api.recordingPlayToken(rec.id)
       setPlaying({ rec, url: apiURL(`/api/recordings/${rec.id}/media?t=${encodeURIComponent(token)}`) })
-    } catch { toast(t('无法播放，请重试', 'Cannot play, retry'), 'error') } finally { setLoadingId(null) }
+    } catch (e) {
+      const msg = e instanceof APIError && e.status === 403 ? t('该录制已删除或无权查看', 'Recording deleted or no access')
+        : e instanceof APIError && e.status === 404 ? t('找不到录制或媒体文件', 'Recording or media not found')
+        : t('无法播放，请重试', 'Cannot play, retry')
+      toast(msg, 'error')
+    } finally { setLoadingId(null) }
   }
 
   const del = async (rec: RecordingInfo) => {

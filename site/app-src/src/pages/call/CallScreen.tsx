@@ -61,6 +61,15 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
           onRecordRequest: () => setIncomingRecReq(true),
           onRecordConsentResult: (ok) => toast(ok ? t('对方已同意录制', 'Recording consent granted') : t('对方拒绝了录制', 'Recording declined'), ok ? 'ok' : 'info'),
           onRecordingStateChange: (r) => setRecording(r),
+          onRecordingError: (reason) => {
+            setRecording(false)
+            const msg = reason === 'consent_required' ? t('对方未同意录制', 'Recording was not consented')
+              : reason === 'unsupported_media_type' ? t('当前浏览器录制格式不受支持', 'This browser’s recording format is not supported')
+              : reason === 'media_too_large' ? t('录制文件过大，未能保存', 'Recording too large to save')
+              : reason === 'empty' ? t('未录到内容', 'Nothing was recorded')
+              : t('录制保存失败，请重试', 'Failed to save recording, please retry')
+            toast(msg, 'error')
+          },
           onLastRecordingId: (id) => setLastRecId(id),
           onMicDenied: () => toast(t('未获得麦克风权限，对方将听不到你', 'Mic blocked — they cannot hear you'), 'error'),
           onEnded: (reason) => { engine.hangUp(); onEnd(reason) },

@@ -27,6 +27,14 @@ final class CallRecorder {
     private var audioInput: AVAssetWriterInput?
     private var sessionStarted = false
     private var outputURL: URL?
+    // 完整性追踪：实测过"WebRTC 重配音频会话致只录到 1 帧/66ms 的损坏文件"。finalize 据此校验：
+    // 帧数过少 / 时长过短即判为采集失败，**不外发不可观看的垃圾文件**，让上层诚实提示"录制失败"。
+    private var videoFrames = 0
+    private var firstVideoPTS: CMTime?
+    private var lastVideoPTS: CMTime = .zero
+    /// 视为有效录制的最低门槛（低于此判定采集损坏）。
+    private static let minVideoFrames = 8
+    private static let minDurationSeconds = 1.0
 
     /// 设备是否支持录制（真机且 ReplayKit 可用）。
     var isAvailable: Bool { recorder.isAvailable }
@@ -61,6 +69,7 @@ final class CallRecorder {
 
         lock.lock()
         writer = assetWriter; videoInput = vIn; audioInput = aIn; outputURL = url; sessionStarted = false
+        videoFrames = 0; firstVideoPTS = nil; lastVideoPTS = .zero
         lock.unlock()
 
         do {
@@ -92,7 +101,13 @@ final class CallRecorder {
                 w.startSession(atSourceTime: CMSampleBufferGetPresentationTimeStamp(sample))
                 sessionStarted = true
             }
-            if sessionStarted, let vi = videoInput, vi.isReadyForMoreMediaData { vi.append(sample) }
+            if sessionStarted, let vi = videoInput, vi.isReadyForMoreMediaData {
+                vi.append(sample)
+                let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+                if firstVideoPTS == nil { firstVideoPTS = pts }
+                lastVideoPTS = pts
+                videoFrames += 1
+            }
         case .audioApp:
             if sessionStarted, let ai = audioInput, ai.isReadyForMoreMediaData { ai.append(sample) }
         case .audioMic:
@@ -116,17 +131,28 @@ final class CallRecorder {
     private func finalize() async throws -> URL {
         lock.lock()
         let w = writer; let url = outputURL; let vi = videoInput; let ai = audioInput; let ok = sessionStarted
+        let frames = videoFrames; let first = firstVideoPTS; let last = lastVideoPTS
         writer = nil; videoInput = nil; audioInput = nil; outputURL = nil; sessionStarted = false
+        videoFrames = 0; firstVideoPTS = nil; lastVideoPTS = .zero
         lock.unlock()
         guard let w, let url else { throw RecorderError.writerFailed }
         vi?.markAsFinished(); ai?.markAsFinished()
-        guard ok, w.status == .writing else { w.cancelWriting(); throw RecorderError.writerFailed }
+        guard ok, w.status == .writing else { w.cancelWriting(); discard(url); throw RecorderError.writerFailed }
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             w.finishWriting { cont.resume() }
         }
-        if w.status == .failed { throw RecorderError.writerFailed }
+        if w.status == .failed { discard(url); throw RecorderError.writerFailed }
+        // 完整性校验：采集到的画面太少/时长过短（典型为音频会话冲突致只录到 1 帧的损坏文件）→
+        // 判为失败、删除文件、抛错。**绝不外发无法观看的录制**（见类注释 + 录制反馈）。
+        let durationSec = (first != nil) ? CMTimeGetSeconds(CMTimeSubtract(last, first!)) : 0
+        if frames < Self.minVideoFrames || durationSec < Self.minDurationSeconds {
+            discard(url)
+            throw RecorderError.writerFailed
+        }
         return url
     }
+
+    private func discard(_ url: URL) { try? FileManager.default.removeItem(at: url) }
 
     /// 取消（出错兜底）：尽力停掉采集、丢弃输出，不抛错。
     func cancel() async {

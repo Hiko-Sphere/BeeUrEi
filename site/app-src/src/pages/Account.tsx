@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, APIError, type SelfView, type SessionInfo } from '../lib/api'
+import { api, APIError, reencodeToJpeg, uploadVerificationDoc, type SelfView, type SessionInfo, type VerificationStatusInfo } from '../lib/api'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { roleLabel } from '../components/Layout'
@@ -15,8 +15,16 @@ export function AccountPage() {
   const [pwOpen, setPwOpen] = useState(false)
   const [tfaOpen, setTfaOpen] = useState(false)
   const [sessionsOpen, setSessionsOpen] = useState(false)
+  const [verifOpen, setVerifOpen] = useState(false)
+  const [verif, setVerif] = useState<VerificationStatusInfo | null>(null)
 
-  useEffect(() => { void api.me().then((m) => { setSelf(m); setDisplayName(m.displayName) }).catch(() => {}) }, [])
+  const reloadVerif = async () => { try { setVerif(await api.verificationStatus()) } catch { /* ignore */ } }
+  useEffect(() => { void api.me().then((m) => { setSelf(m); setDisplayName(m.displayName) }).catch(() => {}); void reloadVerif() }, [])
+
+  const verifLabel = (s?: string) => s === 'verified' ? t('已认证', 'Verified')
+    : s === 'pending' ? t('审核中', 'Pending')
+    : s === 'rejected' ? t('未通过', 'Not approved')
+    : t('未认证', 'Not verified')
 
   const saveName = async () => {
     const name = displayName.trim()
@@ -53,7 +61,12 @@ export function AccountPage() {
         <div className="flex items-center gap-4">
           <Avatar name={user.displayName} src={user.avatar} size={64} />
           <div className="min-w-0">
-            <div className="truncate text-lg font-semibold">{user.displayName}</div>
+            <div className="flex items-center gap-1.5">
+              <span className="truncate text-lg font-semibold">{user.displayName}</span>
+              {(self?.verified || verif?.status === 'verified') && (
+                <span title={t('已实名认证', 'Identity verified')} className="inline-flex items-center gap-0.5 rounded-full bg-honey/15 px-1.5 py-0.5 text-[10px] font-bold text-honey">✓ {t('已认证', 'Verified')}</span>
+              )}
+            </div>
             <div className="truncate text-sm text-faint">@{user.username} · {roleLabel(user.role, t)}</div>
             {self?.email && <div className="truncate text-xs text-faint">{self.email}</div>}
           </div>
@@ -106,6 +119,10 @@ export function AccountPage() {
             <span className="ml-1.5 text-xs text-faint">{self?.twoFactorEnabled ? t('已开启', 'On') : t('未开启', 'Off')}</span>
           </Button>
           <Button variant="soft" onClick={() => setSessionsOpen(true)}>{t('登录设备', 'Devices')}</Button>
+          <Button variant="soft" onClick={() => setVerifOpen(true)}>
+            {t('实名认证', 'Identity')}
+            <span className="ml-1.5 text-xs text-faint">{verifLabel(verif?.status)}</span>
+          </Button>
         </div>
       </Card>
 
@@ -122,7 +139,148 @@ export function AccountPage() {
       {pwOpen && <PasswordDialog onClose={() => setPwOpen(false)} />}
       {tfaOpen && <TwoFactorDialog onClose={() => setTfaOpen(false)} onChanged={async () => { await refreshMe(); try { setSelf(await api.me()) } catch { /* ignore */ } }} />}
       {sessionsOpen && <SessionsDialog onClose={() => setSessionsOpen(false)} />}
+      {verifOpen && <VerificationDialog status={verif} onClose={() => setVerifOpen(false)} onChanged={async () => { await reloadVerif(); await refreshMe(); try { setSelf(await api.me()) } catch { /* ignore */ } }} />}
     </div>
+  )
+}
+
+const KYC_CONSENT_VERSION = 'kyc-1'
+const ID_TYPES: { value: string; zh: string; en: string }[] = [
+  { value: 'national_id', zh: '身份证', en: 'National ID' },
+  { value: 'passport', zh: '护照', en: 'Passport' },
+  { value: 'drivers_license', zh: '驾照', en: "Driver's license" },
+  { value: 'residence_permit', zh: '居住证', en: 'Residence permit' },
+]
+const REJECT_REASONS: Record<string, [string, string]> = {
+  blurry: ['照片模糊，请在光线充足处重拍。', 'The photo was blurry — retake in good lighting.'],
+  glare: ['照片反光，请避开强光重拍。', 'The photo had glare — retake without reflections.'],
+  name_mismatch: ['姓名与证件不一致，请核对后重新提交。', 'Name did not match — check and resubmit.'],
+  face_mismatch: ['自拍与证件不匹配，请本人重新拍摄。', 'Selfie did not match — retake it yourself.'],
+  expired: ['证件已过期，请使用有效证件。', 'The document has expired.'],
+  unsupported_doc: ['证件类型不被支持。', 'Document type not supported.'],
+  incomplete: ['资料不完整，请补齐。', 'Submission incomplete.'],
+  suspected_fraud: ['审核未通过。', 'Verification was not approved.'],
+  timeout: ['超过审核时限已关闭，请重新提交。', 'Timed out — please resubmit.'],
+  revoked: ['实名认证已被撤销。', 'Verification was revoked.'],
+  other: ['审核未通过，请重新提交。', 'Not approved — please resubmit.'],
+}
+
+/// 实名认证弹窗：展示状态，或引导提交（同意 → 填实名+证件类型 → 上传证件正面+自拍 → 提交人工审核）。
+/// 隐私：图片在浏览器内经 canvas 重编码为 JPEG（剥 EXIF/GPS）再上传；提交后不可取回原图。
+function VerificationDialog({ status, onClose, onChanged }: { status: VerificationStatusInfo | null; onClose: () => void; onChanged: () => void }) {
+  const { t, lang } = useI18n()
+  const toast = useToast()
+  const [step, setStep] = useState<'status' | 'consent' | 'form'>('status')
+  const [legalName, setLegalName] = useState('')
+  const [idType, setIdType] = useState('national_id')
+  const [idLast4, setIdLast4] = useState('')
+  const [frontFile, setFrontFile] = useState<File | null>(null)
+  const [selfieFile, setSelfieFile] = useState<File | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const st = status?.status ?? 'none'
+  const canStart = st === 'none' || st === 'rejected'
+
+  const submit = async () => {
+    setErr(null)
+    if (!legalName.trim()) { setErr(t('请填写证件上的法定姓名', 'Enter your legal name as on the document')); return }
+    if (!/^[0-9A-Za-z]{4}$/.test(idLast4)) { setErr(t('请填写证件号后 4 位', 'Enter the last 4 of the ID number')); return }
+    if (!frontFile || !selfieFile) { setErr(t('请上传证件正面与本人自拍', 'Upload the document front and a selfie')); return }
+    setBusy(true)
+    try {
+      const { id } = await api.submitVerification({ legalName: legalName.trim(), idType, idNumberLast4: idLast4, consentVersion: KYC_CONSENT_VERSION })
+      const front = await reencodeToJpeg(frontFile)
+      const selfie = await reencodeToJpeg(selfieFile)
+      await uploadVerificationDoc(id, 'front', front)
+      await uploadVerificationDoc(id, 'selfie', selfie)
+      toast(t('已提交，等待人工审核', 'Submitted — pending review'), 'ok')
+      await onChanged()
+      onClose()
+    } catch (e) {
+      const code = e instanceof APIError ? e.code : ''
+      setErr(code === 'already_pending' ? t('已有一份待审核的申请', 'You already have a pending submission')
+        : code === 'already_verified' ? t('你已通过实名认证', 'You are already verified')
+        : code === 'image_decode_failed' ? t('图片无法读取，请换一张', 'Could not read the image — try another')
+        : t('提交失败，请重试', 'Submission failed — please try again'))
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={onClose}>
+      <div className="slide-up max-h-[88dvh] w-full max-w-md overflow-auto rounded-2xl surface border border-[var(--line)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-semibold">{t('实名认证', 'Identity verification')}</h3>
+
+        {step === 'status' && (
+          <div className="mt-3 flex flex-col gap-3">
+            {st === 'verified' && <p className="rounded-xl bg-honey/10 p-3 text-sm text-honey">✓ {t('你已通过实名认证，账号已显示「已认证」徽章。', 'You are verified — the verified badge appears on your account.')}</p>}
+            {st === 'pending' && <p className="rounded-xl surface-2 p-3 text-sm text-soft">{t('审核中，通常 1–2 个工作日。结果会通过通知告知你。', 'Under review, usually 1–2 business days. We will notify you of the result.')}</p>}
+            {st === 'rejected' && (
+              <p className="rounded-xl border border-danger/30 p-3 text-sm text-soft">
+                {t('上次未通过：', 'Last attempt was not approved: ')}
+                {(REJECT_REASONS[status?.rejectReasonCode ?? 'other'] ?? REJECT_REASONS.other)[lang === 'en' ? 1 : 0]}
+              </p>
+            )}
+            {st === 'none' && <p className="text-sm text-faint">{t('通过实名认证可获得「已认证」徽章，让联系人更信任你。', 'Verify your identity to earn a trusted badge your contacts can see.')}</p>}
+            <div className="mt-2 flex gap-3">
+              {canStart && <Button className="flex-1" onClick={() => setStep('consent')}>{st === 'rejected' ? t('重新提交', 'Resubmit') : t('开始认证', 'Start')}</Button>}
+              <Button variant="soft" className="flex-1" onClick={onClose}>{t('完成', 'Done')}</Button>
+            </div>
+          </div>
+        )}
+
+        {step === 'consent' && (
+          <div className="mt-3 flex flex-col gap-3 text-sm text-soft">
+            <p>{t('我们会收集你的：法定姓名、一张政府证件、一张本人自拍。', 'We collect: your legal name, one government ID, and a selfie.')}</p>
+            <ul className="list-disc space-y-1 pl-5 text-faint">
+              <li>{t('由人工审核员核对是否为你本人——非自动通过。', 'A human reviewer confirms it is you — never auto-approved.')}</li>
+              <li>{t('证件以 AES-256 加密存储，仅审核员可见，每次访问都留痕。', 'Documents are AES-256 encrypted, visible only to reviewers, every access is logged.')}</li>
+              <li>{t('审核完成后证件图片会按留存策略删除。', 'Document images are deleted per our retention policy after review.')}</li>
+            </ul>
+            <div className="mt-2 flex gap-3">
+              <Button className="flex-1" onClick={() => setStep('form')}>{t('我同意并继续', 'I agree & continue')}</Button>
+              <Button variant="soft" className="flex-1" onClick={() => setStep('status')}>{t('返回', 'Back')}</Button>
+            </div>
+          </div>
+        )}
+
+        {step === 'form' && (
+          <div className="mt-3 flex flex-col gap-3">
+            <Field label={t('证件上的法定姓名', 'Legal name on document')}>
+              <Input value={legalName} onChange={(e) => setLegalName(e.target.value)} maxLength={120} />
+            </Field>
+            <Field label={t('证件类型', 'Document type')}>
+              <select value={idType} onChange={(e) => setIdType(e.target.value)} className="w-full rounded-xl border border-[var(--line)] surface-2 px-3 py-2.5 text-sm">
+                {ID_TYPES.map((o) => <option key={o.value} value={o.value}>{lang === 'en' ? o.en : o.zh}</option>)}
+              </select>
+            </Field>
+            <Field label={t('证件号后 4 位', 'Last 4 of ID number')}>
+              <Input value={idLast4} onChange={(e) => setIdLast4(e.target.value.replace(/[^0-9A-Za-z]/g, '').slice(0, 4))} maxLength={4} />
+            </Field>
+            <DocPicker label={t('证件正面照片', 'Document front photo')} capture="environment" file={frontFile} onPick={setFrontFile} t={t} />
+            <DocPicker label={t('本人自拍', 'Selfie')} capture="user" file={selfieFile} onPick={setSelfieFile} t={t} />
+            {err && <p className="text-sm text-danger">{err}</p>}
+            <div className="mt-1 flex gap-3">
+              <Button className="flex-1" loading={busy} onClick={submit}>{t('提交审核', 'Submit for review')}</Button>
+              <Button variant="soft" className="flex-1" onClick={() => setStep('consent')}>{t('返回', 'Back')}</Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function DocPicker({ label, capture, file, onPick, t }: { label: string; capture: 'environment' | 'user'; file: File | null; onPick: (f: File | null) => void; t: (zh: string, en: string) => string }) {
+  return (
+    <Field label={label}>
+      <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-[var(--line)] surface-2 px-3 py-3 text-sm text-soft">
+        <span className="text-lg">📷</span>
+        <span className="flex-1 truncate">{file ? file.name : t('点击选择 / 拍摄', 'Tap to choose / capture')}</span>
+        {file && <span className="text-honey">✓</span>}
+        <input type="file" accept="image/*" capture={capture} className="hidden" onChange={(e) => onPick(e.target.files?.[0] ?? null)} />
+      </label>
+    </Field>
   )
 }
 

@@ -1,8 +1,19 @@
 import { apiURL } from './config'
 
 // ---------- 模型（与服务端对齐） ----------
-export interface User { id: string; username: string; displayName: string; role: string; status: string; avatar?: string | null }
+export interface User { id: string; username: string; displayName: string; role: string; status: string; avatar?: string | null; verified?: boolean }
 export interface SelfView extends User { language?: string | null; email?: string | null; emailVerified?: boolean; phone?: string | null; usernameCustomized?: boolean; appleLinked?: boolean; twoFactorEnabled?: boolean }
+export interface VerificationStatusInfo {
+  status: 'none' | 'pending' | 'verified' | 'rejected'
+  idType?: string
+  attempt?: number
+  submittedAt?: number
+  decidedAt?: number
+  rejectReasonCode?: string
+  rejectReasonNote?: string
+  docsUploaded?: string[]
+  canResubmit?: boolean
+}
 export interface SessionInfo { sessionId: string; deviceLabel?: string; createdAt?: number; lastSeenAt?: number; expiresAt: number; current: boolean }
 export interface IncomingLink { id: string; ownerId: string; ownerName: string; ownerAvatar?: string | null; relation: string; isEmergency?: boolean; status?: string }
 export interface FamilyLink { id: string; memberId: string; memberName: string; memberAvatar?: string | null; relation: string; isEmergency: boolean; phone?: string | null; status?: string; outgoing?: boolean }
@@ -133,6 +144,12 @@ export const api = {
   twoFADisable: (code: string) => post('/api/account/2fa/disable', { code }),
   twoFARecovery: (code: string) => post('/api/account/2fa/recovery-codes', { code }) as Promise<{ recoveryCodes: string[] }>,
 
+  // 实名认证（KYC）
+  verificationStatus: () => get('/api/account/verification') as Promise<VerificationStatusInfo>,
+  submitVerification: (body: { legalName: string; idType: string; idNumberLast4: string; idNumber?: string; consentVersion: string }) =>
+    post('/api/account/verification', body) as Promise<{ status: string; id: string; attempt: number }>,
+  withdrawVerification: () => del('/api/account/verification'),
+
   // 亲友 / 联系人
   incomingLinks: () => get('/api/family/incoming') as Promise<{ links: IncomingLink[] }>,
   familyLinks: () => get('/api/family/links') as Promise<{ links: FamilyLink[] }>,
@@ -252,4 +269,45 @@ export async function fetchMediaObjectURL(id: string): Promise<string> {
   const res = await fetch(apiURL(`/api/media/${id}`), { headers: tokenStore.token ? { authorization: 'Bearer ' + tokenStore.token } : {} })
   if (!res.ok) throw new APIError('media_failed', res.status)
   return URL.createObjectURL(await res.blob())
+}
+
+// 把用户选的图片经 canvas 重编码为 JPEG（≤2048px 长边）——天然剥离 EXIF/GPS，并控制体积；
+// 与服务端的元数据剥离形成纵深防御。失败则抛 image_decode_failed。
+export async function reencodeToJpeg(file: File, maxEdge = 2048): Promise<Blob> {
+  const url = URL.createObjectURL(file)
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const im = new Image()
+      im.onload = () => resolve(im)
+      im.onerror = () => reject(new APIError('image_decode_failed', 0))
+      im.src = url
+    })
+    const scale = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight))
+    const w = Math.max(1, Math.round(img.naturalWidth * scale))
+    const h = Math.max(1, Math.round(img.naturalHeight * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = w; canvas.height = h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new APIError('image_decode_failed', 0)
+    ctx.drawImage(img, 0, 0, w, h)
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9))
+    if (!blob) throw new APIError('image_decode_failed', 0)
+    return blob
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+// 上传一张实名证件图（原始二进制；服务端会再次嗅探/剥离/加密）。kind: front|back|selfie。
+export async function uploadVerificationDoc(id: string, kind: string, blob: Blob): Promise<void> {
+  const res = await fetch(apiURL(`/api/account/verification/${encodeURIComponent(id)}/doc/${encodeURIComponent(kind)}`), {
+    method: 'POST',
+    headers: { 'content-type': 'image/jpeg', ...(tokenStore.token ? { authorization: 'Bearer ' + tokenStore.token } : {}) },
+    body: blob,
+  })
+  if (!res.ok) {
+    let code = 'upload_failed'
+    try { const j = await res.json() as { error?: string }; if (j?.error) code = j.error } catch { /* 非 JSON 错误体 */ }
+    throw new APIError(code, res.status)
+  }
 }

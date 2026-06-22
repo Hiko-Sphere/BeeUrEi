@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { type Store, type Role, type User, selfView } from '../db/store'
 import { hashPassword, verifyPassword } from '../auth/passwords'
 import { signAccessToken, generateRefreshToken, hashToken, refreshTtlMs } from '../auth/tokens'
+import { verifyTotp, hashRecoveryCode } from '../auth/totp'
 import { normalizePhone, type AppleTokenVerifier } from '../auth/apple'
 import { type CodeRegistry } from '../auth/codes'
 import { type Mailer } from '../mail/mailer'
@@ -20,6 +21,20 @@ function issueTokens(store: Store, user: User): { token: string; refreshToken: s
 
 const refreshSchema = z.object({ refreshToken: z.string().min(1) })
 
+/// 两步验证登录门：用户已开 2FA 时，要求有效 TOTP 或一次性恢复码（消费掉）；未开则放行。
+/// 注意：仅在**密码/邮箱码等第一因子已通过**之后调用，避免在验证身份前泄露账号是否开了 2FA。
+function passTwoFactor(store: Store, user: User, code: string | undefined, now: number): { ok: boolean; reason?: 'required' | 'invalid' } {
+  if (!user.totpEnabled || !user.totpSecret) return { ok: true }
+  const c = (code ?? '').trim()
+  if (!c) return { ok: false, reason: 'required' }
+  if (verifyTotp(user.totpSecret, c, now)) return { ok: true }
+  if (store.consumeRecoveryCode(user.id, hashRecoveryCode(c), now)) return { ok: true } // 恢复码兜底
+  return { ok: false, reason: 'invalid' }
+}
+function twoFactorReply(reply: any, reason: 'required' | 'invalid') {
+  return reply.code(401).send({ error: reason === 'required' ? 'two_factor_required' : 'invalid_2fa' })
+}
+
 const registerSchema = z.object({
   // 用户名/手机号/邮箱至少给一个（refine 校验）；不给用户名时自动生成（不从手机号/邮箱派生——username 进 publicUser，派生会泄露隐私标识）。
   username: z.string().trim().min(3).max(32).optional(), // 去首尾空白，避免" alice"/"alice"混淆（见审查 #4）
@@ -35,6 +50,7 @@ const registerSchema = z.object({
 const loginSchema = z.object({
   username: z.string().trim(), // 登录标识：用户名/手机号/邮箱（字段名保持 username 兼容旧客户端）
   password: z.string(),
+  totpCode: z.string().max(64).optional(), // 开了 2FA 的账号：TOTP 6 位码或一次性恢复码（首次登录返回 two_factor_required 后补交）
 })
 
 const appleSchema = z.object({
@@ -50,6 +66,7 @@ const emailCodeVerifySchema = z.object({
   code: z.string().min(4).max(12),
   role: z.enum(['blind', 'helper', 'family']).optional(),
   language: z.string().min(2).max(8).optional(),
+  totpCode: z.string().max(64).optional(), // 已开 2FA 的账号：邮箱码登录也须二次验证（否则邮箱即可绕过 2FA）
 })
 
 export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer, appleVerifier?: AppleTokenVerifier, codeSend: CodeSendLimiter = new CodeSendLimiter()): void {
@@ -125,6 +142,9 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     if (user.status === 'disabled') {
       return reply.code(403).send({ error: 'account_disabled' })
     }
+    // 两步验证：密码已校验通过后，再要求 TOTP/恢复码（已开启时）。
+    const tf = passTwoFactor(store, user, parsed.data.totpCode, Date.now())
+    if (!tf.ok) return twoFactorReply(reply, tf.reason!)
     const tokens = issueTokens(store, user)
     return reply.send({ ...tokens, user: selfView(user) })
   })
@@ -254,6 +274,9 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
       if (!codes.verify(`login:${existing.id}`, parsed.data.code, Date.now())) {
         return reply.code(400).send({ error: 'invalid_code' })
       }
+      // 邮箱码（第一因子）通过后，已开 2FA 的账号仍须二次验证，避免邮箱成为 2FA 绕过通道。
+      const tf = passTwoFactor(store, existing, parsed.data.totpCode, Date.now())
+      if (!tf.ok) return twoFactorReply(reply, tf.reason!)
       // 成功登录即证明邮箱归属 → 标记已验证。
       const updated = (existing.emailVerified ? existing : store.updateUser(existing.id, { emailVerified: true })) ?? existing
       const tokens = issueTokens(store, updated)

@@ -28,6 +28,18 @@ export interface User {
   // 单用户功能覆盖（管理员可对**某个用户**单独关停某功能，用于精准处置滥用者，不波及全站）。
   // 仅能"强制关"：某键为 false 即对该用户关闭；缺省/为 true 则随全站开关。见 effectiveFeatures。
   featureOverrides?: Partial<Record<FeatureKey, boolean>>
+  // 两步验证（2FA / TOTP）。totpSecret 为 base32 密钥（仅服务端校验用，绝不进任何对外视图）；
+  // totpEnabled=true 才在登录时强制验证码（setup 后、enable 前 secret 已写但 enabled 仍假=待启用）。
+  totpSecret?: string
+  totpEnabled?: boolean
+}
+
+/// 一次性恢复码（2FA）：丢失验证器时用。库里只存 SHA-256 哈希，明文仅生成时给用户一次。
+export interface RecoveryCode {
+  id: string
+  userId: string
+  codeHash: string
+  usedAt?: number // 已用时间戳；用过即作废（一次性）
 }
 
 /// Passkey（WebAuthn 凭据）：一个用户可注册多把。只存公钥与计数器，私钥永不离开设备安全区。
@@ -369,6 +381,12 @@ export interface Store {
   deleteRefreshTokensForUser(userId: string): void
   countSessionsForUser(userId: string, nowMs: number): number // 未过期 refresh token 数（活跃会话数，供后台展示）
 
+  // 2FA 恢复码（一次性）：启用 2FA 时整批替换；登录时按哈希消费一个。
+  replaceRecoveryCodes(userId: string, hashes: string[]): void // 整批替换（清旧 + 写新）
+  consumeRecoveryCode(userId: string, codeHash: string, nowMs: number): boolean // 命中未用的码即标记已用并返回 true
+  countUnusedRecoveryCodes(userId: string): number // 剩余可用恢复码数（账号页展示）
+  deleteRecoveryCodesForUser(userId: string): void // 关闭 2FA 时清空
+
   // Passkey（WebAuthn）
   createPasskey(p: Passkey): void
   findPasskeyByCredentialId(credentialId: string): Passkey | undefined
@@ -436,6 +454,7 @@ export class MemoryStore implements Store {
   protected reports = new Map<string, Report>()
   protected recordings = new Map<string, Recording>()
   protected refreshTokens = new Map<string, RefreshToken>()
+  protected recoveryCodes = new Map<string, RecoveryCode>() // 2FA 一次性恢复码（仅哈希），键为 id
   protected passkeys = new Map<string, Passkey>()
   protected messages = new Map<string, ChatMessage>()
   protected groups = new Map<string, ChatGroup>()
@@ -466,6 +485,36 @@ export class MemoryStore implements Store {
     let n = 0
     for (const v of this.refreshTokens.values()) if (v.userId === userId && v.expiresAt > nowMs) n++
     return n
+  }
+
+  replaceRecoveryCodes(userId: string, hashes: string[]): void {
+    for (const [k, v] of this.recoveryCodes) if (v.userId === userId) this.recoveryCodes.delete(k)
+    let i = 0
+    for (const h of hashes) {
+      const id = `${userId}:${Date.now()}:${i++}`
+      this.recoveryCodes.set(id, { id, userId, codeHash: h })
+    }
+    this.afterMutate()
+  }
+  consumeRecoveryCode(userId: string, codeHash: string, nowMs: number): boolean {
+    for (const v of this.recoveryCodes.values()) {
+      if (v.userId === userId && v.usedAt == null && v.codeHash === codeHash) {
+        v.usedAt = nowMs
+        this.afterMutate()
+        return true
+      }
+    }
+    return false
+  }
+  countUnusedRecoveryCodes(userId: string): number {
+    let n = 0
+    for (const v of this.recoveryCodes.values()) if (v.userId === userId && v.usedAt == null) n++
+    return n
+  }
+  deleteRecoveryCodesForUser(userId: string): void {
+    let changed = false
+    for (const [k, v] of this.recoveryCodes) if (v.userId === userId) { this.recoveryCodes.delete(k); changed = true }
+    if (changed) this.afterMutate()
   }
 
   createPasskey(p: Passkey): void {
@@ -832,6 +881,7 @@ export class JsonFileStore extends MemoryStore {
           reports?: Report[]
           recordings?: Recording[]
           refreshTokens?: RefreshToken[]
+          recoveryCodes?: RecoveryCode[]
           recordingConfig?: RecordingConfig
           messages?: ChatMessage[]
           groups?: ChatGroup[]
@@ -850,6 +900,7 @@ export class JsonFileStore extends MemoryStore {
         for (const r of data.reports ?? []) this.reports.set(r.id, r)
         for (const rec of data.recordings ?? []) this.recordings.set(rec.id, rec)
         for (const rt of data.refreshTokens ?? []) this.refreshTokens.set(rt.tokenHash, rt)
+        for (const rc of data.recoveryCodes ?? []) this.recoveryCodes.set(rc.id, rc)
         if (data.recordingConfig) this.recordingConfig = data.recordingConfig
         for (const m of data.messages ?? []) this.messages.set(m.id, m)
         for (const g of data.groups ?? []) this.groups.set(g.id, g)
@@ -876,6 +927,7 @@ export class JsonFileStore extends MemoryStore {
       reports: [...this.reports.values()],
       recordings: [...this.recordings.values()],
       refreshTokens: [...this.refreshTokens.values()],
+      recoveryCodes: [...this.recoveryCodes.values()],
       recordingConfig: this.recordingConfig,
       messages: [...this.messages.values()],
       groups: [...this.groups.values()],
@@ -920,6 +972,7 @@ export function selfView(u: User) {
     phone: u.phone ?? null,
     usernameCustomized: u.usernameCustomized ?? false, // 为 false 时客户端提示设置唯一 userid
     appleLinked: !!u.appleSub, // 是否已绑定 Apple ID（用于账号页展示与解绑）
+    twoFactorEnabled: !!u.totpEnabled, // 是否已开启两步验证（客户端账号页展示开关态；绝不返回 totpSecret）
     legalConsentVersion: u.legalConsentVersion ?? null, // 已同意的隐私/条款版本（客户端据此门控注册/重新同意）
     legalConsentAt: u.legalConsentAt ?? null,
   }

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { type Store, type User, matchBannedTerm } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { hashPassword, verifyPassword } from '../auth/passwords'
+import { generateTotpSecret, verifyTotp, otpauthURI, generateRecoveryCodes, hashRecoveryCode } from '../auth/totp'
 import { type CodeRegistry } from '../auth/codes'
 import { type Mailer } from '../mail/mailer'
 import { emailVerificationMail } from '../mail/templates'
@@ -42,6 +43,77 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     })
     store.deleteRefreshTokensForUser(user.id)
     return { ok: true }
+  })
+
+  // MARK: 两步验证（2FA / TOTP）
+
+  // 校验第二因子：有效 TOTP 或一次性恢复码（恢复码会被消费）。用于关闭/重生成恢复码这类敏感操作的再确认。
+  const verifySecondFactor = (user: User, code: string | undefined, now: number): boolean => {
+    if (!user.totpSecret) return false
+    const c = (code ?? '').trim()
+    if (!c) return false
+    if (verifyTotp(user.totpSecret, c, now)) return true
+    return store.consumeRecoveryCode(user.id, hashRecoveryCode(c), now)
+  }
+  const twoFASchema = z.object({ code: z.string().min(1).max(64) })
+
+  // 当前 2FA 状态（开关 + 剩余恢复码数）。
+  app.get('/api/account/2fa', { preHandler: requireAuth() }, async (req, reply) => {
+    const user = store.findById(req.user!.sub)
+    if (!user) return reply.code(404).send({ error: 'not_found' })
+    return { enabled: !!user.totpEnabled, recoveryCodesRemaining: user.totpEnabled ? store.countUnusedRecoveryCodes(user.id) : 0 }
+  })
+
+  // 开始绑定：生成新密钥（待启用，enabled 仍为 false），返回 base32 密钥 + otpauth URI。
+  // 盲人可直接复制密钥手动添加到验证器，或点 otpauth 链接自动添加。
+  app.post('/api/account/2fa/setup', { preHandler: requireAuth(), config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const user = store.findById(req.user!.sub)
+    if (!user) return reply.code(404).send({ error: 'not_found' })
+    if (user.totpEnabled) return reply.code(409).send({ error: 'already_enabled' })
+    const secret = generateTotpSecret()
+    store.updateUser(user.id, { totpSecret: secret, totpEnabled: false })
+    return { secret, otpauthUri: otpauthURI(secret, user.email ?? user.username) }
+  })
+
+  // 确认启用：校验验证器算出的码 → 启用 + 生成一批一次性恢复码（明文只此一次返回）。
+  app.post('/api/account/2fa/enable', { preHandler: requireAuth(), config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const parsed = twoFASchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const user = store.findById(req.user!.sub)
+    if (!user) return reply.code(404).send({ error: 'not_found' })
+    if (user.totpEnabled) return reply.code(409).send({ error: 'already_enabled' })
+    if (!user.totpSecret) return reply.code(400).send({ error: 'not_setup' })
+    if (!verifyTotp(user.totpSecret, parsed.data.code, Date.now())) return reply.code(400).send({ error: 'invalid_code' })
+    const codes = generateRecoveryCodes()
+    store.replaceRecoveryCodes(user.id, codes.map(hashRecoveryCode))
+    store.updateUser(user.id, { totpEnabled: true })
+    return { ok: true, recoveryCodes: codes }
+  })
+
+  // 关闭 2FA：须再次验证本人（TOTP 或恢复码）→ 清密钥 + 关 + 清恢复码。
+  app.post('/api/account/2fa/disable', { preHandler: requireAuth(), config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const parsed = twoFASchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const user = store.findById(req.user!.sub)
+    if (!user) return reply.code(404).send({ error: 'not_found' })
+    if (!user.totpEnabled) return reply.code(409).send({ error: 'not_enabled' })
+    if (!verifySecondFactor(user, parsed.data.code, Date.now())) return reply.code(400).send({ error: 'invalid_code' })
+    store.updateUser(user.id, { totpEnabled: false, totpSecret: undefined })
+    store.deleteRecoveryCodesForUser(user.id)
+    return { ok: true }
+  })
+
+  // 重新生成恢复码（旧码全部作废）：须再次验证本人。
+  app.post('/api/account/2fa/recovery-codes', { preHandler: requireAuth(), config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const parsed = twoFASchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const user = store.findById(req.user!.sub)
+    if (!user) return reply.code(404).send({ error: 'not_found' })
+    if (!user.totpEnabled) return reply.code(409).send({ error: 'not_enabled' })
+    if (!verifySecondFactor(user, parsed.data.code, Date.now())) return reply.code(400).send({ error: 'invalid_code' })
+    const codes = generateRecoveryCodes()
+    store.replaceRecoveryCodes(user.id, codes.map(hashRecoveryCode))
+    return { ok: true, recoveryCodes: codes }
   })
 
   // 更新语言偏好：推送文案与求助匹配排序按此选语言。

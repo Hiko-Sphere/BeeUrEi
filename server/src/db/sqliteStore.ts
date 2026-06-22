@@ -78,6 +78,8 @@ export class SqliteStore implements Store {
     try { this.db.exec('ALTER TABLE users ADD COLUMN legalConsentVersion TEXT') } catch { /* 列已存在 */ } // 同意的隐私/条款版本（注册门控+GDPR 可证明同意）
     try { this.db.exec('ALTER TABLE users ADD COLUMN legalConsentAt INTEGER') } catch { /* 列已存在 */ } // 同意时间戳
     try { this.db.exec('ALTER TABLE users ADD COLUMN featureOverrides TEXT') } catch { /* 列已存在 */ } // 单用户功能覆盖（JSON）
+    try { this.db.exec('ALTER TABLE users ADD COLUMN totpSecret TEXT') } catch { /* 列已存在 */ } // 2FA TOTP base32 密钥（仅服务端校验）
+    try { this.db.exec('ALTER TABLE users ADD COLUMN totpEnabled INTEGER') } catch { /* 列已存在 */ } // 2FA 是否已启用
     try { this.db.exec('ALTER TABLE recordings ADD COLUMN mediaId TEXT') } catch { /* 列已存在 */ } // 录制关联的媒体文件
     try { this.db.exec('ALTER TABLE messages ADD COLUMN reaction TEXT') } catch { /* 列已存在 */ } // 表情回应
     try { this.db.exec('ALTER TABLE messages ADD COLUMN groupId TEXT') } catch { /* 列已存在 */ } // 群消息
@@ -103,6 +105,9 @@ export class SqliteStore implements Store {
     // 站内通知（持久化收件箱）。
     this.db.exec('CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, userId TEXT, kind TEXT, title TEXT, body TEXT, dataJson TEXT, createdAt INTEGER, readAt INTEGER)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications (userId, createdAt)')
+    // 2FA 一次性恢复码（仅存 SHA-256 哈希）。
+    this.db.exec('CREATE TABLE IF NOT EXISTS recovery_codes (id TEXT PRIMARY KEY, userId TEXT, codeHash TEXT, usedAt INTEGER)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_recovery_user ON recovery_codes (userId)')
   }
 
   // MARK: refresh tokens
@@ -123,6 +128,27 @@ export class SqliteStore implements Store {
   countSessionsForUser(userId: string, nowMs: number): number {
     const row = this.db.prepare('SELECT COUNT(*) AS n FROM refresh_tokens WHERE userId = ? AND expiresAt > ?').get(userId, nowMs) as { n: number }
     return Number(row.n)
+  }
+
+  // MARK: 2FA 恢复码
+  replaceRecoveryCodes(userId: string, hashes: string[]): void {
+    const del = this.db.prepare('DELETE FROM recovery_codes WHERE userId = ?')
+    const ins = this.db.prepare('INSERT INTO recovery_codes (id, userId, codeHash, usedAt) VALUES (?, ?, ?, NULL)')
+    del.run(userId)
+    let i = 0
+    for (const h of hashes) ins.run(`${userId}:${Date.now()}:${i++}`, userId, h)
+  }
+  consumeRecoveryCode(userId: string, codeHash: string, nowMs: number): boolean {
+    // 仅命中"未用"的码才置为已用；用受影响行数判断是否消费成功（一次性）。
+    const res = this.db.prepare('UPDATE recovery_codes SET usedAt = ? WHERE userId = ? AND codeHash = ? AND usedAt IS NULL').run(nowMs, userId, codeHash)
+    return Number(res.changes) > 0
+  }
+  countUnusedRecoveryCodes(userId: string): number {
+    const row = this.db.prepare('SELECT COUNT(*) AS n FROM recovery_codes WHERE userId = ? AND usedAt IS NULL').get(userId) as { n: number }
+    return Number(row.n)
+  }
+  deleteRecoveryCodesForUser(userId: string): void {
+    this.db.prepare('DELETE FROM recovery_codes WHERE userId = ?').run(userId)
   }
 
   // MARK: passkeys（WebAuthn）
@@ -150,9 +176,9 @@ export class SqliteStore implements Store {
   // MARK: users
   createUser(u: User): void {
     this.db.prepare(
-      `INSERT OR REPLACE INTO users (id, username, passwordHash, displayName, role, status, createdAt, language, tokenVersion, email, emailVerified, voipToken, avatar, apnsToken, phone, appleSub, usernameCustomized, legalConsentVersion, legalConsentAt, featureOverrides)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(u.id, u.username, u.passwordHash, u.displayName, u.role, u.status, u.createdAt, u.language ?? null, u.tokenVersion ?? 0, u.email ?? null, u.emailVerified ? 1 : 0, u.voipToken ?? null, u.avatar ?? null, u.apnsToken ?? null, u.phone ?? null, u.appleSub ?? null, u.usernameCustomized ? 1 : 0, u.legalConsentVersion ?? null, u.legalConsentAt ?? null, u.featureOverrides ? JSON.stringify(u.featureOverrides) : null)
+      `INSERT OR REPLACE INTO users (id, username, passwordHash, displayName, role, status, createdAt, language, tokenVersion, email, emailVerified, voipToken, avatar, apnsToken, phone, appleSub, usernameCustomized, legalConsentVersion, legalConsentAt, featureOverrides, totpSecret, totpEnabled)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(u.id, u.username, u.passwordHash, u.displayName, u.role, u.status, u.createdAt, u.language ?? null, u.tokenVersion ?? 0, u.email ?? null, u.emailVerified ? 1 : 0, u.voipToken ?? null, u.avatar ?? null, u.apnsToken ?? null, u.phone ?? null, u.appleSub ?? null, u.usernameCustomized ? 1 : 0, u.legalConsentVersion ?? null, u.legalConsentAt ?? null, u.featureOverrides ? JSON.stringify(u.featureOverrides) : null, u.totpSecret ?? null, u.totpEnabled ? 1 : 0)
   }
   findByUsername(username: string): User | undefined {
     // 大小写不敏感(COLLATE NOCASE)：防同名混淆/冒充；登录兼容任意大小写（见审查 #4）。
@@ -504,7 +530,7 @@ export class SqliteStore implements Store {
     return { id: r.id, name: r.name, ownerId: r.ownerId, memberIds, createdAt: Number(r.createdAt) }
   }
   private toUser(r: any): User {
-    return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt), language: r.language ?? undefined, tokenVersion: r.tokenVersion != null ? Number(r.tokenVersion) : 0, email: r.email ?? undefined, emailVerified: r.emailVerified != null ? Number(r.emailVerified) === 1 : undefined, voipToken: r.voipToken ?? undefined, avatar: r.avatar ?? undefined, apnsToken: r.apnsToken ?? undefined, phone: r.phone ?? undefined, appleSub: r.appleSub ?? undefined, usernameCustomized: r.usernameCustomized != null ? Number(r.usernameCustomized) === 1 : undefined, legalConsentVersion: r.legalConsentVersion ?? undefined, legalConsentAt: r.legalConsentAt != null ? Number(r.legalConsentAt) : undefined, featureOverrides: parseJsonOrUndefined(r.featureOverrides) }
+    return { id: r.id, username: r.username, passwordHash: r.passwordHash, displayName: r.displayName, role: r.role as Role, status: r.status as UserStatus, createdAt: Number(r.createdAt), language: r.language ?? undefined, tokenVersion: r.tokenVersion != null ? Number(r.tokenVersion) : 0, email: r.email ?? undefined, emailVerified: r.emailVerified != null ? Number(r.emailVerified) === 1 : undefined, voipToken: r.voipToken ?? undefined, avatar: r.avatar ?? undefined, apnsToken: r.apnsToken ?? undefined, phone: r.phone ?? undefined, appleSub: r.appleSub ?? undefined, usernameCustomized: r.usernameCustomized != null ? Number(r.usernameCustomized) === 1 : undefined, legalConsentVersion: r.legalConsentVersion ?? undefined, legalConsentAt: r.legalConsentAt != null ? Number(r.legalConsentAt) : undefined, featureOverrides: parseJsonOrUndefined(r.featureOverrides), totpSecret: r.totpSecret ?? undefined, totpEnabled: r.totpEnabled != null ? Number(r.totpEnabled) === 1 : undefined }
   }
   private toLink(r: any): FamilyLink {
     return { id: r.id, ownerId: r.ownerId, memberId: r.memberId, relation: r.relation, isEmergency: Number(r.isEmergency) === 1, phone: r.phone ?? undefined, createdAt: Number(r.createdAt), status: (r.status as LinkStatus) ?? undefined, requestedBy: r.requestedBy ?? undefined }

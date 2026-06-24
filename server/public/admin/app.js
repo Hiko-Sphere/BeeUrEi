@@ -403,7 +403,7 @@ async function onLogin(e) {
 }
 
 // ---------------------------------------------------------------- shell + router
-const ROUTES = ['', 'users', 'relationships', 'live', 'calls', 'blocks', 'reports', 'audit', 'recordings', 'controls'];
+const ROUTES = ['', 'users', 'relationships', 'live', 'calls', 'blocks', 'reports', 'verifications', 'audit', 'recordings', 'controls'];
 function currentRoute() { const h = (location.hash || '#/').replace(/^#\/?/, ''); return ROUTES.includes(h) ? h : ''; }
 
 function renderChrome() {

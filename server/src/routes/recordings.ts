@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import { createReadStream, statSync } from 'node:fs'
 import { type Store, type Recording, type User } from '../db/store'
-import { requireAuth } from '../auth/rbac'
+import { requireAuth, blockedByVerificationGate } from '../auth/rbac'
 import { sweepExpiredRecordings } from '../recording/retention'
 import { removeMediaFile, mediaPath, mediaFileExists } from '../media/storage'
 import { RecordingConsentRegistry } from '../recording/consentRegistry'
@@ -150,6 +150,10 @@ export function registerRecordingRoutes(app: FastifyInstance, store: Store, cons
     if (!rec || !rec.mediaId) return reply.code(404).send({ error: 'not_found' })
     const ident = identify(req, id)
     if (!ident) return reply.code(401).send({ error: 'unauthorized' })
+    // 实名认证门禁：此路不走 requireAuth(自带鉴权)，故在此显式施加同一门禁，防经媒体流端点绕过（见复审 BYPASS-MED）。
+    if (store.getAppConfig().requireVerification && blockedByVerificationGate(ident.user.role, ident.user.identityVerified, undefined)) {
+      return reply.code(403).send({ error: 'verification_required' })
+    }
     const isAdmin = ident.user.role === 'admin'
     const isOwner = rec.ownerId === ident.user.id
     // 拥有者已软删除则其本人不可再看（与"已删除"语义一致）；管理员不受 deletedAt 限制。
@@ -207,7 +211,9 @@ export function registerRecordingRoutes(app: FastifyInstance, store: Store, cons
       const p = verifyAccessToken(authz.slice(7))
       if (p) {
         const u = store.findById(p.sub)
-        if (u && u.status === 'active' && (u.tokenVersion ?? 0) === (p.tv ?? 0)) return { user: u }
+        // 会话级撤销：按设备远程登出后旧 access token 即失效（与 requireAuth 一致，见复审 SESSION-LOW）。
+        if (u && u.status === 'active' && (u.tokenVersion ?? 0) === (p.tv ?? 0)
+            && (!p.sid || store.hasActiveSession(p.sub, p.sid, Date.now()))) return { user: u }
       }
     }
     const t = (req.query as { t?: string }).t

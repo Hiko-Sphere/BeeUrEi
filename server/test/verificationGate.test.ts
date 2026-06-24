@@ -72,6 +72,22 @@ describe('实名认证门禁（verification gate）', () => {
     await app.close()
   })
 
+  it('非 requireAuth 路由也门控：录制媒体流端点 GET /api/recordings/:id/media 未实名 403', async () => {
+    const { app, store } = withAdmin()
+    const { token } = await reg(app, 'dave', 'blind')
+    const uid = store.findByUsername('dave')!.id
+    // 该用户拥有一条录制(带 mediaId)；门禁在所有权/文件校验之前触发。
+    store.createRecording({ id: 'rec1', callId: 'c1', ownerId: uid, consentBy: [uid], reason: 'test', recordedAt: Date.now(), mediaId: 'm1', participants: [uid] })
+    const r = await app.inject({ method: 'GET', url: '/api/recordings/rec1/media', headers: auth(token) })
+    expect(r.statusCode).toBe(403)
+    expect(r.json().error).toBe('verification_required')
+    // 通过实名后不再被门禁拦（改为后续的文件/所有权逻辑）。
+    store.updateUser(uid, { identityVerified: true })
+    const r2 = await app.inject({ method: 'GET', url: '/api/recordings/rec1/media', headers: auth(token) })
+    expect(r2.json()?.error).not.toBe('verification_required')
+    await app.close()
+  })
+
   it('已认证用户正常通过', async () => {
     const { app, store } = withAdmin()
     const { token } = await reg(app, 'carol', 'family')

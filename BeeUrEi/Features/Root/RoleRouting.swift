@@ -154,7 +154,11 @@ struct RoleHomeView: View {
     }
 
     /// 该角色是否受实名门禁约束（与服务端 isGateableRole 同口径）。admin/developer 不门控。
-    private var gateable: Bool { role == "blind" || role == "helper" || role == "family" }
+    /// 用**真实账号角色**判定（非开发者预览选择的 role），免得开发者预览"盲人"被误门禁（见复审 CLIENT-LOW）。
+    private var gateable: Bool {
+        let r = session.user?.role ?? role
+        return r == "blind" || r == "helper" || r == "family"
+    }
 
     @ViewBuilder private var content: some View {
         // 实名认证门禁：管理员开启且当前用户(可门控角色)尚未通过 KYC → 取代主界面，仅允许提交认证 + 紧急 + 退出。

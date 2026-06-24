@@ -102,11 +102,12 @@ struct VerificationRequiredView: View {
             }
         }
         .task {
-            await reloadAll()
-            // 盲人侧：门禁屏也保持摔倒检测运行（安全攸关，不因被门禁拦住而失去保护）。
+            // 盲人侧：先（同步）启动摔倒检测，再做网络刷新——绝不让安全兜底等在网络请求后面
+            // （慢网/离线时曾延迟数十秒，正是用户被长期停在门禁屏的场景，见复审 SAFETY-MED）。
             if isBlind, FeatureSettings().fallDetectionEnabled {
                 motionMonitor.start { event in EmergencyAlertCenter.shared.trigger(event) }
             }
+            await reloadAll()
             announce()
         }
         .onDisappear { motionMonitor.stop() }

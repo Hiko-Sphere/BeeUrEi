@@ -32,8 +32,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback((token: string, refresh: string, u: User) => {
     tokenStore.set(token, refresh, u); setUser(u)
-    void api.me().then((me) => { setSelf(me); setUser(me); tokenStore.setUser(me) }).catch(() => {})
-  }, [])
+    // 走 refreshMe：同时拉 /api/me 与 /api/app-config，使登录后立刻获知 requireVerification——
+    // 否则未实名用户登录后会落到正常 UI 且所有请求 403（见复审 CLIENT-MED）。
+    void refreshMe()
+  }, [refreshMe])
 
   useEffect(() => {
     setUnauthorizedHandler(() => { setUser(null); setSelf(null) })

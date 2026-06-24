@@ -54,11 +54,20 @@ final class EmergencyAlertCenter: NSObject, CLLocationManagerDelegate {
     /// 触发警报流程（已有警报进行中时忽略，防连环触发刷屏）。
     func trigger(_ event: FallDetector.Event) {
         guard phase == .idle, event != .none else { return }
-        let kind = event == .suspectedCrash ? "crash" : "fall"
+        beginCountdown(kind: event == .suspectedCrash ? "crash" : "fall")
+    }
+
+    /// 用户手动发起紧急求助（如未实名门禁屏的紧急按钮）。复用同一套倒计时+定位+通知+可取消流程。
+    func manualSOS() {
+        guard phase == .idle else { return }
+        beginCountdown(kind: "manual")
+    }
+
+    private func beginCountdown(kind: String) {
         phase = .countdown(kind: kind, secondsLeft: 30)
         location.requestWhenInUseAuthorization()
         location.requestLocation() // 提前定位，发送时带上
-        speak(HomeStrings.fallAlertSpeak(kind: kind, lang))
+        speak(kind == "manual" ? HomeStrings.manualSosSpeak(lang) : HomeStrings.fallAlertSpeak(kind: kind, lang))
         countdownTask = Task { [weak self] in
             for remaining in stride(from: 29, through: 0, by: -1) {
                 try? await Task.sleep(for: .seconds(1))

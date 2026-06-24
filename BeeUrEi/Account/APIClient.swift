@@ -152,6 +152,7 @@ struct RemoteAppConfig: Codable, Sendable, Equatable {
     var announcement = RemoteAnnouncement()
     var maintenance = RemoteMaintenance()
     var recording = RemoteRecordingPolicy()
+    var requireVerification = false // 是否要求实名认证（未认证的可门控角色将被门禁屏拦住）
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -159,6 +160,7 @@ struct RemoteAppConfig: Codable, Sendable, Equatable {
         announcement = ((try? c.decodeIfPresent(RemoteAnnouncement.self, forKey: .announcement)) ?? nil) ?? RemoteAnnouncement()
         maintenance = ((try? c.decodeIfPresent(RemoteMaintenance.self, forKey: .maintenance)) ?? nil) ?? RemoteMaintenance()
         recording = ((try? c.decodeIfPresent(RemoteRecordingPolicy.self, forKey: .recording)) ?? nil) ?? RemoteRecordingPolicy()
+        requireVerification = ((try? c.decodeIfPresent(Bool.self, forKey: .requireVerification)) ?? nil) ?? false
     }
 }
 

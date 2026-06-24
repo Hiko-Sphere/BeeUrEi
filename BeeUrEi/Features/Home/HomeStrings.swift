@@ -118,6 +118,10 @@ enum HomeStrings {
         return l == .zh ? "检测到\(what)。30 秒内无操作将自动通知你的亲友。如果你没事，请点击屏幕上的「我没事」按钮。"
                         : "Detected \(what). Your family will be notified in 30 seconds. If you're OK, tap the I'm OK button."
     }
+    static func manualSosSpeak(_ l: Language) -> String {
+        l == .zh ? "正在发起紧急求助。30 秒后将通知你的亲友并附带位置。如果你没事，请点击「我没事」取消。"
+                 : "Starting an emergency SOS. Your family will be notified with your location in 30 seconds. Tap I'm OK to cancel."
+    }
     static func fallAlertReminder(_ seconds: Int, _ l: Language) -> String {
         l == .zh ? "还有 \(seconds) 秒将通知亲友。点「我没事」可取消。"
                  : "\(seconds) seconds until your family is notified. Tap I'm OK to cancel."

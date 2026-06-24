@@ -153,13 +153,21 @@ struct RoleHomeView: View {
         content.safeAreaInset(edge: .top, spacing: 0) { GlobalBanner() }
     }
 
+    /// 该角色是否受实名门禁约束（与服务端 isGateableRole 同口径）。admin/developer 不门控。
+    private var gateable: Bool { role == "blind" || role == "helper" || role == "family" }
+
     @ViewBuilder private var content: some View {
-        switch role {
-        // 协助者与亲友合并：同一「协助端」界面，两个角色的全部功能都在内（见 [[isAssistRole]]）。
-        case "helper", "family": AssistHomeView(session: session, onSwitchRole: onSwitchRole)
-        case "admin": AdminHomeView(session: session, onSwitchRole: onSwitchRole)
-        case "developer": DeveloperHomeView(session: session, onSwitchRole: onSwitchRole)
-        default: HubView() // 视障：功能中枢（首屏不再自动进入导盲；导盲为显式入口）
+        // 实名认证门禁：管理员开启且当前用户(可门控角色)尚未通过 KYC → 取代主界面，仅允许提交认证 + 紧急 + 退出。
+        if session.requireVerification, gateable, !(session.user?.verified ?? false) {
+            VerificationRequiredView(session: session)
+        } else {
+            switch role {
+            // 协助者与亲友合并：同一「协助端」界面，两个角色的全部功能都在内（见 [[isAssistRole]]）。
+            case "helper", "family": AssistHomeView(session: session, onSwitchRole: onSwitchRole)
+            case "admin": AdminHomeView(session: session, onSwitchRole: onSwitchRole)
+            case "developer": DeveloperHomeView(session: session, onSwitchRole: onSwitchRole)
+            default: HubView() // 视障：功能中枢（首屏不再自动进入导盲；导盲为显式入口）
+            }
         }
     }
 }

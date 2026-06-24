@@ -21,7 +21,12 @@ export const pushStrings = {
     l === 'en' ? `${name} accepted your request` : `${name} 接受了你的请求`,
   emergencyAlertTitle: (name: string, l: PushLang): string =>
     l === 'en' ? `Emergency: ${name} may need help` : `紧急：${name} 可能需要帮助`,
-  emergencyAlertBody: (kind: 'fall' | 'crash', hasLocation: boolean, l: PushLang): string => {
+  emergencyAlertBody: (kind: 'fall' | 'crash' | 'manual' | string, hasLocation: boolean, l: PushLang): string => {
+    if (kind === 'manual') {
+      return l === 'en'
+        ? `${'They'} pressed the emergency button and may need help.${hasLocation ? ' Location attached.' : ''} Please contact or call them now.`
+        : `对方按下了紧急求助按钮，可能需要帮助。${hasLocation ? '已附带位置。' : ''}请立即联系或呼叫对方。`
+    }
     if (l === 'en') {
       const what = kind === 'crash' ? 'a severe impact (possible crash)' : 'a possible fall'
       return `The app detected ${what} and no response.${hasLocation ? ' Location attached.' : ''} Please check in or call now.`

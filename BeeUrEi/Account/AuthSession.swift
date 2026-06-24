@@ -12,6 +12,8 @@ final class AuthSession {
     /// 全站公告 / 维护模式横幅（管理员后台推送）。
     private(set) var announcement: RemoteAnnouncement = .init()
     private(set) var maintenance: RemoteMaintenance = .init()
+    /// 是否要求实名认证（管理员开启）。开启时未通过 KYC 的可门控角色被门禁屏拦住，仅可提交认证 + 紧急。
+    private(set) var requireVerification = false
     private(set) var errorMessage: String?
     private(set) var isWorking = false
     /// 登录遇两步验证挑战：第一因子已过、需补交 TOTP / 一次性恢复码。UI 据此弹出验证码输入，经 submitTwoFactor(code) 重试。
@@ -160,6 +162,7 @@ final class AuthSession {
             features = cfg.features
             announcement = cfg.announcement
             maintenance = cfg.maintenance
+            requireVerification = cfg.requireVerification
         }
     }
 

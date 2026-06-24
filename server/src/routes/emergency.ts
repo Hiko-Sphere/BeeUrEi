@@ -7,7 +7,8 @@ import { NoopPushSender, type PushSender } from '../push/apns'
 import { pushLang, pushStrings } from '../push/pushStrings'
 
 const alertSchema = z.object({
-  kind: z.enum(['fall', 'crash']),
+  kind: z.enum(['fall', 'crash', 'manual']), // manual=用户手动 SOS（未实名门禁屏等处的紧急按钮）
+
   lat: z.number().min(-90).max(90).optional(),
   lon: z.number().min(-180).max(180).optional(),
 })

@@ -13,9 +13,10 @@ import { NotificationsPage } from './pages/Notifications'
 import { AccountPage } from './pages/Account'
 import { AdminPage } from './pages/Admin'
 import { IncomingCallHost } from './pages/call/IncomingCallHost'
+import { VerificationGate } from './pages/VerificationGate'
 
 export function App() {
-  const { user, ready } = useSession()
+  const { user, ready, requireVerification } = useSession()
   if (!ready) return <div className="grid min-h-dvh place-items-center"><Spinner /></div>
   if (!user) {
     return (
@@ -23,6 +24,11 @@ export function App() {
         <Route path="*" element={<LoginPage />} />
       </Routes>
     )
+  }
+  // 实名认证门禁：管理员开启且当前用户(非 admin/developer)未通过 KYC → 取代整个应用为门禁屏。
+  const gateable = user.role !== 'admin' && user.role !== 'developer'
+  if (requireVerification && gateable && !user.verified) {
+    return <VerificationGate />
   }
   return (
     <Layout>

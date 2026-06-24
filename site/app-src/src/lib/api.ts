@@ -34,6 +34,7 @@ export interface AppConfig {
   recording: { enabled: boolean; requireConsent: boolean }
   announcement?: { enabled: boolean; text?: string; level?: string } | null
   maintenance?: { enabled: boolean; message?: string } | null
+  requireVerification?: boolean
 }
 
 export class APIError extends Error {

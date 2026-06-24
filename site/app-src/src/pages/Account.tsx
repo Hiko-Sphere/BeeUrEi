@@ -167,7 +167,7 @@ const REJECT_REASONS: Record<string, [string, string]> = {
 
 /// 实名认证弹窗：展示状态，或引导提交（同意 → 填实名+证件类型 → 上传证件正面+自拍 → 提交人工审核）。
 /// 隐私：图片在浏览器内经 canvas 重编码为 JPEG（剥 EXIF/GPS）再上传；提交后不可取回原图。
-function VerificationDialog({ status, onClose, onChanged }: { status: VerificationStatusInfo | null; onClose: () => void; onChanged: () => void }) {
+export function VerificationDialog({ status, onClose, onChanged }: { status: VerificationStatusInfo | null; onClose: () => void; onChanged: () => void }) {
   const { t, lang } = useI18n()
   const toast = useToast()
   const [step, setStep] = useState<'status' | 'consent' | 'form'>('status')

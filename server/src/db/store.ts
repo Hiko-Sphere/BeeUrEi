@@ -189,6 +189,7 @@ export interface AppConfig {
   announcement: Announcement     // 全站公告横幅
   maintenance: MaintenanceMode   // 维护模式
   contentFilter: ContentFilter   // 内容违禁词过滤
+  requireVerification: boolean   // 是否要求实名认证：开启后未通过 KYC 的可门控角色除"提交认证/紧急/账户基本"外一律 403（管理员可即时开关，作为安全攸关 App 的兜底开关）
 }
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
@@ -197,6 +198,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   announcement: { active: false, message: '', level: 'info' },
   maintenance: { active: false, message: '' },
   contentFilter: { enabled: false, terms: [] },
+  requireVerification: false, // 默认关：现网由管理员显式开启；测试默认不门控
 }
 
 /// 配置补丁：嵌套对象可只带部分键（逐键合并）。
@@ -206,6 +208,7 @@ export interface AppConfigPatch {
   announcement?: Partial<Announcement>
   maintenance?: Partial<MaintenanceMode>
   contentFilter?: Partial<ContentFilter>
+  requireVerification?: boolean
 }
 
 /// 归一化：补齐缺失键，使历史旧配置（无 features/announcement 等）平滑升级（向后兼容，无需迁移脚本）。
@@ -232,6 +235,7 @@ export function normalizeAppConfig(raw: Partial<AppConfig> | undefined | null): 
       enabled: cf.enabled ?? false,
       terms: Array.isArray(cf.terms) ? cf.terms.filter((t: unknown): t is string => typeof t === 'string') : [],
     },
+    requireVerification: raw?.requireVerification ?? false,
   }
 }
 
@@ -243,6 +247,7 @@ export function mergeAppConfig(base: AppConfig, patch: AppConfigPatch): AppConfi
     announcement: { ...base.announcement, ...(patch.announcement ?? {}) },
     maintenance: { ...base.maintenance, ...(patch.maintenance ?? {}) },
     contentFilter: { ...base.contentFilter, ...(patch.contentFilter ?? {}) },
+    requireVerification: patch.requireVerification ?? base.requireVerification,
   })
 }
 

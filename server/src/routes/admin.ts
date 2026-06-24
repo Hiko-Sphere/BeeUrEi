@@ -34,6 +34,7 @@ const contentFilterSchema = z.object({ enabled: z.boolean(), terms: z.array(z.st
 const configSchema = z.object({
   registrationEnabled: z.boolean(), features: featuresSchema,
   announcement: announcementSchema, maintenance: maintenanceSchema, contentFilter: contentFilterSchema,
+  requireVerification: z.boolean(),
 }).partial()
 // 实名审核拒绝原因（timeout/revoked 为系统/撤销专用，不在管理员可选项内）。
 const kycRejectSchema = z.object({

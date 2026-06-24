@@ -17,6 +17,7 @@ export function registerAppConfigRoutes(app: FastifyInstance, store: Store): voi
       recording: { enabled: rec.enabled, requireConsent: rec.requireConsent },
       announcement: cfg.announcement, // 全站公告横幅（App 顶部展示）
       maintenance: cfg.maintenance,   // 维护模式横幅
+      requireVerification: cfg.requireVerification, // 是否要求实名认证（客户端据此对未认证用户显示门禁屏）
       // 刻意不下发 contentFilter.terms：违禁词表仅服务端持有，不泄露给客户端。
     }
   })

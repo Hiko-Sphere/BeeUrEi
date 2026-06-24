@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import fastifyWebsocket from '@fastify/websocket'
 import { randomUUID } from 'node:crypto'
 import { verifyAccessToken } from '../auth/tokens'
+import { blockedByVerificationGate } from '../auth/rbac'
 import { SignalingHub, type Member } from '../signaling/hub'
 import { type Store } from '../db/store'
 import { type PendingCallRegistry } from '../assist/pendingCalls'
@@ -90,6 +91,13 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
             }))
             // 通知双方"管理员已加入/监看"（参与方据此显示不可关闭的告知横幅 + 语音）。
             for (const p of peers) relay(p.clientId, { type: 'peer-joined', userId: auth.sub, role: 'admin', userName: meRec?.displayName, userAvatar: meRec?.avatar ?? null })
+            return
+          }
+
+          // 实名认证门禁（信令层，仅当 requireVerification 开启时生效）：未通过 KYC 的可门控角色不得参与通话
+          // ——与 REST 门禁同源，防经 WS 绕过。管理员旁观分支在上方已 return，故此处只拦普通参与者。
+          if (store.getAppConfig().requireVerification && meRec && blockedByVerificationGate(meRec.role, meRec.identityVerified, undefined)) {
+            socket.close(4003, 'verification_required')
             return
           }
 

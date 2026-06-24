@@ -102,6 +102,7 @@ const I18N = {
     // 全站控制
     controls: '全站控制', siteControls: '全站运行开关', registration: '开放注册',
     registrationDesc: '关闭后，任何人都无法新建账号（已有账号登录不受影响）。', recPolicyLink: '录制策略在「录制」页设置。',
+    requireVerif: '要求实名认证', requireVerifDesc: '开启后，未通过实名审核的盲人/协助/亲友用户除「提交认证」与紧急功能外一律无法使用；管理员不受限。可随时关闭作为兜底。',
     // 功能开关（Admin v4）
     siteFeatures: '功能开关', siteFeaturesDesc: '逐项控制 App 的每个功能。关闭后服务端立即拒绝该操作，客户端也会隐藏对应按钮。',
     safetyLocked: '安全功能（始终开启）', safetyLockedDesc: '紧急报警、拉黑、举报为安全攸关功能，刻意不可关闭，以保护用户安全与审核闭环。',
@@ -215,6 +216,7 @@ const I18N = {
     // Site controls
     controls: 'Controls', siteControls: 'Site-wide switches', registration: 'Open registration',
     registrationDesc: 'When off, no one can create a new account (existing accounts can still sign in).', recPolicyLink: 'Recording policy is on the Recordings page.',
+    requireVerif: 'Require identity verification', requireVerifDesc: 'When on, blind/helper/family users who have not passed KYC review cannot use anything except submitting verification and emergency features; admins are unaffected. Can be turned off at any time as a fallback.',
     // Feature switches (Admin v4)
     siteFeatures: 'Feature switches', siteFeaturesDesc: 'Control every app function individually. When off, the server rejects the action and the app hides the matching button.',
     safetyLocked: 'Safety features (always on)', safetyLockedDesc: 'Emergency alerts, blocking, and reporting are safety-critical and deliberately cannot be turned off — to protect users and the moderation loop.',
@@ -1436,6 +1438,8 @@ function renderControls() {
       <div class="card">
         <div class="form-row"><div><div class="lab">${esc(t('registration'))}</div><div class="desc">${esc(t('registrationDesc'))}</div></div>
           <label class="switch"><input type="checkbox" id="cReg" ${c.registrationEnabled ? 'checked' : ''}/><span class="track"></span></label></div>
+        <div class="form-row"><div><div class="lab">${esc(t('requireVerif'))}</div><div class="desc">${esc(t('requireVerifDesc'))}</div></div>
+          <label class="switch"><input type="checkbox" id="cReqVerif" ${c.requireVerification ? 'checked' : ''}/><span class="track"></span></label></div>
         <div class="form-row"><div class="desc">${esc(t('recPolicyLink'))}</div></div>
       </div>
     </div>
@@ -1476,6 +1480,7 @@ function renderControls() {
       </div>
     </div>`;
   $('#cReg').addEventListener('change', (e) => saveConfig({ registrationEnabled: e.target.checked }, e.target));
+  $('#cReqVerif').addEventListener('change', (e) => saveConfig({ requireVerification: e.target.checked }, e.target));
   viewEl().querySelectorAll('[data-feat]').forEach((el) => el.addEventListener('change', (e) =>
     saveConfig({ features: { [e.target.dataset.feat]: e.target.checked } }, e.target)));
   $('#saveAnnounce').addEventListener('click', () => saveConfig({ announcement: { active: $('#aActive').checked, message: $('#aMsg').value, level: $('#aLevel').value } }));

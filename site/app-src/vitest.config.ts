@@ -7,6 +7,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   test: {
+    globals: true, // 让 @testing-library/react 的 afterEach(cleanup) 自动注册——否则组件测试间 DOM 残留互相污染
     setupFiles: ['./src/test-setup.ts'],
   },
 })

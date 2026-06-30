@@ -2,9 +2,9 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import { type Store, publicUser, matchBannedTerm } from '../db/store'
+import { dissolveGroup } from '../db/cascade'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
-import { removeMediaFile } from '../media/storage'
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(50),
@@ -99,13 +99,7 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store): void {
     const group = store.findGroup((req.params as { id: string }).id)
     if (!group) return reply.code(404).send({ error: 'not_found' })
     if (group.ownerId !== req.user!.sub) return reply.code(403).send({ error: 'not_owner' })
-    for (const m of store.groupMessages(group.id, 100_000)) {
-      if (m.kind === 'video' && m.text !== '') {
-        store.deleteMedia(m.text)
-        removeMediaFile(m.text)
-      }
-    }
-    store.deleteGroup(group.id)
+    dissolveGroup(store, group.id) // 清群内视频媒体 + 删群；与删号级联共用同一实现
     return { ok: true }
   })
 }

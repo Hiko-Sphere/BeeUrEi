@@ -2,6 +2,16 @@ import type { Store } from './store'
 import { removeKycBlob } from '../kyc/storage'
 import { removeMediaFile } from '../media/storage'
 
+/// 解散群组：先清群内视频消息的磁盘媒体（含他人发的，不留孤儿），再删群（连带群消息/已读）。
+/// 群主解散端点与删号级联（群主删号→解散其群）共用此函数，保证两条解散路径口径一致——
+/// 否则一路清媒体、另一路漏（曾如此：cascade 直接 deleteGroup 不碰群内视频文件）。
+export function dissolveGroup(store: Store, groupId: string): void {
+  for (const m of store.groupMessages(groupId, 100_000)) {
+    if (m.kind === 'video' && m.text !== '') { store.deleteMedia(m.text); removeMediaFile(m.text) }
+  }
+  store.deleteGroup(groupId)
+}
+
 /// 删除一个用户时的级联清理（账号自删与管理员删号共用，保证数据一致、不留孤儿）。
 /// 处理：群（自己建的解散、参与的退出）→ 消息（单聊双向 + 群内发言）→ 该用户上传的媒体文件
 ///   → 绑定 → Passkey → 会话 → 黑名单（任一方向）→ 站内通知 → KYC → 用户本体。
@@ -9,7 +19,7 @@ import { removeMediaFile } from '../media/storage'
 ///   通话录制亦保留（可为举报证据，且有独立留存策略）。
 export function cascadeDeleteUser(store: Store, id: string): void {
   for (const g of store.groupsFor(id)) {
-    if (g.ownerId === id) store.deleteGroup(g.id) // 群主删号 → 解散（连带群消息/已读）
+    if (g.ownerId === id) dissolveGroup(store, g.id) // 群主删号 → 解散（连带群消息/已读 + 群内视频媒体）
     else store.updateGroup(g.id, { memberIds: g.memberIds.filter((m) => m !== id) }) // 成员删号 → 退群
   }
   store.deleteMessagesForUser(id)

@@ -46,4 +46,20 @@ describe('cascadeDeleteUser — 抹除完整性', () => {
     expect(store.mediaByOwner('u1')).toHaveLength(0)
     expect(store.findMedia('vid-u2')).toBeTruthy()      // 他人媒体不受影响
   })
+
+  it('群主删号 → 解散其群时一并清群内视频消息媒体（含他人发的，与解散端点同口径）', () => {
+    const store = new MemoryStore()
+    store.createUser(user('owner'))
+    store.createUser(user('mem'))
+    store.createGroup({ id: 'g1', name: 'g', ownerId: 'owner', memberIds: ['owner', 'mem'], createdAt: 1 } as never)
+    // mem（非群主）在群里发了视频消息——媒体 owned by mem，但随群解散应一并清（不留孤儿）。
+    store.createMedia({ id: 'gv', ownerId: 'mem', mime: 'video/mp4', size: 1, createdAt: 1 })
+    store.createMessage({ id: 'gmsg', fromId: 'mem', toId: '', groupId: 'g1', kind: 'video', text: 'gv', createdAt: 2 })
+
+    cascadeDeleteUser(store, 'owner')
+
+    expect(store.findGroup('g1')).toBeUndefined()  // 群主删号 → 群解散
+    expect(store.findMedia('gv')).toBeUndefined()  // 群内视频媒体一并清（旧实现直接 deleteGroup 会漏）
+    expect(store.findById('mem')).toBeTruthy()     // 其他成员账号不受影响
+  })
 })

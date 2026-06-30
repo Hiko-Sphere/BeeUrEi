@@ -3,7 +3,7 @@ import { api, APIError, reencodeToJpeg, uploadVerificationDoc, type SelfView, ty
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { roleLabel } from '../components/Layout'
-import { Card, Avatar, Button, Field, Input, useToast } from '../components/ui'
+import { Card, Avatar, Button, Field, Input, useToast, Modal } from '../components/ui'
 
 export function AccountPage() {
   const { user, refreshMe, signOut } = useSession()
@@ -219,8 +219,7 @@ export function VerificationDialog({ status, onClose, onChanged }: { status: Ver
   }
 
   return (
-    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={onClose}>
-      <div className="slide-up max-h-[88dvh] w-full max-w-md overflow-auto rounded-2xl surface border border-[var(--line)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} label={t('实名认证', 'Identity verification')} panelClassName="max-h-[88dvh] w-full max-w-md overflow-auto">
         <h3 className="text-lg font-semibold">{t('实名认证', 'Identity verification')}</h3>
 
         {step === 'status' && (
@@ -278,8 +277,7 @@ export function VerificationDialog({ status, onClose, onChanged }: { status: Ver
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -321,8 +319,7 @@ function SessionsDialog({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={onClose}>
-      <div className="slide-up w-full max-w-md rounded-2xl surface border border-[var(--line)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} label={t('登录设备', 'Devices')} panelClassName="w-full max-w-md">
         <h3 className="text-lg font-semibold">{t('登录设备', 'Devices')}</h3>
         <p className="mt-1 text-sm text-faint">{t('看到不认识的设备就登出它——会立即失去访问权限。', "Sign out any device you don't recognize — it loses access immediately.")}</p>
         <div className="mt-4 flex max-h-[50dvh] flex-col gap-2 overflow-auto">
@@ -349,8 +346,7 @@ function SessionsDialog({ onClose }: { onClose: () => void }) {
           )}
           <Button variant="soft" className="flex-1" onClick={onClose}>{t('完成', 'Done')}</Button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -393,8 +389,7 @@ function TwoFactorDialog({ onClose, onChanged }: { onClose: () => void; onChange
   }
 
   return (
-    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={onClose}>
-      <div className="slide-up w-full max-w-sm rounded-2xl surface border border-[var(--line)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} label={t('两步验证', 'Two-factor authentication')} panelClassName="w-full max-w-sm">
         <h3 className="text-lg font-semibold">{t('两步验证', 'Two-factor authentication')}</h3>
 
         {recoveryCodes ? (
@@ -449,8 +444,7 @@ function TwoFactorDialog({ onClose, onChanged }: { onClose: () => void; onChange
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -483,8 +477,7 @@ function EmailDialog({ currentEmail, verified, onClose, onChanged }: { currentEm
   }
 
   return (
-    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={onClose}>
-      <div className="slide-up w-full max-w-sm rounded-2xl surface border border-[var(--line)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} label={currentEmail && verified ? t('更换邮箱', 'Change email') : t('绑定并验证邮箱', 'Verify your email')} panelClassName="w-full max-w-sm">
         <h3 className="text-lg font-semibold">{currentEmail && verified ? t('更换邮箱', 'Change email') : t('绑定并验证邮箱', 'Verify your email')}</h3>
         <p className="mt-1 text-xs text-faint">{t('用于账号找回与重要通知。我们会发一个验证码到该邮箱。', 'For account recovery and important notices. We will email you a code.')}</p>
         <div className="mt-4 flex flex-col gap-4">
@@ -503,8 +496,7 @@ function EmailDialog({ currentEmail, verified, onClose, onChanged }: { currentEm
             : <Button className="flex-1" loading={busy} onClick={verify} disabled={!code.trim()}>{t('确认验证', 'Verify')}</Button>}
         </div>
         {stage === 'verify' && <button onClick={sendCode} disabled={busy} className="mt-3 w-full text-center text-xs text-faint hover:underline disabled:opacity-40">{t('重新发送验证码', 'Resend code')}</button>}
-      </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -543,8 +535,7 @@ function IdentityDialog({ currentUsername, currentPhone, onClose, onChanged }: {
   }
 
   return (
-    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={onClose}>
-      <div className="slide-up w-full max-w-sm rounded-2xl surface border border-[var(--line)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} label={t('用户名 / 手机号', 'Username / phone')} panelClassName="w-full max-w-sm">
         <h3 className="text-lg font-semibold">{t('用户名 / 手机号', 'Username / phone')}</h3>
         <div className="mt-4 flex flex-col gap-4">
           <Field label={t('用户名', 'Username')} hint={t('唯一登录标识，联系人据此找到你', 'Unique sign-in ID; contacts find you by it')}>
@@ -561,8 +552,7 @@ function IdentityDialog({ currentUsername, currentPhone, onClose, onChanged }: {
           </Field>
         </div>
         <div className="mt-5"><Button variant="soft" className="w-full" onClick={onClose}>{t('关闭', 'Close')}</Button></div>
-      </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -584,8 +574,7 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
     finally { setBusy(false) }
   }
   return (
-    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={onClose}>
-      <div className="slide-up w-full max-w-sm rounded-2xl surface border border-[var(--line)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} label={t('修改密码', 'Change password')} panelClassName="w-full max-w-sm">
         <h3 className="text-lg font-semibold">{t('修改密码', 'Change password')}</h3>
         <div className="mt-4 flex flex-col gap-4">
           <Field label={t('当前密码', 'Current password')}><Input type="password" value={oldPw} onChange={(e) => setOldPw(e.target.value)} autoComplete="current-password" /></Field>
@@ -595,7 +584,6 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
           <Button variant="soft" className="flex-1" onClick={onClose}>{t('取消', 'Cancel')}</Button>
           <Button className="flex-1" loading={busy} onClick={submit} disabled={!oldPw || !newPw}>{t('确认修改', 'Confirm')}</Button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

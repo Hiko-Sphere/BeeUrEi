@@ -129,6 +129,7 @@ struct CallView: View {
             VStack(spacing: 6) {
                 NetworkStatusBar(callQuality: model.callQuality)
                 adminBanner // 合规告知：管理员正在监看（不可关闭）
+                micDeniedBanner // 麦克风被拒：对端听不到本端，常驻提示
                 HStack(spacing: 8) {
                     if let name = model.peerName, !name.isEmpty, model.remoteVideoFrames {
                         AvatarView(dataURL: model.peerAvatar, name: name, size: 24)
@@ -246,6 +247,21 @@ struct CallView: View {
             .background(Color.beeDanger, in: Capsule())
             .accessibilityElement(children: .combine)
             .accessibilityLabel(model.adminObserverName.map { "\(CallStrings.adminObservingBanner(lang)) · \($0)" } ?? CallStrings.adminObservingBanner(lang))
+        }
+    }
+
+    @ViewBuilder private var micDeniedBanner: some View {
+        if model.micDenied {
+            HStack(spacing: 8) {
+                Image(systemName: "mic.slash.fill").font(.footnote.weight(.bold))
+                Text(CallStrings.micDeniedBanner(lang)).font(.footnote.weight(.bold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .frame(maxWidth: .infinity)
+            .background(Color.beeDanger, in: Capsule())
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(CallStrings.micDeniedBanner(lang))
         }
     }
 

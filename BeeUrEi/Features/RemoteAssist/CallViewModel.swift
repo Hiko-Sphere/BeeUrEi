@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import UIKit
 import CoreLocation
+import AVFoundation
 
 /// 通话视图模型：编排信令 + 媒体 + 视频隐私门控。
 @MainActor
@@ -43,6 +44,7 @@ final class CallViewModel {
     private(set) var declined = false                     // 发起方：对方已拒绝
     private(set) var unanswered = false                   // 发起方：40s 无人接听（A4 回退志愿者）
     private(set) var muted = false                        // 本端是否静音
+    private(set) var micDenied = false                    // 麦克风权限被拒：对端听不到本端，须持续提示（见网页端对齐）
     private(set) var callEnded = false                   // 对方已挂断/离开 → 本端自动挂断并关闭界面
     var canReport: Bool { peerUserId != nil }
 
@@ -67,6 +69,22 @@ final class CallViewModel {
     func setMuted(_ on: Bool) {
         muted = on
         media.setMicMuted(on)
+    }
+
+    /// 通话前确保麦克风权限：未决则请求，被拒则置 micDenied 并播报（盲人侧）。
+    private func ensureMicPermission() async {
+        switch AVAudioApplication.shared.recordPermission {
+        case .denied:
+            micDenied = true
+            announce(CallStrings.micDeniedAnnounce(lang))
+        case .undetermined:
+            let granted = await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
+                AVAudioApplication.requestRecordPermission { c.resume(returning: $0) }
+            }
+            if !granted { micDenied = true; announce(CallStrings.micDeniedAnnounce(lang)) }
+        default:
+            break
+        }
     }
 
     /// 协助者侧画面区的提示文案（把"无画面"的原因讲清楚）。
@@ -100,6 +118,9 @@ final class CallViewModel {
             statusText = CallStrings.loginToCall(lang)
             return
         }
+        // 麦克风权限预检：通话靠语音沟通，被拒会"白说"（对端完全听不到）。旁观者纯监看不需麦。
+        // undetermined 先请求；denied 持续提示（横幅 + 盲人侧语音），不卡断通话（仍可只听对方）。
+        if role != .adminObserver { await ensureMicPermission() }
         // 媒体本端 SDP/ICE → 经信令发给对端。
         media.onLocalDescription = { [weak self] type, sdp in
             self?.signaling.send(["type": type, "sdp": sdp])

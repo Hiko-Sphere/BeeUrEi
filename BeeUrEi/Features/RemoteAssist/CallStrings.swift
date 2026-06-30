@@ -13,6 +13,13 @@ enum CallStrings {
     static func mute(_ l: Language) -> String { l == .zh ? "静音" : "Mute" }
     static func unmute(_ l: Language) -> String { l == .zh ? "取消静音" : "Unmute" }
     static func muteConfirmTitle(_ l: Language) -> String { l == .zh ? "确认静音？" : "Mute yourself?" }
+    static func micDeniedBanner(_ l: Language) -> String {
+        l == .zh ? "麦克风被关闭，对方听不到你——请到系统设置允许麦克风" : "Mic is off — they can't hear you. Allow mic in Settings."
+    }
+    static func micDeniedAnnounce(_ l: Language) -> String {
+        l == .zh ? "麦克风未开启，对方将听不到你的声音。请到系统设置允许麦克风权限。"
+                 : "Microphone is off, so they won't hear you. Please allow microphone access in Settings."
+    }
     static func muteConfirmMessage(_ l: Language) -> String {
         l == .zh ? "静音后对方将暂时听不到你的声音。" : "While muted, the other person can't hear you."
     }

@@ -115,6 +115,32 @@ describe('SqliteStore (node:sqlite)', () => {
     expect(store.messagesBetween('u1', 'u2', 10, 1000, 'mB').map((m) => m.id)).toEqual(['m0', 'mA'])
   })
 
+  it('搜索结果同毫秒命中：(createdAt,id) 稳定降序，且两存储口径一致', () => {
+    // 三条同毫秒(7000)命中 + 一条更早(6000)；同毫秒内必须按 id 降序、且 Sqlite 与 Memory 一致，
+    // 否则同一搜索在 SQLite/JSON 部署下结果顺序不同（用户体验漂移、测试随机失败）。
+    const seed = (s: SqliteStore | MemoryStore) => {
+      s.createMessage({ id: 'q1', fromId: 'u1', toId: 'u2', kind: 'text', text: '老地方 meeting', createdAt: 7000 })
+      s.createMessage({ id: 'q3', fromId: 'u2', toId: 'u1', kind: 'text', text: 'meeting 改时间', createdAt: 7000 })
+      s.createMessage({ id: 'q2', fromId: 'u1', toId: 'u2', kind: 'text', text: 'meeting 取消', createdAt: 7000 })
+      s.createMessage({ id: 'q0', fromId: 'u1', toId: 'u2', kind: 'text', text: '上次 meeting', createdAt: 6000 })
+    }
+    const sq = new SqliteStore(':memory:'); seed(sq)
+    const mem = new MemoryStore(); seed(mem)
+    const expected = ['q3', 'q2', 'q1', 'q0'] // 同毫秒 id 降序 q3>q2>q1，再接更早 q0
+    expect(sq.searchDirectMessages('u1', 'u2', 'meeting', 10).map((m) => m.id)).toEqual(expected)
+    expect(mem.searchDirectMessages('u1', 'u2', 'meeting', 10).map((m) => m.id)).toEqual(expected)
+    // 群搜索同理。
+    const seedG = (s: SqliteStore | MemoryStore) => {
+      s.createMessage({ id: 'g1', fromId: 'u1', toId: '', groupId: 'G', kind: 'text', text: 'meeting A', createdAt: 8000 })
+      s.createMessage({ id: 'g3', fromId: 'u2', toId: '', groupId: 'G', kind: 'text', text: 'meeting B', createdAt: 8000 })
+      s.createMessage({ id: 'g2', fromId: 'u3', toId: '', groupId: 'G', kind: 'text', text: 'meeting C', createdAt: 8000 })
+    }
+    const sq2 = new SqliteStore(':memory:'); seedG(sq2)
+    const mem2 = new MemoryStore(); seedG(mem2)
+    expect(sq2.searchGroupMessages('G', 'meeting', 10).map((m) => m.id)).toEqual(['g3', 'g2', 'g1'])
+    expect(mem2.searchGroupMessages('G', 'meeting', 10).map((m) => m.id)).toEqual(['g3', 'g2', 'g1'])
+  })
+
   it('latestMessagesPerPeer：对端最新两条同毫秒时只返回一条（不重复出现在会话列表）', () => {
     const store = new SqliteStore(':memory:')
     store.createMessage({ id: 'x1', fromId: 'u1', toId: 'u2', kind: 'text', text: '1', createdAt: 5000 })

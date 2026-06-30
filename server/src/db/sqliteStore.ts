@@ -636,7 +636,7 @@ export class SqliteStore implements Store {
        WHERE groupId IS NULL AND kind = 'text'
          AND ((fromId = ? AND toId = ?) OR (fromId = ? AND toId = ?))
          AND LOWER(text) LIKE ? ESCAPE '\\'
-       ORDER BY createdAt DESC LIMIT ?`,
+       ORDER BY createdAt DESC, id DESC LIMIT ?`,
     ).all(a, b, b, a, like, limit)
     return rows.map((r) => this.toMessage(r))
   }
@@ -647,7 +647,7 @@ export class SqliteStore implements Store {
     const rows = this.db.prepare(
       `SELECT * FROM messages
        WHERE groupId = ? AND kind = 'text' AND LOWER(text) LIKE ? ESCAPE '\\'
-       ORDER BY createdAt DESC LIMIT ?`,
+       ORDER BY createdAt DESC, id DESC LIMIT ?`,
     ).all(groupId, like, limit)
     return rows.map((r) => this.toMessage(r))
   }

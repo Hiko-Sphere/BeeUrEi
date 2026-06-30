@@ -1056,7 +1056,7 @@ export class MemoryStore implements Store {
       .filter((m) => !m.groupId && m.kind === 'text')
       .filter((m) => (m.fromId === a && m.toId === b) || (m.fromId === b && m.toId === a))
       .filter((m) => m.text.toLowerCase().includes(q))
-      .sort((x, y) => y.createdAt - x.createdAt)
+      .sort((x, y) => y.createdAt - x.createdAt || y.id.localeCompare(x.id)) // (createdAt,id) 稳定序，与 SqliteStore 一致
       .slice(0, limit)
   }
   searchGroupMessages(groupId: string, query: string, limit: number): ChatMessage[] {
@@ -1065,7 +1065,7 @@ export class MemoryStore implements Store {
     return [...this.messages.values()]
       .filter((m) => m.groupId === groupId && m.kind === 'text')
       .filter((m) => m.text.toLowerCase().includes(q))
-      .sort((x, y) => y.createdAt - x.createdAt)
+      .sort((x, y) => y.createdAt - x.createdAt || y.id.localeCompare(x.id)) // (createdAt,id) 稳定序，与 SqliteStore 一致
       .slice(0, limit)
   }
   setGroupRead(groupId: string, userId: string, at: number): void {

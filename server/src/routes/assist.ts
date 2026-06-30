@@ -225,6 +225,11 @@ export function registerAssistRoutes(
     if (matchBannedTerm(cfg, parsed.data.topic ?? '') || matchBannedTerm(cfg, parsed.data.locality ?? '')) {
       return reply.code(403).send({ error: 'content_blocked' })
     }
+    // 防单用户用大量 callId 灌满公开队列、把久等盲人的求助挤出全局 cap：限每用户活跃求助数。
+    // 仅新 callId 受限；重发自己已有的 callId（更新等待信息）放行。正常用户同时只有 1 条。
+    if (!openHelp.byId(parsed.data.callId) && openHelp.activeCountFor(req.user!.sub, Date.now()) >= 5) {
+      return reply.code(429).send({ error: 'too_many_requests' })
+    }
     const me = store.findById(req.user!.sub)
     const ok = openHelp.register({
       callId: parsed.data.callId,

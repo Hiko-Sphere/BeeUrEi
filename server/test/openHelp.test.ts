@@ -14,6 +14,18 @@ describe('OpenHelpRegistry', () => {
     claimedAt: over.claimedAt,
   })
 
+  it('activeCountFor：只数某用户未认领、未过期的求助（防灌队列限流依据）', () => {
+    const r = new OpenHelpRegistry()
+    r.register(base({ callId: 'a1', fromUserId: 'A', createdAt: 0 }))
+    r.register(base({ callId: 'a2', fromUserId: 'A', createdAt: 0 }))
+    r.register(base({ callId: 'b1', fromUserId: 'B', createdAt: 0 }))
+    expect(r.activeCountFor('A', 0)).toBe(2)
+    expect(r.activeCountFor('B', 0)).toBe(1)
+    r.claim('a1', 'volunteer', 1)                       // 认领后不再计入活跃
+    expect(r.activeCountFor('A', 1)).toBe(1)
+    expect(r.activeCountFor('A', 200_000)).toBe(0)      // 过期(TTL 2min)后归零
+  })
+
   it('登记后出现在公开队列，按等待时间最久优先', () => {
     const r = new OpenHelpRegistry()
     r.register(base({ callId: 'new', createdAt: 20 }))

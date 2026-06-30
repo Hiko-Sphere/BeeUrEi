@@ -69,6 +69,15 @@ export class OpenHelpRegistry {
     return this.reqs.get(callId)
   }
 
+  /// 某用户当前活跃（未认领、未过期）的公开求助数。
+  /// 用于限制单用户在队列里的占位，防其用大量 callId 灌满全局 cap、把久等盲人的求助挤出。
+  activeCountFor(userId: string, now: number): number {
+    this.prune(now)
+    let n = 0
+    for (const r of this.reqs.values()) if (r.fromUserId === userId && !r.claimedBy) n++
+    return n
+  }
+
   /// 公开队列：未认领、未过期，按等待时间（最久优先）。
   /// excludeUserId：排除某用户（通常请求者本人）；blockedIds：排除黑名单双方（互不可见）。
   open(now: number, excludeUserId?: string, blockedIds?: Set<string>): HelpRequest[] {

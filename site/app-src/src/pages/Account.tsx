@@ -15,6 +15,7 @@ export function AccountPage() {
   const [pwOpen, setPwOpen] = useState(false)
   const [tfaOpen, setTfaOpen] = useState(false)
   const [sessionsOpen, setSessionsOpen] = useState(false)
+  const [emailOpen, setEmailOpen] = useState(false)
   const [verifOpen, setVerifOpen] = useState(false)
   const [verif, setVerif] = useState<VerificationStatusInfo | null>(null)
 
@@ -114,6 +115,10 @@ export function AccountPage() {
         <div className="mb-3 text-sm font-semibold">{t('安全', 'Security')}</div>
         <div className="flex flex-wrap gap-2">
           <Button variant="soft" onClick={() => setPwOpen(true)}>{t('修改密码', 'Change password')}</Button>
+          <Button variant="soft" onClick={() => setEmailOpen(true)}>
+            {self?.email ? t('邮箱', 'Email') : t('绑定邮箱', 'Add email')}
+            <span className="ml-1.5 text-xs text-faint">{!self?.email ? t('未绑定', 'None') : self.emailVerified ? t('已验证', 'Verified') : t('未验证', 'Unverified')}</span>
+          </Button>
           <Button variant="soft" onClick={() => setTfaOpen(true)}>
             {t('两步验证', 'Two-factor')}
             <span className="ml-1.5 text-xs text-faint">{self?.twoFactorEnabled ? t('已开启', 'On') : t('未开启', 'Off')}</span>
@@ -139,6 +144,7 @@ export function AccountPage() {
       {pwOpen && <PasswordDialog onClose={() => setPwOpen(false)} />}
       {tfaOpen && <TwoFactorDialog onClose={() => setTfaOpen(false)} onChanged={async () => { await refreshMe(); try { setSelf(await api.me()) } catch { /* ignore */ } }} />}
       {sessionsOpen && <SessionsDialog onClose={() => setSessionsOpen(false)} />}
+      {emailOpen && <EmailDialog currentEmail={self?.email ?? null} verified={self?.emailVerified ?? false} onClose={() => setEmailOpen(false)} onChanged={async () => { await refreshMe(); try { setSelf(await api.me()) } catch { /* ignore */ } }} />}
       {verifOpen && <VerificationDialog status={verif} onClose={() => setVerifOpen(false)} onChanged={async () => { await reloadVerif(); await refreshMe(); try { setSelf(await api.me()) } catch { /* ignore */ } }} />}
     </div>
   )
@@ -437,6 +443,60 @@ function TwoFactorDialog({ onClose, onChanged }: { onClose: () => void; onChange
             </div>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+/// 绑定/换绑并验证邮箱（用于账号找回；与 iOS EmailManageView 对齐）。两步：填邮箱发码 → 输码验证。
+function EmailDialog({ currentEmail, verified, onClose, onChanged }: { currentEmail: string | null; verified: boolean; onClose: () => void; onChanged: () => void }) {
+  const { t } = useI18n()
+  const toast = useToast()
+  const [email, setEmail] = useState(currentEmail ?? '')
+  const [code, setCode] = useState('')
+  const [stage, setStage] = useState<'enter' | 'verify'>('enter')
+  const [busy, setBusy] = useState(false)
+
+  const errText = (e: unknown): string => {
+    const c = e instanceof APIError ? e.code : ''
+    if (c === 'email_taken') return t('该邮箱已绑定到另一个账号', 'That email is linked to another account')
+    if (c === 'mail_unavailable') return t('邮件服务暂时不可用，请稍后再试', 'Email service unavailable — try again later')
+    if (c === 'invalid_input') return t('邮箱格式不正确', 'Invalid email format')
+    return t('操作失败', 'Failed')
+  }
+
+  const sendCode = async () => {
+    setBusy(true)
+    try { await api.setEmail(email.trim()); toast(t('验证码已发送', 'Code sent'), 'ok'); setStage('verify') }
+    catch (e) { toast(errText(e), 'error') } finally { setBusy(false) }
+  }
+  const verify = async () => {
+    setBusy(true)
+    try { await api.verifyEmail(code.trim()); toast(t('邮箱已验证', 'Email verified'), 'ok'); onChanged(); onClose() }
+    catch { toast(t('验证码无效或已过期', 'Invalid or expired code'), 'error') } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={onClose}>
+      <div className="slide-up w-full max-w-sm rounded-2xl surface border border-[var(--line)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-semibold">{currentEmail && verified ? t('更换邮箱', 'Change email') : t('绑定并验证邮箱', 'Verify your email')}</h3>
+        <p className="mt-1 text-xs text-faint">{t('用于账号找回与重要通知。我们会发一个验证码到该邮箱。', 'For account recovery and important notices. We will email you a code.')}</p>
+        <div className="mt-4 flex flex-col gap-4">
+          {stage === 'enter' ? (
+            <Field label={t('邮箱', 'Email')}><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" placeholder="you@example.com" /></Field>
+          ) : (
+            <Field label={t('验证码', 'Verification code')} hint={t('查收邮件中的 6 位验证码', 'Check your email for the 6-digit code')}>
+              <Input inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} placeholder="000000" />
+            </Field>
+          )}
+        </div>
+        <div className="mt-5 flex gap-3">
+          <Button variant="soft" className="flex-1" onClick={onClose}>{t('取消', 'Cancel')}</Button>
+          {stage === 'enter'
+            ? <Button className="flex-1" loading={busy} onClick={sendCode} disabled={!email.includes('@')}>{t('发送验证码', 'Send code')}</Button>
+            : <Button className="flex-1" loading={busy} onClick={verify} disabled={!code.trim()}>{t('确认验证', 'Verify')}</Button>}
+        </div>
+        {stage === 'verify' && <button onClick={sendCode} disabled={busy} className="mt-3 w-full text-center text-xs text-faint hover:underline disabled:opacity-40">{t('重新发送验证码', 'Resend code')}</button>}
       </div>
     </div>
   )

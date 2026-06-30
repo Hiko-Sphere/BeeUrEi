@@ -150,6 +150,8 @@ export const api = {
   setPassword: (oldPassword: string, newPassword: string) => post('/api/account/password', { oldPassword, newPassword }),
   setPhone: (phone: string) => post('/api/account/phone', { phone }),
   setUsername: (username: string) => post('/api/account/username', { username }),
+  setEmail: (email: string) => post('/api/account/email', { email }),       // 设置/换绑邮箱 → 服务端发验证码
+  verifyEmail: (code: string) => post('/api/account/email/verify', { code }), // 校验验证码 → 标记已验证
   deleteAccount: () => del('/api/account'),
 
   // 登录设备 / 会话管理

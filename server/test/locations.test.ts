@@ -58,17 +58,24 @@ describe('实时位置共享 /api/locations', () => {
     await app.close()
   })
 
-  it('拉黑后互不可见', async () => {
+  it('拉黑后互不可见（双向：拉黑方与被拉黑方都看不到对方位置）', async () => {
     const store = new MemoryStore()
     const app = buildApp(store)
     const A = await register(app, 'loc_a3', 'blind')
     const B = await register(app, 'loc_b3', 'helper')
     await link(app, A, B.id, B.token)
+    // 双方都在共享位置。
     await app.inject({ method: 'POST', url: '/api/locations/update', headers: auth(B.token), payload: { lat: 5, lng: 6 } })
-    // A 拉黑 B。
+    await app.inject({ method: 'POST', url: '/api/locations/update', headers: auth(A.token), payload: { lat: 7, lng: 8 } })
+    // A 拉黑 B（单向操作）。
     await app.inject({ method: 'POST', url: '/api/blocks', headers: auth(A.token), payload: { userId: B.id } })
-    const body = (await app.inject({ method: 'GET', url: '/api/locations/contacts', headers: auth(A.token) })).json()
-    expect(body.contacts).toHaveLength(0)
+    // 拉黑方 A 看不到 B。
+    const aSees = (await app.inject({ method: 'GET', url: '/api/locations/contacts', headers: auth(A.token) })).json()
+    expect(aSees.contacts).toHaveLength(0)
+    // 关键回归防护：被拉黑方 B 也必须看不到 A。拉黑对位置可见性须双向生效——否则被拉黑者
+    // 仍能追踪拉黑者实时位置（隐私泄露）。依赖 blockedUserIdSet 含"拉黑我的人"（双向）。
+    const bSees = (await app.inject({ method: 'GET', url: '/api/locations/contacts', headers: auth(B.token) })).json()
+    expect(bSees.contacts).toHaveLength(0)
     await app.close()
   })
 

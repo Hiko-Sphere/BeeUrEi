@@ -29,7 +29,9 @@ export function CallsPage() {
   }, [active])
 
   const onAnswer = async (c: IncomingCall) => { setBusyId(c.callId); await answerIncoming(c.callId, c.fromName, c.fromAvatar); setBusyId(null) }
-  const onClaim = async (r: HelpRequest) => { setBusyId(r.callId); await claimQueue(r.callId, r.fromName || r.requesterName || t('求助者', 'Requester'), undefined); setBusyId(null) }
+  const onClaim = async (r: HelpRequest) => { setBusyId(r.callId); await claimQueue(r.callId, r.fromName || t('求助者', 'Requester'), undefined); setBusyId(null) }
+  // 等待时长（后端给的是 waitedSeconds，非时间戳）：>60s 显示分钟，否则秒。
+  const waited = (s: number) => s >= 60 ? t(`已等待 ${Math.floor(s / 60)} 分钟`, `waited ${Math.floor(s / 60)}m`) : t(`已等待 ${s} 秒`, `waited ${s}s`)
 
   return (
     <div className="flex flex-col gap-5">
@@ -68,12 +70,14 @@ export function CallsPage() {
             <ul className="divide-y divide-[var(--line)]">
               {queue.map((r) => (
                 <li key={r.callId} className="flex items-center gap-3 px-4 py-3">
-                  <Avatar name={r.fromName || r.requesterName || '?'} size={42} />
+                  <Avatar name={r.fromName} src={r.fromAvatar} size={42} />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium">{r.fromName || r.requesterName || t('求助者', 'Requester')}</div>
+                    <div className="truncate font-medium">{r.fromName}</div>
+                    {r.topic && <div className="truncate text-sm text-soft">{r.topic}</div>}
                     <div className="flex flex-wrap items-center gap-1.5 text-xs text-faint">
-                      {r.lang && <Pill>{r.lang.toUpperCase()}</Pill>}
-                      {r.createdAt && <span>{timeAgo(r.createdAt, lang)}</span>}
+                      {r.language && <Pill>{r.language.toUpperCase()}</Pill>}
+                      {r.locality && <span>{r.locality}</span>}
+                      <span>{waited(r.waitedSeconds)}</span>
                     </div>
                   </div>
                   <Button loading={busyId === r.callId} disabled={!!active} onClick={() => onClaim(r)}><IconCheck width={16} height={16} />{t('认领接入', 'Claim')}</Button>

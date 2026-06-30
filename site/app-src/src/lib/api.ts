@@ -20,7 +20,8 @@ export interface FamilyLink { id: string; memberId: string; memberName: string; 
 export interface CallRecordInfo { id: string; callId: string; direction?: string; status: string; peerName?: string; peerAvatar?: string | null; createdAt: number }
 export interface IceServer { urls: string[] | string; username?: string; credential?: string }
 export interface IncomingCall { callId: string; fromName: string; fromUserId: string; fromAvatar?: string | null }
-export interface HelpRequest { callId: string; requesterName?: string; fromName?: string; fromUserId?: string; createdAt?: number; durationSec?: number; lang?: string }
+// 与后端 HelpSummary 对齐：队列对外的安全摘要（不暴露 fromUserId）。
+export interface HelpRequest { callId: string; fromName: string; fromAvatar?: string | null; language?: string; locality?: string; topic?: string; waitedSeconds: number }
 export interface ChatMessage { id: string; fromId: string; toId: string; kind: string; text: string; createdAt: number; readAt?: number; reaction?: string; groupId?: string }
 export interface Conversation { peer: User; last: ChatMessage; unread: number }
 export interface ChatGroup { id: string; name: string; ownerId: string; memberIds: string[]; createdAt: number }

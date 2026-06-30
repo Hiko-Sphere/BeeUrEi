@@ -262,4 +262,20 @@ describe('聊天（绑定好友互发）', () => {
     expect(m.text).toBe('')
     expect(m.reaction ?? null).toBeNull()
   })
+
+  it('拉黑后不能再用表情回应旧消息（与发送同口径 isBlockedBetween）', async () => {
+    const app = buildApp(new MemoryStore())
+    const a = await reg(app, 'rba', 'blind')
+    const b = await reg(app, 'rbb', 'helper')
+    await bind(app, a.token, b.token, 'rbb')
+    const sent = (await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, kind: 'text', text: '你好' } })).json().message
+    // 未拉黑：b 能回应。
+    expect((await app.inject({ method: 'POST', url: `/api/messages/${sent.id}/reaction`, headers: auth(b.token), payload: { emoji: '👍' } })).statusCode).toBe(200)
+    // a 拉黑 b 后：b 不能再回应（403 blocked），与发送被拉黑同口径。
+    await app.inject({ method: 'POST', url: '/api/blocks', headers: auth(a.token), payload: { userId: b.user.id } })
+    const blocked = await app.inject({ method: 'POST', url: `/api/messages/${sent.id}/reaction`, headers: auth(b.token), payload: { emoji: '😡' } })
+    expect(blocked.statusCode).toBe(403)
+    expect((blocked.json() as { error: string }).error).toBe('blocked')
+    await app.close()
+  })
 })

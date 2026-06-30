@@ -195,8 +195,11 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     if (msg.groupId) {
       const group = store.findGroup(msg.groupId)
       if (!group?.memberIds.includes(me)) return reply.code(403).send({ error: 'not_participant' })
-    } else if (msg.fromId !== me && msg.toId !== me) {
-      return reply.code(403).send({ error: 'not_participant' })
+    } else {
+      if (msg.fromId !== me && msg.toId !== me) return reply.code(403).send({ error: 'not_participant' })
+      // 与发送同口径：互相拉黑后不能再用表情回应旧消息骚扰对方（发送已查 isBlockedBetween，回应此前漏查）。
+      const other = msg.fromId === me ? msg.toId : msg.fromId
+      if (isBlockedBetween(store, me, other)) return reply.code(403).send({ error: 'blocked' })
     }
     if (msg.kind === 'recalled') return reply.code(400).send({ error: 'message_recalled' })
     const emoji = parsed.data.emoji.trim()

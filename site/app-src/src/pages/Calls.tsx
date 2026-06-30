@@ -52,7 +52,8 @@ export function CallsPage() {
                     <div className="truncate font-medium">{c.fromName}</div>
                     <div className="flex items-center gap-1.5 text-xs text-ok"><span className="inline-block h-1.5 w-1.5 rounded-full bg-ok ring-live" />{t('正在呼叫…', 'Calling…')}</div>
                   </div>
-                  <Button variant="ok" loading={busyId === c.callId} disabled={!!active} onClick={() => onAnswer(c)}><IconPhone width={16} height={16} />{t('接听', 'Answer')}</Button>
+                  <Button variant="ok" loading={busyId === c.callId} disabled={!!active} onClick={() => onAnswer(c)}
+                    aria-label={t(`接听 ${c.fromName} 的来电`, `Answer call from ${c.fromName}`)}><IconPhone width={16} height={16} />{t('接听', 'Answer')}</Button>
                 </li>
               ))}
             </ul>
@@ -80,7 +81,8 @@ export function CallsPage() {
                       <span>{waited(r.waitedSeconds)}</span>
                     </div>
                   </div>
-                  <Button loading={busyId === r.callId} disabled={!!active} onClick={() => onClaim(r)}><IconCheck width={16} height={16} />{t('认领接入', 'Claim')}</Button>
+                  <Button loading={busyId === r.callId} disabled={!!active} onClick={() => onClaim(r)}
+                    aria-label={t(`认领 ${r.fromName} 的求助${r.topic ? `（${r.topic}）` : ''}`, `Claim help from ${r.fromName}${r.topic ? ` (${r.topic})` : ''}`)}><IconCheck width={16} height={16} />{t('认领接入', 'Claim')}</Button>
                 </li>
               ))}
             </ul>

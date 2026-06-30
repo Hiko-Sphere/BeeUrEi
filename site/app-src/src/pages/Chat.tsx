@@ -181,6 +181,12 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
     try { await api.recallMessage(m.id); await load() } catch { toast(t('撤回失败（超过 2 分钟？）', 'Recall failed'), 'error') }
   }
 
+  // 表情回应（与 iOS 对齐）：再次点同一表情=取消（后端空串清除）。
+  const react = async (m: ChatMessage, emoji: string) => {
+    try { await api.reactMessage(m.id, m.reaction === emoji ? '' : emoji); await load() }
+    catch (e) { toast(chatErrorText(e, t, t('操作失败', 'Failed')), 'error') }
+  }
+
   return (
     <div className="flex w-full flex-col rounded-2xl surface border border-[var(--line)]">
       <header className="flex items-center gap-3 border-b border-[var(--line)] px-4 py-3">
@@ -196,7 +202,7 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
         {msgs === null ? <Spinner /> : msgs.length === 0 ? (
           <div className="grid h-full place-items-center text-sm text-faint">{t('开始你们的对话', 'Say hello')}</div>
         ) : msgs.map((m) => (
-          <Bubble key={m.id} m={m} mine={m.fromId === user?.id} lang={lang} t={t} onRecall={() => recall(m)} />
+          <Bubble key={m.id} m={m} mine={m.fromId === user?.id} lang={lang} t={t} onRecall={() => recall(m)} onReact={(e) => react(m, e)} />
         ))}
         <div ref={bottomRef} />
       </div>
@@ -212,17 +218,34 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
   )
 }
 
-function Bubble({ m, mine, lang, t, onRecall }: { m: ChatMessage; mine: boolean; lang: 'zh' | 'en'; t: (z: string, e: string) => string; onRecall: () => void }) {
+const REACTION_CHOICES = ['👍', '❤️', '😂', '😮', '😢', '🙏'] // 与 iOS ChatStrings.reactionChoices 对齐
+
+function Bubble({ m, mine, lang, t, onRecall, onReact }: { m: ChatMessage; mine: boolean; lang: 'zh' | 'en'; t: (z: string, e: string) => string; onRecall: () => void; onReact: (emoji: string) => void }) {
   const recallable = mine && m.kind !== 'recalled' && Date.now() - m.createdAt < 2 * 60_000
+  const reactable = m.kind !== 'recalled'
+  const [picking, setPicking] = useState(false)
   return (
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-      <div className={`group max-w-[78%] rounded-2xl px-3.5 py-2 text-sm ${mine ? 'bg-honey text-ink' : 'surface-2 text-[var(--text)]'} ${m.kind === 'recalled' ? 'italic opacity-60' : ''}`}>
+      <div className={`group relative max-w-[78%] rounded-2xl px-3.5 py-2 text-sm ${mine ? 'bg-honey text-ink' : 'surface-2 text-[var(--text)]'} ${m.kind === 'recalled' ? 'italic opacity-60' : ''}`}>
         <MessageBody m={m} t={t} />
         <div className={`mt-1 flex items-center gap-2 text-[10px] ${mine ? 'text-ink/60' : 'text-faint'}`}>
           <span>{timeAgo(m.createdAt, lang)}</span>
           {m.reaction && <span className="text-sm">{m.reaction}</span>}
+          {reactable && (
+            <button onClick={() => setPicking((v) => !v)} aria-label={t('表情回应', 'React')}
+                    className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('回应', 'React')}</button>
+          )}
           {recallable && <button onClick={onRecall} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('撤回', 'Recall')}</button>}
         </div>
+        {picking && (
+          <div className="absolute -top-9 right-0 z-10 flex gap-1 rounded-full surface border border-[var(--line)] px-2 py-1 shadow-lg">
+            {REACTION_CHOICES.map((e) => (
+              <button key={e} onClick={() => { onReact(e); setPicking(false) }}
+                      className={`text-lg leading-none transition hover:scale-125 ${m.reaction === e ? 'opacity-100' : 'opacity-80'}`}
+                      aria-label={e}>{e}</button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

@@ -33,6 +33,8 @@ enum HelperStrings {
         l == .zh ? "有人发起求助时会出现在这里。下拉刷新。" : "New requests appear here. Pull to refresh."
     }
     static func helpThem(_ l: Language) -> String { l == .zh ? "帮助 TA" : "Help them" }
+    /// 求助者语言与本协助者一致时的提示（队列里更快认出能沟通的对象）。
+    static func yourLanguage(_ l: Language) -> String { l == .zh ? "你的语言" : "your language" }
     static func queueCardA11y(name: String, topic: String?, locality: String?, languageName: String?,
                               waited: String, _ l: Language) -> String {
         switch l {

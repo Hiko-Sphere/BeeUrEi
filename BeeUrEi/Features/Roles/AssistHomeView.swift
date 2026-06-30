@@ -136,7 +136,10 @@ struct AssistHomeView: View {
     }
 
     private func queueCard(_ r: HelpRequestSummary) -> some View {
-        Button { Task { await claim(r) } } label: {
+        // 求助者语言与本协助者界面语言一致 → 语言行追加"你的语言"（视觉+VoiceOver 都标出，帮志愿者认出能沟通的对象）。
+        let langMatch = (r.language?.lowercased() == lang.rawValue)
+        let langLabel = r.language.flatMap { $0.isEmpty ? nil : languageName($0) + (langMatch ? " · " + HelperStrings.yourLanguage(lang) : "") }
+        return Button { Task { await claim(r) } } label: {
             BeeCard {
                 VStack(alignment: .leading, spacing: BeeSpacing.sm) {
                     HStack {
@@ -147,7 +150,7 @@ struct AssistHomeView: View {
                     }
                     if let topic = r.topic, !topic.isEmpty { BeeInfoRow(systemImage: "text.bubble", text: topic) }
                     if let loc = r.locality, !loc.isEmpty { BeeInfoRow(systemImage: "mappin.and.ellipse", text: loc) }
-                    if let lang = r.language, !lang.isEmpty { BeeInfoRow(systemImage: "globe", text: languageName(lang)) }
+                    if let langLabel { BeeInfoRow(systemImage: "globe", text: langLabel) }
                     HStack {
                         Spacer()
                         Label(HelperStrings.helpThem(lang), systemImage: "video.fill")
@@ -163,7 +166,7 @@ struct AssistHomeView: View {
         .disabled(busy)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(HelperStrings.queueCardA11y(name: r.fromName, topic: r.topic, locality: r.locality,
-                                                       languageName: r.language.map { languageName($0) },
+                                                       languageName: langLabel,
                                                        waited: waitText(r.waitedSeconds), lang))
         .accessibilityHint(HelperStrings.queueCardHint(lang))
         .accessibilityAddTraits(.isButton)

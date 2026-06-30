@@ -1,4 +1,5 @@
 import { apiURL } from './config'
+import { classifyIdentifier, normalizePhoneInput } from './identifier'
 
 // ---------- 模型（与服务端对齐） ----------
 export interface User { id: string; username: string; displayName: string; role: string; status: string; avatar?: string | null; verified?: boolean }
@@ -134,8 +135,9 @@ export const api = {
   async login(identifier: string, password: string, totpCode?: string): Promise<{ token: string; refreshToken: string; user: User }> {
     // 标识可为用户名 / 手机号 / 邮箱，后端按字段判定；统一传 username（后端兼容）。
     const body: Record<string, string> = { password }
-    if (identifier.includes('@')) body.email = identifier
-    else if (/^\+?[0-9]{5,}$/.test(identifier.replace(/[\s-]/g, ''))) body.phone = identifier.replace(/[\s-]/g, '')
+    const kind = classifyIdentifier(identifier)
+    if (kind === 'email') body.email = identifier
+    else if (kind === 'phone') body.phone = normalizePhoneInput(identifier)
     else body.username = identifier
     if (totpCode) body.totpCode = totpCode // 开了两步验证的账号补交 TOTP / 恢复码
     return rawFetch('POST', '/api/auth/login', body, false) as Promise<{ token: string; refreshToken: string; user: User }>

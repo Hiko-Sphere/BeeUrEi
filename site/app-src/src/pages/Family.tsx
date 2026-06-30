@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, APIError, type FamilyLink, type IncomingLink } from '../lib/api'
+import { classifyIdentifier } from '../lib/identifier'
 import { useI18n } from '../lib/i18n'
 import { useCall } from './call/CallController'
 import { Card, Avatar, Button, Pill, Spinner, EmptyState, Field, Input, useToast } from '../components/ui'
@@ -143,8 +144,9 @@ function AddContactDialog({ onClose, onAdded }: { onClose: () => void; onAdded: 
     setBusy(true)
     try {
       // 邮箱/手机号先查 userId（与 iOS 一致：lookup → addLink by userId）；纯用户名可直接按 username 提交。
+      // 标识符判定与登录共用 classifyIdentifier，两处口径一致（手机号按实际数字位判定）。
       let target: { username?: string; userId?: string }
-      if (query.includes('@') || /^\+?[0-9\s-]{5,}$/.test(query)) {
+      if (classifyIdentifier(query) !== 'username') {
         const r = await api.lookupUser(query)
         if (!r.user) { toast(t('未找到该用户', 'User not found'), 'error'); setBusy(false); return }
         target = { userId: r.user.id }

@@ -33,6 +33,19 @@ describe('admin + reports', () => {
     await app.close()
   })
 
+  it('用户列表排序对 tied 行以 id 兜底（确定序，防翻页跨页重复/漏 + 跨存储一致）', async () => {
+    const { store, app } = withAdmin()
+    const adminToken = await login(app, 'root', 'rootpass1')
+    // 以"非 id 序"插入同角色、同毫秒创建的用户；role_asc 下它们 tied，须按 id 兜底定序。
+    for (const id of ['u-z', 'u-a', 'u-m']) {
+      store.createUser({ id, username: id, passwordHash: hashPassword('secret123'), displayName: id, role: 'helper', status: 'active', createdAt: 1000 })
+    }
+    const res = await app.inject({ method: 'GET', url: '/api/admin/users?sort=role_asc', headers: { authorization: `Bearer ${adminToken}` } })
+    const ids = (res.json().users as Array<{ id: string; role: string }>).filter((u) => u.role === 'helper').map((u) => u.id)
+    expect(ids).toEqual(['u-a', 'u-m', 'u-z']) // id 兜底排序，而非插入序 z,a,m
+    await app.close()
+  })
+
   it('admin can list and ban users; banned user cannot log in', async () => {
     const { app } = withAdmin()
     const adminToken = await login(app, 'root', 'rootpass1')

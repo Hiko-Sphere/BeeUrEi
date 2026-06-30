@@ -279,13 +279,17 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     })
     // 排序：created（默认倒序）/ name / role / status。
     const sort = q.sort ?? 'created_desc'
+    // 所有比较器以 id 兜底，保证 tied 行（同角色/状态、同毫秒创建、重名）顺序确定。
+    // 否则回退到 allUsers() 顺序——SqliteStore 无 ORDER BY 不确定、且与 MemoryStore 插入序不一致，
+    // 翻页(offset/limit)时 tied 行可能跨页重复/漏掉（同 (字段,id) 稳定序约定）。
+    const byId = (a: typeof list[number], b: typeof list[number]) => a.id.localeCompare(b.id)
     const cmp: Record<string, (a: typeof list[number], b: typeof list[number]) => number> = {
-      created_desc: (a, b) => (b.createdAt || 0) - (a.createdAt || 0),
-      created_asc: (a, b) => (a.createdAt || 0) - (b.createdAt || 0),
-      name_asc: (a, b) => (a.displayName || a.username).localeCompare(b.displayName || b.username),
-      name_desc: (a, b) => (b.displayName || b.username).localeCompare(a.displayName || a.username),
-      role_asc: (a, b) => a.role.localeCompare(b.role),
-      status_asc: (a, b) => a.status.localeCompare(b.status),
+      created_desc: (a, b) => ((b.createdAt || 0) - (a.createdAt || 0)) || byId(a, b),
+      created_asc: (a, b) => ((a.createdAt || 0) - (b.createdAt || 0)) || byId(a, b),
+      name_asc: (a, b) => (a.displayName || a.username).localeCompare(b.displayName || b.username) || byId(a, b),
+      name_desc: (a, b) => (b.displayName || b.username).localeCompare(a.displayName || a.username) || byId(a, b),
+      role_asc: (a, b) => a.role.localeCompare(b.role) || byId(a, b),
+      status_asc: (a, b) => a.status.localeCompare(b.status) || byId(a, b),
     }
     list = [...list].sort(cmp[sort] ?? cmp.created_desc)
     const total = list.length

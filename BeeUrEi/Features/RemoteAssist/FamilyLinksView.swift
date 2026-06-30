@@ -107,8 +107,15 @@ struct FamilyLinksView: View {
             newUsername = ""; newRelation = ""; newPhone = ""; isEmergency = false
             await load()
         } catch let APIError.server(msg) {
-            // 不把原始后端错误码（如 "already_linked"）直接念给用户——映射到可读文案（见 P2 审计）。
-            errorText = msg == "member_not_found" ? AssistStrings.memberNotFound(lang) : AssistStrings.addFailed(lang)
+            // 不把原始后端错误码直接念给用户——映射到可读文案（读屏会朗读，须人话；见 P2 审计）。
+            switch msg {
+            case "member_not_found": errorText = AssistStrings.memberNotFound(lang)
+            case "already_linked": errorText = AssistStrings.alreadyLinked(lang)
+            case "blocked": errorText = AssistStrings.blockedRelation(lang)
+            case "too_many_links": errorText = AssistStrings.tooManyLinks(lang)
+            case "cannot_link_self": errorText = AssistStrings.cannotLinkSelf(lang)
+            default: errorText = AssistStrings.addFailed(lang)
+            }
         } catch { errorText = AssistStrings.addFailed(lang) }
     }
 

@@ -161,6 +161,8 @@ function AddContactDialog({ onClose, onAdded }: { onClose: () => void; onAdded: 
       toast(code === 'already_linked' ? t('你们已是联系人', 'Already linked')
         : code === 'member_not_found' ? t('未找到该用户', 'User not found')
         : code === 'blocked' ? t('对方在黑名单中', 'Blocked relationship')
+        : code === 'too_many_links' ? t('联系人数量已达上限', 'Contact limit reached')
+        : code === 'cannot_link_self' ? t('不能添加自己', 'Cannot add yourself')
         : t('发送失败', 'Failed'), 'error')
     } finally { setBusy(false) }
   }

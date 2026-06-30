@@ -132,6 +132,10 @@ enum AssistStrings {
     }
     static func memberNotFound(_ l: Language) -> String { l == .zh ? "找不到该用户名" : "Username not found" }
     static func addFailed(_ l: Language) -> String { l == .zh ? "添加失败" : "Couldn't add" }
+    static func alreadyLinked(_ l: Language) -> String { l == .zh ? "你们已是亲友/协助者" : "You're already linked" }
+    static func blockedRelation(_ l: Language) -> String { l == .zh ? "无法添加：存在拉黑关系" : "Can't add: one of you blocked the other" }
+    static func tooManyLinks(_ l: Language) -> String { l == .zh ? "联系人数量已达上限" : "Contact limit reached" }
+    static func cannotLinkSelf(_ l: Language) -> String { l == .zh ? "不能添加自己" : "Cannot add yourself" }
     static func sendingHelp(_ l: Language) -> String {
         l == .zh ? "正在发起求助，请稍候…" : "Sending your request, please wait…"
     }

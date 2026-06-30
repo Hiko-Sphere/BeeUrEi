@@ -3,7 +3,7 @@ import { generateKeyPairSync, createPrivateKey } from 'node:crypto'
 import { writeFileSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { NoopPushSender, ApnsPushSender, makePushSender, type PushSender } from '../src/push/apns'
+import { NoopPushSender, ApnsPushSender, makePushSender, buildAlertPayload, type PushSender } from '../src/push/apns'
 
 /// A1 VoIP/提醒推送发送器单测。不打真实 APNs（不需要 Apple 账号）：
 /// 用本机生成的 P-256 私钥走真实 ES256 JWT 签名路径，网络则指向本机已关闭端口走「失败被吞」路径。
@@ -54,5 +54,16 @@ describe('APNs 推送发送器（A1）', () => {
     await expect(sender.sendCallInvite(HEX_TOKEN, 'cid', 'caller', 'uid')).resolves.toBeUndefined()
     // 第二次发送命中 providerToken 的 ~40 分钟缓存复用分支。
     await expect(sender.sendAlert(HEX_TOKEN, 'title', 'body', { k: 'v' })).resolves.toBeUndefined()
+  })
+})
+
+describe('buildAlertPayload', () => {
+  it('给 threadId 则写入 aps[thread-id]（通知按会话分组），不给则无该键', () => {
+    const withThread = JSON.parse(buildAlertPayload('t', 'b', { type: 'chat_message', fromId: 'u1' }, 'dm:u1'))
+    expect(withThread.aps['thread-id']).toBe('dm:u1')
+    expect(withThread.aps.alert).toEqual({ title: 't', body: 'b' })
+    expect(withThread.type).toBe('chat_message') // extra 平铺在顶层
+    const noThread = JSON.parse(buildAlertPayload('t', 'b', {}))
+    expect(noThread.aps['thread-id']).toBeUndefined()
   })
 })

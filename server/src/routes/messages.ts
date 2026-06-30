@@ -103,7 +103,7 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
           void pushSender.sendAlert(member.apnsToken,
             pushStrings.groupMessageTitle(sender.displayName, group.name, l),
             pushStrings.newMessageBody(previewOf(kind, text, l), l),
-            { type: 'chat_message', groupId })
+            { type: 'chat_message', groupId }, `group:${groupId}`) // 按群分组折叠通知
             .catch(() => { /* 单个成员推送失败不影响其他成员与发送回执 */ })
         }
       }
@@ -126,7 +126,7 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
       void pushSender.sendAlert(recipient.apnsToken,
         pushStrings.newMessageTitle(sender.displayName, l),
         pushStrings.newMessageBody(previewOf(kind, text, l), l),
-        { type: 'chat_message', fromId: me })
+        { type: 'chat_message', fromId: me }, `dm:${me}`) // 按发送者分组折叠通知
         .catch(() => { /* 推送失败不影响消息已存库与发送回执 */ })
     }
     return reply.code(201).send({ message: msg })

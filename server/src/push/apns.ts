@@ -9,7 +9,16 @@ export interface PushSender {
   /// 向某设备的 VoIP token 推送一条来电邀请。失败只记日志，绝不抛出（不阻断呼叫主流程）。
   sendCallInvite(voipToken: string, callId: string, callerName: string, callerId: string): Promise<void>
   /// 普通"提醒类"通知（软件外通知：好友请求/被接受等）。失败只记日志。
-  sendAlert(apnsToken: string, title: string, body: string, extra?: Record<string, string>): Promise<void>
+  /// threadId：APNs thread-id，用于在通知中心按会话**分组折叠**（同一对话/群的多条通知不刷屏）。
+  sendAlert(apnsToken: string, title: string, body: string, extra?: Record<string, string>, threadId?: string): Promise<void>
+}
+
+/// 构造 alert 推送 JSON（纯函数，可单测）：extra 平铺在顶层，aps 含 alert/sound，
+/// 给了 threadId 则加 aps['thread-id'] 让 iOS 按会话分组。
+export function buildAlertPayload(title: string, body: string, extra?: Record<string, string>, threadId?: string): string {
+  const aps: Record<string, unknown> = { alert: { title, body }, sound: 'default' }
+  if (threadId) aps['thread-id'] = threadId
+  return JSON.stringify({ ...(extra ?? {}), aps })
 }
 
 /// 未配置 APNs 时的空实现（前台轮询/应用内通知仍可用，仅后台横幅不弹）。
@@ -64,8 +73,8 @@ export class ApnsPushSender implements PushSender {
     }
   }
 
-  async sendAlert(apnsToken: string, title: string, body: string, extra?: Record<string, string>): Promise<void> {
-    const payload = JSON.stringify({ ...(extra ?? {}), aps: { alert: { title, body }, sound: 'default' } })
+  async sendAlert(apnsToken: string, title: string, body: string, extra?: Record<string, string>, threadId?: string): Promise<void> {
+    const payload = buildAlertPayload(title, body, extra, threadId)
     try {
       await this.post(`/3/device/${apnsToken}`, {
         authorization: `bearer ${this.providerToken(Date.now())}`,

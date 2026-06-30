@@ -99,6 +99,18 @@ final class NavigationViewModelSafetyTests: XCTestCase {
         XCTAssertTrue(vm2.running) // 据持久轨迹成功进入回程，而非"还没有可返回的路线"
     }
 
+    /// 清除已记路线：持久轨迹被丢弃，之后回程被拒（点数不足）；新模型也看到 0 点。
+    func testClearTrailDiscardsPersistedTrail() {
+        let vm = makeVM()
+        recordTrail(vm)
+        vm.clearTrail()
+        XCTAssertEqual(vm.trailCount, 0)
+        let vm2 = makeVM()
+        XCTAssertEqual(vm2.trailCount, 0) // 清除后新会话也无轨迹
+        vm2.startBacktrack()
+        XCTAssertFalse(vm2.running) // 无轨迹：拒绝回程
+    }
+
     func testArrivalRequiresPreciseFix() {
         let vm = makeVM()
         recordTrail(vm) // 出发点 latOffset 0，最远点 0.0006

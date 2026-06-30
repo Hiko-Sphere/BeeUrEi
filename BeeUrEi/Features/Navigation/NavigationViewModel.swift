@@ -443,6 +443,16 @@ final class NavigationViewModel {
 
     // MARK: 面包屑回程（Soundscape 式）
 
+    /// 清除已记路线（持久轨迹存单例，跨会话不灭——给用户主动丢弃旧路线的入口，兼顾隐私）。
+    func clearTrail() {
+        lang = FeatureSettings().language
+        BreadcrumbStore.shared.reset()
+        trailCount = 0
+        recordingTrail = false
+        status = NavStrings.trailCleared(lang)
+        speak(status)
+    }
+
     /// 开始记路：行进中每 ≥8m 记一个航点（去抖原地抖动），供之后一键原路返回。
     func startTrailRecording() {
         lang = FeatureSettings().language

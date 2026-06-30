@@ -146,6 +146,11 @@ enum NavStrings {
     static func backtrackHint(_ l: Language) -> String {
         l == .zh ? "沿记录的来路反向引导你走回出发点" : "Guides you back along the recorded path to your start"
     }
+    static func clearTrail(_ l: Language) -> String { l == .zh ? "清除已记路线" : "Clear Recorded Trail" }
+    static func clearTrailHint(_ l: Language) -> String {
+        l == .zh ? "删除已记录的来路，不再可原路返回" : "Discards the recorded path; backtrack will be unavailable"
+    }
+    static func trailCleared(_ l: Language) -> String { l == .zh ? "已清除记录的路线" : "Recorded trail cleared" }
     static func backtrackHeader(_ l: Language) -> String { l == .zh ? "原路返回" : "Backtrack" }
     static func backtrackFooter(_ l: Language) -> String {
         l == .zh ? "进陌生地方前点「开始记路」；要回去时点「原路返回」，跟着提示音原路走回出发点。"

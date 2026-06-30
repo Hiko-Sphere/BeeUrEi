@@ -64,6 +64,11 @@ struct WalkNavigationView: View {
                         Button(NavStrings.backtrack(model.trailCount, lang)) { model.startBacktrack() }
                             .accessibilityHint(NavStrings.backtrackHint(lang))
                     }
+                    // 轨迹持久存活（跨导航页开关），给用户主动清除入口（隐私 + 不想回这条旧路）。
+                    if !model.recordingTrail && model.trailCount >= 2 {
+                        Button(NavStrings.clearTrail(lang), role: .destructive) { model.clearTrail() }
+                            .accessibilityHint(NavStrings.clearTrailHint(lang))
+                    }
                 } header: {
                     Text(NavStrings.backtrackHeader(lang))
                 } footer: {

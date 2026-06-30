@@ -284,7 +284,7 @@ struct RemoteAssistView: View {
             statusText = AssistStrings.helpSent(lang) // 经 .onChange(statusText) 统一朗读
             activeCall = ActiveBlindCall(id: callId, isVolunteer: true)
         } catch {
-            statusText = AssistStrings.helpFailed(lang)
+            statusText = AssistStrings.callErrorText(error, fallback: AssistStrings.helpFailed(lang), lang)
         }
     }
 
@@ -302,7 +302,7 @@ struct RemoteAssistView: View {
             statusText = AssistStrings.callingListPrefix(anyOnline: !online.isEmpty, lang)
                 + targets.map(\.memberName).joined(separator: " → ")
             activeCall = ActiveBlindCall(id: callId, isVolunteer: false)
-        } catch { statusText = AssistStrings.familyCallFailed(lang) }
+        } catch { statusText = AssistStrings.callErrorText(error, fallback: AssistStrings.familyCallFailed(lang), lang) }
     }
 
     /// 定向呼叫某位已绑定的亲友/协助者。
@@ -313,6 +313,6 @@ struct RemoteAssistView: View {
             let callId = UUID().uuidString
             try await APIClient().startEmergencyCall(token: token, callId: callId, targetUserIds: [link.memberId])
             activeCall = ActiveBlindCall(id: callId, isVolunteer: false)
-        } catch { statusText = AssistStrings.callOneFailed(link.memberName, lang) }
+        } catch { statusText = AssistStrings.callErrorText(error, fallback: AssistStrings.callOneFailed(link.memberName, lang), lang) }
     }
 }

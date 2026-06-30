@@ -159,4 +159,20 @@ enum AssistStrings {
         l == .zh ? "呼叫 \(name) 未送达，请重试或改用电话联系。"
                  : "Couldn't reach \(name). Retry, or use a phone call instead."
     }
+
+    /// 管理员关闭呼叫/求助功能或系统维护时，求助路径返回这些码——必须明确告知是"暂不可用"
+    /// 而非网络问题，否则盲人会对着一个被关停的求助按钮反复重试。其余错误回退到 `fallback`。
+    static func callErrorText(_ error: Error, fallback: String, _ l: Language) -> String {
+        guard case let APIError.server(code) = error else { return fallback }
+        switch code {
+        case "feature_disabled":
+            return l == .zh ? "呼叫功能已被管理员暂时关闭，请改用电话联系亲友。"
+                            : "Calling is temporarily turned off by the administrator. Please use a phone call instead."
+        case "maintenance":
+            return l == .zh ? "系统维护中，呼叫暂不可用，请改用电话联系亲友。"
+                            : "Under maintenance — calling is unavailable. Please use a phone call instead."
+        default:
+            return fallback
+        }
+    }
 }

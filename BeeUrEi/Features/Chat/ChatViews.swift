@@ -615,8 +615,9 @@ struct ChatView: View {
                 messages.append(m)
                 errorText = nil
             } catch {
-                errorText = ChatStrings.sendFailed(lang)
-                SpeechHub.shared.speak(ChatStrings.sendFailed(lang), channel: .query, voiceCode: lang.voiceCode)
+                let msg = ChatStrings.sendErrorText(error, lang)
+                errorText = msg
+                SpeechHub.shared.speak(msg, channel: .query, voiceCode: lang.voiceCode)
                 draft = text // 失败还原草稿，不丢内容
             }
         }
@@ -639,8 +640,9 @@ struct ChatView: View {
                 messages.append(m)
                 errorText = nil
             } catch {
-                errorText = ChatStrings.sendFailed(lang)
-                SpeechHub.shared.speak(ChatStrings.sendFailed(lang), channel: .query, voiceCode: lang.voiceCode)
+                let msg = ChatStrings.sendErrorText(error, lang)
+                errorText = msg
+                SpeechHub.shared.speak(msg, channel: .query, voiceCode: lang.voiceCode)
             }
         }
     }
@@ -662,12 +664,14 @@ struct ChatView: View {
         let b64 = "data:image/jpeg;base64," + data.base64EncodedString()
         sending = true
         defer { sending = false }
-        if let m = try? await send(kind: "image", text: b64) {
+        do {
+            let m = try await send(kind: "image", text: b64)
             messages.append(m)
             errorText = nil // 成功清掉上一条失败横幅，避免误导
-        } else {
-            errorText = ChatStrings.sendFailed(lang)
-            SpeechHub.shared.speak(ChatStrings.sendFailed(lang), channel: .query, voiceCode: lang.voiceCode)
+        } catch {
+            let msg = ChatStrings.sendErrorText(error, lang)
+            errorText = msg
+            SpeechHub.shared.speak(msg, channel: .query, voiceCode: lang.voiceCode)
         }
     }
 
@@ -693,8 +697,10 @@ struct ChatView: View {
             messages.append(m)
             errorText = nil
         } catch {
-            errorText = ChatStrings.sendFailed(lang)
-            SpeechHub.shared.speak(ChatStrings.sendFailed(lang), channel: .query, voiceCode: lang.voiceCode)
+            // mediaUpload 功能被关 / 维护 / 聊天被关 都会到这里——给具体原因，不让盲人徒劳重试。
+            let msg = ChatStrings.sendErrorText(error, lang)
+            errorText = msg
+            SpeechHub.shared.speak(msg, channel: .query, voiceCode: lang.voiceCode)
         }
     }
 
@@ -745,13 +751,15 @@ struct ChatView: View {
                 sending = true
                 Task {
                     defer { sending = false }
-                    if let m = try? await send(kind: "audio", text: b64) {
+                    do {
+                        let m = try await send(kind: "audio", text: b64)
                         messages.append(m)
                         errorText = nil
-                    } else {
-                        errorText = ChatStrings.sendFailed(lang)
-                        // 盲人看不到红字横幅——发送失败要朗读（与文本/图片/视频路径一致，见 P1 审计）。
-                        SpeechHub.shared.speak(ChatStrings.sendFailed(lang), channel: .query, voiceCode: lang.voiceCode)
+                    } catch {
+                        // 盲人看不到红字横幅——发送失败要朗读，且区分"功能关闭/维护"等不可重试原因。
+                        let msg = ChatStrings.sendErrorText(error, lang)
+                        errorText = msg
+                        SpeechHub.shared.speak(msg, channel: .query, voiceCode: lang.voiceCode)
                     }
                 }
             }

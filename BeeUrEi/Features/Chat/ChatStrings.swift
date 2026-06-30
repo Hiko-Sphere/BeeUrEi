@@ -17,6 +17,29 @@ enum ChatStrings {
     static func read(_ l: Language) -> String { l == .zh ? "已读" : "Read" }
     static func delivered(_ l: Language) -> String { l == .zh ? "已送达" : "Delivered" }
     static func sendFailed(_ l: Language) -> String { l == .zh ? "发送失败，请重试" : "Couldn't send. Try again." }
+    /// 把发送错误映射成盲人能听懂、不会徒劳重试的具体原因。
+    /// 管理员关闭功能 / 维护 / 违禁词 / 已不是联系人等都是"重试也没用"的状态——必须区别于瞬时失败。
+    static func sendErrorText(_ error: Error, _ l: Language) -> String {
+        guard case let APIError.server(code) = error else { return sendFailed(l) }
+        switch code {
+        case "feature_disabled":
+            return l == .zh ? "聊天功能已被管理员暂时关闭" : "Messaging is currently turned off by the administrator"
+        case "maintenance":
+            return l == .zh ? "系统维护中，请稍后再试" : "Under maintenance — please try again later"
+        case "content_blocked":
+            return l == .zh ? "消息含被禁止的内容，未发送" : "Message contains blocked content and wasn't sent"
+        case "message_too_long":
+            return l == .zh ? "消息太长，请缩短后再发" : "Message is too long — please shorten it"
+        case "blocked":
+            return l == .zh ? "你们之间存在拉黑，无法发送" : "Can't send — one of you blocked the other"
+        case "not_linked":
+            return l == .zh ? "对方已不是你的联系人，无法发送" : "This person is no longer your contact"
+        case "not_member":
+            return l == .zh ? "你已不在该群聊中" : "You're no longer in this group"
+        default:
+            return sendFailed(l)
+        }
+    }
     static func micDenied(_ l: Language) -> String {
         l == .zh ? "需要麦克风权限才能发语音，请在系统设置中开启" : "Microphone access is needed for voice messages"
     }

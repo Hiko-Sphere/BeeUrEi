@@ -122,4 +122,24 @@ describe('VoIP 推送（A1 后台来电）', () => {
     expect(short.statusCode).toBe(400)
     await app.close()
   })
+
+  it('设备换账号：后注册者独占 APNs token，旧账号被收回——防跨账号推送泄漏', async () => {
+    const { app, alerts } = capturingApp()
+    const a = await reg(app, 'devA', 'helper')
+    const b = await reg(app, 'devB', 'helper')
+    const c = await reg(app, 'devC', 'blind') // 给 a/b 发好友请求以触发对其的提醒推送
+    // a 在该设备注册 token T；随后 b 在同一设备登录注册同一 T → a 应被收回。
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(a.token), payload: { token: HEX_TOKEN } })
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(b.token), payload: { token: HEX_TOKEN } })
+    alerts.length = 0
+    // c → a 好友请求：推送目标是 a，但 a 的 token 已被收回 → 不应有发往 T 的推送（更不会落到 b 的设备）。
+    await app.inject({ method: 'POST', url: '/api/family/links', headers: auth(c.token), payload: { username: 'devA' } })
+    await tick()
+    expect(alerts.find((x) => x.token === HEX_TOKEN)).toBeUndefined() // T 不再代表 a
+    // 反向：c → b 好友请求，T 现属 b → 应推到 T。
+    await app.inject({ method: 'POST', url: '/api/family/links', headers: auth(c.token), payload: { username: 'devB' } })
+    await tick()
+    expect(alerts.find((x) => x.token === HEX_TOKEN)).toBeTruthy() // T 现属 b
+    await app.close()
+  })
 })

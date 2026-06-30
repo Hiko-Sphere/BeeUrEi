@@ -262,6 +262,12 @@ export class SqliteStore implements Store {
   deleteUser(id: string): void {
     this.db.prepare('DELETE FROM users WHERE id = ?').run(id)
   }
+  clearApnsTokenFromOthers(token: string, exceptUserId: string): void {
+    this.db.prepare('UPDATE users SET apnsToken = NULL WHERE apnsToken = ? AND id != ?').run(token, exceptUserId)
+  }
+  clearVoipTokenFromOthers(token: string, exceptUserId: string): void {
+    this.db.prepare('UPDATE users SET voipToken = NULL WHERE voipToken = ? AND id != ?').run(token, exceptUserId)
+  }
 
   // MARK: links
   createLink(l: FamilyLink): void {

@@ -14,6 +14,7 @@ export function registerPushRoutes(app: FastifyInstance, store: Store): void {
   app.post('/api/push/register', { preHandler: requireAuth() }, async (req, reply) => {
     const parsed = tokenSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    store.clearVoipTokenFromOthers(parsed.data.voipToken, req.user!.sub) // 设备换账号：从旧账号收回此 token，防跨账号来电推送
     store.updateUser(req.user!.sub, { voipToken: parsed.data.voipToken })
     return { ok: true }
   })
@@ -28,6 +29,7 @@ export function registerPushRoutes(app: FastifyInstance, store: Store): void {
   app.post('/api/push/apns-register', { preHandler: requireAuth() }, async (req, reply) => {
     const parsed = apnsTokenSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    store.clearApnsTokenFromOthers(parsed.data.token, req.user!.sub) // 设备换账号：从旧账号收回此 token，防跨账号提醒推送泄漏
     store.updateUser(req.user!.sub, { apnsToken: parsed.data.token })
     return { ok: true }
   })

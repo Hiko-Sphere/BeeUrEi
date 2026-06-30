@@ -404,6 +404,10 @@ export interface Store {
   allUsers(): User[]
   updateUser(id: string, patch: Partial<User>): User | undefined
   deleteUser(id: string): void
+  /// 设备推送 token 独占：某账号注册 token 时，从所有其它账号清除同一 token——
+  /// 否则同一设备换账号后，旧账号仍持该 token，发给旧账号的推送会送到现登录账号的设备（跨账号泄漏）。
+  clearApnsTokenFromOthers(token: string, exceptUserId: string): void
+  clearVoipTokenFromOthers(token: string, exceptUserId: string): void
 
   createLink(link: FamilyLink): void
   linksByOwner(ownerId: string): FamilyLink[]
@@ -695,6 +699,16 @@ export class MemoryStore implements Store {
   }
   deleteUser(id: string): void {
     if (this.users.delete(id)) this.afterMutate()
+  }
+  clearApnsTokenFromOthers(token: string, exceptUserId: string): void {
+    let changed = false
+    for (const u of this.users.values()) if (u.id !== exceptUserId && u.apnsToken === token) { u.apnsToken = undefined; changed = true }
+    if (changed) this.afterMutate()
+  }
+  clearVoipTokenFromOthers(token: string, exceptUserId: string): void {
+    let changed = false
+    for (const u of this.users.values()) if (u.id !== exceptUserId && u.voipToken === token) { u.voipToken = undefined; changed = true }
+    if (changed) this.afterMutate()
   }
 
   createLink(link: FamilyLink): void {

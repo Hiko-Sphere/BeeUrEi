@@ -69,6 +69,16 @@ describe('SqliteStore (node:sqlite)', () => {
     expect(store.messagesBetween('u1', 'u2', 10).map((m) => m.id)).toEqual(['d1'])
     expect(store.latestMessagesPerPeer('u1').map((m) => m.id)).toEqual(['d1'])
 
+    // 搜索（SQL LIKE 路径）：群内/单聊文本命中、大小写不敏感、% 字面量、非文本不命中。
+    store.createMessage({ id: 's1', fromId: 'u1', toId: '', groupId: 'g1', kind: 'text', text: 'Meeting 100%', createdAt: 6000 })
+    store.createMessage({ id: 's2', fromId: 'u1', toId: 'u2', kind: 'text', text: '去医院meeting', createdAt: 6100 })
+    store.createMessage({ id: 's3', fromId: 'u1', toId: 'u2', kind: 'image', text: 'meeting-photo', createdAt: 6200 })
+    expect(store.searchGroupMessages('g1', 'meeting', 10).map((m) => m.id)).toEqual(['s1']) // 大小写不敏感
+    expect(store.searchGroupMessages('g1', '100%', 10).map((m) => m.id)).toEqual(['s1'])     // % 按字面量
+    const dir = store.searchDirectMessages('u1', 'u2', 'meeting', 10)
+    expect(dir.map((m) => m.id)).toEqual(['s2']) // image(s3) 不命中（仅 kind=text）
+    expect(store.searchDirectMessages('u1', 'u2', '', 10)).toEqual([]) // 空查询
+
     // 媒体元数据。
     store.createMedia({ id: 'v1', ownerId: 'u1', mime: 'video/mp4', size: 12345, createdAt: 5000 })
     expect(store.findMedia('v1')).toMatchObject({ ownerId: 'u1', mime: 'video/mp4', size: 12345 })
@@ -80,7 +90,7 @@ describe('SqliteStore (node:sqlite)', () => {
     expect(store.findGroup('g1')).toBeUndefined()
     expect(store.groupMessages('g1', 10).length).toBe(0)
     expect(store.groupReadAt('g1', 'u3')).toBe(0)
-    expect(store.messagesBetween('u1', 'u2', 10).length).toBe(1)
+    expect(store.messagesBetween('u1', 'u2', 10).length).toBe(3) // d1 + 搜索测试加的 s2(text)/s3(image)，群解散不影响单聊
   })
 
   it('persists across reopen (file-backed)', () => {

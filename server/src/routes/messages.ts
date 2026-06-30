@@ -150,6 +150,26 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     return { messages: store.messagesBetween(me, peer, limit, before) }
   })
 
+  // 会话内搜索文本消息：?q=关键词 + (?with=对端 或 ?group=群 id)。时间倒序，最多 50 条。
+  // 鉴权同消息列表（单聊须 accepted 绑定、群须成员），不泄漏无权会话的内容。
+  app.get('/api/messages/search', { preHandler: requireAuth() }, async (req, reply) => {
+    const q = req.query as { q?: string; with?: string; group?: string; limit?: string }
+    const me = req.user!.sub
+    const query = (q.q ?? '').trim()
+    if (query === '') return { messages: [] } // 空查询不报错，返回空，便于前端边输边查
+    const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 100)
+    if (q.group) {
+      const group = store.findGroup(q.group)
+      if (!group) return reply.code(404).send({ error: 'not_found' })
+      if (!group.memberIds.includes(me)) return reply.code(403).send({ error: 'not_member' })
+      return { messages: store.searchGroupMessages(q.group, query, limit) }
+    }
+    const peer = q.with
+    if (!peer) return reply.code(400).send({ error: 'invalid_input' })
+    if (!linked(me, peer)) return reply.code(403).send({ error: 'not_linked' })
+    return { messages: store.searchDirectMessages(me, peer, query, limit) }
+  })
+
   // 撤回自己发出的消息（WhatsApp 式：双方都看到"已撤回"占位）。限发出后 2 分钟内。
   // 视频消息撤回同时删除服务器上的媒体文件。
   app.post('/api/messages/:id/recall', { preHandler: [requireAuth(), requireFeature(store, 'messaging')] }, async (req, reply) => {

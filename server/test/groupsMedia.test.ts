@@ -239,3 +239,58 @@ describe('视频消息（服务器磁盘媒体存储）', () => {
     expect(dl.statusCode).toBe(200) // 同群成员可下载
   })
 })
+
+describe('会话内消息搜索', () => {
+  it('单聊：按关键词搜文本、不区分大小写、时间倒序；非文本/非本会话不命中；越权 403', async () => {
+    const app = buildApp(new MemoryStore())
+    const a = await reg(app, 'srcha', 'blind')
+    const b = await reg(app, 'srchb', 'helper')
+    const c = await reg(app, 'srchc', 'helper')
+    await bind(app, a.token, b.token, 'srchb')
+
+    await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, text: '明天去医院复查' } })
+    await app.inject({ method: 'POST', url: '/api/messages', headers: auth(b.token), payload: { toId: a.user.id, text: 'Hospital at 9am' } })
+    await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, text: '记得带身份证' } })
+    // 图片消息含 "hospital" 也不应被文本搜索命中（仅 kind=text 可搜）。
+    await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, kind: 'image', text: 'data:image/jpeg;base64,AAAA' } })
+
+    const r = await app.inject({ method: 'GET', url: `/api/messages/search?with=${b.user.id}&q=hospital`, headers: auth(a.token) })
+    expect(r.statusCode).toBe(200)
+    const msgs = (r.json() as any).messages
+    expect(msgs).toHaveLength(1)
+    expect(msgs[0].text).toBe('Hospital at 9am') // 大小写不敏感命中
+
+    const zh = await app.inject({ method: 'GET', url: `/api/messages/search?with=${b.user.id}&q=${encodeURIComponent('复查')}`, headers: auth(a.token) })
+    expect((zh.json() as any).messages).toHaveLength(1)
+
+    // 空查询 → 空结果（不报错）。
+    const empty = await app.inject({ method: 'GET', url: `/api/messages/search?with=${b.user.id}&q=`, headers: auth(a.token) })
+    expect(empty.statusCode).toBe(200)
+    expect((empty.json() as any).messages).toHaveLength(0)
+
+    // 非绑定第三方搜该会话 → 403（不泄漏内容）。
+    const forbidden = await app.inject({ method: 'GET', url: `/api/messages/search?with=${b.user.id}&q=hospital`, headers: auth(c.token) })
+    expect(forbidden.statusCode).toBe(403)
+  })
+
+  it('群聊：成员可搜群内文本消息；非成员 403；LIKE 通配符按字面匹配', async () => {
+    const app = buildApp(new MemoryStore())
+    const owner = await reg(app, 'gsrcho', 'blind')
+    const mem = await reg(app, 'gsrchm', 'helper')
+    const out = await reg(app, 'gsrchx', 'helper')
+    await bind(app, owner.token, mem.token, 'gsrchm')
+    const created = await app.inject({ method: 'POST', url: '/api/groups', headers: auth(owner.token), payload: { name: '搜群', memberIds: [mem.user.id] } })
+    const gid = (created.json() as any).group.id as string
+    await app.inject({ method: 'POST', url: '/api/messages', headers: auth(owner.token), payload: { groupId: gid, text: '周六聚餐 100%' } })
+    await app.inject({ method: 'POST', url: '/api/messages', headers: auth(mem.token), payload: { groupId: gid, text: '好的' } })
+
+    const r = await app.inject({ method: 'GET', url: `/api/messages/search?group=${gid}&q=${encodeURIComponent('聚餐')}`, headers: auth(mem.token) })
+    expect((r.json() as any).messages).toHaveLength(1)
+    // '%' 作字面量搜（不当通配符全匹配）。
+    const pct = await app.inject({ method: 'GET', url: `/api/messages/search?group=${gid}&q=${encodeURIComponent('100%')}`, headers: auth(owner.token) })
+    expect((pct.json() as any).messages).toHaveLength(1)
+    // 非成员越权 403。
+    const forbidden = await app.inject({ method: 'GET', url: `/api/messages/search?group=${gid}&q=${encodeURIComponent('聚餐')}`, headers: auth(out.token) })
+    expect(forbidden.statusCode).toBe(403)
+  })
+})

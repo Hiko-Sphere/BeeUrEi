@@ -612,6 +612,30 @@ export class SqliteStore implements Store {
     ).all(groupId, beforeMs ?? null, beforeMs ?? null, limit)
     return rows.map((r) => this.toMessage(r))
   }
+  searchDirectMessages(a: string, b: string, query: string, limit: number): ChatMessage[] {
+    const q = query.trim().toLowerCase()
+    if (q === '') return []
+    const like = '%' + q.replace(/[\\%_]/g, '\\$&') + '%' // 转义 LIKE 通配符，按字面量匹配
+    const rows = this.db.prepare(
+      `SELECT * FROM messages
+       WHERE groupId IS NULL AND kind = 'text'
+         AND ((fromId = ? AND toId = ?) OR (fromId = ? AND toId = ?))
+         AND LOWER(text) LIKE ? ESCAPE '\\'
+       ORDER BY createdAt DESC LIMIT ?`,
+    ).all(a, b, b, a, like, limit)
+    return rows.map((r) => this.toMessage(r))
+  }
+  searchGroupMessages(groupId: string, query: string, limit: number): ChatMessage[] {
+    const q = query.trim().toLowerCase()
+    if (q === '') return []
+    const like = '%' + q.replace(/[\\%_]/g, '\\$&') + '%'
+    const rows = this.db.prepare(
+      `SELECT * FROM messages
+       WHERE groupId = ? AND kind = 'text' AND LOWER(text) LIKE ? ESCAPE '\\'
+       ORDER BY createdAt DESC LIMIT ?`,
+    ).all(groupId, like, limit)
+    return rows.map((r) => this.toMessage(r))
+  }
   setGroupRead(groupId: string, userId: string, at: number): void {
     this.db.prepare('INSERT OR REPLACE INTO group_reads (groupId, userId, lastReadAt) VALUES (?, ?, ?)')
       .run(groupId, userId, at)

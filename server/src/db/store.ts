@@ -518,6 +518,9 @@ export interface Store {
   deleteGroup(id: string): void // 解散：同时删群消息与已读标记
   /// 群消息（时间正序，分页同 messagesBetween）。
   groupMessages(groupId: string, limit: number, beforeMs?: number): ChatMessage[]
+  /// 会话内按关键词搜索**文本**消息（不区分大小写，时间倒序，最多 limit 条）。仅 kind=text 可搜。
+  searchDirectMessages(a: string, b: string, query: string, limit: number): ChatMessage[]
+  searchGroupMessages(groupId: string, query: string, limit: number): ChatMessage[]
   /// 群按人已读：记录/读取某人在某群"读到的时间戳"（群未读 = 晚于此且非本人发的消息数）。
   setGroupRead(groupId: string, userId: string, at: number): void
   groupReadAt(groupId: string, userId: string): number
@@ -1010,6 +1013,25 @@ export class MemoryStore implements Store {
       .filter((m) => beforeMs == null || m.createdAt < beforeMs)
       .sort((x, y) => x.createdAt - y.createdAt)
     return all.slice(Math.max(0, all.length - limit))
+  }
+  searchDirectMessages(a: string, b: string, query: string, limit: number): ChatMessage[] {
+    const q = query.trim().toLowerCase()
+    if (q === '') return []
+    return [...this.messages.values()]
+      .filter((m) => !m.groupId && m.kind === 'text')
+      .filter((m) => (m.fromId === a && m.toId === b) || (m.fromId === b && m.toId === a))
+      .filter((m) => m.text.toLowerCase().includes(q))
+      .sort((x, y) => y.createdAt - x.createdAt)
+      .slice(0, limit)
+  }
+  searchGroupMessages(groupId: string, query: string, limit: number): ChatMessage[] {
+    const q = query.trim().toLowerCase()
+    if (q === '') return []
+    return [...this.messages.values()]
+      .filter((m) => m.groupId === groupId && m.kind === 'text')
+      .filter((m) => m.text.toLowerCase().includes(q))
+      .sort((x, y) => y.createdAt - x.createdAt)
+      .slice(0, limit)
   }
   setGroupRead(groupId: string, userId: string, at: number): void {
     this.groupReads.set(`${groupId}:${userId}`, at)

@@ -85,7 +85,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[100] flex flex-col items-center gap-2 px-4">
         {toasts.map((t) => (
-          <div key={t.id} className={`slide-up pointer-events-auto max-w-sm rounded-xl px-4 py-2.5 text-sm shadow-lg ${t.tone === 'error' ? 'bg-danger text-white' : t.tone === 'ok' ? 'bg-ok text-white' : 'surface border border-[var(--line)] text-[var(--text)]'}`}>{t.text}</div>
+          // 每条 toast 自带 live-region 角色：盲人/读屏用户也能听到反馈（视障+协助者是本应用核心用户）。
+          // error→role=alert(assertive，打断朗读，如"内容被禁/发送失败")；其余→role=status(polite)。
+          // 按条加角色而非容器统一 aria-live，避免容器+子节点双重 live 区导致重复朗读。
+          <div key={t.id} role={t.tone === 'error' ? 'alert' : 'status'}
+            className={`slide-up pointer-events-auto max-w-sm rounded-xl px-4 py-2.5 text-sm shadow-lg ${t.tone === 'error' ? 'bg-danger text-white' : t.tone === 'ok' ? 'bg-ok text-white' : 'surface border border-[var(--line)] text-[var(--text)]'}`}>{t.text}</div>
         ))}
       </div>
     </ToastCtx.Provider>

@@ -66,6 +66,34 @@ describe('WebRTC signaling relay', () => {
     await app.close()
   })
 
+  it('非对象 JSON 帧（null/数字/字符串/布尔）被忽略而不崩，连接仍可正常 join', async () => {
+    const app = buildApp(new MemoryStore())
+    await app.listen({ port: 0, host: '127.0.0.1' })
+    const port = (app.server.address() as { port: number }).port
+    const reg = async (u: string, role: string) => {
+      const r = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+      return { token: r.token as string, id: r.user.id as string }
+    }
+    const caller = await reg('caller', 'blind')
+    const helper = await reg('helper', 'helper')
+    const link = await app.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${caller.token}` },
+      payload: { username: 'helper', relation: '志愿者', isEmergency: true } })
+    await app.inject({ method: 'POST', url: `/api/family/links/${link.json().link.id}/accept`, headers: { authorization: `Bearer ${helper.token}` } })
+    await app.inject({ method: 'POST', url: '/api/assist/call', headers: { authorization: `Bearer ${caller.token}` },
+      payload: { callId: 'cN', targetUserIds: [helper.id] } })
+
+    const ws1 = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${caller.token}`)
+    await open(ws1)
+    // 合法 JSON 但非对象：此前 `null` 会让 msg.type 抛 TypeError（未捕获于 message 处理器）。应被静默忽略。
+    ws1.send('null'); ws1.send('123'); ws1.send('"x"'); ws1.send('true')
+    // 紧接一个合法 join：若上面任一帧搞崩了 message 处理器/连接，这里就收不到 joined。
+    const joined = nextMessage(ws1, (m) => m.type === 'joined')
+    ws1.send(JSON.stringify({ type: 'join', callId: 'cN', role: 'blind' }))
+    expect((await joined).type).toBe('joined')
+    ws1.close()
+    await app.close()
+  })
+
   it('一端断开连接 → 另一端收到 peer-left（不卡在已掉线的通话里）', async () => {
     // 端到端锁定：socket close → hub.leave → 向房间剩余成员转发 peer-left。
     // hub.leave 有单测，但"真实断线触发通知对端"这条 UX 关键链路此前无集成测试。

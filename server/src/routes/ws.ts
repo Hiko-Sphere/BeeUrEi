@@ -57,6 +57,9 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
         } catch {
           return
         }
+        // 合法 JSON 但非对象（null / 数字 / 字符串 / 布尔）：下方 msg.type 取属性会抛——
+        // 尤其 JSON `null` 会 TypeError 致 message 处理器未捕获异常。直接忽略这类帧。
+        if (typeof msg !== 'object' || msg === null) return
 
         if (msg.type === 'join') {
           // 必须带非空 callId：否则空串会让所有"漏带 callId"的连接落进同一全局房间互相串话（见审查 #8）。

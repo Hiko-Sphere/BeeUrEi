@@ -57,6 +57,24 @@ describe('family + emergency', () => {
     await a.close()
   })
 
+  it('caps the initiator side too: non-blind requester cannot fan out unbounded requests (422)', async () => {
+    // 非盲发起方时 ownerId=target(盲)，owner 维度上限约束不到发起方自身——不补上限则单账号可向无数
+    // 不同目标发 pending 请求（无界增长 + 群发好友请求推送骚扰）。验证发起方自身满 200 时被挡。
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const reg = async (username: string, role?: string) =>
+      (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username, password: 'secret123', role } })).json()
+    const helper = await reg('helperx', 'helper') // 非盲发起方（member 侧）
+    await reg('blindy', 'blind')                   // 全新盲人目标（其 owner 维度为空）
+    for (let i = 0; i < 200; i++)                  // 预置发起方作为 member 的 200 条 link
+      store.createLink({ id: `seed-${i}`, ownerId: `owner-${i}`, memberId: helper.user.id, relation: '亲友', isEmergency: false, createdAt: i, status: 'accepted', requestedBy: helper.user.id })
+    const auth = { authorization: `Bearer ${helper.token}` }
+    const res = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth, payload: { username: 'blindy' } })
+    expect(res.statusCode).toBe(422)
+    expect(res.json().error).toBe('too_many_links')
+    await a.close()
+  })
+
   it('username lookup is case-insensitive (no impersonation by case)', async () => {
     const { a, reg } = setup()
     const owner = await reg('alice')

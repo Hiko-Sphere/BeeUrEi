@@ -36,6 +36,10 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: P
     const existing = store.linksByOwner(ownerId)
     if (existing.some((l) => l.memberId === memberId)) return reply.code(409).send({ error: 'already_linked' })
     if (existing.length >= 200) return reply.code(422).send({ error: 'too_many_links' })
+    // 上面的 existing(=linksByOwner(target)) 只约束"被绑定的视障侧"。当发起方是非盲（member 侧，
+    // ownerId=target≠meId）时它约束不到发起方自身——单个非盲账号可向无数不同目标发 pending 请求：
+    // 既无界增长 link 记录，又把好友请求推送群发骚扰（每目标各推一条）。补发起方自身上限（与 owner 同口径）。
+    if (ownerId !== meId && store.linksByMember(meId).length >= 200) return reply.code(422).send({ error: 'too_many_links' })
 
     const link: FamilyLink = {
       id: randomUUID(),

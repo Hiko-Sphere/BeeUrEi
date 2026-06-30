@@ -1294,6 +1294,14 @@ struct APIClient {
         return (r.notifications, r.unread)
     }
 
+    /// 未读汇总（单聊+群聊+铃铛通知）：一次轻量拉取，供应用内角标与 App 图标角标同步。
+    struct UnreadSummary: Codable { let messages: Int; let notifications: Int; let total: Int }
+    func unreadSummary(token: String) async throws -> UnreadSummary {
+        let data = try await authedGet("/api/unread", token: token)
+        guard let r = try? JSONDecoder().decode(UnreadSummary.self, from: data) else { throw APIError.decoding }
+        return r
+    }
+
     func markNotificationRead(token: String, id: String) async throws {
         _ = try await authedSend("POST", "/api/notifications/\(id)/read", token: token)
     }

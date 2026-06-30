@@ -10,14 +10,16 @@ export interface PushSender {
   sendCallInvite(voipToken: string, callId: string, callerName: string, callerId: string): Promise<void>
   /// 普通"提醒类"通知（软件外通知：好友请求/被接受等）。失败只记日志。
   /// threadId：APNs thread-id，用于在通知中心按会话**分组折叠**（同一对话/群的多条通知不刷屏）。
-  sendAlert(apnsToken: string, title: string, body: string, extra?: Record<string, string>, threadId?: string): Promise<void>
+  /// badge：App 图标角标数（收件人当前未读总数）——后台收到消息即在图标上递增。
+  sendAlert(apnsToken: string, title: string, body: string, extra?: Record<string, string>, threadId?: string, badge?: number): Promise<void>
 }
 
 /// 构造 alert 推送 JSON（纯函数，可单测）：extra 平铺在顶层，aps 含 alert/sound，
-/// 给了 threadId 则加 aps['thread-id'] 让 iOS 按会话分组。
-export function buildAlertPayload(title: string, body: string, extra?: Record<string, string>, threadId?: string): string {
+/// 给了 threadId 则加 aps['thread-id'] 让 iOS 按会话分组；给了 badge 则设 aps.badge 图标角标。
+export function buildAlertPayload(title: string, body: string, extra?: Record<string, string>, threadId?: string, badge?: number): string {
   const aps: Record<string, unknown> = { alert: { title, body }, sound: 'default' }
   if (threadId) aps['thread-id'] = threadId
+  if (typeof badge === 'number') aps.badge = badge
   return JSON.stringify({ ...(extra ?? {}), aps })
 }
 
@@ -73,8 +75,8 @@ export class ApnsPushSender implements PushSender {
     }
   }
 
-  async sendAlert(apnsToken: string, title: string, body: string, extra?: Record<string, string>, threadId?: string): Promise<void> {
-    const payload = buildAlertPayload(title, body, extra, threadId)
+  async sendAlert(apnsToken: string, title: string, body: string, extra?: Record<string, string>, threadId?: string, badge?: number): Promise<void> {
+    const payload = buildAlertPayload(title, body, extra, threadId, badge)
     try {
       await this.post(`/3/device/${apnsToken}`, {
         authorization: `bearer ${this.providerToken(Date.now())}`,

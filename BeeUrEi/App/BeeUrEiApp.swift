@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 /// App 入口。先过免责知情同意门（首次/超期需完整同意），再进首屏。
 @main
@@ -90,7 +91,12 @@ private struct RootView: View {
         .environment(session)
         .tint(.beeAccent) // 全局强调色：浅色墨蓝/深色蜂蜜，两端皆高对比、无障碍友好
         // 切到后台即锁（若已开启）：回前台必须重新验证本人。仅 .background（避免 .inactive 瞬态误锁；隐私遮罩另由 securityMode 处理）。
-        .onChange(of: scenePhase) { _, phase in if phase == .background { appLock.lockOnBackground() } }
+        // 回前台时把 App 图标角标同步到真实未读（清掉在别处已读后推送 badge 残留的陈旧数字）。
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { appLock.lockOnBackground() }
+            if phase == .active { Task { await syncAppBadge() } }
+        }
+        .task { await syncAppBadge() } // 冷启动同步一次
         // 安全遮罩（锁屏 / 隐私遮罩）：用独立高层级窗口，盖在任何 sheet/快照之上——模式变化即驱动。
         .onChange(of: securityMode) { _, m in SecurityScreen.shared.update(m) }
         .onAppear { SecurityScreen.shared.update(securityMode) }
@@ -98,8 +104,8 @@ private struct RootView: View {
         .onChange(of: session.isLoggedIn) { _, loggedIn in
             if loggedIn {
                 RemoteAssistService.shared.refreshRegistration()
-                Task { await PushAlerts.shared.uploadIfPossible(); await NotificationsCenter.shared.refresh() }
-            } else { enteredRole = nil; RoleEntryStore().lastRole = nil } // 登出：清除记住的角色
+                Task { await PushAlerts.shared.uploadIfPossible(); await NotificationsCenter.shared.refresh(); await syncAppBadge() }
+            } else { enteredRole = nil; RoleEntryStore().lastRole = nil; Task { await syncAppBadge() } } // 登出：清除记住的角色 + 清角标
         }
         // 账号恢复后纠正记忆：若服务端角色已变（非开发者），更新已记住的角色，避免老用户进错界面。
         .onChange(of: session.user?.role) { _, role in
@@ -142,5 +148,16 @@ private struct RootView: View {
     private var needsFullConsent: Bool {
         policy.requirement(hasEverAccepted: store.hasEverAccepted,
                            daysSinceLastAcceptance: store.daysSinceLastAcceptance) == .fullConsentRequired
+    }
+
+    /// 同步 App 图标角标到真实未读总数（启动/回前台/登录登出）：读完别处的消息后清掉推送 badge 残留的陈旧数字。
+    /// 未登录则清零。失败静默（角标非关键路径）。
+    @MainActor private func syncAppBadge() async {
+        guard let token = session.token else {
+            try? await UNUserNotificationCenter.current().setBadgeCount(0)
+            return
+        }
+        let total = (try? await APIClient().unreadSummary(token: token))?.total ?? 0
+        try? await UNUserNotificationCenter.current().setBadgeCount(total)
     }
 }

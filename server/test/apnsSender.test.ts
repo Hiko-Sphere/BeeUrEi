@@ -66,4 +66,10 @@ describe('buildAlertPayload', () => {
     const noThread = JSON.parse(buildAlertPayload('t', 'b', {}))
     expect(noThread.aps['thread-id']).toBeUndefined()
   })
+
+  it('给 badge 则写入 aps.badge（含 0 清零），不给则无该键', () => {
+    expect(JSON.parse(buildAlertPayload('t', 'b', {}, undefined, 5)).aps.badge).toBe(5)
+    expect(JSON.parse(buildAlertPayload('t', 'b', {}, 'dm:u1', 0)).aps.badge).toBe(0) // 0 也要下发（清零角标）
+    expect(JSON.parse(buildAlertPayload('t', 'b', {})).aps.badge).toBeUndefined()
+  })
 })

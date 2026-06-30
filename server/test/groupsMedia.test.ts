@@ -13,11 +13,11 @@ process.env.MEDIA_DIR = mkdtempSync(join(tmpdir(), 'beeurei-media-'))
 const auth = (t: string) => ({ authorization: `Bearer ${t}` })
 
 class FakePush implements PushSender {
-  sent: { token: string; title: string; body: string; extra?: Record<string, string> }[] = []
+  sent: { token: string; title: string; body: string; extra?: Record<string, string>; threadId?: string; badge?: number }[] = []
   async send(): Promise<void> {}
   async sendCallInvite(): Promise<void> {}
-  async sendAlert(token: string, title: string, body: string, extra?: Record<string, string>): Promise<void> {
-    this.sent.push({ token, title, body, extra })
+  async sendAlert(token: string, title: string, body: string, extra?: Record<string, string>, threadId?: string, badge?: number): Promise<void> {
+    this.sent.push({ token, title, body, extra, threadId, badge })
   }
 }
 
@@ -324,5 +324,21 @@ describe('未读汇总 /api/unread', () => {
     // 自己发的不计入自己的未读。
     const ua = await app.inject({ method: 'GET', url: '/api/unread', headers: auth(a.token) })
     expect((ua.json() as any).messages).toBe(0)
+  })
+
+  it('单聊推送携带 thread-id（按发送者分组）与 badge（收件人未读总数，递增）', async () => {
+    const push = new FakePush()
+    const app = buildApp(new MemoryStore(), { pushSender: push })
+    const a = await reg(app, 'bdga', 'blind')
+    const b = await reg(app, 'bdgb', 'helper')
+    await bind(app, a.token, b.token, 'bdgb')
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(b.token), payload: { token: 'c'.repeat(64) } })
+
+    await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, text: '第一条' } })
+    await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, text: '第二条' } })
+    expect(push.sent).toHaveLength(2)
+    expect(push.sent[0].threadId).toBe(`dm:${a.user.id}`)
+    expect(push.sent[0].badge).toBe(1) // 第一条后 b 未读=1
+    expect(push.sent[1].badge).toBe(2) // 第二条后递增到 2
   })
 })

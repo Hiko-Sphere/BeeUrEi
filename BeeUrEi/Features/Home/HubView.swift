@@ -378,9 +378,8 @@ struct HubView: View {
         unreadPollTask = Task {
             while !Task.isCancelled {
                 if let token = session.token {
-                    let direct = (try? await APIClient().conversations(token: token))?.reduce(0) { $0 + $1.unread } ?? 0
-                    let group = (try? await APIClient().groups(token: token))?.reduce(0) { $0 + $1.unread } ?? 0
-                    unreadTotal = direct + group
+                    // 一次轻量汇总（替代各拉一遍会话+群列表）：messages=单聊+群聊未读。
+                    unreadTotal = (try? await APIClient().unreadSummary(token: token))?.messages ?? unreadTotal
                 }
                 try? await Task.sleep(for: .seconds(15))
             }

@@ -33,6 +33,21 @@ function locationName(text: string): string {
   try { return locationSchema.parse(JSON.parse(text)).name ?? '' } catch { return '' }
 }
 
+/// 用户未读总数（单聊 + 群聊 + 铃铛通知）——供未读汇总端点与推送的 App 图标角标共用。
+/// 群未读口径与 GET /api/groups 一致（createdAt>已读时刻、非己发、非撤回）。
+export function totalUnreadFor(store: Store, userId: string): { messages: number; notifications: number; total: number } {
+  let messages = 0
+  for (const m of store.latestMessagesPerPeer(userId)) {
+    messages += store.unreadCount(userId, m.fromId === userId ? m.toId : m.fromId)
+  }
+  for (const g of store.groupsFor(userId)) {
+    const readAt = store.groupReadAt(g.id, userId)
+    messages += store.groupMessages(g.id, 200).filter((m) => m.createdAt > readAt && m.fromId !== userId && m.kind !== 'recalled').length
+  }
+  const notifications = store.unreadNotificationCount(userId)
+  return { messages, notifications, total: messages + notifications }
+}
+
 /// 聊天（参照 WhatsApp/iMessage 核心集：文本 + 语音条 + 图片 + 视频 + 已读回执 + 未读数 + 推送）。
 /// 单聊互发资格 = 双方存在 **accepted** 绑定且无任一方向拉黑；群消息资格 = 群成员。
 export function registerMessageRoutes(app: FastifyInstance, store: Store,
@@ -103,7 +118,8 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
           void pushSender.sendAlert(member.apnsToken,
             pushStrings.groupMessageTitle(sender.displayName, group.name, l),
             pushStrings.newMessageBody(previewOf(kind, text, l), l),
-            { type: 'chat_message', groupId }, `group:${groupId}`) // 按群分组折叠通知
+            { type: 'chat_message', groupId }, `group:${groupId}`, // 按群分组折叠通知
+            totalUnreadFor(store, memberId).total) // 图标角标=该成员未读总数（含本条）
             .catch(() => { /* 单个成员推送失败不影响其他成员与发送回执 */ })
         }
       }
@@ -126,7 +142,8 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
       void pushSender.sendAlert(recipient.apnsToken,
         pushStrings.newMessageTitle(sender.displayName, l),
         pushStrings.newMessageBody(previewOf(kind, text, l), l),
-        { type: 'chat_message', fromId: me }, `dm:${me}`) // 按发送者分组折叠通知
+        { type: 'chat_message', fromId: me }, `dm:${me}`, // 按发送者分组折叠通知
+        totalUnreadFor(store, toId!).total) // 图标角标=收件人未读总数（含本条）
         .catch(() => { /* 推送失败不影响消息已存库与发送回执 */ })
     }
     return reply.code(201).send({ message: msg })
@@ -242,16 +259,6 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
   /// 未读汇总（单聊 + 群聊 + 铃铛通知）：供网页标签标题/导航徽标一次性轻量拉取，
   /// 免得为算总数去拉完整会话/群列表。群未读口径与 GET /api/groups 一致。
   app.get('/api/unread', { preHandler: requireAuth() }, async (req) => {
-    const me = req.user!.sub
-    let messages = 0
-    for (const m of store.latestMessagesPerPeer(me)) {
-      messages += store.unreadCount(me, m.fromId === me ? m.toId : m.fromId)
-    }
-    for (const g of store.groupsFor(me)) {
-      const readAt = store.groupReadAt(g.id, me)
-      messages += store.groupMessages(g.id, 200).filter((m) => m.createdAt > readAt && m.fromId !== me && m.kind !== 'recalled').length
-    }
-    const notifications = store.unreadNotificationCount(me)
-    return { messages, notifications, total: messages + notifications }
+    return totalUnreadFor(store, req.user!.sub)
   })
 }

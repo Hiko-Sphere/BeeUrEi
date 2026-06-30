@@ -3,7 +3,7 @@ import { api, type AdminOverview, type AdminActiveCall, type AdminReport, type A
 import { apiURL } from '../lib/config'
 import { useI18n } from '../lib/i18n'
 import { roleLabel } from '../components/Layout'
-import { Card, Avatar, Button, Pill, Spinner, EmptyState, Input, useToast, fmtTime, fmtDuration } from '../components/ui'
+import { Card, Avatar, Button, Pill, Spinner, EmptyState, Input, useToast, fmtTime, fmtDuration, Modal } from '../components/ui'
 import { IconShield, IconPhone, IconFlag, IconUsers, IconX } from '../components/icons'
 
 type Tab = 'overview' | 'live' | 'reports' | 'users'
@@ -173,8 +173,7 @@ function ModerateDialog({ r, onClose, onModerate }: { r: AdminReport; onClose: (
     { a: 'ban', label: t('封禁', 'Ban'), tone: 'danger' },
   ]
   return (
-    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={onClose}>
-      <div className="slide-up w-full max-w-md rounded-2xl surface border border-[var(--line)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} label={t('处置举报', 'Moderate report')} panelClassName="w-full max-w-md">
         <h3 className="text-lg font-semibold">{t('处置举报', 'Moderate report')}</h3>
         <div className="mt-3 space-y-1 text-sm">
           <div><span className="text-faint">{t('举报人', 'Reporter')}：</span>{r.reporterName}</div>
@@ -187,8 +186,7 @@ function ModerateDialog({ r, onClose, onModerate }: { r: AdminReport; onClose: (
           {acts.map((x) => <Button key={x.a} variant={x.tone} disabled={!reason.trim()} onClick={() => onModerate(r.id, x.a, reason.trim())}>{x.label}</Button>)}
         </div>
         <button onClick={onClose} className="mt-3 w-full text-center text-sm text-faint hover:underline">{t('取消', 'Cancel')}</button>
-      </div>
-    </div>
+    </Modal>
   )
 }
 

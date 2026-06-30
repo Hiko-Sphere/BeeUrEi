@@ -4,7 +4,7 @@ import { api, APIError, type FamilyLink, type IncomingLink } from '../lib/api'
 import { classifyIdentifier } from '../lib/identifier'
 import { useI18n } from '../lib/i18n'
 import { useCall } from './call/CallController'
-import { Card, Avatar, Button, Pill, Spinner, EmptyState, Field, Input, useToast } from '../components/ui'
+import { Card, Avatar, Button, Pill, Spinner, EmptyState, Field, Input, useToast, Modal } from '../components/ui'
 import { IconUsers, IconPhone, IconChat, IconPlus, IconCheck, IconX, IconShield } from '../components/icons'
 
 export function FamilyPage() {
@@ -166,8 +166,7 @@ function AddContactDialog({ onClose, onAdded }: { onClose: () => void; onAdded: 
   }
 
   return (
-    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={onClose}>
-      <div className="slide-up w-full max-w-sm rounded-2xl surface border border-[var(--line)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} label={t('添加联系人', 'Add contact')} panelClassName="w-full max-w-sm">
         <h3 className="text-lg font-semibold">{t('添加联系人', 'Add contact')}</h3>
         <p className="mt-1 text-sm text-faint">{t('输入对方的用户名、邮箱或手机号', 'Enter their username, email, or phone')}</p>
         <div className="mt-4 flex flex-col gap-4">
@@ -186,7 +185,6 @@ function AddContactDialog({ onClose, onAdded }: { onClose: () => void; onAdded: 
           <Button variant="soft" className="flex-1" onClick={onClose}>{t('取消', 'Cancel')}</Button>
           <Button className="flex-1" loading={busy} onClick={submit} disabled={!q.trim()}>{t('发送请求', 'Send request')}</Button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { api, APIError, type ContactLocation } from '../lib/api'
+import { pollWhileVisible } from '../lib/poll'
 import { useI18n } from '../lib/i18n'
 import { useSession } from '../lib/session'
 import { roleLabel } from '../components/Layout'
@@ -66,7 +67,7 @@ export function LocationsPage() {
       if (e instanceof APIError && e.status === 403) setFeatureOff(true)
     }
   }, [])
-  useEffect(() => { void poll(); const id = setInterval(poll, POLL_MS); return () => clearInterval(id) }, [poll])
+  useEffect(() => { void poll(); return pollWhileVisible(poll, POLL_MS) }, [poll])
 
   // 把联系人位置同步到地图标记。
   useEffect(() => {

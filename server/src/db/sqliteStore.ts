@@ -74,6 +74,13 @@ export class SqliteStore implements Store {
     try { this.db.exec('ALTER TABLE users ADD COLUMN apnsToken TEXT') } catch { /* 列已存在 */ } // 普通 APNs 提醒推送 token
     try { this.db.exec('ALTER TABLE users ADD COLUMN phone TEXT') } catch { /* 列已存在 */ } // 手机号登录标识
     try { this.db.exec('ALTER TABLE users ADD COLUMN appleSub TEXT') } catch { /* 列已存在 */ } // Sign in with Apple sub
+    // 登录/查找热路径索引（每次登录都按标识查 users）：username/email 查询带 COLLATE NOCASE，
+    // 故索引也须 NOCASE——否则 UNIQUE(username) 的 BINARY 索引用不上、登录退化为全表扫描；
+    // phone/appleSub 是迁移列、原本完全无索引。
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_users_username_nocase ON users (username COLLATE NOCASE)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_users_email_nocase ON users (email COLLATE NOCASE)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_users_phone ON users (phone)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_users_apple ON users (appleSub)')
     try { this.db.exec('ALTER TABLE users ADD COLUMN usernameCustomized INTEGER') } catch { /* 列已存在 */ } // 是否设过自定义用户名
     try { this.db.exec('ALTER TABLE users ADD COLUMN legalConsentVersion TEXT') } catch { /* 列已存在 */ } // 同意的隐私/条款版本（注册门控+GDPR 可证明同意）
     try { this.db.exec('ALTER TABLE users ADD COLUMN legalConsentAt INTEGER') } catch { /* 列已存在 */ } // 同意时间戳

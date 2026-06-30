@@ -227,17 +227,27 @@ function Bubble({ m, mine, lang, t, onRecall }: { m: ChatMessage; mine: boolean;
 
 function MessageBody({ m, t }: { m: ChatMessage; t: (z: string, e: string) => string }) {
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
+  const [videoFailed, setVideoFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     if (m.kind !== 'video' || !m.text) return
     let url: string | null = null
-    void fetchMediaObjectURL(m.text).then((u) => { url = u; setVideoUrl(u) }).catch(() => {})
-    return () => { if (url) URL.revokeObjectURL(url) }
-  }, [m.kind, m.text])
+    let cancelled = false
+    setVideoUrl(null); setVideoFailed(false) // 切换消息/重试时复位，避免沿用上一条状态
+    void fetchMediaObjectURL(m.text)
+      .then((u) => { if (cancelled) { URL.revokeObjectURL(u); return } url = u; setVideoUrl(u) })
+      .catch(() => { if (!cancelled) setVideoFailed(true) }) // 失败要显式标记，否则与"加载中"无法区分、永久转圈
+    return () => { cancelled = true; if (url) URL.revokeObjectURL(url) }
+  }, [m.kind, m.text, attempt])
 
   if (m.kind === 'recalled') return <span>{t('该消息已撤回', 'Message recalled')}</span>
   if (m.kind === 'image') return <img src={m.text} alt="" className="max-h-64 rounded-lg" />
   if (m.kind === 'audio') return <audio src={m.text} controls className="max-w-[240px]" />
-  if (m.kind === 'video') return videoUrl ? <video src={videoUrl} controls className="max-h-64 rounded-lg" /> : <span className="opacity-60">{t('[视频加载中]', '[Loading video]')}</span>
+  if (m.kind === 'video') {
+    if (videoUrl) return <video src={videoUrl} controls className="max-h-64 rounded-lg" />
+    if (videoFailed) return <button onClick={() => setAttempt((a) => a + 1)} className="underline opacity-80">{t('视频加载失败，点击重试', 'Video failed to load — tap to retry')}</button>
+    return <span className="opacity-60">{t('[视频加载中]', '[Loading video]')}</span>
+  }
   if (m.kind === 'location') {
     try {
       const loc = JSON.parse(m.text) as { lat: number; lng: number; name?: string }

@@ -95,6 +95,11 @@ enum ChatStrings {
         l == .zh ? "\(name) 发来图片" : "Photo from \(name)"
     }
     static func loadEarlier(_ l: Language) -> String { l == .zh ? "加载更早的消息" : "Load earlier messages" }
+    static func searchTitle(_ l: Language) -> String { l == .zh ? "搜索消息" : "Search messages" }
+    static func searchPlaceholder(_ l: Language) -> String { l == .zh ? "搜索这个会话的文字消息" : "Search text messages in this chat" }
+    static func searchNoResults(_ l: Language) -> String { l == .zh ? "没有找到匹配的消息" : "No matching messages" }
+    static func searchPrompt(_ l: Language) -> String { l == .zh ? "输入关键词搜索本会话的文字消息" : "Type a keyword to search this chat's text messages" }
+    static func searchResultsCount(_ n: Int, _ l: Language) -> String { l == .zh ? "找到 \(n) 条" : "\(n) found" }
     static func formerMember(_ l: Language) -> String { l == .zh ? "已退群成员" : "Former member" }
     static func close(_ l: Language) -> String { l == .zh ? "关闭" : "Close" }
     static func cancel(_ l: Language) -> String { l == .zh ? "取消" : "Cancel" }

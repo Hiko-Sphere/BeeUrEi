@@ -919,6 +919,15 @@ struct APIClient {
         return try JSONDecoder().decode(R.self, from: data).messages
     }
 
+    /// 会话内搜索文本消息（时间倒序）。peerId 或 groupId 二选一；空查询后端返回空。
+    func searchMessages(token: String, peerId: String? = nil, groupId: String? = nil, query: String) async throws -> [ChatMessageInfo] {
+        let scope = groupId.map { "group=\($0)" } ?? "with=\(peerId ?? "")"
+        let q = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let data = try await authedGet("/api/messages/search?\(scope)&q=\(q)", token: token)
+        struct R: Codable { let messages: [ChatMessageInfo] }
+        return try JSONDecoder().decode(R.self, from: data).messages
+    }
+
     /// 发群消息。
     func sendGroupMessage(token: String, groupId: String, kind: String, text: String) async throws -> ChatMessageInfo {
         let data = try await authedSend("POST", "/api/messages", token: token,

@@ -272,6 +272,7 @@ struct ChatView: View {
     @State private var zoomImage: ZoomableImage?    // 点开图片全屏查看
     @State private var groupDetail: GroupConversationInfo? // 群聊：成员表（发言人名字/管理）
     @State private var showGroupInfo = false
+    @State private var showSearch = false
     @State private var contacts: [FamilyLinkInfo] = []
     @Environment(\.dismiss) private var dismiss
     @FocusState private var inputFocused: Bool
@@ -312,12 +313,20 @@ struct ChatView: View {
         .navigationTitle(target.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { showSearch = true } label: { Image(systemName: "magnifyingglass") }
+                    .accessibilityLabel(ChatStrings.searchTitle(lang))
+            }
             if isGroup {
                 ToolbarItem(placement: .primaryAction) {
                     Button { showGroupInfo = true } label: { Image(systemName: "person.3") }
                         .accessibilityLabel(ChatStrings.groupInfo(lang))
                 }
             }
+        }
+        .sheet(isPresented: $showSearch) {
+            MessageSearchSheet(session: session, peerId: peerId, groupId: groupId,
+                               memberName: isGroup ? { senderName($0) } : nil, selfId: myId, lang: lang)
         }
         .sheet(isPresented: $showGroupInfo) {
             if let detail = groupDetail {
@@ -849,6 +858,86 @@ struct ChatView: View {
 struct ZoomableImage: Identifiable {
     let id = UUID().uuidString
     let image: UIImage
+}
+
+/// 会话内消息搜索（参照 WhatsApp 搜索）：输入关键词 → 调后端搜索端点 → 列出命中文字消息
+/// （发送者 + 内容 + 时间，时间倒序）。盲人友好：每条结果合并为单一 VoiceOver 标签朗读。
+/// 首版只展示结果供阅读；跳转到原消息因翻页较复杂，留待后续。
+struct MessageSearchSheet: View {
+    let session: AuthSession
+    let peerId: String?
+    let groupId: String?
+    let memberName: ((String) -> String)?  // 群聊：按 fromId 取发送者名；单聊为 nil
+    let selfId: String
+    let lang: Language
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    @State private var results: [ChatMessageInfo] = []
+    @State private var searching = false
+    @State private var didSearch = false
+    @State private var searchTask: Task<Void, Never>?
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                if searching {
+                    ProgressView().frame(maxWidth: .infinity).padding()
+                } else if didSearch && results.isEmpty {
+                    BeeEmptyState(systemImage: "magnifyingglass",
+                                  title: ChatStrings.searchNoResults(lang), message: "")
+                } else if !didSearch {
+                    BeeEmptyState(systemImage: "text.magnifyingglass",
+                                  title: ChatStrings.searchTitle(lang), message: ChatStrings.searchPrompt(lang))
+                } else {
+                    List {
+                        Section(ChatStrings.searchResultsCount(results.count, lang)) {
+                            ForEach(results) { m in resultRow(m) }
+                        }
+                    }
+                    .listStyle(.plain)
+                }
+            }
+            .navigationTitle(ChatStrings.searchTitle(lang))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(ChatStrings.close(lang)) { dismiss() } } }
+            .searchable(text: $query, prompt: ChatStrings.searchPlaceholder(lang))
+            .onChange(of: query) { _, _ in scheduleSearch() }
+        }
+    }
+
+    private func resultRow(_ m: ChatMessageInfo) -> some View {
+        let who = m.fromId == selfId ? ChatStrings.me(lang) : (memberName?(m.fromId) ?? "")
+        let time = ChatStrings.timeFormat(m.createdAt)
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                if !who.isEmpty { Text(who).font(.caption.bold()).foregroundStyle(Color.beeHoney) }
+                Spacer()
+                Text(time).font(.caption2).foregroundStyle(.secondary)
+            }
+            Text(m.text).font(.body).lineLimit(3)
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(ChatStrings.bubbleA11y(from: who.isEmpty ? ChatStrings.me(lang) : who,
+                                                   content: m.text, time: time, lang))
+    }
+
+    /// 输入防抖 0.35s 再查（边输边查不打满后端）。
+    private func scheduleSearch() {
+        searchTask?.cancel()
+        let q = query.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { results = []; didSearch = false; return }
+        searchTask = Task {
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled, let token = session.token else { return }
+            searching = true; defer { searching = false }
+            let found = (try? await APIClient().searchMessages(token: token, peerId: peerId, groupId: groupId, query: q)) ?? []
+            guard !Task.isCancelled else { return }
+            results = found
+            didSearch = true
+        }
+    }
 }
 
 /// 收到的照片点开后全屏查看，支持双指捏合缩放（聊天双方多为明眼亲友/协助者）。

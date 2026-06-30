@@ -29,7 +29,10 @@ const avatarSchema = z.object({
 export function registerAccountRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer, appleVerifier?: AppleTokenVerifier, codeSend: CodeSendLimiter = new CodeSendLimiter()): void {
   // 修改密码：验证旧密码 → 设新密码 → 递增 tokenVersion(令已签发的 access token 立即失效) → 撤销所有 refresh token。
   // 递增 tokenVersion 是关键：否则被盗号者手里的 access token 在改密后仍可用最长 1h，改密自救形同虚设（见审查 #2）。
-  app.post('/api/account/password', { preHandler: requireAuth() }, async (req, reply) => {
+  // 限流：校验 oldPassword 而无内置尝试上限（不同于走 CodeRegistry 5 次上限的验证码端点）。
+  // 防：持有被盗 access token 者暴力猜 oldPassword → 改密 → 吊销原会话 → 把临时访问升级为持久接管。
+  // 与 2FA/login 等校验秘密的端点同口径(10/min)。
+  app.post('/api/account/password', { preHandler: requireAuth(), config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = passwordSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const user = store.findById(req.user!.sub)

@@ -13,7 +13,9 @@ final class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     static let shared = LiveLocationManager()
 
     private let manager = CLLocationManager()
-    private let lang = FeatureSettings().language
+    // 计算属性按需读取：本类是 static let 单例（跨语言切换长期存活），不能在 init 缓存 lang，
+    // 否则运行时切换语言后位置共享的语音播报仍停留在旧语言（与 EmergencyWatch/VoiceCommandListener 同模式）。
+    private var lang: Language { FeatureSettings().language }
     @ObservationIgnored private var isBlind = false   // 盲人侧用 SpeechHub 朗读状态；协助者/亲友走系统无障碍公告即可
 
     private(set) var sharing = false

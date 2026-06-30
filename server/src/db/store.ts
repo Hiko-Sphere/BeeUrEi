@@ -972,7 +972,8 @@ export class MemoryStore implements Store {
   unreadCount(userId: string, fromId: string): number {
     let n = 0
     for (const m of this.messages.values()) {
-      if (m.toId === userId && m.fromId === fromId && m.readAt == null) n++
+      // 排除已撤回（kind=recalled）：撤回消息无内容可读，不应计未读（与群未读口径一致）。
+      if (m.toId === userId && m.fromId === fromId && m.readAt == null && m.kind !== 'recalled') n++
     }
     return n
   }

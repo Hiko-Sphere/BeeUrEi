@@ -344,6 +344,20 @@ describe('未读汇总 /api/unread', () => {
     expect(((await app.inject({ method: 'GET', url: '/api/unread', headers: auth(b.token) })).json() as any).messages).toBe(1)
   })
 
+  it('被撤回的单聊消息不计入未读（与群口径一致，修复 direct/group 不对称）', async () => {
+    const app = buildApp(new MemoryStore())
+    const a = await reg(app, 'unre', 'blind')
+    const b = await reg(app, 'unrf', 'helper')
+    await bind(app, a.token, b.token, 'unrf')
+    const d1 = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, text: '第一条' } })
+    await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, text: '第二条' } })
+    expect(((await app.inject({ method: 'GET', url: '/api/unread', headers: auth(b.token) })).json() as any).messages).toBe(2)
+    // a 撤回第一条单聊 → b 单聊未读应降为 1（此前 unreadCount 未排除 recalled，会错误地仍计 2）。
+    const did = (d1.json() as any).message.id as string
+    expect((await app.inject({ method: 'POST', url: `/api/messages/${did}/recall`, headers: auth(a.token) })).statusCode).toBe(200)
+    expect(((await app.inject({ method: 'GET', url: '/api/unread', headers: auth(b.token) })).json() as any).messages).toBe(1)
+  })
+
   it('单聊推送携带 thread-id（按发送者分组）与 badge（收件人未读总数，递增）', async () => {
     const push = new FakePush()
     const app = buildApp(new MemoryStore(), { pushSender: push })

@@ -68,6 +68,12 @@ describe('SqliteStore (node:sqlite)', () => {
     store.createMessage({ id: 'd1', fromId: 'u1', toId: 'u2', kind: 'text', text: '私聊', createdAt: 4000 })
     expect(store.messagesBetween('u1', 'u2', 10).map((m) => m.id)).toEqual(['d1'])
     expect(store.latestMessagesPerPeer('u1').map((m) => m.id)).toEqual(['d1'])
+    // 单聊未读：u2 对 u1 有 1 条未读；撤回后(kind=recalled)不再计未读（SQL 路径，与群口径/MemoryStore 一致）。
+    expect(store.unreadCount('u2', 'u1')).toBe(1)
+    store.updateMessage('d1', { kind: 'recalled', text: '' })
+    expect(store.unreadCount('u2', 'u1')).toBe(0)
+    // 复原 d1 供后续"群解散不影响单聊"断言（保持原计数语义）。
+    store.updateMessage('d1', { kind: 'text', text: '私聊' })
 
     // 搜索（SQL LIKE 路径）：群内/单聊文本命中、大小写不敏感、% 字面量、非文本不命中。
     store.createMessage({ id: 's1', fromId: 'u1', toId: '', groupId: 'g1', kind: 'text', text: 'Meeting 100%', createdAt: 6000 })

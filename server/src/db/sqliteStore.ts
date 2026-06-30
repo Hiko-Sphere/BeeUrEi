@@ -568,7 +568,8 @@ export class SqliteStore implements Store {
     return Number(res.changes)
   }
   unreadCount(userId: string, fromId: string): number {
-    const r = this.db.prepare('SELECT COUNT(*) AS n FROM messages WHERE toId = ? AND fromId = ? AND readAt IS NULL AND groupId IS NULL')
+    // 排除已撤回（kind=recalled）：撤回消息无内容可读，不应计未读（与群未读口径一致）。
+    const r = this.db.prepare("SELECT COUNT(*) AS n FROM messages WHERE toId = ? AND fromId = ? AND readAt IS NULL AND groupId IS NULL AND kind != 'recalled'")
       .get(userId, fromId) as any
     return Number(r?.n ?? 0)
   }

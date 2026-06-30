@@ -16,6 +16,13 @@ describe('Avatar', () => {
     expect(screen.getByText('?')).toBeInTheDocument()
   })
 
+  it('emoji/增补平面字开头：按码点取整字（不截出半个代理对）', () => {
+    render(<Avatar name="🎉派对" />)
+    expect(screen.getByText('🎉')).toBeInTheDocument() // 完整 emoji，非半个代理对乱码
+    render(<Avatar name="𠮷野家" />)                    // U+20BB7（增补平面）
+    expect(screen.getByText('𠮷')).toBeInTheDocument()
+  })
+
   it('有 src：渲染 <img>，不渲染首字母', () => {
     const { container } = render(<Avatar name="bob" src="data:image/png;base64,AAAA" />)
     expect(container.querySelector('img')).not.toBeNull()

@@ -41,7 +41,9 @@ export function Input({ className = '', ...rest }: InputHTMLAttributes<HTMLInput
 
 // ---------- Avatar ----------
 export function Avatar({ name, src, size = 40 }: { name: string; src?: string | null; size?: number }) {
-  const initial = (name || '?').trim().charAt(0).toUpperCase()
+  // 按 Unicode 码点取首字符：charAt(0) 对以 emoji/增补平面字（如「🎉」「𠮷」）开头的名字
+  // 会截出半个代理对、显示成乱码方块。用展开运算符按码点取。
+  const initial = ([...(name || '?').trim()][0] ?? '?').toUpperCase()
   if (src) return <img src={src} alt="" width={size} height={size} className="rounded-full object-cover" style={{ width: size, height: size }} />
   return (
     <span className="inline-flex shrink-0 items-center justify-center rounded-full bg-honey/20 font-semibold text-[var(--text)]"

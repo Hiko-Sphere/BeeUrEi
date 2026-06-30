@@ -620,7 +620,7 @@ struct ChatView: View {
         // 去重并按时间排序（id 唯一；正常情况下 older 与现有不重叠，去重纯属稳妥）。
         var byId: [String: ChatMessageInfo] = [:]
         for m in older + messages { byId[m.id] = m }
-        messages = byId.values.sorted { $0.createdAt < $1.createdAt }
+        messages = byId.values.sorted { $0.createdAt != $1.createdAt ? $0.createdAt < $1.createdAt : $0.id < $1.id }
         if older.count < chatPageLimit { reachedStart = true; canLoadEarlier = false } // 不足一页 = 已到开头
     }
 
@@ -629,7 +629,8 @@ struct ChatView: View {
         let serverIds = Set(server.map(\.id))
         let extra = messages.filter { !serverIds.contains($0.id) }
         guard !extra.isEmpty else { return server }
-        return (server + extra).sorted { $0.createdAt < $1.createdAt }
+        // 稳定全序 (createdAt, id)：同毫秒的两条消息排序确定，避免轮询间相邻消息忽前忽后。
+        return (server + extra).sorted { $0.createdAt != $1.createdAt ? $0.createdAt < $1.createdAt : $0.id < $1.id }
     }
 
     private func refreshGroupDetail() async {

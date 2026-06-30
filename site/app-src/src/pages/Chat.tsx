@@ -154,7 +154,8 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
         if (!cur || cur.length === 0) return r.messages
         const ids = new Set(r.messages.map((m) => m.id))
         const extra = cur.filter((m) => !ids.has(m.id))
-        return extra.length ? [...r.messages, ...extra].sort((a, b) => a.createdAt - b.createdAt) : r.messages
+        // 稳定全序 (createdAt, id)：同毫秒消息排序确定，避免轮询间相邻消息忽前忽后。
+        return extra.length ? [...r.messages, ...extra].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)) : r.messages
       })
       if (sel.kind === 'peer') void api.markRead(sel.id).catch(() => {})
       else void api.markGroupRead(sel.id).catch(() => {})
@@ -171,7 +172,7 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
       setMsgs((cur) => {
         const byId = new Map<string, ChatMessage>()
         for (const m of [...r.messages, ...(cur ?? [])]) byId.set(m.id, m)
-        return [...byId.values()].sort((a, b) => a.createdAt - b.createdAt)
+        return [...byId.values()].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
       })
       if (r.messages.length < PAGE) setReachedStart(true) // 不足一页 = 已到对话开头
     } catch { /* 失败下次再试 */ } finally { setLoadingEarlier(false) }

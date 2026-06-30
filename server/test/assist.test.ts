@@ -106,3 +106,21 @@ describe('assist presence + match', () => {
     await a.close()
   })
 })
+
+describe('公开求助 topic/locality 内容审核', () => {
+  it('开启违禁词后：广播文本含违禁词被拒(403 content_blocked)，干净通过', async () => {
+    const store = new MemoryStore()
+    store.setAppConfig({ contentFilter: { enabled: true, terms: ['脏词'] } })
+    const a = buildApp(store)
+    const u = (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'hru', password: 'secret123', role: 'blind' } })).json() as { token: string }
+    const auth = { authorization: `Bearer ${u.token}` }
+    const bad = await a.inject({ method: 'POST', url: '/api/assist/help/request', headers: auth, payload: { callId: 'c-bad', topic: '帮我看脏词' } })
+    expect(bad.statusCode).toBe(403)
+    expect((bad.json() as { error: string }).error).toBe('content_blocked')
+    const badLoc = await a.inject({ method: 'POST', url: '/api/assist/help/request', headers: auth, payload: { callId: 'c-bad2', topic: '看红绿灯', locality: '脏词区' } })
+    expect(badLoc.statusCode).toBe(403)
+    const ok = await a.inject({ method: 'POST', url: '/api/assist/help/request', headers: auth, payload: { callId: 'c-ok', topic: '帮我看红绿灯' } })
+    expect(ok.statusCode).toBe(200)
+    await a.close()
+  })
+})

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import { type Store, isBlockedBetween, blockedUserIdSet } from '../db/store'
+import { type Store, isBlockedBetween, blockedUserIdSet, matchBannedTerm } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
 import { SignalingHub } from '../signaling/hub'
@@ -219,6 +219,12 @@ export function registerAssistRoutes(
   app.post('/api/assist/help/request', { preHandler: [requireAuth(), requireFeature(store, 'helpRequests')] }, async (req, reply) => {
     const parsed = helpRequestSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    // 内容审核：topic/locality 会广播给队列里所有在线志愿者（可见面最广的用户文本），与消息/群名/昵称同口径过滤。
+    // 正常端是预设选项，此处防改造客户端把违禁词广播给众人。
+    const cfg = store.getAppConfig()
+    if (matchBannedTerm(cfg, parsed.data.topic ?? '') || matchBannedTerm(cfg, parsed.data.locality ?? '')) {
+      return reply.code(403).send({ error: 'content_blocked' })
+    }
     const me = store.findById(req.user!.sub)
     const ok = openHelp.register({
       callId: parsed.data.callId,

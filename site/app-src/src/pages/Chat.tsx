@@ -6,7 +6,7 @@ import { useI18n } from '../lib/i18n'
 import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo } from '../components/ui'
 import { IconChat, IconSend, IconPlus, IconX } from '../components/icons'
 
-type Selection = { kind: 'peer'; id: string; name: string; avatar?: string | null } | { kind: 'group'; id: string; name: string; members: User[] }
+type Selection = { kind: 'peer'; id: string; name: string; avatar?: string | null } | { kind: 'group'; id: string; name: string; members: User[]; ownerId: string }
 
 export function ChatPage() {
   const { peerId } = useParams()
@@ -60,7 +60,7 @@ export function ChatPage() {
                   onClick={() => setSel({ kind: 'peer', id: it.c.peer.id, name: it.c.peer.displayName, avatar: it.c.peer.avatar })} />
               ) : (
                 <GroupRow key={it.key} active={sel?.kind === 'group' && sel.id === it.g.group.id} g={it.g} lang={lang} t={t}
-                  onClick={() => setSel({ kind: 'group', id: it.g.group.id, name: it.g.group.name, members: it.g.members })} />
+                  onClick={() => setSel({ kind: 'group', id: it.g.group.id, name: it.g.group.name, members: it.g.members, ownerId: it.g.group.ownerId })} />
               ))}
             </ul>
           )}
@@ -131,6 +131,7 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
   const [msgs, setMsgs] = useState<ChatMessage[] | null>(null)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
+  const [showInfo, setShowInfo] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -192,10 +193,13 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
       <header className="flex items-center gap-3 border-b border-[var(--line)] px-4 py-3">
         <button onClick={onBack} className="md:hidden" aria-label={t('返回', 'Back')}><IconX /></button>
         {sel.kind === 'peer' ? <Avatar name={sel.name} src={sel.avatar} size={36} /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-honey/15 text-honey"><IconChat width={18} height={18} /></span>}
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="truncate font-semibold">{sel.name}</div>
           {sel.kind === 'group' && <div className="text-xs text-faint">{sel.members.map((m) => m.displayName).join('、')}</div>}
         </div>
+        {sel.kind === 'group' && (
+          <button onClick={() => setShowInfo(true)} className="rounded-full surface-2 px-3 py-1.5 text-xs font-medium text-soft" aria-label={t('群信息', 'Group info')}>{t('群信息', 'Group info')}</button>
+        )}
       </header>
 
       <div className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
@@ -213,6 +217,102 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
         <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }}
           placeholder={t('输入消息…', 'Type a message…')} className="min-w-0 flex-1 rounded-full border border-[var(--line)] surface-2 px-4 py-2.5 text-sm outline-none focus:border-honey" />
         <button onClick={send} disabled={!text.trim() || sending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-honey text-ink disabled:opacity-40" aria-label={t('发送', 'Send')}><IconSend width={18} height={18} /></button>
+      </div>
+
+      {showInfo && sel.kind === 'group' && (
+        <GroupInfoDialog groupId={sel.id} groupName={sel.name} ownerId={sel.ownerId} members={sel.members} meId={user?.id ?? ''}
+          onClose={() => setShowInfo(false)}
+          onChanged={() => { onSent(); void load() }}
+          onLeft={() => { setShowInfo(false); onSent(); onBack() }} />
+      )}
+    </div>
+  )
+}
+
+/// 群信息（与 iOS GroupInfoSheet 对齐）：成员列表 + 群主加人/踢人、成员退群、群主解散。
+function GroupInfoDialog({ groupId, groupName, ownerId, members, meId, onClose, onChanged, onLeft }: {
+  groupId: string; groupName: string; ownerId: string; members: User[]; meId: string
+  onClose: () => void; onChanged: () => void; onLeft: () => void
+}) {
+  const { t } = useI18n()
+  const toast = useToast()
+  const isOwner = meId === ownerId
+  const [list, setList] = useState<User[]>(members)
+  const [contacts, setContacts] = useState<{ id: string; name: string }[]>([])
+  const [busy, setBusy] = useState(false)
+
+  // 拉最新成员（避免沿用进群时的旧快照）+ 可加联系人（我的 accepted 绑定中不在群里的）。
+  const refresh = useCallback(async () => {
+    try { const { groups } = await api.groups(); const g = groups.find((x) => x.group.id === groupId); if (g) setList(g.members) } catch { /* 保留现有 */ }
+  }, [groupId])
+  useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => { void api.familyLinks().then(({ links }) => setContacts(links.filter((l) => (l.status ?? 'accepted') === 'accepted').map((l) => ({ id: l.memberId, name: l.memberName })))).catch(() => {}) }, [])
+
+  const addable = contacts.filter((c) => !list.some((m) => m.id === c.id))
+
+  const add = async (userId: string) => {
+    setBusy(true)
+    try { await api.addGroupMember(groupId, userId); await refresh(); onChanged() }
+    catch (e) { toast(chatErrorText(e, t, t('操作失败', 'Failed')), 'error') } finally { setBusy(false) }
+  }
+  const kick = async (userId: string) => {
+    setBusy(true)
+    try { await api.leaveGroup(groupId, userId); await refresh(); onChanged() }
+    catch (e) { toast(chatErrorText(e, t, t('操作失败', 'Failed')), 'error') } finally { setBusy(false) }
+  }
+  const leave = async () => {
+    if (!confirm(t('退出后将不再收到此群消息，确定吗？', "You'll stop receiving this group's messages. Leave?"))) return
+    setBusy(true)
+    try { await api.leaveGroup(groupId, meId); onLeft() }
+    catch (e) { toast(chatErrorText(e, t, t('操作失败', 'Failed')), 'error'); setBusy(false) }
+  }
+  const dissolve = async () => {
+    if (!confirm(t('解散后所有群消息将被删除，确定吗？', 'Dissolving deletes all group messages. Are you sure?'))) return
+    setBusy(true)
+    try { await api.deleteGroup(groupId); onLeft() }
+    catch (e) { toast(chatErrorText(e, t, t('操作失败', 'Failed')), 'error'); setBusy(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={onClose}>
+      <div className="slide-up flex max-h-[80vh] w-full max-w-sm flex-col rounded-2xl surface border border-[var(--line)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-semibold">{groupName}</h3>
+        <div className="mt-1 text-xs text-faint">{t('成员', 'Members')}（{list.length}）</div>
+        <div className="mt-2 flex-1 overflow-y-auto rounded-xl border border-[var(--line)]">
+          <ul className="divide-y divide-[var(--line)]">
+            {list.map((m) => (
+              <li key={m.id} className="flex items-center gap-3 px-3 py-2.5">
+                <Avatar name={m.displayName} src={m.avatar} size={32} />
+                <span className="flex-1 truncate text-sm">{m.displayName}{m.id === ownerId && <span className="ml-2 rounded-full bg-honey/20 px-2 py-0.5 text-[10px] text-honey">{t('群主', 'Owner')}</span>}</span>
+                {isOwner && m.id !== ownerId && (
+                  <button onClick={() => kick(m.id)} disabled={busy} className="text-xs text-danger hover:underline disabled:opacity-40">{t('移出', 'Remove')}</button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+        {isOwner && addable.length > 0 && (
+          <>
+            <div className="mt-3 text-xs font-medium text-faint">{t('添加成员', 'Add member')}</div>
+            <div className="mt-1 max-h-32 overflow-y-auto rounded-xl border border-[var(--line)]">
+              <ul className="divide-y divide-[var(--line)]">
+                {addable.map((c) => (
+                  <li key={c.id} className="flex items-center gap-3 px-3 py-2">
+                    <Avatar name={c.name} size={28} />
+                    <span className="flex-1 truncate text-sm">{c.name}</span>
+                    <button onClick={() => add(c.id)} disabled={busy} className="text-xs text-honey hover:underline disabled:opacity-40">{t('添加', 'Add')}</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
+        <div className="mt-4 flex gap-3">
+          <button onClick={onClose} className="flex-1 rounded-xl surface-2 py-2.5 text-sm">{t('关闭', 'Close')}</button>
+          {isOwner
+            ? <button onClick={dissolve} disabled={busy} className="flex-1 rounded-xl bg-danger py-2.5 text-sm font-semibold text-white disabled:opacity-40">{t('解散群聊', 'Dissolve')}</button>
+            : <button onClick={leave} disabled={busy} className="flex-1 rounded-xl bg-danger py-2.5 text-sm font-semibold text-white disabled:opacity-40">{t('退出群聊', 'Leave')}</button>}
+        </div>
       </div>
     </div>
   )

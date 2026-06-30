@@ -220,7 +220,8 @@ export const api = {
   reactMessage: (id: string, emoji: string) => post(`/api/messages/${id}/reaction`, { emoji }) as Promise<{ message: ChatMessage }>,
   groups: () => get('/api/groups') as Promise<{ groups: GroupSummary[] }>,
   createGroup: (name: string, memberIds: string[]) => post('/api/groups', { name, memberIds }),
-  addGroupMembers: (id: string, memberIds: string[]) => post(`/api/groups/${id}/members`, { memberIds }),
+  // 后端期望单个 { userId }（非 memberIds 数组）——此前形状不匹配会 400。逐个加。
+  addGroupMember: (id: string, userId: string) => post(`/api/groups/${id}/members`, { userId }),
   leaveGroup: (id: string, userId: string) => del(`/api/groups/${id}/members/${userId}`),
   deleteGroup: (id: string) => del(`/api/groups/${id}`),
 

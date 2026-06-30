@@ -181,8 +181,8 @@ export const api = {
   deleteLink: (id: string) => del(`/api/family/links/${id}`),
   lookupUser: (q: string) => get(`/api/users/lookup?q=${encodeURIComponent(q)}`) as Promise<{ user?: User }>,
 
-  // 拉黑
-  blocks: () => get('/api/blocks') as Promise<{ blocks: { id: string; blockedId: string; blockedName?: string }[] }>,
+  // 拉黑（后端返回 { id, user: publicUser }，与 iOS 一致）
+  blocks: () => get('/api/blocks') as Promise<{ blocks: { id: string; user: { id: string; displayName: string; avatar?: string | null } }[] }>,
   block: (userId: string) => post('/api/blocks', { userId }),
   unblock: (id: string) => del(`/api/blocks/${id}`),
 

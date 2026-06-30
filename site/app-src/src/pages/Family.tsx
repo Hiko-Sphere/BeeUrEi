@@ -4,7 +4,7 @@ import { api, APIError, type FamilyLink, type IncomingLink } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { useCall } from './call/CallController'
 import { Card, Avatar, Button, Pill, Spinner, EmptyState, Field, Input, useToast } from '../components/ui'
-import { IconUsers, IconPhone, IconChat, IconPlus, IconCheck, IconX } from '../components/icons'
+import { IconUsers, IconPhone, IconChat, IconPlus, IconCheck, IconX, IconShield } from '../components/icons'
 
 export function FamilyPage() {
   const { t } = useI18n()
@@ -13,7 +13,7 @@ export function FamilyPage() {
   const { startOutgoing, active } = useCall()
   const [links, setLinks] = useState<FamilyLink[] | null>(null)
   const [incoming, setIncoming] = useState<IncomingLink[] | null>(null)
-  const [blocks, setBlocks] = useState<{ id: string; blockedId: string; blockedName?: string }[] | null>(null)
+  const [blocks, setBlocks] = useState<{ id: string; user: { id: string; displayName: string; avatar?: string | null } }[] | null>(null)
   const [addOpen, setAddOpen] = useState(false)
 
   const reload = useCallback(async () => {
@@ -28,6 +28,13 @@ export function FamilyPage() {
   const accept = async (id: string) => { try { await api.acceptLink(id); toast(t('已接受', 'Accepted'), 'ok'); void reload() } catch { toast(t('操作失败', 'Failed'), 'error') } }
   const remove = async (id: string) => { try { await api.deleteLink(id); void reload() } catch { toast(t('操作失败', 'Failed'), 'error') } }
   const unblock = async (id: string) => { try { await api.unblock(id); void reload() } catch { toast(t('操作失败', 'Failed'), 'error') } }
+  // 拉黑联系人（不必正在通话也能拉黑：经聊天骚扰也可在此处理）：拉黑 + 解除绑定，之后互不可呼叫/发消息。
+  const blockContact = async (link: FamilyLink) => {
+    if (!confirm(t(`确定拉黑「${link.memberName}」？将解除绑定，对方无法再呼叫或给你发消息。`,
+                   `Block "${link.memberName}"? This removes the link; they can no longer call or message you.`))) return
+    try { await api.block(link.memberId); await api.deleteLink(link.id); toast(t('已拉黑', 'Blocked'), 'ok'); void reload() }
+    catch { toast(t('操作失败', 'Failed'), 'error') }
+  }
 
   const accepted = (links ?? []).filter((l) => (l.status ?? 'accepted') === 'accepted')
   const pendingOut = (links ?? []).filter((l) => l.status === 'pending' && l.outgoing)
@@ -76,6 +83,7 @@ export function FamilyPage() {
                 <button onClick={() => startOutgoing(l.memberId, l.memberName, l.memberAvatar)} disabled={!!active}
                   className="flex h-9 w-9 items-center justify-center rounded-full bg-honey/15 text-honey disabled:opacity-40" aria-label={t('呼叫', 'Call')}><IconPhone width={18} height={18} /></button>
                 <button onClick={() => nav(`/chat/${l.memberId}`)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-soft" aria-label={t('消息', 'Message')}><IconChat width={18} height={18} /></button>
+                <button onClick={() => blockContact(l)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-faint hover:text-danger" aria-label={t('拉黑', 'Block')}><IconShield width={16} height={16} /></button>
                 <button onClick={() => remove(l.id)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-faint" aria-label={t('删除', 'Remove')}><IconX width={16} height={16} /></button>
               </li>
             ))}
@@ -107,8 +115,8 @@ export function FamilyPage() {
           <ul className="divide-y divide-[var(--line)]">
             {blocks.map((b) => (
               <li key={b.id} className="flex items-center gap-3 px-4 py-3">
-                <Avatar name={b.blockedName || '?'} size={36} />
-                <div className="min-w-0 flex-1 truncate text-sm">{b.blockedName || b.blockedId}</div>
+                <Avatar name={b.user.displayName} src={b.user.avatar} size={36} />
+                <div className="min-w-0 flex-1 truncate text-sm">{b.user.displayName}</div>
                 <Button variant="soft" onClick={() => unblock(b.id)}>{t('解除', 'Unblock')}</Button>
               </li>
             ))}

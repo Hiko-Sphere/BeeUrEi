@@ -75,20 +75,30 @@ struct NotificationsView: View {
                 if !center.feed.isEmpty {
                     Section(HelperStrings.updatesHeader(lang)) {
                         ForEach(center.feed) { n in
-                            HStack(alignment: .top, spacing: BeeSpacing.sm) {
-                                if n.isUnread {
-                                    Circle().fill(Color.beeHoney).frame(width: 8, height: 8).padding(.top, 6)
-                                        .accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(alignment: .top, spacing: BeeSpacing.sm) {
+                                    if n.isUnread {
+                                        Circle().fill(Color.beeHoney).frame(width: 8, height: 8).padding(.top, 6)
+                                            .accessibilityHidden(true)
+                                    }
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(n.title).font(.subheadline.weight(.semibold))
+                                        Text(n.body).font(.footnote).foregroundStyle(.secondary)
+                                        Text(RecordingStrings.timeText(n.createdAt, lang)).font(.caption2).foregroundStyle(.tertiary)
+                                    }
                                 }
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(n.title).font(.subheadline.weight(.semibold))
-                                    Text(n.body).font(.footnote).foregroundStyle(.secondary)
-                                    Text(RecordingStrings.timeText(n.createdAt, lang)).font(.caption2).foregroundStyle(.tertiary)
+                                .accessibilityElement(children: .combine)
+                                .accessibilityLabel("\(n.title). \(n.body)")
+                                // 紧急告警带坐标：一键在地图查看对方位置（响应救助的关键信息）。独立可点元素，不并入上面的标签。
+                                if let lat = n.data?["lat"], let lon = n.data?["lon"],
+                                   let url = URL(string: "https://maps.apple.com/?ll=\(lat),\(lon)&q=\(lat),\(lon)") {
+                                    Link(destination: url) {
+                                        Label(ChatStrings.openInMaps(lang), systemImage: "mappin.and.ellipse").font(.footnote)
+                                    }
+                                    .padding(.leading, n.isUnread ? 16 : 0)
                                 }
                             }
                             .padding(.vertical, 2)
-                            .accessibilityElement(children: .combine)
-                            .accessibilityLabel("\(n.title). \(n.body)")
                         }
                     }
                 }

@@ -46,6 +46,14 @@ export function NotificationsPage() {
                     {!n.readAt && <span className="h-2 w-2 shrink-0 rounded-full bg-honey" />}
                   </div>
                   {n.body && <p className="mt-0.5 text-sm text-soft">{n.body}</p>}
+                  {n.data?.lat && n.data?.lon && (
+                    // 紧急告警带坐标：协助者一键看地图定位（响应救助的关键信息）。
+                    <a href={`https://maps.google.com/?q=${n.data.lat},${n.data.lon}`} target="_blank" rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-honey hover:underline">
+                      📍 {t('查看位置', 'View location')}
+                    </a>
+                  )}
                   <div className="mt-1 text-xs text-faint">{fmtTime(n.createdAt, lang)}</div>
                 </div>
               </li>

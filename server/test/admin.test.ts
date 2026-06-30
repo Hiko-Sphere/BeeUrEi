@@ -67,6 +67,24 @@ describe('admin + reports', () => {
     await app.close()
   })
 
+  it('单用户封禁即吊销会话：refresh token 删除 + tokenVersion 递增（与批量封禁/force-logout 同口径）', async () => {
+    const { store, app } = withAdmin()
+    const adminAuth = { authorization: `Bearer ${await login(app, 'root', 'rootpass1')}` }
+    await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'dan', password: 'secret123' } })
+    const danLogin = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'dan', password: 'secret123' } })
+    const refreshToken = (danLogin.json() as { refreshToken: string }).refreshToken
+    const danId = store.findByUsername('dan')!.id
+    const tv0 = store.findById(danId)!.tokenVersion ?? 0
+
+    const ban = await app.inject({ method: 'POST', url: `/api/admin/users/${danId}/status`, headers: adminAuth, payload: { status: 'disabled' } })
+    expect(ban.statusCode).toBe(200)
+    // 封禁删了 refresh token → 续期失败（旧会话不可复活）
+    expect((await app.inject({ method: 'POST', url: '/api/auth/refresh', payload: { refreshToken } })).statusCode).not.toBe(200)
+    // tokenVersion 递增 → 解封后旧 access token 仍失效
+    expect(store.findById(danId)!.tokenVersion ?? 0).toBe(tv0 + 1)
+    await app.close()
+  })
+
   it('user submits a report; admin lists and resolves it', async () => {
     const { app } = withAdmin()
     const reg = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'carol', password: 'secret123' } })

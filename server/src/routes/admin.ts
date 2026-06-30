@@ -493,7 +493,13 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     if (target.role === 'admin' && parsed.data.status === 'disabled' && activeAdminCount() <= 1) {
       return reply.code(400).send({ error: 'last_admin_protected' })
     }
-    const updated = store.updateUser(id, { status: parsed.data.status })
+    // 封禁即吊销会话——与批量封禁(line ~336)和 force-logout 同口径：删 refresh token + 递增 tokenVersion，
+    // 使在线 access token 立即失效，且解封后须重新登录（不复活旧会话）。此前单用户封禁只改 status：虽因 rbac
+    // 实时校验 status 而即时拦截，但旧 refresh token 残留、解封后旧会话复活，与另两条封禁路径不一致。
+    if (parsed.data.status === 'disabled') store.deleteRefreshTokensForUser(id)
+    const updated = store.updateUser(id, parsed.data.status === 'disabled'
+      ? { status: 'disabled', tokenVersion: (target.tokenVersion ?? 0) + 1 }
+      : { status: 'active' })
     audit(req.user!.sub, parsed.data.status === 'disabled' ? 'user.disable' : 'user.enable', 'user', id)
     return { user: publicUser(updated!) }
   })

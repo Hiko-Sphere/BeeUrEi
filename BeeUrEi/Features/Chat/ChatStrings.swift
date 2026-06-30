@@ -107,7 +107,8 @@ enum ChatStrings {
         l == .zh ? "\(name) 共享了位置" : "\(name) shared a location"
     }
     static func locationA11y(_ place: String, _ l: Language) -> String {
-        l == .zh ? "位置：\(place)，点按可在地图中打开" : "Location: \(place). Tap to open in Maps."
+        // 点按实际启动**步行导航**（openInMaps 用 walking 模式）——如实告知比"打开地图"更有用。
+        l == .zh ? "位置：\(place)，点按开始步行导航前往" : "Location: \(place). Tap for walking directions."
     }
 
     // MARK: 群聊

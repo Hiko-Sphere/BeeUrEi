@@ -36,6 +36,17 @@ describe('Modal 无障碍与关闭语义', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 
+  it('焦点陷阱：Tab 在末元素回卷到首、Shift+Tab 在首回卷到末（不逃逸到背景）', () => {
+    render(<Modal onClose={() => {}} label="x"><button>一</button><button>二</button></Modal>)
+    const [b1, b2] = screen.getAllByRole('button')
+    b2.focus()
+    fireEvent.keyDown(document, { key: 'Tab' })            // 末元素 Tab → 回到首
+    expect(document.activeElement).toBe(b1)
+    b1.focus()
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true }) // 首元素 Shift+Tab → 回到末
+    expect(document.activeElement).toBe(b2)
+  })
+
   it('开弹窗焦点移入面板；关弹窗恢复到打开前的元素', () => {
     document.body.innerHTML = '<button id="trigger">打开</button>'
     const trigger = document.getElementById('trigger') as HTMLButtonElement

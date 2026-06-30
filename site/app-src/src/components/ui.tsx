@@ -92,7 +92,18 @@ export function Modal({ onClose, label, panelClassName = 'w-full max-w-md', chil
     // 关弹窗时恢复到打开前聚焦的元素（否则键盘焦点丢回页面顶部）。
     const prev = document.activeElement as HTMLElement | null
     panelRef.current?.focus()
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); return }
+      if (e.key !== 'Tab') return
+      // 焦点陷阱：Tab 在弹窗内循环，不逃逸到背景（背景已 aria-modal 视为 inert，键盘焦点也应被困住）。
+      const panel = panelRef.current
+      if (!panel) return
+      const f = panel.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')
+      if (f.length === 0) { e.preventDefault(); panel.focus(); return }
+      const first = f[0], last = f[f.length - 1], active = document.activeElement
+      if (e.shiftKey && (active === first || active === panel)) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus() }
+    }
     document.addEventListener('keydown', onKey)
     return () => {
       document.removeEventListener('keydown', onKey)

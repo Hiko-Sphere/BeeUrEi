@@ -24,6 +24,7 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
   const [incomingRecReq, setIncomingRecReq] = useState(false)
   const [lastRecId, setLastRecId] = useState<string | null>(null)
   const [micMuted, setMicMuted] = useState(false)
+  const [micDenied, setMicDenied] = useState(false)
   const [torchOn, setTorchOn] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [reportOpen, setReportOpen] = useState(false)
@@ -71,7 +72,7 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
             toast(msg, 'error')
           },
           onLastRecordingId: (id) => setLastRecId(id),
-          onMicDenied: () => toast(t('未获得麦克风权限，对方将听不到你', 'Mic blocked — they cannot hear you'), 'error'),
+          onMicDenied: () => { setMicDenied(true); toast(t('未获得麦克风权限，对方将听不到你', 'Mic blocked — they cannot hear you'), 'error') },
           onEnded: (reason) => { engine.hangUp(); onEnd(reason) },
         },
       })
@@ -135,6 +136,13 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
         <div className="mx-4 mb-2 flex items-center gap-2 rounded-xl bg-danger/20 px-3 py-2 text-sm">
           <span className="inline-block h-2.5 w-2.5 rounded-full bg-danger ring-live" />
           {t('对方正在录制本次通话', 'The other party is recording this call')}
+        </div>
+      )}
+      {/* 麦克风被阻止：常驻警告（一次性 toast 会消失，协助者会以为对方能听到却一直白说）。 */}
+      {micDenied && (
+        <div className="mx-4 mb-2 flex items-center gap-2 rounded-xl bg-danger/20 px-3 py-2 text-sm" role="alert">
+          <span className="inline-block h-2.5 w-2.5 rounded-full bg-danger" />
+          {t('麦克风被阻止，对方听不到你——请在浏览器地址栏允许麦克风后重进通话', 'Mic is blocked — they cannot hear you. Allow mic access in the browser, then rejoin.')}
         </div>
       )}
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { api, chatErrorText, fetchMediaObjectURL, type ChatMessage, type Conversation, type GroupSummary, type User } from '../lib/api'
+import { api, chatErrorText, fetchMediaObjectURL, uploadMedia, type ChatMessage, type Conversation, type GroupSummary, type User } from '../lib/api'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo } from '../components/ui'
@@ -161,6 +161,19 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
     } catch (e) { toast(chatErrorText(e, t, t('图片发送失败', 'Failed to send image')), 'error') } finally { setSending(false) }
   }
 
+  // 发送视频（与 iOS 双向对齐）：原始二进制上传服务器磁盘 → 拿 mediaId 发 kind=video。
+  const sendVideo = async (file: File) => {
+    if (file.size > 50 * 1024 * 1024) { // 与服务端 MAX_MEDIA_BYTES 一致，发前预检免白等上传
+      toast(t('视频太大（上限 50MB），请选短一点的', 'Video too large (50MB max) — pick a shorter one'), 'error'); return
+    }
+    setSending(true)
+    try {
+      const mediaId = await uploadMedia(file, file.type || 'video/mp4')
+      await api.sendMessage(target, 'video', mediaId)
+      await load(); onSent()
+    } catch (e) { toast(chatErrorText(e, t, t('视频发送失败', 'Failed to send video')), 'error') } finally { setSending(false) }
+  }
+
   const recall = async (m: ChatMessage) => {
     try { await api.recallMessage(m.id); await load() } catch { toast(t('撤回失败（超过 2 分钟？）', 'Recall failed'), 'error') }
   }
@@ -186,8 +199,8 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
       </div>
 
       <div className="flex items-center gap-2 border-t border-[var(--line)] p-3">
-        <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void sendImage(f); e.target.value = '' }} />
-        <button onClick={() => fileRef.current?.click()} disabled={sending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full surface-2 text-soft disabled:opacity-40" aria-label={t('发送图片', 'Send image')}><IconPlus /></button>
+        <input ref={fileRef} type="file" accept="image/*,video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) { void (f.type.startsWith('video/') ? sendVideo(f) : sendImage(f)) } e.target.value = '' }} />
+        <button onClick={() => fileRef.current?.click()} disabled={sending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full surface-2 text-soft disabled:opacity-40" aria-label={t('发送图片或视频', 'Send image or video')}><IconPlus /></button>
         <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }}
           placeholder={t('输入消息…', 'Type a message…')} className="min-w-0 flex-1 rounded-full border border-[var(--line)] surface-2 px-4 py-2.5 text-sm outline-none focus:border-honey" />
         <button onClick={send} disabled={!text.trim() || sending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-honey text-ink disabled:opacity-40" aria-label={t('发送', 'Send')}><IconSend width={18} height={18} /></button>

@@ -3,8 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { api, type AppConfig } from '../lib/api'
-import { pollWhileVisible } from '../lib/poll'
-import { getTheme, setTheme, type Theme } from '../lib/theme'
+import { getTheme, setTheme, appTitle, type Theme } from '../lib/theme'
 import { Avatar, Pill } from './ui'
 import { CallProvider } from '../pages/call/CallController'
 import { IconHome, IconPhone, IconChat, IconUsers, IconFilm, IconBell, IconUser, IconShield, IconLogo, IconPin } from './icons'
@@ -24,14 +23,21 @@ export function Layout({ children }: { children: ReactNode }) {
   const loc = useLocation()
 
   // 全站配置（公告/维护横幅、录制策略） + 通知未读数轮询。
+  // 通知轮询**始终运行**（含后台标签）：协助者把页面切后台时正是最需要知道"有盲人需要我"的时候，
+  // 由标签标题的未读前缀提醒（页内铃铛在后台看不到）。与在线心跳同策略——不随可见性暂停。
   useEffect(() => {
     let alive = true
     void api.appConfig().then((c) => alive && setConfig(c)).catch(() => {})
     const tick = () => void api.notifications().then((n) => alive && setUnread(n.unread)).catch(() => {})
     tick()
-    const stop = pollWhileVisible(tick, 30_000)
-    return () => { alive = false; stop() }
+    const id = setInterval(tick, 30_000)
+    return () => { alive = false; clearInterval(id) }
   }, [loc.pathname])
+
+  // 浏览器标签标题带未读数前缀 "(N) BeeUrEi 协助者"：后台标签也能在标签条看到有未读。
+  useEffect(() => {
+    document.title = (unread > 0 ? `(${unread > 99 ? '99+' : unread}) ` : '') + appTitle(lang)
+  }, [unread, lang])
 
   // 待命心跳：开启后周期上报 available=true，让绑定的视障侧看到「在线」并能呼入；关闭立即下线。
   const availRef = useRef(available)

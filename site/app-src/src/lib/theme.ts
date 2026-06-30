@@ -24,9 +24,13 @@ export function getLang(): Lang {
   if (v === 'zh' || v === 'en') return v
   return (navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en'
 }
+/// App 基础标题（随语言）。Layout 会在前面加未读数前缀 "(N) "。
+export function appTitle(l: Lang): string { return l === 'zh' ? 'BeeUrEi 协助者' : 'BeeUrEi Helper' }
+
 export function setLang(l: Lang) {
   localStorage.setItem(LS_LANG, l)
   document.documentElement.lang = l === 'zh' ? 'zh-Hans' : 'en'
   // 浏览器标签标题随语言（此前静态双语）。setLang 在启动(main.tsx)与切换(Layout)都会调用，两处一并覆盖。
-  document.title = l === 'zh' ? 'BeeUrEi 协助者' : 'BeeUrEi Helper'
+  // 登录后 Layout 会再带未读数前缀覆盖；登录页无 Layout，此处即最终标题。
+  document.title = appTitle(l)
 }

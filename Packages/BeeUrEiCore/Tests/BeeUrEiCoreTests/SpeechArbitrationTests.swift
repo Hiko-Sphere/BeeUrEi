@@ -49,6 +49,9 @@ final class SpeechArbitrationTests: XCTestCase {
         // 提示替换提示（方向变了就说最新的）。
         XCTAssertEqual(SpeechGate.action(newChannel: .query, newDroppable: true,
                                          current: (.query, true), safetyHold: false), .speakInterrupt)
+        // 结果替换结果（同通道两个非可弃：重新取景再读/连续"这是X"→新结果打断旧结果，盲人不被陈旧长读卡住）。
+        XCTAssertEqual(SpeechGate.action(newChannel: .query, newDroppable: false,
+                                         current: (.query, false), safetyHold: false), .speakInterrupt)
     }
 
     // MARK: HintThrottle

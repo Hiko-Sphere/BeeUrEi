@@ -104,6 +104,9 @@ enum AssistStrings {
         l == .zh ? "加载失败（需登录并连接后端）" : "Couldn't load (sign in and connect to the backend)"
     }
     static func deleteFailed(_ l: Language) -> String { l == .zh ? "删除失败" : "Couldn't remove" }
+    static func acceptedOk(_ name: String, _ l: Language) -> String { l == .zh ? "已接受 \(name) 的请求" : "Accepted \(name)'s request" }
+    static func acceptFailed(_ l: Language) -> String { l == .zh ? "接受失败，请重试" : "Couldn't accept — try again" }
+    static func rejectFailed(_ l: Language) -> String { l == .zh ? "拒绝失败，请重试" : "Couldn't reject — try again" }
     static func noEmergencyTargets(_ l: Language) -> String {
         l == .zh ? "没有可呼叫的亲友，请先添加紧急联系人。" : "Nobody to call — add an emergency contact first."
     }

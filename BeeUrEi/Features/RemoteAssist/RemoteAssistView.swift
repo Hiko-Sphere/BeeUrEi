@@ -240,14 +240,20 @@ struct RemoteAssistView: View {
     private func accept(_ r: IncomingLinkInfo) async {
         guard let token = KeychainStore.read(), !linkBusy.contains(r.id) else { return }
         linkBusy.insert(r.id); defer { linkBusy.remove(r.id) }
-        try? await APIClient().acceptFamilyLink(token: token, id: r.id)
+        do {
+            try await APIClient().acceptFamilyLink(token: token, id: r.id)
+            statusText = AssistStrings.acceptedOk(r.ownerName, lang) // 成功正向确认：盲人看不到列表变化，需朗读
+        } catch {
+            statusText = AssistStrings.acceptFailed(lang) // 失败必须有反馈，否则盲人以为没生效、反复点
+        }
         await load()
     }
 
     private func reject(_ r: IncomingLinkInfo) async {
         guard let token = KeychainStore.read(), !linkBusy.contains(r.id) else { return }
         linkBusy.insert(r.id); defer { linkBusy.remove(r.id) }
-        try? await APIClient().deleteFamilyLink(token: token, id: r.id)
+        do { try await APIClient().deleteFamilyLink(token: token, id: r.id) }
+        catch { statusText = AssistStrings.rejectFailed(lang) }
         await load()
     }
 

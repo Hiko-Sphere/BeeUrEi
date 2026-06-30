@@ -537,14 +537,20 @@ struct AssistHomeView: View {
     private func accept(_ l: IncomingLinkInfo) async {
         guard let token = session.token, !linkBusy.contains(l.id) else { return }
         linkBusy.insert(l.id); defer { linkBusy.remove(l.id) }
-        try? await APIClient().acceptFamilyLink(token: token, id: l.id)
+        do {
+            try await APIClient().acceptFamilyLink(token: token, id: l.id)
+            statusText = HelperStrings.acceptedAnnounce(l.ownerName, lang) // 成功正向确认（列表变化看不到）
+        } catch {
+            statusText = HelperStrings.acceptFailed(lang) // 失败必须反馈，否则以为没生效反复点
+        }
         await loadLinks()
     }
 
     private func reject(_ l: IncomingLinkInfo) async {
         guard let token = session.token, !linkBusy.contains(l.id) else { return }
         linkBusy.insert(l.id); defer { linkBusy.remove(l.id) }
-        try? await APIClient().deleteFamilyLink(token: token, id: l.id)
+        do { try await APIClient().deleteFamilyLink(token: token, id: l.id) }
+        catch { statusText = HelperStrings.rejectFailed(lang) }
         await loadLinks()
     }
 
@@ -552,7 +558,8 @@ struct AssistHomeView: View {
     private func cancelOutgoing(_ l: FamilyLinkInfo) async {
         guard let token = session.token, !linkBusy.contains(l.id) else { return }
         linkBusy.insert(l.id); defer { linkBusy.remove(l.id) }
-        try? await APIClient().deleteFamilyLink(token: token, id: l.id)
+        do { try await APIClient().deleteFamilyLink(token: token, id: l.id) }
+        catch { statusText = HelperStrings.cancelRequestFailed(lang) }
         await loadLinks()
     }
 

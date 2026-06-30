@@ -194,6 +194,9 @@ enum HelperStrings {
     static func acceptedAnnounce(_ name: String, _ l: Language) -> String {
         l == .zh ? "已接受 \(name) 的请求" : "Accepted \(name)'s request"
     }
+    static func acceptFailed(_ l: Language) -> String { l == .zh ? "接受失败，请重试" : "Couldn't accept — try again" }
+    static func rejectFailed(_ l: Language) -> String { l == .zh ? "拒绝失败，请重试" : "Couldn't reject — try again" }
+    static func cancelRequestFailed(_ l: Language) -> String { l == .zh ? "撤回失败，请重试" : "Couldn't withdraw — try again" }
 
     // MARK: 工具
 

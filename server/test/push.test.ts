@@ -54,6 +54,21 @@ describe('提醒类推送（软件外通知）', () => {
     expect((await app.inject({ method: 'DELETE', url: '/api/push/apns-register', headers: auth(u.token) })).statusCode).toBe(200)
     await app.close()
   })
+
+  it('注销 APNs token 后不再收到提醒推送（登出设备不再被投递消息/告警内容）', async () => {
+    // 隐私不变量：登出会经 DELETE /api/push/apns-register 解绑 token；之后任何提醒（好友请求/
+    // 消息/告警）都不应再投到该设备——否则换手/共享设备会看到前一账号的通知内容。
+    const { app, alerts } = capturingApp()
+    const blind = await reg(app, 'naBlind2', 'blind')
+    const helper = await reg(app, 'naHelper2', 'helper')
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(helper.token), payload: { token: HEX_TOKEN } })
+    await app.inject({ method: 'DELETE', url: '/api/push/apns-register', headers: auth(helper.token) }) // 登出解绑
+    // blind 向 helper 发好友请求——token 已清，不应有任何推送投到该 token。
+    await app.inject({ method: 'POST', url: '/api/family/links', headers: auth(blind.token), payload: { username: 'naHelper2' } })
+    await tick()
+    expect(alerts.some((a) => a.token === HEX_TOKEN)).toBe(false)
+    await app.close()
+  })
 })
 
 describe('VoIP 推送（A1 后台来电）', () => {

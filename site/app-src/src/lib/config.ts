@@ -2,7 +2,7 @@
 // 可经 localStorage 覆盖，便于联调。
 const PROD_API = 'https://beeurei-api.hikosphere.com'
 
-function resolveBase(): string {
+export function resolveBase(): string {
   try {
     const o = localStorage.getItem('beeurei.web.apiBase')
     if (o) return o

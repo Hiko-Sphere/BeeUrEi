@@ -82,17 +82,20 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
       store.createMessage(msg)
       store.setGroupRead(groupId, me, msg.createdAt) // 自己发的群消息对自己即读
 
-      // 推送给群里其他成员（尽力而为）。
+      // 推送给群里其他成员（尽力而为）：**并行扇出 + 不阻塞发送回执**。
+      // 此前是串行 await——50 人群发一条消息要等 49 次 APNs 往返才返回 201，发送方明显卡顿。
+      // 推送本就是尽力而为，故 fire-and-forget：立即 201，推送在后台并行投递、各自吞错。
       if (sender) {
         for (const memberId of group.memberIds) {
           if (memberId === me) continue
           const member = store.findById(memberId)
           if (!member?.apnsToken) continue
           const l = pushLang(member.language)
-          await pushSender.sendAlert(member.apnsToken,
+          void pushSender.sendAlert(member.apnsToken,
             pushStrings.groupMessageTitle(sender.displayName, group.name, l),
             pushStrings.newMessageBody(previewOf(kind, text, l), l),
             { type: 'chat_message', groupId })
+            .catch(() => { /* 单个成员推送失败不影响其他成员与发送回执 */ })
         }
       }
       return reply.code(201).send({ message: msg })
@@ -107,14 +110,15 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     const msg: ChatMessage = { id: randomUUID(), fromId: me, toId: toId!, kind, text, createdAt: Date.now() }
     store.createMessage(msg)
 
-    // 提醒推送（尽力而为）。
+    // 提醒推送（尽力而为，不阻塞发送回执）。
     const recipient = store.findById(toId!)
     if (recipient?.apnsToken && sender) {
       const l = pushLang(recipient.language)
-      await pushSender.sendAlert(recipient.apnsToken,
+      void pushSender.sendAlert(recipient.apnsToken,
         pushStrings.newMessageTitle(sender.displayName, l),
         pushStrings.newMessageBody(previewOf(kind, text, l), l),
         { type: 'chat_message', fromId: me })
+        .catch(() => { /* 推送失败不影响消息已存库与发送回执 */ })
     }
     return reply.code(201).send({ message: msg })
   })

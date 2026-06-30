@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import { type Store, isBlockedBetween, blockedUserIdSet, matchBannedTerm } from '../db/store'
+import { type Store, isBlockedBetween, blockedUserIdSet, matchBannedTerm, acceptedContactIds } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
 import { SignalingHub } from '../signaling/hub'
@@ -104,13 +104,10 @@ export function registerAssistRoutes(
     const parsed = callSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const from = req.user!
-    // 仅允许呼叫与自己有**已接受**绑定关系的目标（防越权/骚扰，见审查 #1/#6）。
-    // 双向：我作为 owner(盲人) 可呼叫我的协助者；我作为 member(协助者/亲友) 可呼叫绑定我的盲人。
-    const blocked = blockedUserIdSet(store, from.sub)
-    const owned = store.linksByOwner(from.sub).filter((l) => (l.status ?? 'accepted') === 'accepted').map((l) => l.memberId)
-    const memberOf = store.linksByMember(from.sub).filter((l) => (l.status ?? 'accepted') === 'accepted').map((l) => l.ownerId)
-    const allowed = new Set([...owned, ...memberOf])
-    const targets = parsed.data.targetUserIds.filter((id) => allowed.has(id) && !blocked.has(id)) // 排除黑名单
+    // 仅允许呼叫与自己有**已接受**绑定、且未互相拉黑的目标（防越权/骚扰，见审查 #1/#6）。
+    // acceptedContactIds 已是双向(owner∪member)并排除黑名单。
+    const allowed = acceptedContactIds(store, from.sub)
+    const targets = parsed.data.targetUserIds.filter((id) => allowed.has(id))
     if (targets.length === 0) return reply.code(403).send({ error: 'not_linked' })
     // 防单用户用大量 callId 灌满待接表、把他人(尤其盲人的紧急来电)挤出全局 cap。
     // 仅新 callId 受限；重发自己已有的 callId 放行。上限给足紧急重拨余量(10>正常的 1)。

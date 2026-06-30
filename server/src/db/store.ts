@@ -1207,6 +1207,17 @@ export function areLinked(store: Store, a: string, b: string): boolean {
     || store.linksByMember(a).some((l) => l.ownerId === b && ok(l))
 }
 
+/// 我的"互为 accepted 绑定"联系人 id 集（双向 owner∪member），排除任一方向拉黑者。
+/// 位置共享可见集 / 定向呼叫可达目标等共用——单点定义"可达联系人"口径（曾在 assist/locations 重复）。
+export function acceptedContactIds(store: Store, me: string): Set<string> {
+  const ok = (l: { status?: string }) => (l.status ?? 'accepted') === 'accepted'
+  const ids = new Set<string>()
+  for (const l of store.linksByOwner(me)) if (ok(l)) ids.add(l.memberId)
+  for (const l of store.linksByMember(me)) if (ok(l)) ids.add(l.ownerId)
+  for (const id of blockedUserIdSet(store, me)) ids.delete(id)
+  return ids
+}
+
 /// 对外暴露的安全用户字段（不含 passwordHash / email；用于管理员列表、亲友等场景）。
 export function publicUser(u: User) {
   return { id: u.id, username: u.username, displayName: u.displayName, role: u.role, status: u.status, avatar: u.avatar ?? null, verified: u.identityVerified ?? false }

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { type Store, blockedUserIdSet } from '../db/store'
+import { type Store, acceptedContactIds } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
 import { type LiveLocationRegistry } from '../location/liveLocations'
@@ -17,13 +17,8 @@ const updateSchema = z.object({
 /// 实时位置共享：盲人与其亲友/协助者互相可见对方当前位置（双方各自独立开关，对等）。
 /// 授权边界 = **已接受的绑定关系**（双向，排除黑名单），与呼叫/紧急/聊天一致。位置纯内存、不落库（见 liveLocations）。
 export function registerLocationRoutes(app: FastifyInstance, store: Store, live: LiveLocationRegistry): void {
-  /// 我的"已接受"联系人（我作为 owner 或 member 任一方；排除黑名单双方）——位置可见性的授权集合。
-  function contactIds(me: string): string[] {
-    const blocked = blockedUserIdSet(store, me)
-    const owned = store.linksByOwner(me).filter((l) => (l.status ?? 'accepted') === 'accepted').map((l) => l.memberId)
-    const memberOf = store.linksByMember(me).filter((l) => (l.status ?? 'accepted') === 'accepted').map((l) => l.ownerId)
-    return [...new Set([...owned, ...memberOf])].filter((id) => !blocked.has(id))
-  }
+  /// 我的"已接受"联系人（双向，排除黑名单双方）——位置可见性的授权集合。单点口径见 store.acceptedContactIds。
+  const contactIds = (me: string): string[] => [...acceptedContactIds(store, me)]
 
   // 上报当前位置 + （重）激活共享。客户端在共享期间周期调用（如每 10s）。限流防刷。
   app.post('/api/locations/update', {

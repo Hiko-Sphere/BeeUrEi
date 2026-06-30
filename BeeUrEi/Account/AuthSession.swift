@@ -25,6 +25,7 @@ final class AuthSession {
     /// 本次认证**新建了账号**（服务端 created=true）：引导首步先选身份角色（所有注册方式统一在此选）。
     private(set) var accountCreated = false
     @ObservationIgnored private var isRestoring = false
+    @ObservationIgnored private var isRenewing = false
 
     @ObservationIgnored private let api = APIClient()
 
@@ -77,6 +78,43 @@ final class AuthSession {
         } catch {
             restoreFailed = true // refresh 遇其它瞬时错误(5xx 已是 .network；4xx/解码)：保留令牌，不贸然登出。
         }
+    }
+
+    /// 主动续期：access token 仅 1h，但运行时各功能调用并不会在撞 401 后自动续期（仅启动 restore() 会续）。
+    /// 长时间前台使用（盲人开着导航/避障可能数小时）期间 access 一旦过期，下一次「求助/呼叫亲友/收发消息」
+    /// 就会失败而无法自动恢复（须杀进程重开）。故由 App 在回前台与定时轮询时调用本方法，临近过期就先换新。
+    /// **纯增益**：只会成功换新或空转——任何失败（网络/refresh 失效）都保留现状、绝不据此登出，
+    /// 避免后台定时器把可能正在导航的盲人突然踢下线；真过期仍由用户下次操作的 401 走既有路径处理。
+    /// 单飞（isRenewing 防并发）；换新逻辑与 restore() 同口径（含刷新期间已登出则不复活，见审查 #5）。
+    func renewIfNeeded() async {
+        guard let current = token, user != nil, !isRenewing else { return }
+        // 仅在 access 临近过期（剩 < 15min）时续；还早就不打扰。解不出 exp 则保守地续一次。
+        if let exp = jwtExpiry(current), exp.timeIntervalSinceNow > 15 * 60 { return }
+        guard let rt = KeychainStore.readRefresh() else { return }
+        isRenewing = true
+        defer { isRenewing = false }
+        do {
+            let result = try await api.refresh(refreshToken: rt)
+            guard token != nil else { return } // 刷新期间已登出 → 不复活
+            token = result.token
+            user = result.user
+            KeychainStore.save(result.token)
+            KeychainStore.saveRefresh(result.refreshToken)
+        } catch {
+            // 纯增益：失败一律保留现状、不登出（见上）。
+        }
+    }
+
+    /// 读 JWT 的 exp（unix 秒）。解析失败返回 nil（调用方按"该续了"保守处理）。仅用于本地判断是否临近过期，不做验签。
+    private func jwtExpiry(_ jwt: String) -> Date? {
+        let parts = jwt.split(separator: ".")
+        guard parts.count == 3 else { return nil }
+        var s = String(parts[1]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        while s.count % 4 != 0 { s += "=" }
+        guard let data = Data(base64Encoded: s),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let exp = obj["exp"] as? Double else { return nil }
+        return Date(timeIntervalSince1970: exp)
     }
 
     func login(username: String, password: String, totpCode: String? = nil) async {

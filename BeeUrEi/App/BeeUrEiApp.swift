@@ -94,9 +94,18 @@ private struct RootView: View {
         // 回前台时把 App 图标角标同步到真实未读（清掉在别处已读后推送 badge 残留的陈旧数字）。
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { appLock.lockOnBackground() }
-            if phase == .active { Task { await syncAppBadge() } }
+            if phase == .active { Task { await syncAppBadge() }; Task { await session.renewIfNeeded() } } // 回前台顺带续 access token（仅 1h）
         }
         .task { await syncAppBadge() } // 冷启动同步一次
+        .task {
+            // 长驻续期轮询：access token 仅 1h，长时间前台使用（导航/避障可能数小时）期间也要保持有效，
+            // 否则下一次求助/呼叫会撞 401 且无运行时自动续期。每 10min 查一次，临近过期(<15min)才换新；
+            // 登出时 renewIfNeeded() 自身空转，故无需随登录态起停。
+            while !Task.isCancelled {
+                await session.renewIfNeeded()
+                try? await Task.sleep(nanoseconds: 600 * 1_000_000_000)
+            }
+        }
         // 安全遮罩（锁屏 / 隐私遮罩）：用独立高层级窗口，盖在任何 sheet/快照之上——模式变化即驱动。
         .onChange(of: securityMode) { _, m in SecurityScreen.shared.update(m) }
         .onAppear { SecurityScreen.shared.update(securityMode) }

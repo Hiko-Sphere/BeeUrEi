@@ -272,12 +272,14 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
                 {searchResults.map((m) => {
                   const who = m.fromId === user?.id ? t('我', 'Me')
                     : sel.kind === 'group' ? (sel.members.find((mm) => mm.id === m.fromId)?.displayName ?? '') : sel.name
+                  // 文本式位置命中时显示 📍 地名而非原始 maps URL。
+                  const loc = parseLocation(m.text)
                   return (
                     <div key={m.id} className="rounded-xl surface-2 px-3 py-2">
                       <div className="flex items-center justify-between text-[11px] text-faint">
                         <span className="font-semibold text-honey">{who}</span><span>{timeAgo(m.createdAt, lang)}</span>
                       </div>
-                      <div className="mt-0.5 break-words text-sm">{m.text}</div>
+                      <div className="mt-0.5 break-words text-sm">{loc ? `📍 ${loc.name || t('位置', 'Location')}` : m.text}</div>
                     </div>
                   )
                 })}

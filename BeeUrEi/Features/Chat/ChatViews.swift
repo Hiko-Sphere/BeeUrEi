@@ -909,18 +909,25 @@ struct MessageSearchSheet: View {
     private func resultRow(_ m: ChatMessageInfo) -> some View {
         let who = m.fromId == selfId ? ChatStrings.me(lang) : (memberName?(m.fromId) ?? "")
         let time = ChatStrings.timeFormat(m.createdAt)
+        // 文本式位置（kind=text + 内嵌 maps 链接）命中时，显示 📍 地名而非一串原始 URL。
+        let display: String
+        if let loc = LocationPayload.from(m) {
+            display = "📍 " + (loc.name ?? ChatStrings.unknownPlace(lang))
+        } else {
+            display = m.text
+        }
         return VStack(alignment: .leading, spacing: 3) {
             HStack {
                 if !who.isEmpty { Text(who).font(.caption.bold()).foregroundStyle(Color.beeHoney) }
                 Spacer()
                 Text(time).font(.caption2).foregroundStyle(.secondary)
             }
-            Text(m.text).font(.body).lineLimit(3)
+            Text(display).font(.body).lineLimit(3)
         }
         .padding(.vertical, 2)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(ChatStrings.bubbleA11y(from: who.isEmpty ? ChatStrings.me(lang) : who,
-                                                   content: m.text, time: time, lang))
+                                                   content: display, time: time, lang))
     }
 
     /// 输入防抖 0.35s 再查（边输边查不打满后端）。

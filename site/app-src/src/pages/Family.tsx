@@ -174,7 +174,7 @@ function AddContactDialog({ onClose, onAdded }: { onClose: () => void; onAdded: 
             <Input value={q} onChange={(e) => setQ(e.target.value)} autoCapitalize="none" placeholder={t('例如 alice 或 alice@mail.com', 'e.g. alice or alice@mail.com')} />
           </Field>
           <Field label={t('关系称谓（可选）', 'Relation (optional)')}>
-            <Input value={relation} onChange={(e) => setRelation(e.target.value)} placeholder={t('如：志愿者 / 子女', 'e.g. Volunteer / Child')} />
+            <Input value={relation} onChange={(e) => setRelation(e.target.value)} maxLength={32} placeholder={t('如：志愿者 / 子女', 'e.g. Volunteer / Child')} />
           </Field>
           <label className="flex items-center gap-2 text-sm text-soft">
             <input type="checkbox" checked={emergency} onChange={(e) => setEmergency(e.target.checked)} className="accent-[var(--color-honey)]" />

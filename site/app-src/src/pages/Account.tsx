@@ -549,7 +549,7 @@ function IdentityDialog({ currentUsername, currentPhone, onClose, onChanged }: {
           </Field>
           <Field label={t('手机号', 'Phone')} hint={t('可作登录标识（手机号 + 密码）', 'Can be used to sign in (phone + password)')}>
             <div className="flex gap-2">
-              <Input type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+86 138…" />
+              <Input type="tel" inputMode="tel" maxLength={20} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+86 138…" />
               <Button className="shrink-0" loading={savingP} onClick={savePhone} disabled={!phone.trim() || phone.trim() === (currentPhone ?? '')}>{t('保存', 'Save')}</Button>
             </div>
           </Field>

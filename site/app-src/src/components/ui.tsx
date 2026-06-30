@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes } from 'react'
 import { useI18n } from '../lib/i18n'
 
 // ---------- Button ----------
@@ -84,15 +84,23 @@ export function Spinner() {
 export function Modal({ onClose, label, panelClassName = 'w-full max-w-md', children }: {
   onClose: () => void; label: string; panelClassName?: string; children: ReactNode
 }) {
+  const panelRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
+    // 焦点管理：开弹窗时把焦点移入面板（读屏据 aria-label 播报弹窗、键盘从此处起 Tab）；
+    // 关弹窗时恢复到打开前聚焦的元素（否则键盘焦点丢回页面顶部）。
+    const prev = document.activeElement as HTMLElement | null
+    panelRef.current?.focus()
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      prev?.focus?.()
+    }
   }, [onClose])
   return (
     <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-label={label} onClick={(e) => e.stopPropagation()}
-        className={`slide-up rounded-2xl surface border border-[var(--line)] p-6 shadow-2xl ${panelClassName}`}>
+      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={label} onClick={(e) => e.stopPropagation()}
+        className={`slide-up rounded-2xl surface border border-[var(--line)] p-6 shadow-2xl outline-none ${panelClassName}`}>
         {children}
       </div>
     </div>

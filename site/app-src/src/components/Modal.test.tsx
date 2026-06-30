@@ -35,4 +35,15 @@ describe('Modal 无障碍与关闭语义', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(onClose).not.toHaveBeenCalled()
   })
+
+  it('开弹窗焦点移入面板；关弹窗恢复到打开前的元素', () => {
+    document.body.innerHTML = '<button id="trigger">打开</button>'
+    const trigger = document.getElementById('trigger') as HTMLButtonElement
+    trigger.focus()
+    expect(document.activeElement).toBe(trigger)
+    const { unmount } = render(<Modal onClose={() => {}} label="设置"><p>内容</p></Modal>)
+    expect(document.activeElement).toBe(screen.getByRole('dialog')) // 焦点入面板
+    unmount()
+    expect(document.activeElement).toBe(trigger) // 焦点还给触发按钮
+  })
 })

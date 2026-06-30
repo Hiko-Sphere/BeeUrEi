@@ -125,14 +125,20 @@ struct NotificationsView: View {
     private func accept(_ r: IncomingLinkInfo) async {
         guard let token = KeychainStore.read(), !busy.contains(r.id) else { return }
         busy.insert(r.id); defer { busy.remove(r.id) }
-        try? await APIClient().acceptFamilyLink(token: token, id: r.id)
-        A11y.announce(HelperStrings.acceptedAnnounce(r.ownerName, lang))
+        // 此前用 try? 吞错后无条件播报"已接受"——失败时给盲人**虚假成功确认**。改为成功才报成功。
+        do {
+            try await APIClient().acceptFamilyLink(token: token, id: r.id)
+            A11y.announce(HelperStrings.acceptedAnnounce(r.ownerName, lang))
+        } catch {
+            A11y.announce(HelperStrings.acceptFailed(lang))
+        }
         await center.refresh()
     }
     private func reject(_ r: IncomingLinkInfo) async {
         guard let token = KeychainStore.read(), !busy.contains(r.id) else { return }
         busy.insert(r.id); defer { busy.remove(r.id) }
-        try? await APIClient().deleteFamilyLink(token: token, id: r.id)
+        do { try await APIClient().deleteFamilyLink(token: token, id: r.id) }
+        catch { A11y.announce(HelperStrings.rejectFailed(lang)) }
         await center.refresh()
     }
 }

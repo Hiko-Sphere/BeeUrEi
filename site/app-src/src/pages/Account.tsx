@@ -16,6 +16,7 @@ export function AccountPage() {
   const [tfaOpen, setTfaOpen] = useState(false)
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const [emailOpen, setEmailOpen] = useState(false)
+  const [idOpen, setIdOpen] = useState(false)
   const [verifOpen, setVerifOpen] = useState(false)
   const [verif, setVerif] = useState<VerificationStatusInfo | null>(null)
 
@@ -114,6 +115,10 @@ export function AccountPage() {
       <Card className="p-5">
         <div className="mb-3 text-sm font-semibold">{t('安全', 'Security')}</div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="soft" onClick={() => setIdOpen(true)}>
+            {t('用户名 / 手机号', 'Username / phone')}
+            {self?.usernameCustomized === false && <span className="ml-1.5 text-xs text-honey">{t('待设置', 'Set up')}</span>}
+          </Button>
           <Button variant="soft" onClick={() => setPwOpen(true)}>{t('修改密码', 'Change password')}</Button>
           <Button variant="soft" onClick={() => setEmailOpen(true)}>
             {self?.email ? t('邮箱', 'Email') : t('绑定邮箱', 'Add email')}
@@ -145,6 +150,7 @@ export function AccountPage() {
       {tfaOpen && <TwoFactorDialog onClose={() => setTfaOpen(false)} onChanged={async () => { await refreshMe(); try { setSelf(await api.me()) } catch { /* ignore */ } }} />}
       {sessionsOpen && <SessionsDialog onClose={() => setSessionsOpen(false)} />}
       {emailOpen && <EmailDialog currentEmail={self?.email ?? null} verified={self?.emailVerified ?? false} onClose={() => setEmailOpen(false)} onChanged={async () => { await refreshMe(); try { setSelf(await api.me()) } catch { /* ignore */ } }} />}
+      {idOpen && <IdentityDialog currentUsername={user.username} currentPhone={self?.phone ?? null} onClose={() => setIdOpen(false)} onChanged={async () => { await refreshMe(); try { setSelf(await api.me()) } catch { /* ignore */ } }} />}
       {verifOpen && <VerificationDialog status={verif} onClose={() => setVerifOpen(false)} onChanged={async () => { await reloadVerif(); await refreshMe(); try { setSelf(await api.me()) } catch { /* ignore */ } }} />}
     </div>
   )
@@ -497,6 +503,64 @@ function EmailDialog({ currentEmail, verified, onClose, onChanged }: { currentEm
             : <Button className="flex-1" loading={busy} onClick={verify} disabled={!code.trim()}>{t('确认验证', 'Verify')}</Button>}
         </div>
         {stage === 'verify' && <button onClick={sendCode} disabled={busy} className="mt-3 w-full text-center text-xs text-faint hover:underline disabled:opacity-40">{t('重新发送验证码', 'Resend code')}</button>}
+      </div>
+    </div>
+  )
+}
+
+/// 用户名（唯一登录标识）+ 手机号管理。自动生成名（user_xxxx）的用户在此设置易记 userid。
+function IdentityDialog({ currentUsername, currentPhone, onClose, onChanged }: { currentUsername: string; currentPhone: string | null; onClose: () => void; onChanged: () => void }) {
+  const { t } = useI18n()
+  const toast = useToast()
+  const [username, setUsername] = useState(currentUsername)
+  const [phone, setPhone] = useState(currentPhone ?? '')
+  const [savingU, setSavingU] = useState(false)
+  const [savingP, setSavingP] = useState(false)
+
+  const saveUsername = async () => {
+    const u = username.trim()
+    if (!u || u === currentUsername) return
+    setSavingU(true)
+    try { await api.setUsername(u); toast(t('用户名已更新', 'Username updated'), 'ok'); onChanged() }
+    catch (e) {
+      const c = e instanceof APIError ? e.code : ''
+      toast(c === 'username_taken' ? t('用户名已被占用', 'Username taken')
+        : c === 'invalid_username' ? t('仅限字母、数字、_ . -，3–32 位', 'Letters, digits, _ . - only (3–32)')
+        : t('保存失败', 'Failed'), 'error')
+    } finally { setSavingU(false) }
+  }
+  const savePhone = async () => {
+    const p = phone.trim()
+    if (!p || p === (currentPhone ?? '')) return
+    setSavingP(true)
+    try { await api.setPhone(p); toast(t('手机号已更新', 'Phone updated'), 'ok'); onChanged() }
+    catch (e) {
+      const c = e instanceof APIError ? e.code : ''
+      toast(c === 'phone_taken' ? t('手机号已被占用', 'Phone already in use')
+        : c === 'invalid_phone' ? t('手机号格式不正确', 'Invalid phone number')
+        : t('保存失败', 'Failed'), 'error')
+    } finally { setSavingP(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={onClose}>
+      <div className="slide-up w-full max-w-sm rounded-2xl surface border border-[var(--line)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-semibold">{t('用户名 / 手机号', 'Username / phone')}</h3>
+        <div className="mt-4 flex flex-col gap-4">
+          <Field label={t('用户名', 'Username')} hint={t('唯一登录标识，联系人据此找到你', 'Unique sign-in ID; contacts find you by it')}>
+            <div className="flex gap-2">
+              <Input value={username} onChange={(e) => setUsername(e.target.value)} maxLength={32} autoCapitalize="off" autoCorrect="off" />
+              <Button className="shrink-0" loading={savingU} onClick={saveUsername} disabled={!username.trim() || username.trim() === currentUsername}>{t('保存', 'Save')}</Button>
+            </div>
+          </Field>
+          <Field label={t('手机号', 'Phone')} hint={t('可作登录标识（手机号 + 密码）', 'Can be used to sign in (phone + password)')}>
+            <div className="flex gap-2">
+              <Input type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+86 138…" />
+              <Button className="shrink-0" loading={savingP} onClick={savePhone} disabled={!phone.trim() || phone.trim() === (currentPhone ?? '')}>{t('保存', 'Save')}</Button>
+            </div>
+          </Field>
+        </div>
+        <div className="mt-5"><Button variant="soft" className="w-full" onClick={onClose}>{t('关闭', 'Close')}</Button></div>
       </div>
     </div>
   )

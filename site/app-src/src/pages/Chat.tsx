@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api, chatErrorText, fetchMediaObjectURL, uploadMedia, type ChatMessage, type Conversation, type GroupSummary, type User } from '../lib/api'
+import { pollWhileVisible } from '../lib/poll'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo } from '../components/ui'
@@ -22,7 +23,7 @@ export function ChatPage() {
     if (c.status === 'fulfilled') setConvos(c.value.conversations)
     if (g.status === 'fulfilled') setGroups(g.value.groups)
   }, [])
-  useEffect(() => { void loadLists(); const id = setInterval(loadLists, 8000); return () => clearInterval(id) }, [loadLists])
+  useEffect(() => { void loadLists(); return pollWhileVisible(loadLists, 8000) }, [loadLists])
 
   // 由路由 /chat/:peerId 预选单聊对象。
   useEffect(() => {
@@ -143,7 +144,7 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
       else void api.markGroupRead(sel.id).catch(() => {})
     } catch { setMsgs([]) }
   }, [sel])
-  useEffect(() => { void load(); const id = setInterval(load, 5000); return () => clearInterval(id) }, [load])
+  useEffect(() => { void load(); return pollWhileVisible(load, 5000) }, [load])
   useEffect(() => { bottomRef.current?.scrollIntoView({ block: 'end' }) }, [msgs])
 
   const target = sel.kind === 'peer' ? { toId: sel.id } : { groupId: sel.id }

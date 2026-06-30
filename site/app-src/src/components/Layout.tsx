@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { api, type AppConfig } from '../lib/api'
+import { pollWhileVisible } from '../lib/poll'
 import { getTheme, setTheme, type Theme } from '../lib/theme'
 import { Avatar, Pill } from './ui'
 import { CallProvider } from '../pages/call/CallController'
@@ -28,8 +29,8 @@ export function Layout({ children }: { children: ReactNode }) {
     void api.appConfig().then((c) => alive && setConfig(c)).catch(() => {})
     const tick = () => void api.notifications().then((n) => alive && setUnread(n.unread)).catch(() => {})
     tick()
-    const id = setInterval(tick, 30_000)
-    return () => { alive = false; clearInterval(id) }
+    const stop = pollWhileVisible(tick, 30_000)
+    return () => { alive = false; stop() }
   }, [loc.pathname])
 
   // 待命心跳：开启后周期上报 available=true，让绑定的视障侧看到「在线」并能呼入；关闭立即下线。

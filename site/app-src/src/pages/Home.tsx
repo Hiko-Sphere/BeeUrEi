@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type CallRecordInfo } from '../lib/api'
+import { pollWhileVisible } from '../lib/poll'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { Card, Avatar, Pill, Spinner, EmptyState, timeAgo } from '../components/ui'
@@ -32,8 +33,8 @@ export function HomePage() {
       if (hist.status === 'fulfilled') setCalls(hist.value.calls.slice(0, 6))
     }
     void load()
-    const id = setInterval(load, 15_000)
-    return () => { alive = false; clearInterval(id) }
+    const stop = pollWhileVisible(load, 15_000)
+    return () => { alive = false; stop() }
   }, [])
 
   const hour = new Date().getHours()

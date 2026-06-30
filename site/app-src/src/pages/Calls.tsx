@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type IncomingCall, type HelpRequest, type CallRecordInfo } from '../lib/api'
+import { pollWhileVisible } from '../lib/poll'
 import { useI18n } from '../lib/i18n'
 import { useCall } from './call/CallController'
 import { Card, Avatar, Button, Pill, Spinner, EmptyState, timeAgo } from '../components/ui'
@@ -23,8 +24,8 @@ export function CallsPage() {
       if (hist.status === 'fulfilled') setHistory(hist.value.calls)
     }
     void load()
-    const id = setInterval(load, 4000)
-    return () => { alive = false; clearInterval(id) }
+    const stop = pollWhileVisible(load, 4000)
+    return () => { alive = false; stop() }
   }, [active])
 
   const onAnswer = async (c: IncomingCall) => { setBusyId(c.callId); await answerIncoming(c.callId, c.fromName, c.fromAvatar); setBusyId(null) }

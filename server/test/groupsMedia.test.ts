@@ -326,6 +326,24 @@ describe('未读汇总 /api/unread', () => {
     expect((ua.json() as any).messages).toBe(0)
   })
 
+  it('被撤回的群消息不计入未读（驱动 App 图标角标/标签标题）', async () => {
+    const app = buildApp(new MemoryStore())
+    const a = await reg(app, 'unrc', 'blind')
+    const b = await reg(app, 'unrd', 'helper')
+    await bind(app, a.token, b.token, 'unrd')
+    const g = await app.inject({ method: 'POST', url: '/api/groups', headers: auth(a.token), payload: { name: 'G', memberIds: [b.user.id] } })
+    const gid = (g.json() as any).group.id as string
+    // a 发两条群消息 → b 群未读=2。
+    const m1 = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { groupId: gid, text: '第一条' } })
+    await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { groupId: gid, text: '第二条' } })
+    expect(((await app.inject({ method: 'GET', url: '/api/unread', headers: auth(b.token) })).json() as any).messages).toBe(2)
+    // a 撤回第一条 → b 群未读应降为 1（撤回消息 kind=recalled，不计未读）。
+    const mid = (m1.json() as any).message.id as string
+    const recall = await app.inject({ method: 'POST', url: `/api/messages/${mid}/recall`, headers: auth(a.token) })
+    expect(recall.statusCode).toBe(200)
+    expect(((await app.inject({ method: 'GET', url: '/api/unread', headers: auth(b.token) })).json() as any).messages).toBe(1)
+  })
+
   it('单聊推送携带 thread-id（按发送者分组）与 badge（收件人未读总数，递增）', async () => {
     const push = new FakePush()
     const app = buildApp(new MemoryStore(), { pushSender: push })

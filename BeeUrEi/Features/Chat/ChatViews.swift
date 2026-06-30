@@ -559,6 +559,7 @@ struct ChatView: View {
                     switch m.kind {
                     case "audio": speak = ChatStrings.newVoiceSpeak(name, lang)
                     case "video": speak = ChatStrings.newVideoSpeak(name, lang)
+                    case "image": speak = ChatStrings.newPhotoSpeak(name, lang) // 否则会把 base64 data URL 念给盲人
                     default:
                         speak = isGroup
                             ? ChatStrings.newGroupMessageSpeak(name, target.title, String(m.text.prefix(60)), lang)

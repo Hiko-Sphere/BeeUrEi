@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import { type Store, type Role, type User, selfView, matchBannedTerm } from '../db/store'
+import { type Store, type Role, type User, selfView, matchBannedTerm, findByLoginIdentifier } from '../db/store'
 import { hashPassword, verifyPassword } from '../auth/passwords'
 import { hashToken, generateRefreshToken } from '../auth/tokens'
 import { issueTokens, deviceLabelFromReq } from '../auth/session'
@@ -128,15 +128,8 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     if (!parsed.success) {
       return reply.code(400).send({ error: 'invalid_input' })
     }
-    // 登录标识兼容用户名/手机号/邮箱：先按用户名查，再按归一化手机号，最后按邮箱（含 @ 才试）。
-    const identifier = parsed.data.username
-    const byPhone = (): User | undefined => {
-      const p = normalizePhone(identifier)
-      return p ? store.findByPhone(p) : undefined
-    }
-    const byEmail = (): User | undefined =>
-      identifier.includes('@') ? store.findByEmail(identifier) : undefined
-    const user = store.findByUsername(identifier) ?? byPhone() ?? byEmail()
+    // 登录标识兼容用户名/手机号/邮箱（与找回密码共用 findByLoginIdentifier，避免口径漂移）。
+    const user = findByLoginIdentifier(store, parsed.data.username)
     if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) {
       return reply.code(401).send({ error: 'invalid_credentials' })
     }

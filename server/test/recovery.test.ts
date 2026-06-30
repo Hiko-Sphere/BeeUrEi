@@ -80,6 +80,22 @@ describe('邮箱验证 / 找回密码 (D1)', () => {
     await app.close()
   })
 
+  it('找回密码可用邮箱作标识（邮箱注册者不知道自动生成的用户名也能找回）', async () => {
+    const { app, sent } = capturingApp()
+    const reg = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'mailE', password: 'oldpass123' } })
+    await verifyEmail(app, reg.json().token, 'e@example.com', sent)
+    // 用邮箱（而非用户名）发起找回：修复前 findByUsername('e@example.com') 查不到→静默不发码→无从找回。
+    const forgot = await app.inject({ method: 'POST', url: '/api/auth/forgot-password', payload: { username: 'e@example.com' } })
+    expect(forgot.statusCode).toBe(200)
+    await tick()
+    const code = codeOf(sent[sent.length - 1].text)
+    // 用邮箱重置同样成立（标识解析与登录同口径）。
+    const reset = await app.inject({ method: 'POST', url: '/api/auth/reset-password', payload: { username: 'e@example.com', code, newPassword: 'newpass123' } })
+    expect(reset.statusCode).toBe(200)
+    expect((await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'mailE', password: 'newpass123' } })).statusCode).toBe(200)
+    await app.close()
+  })
+
   it('未验证邮箱不发重置码（见审查 #8）', async () => {
     const { app, sent } = capturingApp()
     // 注册带邮箱但从不验证

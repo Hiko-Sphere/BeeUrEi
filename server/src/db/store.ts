@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { dirname } from 'node:path'
+import { normalizePhone } from '../auth/apple' // 纯字符串工具，无模块级副作用、不依赖 store（无循环）
 import type { Sealed } from '../kyc/crypto' // 仅类型导入（编译期擦除）——不触发 crypto 的 KYC_ENC_KEY 启动校验
 
 /// 角色（见 PLAN §14.2）。admin/developer 不可自助注册，由后台分配。
@@ -1216,6 +1217,17 @@ export function acceptedContactIds(store: Store, me: string): Set<string> {
   for (const l of store.linksByMember(me)) if (ok(l)) ids.add(l.ownerId)
   for (const id of blockedUserIdSet(store, me)) ids.delete(id)
   return ids
+}
+
+/// 登录/找回标识解析：兼容用户名 / 归一化手机号 / 邮箱（含 @ 才试）。**登录与找回密码共用同一口径**
+/// ——否则二者漂移：找回若只认用户名，则用邮箱/手机号注册（用户名是自动生成、用户根本不知道）的人无从找回密码。
+export function findByLoginIdentifier(store: Store, identifier: string): User | undefined {
+  const byUsername = store.findByUsername(identifier)
+  if (byUsername) return byUsername
+  const p = normalizePhone(identifier)
+  if (p) { const byPhone = store.findByPhone(p); if (byPhone) return byPhone }
+  if (identifier.includes('@')) return store.findByEmail(identifier)
+  return undefined
 }
 
 /// 对外暴露的安全用户字段（不含 passwordHash / email；用于管理员列表、亲友等场景）。

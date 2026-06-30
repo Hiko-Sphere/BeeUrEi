@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { type Store } from '../db/store'
+import { type Store, findByLoginIdentifier } from '../db/store'
 import { hashPassword } from '../auth/passwords'
 import { type CodeRegistry } from '../auth/codes'
 import { type Mailer } from '../mail/mailer'
@@ -30,7 +30,8 @@ export function registerRecoveryRoutes(app: FastifyInstance, store: Store, codes
       return reply.code(429).send({ error: dec.reason === 'cooldown' ? 'code_cooldown' : 'code_too_many', retryAfterSec: dec.retryAfterSec })
     }
     codeSend.record(sendKey, Date.now())
-    const user = store.findByUsername(parsed.data.username)
+    // 标识解析与登录同口径（用户名/手机号/邮箱）——否则邮箱/手机号注册的用户（用户名自动生成、本人不知）无从找回。
+    const user = findByLoginIdentifier(store, parsed.data.username)
     // 仅向**已验证**邮箱发码：未验证邮箱可能是拼错/他人地址，不应作为账号恢复锚点（见审查 #8）。
     if (user?.email && user.emailVerified) {
       const code = codes.issue(`reset:${user.id}`, Date.now())
@@ -48,7 +49,7 @@ export function registerRecoveryRoutes(app: FastifyInstance, store: Store, codes
   app.post('/api/auth/reset-password', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = resetSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
-    const user = store.findByUsername(parsed.data.username)
+    const user = findByLoginIdentifier(store, parsed.data.username)
     if (!user || !codes.verify(`reset:${user.id}`, parsed.data.code, Date.now())) {
       return reply.code(400).send({ error: 'invalid_code' })
     }

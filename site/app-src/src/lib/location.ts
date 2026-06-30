@@ -3,6 +3,9 @@
 //  ② 内嵌 https://maps.apple.com/?ll=lat,lng&q=name 文本链接（iOS 兼容未升级服务端时发的形态）
 // 均做经纬度范围与有限性校验；任何畸形/越界/非位置输入返回 null（绝不抛错——文本来自用户可控消息）。
 export function parseLocation(text: string): { lat: number; lng: number; name?: string } | null {
+  // 防御：text 类型虽为 string，但消息字段可能因后端数据异常为 null/undefined——
+  // 下方 text.indexOf 在 try/catch 之外，无此守卫会抛 TypeError、连累整条聊天列表/会话渲染崩。
+  if (typeof text !== 'string' || text === '') return null
   try {
     const j = JSON.parse(text) as { lat?: unknown; lng?: unknown; name?: unknown }
     if (typeof j.lat === 'number' && typeof j.lng === 'number'

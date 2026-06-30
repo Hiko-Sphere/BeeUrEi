@@ -26,4 +26,12 @@ describe('parseLocation', () => {
     expect(parseLocation('')).toBeNull()
     expect(parseLocation('{乱七八糟')).toBeNull()
   })
+
+  it('null/undefined 输入 → null 而非抛错（契约：绝不抛错）', () => {
+    // 后端数据异常时消息 text 可能为 null/undefined；文本链接分支在 try 外，无守卫会抛 TypeError 连累渲染。
+    expect(() => parseLocation(undefined as unknown as string)).not.toThrow()
+    expect(() => parseLocation(null as unknown as string)).not.toThrow()
+    expect(parseLocation(undefined as unknown as string)).toBeNull()
+    expect(parseLocation(null as unknown as string)).toBeNull()
+  })
 })

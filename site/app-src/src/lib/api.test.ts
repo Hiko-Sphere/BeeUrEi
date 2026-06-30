@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { APIError, chatErrorText } from './api'
 
-// 取中文分支断言（t 返回 zh）。
-const t = (zh: string, _en: string) => zh
+// 取中文分支断言（t 返回 zh）。少写一个形参即可——TS 允许少参函数赋给 (zh,en)=>string。
+const t = (zh: string) => zh
 
 describe('chatErrorText 错误码→用户文案映射', () => {
   it('"重试也没用"的状态各有专属文案，区别于瞬时失败', () => {

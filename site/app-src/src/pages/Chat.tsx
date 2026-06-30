@@ -206,7 +206,8 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
         {msgs === null ? <Spinner /> : msgs.length === 0 ? (
           <div className="grid h-full place-items-center text-sm text-faint">{t('开始你们的对话', 'Say hello')}</div>
         ) : msgs.map((m) => (
-          <Bubble key={m.id} m={m} mine={m.fromId === user?.id} lang={lang} t={t} onRecall={() => recall(m)} onReact={(e) => react(m, e)} />
+          <Bubble key={m.id} m={m} mine={m.fromId === user?.id} lang={lang} t={t} onRecall={() => recall(m)} onReact={(e) => react(m, e)}
+            senderName={sel.kind === 'group' && m.fromId !== user?.id ? (sel.members.find((mm) => mm.id === m.fromId)?.displayName ?? '') : undefined} />
         ))}
         <div ref={bottomRef} />
       </div>
@@ -320,13 +321,15 @@ function GroupInfoDialog({ groupId, groupName, ownerId, members, meId, onClose, 
 
 const REACTION_CHOICES = ['👍', '❤️', '😂', '😮', '😢', '🙏'] // 与 iOS ChatStrings.reactionChoices 对齐
 
-function Bubble({ m, mine, lang, t, onRecall, onReact }: { m: ChatMessage; mine: boolean; lang: 'zh' | 'en'; t: (z: string, e: string) => string; onRecall: () => void; onReact: (emoji: string) => void }) {
+function Bubble({ m, mine, lang, t, onRecall, onReact, senderName }: { m: ChatMessage; mine: boolean; lang: 'zh' | 'en'; t: (z: string, e: string) => string; onRecall: () => void; onReact: (emoji: string) => void; senderName?: string }) {
   const recallable = mine && m.kind !== 'recalled' && Date.now() - m.createdAt < 2 * 60_000
   const reactable = m.kind !== 'recalled'
   const [picking, setPicking] = useState(false)
   return (
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div className={`group relative max-w-[78%] rounded-2xl px-3.5 py-2 text-sm ${mine ? 'bg-honey text-ink' : 'surface-2 text-[var(--text)]'} ${m.kind === 'recalled' ? 'italic opacity-60' : ''}`}>
+        {/* 群聊里别人的消息署名——否则多人群聊分不清谁说的。 */}
+        {senderName && <div className="mb-0.5 text-xs font-semibold text-honey">{senderName}</div>}
         <MessageBody m={m} t={t} />
         <div className={`mt-1 flex items-center gap-2 text-[10px] ${mine ? 'text-ink/60' : 'text-faint'}`}>
           <span>{timeAgo(m.createdAt, lang)}</span>

@@ -447,7 +447,9 @@ struct ChatView: View {
     }
 
     private func senderName(_ id: String) -> String {
-        groupDetail?.members.first { $0.id == id }?.displayName ?? ""
+        // 发送者已退群 → 不在成员表里：给兜底名，避免空署名行 / VoiceOver 读空白 / 播报"（空）发来消息"。
+        let name = groupDetail?.members.first { $0.id == id }?.displayName ?? ""
+        return name.isEmpty ? ChatStrings.formerMember(lang) : name
     }
 
     private func bubbleA11y(_ m: ChatMessageInfo) -> String {

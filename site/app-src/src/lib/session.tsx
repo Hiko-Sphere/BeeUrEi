@@ -18,7 +18,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false)
   const [requireVerification, setRequireVerification] = useState(false)
 
-  const signOut = useCallback(() => { tokenStore.clear(); setUser(null); setSelf(null) }, [])
+  const signOut = useCallback(() => {
+    const rt = tokenStore.refresh
+    if (rt) void api.logout(rt).catch(() => {}) // 尽力而为：服务端吊销 refresh token；先读再清，失败/离线也照常登出
+    tokenStore.clear(); setUser(null); setSelf(null)
+  }, [])
 
   const refreshMe = useCallback(async () => {
     if (!tokenStore.token) { setUser(null); return }

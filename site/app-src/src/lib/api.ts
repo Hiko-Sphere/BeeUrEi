@@ -141,6 +141,9 @@ const del = (p: string) => rawFetch('DELETE', p, undefined, true)
 
 // ---------- API ----------
 export const api = {
+  // 登出：服务端吊销该 refresh token（不再能续期）。无需鉴权、不走 401 续期重试（auth=false）。
+  // 与 iOS 登出对齐——否则 web 仅清本地存储，refresh token 在服务端 30 天 TTL 内仍有效（被窃取也无法靠登出失效）。
+  logout: (refreshToken: string) => rawFetch('POST', '/api/auth/logout', { refreshToken }, false),
   // 认证
   async login(identifier: string, password: string, totpCode?: string): Promise<{ token: string; refreshToken: string; user: User }> {
     // 标识可为用户名 / 手机号 / 邮箱，后端按字段判定；统一传 username（后端兼容）。

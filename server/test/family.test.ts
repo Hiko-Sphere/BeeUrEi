@@ -76,6 +76,21 @@ describe('family + emergency', () => {
     await a.close()
   })
 
+  it('接受好友请求 → 给发起者写持久通知（web-only 无 push 也能看到，非仅推送）', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const reg = async (u: string, role?: string) =>
+      (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const requester = await reg('reqA', 'helper') // 发起者（设想为 web-only，无 apnsToken）
+    await reg('blindA', 'blind')
+    const link = await a.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${requester.token}` }, payload: { username: 'blindA' } })
+    const blindLogin = await a.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'blindA', password: 'secret123' } })
+    await a.inject({ method: 'POST', url: `/api/family/links/${link.json().link.id}/accept`, headers: { authorization: `Bearer ${blindLogin.json().token}` } })
+    // 发起者收到持久化的 friend_accepted 通知（不依赖 push）
+    expect(store.notificationsForUser(requester.user.id).some((n) => n.kind === 'friend_accepted')).toBe(true)
+    await a.close()
+  })
+
   it('caps the initiator side too: non-blind requester cannot fan out unbounded requests (422)', async () => {
     // 非盲发起方时 ownerId=target(盲)，owner 维度上限约束不到发起方自身——不补上限则单账号可向无数
     // 不同目标发 pending 请求（无界增长 + 群发好友请求推送骚扰）。验证发起方自身满 200 时被挡。

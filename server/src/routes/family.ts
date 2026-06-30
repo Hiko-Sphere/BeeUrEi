@@ -6,6 +6,7 @@ import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
 import { type PushSender, NoopPushSender } from '../push/apns'
 import { pushLang, pushStrings } from '../push/pushStrings'
+import { notifyUser } from '../notifications/notify'
 
 const addLinkSchema = z.object({
   username: z.string().min(3).max(32).optional(),
@@ -77,14 +78,15 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: P
     // 一条"已接受却处处被拉黑拦截"的死链（出现在联系人列表却无法互动）。解除拉黑后请求仍在，可再接受。
     if (isBlockedBetween(store, meId, counterpartId(link, meId))) return reply.code(403).send({ error: 'blocked' })
     store.createLink({ ...link, status: 'accepted' })
-    // 软件外通知：告诉"发起者"对方已接受。fire-and-forget。
+    // 告知发起者"对方已接受"：走 notifyUser（持久通知 + 尽力推送），而非纯推送——
+    // 否则对无 push token 的 web 端发起者完全无感（接受后好友只是静悄悄出现在列表里），
+    // 与紧急告警同类的"web-only 漏收"缺口。requestedBy 为发起者 id。
     const requester = link.requestedBy ? store.findById(link.requestedBy) : undefined
     const me = store.findById(meId)
-    if (requester?.apnsToken && me) {
+    if (requester && me) {
       const lang = pushLang(requester.language)
-      void push.sendAlert(requester.apnsToken, pushStrings.friendAcceptedTitle(lang),
-                          pushStrings.friendAcceptedBody(me.displayName, lang), { kind: 'friend_accepted' })
-        .catch((e) => console.warn('[push] friend_accepted alert failed:', (e as Error).message))
+      notifyUser(store, push, requester.id, 'friend_accepted',
+                 pushStrings.friendAcceptedTitle(lang), pushStrings.friendAcceptedBody(me.displayName, lang))
     }
     return { ok: true }
   })

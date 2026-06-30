@@ -76,7 +76,10 @@ export function CallsPage() {
                     <div className="truncate font-medium">{r.fromName}</div>
                     {r.topic && <div className="truncate text-sm text-soft">{r.topic}</div>}
                     <div className="flex flex-wrap items-center gap-1.5 text-xs text-faint">
-                      {r.language && <Pill>{r.language.toUpperCase()}</Pill>}
+                      {/* 求助者语言与协助者界面语言一致时高亮：帮志愿者一眼看到自己最能服务的对象（不改队列顺序，保持先到先得公平）。 */}
+                      {r.language && (r.language.toLowerCase() === lang
+                        ? <Pill tone="honey">{r.language.toUpperCase()} · {t('你的语言', 'your language')}</Pill>
+                        : <Pill>{r.language.toUpperCase()}</Pill>)}
                       {r.locality && <span>{r.locality}</span>}
                       <span>{waited(r.waitedSeconds)}</span>
                     </div>

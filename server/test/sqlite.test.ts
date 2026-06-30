@@ -7,6 +7,15 @@ function user(id: string, username: string): User {
 }
 
 describe('SqliteStore (node:sqlite)', () => {
+  it('热路径索引存在（授权/拉黑/通话历史/媒体不退化为全表扫描）', () => {
+    const store = new SqliteStore(':memory:') as unknown as { db: { prepare: (s: string) => { all: () => { name: string }[] } } }
+    const names = new Set(store.db.prepare("SELECT name FROM sqlite_master WHERE type='index'").all().map((r) => r.name))
+    for (const idx of ['idx_links_owner', 'idx_links_member', 'idx_blocks_blocker', 'idx_blocks_blocked',
+      'idx_callrec_caller', 'idx_callrec_callee', 'idx_recordings_owner', 'idx_media_owner', 'idx_notif_user']) {
+      expect(names.has(idx)).toBe(true)
+    }
+  })
+
   it('round-trips users, links, reports, recordings, config', () => {
     const store = new SqliteStore(':memory:')
 

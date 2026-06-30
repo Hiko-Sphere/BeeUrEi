@@ -86,6 +86,16 @@ export class SqliteStore implements Store {
     try { this.db.exec('ALTER TABLE messages ADD COLUMN groupId TEXT') } catch { /* 列已存在 */ } // 群消息
     // 群消息索引必须在 groupId 列迁移之后建——否则旧库（无此列）在 CREATE INDEX 处直接崩。
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_messages_group ON messages (groupId, createdAt)')
+    // 热路径索引：授权判定(areLinked/acceptedContactIds)每次都查 links、拉黑检查每次都查 blocks；
+    // 通话历史/录制/媒体按参与方/owner 过滤。缺索引则随表增长退化为全表扫描，逐步拖慢**每一个**授权检查。
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_links_owner ON links (ownerId)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_links_member ON links (memberId)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_blocks_blocker ON blocks (blockerId)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_blocks_blocked ON blocks (blockedId)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_callrec_caller ON call_records (callerId, createdAt)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_callrec_callee ON call_records (calleeId, createdAt)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_recordings_owner ON recordings (ownerId, recordedAt)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_media_owner ON media (ownerId)')
     // Admin v3：审核处置 + 审计日志 + 用户警告
     try { this.db.exec('ALTER TABLE reports ADD COLUMN decision TEXT') } catch { /* 列已存在 */ }
     try { this.db.exec('ALTER TABLE reports ADD COLUMN resolvedBy TEXT') } catch { /* 列已存在 */ }

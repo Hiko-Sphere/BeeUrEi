@@ -15,14 +15,17 @@ struct CallView: View {
     let onClose: () -> Void
     /// A4：呼叫亲友无人接听/被拒时的「改为向志愿者求助」回退（仅盲人呼亲友的路径传入）。
     var onFallbackToVolunteer: (() -> Void)?
+    /// 公开求助无人应答时的「重新求助」回退（仅盲人志愿者求助的路径传入）——不让盲人卡在没人接的求助里。
+    var onRetryHelp: (() -> Void)?
     /// 通话屏文案语言（E5）。
     private var lang: Language { FeatureSettings().language }
 
     init(role: CallViewModel.Role, callId: String,
          waitingText: String = CallStrings.defaultWaiting(FeatureSettings().language),
-         onFallbackToVolunteer: (() -> Void)? = nil, onClose: @escaping () -> Void) {
+         onFallbackToVolunteer: (() -> Void)? = nil, onRetryHelp: (() -> Void)? = nil, onClose: @escaping () -> Void) {
         _model = State(initialValue: CallViewModel(role: role, callId: callId, waitingText: waitingText))
         self.onFallbackToVolunteer = onFallbackToVolunteer
+        self.onRetryHelp = onRetryHelp
         self.onClose = onClose
     }
 
@@ -320,6 +323,14 @@ struct CallView: View {
                              subtitle: CallStrings.fallbackSubtitle(lang), tint: .beeHoney) {
                     model.hangUp()
                     fallback()
+                }
+            }
+            // 志愿者求助无人应答 → 一键重新求助（与亲友未接→改求志愿者对称，不让盲人卡死）。
+            if model.unanswered, let retry = onRetryHelp {
+                BeeBigButton(CallStrings.retryHelpTitle(lang), systemImage: "arrow.clockwise",
+                             subtitle: CallStrings.retryHelpSubtitle(lang), tint: .beeHoney) {
+                    model.hangUp()
+                    retry()
                 }
             }
 

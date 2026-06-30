@@ -31,6 +31,7 @@ struct RemoteAssistView: View {
     @State private var totalCount = 0      // 绑定总数
     @State private var onlineTask: Task<Void, Never>?
     @State private var pendingVolunteerFallback = false // A4：亲友无人接听→关旧通话后自动转志愿者
+    @State private var lastVolunteerTopic: String?      // 记住上次求助事项，重新求助时沿用（不退化成默认）
     @Environment(AuthSession.self) private var session // 全站功能开关：关停时禁用对应呼叫按钮
     let onClose: () -> Void
 
@@ -145,7 +146,8 @@ struct RemoteAssistView: View {
             // A4：呼亲友无人接听 → 关闭旧通话后自动发起志愿者求助（模态真正关闭后再开新 cover，防同 tick 吞没）。
             if pendingVolunteerFallback {
                 pendingVolunteerFallback = false
-                Task { await callForVolunteer(topic: AssistStrings.defaultTopic(lang)) }
+                let topic = lastVolunteerTopic ?? AssistStrings.defaultTopic(lang)
+                Task { await callForVolunteer(topic: topic) }
             }
         }) { call in
             CallView(role: .blind, callId: call.id,
@@ -159,7 +161,17 @@ struct RemoteAssistView: View {
                          }
                          pendingVolunteerFallback = true
                          activeCall = nil
-                     }) {
+                     },
+                     onRetryHelp: call.isVolunteer ? {
+                         // 志愿者求助无人应答 → 撤掉旧求助(openHelp 用 cancelHelp，非 cancelCall)、cover 关闭后用同一事项重新广播。
+                         // 外部置 activeCall=nil 不会触发 CallView 的 onClose，故旧求助须在此显式撤销，避免被志愿者认领到已放弃的 callId。
+                         if let token = KeychainStore.read() {
+                             let id = call.id
+                             Task { await APIClient().cancelHelp(token: token, callId: id) }
+                         }
+                         pendingVolunteerFallback = true
+                         activeCall = nil
+                     } : nil) {
                 if let token = KeychainStore.read() {
                     let id = call.id, isVol = call.isVolunteer
                     Task {
@@ -281,6 +293,7 @@ struct RemoteAssistView: View {
     private func callForVolunteer(topic: String) async {
         guard !calling, activeCall == nil else { return }
         guard let token = KeychainStore.read() else { statusText = AssistStrings.loginFirst(lang); return }
+        lastVolunteerTopic = topic // 记住事项，供"重新求助"沿用
         calling = true; statusText = AssistStrings.sendingHelp(lang); defer { calling = false }
         let callId = UUID().uuidString
         let locality = await CoarseLocality().fetch() // best-effort，未授权则为 nil

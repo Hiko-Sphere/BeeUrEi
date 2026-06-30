@@ -91,6 +91,10 @@ enum CallStrings {
     static func fallbackSubtitle(_ l: Language) -> String {
         l == .zh ? "亲友暂时没接，让在线志愿者帮你" : "Family didn't answer — let an online volunteer help"
     }
+    static func retryHelpTitle(_ l: Language) -> String { l == .zh ? "重新求助" : "Ask Again" }
+    static func retryHelpSubtitle(_ l: Language) -> String {
+        l == .zh ? "暂时没有志愿者，再向大家求助一次" : "No volunteer yet — broadcast your request again"
+    }
     static func videoStatus(sending: Bool, front: Bool, _ l: Language) -> String {
         switch l {
         case .zh:

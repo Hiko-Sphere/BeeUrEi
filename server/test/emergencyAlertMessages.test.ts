@@ -6,11 +6,11 @@ import type { PushSender } from '../src/push/apns'
 const auth = (t: string) => ({ authorization: `Bearer ${t}` })
 
 class FakePush implements PushSender {
-  sent: { token: string; title: string; body: string; extra?: Record<string, string> }[] = []
+  sent: { token: string; title: string; body: string; extra?: Record<string, string>; badge?: number }[] = []
   async send(): Promise<void> {}
   async sendCallInvite(): Promise<void> {}
-  async sendAlert(token: string, title: string, body: string, extra?: Record<string, string>): Promise<void> {
-    this.sent.push({ token, title, body, extra })
+  async sendAlert(token: string, title: string, body: string, extra?: Record<string, string>, _threadId?: string, badge?: number): Promise<void> {
+    this.sent.push({ token, title, body, extra, badge })
   }
 }
 

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import { type Store, type ChatMessage, isBlockedBetween, publicUser, matchBannedTerm } from '../db/store'
+import { totalUnreadFor } from '../db/unread'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
 import { NoopPushSender, type PushSender } from '../push/apns'
@@ -31,21 +32,6 @@ function isValidLocation(text: string): boolean {
 /// 取位置载荷里的用户可见地址名（用于内容审核——否则违禁词塞进位置名可绕过文本过滤）。
 function locationName(text: string): string {
   try { return locationSchema.parse(JSON.parse(text)).name ?? '' } catch { return '' }
-}
-
-/// 用户未读总数（单聊 + 群聊 + 铃铛通知）——供未读汇总端点与推送的 App 图标角标共用。
-/// 群未读口径与 GET /api/groups 一致（createdAt>已读时刻、非己发、非撤回）。
-export function totalUnreadFor(store: Store, userId: string): { messages: number; notifications: number; total: number } {
-  let messages = 0
-  for (const m of store.latestMessagesPerPeer(userId)) {
-    messages += store.unreadCount(userId, m.fromId === userId ? m.toId : m.fromId)
-  }
-  for (const g of store.groupsFor(userId)) {
-    const readAt = store.groupReadAt(g.id, userId)
-    messages += store.groupMessages(g.id, 200).filter((m) => m.createdAt > readAt && m.fromId !== userId && m.kind !== 'recalled').length
-  }
-  const notifications = store.unreadNotificationCount(userId)
-  return { messages, notifications, total: messages + notifications }
 }
 
 /// 聊天（参照 WhatsApp/iMessage 核心集：文本 + 语音条 + 图片 + 视频 + 已读回执 + 未读数 + 推送）。

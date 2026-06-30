@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Store } from '../db/store'
 import type { PushSender } from '../push/apns'
+import { totalUnreadFor } from '../db/unread'
 
 /// 站内通知 + 离线推送的统一投递：
 /// 先**持久化**到 notifications 表（权威、可回看、登录后必能看到），
@@ -22,6 +23,9 @@ export function notifyUser(
     store.createNotification({ id: randomUUID(), userId, kind, title, body, data, createdAt: Date.now() })
   } catch { /* 通知不可作为主流程成功的前置条件 */ }
   if (user.apnsToken) {
-    void push.sendAlert(user.apnsToken, title, body, { kind, ...(data ?? {}) }).catch(() => { /* best-effort */ })
+    // badge=该用户未读总数（含刚写入的本条通知）：后台收到通知类推送时图标角标同样递增，
+    // 与聊天推送一致（否则图标会漏计未读通知，见 App 图标角标主线）。
+    const badge = totalUnreadFor(store, userId).total
+    void push.sendAlert(user.apnsToken, title, body, { kind, ...(data ?? {}) }, undefined, badge).catch(() => { /* best-effort */ })
   }
 }

@@ -8,9 +8,19 @@ export class RecordingConsentRegistry {
 
   /// 记录一条同意（被录方授予）。
   grant(callId: string, granterId: string, now: number): void {
+    this.pruneExpired(now) // 顺手清全表过期项：consenters() 只清被查询的 callId，
+                           // 而"授予了同意但该通话从未录制(从不调 consenters)"的项否则永不清除→慢泄漏。grant 调用稀疏，O(n) 可接受。
     let m = this.grants.get(callId)
     if (!m) { m = new Map(); this.grants.set(callId, m) }
     m.set(granterId, now + this.ttlMs)
+  }
+
+  /// 清除全表已过期的同意项（及随之变空的 callId 桶）。
+  private pruneExpired(now: number): void {
+    for (const [cid, m] of this.grants) {
+      for (const [uid, exp] of m) if (exp <= now) m.delete(uid)
+      if (m.size === 0) this.grants.delete(cid)
+    }
   }
 
   /// 撤回同意（被录方点"不录制"或反悔）。

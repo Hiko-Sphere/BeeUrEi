@@ -197,6 +197,17 @@ describe('录制知情同意（服务端权威）', () => {
     expect(reg.consenters('call2', 'owner', now + 2000)).toEqual([]) // 已过期
   })
 
+  it('grant 顺手清全表过期项（防"授予但从不录制"的同意永驻泄漏）', () => {
+    const reg = new RecordingConsentRegistry(1000) // 1s TTL
+    const now = 1_000_000
+    reg.grant('never-records-1', 'peer', now) // 这些 callId 从不调 consenters() → 旧实现永不清
+    reg.grant('never-records-2', 'peer', now)
+    expect(reg.size).toBe(2)
+    // 过期之后再有任意 grant → pruneExpired 清掉两条陈旧项，只剩新的。
+    reg.grant('fresh', 'peer', now + 5000)
+    expect(reg.size).toBe(1)
+  })
+
   it('端点：被改造客户端即使自报 consentBy 也无效——以服务端同意记录为准', async () => {
     const store = new MemoryStore()
     store.createUser(admin())

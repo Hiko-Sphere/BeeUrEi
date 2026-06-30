@@ -57,6 +57,25 @@ describe('family + emergency', () => {
     await a.close()
   })
 
+  it('拉黑后：来自被拉黑者的待确认请求不出现在收件箱，且接受被拒(403 blocked)', async () => {
+    const { a, reg } = setup()
+    const requester = await reg('reqr', 'helper') // 发起方
+    const me = await reg('blkme', 'blind')         // 被请求方（稍后拉黑发起方）
+    const link = await a.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${requester.token}` }, payload: { username: 'blkme' } })
+    expect(link.statusCode).toBe(201)
+    const linkId = link.json().link.id
+    // me 拉黑发起方（请求是在拉黑前发出的）
+    await a.inject({ method: 'POST', url: '/api/blocks', headers: { authorization: `Bearer ${me.token}` }, payload: { username: 'reqr' } })
+    // 收件箱不再展示该请求
+    const incoming = await a.inject({ method: 'GET', url: '/api/family/incoming', headers: { authorization: `Bearer ${me.token}` } })
+    expect(incoming.json().links.length).toBe(0)
+    // 接受被拒（不再建出"已接受却处处被拦"的死链）
+    const accept = await a.inject({ method: 'POST', url: `/api/family/links/${linkId}/accept`, headers: { authorization: `Bearer ${me.token}` } })
+    expect(accept.statusCode).toBe(403)
+    expect(accept.json().error).toBe('blocked')
+    await a.close()
+  })
+
   it('caps the initiator side too: non-blind requester cannot fan out unbounded requests (422)', async () => {
     // 非盲发起方时 ownerId=target(盲)，owner 维度上限约束不到发起方自身——不补上限则单账号可向无数
     // 不同目标发 pending 请求（无界增长 + 群发好友请求推送骚扰）。验证发起方自身满 200 时被挡。

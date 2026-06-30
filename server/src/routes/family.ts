@@ -73,6 +73,9 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: P
     // 旧数据无 requestedBy：兜底回原逻辑（member 接受）。
     const canAccept = isParty && (link.requestedBy ? link.requestedBy !== meId : link.memberId === meId)
     if (!canAccept) return reply.code(404).send({ error: 'not_found' })
+    // 与 addLink 同口径：拉黑关系下不得接受（请求可能在拉黑前发出）——否则会在黑名单双方间建出
+    // 一条"已接受却处处被拉黑拦截"的死链（出现在联系人列表却无法互动）。解除拉黑后请求仍在，可再接受。
+    if (isBlockedBetween(store, meId, counterpartId(link, meId))) return reply.code(403).send({ error: 'blocked' })
     store.createLink({ ...link, status: 'accepted' })
     // 软件外通知：告诉"发起者"对方已接受。fire-and-forget。
     const requester = link.requestedBy ? store.findById(link.requestedBy) : undefined
@@ -97,7 +100,8 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: P
   app.get('/api/family/incoming', { preHandler: requireAuth() }, async (req) => {
     const meId = req.user!.sub
     const pending = [...store.linksByOwner(meId), ...store.linksByMember(meId)].filter(
-      (l) => (l.status ?? 'accepted') === 'pending' && (l.requestedBy ? l.requestedBy !== meId : l.memberId === meId),
+      (l) => (l.status ?? 'accepted') === 'pending' && (l.requestedBy ? l.requestedBy !== meId : l.memberId === meId)
+        && !isBlockedBetween(store, meId, counterpartId(l, meId)), // 不展示来自/涉及拉黑对象的请求（解除拉黑后自然重现）
     )
     return { links: pending.map((l) => incomingView(store, l, meId)) }
   })

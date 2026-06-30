@@ -44,12 +44,15 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
       || store.linksByMember(a).some((l) => l.ownerId === b && ok(l))
   }
 
-  /// 推送预览文案（语音/图片/视频用占位，文本截 80 字）。
+  /// 推送预览文案（语音/图片/视频/位置用占位，文本截 80 字）。
   function previewOf(kind: ChatMessage['kind'], text: string, l: PushLang): string {
     if (kind === 'audio') return l === 'en' ? '[Voice message]' : '[语音消息]'
     if (kind === 'image') return l === 'en' ? '[Photo]' : '[图片]'
     if (kind === 'video') return l === 'en' ? '[Video]' : '[视频]'
     if (kind === 'location') return l === 'en' ? '[Location]' : '[位置]'
+    // iOS 默认把位置发成 kind=text + 内嵌 Apple 地图链接：推送预览也显示 [位置]，
+    // 否则盲人收到的推送是一串原始 maps URL（与 iOS/web 列表预览保持一致）。
+    if (text.includes('https://maps.apple.com/?ll=')) return l === 'en' ? '[Location]' : '[位置]'
     return text.slice(0, 80)
   }
 

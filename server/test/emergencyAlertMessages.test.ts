@@ -170,6 +170,12 @@ describe('聊天（绑定好友互发）', () => {
     expect((ok.json() as any).message.kind).toBe('location')
     expect(push.sent.at(-1)?.body).toBe('[Location]') // 英文收件人推送预览
 
+    // iOS 默认把位置发成 kind=text + 内嵌 Apple 地图链接：推送预览也应是 [Location]，不是原始 URL。
+    const asText = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token),
+      payload: { toId: b.user.id, kind: 'text', text: '📍 上海市黄浦区\nhttps://maps.apple.com/?ll=31.23,121.47&q=foo' } })
+    expect(asText.statusCode).toBe(201)
+    expect(push.sent.at(-1)?.body).toBe('[Location]')
+
     const outOfRange = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token),
       payload: { toId: b.user.id, kind: 'location', text: JSON.stringify({ lat: 200, lng: 0 }) } })
     expect(outOfRange.statusCode).toBe(400)

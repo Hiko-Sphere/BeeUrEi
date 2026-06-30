@@ -238,4 +238,20 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     })
     return { conversations }
   })
+
+  /// 未读汇总（单聊 + 群聊 + 铃铛通知）：供网页标签标题/导航徽标一次性轻量拉取，
+  /// 免得为算总数去拉完整会话/群列表。群未读口径与 GET /api/groups 一致。
+  app.get('/api/unread', { preHandler: requireAuth() }, async (req) => {
+    const me = req.user!.sub
+    let messages = 0
+    for (const m of store.latestMessagesPerPeer(me)) {
+      messages += store.unreadCount(me, m.fromId === me ? m.toId : m.fromId)
+    }
+    for (const g of store.groupsFor(me)) {
+      const readAt = store.groupReadAt(g.id, me)
+      messages += store.groupMessages(g.id, 200).filter((m) => m.createdAt > readAt && m.fromId !== me && m.kind !== 'recalled').length
+    }
+    const notifications = store.unreadNotificationCount(me)
+    return { messages, notifications, total: messages + notifications }
+  })
 }

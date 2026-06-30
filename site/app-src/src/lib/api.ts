@@ -239,6 +239,8 @@ export const api = {
 
   // 通知
   notifications: () => get('/api/notifications') as Promise<{ notifications: NotificationInfo[]; unread: number }>,
+  // 未读汇总（单聊+群聊+铃铛通知），供标签标题/导航徽标一次轻量拉取。
+  unreadSummary: () => get('/api/unread') as Promise<{ messages: number; notifications: number; total: number }>,
   markNotifRead: (id: string) => post(`/api/notifications/${id}/read`),
   markAllNotifsRead: () => post('/api/notifications/read-all'),
 

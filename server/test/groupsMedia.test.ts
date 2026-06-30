@@ -294,3 +294,35 @@ describe('会话内消息搜索', () => {
     expect(forbidden.statusCode).toBe(403)
   })
 })
+
+describe('未读汇总 /api/unread', () => {
+  it('汇总单聊 + 群聊 + 铃铛通知；读后归零；自己发的不计入', async () => {
+    const app = buildApp(new MemoryStore())
+    const a = await reg(app, 'unra', 'blind')
+    const b = await reg(app, 'unrb', 'helper')
+    await bind(app, a.token, b.token, 'unrb')
+
+    // a 给 b 发两条单聊 → b 单聊未读=2。
+    await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, text: '在吗' } })
+    await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, text: '帮我看下' } })
+    // 群聊：a 建群拉 b，a 发一条 → b 群未读=1。
+    const g = await app.inject({ method: 'POST', url: '/api/groups', headers: auth(a.token), payload: { name: 'G', memberIds: [b.user.id] } })
+    const gid = (g.json() as any).group.id as string
+    await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { groupId: gid, text: '群里说一句' } })
+
+    const u1 = await app.inject({ method: 'GET', url: '/api/unread', headers: auth(b.token) })
+    expect(u1.statusCode).toBe(200)
+    const body = u1.json() as { messages: number; notifications: number; total: number }
+    expect(body.messages).toBe(3) // 2 单聊 + 1 群聊
+    expect(body.total).toBe(body.messages + body.notifications)
+
+    // b 读完单聊后，messages 应只剩群未读 1。
+    await app.inject({ method: 'POST', url: '/api/messages/read', headers: auth(b.token), payload: { fromId: a.user.id } })
+    const u2 = await app.inject({ method: 'GET', url: '/api/unread', headers: auth(b.token) })
+    expect((u2.json() as any).messages).toBe(1)
+
+    // 自己发的不计入自己的未读。
+    const ua = await app.inject({ method: 'GET', url: '/api/unread', headers: auth(a.token) })
+    expect((ua.json() as any).messages).toBe(0)
+  })
+})

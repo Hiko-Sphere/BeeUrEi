@@ -393,6 +393,10 @@ public enum SpokenStrings {
     public static func rangingPaused(_ lang: Language) -> String {
         switch lang { case .zh: return "测距暂停"; case .en: return "Ranging paused" }
     }
+    /// 外部中断（来电等）结束、避障会话自动恢复后播报——与"测距暂停"对称，消除"还在工作吗"的疑虑。
+    public static func rangingResumed(_ lang: Language) -> String {
+        switch lang { case .zh: return "测距已恢复"; case .en: return "Ranging resumed" }
+    }
     public static func avoidanceOff(_ lang: Language) -> String {
         switch lang { case .zh: return "避障已关闭"; case .en: return "Obstacle alerts off" }
     }

@@ -80,6 +80,15 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(c.announceProximity(.danger, nearestMeters: nil, language: .en), "Very close ahead, please stop")
     }
 
+    // 测距暂停/恢复须成对存在、双语非空且彼此不同（盲人据此判断避障是否仍在工作）。
+    func testRangingPausedResumedDistinctBilingual() {
+        for l in [Language.zh, .en] {
+            XCTAssertFalse(SpokenStrings.rangingPaused(l).isEmpty)
+            XCTAssertFalse(SpokenStrings.rangingResumed(l).isEmpty)
+            XCTAssertNotEqual(SpokenStrings.rangingPaused(l), SpokenStrings.rangingResumed(l))
+        }
+    }
+
     // MARK: GroundHazardDetector
 
     func testGroundHazardHintEnglish() {

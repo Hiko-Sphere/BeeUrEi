@@ -187,12 +187,17 @@ final class HomeViewModel {
     /// 会话被外部中断（来电、被其它界面/ App 抢相机、退后台）：帧流停止 → 避障静默停摆。
     /// 主动告知盲人"测距暂停"，避免误以为避障仍在工作（见 P1 安全审计）。我方主动暂停（通话/取景）不另行播报。
     private func handleInterruption(_ interrupted: Bool) {
-        guard !paused else { return }
+        guard !paused else { return } // 我方主动暂停（通话/取景）的中断起止都不另行播报
         if interrupted {
             degradeStop()
             proximityText = SpokenStrings.rangingPaused(lang)
             advisoryText = ""
             coordinator.submit(FeedbackEvent(priority: .critical, speech: SpokenStrings.rangingPaused(lang), interrupt: true))
+        } else {
+            // 外部中断结束、会话已自动重跑：主动告知"已恢复"。否则若用户此刻无近物，
+            // 声呐两种状态都静默，盲人无从判断避障是否还在工作（与"测距暂停"对称，见 P1 安全审计延伸）。
+            proximityText = SpokenStrings.rangingResumed(lang)
+            coordinator.submit(FeedbackEvent(priority: .critical, speech: SpokenStrings.rangingResumed(lang), interrupt: true))
         }
     }
 

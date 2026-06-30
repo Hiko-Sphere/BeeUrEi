@@ -40,7 +40,7 @@ final class MotionMonitor {
 final class EmergencyAlertCenter: NSObject, CLLocationManagerDelegate {
     static let shared = EmergencyAlertCenter()
 
-    enum Phase: Equatable { case idle, countdown(kind: String, secondsLeft: Int), sending, sent(notified: Int), failed }
+    enum Phase: Equatable { case idle, countdown(kind: String, secondsLeft: Int), sending, sent(reached: Int), failed }
     private(set) var phase: Phase = .idle
 
     @ObservationIgnored private var countdownTask: Task<Void, Never>?
@@ -120,9 +120,9 @@ final class EmergencyAlertCenter: NSObject, CLLocationManagerDelegate {
         let result = await APIClient().postEmergencyAlert(token: token, kind: kind,
                                                           lat: lastFix?.coordinate.latitude,
                                                           lon: lastFix?.coordinate.longitude)
-        if let notified = result {
-            phase = .sent(notified: notified)
-            speak(HomeStrings.fallAlertSent(notified, lang))
+        if let reached = result {
+            phase = .sent(reached: reached)
+            speak(HomeStrings.fallAlertSent(reached, lang))
         } else {
             phase = .failed
             speak(HomeStrings.fallAlertFailed(lang))

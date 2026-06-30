@@ -47,4 +47,18 @@ final class VoiceCommandParserTests: XCTestCase {
         // 危险动作刻意不解析（误识别"挂断"可能切断求助）。
         XCTAssertEqual(VoiceCommandParser.parse("挂断电话"), .unknown)
     }
+
+    /// 导盲(避障) vs 看一看(识别) 的关键词顺序不变式：避障须先于通用识别匹配，
+    /// 否则同时含"避障"与"识别"的句子会被 look 抢走（安全攸关——"开始避障"绝不能误成普通识别）。
+    func testGuideMeBeatsLookOnOverlap() {
+        XCTAssertEqual(VoiceCommandParser.parse("开始导盲"), .guideMe)
+        XCTAssertEqual(VoiceCommandParser.parse("避障"), .guideMe)
+        XCTAssertEqual(VoiceCommandParser.parse("Start guide"), .guideMe)
+        XCTAssertEqual(VoiceCommandParser.parse("识别一下"), .look)
+        XCTAssertEqual(VoiceCommandParser.parse("看一看这是什么"), .look)
+        // 同时含"避障"(导盲)与"识别"(看一看) → 必须判为导盲（顺序不变式）。
+        XCTAssertEqual(VoiceCommandParser.parse("避障识别"), .guideMe)
+        XCTAssertEqual(VoiceCommandParser.parse("打开消息"), .messages)
+        XCTAssertEqual(VoiceCommandParser.parse("open chat"), .messages)
+    }
 }

@@ -27,4 +27,6 @@ export function getLang(): Lang {
 export function setLang(l: Lang) {
   localStorage.setItem(LS_LANG, l)
   document.documentElement.lang = l === 'zh' ? 'zh-Hans' : 'en'
+  // 浏览器标签标题随语言（此前静态双语）。setLang 在启动(main.tsx)与切换(Layout)都会调用，两处一并覆盖。
+  document.title = l === 'zh' ? 'BeeUrEi 协助者' : 'BeeUrEi Helper'
 }

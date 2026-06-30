@@ -82,19 +82,24 @@ export const tokenStore = {
 let onUnauthorized: (() => void) | null = null
 export function setUnauthorizedHandler(fn: () => void) { onUnauthorized = fn }
 
+// 带 30s 超时的 fetch：网络挂死(连接被丢却无 RST)时 fetch 可能久久不返回——会让初始 /api/me 卡住、
+// 整个应用无限转圈，或 401 续期挂住、请求永不完成。AbortController 兜底。仅用于 JSON 请求
+// (rawFetch/tryRefresh)；媒体上下传走独立 fetch、不设此短超时（大文件慢传不应被误中止）。
+async function timedFetch(input: string, opts: RequestInit, ms = 30_000): Promise<Response> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), ms)
+  try { return await fetch(input, { ...opts, signal: ctrl.signal }) }
+  finally { clearTimeout(timer) }
+}
+
 async function rawFetch(method: string, path: string, body: unknown, auth: boolean, retry = true): Promise<unknown> {
   const headers: Record<string, string> = {}
   if (body !== undefined) headers['content-type'] = 'application/json'
   if (auth && tokenStore.token) headers['authorization'] = 'Bearer ' + tokenStore.token
   let res: Response
-  // 30s 超时：网络挂死(连接被丢弃却无 RST)时，fetch 可能久久不返回——初始 /api/me 卡住会让整个应用
-  // 无限转圈(setReady 永不触发)。AbortController 兜底，超时按网络错误处理。媒体上传走独立路径、不受此限。
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), 30_000)
   try {
-    res = await fetch(apiURL(path), { method, headers, signal: ctrl.signal, body: body !== undefined ? JSON.stringify(body) : undefined })
+    res = await timedFetch(apiURL(path), { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined })
   } catch { throw new APIError('network', 0) } // abort/网络失败统一按 network 错误
-  finally { clearTimeout(timer) }
   if (res.status === 401 && auth && retry) {
     // 尝试用 refresh 续期一次。
     if (await tryRefresh()) return rawFetch(method, path, body, auth, false)
@@ -117,7 +122,7 @@ async function tryRefresh(): Promise<boolean> {
   if (refreshing) return refreshing
   refreshing = (async () => {
     try {
-      const r = await fetch(apiURL('/api/auth/refresh'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ refreshToken: rt }) })
+      const r = await timedFetch(apiURL('/api/auth/refresh'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ refreshToken: rt }) })
       if (!r.ok) return false
       const j = await r.json() as { token?: string; refreshToken?: string }
       if (!j.token) return false

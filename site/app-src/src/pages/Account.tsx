@@ -283,14 +283,17 @@ export function VerificationDialog({ status, onClose, onChanged }: { status: Ver
 
 function DocPicker({ label, capture, file, onPick, t }: { label: string; capture: 'environment' | 'user'; file: File | null; onPick: (f: File | null) => void; t: (zh: string, en: string) => string }) {
   return (
-    <Field label={label}>
+    // 不能用 Field：Field 是 <label>，而内层可点选区也是 <label>——嵌套 <label> 是非法 HTML，
+    // 关联会错乱。改为 div + 描述性 span；文件 input 用 aria-label 命名（读屏听到"证件正面照片"等）。
+    <div>
+      <span className="mb-1.5 block text-sm font-medium text-soft">{label}</span>
       <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-[var(--line)] surface-2 px-3 py-3 text-sm text-soft">
         <span className="text-lg">📷</span>
         <span className="flex-1 truncate">{file ? file.name : t('点击选择 / 拍摄', 'Tap to choose / capture')}</span>
         {file && <span className="text-honey">✓</span>}
-        <input type="file" accept="image/*" capture={capture} className="hidden" onChange={(e) => onPick(e.target.files?.[0] ?? null)} />
+        <input type="file" accept="image/*" capture={capture} aria-label={label} className="hidden" onChange={(e) => onPick(e.target.files?.[0] ?? null)} />
       </label>
-    </Field>
+    </div>
   )
 }
 

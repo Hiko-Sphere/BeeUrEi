@@ -54,6 +54,44 @@ final class CollisionCorridorTests: XCTestCase {
         XCTAssertLessThanOrEqual(roi.x + roi.width, 1.0001)
         XCTAssertLessThanOrEqual(roi.y + roi.height, 1.0001)
     }
+
+    // 边界包含性：恰落在半宽/头高/纵深边界上的点算"在走廊内"（避免擦边障碍被漏判）。
+    func testContainsBoundariesInclusive() {
+        let c = CollisionCorridor()
+        let o = SIMD3<Float>(0, 0, 0), f = SIMD3<Float>(0, 0, 1), u = SIMD3<Float>(0, 1, 0)
+        XCTAssertTrue(c.contains(SIMD3<Float>(0.4, 1.0, 1.5), origin: o, forward: f, up: u)) // 半宽边界
+        XCTAssertTrue(c.contains(SIMD3<Float>(0, 1.7, 1.5), origin: o, forward: f, up: u))   // 头高边界
+        XCTAssertTrue(c.contains(SIMD3<Float>(0, 1.0, 3.0), origin: o, forward: f, up: u))   // 纵深边界
+        XCTAssertFalse(c.contains(SIMD3<Float>(0, 0.04, 1.5), origin: o, forward: f, up: u)) // 低于 groundMin（贴地噪声）
+        XCTAssertFalse(c.contains(SIMD3<Float>(0, 1.0, -0.1), origin: o, forward: f, up: u)) // 身后
+    }
+
+    // 走廊随前向旋转：前向转到 +X 后，纵深轴随之变为 X，判定坐标系一致旋转。
+    func testContainsRotatedForward() {
+        let c = CollisionCorridor()
+        let o = SIMD3<Float>(0, 0, 0), fwdX = SIMD3<Float>(1, 0, 0), u = SIMD3<Float>(0, 1, 0)
+        XCTAssertTrue(c.contains(SIMD3<Float>(1.5, 1.0, 0), origin: o, forward: fwdX, up: u))  // 沿新前向 1.5m 在内
+        XCTAssertFalse(c.contains(SIMD3<Float>(0, 1.0, 1.5), origin: o, forward: fwdX, up: u)) // 旧前向方向已出界
+    }
+
+    // decel<=0 不得除零/产生 NaN：只保留 v·t 项再 clamp。
+    func testAdaptiveDepthNonPositiveDecelIsSafe() {
+        let d = CollisionCorridor.adaptiveDepth(speed: 2, reactionTime: 1, decel: 0)
+        XCTAssertEqual(d, 2, accuracy: 0.01)
+        XCTAssertFalse(d.isNaN)
+    }
+
+    // 安全不变量（见审查 #3）：任一角点落在相机后方/光心平面（投影失败）→ 保守回退整帧 .full，
+    // 绝不可仅用剩余角点算出偏小且偏移的 ROI 而漏判近处障碍。
+    func testImageROIFallsBackToFullWhenCornersBehindCamera() {
+        let c = CollisionCorridor()
+        // 相机在原点看 +Z，走廊原点也在相机处 → 近端（z=0，脚下）角点投影失败。
+        let roi = c.imageROI(origin: SIMD3<Float>(0, 0, 0), forward: SIMD3<Float>(0, 0, 1), up: SIMD3<Float>(0, 1, 0),
+                             cameraToWorld: matrix_identity_float4x4,
+                             intrinsics: CameraIntrinsics(fx: 500, fy: 500, cx: 320, cy: 240),
+                             imageWidth: 640, imageHeight: 480)
+        XCTAssertEqual(roi, .full)
+    }
 }
 
 final class AlphaBetaFilterTests: XCTestCase {

@@ -32,4 +32,18 @@ describe('cascadeDeleteUser — 抹除完整性', () => {
     expect(store.notificationsForUser('u1')).toHaveLength(0)
     expect(store.notificationsForUser('u2')).toHaveLength(1)
   })
+
+  it('清除被删用户上传的媒体(视频消息文件元数据)；他人媒体保留', () => {
+    const store = new MemoryStore()
+    store.createUser(user('u1'))
+    store.createUser(user('u2'))
+    store.createMedia({ id: 'vid-u1', ownerId: 'u1', mime: 'video/mp4', size: 100, createdAt: 1 })
+    store.createMedia({ id: 'vid-u2', ownerId: 'u2', mime: 'video/mp4', size: 200, createdAt: 2 })
+
+    cascadeDeleteUser(store, 'u1')
+
+    expect(store.findMedia('vid-u1')).toBeUndefined()  // 被删用户上传的媒体随删号清除（不留孤儿 PII）
+    expect(store.mediaByOwner('u1')).toHaveLength(0)
+    expect(store.findMedia('vid-u2')).toBeTruthy()      // 他人媒体不受影响
+  })
 })

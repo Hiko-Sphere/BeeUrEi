@@ -1,9 +1,10 @@
 import type { Store } from './store'
 import { removeKycBlob } from '../kyc/storage'
+import { removeMediaFile } from '../media/storage'
 
 /// 删除一个用户时的级联清理（账号自删与管理员删号共用，保证数据一致、不留孤儿）。
-/// 处理：群（自己建的解散、参与的退出）→ 消息（单聊双向 + 群内发言）→ 绑定 → Passkey → 会话
-///   → 黑名单（任一方向）→ 站内通知 → KYC → 用户本体。
+/// 处理：群（自己建的解散、参与的退出）→ 消息（单聊双向 + 群内发言）→ 该用户上传的媒体文件
+///   → 绑定 → Passkey → 会话 → 黑名单（任一方向）→ 站内通知 → KYC → 用户本体。
 /// 刻意保留：警告/举报等审核与审计记录（用 nameOf 兜底显示 '—'，留存合规证据；删除会破坏可追责性）；
 ///   通话录制亦保留（可为举报证据，且有独立留存策略）。
 export function cascadeDeleteUser(store: Store, id: string): void {
@@ -12,6 +13,9 @@ export function cascadeDeleteUser(store: Store, id: string): void {
     else store.updateGroup(g.id, { memberIds: g.memberIds.filter((m) => m !== id) }) // 成员删号 → 退群
   }
   store.deleteMessagesForUser(id)
+  // 该用户上传的媒体（视频消息文件等）：删号即清磁盘文件 + 元数据，否则视频文件成孤儿、
+  // 留存其 PII（cascade 承诺"不留孤儿"；deleteMessagesForUser 只删消息记录不碰磁盘文件）。
+  for (const m of store.mediaByOwner(id)) { removeMediaFile(m.id); store.deleteMedia(m.id) }
   for (const l of store.linksByOwner(id)) store.deleteLink(l.id)
   for (const l of store.linksByMember(id)) store.deleteLink(l.id)
   for (const pk of store.passkeysForUser(id)) store.deletePasskey(pk.id, id)

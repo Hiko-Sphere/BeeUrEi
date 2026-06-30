@@ -673,6 +673,10 @@ export class SqliteStore implements Store {
   deleteMedia(id: string): void {
     this.db.prepare('DELETE FROM media WHERE id = ?').run(id)
   }
+  mediaByOwner(userId: string): MediaMeta[] {
+    return (this.db.prepare('SELECT * FROM media WHERE ownerId = ?').all(userId) as any[])
+      .map((row) => ({ id: row.id, ownerId: row.ownerId, mime: row.mime, size: Number(row.size), createdAt: Number(row.createdAt) }))
+  }
 
   // MARK: row mappers
   private toMessage(r: any): ChatMessage {

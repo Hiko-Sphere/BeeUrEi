@@ -547,6 +547,7 @@ export interface Store {
   createMedia(m: MediaMeta): void
   findMedia(id: string): MediaMeta | undefined
   deleteMedia(id: string): void
+  mediaByOwner(userId: string): MediaMeta[] // 某用户上传的全部媒体（删号级联清磁盘文件用）
 }
 
 /// 内存实现（测试用）。
@@ -1086,6 +1087,9 @@ export class MemoryStore implements Store {
   }
   deleteMedia(id: string): void {
     if (this.media.delete(id)) this.afterMutate()
+  }
+  mediaByOwner(userId: string): MediaMeta[] {
+    return [...this.media.values()].filter((m) => m.ownerId === userId)
   }
 
   protected afterMutate(): void { /* 内存无需持久化 */ }

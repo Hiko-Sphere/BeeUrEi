@@ -521,6 +521,9 @@ export class SqliteStore implements Store {
     const row = this.db.prepare('SELECT COUNT(*) AS n FROM notifications WHERE userId = ? AND readAt IS NULL').get(userId) as { n: number }
     return Number(row?.n ?? 0)
   }
+  deleteNotificationsForUser(userId: string): void {
+    this.db.prepare('DELETE FROM notifications WHERE userId = ?').run(userId)
+  }
 
   // MARK: messages
   createMessage(m: ChatMessage): void {

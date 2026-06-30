@@ -495,6 +495,7 @@ export interface Store {
   markNotificationRead(id: string, userId: string): void // 仅本人可标记
   markAllNotificationsRead(userId: string): number
   unreadNotificationCount(userId: string): number
+  deleteNotificationsForUser(userId: string): void // 删号级联：清除该用户全部站内通知（GDPR 抹除）
 
   createMessage(m: ChatMessage): void
   findMessage(id: string): ChatMessage | undefined
@@ -925,6 +926,11 @@ export class MemoryStore implements Store {
     let n = 0
     for (const x of this.notifications.values()) if (x.userId === userId && x.readAt == null) n++
     return n
+  }
+  deleteNotificationsForUser(userId: string): void {
+    let changed = false
+    for (const [k, n] of this.notifications) if (n.userId === userId) { this.notifications.delete(k); changed = true }
+    if (changed) this.afterMutate()
   }
 
   createMessage(m: ChatMessage): void {

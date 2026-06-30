@@ -1,0 +1,35 @@
+import { describe, it, expect } from 'vitest'
+import { MemoryStore } from '../src/db/store'
+import { cascadeDeleteUser } from '../src/db/cascade'
+
+function user(id: string) {
+  return { id, username: id, passwordHash: 'h', displayName: id, role: 'blind', status: 'active', createdAt: 1 } as any
+}
+
+describe('cascadeDeleteUser — 抹除完整性', () => {
+  it('清除被删用户的黑名单(任一方向)与站内通知；不波及他人无关数据', () => {
+    const store = new MemoryStore()
+    store.createUser(user('u1'))
+    store.createUser(user('u2'))
+    store.createUser(user('u3'))
+    // u1 拉黑 u2；u3 拉黑 u1（任一方向都须随 u1 删号清除）。u2 拉黑 u3（与 u1 无关，须保留）。
+    store.createBlock({ id: 'b1', blockerId: 'u1', blockedId: 'u2', createdAt: 1 })
+    store.createBlock({ id: 'b2', blockerId: 'u3', blockedId: 'u1', createdAt: 2 })
+    store.createBlock({ id: 'b3', blockerId: 'u2', blockedId: 'u3', createdAt: 3 })
+    // u1 的通知 + u2 的通知（u2 的须保留）。
+    store.createNotification({ id: 'n1', userId: 'u1', kind: 'kyc_verified', title: 't', body: 'b', createdAt: 1 })
+    store.createNotification({ id: 'n2', userId: 'u2', kind: 'report_resolved', title: 't', body: 'b', createdAt: 2 })
+
+    cascadeDeleteUser(store, 'u1')
+
+    // u1 已删；涉及 u1 的拉黑(b1/b2)清除，无关的 b3 保留。
+    expect(store.findById('u1')).toBeUndefined()
+    expect(store.findBlock('b1')).toBeUndefined()
+    expect(store.findBlock('b2')).toBeUndefined()
+    expect(store.findBlock('b3')).toBeTruthy()
+    expect(store.blocksInvolving('u1')).toHaveLength(0) // 被删用户 id 不再残留于任何黑名单
+    // u1 的通知清空，u2 的保留。
+    expect(store.notificationsForUser('u1')).toHaveLength(0)
+    expect(store.notificationsForUser('u2')).toHaveLength(1)
+  })
+})

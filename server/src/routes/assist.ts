@@ -112,6 +112,11 @@ export function registerAssistRoutes(
     const allowed = new Set([...owned, ...memberOf])
     const targets = parsed.data.targetUserIds.filter((id) => allowed.has(id) && !blocked.has(id)) // 排除黑名单
     if (targets.length === 0) return reply.code(403).send({ error: 'not_linked' })
+    // 防单用户用大量 callId 灌满待接表、把他人(尤其盲人的紧急来电)挤出全局 cap。
+    // 仅新 callId 受限；重发自己已有的 callId 放行。上限给足紧急重拨余量(10>正常的 1)。
+    if (!pendingCalls.hasActive(parsed.data.callId, Date.now()) && pendingCalls.activeCountFor(from.sub, Date.now()) >= 10) {
+      return reply.code(429).send({ error: 'too_many_requests' })
+    }
     const ok = pendingCalls.register({
       callId: parsed.data.callId,
       fromUserId: from.sub,

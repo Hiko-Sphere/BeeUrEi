@@ -39,6 +39,15 @@ export class PendingCallRegistry {
     return true
   }
 
+  /// 某发起人当前未过期的待接来电数。用于限制单用户占位、防其用大量 callId 灌满全局 cap、
+  /// 把他人(尤其盲人发起的紧急来电)从待接表挤出(被叫前台轮询就看不到→接不通)。
+  activeCountFor(fromUserId: string, now: number): number {
+    this.prune(now)
+    let n = 0
+    for (const c of this.calls.values()) if (c.fromUserId === fromUserId) n++
+    return n
+  }
+
   /// 返回该 callId 的合法参与者（发起者 + 目标）；未登记则 null。供信令 join 的参与权校验（见审查 #8）。
   /// 传 now 则先清过期（过期条目视为不存在，避免僵尸条目影子覆盖参与权，见审查 #7）。
   participants(callId: string, now?: number): string[] | null {

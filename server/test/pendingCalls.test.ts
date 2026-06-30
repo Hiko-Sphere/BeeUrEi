@@ -10,6 +10,16 @@ describe('PendingCallRegistry', () => {
     createdAt: over.createdAt ?? 0,
   })
 
+  it('activeCountFor：只数某发起人未过期的待接来电（防灌待接表限流依据）', () => {
+    const r = new PendingCallRegistry() // 默认 TTL 180s
+    r.register({ callId: 'a1', fromUserId: 'A', fromName: 'A', toUserIds: ['x'], createdAt: 0 })
+    r.register({ callId: 'a2', fromUserId: 'A', fromName: 'A', toUserIds: ['y'], createdAt: 0 })
+    r.register({ callId: 'b1', fromUserId: 'B', fromName: 'B', toUserIds: ['z'], createdAt: 0 })
+    expect(r.activeCountFor('A', 0)).toBe(2)
+    expect(r.activeCountFor('B', 0)).toBe(1)
+    expect(r.activeCountFor('A', 200_000)).toBe(0) // 过期(>180s)后归零
+  })
+
   it('delivers a pending call only to its targets', () => {
     const r = new PendingCallRegistry()
     r.register(base({ toUserIds: ['helper1', 'family1'] }))

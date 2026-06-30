@@ -103,6 +103,8 @@ export class SqliteStore implements Store {
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_callrec_callee ON call_records (calleeId, createdAt)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_recordings_owner ON recordings (ownerId, recordedAt)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_media_owner ON media (ownerId)')
+    // recordingByMediaId 在**每次** GET /api/media 都被调（拦截录制媒体外泄），缺索引则每次媒体下载全表扫 recordings。
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_recordings_media ON recordings (mediaId)')
     // Admin v3：审核处置 + 审计日志 + 用户警告
     try { this.db.exec('ALTER TABLE reports ADD COLUMN decision TEXT') } catch { /* 列已存在 */ }
     try { this.db.exec('ALTER TABLE reports ADD COLUMN resolvedBy TEXT') } catch { /* 列已存在 */ }
@@ -120,6 +122,8 @@ export class SqliteStore implements Store {
     try { this.db.exec('ALTER TABLE recordings ADD COLUMN deletedAt INTEGER') } catch { /* 列已存在 */ } // 用户软删除（管理员留存期内仍可见）
     // 举报证据：关联录制。
     try { this.db.exec('ALTER TABLE reports ADD COLUMN evidenceRecordingId TEXT') } catch { /* 列已存在 */ }
+    // reportsCitingRecording 在留存清扫里**逐条过期录制**调用（取证保护判定）；缺索引则每条录制全表扫 reports。
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_reports_evidence ON reports (evidenceRecordingId)')
     // 站内通知（持久化收件箱）。
     this.db.exec('CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, userId TEXT, kind TEXT, title TEXT, body TEXT, dataJson TEXT, createdAt INTEGER, readAt INTEGER)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications (userId, createdAt)')

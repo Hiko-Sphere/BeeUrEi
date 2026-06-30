@@ -12,7 +12,8 @@ describe('SqliteStore (node:sqlite)', () => {
     const names = new Set(store.db.prepare("SELECT name FROM sqlite_master WHERE type='index'").all().map((r) => r.name))
     for (const idx of ['idx_links_owner', 'idx_links_member', 'idx_blocks_blocker', 'idx_blocks_blocked',
       'idx_callrec_caller', 'idx_callrec_callee', 'idx_recordings_owner', 'idx_media_owner', 'idx_notif_user',
-      'idx_users_username_nocase', 'idx_users_email_nocase', 'idx_users_phone', 'idx_users_apple']) {
+      'idx_users_username_nocase', 'idx_users_email_nocase', 'idx_users_phone', 'idx_users_apple',
+      'idx_recordings_media', 'idx_reports_evidence']) {
       expect(names.has(idx)).toBe(true)
     }
   })

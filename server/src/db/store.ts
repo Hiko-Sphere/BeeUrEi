@@ -990,9 +990,10 @@ export class MemoryStore implements Store {
       if (m.fromId !== userId && m.toId !== userId) continue
       const peer = m.fromId === userId ? m.toId : m.fromId
       const cur = latest.get(peer)
-      if (!cur || m.createdAt > cur.createdAt) latest.set(peer, m)
+      // 取每对端 (createdAt,id) 最大的那条为"最新"——同毫秒也确定唯一，与 SqliteStore 口径一致。
+      if (!cur || byTimeThenId(m, cur) > 0) latest.set(peer, m)
     }
-    return [...latest.values()].sort((x, y) => y.createdAt - x.createdAt)
+    return [...latest.values()].sort((x, y) => -byTimeThenId(x, y))
   }
   markMessagesRead(readerId: string, fromId: string, at: number): number {
     let n = 0

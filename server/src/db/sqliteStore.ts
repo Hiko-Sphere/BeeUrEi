@@ -560,17 +560,18 @@ export class SqliteStore implements Store {
     return rows.map((r) => this.toMessage(r))
   }
   latestMessagesPerPeer(userId: string): ChatMessage[] {
-    // 每个对端取最新一条（按对端分组的最大 createdAt）。
+    // 每个对端取 (createdAt,id) 最大的**唯一**一条。用 ROW_NUMBER 而非 MAX(createdAt) JOIN：
+    // 否则同对端两条同毫秒消息会双双命中 MAX，导致该对端在会话列表里重复出现（见与 MemoryStore 对齐）。
     const rows = this.db.prepare(
-      `SELECT m.* FROM messages m
-       JOIN (
-         SELECT CASE WHEN fromId = ? THEN toId ELSE fromId END AS peer, MAX(createdAt) AS latest
-         FROM messages WHERE groupId IS NULL AND (fromId = ? OR toId = ?)
-         GROUP BY peer
-       ) t ON (CASE WHEN m.fromId = ? THEN m.toId ELSE m.fromId END) = t.peer AND m.createdAt = t.latest
-       WHERE m.groupId IS NULL AND (m.fromId = ? OR m.toId = ?)
-       ORDER BY m.createdAt DESC`,
-    ).all(userId, userId, userId, userId, userId, userId)
+      `SELECT * FROM (
+         SELECT m.*, ROW_NUMBER() OVER (
+           PARTITION BY (CASE WHEN m.fromId = ? THEN m.toId ELSE m.fromId END)
+           ORDER BY m.createdAt DESC, m.id DESC
+         ) AS rn
+         FROM messages m WHERE m.groupId IS NULL AND (m.fromId = ? OR m.toId = ?)
+       ) WHERE rn = 1
+       ORDER BY createdAt DESC, id DESC`,
+    ).all(userId, userId, userId)
     return rows.map((r) => this.toMessage(r))
   }
   markMessagesRead(readerId: string, fromId: string, at: number): number {

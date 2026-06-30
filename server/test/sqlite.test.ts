@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { SqliteStore } from '../src/db/sqliteStore'
-import type { User } from '../src/db/store'
+import { MemoryStore, type User } from '../src/db/store'
 
 function user(id: string, username: string): User {
   return { id, username, passwordHash: 'h', displayName: username, role: 'blind', status: 'active', createdAt: 1000 }
@@ -113,6 +113,25 @@ describe('SqliteStore (node:sqlite)', () => {
     expect(store.messagesBetween('u1', 'u2', 2, 1000).map((m) => m.id)).toEqual(['m0']) // mA 被严格游标漏掉
     // 复合游标 before=(1000, 'mB')：正确取到边界前的 mA 与更早的 m0，不漏。
     expect(store.messagesBetween('u1', 'u2', 10, 1000, 'mB').map((m) => m.id)).toEqual(['m0', 'mA'])
+  })
+
+  it('latestMessagesPerPeer：对端最新两条同毫秒时只返回一条（不重复出现在会话列表）', () => {
+    const store = new SqliteStore(':memory:')
+    store.createMessage({ id: 'x1', fromId: 'u1', toId: 'u2', kind: 'text', text: '1', createdAt: 5000 })
+    // u2 最新两条都在 5000ms：旧实现 MAX(createdAt) JOIN 会双双命中 → u2 重复。
+    store.createMessage({ id: 'x2', fromId: 'u2', toId: 'u1', kind: 'text', text: '2', createdAt: 5000 })
+    store.createMessage({ id: 'x3', fromId: 'u1', toId: 'u2', kind: 'text', text: '3', createdAt: 5000 })
+    const latest = store.latestMessagesPerPeer('u1')
+    expect(latest.length).toBe(1) // u2 只出现一次
+    expect(latest[0].id).toBe('x3') // (createdAt,id) 最大者为最新
+    // MemoryStore 同口径（两存储对"同毫秒哪条为最新"必须一致，否则 Sqlite/JSON 预览不一致）。
+    const mem = new MemoryStore()
+    mem.createMessage({ id: 'x1', fromId: 'u1', toId: 'u2', kind: 'text', text: '1', createdAt: 5000 })
+    mem.createMessage({ id: 'x2', fromId: 'u2', toId: 'u1', kind: 'text', text: '2', createdAt: 5000 })
+    mem.createMessage({ id: 'x3', fromId: 'u1', toId: 'u2', kind: 'text', text: '3', createdAt: 5000 })
+    const memLatest = mem.latestMessagesPerPeer('u1')
+    expect(memLatest.length).toBe(1)
+    expect(memLatest[0].id).toBe('x3')
   })
 
   it('persists across reopen (file-backed)', () => {

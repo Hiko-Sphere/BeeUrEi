@@ -159,6 +159,27 @@ describe('recordings media-link + 级联 + 后台清理（录制功能补完）'
     expect(store.findMedia('em')).toBeUndefined() // 过期录制的媒体一并清
     expect(store.findRecording('freshrec')).toBeTruthy()
   })
+
+  it('取证留存：被未结(open)举报引用的过期录制不清；举报 resolved 后才清（连同媒体）', async () => {
+    const store = new MemoryStore()
+    store.setRecordingConfig({ retentionDays: 7 })
+    const now = 10_000 * 86_400_000
+    store.createMedia({ id: 'm-held', ownerId: 'o', mime: 'video/quicktime', size: 1, createdAt: now })
+    store.createRecording({ id: 'held', callId: 'c', ownerId: 'o', consentBy: [], reason: '', recordedAt: now - 8 * 86_400_000, mediaId: 'm-held' })
+    // 一条未结举报把该录制列为证据。
+    store.createReport({ id: 'rep1', reporterId: 'u1', targetUserId: 'u2', reason: 'abuse', status: 'open', createdAt: now, evidenceRecordingId: 'held' })
+
+    // 举报未结 → 即使已过 7 天也不清（取证保护，证据不能被自动留存策略抹掉）。
+    expect(sweepExpiredRecordings(store, now)).toBe(0)
+    expect(store.findRecording('held')).toBeTruthy()
+    expect(store.findMedia('m-held')).toBeTruthy()
+
+    // 举报处置完毕 → 再次清理才删录制与其媒体。
+    store.updateReport('rep1', { status: 'resolved' })
+    expect(sweepExpiredRecordings(store, now)).toBe(1)
+    expect(store.findRecording('held')).toBeUndefined()
+    expect(store.findMedia('m-held')).toBeUndefined()
+  })
 })
 
 import { RecordingConsentRegistry } from '../src/recording/consentRegistry'

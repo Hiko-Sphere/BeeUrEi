@@ -67,6 +67,35 @@ describe('摔倒/车祸紧急警报', () => {
     expect((strangerNotifs.json() as any).notifications).toHaveLength(0)
   })
 
+  it('无 APNs token 的 accepted 亲友（如 web-only 协助者）仍写持久化通知，能在通知中心回看', async () => {
+    // 安全攸关回归：旧实现把持久化通知也按 apnsToken 过滤——无 token 的亲友既收不到推送、
+    // 也看不到通知，对摔倒/车祸告警完全无感。现持久化通知须发给每个 accepted 亲友。
+    const push = new FakePush()
+    const app = buildApp(new MemoryStore(), { pushSender: push })
+    const blind = await reg(app, 'blindx', 'blind')
+    const webFam = await reg(app, 'webfam', 'helper')   // 仅网页端，从不注册 APNs token
+    const iosFam = await reg(app, 'iosfam', 'family')
+    await bind(app, blind.token, webFam.token, 'webfam')
+    await bind(app, blind.token, iosFam.token, 'iosfam')
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(iosFam.token), payload: { token: 'd'.repeat(64) } })
+
+    const res = await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token), payload: { kind: 'fall' } })
+    expect(res.statusCode).toBe(200)
+    expect((res.json() as any).notified).toBe(1)  // 仅 iosFam 有 token → 实时推送 1
+    expect((res.json() as any).contacts).toBe(2)  // accepted 亲友共 2
+    expect(push.sent).toHaveLength(1)             // 推送只发给有 token 的
+
+    // 关键：web-only 亲友虽无推送，仍能在通知中心看到这次告警。
+    const webNotifs = await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(webFam.token) })
+    const feed = (webNotifs.json() as any).notifications
+    expect(feed).toHaveLength(1)
+    expect(feed[0].kind).toBe('emergency_alert')
+    expect(feed[0].data.kind).toBe('fall')
+    // 有 token 的亲友同样有持久化通知。
+    const iosNotifs = await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(iosFam.token) })
+    expect((iosNotifs.json() as any).notifications).toHaveLength(1)
+  })
+
   it('非法 kind 拒绝', async () => {
     const app = buildApp(new MemoryStore())
     const blind = await reg(app, 'blind2', 'blind')

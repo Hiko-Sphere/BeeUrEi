@@ -47,9 +47,9 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     const links = store.linksByOwner(me.id).filter((l) => (l.status ?? 'accepted') === 'accepted')
     // 安全攸关：所有亲友必须**并行**收到告警，且任一推送失败绝不能中断其余推送或 500 整个请求。
     // 此前串行 await——第一个亲友的 APNs 抛错会让后面所有亲友收不到摔倒告警。
-    const recipients = links
+    const members = links
       .map((link) => store.findById(link.memberId))
-      .filter((m): m is NonNullable<typeof m> => !!m?.apnsToken)
+      .filter((m): m is NonNullable<typeof m> => !!m)
     const extraBase: Record<string, string> = { type: 'emergency_alert', kind: parsed.data.kind, fromId: me.id }
     if (parsed.data.lat != null && parsed.data.lon != null) {
       extraBase.lat = String(parsed.data.lat)
@@ -61,18 +61,24 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
       notifData.lat = String(parsed.data.lat)
       notifData.lon = String(parsed.data.lon)
     }
-    await Promise.allSettled(recipients.map((member) => {
+    await Promise.allSettled(members.map((member) => {
       const l = pushLang(member.language)
       const title = pushStrings.emergencyAlertTitle(me.displayName, l)
       const body = pushStrings.emergencyAlertBody(parsed.data.kind, parsed.data.lat != null, l)
-      // 持久化通知：亲友即使错过这条 APNs（App 关闭/推送丢失），也能在通知中心回看这次摔倒/车祸告警。
+      // 持久化通知发给**每个** accepted 亲友（含无 APNs token 者：web-only 协助者 / 推送被拒 /
+      // token 未注册）——否则这些人对摔倒/车祸告警完全无感。这正是"错过推送也能在通知中心回看"
+      // 兜底要覆盖的对象，绝不能再按 token 过滤（旧实现把兜底也漏给了最需要它的人）。
       // best-effort：写入失败绝不能中断对其余亲友的告警推送。
       try {
         store.createNotification({ id: randomUUID(), userId: member.id, kind: 'emergency_alert', title, body, data: notifData, createdAt: Date.now() })
       } catch { /* 通知不可阻断安全攸关的告警推送 */ }
+      // APNs 推送仅发给有 token 的；无 token 者靠上面的持久化通知在通知中心兜底。
+      if (!member.apnsToken) return Promise.resolve()
       // badge=该亲友未读总数（含刚写入的本条告警），与图标角标主线一致。
-      return pushSender.sendAlert(member.apnsToken!, title, body, extraBase, undefined, totalUnreadFor(store, member.id).total)
+      return pushSender.sendAlert(member.apnsToken, title, body, extraBase, undefined, totalUnreadFor(store, member.id).total)
     }))
-    return { ok: true, notified: recipients.length, contacts: links.length }
+    // notified=实际推送对象数（有 token 者）；contacts=accepted 亲友总数。
+    // 二者差值 = 仅靠通知中心兜底、未收到实时推送的人——客户端可据此提示用户。
+    return { ok: true, notified: members.filter((m) => !!m.apnsToken).length, contacts: links.length }
   })
 }

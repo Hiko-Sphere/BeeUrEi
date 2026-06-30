@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, APIError, type RecordingInfo } from '../lib/api'
-import { apiURL } from '../lib/config'
+import { api, APIError, fetchRecordingObjectURL, type RecordingInfo } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { Card, Button, Pill, Spinner, EmptyState, useToast, fmtTime, fmtDuration } from '../components/ui'
 import { IconFilm, IconX } from '../components/icons'
@@ -14,13 +13,15 @@ export function RecordingsPage() {
 
   const load = async () => { try { const r = await api.myRecordings(); setItems(r.recordings) } catch { setItems([]) } }
   useEffect(() => { void load() }, [])
+  // 回放用的是 blob objectURL：关闭弹窗 / 换播另一条 / 卸载时释放，避免内存泄漏。
+  useEffect(() => { const u = playing?.url; return () => { if (u) URL.revokeObjectURL(u) } }, [playing?.url])
 
   const play = async (rec: RecordingInfo) => {
     if (!rec.hasMedia) { toast(t('该录制暂无可播放媒体', 'No playable media'), 'error'); return }
     setLoadingId(rec.id)
     try {
-      const { token } = await api.recordingPlayToken(rec.id)
-      setPlaying({ rec, url: apiURL(`/api/recordings/${rec.id}/media?t=${encodeURIComponent(token)}`) })
+      const url = await fetchRecordingObjectURL(rec.id) // Bearer→blob：无 60s 令牌过期、拖动/重播不再请求服务端
+      setPlaying({ rec, url })
     } catch (e) {
       const msg = e instanceof APIError && e.status === 403 ? t('该录制已删除或无权查看', 'Recording deleted or no access')
         : e instanceof APIError && e.status === 404 ? t('找不到录制或媒体文件', 'Recording or media not found')

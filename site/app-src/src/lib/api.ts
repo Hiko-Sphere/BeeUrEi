@@ -315,6 +315,16 @@ export async function fetchMediaObjectURL(id: string): Promise<string> {
   return URL.createObjectURL(await res.blob())
 }
 
+// 录制回放：同样用 Bearer 拉 blob 后 objectURL，而非 `<video src=...?t=令牌>` 流式。
+// 那个 ?t= 媒体令牌仅 60s——而 <video> 的每个 Range 请求都带它，故 >60s 的回放或拖动会 401 致播放中断；
+// 改走 1h access token 一次性下载(媒体≤50MB)，blob 本地播放后拖动/重播都不再请求服务端，且 URL 里不再带令牌
+// (无 URL 令牌泄漏面)。与 iOS「下载到本地再播」一致。错误状态码透传，供调用方区分 403/404。
+export async function fetchRecordingObjectURL(id: string): Promise<string> {
+  const res = await fetch(apiURL(`/api/recordings/${id}/media`), { headers: tokenStore.token ? { authorization: 'Bearer ' + tokenStore.token } : {} })
+  if (!res.ok) throw new APIError('media_failed', res.status)
+  return URL.createObjectURL(await res.blob())
+}
+
 // 把用户选的图片经 canvas 重编码为 JPEG（≤2048px 长边）——天然剥离 EXIF/GPS，并控制体积；
 // 与服务端的元数据剥离形成纵深防御。失败则抛 image_decode_failed。
 export async function reencodeToJpeg(file: File, maxEdge = 2048): Promise<Blob> {

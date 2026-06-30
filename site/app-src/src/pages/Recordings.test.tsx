@@ -2,9 +2,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
-// RecordingsPage 仅用 useI18n(默认 ctx)+useToast(no-op 默认)+api；apiURL(config)仅播放时调用，渲染不触及。
+// RecordingsPage 仅用 useI18n(默认 ctx)+useToast(no-op 默认)+api；fetchRecordingObjectURL 仅播放时调用，渲染不触及。
 vi.mock('../lib/api', () => ({
-  api: { myRecordings: vi.fn(), recordingPlayToken: vi.fn(), deleteMyRecording: vi.fn() },
+  api: { myRecordings: vi.fn(), deleteMyRecording: vi.fn() },
+  fetchRecordingObjectURL: vi.fn(),
   APIError: class extends Error { code = ''; status = 0 },
 }))
 import { api } from '../lib/api'

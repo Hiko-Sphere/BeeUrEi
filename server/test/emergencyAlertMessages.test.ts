@@ -54,6 +54,17 @@ describe('摔倒/车祸紧急警报', () => {
     expect(push.sent[0].title).toContain('Emergency')
     expect(push.sent[0].extra?.lat).toBe('39.9')
     expect(push.sent[0].extra?.kind).toBe('fall')
+    expect(push.sent[0].badge).toBe(1) // 图标角标=亲友未读总数（这条告警）
+
+    // 持久化：亲友在通知中心能回看这次告警（即使错过推送）；陌生人(pending)无。
+    const famNotifs = await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(fam.token) })
+    const feed = (famNotifs.json() as any).notifications
+    expect(feed).toHaveLength(1)
+    expect(feed[0].kind).toBe('emergency_alert')
+    expect(feed[0].data.kind).toBe('fall')
+    expect(feed[0].data.fromId).toBe(blind.user.id)
+    const strangerNotifs = await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(stranger.token) })
+    expect((strangerNotifs.json() as any).notifications).toHaveLength(0)
   })
 
   it('非法 kind 拒绝', async () => {

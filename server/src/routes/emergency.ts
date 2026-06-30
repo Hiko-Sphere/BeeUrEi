@@ -1,10 +1,12 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
+import { randomUUID } from 'node:crypto'
 import { type Store } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { planEmergencyRoute } from '../emergency/routing'
 import { NoopPushSender, type PushSender } from '../push/apns'
 import { pushLang, pushStrings } from '../push/pushStrings'
+import { totalUnreadFor } from '../db/unread'
 
 const alertSchema = z.object({
   kind: z.enum(['fall', 'crash', 'manual']), // manual=用户手动 SOS（未实名门禁屏等处的紧急按钮）
@@ -53,12 +55,23 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
       extraBase.lat = String(parsed.data.lat)
       extraBase.lon = String(parsed.data.lon)
     }
+    // 通知记录的 data 形状与推送 extra 一致（去掉 type，记录的 kind 字段已表达类别）。
+    const notifData: Record<string, string> = { kind: parsed.data.kind, fromId: me.id }
+    if (parsed.data.lat != null && parsed.data.lon != null) {
+      notifData.lat = String(parsed.data.lat)
+      notifData.lon = String(parsed.data.lon)
+    }
     await Promise.allSettled(recipients.map((member) => {
       const l = pushLang(member.language)
-      return pushSender.sendAlert(member.apnsToken!,
-        pushStrings.emergencyAlertTitle(me.displayName, l),
-        pushStrings.emergencyAlertBody(parsed.data.kind, parsed.data.lat != null, l),
-        extraBase)
+      const title = pushStrings.emergencyAlertTitle(me.displayName, l)
+      const body = pushStrings.emergencyAlertBody(parsed.data.kind, parsed.data.lat != null, l)
+      // 持久化通知：亲友即使错过这条 APNs（App 关闭/推送丢失），也能在通知中心回看这次摔倒/车祸告警。
+      // best-effort：写入失败绝不能中断对其余亲友的告警推送。
+      try {
+        store.createNotification({ id: randomUUID(), userId: member.id, kind: 'emergency_alert', title, body, data: notifData, createdAt: Date.now() })
+      } catch { /* 通知不可阻断安全攸关的告警推送 */ }
+      // badge=该亲友未读总数（含刚写入的本条告警），与图标角标主线一致。
+      return pushSender.sendAlert(member.apnsToken!, title, body, extraBase, undefined, totalUnreadFor(store, member.id).total)
     }))
     return { ok: true, notified: recipients.length, contacts: links.length }
   })

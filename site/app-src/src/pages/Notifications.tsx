@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import { api, type NotificationInfo } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { Card, Button, Spinner, EmptyState, fmtTime } from '../components/ui'
-import { IconBell, IconShield, IconPhone, IconUsers, IconFilm } from '../components/icons'
+import { IconBell, IconShield, IconPhone, IconUsers, IconFilm, IconFlash } from '../components/icons'
 
 function iconFor(kind: string) {
+  if (kind.includes('emergency')) return <IconFlash />
   if (kind.includes('call')) return <IconPhone />
   if (kind.includes('friend') || kind.includes('link')) return <IconUsers />
   if (kind.includes('report') || kind.includes('moderation') || kind.includes('ban')) return <IconShield />

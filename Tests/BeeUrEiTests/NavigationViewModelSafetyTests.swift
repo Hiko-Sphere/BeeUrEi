@@ -32,6 +32,11 @@ final class NavigationViewModelSafetyTests: XCTestCase {
     private let originLat = 39.9000
     private let lon = 116.4000
 
+    override func tearDown() {
+        BreadcrumbStore.shared.reset() // 轨迹存进程内单例，跨测试隔离避免相互污染
+        super.tearDown()
+    }
+
     private func makeVM() -> NavigationViewModel {
         service = MockNavService()
         let vm = NavigationViewModel(service: service, spatial: MockSpatialCue())
@@ -80,6 +85,18 @@ final class NavigationViewModelSafetyTests: XCTestCase {
         vm.stopTrailRecording()
         vm.startBacktrack()
         XCTAssertTrue(vm.running)
+    }
+
+    /// 回归：导航 sheet 关闭会重建 @State 模型（语音"原路返回"更会开新 sheet）。轨迹经 BreadcrumbStore
+    /// 持久后，新模型仍能据此回程——修复"轨迹随 sheet 关闭丢失、语音原路返回永远空轨迹失败"的 bug。
+    func testTrailPersistsAcrossModelRecreation() {
+        let vm1 = makeVM()
+        recordTrail(vm1)          // 记 3 点（存进单例）
+        vm1.stop()                // 关闭旧 sheet：stop() 不应清空轨迹
+        let vm2 = makeVM()        // 新 sheet → 新模型（模拟语音 .goHome 开的全新导航页）
+        XCTAssertEqual(vm2.trailCount, 3) // 新模型 init 即反映持久轨迹（"原路返回(3点)"按钮可见）
+        vm2.startBacktrack()
+        XCTAssertTrue(vm2.running) // 据持久轨迹成功进入回程，而非"还没有可返回的路线"
     }
 
     func testArrivalRequiresPreciseFix() {

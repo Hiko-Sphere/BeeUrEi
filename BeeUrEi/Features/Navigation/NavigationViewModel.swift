@@ -4,6 +4,17 @@ import AVFoundation
 import CoreLocation
 import MapKit
 
+/// 面包屑轨迹的**进程内持久存储**：导航视图(sheet)关闭即重建 @State 模型，若把轨迹放在模型里，
+/// 记录的路会随 sheet 关闭丢失，导致语音"原路返回"（从主屏开新 sheet）永远拿到空轨迹而失败。
+/// 放进单例后：在任一会话记录的路，关掉再开（含语音触发的新 sheet）仍能据此回程。
+@MainActor
+final class BreadcrumbStore {
+    static let shared = BreadcrumbStore()
+    var trail = BreadcrumbTrail()
+    func reset() { trail = BreadcrumbTrail() } // 清空持久轨迹（测试隔离 / 未来"清除已记路线"入口）
+    private init() {}
+}
+
 /// 步行导航视图模型。海外用 MapKit（实时转向播报 + **空间音信标** + **偏航重规划** +
 /// **AirPods 头追踪**，接已测核心）；国内用高德（经后端，key 在 .env）取步行路线并读出步骤。
 @MainActor
@@ -31,6 +42,7 @@ final class NavigationViewModel {
     init(service: NavigationServicing = NavigationService(), spatial: SpatialCueing = SpatialAudioFeedback()) {
         self.service = service
         self.spatial = spatial
+        trailCount = BreadcrumbStore.shared.trail.count // 反映此前会话记录的轨迹（sheet 重开后"原路返回(N点)"按钮即可见）
     }
     @ObservationIgnored private let offRoute = OffRouteDetector()
 
@@ -63,7 +75,11 @@ final class NavigationViewModel {
     // 面包屑回程（Soundscape 式）：记路 → 一键原路返回。
     private(set) var recordingTrail = false
     private(set) var trailCount = 0
-    @ObservationIgnored private var trail = BreadcrumbTrail()
+    // 轨迹存进程内单例（见 BreadcrumbStore）：sheet 关闭重建模型后，已记录的路仍在，语音"原路返回"可用。
+    private var trail: BreadcrumbTrail {
+        get { BreadcrumbStore.shared.trail }
+        set { BreadcrumbStore.shared.trail = newValue }
+    }
     // 街景预览（Soundscape Street Preview 式）：出门前在家试听整条路线。
     private(set) var previewing = false
 

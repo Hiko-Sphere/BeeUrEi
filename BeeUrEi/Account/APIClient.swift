@@ -459,6 +459,7 @@ struct APIClient {
 
     private func postAuth(_ path: String, body: [String: Any]) async throws -> AuthResult {
         var req = URLRequest(url: apiURL(path))
+        req.timeoutInterval = 30 // JSON 请求空闲超时：挂死的请求最多 30s 即落到可操作的 .network 错误（默认 60s 对盲人等待过久；媒体上传/下载另设更长超时）
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -502,6 +503,7 @@ struct APIClient {
 
     private func authedGet(_ path: String, token: String) async throws -> Data {
         var req = URLRequest(url: apiURL(path))
+        req.timeoutInterval = 30 // JSON 请求空闲超时：挂死的请求最多 30s 即落到可操作的 .network 错误（默认 60s 对盲人等待过久；媒体上传/下载另设更长超时）
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (data, resp): (Data, URLResponse)
         do { (data, resp) = try await URLSession.shared.data(for: req) } catch { throw APIError.network }
@@ -583,6 +585,7 @@ struct APIClient {
     @discardableResult
     private func authedSend(_ method: String, _ path: String, token: String, body: [String: Any]? = nil) async throws -> Data {
         var req = URLRequest(url: apiURL(path))
+        req.timeoutInterval = 30 // JSON 请求空闲超时：挂死的请求最多 30s 即落到可操作的 .network 错误（默认 60s 对盲人等待过久；媒体上传/下载另设更长超时）
         req.httpMethod = method
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         if let body {
@@ -1071,6 +1074,7 @@ struct APIClient {
     @discardableResult
     private func postNoAuth(_ path: String, body: [String: Any]) async throws -> Data {
         var req = URLRequest(url: apiURL(path))
+        req.timeoutInterval = 30 // JSON 请求空闲超时：挂死的请求最多 30s 即落到可操作的 .network 错误（默认 60s 对盲人等待过久；媒体上传/下载另设更长超时）
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONSerialization.data(withJSONObject: body)

@@ -43,22 +43,23 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     if (!me) return reply.code(404).send({ error: 'not_found' })
 
     const links = store.linksByOwner(me.id).filter((l) => (l.status ?? 'accepted') === 'accepted')
-    let notified = 0
-    for (const link of links) {
-      const member = store.findById(link.memberId)
-      if (!member?.apnsToken) continue
+    // 安全攸关：所有亲友必须**并行**收到告警，且任一推送失败绝不能中断其余推送或 500 整个请求。
+    // 此前串行 await——第一个亲友的 APNs 抛错会让后面所有亲友收不到摔倒告警。
+    const recipients = links
+      .map((link) => store.findById(link.memberId))
+      .filter((m): m is NonNullable<typeof m> => !!m?.apnsToken)
+    const extraBase: Record<string, string> = { type: 'emergency_alert', kind: parsed.data.kind, fromId: me.id }
+    if (parsed.data.lat != null && parsed.data.lon != null) {
+      extraBase.lat = String(parsed.data.lat)
+      extraBase.lon = String(parsed.data.lon)
+    }
+    await Promise.allSettled(recipients.map((member) => {
       const l = pushLang(member.language)
-      const extra: Record<string, string> = { type: 'emergency_alert', kind: parsed.data.kind, fromId: me.id }
-      if (parsed.data.lat != null && parsed.data.lon != null) {
-        extra.lat = String(parsed.data.lat)
-        extra.lon = String(parsed.data.lon)
-      }
-      await pushSender.sendAlert(member.apnsToken,
+      return pushSender.sendAlert(member.apnsToken!,
         pushStrings.emergencyAlertTitle(me.displayName, l),
         pushStrings.emergencyAlertBody(parsed.data.kind, parsed.data.lat != null, l),
-        extra)
-      notified++
-    }
-    return { ok: true, notified, contacts: links.length }
+        extraBase)
+    }))
+    return { ok: true, notified: recipients.length, contacts: links.length }
   })
 }

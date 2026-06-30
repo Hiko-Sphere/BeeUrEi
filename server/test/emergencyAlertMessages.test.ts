@@ -63,6 +63,37 @@ describe('摔倒/车祸紧急警报', () => {
       payload: { kind: 'oops' } })
     expect(res.statusCode).toBe(400)
   })
+
+  it('安全攸关：单个亲友推送失败不中断其余亲友，也不 500 整个告警', async () => {
+    // 第一个收件人的 APNs 调用抛错——并行+故障隔离下，其余亲友仍应收到，且请求成功。
+    let calls = 0
+    class FlakyPush implements PushSender {
+      sent: string[] = []
+      async send(): Promise<void> {}
+      async sendCallInvite(): Promise<void> {}
+      async sendAlert(token: string): Promise<void> {
+        calls++
+        if (token === 'a'.repeat(64)) throw new Error('APNs down for this device')
+        this.sent.push(token)
+      }
+    }
+    const push = new FlakyPush()
+    const app = buildApp(new MemoryStore(), { pushSender: push })
+    const blind = await reg(app, 'sosblind', 'blind')
+    const f1 = await reg(app, 'sosfam1', 'helper')
+    const f2 = await reg(app, 'sosfam2', 'family')
+    await bind(app, blind.token, f1.token, 'sosfam1')
+    await bind(app, blind.token, f2.token, 'sosfam2')
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(f1.token), payload: { token: 'a'.repeat(64) } })
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(f2.token), payload: { token: 'c'.repeat(64) } })
+
+    const res = await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token),
+      payload: { kind: 'crash' } })
+    expect(res.statusCode).toBe(200) // 不因单点失败 500
+    expect(calls).toBe(2) // 两位都尝试到了（未在第一位抛错处中断）
+    expect(push.sent).toContain('c'.repeat(64)) // 第二位实际送达
+    expect((res.json() as any).notified).toBe(2) // 派发对象数=有 token 的亲友数
+  })
 })
 
 describe('聊天（绑定好友互发）', () => {

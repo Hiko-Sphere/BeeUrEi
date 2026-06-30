@@ -127,6 +127,11 @@ describe('v5 公告 / 维护模式 / 内容过滤（端到端强制）', () => {
     const name = await app.inject({ method: 'POST', url: '/api/account/profile', headers: auth(u.token), payload: { displayName: '违禁词昵称' } })
     expect(name.statusCode).toBe(403)
     expect(name.json().error).toBe('content_blocked')
+    // 位置名同样过审：违禁词塞进位置 name 不能绕过文本过滤。
+    const loc = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(u.token),
+      payload: { toId: 'x', kind: 'location', text: JSON.stringify({ lat: 31.2, lng: 121.5, name: '违禁词大厦' }) } })
+    expect(loc.statusCode).toBe(403)
+    expect(loc.json().error).toBe('content_blocked')
   })
 
   it('app-config 不下发 contentFilter 词表（不泄露违禁词）', async () => {

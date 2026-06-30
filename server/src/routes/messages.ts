@@ -28,6 +28,10 @@ const locationSchema = z.object({
 function isValidLocation(text: string): boolean {
   try { return locationSchema.safeParse(JSON.parse(text)).success } catch { return false }
 }
+/// 取位置载荷里的用户可见地址名（用于内容审核——否则违禁词塞进位置名可绕过文本过滤）。
+function locationName(text: string): string {
+  try { return locationSchema.parse(JSON.parse(text)).name ?? '' } catch { return '' }
+}
 
 /// 聊天（参照 WhatsApp/iMessage 核心集：文本 + 语音条 + 图片 + 视频 + 已读回执 + 未读数 + 推送）。
 /// 单聊互发资格 = 双方存在 **accepted** 绑定且无任一方向拉黑；群消息资格 = 群成员。
@@ -63,6 +67,8 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     if (kind === 'audio' && !audioPrefix.test(text)) return reply.code(400).send({ error: 'invalid_audio' })
     if (kind === 'image' && !imagePrefix.test(text)) return reply.code(400).send({ error: 'invalid_image' })
     if (kind === 'location' && !isValidLocation(text)) return reply.code(400).send({ error: 'invalid_location' })
+    // 位置名是用户文本，同样过审违禁词（否则把违禁内容塞进地址名即可绕过 text 过滤）。
+    if (kind === 'location' && matchBannedTerm(store.getAppConfig(), locationName(text))) return reply.code(403).send({ error: 'content_blocked' })
     if (kind === 'video') {
       // text = mediaId：必须是发送者本人刚上传的视频文件。
       const media = store.findMedia(text)

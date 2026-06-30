@@ -71,8 +71,8 @@ export function LoginPage() {
 
         <div className="surface rounded-2xl border border-[var(--line)] p-6 shadow-sm">
           <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl surface-2 p-1 text-sm">
-            <button onClick={() => { setMode('login'); setError(null) }} className={`rounded-lg py-2 font-medium transition ${mode === 'login' ? 'surface shadow-sm' : 'text-faint'}`}>{t('登录', 'Sign in')}</button>
-            <button onClick={() => { setMode('register'); setError(null) }} className={`rounded-lg py-2 font-medium transition ${mode === 'register' ? 'surface shadow-sm' : 'text-faint'}`}>{t('注册', 'Register')}</button>
+            <button aria-pressed={mode === 'login'} onClick={() => { setMode('login'); setError(null) }} className={`rounded-lg py-2 font-medium transition ${mode === 'login' ? 'surface shadow-sm' : 'text-faint'}`}>{t('登录', 'Sign in')}</button>
+            <button aria-pressed={mode === 'register'} onClick={() => { setMode('register'); setError(null) }} className={`rounded-lg py-2 font-medium transition ${mode === 'register' ? 'surface shadow-sm' : 'text-faint'}`}>{t('注册', 'Register')}</button>
           </div>
 
           {twoFA ? (
@@ -96,16 +96,19 @@ export function LoginPage() {
                 <Field label={t('用户名', 'Username')} hint={t('3–32 位，字母/数字/下划线', '3–32 chars, letters/numbers/_')}>
                   <Input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" required minLength={3} maxLength={32} placeholder={t('设置登录用户名', 'Choose a username')} />
                 </Field>
-                <Field label={t('身份', 'Your role')}>
+                {/* 身份是一组互斥按钮（非单个表单控件），用 role=group + aria-label 命名分组；
+                    不可用 Field(<label>) 包多个按钮——会把"身份"拼进每个按钮的可朗读名且语义非法。 */}
+                <div role="group" aria-label={t('身份', 'Your role')}>
+                  <span className="mb-1.5 block text-sm font-medium text-soft">{t('身份', 'Your role')}</span>
                   <div className="grid grid-cols-2 gap-2">
                     {(['helper', 'family'] as const).map((r) => (
-                      <button type="button" key={r} onClick={() => setRole(r)}
+                      <button type="button" key={r} aria-pressed={role === r} onClick={() => setRole(r)}
                         className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition ${role === r ? 'border-honey bg-honey/10' : 'border-[var(--line)] text-soft'}`}>
                         {r === 'helper' ? t('志愿者', 'Volunteer') : t('亲友', 'Family')}
                       </button>
                     ))}
                   </div>
-                </Field>
+                </div>
               </>
             )}
             <Field label={t('密码', 'Password')}>

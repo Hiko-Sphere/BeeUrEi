@@ -717,7 +717,9 @@ export class SqliteStore implements Store {
   }
   private toGroup(r: any): ChatGroup {
     let memberIds: string[] = []
-    try { memberIds = JSON.parse(r.memberIds) } catch { /* 损坏行视为空成员 */ }
+    // 损坏行视为空成员：既挡解析失败，也挡"解析成功但不是数组"（如 null/对象）——否则下游
+    // memberIds.includes/.map/.filter 会崩。只收字符串元素，杜绝坏类型流入。
+    try { const v = JSON.parse(r.memberIds); if (Array.isArray(v)) memberIds = v.filter((x): x is string => typeof x === 'string') } catch { /* 损坏行视为空成员 */ }
     return { id: r.id, name: r.name, ownerId: r.ownerId, memberIds, createdAt: Number(r.createdAt) }
   }
   private toUser(r: any): User {

@@ -677,6 +677,16 @@ export class SqliteStore implements Store {
     return (this.db.prepare('SELECT * FROM media WHERE ownerId = ?').all(userId) as any[])
       .map((row) => ({ id: row.id, ownerId: row.ownerId, mime: row.mime, size: Number(row.size), createdAt: Number(row.createdAt) }))
   }
+  allMedia(): MediaMeta[] {
+    return (this.db.prepare('SELECT * FROM media').all() as any[])
+      .map((row) => ({ id: row.id, ownerId: row.ownerId, mime: row.mime, size: Number(row.size), createdAt: Number(row.createdAt) }))
+  }
+  referencedMediaIds(): Set<string> {
+    const s = new Set<string>()
+    for (const row of this.db.prepare("SELECT text FROM messages WHERE kind = 'video' AND text IS NOT NULL AND text != ''").all() as { text: string }[]) s.add(row.text)
+    for (const row of this.db.prepare('SELECT mediaId FROM recordings WHERE mediaId IS NOT NULL').all() as { mediaId: string }[]) s.add(row.mediaId)
+    return s
+  }
 
   // MARK: row mappers
   private toMessage(r: any): ChatMessage {

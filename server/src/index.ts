@@ -5,6 +5,7 @@ import { makePushSender } from './push/apns'
 import { initErrorReporting } from './monitoring/errorReporting'
 import { sweepExpiredRecordings } from './recording/retention'
 import { sweepStaleVerifications } from './kyc/retention'
+import { sweepOrphanMedia } from './media/orphanSweep'
 import { ensureKycDir } from './kyc/storage'
 
 // 从 .env 读取密钥/配置（AMAP_API_KEY / ADMIN_* / JWT_SECRET / SMTP_* / SENTRY_DSN / METRICS_TOKEN）。Node 21+ 内置。
@@ -36,6 +37,9 @@ async function main(): Promise<void> {
     catch (e) { console.warn('[recordings] 清理失败:', (e as Error).message) }
     try { const k = sweepStaleVerifications(store, Date.now()); if (k) console.log(`[kyc] 清理停滞/过宽限证件 ${k} 条`) }
     catch (e) { console.warn('[kyc] 清理失败:', (e as Error).message) }
+    // 孤儿媒体（上传后从未关联到视频消息/录制，超 7 天）：清磁盘文件+元数据，防上传不发的慢 DoS / 解散群残留累积。
+    try { const o = sweepOrphanMedia(store, Date.now()); if (o) console.log(`[media] 清理孤儿媒体 ${o} 条`) }
+    catch (e) { console.warn('[media] 清理失败:', (e as Error).message) }
   }
   sweep() // 启动即清一次
   const sweepTimer = setInterval(sweep, 60 * 60 * 1000)

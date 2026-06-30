@@ -43,6 +43,23 @@ export class APIError extends Error {
   constructor(code: string, status: number) { super(code); this.code = code; this.status = status }
 }
 
+/// 把发送/聊天操作错误映射成对用户友好、且**不会让人徒劳重试**的文案（与 iOS 端 ChatStrings.sendErrorText 对齐）。
+/// feature_disabled/maintenance/content_blocked 等是"重试也没用"的状态，必须区别于瞬时失败。
+/// t 为 i18n 译函数；fallback 为非已知码时的兜底文案。
+export function chatErrorText(err: unknown, t: (zh: string, en: string) => string, fallback?: string): string {
+  const code = err instanceof APIError ? err.code : ''
+  switch (code) {
+    case 'feature_disabled': return t('聊天功能已被管理员暂时关闭', 'Messaging is currently turned off by the administrator')
+    case 'maintenance': return t('系统维护中，请稍后再试', 'Under maintenance — please try again later')
+    case 'content_blocked': return t('消息含被禁止的内容，未发送', "Message contains blocked content and wasn't sent")
+    case 'message_too_long': return t('消息太长，请缩短后再发', 'Message is too long — please shorten it')
+    case 'blocked': return t('你们之间存在拉黑，无法发送', "Can't send — one of you blocked the other")
+    case 'not_linked': return t('对方已不是你的联系人，无法发送', 'This person is no longer your contact')
+    case 'not_member': return t('你已不在该群聊中', "You're no longer in this group")
+    default: return fallback ?? t('发送失败', 'Failed to send')
+  }
+}
+
 const LS_TOKEN = 'beeurei.web.token'
 const LS_REFRESH = 'beeurei.web.refresh'
 const LS_USER = 'beeurei.web.user'

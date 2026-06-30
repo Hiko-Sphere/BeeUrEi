@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { api, fetchMediaObjectURL, type ChatMessage, type Conversation, type GroupSummary, type User } from '../lib/api'
+import { api, chatErrorText, fetchMediaObjectURL, type ChatMessage, type Conversation, type GroupSummary, type User } from '../lib/api'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo } from '../components/ui'
@@ -149,7 +149,7 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
     if (!body || sending) return
     setSending(true)
     try { await api.sendMessage(target, 'text', body); setText(''); await load(); onSent() }
-    catch { toast(t('发送失败', 'Failed to send'), 'error') } finally { setSending(false) }
+    catch (e) { toast(chatErrorText(e, t), 'error') } finally { setSending(false) }
   }
 
   const sendImage = async (file: File) => {
@@ -158,7 +158,7 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
       const dataUrl = await downscaleImage(file)
       await api.sendMessage(target, 'image', dataUrl)
       await load(); onSent()
-    } catch { toast(t('图片发送失败', 'Failed to send image'), 'error') } finally { setSending(false) }
+    } catch (e) { toast(chatErrorText(e, t, t('图片发送失败', 'Failed to send image')), 'error') } finally { setSending(false) }
   }
 
   const recall = async (m: ChatMessage) => {
@@ -249,7 +249,7 @@ function CreateGroupDialog({ onClose, onCreated }: { onClose: () => void; onCrea
     if (!name.trim() || picked.size === 0) return
     setBusy(true)
     try { await api.createGroup(name.trim(), [...picked]); toast(t('群已创建', 'Group created'), 'ok'); onCreated() }
-    catch { toast(t('创建失败', 'Failed'), 'error') } finally { setBusy(false) }
+    catch (e) { toast(chatErrorText(e, t, t('创建失败', 'Failed')), 'error') } finally { setBusy(false) }
   }
   return (
     <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={onClose}>

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { writeFileSync, createReadStream, statSync } from 'node:fs'
-import { type Store, type MediaMeta } from '../db/store'
+import { type Store, type MediaMeta, areLinked } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
 import { ensureMediaDir, mediaPath, mediaFileExists } from '../media/storage'
@@ -23,13 +23,6 @@ export function registerMediaRoutes(app: FastifyInstance, store: Store): void {
   app.addContentTypeParser(mediaContentTypes,
     { parseAs: 'buffer', bodyLimit: MAX_MEDIA_BYTES + 1024 * 1024 },
     (_req, body, done) => done(null, body))
-
-  /// a、b 是否互为 accepted 绑定（任一方向）。
-  function linked(a: string, b: string): boolean {
-    const ok = (l: { status?: string }) => (l.status ?? 'accepted') === 'accepted'
-    return store.linksByOwner(a).some((l) => l.memberId === b && ok(l))
-      || store.linksByMember(a).some((l) => l.ownerId === b && ok(l))
-  }
 
   /// 是否与 owner 同在任一群。
   function sharesGroup(me: string, owner: string): boolean {
@@ -60,7 +53,7 @@ export function registerMediaRoutes(app: FastifyInstance, store: Store): void {
     // 录制捕获了被录方音视频，必须走录制作用域端点（owner∨admin，且尊重 deletedAt）。返回 404 不泄漏存在性。
     if (store.recordingByMediaId(id)) return reply.code(404).send({ error: 'not_found' })
     const me = req.user!.sub
-    if (me !== meta.ownerId && !linked(me, meta.ownerId) && !sharesGroup(me, meta.ownerId)) {
+    if (me !== meta.ownerId && !areLinked(store, me, meta.ownerId) && !sharesGroup(me, meta.ownerId)) {
       return reply.code(403).send({ error: 'forbidden' })
     }
     const path = mediaPath(meta.id)

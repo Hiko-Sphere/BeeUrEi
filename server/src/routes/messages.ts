@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import { type Store, type ChatMessage, isBlockedBetween, publicUser, matchBannedTerm } from '../db/store'
+import { type Store, type ChatMessage, isBlockedBetween, publicUser, matchBannedTerm, areLinked } from '../db/store'
 import { totalUnreadFor } from '../db/unread'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
@@ -38,12 +38,6 @@ function locationName(text: string): string {
 /// 单聊互发资格 = 双方存在 **accepted** 绑定且无任一方向拉黑；群消息资格 = 群成员。
 export function registerMessageRoutes(app: FastifyInstance, store: Store,
                                       pushSender: PushSender = new NoopPushSender()): void {
-  /// 双方是否互为 accepted 绑定（任一方向 owner/member 均可）。
-  function linked(a: string, b: string): boolean {
-    const ok = (l: { status?: string }) => (l.status ?? 'accepted') === 'accepted'
-    return store.linksByOwner(a).some((l) => l.memberId === b && ok(l))
-      || store.linksByMember(a).some((l) => l.ownerId === b && ok(l))
-  }
 
   /// 推送预览文案（语音/图片/视频/位置用占位，文本截 80 字）。
   function previewOf(kind: ChatMessage['kind'], text: string, l: PushLang): string {
@@ -115,7 +109,7 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     // 单聊
     if (toId === me) return reply.code(400).send({ error: 'invalid_input' })
     if (!store.findById(toId!)) return reply.code(404).send({ error: 'not_found' })
-    if (!linked(me, toId!)) return reply.code(403).send({ error: 'not_linked' })       // 仅绑定好友可互发
+    if (!areLinked(store, me, toId!)) return reply.code(403).send({ error: 'not_linked' })       // 仅绑定好友可互发
     if (isBlockedBetween(store, me, toId!)) return reply.code(403).send({ error: 'blocked' })
 
     const msg: ChatMessage = { id: randomUUID(), fromId: me, toId: toId!, kind, text, createdAt: Date.now() }
@@ -150,7 +144,7 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     }
     const peer = q.with
     if (!peer) return reply.code(400).send({ error: 'invalid_input' })
-    if (!linked(me, peer)) return reply.code(403).send({ error: 'not_linked' })
+    if (!areLinked(store, me, peer)) return reply.code(403).send({ error: 'not_linked' })
     return { messages: store.messagesBetween(me, peer, limit, before, beforeId) }
   })
 
@@ -170,7 +164,7 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     }
     const peer = q.with
     if (!peer) return reply.code(400).send({ error: 'invalid_input' })
-    if (!linked(me, peer)) return reply.code(403).send({ error: 'not_linked' })
+    if (!areLinked(store, me, peer)) return reply.code(403).send({ error: 'not_linked' })
     return { messages: store.searchDirectMessages(me, peer, query, limit) }
   })
 

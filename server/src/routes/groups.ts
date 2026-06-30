@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import { type Store, publicUser, matchBannedTerm } from '../db/store'
+import { type Store, publicUser, matchBannedTerm, areLinked } from '../db/store'
 import { dissolveGroup } from '../db/cascade'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
@@ -16,13 +16,6 @@ const MAX_MEMBERS = 50
 /// 群聊（WhatsApp 式）：群主建群/加人/踢人/解散；成员可退群。
 /// 建群与加人都要求新成员是**群主**的 accepted 绑定好友——沿用"只有互相确认过的人才能进入对话"的原则。
 export function registerGroupRoutes(app: FastifyInstance, store: Store): void {
-  /// a、b 是否互为 accepted 绑定（任一方向）。
-  function linked(a: string, b: string): boolean {
-    const ok = (l: { status?: string }) => (l.status ?? 'accepted') === 'accepted'
-    return store.linksByOwner(a).some((l) => l.memberId === b && ok(l))
-      || store.linksByMember(a).some((l) => l.ownerId === b && ok(l))
-  }
-
   // 建群：发起人为群主，初始成员必须都是群主的好友。
   app.post('/api/groups', { preHandler: [requireAuth(), requireFeature(store, 'groups')],
                             config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
@@ -34,7 +27,7 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store): void {
     if (memberIds.length === 0) return reply.code(400).send({ error: 'invalid_input' })
     for (const id of memberIds) {
       if (!store.findById(id)) return reply.code(404).send({ error: 'not_found' })
-      if (!linked(me, id)) return reply.code(403).send({ error: 'not_linked' })
+      if (!areLinked(store, me, id)) return reply.code(403).send({ error: 'not_linked' })
     }
     const group = { id: randomUUID(), name: parsed.data.name, ownerId: me,
                     memberIds: [me, ...memberIds], createdAt: Date.now() }
@@ -76,7 +69,7 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store): void {
     if (group.memberIds.includes(userId)) return reply.code(400).send({ error: 'already_member' })
     if (group.memberIds.length >= MAX_MEMBERS) return reply.code(400).send({ error: 'group_full' })
     if (!store.findById(userId)) return reply.code(404).send({ error: 'not_found' })
-    if (!linked(me, userId)) return reply.code(403).send({ error: 'not_linked' })
+    if (!areLinked(store, me, userId)) return reply.code(403).send({ error: 'not_linked' })
     const updated = store.updateGroup(group.id, { memberIds: [...group.memberIds, userId] })
     return { group: updated }
   })

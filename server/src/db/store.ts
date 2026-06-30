@@ -1199,6 +1199,14 @@ export function isBlockedBetween(store: Store, a: string, b: string): boolean {
   )
 }
 
+/// a 与 b 是否互为**已接受**绑定（任一方向）。media/消息/群成员等可达性判定共用——
+/// 单点定义，避免各路由各拷一份导致"accepted 口径/方向"漂移（曾在 groups/media/messages 三处重复）。
+export function areLinked(store: Store, a: string, b: string): boolean {
+  const ok = (l: { status?: string }) => (l.status ?? 'accepted') === 'accepted'
+  return store.linksByOwner(a).some((l) => l.memberId === b && ok(l))
+    || store.linksByMember(a).some((l) => l.ownerId === b && ok(l))
+}
+
 /// 对外暴露的安全用户字段（不含 passwordHash / email；用于管理员列表、亲友等场景）。
 export function publicUser(u: User) {
   return { id: u.id, username: u.username, displayName: u.displayName, role: u.role, status: u.status, avatar: u.avatar ?? null, verified: u.identityVerified ?? false }

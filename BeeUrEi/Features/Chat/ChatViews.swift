@@ -260,6 +260,10 @@ struct ChatView: View {
     @State private var draft = ""
     @State private var sending = false
     @State private var errorText: String?
+    @State private var canLoadEarlier = false   // 顶部"加载更早消息"是否可见
+    @State private var loadingEarlier = false    // 正在加载更早历史
+    @State private var reachedStart = false      // 已翻到对话最开头（再无更早）
+    private let chatPageLimit = 50               // 与 APIClient 单次拉取条数一致
     @State private var pollTask: Task<Void, Never>?
     @State private var recorder = VoiceNoteRecorder()
     @State private var player: AVAudioPlayer?
@@ -283,11 +287,20 @@ struct ChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: BeeSpacing.sm) {
+                        if canLoadEarlier {
+                            Button { Task { await loadEarlier() } } label: {
+                                if loadingEarlier { ProgressView() }
+                                else { Text(ChatStrings.loadEarlier(lang)).font(.footnote).foregroundStyle(Color.beeAccent) }
+                            }
+                            .disabled(loadingEarlier)
+                            .padding(.bottom, BeeSpacing.xs)
+                        }
                         ForEach(messages) { m in bubble(m) }
                     }
                     .padding()
                 }
-                .onChange(of: messages.count) { _, _ in
+                // 仅当**最新一条**变化时滚到底（新消息）；上翻加载更早消息时 last 不变，不应跳到底部。
+                .onChange(of: messages.last?.id) { _, _ in
                     if let last = messages.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
                 }
             }
@@ -570,17 +583,39 @@ struct ChatView: View {
             }
             if !fresh.isEmpty { markRead() }
         }
-        // 合并而非直接替换：服务器为权威，但保留它**尚未返回**的本地已发消息（刚发出、而本次轮询快照
-        // 早于这条消息）。否则乐观插入的消息会被旧快照覆盖而"消失"——这正是"发完看不到消息"的根因。
+        // 最新一批满页且未翻到开头 → 可能还有更早历史，显示"加载更早"。
+        canLoadEarlier = list.count >= chatPageLimit && !reachedStart
+        // 合并而非直接替换：服务器为权威，但保留它**未返回**的已显示消息——既含尚未回流的本地已发
+        // （否则乐观插入会被旧快照覆盖"消失"，这是"发完看不到消息"的根因），也含上翻加载的更早历史
+        // （否则每次轮询都会把翻页加载的旧消息冲掉）。重叠 id 以服务器版本为准（如撤回更新）。
         messages = merged(server: list)
     }
 
-    /// 服务器列表 + 本地待回流的自己已发消息（按 id 去重、按时间排序）。
+    /// 加载更早历史（向上翻页）：取早于当前最旧一条的消息，前插去重。
+    private func loadEarlier() async {
+        guard let oldest = messages.first, !loadingEarlier, let token = session.token else { return }
+        loadingEarlier = true; defer { loadingEarlier = false }
+        let older: [ChatMessageInfo]?
+        if let groupId {
+            older = try? await APIClient().groupMessages(token: token, groupId: groupId, before: oldest.createdAt)
+        } else {
+            older = try? await APIClient().messages(token: token, with: peerId ?? "", before: oldest.createdAt)
+        }
+        guard let older else { return }
+        if older.isEmpty { reachedStart = true; canLoadEarlier = false; return }
+        // 去重并按时间排序（id 唯一；正常情况下 older 与现有不重叠，去重纯属稳妥）。
+        var byId: [String: ChatMessageInfo] = [:]
+        for m in older + messages { byId[m.id] = m }
+        messages = byId.values.sorted { $0.createdAt < $1.createdAt }
+        if older.count < chatPageLimit { reachedStart = true; canLoadEarlier = false } // 不足一页 = 已到开头
+    }
+
+    /// 服务器最新窗口 ∪ 已显示但不在该窗口的消息（更早历史 + 本地待回流），按 id 去重、时间排序。
     private func merged(server: [ChatMessageInfo]) -> [ChatMessageInfo] {
         let serverIds = Set(server.map(\.id))
-        let pendingLocal = messages.filter { !serverIds.contains($0.id) && $0.fromId == myId }
-        guard !pendingLocal.isEmpty else { return server }
-        return (server + pendingLocal).sorted { $0.createdAt < $1.createdAt }
+        let extra = messages.filter { !serverIds.contains($0.id) }
+        guard !extra.isEmpty else { return server }
+        return (server + extra).sorted { $0.createdAt < $1.createdAt }
     }
 
     private func refreshGroupDetail() async {

@@ -94,6 +94,7 @@ enum ChatStrings {
     static func newPhotoSpeak(_ name: String, _ l: Language) -> String {
         l == .zh ? "\(name) 发来图片" : "Photo from \(name)"
     }
+    static func loadEarlier(_ l: Language) -> String { l == .zh ? "加载更早的消息" : "Load earlier messages" }
     static func close(_ l: Language) -> String { l == .zh ? "关闭" : "Close" }
     static func cancel(_ l: Language) -> String { l == .zh ? "取消" : "Cancel" }
 

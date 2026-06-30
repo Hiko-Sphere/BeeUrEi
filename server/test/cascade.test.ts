@@ -33,6 +33,18 @@ describe('cascadeDeleteUser — 抹除完整性', () => {
     expect(store.notificationsForUser('u2')).toHaveLength(1)
   })
 
+  it('清除被删用户的 2FA 一次性恢复码（无主安全凭据不残留）；他人恢复码保留', () => {
+    const store = new MemoryStore()
+    store.createUser(user('u1'))
+    store.createUser(user('u2'))
+    store.replaceRecoveryCodes('u1', ['h1', 'h2', 'h3'])
+    store.replaceRecoveryCodes('u2', ['h4', 'h5'])
+    expect(store.countUnusedRecoveryCodes('u1')).toBe(3)
+    cascadeDeleteUser(store, 'u1')
+    expect(store.countUnusedRecoveryCodes('u1')).toBe(0) // 随删号清空
+    expect(store.countUnusedRecoveryCodes('u2')).toBe(2) // 他人不受影响
+  })
+
   it('清除被删用户上传的媒体(视频消息文件元数据)；他人媒体保留', () => {
     const store = new MemoryStore()
     store.createUser(user('u1'))

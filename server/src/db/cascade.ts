@@ -30,6 +30,7 @@ export function cascadeDeleteUser(store: Store, id: string): void {
   for (const l of store.linksByMember(id)) store.deleteLink(l.id)
   for (const pk of store.passkeysForUser(id)) store.deletePasskey(pk.id, id)
   store.deleteRefreshTokensForUser(id)
+  store.deleteRecoveryCodesForUser(id) // 2FA 一次性恢复码（哈希）：删号即清，否则残留无主安全凭据（GDPR 抹除，同通知）
   // 拉黑记录（任一方向）：删号即清除，否则被删用户 id 永久残留在他人黑名单里（孤儿数据 + 抹除不彻底）。
   // 黑名单非证据，无保留必要（与举报/审计记录不同）。
   for (const b of store.blocksInvolving(id)) store.deleteBlock(b.id)

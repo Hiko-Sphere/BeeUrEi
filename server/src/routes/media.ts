@@ -29,6 +29,17 @@ export function registerMediaRoutes(app: FastifyInstance, store: Store): void {
     return store.groupsFor(me).some((g) => g.memberIds.includes(owner))
   }
 
+  /// 精确授权兜底：能否看该媒体 = 能否看引用它的那条消息。修"发送者退群/解除好友后，
+  /// 历史里仍在的视频对其余可见者却 403"——上面 areLinked/sharesGroup 是按"与 owner 现有关系"
+  /// 的近似，owner 一旦退群/解绑就失效，但消息（及其媒体）本应对仍能看到该消息的人保持可见。
+  /// 仅在前两条廉价判定都不成立时才查（短路），故对常见路径无开销。
+  function sharedViaVisibleMessage(me: string, mediaId: string): boolean {
+    const msg = store.findVideoMessageByMediaId(mediaId)
+    if (!msg) return false
+    if (msg.groupId) { const g = store.findGroup(msg.groupId); return !!g && g.memberIds.includes(me) }
+    return msg.fromId === me || msg.toId === me // 单聊：收发双方任一
+  }
+
   app.post('/api/media', { preHandler: [requireAuth(), requireFeature(store, 'mediaUpload')],
                            bodyLimit: MAX_MEDIA_BYTES + 1024 * 1024,
                            config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
@@ -53,7 +64,8 @@ export function registerMediaRoutes(app: FastifyInstance, store: Store): void {
     // 录制捕获了被录方音视频，必须走录制作用域端点（owner∨admin，且尊重 deletedAt）。返回 404 不泄漏存在性。
     if (store.recordingByMediaId(id)) return reply.code(404).send({ error: 'not_found' })
     const me = req.user!.sub
-    if (me !== meta.ownerId && !areLinked(store, me, meta.ownerId) && !sharesGroup(me, meta.ownerId)) {
+    if (me !== meta.ownerId && !areLinked(store, me, meta.ownerId) && !sharesGroup(me, meta.ownerId)
+        && !sharedViaVisibleMessage(me, id)) {
       return reply.code(403).send({ error: 'forbidden' })
     }
     const path = mediaPath(meta.id)

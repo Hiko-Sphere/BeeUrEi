@@ -213,6 +213,32 @@ describe('视频消息（服务器磁盘媒体存储）', () => {
     expect(dlGone.statusCode).toBe(404)
   })
 
+  it('群成员退群后，其历史视频对仍在群里的其他成员保持可见（不再 403）', async () => {
+    const app = buildApp(new MemoryStore())
+    const owner = await reg(app, 'gmo', 'blind')
+    const a = await reg(app, 'gma', 'helper') // 视频发送者
+    const b = await reg(app, 'gmb', 'helper') // 仍在群里的另一成员（与 a 非好友）
+    await bind(app, owner.token, a.token, 'gma') // 建群要求成员是群主好友；a、b 彼此并非好友
+    await bind(app, owner.token, b.token, 'gmb')
+    const grp = await app.inject({ method: 'POST', url: '/api/groups', headers: auth(owner.token),
+      payload: { name: '出行', memberIds: [a.user.id, b.user.id] } })
+    const gid = (grp.json() as any).group.id as string
+    const bytes = Buffer.from('grp-video-bytes-xyz')
+    const up = await app.inject({ method: 'POST', url: '/api/media', headers: { ...auth(a.token), 'content-type': 'video/mp4' }, payload: bytes })
+    const mediaId = (up.json() as any).media.id as string
+    await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { groupId: gid, kind: 'video', text: mediaId } })
+    // 基线：b（同群、非 a 好友）可下载 —— 走 sharesGroup
+    expect((await app.inject({ method: 'GET', url: `/api/media/${mediaId}`, headers: auth(b.token) })).statusCode).toBe(200)
+    // a 退群（自我移除）
+    expect((await app.inject({ method: 'DELETE', url: `/api/groups/${gid}/members/${a.user.id}`, headers: auth(a.token) })).statusCode).toBe(200)
+    // 修复点：a 退群后 sharesGroup(b,a) 失效，但视频仍在群历史里 → b 应仍可下载（旧逻辑 403）
+    expect((await app.inject({ method: 'GET', url: `/api/media/${mediaId}`, headers: auth(b.token) })).statusCode).toBe(200)
+    // 既非群成员又非好友的陌生人仍 403
+    const stranger = await reg(app, 'gms', 'helper')
+    expect((await app.inject({ method: 'GET', url: `/api/media/${mediaId}`, headers: auth(stranger.token) })).statusCode).toBe(403)
+    await app.close()
+  })
+
   it('群里发视频：同群成员可下载媒体；toId 与 groupId 不能同时传', async () => {
     const app = buildApp(new MemoryStore())
     const owner = await reg(app, 'gvowner', 'blind')

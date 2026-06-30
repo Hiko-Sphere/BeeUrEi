@@ -708,6 +708,10 @@ export class SqliteStore implements Store {
     for (const row of this.db.prepare('SELECT mediaId FROM recordings WHERE mediaId IS NOT NULL').all() as { mediaId: string }[]) s.add(row.mediaId)
     return s
   }
+  findVideoMessageByMediaId(mediaId: string): ChatMessage | undefined {
+    const row = this.db.prepare("SELECT * FROM messages WHERE kind = 'video' AND text = ? LIMIT 1").get(mediaId)
+    return row ? this.toMessage(row) : undefined
+  }
 
   // MARK: row mappers
   private toMessage(r: any): ChatMessage {

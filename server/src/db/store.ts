@@ -551,6 +551,7 @@ export interface Store {
   mediaByOwner(userId: string): MediaMeta[] // 某用户上传的全部媒体（删号级联清磁盘文件用）
   allMedia(): MediaMeta[] // 全部媒体元数据（孤儿清扫遍历用）
   referencedMediaIds(): Set<string> // 被视频消息(kind=video,text=mediaId)或录制(mediaId)引用的全部 mediaId（孤儿清扫判定用）
+  findVideoMessageByMediaId(mediaId: string): ChatMessage | undefined // 引用该 mediaId 的视频消息（媒体访问授权：能否看该媒体＝能否看引用它的那条消息）
 }
 
 /// 内存实现（测试用）。
@@ -1102,6 +1103,10 @@ export class MemoryStore implements Store {
     for (const m of this.messages.values()) if (m.kind === 'video' && m.text) s.add(m.text)
     for (const r of this.recordings.values()) if (r.mediaId) s.add(r.mediaId)
     return s
+  }
+  findVideoMessageByMediaId(mediaId: string): ChatMessage | undefined {
+    for (const m of this.messages.values()) if (m.kind === 'video' && m.text === mediaId) return m
+    return undefined
   }
 
   protected afterMutate(): void { /* 内存无需持久化 */ }

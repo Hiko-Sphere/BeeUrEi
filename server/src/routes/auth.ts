@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import { type Store, type Role, type User, selfView } from '../db/store'
+import { type Store, type Role, type User, selfView, matchBannedTerm } from '../db/store'
 import { hashPassword, verifyPassword } from '../auth/passwords'
 import { hashToken, generateRefreshToken } from '../auth/tokens'
 import { issueTokens, deviceLabelFromReq } from '../auth/session'
@@ -78,6 +78,8 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     // 全站注册开关（管理员可在后台关闭）：关闭后拒绝新建账号；已有账号登录不受影响。
     if (!store.getAppConfig().registrationEnabled) return reply.code(403).send({ error: 'registration_disabled' })
     const { username: rawUsername, password, displayName, role, language, email, phone } = parsed.data
+    // 昵称内容审核：与改昵称端点(account.ts)一致——否则注册时即可塞入违禁昵称绕过审核（everyone 可见）。
+    if (displayName && matchBannedTerm(store.getAppConfig(), displayName)) return reply.code(403).send({ error: 'content_blocked' })
     if (rawUsername && store.findByUsername(rawUsername)) {
       return reply.code(409).send({ error: 'username_taken' })
     }

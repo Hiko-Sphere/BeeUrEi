@@ -213,3 +213,20 @@ describe('邮件服务故障的诚实处理', () => {
     expect((res.json() as any).error).toBe('mail_unavailable')
   })
 })
+
+describe('注册昵称内容审核（与改昵称端点一致）', () => {
+  it('开启违禁词后：注册昵称含违禁词被拒(403 content_blocked)，干净昵称通过', async () => {
+    const store = new MemoryStore()
+    store.setAppConfig({ contentFilter: { enabled: true, terms: ['脏词'] } })
+    const app = buildApp(store, { codeSend: noThrottle() })
+    const bad = await app.inject({ method: 'POST', url: '/api/auth/register',
+      payload: { username: 'cfuser', password: 'secret123', displayName: '我是脏词哈', role: 'blind' } })
+    expect(bad.statusCode).toBe(403)
+    expect((bad.json() as any).error).toBe('content_blocked')
+    // 未注册成功：用户名仍可用。
+    const ok = await app.inject({ method: 'POST', url: '/api/auth/register',
+      payload: { username: 'cfuser', password: 'secret123', displayName: '正常昵称', role: 'blind' } })
+    expect(ok.statusCode).toBe(201)
+    expect((ok.json() as any).token).toBeTruthy()
+  })
+})

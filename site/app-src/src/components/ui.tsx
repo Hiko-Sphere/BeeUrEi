@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes } from 'react'
 import { useI18n } from '../lib/i18n'
 
 // ---------- Button ----------
@@ -73,6 +73,28 @@ export function Spinner() {
   return (
     <div role="status" aria-label={t('加载中', 'Loading')} className="flex justify-center py-10">
       <span aria-hidden="true" className="inline-block h-6 w-6 rounded-full border-2 border-[var(--text-faint)] border-t-transparent spin" />
+    </div>
+  )
+}
+
+// 统一弹窗：把全仓重复的 backdrop+面板+stopPropagation 收敛到一处，并一次性补齐无障碍语义——
+// role=dialog + aria-modal（读屏将弹窗外内容视为 inert）、aria-label（弹窗有名）、Esc 关闭、
+// 点遮罩关闭、点面板内不关闭。panelClassName 传各弹窗自有的尺寸/布局类（max-w/max-h/flex 等）。
+// 注：通话类弹窗（来电/通话中）语义上不可点遮罩关闭，不走此组件。
+export function Modal({ onClose, label, panelClassName = 'w-full max-w-md', children }: {
+  onClose: () => void; label: string; panelClassName?: string; children: ReactNode
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return (
+    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-label={label} onClick={(e) => e.stopPropagation()}
+        className={`slide-up rounded-2xl surface border border-[var(--line)] p-6 shadow-2xl ${panelClassName}`}>
+        {children}
+      </div>
     </div>
   )
 }

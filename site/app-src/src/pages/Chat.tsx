@@ -5,7 +5,7 @@ import { pollWhileVisible } from '../lib/poll'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { parseLocation } from '../lib/location'
-import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo } from '../components/ui'
+import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo, Modal } from '../components/ui'
 import { IconChat, IconSend, IconPlus, IconX } from '../components/icons'
 
 type Selection = { kind: 'peer'; id: string; name: string; avatar?: string | null } | { kind: 'group'; id: string; name: string; members: User[]; ownerId: string }
@@ -372,8 +372,7 @@ function GroupInfoDialog({ groupId, groupName, ownerId, members, meId, onClose, 
   }
 
   return (
-    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={onClose}>
-      <div className="slide-up flex max-h-[80vh] w-full max-w-sm flex-col rounded-2xl surface border border-[var(--line)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} label={groupName} panelClassName="flex max-h-[80vh] w-full max-w-sm flex-col">
         <h3 className="text-lg font-semibold">{groupName}</h3>
         <div className="mt-1 text-xs text-faint">{t('成员', 'Members')}（{list.length}）</div>
         <div className="mt-2 flex-1 overflow-y-auto rounded-xl border border-[var(--line)]">
@@ -411,8 +410,7 @@ function GroupInfoDialog({ groupId, groupName, ownerId, members, meId, onClose, 
             ? <button onClick={dissolve} disabled={busy} className="flex-1 rounded-xl bg-danger py-2.5 text-sm font-semibold text-white disabled:opacity-40">{t('解散群聊', 'Dissolve')}</button>
             : <button onClick={leave} disabled={busy} className="flex-1 rounded-xl bg-danger py-2.5 text-sm font-semibold text-white disabled:opacity-40">{t('退出群聊', 'Leave')}</button>}
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -509,8 +507,7 @@ function CreateGroupDialog({ onClose, onCreated }: { onClose: () => void; onCrea
     catch (e) { toast(chatErrorText(e, t, t('创建失败', 'Failed')), 'error') } finally { setBusy(false) }
   }
   return (
-    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={onClose}>
-      <div className="slide-up flex max-h-[80vh] w-full max-w-sm flex-col rounded-2xl surface border border-[var(--line)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} label={t('创建群聊', 'New group')} panelClassName="flex max-h-[80vh] w-full max-w-sm flex-col">
         <h3 className="text-lg font-semibold">{t('创建群聊', 'New group')}</h3>
         <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} placeholder={t('群名称', 'Group name')}
           className="mt-3 w-full rounded-xl border border-[var(--line)] surface-2 px-3.5 py-2.5 text-sm outline-none focus:border-honey" />
@@ -532,8 +529,7 @@ function CreateGroupDialog({ onClose, onCreated }: { onClose: () => void; onCrea
           <button onClick={onClose} className="flex-1 rounded-xl surface-2 py-2.5 text-sm">{t('取消', 'Cancel')}</button>
           <button onClick={submit} disabled={busy || !name.trim() || picked.size === 0} className="flex-1 rounded-xl bg-honey py-2.5 text-sm font-semibold text-ink disabled:opacity-40">{t('创建', 'Create')}</button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
 

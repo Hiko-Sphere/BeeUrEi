@@ -117,7 +117,10 @@ function preview(m: ChatMessage | null, t: (z: string, e: string) => string): st
     case 'video': return t('[视频]', '[Video]')
     case 'location': return t('[位置]', '[Location]')
     case 'recalled': return t('[已撤回]', '[Recalled]')
-    default: return m.text
+    default:
+      // 文本式位置（iOS 默认）在列表里也显示成 [位置]，而非一串裸 URL。
+      if (parseLocation(m.text)) return t('[位置]', '[Location]')
+      return m.text
   }
 }
 
@@ -249,12 +252,40 @@ function MessageBody({ m, t }: { m: ChatMessage; t: (z: string, e: string) => st
     return <span className="opacity-60">{t('[视频加载中]', '[Loading video]')}</span>
   }
   if (m.kind === 'location') {
-    try {
-      const loc = JSON.parse(m.text) as { lat: number; lng: number; name?: string }
-      return <a href={`https://www.openstreetmap.org/?mlat=${loc.lat}&mlon=${loc.lng}#map=17/${loc.lat}/${loc.lng}`} target="_blank" rel="noreferrer" className="underline">📍 {loc.name || t('位置', 'Location')}</a>
-    } catch { return <span>📍 {t('位置', 'Location')}</span> }
+    const loc = parseLocation(m.text)
+    return loc ? <LocationLink loc={loc} t={t} /> : <span>📍 {t('位置', 'Location')}</span>
   }
+  // 文本消息也可能是位置：iOS 默认把位置发成 kind=text + 内嵌 Apple Maps 链接（兼容未部署
+  // location kind 的服务器）。识别出来渲染成位置，否则会显示成一串裸 URL。
+  const loc = parseLocation(m.text)
+  if (loc) return <LocationLink loc={loc} t={t} />
   return <span className="whitespace-pre-wrap break-words">{m.text}</span>
+}
+
+/// 解析位置：兼容 JSON 形式（kind=location）与文本内嵌 Apple Maps 链接形式（iOS 默认）。
+function parseLocation(text: string): { lat: number; lng: number; name?: string } | null {
+  try {
+    const j = JSON.parse(text) as { lat?: unknown; lng?: unknown; name?: unknown }
+    if (typeof j.lat === 'number' && typeof j.lng === 'number'
+        && j.lat >= -90 && j.lat <= 90 && j.lng >= -180 && j.lng <= 180) {
+      return { lat: j.lat, lng: j.lng, name: typeof j.name === 'string' ? j.name : undefined }
+    }
+  } catch { /* 非 JSON：尝试文本链接形式 */ }
+  const i = text.indexOf('https://maps.apple.com/?ll=')
+  if (i < 0) return null
+  try {
+    const u = new URL(text.slice(i).split(/\s/)[0]) // 取到首个空白为止
+    const parts = (u.searchParams.get('ll') ?? '').split(',')
+    if (parts.length !== 2) return null
+    const lat = Number(parts[0]), lng = Number(parts[1])
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return null
+    return { lat, lng, name: u.searchParams.get('q') || undefined }
+  } catch { return null }
+}
+
+function LocationLink({ loc, t }: { loc: { lat: number; lng: number; name?: string }; t: (z: string, e: string) => string }) {
+  return <a href={`https://www.openstreetmap.org/?mlat=${loc.lat}&mlon=${loc.lng}#map=17/${loc.lat}/${loc.lng}`}
+            target="_blank" rel="noreferrer" className="underline">📍 {loc.name || t('位置', 'Location')}</a>
 }
 
 function CreateGroupDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {

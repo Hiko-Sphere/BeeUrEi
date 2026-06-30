@@ -467,7 +467,7 @@ function MessageBody({ m, t }: { m: ChatMessage; t: (z: string, e: string) => st
   }, [m.kind, m.text, attempt])
 
   if (m.kind === 'recalled') return <span>{t('该消息已撤回', 'Message recalled')}</span>
-  if (m.kind === 'image') return <img src={m.text} alt="" className="max-h-64 rounded-lg" />
+  if (m.kind === 'image') return <img src={m.text} alt={t('图片消息', 'Photo')} className="max-h-64 rounded-lg" />
   if (m.kind === 'audio') return <audio src={m.text} controls className="max-w-[240px]" />
   if (m.kind === 'video') {
     if (videoUrl) return <video src={videoUrl} controls className="max-h-64 rounded-lg" />

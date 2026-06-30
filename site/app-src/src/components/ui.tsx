@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes } from 'react'
+import { useI18n } from '../lib/i18n'
 
 // ---------- Button ----------
 type Variant = 'primary' | 'ghost' | 'danger' | 'soft' | 'ok'
@@ -66,7 +67,14 @@ export function EmptyState({ icon = '✦', title, message }: { icon?: ReactNode;
 }
 
 export function Spinner() {
-  return <div className="flex justify-center py-10"><span className="inline-block h-6 w-6 rounded-full border-2 border-[var(--text-faint)] border-t-transparent spin" /></div>
+  // role=status + aria-label：读屏用户听到"加载中"，否则纯视觉转圈对盲人是一片静默。
+  // 内层视觉转圈 aria-hidden（装饰）。
+  const { t } = useI18n()
+  return (
+    <div role="status" aria-label={t('加载中', 'Loading')} className="flex justify-center py-10">
+      <span aria-hidden="true" className="inline-block h-6 w-6 rounded-full border-2 border-[var(--text-faint)] border-t-transparent spin" />
+    </div>
+  )
 }
 
 // ---------- Toast ----------

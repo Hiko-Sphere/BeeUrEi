@@ -105,7 +105,8 @@ export function Layout({ children }: { children: ReactNode }) {
           <button onClick={cycleTheme} className="rounded-lg px-2 py-1.5 text-xs text-soft hover:surface-2" title={themeLabel}>{themeLabel}</button>
           <button onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')} className="rounded-lg px-2 py-1.5 text-xs text-soft hover:surface-2">{lang === 'zh' ? 'EN' : '中文'}</button>
           <div className="relative">
-            <button onClick={() => setMenuOpen((v) => !v)} className="flex items-center gap-2 rounded-full p-0.5 hover:surface-2">
+            <button onClick={() => setMenuOpen((v) => !v)} className="flex items-center gap-2 rounded-full p-0.5 hover:surface-2"
+              aria-label={t('账户菜单', 'Account menu')} aria-haspopup="menu" aria-expanded={menuOpen}>
               <Avatar name={user.displayName} src={user.avatar} size={32} />
             </button>
             {menuOpen && (

@@ -574,6 +574,9 @@ struct ChatView: View {
             let known = Set(messages.map(\.id))
             let fresh = list.filter { !known.contains($0.id) && $0.fromId != myId }
             for m in fresh {
+                // 撤回消息（kind=recalled，text 为空）不播报：可能是对端在本端轮询看到原消息前就撤回了
+                // （首次见到即已撤回），此时念"X 发来消息：（空）"对盲人是无意义噪声；列表仍显示"[已撤回]"占位。
+                if m.kind == "recalled" { continue }
                 // 新到消息语音播报：经总线 .query（不打断避障/导航/来电播报，闲时补播）。
                 let name = isGroup ? senderName(m.fromId) : target.title
                 let speak: String

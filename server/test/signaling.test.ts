@@ -66,6 +66,42 @@ describe('WebRTC signaling relay', () => {
     await app.close()
   })
 
+  it('一端断开连接 → 另一端收到 peer-left（不卡在已掉线的通话里）', async () => {
+    // 端到端锁定：socket close → hub.leave → 向房间剩余成员转发 peer-left。
+    // hub.leave 有单测，但"真实断线触发通知对端"这条 UX 关键链路此前无集成测试。
+    const app = buildApp(new MemoryStore())
+    await app.listen({ port: 0, host: '127.0.0.1' })
+    const port = (app.server.address() as { port: number }).port
+    const reg = async (u: string, role: string) => {
+      const r = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+      return { token: r.token as string, id: r.user.id as string }
+    }
+    const caller = await reg('dc_caller', 'blind')
+    const helper = await reg('dc_helper', 'helper')
+    const link = await app.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${caller.token}` }, payload: { username: 'dc_helper' } })
+    await app.inject({ method: 'POST', url: `/api/family/links/${link.json().link.id}/accept`, headers: { authorization: `Bearer ${helper.token}` } })
+    await app.inject({ method: 'POST', url: '/api/assist/call', headers: { authorization: `Bearer ${caller.token}` }, payload: { callId: 'dc1', targetUserIds: [helper.id] } })
+
+    const base = `ws://127.0.0.1:${port}/ws`
+    const ws1 = new WebSocket(`${base}?token=${caller.token}`)
+    const ws2 = new WebSocket(`${base}?token=${helper.token}`)
+    await Promise.all([open(ws1), open(ws2)])
+    const joined1 = nextMessage(ws1, (m) => m.type === 'joined')
+    const joined2 = nextMessage(ws2, (m) => m.type === 'joined')
+    ws1.send(JSON.stringify({ type: 'join', callId: 'dc1', role: 'blind' }))
+    ws2.send(JSON.stringify({ type: 'join', callId: 'dc1', role: 'helper' }))
+    await Promise.all([joined1, joined2])
+
+    // caller 断线 → helper 必须收到 peer-left(带 caller userId)，以便结束/清理本端通话。
+    const leftAtHelper = nextMessage(ws2, (m) => m.type === 'peer-left')
+    ws1.close()
+    const left = await leftAtHelper
+    expect(left.userId).toBe(caller.id)
+
+    ws2.close()
+    await app.close()
+  })
+
   it('rejects connection without a valid token', async () => {
     const app = buildApp(new MemoryStore())
     await app.listen({ port: 0, host: '127.0.0.1' })

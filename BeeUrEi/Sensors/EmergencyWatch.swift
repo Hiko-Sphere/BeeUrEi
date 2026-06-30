@@ -12,6 +12,7 @@ final class MotionMonitor {
 
     func start(onEvent: @escaping (FallDetector.Event) -> Void) {
         guard motion.isAccelerometerAvailable, !motion.isAccelerometerActive else { return }
+        queue.maxConcurrentOperationCount = 1 // 串行：detector 只在此队列被读写，杜绝 ingest 与 reset 跨线程竞争
         motion.accelerometerUpdateInterval = 0.05 // 20Hz：足够捕捉失重/撞击，省电
         motion.startAccelerometerUpdates(to: queue) { [weak self] data, _ in
             guard let self, let a = data?.acceleration else { return }
@@ -25,7 +26,9 @@ final class MotionMonitor {
 
     func stop() {
         motion.stopAccelerometerUpdates()
-        detector.reset()
+        // 在采集同一串行队列上复位：否则主线程 reset 可能与在途回调里的 ingest 并发改 detector（数据竞争），
+        // 半复位状态被读出可能误判为摔倒，在用户刚关闭监测时弹出**假**紧急倒计时。
+        queue.addOperation { [weak self] in self?.detector.reset() }
     }
 }
 

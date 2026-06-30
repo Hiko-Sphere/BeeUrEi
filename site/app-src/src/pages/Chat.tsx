@@ -133,6 +133,9 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [showInfo, setShowInfo] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<ChatMessage[] | null>(null)
   const [loadingEarlier, setLoadingEarlier] = useState(false)
   const [reachedStart, setReachedStart] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -179,6 +182,17 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
   const lastId = msgs && msgs.length ? msgs[msgs.length - 1].id : null
   useEffect(() => { bottomRef.current?.scrollIntoView({ block: 'end' }) }, [lastId])
   const canLoadEarlier = (msgs?.length ?? 0) >= PAGE && !reachedStart
+
+  // 会话内搜索：输入防抖 0.35s 调后端搜索端点。
+  useEffect(() => {
+    const q = searchQuery.trim()
+    if (!searchOpen || !q) { setSearchResults(q ? [] : null); return }
+    const id = setTimeout(() => {
+      void api.searchMessages(sel.kind === 'group' ? { groupId: sel.id } : { peerId: sel.id }, q)
+        .then((r) => setSearchResults(r.messages)).catch(() => setSearchResults([]))
+    }, 350)
+    return () => clearTimeout(id)
+  }, [searchQuery, searchOpen, sel])
 
   const target = sel.kind === 'peer' ? { toId: sel.id } : { groupId: sel.id }
 
@@ -231,12 +245,49 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
           <div className="truncate font-semibold">{sel.name}</div>
           {sel.kind === 'group' && <div className="text-xs text-faint">{sel.members.map((m) => m.displayName).join('、')}</div>}
         </div>
+        <button onClick={() => { setSearchOpen((v) => !v); if (searchOpen) { setSearchQuery(''); setSearchResults(null) } }}
+          className="rounded-full surface-2 px-3 py-1.5 text-xs font-medium text-soft" aria-label={t('搜索消息', 'Search messages')}>
+          {searchOpen ? t('完成', 'Done') : t('搜索', 'Search')}
+        </button>
         {sel.kind === 'group' && (
           <button onClick={() => setShowInfo(true)} className="rounded-full surface-2 px-3 py-1.5 text-xs font-medium text-soft" aria-label={t('群信息', 'Group info')}>{t('群信息', 'Group info')}</button>
         )}
       </header>
 
-      <div className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
+      {searchOpen && (
+        <div className="flex min-h-0 flex-1 flex-col border-b border-[var(--line)]">
+          <div className="p-3">
+            <input autoFocus value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t('搜索这个会话的文字消息', 'Search text messages in this chat')}
+              className="w-full rounded-full border border-[var(--line)] surface-2 px-4 py-2.5 text-sm outline-none focus:border-honey" />
+          </div>
+          <div className="flex-1 space-y-2 overflow-y-auto px-4 pb-4">
+            {searchResults === null ? (
+              <div className="grid h-full place-items-center text-sm text-faint">{t('输入关键词搜索本会话的文字消息', 'Type a keyword to search this chat')}</div>
+            ) : searchResults.length === 0 ? (
+              <div className="grid h-full place-items-center text-sm text-faint">{t('没有找到匹配的消息', 'No matching messages')}</div>
+            ) : (
+              <>
+                <div className="pt-1 text-xs text-faint">{t(`找到 ${searchResults.length} 条`, `${searchResults.length} found`)}</div>
+                {searchResults.map((m) => {
+                  const who = m.fromId === user?.id ? t('我', 'Me')
+                    : sel.kind === 'group' ? (sel.members.find((mm) => mm.id === m.fromId)?.displayName ?? '') : sel.name
+                  return (
+                    <div key={m.id} className="rounded-xl surface-2 px-3 py-2">
+                      <div className="flex items-center justify-between text-[11px] text-faint">
+                        <span className="font-semibold text-honey">{who}</span><span>{timeAgo(m.createdAt, lang)}</span>
+                      </div>
+                      <div className="mt-0.5 break-words text-sm">{m.text}</div>
+                    </div>
+                  )
+                })}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className={`flex-1 space-y-2 overflow-y-auto px-4 py-4 ${searchOpen ? 'hidden' : ''}`}>
         {canLoadEarlier && (
           <div className="flex justify-center pb-1">
             <button onClick={() => void loadEarlier()} disabled={loadingEarlier}

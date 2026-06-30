@@ -216,6 +216,11 @@ export const api = {
   messagesWith: (peerId: string, before?: number) => get(`/api/messages?with=${encodeURIComponent(peerId)}${before ? `&before=${before}` : ''}`) as Promise<{ messages: ChatMessage[] }>,
   groupMessages: (groupId: string, before?: number) => get(`/api/messages?group=${encodeURIComponent(groupId)}${before ? `&before=${before}` : ''}`) as Promise<{ messages: ChatMessage[] }>,
   sendMessage: (target: { toId?: string; groupId?: string }, kind: string, text: string) => post('/api/messages', { ...target, kind, text }) as Promise<{ message: ChatMessage }>,
+  // 会话内搜索文本消息（时间倒序）：peerId 或 groupId 二选一。
+  searchMessages: (scope: { peerId?: string; groupId?: string }, query: string) => {
+    const s = scope.groupId ? `group=${encodeURIComponent(scope.groupId)}` : `with=${encodeURIComponent(scope.peerId ?? '')}`
+    return get(`/api/messages/search?${s}&q=${encodeURIComponent(query)}`) as Promise<{ messages: ChatMessage[] }>
+  },
   markRead: (fromId: string) => post('/api/messages/read', { fromId }),
   markGroupRead: (groupId: string) => post('/api/messages/read', { groupId }),
   recallMessage: (id: string) => post(`/api/messages/${id}/recall`) as Promise<{ message: ChatMessage }>,

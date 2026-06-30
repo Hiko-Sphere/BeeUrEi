@@ -7,6 +7,8 @@ function resolveBase(): string {
     const o = localStorage.getItem('beeurei.web.apiBase')
     if (o) return o
   } catch { /* ignore */ }
+  // 非浏览器上下文（单测/SSR/worker）下 location 不存在：不抛错，回退生产源（浏览器内此分支永不触发）。
+  if (typeof location === 'undefined') return PROD_API
   const h = location.hostname
   if (h === 'localhost' || h === '127.0.0.1') return '' // 走 Vite 代理（同源相对路径）
   return PROD_API

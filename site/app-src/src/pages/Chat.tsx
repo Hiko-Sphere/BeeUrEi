@@ -133,19 +133,52 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [showInfo, setShowInfo] = useState(false)
+  const [loadingEarlier, setLoadingEarlier] = useState(false)
+  const [reachedStart, setReachedStart] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const PAGE = 50 // 与后端单次返回条数一致
+
+  const fetchWindow = useCallback((before?: number) =>
+    sel.kind === 'peer' ? api.messagesWith(sel.id, before) : api.groupMessages(sel.id, before), [sel])
 
   const load = useCallback(async () => {
     try {
-      const r = sel.kind === 'peer' ? await api.messagesWith(sel.id) : await api.groupMessages(sel.id)
-      setMsgs(r.messages)
+      const r = await fetchWindow()
+      // 合并保留已加载的更早历史（Thread 带 key，切会话会重挂载，cur 只含本会话消息）：
+      // 否则每 5s 轮询会把上翻加载的旧消息冲掉。重叠 id 以服务器为准。
+      setMsgs((cur) => {
+        if (!cur || cur.length === 0) return r.messages
+        const ids = new Set(r.messages.map((m) => m.id))
+        const extra = cur.filter((m) => !ids.has(m.id))
+        return extra.length ? [...r.messages, ...extra].sort((a, b) => a.createdAt - b.createdAt) : r.messages
+      })
       if (sel.kind === 'peer') void api.markRead(sel.id).catch(() => {})
       else void api.markGroupRead(sel.id).catch(() => {})
-    } catch { setMsgs([]) }
-  }, [sel])
+    } catch { setMsgs((cur) => cur ?? []) }
+  }, [sel, fetchWindow])
+
+  const loadEarlier = useCallback(async () => {
+    const oldest = msgs?.[0]
+    if (!oldest || loadingEarlier) return
+    setLoadingEarlier(true)
+    try {
+      const r = await fetchWindow(oldest.createdAt)
+      if (r.messages.length === 0) { setReachedStart(true); return }
+      setMsgs((cur) => {
+        const byId = new Map<string, ChatMessage>()
+        for (const m of [...r.messages, ...(cur ?? [])]) byId.set(m.id, m)
+        return [...byId.values()].sort((a, b) => a.createdAt - b.createdAt)
+      })
+      if (r.messages.length < PAGE) setReachedStart(true) // 不足一页 = 已到对话开头
+    } catch { /* 失败下次再试 */ } finally { setLoadingEarlier(false) }
+  }, [msgs, loadingEarlier, fetchWindow])
+
   useEffect(() => { void load(); return pollWhileVisible(load, 5000) }, [load])
-  useEffect(() => { bottomRef.current?.scrollIntoView({ block: 'end' }) }, [msgs])
+  // 仅在**最新一条**变化时滚到底（新消息）；上翻加载更早消息时 last 不变，不应跳到底部。
+  const lastId = msgs && msgs.length ? msgs[msgs.length - 1].id : null
+  useEffect(() => { bottomRef.current?.scrollIntoView({ block: 'end' }) }, [lastId])
+  const canLoadEarlier = (msgs?.length ?? 0) >= PAGE && !reachedStart
 
   const target = sel.kind === 'peer' ? { toId: sel.id } : { groupId: sel.id }
 
@@ -204,6 +237,14 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
       </header>
 
       <div className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
+        {canLoadEarlier && (
+          <div className="flex justify-center pb-1">
+            <button onClick={() => void loadEarlier()} disabled={loadingEarlier}
+              className="rounded-full surface-2 px-3 py-1 text-xs text-soft disabled:opacity-50">
+              {loadingEarlier ? t('加载中…', 'Loading…') : t('加载更早的消息', 'Load earlier messages')}
+            </button>
+          </div>
+        )}
         {msgs === null ? <Spinner /> : msgs.length === 0 ? (
           <div className="grid h-full place-items-center text-sm text-faint">{t('开始你们的对话', 'Say hello')}</div>
         ) : msgs.map((m) => (

@@ -243,7 +243,10 @@ function streamWithRange(req: FastifyRequest, reply: FastifyReply, path: string,
       return reply.code(416).header('Content-Range', `bytes */${size}`).send()
     }
     let start = m[1] === '' ? size - Number(m[2]) : Number(m[1])
-    let end = m[2] === '' ? size - 1 : Number(m[2])
+    // 后缀区间 bytes=-N（最后 N 字节）：start=size-N、end 必须是 size-1，而非 N——
+    // 否则如 bytes=-500 在 10000 字节文件上得 start=9500/end=500，被下方 start>end 误判 416。
+    // 这类后缀请求合法且 MOV/MP4 播放器常用（读片尾 moov 原子）。
+    let end = (m[2] === '' || m[1] === '') ? size - 1 : Number(m[2])
     if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0) start = 0
     if (end >= size) end = size - 1
     if (start > end || start >= size) {

@@ -135,6 +135,21 @@ describe('录制媒体播放（流式 + 授权 + Range）', () => {
     await app.close()
   })
 
+  it('后缀区间 bytes=-N（最后 N 字节）正确返回片尾，而非误判 416', async () => {
+    const { app, owner, recording, mediaBytes } = await makeRecording()
+    const n = mediaBytes!.length
+    // 最后 3 字节：start=n-3, end=n-1, 长度 3。曾因 end 被误设为 3 → start>end → 错判 416。
+    const suffix = await app.inject({ method: 'GET', url: `/api/recordings/${recording.id}/media`, headers: { ...auth(owner.token), range: 'bytes=-3' } })
+    expect(suffix.statusCode).toBe(206)
+    expect(suffix.headers['content-range']).toBe(`bytes ${n - 3}-${n - 1}/${n}`)
+    expect(suffix.rawPayload.length).toBe(3)
+    // 后缀长度超过文件 → start 截到 0，返回整个文件（仍 206）。
+    const big = await app.inject({ method: 'GET', url: `/api/recordings/${recording.id}/media`, headers: { ...auth(owner.token), range: `bytes=-${n + 100}` } })
+    expect(big.statusCode).toBe(206)
+    expect(big.headers['content-range']).toBe(`bytes 0-${n - 1}/${n}`)
+    await app.close()
+  })
+
   it('管理员可播放，即使 owner 已软删除（留存取证）；owner 本人软删除后不可再播', async () => {
     const { app, at, owner, recording } = await makeRecording()
     await app.inject({ method: 'DELETE', url: `/api/recordings/mine/${recording.id}`, headers: auth(owner.token) })

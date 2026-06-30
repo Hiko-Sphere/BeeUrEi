@@ -840,9 +840,10 @@ struct APIClient {
         return try JSONDecoder().decode(R.self, from: data).message
     }
 
-    func messages(token: String, with peerId: String, before: Int? = nil) async throws -> [ChatMessageInfo] {
+    func messages(token: String, with peerId: String, before: Int? = nil, beforeId: String? = nil) async throws -> [ChatMessageInfo] {
         var path = "/api/messages?with=\(peerId)&limit=50"
         if let before { path += "&before=\(before)" }
+        if let beforeId { path += "&beforeId=\(beforeId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? beforeId)" }
         let data = try await authedGet(path, token: token)
         struct R: Codable { let messages: [ChatMessageInfo] }
         return try JSONDecoder().decode(R.self, from: data).messages
@@ -911,9 +912,10 @@ struct APIClient {
     }
 
     /// 群消息（时间正序）。
-    func groupMessages(token: String, groupId: String, before: Int? = nil) async throws -> [ChatMessageInfo] {
+    func groupMessages(token: String, groupId: String, before: Int? = nil, beforeId: String? = nil) async throws -> [ChatMessageInfo] {
         var path = "/api/messages?group=\(groupId)&limit=50"
         if let before { path += "&before=\(before)" }
+        if let beforeId { path += "&beforeId=\(beforeId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? beforeId)" }
         let data = try await authedGet(path, token: token)
         struct R: Codable { let messages: [ChatMessageInfo] }
         return try JSONDecoder().decode(R.self, from: data).messages

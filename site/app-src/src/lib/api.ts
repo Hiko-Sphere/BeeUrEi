@@ -214,8 +214,9 @@ export const api = {
 
   // 聊天
   conversations: () => get('/api/conversations') as Promise<{ conversations: Conversation[] }>,
-  messagesWith: (peerId: string, before?: number) => get(`/api/messages?with=${encodeURIComponent(peerId)}${before ? `&before=${before}` : ''}`) as Promise<{ messages: ChatMessage[] }>,
-  groupMessages: (groupId: string, before?: number) => get(`/api/messages?group=${encodeURIComponent(groupId)}${before ? `&before=${before}` : ''}`) as Promise<{ messages: ChatMessage[] }>,
+  // before+beforeId 组成 (createdAt,id) 复合游标，翻页边界遇同毫秒消息不漏。
+  messagesWith: (peerId: string, before?: number, beforeId?: string) => get(`/api/messages?with=${encodeURIComponent(peerId)}${before ? `&before=${before}` : ''}${beforeId ? `&beforeId=${encodeURIComponent(beforeId)}` : ''}`) as Promise<{ messages: ChatMessage[] }>,
+  groupMessages: (groupId: string, before?: number, beforeId?: string) => get(`/api/messages?group=${encodeURIComponent(groupId)}${before ? `&before=${before}` : ''}${beforeId ? `&beforeId=${encodeURIComponent(beforeId)}` : ''}`) as Promise<{ messages: ChatMessage[] }>,
   sendMessage: (target: { toId?: string; groupId?: string }, kind: string, text: string) => post('/api/messages', { ...target, kind, text }) as Promise<{ message: ChatMessage }>,
   // 会话内搜索文本消息（时间倒序）：peerId 或 groupId 二选一。
   searchMessages: (scope: { peerId?: string; groupId?: string }, query: string) => {

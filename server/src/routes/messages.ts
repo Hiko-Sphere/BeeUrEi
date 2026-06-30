@@ -137,20 +137,21 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
 
   // 消息列表（时间正序；before 向前翻页）：?with=单聊对端 或 ?group=群 id。
   app.get('/api/messages', { preHandler: requireAuth() }, async (req, reply) => {
-    const q = req.query as { with?: string; group?: string; before?: string; limit?: string }
+    const q = req.query as { with?: string; group?: string; before?: string; beforeId?: string; limit?: string }
     const me = req.user!.sub
     const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 200)
     const before = q.before ? Number(q.before) : undefined
+    const beforeId = q.beforeId || undefined // 与 before 组成复合游标，翻页边界遇同毫秒消息不漏
     if (q.group) {
       const group = store.findGroup(q.group)
       if (!group) return reply.code(404).send({ error: 'not_found' })
       if (!group.memberIds.includes(me)) return reply.code(403).send({ error: 'not_member' })
-      return { messages: store.groupMessages(q.group, limit, before) }
+      return { messages: store.groupMessages(q.group, limit, before, beforeId) }
     }
     const peer = q.with
     if (!peer) return reply.code(400).send({ error: 'invalid_input' })
     if (!linked(me, peer)) return reply.code(403).send({ error: 'not_linked' })
-    return { messages: store.messagesBetween(me, peer, limit, before) }
+    return { messages: store.messagesBetween(me, peer, limit, before, beforeId) }
   })
 
   // 会话内搜索文本消息：?q=关键词 + (?with=对端 或 ?group=群 id)。时间倒序，最多 50 条。

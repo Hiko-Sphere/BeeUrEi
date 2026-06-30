@@ -99,6 +99,22 @@ describe('SqliteStore (node:sqlite)', () => {
     expect(store.messagesBetween('u1', 'u2', 10).length).toBe(3) // d1 + 搜索测试加的 s2(text)/s3(image)，群解散不影响单聊
   })
 
+  it('翻页复合游标 (createdAt,id)：同毫秒边界消息不漏（修严格 < 游标的历史丢失）', () => {
+    const store = new SqliteStore(':memory:')
+    // 三条同毫秒(1000) + 一条更早(900)；id 决定同毫秒内顺序。
+    store.createMessage({ id: 'mA', fromId: 'u1', toId: 'u2', kind: 'text', text: 'A', createdAt: 1000 })
+    store.createMessage({ id: 'mB', fromId: 'u1', toId: 'u2', kind: 'text', text: 'B', createdAt: 1000 })
+    store.createMessage({ id: 'mC', fromId: 'u1', toId: 'u2', kind: 'text', text: 'C', createdAt: 1000 })
+    store.createMessage({ id: 'm0', fromId: 'u1', toId: 'u2', kind: 'text', text: '0', createdAt: 900 })
+    // 第一页：最新 2 条（稳定序 mA<mB<mC → 取 mB,mC）。
+    const p1 = store.messagesBetween('u1', 'u2', 2)
+    expect(p1.map((m) => m.id)).toEqual(['mB', 'mC'])
+    // 旧客户端只给 before=1000（严格 <）：会漏掉同毫秒的 mA（历史丢失，这是被修的 bug）。
+    expect(store.messagesBetween('u1', 'u2', 2, 1000).map((m) => m.id)).toEqual(['m0']) // mA 被严格游标漏掉
+    // 复合游标 before=(1000, 'mB')：正确取到边界前的 mA 与更早的 m0，不漏。
+    expect(store.messagesBetween('u1', 'u2', 10, 1000, 'mB').map((m) => m.id)).toEqual(['m0', 'mA'])
+  })
+
   it('persists across reopen (file-backed)', () => {
     const path = `/tmp/beeurei-test-${Math.floor(performance.now())}.db`
     const a = new SqliteStore(path)

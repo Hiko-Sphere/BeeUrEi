@@ -547,14 +547,16 @@ export class SqliteStore implements Store {
     this.createMessage(next)
     return next
   }
-  messagesBetween(a: string, b: string, limit: number, beforeMs?: number): ChatMessage[] {
+  messagesBetween(a: string, b: string, limit: number, beforeMs?: number, beforeId?: string): ChatMessage[] {
+    const bm = beforeMs ?? null, bi = beforeId ?? null
     const rows = this.db.prepare(
       `SELECT * FROM (
          SELECT * FROM messages
-         WHERE groupId IS NULL AND ((fromId = ? AND toId = ?) OR (fromId = ? AND toId = ?)) AND (? IS NULL OR createdAt < ?)
-         ORDER BY createdAt DESC LIMIT ?
-       ) ORDER BY createdAt ASC`,
-    ).all(a, b, b, a, beforeMs ?? null, beforeMs ?? null, limit)
+         WHERE groupId IS NULL AND ((fromId = ? AND toId = ?) OR (fromId = ? AND toId = ?))
+           AND (? IS NULL OR createdAt < ? OR (? IS NOT NULL AND createdAt = ? AND id < ?))
+         ORDER BY createdAt DESC, id DESC LIMIT ?
+       ) ORDER BY createdAt ASC, id ASC`,
+    ).all(a, b, b, a, bm, bm, bi, bm, bi, limit)
     return rows.map((r) => this.toMessage(r))
   }
   latestMessagesPerPeer(userId: string): ChatMessage[] {
@@ -613,13 +615,15 @@ export class SqliteStore implements Store {
     this.db.prepare('DELETE FROM messages WHERE groupId = ?').run(id)
     this.db.prepare('DELETE FROM group_reads WHERE groupId = ?').run(id)
   }
-  groupMessages(groupId: string, limit: number, beforeMs?: number): ChatMessage[] {
+  groupMessages(groupId: string, limit: number, beforeMs?: number, beforeId?: string): ChatMessage[] {
+    const bm = beforeMs ?? null, bi = beforeId ?? null
     const rows = this.db.prepare(
       `SELECT * FROM (
-         SELECT * FROM messages WHERE groupId = ? AND (? IS NULL OR createdAt < ?)
-         ORDER BY createdAt DESC LIMIT ?
-       ) ORDER BY createdAt ASC`,
-    ).all(groupId, beforeMs ?? null, beforeMs ?? null, limit)
+         SELECT * FROM messages WHERE groupId = ?
+           AND (? IS NULL OR createdAt < ? OR (? IS NOT NULL AND createdAt = ? AND id < ?))
+         ORDER BY createdAt DESC, id DESC LIMIT ?
+       ) ORDER BY createdAt ASC, id ASC`,
+    ).all(groupId, bm, bm, bi, bm, bi, limit)
     return rows.map((r) => this.toMessage(r))
   }
   searchDirectMessages(a: string, b: string, query: string, limit: number): ChatMessage[] {

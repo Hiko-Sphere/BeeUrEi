@@ -142,8 +142,8 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
   const fileRef = useRef<HTMLInputElement>(null)
   const PAGE = 50 // 与后端单次返回条数一致
 
-  const fetchWindow = useCallback((before?: number) =>
-    sel.kind === 'peer' ? api.messagesWith(sel.id, before) : api.groupMessages(sel.id, before), [sel])
+  const fetchWindow = useCallback((before?: number, beforeId?: string) =>
+    sel.kind === 'peer' ? api.messagesWith(sel.id, before, beforeId) : api.groupMessages(sel.id, before, beforeId), [sel])
 
   const load = useCallback(async () => {
     try {
@@ -167,7 +167,7 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
     if (!oldest || loadingEarlier) return
     setLoadingEarlier(true)
     try {
-      const r = await fetchWindow(oldest.createdAt)
+      const r = await fetchWindow(oldest.createdAt, oldest.id)
       if (r.messages.length === 0) { setReachedStart(true); return }
       setMsgs((cur) => {
         const byId = new Map<string, ChatMessage>()

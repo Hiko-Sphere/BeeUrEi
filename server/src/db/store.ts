@@ -375,6 +375,18 @@ export interface ChatMessage {
   groupId?: string // 群消息所属群
 }
 
+/// 消息稳定全序比较：先 createdAt，再 id。让同毫秒消息排序确定、与翻页复合游标口径一致。
+export function byTimeThenId(x: ChatMessage, y: ChatMessage): number {
+  return x.createdAt !== y.createdAt ? x.createdAt - y.createdAt : (x.id < y.id ? -1 : x.id > y.id ? 1 : 0)
+}
+/// 复合游标判定：消息是否严格早于 (beforeMs, beforeId) 这个 (createdAt,id) 点。
+/// beforeMs 缺省=不翻页（全取）；beforeId 缺省=退回严格 createdAt<beforeMs（向后兼容旧客户端）。
+export function beforeCursor(m: ChatMessage, beforeMs?: number, beforeId?: string): boolean {
+  if (beforeMs == null) return true
+  if (m.createdAt < beforeMs) return true
+  return beforeId != null && m.createdAt === beforeMs && m.id < beforeId
+}
+
 /// 聊天群组（WhatsApp 式）：群主创建/加人/踢人/解散；成员可退群发言。
 export interface ChatGroup {
   id: string
@@ -504,8 +516,9 @@ export interface Store {
   createMessage(m: ChatMessage): void
   findMessage(id: string): ChatMessage | undefined
   updateMessage(id: string, patch: Partial<ChatMessage>): ChatMessage | undefined
-  /// 双方之间的单聊消息（时间正序）；beforeMs 用于向前翻页（只取早于该时刻的最后 limit 条）。
-  messagesBetween(a: string, b: string, limit: number, beforeMs?: number): ChatMessage[]
+  /// 双方之间的单聊消息（时间正序）；beforeMs/beforeId 用于向前翻页。
+  /// beforeId：与 beforeMs 组成 (createdAt,id) 复合游标，边界遇同毫秒消息不漏（缺省退回严格 createdAt<beforeMs，向后兼容）。
+  messagesBetween(a: string, b: string, limit: number, beforeMs?: number, beforeId?: string): ChatMessage[]
   /// 我参与的每个单聊对话的最后一条消息（按时间倒序），供会话列表。
   latestMessagesPerPeer(userId: string): ChatMessage[]
   /// 把 from→reader 的未读单聊消息标记已读，返回条数。
@@ -521,8 +534,8 @@ export interface Store {
   groupsFor(userId: string): ChatGroup[]
   updateGroup(id: string, patch: Partial<ChatGroup>): ChatGroup | undefined
   deleteGroup(id: string): void // 解散：同时删群消息与已读标记
-  /// 群消息（时间正序，分页同 messagesBetween）。
-  groupMessages(groupId: string, limit: number, beforeMs?: number): ChatMessage[]
+  /// 群消息（时间正序，分页同 messagesBetween；beforeId 同义）。
+  groupMessages(groupId: string, limit: number, beforeMs?: number, beforeId?: string): ChatMessage[]
   /// 会话内按关键词搜索**文本**消息（不区分大小写，时间倒序，最多 limit 条）。仅 kind=text 可搜。
   searchDirectMessages(a: string, b: string, query: string, limit: number): ChatMessage[]
   searchGroupMessages(groupId: string, query: string, limit: number): ChatMessage[]
@@ -962,12 +975,12 @@ export class MemoryStore implements Store {
     this.afterMutate()
     return next
   }
-  messagesBetween(a: string, b: string, limit: number, beforeMs?: number): ChatMessage[] {
+  messagesBetween(a: string, b: string, limit: number, beforeMs?: number, beforeId?: string): ChatMessage[] {
     const all = [...this.messages.values()]
       .filter((m) => !m.groupId)
       .filter((m) => (m.fromId === a && m.toId === b) || (m.fromId === b && m.toId === a))
-      .filter((m) => beforeMs == null || m.createdAt < beforeMs)
-      .sort((x, y) => x.createdAt - y.createdAt)
+      .filter((m) => beforeCursor(m, beforeMs, beforeId))
+      .sort(byTimeThenId)
     return all.slice(Math.max(0, all.length - limit))
   }
   latestMessagesPerPeer(userId: string): ChatMessage[] {
@@ -1028,11 +1041,11 @@ export class MemoryStore implements Store {
     for (const k of [...this.groupReads.keys()]) if (k.startsWith(`${id}:`)) this.groupReads.delete(k)
     this.afterMutate()
   }
-  groupMessages(groupId: string, limit: number, beforeMs?: number): ChatMessage[] {
+  groupMessages(groupId: string, limit: number, beforeMs?: number, beforeId?: string): ChatMessage[] {
     const all = [...this.messages.values()]
       .filter((m) => m.groupId === groupId)
-      .filter((m) => beforeMs == null || m.createdAt < beforeMs)
-      .sort((x, y) => x.createdAt - y.createdAt)
+      .filter((m) => beforeCursor(m, beforeMs, beforeId))
+      .sort(byTimeThenId)
     return all.slice(Math.max(0, all.length - limit))
   }
   searchDirectMessages(a: string, b: string, query: string, limit: number): ChatMessage[] {

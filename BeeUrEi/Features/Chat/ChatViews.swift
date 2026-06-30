@@ -611,9 +611,9 @@ struct ChatView: View {
         loadingEarlier = true; defer { loadingEarlier = false }
         let older: [ChatMessageInfo]?
         if let groupId {
-            older = try? await APIClient().groupMessages(token: token, groupId: groupId, before: oldest.createdAt)
+            older = try? await APIClient().groupMessages(token: token, groupId: groupId, before: oldest.createdAt, beforeId: oldest.id)
         } else {
-            older = try? await APIClient().messages(token: token, with: peerId ?? "", before: oldest.createdAt)
+            older = try? await APIClient().messages(token: token, with: peerId ?? "", before: oldest.createdAt, beforeId: oldest.id)
         }
         guard let older else { return }
         if older.isEmpty { reachedStart = true; canLoadEarlier = false; return }

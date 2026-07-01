@@ -83,31 +83,37 @@ export function ChatPage() {
 
 function ConvoRow({ convo, active, onClick, lang, t }: { convo: Conversation; active: boolean; onClick: () => void; lang: 'zh' | 'en'; t: (z: string, e: string) => string }) {
   return (
-    <li onClick={onClick} className={`flex cursor-pointer items-center gap-3 px-3 py-3 transition hover:surface-2 ${active ? 'surface-2' : ''}`}>
-      <Avatar name={convo.peer.displayName} src={convo.peer.avatar} size={44} />
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-medium">{convo.peer.displayName}</div>
-        <div className="truncate text-xs text-faint">{preview(convo.last, t)}</div>
-      </div>
-      <div className="flex flex-col items-end gap-1">
-        <span className="text-[10px] text-faint">{convo.last ? timeAgo(convo.last.createdAt, lang) : ''}</span>
-        {convo.unread > 0 && <span className="rounded-full bg-honey px-1.5 text-[10px] font-bold text-ink">{convo.unread}</span>}
-      </div>
+    // 行内容包一层 <button>：<li> 保留 listitem 语义，按钮天然可 Tab 聚焦 + Enter/Space 激活
+    // （键盘/读屏用户此前无法选择会话——onClick 挂在 li 上对键盘完全不可达）。
+    <li className={active ? 'surface-2' : ''}>
+      <button type="button" onClick={onClick} className="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:surface-2">
+        <Avatar name={convo.peer.displayName} src={convo.peer.avatar} size={44} />
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-medium">{convo.peer.displayName}</div>
+          <div className="truncate text-xs text-faint">{preview(convo.last, t)}</div>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <span className="text-[10px] text-faint">{convo.last ? timeAgo(convo.last.createdAt, lang) : ''}</span>
+          {convo.unread > 0 && <span className="rounded-full bg-honey px-1.5 text-[10px] font-bold text-ink">{convo.unread}</span>}
+        </div>
+      </button>
     </li>
   )
 }
 function GroupRow({ g, active, onClick, lang, t }: { g: GroupSummary; active: boolean; onClick: () => void; lang: 'zh' | 'en'; t: (z: string, e: string) => string }) {
   return (
-    <li onClick={onClick} className={`flex cursor-pointer items-center gap-3 px-3 py-3 transition hover:surface-2 ${active ? 'surface-2' : ''}`}>
-      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-honey/15 text-honey"><IconChat /></span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5"><span className="truncate font-medium">{g.group.name}</span><Pill>{g.members.length}</Pill></div>
-        <div className="truncate text-xs text-faint">{preview(g.last, t)}</div>
-      </div>
-      <div className="flex flex-col items-end gap-1">
-        <span className="text-[10px] text-faint">{g.last ? timeAgo(g.last.createdAt, lang) : ''}</span>
-        {g.unread > 0 && <span className="rounded-full bg-honey px-1.5 text-[10px] font-bold text-ink">{g.unread}</span>}
-      </div>
+    <li className={active ? 'surface-2' : ''}>
+      <button type="button" onClick={onClick} className="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:surface-2">
+        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-honey/15 text-honey"><IconChat /></span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5"><span className="truncate font-medium">{g.group.name}</span><Pill>{g.members.length}</Pill></div>
+          <div className="truncate text-xs text-faint">{preview(g.last, t)}</div>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <span className="text-[10px] text-faint">{g.last ? timeAgo(g.last.createdAt, lang) : ''}</span>
+          {g.unread > 0 && <span className="rounded-full bg-honey px-1.5 text-[10px] font-bold text-ink">{g.unread}</span>}
+        </div>
+      </button>
     </li>
   )
 }

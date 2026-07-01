@@ -45,6 +45,10 @@ describe('ChatPage 会话列表渲染（防字段漂移 + 合并排序）', () =
     expect(within(rows[1]).getByText('2')).toBeInTheDocument() // 成员数 Pill
     expect(within(rows[1]).getByText('5')).toBeInTheDocument() // 未读
     expect(rows[2]).toHaveTextContent('[图片]')               // image kind 预览
+
+    // 键盘无障碍（防回归）：每行内容包在 <button> 中，可 Tab 聚焦 + Enter/Space 激活；
+    // 此前 onClick 直接挂在 <li> 上，键盘/读屏用户完全无法选择会话。
+    for (const row of rows) expect(within(row).getByRole('button')).toBeInTheDocument()
   })
 
   it('无任何会话 → 空状态，不渲染列表项', async () => {

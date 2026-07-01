@@ -159,4 +159,12 @@ export function timeAgo(ms: number, lang: 'zh' | 'en'): string {
 export function fmtTime(ms: number, lang: 'zh' | 'en'): string {
   return new Date(ms).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' })
 }
-export function fmtDuration(sec: number): string { const m = Math.floor(sec / 60), s = sec % 60; return `${m}:${String(s).padStart(2, '0')}` }
+/// 时长 m:ss；≥1 小时用 h:mm:ss（否则服务器 uptime 等长时长会溢出成 "1666:40" 这类分钟数，管理台不可读）。
+/// 非有限/负值兜底 0:00，避免任何调用点传入坏值时渲染 "NaN:NaN"。
+export function fmtDuration(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) return '0:00'
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60)
+  return h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${m}:${String(s).padStart(2, '0')}`
+}

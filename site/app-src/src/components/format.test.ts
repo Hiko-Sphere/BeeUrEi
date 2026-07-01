@@ -24,4 +24,13 @@ describe('fmtDuration', () => {
     expect(fmtDuration(65)).toBe('1:05')
     expect(fmtDuration(600)).toBe('10:00')
   })
+  it('≥1 小时用 h:mm:ss（uptime/长通话不溢出成分钟数）', () => {
+    expect(fmtDuration(3600)).toBe('1:00:00')
+    expect(fmtDuration(3665)).toBe('1:01:05')
+    expect(fmtDuration(100000)).toBe('27:46:40') // 原实现会给 "1666:40"
+  })
+  it('非有限/负值兜底 0:00，不渲染 NaN:NaN', () => {
+    expect(fmtDuration(NaN)).toBe('0:00')
+    expect(fmtDuration(-5)).toBe('0:00')
+  })
 })

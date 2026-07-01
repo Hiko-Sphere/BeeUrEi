@@ -21,6 +21,8 @@ final class BarcodePayloadTests: XCTestCase {
         XCTAssertEqual(BarcodePayload.classify("WIFI:T:WPA;S:MyHome;P:secret;;"), .wifi(ssid: "MyHome"))
         XCTAssertEqual(BarcodePayload.classify("wifi:S:家里的网;P:p;;"), .wifi(ssid: "家里的网"))
         XCTAssertEqual(BarcodePayload.classify("WIFI:T:WPA;P:secret;;"), .wifi(ssid: nil))
+        // 非标准小写字段键 `s:` 也应读出 SSID，且值大小写保留（网络名区分大小写）。
+        XCTAssertEqual(BarcodePayload.classify("WIFI:t:wpa;s:CoffeeShop;p:pass;;"), .wifi(ssid: "CoffeeShop"))
     }
 
     func testUrl() {

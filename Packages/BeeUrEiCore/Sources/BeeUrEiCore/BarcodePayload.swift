@@ -31,8 +31,10 @@ public enum BarcodePayload {
     /// `WIFI:T:WPA;S:MyHome;P:pass;;` → "MyHome"。S 字段带转义的罕见情况不展开（原样读出已可用）。
     static func wifiSSID(_ payload: String) -> String? {
         let body = payload.dropFirst("WIFI:".count)
-        for field in body.split(separator: ";") where field.hasPrefix("S:") {
-            let v = String(field.dropFirst(2))
+        // 字段**键**大小写不敏感（与 classify 的 upper.hasPrefix("WIFI:") 同口径）——否则非标准
+        // 生成器的 `s:` 小写键会漏读 SSID；但**值**保持原样大小写（网络名区分大小写）。
+        for field in body.split(separator: ";") where field.uppercased().hasPrefix("S:") {
+            let v = String(field.dropFirst(2)) // 从原始 field 去掉 2 字符键，保留值大小写
             return v.isEmpty ? nil : v
         }
         return nil

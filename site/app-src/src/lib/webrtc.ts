@@ -11,6 +11,14 @@ import { api, uploadMedia, APIError } from './api'
 export type MediaState = 'connecting' | 'connected' | 'failed' | 'disconnected'
 export type Quality = 'unknown' | 'weak' | 'fair' | 'good'
 
+/// 由候选对往返时延(秒)判定通话质量档：无 rtt→unknown；<150ms→good；<400ms→fair；否则 weak
+/// （含 NaN——保守归为 weak，不虚报好信号）。抽成纯函数便于单测：阈值直接决定盲人听到的
+/// "信号良好/一般/弱"（见 CallScreen QualityBars），回归须挡住。
+export function qualityFromRtt(rtt: number | undefined): Quality {
+  if (rtt === undefined) return 'unknown'
+  return rtt < 0.15 ? 'good' : rtt < 0.4 ? 'fair' : 'weak'
+}
+
 export interface CallPeer { userId?: string; name?: string; avatar?: string | null }
 
 export interface CallCallbacks {
@@ -445,8 +453,7 @@ export class CallEngine {
       report.forEach((s) => {
         if (s.type === 'candidate-pair' && (s.nominated || s.state === 'succeeded') && typeof s.currentRoundTripTime === 'number') rtt = s.currentRoundTripTime
       })
-      const q: Quality = rtt === undefined ? 'unknown' : rtt < 0.15 ? 'good' : rtt < 0.4 ? 'fair' : 'weak'
-      this.cb.onQuality?.(q)
+      this.cb.onQuality?.(qualityFromRtt(rtt))
     } catch { /* ignore */ }
   }
 

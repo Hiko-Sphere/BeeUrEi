@@ -22,4 +22,14 @@ describe('planEmergencyRoute', () => {
   it('empty list returns empty', () => {
     expect(planEmergencyRoute([])).toEqual([])
   })
+
+  it('同毫秒同紧急标记按 id 稳定排序（不依赖输入序，两存储部署下一致）', () => {
+    // 同 createdAt 同 isEmergency：须按 id 确定序，否则输入序不同（Memory 插入序 vs Sqlite ORDER BY）
+    // 会让紧急呼叫顺序在两部署间漂移。倒序输入也应得到 id 升序输出。
+    const links = [link('z', true, 100), link('a', true, 100), link('m', true, 100)]
+    expect(planEmergencyRoute(links).map((l) => l.id)).toEqual(['a', 'm', 'z'])
+    // 紧急优先仍压倒 id：非紧急 'a' 不得排到紧急 'z' 前。
+    const mixed = [link('a', false, 100), link('z', true, 100)]
+    expect(planEmergencyRoute(mixed).map((l) => l.id)).toEqual(['z', 'a'])
+  })
 })

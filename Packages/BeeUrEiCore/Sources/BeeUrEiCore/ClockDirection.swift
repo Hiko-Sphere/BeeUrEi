@@ -24,10 +24,7 @@ public struct ClockDirection: Equatable, Sendable {
         let clampedX = min(max(normalizedX, 0), 1)
         let angle = (clampedX - 0.5) * horizontalFOVDegrees
         self.angleDegrees = angle
-
-        // 每个钟点 = 30°；0°→12 点，+30°→1 点，-30°→11 点。
-        let offset = Int((angle / 30).rounded())
-        self.hour = ((12 + offset - 1) % 12 + 12) % 12 + 1
+        self.hour = ClockDirection.hour(fromAngle: angle)
     }
 
     /// 从（已平滑的）水平角直接构造，用于平滑后的方位。
@@ -38,8 +35,16 @@ public struct ClockDirection: Equatable, Sendable {
             return
         }
         self.angleDegrees = angleDegrees
-        let offset = Int((angleDegrees / 30).rounded())
-        self.hour = ((12 + offset - 1) % 12 + 12) % 12 + 1
+        self.hour = ClockDirection.hour(fromAngle: angleDegrees)
+    }
+
+    /// 由水平角求钟点(1...12)。**先对 360 取余**：`Int(...)` 对巨大有限角（如异常相机 FOV 或平滑
+    /// 毛刺）会因超出 Int 范围而**溢出陷阱崩溃**，而 `.isFinite` 只挡 NaN/∞、挡不住量级。
+    /// 钟点本就周期性，取余等价且安全。每个钟点 = 30°；0°→12 点，+30°→1 点，-30°→11 点。
+    private static func hour(fromAngle angle: Double) -> Int {
+        let periodic = angle.truncatingRemainder(dividingBy: 360) // ∈ (-360, 360) → offset ∈ [-12, 12]，不溢出
+        let offset = Int((periodic / 30).rounded())
+        return ((12 + offset - 1) % 12 + 12) % 12 + 1
     }
 
     /// 中文播报用的方向短语，如「12 点钟方向」（默认中文，向后兼容）。

@@ -55,4 +55,23 @@ final class ClockDirectionTests: XCTestCase {
     func testNaNFOVDoesNotCrash() {
         XCTAssertEqual(ClockDirection(normalizedX: 0.5, horizontalFOVDegrees: .nan).hour, 12)
     }
+
+    // 回归：**巨大但有限**的输入（异常相机 FOV / 平滑毛刺）也不得崩溃——.isFinite 挡不住量级，
+    // 修复前 Int(巨值) 会溢出陷阱致命崩溃。先对 360 取余后 hour 恒在合法 1...12。
+    func testHugeFiniteFOVDoesNotCrash() {
+        let d = ClockDirection(normalizedX: 1.0, horizontalFOVDegrees: 1e300)
+        XCTAssertTrue((1...12).contains(d.hour))
+    }
+
+    func testHugeFiniteAngleDoesNotCrash() {
+        let d = ClockDirection(angleDegrees: 1e300)
+        XCTAssertTrue((1...12).contains(d.hour))
+    }
+
+    // 钟点周期性：360° 等价 0°(12 点)、390° 等价 30°(1 点)、-330° 等价 30°(1 点)。
+    func testAngleIsPeriodicMod360() {
+        XCTAssertEqual(ClockDirection(angleDegrees: 360).hour, 12)
+        XCTAssertEqual(ClockDirection(angleDegrees: 390).hour, 1)
+        XCTAssertEqual(ClockDirection(angleDegrees: -330).hour, 1)
+    }
 }

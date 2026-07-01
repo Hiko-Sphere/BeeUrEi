@@ -2,6 +2,11 @@
 # 守住"可上线"质量门槛——任一失败即阻止合并。
 name: CI
 
+# 最小权限：本 CI 仅 checkout + 跑测试/构建，从不写仓库/发布。显式把 GITHUB_TOKEN 收窄为只读，
+# 万一某步骤（含 PR 里可被改的 scripts/fetch-webrtc.sh）被投毒，也无法改仓库/发 release（GitHub 加固指南推荐）。
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]

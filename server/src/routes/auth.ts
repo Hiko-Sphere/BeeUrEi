@@ -52,6 +52,11 @@ const loginSchema = z.object({
   totpCode: z.string().max(64).optional(), // 开了 2FA 的账号：TOTP 6 位码或一次性恢复码（首次登录返回 two_factor_required 后补交）
 })
 
+// 常时防枚举：账号不存在时也对这个固定 dummy hash 跑一次 bcrypt（与真 hash 同 cost=10），
+// 抹平"账号不存在→不跑 bcrypt 秒回 vs 存在→跑 bcrypt 慢 50-100ms"的计时旁路——否则未认证攻击者
+// 可据登录响应耗时枚举已注册的用户名/邮箱/手机号（本 App 用户为视障者+亲友，隐私敏感）。模块加载时生成一次。
+const DUMMY_PASSWORD_HASH = hashPassword('beeurei-login-timing-equalizer-not-a-real-credential')
+
 const appleSchema = z.object({
   identityToken: z.string().min(1),
   displayName: z.string().trim().min(1).max(64).optional(), // Apple 仅首次授权给姓名，客户端透传；trim 同注册/改名口径
@@ -136,7 +141,12 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     }
     // 登录标识兼容用户名/手机号/邮箱（与找回密码共用 findByLoginIdentifier，避免口径漂移）。
     const user = findByLoginIdentifier(store, parsed.data.username)
-    if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) {
+    if (!user) {
+      // 账号不存在也跑一次等价 bcrypt，令两路耗时一致、消除计时枚举旁路（见 DUMMY_PASSWORD_HASH 说明）。
+      verifyPassword(parsed.data.password, DUMMY_PASSWORD_HASH)
+      return reply.code(401).send({ error: 'invalid_credentials' })
+    }
+    if (!verifyPassword(parsed.data.password, user.passwordHash)) {
       return reply.code(401).send({ error: 'invalid_credentials' })
     }
     if (user.status === 'disabled') {

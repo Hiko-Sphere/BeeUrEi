@@ -63,6 +63,19 @@ describe('邮箱验证码登录/注册（无密码）', () => {
     expect(r.statusCode).toBe(200)
     expect((r.json() as any).ok).toBe(true)
   })
+
+  it('登录防枚举：账号不存在与密码错都回同一 401 invalid_credentials（响应不泄露存在性）', async () => {
+    const app = buildApp(new MemoryStore(), { codeSend: noThrottle() })
+    await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'realuser', password: 'secret123', role: 'helper' } })
+    // 账号存在但密码错
+    const wrongPw = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'realuser', password: 'wrongpass' } })
+    // 账号完全不存在（此路现在也跑一次等价 bcrypt 抹平计时；响应须与"密码错"字面一致）
+    const noUser = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'ghost404', password: 'wrongpass' } })
+    expect(wrongPw.statusCode).toBe(401)
+    expect(noUser.statusCode).toBe(401)
+    expect((wrongPw.json() as any).error).toBe('invalid_credentials')
+    expect((noUser.json() as any).error).toBe('invalid_credentials') // 与"存在密码错"一字不差，不据响应区分存在性
+  })
 })
 
 describe('自定义/修改用户名', () => {

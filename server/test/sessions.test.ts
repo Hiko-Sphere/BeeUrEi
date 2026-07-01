@@ -71,6 +71,19 @@ describe('login sessions / device management', () => {
     await a.close()
   })
 
+  it('不能吊销当前会话（cannot_revoke_current）——服务端权威，防自我踢下线', async () => {
+    const a = app()
+    const me = await reg(a, 'sesscur')
+    const list = await a.inject({ method: 'GET', url: '/api/account/sessions', headers: auth(me.token) })
+    const current = (list.json() as { sessions: { sessionId: string; current: boolean }[] }).sessions.find((s) => s.current)!
+    const rv = await a.inject({ method: 'POST', url: '/api/account/sessions/revoke', headers: auth(me.token), payload: { sessionId: current.sessionId } })
+    expect(rv.statusCode).toBe(400)
+    expect(rv.json().error).toBe('cannot_revoke_current')
+    // 当前会话仍有效：还能列出会话
+    expect((await a.inject({ method: 'GET', url: '/api/account/sessions', headers: auth(me.token) })).statusCode).toBe(200)
+    await a.close()
+  })
+
   it('refresh keeps the same session (sessionId stable across rotation)', async () => {
     const a = app()
     const r = await reg(a, 'sess4')

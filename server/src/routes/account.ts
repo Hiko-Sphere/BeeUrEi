@@ -140,6 +140,9 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
   app.post('/api/account/sessions/revoke', { preHandler: requireAuth() }, async (req, reply) => {
     const parsed = sessionSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    // 本设备管理页语义是"登出**其它**设备"——不该经此吊销当前会话把自己踢下线（登出走登出、批量走 revoke-others）。
+    // 服务端权威：两端 UI 已对当前会话隐藏登出按钮，这里再兜一层，防改造/未来客户端误踢当前会话。
+    if (req.user!.sid && parsed.data.sessionId === req.user!.sid) return reply.code(400).send({ error: 'cannot_revoke_current' })
     store.revokeSession(req.user!.sub, parsed.data.sessionId)
     return { ok: true }
   })

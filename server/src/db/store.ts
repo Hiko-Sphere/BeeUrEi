@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { normalizePhone } from '../auth/apple' // 纯字符串工具，无模块级副作用、不依赖 store（无循环）
 import type { Sealed } from '../kyc/crypto' // 仅类型导入（编译期擦除）——不触发 crypto 的 KYC_ENC_KEY 启动校验
@@ -1196,7 +1196,12 @@ export class JsonFileStore extends MemoryStore {
       appConfig: this.appConfig,
       notifications: [...this.notifications.values()],
     }
-    writeFileSync(this.path, JSON.stringify(data, null, 2))
+    // 原子写：先写临时文件再 rename 覆盖。writeFileSync 直写在写入中途崩溃/断电/磁盘满时会留下**半写**
+    // 的 JSON——下次启动 JSON.parse 失败→构造函数按"损坏忽略、从空开始"处理→**静默全量丢数据**。
+    // rename 在同一文件系统上是原子的：主文件永远是上一次或本次的完整内容，绝不半写。
+    const tmp = `${this.path}.tmp`
+    writeFileSync(tmp, JSON.stringify(data, null, 2))
+    renameSync(tmp, this.path)
   }
 }
 

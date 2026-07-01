@@ -17,7 +17,9 @@ const RELAY_TYPES = new Set(['offer', 'answer', 'ice', 'video-gate', 'end', 'con
 /// 之后 offer/answer/ice/video-gate/end 会被转发给同房间的另一端。
 /// video-gate {on} 用于视障侧通知协助者"画面已开/关"（见 BACKEND_PLAN §5）。
 export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store: Store, pendingCalls: PendingCallRegistry, openHelp: OpenHelpRegistry, callControl?: CallControlBridge): void {
-  app.register(fastifyWebsocket)
+  // 信令帧上限 256 KiB：本通道只走小消息（SDP 数 KB、ICE 更小；音视频走 WebRTC 点对点、不经此）。
+  // 默认(ws 库 100 MiB)对纯信令过大——通话参与者可发超大帧，被 JSON.parse 放大分配 + 转发给对端 → 内存放大 DoS。
+  app.register(fastifyWebsocket, { options: { maxPayload: 256 * 1024 } })
   app.register(async (f) => {
     // clientId → socket（转发用）。adapter 层，故用 any 规避 ws 类型摩擦。
     const sockets = new Map<string, { send: (s: string) => void; readyState: number }>()

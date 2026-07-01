@@ -167,4 +167,17 @@ describe('WebRTC signaling relay', () => {
     expect(await closed).toBe(4003)
     await app.close()
   })
+
+  it('超大信令帧(>256KiB)按 maxPayload 关闭连接(1009)——不放大内存', async () => {
+    const app = buildApp(new MemoryStore())
+    await app.listen({ port: 0, host: '127.0.0.1' })
+    const port = (app.server.address() as { port: number }).port
+    const caller = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'bigc', password: 'secret123', role: 'blind' } })).json()
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${caller.token}`)
+    await open(ws)
+    const closed = new Promise<number>((resolve) => ws.on('close', (code) => resolve(code)))
+    ws.send('x'.repeat(300 * 1024)) // 300KiB > 256KiB 上限 → ws 层拒收并关闭，帧根本不进 message 处理器
+    expect(await closed).toBe(1009) // 1009 = message too big
+    await app.close()
+  })
 })

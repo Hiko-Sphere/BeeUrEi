@@ -40,6 +40,27 @@ jobs:
       - name: test
         run: npm test
 
+  web:
+    name: 网页协助端 (React + eslint + vitest + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site/app-src
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/app-src/package-lock.json
+      - run: npm ci
+      - name: lint
+        run: npm run lint
+      - name: test
+        run: npm test
+      - name: build
+        run: npm run build
+
   ios-build:
     name: iOS 构建
     runs-on: macos-14

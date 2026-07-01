@@ -84,6 +84,21 @@ final class SafetyCoreEdgeCaseTests: XCTestCase {
         XCTAssertNil(RiskScore().mostDangerous([]))
     }
 
+    func testScoreAlwaysFiniteOnNonFiniteInputs() {
+        // 安全关键：坏传感器/坏几何(NaN/±inf)绝不能污染分数——否则 mostDangerous 的 `<` 比较会错选/漏选最危险目标。
+        // bearing 尤其可达：tracker 直接拷 obs.bearingDegrees、未像距离那样在 α-β 处过滤非有限。
+        let r = RiskScore()
+        for bad in [Double.nan, .infinity, -.infinity] {
+            XCTAssertTrue(r.score(ttc: bad, distanceMeters: 1, bearingDegrees: 0, isHazard: true).isFinite)
+            XCTAssertTrue(r.score(ttc: 2, distanceMeters: bad, bearingDegrees: 0, isHazard: true).isFinite)
+            XCTAssertTrue(r.score(ttc: 2, distanceMeters: 1, bearingDegrees: bad, isHazard: true).isFinite)
+            XCTAssertTrue(r.score(ttc: bad, distanceMeters: bad, bearingDegrees: bad, isHazard: false).isFinite)
+        }
+        // 有限输入行为不变：非有限 bearing 等价于「居中度 0」，故真·居中(0°)仍严格更危险。
+        XCTAssertGreaterThan(r.score(ttc: 2, distanceMeters: 1, bearingDegrees: 0, isHazard: true),
+                             r.score(ttc: 2, distanceMeters: 1, bearingDegrees: .nan, isHazard: true))
+    }
+
     // MARK: AnnouncementPolicy 承诺撤销
 
     func testResetAllowsImmediateReannounce() {

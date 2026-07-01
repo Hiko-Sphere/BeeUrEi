@@ -71,6 +71,9 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store): void {
     if (!store.findById(userId)) return reply.code(404).send({ error: 'not_found' })
     if (!areLinked(store, me, userId)) return reply.code(403).send({ error: 'not_linked' })
     const updated = store.updateGroup(group.id, { memberIds: [...group.memberIds, userId] })
+    // 新成员的"已读时刻"置为入群此刻——否则其未读数会把**入群前**的全部历史消息(至多 200 上限)都算上，
+    // 刚进群就顶着一个巨大的未读角标（历史仍可上翻查看，只是不计未读）。与建群时群主 setGroupRead 同口径。
+    store.setGroupRead(group.id, userId, Date.now())
     return { group: updated }
   })
 

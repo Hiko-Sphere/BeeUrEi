@@ -89,6 +89,25 @@ describe('群聊', () => {
     expect((mine.json() as any).groups[0].unread).toBe(0) // 自己发的不算未读
   })
 
+  it('新成员入群后未读从入群时刻算起（入群前历史不计未读）', async () => {
+    const app = buildApp(new MemoryStore())
+    const owner = await reg(app, 'gjo', 'blind')
+    const m1 = await reg(app, 'gjm1', 'helper')
+    const late = await reg(app, 'gjlate', 'helper')
+    await bind(app, owner.token, m1.token, 'gjm1')
+    await bind(app, owner.token, late.token, 'gjlate')
+    const grp = await app.inject({ method: 'POST', url: '/api/groups', headers: auth(owner.token), payload: { name: '晚到群', memberIds: [m1.user.id] } })
+    const gid = (grp.json() as any).group.id
+    for (const t of ['a', 'b', 'c']) await app.inject({ method: 'POST', url: '/api/messages', headers: auth(owner.token), payload: { groupId: gid, kind: 'text', text: t } })
+    // late 入群（晚于那 3 条消息）
+    expect((await app.inject({ method: 'POST', url: `/api/groups/${gid}/members`, headers: auth(owner.token), payload: { userId: late.user.id } })).statusCode).toBe(200)
+    const find = (r: any) => (r.json() as any).groups.find((x: any) => x.group.id === gid).unread
+    // late：入群前 3 条不计 → 未读 0；m1：建群起就在、未读该 3 条 → 未读 3（互不影响）
+    expect(find(await app.inject({ method: 'GET', url: '/api/groups', headers: auth(late.token) }))).toBe(0)
+    expect(find(await app.inject({ method: 'GET', url: '/api/groups', headers: auth(m1.token) }))).toBe(3)
+    await app.close()
+  })
+
   it('成员管理：群主加人/踢人，成员退群，旁人无权；解散级联删消息', async () => {
     const app = buildApp(new MemoryStore())
     const owner = await reg(app, 'mowner', 'blind')

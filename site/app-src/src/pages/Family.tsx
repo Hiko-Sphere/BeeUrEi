@@ -19,9 +19,10 @@ export function FamilyPage() {
 
   const reload = useCallback(async () => {
     const [l, i, b] = await Promise.allSettled([api.familyLinks(), api.incomingLinks(), api.blocks()])
-    if (l.status === 'fulfilled') setLinks(l.value.links)
-    if (i.status === 'fulfilled') setIncoming(i.value.links)
-    if (b.status === 'fulfilled') setBlocks(b.value.blocks)
+    // 失败时：有数据则保留，仍是初始 null 则落空数组退出加载态（避免某端点持续失败让该段永远转圈）。
+    if (l.status === 'fulfilled') setLinks(l.value.links); else setLinks((c) => c ?? [])
+    if (i.status === 'fulfilled') setIncoming(i.value.links); else setIncoming((c) => c ?? [])
+    if (b.status === 'fulfilled') setBlocks(b.value.blocks); else setBlocks((c) => c ?? [])
   }, [])
 
   useEffect(() => { void reload() }, [reload])

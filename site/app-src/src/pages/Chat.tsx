@@ -21,8 +21,9 @@ export function ChatPage() {
 
   const loadLists = useCallback(async () => {
     const [c, g] = await Promise.allSettled([api.conversations(), api.groups()])
-    if (c.status === 'fulfilled') setConvos(c.value.conversations)
-    if (g.status === 'fulfilled') setGroups(g.value.groups)
+    // 失败时：有数据则保留，仍是初始 null 则落空数组退出加载态（避免持续失败让列表永远转圈）。
+    if (c.status === 'fulfilled') setConvos(c.value.conversations); else setConvos((v) => v ?? [])
+    if (g.status === 'fulfilled') setGroups(g.value.groups); else setGroups((v) => v ?? [])
   }, [])
   useEffect(() => { void loadLists(); return pollWhileVisible(loadLists, 8000) }, [loadLists])
 

@@ -30,7 +30,7 @@ export function HomePage() {
         unread: notif.status === 'fulfilled' ? notif.value.unread : 0,
         pendingLinks: links.status === 'fulfilled' ? links.value.links.length : 0,
       })
-      if (hist.status === 'fulfilled') setCalls(hist.value.calls.slice(0, 6))
+      if (hist.status === 'fulfilled') setCalls(hist.value.calls.slice(0, 6)); else setCalls((c) => c ?? []) // 失败也退出加载态（stats 已带默认值，calls 此前会永远转圈）
     }
     void load()
     const stop = pollWhileVisible(load, 15_000)

@@ -20,7 +20,10 @@ const querySchema = z.object({
 
 /// 国内步行导航：用高德 Web 服务（key 仅后端持有），App 通过本接口取路线。
 export function registerNavRoutes(app: FastifyInstance, store: Store): void {
-  app.get('/api/nav/walking', { preHandler: [requireAuth(), requireFeature(store, 'navigation')] }, async (req, reply) => {
+  // 限流 20/min：本接口每次要打 2 次高德 Web 服务（geocode + walking），而高德是**有额度/计费**的外部上游。
+  // 全局 300/min 对它太松（单用户可 600 次高德调用/分钟 → 烧日额度、拖垮全体导航 + 计费）。正常一次导航只取一两条路线。
+  app.get('/api/nav/walking', { preHandler: [requireAuth(), requireFeature(store, 'navigation')],
+                                config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
     if (!amapConfigured()) return reply.code(503).send({ error: 'amap_not_configured' })
     const parsed = querySchema.safeParse(req.query)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })

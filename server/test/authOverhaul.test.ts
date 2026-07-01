@@ -102,6 +102,17 @@ describe('自定义/修改用户名', () => {
     const ok = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'good.user-1', password: 'secret123' } })
     expect(ok.statusCode).toBe(201)
   })
+
+  it('注册昵称 trim（与改名同口径）：纯空白昵称拒、带首尾空格昵称落库去空格', async () => {
+    const app = buildApp(new MemoryStore(), { codeSend: noThrottle() })
+    // 纯空白昵称 → trim 后为空 → min(1) 失败 → 400（不再落一个"看不见的空名"）
+    const blank = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'nameA', password: 'secret123', displayName: '   ' } })
+    expect(blank.statusCode).toBe(400)
+    // 带首尾空格 → 落库为去空格后的值
+    const padded = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'nameB', password: 'secret123', displayName: '  Bob  ' } })
+    expect(padded.statusCode).toBe(201)
+    expect((padded.json() as any).user.displayName).toBe('Bob')
+  })
 })
 
 describe('Apple ID 绑定/解绑（现存账号）', () => {

@@ -38,7 +38,7 @@ const registerSchema = z.object({
   // 用户名/手机号/邮箱至少给一个（refine 校验）；不给用户名时自动生成（不从手机号/邮箱派生——username 进 publicUser，派生会泄露隐私标识）。
   username: z.string().trim().min(3).max(32).optional(), // 去首尾空白，避免" alice"/"alice"混淆（见审查 #4）
   password: z.string().min(6).max(128),
-  displayName: z.string().min(1).max(64).optional(),
+  displayName: z.string().trim().min(1).max(64).optional(), // trim 与改昵称端点(account.ts)一致——否则可注册出纯空白/带首尾空格的昵称（盲人来电播报会念到空名）
   // 自助注册仅限这些角色；admin/developer 由后台分配。
   role: z.enum(['blind', 'helper', 'family']).optional(),
   language: z.string().min(2).max(8).optional(), // 协助者/亲友语言，用于匹配排序（见审查 #10）
@@ -54,7 +54,7 @@ const loginSchema = z.object({
 
 const appleSchema = z.object({
   identityToken: z.string().min(1),
-  displayName: z.string().min(1).max(64).optional(), // Apple 仅首次授权给姓名，客户端透传
+  displayName: z.string().trim().min(1).max(64).optional(), // Apple 仅首次授权给姓名，客户端透传；trim 同注册/改名口径
   role: z.enum(['blind', 'helper', 'family']).optional(),
   language: z.string().min(2).max(8).optional(),
 })

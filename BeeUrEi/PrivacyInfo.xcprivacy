@@ -75,6 +75,16 @@
                 <string>CA92.1</string>
             </array>
         </dict>
+        <!-- 必需理由 API：ProcessInfo.systemUptime（单调时钟）——测量 App 内事件间隔/驱动计时器与节流
+             （语音指令去抖、导航播报节流、KYC 拍摄计时等），不用于指纹识别。35F9.1。 -->
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>35F9.1</string>
+            </array>
+        </dict>
     </array>
 </dict>
 </plist>

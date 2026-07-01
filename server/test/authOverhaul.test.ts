@@ -91,6 +91,17 @@ describe('自定义/修改用户名', () => {
     const dup = await app.inject({ method: 'POST', url: '/api/account/username', headers: auth(token), payload: { username: 'taken1' } })
     expect(dup.statusCode).toBe(409)
   })
+
+  it('注册用户名走与改名同口径的字符集校验：含空格/@//等 → 400 invalid_username；合法字符集放行', async () => {
+    const app = buildApp(new MemoryStore(), { codeSend: noThrottle() })
+    for (const u of ['has space', 'a@b.com', 'foo/bar', 'x<i>']) {
+      const r = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123' } })
+      expect(r.statusCode).toBe(400)
+      expect((r.json() as any).error).toBe('invalid_username')
+    }
+    const ok = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'good.user-1', password: 'secret123' } })
+    expect(ok.statusCode).toBe(201)
+  })
 })
 
 describe('Apple ID 绑定/解绑（现存账号）', () => {

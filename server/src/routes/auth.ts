@@ -80,6 +80,9 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     const { username: rawUsername, password, displayName, role, language, email, phone } = parsed.data
     // 昵称内容审核：与改昵称端点(account.ts)一致——否则注册时即可塞入违禁昵称绕过审核（everyone 可见）。
     if (displayName && matchBannedTerm(store.getAppConfig(), displayName)) return reply.code(403).send({ error: 'content_blocked' })
+    // 用户名字符集：与改用户名端点(account.ts)一致——仅字母数字 _.- 。否则注册可塞入含空白/@//控制字符的
+    // 用户名（虽各处显示已转义防 XSS，但会引起登录标识与邮箱(@)歧义、导出文件名注入、且改名时反而改不回同值）。
+    if (rawUsername && !/^[A-Za-z0-9_.-]+$/.test(rawUsername)) return reply.code(400).send({ error: 'invalid_username' })
     if (rawUsername && store.findByUsername(rawUsername)) {
       return reply.code(409).send({ error: 'username_taken' })
     }

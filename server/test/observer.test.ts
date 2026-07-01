@@ -58,7 +58,7 @@ async function liveCall(opts: { callerCaps?: boolean; helperCaps?: boolean } = {
 
 describe('管理员旁观准入与定向中继', () => {
   it('双方均同意（声明能力）时管理员可旁观；各端被告知；obs-* 定向；1:1 主媒体不泄漏给管理员', async () => {
-    const { app, base, ws1, ws2, caller, adminToken } = await liveCall({})
+    const { app, store, base, ws1, ws2, caller, adminToken } = await liveCall({})
     const pjAtCaller = nextMessage(ws1, (m) => m.type === 'peer-joined' && m.role === 'admin')
     const pjAtHelper = nextMessage(ws2, (m) => m.type === 'peer-joined' && m.role === 'admin')
     const wsAdmin = new WebSocket(`${base}?token=${adminToken}`)
@@ -72,6 +72,11 @@ describe('管理员旁观准入与定向中继', () => {
     const pjh = await pjAtHelper
     expect(pjc.userId).toBe('admin1')
     expect(pjh.role).toBe('admin') // 双方都被告知管理员加入监看（合规）
+
+    // 审计：旁观（监看被录方实时音视频，最敏感的管理员权力）必须落不可抵赖日志，与 kyc.view 等后台操作同口径。
+    const obsAudit = store.allAuditEntries().find((a) => a.action === 'call.observe' && a.targetId === 'c1' && a.adminId === 'admin1')
+    expect(obsAudit).toBeTruthy()
+    expect(obsAudit!.targetType).toBe('call')
 
     // 参与者向管理员发 obs-offer（定向 to:admin1）→ 仅管理员收到，对端不收到。
     const obsAtAdmin = nextMessage(wsAdmin, (m) => m.type === 'obs-offer')

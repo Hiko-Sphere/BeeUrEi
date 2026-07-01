@@ -90,6 +90,9 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
             if (joined) { const { peers: oldPeers } = hub.leave(clientId); for (const p of oldPeers) relay(p.clientId, { type: 'peer-left', userId: auth.sub }) }
             joined = { clientId, userId: auth.sub, role: 'admin', callId, joinedAt: now, caps }
             const peers = hub.join(joined)
+            // 审计：旁观通话（监看被录方实时音视频）是最敏感的管理员权力，须与其它后台操作(含 kyc.view)同口径落不可抵赖日志——
+            // 参与方虽实时收到 peer-joined 告知横幅，但那非持久留存；无此审计则事后无从追责"谁在何时监看了哪通电话"。
+            store.createAuditEntry({ id: randomUUID(), adminId: auth.sub, action: 'call.observe', targetType: 'call', targetId: callId, detail: `observing ${existing.length} participant(s)`, at: now })
             socket.send(JSON.stringify({
               type: 'joined', observer: true,
               peers: peers.map((p) => { const pu = store.findById(p.userId); return { userId: p.userId, role: p.role, userName: pu?.displayName, userAvatar: pu?.avatar ?? null } }),

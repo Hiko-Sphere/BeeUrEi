@@ -422,6 +422,10 @@ export interface Store {
   /// 否则同一设备换账号后，旧账号仍持该 token，发给旧账号的推送会送到现登录账号的设备（跨账号泄漏）。
   clearApnsTokenFromOthers(token: string, exceptUserId: string): void
   clearVoipTokenFromOthers(token: string, exceptUserId: string): void
+  /// 回收失效的推送 token：APNs 对某 token 返回 410（Unregistered，设备已卸载/token 失效）时，
+  /// 从其所属账号清除该 token（apns 或 voip 字段任一匹配即清），避免此后对死 token 反复空投、
+  /// 以及 Apple 因高失效率对发送方限流。
+  clearPushToken(token: string): void
 
   createLink(link: FamilyLink): void
   linksByOwner(ownerId: string): FamilyLink[]
@@ -729,6 +733,14 @@ export class MemoryStore implements Store {
   clearVoipTokenFromOthers(token: string, exceptUserId: string): void {
     let changed = false
     for (const u of this.users.values()) if (u.id !== exceptUserId && u.voipToken === token) { u.voipToken = undefined; changed = true }
+    if (changed) this.afterMutate()
+  }
+  clearPushToken(token: string): void {
+    let changed = false
+    for (const u of this.users.values()) {
+      if (u.apnsToken === token) { u.apnsToken = undefined; changed = true }
+      if (u.voipToken === token) { u.voipToken = undefined; changed = true }
+    }
     if (changed) this.afterMutate()
   }
 

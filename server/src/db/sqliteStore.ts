@@ -295,6 +295,10 @@ export class SqliteStore implements Store {
   clearVoipTokenFromOthers(token: string, exceptUserId: string): void {
     this.db.prepare('UPDATE users SET voipToken = NULL WHERE voipToken = ? AND id != ?').run(token, exceptUserId)
   }
+  clearPushToken(token: string): void {
+    this.db.prepare('UPDATE users SET apnsToken = NULL WHERE apnsToken = ?').run(token)
+    this.db.prepare('UPDATE users SET voipToken = NULL WHERE voipToken = ?').run(token)
+  }
 
   // MARK: links
   createLink(l: FamilyLink): void {

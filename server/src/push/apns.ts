@@ -14,6 +14,19 @@ export interface PushSender {
   sendAlert(apnsToken: string, title: string, body: string, extra?: Record<string, string>, threadId?: string, badge?: number): Promise<void>
 }
 
+/// 带 HTTP 状态的 APNs 错误——让发送方能区分"token 确定失效(410)"与其它失败（超时/连接错误 status=0、
+/// 429 限流、5xx 服务端、4xx 配置类），仅前者才回收 token。
+export class ApnsError extends Error {
+  constructor(readonly status: number, message: string) { super(message); this.name = 'ApnsError' }
+}
+
+/// 是否应据此状态回收设备 token。**仅 410**（Unregistered，设备卸载/token 失效，Apple 明确语义）。
+/// 绝不含 400（可能是 DeviceTokenNotForTopic 等配置问题）/429/5xx/超时——那些是暂时性或配置错误，
+/// 据此清除会误删用户的有效 token、导致其再也收不到来电/告警推送（静默且危险）。
+export function shouldInvalidateToken(status: number): boolean {
+  return status === 410
+}
+
 /// 构造 alert 推送 JSON（纯函数，可单测）：extra 平铺在顶层，aps 含 alert/sound，
 /// 给了 threadId 则加 aps['thread-id'] 让 iOS 按会话分组；给了 badge 则设 aps.badge 图标角标。
 export function buildAlertPayload(title: string, body: string, extra?: Record<string, string>, threadId?: string, badge?: number): string {
@@ -45,6 +58,8 @@ export class ApnsPushSender implements PushSender {
     private readonly topic: string,      // VoIP topic（…​.voip）
     private readonly host: string,
     private readonly alertTopic: string, // 普通推送 topic（App bundle id，去掉 .voip 后缀）
+    // APNs 返回 410 时的回调：把失效 token 交给上层（通常清除其在存储里的 token）。可选、失败安全。
+    private readonly onInvalidToken?: (token: string) => void,
   ) {}
 
   /// APNs provider JWT（ES256）。最长有效 1h，缓存 ~40 分钟复用（APNs 限制频繁换发新 token）。
@@ -72,6 +87,7 @@ export class ApnsPushSender implements PushSender {
       }, body)
     } catch (err) {
       console.warn('[apns] VoIP push failed:', (err as Error).message)
+      if (err instanceof ApnsError && shouldInvalidateToken(err.status)) this.onInvalidToken?.(voipToken)
     }
   }
 
@@ -86,10 +102,12 @@ export class ApnsPushSender implements PushSender {
       }, payload)
     } catch (err) {
       console.warn('[apns] alert push failed:', (err as Error).message)
+      if (err instanceof ApnsError && shouldInvalidateToken(err.status)) this.onInvalidToken?.(apnsToken)
     }
   }
 
-  private post(path: string, headers: Record<string, string>, body: string): Promise<void> {
+  // protected（非 private）：便于单测子类覆盖以模拟 410/5xx/超时，验证 token 回收逻辑（真实 http2 无法在测试里触发）。
+  protected post(path: string, headers: Record<string, string>, body: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const client = http2.connect(`https://${this.host}`)
       // settle 守卫：无论成功/连接错误/请求错误/超时，都确保 client 被关闭一次，杜绝失败路径上的 http2 会话/socket 泄漏（见复审 #7）。
@@ -113,7 +131,7 @@ export class ApnsPushSender implements PushSender {
       req.on('response', (h) => { status = Number(h[':status']) })
       req.setEncoding('utf8')
       req.on('data', (c) => { data += c })
-      req.on('end', () => settle(status === 200 ? undefined : new Error(`APNs ${status}: ${data}`)))
+      req.on('end', () => settle(status === 200 ? undefined : new ApnsError(status, `APNs ${status}: ${data}`)))
       req.on('error', settle)
       req.write(body)
       req.end()
@@ -122,7 +140,7 @@ export class ApnsPushSender implements PushSender {
 }
 
 /// 工厂：四个必需 env 齐全且能读到 .p8 才启用真实 APNs，否则 Noop（不阻断其余功能）。
-export function makePushSender(): PushSender {
+export function makePushSender(onInvalidToken?: (token: string) => void): PushSender {
   const keyPath = process.env.APNS_KEY_PATH
   const keyId = process.env.APNS_KEY_ID
   const teamId = process.env.APNS_TEAM_ID
@@ -133,7 +151,7 @@ export function makePushSender(): PushSender {
     const host = process.env.APNS_HOST ?? 'api.sandbox.push.apple.com'
     const alertTopic = topic.endsWith('.voip') ? topic.slice(0, -'.voip'.length) : topic
     console.log(`[apns] 推送已启用（host=${host}, voip=${topic}, alert=${alertTopic}）`)
-    return new ApnsPushSender(key, keyId, teamId, topic, host, alertTopic)
+    return new ApnsPushSender(key, keyId, teamId, topic, host, alertTopic, onInvalidToken)
   } catch (err) {
     console.warn('[apns] 配置不完整或 .p8 读取失败，回退无推送：', (err as Error).message)
     return new NoopPushSender()

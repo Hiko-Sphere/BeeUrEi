@@ -22,7 +22,8 @@ async function main(): Promise<void> {
   seedAdmin(store) // 若设置了 ADMIN_USERNAME/ADMIN_PASSWORD 则引导管理员
 
   const mailer = await makeMailer() // 配了 SMTP_* 则真实发信，否则控制台打码（D1）
-  const pushSender = makePushSender() // 配了 APNS_* 则真实 VoIP 推送，否则无后台来电（A1）
+  // APNs 410（token 失效）时回收该 token，避免反复空投死 token + 被 Apple 限流。
+  const pushSender = makePushSender((token) => store.clearPushToken(token)) // 配了 APNS_* 则真实 VoIP 推送，否则无后台来电（A1）
   const app = buildApp(store, { mailer, pushSender })
   const port = Number(process.env.PORT ?? 8787)
 

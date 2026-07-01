@@ -524,10 +524,14 @@ function CreateGroupDialog({ onClose, onCreated }: { onClose: () => void; onCrea
           {contacts.length === 0 ? <div className="p-4 text-center text-sm text-faint">{t('暂无可选联系人', 'No contacts')}</div> : (
             <ul className="divide-y divide-[var(--line)]">
               {contacts.map((c) => (
-                <li key={c.id} onClick={() => toggle(c.id)} className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:surface-2">
-                  <Avatar name={c.name} size={32} />
-                  <span className="flex-1 text-sm">{c.name}</span>
-                  <input type="checkbox" readOnly checked={picked.has(c.id)} className="accent-[var(--color-honey)]" />
+                // 用 <label>+真复选框：点整行切换（label 原生行为），复选框天然可 Tab 聚焦 + 空格切换、
+                // 被读屏播报为"姓名，复选框，已选/未选"。此前 onClick 挂 li + readOnly 复选框对键盘不可达。
+                <li key={c.id}>
+                  <label className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:surface-2">
+                    <Avatar name={c.name} size={32} />
+                    <span className="flex-1 text-sm">{c.name}</span>
+                    <input type="checkbox" checked={picked.has(c.id)} onChange={() => toggle(c.id)} className="accent-[var(--color-honey)]" />
+                  </label>
                 </li>
               ))}
             </ul>

@@ -53,6 +53,7 @@ export function chatErrorText(err: unknown, t: (zh: string, en: string) => strin
   switch (code) {
     case 'feature_disabled': return t('聊天功能已被管理员暂时关闭', 'Messaging is currently turned off by the administrator')
     case 'maintenance': return t('系统维护中，请稍后再试', 'Under maintenance — please try again later')
+    case 'too_many_requests': return t('操作太频繁，请稍候再试', 'Too many attempts — please wait a moment')
     case 'content_blocked': return t('消息含被禁止的内容，未发送', "Message contains blocked content and wasn't sent")
     case 'message_too_long': return t('消息太长，请缩短后再发', 'Message is too long — please shorten it')
     case 'blocked': return t('你们之间存在拉黑，无法发送', "Can't send — one of you blocked the other")
@@ -73,6 +74,7 @@ export function callErrorText(err: unknown, t: (zh: string, en: string) => strin
   switch (code) {
     case 'feature_disabled': return t('通话功能已被管理员暂时关闭', 'Calling is currently turned off by the administrator')
     case 'maintenance': return t('系统维护中，请稍后再试', 'Under maintenance — please try again later')
+    case 'too_many_requests': return t('操作太频繁，请稍候再试', 'Too many attempts — please wait a moment')
     case 'not_linked': return t('你们尚未建立联系', 'You are not linked')
     case 'already_claimed_or_gone': return t('该求助已被认领或已结束', 'Already claimed or gone')
     default: return fallback
@@ -133,6 +135,9 @@ async function rawFetch(method: string, path: string, body: unknown, auth: boole
   let data: unknown = null
   try { data = await res.json() } catch { /* 204 等空体 */ }
   if (!res.ok) {
+    // 429 归一：全局限流返回 fastify 文案串、assist 端点返回 'too_many_requests'、空体→http_429——统一成
+    // 'too_many_requests'，让错误映射给出"稍候再试"而非笼统"请重试"（立刻重试只会再次撞限流）。
+    if (res.status === 429) throw new APIError('too_many_requests', 429)
     const code = (data && typeof data === 'object' && 'error' in data) ? String((data as { error: unknown }).error) : `http_${res.status}`
     throw new APIError(code, res.status)
   }

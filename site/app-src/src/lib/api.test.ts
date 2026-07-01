@@ -15,6 +15,7 @@ describe('chatErrorText 错误码→用户文案映射', () => {
     expect(chatErrorText(new APIError('not_member', 403), t)).toContain('群聊')
     expect(chatErrorText(new APIError('media_too_large', 413), t)).toContain('太大')
     expect(chatErrorText(new APIError('unsupported_media_type', 400), t)).toContain('格式')
+    expect(chatErrorText(new APIError('too_many_requests', 429), t)).toContain('频繁') // 限流→"稍候"而非笼统"重试"
   })
 
   it('未知码/非 APIError 用兜底；显式 fallback 优先', () => {
@@ -31,6 +32,7 @@ describe('callErrorText 呼叫/求助错误码→用户文案映射', () => {
     expect(callErrorText(new APIError('maintenance', 503), t, '呼叫失败')).toContain('维护')
     expect(callErrorText(new APIError('not_linked', 403), t, '呼叫失败')).toContain('联系')
     expect(callErrorText(new APIError('already_claimed_or_gone', 409), t, '认领失败')).toContain('已被认领')
+    expect(callErrorText(new APIError('too_many_requests', 429), t, '呼叫失败')).toContain('频繁')
   })
 
   it('未知码/非 APIError 落到各调用点的 fallback', () => {

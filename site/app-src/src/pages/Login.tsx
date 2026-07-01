@@ -26,6 +26,7 @@ export function LoginPage() {
       case 'invalid_credentials': return t('账号或密码不正确', 'Incorrect account or password')
       case 'username_taken': return t('该用户名已被占用', 'That username is taken')
       case 'registration_disabled': return t('注册暂时关闭', 'Registration is currently closed')
+      case 'content_blocked': return t('该内容不被允许，请换一个', "That's not allowed — please choose another")
       case 'network': return t('网络连接失败，请重试', 'Network error, please retry')
       case 'invalid_input': return t('请检查输入内容', 'Please check your input')
       default: return t('操作失败，请重试', 'Something went wrong, please retry')
@@ -35,6 +36,14 @@ export function LoginPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    // 注册前端校验：与后端 auth.ts 同口径（用户名 3–32 且仅字母数字 _.- ；密码 ≥6）。
+    // 否则非法输入要打到服务端才被 invalid_input 泛拒，用户看不出错在哪（与改密表单已有的即时校验对齐）。
+    if (mode === 'register') {
+      const u = username.trim()
+      if (u.length < 3 || u.length > 32) { setError(t('用户名需 3–32 位', 'Username must be 3–32 characters')); return }
+      if (!/^[A-Za-z0-9_.-]+$/.test(u)) { setError(t('用户名只能含字母、数字和 _ . -', 'Username may only contain letters, numbers, and _ . -')); return }
+      if (password.length < 6) { setError(t('密码至少 6 位', 'Password must be at least 6 characters')); return }
+    }
     setBusy(true)
     try {
       const res = mode === 'login'

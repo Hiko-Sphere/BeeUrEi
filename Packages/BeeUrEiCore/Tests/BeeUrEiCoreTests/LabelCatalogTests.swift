@@ -38,4 +38,13 @@ final class LabelCatalogTests: XCTestCase {
         XCTAssertTrue(hazard.isHighRisk(catalog.localizedName("bus")))        // 公交车
         XCTAssertFalse(hazard.isHighRisk(catalog.localizedName("cat")))       // 猫（非高危）
     }
+
+    func testUnknownObstacleIsHighRiskInBothLanguages() {
+        // 未识别障碍（中文回退"障碍物"/英文"obstacle"）两种语言都应命中高危加成——否则中文用户
+        // 漏掉"不认识但挡路"的危险（修复前 HazardCatalog 中文侧是"障碍"≠LabelCatalog 的"障碍物"）。
+        let zhLabel = LabelCatalog(language: .zh), zhHazard = HazardCatalog(language: .zh)
+        XCTAssertTrue(zhHazard.isHighRisk(zhLabel.localizedName("xyzunknown"))) // 障碍物
+        let enLabel = LabelCatalog(language: .en), enHazard = HazardCatalog(language: .en)
+        XCTAssertTrue(enHazard.isHighRisk(enLabel.localizedName("xyzunknown"))) // obstacle
+    }
 }

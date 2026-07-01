@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import { type Store, type Role, type AdminAuditEntry, type FeatureKey, FEATURE_KEYS, publicUser } from '../db/store'
+import { type Store, type Role, type User, type AdminAuditEntry, type FeatureKey, FEATURE_KEYS, publicUser } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { hashPassword } from '../auth/passwords'
 import { normalizePhone } from '../auth/apple'
@@ -49,6 +49,13 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
   const adminOnly = { preHandler: requireAuth(['admin']) }
   // 当前活跃管理员数（用于"最后一名管理员"保护，防把后台锁死）。
   const activeAdminCount = () => store.allUsers().filter((u) => u.role === 'admin' && u.status === 'active').length
+  // 强制下线一名用户：撤销全部 refresh token + 递增 tokenVersion（在线 access token 立即失效、被登出会话即时撤销）。
+  // 封禁(单/批量/举报处置)、force-logout、代设密码共用此原语——把"必须同时撤销会话"收敛一处，杜绝各自 inline 的漂移
+  // （曾致单用户封禁只改 status 不撤会话，见修复）。patch 承载 status/passwordHash 等附加变更；tokenVersion 恒在 patch 之后，不可被覆盖。
+  const severSessions = (id: string, currentTv: number, patch: Partial<User> = {}) => {
+    store.deleteRefreshTokensForUser(id)
+    return store.updateUser(id, { ...patch, tokenVersion: currentTv + 1 })
+  }
   const nameOf = (id: string) => store.findById(id)?.displayName ?? '—'
 
   // 举报处理后通知通话双方（持久站内通知 + 离线推送）。隐私：两条文案都不点名对方、
@@ -333,7 +340,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
         (action === 'delete' || action === 'disable' || (action === 'role' && role !== 'admin'))
       if (losesActiveAdmin && activeAdminCount() <= 1) { results.push({ id, ok: false, error: 'last_admin_protected' }); continue }
       try {
-        if (action === 'disable') { store.deleteRefreshTokensForUser(id); store.updateUser(id, { status: 'disabled', tokenVersion: (target.tokenVersion ?? 0) + 1 }); audit(adminId, 'user.disable', 'user', id, 'bulk') }
+        if (action === 'disable') { severSessions(id, target.tokenVersion ?? 0, { status: 'disabled' }); audit(adminId, 'user.disable', 'user', id, 'bulk') }
         else if (action === 'enable') { store.updateUser(id, { status: 'active' }); audit(adminId, 'user.enable', 'user', id, 'bulk') }
         else if (action === 'role') { store.updateUser(id, { role: role as Role }); audit(adminId, 'user.role', 'user', id, `bulk → ${role}`) }
         else if (action === 'delete') { cascadeDeleteUser(store, id); audit(adminId, 'user.delete', 'user', id, `bulk username=${target.username}`) }
@@ -493,13 +500,11 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     if (target.role === 'admin' && parsed.data.status === 'disabled' && activeAdminCount() <= 1) {
       return reply.code(400).send({ error: 'last_admin_protected' })
     }
-    // 封禁即吊销会话——与批量封禁(line ~336)和 force-logout 同口径：删 refresh token + 递增 tokenVersion，
-    // 使在线 access token 立即失效，且解封后须重新登录（不复活旧会话）。此前单用户封禁只改 status：虽因 rbac
-    // 实时校验 status 而即时拦截，但旧 refresh token 残留、解封后旧会话复活，与另两条封禁路径不一致。
-    if (parsed.data.status === 'disabled') store.deleteRefreshTokensForUser(id)
-    const updated = store.updateUser(id, parsed.data.status === 'disabled'
-      ? { status: 'disabled', tokenVersion: (target.tokenVersion ?? 0) + 1 }
-      : { status: 'active' })
+    // 封禁即吊销会话（severSessions 与批量封禁/force-logout 同口径：删 refresh + 递增 tokenVersion，
+    // 使在线 access token 立即失效、解封后须重新登录）。解封(enable)只改 status、不动会话。
+    const updated = parsed.data.status === 'disabled'
+      ? severSessions(id, target.tokenVersion ?? 0, { status: 'disabled' })
+      : store.updateUser(id, { status: 'active' })
     audit(req.user!.sub, parsed.data.status === 'disabled' ? 'user.disable' : 'user.enable', 'user', id)
     return { user: publicUser(updated!) }
   })
@@ -557,8 +562,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       store.createWarning({ id: randomUUID(), userId: targetId, reason, byAdminId: adminId, reportId: id, at: Date.now() })
     } else if (action === 'suspend' || action === 'ban') {
       // 重处置：封禁 + 强制下线（已签发 token 立即失效、撤销 refresh token），防被封后仍在线。
-      store.deleteRefreshTokensForUser(targetId)
-      store.updateUser(targetId, { status: 'disabled', tokenVersion: (target.tokenVersion ?? 0) + 1 })
+      severSessions(targetId, target.tokenVersion ?? 0, { status: 'disabled' })
     }
     const updated = store.updateReport(id, { status: 'resolved', decision, resolvedBy: adminId, resolvedAt: Date.now() })
     audit(adminId, `report.${action}`, 'report', id, `target=${targetId} reason=${reason}`)
@@ -692,8 +696,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     const id = (req.params as { id: string }).id
     const target = store.findById(id)
     if (!target) return reply.code(404).send({ error: 'not_found' })
-    store.deleteRefreshTokensForUser(id)
-    const updated = store.updateUser(id, { tokenVersion: (target.tokenVersion ?? 0) + 1 })
+    const updated = severSessions(id, target.tokenVersion ?? 0)
     audit(req.user!.sub, 'user.forceLogout', 'user', id)
     return { user: publicUser(updated!), tokenVersion: updated!.tokenVersion ?? 0 }
   })
@@ -783,8 +786,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     const id = (req.params as { id: string }).id
     const target = store.findById(id)
     if (!target) return reply.code(404).send({ error: 'not_found' })
-    store.deleteRefreshTokensForUser(id) // 改密即撤销所有会话
-    store.updateUser(id, { passwordHash: hashPassword(parsed.data.newPassword), tokenVersion: (target.tokenVersion ?? 0) + 1 })
+    severSessions(id, target.tokenVersion ?? 0, { passwordHash: hashPassword(parsed.data.newPassword) }) // 改密即撤销所有会话
     audit(req.user!.sub, 'user.resetPassword', 'user', id)
     return { ok: true }
   })

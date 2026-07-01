@@ -927,7 +927,10 @@ function promptDialog(title, placeholder, type) {
 // ---------------------------------------------------------------- csv export
 function downloadCSV(filename, rows) {
   const csv = rows.map((r) => r.map((c) => {
-    const s = String(c ?? '');
+    let s = String(c ?? '');
+    // 防 CSV 公式注入：以 = + - @ 或制表/回车开头的单元格前置 '，令 Excel/Sheets 当文本而非公式。
+    // 否则恶意 displayName（不受字符集限制）如 =HYPERLINK(...)/=cmd|... 会在管理员导出打开时执行、泄数据。
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   }).join(',')).join('\r\n');
   // 前置 BOM：Excel 据此识别 UTF-8，避免中文乱码。

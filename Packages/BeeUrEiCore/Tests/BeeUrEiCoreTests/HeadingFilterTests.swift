@@ -50,4 +50,23 @@ final class HeadingFilterTests: XCTestCase {
         XCTAssertNil(f.current)
         XCTAssertEqual(f.update(headingDegrees: 100, accuracyDegrees: 5), 100, accuracy: 0.0001)
     }
+
+    // 回归：非有限航向（如 headYaw 毛刺累加出 NaN）即便精度"可信"也绝不并入——否则会**永久污染**
+    // 平滑值(此后每次 atan2(NaN,NaN)=NaN)。污染样本被忽略，既有平滑值保持有限、后续可信样本正常收敛。
+    func testNonFiniteHeadingDoesNotPoisonSmoothed() {
+        var f = HeadingFilter(smoothingFactor: 0.5)
+        _ = f.update(headingDegrees: 100, accuracyDegrees: 5)
+        _ = f.update(headingDegrees: .nan, accuracyDegrees: 5)      // 精度"可信"但航向 NaN
+        _ = f.update(headingDegrees: .infinity, accuracyDegrees: 5) // ∞ 同理
+        XCTAssertTrue(f.current!.isFinite)                          // 平滑值未被污染，仍有限
+        XCTAssertEqual(f.current!, 100, accuracy: 1)                // 仍是上个可信航向
+        XCTAssertEqual(f.update(headingDegrees: 100, accuracyDegrees: 5), 100, accuracy: 1) // 后续可信样本正常
+    }
+
+    // 首样本即非有限：不播种、返回安全默认 0，且不污染。
+    func testNonFiniteFirstSampleReturnsZeroAndDoesNotSeed() {
+        var f = HeadingFilter(smoothingFactor: 0.5)
+        XCTAssertEqual(f.update(headingDegrees: .nan, accuracyDegrees: 5), 0, accuracy: 0.0001)
+        XCTAssertNil(f.current)
+    }
 }

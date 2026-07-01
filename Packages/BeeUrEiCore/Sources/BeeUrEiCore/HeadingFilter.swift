@@ -17,6 +17,9 @@ public struct HeadingFilter {
     /// 喂入一个航向样本，返回平滑后的航向（度，0...360）。
     @discardableResult
     public mutating func update(headingDegrees: Double, accuracyDegrees: Double) -> Double {
+        // 非有限航向（如上游把 headYaw 毛刺累加出 NaN/∞）：绝不并入——否则一旦存进 smoothed，
+        // 之后每次 atan2(NaN,NaN) 都出 NaN，平滑值**永久被污染**直到重启。返回上个平滑值或 0(正北)。
+        guard headingDegrees.isFinite else { return smoothed ?? 0 }
         // 不可信（含 CLHeading 用负值表示的无效/受磁干扰）样本：丢弃，不并入平滑值，
         // 也不作为首样本播种；返回上一个可信航向（若有）或本次原始值（不存储）。
         guard isReliable(accuracyDegrees: accuracyDegrees) else {

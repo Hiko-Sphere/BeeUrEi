@@ -687,6 +687,9 @@ export class SqliteStore implements Store {
       .get(groupId, userId) as any
     return r ? Number(r.lastReadAt) : 0
   }
+  deleteGroupReadsForUser(userId: string): void {
+    this.db.prepare('DELETE FROM group_reads WHERE userId = ?').run(userId)
+  }
 
   // MARK: 媒体
   createMedia(m: MediaMeta): void {

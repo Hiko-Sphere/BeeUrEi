@@ -74,4 +74,21 @@ describe('cascadeDeleteUser — 抹除完整性', () => {
     expect(store.findMedia('gv')).toBeUndefined()  // 群内视频媒体一并清（旧实现直接 deleteGroup 会漏）
     expect(store.findById('mem')).toBeTruthy()     // 其他成员账号不受影响
   })
+
+  it('非群主成员删号 → 其在他人群里的已读游标(group_reads)一并清除（不留孤儿），不波及群与他人游标', () => {
+    const store = new MemoryStore()
+    store.createUser(user('owner'))
+    store.createUser(user('mem'))
+    store.createGroup({ id: 'g1', name: 'g', ownerId: 'owner', memberIds: ['owner', 'mem'], createdAt: 1 } as never)
+    store.setGroupRead('g1', 'owner', 100)
+    store.setGroupRead('g1', 'mem', 200)
+    expect(store.groupReadAt('g1', 'mem')).toBe(200)
+
+    cascadeDeleteUser(store, 'mem') // 非群主成员删号：走 updateGroup(memberIds) 退群，不经 deleteGroup
+
+    expect(store.findGroup('g1')).toBeTruthy()               // 群仍在（群主未删）
+    expect(store.findGroup('g1')!.memberIds).toEqual(['owner']) // mem 已退群
+    expect(store.groupReadAt('g1', 'mem')).toBe(0)           // mem 的已读游标已清（旧实现残留孤儿）
+    expect(store.groupReadAt('g1', 'owner')).toBe(100)       // 群主游标不受影响
+  })
 })

@@ -544,6 +544,7 @@ export interface Store {
   /// 群按人已读：记录/读取某人在某群"读到的时间戳"（群未读 = 晚于此且非本人发的消息数）。
   setGroupRead(groupId: string, userId: string, at: number): void
   groupReadAt(groupId: string, userId: string): number
+  deleteGroupReadsForUser(userId: string): void // 删号级联：清该用户在所有群的已读游标（非群主退群路径不经 deleteGroup，否则残留孤儿）
 
   // 媒体（视频消息等：元数据在库，实体文件在磁盘 media/）
   createMedia(m: MediaMeta): void
@@ -1081,6 +1082,12 @@ export class MemoryStore implements Store {
   }
   groupReadAt(groupId: string, userId: string): number {
     return this.groupReads.get(`${groupId}:${userId}`) ?? 0
+  }
+  deleteGroupReadsForUser(userId: string): void {
+    let changed = false
+    // key = `${groupId}:${userId}`（groupId/userId 均为 UUID，无冒号），故按 `:${userId}` 结尾唯一匹配该用户。
+    for (const k of [...this.groupReads.keys()]) if (k.endsWith(`:${userId}`)) { this.groupReads.delete(k); changed = true }
+    if (changed) this.afterMutate()
   }
 
   // MARK: 媒体

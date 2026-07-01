@@ -22,6 +22,9 @@ export function cascadeDeleteUser(store: Store, id: string): void {
     if (g.ownerId === id) dissolveGroup(store, g.id) // 群主删号 → 解散（连带群消息/已读 + 群内视频媒体）
     else store.updateGroup(g.id, { memberIds: g.memberIds.filter((m) => m !== id) }) // 成员删号 → 退群
   }
+  // 非群主退群仅改 memberIds、不经 deleteGroup，其在这些群的已读游标(group_reads)会残留成孤儿——
+  // 显式清除，兑现"不留孤儿"。群主的群已由 dissolveGroup→deleteGroup 连带清掉，这里重复清也无副作用。
+  store.deleteGroupReadsForUser(id)
   store.deleteMessagesForUser(id)
   // 该用户上传的媒体（视频消息文件等）：删号即清磁盘文件 + 元数据，否则视频文件成孤儿、
   // 留存其 PII（cascade 承诺"不留孤儿"；deleteMessagesForUser 只删消息记录不碰磁盘文件）。

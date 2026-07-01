@@ -82,6 +82,11 @@ describe('SqliteStore (node:sqlite)', () => {
     expect(store.groupReadAt('g1', 'u3')).toBe(2500)
     store.setGroupRead('g1', 'u3', 3500) // 覆盖更新
     expect(store.groupReadAt('g1', 'u3')).toBe(3500)
+    // 删号级联：清该用户在所有群的已读游标（SQL DELETE WHERE userId 路径），仅清本人、不波及他人。
+    store.setGroupRead('g1', 'u2', 4000)
+    store.deleteGroupReadsForUser('u3')
+    expect(store.groupReadAt('g1', 'u3')).toBe(0)     // 已清
+    expect(store.groupReadAt('g1', 'u2')).toBe(4000)  // 他人游标保留
 
     // 群消息不得混入单聊查询（toId=''，且显式按 groupId 过滤）。
     store.createMessage({ id: 'd1', fromId: 'u1', toId: 'u2', kind: 'text', text: '私聊', createdAt: 4000 })

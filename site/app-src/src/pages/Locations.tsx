@@ -15,9 +15,10 @@ const PUBLISH_MS = 8000   // 共享时上报自身位置的间隔（受服务端
 // 头像式地图标记（DivIcon，纯 HTML——不依赖 Leaflet 默认图标资源，CSP 干净）。
 function markerHtml(name: string, color: string): string {
   const initial = ([...(name || '?').trim()][0] ?? '?').toUpperCase() // 按码点取首字符，避免 emoji/增补平面字截出半个代理对
+  // 单码点插入 HTML：即便日后改成放全名也不成注入面（对每个插入 HTML 的值一律 escapeHtml，见复审潜在坑）。
   return `<div style="transform:translate(-50%,-100%);">
     <div style="width:34px;height:34px;border-radius:50% 50% 50% 0;background:${color};transform:rotate(-45deg);box-shadow:0 2px 6px rgba(0,0,0,.35);display:grid;place-items:center;">
-      <span style="transform:rotate(45deg);color:#14161f;font-weight:700;font-size:14px;font-family:system-ui;">${initial}</span>
+      <span style="transform:rotate(45deg);color:#14161f;font-weight:700;font-size:14px;font-family:system-ui;">${escapeHtml(initial)}</span>
     </div></div>`
 }
 const divIcon = (name: string, color: string) =>

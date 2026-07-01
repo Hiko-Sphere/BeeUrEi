@@ -26,6 +26,9 @@ describe('NotificationsPage 渲染（防字段漂移）', () => {
     const link = (await screen.findByText(/查看位置/)).closest('a')
     expect(link?.getAttribute('href')).toContain('31.2')
     expect(link?.getAttribute('href')).toContain('121.4')
+    // 必须用 Apple Maps（境内可开 + WGS-84 自动纠偏），不得回退 Google Maps（境内被墙 + 坐标偏移）。
+    expect(link?.getAttribute('href')).toContain('maps.apple.com')
+    expect(link?.getAttribute('href')).not.toContain('google')
   })
 
   it('无坐标的通知 → 不渲染位置链接，仍显示标题/正文', async () => {

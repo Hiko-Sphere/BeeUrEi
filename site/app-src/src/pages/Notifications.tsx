@@ -49,7 +49,10 @@ export function NotificationsPage() {
                   {n.body && <p className="mt-0.5 text-sm text-soft">{n.body}</p>}
                   {n.data?.lat && n.data?.lon && (
                     // 紧急告警带坐标：协助者一键看地图定位（响应救助的关键信息）。
-                    <a href={`https://maps.google.com/?q=${n.data.lat},${n.data.lon}`} target="_blank" rel="noreferrer"
+                    // 用 Apple Maps 而非 Google Maps：坐标为 WGS-84（iOS 只在导航时才转 GCJ-02），
+                    // 而本 App 用户在国内——Google Maps 被墙且把 WGS-84 画在 GCJ-02 底图上会偏移约 500m；
+                    // Apple Maps 网页版跨平台可开、境内自动纠偏，且与 iOS 告警/聊天位置链接口径一致。
+                    <a href={`https://maps.apple.com/?ll=${n.data.lat},${n.data.lon}&q=${n.data.lat},${n.data.lon}`} target="_blank" rel="noreferrer"
                       onClick={(e) => e.stopPropagation()}
                       className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-honey hover:underline">
                       📍 {t('查看位置', 'View location')}

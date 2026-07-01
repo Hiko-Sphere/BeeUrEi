@@ -19,7 +19,11 @@ const addLinkSchema = z.object({
 export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: PushSender = new NoopPushSender()): void {
   // 发起加亲友/协助者请求（**双向**：盲人或协助者/亲友任一方都可发起，由另一方确认才建立关系）。
   // owner 恒为视障侧（保证匹配/紧急用 linksByOwner(blind) 成立）；requestedBy 记录发起方。
-  app.post('/api/family/links', { preHandler: [requireAuth(), requireFeature(store, 'familyLinks')] }, async (req, reply) => {
+  // 限流：好友请求会向目标发推送。200 条上限只约束**并发** link 数，挡不住"发满→删除→再发"的循环刷推送
+  // （审查 #7 已点名"群发好友请求推送骚扰"为威胁，但绝对上限不限速率）。补每分钟上限，掐断高频刷推送环路。
+  // 与 groups/media/reports 等"建记录+外发"端点同口径。20/min 远高于正常用户加联系人频率（测试单例最多 4）。
+  app.post('/api/family/links', { preHandler: [requireAuth(), requireFeature(store, 'familyLinks')],
+                                  config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = addLinkSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     // relation 是对方在"待确认请求"列表与好友请求推送里能看到的用户文本——须过内容审核（与昵称/消息/群名同口径）。

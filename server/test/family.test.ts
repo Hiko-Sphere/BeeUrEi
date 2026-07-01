@@ -197,4 +197,21 @@ describe('family + emergency', () => {
     expect(noAuth.statusCode).toBe(401)
     await a.close()
   })
+
+  it('好友请求限流：单账号短时间内连发被 429（掐断"发满→删除→再发"的刷推送环路）', async () => {
+    const { a, reg } = setup()
+    const owner = await reg('rlowner', 'blind')
+    await reg('rltarget', 'helper')
+    const auth = { authorization: `Bearer ${owner.token}` }
+    let handled = 0 // 进入处理器（201 首次 / 409 去重）
+    let limited = 0 // 被限流 429
+    for (let i = 0; i < 24; i++) {
+      const res = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth, payload: { username: 'rltarget' } })
+      if (res.statusCode === 429) limited++
+      else if (res.statusCode === 201 || res.statusCode === 409) handled++
+    }
+    expect(handled).toBeLessThanOrEqual(20) // 每分钟至多 20 次进入处理器
+    expect(limited).toBeGreaterThan(0)      // 超额后触发限流（否则刷推送环路无界）
+    await a.close()
+  })
 })

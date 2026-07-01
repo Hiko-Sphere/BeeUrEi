@@ -40,4 +40,19 @@ describe('CodeRegistry', () => {
     const c = r.issue('k', 0)
     expect(c).toMatch(/^\d{6}$/)
   })
+
+  it('map 超阈值时机会式清过期码（防未消费码累积无界增长）；未过期不误删', () => {
+    const r = new CodeRegistry(60_000, 5, 2) // ttl=60s，prune 阈值=2
+    r.issue('a', 0)
+    r.issue('b', 0)
+    expect(r.size).toBe(2)
+    // t=70s：a、b 已过期。issue 'c' 使 size 越阈值 → 清掉过期的 a、b，仅留 c。
+    r.issue('c', 70_000)
+    expect(r.size).toBe(1)
+    expect(r.has('c')).toBe(true)
+    // 未过期不误删：越阈值但无过期项 → 一个都不删。
+    const r2 = new CodeRegistry(60_000, 5, 2)
+    r2.issue('x', 0); r2.issue('y', 0); r2.issue('z', 0)
+    expect(r2.size).toBe(3)
+  })
 })

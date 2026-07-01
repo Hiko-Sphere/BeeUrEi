@@ -15,6 +15,7 @@ export class CodeRegistry {
   constructor(
     private readonly ttlMs = 10 * 60 * 1000,
     private readonly maxAttempts = 5,
+    private readonly pruneThreshold = 5000, // map 超此规模时机会式清过期项，防未消费码累积（见 issue）
   ) {}
 
   private hash(code: string): string {
@@ -26,6 +27,11 @@ export class CodeRegistry {
   issue(key: string, now: number, code?: string): string {
     const c = code ?? String(randomInt(0, 1_000_000)).padStart(6, '0')
     this.map.set(key, { codeHash: this.hash(c), expiresAt: now + this.ttlMs, attempts: 0 })
+    // 机会式清理：未被 verify 消费的码（如请求了验证码却从不校验）否则永不删除——攻击者循环不同
+    // 邮箱刷 signup 码可令 map 无界增长。map 过大时清掉已过期项（与 CodeSendLimiter 同法）。
+    if (this.map.size > this.pruneThreshold) {
+      for (const [k, e] of this.map) if (now > e.expiresAt) this.map.delete(k)
+    }
     return c
   }
 

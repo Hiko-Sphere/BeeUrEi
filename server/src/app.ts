@@ -85,6 +85,17 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     }
   })
 
+  // 安全响应头（纵深防御，对所有实际响应生效）：
+  // - nosniff：禁 MIME 嗅探——防把媒体/JSON 被浏览器改判为 HTML/脚本执行（媒体流的存储型 XSS 兜底）。
+  // - X-Frame-Options DENY：防点击劫持——尤其 /admin 后台 HTML 不得被恶意站点 iframe。
+  // - Referrer-Policy：跨站只发来源、不泄完整路径。
+  // CSP/HSTS 刻意不在此设：CSP 需按页精调（易误伤 SPA），HSTS 应在 TLS 终止的反代层设。
+  app.addHook('onRequest', async (_req, reply) => {
+    reply.header('X-Content-Type-Options', 'nosniff')
+    reply.header('X-Frame-Options', 'DENY')
+    reply.header('Referrer-Policy', 'strict-origin-when-cross-origin')
+  })
+
   const hub = new SignalingHub()
   const presence = new PresenceRegistry()
   const pendingCalls = new PendingCallRegistry()

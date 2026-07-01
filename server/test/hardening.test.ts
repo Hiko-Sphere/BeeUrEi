@@ -22,4 +22,13 @@ describe('production hardening', () => {
     expect(res.json()).toEqual({ error: 'not_found' })
     await a.close()
   })
+
+  it('响应带安全头（nosniff / DENY / Referrer-Policy）', async () => {
+    const a = app()
+    const res = await a.inject({ method: 'GET', url: '/api/version' })
+    expect(res.headers['x-content-type-options']).toBe('nosniff')
+    expect(res.headers['x-frame-options']).toBe('DENY')
+    expect(res.headers['referrer-policy']).toBe('strict-origin-when-cross-origin')
+    await a.close()
+  })
 })

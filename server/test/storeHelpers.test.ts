@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchBannedTerm, byTimeThenId, beforeCursor, normalizeAppConfig } from '../src/db/store'
+import { matchBannedTerm, byTimeThenId, beforeCursor, normalizeAppConfig, effectiveFeatures, mergeAppConfig } from '../src/db/store'
 import type { AppConfig, ChatMessage } from '../src/db/store'
 
 const cfg = (enabled: boolean, terms: string[]): AppConfig =>
@@ -59,5 +59,35 @@ describe('beforeCursor 复合游标（keyset 分页，防漏/重）', () => {
   it('缺 beforeId（旧客户端）→ 退回严格 createdAt<beforeMs：同毫秒不含、更早含', () => {
     expect(beforeCursor(m('x', 100), 100)).toBe(false)
     expect(beforeCursor(m('x', 99), 100)).toBe(true)
+  })
+})
+
+describe('effectiveFeatures 有效功能开关（覆盖只能 force-off）', () => {
+  // normalizeAppConfig 运行时按键读 features（缺键取默认），但类型要求整份 Record，故双断言喂部分键。
+  const base = normalizeAppConfig({ features: { calls: true, groups: false } as unknown as AppConfig['features'] })
+  it('无覆盖 → 等于全站开关', () => {
+    const f = effectiveFeatures(base)
+    expect(f.calls).toBe(true)
+    expect(f.groups).toBe(false)
+  })
+  it('override false 关掉全站已开的功能', () => {
+    expect(effectiveFeatures(base, { calls: false }).calls).toBe(false)
+  })
+  it('override true 不能打开全站已关的功能（安全不变量：不能反向提权）', () => {
+    expect(effectiveFeatures(base, { groups: true }).groups).toBe(false)
+  })
+})
+
+describe('mergeAppConfig 逐键合并（PATCH 语义，不整体替换）', () => {
+  const base = normalizeAppConfig({ contentFilter: { enabled: false, terms: ['x'] }, features: { calls: true } as unknown as AppConfig['features'] })
+  it('只切 contentFilter.enabled 不清空已有 terms', () => {
+    const merged = mergeAppConfig(base, { contentFilter: { enabled: true } })
+    expect(merged.contentFilter.enabled).toBe(true)
+    expect(merged.contentFilter.terms).toEqual(['x'])
+  })
+  it('未提及的 feature 键保持 base 值，提及的更新', () => {
+    const merged = mergeAppConfig(base, { features: { groups: true } })
+    expect(merged.features.calls).toBe(true)
+    expect(merged.features.groups).toBe(true)
   })
 })

@@ -79,6 +79,13 @@ export function callErrorText(err: unknown, t: (zh: string, en: string) => strin
   }
 }
 
+/// content_blocked（昵称/用户名/联系人关系/群名等输入命中服务端内容过滤）→ 统一"该内容不被允许"文案；
+/// 否则返回各调用点 fallback。避免把"内容被禁"压成笼统"保存/发送失败"让用户不知为何被拒、反复重试同一违规内容。
+export function contentBlockedText(err: unknown, t: (zh: string, en: string) => string, fallback: string): string {
+  if (err instanceof APIError && err.code === 'content_blocked') return t('该内容不被允许，请换一个', "That's not allowed — please choose another")
+  return fallback
+}
+
 const LS_TOKEN = 'beeurei.web.token'
 const LS_REFRESH = 'beeurei.web.refresh'
 const LS_USER = 'beeurei.web.user'

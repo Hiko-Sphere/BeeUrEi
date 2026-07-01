@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, APIError, type FamilyLink, type IncomingLink } from '../lib/api'
+import { api, APIError, contentBlockedText, type FamilyLink, type IncomingLink } from '../lib/api'
 import { classifyIdentifier } from '../lib/identifier'
 import { useI18n } from '../lib/i18n'
 import { useCall } from './call/CallController'
@@ -164,7 +164,7 @@ function AddContactDialog({ onClose, onAdded }: { onClose: () => void; onAdded: 
         : code === 'blocked' ? t('对方在黑名单中', 'Blocked relationship')
         : code === 'too_many_links' ? t('联系人数量已达上限', 'Contact limit reached')
         : code === 'cannot_link_self' ? t('不能添加自己', 'Cannot add yourself')
-        : t('发送失败', 'Failed'), 'error')
+        : contentBlockedText(e, t, t('发送失败', 'Failed')), 'error')
     } finally { setBusy(false) }
   }
 

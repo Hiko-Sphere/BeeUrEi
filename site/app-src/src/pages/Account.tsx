@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, APIError, reencodeToJpeg, uploadVerificationDoc, type SelfView, type SessionInfo, type VerificationStatusInfo } from '../lib/api'
+import { api, APIError, contentBlockedText, reencodeToJpeg, uploadVerificationDoc, type SelfView, type SessionInfo, type VerificationStatusInfo } from '../lib/api'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { roleLabel } from '../components/Layout'
@@ -33,7 +33,7 @@ export function AccountPage() {
     if (!name || name === self?.displayName) return
     setSavingName(true)
     try { await api.setProfile(name); await refreshMe(); setSelf((s) => s ? { ...s, displayName: name } : s); toast(t('已保存', 'Saved'), 'ok') }
-    catch { toast(t('保存失败', 'Failed'), 'error') } finally { setSavingName(false) }
+    catch (e) { toast(contentBlockedText(e, t, t('保存失败', 'Failed')), 'error') } finally { setSavingName(false) }
   }
 
   const changeRole = async (role: 'helper' | 'family') => {
@@ -521,7 +521,7 @@ function IdentityDialog({ currentUsername, currentPhone, onClose, onChanged }: {
       const c = e instanceof APIError ? e.code : ''
       toast(c === 'username_taken' ? t('用户名已被占用', 'Username taken')
         : c === 'invalid_username' ? t('仅限字母、数字、_ . -，3–32 位', 'Letters, digits, _ . - only (3–32)')
-        : t('保存失败', 'Failed'), 'error')
+        : contentBlockedText(e, t, t('保存失败', 'Failed')), 'error')
     } finally { setSavingU(false) }
   }
   const savePhone = async () => {

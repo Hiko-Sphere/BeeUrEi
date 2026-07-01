@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { APIError, chatErrorText, callErrorText } from './api'
+import { APIError, chatErrorText, callErrorText, contentBlockedText } from './api'
 
 // 取中文分支断言（t 返回 zh）。少写一个形参即可——TS 允许少参函数赋给 (zh,en)=>string。
 const t = (zh: string) => zh
@@ -36,5 +36,15 @@ describe('callErrorText 呼叫/求助错误码→用户文案映射', () => {
   it('未知码/非 APIError 落到各调用点的 fallback', () => {
     expect(callErrorText(new APIError('weird_code', 500), t, '呼叫失败')).toBe('呼叫失败')
     expect(callErrorText(new Error('boom'), t, '认领失败')).toBe('认领失败')
+  })
+})
+
+describe('contentBlockedText 内容过滤→用户文案', () => {
+  it('content_blocked（昵称/用户名/关系/群名输入）给专属"不被允许"文案，不压成 fallback', () => {
+    expect(contentBlockedText(new APIError('content_blocked', 403), t, '保存失败')).toContain('不被允许')
+  })
+  it('其余码/非 APIError 落到各调用点 fallback', () => {
+    expect(contentBlockedText(new APIError('username_taken', 409), t, '保存失败')).toBe('保存失败')
+    expect(contentBlockedText(new Error('boom'), t, '发送失败')).toBe('发送失败')
   })
 })

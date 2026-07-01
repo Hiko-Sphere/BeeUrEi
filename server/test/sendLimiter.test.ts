@@ -65,4 +65,18 @@ describe('发送侧节流（端到端）', () => {
     expect(second.json().error).toBe('code_cooldown')
     await app.close()
   })
+
+  it('设置邮箱验证码连点也被 429（按用户节流，防经改邮箱轰炸不同地址）', async () => {
+    const sent: { to: string }[] = []
+    const app = buildApp(new MemoryStore(), { mailer: { async send(to) { sent.push({ to }) } } })
+    const reg = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'setmail', password: 'secret123' } })).json()
+    const auth = { authorization: `Bearer ${reg.token}` }
+    expect((await app.inject({ method: 'POST', url: '/api/account/email', headers: auth, payload: { email: 'e@example.com' } })).statusCode).toBe(200)
+    // 第二次换一个**不同**邮箱：send key 按 user 而非按邮箱，故仍 429（防扫地址轰炸）
+    const second = await app.inject({ method: 'POST', url: '/api/account/email', headers: auth, payload: { email: 'e2@example.com' } })
+    expect(second.statusCode).toBe(429)
+    expect(second.json().error).toBe('code_cooldown')
+    expect(sent.length).toBe(1) // 第二次在发送前即被拒
+    await app.close()
+  })
 })

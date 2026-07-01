@@ -119,7 +119,8 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: P
     const meId = req.user!.sub
     const id = (req.params as { id: string }).id
     const link = store.findLink(id)
-    if (!link || (link.ownerId !== meId && link.memberId !== meId)) return reply.code(404).send({ error: 'not_found' })
+    if (!link) return reply.code(204).send() // 幂等删除：已不存在即视为成功（双击/重试第二次不再报错，同录制删除口径）
+    if (link.ownerId !== meId && link.memberId !== meId) return reply.code(404).send({ error: 'not_found' }) // 存在但非本人的关系：不可删
     store.deleteLink(id)
     return reply.code(204).send()
   })

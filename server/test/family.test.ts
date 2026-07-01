@@ -43,6 +43,8 @@ describe('family + emergency', () => {
     const id = list.json().links[0].id
     const del = await a.inject({ method: 'DELETE', url: `/api/family/links/${id}`, headers: auth })
     expect(del.statusCode).toBe(204)
+    // 幂等：再删一次（已不存在）仍 204，而非 404（双击/重试不报错）
+    expect((await a.inject({ method: 'DELETE', url: `/api/family/links/${id}`, headers: auth })).statusCode).toBe(204)
     await a.close()
   })
 

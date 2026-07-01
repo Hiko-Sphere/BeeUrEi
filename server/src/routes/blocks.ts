@@ -42,7 +42,8 @@ export function registerBlockRoutes(app: FastifyInstance, store: Store): void {
   app.delete('/api/blocks/:id', { preHandler: requireAuth() }, async (req, reply) => {
     const id = (req.params as { id: string }).id
     const b = store.findBlock(id)
-    if (!b || b.blockerId !== req.user!.sub) return reply.code(404).send({ error: 'not_found' })
+    if (!b) return reply.code(204).send() // 幂等删除：已不存在即视为成功（双击/重试第二次不再报错）
+    if (b.blockerId !== req.user!.sub) return reply.code(404).send({ error: 'not_found' }) // 存在但非本人创建的拉黑：不可删
     store.deleteBlock(id)
     return reply.code(204).send()
   })

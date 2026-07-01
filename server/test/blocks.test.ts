@@ -21,6 +21,8 @@ describe('黑名单', () => {
     expect(list.json().blocks[0].user.username).toBe('badguy')
     const id = list.json().blocks[0].id
     expect((await a.inject({ method: 'DELETE', url: `/api/blocks/${id}`, headers: auth(me.token) })).statusCode).toBe(204)
+    // 幂等：再删一次（已不存在）仍 204
+    expect((await a.inject({ method: 'DELETE', url: `/api/blocks/${id}`, headers: auth(me.token) })).statusCode).toBe(204)
     expect((await a.inject({ method: 'GET', url: '/api/blocks', headers: auth(me.token) })).json().blocks.length).toBe(0)
     await a.close()
   })

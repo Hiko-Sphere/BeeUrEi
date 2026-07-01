@@ -31,6 +31,17 @@ describe('Metrics', () => {
     await a.close()
   })
 
+  it('users_total 走 store.userCount()（O(1) 计数）且与实际用户数一致', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const base = store.userCount() // 可能含 seed 的管理员，故用增量断言
+    for (const u of ['mua', 'mub', 'muc']) await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role: 'blind' } })
+    expect(store.userCount()).toBe(base + 3)
+    expect(store.userCount()).toBe(store.allUsers().length) // 与全量口径一致
+    expect((await a.inject({ method: 'GET', url: '/metrics' })).body).toContain(`beeurei_users_total ${base + 3}`)
+    await a.close()
+  })
+
   it('业务计数：发起公开求助后 /metrics 反映 help_requests_total', async () => {
     const a = buildApp(new MemoryStore())
     const reg = (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'mblind', password: 'secret123', role: 'blind' } })).json()

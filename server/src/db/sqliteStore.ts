@@ -273,6 +273,7 @@ export class SqliteStore implements Store {
   allUsers(): User[] {
     return this.db.prepare('SELECT * FROM users').all().map((r) => this.toUser(r))
   }
+  userCount(): number { return (this.db.prepare('SELECT COUNT(*) AS c FROM users').get() as { c: number }).c }
   updateUser(id: string, patch: Partial<User>): User | undefined {
     const cur = this.findById(id)
     if (!cur) return undefined

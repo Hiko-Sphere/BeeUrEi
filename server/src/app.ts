@@ -137,7 +137,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
       reply.type('text/plain; version=0.0.4; charset=utf-8')
       return metrics.render({
         nowMs: Date.now(),
-        gauges: { users_total: store.allUsers().length },
+        gauges: { users_total: store.userCount() },
       })
     })
     // 就绪探针：触达存储确认可用（供监控/编排健康检查）。

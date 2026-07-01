@@ -415,6 +415,7 @@ export interface Store {
   findByAppleSub(appleSub: string): User | undefined // Sign in with Apple 账号匹配
   findById(id: string): User | undefined
   allUsers(): User[]
+  userCount(): number // O(1) 计数：/metrics 每次 Prometheus 抓取只需总数，避免 allUsers() 全表 SELECT *+映射
   updateUser(id: string, patch: Partial<User>): User | undefined
   deleteUser(id: string): void
   /// 设备推送 token 独占：某账号注册 token 时，从所有其它账号清除同一 token——
@@ -707,6 +708,7 @@ export class MemoryStore implements Store {
   allUsers(): User[] {
     return [...this.users.values()]
   }
+  userCount(): number { return this.users.size }
   updateUser(id: string, patch: Partial<User>): User | undefined {
     const u = this.users.get(id)
     if (!u) return undefined

@@ -13,5 +13,10 @@ ENV PORT=8787
 ENV DB_PATH=/app/data/beeurei.db
 EXPOSE 8787
 
+# 容器健康检查：打 /api/ready（就绪探针，触达存储确认可用；见 app.ts），编排层据此判活 / 重启不健康容器。
+# 与官网镜像 /healthz healthcheck 同口径（alpine 自带 busybox wget）；start-period 给足服务端启动(store 初始化)时间。
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1:8787/api/ready || exit 1
+
 # npm start 已带 NODE_OPTIONS=--experimental-sqlite（启用 node:sqlite）。
 CMD ["npm", "start"]

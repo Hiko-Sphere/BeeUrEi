@@ -36,25 +36,32 @@ public enum WeatherPhrase {
 
     /// 一句话天气播报：当前温度/天气 + 今日最高最低 + 降水概率 + 出行建议。
     /// 温度四舍五入为整数（语音听感）；缺失字段自动省略。
+    /// 安全把温度(可负；可能来自异常 API 响应的 NaN/∞/巨值)四舍五入为 Int，防 `Int(非有限/越界 Double)`
+    /// 陷阱崩溃（同 ClockDirection/距离播报一类）。地表温度远在 ±1000℃ 内，非有限退化为 0。
+    static func safeTemp(_ v: Double) -> Int {
+        guard v.isFinite else { return 0 }
+        return Int(min(max(v, -1000), 1000).rounded())
+    }
+
     public static func summary(temperature: Double, code: Int,
                                windSpeedKmh: Double? = nil,
                                todayMax: Double? = nil, todayMin: Double? = nil,
                                precipProbability: Int? = nil,
                                language: Language) -> String {
         let cond = condition(code: code, language: language)
-        let t = Int(temperature.rounded())
+        let t = safeTemp(temperature)
         var parts: [String] = []
         if language == .zh {
             parts.append("现在\(cond)，气温\(t)度")
             if let mx = todayMax, let mn = todayMin {
-                parts.append("今天最高\(Int(mx.rounded()))度，最低\(Int(mn.rounded()))度")
+                parts.append("今天最高\(safeTemp(mx))度，最低\(safeTemp(mn))度")
             }
             if let p = precipProbability, p >= 20 { parts.append("降水概率百分之\(p)") }
             if let w = windSpeedKmh, w >= 29 { parts.append("风较大") } // ≥5级（29km/h）才提醒
         } else {
             parts.append("It's \(cond), \(t) degrees")
             if let mx = todayMax, let mn = todayMin {
-                parts.append("today's high \(Int(mx.rounded())), low \(Int(mn.rounded()))")
+                parts.append("today's high \(safeTemp(mx)), low \(safeTemp(mn))")
             }
             if let p = precipProbability, p >= 20 { parts.append("\(p) percent chance of rain") }
             if let w = windSpeedKmh, w >= 29 { parts.append("quite windy") }

@@ -49,4 +49,16 @@ final class WeatherPhraseTests: XCTestCase {
                            "英文文案混入中文：\(s)")
         }
     }
+
+    // 回归：异常 API 响应的 NaN/∞/巨大有限温度不得崩溃（修复前 Int(温度) 会陷阱崩溃）。
+    func testSummarySurvivesNonFiniteTemperatures() {
+        for bad in [Double.nan, .infinity, -.infinity, 1e300, -1e300] {
+            for lang in [Language.zh, .en] {
+                _ = WeatherPhrase.summary(temperature: bad, code: 2, todayMax: bad, todayMin: bad, language: lang)
+            }
+        }
+        // 负温仍正确保留（signed，不被夹成 0）。
+        XCTAssertEqual(WeatherPhrase.safeTemp(-7), -7)
+        XCTAssertEqual(WeatherPhrase.safeTemp(.nan), 0) // 非有限退化为 0，不崩溃
+    }
 }

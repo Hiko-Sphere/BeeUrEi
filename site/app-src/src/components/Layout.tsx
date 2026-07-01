@@ -73,12 +73,18 @@ export function Layout({ children }: { children: ReactNode }) {
   ]
   if (user.role === 'admin') nav.push({ to: '/admin', label: t('管理', 'Admin'), icon: <IconShield /> })
 
+  // 路由切换朗读（SPA 无障碍，WCAG 4.1.3）：读屏用户点导航后内容整片替换、焦点仍留在链接、
+  // 新页面无声。取当前路由最长前缀匹配的导航项标题，喂给下方持久 aria-live 隐藏区，跳转即播报页名。
+  const activeLabel = activeNavLabel(loc.pathname, nav, 'BeeUrEi')
+
   const cycleTheme = () => { const order: Theme[] = ['auto', 'light', 'dark']; const cur = getTheme(); setTheme(order[(order.indexOf(cur) + 1) % 3]) }
   const themeLabel = { auto: t('跟随系统', 'Auto'), light: t('浅色', 'Light'), dark: t('深色', 'Dark') }[getTheme()]
 
   return (
     <CallProvider>
       <div className="min-h-dvh">
+        {/* 路由切换朗读：持久隐藏 aria-live 区，路由变化时播报当前页名，读屏用户跳转后知道身处何页。 */}
+        <div aria-live="polite" aria-atomic="true" className="sr-only">{activeLabel}</div>
         {/* 全站公告 / 维护横幅 */}
         {config?.maintenance?.enabled && (
           <div className="bg-danger px-4 py-2 text-center text-sm font-medium text-white">{config.maintenance.message || t('系统维护中', 'Under maintenance')}</div>
@@ -155,6 +161,14 @@ function NavItemLink({ item }: { item: NavItem }) {
       {item.label}
     </NavLink>
   )
+}
+
+/// 当前路由最长前缀匹配的导航项标题（'/' 仅精确匹配；/chat/:id→消息、/admin/reports→管理）。
+/// 供路由切换的 aria-live 朗读用；纯函数，可单测。
+export function activeNavLabel(pathname: string, items: { to: string; label: string }[], fallback: string): string {
+  return items
+    .filter((n) => (n.to === '/' ? pathname === '/' : pathname === n.to || pathname.startsWith(n.to + '/')))
+    .sort((a, b) => b.to.length - a.to.length)[0]?.label ?? fallback
 }
 
 export function roleLabel(role: string, t: (zh: string, en: string) => string): string {

@@ -23,10 +23,13 @@ public struct AlphaBetaFilter: Sendable {
             position = z; velocity = 0; initialized = true
             return
         }
-        let predicted = position + velocity * dt
+        // 非有限 dt(坏帧时序)当 0 处理：仍并入本次观测做平滑、只是不做时间预测/不更新速度。
+        // 否则 predicted = position + velocity*NaN = NaN → position 被**永久污染**（与 z 守卫同口径）。
+        let d = dt.isFinite ? dt : 0
+        let predicted = position + velocity * d
         let residual = z - predicted
         position = predicted + alpha * residual
-        if dt > 0 { velocity += beta * residual / dt }
+        if d > 0 { velocity += beta * residual / d }
     }
 
     public var isInitialized: Bool { initialized }

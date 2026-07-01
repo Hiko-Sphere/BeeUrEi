@@ -108,6 +108,20 @@ final class AlphaBetaFilterTests: XCTestCase {
         for _ in 0..<20 { f.update(measurement: x, dt: 1); x += 1 } // 斜率 1/步
         XCTAssertEqual(f.velocity, 1, accuracy: 0.3)
     }
+
+    // 回归：非有限 dt(坏帧时序)不得污染跟踪状态——否则 predicted=position+velocity*NaN=NaN，
+    // position/velocity 永久为 NaN，障碍距离/闭合速度/TTC 全废。非有限 dt 当 0：仍并入观测。
+    func testNonFiniteDtDoesNotPoison() {
+        var f = AlphaBetaFilter(alpha: 0.5, beta: 0.2)
+        f.update(measurement: 5, dt: 0.5)
+        f.update(measurement: 6, dt: .nan)      // 坏 dt
+        f.update(measurement: 6, dt: .infinity)  // 坏 dt
+        XCTAssertTrue(f.position.isFinite)
+        XCTAssertTrue(f.velocity.isFinite)
+        XCTAssertEqual(f.position, 6, accuracy: 1.5) // 观测仍被并入（当 dt=0 平滑）
+        f.update(measurement: 6, dt: 0.5)            // 后续正常 dt 仍收敛
+        XCTAssertTrue(f.position.isFinite && f.velocity.isFinite)
+    }
 }
 
 final class ObstacleTrackerTests: XCTestCase {

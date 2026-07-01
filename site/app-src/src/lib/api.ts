@@ -100,9 +100,11 @@ async function rawFetch(method: string, path: string, body: unknown, auth: boole
   try {
     res = await timedFetch(apiURL(path), { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined })
   } catch { throw new APIError('network', 0) } // abort/网络失败统一按 network 错误
-  if (res.status === 401 && auth && retry) {
-    // 尝试用 refresh 续期一次。
-    if (await tryRefresh()) return rawFetch(method, path, body, auth, false)
+  if (res.status === 401 && auth) {
+    // 尝试用 refresh 续期一次并重放（retry=false 防死循环）。
+    if (retry && await tryRefresh()) return rawFetch(method, path, body, auth, false)
+    // 续期失败，或续期后重放仍 401（会话已被撤销/封禁/改密——远程登出安全特性即时生效）：
+    // 立即登出，不留"看似登录却样样 401"的中间态（否则要等下一个请求才自愈）。
     tokenStore.clear(); onUnauthorized?.()
     throw new APIError('unauthorized', 401)
   }

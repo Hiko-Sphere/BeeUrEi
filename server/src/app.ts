@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path'
 import { JsonFileStore, type Store } from './db/store'
 import { SqliteStore } from './db/sqliteStore'
 import { setAuthStore } from './auth/rbac'
+import { verifyAccessToken } from './auth/tokens'
 import { registerAuthRoutes } from './routes/auth'
 import { registerAccountRoutes } from './routes/account'
 import { registerKycRoutes } from './routes/kyc'
@@ -125,7 +126,23 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
 
   // 速率限制（防暴力/滥用）。必须在路由之前加载，故把 HTTP 路由放进随后加载的子插件，
   // 确保它们继承到限流钩子。
-  app.register(rateLimit, { max: options.rateLimitMax ?? 300, timeWindow: '1 minute' })
+  // keyGenerator：已登录请求按**用户(sub)**限流，未登录（登录/注册等）回落到 IP。
+  //   ·比纯按 IP 更准：不受运营商 NAT 共享 IP 误伤、也不受反代把源 IP 收敛成一个的影响
+  //    （若 API 在反代后又未配 trustProxy，纯 IP 限流会退化成全站共用一个桶——见部署待办）；
+  //    且用户无法靠换 IP 放大自己的额度（authed 滥用限流如加好友/改邮箱因此真正生效）。
+  //   ·无绕过面：token 验不过（verifyAccessToken 返回 null，绝不抛）即回落 IP，伪造 token 无效。
+  app.register(rateLimit, {
+    max: options.rateLimitMax ?? 300,
+    timeWindow: '1 minute',
+    keyGenerator: (req) => {
+      const authz = req.headers.authorization
+      if (authz && authz.startsWith('Bearer ')) {
+        const claims = verifyAccessToken(authz.slice(7))
+        if (claims?.sub) return `u:${claims.sub}`
+      }
+      return req.ip
+    },
+  })
 
   app.register(async (instance) => {
     instance.get('/health', async () => ({ status: 'ok', service: 'beeurei-server' }))

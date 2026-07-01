@@ -26,20 +26,21 @@ public struct PeopleSummarizer: Sendable {
                                           language)
         }
         let nearest = sorted[0]
+        let nearestDir = direction(nearest.normalizedX)
         let nearestDist = nearest.distanceMeters.map { SpokenStrings.meters($0, language) }
         if sorted.count == 1 {
-            return SpokenStrings.peopleOne(direction: direction(nearest.normalizedX),
-                                           distance: nearestDist, language)
+            return SpokenStrings.peopleOne(direction: nearestDir, distance: nearestDist, language)
         }
-        // 其余人只报方位；同方位去重、保持近→远顺序。
-        var seen = Set<String>()
+        // 其余人只报方位；同方位去重、保持近→远顺序。**预置最近者方位**——否则与最近者同方位的人
+        // 会在 others 里再报一遍（如"最近正前方，其余正前方、右侧"），对盲人冗余且含混。
+        var seen = Set<String>([nearestDir])
         var others: [String] = []
         for p in sorted.dropFirst() {
             let d = direction(p.normalizedX)
             if seen.insert(d).inserted { others.append(d) }
         }
         return SpokenStrings.peopleMany(count: sorted.count,
-                                        nearestDirection: direction(nearest.normalizedX),
+                                        nearestDirection: nearestDir,
                                         nearestDistance: nearestDist,
                                         others: others, language)
     }

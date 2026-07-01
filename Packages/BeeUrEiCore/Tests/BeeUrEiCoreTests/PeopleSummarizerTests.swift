@@ -32,6 +32,12 @@ final class PeopleSummarizerTests: XCTestCase {
         XCTAssertEqual(text, "看到 3 个人。最近的在正前方，大约1.0 米；其他在左前方")
     }
 
+    func testOthersExcludeNearestDirection() {
+        // 最近者在正前方；另一人也在正前方 → others 不应再报"正前方"(与最近者同方位，避免冗余含混)。
+        let text = s.summary(people: [(0.5, 1.0), (0.52, nil), (0.9, nil)])
+        XCTAssertEqual(text, "看到 3 个人。最近的在正前方，大约1.0 米；其他在右前方")
+    }
+
     func testEnglish() {
         let text = s.summary(people: [(0.5, 1.5), (0.9, nil)], language: .en)
         XCTAssertEqual(text, "2 people. Nearest ahead, about 1.5 m; others ahead right")

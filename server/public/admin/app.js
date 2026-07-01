@@ -107,8 +107,8 @@ const I18N = {
     siteFeatures: '功能开关', siteFeaturesDesc: '逐项控制 App 的每个功能。关闭后服务端立即拒绝该操作，客户端也会隐藏对应按钮。',
     safetyLocked: '安全功能（始终开启）', safetyLockedDesc: '紧急报警、拉黑、举报为安全攸关功能，刻意不可关闭，以保护用户安全与审核闭环。',
     alwaysOn: '始终开启',
-    featLabels: { messaging: '消息', calls: '远程协助通话', helpRequests: '公开求助', groups: '群组', familyLinks: '亲友绑定', mediaUpload: '媒体上传', navigation: '步行导航', sceneScan: '看一看（场景识别）', emergency: '紧急报警', blocks: '拉黑', reports: '举报' },
-    featDescs: { messaging: '私聊/群聊发送消息', calls: '发起远程协助音视频呼叫', helpRequests: '发起/认领公开求助', groups: '创建群组、管理成员', familyLinks: '绑定亲友/协助者', mediaUpload: '上传图片/视频', navigation: '步行路径导航', sceneScan: '端侧场景识别（仅客户端隐藏）' },
+    featLabels: { messaging: '消息', calls: '远程协助通话', helpRequests: '公开求助', groups: '群组', familyLinks: '亲友绑定', mediaUpload: '媒体上传', navigation: '步行导航', locationSharing: '位置共享', sceneScan: '看一看（场景识别）', emergency: '紧急报警', blocks: '拉黑', reports: '举报' },
+    featDescs: { messaging: '私聊/群聊发送消息', calls: '发起远程协助音视频呼叫', helpRequests: '发起/认领公开求助', groups: '创建群组、管理成员', familyLinks: '绑定亲友/协助者', mediaUpload: '上传图片/视频', navigation: '步行路径导航', locationSharing: '亲友/协助者与盲人实时互相可见位置', sceneScan: '端侧场景识别（仅客户端隐藏）' },
     // 用户编辑（Admin v4）
     editUser: '编辑资料', cancelEdit: '取消', profileSaved: '资料已保存',
     fldDisplayName: '昵称', fldUsername: '用户名', fldEmail: '邮箱', fldPhone: '手机号', fldLanguage: '语言（如 zh/en）', clearAvatarBtn: '清除头像',
@@ -221,8 +221,8 @@ const I18N = {
     siteFeatures: 'Feature switches', siteFeaturesDesc: 'Control every app function individually. When off, the server rejects the action and the app hides the matching button.',
     safetyLocked: 'Safety features (always on)', safetyLockedDesc: 'Emergency alerts, blocking, and reporting are safety-critical and deliberately cannot be turned off — to protect users and the moderation loop.',
     alwaysOn: 'Always on',
-    featLabels: { messaging: 'Messaging', calls: 'Remote-assist calls', helpRequests: 'Public help', groups: 'Groups', familyLinks: 'Family links', mediaUpload: 'Media upload', navigation: 'Walking navigation', sceneScan: 'Look (scene scan)', emergency: 'Emergency alerts', blocks: 'Blocking', reports: 'Reporting' },
-    featDescs: { messaging: 'Send 1:1 / group messages', calls: 'Start remote-assist calls', helpRequests: 'Start / claim public help', groups: 'Create groups, manage members', familyLinks: 'Link family / helpers', mediaUpload: 'Upload images / video', navigation: 'Walking route guidance', sceneScan: 'On-device scene scan (client-hidden)' },
+    featLabels: { messaging: 'Messaging', calls: 'Remote-assist calls', helpRequests: 'Public help', groups: 'Groups', familyLinks: 'Family links', mediaUpload: 'Media upload', navigation: 'Walking navigation', locationSharing: 'Location sharing', sceneScan: 'Look (scene scan)', emergency: 'Emergency alerts', blocks: 'Blocking', reports: 'Reporting' },
+    featDescs: { messaging: 'Send 1:1 / group messages', calls: 'Start remote-assist calls', helpRequests: 'Start / claim public help', groups: 'Create groups, manage members', familyLinks: 'Link family / helpers', mediaUpload: 'Upload images / video', navigation: 'Walking route guidance', locationSharing: 'Real-time location sharing between contacts', sceneScan: 'On-device scene scan (client-hidden)' },
     // User editor (Admin v4)
     editUser: 'Edit profile', cancelEdit: 'Cancel', profileSaved: 'Profile saved',
     fldDisplayName: 'Display name', fldUsername: 'Username', fldEmail: 'Email', fldPhone: 'Phone', fldLanguage: 'Language (e.g. zh/en)', clearAvatarBtn: 'Clear avatar',
@@ -1422,7 +1422,7 @@ async function loadControls() {
   try { state.appConfig = (await api('/api/admin/config')).config; renderControls(); }
   catch (err) { viewEl().innerHTML = `<div class="err-banner">${esc(errText(err.code))}</div>`; }
 }
-const FEATURE_ORDER = ['messaging', 'calls', 'helpRequests', 'groups', 'familyLinks', 'mediaUpload', 'navigation', 'sceneScan'];
+const FEATURE_ORDER = ['messaging', 'calls', 'helpRequests', 'groups', 'familyLinks', 'mediaUpload', 'navigation', 'locationSharing', 'sceneScan'];
 const SAFETY_LOCKED = ['emergency', 'blocks', 'reports']; // 刻意不可关停
 function renderControls() {
   const c = state.appConfig || { registrationEnabled: true, features: {} };

@@ -827,8 +827,10 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const data = parsed.data
     // 拒绝空补丁：任何一个可改区块都没有就 400。
+    // requireVerification 也必须计入——否则单独 {requireVerification} 补丁（独立开关 KYC 门禁、不改其它配置）
+    // 会被误判为空补丁而 400，管理员无法单独切换实名门禁。
     const nonEmpty = (o?: object) => o && Object.keys(o).length > 0
-    if (data.registrationEnabled === undefined && !nonEmpty(data.features) &&
+    if (data.registrationEnabled === undefined && data.requireVerification === undefined && !nonEmpty(data.features) &&
         !nonEmpty(data.announcement) && !nonEmpty(data.maintenance) && !nonEmpty(data.contentFilter)) {
       return reply.code(400).send({ error: 'invalid_input' })
     }

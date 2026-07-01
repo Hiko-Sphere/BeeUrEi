@@ -61,6 +61,21 @@ describe('admin + reports', () => {
     await app.close()
   })
 
+  it('全站配置：可单独切换 requireVerification（回归：空补丁守卫曾漏计 requireVerification → 单独 patch 被误判空 400）', async () => {
+    const { app } = withAdmin()
+    const adminAuth = { authorization: `Bearer ${await login(app, 'root', 'rootpass1')}` }
+    // 只发 requireVerification、不带其它配置块：修复前空补丁守卫不计 requireVerification → 误当空补丁 400。
+    const put = await app.inject({ method: 'PUT', url: '/api/admin/config', headers: adminAuth, payload: { requireVerification: true } })
+    expect(put.statusCode).toBe(200)
+    expect(put.json().config.requireVerification).toBe(true)
+    const get = await app.inject({ method: 'GET', url: '/api/admin/config', headers: adminAuth })
+    expect(get.json().config.requireVerification).toBe(true)
+    // 真正的空补丁仍应被拒。
+    const empty = await app.inject({ method: 'PUT', url: '/api/admin/config', headers: adminAuth, payload: {} })
+    expect(empty.statusCode).toBe(400)
+    await app.close()
+  })
+
   it('admin can list and ban users; banned user cannot log in', async () => {
     const { app } = withAdmin()
     const adminToken = await login(app, 'root', 'rootpass1')

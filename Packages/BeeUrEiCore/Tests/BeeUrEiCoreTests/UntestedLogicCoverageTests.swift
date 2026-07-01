@@ -158,4 +158,21 @@ final class UntestedLogicCoverageTests: XCTestCase {
         XCTAssertNil(a.current)
         XCTAssertTrue(a.shouldPlay(FeedbackEvent(priority: .environment, speech: "环境"))) // 释放后低优先级可播
     }
+
+    // MARK: Geo 大圆距离 / 方位角（导航基础，此前仅经 BreadcrumbTrail 等间接覆盖——直测绝对值防公式漂移）
+
+    func testGeoDistanceKnownValues() {
+        // 同点 → 0。
+        XCTAssertEqual(Geo.distanceMeters(fromLat: 31.2, fromLon: 121.4, toLat: 31.2, toLon: 121.4), 0, accuracy: 1e-6)
+        // 赤道 1° 经度 ≈ 111.2km（R=6371km）；1° 纬度同量级。绝对值锁死，防半径/因子写错。
+        XCTAssertEqual(Geo.distanceMeters(fromLat: 0, fromLon: 0, toLat: 0, toLon: 1), 111_195, accuracy: 300)
+        XCTAssertEqual(Geo.distanceMeters(fromLat: 0, fromLon: 0, toLat: 1, toLon: 0), 111_195, accuracy: 300)
+    }
+
+    func testGeoInitialBearingCardinals() {
+        XCTAssertEqual(Geo.initialBearing(fromLat: 0, fromLon: 0, toLat: 1, toLon: 0), 0, accuracy: 0.5)    // 正北
+        XCTAssertEqual(Geo.initialBearing(fromLat: 0, fromLon: 0, toLat: 0, toLon: 1), 90, accuracy: 0.5)   // 正东
+        XCTAssertEqual(Geo.initialBearing(fromLat: 0, fromLon: 0, toLat: -1, toLon: 0), 180, accuracy: 0.5) // 正南
+        XCTAssertEqual(Geo.initialBearing(fromLat: 0, fromLon: 0, toLat: 0, toLon: -1), 270, accuracy: 0.5) // 正西
+    }
 }

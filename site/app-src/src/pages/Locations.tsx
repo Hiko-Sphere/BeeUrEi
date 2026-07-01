@@ -189,14 +189,17 @@ export function LocationsPage() {
             ) : (
               <ul className="divide-y divide-[var(--line)]">
                 {contacts.map((c) => (
-                  <li key={c.userId} onClick={() => { const mk = markers.current.get(c.userId); if (mk && map.current) { map.current.setView(mk.getLatLng(), 16); mk.openPopup() } }}
-                    className="flex cursor-pointer items-center gap-3 px-4 py-3 hover:surface-2">
-                    <Avatar name={c.displayName} src={c.avatar} size={38} />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium">{c.displayName}</div>
-                      <div className="text-xs text-faint">{roleLabel(c.role, t)} · {t('更新于', 'updated')} {timeAgo(c.updatedAt, lang)}</div>
-                    </div>
-                    <span className="inline-block h-2 w-2 rounded-full bg-ok ring-live" />
+                  <li key={c.userId}>
+                    {/* 行内容包 <button>：<li> 保留 listitem，按钮可键盘聚焦/激活（Enter 平移地图到该联系人）。 */}
+                    <button type="button" onClick={() => { const mk = markers.current.get(c.userId); if (mk && map.current) { map.current.setView(mk.getLatLng(), 16); mk.openPopup() } }}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-left hover:surface-2">
+                      <Avatar name={c.displayName} src={c.avatar} size={38} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium">{c.displayName}</div>
+                        <div className="text-xs text-faint">{roleLabel(c.role, t)} · {t('更新于', 'updated')} {timeAgo(c.updatedAt, lang)}</div>
+                      </div>
+                      <span className="inline-block h-2 w-2 rounded-full bg-ok ring-live" />
+                    </button>
                   </li>
                 ))}
               </ul>

@@ -151,14 +151,17 @@ function ReportsTab() {
 
 function ReportRow({ r, onClick, t }: { r: AdminReport; onClick: () => void; t: (z: string, e: string) => string }) {
   return (
-    <li onClick={onClick} className="flex cursor-pointer items-center gap-3 px-4 py-3 hover:surface-2">
-      <Avatar name={r.targetName} size={36} />
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm"><span className="font-medium">{r.reporterName}</span> → <span className="font-medium">{r.targetName}</span></div>
-        <div className="truncate text-xs text-faint">{r.reason}</div>
-      </div>
-      {r.evidenceRecordingId && <Pill tone="honey">{t('有录制', 'Evidence')}</Pill>}
-      <Pill tone={r.status === 'resolved' ? 'ok' : 'danger'}>{r.decision || (r.status === 'resolved' ? t('已处理', 'Resolved') : t('待处理', 'Open'))}</Pill>
+    // 行内容包 <button>：<li> 保留 listitem，按钮可键盘聚焦/激活（管理员用键盘打开举报详情）。
+    <li>
+      <button type="button" onClick={onClick} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:surface-2">
+        <Avatar name={r.targetName} size={36} />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm"><span className="font-medium">{r.reporterName}</span> → <span className="font-medium">{r.targetName}</span></div>
+          <div className="truncate text-xs text-faint">{r.reason}</div>
+        </div>
+        {r.evidenceRecordingId && <Pill tone="honey">{t('有录制', 'Evidence')}</Pill>}
+        <Pill tone={r.status === 'resolved' ? 'ok' : 'danger'}>{r.decision || (r.status === 'resolved' ? t('已处理', 'Resolved') : t('待处理', 'Open'))}</Pill>
+      </button>
     </li>
   )
 }

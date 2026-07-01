@@ -46,6 +46,21 @@ describe('admin + reports', () => {
     await app.close()
   })
 
+  it('全站功能开关：locationSharing 可被关闭（回归：曾因 featuresSchema 硬编码漏加、被 z.object 静默剥离）', async () => {
+    const { app } = withAdmin()
+    const adminAuth = { authorization: `Bearer ${await login(app, 'root', 'rootpass1')}` }
+    // 修复前 featuresSchema 只列 8 个键、缺 locationSharing → 该键被静默剥离、设置无效（仍为默认 true）。
+    // 修复后 featuresSchema 派生自 FEATURE_KEYS，locationSharing 与其余功能开关一样可被全站关闭。
+    const put = await app.inject({ method: 'PUT', url: '/api/admin/config', headers: adminAuth, payload: { features: { locationSharing: false } } })
+    expect(put.statusCode).toBe(200)
+    expect(put.json().config.features.locationSharing).toBe(false)
+    const get = await app.inject({ method: 'GET', url: '/api/admin/config', headers: adminAuth })
+    expect(get.json().config.features.locationSharing).toBe(false)
+    // 逐键合并：只关 locationSharing，其余开关不受影响（仍为默认 true）。
+    expect(get.json().config.features.calls).toBe(true)
+    await app.close()
+  })
+
   it('admin can list and ban users; banned user cannot log in', async () => {
     const { app } = withAdmin()
     const adminToken = await login(app, 'root', 'rootpass1')

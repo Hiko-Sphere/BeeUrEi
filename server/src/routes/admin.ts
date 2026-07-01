@@ -24,10 +24,11 @@ const moderateSchema = z.object({
   reason: z.string().trim().min(1).max(1000),
 })
 // 功能开关补丁：每个键可选（逐键合并）。安全攸关的 紧急/拉黑/举报 不在此列——刻意不可关停。
-const featuresSchema = z.object({
-  messaging: z.boolean(), calls: z.boolean(), helpRequests: z.boolean(), groups: z.boolean(),
-  familyLinks: z.boolean(), mediaUpload: z.boolean(), navigation: z.boolean(), sceneScan: z.boolean(),
-}).partial()
+// 派生自 FEATURE_KEYS（而非硬编码列表），避免新增功能开关时漏加：locationSharing 曾因硬编码遗漏，
+// 导致全站 features.locationSharing 被 z.object 静默剥离、管理员无法全站关闭位置共享（仅 per-user override 生效）。
+const featuresSchema = z.object(
+  Object.fromEntries(FEATURE_KEYS.map((k) => [k, z.boolean()])) as Record<FeatureKey, z.ZodBoolean>,
+).partial()
 const announcementSchema = z.object({ active: z.boolean(), message: z.string().max(500), level: z.enum(['info', 'warning']) }).partial()
 const maintenanceSchema = z.object({ active: z.boolean(), message: z.string().max(500) }).partial()
 const contentFilterSchema = z.object({ enabled: z.boolean(), terms: z.array(z.string().trim().min(1).max(100)).max(500) }).partial()

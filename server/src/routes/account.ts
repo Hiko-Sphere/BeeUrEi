@@ -210,6 +210,8 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const username = parsed.data.username
     if (!/^[A-Za-z0-9_.-]+$/.test(username)) return reply.code(400).send({ error: 'invalid_username' }) // 仅字母数字 _.- ，禁空白/混淆字符
+    // 内容审核：与昵称/注册同口径——用户名 everyone 可见，违禁词不得塞进用户名绕过昵称过滤。
+    if (matchBannedTerm(store.getAppConfig(), username)) return reply.code(403).send({ error: 'content_blocked' })
     const existing = store.findByUsername(username)
     if (existing && existing.id !== req.user!.sub) return reply.code(409).send({ error: 'username_taken' })
     const updated = store.updateUser(req.user!.sub, { username, usernameCustomized: true })

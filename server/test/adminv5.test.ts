@@ -116,8 +116,8 @@ describe('v5 公告 / 维护模式 / 内容过滤（端到端强制）', () => {
     // 默认关闭：含敏感词也能过功能门（可能因无绑定 403/400，但不是 content_blocked）
     const before = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(u.token), payload: { toId: 'x', kind: 'text', text: '违禁词' } })
     expect(before.json().error).not.toBe('content_blocked')
-    // 启用 + 配置词表
-    await app.inject({ method: 'PUT', url: '/api/admin/config', headers: aa, payload: { contentFilter: { enabled: true, terms: ['违禁词'] } } })
+    // 启用 + 配置词表（含一个 ASCII 词，用于测用户名——用户名字符集不含中文）
+    await app.inject({ method: 'PUT', url: '/api/admin/config', headers: aa, payload: { contentFilter: { enabled: true, terms: ['违禁词', 'badword'] } } })
     const msg = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(u.token), payload: { toId: 'x', kind: 'text', text: '这是违禁词内容' } })
     expect(msg.statusCode).toBe(403)
     expect(msg.json().error).toBe('content_blocked')
@@ -132,6 +132,14 @@ describe('v5 公告 / 维护模式 / 内容过滤（端到端强制）', () => {
       payload: { toId: 'x', kind: 'location', text: JSON.stringify({ lat: 31.2, lng: 121.5, name: '违禁词大厦' }) } })
     expect(loc.statusCode).toBe(403)
     expect(loc.json().error).toBe('content_blocked')
+    // 用户名同样过审：用户名 everyone 可见，违禁词(ASCII，在用户名字符集内)不能塞进用户名绕过昵称过滤。
+    const un = await app.inject({ method: 'POST', url: '/api/account/username', headers: auth(u.token), payload: { username: 'badword99' } })
+    expect(un.statusCode).toBe(403)
+    expect(un.json().error).toBe('content_blocked')
+    // 注册时用户名也过审（否则注册即可塞入违禁用户名）。
+    const reg = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'xbadwordx', password: 'secret123' } })
+    expect(reg.statusCode).toBe(403)
+    expect(reg.json().error).toBe('content_blocked')
   })
 
   it('app-config 不下发 contentFilter 词表（不泄露违禁词）', async () => {

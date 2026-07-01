@@ -20,6 +20,18 @@ describe('PendingCallRegistry', () => {
     expect(r.activeCountFor('A', 200_000)).toBe(0) // 过期(>180s)后归零
   })
 
+  it('硬上限优先淘汰未接听的振铃积压，保留已接听通话——接听者掉线仍能凭 participants 重接', () => {
+    const r = new PendingCallRegistry(180_000, 2) // maxEntries=2
+    r.register(base({ callId: 'active', toUserIds: ['helper1'], createdAt: 0 }))
+    r.claimAnswer('active', 'helper1', 1)                                          // 老 createdAt 的**已接听**通话
+    r.register(base({ callId: 'ringing', toUserIds: ['helper2'], createdAt: 10 })) // 未接听振铃，size=2
+    r.register(base({ callId: 'newest', toUserIds: ['helper3'], createdAt: 20 }))  // 触发 cap
+    // 旧实现按 createdAt 淘汰最旧 → 会淘汰 'active'(createdAt=0，却已接听)；新实现优先淘汰未接听。
+    expect(r.participants('active')).toEqual(['blind1', 'helper1']) // 已接听通话保留（可重接）
+    expect(r.participants('ringing')).toBeNull()                    // 未接听积压被淘汰（可重拨）
+    expect(r.participants('newest')).toBeTruthy()                   // 新条目入队
+  })
+
   it('delivers a pending call only to its targets', () => {
     const r = new PendingCallRegistry()
     r.register(base({ toUserIds: ['helper1', 'family1'] }))

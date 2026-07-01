@@ -133,11 +133,19 @@ export class PendingCallRegistry {
   }
 
   /// 硬上限：超出则淘汰最旧，防止无界增长（即便无人轮询触发 prune）。
+  /// **优先淘汰未接听**的振铃中呼叫（可丢弃：发起方可重拨），仅在未接听全清后仍超限，才动**已接听**的
+  /// 呼叫（兜底）——否则积压把一通已接听的紧急来电挤掉，接听者掉线后无法凭 participants 重新加入。
+  /// 与 OpenHelpRegistry.cap 同口径（未认领/已认领 ↔ 未接听/已接听）。
   private cap(): void {
     if (this.calls.size < this.maxEntries) return
-    const oldestFirst = [...this.calls.entries()].sort((a, b) => a[1].createdAt - b[1].createdAt)
     const removeCount = this.calls.size - this.maxEntries + 1
-    for (let i = 0; i < removeCount; i++) this.calls.delete(oldestFirst[i][0])
+    const entries = [...this.calls.entries()]
+    const byAge = (a: [string, PendingCall], b: [string, PendingCall]) => a[1].createdAt - b[1].createdAt
+    const evictionOrder = [
+      ...entries.filter(([, c]) => c.answeredBy === undefined).sort(byAge), // 先淘汰未接听的振铃积压
+      ...entries.filter(([, c]) => c.answeredBy !== undefined).sort(byAge), // 兜底：仍超限才动已接听通话
+    ]
+    for (let i = 0; i < removeCount && i < evictionOrder.length; i++) this.calls.delete(evictionOrder[i][0])
   }
 
   get size(): number {

@@ -64,6 +64,21 @@ export function chatErrorText(err: unknown, t: (zh: string, en: string) => strin
   }
 }
 
+/// 呼叫/求助路径错误码→用户文案（与 iOS AssistStrings.callErrorText 对齐）。
+/// /api/assist/call 受 requireFeature('calls')、/api/assist/help/claim 受 requireFeature('helpRequests') 门控，
+/// 关停/维护时会返回 feature_disabled/maintenance——这是"重试也没用"的状态，不加区分只报"呼叫失败"会让协助者
+/// 对着被关停的功能反复重试。fallback 为未知码时各调用点的兜底（"呼叫失败"/"认领失败"）。
+export function callErrorText(err: unknown, t: (zh: string, en: string) => string, fallback: string): string {
+  const code = err instanceof APIError ? err.code : ''
+  switch (code) {
+    case 'feature_disabled': return t('通话功能已被管理员暂时关闭', 'Calling is currently turned off by the administrator')
+    case 'maintenance': return t('系统维护中，请稍后再试', 'Under maintenance — please try again later')
+    case 'not_linked': return t('你们尚未建立联系', 'You are not linked')
+    case 'already_claimed_or_gone': return t('该求助已被认领或已结束', 'Already claimed or gone')
+    default: return fallback
+  }
+}
+
 const LS_TOKEN = 'beeurei.web.token'
 const LS_REFRESH = 'beeurei.web.refresh'
 const LS_USER = 'beeurei.web.user'

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { api, APIError } from '../../lib/api'
+import { api, callErrorText } from '../../lib/api'
 import { useI18n } from '../../lib/i18n'
 import { useToast, Avatar, Button } from '../../components/ui'
 import { IconPhone, IconX } from '../../components/icons'
@@ -46,7 +46,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       await api.registerCall(callId, [targetUserId])
       setActive({ callId, kind: 'outgoing', peerUserId: targetUserId, peerName, peerAvatar, waitingText: t('正在呼叫…', 'Calling…') })
     } catch (e) {
-      toast(e instanceof APIError && e.code === 'not_linked' ? t('你们尚未建立联系', 'You are not linked') : t('呼叫失败', 'Call failed'), 'error')
+      toast(callErrorText(e, t, t('呼叫失败', 'Call failed')), 'error')
     }
   }, [active, t, toast])
 
@@ -57,7 +57,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       setActive({ callId, kind: 'queue', peerName: fromName, peerAvatar: fromAvatar, waitingText: t('正在接入求助者…', 'Connecting to requester…') })
       return true
     } catch (e) {
-      toast(e instanceof APIError && e.code === 'already_claimed_or_gone' ? t('该求助已被认领或已结束', 'Already claimed or gone') : t('认领失败', 'Claim failed'), 'error')
+      toast(callErrorText(e, t, t('认领失败', 'Claim failed')), 'error')
       return false
     }
   }, [active, t, toast])

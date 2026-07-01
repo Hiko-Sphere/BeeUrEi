@@ -19,9 +19,11 @@ export function CallsPage() {
     const load = async () => {
       const [inc, q, hist] = await Promise.allSettled([api.incomingCalls(), api.helpQueue(), api.callHistory()])
       if (!alive) return
-      if (inc.status === 'fulfilled') setIncoming(inc.value.calls)
-      if (q.status === 'fulfilled') setQueue(q.value.requests)
-      if (hist.status === 'fulfilled') setHistory(hist.value.calls)
+      // 每段独立：成功则更新；失败时——若已有数据则保留(轮询瞬时失败不清屏)，若仍是初始 null 则落为空数组，
+      // 退出加载态(否则某个端点持续失败会让该段永远转圈；页面每 4s 轮询，恢复后自然填回)。
+      if (inc.status === 'fulfilled') setIncoming(inc.value.calls); else setIncoming((c) => c ?? [])
+      if (q.status === 'fulfilled') setQueue(q.value.requests); else setQueue((c) => c ?? [])
+      if (hist.status === 'fulfilled') setHistory(hist.value.calls); else setHistory((c) => c ?? [])
     }
     void load()
     const stop = pollWhileVisible(load, 4000)

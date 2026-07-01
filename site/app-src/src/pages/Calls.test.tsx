@@ -41,4 +41,13 @@ describe('CallsPage 公开求助队列渲染（防字段漂移复发）', () => 
     expect(screen.queryByText(/你的语言/)).toBeNull()              // en ≠ zh → 不高亮
     expect(screen.getByText(/已等待 30 秒/)).toBeInTheDocument()
   })
+
+  it('某段端点持续失败也退出加载态（显示空态，而非永远转圈）', async () => {
+    mock(api.incomingCalls).mockResolvedValue({ calls: [] })
+    mock(api.helpQueue).mockResolvedValue({ requests: [] })
+    mock(api.callHistory).mockRejectedValue(new Error('boom')) // 历史段拉取失败
+    render(<CallsPage />)
+    // 历史段应落到空态"暂无记录"，而不是卡在 Spinner
+    expect(await screen.findByText('暂无记录')).toBeInTheDocument()
+  })
 })

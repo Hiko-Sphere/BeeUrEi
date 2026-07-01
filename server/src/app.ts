@@ -74,7 +74,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
       reply.header('access-control-allow-origin', origin)
       reply.header('vary', 'Origin')
       if (req.method === 'OPTIONS') {
-        reply.header('access-control-allow-methods', 'GET,POST,PUT,DELETE,OPTIONS')
+        reply.header('access-control-allow-methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS') // 含 PATCH：API 有 PATCH 端点(admin 改资料)，列表应覆盖全部支持方法(已含同为 admin-only 的 PUT)
         reply.header('access-control-allow-headers', (req.headers['access-control-request-headers'] as string) || 'authorization,content-type')
         reply.header('access-control-max-age', '86400')
         return reply.code(204).send()

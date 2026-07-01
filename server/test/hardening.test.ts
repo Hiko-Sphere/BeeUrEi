@@ -31,4 +31,13 @@ describe('production hardening', () => {
     expect(res.headers['referrer-policy']).toBe('strict-origin-when-cross-origin')
     await a.close()
   })
+
+  it('CORS 预检对白名单源放行含 PATCH 的方法集（覆盖 API 全部方法）', async () => {
+    const a = app()
+    const res = await a.inject({ method: 'OPTIONS', url: '/api/version', headers: { origin: 'http://localhost:5173' } })
+    expect(res.statusCode).toBe(204)
+    const methods = res.headers['access-control-allow-methods'] as string
+    for (const m of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']) expect(methods).toContain(m)
+    await a.close()
+  })
 })

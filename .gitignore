@@ -11,6 +11,9 @@ xcuserdata/
 .build/
 .spm-cache/
 
+# 测试覆盖率输出（vitest --coverage 产物；server / 网页端通用，绝不入库。子目录 .gitignore 已含 node_modules/dist）
+coverage/
+
 # XcodeGen 生成的工程（可由 project.yml + `xcodegen generate` 重建）
 # 新手如果想用 git 跟踪 .xcodeproj，删掉下面这一行即可。
 BeeUrEi.xcodeproj/

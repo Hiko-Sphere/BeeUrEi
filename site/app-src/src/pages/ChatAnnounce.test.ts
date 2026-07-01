@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { nextChatAnnouncement, type AnnounceState } from './Chat'
+import { nextChatAnnouncement, mergeMessagesStable, type AnnounceState } from './Chat'
 import type { ChatMessage } from '../lib/api'
 
 const msg = (id: string, fromId: string, text = 'hi'): ChatMessage =>
@@ -53,5 +53,41 @@ describe('nextChatAnnouncement 新消息读屏播报决策', () => {
     const r = nextChatAnnouncement(null, state, 'me', describe_)
     expect(r.text).toBeNull()
     expect(r.state).toEqual(state)
+  })
+})
+
+describe('mergeMessagesStable 轮询窗口与已加载历史合并', () => {
+  it('无已有历史 → 直接返回 fresh（同一引用，避免无谓重排）', () => {
+    const fresh = [msg('2', 'peer'), msg('3', 'peer')]
+    expect(mergeMessagesStable(fresh, null)).toBe(fresh)
+    expect(mergeMessagesStable(fresh, [])).toBe(fresh)
+  })
+
+  it('已有历史全在 fresh 中 → 返回 fresh 本身（无 extra，引用稳定）', () => {
+    const fresh = [msg('2', 'peer'), msg('3', 'peer')]
+    const existing = [msg('3', 'peer')]
+    expect(mergeMessagesStable(fresh, existing)).toBe(fresh)
+  })
+
+  it('补回不在 fresh 中的更早历史，(createdAt,id) 升序', () => {
+    const fresh = [msg('5', 'peer'), msg('6', 'peer')]
+    const existing = [msg('1', 'peer'), msg('2', 'peer'), msg('5', 'peer')] // 5 与 fresh 重叠
+    const out = mergeMessagesStable(fresh, existing)
+    expect(out.map((m) => m.id)).toEqual(['1', '2', '5', '6']) // 1,2 补回；5 不重复
+  })
+
+  it('重叠 id 以 fresh 为准（服务器权威）', () => {
+    const fresh = [msg('5', 'peer', 'NEW')]
+    const existing = [msg('5', 'peer', 'OLD')]
+    const out = mergeMessagesStable(fresh, existing)
+    expect(out).toHaveLength(1)
+    expect(out[0].text).toBe('NEW')
+  })
+
+  it('同 createdAt 用 id 决胜，排序稳定确定', () => {
+    const a = { id: 'b', fromId: 'peer', toId: 'me', kind: 'text', text: 'x', createdAt: 9 } as ChatMessage
+    const b = { id: 'a', fromId: 'peer', toId: 'me', kind: 'text', text: 'y', createdAt: 9 } as ChatMessage
+    const out = mergeMessagesStable([a], [b]) // 同 createdAt=9，id a<b
+    expect(out.map((m) => m.id)).toEqual(['a', 'b'])
   })
 })

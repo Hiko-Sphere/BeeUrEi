@@ -151,6 +151,16 @@ export function nextChatAnnouncement(
   return { text: describe(lastMsg), state: next }
 }
 
+/// 轮询窗口与已加载历史合并：以最新窗口 fresh 为准，补回不在其中的更早历史 existing（上翻加载的），
+/// 按 id 去重（重叠以 fresh/服务器为准）、(createdAt,id) 升序稳定排序。纯函数，可单测。
+/// 无 extra 时直接返回 fresh，避免每次轮询都重排（引用稳定，减少无谓渲染）。
+export function mergeMessagesStable(fresh: ChatMessage[], existing: ChatMessage[] | null): ChatMessage[] {
+  if (!existing || existing.length === 0) return fresh
+  const ids = new Set(fresh.map((m) => m.id))
+  const extra = existing.filter((m) => !ids.has(m.id))
+  return extra.length ? [...fresh, ...extra].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)) : fresh
+}
+
 function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; onSent: () => void }) {
   const { user } = useSession()
   const { t, lang } = useI18n()
@@ -175,14 +185,8 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
     try {
       const r = await fetchWindow()
       // 合并保留已加载的更早历史（Thread 带 key，切会话会重挂载，cur 只含本会话消息）：
-      // 否则每 5s 轮询会把上翻加载的旧消息冲掉。重叠 id 以服务器为准。
-      setMsgs((cur) => {
-        if (!cur || cur.length === 0) return r.messages
-        const ids = new Set(r.messages.map((m) => m.id))
-        const extra = cur.filter((m) => !ids.has(m.id))
-        // 稳定全序 (createdAt, id)：同毫秒消息排序确定，避免轮询间相邻消息忽前忽后。
-        return extra.length ? [...r.messages, ...extra].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)) : r.messages
-      })
+      // 否则每 5s 轮询会把上翻加载的旧消息冲掉。重叠 id 以服务器为准。见 mergeMessagesStable。
+      setMsgs((cur) => mergeMessagesStable(r.messages, cur))
       if (sel.kind === 'peer') void api.markRead(sel.id).catch(() => {})
       else void api.markGroupRead(sel.id).catch(() => {})
     } catch { setMsgs((cur) => cur ?? []) }

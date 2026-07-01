@@ -160,6 +160,24 @@ describe('SqliteStore (node:sqlite)', () => {
     expect(mem2.searchGroupMessages('G', 'meeting', 10).map((m) => m.id)).toEqual(['g3', 'g2', 'g1'])
   })
 
+  it('搜索大小写不敏感覆盖非 ASCII（重音拉丁/西里尔/全大写拼音）：Sqlite 与 Memory 一致', () => {
+    // SQLite 内置 LOWER() 只折叠 ASCII，会漏掉大写非 ASCII 文本（CAFÉ/MÜLLER/ПРИВЕТ）；已改用 ulower
+    // 镜像 JS toLowerCase。此测确保生产 SqliteStore 与 MemoryStore 对这些查询给出相同（非空）结果，
+    // 否则盲人在会话内搜欧洲人名/品牌/西里尔时线上漏搜而测试却过（存储实现分叉）。
+    const seed = (s: SqliteStore | MemoryStore) => {
+      s.createMessage({ id: 'n1', fromId: 'u1', toId: 'u2', kind: 'text', text: '在 CAFÉ 见面', createdAt: 9000 })
+      s.createMessage({ id: 'n2', fromId: 'u1', toId: 'u2', kind: 'text', text: '联系 MÜLLER 先生', createdAt: 9100 })
+      s.createMessage({ id: 'n3', fromId: 'u1', toId: 'u2', kind: 'text', text: 'ПРИВЕТ 你好', createdAt: 9200 })
+    }
+    const sq = new SqliteStore(':memory:'); seed(sq)
+    const mem = new MemoryStore(); seed(mem)
+    for (const [q, id] of [['café', 'n1'], ['müller', 'n2'], ['привет', 'n3']] as const) {
+      const sqIds = sq.searchDirectMessages('u1', 'u2', q, 10).map((m) => m.id)
+      expect(sqIds).toEqual([id])                                        // 生产存储不再漏搜大写非 ASCII
+      expect(mem.searchDirectMessages('u1', 'u2', q, 10).map((m) => m.id)).toEqual(sqIds) // 两存储同口径
+    }
+  })
+
   it('latestMessagesPerPeer：对端最新两条同毫秒时只返回一条（不重复出现在会话列表）', () => {
     const store = new SqliteStore(':memory:')
     store.createMessage({ id: 'x1', fromId: 'u1', toId: 'u2', kind: 'text', text: '1', createdAt: 5000 })

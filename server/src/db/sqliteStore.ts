@@ -27,6 +27,11 @@ export class SqliteStore implements Store {
   constructor(path: string) {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true })
     this.db = new DatabaseSync(path)
+    // Unicode 感知的小写：SQLite 内置 LOWER() 只折叠 ASCII A-Z，非 ASCII（重音拉丁 CAFÉ/MÜLLER、
+    // 西里尔/希腊、全大写拼音等）原样保留，会导致会话内搜索漏掉大写非 ASCII 文本（MemoryStore 用
+    // JS toLowerCase 是 Unicode 感知的 → 两存储实现分叉：测试过而线上漏搜）。注册 ulower 镜像 JS
+    // toLowerCase，令搜索的文本侧与已 JS 小写的查询侧同口径。deterministic 便于查询优化器缓存。
+    this.db.function('ulower', { deterministic: true }, (x) => (x == null ? null : String(x).toLowerCase()))
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY, username TEXT UNIQUE, passwordHash TEXT,
@@ -657,7 +662,7 @@ export class SqliteStore implements Store {
       `SELECT * FROM messages
        WHERE groupId IS NULL AND kind = 'text'
          AND ((fromId = ? AND toId = ?) OR (fromId = ? AND toId = ?))
-         AND LOWER(text) LIKE ? ESCAPE '\\'
+         AND ulower(text) LIKE ? ESCAPE '\\'
        ORDER BY createdAt DESC, id DESC LIMIT ?`,
     ).all(a, b, b, a, like, limit)
     return rows.map((r) => this.toMessage(r))
@@ -668,7 +673,7 @@ export class SqliteStore implements Store {
     const like = '%' + q.replace(/[\\%_]/g, '\\$&') + '%'
     const rows = this.db.prepare(
       `SELECT * FROM messages
-       WHERE groupId = ? AND kind = 'text' AND LOWER(text) LIKE ? ESCAPE '\\'
+       WHERE groupId = ? AND kind = 'text' AND ulower(text) LIKE ? ESCAPE '\\'
        ORDER BY createdAt DESC, id DESC LIMIT ?`,
     ).all(groupId, like, limit)
     return rows.map((r) => this.toMessage(r))

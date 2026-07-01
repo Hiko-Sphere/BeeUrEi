@@ -110,6 +110,24 @@ describe('family + emergency', () => {
     await a.close()
   })
 
+  it('重复接受好友请求幂等：第二次不再重复给发起者发"已接受"通知', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const reg = async (u: string, role?: string) =>
+      (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const requester = await reg('reqI', 'helper')
+    await reg('blindI', 'blind')
+    const link = await a.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${requester.token}` }, payload: { username: 'blindI' } })
+    const blindLogin = await a.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'blindI', password: 'secret123' } })
+    const auth = { authorization: `Bearer ${blindLogin.json().token}` }
+    const linkId = link.json().link.id
+    expect((await a.inject({ method: 'POST', url: `/api/family/links/${linkId}/accept`, headers: auth })).statusCode).toBe(200)
+    expect((await a.inject({ method: 'POST', url: `/api/family/links/${linkId}/accept`, headers: auth })).statusCode).toBe(200) // 幂等
+    // 只通知过一次
+    expect(store.notificationsForUser(requester.user.id).filter((n) => n.kind === 'friend_accepted').length).toBe(1)
+    await a.close()
+  })
+
   it('caps the initiator side too: non-blind requester cannot fan out unbounded requests (422)', async () => {
     // 非盲发起方时 ownerId=target(盲)，owner 维度上限约束不到发起方自身——不补上限则单账号可向无数
     // 不同目标发 pending 请求（无界增长 + 群发好友请求推送骚扰）。验证发起方自身满 200 时被挡。

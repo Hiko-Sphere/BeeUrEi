@@ -47,4 +47,15 @@ final class LabelCatalogTests: XCTestCase {
         let enLabel = LabelCatalog(language: .en), enHazard = HazardCatalog(language: .en)
         XCTAssertTrue(enHazard.isHighRisk(enLabel.localizedName("xyzunknown"))) // obstacle
     }
+
+    func testDoorAndCurbHighRiskInBothLanguages() {
+        // 门(door)/路沿(curb)在两语言都应命中高危——修复前中文侧只有"玻璃门"、且缺"路沿"，
+        // 检测到的门/路沿在中文侧漏高危加成，而英文侧("door"/"curb")命中。
+        let zhL = LabelCatalog(language: .zh), zhH = HazardCatalog(language: .zh)
+        XCTAssertTrue(zhH.isHighRisk(zhL.localizedName("door")))  // 门
+        XCTAssertTrue(zhH.isHighRisk(zhL.localizedName("curb")))  // 路沿
+        let enL = LabelCatalog(language: .en), enH = HazardCatalog(language: .en)
+        XCTAssertTrue(enH.isHighRisk(enL.localizedName("door")))  // door
+        XCTAssertTrue(enH.isHighRisk(enL.localizedName("curb")))  // curb
+    }
 }

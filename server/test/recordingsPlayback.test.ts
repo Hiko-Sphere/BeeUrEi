@@ -266,9 +266,9 @@ describe('复审修复回归', () => {
   })
 
   it('MED-5：非拥有者（被录方）不能把他人录制作为证据（仅 owner 可）', async () => {
-    const { app, peer, recording } = await makeRecording()
-    // peer 是参与者/被录方但非 owner → 附 owner 的录制应被拒。
-    const bad = await app.inject({ method: 'POST', url: '/api/reports', headers: auth(peer.token), payload: { targetUserId: 'someone', reason: 'x', evidenceRecordingId: recording.id } })
+    const { app, owner, peer, recording } = await makeRecording()
+    // peer 是参与者/被录方但非 owner → 附 owner 的录制应被拒。举报对象用真实用户 owner，以走到证据校验。
+    const bad = await app.inject({ method: 'POST', url: '/api/reports', headers: auth(peer.token), payload: { targetUserId: owner.id, reason: 'x', evidenceRecordingId: recording.id } })
     expect(bad.statusCode).toBe(400)
     expect(bad.json().error).toBe('invalid_evidence')
     await app.close()

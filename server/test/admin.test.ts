@@ -89,12 +89,14 @@ describe('admin + reports', () => {
     const { app } = withAdmin()
     const reg = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'carol', password: 'secret123' } })
     const token = reg.json().token
+    const targetReg = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'someone', password: 'secret123' } })
+    const targetId = targetReg.json().user.id
 
     const create = await app.inject({
       method: 'POST',
       url: '/api/reports',
       headers: { authorization: `Bearer ${token}` },
-      payload: { targetUserId: 'someone', reason: '不当行为' },
+      payload: { targetUserId: targetId, reason: '不当行为' },
     })
     expect(create.statusCode).toBe(201)
     const reportId = create.json().report.id

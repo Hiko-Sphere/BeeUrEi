@@ -5,18 +5,22 @@ import { type Store, type Report } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 
 const createReportSchema = z.object({
-  targetUserId: z.string().min(1),
-  callId: z.string().optional(),
+  targetUserId: z.string().min(1).max(64),
+  callId: z.string().max(128).optional(),
   reason: z.string().min(1).max(500),
-  evidenceRecordingId: z.string().min(1).optional(), // 附通话录制作为证据（举报人须为该录制参与方）
+  evidenceRecordingId: z.string().min(1).max(64).optional(), // 附通话录制作为证据（举报人须为该录制参与方）
 })
 
 export function registerReportRoutes(app: FastifyInstance, store: Store): void {
   // 任何登录用户可举报（通话后一键举报）。
-  app.post('/api/reports', { preHandler: requireAuth() }, async (req, reply) => {
+  app.post('/api/reports', { preHandler: requireAuth(), config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = createReportSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const reporter = req.user!
+    // 被举报对象须是真实用户、且不能是自己——否则可用伪造/变化的 targetUserId 每次绕过去重(去重按 reporter+target)、
+    // 无限灌报(报表长期留存→无界增长 + 管理员队列被刷爆)。配合上面的限流(10/min)双重防刷。
+    if (parsed.data.targetUserId === reporter.sub) return reply.code(400).send({ error: 'cannot_report_self' })
+    if (!store.findById(parsed.data.targetUserId)) return reply.code(404).send({ error: 'target_not_found' })
     // 证据校验：附带的录制必须存在，且举报人**就是该录制的拥有者**（录制者本人）——
     // 仅拥有者可把自己的录制作为证据提出。否则非拥有者参与方可把他人（甚至已软删除）的录制拖入
     // 无限期取证留存、绕过拥有者的删除控制、并把其位置等元数据暴露给管理员（见复审 EVIDENCE-OWNER）。

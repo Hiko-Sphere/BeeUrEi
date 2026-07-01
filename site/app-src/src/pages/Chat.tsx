@@ -133,6 +133,24 @@ function preview(m: ChatMessage | null, t: (z: string, e: string) => string): st
   }
 }
 
+export type AnnounceState = { id: string | null; initialized: boolean }
+/// 决定聊天线程该向读屏播报什么——只播"会话进行中新到的对端消息"。纯函数，可单测。
+/// 规则：① 未初始化（刚进会话/刚加载完历史）只记录末尾基线、不播报（否则一进来就念历史最后一条）；
+/// ② 末尾 id 未变不播报（上翻"加载更早"只改列表头部，末尾不动）；③ 新末尾若是自己发的不播报；
+/// ④ 会话本空、对端发来第一条：此时已 initialized、末尾 id 从 null 变为新 id → 正常播报（不被①吞掉）。
+export function nextChatAnnouncement(
+  lastMsg: ChatMessage | null,
+  state: AnnounceState,
+  myId: string | undefined,
+  describe: (m: ChatMessage) => string,
+): { text: string | null; state: AnnounceState } {
+  if (!state.initialized) return { text: null, state: { id: lastMsg?.id ?? null, initialized: true } }
+  if (!lastMsg || lastMsg.id === state.id) return { text: null, state }
+  const next: AnnounceState = { id: lastMsg.id, initialized: true }
+  if (lastMsg.fromId === myId) return { text: null, state: next } // 自己发的不念
+  return { text: describe(lastMsg), state: next }
+}
+
 function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; onSent: () => void }) {
   const { user } = useSession()
   const { t, lang } = useI18n()
@@ -203,6 +221,24 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
     return () => clearTimeout(id)
   }, [searchQuery, searchOpen, sel])
 
+  // 新消息读屏播报：仅"会话进行中新到的对端消息"写入下方隐藏 aria-live 区（规则见 nextChatAnnouncement）。
+  const announceRef = useRef<AnnounceState>({ id: null, initialized: false })
+  const announceSeq = useRef(0)
+  const [announce, setAnnounce] = useState('')
+  useEffect(() => {
+    const lastMsg = msgs && msgs.length ? msgs[msgs.length - 1] : null
+    const describe = (m: ChatMessage) => {
+      const who = sel.kind === 'group'
+        ? (sel.members.find((mm) => mm.id === m.fromId)?.displayName ?? t('成员', 'Member'))
+        : sel.name
+      return `${who}：${preview(m, t)}`
+    }
+    const r = nextChatAnnouncement(lastMsg, announceRef.current, user?.id, describe)
+    announceRef.current = r.state
+    // 交替零宽字符：连续两条内容相同的消息也构成 DOM 文本变化，确保读屏不吞掉第二条。
+    if (r.text !== null) { announceSeq.current += 1; setAnnounce(r.text + (announceSeq.current % 2 ? '\u200B' : '')) }
+  }, [msgs, sel, user?.id, t])
+
   const target = sel.kind === 'peer' ? { toId: sel.id } : { groupId: sel.id }
 
   const send = async () => {
@@ -247,6 +283,8 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
 
   return (
     <div className="flex w-full flex-col rounded-2xl surface border border-[var(--line)]">
+      {/* 新消息读屏播报：隐藏 aria-live 区，会话进行中收到对端消息时播报"对端名：内容"。 */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">{announce}</div>
       <header className="flex items-center gap-3 border-b border-[var(--line)] px-4 py-3">
         <button onClick={onBack} className="md:hidden" aria-label={t('返回', 'Back')}><IconX /></button>
         {sel.kind === 'peer' ? <Avatar name={sel.name} src={sel.avatar} size={36} /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-honey/15 text-honey"><IconChat width={18} height={18} /></span>}

@@ -46,6 +46,25 @@ export class CodeSendLimiter {
     }
   }
 
+  /// 原子「占额」：check 通过则**同步立即** record，返回决定。用于消除「check → await 发信 → record」
+  /// 之间的并发 TOCTOU——原写法并发连发会在 record 落库前都过 check，绕过冷却。tryConsume 同步完成
+  /// check+record，故并发的第二个请求必看到第一个的记录而被冷却挡下（只放行一个）。
+  tryConsume(key: string, now: number): SendDecision {
+    const dec = this.check(key, now)
+    if (dec.ok) this.record(key, now)
+    return dec
+  }
+
+  /// 退还一次刚 tryConsume 占用的额度：发信失败时调用，保持「发信失败不锁冷却」语义。
+  /// 移除该 key 在 now 记的那一条（因冷却，同一 key 同一 now 至多一条 tryConsume 成功，故无歧义）。
+  refund(key: string, now: number): void {
+    const arr = this.hits.get(key)
+    if (!arr) return
+    const i = arr.lastIndexOf(now)
+    if (i >= 0) arr.splice(i, 1)
+    if (arr.length === 0) this.hits.delete(key)
+  }
+
   get size(): number {
     return this.hits.size
   }

@@ -273,7 +273,9 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     }
     // 发送侧节流（防连点/轰炸）：按用户节流，超限则拒绝且不改邮箱。
     const sendKey = `send:verify:${user.id}`
-    const dec = codeSend.check(sendKey, Date.now())
+    const sendAt = Date.now()
+    // 原子占额：同步 check+record，消除「check→await 发信→record」的并发 TOCTOU（连发绕过冷却轰炸）。
+    const dec = codeSend.tryConsume(sendKey, sendAt)
     if (!dec.ok) {
       reply.header('Retry-After', String(dec.retryAfterSec))
       return reply.code(429).send({ error: dec.reason === 'cooldown' ? 'code_cooldown' : 'code_too_many', retryAfterSec: dec.retryAfterSec })
@@ -285,13 +287,13 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
       const m = emailVerificationMail(code)
       await mailer.send(email, m.subject, m.text, m.html)
     } catch (e) {
-      // 发信失败（SMTP 故障/凭据失效）：回滚邮箱变更并明确告知"邮件服务不可用"——
+      // 发信失败（SMTP 故障/凭据失效）：回滚邮箱变更 + 退还发送额度（不锁冷却），明确告知"邮件服务不可用"——
       // 不可发 500（客户端会误报网络错误），更不可假装已发送。
       store.updateUser(user.id, prev)
+      codeSend.refund(sendKey, sendAt)
       console.warn('[mail] 验证码发送失败:', (e as Error).message)
       return reply.code(503).send({ error: 'mail_unavailable' })
     }
-    codeSend.record(sendKey, Date.now())
     return { ok: true }
   })
 

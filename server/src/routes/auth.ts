@@ -243,7 +243,9 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     const email = parsed.data.email.trim().toLowerCase()
     // 发送侧节流（防连点/轰炸）：按收件邮箱节流——已注册/未注册两条路径都发码，故节流对称，不泄露账号是否存在。
     const sendKey = `send:login:${email}`
-    const dec = codeSend.check(sendKey, Date.now())
+    const sendAt = Date.now()
+    // 原子占额：同步 check+record，消除「check→await 发信→record」的并发 TOCTOU（连发绕过冷却）。
+    const dec = codeSend.tryConsume(sendKey, sendAt)
     if (!dec.ok) {
       reply.header('Retry-After', String(dec.retryAfterSec))
       return reply.code(429).send({ error: dec.reason === 'cooldown' ? 'code_cooldown' : 'code_too_many', retryAfterSec: dec.retryAfterSec })
@@ -257,10 +259,10 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
       const m = loginCodeMail(code)
       await mailer.send(email, m.subject, m.text, m.html)
     } catch (e) {
+      codeSend.refund(sendKey, sendAt) // 发信失败退还额度（不锁冷却，语义同旧「仅成功才计入」）
       console.warn('[mail] 登录码发送失败:', (e as Error).message)
       return reply.code(503).send({ error: 'mail_unavailable' })
     }
-    codeSend.record(sendKey, Date.now()) // 仅在成功发送后计入节流（发信失败不锁冷却）
     return { ok: true }
   })
 

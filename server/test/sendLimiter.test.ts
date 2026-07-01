@@ -38,6 +38,37 @@ describe('CodeSendLimiter（验证码发送侧节流）', () => {
     expect(lim.check('b', t).ok).toBe(true) // 不同收件人不受影响
     expect(lim.check('a', t + 60_001).ok).toBe(true) // 超过窗口，旧记录滑出
   })
+
+  it('tryConsume 原子占额：通过即计入，同 now 的第二次立刻被冷却挡下（消除 check/record 间 TOCTOU）', () => {
+    const lim = new CodeSendLimiter(60_000, 3_600_000, 5)
+    const t = 1_000_000
+    // 模拟并发：两次 tryConsume 用同一 now。原子性保证第二次必看到第一次的记录 → 冷却拒绝，只放行一个。
+    expect(lim.tryConsume('k', t).ok).toBe(true)   // 第一个占额成功（已 record）
+    const d = lim.tryConsume('k', t)
+    expect(d.ok).toBe(false)                        // 第二个（同 now）被冷却挡下——旧 check→…→record 会两个都过
+    if (!d.ok) expect(d.reason).toBe('cooldown')
+  })
+
+  it('tryConsume 被拒时不占额（额度只在放行时消耗）', () => {
+    const lim = new CodeSendLimiter(0, 3_600_000, 2) // 冷却 0，仅测窗口上限
+    const t = 1_000_000
+    expect(lim.tryConsume('k', t).ok).toBe(true)     // 1/2
+    expect(lim.tryConsume('k', t + 1).ok).toBe(true) // 2/2
+    expect(lim.tryConsume('k', t + 2).ok).toBe(false) // 超上限被拒
+    expect(lim.tryConsume('k', t + 3).ok).toBe(false) // 仍被拒——被拒的调用没有额外占额把窗口越推越满
+  })
+
+  it('refund 退还刚占的额度：发信失败后可立即重试（不锁冷却）', () => {
+    const lim = new CodeSendLimiter(60_000, 3_600_000, 5)
+    const t = 1_000_000
+    expect(lim.tryConsume('k', t).ok).toBe(true) // 占额
+    lim.refund('k', t)                            // 发信失败 → 退还
+    expect(lim.tryConsume('k', t).ok).toBe(true)  // 冷却未被锁，立即可再发
+    // 退还不误伤他人：另一 key 的记录不受影响。
+    lim.tryConsume('other', t)
+    lim.refund('k', t)
+    expect(lim.check('other', t).ok).toBe(false)  // other 仍在冷却
+  })
 })
 
 describe('发送侧节流（端到端）', () => {
@@ -53,6 +84,24 @@ describe('发送侧节流（端到端）', () => {
     expect(second.json().retryAfterSec).toBeGreaterThan(0)
     expect(second.headers['retry-after']).toBeTruthy()
     expect(sent.length).toBe(1) // 第二次在发送前即被拒
+    await app.close()
+  })
+
+  it('发信失败(503)退还额度：紧接着重试不被冷却锁住——tryConsume+refund 保住"发信失败不锁冷却"', async () => {
+    let failNext = true // 第一次发信抛错，之后成功
+    const sent: string[] = []
+    const mailer: Mailer = { async send(to) { if (failNext) { failNext = false; throw new Error('smtp down') } sent.push(to) } }
+    const app = buildApp(new MemoryStore(), { mailer })
+    const first = await app.inject({ method: 'POST', url: '/api/auth/email/request-code', payload: { email: 'x@example.com' } })
+    expect(first.statusCode).toBe(503) // 发信失败
+    // 关键：发信失败已 refund，冷却未被锁 → 立即重试应放行（而非 429 code_cooldown）。
+    const retry = await app.inject({ method: 'POST', url: '/api/auth/email/request-code', payload: { email: 'x@example.com' } })
+    expect(retry.statusCode).toBe(200)
+    expect(sent).toEqual(['x@example.com']) // 第二次真发出去了
+    // 此时额度已占用（成功那次），第三次立即再打才被冷却挡下。
+    const third = await app.inject({ method: 'POST', url: '/api/auth/email/request-code', payload: { email: 'x@example.com' } })
+    expect(third.statusCode).toBe(429)
+    expect(third.json().error).toBe('code_cooldown')
     await app.close()
   })
 

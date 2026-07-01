@@ -26,6 +26,18 @@ describe('OpenHelpRegistry', () => {
     expect(r.activeCountFor('A', 200_000)).toBe(0)      // 过期(TTL 2min)后归零
   })
 
+  it('硬上限优先淘汰未认领的排队积压，保留进行中(已认领)会话——不因积压打断盲人通话', () => {
+    const r = new OpenHelpRegistry(120_000, 4 * 60 * 60 * 1000, 2) // maxEntries=2
+    r.register(base({ callId: 'active', fromUserId: 'blindOld', createdAt: 0 }))
+    r.claim('active', 'volunteer', 1)                    // 老 createdAt 的**进行中**通话（已认领）
+    r.register(base({ callId: 'queued', fromUserId: 'blindNew', createdAt: 10 })) // 未认领排队，size=2
+    r.register(base({ callId: 'newest', fromUserId: 'blindNewest', createdAt: 20 })) // 触发 cap
+    // 旧实现按 createdAt 淘汰最旧 → 会淘汰 'active'(createdAt=0，却是活跃通话)；新实现优先淘汰未认领。
+    expect(r.byId('active')?.claimedBy).toBe('volunteer') // 进行中通话保留（不被积压挤掉）
+    expect(r.byId('queued')).toBeUndefined()              // 未认领积压被淘汰（求助者可重发）
+    expect(r.byId('newest')).toBeTruthy()                 // 新条目入队
+  })
+
   it('登记后出现在公开队列，按等待时间最久优先', () => {
     const r = new OpenHelpRegistry()
     r.register(base({ callId: 'new', createdAt: 20 }))

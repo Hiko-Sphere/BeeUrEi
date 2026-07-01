@@ -185,11 +185,19 @@ export class OpenHelpRegistry {
   }
 
   /// 硬上限：超出则淘汰最旧，防止无界增长（即便无人触发 prune）。
+  /// **优先淘汰未认领**的排队积压（可丢弃：求助者可重发），仅在未认领全清后仍超限，才动**已认领**的
+  /// 进行中会话——否则一个老 createdAt 的活跃通话(claimed)会被新的排队积压挤掉，ws 参与权记录随之消失、
+  /// 盲人正在进行的求助通话被凭空打断，违背"已认领条目保留供通话期间校验"的设计意图。
   private cap(): void {
     if (this.reqs.size < this.maxEntries) return
-    const oldestFirst = [...this.reqs.entries()].sort((a, b) => a[1].createdAt - b[1].createdAt)
     const removeCount = this.reqs.size - this.maxEntries + 1
-    for (let i = 0; i < removeCount; i++) this.reqs.delete(oldestFirst[i][0])
+    const entries = [...this.reqs.entries()]
+    const byAge = (a: [string, HelpRequest], b: [string, HelpRequest]) => a[1].createdAt - b[1].createdAt
+    const evictionOrder = [
+      ...entries.filter(([, r]) => !r.claimedBy).sort(byAge), // 先淘汰未认领的排队积压（最旧优先）
+      ...entries.filter(([, r]) => r.claimedBy).sort(byAge),  // 兜底：仍超限才动进行中会话（最旧优先）
+    ]
+    for (let i = 0; i < removeCount && i < evictionOrder.length; i++) this.reqs.delete(evictionOrder[i][0])
   }
 
   get size(): number {

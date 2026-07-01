@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import { type Store, type FamilyLink, isBlockedBetween } from '../db/store'
+import { type Store, type FamilyLink, isBlockedBetween, matchBannedTerm } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
 import { type PushSender, NoopPushSender } from '../push/apns'
@@ -22,6 +22,9 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: P
   app.post('/api/family/links', { preHandler: [requireAuth(), requireFeature(store, 'familyLinks')] }, async (req, reply) => {
     const parsed = addLinkSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    // relation 是对方在"待确认请求"列表与好友请求推送里能看到的用户文本——须过内容审核（与昵称/消息/群名同口径）。
+    // 否则可经好友请求的 relation 字段向**陌生人**发违禁内容，绕过"需先建立关系"的消息过滤。正常端为预设称谓，此处防改造客户端。
+    if (parsed.data.relation && matchBannedTerm(store.getAppConfig(), parsed.data.relation)) return reply.code(403).send({ error: 'content_blocked' })
     const meId = req.user!.sub
     const me = store.findById(meId)
     const target = parsed.data.userId ? store.findById(parsed.data.userId) : store.findByUsername(parsed.data.username!.trim())

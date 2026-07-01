@@ -91,6 +91,25 @@ describe('family + emergency', () => {
     await a.close()
   })
 
+  it('好友请求 relation 过内容审核：含违禁词被拒(403 content_blocked)，干净通过', async () => {
+    const store = new MemoryStore()
+    store.setAppConfig({ contentFilter: { enabled: true, terms: ['脏词'] } })
+    const a = buildApp(store)
+    const reg = async (u: string, role?: string) =>
+      (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const requester = await reg('reqR', 'helper')
+    await reg('tgtR', 'blind')
+    const auth = { authorization: `Bearer ${requester.token}` }
+    // relation 含违禁词 → 拒（否则可经好友请求 relation 向陌生人发违禁内容）
+    const bad = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth, payload: { username: 'tgtR', relation: '脏词称呼' } })
+    expect(bad.statusCode).toBe(403)
+    expect((bad.json() as any).error).toBe('content_blocked')
+    // 干净 relation → 通过
+    const ok = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth, payload: { username: 'tgtR', relation: '朋友' } })
+    expect(ok.statusCode).toBe(201)
+    await a.close()
+  })
+
   it('caps the initiator side too: non-blind requester cannot fan out unbounded requests (422)', async () => {
     // 非盲发起方时 ownerId=target(盲)，owner 维度上限约束不到发起方自身——不补上限则单账号可向无数
     // 不同目标发 pending 请求（无界增长 + 群发好友请求推送骚扰）。验证发起方自身满 200 时被挡。

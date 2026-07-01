@@ -1,5 +1,4 @@
 import { apiURL } from './config'
-import { classifyIdentifier, normalizePhoneInput } from './identifier'
 
 // ---------- 模型（与服务端对齐） ----------
 export interface User { id: string; username: string; displayName: string; role: string; status: string; avatar?: string | null; verified?: boolean }
@@ -86,6 +85,15 @@ export function callErrorText(err: unknown, t: (zh: string, en: string) => strin
 export function contentBlockedText(err: unknown, t: (zh: string, en: string) => string, fallback: string): string {
   if (err instanceof APIError && err.code === 'content_blocked') return t('该内容不被允许，请换一个', "That's not allowed — please choose another")
   return fallback
+}
+
+/// 登录请求体：标识（用户名/手机号/邮箱）**一律作为 username 字段**发送——服务端 loginSchema 只认
+/// username(必填) 且用 findByLoginIdentifier 依次按 用户名→手机号(normalizePhone)→邮箱 解析这一个字段。
+/// 此前误按类型拆成 email/phone 字段发送，导致邮箱/手机号登录因缺 username 被 400 挡下（仅用户名能登）。
+export function buildLoginBody(identifier: string, password: string, totpCode?: string): Record<string, string> {
+  const body: Record<string, string> = { username: identifier, password }
+  if (totpCode) body.totpCode = totpCode
+  return body
 }
 
 const LS_TOKEN = 'beeurei.web.token'
@@ -175,14 +183,8 @@ export const api = {
   logout: (refreshToken: string) => rawFetch('POST', '/api/auth/logout', { refreshToken }, false),
   // 认证
   async login(identifier: string, password: string, totpCode?: string): Promise<{ token: string; refreshToken: string; user: User }> {
-    // 标识可为用户名 / 手机号 / 邮箱，后端按字段判定；统一传 username（后端兼容）。
-    const body: Record<string, string> = { password }
-    const kind = classifyIdentifier(identifier)
-    if (kind === 'email') body.email = identifier
-    else if (kind === 'phone') body.phone = normalizePhoneInput(identifier)
-    else body.username = identifier
-    if (totpCode) body.totpCode = totpCode // 开了两步验证的账号补交 TOTP / 恢复码
-    return rawFetch('POST', '/api/auth/login', body, false) as Promise<{ token: string; refreshToken: string; user: User }>
+    // 标识（用户名/手机号/邮箱）一律作为 username 传，服务端单字段解析（见 buildLoginBody）。
+    return rawFetch('POST', '/api/auth/login', buildLoginBody(identifier, password, totpCode), false) as Promise<{ token: string; refreshToken: string; user: User }>
   },
   async register(username: string, password: string, role: string): Promise<{ token: string; refreshToken: string; user: User; created?: boolean }> {
     return rawFetch('POST', '/api/auth/register', { username, password, role }, false) as Promise<{ token: string; refreshToken: string; user: User; created?: boolean }>

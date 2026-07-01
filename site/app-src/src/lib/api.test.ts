@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { APIError, chatErrorText, callErrorText, contentBlockedText } from './api'
+import { APIError, chatErrorText, callErrorText, contentBlockedText, buildLoginBody } from './api'
 
 // 取中文分支断言（t 返回 zh）。少写一个形参即可——TS 允许少参函数赋给 (zh,en)=>string。
 const t = (zh: string) => zh
@@ -48,5 +48,21 @@ describe('contentBlockedText 内容过滤→用户文案', () => {
   it('其余码/非 APIError 落到各调用点 fallback', () => {
     expect(contentBlockedText(new APIError('username_taken', 409), t, '保存失败')).toBe('保存失败')
     expect(contentBlockedText(new Error('boom'), t, '发送失败')).toBe('发送失败')
+  })
+})
+
+describe('buildLoginBody 登录请求体（标识一律作 username 字段）', () => {
+  it('邮箱/手机号/用户名都放进 username 字段，绝不拆成 email/phone（否则缺 username 被 400）', () => {
+    for (const id of ['alice@example.com', '13800138000', '+86 138-0013-8000', 'alice']) {
+      const b = buildLoginBody(id, 'pw')
+      expect(b.username).toBe(id) // 原样作 username 传，服务端 findByLoginIdentifier 解析
+      expect(b.password).toBe('pw')
+      expect('email' in b).toBe(false)
+      expect('phone' in b).toBe(false)
+    }
+  })
+  it('带 TOTP 时透传 totpCode，否则不含该键', () => {
+    expect(buildLoginBody('alice', 'pw', '123456').totpCode).toBe('123456')
+    expect('totpCode' in buildLoginBody('alice', 'pw')).toBe(false)
   })
 })

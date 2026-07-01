@@ -26,6 +26,7 @@ export function LoginPage() {
       case 'invalid_credentials': return t('账号或密码不正确', 'Incorrect account or password')
       case 'username_taken': return t('该用户名已被占用', 'That username is taken')
       case 'registration_disabled': return t('注册暂时关闭', 'Registration is currently closed')
+      case 'account_disabled': return t('该账号已被停用，请联系管理员', 'This account has been disabled — please contact the administrator')
       case 'content_blocked': return t('该内容不被允许，请换一个', "That's not allowed — please choose another")
       case 'network': return t('网络连接失败，请重试', 'Network error, please retry')
       case 'invalid_input': return t('请检查输入内容', 'Please check your input')

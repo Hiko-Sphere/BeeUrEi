@@ -91,3 +91,31 @@ describe('mergeAppConfig 逐键合并（PATCH 语义，不整体替换）', () =
     expect(merged.features.groups).toBe(true)
   })
 })
+
+describe('normalizeAppConfig 配置消毒（默认值 + 类型强制，防坏配置击穿）', () => {
+  it('undefined/null → 安全默认（注册开、免验证、无公告/维护、过滤关）', () => {
+    for (const c of [normalizeAppConfig(undefined), normalizeAppConfig(null)]) {
+      expect(c.registrationEnabled).toBe(true)
+      expect(c.requireVerification).toBe(false)
+      expect(c.announcement.active).toBe(false)
+      expect(c.maintenance.active).toBe(false)
+      expect(c.contentFilter.enabled).toBe(false)
+      expect(c.contentFilter.terms).toEqual([])
+    }
+  })
+  it('announcement.level 仅 warning 保留，其余一律归 info', () => {
+    expect(normalizeAppConfig({ announcement: { active: true, message: 'x', level: 'warning' } }).announcement.level).toBe('warning')
+    expect(normalizeAppConfig({ announcement: { active: true, message: 'x', level: 'bogus' } } as unknown as Partial<AppConfig>).announcement.level).toBe('info')
+  })
+  it('非字符串 message 归空串（不外泄坏类型到前端）', () => {
+    expect(normalizeAppConfig({ announcement: { message: 123 } } as unknown as Partial<AppConfig>).announcement.message).toBe('')
+  })
+  it('非数组 terms 归 []；数组内非字符串被剔除', () => {
+    expect(normalizeAppConfig({ contentFilter: { enabled: true, terms: 'notarray' } } as unknown as Partial<AppConfig>).contentFilter.terms).toEqual([])
+    expect(normalizeAppConfig({ contentFilter: { enabled: true, terms: ['a', 123, 'b'] } } as unknown as Partial<AppConfig>).contentFilter.terms).toEqual(['a', 'b'])
+  })
+  it('非布尔 feature 值被忽略（保持默认，不被坏值污染）', () => {
+    const c = normalizeAppConfig({ features: { calls: 'yes' } } as unknown as Partial<AppConfig>)
+    expect(typeof c.features.calls).toBe('boolean') // 'yes' 非 boolean → 取默认，不写入字符串
+  })
+})

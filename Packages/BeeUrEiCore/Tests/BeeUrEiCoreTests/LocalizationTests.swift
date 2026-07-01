@@ -72,6 +72,22 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(c.conciseMeters(2.4, language: .en), "2m")
     }
 
+    // 回归：距离格式化对**异常帧**的 NaN/∞/巨大有限值不得崩溃（安全播报路径）。修复前
+    // conciseMeters/groundMeters 无 isFinite 守卫、meters 有量级缺口 → Int(NaN)/Int(巨值) 陷阱崩溃。
+    func testDistanceFormattingSurvivesNonFiniteAndHuge() {
+        for lang in [Language.zh, .en] {
+            for bad in [Double.nan, .infinity, -.infinity, 1e300, -1e300] {
+                _ = SpokenStrings.meters(bad, lang)
+                _ = SpokenStrings.conciseMeters(bad, lang)
+                _ = SpokenStrings.groundMeters(bad, lang)
+            }
+        }
+        // NaN 距离保守退化：conciseMeters→很近/very close，groundMeters→半米/half a meter。
+        XCTAssertEqual(SpokenStrings.conciseMeters(.nan, .en), "very close")
+        XCTAssertEqual(SpokenStrings.groundMeters(.nan, .zh), "半米")
+        XCTAssertFalse(SpokenStrings.conciseMeters(1e300, .en).isEmpty) // 巨值不崩溃、仍出合法字符串
+    }
+
     func testProximityEnglish() {
         let c = SpeechComposer()
         XCTAssertNil(c.announceProximity(.clear, nearestMeters: nil, language: .en))

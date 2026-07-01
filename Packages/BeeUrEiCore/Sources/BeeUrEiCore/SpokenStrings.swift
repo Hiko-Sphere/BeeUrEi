@@ -38,10 +38,17 @@ public enum SpokenStrings {
 
     // MARK: 距离（SpeechComposer）
 
+    /// 安全四舍五入为非负 Int：非有限退化为 0，并夹到安全范围——防 `Int(非有限/越界 Double)` 陷阱崩溃
+    /// （异常视觉帧可产生 NaN/∞/巨值距离；`.isFinite` 挡不住量级。见 ClockDirection 同类修复）。
+    static func safeRoundedInt(_ v: Double) -> Int {
+        guard v.isFinite else { return 0 }
+        return Int(min(max(v, 0), 1_000_000).rounded())
+    }
+
     /// 详细距离：非法/退化距离退化为「非常近」。
     public static func meters(_ d: Double, _ lang: Language) -> String {
         guard d.isFinite, d > 0 else { return veryClose(lang) }
-        let cm = Int((d * 100).rounded())
+        let cm = safeRoundedInt(d * 100) // d 巨值时 d*100 仍会让 Int(...) 溢出崩溃，故用安全转换
         if cm <= 0 { return veryClose(lang) }
         switch lang {
         case .zh: return cm < 100 ? "\(cm) 厘米" : String(format: "%.1f 米", d)
@@ -51,15 +58,17 @@ public enum SpokenStrings {
 
     /// 简短距离：<0.5 很近、<1 半米、否则整米。
     public static func conciseMeters(_ d: Double, _ lang: Language) -> String {
+        // 非有限（异常帧的 NaN/∞）保守退化为「很近」——否则 d<0.5 等比较对 NaN 皆假，落到 Int(NaN) 陷阱崩溃。
+        guard d.isFinite else { return veryClose(lang) }
         switch lang {
         case .zh:
             if d < 0.5 { return "很近" }
             if d < 1 { return "半米" }
-            return "\(Int(d.rounded()))米"
+            return "\(safeRoundedInt(d))米"
         case .en:
             if d < 0.5 { return "very close" }
             if d < 1 { return "half a meter" }
-            return "\(Int(d.rounded()))m"
+            return "\(safeRoundedInt(d))m"
         }
     }
 
@@ -120,9 +129,11 @@ public enum SpokenStrings {
 
     /// 地面高危用的简短距离（半米 / 整米，无「厘米」档）。
     public static func groundMeters(_ d: Double, _ lang: Language) -> String {
+        // 非有限（异常帧）保守退化为最近档「半米」——防 Int(NaN)/Int(巨值) 在地面高危播报路径上崩溃。
+        guard d.isFinite else { return lang == .zh ? "半米" : "half a meter" }
         switch lang {
-        case .zh: return d < 0.5 ? "半米" : "\(Int(d.rounded()))米"
-        case .en: return d < 0.5 ? "half a meter" : "\(Int(d.rounded()))m"
+        case .zh: return d < 0.5 ? "半米" : "\(safeRoundedInt(d))米"
+        case .en: return d < 0.5 ? "half a meter" : "\(safeRoundedInt(d))m"
         }
     }
 

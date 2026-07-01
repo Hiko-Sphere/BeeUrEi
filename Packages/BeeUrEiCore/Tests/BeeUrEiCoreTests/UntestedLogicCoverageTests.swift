@@ -114,4 +114,48 @@ final class UntestedLogicCoverageTests: XCTestCase {
         let k = CameraIntrinsics(fx: 600, fy: 600, cx: 320, cy: 240)
         XCTAssertNil(PinholeCamera.project(SIMD3<Float>(0, 0, -1), cameraToWorld: matrix_identity_float4x4, intrinsics: k)) // 相机后方
     }
+
+    // MARK: FeedbackArbiter 反馈仲裁（iOS FeedbackCoordinator 的核心，决定 P0 避障是否抢占 P3 环境描述）
+
+    func testFeedbackPriorityOrdering() {
+        XCTAssertLessThan(FeedbackPriority.environment, FeedbackPriority.status)
+        XCTAssertLessThan(FeedbackPriority.status, FeedbackPriority.turn)
+        XCTAssertLessThan(FeedbackPriority.turn, FeedbackPriority.obstacle)
+        XCTAssertLessThan(FeedbackPriority.obstacle, FeedbackPriority.critical)
+    }
+
+    func testFeedbackArbiterIdlePlays() {
+        var a = FeedbackArbiter()
+        XCTAssertTrue(a.shouldPlay(FeedbackEvent(priority: .environment, speech: "远处有树")))
+        XCTAssertEqual(a.current?.priority, .environment)
+    }
+
+    func testFeedbackArbiterHigherPreempts() {
+        var a = FeedbackArbiter()
+        _ = a.shouldPlay(FeedbackEvent(priority: .environment, speech: "环境"))
+        XCTAssertTrue(a.shouldPlay(FeedbackEvent(priority: .obstacle, speech: "障碍"))) // P0 抢占 P3
+        XCTAssertEqual(a.current?.priority, .obstacle)
+    }
+
+    func testFeedbackArbiterLowerDropped() {
+        var a = FeedbackArbiter()
+        _ = a.shouldPlay(FeedbackEvent(priority: .critical, speech: "落差"))
+        XCTAssertFalse(a.shouldPlay(FeedbackEvent(priority: .environment, speech: "环境"))) // 不打断最高优先级
+        XCTAssertEqual(a.current?.priority, .critical) // current 保持
+    }
+
+    func testFeedbackArbiterEqualReplaces() {
+        var a = FeedbackArbiter()
+        _ = a.shouldPlay(FeedbackEvent(priority: .obstacle, speech: "5米"))
+        XCTAssertTrue(a.shouldPlay(FeedbackEvent(priority: .obstacle, speech: "2米"))) // 同级：更近的覆盖
+        XCTAssertEqual(a.current?.speech, "2米")
+    }
+
+    func testFeedbackArbiterFinishReleasesChannel() {
+        var a = FeedbackArbiter()
+        _ = a.shouldPlay(FeedbackEvent(priority: .critical, speech: "落差"))
+        a.finish()
+        XCTAssertNil(a.current)
+        XCTAssertTrue(a.shouldPlay(FeedbackEvent(priority: .environment, speech: "环境"))) // 释放后低优先级可播
+    }
 }

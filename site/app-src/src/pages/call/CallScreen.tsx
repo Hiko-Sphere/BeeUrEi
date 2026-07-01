@@ -215,9 +215,16 @@ function CtrlButton({ icon, label, onClick, active, danger, disabled }: { icon: 
 }
 
 function QualityBars({ quality }: { quality: Quality }) {
+  const { t } = useI18n()
   const bars = quality === 'good' ? 3 : quality === 'fair' ? 2 : quality === 'weak' ? 1 : 0
+  // 读屏播报本地化的连接质量（此前 aria-label 硬编码英文 "signal N/3"，对中文盲人用户不可读）；
+  // role=img 让这组装饰性条形被当作有含义的图形整体朗读，而非三个空 span。
+  const desc = quality === 'good' ? t('信号良好', 'Signal good')
+    : quality === 'fair' ? t('信号一般', 'Signal fair')
+      : quality === 'weak' ? t('信号弱', 'Signal weak')
+        : t('信号未知', 'Signal unknown')
   return (
-    <div className="flex items-end gap-0.5" aria-label={`signal ${bars}/3`}>
+    <div className="flex items-end gap-0.5" role="img" aria-label={desc}>
       {[1, 2, 3].map((i) => <span key={i} className={`w-1 rounded-sm ${i <= bars ? 'bg-ok' : 'bg-white/25'}`} style={{ height: 4 + i * 4 }} />)}
     </div>
   )

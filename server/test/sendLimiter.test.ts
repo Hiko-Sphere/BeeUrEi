@@ -79,4 +79,23 @@ describe('发送侧节流（端到端）', () => {
     expect(sent.length).toBe(1) // 第二次在发送前即被拒
     await app.close()
   })
+
+  it('设置邮箱有 fastify 每分钟兜底：突发连打超 5 次被限流(区别于 codeSend 冷却)——补 codeSend check/record 夹 await 的并发绕过', async () => {
+    // codeSend 的 check→await mailer.send→record 之间有让点，并发连发会在 record 前都过 check 绕过冷却；
+    // 此端点原无 fastify 兜底（不同于 auth/email/request-code）。fastify 限流在 onRequest 同步计数、
+    // 早于处理器且不受 await 竞态影响，兜住突发。这里逐个打 6 次：fastify 计满所有请求，第 6 次越限被
+    // fastify 429（error 非 'code_cooldown'，而是 'Too Many Requests'），证明兜底生效。
+    const app = buildApp(new MemoryStore(), { mailer: { async send() {} } })
+    const reg = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'burstmail', password: 'secret123' } })).json()
+    const auth = { authorization: `Bearer ${reg.token}` }
+    const errors: string[] = []
+    for (let i = 0; i < 6; i++) {
+      const res = await app.inject({ method: 'POST', url: '/api/account/email', headers: auth, payload: { email: `b${i}@example.com` } })
+      errors.push(res.statusCode === 429 ? String(res.json().error) : 'ok')
+    }
+    // 第 6 次被 fastify 限流兜底（越过 max:5），错误是限流文案而非 codeSend 的 'code_cooldown'——证明兜底生效。
+    expect(errors[5]).toMatch(/Rate limit/)
+    expect(errors[5]).not.toBe('code_cooldown')
+    await app.close()
+  })
 })

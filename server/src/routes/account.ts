@@ -255,7 +255,12 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
   })
 
   // 设置/更新邮箱（D1）：保存邮箱并标记未验证，随即发一封验证码邮件。
-  app.post('/api/account/email', { preHandler: requireAuth() }, async (req, reply) => {
+  // 限流：本端点会发验证码邮件。仅靠 codeSend 节流不够——其 check/record 夹着 await mailer.send，
+  // 并发连发会在 record 前都过 check（绕过冷却）；而此端点（不同于 auth/email/request-code）此前无
+  // fastify 限流兜底，故未实名攻击者可借并发向多个受害邮箱轰炸验证码。补 fastify 每分钟限流（在 onRequest
+  // 钩子里同步计数、早于处理器，不受 codeSend 的 await 竞态影响），与 request-code 同口径 5/min 兜住突发。
+  app.post('/api/account/email', { preHandler: requireAuth(),
+                                   config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = emailSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const user = store.findById(req.user!.sub)

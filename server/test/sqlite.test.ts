@@ -209,4 +209,20 @@ describe('SqliteStore (node:sqlite)', () => {
     const b = new SqliteStore(path)
     expect(b.findByUsername('persist')?.id).toBe('p1')
   })
+
+  it('app-config 持久化两存储一致：features 逐键合并 + requireVerification（生产 SqliteStore 整库 JSON 路径）', () => {
+    // 最高产分叉类（SQLite vs Memory）：SqliteStore 把整份 config 以 JSON 存入 config 行，
+    // 若日后改成按列存储会静默丢键。此测锁死：关某个功能开关只影响该键、requireVerification 标量可单独持久化，
+    // 且生产(SqliteStore) 与测试(MemoryStore) 完全一致。
+    const check = (s: SqliteStore | MemoryStore) => {
+      s.setAppConfig({ features: { locationSharing: false } }) // 只关 locationSharing
+      s.setAppConfig({ requireVerification: true })            // 再单独开实名门禁
+      const c = s.getAppConfig()
+      expect(c.features.locationSharing).toBe(false) // 关掉的键持久化
+      expect(c.features.calls).toBe(true)            // 逐键合并：其余功能仍默认 true，未被覆盖
+      expect(c.requireVerification).toBe(true)       // 标量字段单独持久化
+    }
+    check(new SqliteStore(':memory:'))
+    check(new MemoryStore())
+  })
 })

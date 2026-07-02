@@ -72,4 +72,14 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertEqual(FramingStrings.approx(1.5, .zh), "，大约1.5 米")
         XCTAssertEqual(FramingStrings.approx(1.5, .en), ", about 1.5 m")
     }
+
+    func testSeatOccupancySuffixes() {
+        // 占用后缀作为句尾追加（找空座位）：措辞保守（"可能"而非断言）；英文无中文混入。
+        XCTAssertEqual(FramingStrings.seatLooksFree(.zh), "，看起来空着")
+        XCTAssertTrue(FramingStrings.seatMaybeOccupied(.zh).contains("可能"))
+        XCTAssertFalse(FramingStrings.seatLooksFree(.en).contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+        // 拼接形态与实际播报一致（"椅子，在3 点钟方向，大约1.5 米，可能有人"）
+        let joined = FramingStrings.foundCategorySpeak("椅子", "3 点钟方向", FramingStrings.approx(1.5, .zh), .zh) + FramingStrings.seatMaybeOccupied(.zh)
+        XCTAssertEqual(joined, "椅子，在3 点钟方向，大约1.5 米，可能有人")
+    }
 }

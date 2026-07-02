@@ -211,8 +211,16 @@ final class FramingAssistViewModel {
                 }
             }
             let where_ = FramingStrings.direction(hour: clock.hour, lang)
-            guidanceText = FramingStrings.foundCategoryGuide(category.name, where_, lang)
-            speak(FramingStrings.foundCategorySpeak(category.name, where_, distText, lang))
+            // 找空座位：椅子/沙发命中时用同帧 person 框做占用判定（核心 SeatOccupancy，已测）。
+            // 补齐 Apple Magnifier Pro 机型独占的 Announce Seat Occupancy；保守措辞"可能有人"。
+            var seatNote = ""
+            if category.label == "chair" || category.label == "couch" {
+                let persons = dets.filter { $0.label.lowercased() == "person" }.compactMap(\.box)
+                seatNote = SeatOccupancy.judge(seat: box, persons: persons) == .free
+                    ? FramingStrings.seatLooksFree(lang) : FramingStrings.seatMaybeOccupied(lang)
+            }
+            guidanceText = FramingStrings.foundCategoryGuide(category.name, where_, lang) + seatNote
+            speak(FramingStrings.foundCategorySpeak(category.name, where_, distText, lang) + seatNote)
         } else if frame.timestamp - lastFindHeartbeat >= 6 {
             lastFindHeartbeat = frame.timestamp
             speak(FramingStrings.stillSearchingFor(category.name, lang), hint: true) // 心跳提示：不打断结果播报

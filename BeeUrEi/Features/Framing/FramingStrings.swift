@@ -93,6 +93,9 @@ enum FramingStrings {
     static func stillSearchingFor(_ name: String, _ l: Language) -> String {
         l == .zh ? "还在找\(name)，慢慢移动手机" : "Still looking for \(name) — keep moving slowly"
     }
+    /// 找空座位（椅子/沙发命中时的占用后缀）：保守措辞——"可能有人"而非断言，遮挡场景会误报。
+    static func seatLooksFree(_ l: Language) -> String { l == .zh ? "，看起来空着" : " — looks free" }
+    static func seatMaybeOccupied(_ l: Language) -> String { l == .zh ? "，可能有人" : " — someone may be there" }
     /// 方位："正前方" / "x 点钟方向"（复用核心 SpokenStrings）。
     static func direction(hour: Int, _ l: Language) -> String {
         hour == 12 ? SpokenStrings.coarseDirection(hour: 12, l) : SpokenStrings.clockDirection(hour: hour, l)

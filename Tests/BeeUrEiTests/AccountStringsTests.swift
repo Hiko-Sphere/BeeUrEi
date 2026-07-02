@@ -32,3 +32,42 @@ final class AccountStringsTests: XCTestCase {
         }
     }
 }
+
+/// 服务端错误码→人话映射（跨端对齐审计回归，主题式组织；置于本文件避免新增测试文件需重生成 Xcode 工程）。
+/// 不变量：这些文案会被读屏/端侧 TTS 朗读给盲人——任何路径都不得把原始 snake_case 码返回给用户。
+final class ServerErrorMappingTests: XCTestCase {
+
+    func testAccountErrorTextKnownCodes() {
+        XCTAssertEqual(AccountStrings.accountErrorText("content_blocked", .zh), "该内容不被允许，请换一个")
+        XCTAssertFalse(AccountStrings.accountErrorText("content_blocked", .en).contains("content_blocked"))
+    }
+
+    func testServerErrorTextKnownCodes() {
+        XCTAssertEqual(AccountStrings.serverErrorText("registration_disabled", .zh), "注册暂时关闭")
+        XCTAssertEqual(AccountStrings.serverErrorText("content_blocked", .zh), "该内容不被允许，请换一个")
+        // two_factor_link_required 须指引"先密码+验证码登录、再绑 Apple"，不能只报失败
+        XCTAssertTrue(AccountStrings.serverErrorText("two_factor_link_required", .zh).contains("两步验证"))
+        XCTAssertTrue(AccountStrings.serverErrorText("two_factor_link_required", .en).lowercased().contains("2fa"))
+    }
+
+    func testUnknownCodeNeverEchoedRaw() {
+        // 曾经 default: return code——读屏把英文码原样念给盲人（审计 CROSS-CLIENT-ERR）。锁死不回退。
+        let weird = "some_unknown_future_code"
+        for l in [Language.zh, .en] {
+            XCTAssertFalse(AccountStrings.accountErrorText(weird, l).contains(weird))
+            XCTAssertFalse(AccountStrings.serverErrorText(weird, l).contains(weird))
+        }
+    }
+
+    func testCreateGroupErrorTextDistinguishesCauses() {
+        XCTAssertEqual(ChatStrings.createGroupErrorText(APIError.server("content_blocked"), .zh),
+                       "群名含被禁止的内容，请换一个")
+        XCTAssertTrue(ChatStrings.createGroupErrorText(APIError.server("feature_disabled"), .zh).contains("关闭"))
+        XCTAssertTrue(ChatStrings.createGroupErrorText(APIError.server("maintenance"), .en).lowercased().contains("maintenance"))
+        XCTAssertTrue(ChatStrings.createGroupErrorText(APIError.server("not_linked"), .zh).contains("联系人"))
+        // 未知码/非服务端错误回退到通用建群失败文案（不外泄原始码）
+        XCTAssertEqual(ChatStrings.createGroupErrorText(APIError.server("whatever_else"), .zh),
+                       ChatStrings.createGroupFailed(.zh))
+        XCTAssertEqual(ChatStrings.createGroupErrorText(APIError.network, .en), ChatStrings.createGroupFailed(.en))
+    }
+}

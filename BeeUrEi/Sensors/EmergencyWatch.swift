@@ -68,6 +68,9 @@ final class EmergencyAlertCenter: NSObject, CLLocationManagerDelegate {
 
     private func beginCountdown(kind: String) {
         phase = .countdown(kind: kind, secondsLeft: 30)
+        // 清掉上一轮紧急的缓存 fix：本中心是常驻单例，lastFix 从不复位。若不清，重复 SOS/摔倒会命中
+        // send() 里 `lastFix == nil` 为假、跳过等新定位，直接发出**上一次**（可能在别处/家里）的旧坐标（见审计 EMERGENCY-STALE-LOC）。
+        lastFix = nil
         location.requestWhenInUseAuthorization()
         location.requestLocation() // 提前定位，发送时带上
         speak(kind == "manual" ? HomeStrings.manualSosSpeak(lang) : HomeStrings.fallAlertSpeak(kind: kind, lang))
@@ -117,9 +120,12 @@ final class EmergencyAlertCenter: NSObject, CLLocationManagerDelegate {
             scheduleReset()
             return
         }
+        // 只带**新鲜**坐标：即便拿到 fix 也校验时间戳，>60s 的陈旧 fix 宁可不带——紧急通知附错误的旧位置
+        // 比不附位置更危险（与 LiveLocationManager 的 30s 守卫同理，此处放宽到 60s 覆盖 30s 倒计时）。
+        let fix = lastFix.flatMap { Date().timeIntervalSince($0.timestamp) < 60 ? $0 : nil }
         let result = await APIClient().postEmergencyAlert(token: token, kind: kind,
-                                                          lat: lastFix?.coordinate.latitude,
-                                                          lon: lastFix?.coordinate.longitude)
+                                                          lat: fix?.coordinate.latitude,
+                                                          lon: fix?.coordinate.longitude)
         if let reached = result {
             phase = .sent(reached: reached)
             speak(HomeStrings.fallAlertSent(reached, lang))

@@ -128,6 +128,18 @@ enum ChatStrings {
     static func pickMembers(_ l: Language) -> String { l == .zh ? "选择成员（可多选）" : "Pick members" }
     static func createGroup(_ l: Language) -> String { l == .zh ? "创建群聊" : "Create group" }
     static func createGroupFailed(_ l: Language) -> String { l == .zh ? "建群失败，请重试" : "Couldn't create group" }
+    /// 建群错误码 → 可读文案（读屏会朗读）。区分违禁群名/功能关停/维护/成员非联系人，其余回退 createGroupFailed
+    /// （此前 catch 一律压成「建群失败，请重试」，含违禁词群名者会用同名反复重试永远建不成，见审计 CROSS-CLIENT-ERR）。
+    static func createGroupErrorText(_ error: Error, _ l: Language) -> String {
+        guard case let APIError.server(code) = error else { return createGroupFailed(l) }
+        switch code {
+        case "content_blocked": return l == .zh ? "群名含被禁止的内容，请换一个" : "Group name contains blocked content — please choose another"
+        case "feature_disabled": return l == .zh ? "群聊功能已被管理员暂时关闭" : "Groups are currently turned off by the administrator"
+        case "maintenance": return l == .zh ? "系统维护中，请稍后再试" : "Under maintenance — please try again later"
+        case "not_linked": return l == .zh ? "所选成员中有人已不是你的联系人" : "One of the selected members is no longer your contact"
+        default: return createGroupFailed(l)
+        }
+    }
     static func groupInfo(_ l: Language) -> String { l == .zh ? "群信息" : "Group info" }
     static func members(_ n: Int, _ l: Language) -> String { l == .zh ? "\(n) 名成员" : "\(n) members" }
     static func owner(_ l: Language) -> String { l == .zh ? "群主" : "Owner" }

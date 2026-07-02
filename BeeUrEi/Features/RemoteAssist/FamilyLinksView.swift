@@ -114,6 +114,10 @@ struct FamilyLinksView: View {
             case "blocked": errorText = AssistStrings.blockedRelation(lang)
             case "too_many_links": errorText = AssistStrings.tooManyLinks(lang)
             case "cannot_link_self": errorText = AssistStrings.cannotLinkSelf(lang)
+            // 门控/维护/违禁词此前落 default→「添加失败，请重试」，盲人对已关停功能徒劳重试（见审计 CROSS-CLIENT-ERR）。
+            case "feature_disabled": errorText = lang == .zh ? "该功能已被管理员暂时关闭" : "This feature is currently turned off by the administrator"
+            case "maintenance": errorText = lang == .zh ? "系统维护中，请稍后再试" : "Under maintenance — please try again later"
+            case "content_blocked": errorText = lang == .zh ? "该内容不被允许，请换一个" : "That content isn't allowed — please try another"
             default: errorText = AssistStrings.addFailed(lang)
             }
         } catch { errorText = AssistStrings.addFailed(lang) }

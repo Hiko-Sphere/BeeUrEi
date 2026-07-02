@@ -354,7 +354,10 @@ enum AccountStrings {
         case "code_too_many":
             return l == .zh ? "获取验证码的次数过多，请稍后再试。"
                             : "Too many code requests — please try again later."
-        default: return code
+        case "content_blocked":
+            return l == .zh ? "该内容不被允许，请换一个" : "That content isn't allowed — please try another"
+        // 未知码不再原样返回：本文案会被读屏朗读给盲人，念英文 snake_case 码毫无意义（见审计 CROSS-CLIENT-ERR）。
+        default: return l == .zh ? "操作失败，请重试" : "Something went wrong — please try again"
         }
     }
 
@@ -364,7 +367,7 @@ enum AccountStrings {
     static func networkError(_ l: Language) -> String {
         l == .zh ? "网络错误，请检查服务器地址" : "Network error — check the server address"
     }
-    /// 后端错误码 → 用户可读文案（未知码原样显示，便于排障）。
+    /// 后端错误码 → 用户可读文案（本文案会被读屏朗读，未知码给通用兜底，绝不把原始码念给盲人）。
     static func serverErrorText(_ code: String, _ l: Language) -> String {
         switch code {
         case "username_taken": return l == .zh ? "用户名已被使用" : "Username already taken"
@@ -378,7 +381,15 @@ enum AccountStrings {
         case "mail_unavailable":
             return l == .zh ? "邮件服务暂时不可用（服务器发信失败），请稍后再试" : "Email service is temporarily unavailable. Try again later."
         case "invalid_input": return l == .zh ? "输入有误，请检查后重试" : "Invalid input, please check and retry"
-        default: return code
+        case "content_blocked":
+            return l == .zh ? "该内容不被允许，请换一个" : "That content isn't allowed — please try another"
+        case "registration_disabled":
+            return l == .zh ? "注册暂时关闭" : "Registration is temporarily closed"
+        case "two_factor_link_required":
+            return l == .zh ? "该邮箱账号已开启两步验证，请先用密码和验证码登录，再到账号页绑定 Apple"
+                            : "This email account has 2FA enabled — sign in with password + code first, then link Apple in Account settings"
+        // 未知码给通用可读兜底，杜绝把英文 snake_case 码念给盲人（见审计 CROSS-CLIENT-ERR）。
+        default: return l == .zh ? "操作失败，请重试" : "Something went wrong — please try again"
         }
     }
 

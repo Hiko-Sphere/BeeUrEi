@@ -81,7 +81,7 @@ struct NewGroupSheet: View {
                 onCreated(group)
                 dismiss()
             } catch {
-                errorText = ChatStrings.createGroupFailed(lang)
+                errorText = ChatStrings.createGroupErrorText(error, lang)
             }
         }
     }

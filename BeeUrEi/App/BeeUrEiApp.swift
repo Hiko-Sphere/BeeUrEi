@@ -1,5 +1,6 @@
 import SwiftUI
 import UserNotifications
+import UIKit // UIAccessibility.isVoiceOverRunning（盲人未开 VoiceOver 的双通道播报判定）
 
 /// App 入口。先过免责知情同意门（首次/超期需完整同意），再进首屏。
 @main
@@ -141,6 +142,10 @@ private struct RootView: View {
                 let won = await APIClient().markAnswered(token: token, callId: call.callId)
                 if !won {
                     A11y.announce(CallStrings.answeredElsewhere(lang))
+                    // 盲人未开 VoiceOver 时 A11y.announce 被静默丢弃，补端侧 TTS（见无障碍审计）。
+                    if session.user?.role == "blind", !UIAccessibility.isVoiceOverRunning {
+                        SpeechHub.shared.speak(CallStrings.answeredElsewhere(lang), channel: .call, voiceCode: lang.voiceCode)
+                    }
                     RemoteAssistService.shared.endCall()
                     incoming.clear()
                 }

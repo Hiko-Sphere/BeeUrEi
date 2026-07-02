@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit // UIAccessibility.isVoiceOverRunning（盲人未开 VoiceOver 的双通道播报判定）
 
 /// 应用内来电界面（前台手动接听，参照 WhatsApp）：先显示来电铃（接听/拒绝），
 /// 用户点「接听」后再进入通话（CallView）。CallKit 接听（后台）不经此处，直接进通话。
@@ -95,6 +96,11 @@ struct IncomingCallView: View {
                 let won = await APIClient().markAnswered(token: token, callId: ring.callId)
                 guard won else {
                     A11y.announce(CallStrings.answeredElsewhere(lang))
+                    // 盲人未开 VoiceOver 时 A11y.announce 被静默丢弃：来电屏骤然收起却无解释，用户不知被他人接走。
+                    // 补端侧 TTS（与 CallView.announceCall 同款），见无障碍审计。
+                    if role == .blind, !UIAccessibility.isVoiceOverRunning {
+                        SpeechHub.shared.speak(CallStrings.answeredElsewhere(lang), channel: .call, voiceCode: lang.voiceCode)
+                    }
                     dismiss()
                     return
                 }

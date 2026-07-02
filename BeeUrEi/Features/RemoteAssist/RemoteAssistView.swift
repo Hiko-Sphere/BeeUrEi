@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit // UIAccessibility.isVoiceOverRunning（盲人未开 VoiceOver 的双通道播报判定）
 
 /// 一个通话会话标识（用于 fullScreenCover 呈现）。
 struct CallSession: Identifiable {
@@ -141,7 +142,15 @@ struct RemoteAssistView: View {
         .refreshable { await load() }
         .onDisappear { onlineTask?.cancel(); onlineTask = nil; ScreenWake.release("assist") }
         // 所有求助/呼叫/错误状态变化主动朗读——盲人点完按钮后才能得到语音反馈，不会以为没反应反复点（见无障碍审计）。
-        .onChange(of: statusText) { _, new in if let new, !new.isEmpty { A11y.announce(new) } }
+        // 双通道：A11y.announce 在未开 VoiceOver 时被系统静默丢弃，而盲人常关 VoiceOver 靠 App TTS，
+        // 故盲人侧未开 VoiceOver 时补一条端侧语音（与 CallView.announceCall 同款），否则「无可呼叫的亲友/求助失败」等结果盲人完全无反馈。
+        .onChange(of: statusText) { _, new in
+            guard let new, !new.isEmpty else { return }
+            A11y.announce(new)
+            if session.user?.role == "blind", !UIAccessibility.isVoiceOverRunning {
+                SpeechHub.shared.speak(new, channel: .call, voiceCode: lang.voiceCode)
+            }
+        }
         .fullScreenCover(item: $activeCall, onDismiss: {
             // A4：呼亲友无人接听 → 关闭旧通话后自动发起志愿者求助（模态真正关闭后再开新 cover，防同 tick 吞没）。
             if pendingVolunteerFallback {

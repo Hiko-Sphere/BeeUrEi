@@ -99,7 +99,12 @@ final class SpatialAudioFeedback: FeedbackSink {
         }
     }
 
-    deinit { stop() }
+    deinit {
+        // 块式(block-based) observer 必须显式注销：每进一次避障/导航都会 new 一个 SpatialAudioFeedback，
+        // 不注销则每个旧实例的 routeChange 回调永久滞留 NotificationCenter，插拔 AirPods 时逐个空转累积（见审计 OBS-LEAK）。
+        if let routeObserver { NotificationCenter.default.removeObserver(routeObserver) }
+        stop()
+    }
 
     private static func makeTone(format: AVAudioFormat,
                                  frequency: Float = 880,

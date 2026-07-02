@@ -199,8 +199,13 @@ function UsersTab() {
   const [q, setQ] = useState('')
   const [users, setUsers] = useState<AdminUser[] | null>(null)
   const [total, setTotal] = useState(0)
-  const load = useCallback((term: string) => void api.adminUsers({ q: term, limit: 50 }).then((r) => { setUsers(r.users); setTotal(r.total) }).catch(() => setUsers([])), [])
-  useEffect(() => { const id = setTimeout(() => load(q), 300); return () => clearTimeout(id) }, [q, load])
+  // isCurrent 守卫：cleanup 只清未触发的 timer，不取消已发出的请求；快速改搜索词时旧关键词若晚返回会覆盖
+  // 新结果（乱序竞态），管理员可能对错误用户执行启停。仅当本次仍是最新请求时才写入 state。
+  const load = useCallback((term: string, isCurrent: () => boolean = () => true) =>
+    void api.adminUsers({ q: term, limit: 50 })
+      .then((r) => { if (isCurrent()) { setUsers(r.users); setTotal(r.total) } })
+      .catch(() => { if (isCurrent()) setUsers([]) }), [])
+  useEffect(() => { let alive = true; const id = setTimeout(() => load(q, () => alive), 300); return () => { alive = false; clearTimeout(id) } }, [q, load])
 
   const toggle = async (u: AdminUser) => {
     const next = u.status === 'active' ? 'disabled' : 'active'

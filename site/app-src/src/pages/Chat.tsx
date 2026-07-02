@@ -215,14 +215,17 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
   const canLoadEarlier = (msgs?.length ?? 0) >= PAGE && !reachedStart
 
   // 会话内搜索：输入防抖 0.35s 调后端搜索端点。
+  // stale 守卫：cleanup 只能清未触发的 timer，不能取消已发出的请求；连续搜索时旧查询若晚返回会覆盖新结果
+  // （乱序竞态，与 iOS MessageSearchSheet 的 Task.cancel 守卫对齐）——故仅当本次 effect 未被取代时才写入 state。
   useEffect(() => {
     const q = searchQuery.trim()
     if (!searchOpen || !q) { setSearchResults(q ? [] : null); return }
+    let stale = false
     const id = setTimeout(() => {
       void api.searchMessages(sel.kind === 'group' ? { groupId: sel.id } : { peerId: sel.id }, q)
-        .then((r) => setSearchResults(r.messages)).catch(() => setSearchResults([]))
+        .then((r) => { if (!stale) setSearchResults(r.messages) }).catch(() => { if (!stale) setSearchResults([]) })
     }, 350)
-    return () => clearTimeout(id)
+    return () => { stale = true; clearTimeout(id) }
   }, [searchQuery, searchOpen, sel])
 
   // 新消息读屏播报：仅"会话进行中新到的对端消息"写入下方隐藏 aria-live 区（规则见 nextChatAnnouncement）。

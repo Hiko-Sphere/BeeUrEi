@@ -29,6 +29,10 @@ final class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     @ObservationIgnored private var publishTask: Task<Void, Never>?
     @ObservationIgnored private var pollTask: Task<Void, Never>?
     @ObservationIgnored private var lastPublish: Date = .distantPast
+    // 最近一次在途上报：stopSharing 发 stop 前先 await 它落地，保证 update→stop 的到达顺序。
+    // 否则已过 sharing 守卫、悬在 await updateLocation 的旧上报若晚于 stop 到达服务器，
+    // 会把刚停止的共享"复活"（服务端 update 无条件 set、stop 只 delete）≤90s（见 flag task_86ec92b0）。
+    @ObservationIgnored private var inflightPublish: Task<Void, Never>?
 
     private override init() {
         super.init()
@@ -96,7 +100,7 @@ final class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         publishTask?.cancel()
         publishTask = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.publishLatest()
+                await self?.trackedPublish()
                 try? await Task.sleep(for: .seconds(10))
             }
         }
@@ -110,7 +114,15 @@ final class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         manager.allowsBackgroundLocationUpdates = false
         publishTask?.cancel(); publishTask = nil
         clearCachedFix() // 停止后清缓存定位：再次开始共享前不复用旧坐标上报（见复审）
-        if let token { Task { try? await APIClient().stopSharingLocation(token: token) } }
+        // 先等在途上报落地再发 stop：保证服务器按 update→stop 顺序处理，杜绝晚到的旧上报复活已停共享。
+        // 在途请求受 30s 空闲超时约束，最坏也只延迟 stop 半分钟；本地 sharing 已置 false，UI/播报即时。
+        if let token {
+            let pending = inflightPublish
+            Task {
+                await pending?.value
+                try? await APIClient().stopSharingLocation(token: token)
+            }
+        }
         announce(LiveLocationStrings.stoppedSpeak(lang))
     }
 
@@ -133,12 +145,21 @@ final class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         latest = loc
         lastCoordinate = loc.coordinate
         // 移动达阈值即可立即上报（不必等定时器），让对端更跟手——但不超过每 ~6s 一次，省流量/限流。
-        if Date().timeIntervalSince(lastPublish) >= 6 { Task { await publishLatest() } }
+        if Date().timeIntervalSince(lastPublish) >= 6 { Task { await trackedPublish() } }
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) { /* 瞬时失败忽略，下次更新/定时器重试 */ }
 
     // MARK: 网络
+
+    /// 以可追踪的独立 Task 执行一次上报并等其完成：把在途上报登记到 inflightPublish，
+    /// 使 stopSharing 能 await 它落地后再发 stop（顺序保证）；独立 Task 也让 publishTask.cancel()
+    /// 不会把已在途的 POST 一并取消（保持既有"发出的上报总会完成"语义）。
+    private func trackedPublish() async {
+        let t = Task { await self.publishLatest() }
+        inflightPublish = t
+        await t.value
+    }
 
     private func publishLatest() async {
         guard sharing, let token, let loc = latest else { return }

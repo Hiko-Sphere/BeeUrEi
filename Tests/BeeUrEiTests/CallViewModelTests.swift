@@ -158,6 +158,55 @@ final class CallViewModelTests: XCTestCase {
         XCTAssertEqual(signaling.endCount, 1)
     }
 
+    // MARK: 通话内实时文字（RTT）
+
+    func testSendCallTextRequiresConnectionAndValidText() {
+        let vm = makeVM(role: .blind)
+        // 未接通：不发送
+        XCTAssertFalse(vm.sendCallText("你好"))
+        vm.handle(["type": "peer-joined", "userId": "u2"])
+        // 空/纯空白：不发送
+        XCTAssertFalse(vm.sendCallText("   "))
+        // 超长（>500）：不发送（与服务端同口径，免得发出才被拒）
+        XCTAssertFalse(vm.sendCallText(String(repeating: "x", count: 501)))
+        // 正常：trim 后发出，气泡先落本地
+        XCTAssertTrue(vm.sendCallText("  前面路口左转  "))
+        XCTAssertEqual(vm.callTexts.count, 1)
+        XCTAssertEqual(vm.callTexts[0].text, "前面路口左转")
+        XCTAssertTrue(vm.callTexts[0].mine)
+        let sentText = signaling.sent.first { ($0["type"] as? String) == "in-call-text" }
+        XCTAssertEqual(sentText?["text"] as? String, "前面路口左转")
+        XCTAssertNotNil(sentText?["id"]) // 带 id 供拒绝回执关联
+    }
+
+    func testIncomingCallTextAppendsAndCountsUnread() {
+        let vm = makeVM(role: .blind)
+        vm.handle(["type": "peer-joined", "userId": "u2"])
+        vm.handle(["type": "in-call-text", "text": "我看到了红灯", "id": "p1", "from": "u2"])
+        XCTAssertEqual(vm.callTexts.count, 1)
+        XCTAssertFalse(vm.callTexts[0].mine)
+        XCTAssertEqual(vm.unreadTexts, 1)          // 面板未开 → 计未读
+        vm.setTextPanelOpen(true)
+        XCTAssertEqual(vm.unreadTexts, 0)          // 打开面板清零
+        vm.handle(["type": "in-call-text", "text": "现在是绿灯", "id": "p2"])
+        XCTAssertEqual(vm.unreadTexts, 0)          // 面板开着不计未读
+        // 空文本帧被忽略
+        vm.handle(["type": "in-call-text", "text": ""])
+        XCTAssertEqual(vm.callTexts.count, 2)
+    }
+
+    func testCallTextRejectionMarksBubble() {
+        let vm = makeVM(role: .blind)
+        vm.handle(["type": "peer-joined", "userId": "u2"])
+        XCTAssertTrue(vm.sendCallText("hello"))
+        let id = vm.callTexts[0].id
+        vm.handle(["type": "in-call-text-rejected", "reason": "content_blocked", "id": id])
+        XCTAssertEqual(vm.callTexts[0].failed, "content_blocked") // 气泡标记未发送，绝不静默丢失
+        // 未知 id 的回执不崩、不误标
+        vm.handle(["type": "in-call-text-rejected", "reason": "rate_limited", "id": "nonexistent"])
+        XCTAssertEqual(vm.callTexts.filter { $0.failed != nil }.count, 1)
+    }
+
     func testVideoGateStatusFollowsPeerState() {
         let vm = makeVM()
         vm.handle(["type": "peer-joined", "userId": "u2", "userName": "小明"])

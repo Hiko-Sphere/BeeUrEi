@@ -38,6 +38,25 @@ export interface CallCallbacks {
   onLastRecordingId?(id: string): void
   onMicDenied?(): void
   onEnded?(reason: 'peer' | 'admin' | 'signaling'): void
+  /// 通话内实时文字（RTT）：收到对端文本 / 本端文本被服务端拒绝（rejected 带原因与回显 id）。
+  onCallText?(m: { text: string; from?: string; at?: number }): void
+  onCallTextRejected?(reason: string, id?: string): void
+}
+
+/// 通话内文本客户端约束（与服务端 ws.ts 同口径：trim 后非空且 ≤500 字）。
+export const CALL_TEXT_MAX = 500
+export function validCallText(text: string): string | null {
+  const t = text.trim()
+  return t && t.length <= CALL_TEXT_MAX ? t : null
+}
+
+/// 服务端拒绝回执 reason → 用户文案（与 chatErrorText/callErrorText 同风格：给可行动的话，不念原始码）。
+export function callTextRejectText(reason: string, t: (zh: string, en: string) => string): string {
+  switch (reason) {
+    case 'content_blocked': return t('消息包含违禁内容，未发送', 'Message contains blocked content — not sent')
+    case 'rate_limited': return t('发送太快了，请稍等片刻再发', 'Sending too fast — wait a moment and retry')
+    default: return t('消息无效，未发送', 'Invalid message — not sent')
+  }
 }
 
 interface EngineOpts {
@@ -200,6 +219,14 @@ export class CallEngine {
       case 'video-gate':
         if (typeof msg.on === 'boolean') { this.cb.onPeerVideoGate?.(msg.on); this.cb.onStatus?.(msg.on ? 'peerVideoOn' : 'connected') }
         break
+      case 'in-call-text':
+        if (typeof msg.text === 'string' && msg.text) {
+          this.cb.onCallText?.({ text: msg.text, from: msg.from as string | undefined, at: typeof msg.at === 'number' ? msg.at : undefined })
+        }
+        break
+      case 'in-call-text-rejected':
+        this.cb.onCallTextRejected?.(typeof msg.reason === 'string' ? msg.reason : 'invalid_text', msg.id as string | undefined)
+        break
       case 'record-request':
         this.cb.onRecordRequest?.()
         break
@@ -288,6 +315,14 @@ export class CallEngine {
     this.remoteZoom = this.remoteZoom >= 3 ? 1 : this.remoteZoom + 1
     this.send({ type: 'control', zoom: this.remoteZoom })
     return this.remoteZoom
+  }
+  /// 通话内实时文字：客户端先按服务端同口径校验（trim 非空且 ≤500），无效返回 false 不发送。
+  /// id 供服务端拒绝回执（in-call-text-rejected）关联到具体气泡。
+  sendCallText(text: string, id?: string): boolean {
+    const t = validCallText(text)
+    if (!t) return false
+    this.send({ type: 'in-call-text', text: t, ...(id ? { id } : {}) })
+    return true
   }
 
   // ---------- 管理员旁观（合规）：隔离 PC，共享本端音频，播放管理员语音 ----------

@@ -48,6 +48,34 @@ final class CallViewModel {
     private(set) var callEnded = false                   // 对方已挂断/离开 → 本端自动挂断并关闭界面
     var canReport: Bool { peerUserId != nil }
 
+    // MARK: 通话内实时文字（RTT）——随音视频并行的文字通道（服务端 in-call-text，EN 301 549 total conversation）
+
+    struct CallTextMessage: Identifiable, Equatable {
+        let id: String
+        let text: String
+        let mine: Bool
+        var failed: String?  // 服务端拒绝原因（content_blocked / rate_limited / invalid_text）
+    }
+    private(set) var callTexts: [CallTextMessage] = []
+    private(set) var unreadTexts = 0          // 文字面板未打开时收到的条数（按钮角标）
+    private(set) var textPanelOpen = false
+
+    func setTextPanelOpen(_ open: Bool) {
+        textPanelOpen = open
+        if open { unreadTexts = 0 }
+    }
+
+    /// 发送通话内文字。客户端先按服务端同口径校验（trim 非空且 ≤500 字），无效或未接通返回 false。
+    /// 气泡先落本地，若服务端拒绝（违禁词/限速）会经 in-call-text-rejected 回执标记为未发送。
+    func sendCallText(_ text: String) -> Bool {
+        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, clean.count <= 500, connected else { return false }
+        let id = UUID().uuidString
+        callTexts.append(CallTextMessage(id: id, text: clean, mine: true))
+        signaling.send(["type": "in-call-text", "text": clean, "id": id])
+        return true
+    }
+
     // MARK: 通话录制（Q6，知情同意握手 + ReplayKit 采集）
     private(set) var recordingPolicy = RemoteRecordingPolicy()  // 全站录制策略（开播时拉取；默认 fail-safe 关闭+需同意）
     private(set) var isRecording = false                        // 本端正在录制
@@ -314,6 +342,20 @@ final class CallViewModel {
             if let zoom = msg["zoom"] as? Double {
                 media.setZoom(zoom)
             }
+        case "in-call-text":
+            // 通话内文字：入列 + 未读计数；盲人侧把内容念出来（双通道），别让文字静默躺在没打开的面板里。
+            guard let text = msg["text"] as? String, !text.isEmpty else { return }
+            let inId = "in-" + ((msg["id"] as? String) ?? UUID().uuidString) // 前缀隔离对端 id 空间，避免与本端气泡撞 id
+            callTexts.append(CallTextMessage(id: inId, text: text, mine: false))
+            if !textPanelOpen { unreadTexts += 1 }
+            announce(CallStrings.incomingCallText(text, lang))
+        case "in-call-text-rejected":
+            // 本端文字被服务端拒绝（违禁词/限速/无效）：标记对应气泡 + 播报可行动原因。
+            let reason = (msg["reason"] as? String) ?? "invalid_text"
+            if let id = msg["id"] as? String, let i = callTexts.firstIndex(where: { $0.id == id }) {
+                callTexts[i].failed = reason
+            }
+            announce(CallStrings.callTextRejected(reason, lang))
         case "record-request":
             // 对端请求录制（要录到含本端画面/语音的通话）→ 弹出知情同意，由本端决定是否同意。
             guard !incomingRecordRequest, !peerRecording else { return }

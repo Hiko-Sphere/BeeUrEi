@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { verifyAccessToken } from '../auth/tokens'
 import { blockedByVerificationGate } from '../auth/rbac'
 import { SignalingHub, type Member } from '../signaling/hub'
-import { type Store } from '../db/store'
+import { type Store, matchBannedTerm } from '../db/store'
 import { type PendingCallRegistry } from '../assist/pendingCalls'
 import { type OpenHelpRegistry } from '../assist/openHelp'
 import { type CallControlBridge } from '../signaling/callControl'
@@ -68,6 +68,9 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
       }
       const clientId = randomUUID()
       sockets.set(clientId, socket)
+      // 通话内实时文字（RTT）令牌桶：容量 5、每秒回填 1 条——防刷屏轰炸对端 TTS（评审定稿口径）。
+      let rttTokens = 5
+      let rttRefillAt = Date.now()
       // 登记 userId → clientId，供会话撤销时按用户批量断开。
       let userClientIds = userSockets.get(auth.sub)
       if (!userClientIds) { userClientIds = new Set(); userSockets.set(auth.sub, userClientIds) }
@@ -174,6 +177,27 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
         }
 
         if (!joined) return
+
+        // —— 通话内实时文字（RTT 式，EN 301 549 total conversation）——
+        // 不进 RELAY_TYPES 盲转：文本帧须过 ①长度上限 ②令牌桶限速 ③违禁词过滤（与 messages.ts 同口径），
+        // 任一不过即回执 in-call-text-rejected（带 reason 与回显 id），绝不静默丢弃——发送端要能把气泡标记为未送达。
+        if (msg.type === 'in-call-text') {
+          const echoId = typeof msg.id === 'string' && msg.id.length <= 64 ? { id: msg.id } : {}
+          const reject = (reason: string) => socket.send(JSON.stringify({ type: 'in-call-text-rejected', reason, ...echoId }))
+          const text = typeof msg.text === 'string' ? msg.text.trim() : ''
+          if (!text || text.length > 500) { reject('invalid_text'); return }
+          const nowMs = Date.now()
+          rttTokens = Math.min(5, rttTokens + (nowMs - rttRefillAt) / 1000)
+          rttRefillAt = nowMs
+          if (rttTokens < 1) { reject('rate_limited'); return }
+          rttTokens -= 1
+          if (matchBannedTerm(store.getAppConfig(), text)) { reject('content_blocked'); return }
+          // 发给房间内除发送者外的所有端（含旁观管理员——文本与音视频同属被监看的通话内容）。
+          for (const p of hub.peersInCall(joined.callId, clientId)) {
+            relay(p.clientId, { type: 'in-call-text', text, from: auth.sub, at: nowMs, ...echoId })
+          }
+          return
+        }
 
         if (msg.type && RELAY_TYPES.has(msg.type)) {
           let targets = hub.peersInCall(joined.callId, clientId)

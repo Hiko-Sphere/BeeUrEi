@@ -27,6 +27,33 @@ enum CallStrings {
         l == .zh ? "挂断需再次确认，避免误触" : "Ending the call asks for confirmation to prevent accidental taps"
     }
 
+    // MARK: 通话内实时文字（RTT——嘈杂环境/听障场景的并行文字通道）
+
+    static func textButton(_ l: Language) -> String { l == .zh ? "文字" : "Text" }
+    static func textButtonUnread(_ n: Int, _ l: Language) -> String { l == .zh ? "文字（\(n) 条新消息）" : "Text (\(n) new)" }
+    static func textSheetTitle(_ l: Language) -> String { l == .zh ? "通话文字" : "In-call text" }
+    static func textPlaceholder(_ l: Language) -> String { l == .zh ? "输入文字…" : "Type a message…" }
+    static func textSend(_ l: Language) -> String { l == .zh ? "发送" : "Send" }
+    static func textEmptyHint(_ l: Language) -> String {
+        l == .zh ? "文字会立刻送达对方并被读出，适合嘈杂环境或不便说话时。"
+                 : "Text reaches them instantly and can be read aloud — great for noisy places or when speaking is hard."
+    }
+    static func textMine(_ l: Language) -> String { l == .zh ? "我" : "Me" }
+    static func textPeer(_ l: Language) -> String { l == .zh ? "对方" : "Them" }
+    /// 收到对端文字时的播报（盲人侧走 TTS 双通道，必须把内容念出来）。
+    static func incomingCallText(_ text: String, _ l: Language) -> String {
+        l == .zh ? "对方发来文字：\(text)" : "Text from them: \(text)"
+    }
+    /// 服务端拒绝回执 → 可行动的话（绝不把原始码念给盲人）。
+    static func callTextRejected(_ reason: String, _ l: Language) -> String {
+        switch reason {
+        case "content_blocked": return l == .zh ? "文字包含违禁内容，未发送。" : "Message contains blocked content — not sent."
+        case "rate_limited": return l == .zh ? "发送太快了，请稍等片刻再发。" : "Sending too fast — wait a moment and retry."
+        default: return l == .zh ? "文字无效，未发送。" : "Invalid message — not sent."
+        }
+    }
+    static func textNotSent(_ l: Language) -> String { l == .zh ? "未发送" : "Not sent" }
+
     // MARK: 举报 / 信任与安全
 
     static func reportDialogTitle(_ l: Language) -> String { l == .zh ? "举报对方" : "Report this person" }

@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { api, tokenStore } from '../../lib/api'
 import { useI18n } from '../../lib/i18n'
 import { useToast, Avatar, Button } from '../../components/ui'
-import { IconMic, IconMicOff, IconFlash, IconZoom, IconRecord, IconHangup, IconFlag, IconUser, IconShield } from '../../components/icons'
-import { CallEngine, type MediaState, type Quality } from '../../lib/webrtc'
+import { IconMic, IconMicOff, IconFlash, IconZoom, IconRecord, IconHangup, IconFlag, IconUser, IconShield, IconChat, IconSend } from '../../components/icons'
+import { CallEngine, type MediaState, type Quality, CALL_TEXT_MAX, validCallText, callTextRejectText } from '../../lib/webrtc'
 import type { ActiveCall } from './CallController'
 
 export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?: 'peer' | 'admin' | 'signaling') => void }) {
@@ -29,6 +29,15 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
   const [zoom, setZoom] = useState(1)
   const [reportOpen, setReportOpen] = useState(false)
   const [elapsed, setElapsed] = useState(0)
+
+  // 通话内实时文字（RTT）：嘈杂环境/听障场景下随音视频并行的文字通道（服务端 in-call-text）。
+  const [chatOpen, setChatOpen] = useState(false)
+  const chatOpenRef = useRef(false) // engine 回调闭包里读最新开合态
+  const [rtt, setRtt] = useState<Array<{ id: string; text: string; mine: boolean; failed?: string }>>([])
+  const [unread, setUnread] = useState(0)
+  const [draft, setDraft] = useState('')
+  const rttLogRef = useRef<HTMLDivElement>(null)
+  useEffect(() => { rttLogRef.current?.scrollTo({ top: rttLogRef.current.scrollHeight }) }, [rtt, chatOpen])
 
   // 通话计时（连接后）。
   useEffect(() => {
@@ -73,6 +82,14 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
           },
           onLastRecordingId: (id) => setLastRecId(id),
           onMicDenied: () => { setMicDenied(true); toast(t('未获得麦克风权限，对方将听不到你', 'Mic blocked — they cannot hear you'), 'error') },
+          onCallText: (m) => {
+            setRtt((l) => [...l, { id: `in-${l.length}-${m.at ?? ''}`, text: m.text, mine: false }])
+            if (!chatOpenRef.current) setUnread((u) => u + 1)
+          },
+          onCallTextRejected: (reason, id) => {
+            if (id) setRtt((l) => l.map((m) => (m.id === id ? { ...m, failed: reason } : m)))
+            toast(callTextRejectText(reason, t), 'error')
+          },
           onEnded: (reason) => { engine.hangUp(); onEnd(reason) },
         },
       })
@@ -94,6 +111,20 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
     else toast(t('当前无法录制', 'Recording unavailable now'))
   }
   const respondConsent = (ok: boolean) => { engineRef.current?.respondToRecordRequest(ok); setIncomingRecReq(false) }
+  const toggleChat = () => {
+    const next = !chatOpen
+    setChatOpen(next); chatOpenRef.current = next
+    if (next) setUnread(0)
+  }
+  const sendRtt = () => {
+    const e = engineRef.current
+    const clean = validCallText(draft)
+    if (!e || !clean) return
+    const id = crypto.randomUUID()
+    if (!e.sendCallText(clean, id)) return
+    setRtt((l) => [...l, { id, text: clean, mine: true }])
+    setDraft('')
+  }
 
   const statusText = ((): string => {
     switch (statusKey) {
@@ -163,10 +194,40 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
         )}
       </div>
 
+      {/* 通话内实时文字（RTT）面板：随音视频并行的文字通道，收发都在通话覆盖层内完成 */}
+      {chatOpen && (
+        <div className="mx-4 mt-2 flex max-h-52 flex-col rounded-2xl bg-white/5 p-2">
+          <div ref={rttLogRef} role="log" aria-live="polite" aria-label={t('通话文字消息', 'In-call text messages')}
+            className="min-h-[3.5rem] flex-1 space-y-1 overflow-y-auto px-1 py-1 text-sm">
+            {rtt.length === 0 && (
+              <div className="py-2 text-center text-xs text-white/40">{t('文字会实时送达对方并可被读出，适合嘈杂环境', 'Text reaches them instantly and can be read aloud — great for noisy places')}</div>
+            )}
+            {rtt.map((m) => (
+              <div key={m.id} className={`flex ${m.mine ? 'justify-end' : 'justify-start'}`}>
+                <span className={`max-w-[80%] break-words rounded-xl px-2.5 py-1.5 ${m.mine ? (m.failed ? 'bg-danger/40 text-white/70 line-through' : 'bg-honey/30') : 'bg-white/15'}`}>
+                  {m.text}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-1 flex items-center gap-2">
+            <input value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={CALL_TEXT_MAX}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); sendRtt() } }}
+              placeholder={t('输入文字…', 'Type a message…')} aria-label={t('通话文字输入', 'In-call text input')}
+              className="min-w-0 flex-1 rounded-xl bg-white/10 px-3 py-2 text-sm outline-none placeholder:text-white/40 focus:bg-white/15" />
+            <button onClick={sendRtt} disabled={!validCallText(draft)} aria-label={t('发送文字', 'Send text')}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-honey/40 transition hover:bg-honey/60 disabled:opacity-30">
+              <IconSend width={18} height={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 控制条 */}
       <div className="px-4 pb-[max(env(safe-area-inset-bottom),1rem)] pt-4">
         <div className="mb-3 flex items-center justify-center gap-2 overflow-x-auto">
           <CtrlButton active={micMuted} danger={micMuted} onClick={toggleMute} icon={micMuted ? <IconMicOff /> : <IconMic />} label={micMuted ? t('已静音', 'Muted') : t('静音', 'Mute')} />
+          <CtrlButton active={chatOpen} onClick={toggleChat} icon={<IconChat />} label={unread > 0 ? t(`文字 ${unread}`, `Text ${unread}`) : t('文字', 'Text')} />
           <CtrlButton active={torchOn} onClick={toggleTorch} icon={<IconFlash />} label={t('手电', 'Torch')} disabled={!peerVideoOn} />
           <CtrlButton active={zoom > 1} onClick={cycleZoom} icon={<IconZoom />} label={zoom > 1 ? `${zoom}×` : t('变焦', 'Zoom')} disabled={!peerVideoOn} />
           <CtrlButton active={recording} danger={recording} onClick={toggleRecord} icon={<IconRecord />} label={recording ? t('停止', 'Stop') : t('录制', 'Record')} />

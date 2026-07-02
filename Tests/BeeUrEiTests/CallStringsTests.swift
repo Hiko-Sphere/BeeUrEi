@@ -19,6 +19,20 @@ final class CallStringsTests: XCTestCase {
         XCTAssertEqual(CallStrings.reportReasons(.zh).count, CallStrings.reportReasons(.en).count)
     }
 
+    // 通话内文字（RTT）：拒绝原因映射绝不把原始码念给盲人（与 AccountStrings 同不变量）。
+    func testCallTextRejectedNeverSpeaksRawCode() {
+        for reason in ["content_blocked", "rate_limited", "invalid_text", "some_future_code"] {
+            for lang in [Language.zh, .en] {
+                let s = CallStrings.callTextRejected(reason, lang)
+                XCTAssertFalse(s.contains(reason), "拒绝原因原始码被念出：\(s)")
+                XCTAssertFalse(s.isEmpty)
+            }
+        }
+        // 收到文字的播报包含文字本体（盲人靠这句听到内容）
+        XCTAssertTrue(CallStrings.incomingCallText("前方左转", .zh).contains("前方左转"))
+        XCTAssertTrue(CallStrings.incomingCallText("turn left", .en).contains("turn left"))
+    }
+
     func testEnglishHasNoChinese() {
         let samples = [
             CallStrings.muteConfirmMessage(.en), CallStrings.mediaFailedHint(.en),

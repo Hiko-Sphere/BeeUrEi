@@ -9,6 +9,7 @@ struct CallView: View {
     @State private var showHangupConfirm = false   // 盲人挂断防呆
     @State private var showMuteConfirm = false      // 盲人静音防呆（取消静音不需确认）
     @State private var showForceEndConfirm = false  // 管理员旁观：强制结束他人通话二次确认
+    @State private var showTextSheet = false         // 通话内实时文字面板（RTT）
     @State private var controlsVisible = true       // 协助者全屏控件显隐
     @State private var autoHide: Task<Void, Never>?
     @Environment(\.scenePhase) private var scenePhase
@@ -71,6 +72,11 @@ struct CallView: View {
         .sheet(isPresented: Binding(get: { model.incomingRecordRequest }, set: { if !$0 { model.respondToRecordRequest(false) } })) {
             RecordingConsentView { accepted in model.respondToRecordRequest(accepted) }
                 .interactiveDismissDisabled()
+        }
+        // 通话内实时文字（RTT）：随音视频并行的文字通道。面板开合同步到 VM（关面板期间来的文字计未读并语音播报）。
+        .sheet(isPresented: $showTextSheet, onDismiss: { model.setTextPanelOpen(false) }) {
+            CallTextSheet(lang: lang, model: model, onClose: { showTextSheet = false })
+                .onAppear { model.setTextPanelOpen(true) }
         }
         .task { await model.start() }
         .onChange(of: model.statusText) { _, new in announceCall(new) }
@@ -177,6 +183,12 @@ struct CallView: View {
                                  label: model.muted ? CallStrings.unmute(lang) : CallStrings.mute(lang),
                                  tint: model.muted ? Color.beeWarn : Color.white.opacity(0.22)) {
                         model.setMuted(!model.muted); scheduleAutoHide()
+                    }
+                    // 通话内文字（RTT）：嘈杂环境/听障场景下与语音并行的文字通道。
+                    circleButton("text.bubble.fill",
+                                 label: model.unreadTexts > 0 ? CallStrings.textButtonUnread(model.unreadTexts, lang) : CallStrings.textButton(lang),
+                                 tint: model.unreadTexts > 0 ? Color.beeHoney : Color.white.opacity(0.22)) {
+                        showTextSheet = true; scheduleAutoHide()
                     }
                     // 录制（策略开启时）：发起需对端同意；录制中为停止（红）。请求同意期间禁用避免重复发起。
                     if model.recordingPolicy.enabled {
@@ -334,6 +346,14 @@ struct CallView: View {
                 }
             }
 
+            // 通话内文字（RTT）：不便说话/嘈杂环境时的并行文字通道；收到的文字会自动语音播报。
+            if model.connected {
+                BeeBigButton(model.unreadTexts > 0 ? CallStrings.textButtonUnread(model.unreadTexts, lang) : CallStrings.textSheetTitle(lang),
+                             systemImage: "text.bubble.fill", tint: .beeInk, foreground: .white) {
+                    showTextSheet = true
+                }
+            }
+
             HStack(spacing: BeeSpacing.md) {
                 BeeBigButton(model.muted ? CallStrings.unmute(lang) : CallStrings.mute(lang),
                              systemImage: model.muted ? "mic.slash.fill" : "mic.fill",
@@ -473,6 +493,12 @@ struct CallView: View {
                          tint: model.muted ? Color.white.opacity(0.22) : Color.beeHoney) {
                 model.setMuted(!model.muted)
             }
+            // 通话文字：监看会话中的文字内容（合规：文字与音视频同属被监看内容），也可发文字介入。
+            circleButton("text.bubble.fill",
+                         label: model.unreadTexts > 0 ? CallStrings.textButtonUnread(model.unreadTexts, lang) : CallStrings.textButton(lang),
+                         tint: model.unreadTexts > 0 ? Color.beeHoney : Color.white.opacity(0.22)) {
+                showTextSheet = true
+            }
             // 结束监看：仅离场，不影响参与者通话。
             circleButton("eye.slash.fill", label: CallStrings.observerLeave(lang), tint: Color.white.opacity(0.22)) {
                 model.hangUp(); onClose()
@@ -484,6 +510,88 @@ struct CallView: View {
         }
         .padding(.top, 18).padding(.bottom, 36)
         .frame(maxWidth: .infinity)
+    }
+}
+
+/// 通话内实时文字面板（RTT）：气泡列表 + 输入框。收到的文字在盲人侧已由 VM 语音播报；
+/// 被服务端拒绝（违禁词/限速）的气泡标记"未发送"并给出可行动原因——绝不静默丢失。
+struct CallTextSheet: View {
+    let lang: Language
+    var model: CallViewModel
+    let onClose: () -> Void
+    @State private var draft = ""
+    @FocusState private var inputFocused: Bool
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                if model.callTexts.isEmpty {
+                    Spacer()
+                    Text(CallStrings.textEmptyHint(lang))
+                        .font(.subheadline).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center).padding(.horizontal, 28)
+                    Spacer()
+                } else {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(spacing: 8) {
+                                ForEach(model.callTexts) { m in bubble(m) }
+                            }
+                            .padding()
+                        }
+                        .onChange(of: model.callTexts.count) { _, _ in
+                            if let last = model.callTexts.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
+                        }
+                        .onAppear { if let last = model.callTexts.last { proxy.scrollTo(last.id, anchor: .bottom) } }
+                    }
+                }
+                HStack(spacing: 10) {
+                    TextField(CallStrings.textPlaceholder(lang), text: $draft, axis: .vertical)
+                        .lineLimit(1...3)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($inputFocused)
+                        .submitLabel(.send)
+                        .onSubmit { send() }
+                        .accessibilityLabel(CallStrings.textSheetTitle(lang))
+                    Button { send() } label: {
+                        Image(systemName: "arrow.up.circle.fill").font(.title)
+                    }
+                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityLabel(CallStrings.textSend(lang))
+                }
+                .padding()
+            }
+            .navigationTitle(CallStrings.textSheetTitle(lang))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(CallStrings.cancel(lang)) { onClose() } } }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func send() {
+        if model.sendCallText(draft) { draft = "" }
+    }
+
+    private func bubble(_ m: CallViewModel.CallTextMessage) -> some View {
+        HStack {
+            if m.mine { Spacer(minLength: 40) }
+            VStack(alignment: m.mine ? .trailing : .leading, spacing: 2) {
+                Text(m.text)
+                    .strikethrough(m.failed != nil)
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .background(m.mine ? (m.failed != nil ? Color.beeDanger.opacity(0.25) : Color.beeHoney.opacity(0.3))
+                                       : Color(.secondarySystemBackground),
+                                in: RoundedRectangle(cornerRadius: 14))
+                if let reason = m.failed {
+                    Text("\(CallStrings.textNotSent(lang))：\(CallStrings.callTextRejected(reason, lang))")
+                        .font(.caption2).foregroundStyle(Color.beeDanger)
+                }
+            }
+            if !m.mine { Spacer(minLength: 40) }
+        }
+        .id(m.id)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(m.mine ? CallStrings.textMine(lang) : CallStrings.textPeer(lang))：\(m.text)\(m.failed != nil ? "，" + CallStrings.textNotSent(lang) : "")")
     }
 }
 

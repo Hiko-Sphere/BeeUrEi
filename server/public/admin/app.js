@@ -36,6 +36,7 @@ const I18N = {
     appName: 'BeeUrEi 管理后台', console: '后台', signInTitle: '管理员登录', signInSub: '请用管理员账号登录后台',
     username: '用户名 / 手机号 / 邮箱', password: '密码', signIn: '登录', signingIn: '登录中…',
     notAdmin: '该账号不是管理员，无权访问后台。', loginFailed: '登录失败，请检查账号密码。',
+    tfaSub: '该账号已开启两步验证', tfaCode: '验证码（6 位）或恢复码', verify: '验证', tfaBack: '返回', tfaInvalid: '验证码不正确，请重试',
     dashboard: '总览', users: '用户', reports: '举报', recordings: '录制', logout: '退出登录',
     totalUsers: '用户总数', active: '正常', disabled: '已封禁', online: '在线', onlineHelpers: '在线协助者',
     openReports: '待处理举报', recordingsCount: '录制记录', byRole: '按角色分布', version: '版本', uptime: '运行时长',
@@ -69,7 +70,7 @@ const I18N = {
     close: '关闭', never: '从未', justNow: '刚刚',
     err_last_admin_protected: '不能操作最后一名管理员', err_cannot_change_own_role: '不能修改自己的角色',
     err_cannot_disable_self: '不能封禁自己', err_not_found: '对象不存在', err_invalid_input: '输入有误',
-    err_forbidden: '无权操作', err_unauthorized: '登录已过期，请重新登录', err_network: '网络错误，请重试',
+    err_forbidden: '无权操作', err_unauthorized: '登录已过期，请重新登录', err_network: '网络错误，请重试', err_cannot_review_self: '不能审核自己的实名提交',
     sessionExpired: '登录已过期，请重新登录', loading: '加载中…',
     relationships: '关系', calls: '通话', owner: '视障用户', member: '协助者 / 亲友', relationCol: '关系',
     emergency: '紧急', exportCsv: '导出 CSV', noLinks: '暂无绑定关系', caller: '主叫', callee: '被叫', time: '时间',
@@ -150,6 +151,7 @@ const I18N = {
     appName: 'BeeUrEi Admin', console: 'Console', signInTitle: 'Admin sign-in', signInSub: 'Sign in with an admin account',
     username: 'Username / phone / email', password: 'Password', signIn: 'Sign in', signingIn: 'Signing in…',
     notAdmin: 'This account is not an admin and cannot access the console.', loginFailed: 'Sign-in failed — check your credentials.',
+    tfaSub: 'This account has two-factor authentication enabled', tfaCode: 'Code (6 digits) or recovery code', verify: 'Verify', tfaBack: 'Back', tfaInvalid: 'Incorrect code — try again',
     dashboard: 'Overview', users: 'Users', reports: 'Reports', recordings: 'Recordings', logout: 'Sign out',
     totalUsers: 'Total users', active: 'Active', disabled: 'Banned', online: 'Online', onlineHelpers: 'Online helpers',
     openReports: 'Open reports', recordingsCount: 'Recordings', byRole: 'By role', version: 'Version', uptime: 'Uptime',
@@ -183,7 +185,7 @@ const I18N = {
     close: 'Close', never: 'never', justNow: 'just now',
     err_last_admin_protected: 'Can’t act on the last admin', err_cannot_change_own_role: 'Can’t change your own role',
     err_cannot_disable_self: 'Can’t ban yourself', err_not_found: 'Not found', err_invalid_input: 'Invalid input',
-    err_forbidden: 'Forbidden', err_unauthorized: 'Session expired — sign in again', err_network: 'Network error, try again',
+    err_forbidden: 'Forbidden', err_unauthorized: 'Session expired — sign in again', err_network: 'Network error, try again', err_cannot_review_self: 'You cannot review your own ID submission',
     sessionExpired: 'Session expired — sign in again', loading: 'Loading…',
     relationships: 'Relations', calls: 'Calls', owner: 'Blind user', member: 'Helper / family', relationCol: 'Relation',
     emergency: 'Emergency', exportCsv: 'Export CSV', noLinks: 'No relationships yet', caller: 'Caller', callee: 'Callee', time: 'Time',
@@ -321,9 +323,9 @@ async function api(path, { method = 'GET', body, auth = true } = {}) {
   } catch {
     throw { code: 'network' };
   }
-  if (res.status === 401 || res.status === 403) {
-    if (auth) { logout(true); throw { code: res.status === 403 ? 'forbidden' : 'unauthorized' }; }
-  }
+  // 仅 401 = 会话失效/过期 → 强制登出。403 是业务/权限拒绝（如 cannot_review_self：管理员打开自己的实名提交），
+  // 绝不能当作掉线把人踢回登录页——让它落到下面的 throw，由调用方 toast 具体原因（见审计 403-LOGOUT）。
+  if (res.status === 401 && auth) { logout(true); throw { code: 'unauthorized' }; }
   let data = null;
   try { data = await res.json(); } catch { /* empty body (204) */ }
   if (!res.ok) throw { code: (data && data.error) || 'network', status: res.status };
@@ -386,6 +388,17 @@ function renderLogin(errMsg) {
   app().querySelector('[data-action="theme"]').addEventListener('click', cycleTheme);
   $('#u').focus();
 }
+// 提交登录（可带 2FA 码）。成功则落地会话并进入后台；失败抛 { code } 交由调用方分流。
+// 分成 helper 是为了两步登录（凭证 → 若 2FA_required 则再补 TOTP/恢复码）复用同一提交路径。
+async function submitLogin(username, password, totpCode) {
+  const body = { username, password };
+  if (totpCode) body.totpCode = totpCode;
+  const data = await api('/api/auth/login', { method: 'POST', auth: false, body });
+  if (!data || !data.user || data.user.role !== 'admin') { renderLogin(t('notAdmin')); return; }
+  setAuth(data.token, data.user);
+  location.hash = '#/';
+  render();
+}
 async function onLogin(e) {
   e.preventDefault();
   const btn = $('#loginBtn');
@@ -393,15 +406,51 @@ async function onLogin(e) {
   if (!username || !password) return;
   btn.disabled = true; btn.textContent = t('signingIn');
   try {
-    const data = await api('/api/auth/login', { method: 'POST', auth: false, body: { username, password } });
-    if (!data || !data.user || data.user.role !== 'admin') { renderLogin(t('notAdmin')); return; }
-    setAuth(data.token, data.user);
-    location.hash = '#/';
-    render();
+    await submitLogin(username, password);
   } catch (err) {
     btn.disabled = false; btn.textContent = t('signIn');
+    // 开了 2FA 的管理员：服务端返回 401 two_factor_required → 进入第二步收 TOTP/恢复码
+    // （此前后台无 2FA 输入，开了两步验证的管理员会被永久锁在门外，见审计 ADMIN-2FA）。
+    if (err.code === 'two_factor_required') { renderTwoFactor(username, password); return; }
     renderLogin(err.code === 'network' ? t('err_network') : t('loginFailed'));
   }
+}
+// 两步验证第二步：收 6 位 TOTP 或一次性恢复码，凭证在闭包内暂存后连码重发登录。
+function renderTwoFactor(username, password, errMsg) {
+  applyTheme();
+  app().innerHTML = `
+    <div class="login-wrap">
+      <form class="login-card" id="tfaForm" autocomplete="off">
+        <div class="login-brand"><span class="logo" aria-hidden="true">🐝</span><h1>${esc(t('appName'))}</h1></div>
+        <p class="login-sub">${esc(t('tfaSub'))}</p>
+        ${errMsg ? `<div class="err-banner" role="alert">${esc(errMsg)}</div>` : ''}
+        <div class="field">
+          <label for="c">${esc(t('tfaCode'))}</label>
+          <input id="c" name="one-time-code" type="text" inputmode="numeric" autocomplete="one-time-code" autocapitalize="none" spellcheck="false" required />
+        </div>
+        <button class="btn primary block" type="submit" id="tfaBtn">${esc(t('verify'))}</button>
+        <div class="login-actions">
+          <button class="btn ghost sm" type="button" data-action="back">${esc(t('tfaBack'))}</button>
+        </div>
+      </form>
+    </div>`;
+  $('#tfaForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const b = $('#tfaBtn');
+    const code = $('#c').value.trim();
+    if (!code) return;
+    b.disabled = true; b.textContent = t('signingIn');
+    try {
+      await submitLogin(username, password, code);
+    } catch (err) {
+      b.disabled = false; b.textContent = t('verify');
+      // invalid_2fa 或（时序竞态下再次）two_factor_required：留在第二步并提示重试；其它错误退回首步。
+      if (err.code === 'invalid_2fa' || err.code === 'two_factor_required') { renderTwoFactor(username, password, t('tfaInvalid')); return; }
+      renderLogin(err.code === 'network' ? t('err_network') : t('loginFailed'));
+    }
+  });
+  app().querySelector('[data-action="back"]').addEventListener('click', () => renderLogin());
+  $('#c').focus();
 }
 
 // ---------------------------------------------------------------- shell + router

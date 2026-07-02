@@ -48,6 +48,17 @@ export function registerAssistRoutes(
     return { ok: true }
   })
 
+  // 协助者行为守则确认（Aira 范式："只描述所见，安全决策由对方做出"）：客户端在用户首次
+  // 接单/接听前展示一次性守则卡，确认后调本端点留痕（selfView 回传 helperGuidelineAckAt，
+  // null 即客户端该展示）。keep-first 幂等：重复确认不刷新时间戳——首次确认时刻才是追责锚点。
+  app.post('/api/assist/guideline-ack', { preHandler: requireAuth() }, async (req, reply) => {
+    const me = store.findById(req.user!.sub)
+    if (!me) return reply.code(404).send({ error: 'not_found' })
+    const at = me.helperGuidelineAckAt ?? Date.now()
+    if (!me.helperGuidelineAckAt) store.updateUser(me.id, { helperGuidelineAckAt: at })
+    return { ok: true, helperGuidelineAckAt: at }
+  })
+
   // WebRTC ICE 服务器（STUN + 短时效 TURN 凭据）。客户端通话前拉取。
   app.get('/api/assist/turn', { preHandler: requireAuth() }, async () => {
     const stun = (process.env.STUN_URLS ?? 'stun:stun.l.google.com:19302').split(',').map((s) => s.trim()).filter(Boolean)

@@ -2,7 +2,7 @@ import { apiURL } from './config'
 
 // ---------- 模型（与服务端对齐） ----------
 export interface User { id: string; username: string; displayName: string; role: string; status: string; avatar?: string | null; verified?: boolean }
-export interface SelfView extends User { language?: string | null; email?: string | null; emailVerified?: boolean; phone?: string | null; usernameCustomized?: boolean; appleLinked?: boolean; twoFactorEnabled?: boolean }
+export interface SelfView extends User { language?: string | null; email?: string | null; emailVerified?: boolean; phone?: string | null; usernameCustomized?: boolean; appleLinked?: boolean; twoFactorEnabled?: boolean; helperGuidelineAckAt?: number | null }
 export interface VerificationStatusInfo {
   status: 'none' | 'pending' | 'verified' | 'rejected'
   idType?: string
@@ -244,6 +244,8 @@ export const api = {
   callStatus: (callId: string) => get(`/api/assist/call/status?callId=${encodeURIComponent(callId)}`) as Promise<{ exists?: boolean; declinedAll?: boolean }>,
   onlineCount: () => get('/api/assist/online-count') as Promise<{ total: number; online: number }>,
   heartbeat: (available = true) => post('/api/assist/heartbeat', { available }),
+  // 协助者行为守则确认（一次性守则卡）：服务端留痕，selfView.helperGuidelineAckAt 回传。
+  guidelineAck: () => post('/api/assist/guideline-ack', {}) as Promise<{ ok: boolean; helperGuidelineAckAt: number }>,
   helpQueue: () => get('/api/assist/help/queue') as Promise<{ requests: HelpRequest[]; count: number }>,
   claimHelp: (callId: string) => post('/api/assist/help/claim', { callId }) as Promise<{ request: { callId: string; fromName: string; fromAvatar?: string | null; language?: string | null; locality?: string | null; topic?: string | null } }>,
 

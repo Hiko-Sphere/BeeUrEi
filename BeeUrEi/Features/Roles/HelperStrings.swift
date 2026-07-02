@@ -12,6 +12,26 @@ enum HelperStrings {
 
     // MARK: 帮助大家
 
+    // MARK: 协助守则（Aira 范式：只描述、不替对方做安全决策；首次接单前一次性确认，服务端留痕）
+
+    static func guidelineTitle(_ l: Language) -> String {
+        l == .zh ? "开始协助前，请了解三条守则" : "Before you help — three ground rules"
+    }
+    static func guidelineRule1(_ l: Language) -> String {
+        l == .zh ? "只描述你所见（如\u{201C}前方三米有台阶\u{201D}），不要替对方做安全决策——可以说\u{201C}灯是绿的\u{201D}，不要说\u{201C}可以走了\u{201D}。"
+                 : "Describe what you see (\u{201C}steps three meters ahead\u{201D}). Never make safety decisions for them — say \u{201C}the light is green\u{201D}, not \u{201C}you can go\u{201D}."
+    }
+    static func guidelineRule2(_ l: Language) -> String {
+        l == .zh ? "过马路等高风险时刻，不确定就直说\u{201C}我不确定\u{201D}，行动由对方自己决定。"
+                 : "At risky moments like crossings, say \u{201C}I'm not sure\u{201D} when unsure — they decide whether to move."
+    }
+    static func guidelineRule3(_ l: Language) -> String {
+        l == .zh ? "尊重隐私：画面与对话仅用于本次协助，不截屏、不外传。"
+                 : "Respect privacy: what you see and hear is for this session only — no screenshots, no sharing."
+    }
+    static func guidelineConfirm(_ l: Language) -> String { l == .zh ? "我已了解，开始协助" : "Got it — start helping" }
+    static func guidelineLater(_ l: Language) -> String { l == .zh ? "暂不" : "Not now" }
+
     static func matchPrefs(_ l: Language) -> String { l == .zh ? "匹配偏好" : "Match preferences" }
     static func matchPrefsHint(_ l: Language) -> String {
         l == .zh ? "设置随机匹配时优先的语言" : "Choose the preferred language for random matching"

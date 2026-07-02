@@ -183,6 +183,9 @@ final class AuthSession {
     /// 记录已同意当前法律版本（服务端记录成功后调用）：就地更新内存态，立即消除 needsLegalConsent，不依赖 refreshMe。
     func markLegalConsented(version: String) { user?.legalConsentVersion = version }
 
+    /// 记录已确认协助守则（服务端留痕后调用）：就地更新内存态，首次接单闸门立即放行，不依赖 refreshMe。
+    func markGuidelineAcked() { user?.helperGuidelineAckAt = Date().timeIntervalSince1970 * 1000 }
+
     /// 补全完成（或用户在账号页另行处理）：清除引导标记。
     func completeSetup() { requiresSetup = false; accountCreated = false }
 

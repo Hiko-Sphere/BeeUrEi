@@ -26,6 +26,9 @@ struct AssistHomeView: View {
     @State private var dismissedCallIds: Set<String> = []
     @State private var statusText: String?
     @State private var prefsShown = false
+    // 协助守则一次性确认卡（Aira 范式）：首次接单（认领/随机匹配）前展示；确认经服务端留痕。
+    @State private var guidelineShown = false
+    @State private var afterGuideline: (() -> Void)?
     @State private var busy = false
     @State private var showLogoutConfirm = false
     @Environment(\.scenePhase) private var scenePhase
@@ -133,6 +136,11 @@ struct AssistHomeView: View {
             .refreshable { await refreshQueue() }
         }
         .sheet(isPresented: $prefsShown) { prefsSheet }
+        .sheet(isPresented: $guidelineShown, onDismiss: {
+            let go = afterGuideline; afterGuideline = nil
+            // 只有真的确认过（内存态已标记）才续跑原动作；滑掉/暂不=放弃本次，下次接单再问。
+            if session.user?.helperGuidelineAckAt != nil { go?() }
+        }) { guidelineSheet }
     }
 
     private func queueCard(_ r: HelpRequestSummary) -> some View {
@@ -178,6 +186,41 @@ struct AssistHomeView: View {
                                                : HelperStrings.prefer(languageName(preferredLanguage), lang))
         if requireLanguageMatch && !preferredLanguage.isEmpty { parts.append(HelperStrings.sameLanguageOnly(lang)) }
         return parts.joined(separator: " · ")
+    }
+
+    /// 协助守则一次性确认卡（Aira 范式）：三条守则 + 确认（服务端留痕）。
+    /// 确认后先标记内存态再收卡——onDismiss 据此续跑被闸下的接单动作。
+    private var guidelineSheet: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: BeeSpacing.lg) {
+                Text(HelperStrings.guidelineTitle(lang)).font(.title3.weight(.semibold))
+                ForEach([HelperStrings.guidelineRule1(lang), HelperStrings.guidelineRule2(lang), HelperStrings.guidelineRule3(lang)], id: \.self) { rule in
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.beeHoney).padding(.top, 2)
+                            .accessibilityHidden(true)
+                        Text(rule).font(.subheadline)
+                    }
+                }
+                Spacer()
+                BeeBigButton(HelperStrings.guidelineConfirm(lang), systemImage: "hand.raised.fill", tint: .beeHoney) {
+                    confirmGuideline()
+                }
+                Button(HelperStrings.guidelineLater(lang)) { afterGuideline = nil; guidelineShown = false }
+                    .frame(maxWidth: .infinity).font(.subheadline).foregroundStyle(.secondary)
+            }
+            .padding()
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    /// 确认守则：服务端留痕（失败不阻塞，下次会话仍会展示）→ 标记内存态 → 收卡（onDismiss 续跑原动作）。
+    private func confirmGuideline() {
+        let token = session.token
+        Task {
+            if let token { try? await APIClient().ackHelperGuideline(token: token) }
+            session.markGuidelineAcked()
+            guidelineShown = false
+        }
     }
 
     private var prefsSheet: some View {
@@ -468,6 +511,11 @@ struct AssistHomeView: View {
     private func claim(_ r: HelpRequestSummary) async {
         guard !busy, answering == nil, matched == nil, pendingAnswer == nil,
               !IncomingCallCenter.shared.hasIncoming, let token = session.token else { return }
+        if session.user?.helperGuidelineAckAt == nil {
+            afterGuideline = { Task { await claim(r) } }
+            guidelineShown = true
+            return
+        }
         busy = true; defer { busy = false }
         do {
             let detail = try await APIClient().claimHelp(token: token, callId: r.callId)
@@ -481,6 +529,11 @@ struct AssistHomeView: View {
     private func matchRandom() async {
         guard !busy, answering == nil, matched == nil, pendingAnswer == nil,
               !IncomingCallCenter.shared.hasIncoming, let token = session.token else { return }
+        if session.user?.helperGuidelineAckAt == nil {
+            afterGuideline = { Task { await matchRandom() } }
+            guidelineShown = true
+            return
+        }
         busy = true; statusText = HelperStrings.matching(lang); defer { busy = false }
         do {
             let preferred = preferredLanguage.isEmpty ? nil : preferredLanguage

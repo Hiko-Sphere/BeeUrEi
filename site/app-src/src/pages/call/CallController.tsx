@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { api, callErrorText } from '../../lib/api'
 import { useI18n } from '../../lib/i18n'
-import { useToast, Avatar, Button } from '../../components/ui'
+import { useToast, Avatar, Button, Modal } from '../../components/ui'
 import { IconPhone, IconX } from '../../components/icons'
 import { CallScreen } from './CallScreen'
 
@@ -39,8 +39,31 @@ export function CallProvider({ children }: { children: ReactNode }) {
     return () => ringtone.current?.stop()
   }, [ring])
 
+  // —— 协助者行为守则（Aira 范式："只描述所见，安全决策由对方做出"）——
+  // 首次协助动作（呼叫/认领/接听）前展示一次性守则卡；确认经 POST /api/assist/guideline-ack 服务端留痕。
+  // fail-safe：拉不到 me 时也展示卡（多看一次无害，漏看有害）；确认后本地缓存不再打扰。
+  const [guidelinePrompt, setGuidelinePrompt] = useState<null | { resolve: (ok: boolean) => void }>(null)
+  const guidelineAcked = useRef<boolean | null>(null) // null=未知（惰性拉 me）
+  const ensureGuideline = useCallback(async (): Promise<boolean> => {
+    if (guidelineAcked.current === true) return true
+    if (guidelineAcked.current === null) {
+      try { guidelineAcked.current = !!(await api.me()).helperGuidelineAckAt } catch { guidelineAcked.current = false }
+      if (guidelineAcked.current) return true
+    }
+    return new Promise<boolean>((resolve) => setGuidelinePrompt({ resolve }))
+  }, [])
+  const confirmGuideline = useCallback(async () => {
+    try { await api.guidelineAck() } catch { /* 留痕失败不阻塞协助（下次仍会展示） */ }
+    guidelineAcked.current = true
+    setGuidelinePrompt((cur) => { cur?.resolve(true); return null })
+  }, [])
+  const dismissGuideline = useCallback(() => {
+    setGuidelinePrompt((cur) => { cur?.resolve(false); return null })
+  }, [])
+
   const startOutgoing = useCallback(async (targetUserId: string, peerName: string, peerAvatar?: string | null) => {
     if (active) { toast(t('已有进行中的通话', 'A call is already in progress'), 'error'); return }
+    if (!(await ensureGuideline())) return
     const callId = crypto.randomUUID()
     try {
       await api.registerCall(callId, [targetUserId])
@@ -48,10 +71,11 @@ export function CallProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       toast(callErrorText(e, t, t('呼叫失败', 'Call failed')), 'error')
     }
-  }, [active, t, toast])
+  }, [active, t, toast, ensureGuideline])
 
   const claimQueue = useCallback(async (callId: string, fromName: string, fromAvatar?: string | null) => {
     if (active) { toast(t('已有进行中的通话', 'A call is already in progress'), 'error'); return false }
+    if (!(await ensureGuideline())) return false
     try {
       await api.claimHelp(callId)
       setActive({ callId, kind: 'queue', peerName: fromName, peerAvatar: fromAvatar, waitingText: t('正在接入求助者…', 'Connecting to requester…') })
@@ -60,9 +84,11 @@ export function CallProvider({ children }: { children: ReactNode }) {
       toast(callErrorText(e, t, t('认领失败', 'Claim failed')), 'error')
       return false
     }
-  }, [active, t, toast])
+  }, [active, t, toast, ensureGuideline])
 
   // 直接接听一通指定来电（来电列表/来电铃共用）：抢占接听，胜出则进入通话。
+  // 接听路径**刻意不设**守则卡阻断：来电可能是紧急求助，接听延迟的安全代价高于教育收益——
+  // 守则教育由（非紧急的）呼出/认领闸门 + 通话内常驻提示条完成。
   const answerIncoming = useCallback(async (callId: string, fromName: string, fromAvatar?: string | null) => {
     if (active) { toast(t('已有进行中的通话', 'A call is already in progress'), 'error'); return }
     setRing(null)
@@ -120,6 +146,29 @@ export function CallProvider({ children }: { children: ReactNode }) {
         </div>
       )}
       {active && <CallScreen call={active} onEnd={endActive} />}
+      {/* 一次性协助守则卡（Aira 范式）：确认前不进入任何协助通话；关闭=放弃本次动作，下次仍会展示。 */}
+      {guidelinePrompt && (
+        <Modal onClose={dismissGuideline} label={t('协助守则', 'Helper guidelines')}>
+          <h3 className="text-lg font-semibold">{t('开始协助前，请了解三条守则', 'Before you help — three ground rules')}</h3>
+          <ul className="mt-3 space-y-2.5 text-sm text-soft">
+            <li className="flex gap-2"><span aria-hidden="true">👁️</span>
+              {t('只描述你所见（如"前方三米有台阶"），不要替对方做安全决策——可以说"灯是绿的"，不要说"可以走了"。',
+                 'Describe what you see ("steps three meters ahead"). Never make safety decisions for them — say "the light is green", not "you can go".')}</li>
+            <li className="flex gap-2"><span aria-hidden="true">🚸</span>
+              {t('过马路等高风险时刻，不确定就直说"我不确定"，行动由对方自己决定。',
+                 "At risky moments like crossings, say \"I'm not sure\" when unsure — they decide whether to move.")}</li>
+            <li className="flex gap-2"><span aria-hidden="true">🔒</span>
+              {t('尊重隐私：画面与对话仅用于本次协助，不截屏、不外传。',
+                 'Respect privacy: what you see and hear is for this session only — no screenshots, no sharing.')}</li>
+          </ul>
+          <Button variant="primary" className="mt-5 w-full" onClick={() => void confirmGuideline()}>
+            {t('我已了解，开始协助', 'Got it — start helping')}
+          </Button>
+          <button onClick={dismissGuideline} className="mt-3 w-full text-center text-sm text-faint hover:underline">
+            {t('暂不', 'Not now')}
+          </button>
+        </Modal>
+      )}
     </Ctx.Provider>
   )
 }

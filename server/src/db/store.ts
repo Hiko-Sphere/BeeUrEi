@@ -27,6 +27,7 @@ export interface User {
   usernameCustomized?: boolean // 用户是否设置过自定义用户名（自动生成的 user_/apple_ 为 false）。为 false 时客户端提示设置唯一 userid。
   legalConsentVersion?: string // 用户同意的隐私政策/使用条款版本（如 "2.0"）。注册须同意方可完成（GDPR 可证明同意）。
   legalConsentAt?: number // 同意时间戳（ms）。
+  helperGuidelineAckAt?: number // 协助者行为守则（只描述、不替对方做安全决策）首次确认时间戳（ms）。客户端据此一次性展示守则卡；服务端留痕供追责。
   // 单用户功能覆盖（管理员可对**某个用户**单独关停某功能，用于精准处置滥用者，不波及全站）。
   // 仅能"强制关"：某键为 false 即对该用户关闭；缺省/为 true 则随全站开关。见 effectiveFeatures。
   featureOverrides?: Partial<Record<FeatureKey, boolean>>
@@ -1279,5 +1280,6 @@ export function selfView(u: User) {
     twoFactorEnabled: !!u.totpEnabled, // 是否已开启两步验证（客户端账号页展示开关态；绝不返回 totpSecret）
     legalConsentVersion: u.legalConsentVersion ?? null, // 已同意的隐私/条款版本（客户端据此门控注册/重新同意）
     legalConsentAt: u.legalConsentAt ?? null,
+    helperGuidelineAckAt: u.helperGuidelineAckAt ?? null, // 协助者守则确认时间（null=客户端首次协助前展示守则卡）
   }
 }

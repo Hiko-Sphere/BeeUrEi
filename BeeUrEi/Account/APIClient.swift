@@ -38,6 +38,7 @@ struct AccountInfo: Codable, Sendable, Equatable, Identifiable {
     var hasPasskey: Bool?         // /api/me：是否已注册 passkey
     var twoFactorEnabled: Bool?   // /api/me：是否已开启两步验证（账号页展示开关态）
     var legalConsentVersion: String? // /api/me：已同意的隐私/条款版本；与当前版本不符则需（重新）同意
+    var helperGuidelineAckAt: Double? // /api/me：协助守则首次确认时间（nil=首次协助前展示守则卡）
     var verified: Bool?           // publicUser/selfView：实名认证（KYC）是否已通过——仅布尔徽章，绝不含姓名
 }
 
@@ -1005,6 +1006,11 @@ struct APIClient {
     /// 记录用户对《隐私政策》《使用条款》的同意（注册门控 + GDPR 可证明同意）。
     func recordLegalConsent(token: String, version: String) async throws {
         _ = try await authedSend("POST", "/api/account/legal-consent", token: token, body: ["version": version])
+    }
+
+    /// 确认协助者行为守则（只描述、不替对方做安全决策）：服务端留痕，keep-first 幂等。
+    func ackHelperGuideline(token: String) async throws {
+        _ = try await authedSend("POST", "/api/assist/guideline-ack", token: token, body: [:])
     }
 
     /// 修改/设置用户名（唯一登录标识；用于自定义 userid）。

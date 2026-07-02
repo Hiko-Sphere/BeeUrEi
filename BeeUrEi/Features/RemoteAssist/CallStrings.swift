@@ -66,6 +66,11 @@ enum CallStrings {
     }
     static func textNotSent(_ l: Language) -> String { l == .zh ? "未发送" : "Not sent" }
 
+    /// 协助守则常驻轻提示（对方开画面=正在实地协助时显示；Aira 范式）。
+    static func describeOnlyHint(_ l: Language) -> String {
+        l == .zh ? "只描述所见；过街等安全决策请交给对方" : "Describe what you see — safety decisions are theirs to make"
+    }
+
     // MARK: 举报 / 信任与安全
 
     static func reportDialogTitle(_ l: Language) -> String { l == .zh ? "举报对方" : "Report this person" }

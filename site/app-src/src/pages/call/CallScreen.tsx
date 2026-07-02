@@ -187,6 +187,12 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
           {t('对方正在录制本次通话', 'The other party is recording this call')}
         </div>
       )}
+      {/* 协助守则提示（对方开画面=正在实地协助）：只描述、不替对方做安全决策（Aira 范式，常驻轻提示）。 */}
+      {peerVideoOn && (
+        <div className="mx-4 mb-2 rounded-xl bg-white/5 px-3 py-1.5 text-xs text-white/60">
+          {t('只描述所见；过街等安全决策请交给对方', 'Describe what you see — safety decisions are theirs to make')}
+        </div>
+      )}
       {/* 麦克风被阻止：常驻警告（一次性 toast 会消失，协助者会以为对方能听到却一直白说）。 */}
       {micDenied && (
         <div className="mx-4 mb-2 flex items-center gap-2 rounded-xl bg-danger/20 px-3 py-2 text-sm" role="alert">

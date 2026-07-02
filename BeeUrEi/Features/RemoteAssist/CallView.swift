@@ -151,6 +151,12 @@ struct CallView: View {
                 NetworkStatusBar(callQuality: model.callQuality)
                 adminBanner // 合规告知：管理员正在监看（不可关闭）
                 micDeniedBanner // 麦克风被拒：对端听不到本端，常驻提示
+                // 协助守则轻提示（对方开画面=正在实地协助）：只描述、不替对方做安全决策（Aira 范式）。
+                if model.remoteVideoFrames {
+                    Text(CallStrings.describeOnlyHint(lang))
+                        .font(.caption).foregroundStyle(.white.opacity(0.75))
+                        .frame(maxWidth: .infinity)
+                }
                 HStack(spacing: 8) {
                     if let name = model.peerName, !name.isEmpty, model.remoteVideoFrames {
                         AvatarView(dataURL: model.peerAvatar, name: name, size: 24)

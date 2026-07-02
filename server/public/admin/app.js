@@ -136,6 +136,7 @@ const I18N = {
     liveCalls: '实时通话', liveCallsDesc: '当前进行中的通话。可强制结束；点参与者查看/封禁。监看(声音画面)需在 App 端进行且会通知用户。',
     liveDuration: '时长', liveParticipants: '参与者', liveForceEnd: '强制结束', liveConfirmEnd: '确认强制结束这通通话？双方都会收到挂断。', liveCallEnded: '通话已结束', noLiveCalls: '当前没有进行中的通话', liveObserved: '管理员监看中', liveRefresh: '自动刷新中',
     observe: '旁观', observeTitle: '旁观通话', observeConnecting: '正在接入旁观…', observeWaiting: '等待对方音视频…', observeSpeak: '开麦说话', observeMute: '静音', observeLeave: '结束旁观', observeForceEnd: '强制结束', observeNoVideo: '（未共享画面）', observeMicDenied: '麦克风不可用', observeNotObservable: '该通话参与方的 App 版本不支持被旁观（需双方升级到最新版）', observeExists: '已有管理员在旁观该通话', observeNotActive: '该通话已结束', observeFailed: '旁观接入失败', observeNotice: '旁观会实时通知通话双方（横幅+语音），合规监管。',
+    observeTextPlaceholder: '发文字介入…', observeTextSend: '发送', observeMe: '我（管理员）', observeTextBlocked: '文字包含违禁内容，未发送', observeTextTooFast: '发送太快，稍候再试', observeTextInvalid: '文字无效，未发送',
     auditActions: {
       'user.role': '修改角色', 'user.disable': '封禁用户', 'user.enable': '解封用户',
       'user.verifyEmail': '标记邮箱已验证', 'user.unverifyEmail': '撤销邮箱验证', 'user.unlinkApple': '解绑 Apple',
@@ -251,6 +252,7 @@ const I18N = {
     liveCalls: 'Live calls', liveCallsDesc: 'Calls in progress. You can force-end; click a participant to view/ban. Observing (audio/video) happens in the app and notifies the users.',
     liveDuration: 'Duration', liveParticipants: 'Participants', liveForceEnd: 'Force end', liveConfirmEnd: 'Force-end this call? Both sides will be hung up.', liveCallEnded: 'Call ended', noLiveCalls: 'No calls in progress', liveObserved: 'Admin observing', liveRefresh: 'Auto-refreshing',
     observe: 'Observe', observeTitle: 'Observe call', observeConnecting: 'Connecting observer…', observeWaiting: 'Waiting for audio/video…', observeSpeak: 'Speak', observeMute: 'Mute', observeLeave: 'Stop observing', observeForceEnd: 'Force end', observeNoVideo: '(no video shared)', observeMicDenied: 'Microphone unavailable', observeNotObservable: "Participants' app version doesn't support being observed (both must update)", observeExists: 'An admin is already observing this call', observeNotActive: 'This call has ended', observeFailed: 'Failed to connect observer', observeNotice: 'Observing notifies both parties in real time (banner + voice) — compliant supervision.',
+    observeTextPlaceholder: 'Type to intervene…', observeTextSend: 'Send', observeMe: 'Me (admin)', observeTextBlocked: 'Blocked content — not sent', observeTextTooFast: 'Too fast — wait a moment', observeTextInvalid: 'Invalid text — not sent',
     auditActions: {
       'user.role': 'Change role', 'user.disable': 'Ban user', 'user.enable': 'Unban user',
       'user.verifyEmail': 'Mark email verified', 'user.unverifyEmail': 'Unverify email', 'user.unlinkApple': 'Unlink Apple',
@@ -1211,6 +1213,11 @@ function startObserver(call) {
       <span class="text-dim observe-note">${esc(t('observeNotice'))}</span>
     </div>
     <div class="observe-grid"></div>
+    <div class="observe-textlog" role="log" aria-live="polite" hidden></div>
+    <div class="observe-textrow">
+      <input data-textinput maxlength="500" placeholder="${esc(t('observeTextPlaceholder'))}" aria-label="${esc(t('observeTextPlaceholder'))}">
+      <button class="btn" data-textsend>${esc(t('observeTextSend'))}</button>
+    </div>
     <div class="observe-actions">
       <button class="btn" data-speak>🎤 ${esc(t('observeSpeak'))}</button>
       <button class="btn" data-mute hidden>🔇 ${esc(t('observeMute'))}</button>
@@ -1223,6 +1230,26 @@ function startObserver(call) {
   const grid = box.querySelector('.observe-grid');
   const statusEl = box.querySelector('.observe-status');
   const setStatus = (s) => { statusEl.textContent = s; };
+
+  // —— 通话内文字（RTT）监看与介入：文字与音视频同属被监看内容（与 iOS 旁观端对称）——
+  const textlog = box.querySelector('.observe-textlog');
+  const textInput = box.querySelector('[data-textinput]');
+  const appendText = (name, text) => {  // 全 textContent 落 DOM，无注入面
+    textlog.hidden = false;
+    const row = document.createElement('div'); row.className = 'tl-row';
+    const b = document.createElement('b'); b.textContent = name + ':';
+    row.appendChild(b); row.appendChild(document.createTextNode(text));
+    textlog.appendChild(row); textlog.scrollTop = textlog.scrollHeight;
+  };
+  const sendText = () => {
+    const v = (textInput.value || '').trim();
+    if (!v || v.length > 500 || !ws || ws.readyState !== 1) return;
+    ws.send(JSON.stringify({ type: 'in-call-text', text: v, id: 'adm-' + Date.now() }));
+    appendText(t('observeMe'), v);
+    textInput.value = '';
+  };
+  box.querySelector('[data-textsend]').addEventListener('click', sendText);
+  textInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); sendText(); } });
 
   function ensureTile(peerId, name) {
     if (tiles[peerId]) { if (name) tiles[peerId].label.textContent = name; return tiles[peerId]; }
@@ -1332,6 +1359,12 @@ function startObserver(call) {
         case 'obs-answer': if (m.from) onObsAnswer(m.from, m.sdp); break;
         case 'obs-ice': if (m.from) onObsIce(m.from, m); break;
         case 'peer-left': if (m.userId) { const pc = pcs[m.userId]; if (pc) { try { pc.close(); } catch {} delete pcs[m.userId]; } dropTile(m.userId); } break;
+        case 'in-call-text':
+          if (typeof m.text === 'string' && m.text) appendText((tiles[m.from] && tiles[m.from].label.textContent) || m.from || '?', m.text);
+          break;
+        case 'in-call-text-rejected':
+          toast(m.reason === 'content_blocked' ? t('observeTextBlocked') : m.reason === 'rate_limited' ? t('observeTextTooFast') : t('observeTextInvalid'), 'error');
+          break;
         case 'end': toast(t('liveCallEnded')); teardown(); break;
       }
     };

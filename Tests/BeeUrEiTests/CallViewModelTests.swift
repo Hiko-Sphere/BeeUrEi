@@ -169,6 +169,9 @@ final class CallViewModelTests: XCTestCase {
         XCTAssertFalse(vm.sendCallText("   "))
         // 超长（>500）：不发送（与服务端同口径，免得发出才被拒）
         XCTAssertFalse(vm.sendCallText(String(repeating: "x", count: 501)))
+        // 长度按 UTF-16 码元计（服务端/web 都是 JS length 口径）：500 个 emoji = 1000 码元，必须拒发。
+        // 字素簇计数（.count）会放行它、发出去才被服务端拒——三端口径必须一致。
+        XCTAssertFalse(vm.sendCallText(String(repeating: "😀", count: 500)))
         // 正常：trim 后发出，气泡先落本地
         XCTAssertTrue(vm.sendCallText("  前面路口左转  "))
         XCTAssertEqual(vm.callTexts.count, 1)
@@ -177,6 +180,8 @@ final class CallViewModelTests: XCTestCase {
         let sentText = signaling.sent.first { ($0["type"] as? String) == "in-call-text" }
         XCTAssertEqual(sentText?["text"] as? String, "前面路口左转")
         XCTAssertNotNil(sentText?["id"]) // 带 id 供拒绝回执关联
+        XCTAssertTrue(vm.sendCallText(String(repeating: "😀", count: 250))) // 500 码元临界放行
+        XCTAssertEqual(vm.callTexts.count, 2)
     }
 
     func testIncomingCallTextAppendsAndCountsUnread() {
@@ -193,6 +198,18 @@ final class CallViewModelTests: XCTestCase {
         // 空文本帧被忽略
         vm.handle(["type": "in-call-text", "text": ""])
         XCTAssertEqual(vm.callTexts.count, 2)
+    }
+
+    func testAdminObserverTextAttributedHonestly() {
+        // 旁观管理员发的介入文字必须归属"管理员"，冒名"对方"是对盲人的说话人错误陈述（复审 MED）。
+        let vm = makeVM(role: .blind)
+        vm.handle(["type": "peer-joined", "userId": "u2", "userName": "协助者"])
+        vm.handle(["type": "peer-joined", "userId": "adm1", "userName": "管理员甲", "role": "admin"])
+        vm.handle(["type": "in-call-text", "text": "请注意安全", "from": "adm1"])
+        vm.handle(["type": "in-call-text", "text": "我看到了", "from": "u2"])
+        XCTAssertEqual(vm.callTexts.count, 2)
+        XCTAssertTrue(vm.callTexts[0].fromAdmin)
+        XCTAssertFalse(vm.callTexts[1].fromAdmin)
     }
 
     func testCallTextRejectionMarksBubble() {

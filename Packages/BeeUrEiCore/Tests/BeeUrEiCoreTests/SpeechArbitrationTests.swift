@@ -40,6 +40,12 @@ final class SpeechArbitrationTests: XCTestCase {
                                          current: (.navigation, false), safetyHold: false), .speakEnqueue)
     }
 
+    func testCallQueuesOnItself() {
+        // 通话文字（RTT）连发逐条排队顺读——互相掐断会让前一条内容永久听不到（复审 HIGH）。
+        XCTAssertEqual(SpeechGate.action(newChannel: .call, newDroppable: false,
+                                         current: (.call, false), safetyHold: false), .speakEnqueue)
+    }
+
     func testHintNeverInterruptsResultButResultReplacesHint() {
         // 取景提示不打断"这是X"（识别灵敏度修复的总线侧保障）；反向结果可打断提示。
         XCTAssertEqual(SpeechGate.action(newChannel: .query, newDroppable: true,

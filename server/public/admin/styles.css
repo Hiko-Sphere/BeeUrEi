@@ -176,6 +176,11 @@ tbody tr.clickable:hover { background: var(--surface-2); }
 .observe-label { position: absolute; left: 8px; bottom: 8px; padding: 2px 8px; font-size: 12px; font-weight: 600; color: #fff; background: rgba(0,0,0,0.55); border-radius: 6px; }
 .observe-hint { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(255,255,255,0.7); font-size: 13px; }
 .observe-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+/* 通话内文字（RTT）监看日志：文字与音视频同属被监看内容 */
+.observe-textlog { max-height: 130px; overflow-y: auto; margin-top: 10px; padding: 8px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.observe-textlog .tl-row b { margin-right: 6px; }
+.observe-textrow { display: flex; gap: 8px; margin-top: 8px; }
+.observe-textrow input { flex: 1; min-width: 0; }
 
 /* ---------- Forms (recordings config) ---------- */
 .form-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border); }

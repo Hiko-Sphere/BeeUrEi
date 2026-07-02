@@ -33,9 +33,14 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
   // 通话内实时文字（RTT）：嘈杂环境/听障场景下随音视频并行的文字通道（服务端 in-call-text）。
   const [chatOpen, setChatOpen] = useState(false)
   const chatOpenRef = useRef(false) // engine 回调闭包里读最新开合态
-  const [rtt, setRtt] = useState<Array<{ id: string; text: string; mine: boolean; failed?: string }>>([])
+  const [rtt, setRtt] = useState<Array<{ id: string; text: string; mine: boolean; fromAdmin?: boolean; failed?: string }>>([])
   const [unread, setUnread] = useState(0)
   const [draft, setDraft] = useState('')
+  // 面板关着时的读屏播报：aria-live 区必须**常驻**（随 chatOpen 卸载的 live region 读屏收不到）。
+  const [srNote, setSrNote] = useState('')
+  // Safari 的 compositionend 在确认候选词的 keydown 之后才触发，e.nativeEvent.isComposing 在该次
+  // keydown 上已是 false——须自持合成态并用 setTimeout(0) 延迟复位才能挡住"确认候选词即误发送"。
+  const composingRef = useRef(false)
   const rttLogRef = useRef<HTMLDivElement>(null)
   useEffect(() => { rttLogRef.current?.scrollTo({ top: rttLogRef.current.scrollHeight }) }, [rtt, chatOpen])
 
@@ -83,8 +88,15 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
           onLastRecordingId: (id) => setLastRecId(id),
           onMicDenied: () => { setMicDenied(true); toast(t('未获得麦克风权限，对方将听不到你', 'Mic blocked — they cannot hear you'), 'error') },
           onCallText: (m) => {
-            setRtt((l) => [...l, { id: `in-${l.length}-${m.at ?? ''}`, text: m.text, mine: false }])
-            if (!chatOpenRef.current) setUnread((u) => u + 1)
+            setRtt((l) => [...l, { id: crypto.randomUUID(), text: m.text, mine: false, fromAdmin: m.fromAdmin }])
+            if (!chatOpenRef.current) {
+              setUnread((u) => {
+                const n = u + 1
+                // 计数进播报文案：同文本重复到达时 live region 才会因内容变化重新播报。
+                setSrNote(t(`新文字消息（${n}）：${m.text}`, `New text message (${n}): ${m.text}`))
+                return n
+              })
+            }
           },
           onCallTextRejected: (reason, id) => {
             if (id) setRtt((l) => l.map((m) => (m.id === id ? { ...m, failed: reason } : m)))
@@ -114,14 +126,18 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
   const toggleChat = () => {
     const next = !chatOpen
     setChatOpen(next); chatOpenRef.current = next
-    if (next) setUnread(0)
+    if (next) { setUnread(0); setSrNote('') }
   }
   const sendRtt = () => {
     const e = engineRef.current
     const clean = validCallText(draft)
     if (!e || !clean) return
     const id = crypto.randomUUID()
-    if (!e.sendCallText(clean, id)) return
+    if (!e.sendCallText(clean, id)) {
+      // WS 未连接：不落假气泡、保留草稿，明确告知（绝不静默丢弃）。
+      toast(t('尚未连接，文字未发送', 'Not connected — text not sent'), 'error')
+      return
+    }
     setRtt((l) => [...l, { id, text: clean, mine: true }])
     setDraft('')
   }
@@ -146,6 +162,8 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
 
   return (
     <div className="fixed inset-0 z-[110] flex flex-col bg-[#0b0d14] text-white">
+      {/* 常驻读屏播报区：面板关闭时的来信通知。随 chatOpen 卸载的 live region 读屏收不到，必须恒渲染。 */}
+      <div className="sr-only" role="status" aria-live="polite">{srNote}</div>
       {/* 顶部信息 */}
       <div className="flex items-center gap-3 px-4 pt-[max(env(safe-area-inset-top),0.75rem)] pb-3">
         <Avatar name={peer.name || '?'} src={peer.avatar} size={40} />
@@ -204,7 +222,8 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
             )}
             {rtt.map((m) => (
               <div key={m.id} className={`flex ${m.mine ? 'justify-end' : 'justify-start'}`}>
-                <span className={`max-w-[80%] break-words rounded-xl px-2.5 py-1.5 ${m.mine ? (m.failed ? 'bg-danger/40 text-white/70 line-through' : 'bg-honey/30') : 'bg-white/15'}`}>
+                <span className={`max-w-[80%] break-words rounded-xl px-2.5 py-1.5 ${m.mine ? (m.failed ? 'bg-danger/40 text-white/70 line-through' : 'bg-honey/30') : m.fromAdmin ? 'bg-danger/25' : 'bg-white/15'}`}>
+                  {m.fromAdmin && <span className="mr-1.5 text-[10px] font-bold text-danger">{t('管理员', 'Admin')}</span>}
                   {m.text}
                 </span>
               </div>
@@ -212,7 +231,9 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
           </div>
           <div className="mt-1 flex items-center gap-2">
             <input value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={CALL_TEXT_MAX}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); sendRtt() } }}
+              onCompositionStart={() => { composingRef.current = true }}
+              onCompositionEnd={() => { setTimeout(() => { composingRef.current = false }, 0) }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && !composingRef.current) { e.preventDefault(); sendRtt() } }}
               placeholder={t('输入文字…', 'Type a message…')} aria-label={t('通话文字输入', 'In-call text input')}
               className="min-w-0 flex-1 rounded-xl bg-white/10 px-3 py-2 text-sm outline-none placeholder:text-white/40 focus:bg-white/15" />
             <button onClick={sendRtt} disabled={!validCallText(draft)} aria-label={t('发送文字', 'Send text')}

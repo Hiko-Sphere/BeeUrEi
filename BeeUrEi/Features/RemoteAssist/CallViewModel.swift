@@ -54,6 +54,7 @@ final class CallViewModel {
         let id: String
         let text: String
         let mine: Bool
+        var fromAdmin = false // 旁观管理员发的介入文字（气泡与播报须如实归属，不得冒名"对方"）
         var failed: String?  // 服务端拒绝原因（content_blocked / rate_limited / invalid_text）
     }
     private(set) var callTexts: [CallTextMessage] = []
@@ -65,11 +66,17 @@ final class CallViewModel {
         if open { unreadTexts = 0 }
     }
 
-    /// 发送通话内文字。客户端先按服务端同口径校验（trim 非空且 ≤500 字），无效或未接通返回 false。
+    /// 发送通话内文字。客户端先按服务端同口径校验（trim 非空且 UTF-16 码元 ≤500——服务端/web 都按
+    /// JS length 计数，字素簇计数会放行 emoji 长文再被服务端拒），无效或未接通返回 false，
+    /// **并播报可行动原因**（盲人按下发送后不能没有任何动静）。
     /// 气泡先落本地，若服务端拒绝（违禁词/限速）会经 in-call-text-rejected 回执标记为未发送。
     func sendCallText(_ text: String) -> Bool {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !clean.isEmpty, clean.count <= 500, connected else { return false }
+        guard connected else { announce(CallStrings.textNotConnected(lang)); return false }
+        guard !clean.isEmpty, clean.utf16.count <= 500 else {
+            if !clean.isEmpty { announce(CallStrings.callTextRejected("invalid_text", lang)) }
+            return false
+        }
         let id = UUID().uuidString
         callTexts.append(CallTextMessage(id: id, text: clean, mine: true))
         signaling.send(["type": "in-call-text", "text": clean, "id": id])
@@ -344,11 +351,13 @@ final class CallViewModel {
             }
         case "in-call-text":
             // 通话内文字：入列 + 未读计数；盲人侧把内容念出来（双通道），别让文字静默躺在没打开的面板里。
+            // id 本地生成（不信任远端 id——多发送者/重放可撞 Identifiable id）；发送者据 from 如实归属：
+            // 旁观管理员的介入文字必须标注并播报"管理员"，冒名"对方"是对以语音为唯一通道的盲人的错误陈述。
             guard let text = msg["text"] as? String, !text.isEmpty else { return }
-            let inId = "in-" + ((msg["id"] as? String) ?? UUID().uuidString) // 前缀隔离对端 id 空间，避免与本端气泡撞 id
-            callTexts.append(CallTextMessage(id: inId, text: text, mine: false))
+            let fromAdmin = adminObserverId != nil && (msg["from"] as? String) == adminObserverId
+            callTexts.append(CallTextMessage(id: UUID().uuidString, text: text, mine: false, fromAdmin: fromAdmin))
             if !textPanelOpen { unreadTexts += 1 }
-            announce(CallStrings.incomingCallText(text, lang))
+            announce(fromAdmin ? CallStrings.incomingAdminText(text, lang) : CallStrings.incomingCallText(text, lang))
         case "in-call-text-rejected":
             // 本端文字被服务端拒绝（违禁词/限速/无效）：标记对应气泡 + 播报可行动原因。
             let reason = (msg["reason"] as? String) ?? "invalid_text"

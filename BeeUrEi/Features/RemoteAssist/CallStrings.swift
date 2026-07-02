@@ -44,6 +44,18 @@ enum CallStrings {
     static func incomingCallText(_ text: String, _ l: Language) -> String {
         l == .zh ? "对方发来文字：\(text)" : "Text from them: \(text)"
     }
+    /// 旁观管理员的介入文字：播报与气泡必须如实归属，不得冒名"对方"。
+    static func incomingAdminText(_ text: String, _ l: Language) -> String {
+        l == .zh ? "管理员发来文字：\(text)" : "Text from admin: \(text)"
+    }
+    static func textAdmin(_ l: Language) -> String { l == .zh ? "管理员" : "Admin" }
+    static func textNotConnected(_ l: Language) -> String {
+        l == .zh ? "尚未接通，文字未发送。" : "Not connected yet — text not sent."
+    }
+    /// 录制期间文字会出现在录屏画面/播报音轨里（知情提示，与录制同意的诚实性一致）。
+    static func textRecordingHint(_ l: Language) -> String {
+        l == .zh ? "正在录制：文字内容会包含在录像中。" : "Recording in progress: text will appear in the recording."
+    }
     /// 服务端拒绝回执 → 可行动的话（绝不把原始码念给盲人）。
     static func callTextRejected(_ reason: String, _ l: Language) -> String {
         switch reason {

@@ -75,8 +75,20 @@ struct CallView: View {
         }
         // 通话内实时文字（RTT）：随音视频并行的文字通道。面板开合同步到 VM（关面板期间来的文字计未读并语音播报）。
         .sheet(isPresented: $showTextSheet, onDismiss: { model.setTextPanelOpen(false) }) {
-            CallTextSheet(lang: lang, model: model, onClose: { showTextSheet = false })
-                .onAppear { model.setTextPanelOpen(true) }
+            CallTextSheet(lang: lang, model: model, onClose: { showTextSheet = false }, onMagicTap: {
+                // 面板打开时 magicTap（双指双击=挂断的系统惯例）仍须可用——sheet 会遮蔽底层视图的手势。
+                showTextSheet = false
+                if model.role == .blind { showHangupConfirm = true } else { model.hangUp(); onClose() }
+            })
+            .onAppear { model.setTextPanelOpen(true) }
+        }
+        // 协助者侧控件层 4 秒自动隐藏：来文字时必须把控件层唤回，否则明眼协助者对来信零感知
+        // （A11y.announce 未开 VoiceOver 时静默；TTS 仅盲人侧）——RTT 核心场景（盲人嘈杂环境改打字）会失效。
+        .onChange(of: model.unreadTexts) { _, n in
+            if n > 0 && model.role == .helper {
+                withAnimation { controlsVisible = true }
+                scheduleAutoHide()
+            }
         }
         .task { await model.start() }
         .onChange(of: model.statusText) { _, new in announceCall(new) }
@@ -519,12 +531,21 @@ struct CallTextSheet: View {
     let lang: Language
     var model: CallViewModel
     let onClose: () -> Void
+    var onMagicTap: (() -> Void)?
     @State private var draft = ""
     @FocusState private var inputFocused: Bool
+    @AccessibilityFocusState private var a11yInputFocus: Bool
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                // 录制知情：ReplayKit 录屏会把面板上的文字（及盲人侧念读音轨）一并录进去——如实提示。
+                if model.isRecording || model.peerRecording {
+                    Text(CallStrings.textRecordingHint(lang))
+                        .font(.footnote).foregroundStyle(Color.beeDanger)
+                        .padding(.horizontal, 16).padding(.top, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 if model.callTexts.isEmpty {
                     Spacer()
                     Text(CallStrings.textEmptyHint(lang))
@@ -550,13 +571,14 @@ struct CallTextSheet: View {
                         .lineLimit(1...3)
                         .textFieldStyle(.roundedBorder)
                         .focused($inputFocused)
+                        .accessibilityFocused($a11yInputFocus)
                         .submitLabel(.send)
                         .onSubmit { send() }
                         .accessibilityLabel(CallStrings.textSheetTitle(lang))
                     Button { send() } label: {
                         Image(systemName: "arrow.up.circle.fill").font(.title)
                     }
-                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !model.connected)
                     .accessibilityLabel(CallStrings.textSend(lang))
                 }
                 .padding()
@@ -566,6 +588,16 @@ struct CallTextSheet: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(CallStrings.cancel(lang)) { onClose() } } }
         }
         .presentationDetents([.medium, .large])
+        // 面板打开时 magicTap 挂断仍可用（sheet 遮蔽底层手势，须在本层补挂）。
+        .accessibilityAction(.magicTap) { onMagicTap?() }
+        // VoiceOver 焦点管理：面板呈现动画结束后把焦点送进输入框，不让 VO 用户在面板顶部摸索。
+        .onAppear {
+            Task {
+                try? await Task.sleep(for: .seconds(0.6))
+                inputFocused = true
+                a11yInputFocus = true
+            }
+        }
     }
 
     private func send() {
@@ -573,14 +605,22 @@ struct CallTextSheet: View {
     }
 
     private func bubble(_ m: CallViewModel.CallTextMessage) -> some View {
-        HStack {
+        // 发送者如实归属：旁观管理员的介入文字标注"管理员"，不得与对端气泡混同。
+        let sender = m.mine ? CallStrings.textMine(lang) : (m.fromAdmin ? CallStrings.textAdmin(lang) : CallStrings.textPeer(lang))
+        // 失败原因必须进 accessibilityLabel——明眼人可见的红字，VoiceOver/盲文用户同样有权得到。
+        let failedSuffix = m.failed.map { "，\(CallStrings.textNotSent(lang))：\(CallStrings.callTextRejected($0, lang))" } ?? ""
+        return HStack {
             if m.mine { Spacer(minLength: 40) }
             VStack(alignment: m.mine ? .trailing : .leading, spacing: 2) {
+                if m.fromAdmin {
+                    Text(CallStrings.textAdmin(lang))
+                        .font(.caption2.weight(.bold)).foregroundStyle(Color.beeDanger)
+                }
                 Text(m.text)
                     .strikethrough(m.failed != nil)
                     .padding(.horizontal, 12).padding(.vertical, 8)
                     .background(m.mine ? (m.failed != nil ? Color.beeDanger.opacity(0.25) : Color.beeHoney.opacity(0.3))
-                                       : Color(.secondarySystemBackground),
+                                       : (m.fromAdmin ? Color.beeDanger.opacity(0.15) : Color(.secondarySystemBackground)),
                                 in: RoundedRectangle(cornerRadius: 14))
                 if let reason = m.failed {
                     Text("\(CallStrings.textNotSent(lang))：\(CallStrings.callTextRejected(reason, lang))")
@@ -591,7 +631,7 @@ struct CallTextSheet: View {
         }
         .id(m.id)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(m.mine ? CallStrings.textMine(lang) : CallStrings.textPeer(lang))：\(m.text)\(m.failed != nil ? "，" + CallStrings.textNotSent(lang) : "")")
+        .accessibilityLabel("\(sender)：\(m.text)\(failedSuffix)")
     }
 }
 

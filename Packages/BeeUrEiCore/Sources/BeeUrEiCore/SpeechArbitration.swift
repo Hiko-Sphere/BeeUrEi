@@ -31,7 +31,10 @@ public enum SpeechGate {
         if newChannel > current.channel { return .speakInterrupt }
         if newChannel < current.channel { return newDroppable ? .drop : .stash }
         // 同通道：
-        if newChannel == .navigation { return .speakEnqueue }
+        // navigation：路线预览逐行顺读依赖排队。
+        // call：通话文字（RTT）连发时逐条排队顺读——若互相掐断，前一条内容永久听不到（复审 HIGH）；
+        //       来电/挂断类播报同通道排队只是稍晚几秒，不丢信息。
+        if newChannel == .navigation || newChannel == .call { return .speakEnqueue }
         if newDroppable && !current.droppable { return .drop } // 取景提示不打断"这是X"
         return .speakInterrupt
     }

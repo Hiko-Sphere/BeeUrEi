@@ -39,7 +39,8 @@ export interface CallCallbacks {
   onMicDenied?(): void
   onEnded?(reason: 'peer' | 'admin' | 'signaling'): void
   /// 通话内实时文字（RTT）：收到对端文本 / 本端文本被服务端拒绝（rejected 带原因与回显 id）。
-  onCallText?(m: { text: string; from?: string; at?: number }): void
+  /// fromAdmin：旁观管理员发的介入文字（气泡须如实归属，不得与对端混同）。
+  onCallText?(m: { text: string; from?: string; at?: number; fromAdmin: boolean }): void
   onCallTextRejected?(reason: string, id?: string): void
 }
 
@@ -221,7 +222,11 @@ export class CallEngine {
         break
       case 'in-call-text':
         if (typeof msg.text === 'string' && msg.text) {
-          this.cb.onCallText?.({ text: msg.text, from: msg.from as string | undefined, at: typeof msg.at === 'number' ? msg.at : undefined })
+          const from = typeof msg.from === 'string' ? msg.from : undefined
+          this.cb.onCallText?.({
+            text: msg.text, from, at: typeof msg.at === 'number' ? msg.at : undefined,
+            fromAdmin: !!from && !!this.adminObserverId && from === this.adminObserverId,
+          })
         }
         break
       case 'in-call-text-rejected':
@@ -317,10 +322,12 @@ export class CallEngine {
     return this.remoteZoom
   }
   /// 通话内实时文字：客户端先按服务端同口径校验（trim 非空且 ≤500），无效返回 false 不发送。
+  /// WS 未连接同样返回 false——send() 静默吞掉会让 UI 落下"已发送"假气泡，违反"绝不静默丢弃"。
   /// id 供服务端拒绝回执（in-call-text-rejected）关联到具体气泡。
   sendCallText(text: string, id?: string): boolean {
     const t = validCallText(text)
     if (!t) return false
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false
     this.send({ type: 'in-call-text', text: t, ...(id ? { id } : {}) })
     return true
   }

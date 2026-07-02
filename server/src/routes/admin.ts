@@ -55,7 +55,11 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
   // （曾致单用户封禁只改 status 不撤会话，见修复）。patch 承载 status/passwordHash 等附加变更；tokenVersion 恒在 patch 之后，不可被覆盖。
   const severSessions = (id: string, currentTv: number, patch: Partial<User> = {}) => {
     store.deleteRefreshTokensForUser(id)
-    return store.updateUser(id, { ...patch, tokenVersion: currentTv + 1 })
+    const updated = store.updateUser(id, { ...patch, tokenVersion: currentTv + 1 })
+    // 会话撤销须同时踢掉在线 /ws：仅删 refresh + 升 tokenVersion 只对 REST 与后续重连即时生效，
+    // 已打开的信令 socket 会继续中继通话帧至 access token 到期。disconnectUser 立即关闭之（见 WS-AUTH 补全）。
+    callControl?.disconnectUser(id)
+    return updated
   }
   const nameOf = (id: string) => store.findById(id)?.displayName ?? '—'
 

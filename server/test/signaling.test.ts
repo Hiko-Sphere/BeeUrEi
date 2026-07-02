@@ -168,6 +168,49 @@ describe('WebRTC signaling relay', () => {
     await app.close()
   })
 
+  it('会话撤销(force-logout)即时踢掉在线信令 socket，对端收到 peer-left（不止拦重连）', async () => {
+    // 补全：握手校验只拦"被撤销后重连"；已打开的 socket 还需被主动关闭，否则被封用户能在既有 socket
+    // 上继续中继通话帧至 access token 到期。severSessions → callControl.disconnectUser → 关闭其所有 /ws。
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    await app.listen({ port: 0, host: '127.0.0.1' })
+    const port = (app.server.address() as { port: number }).port
+    const reg = async (u: string, role: string) => {
+      const r = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+      return { token: r.token as string, id: r.user.id as string }
+    }
+    const caller = await reg('kick_caller', 'blind')
+    const helper = await reg('kick_helper', 'helper')
+    const adminU = await reg('kick_admin', 'helper') // 注册 schema 不收 admin 角色 → 注册后直接提权
+    store.updateUser(adminU.id, { role: 'admin' })
+    const adminTok = (await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'kick_admin', password: 'secret123' } })).json().token
+
+    const link = await app.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${caller.token}` }, payload: { username: 'kick_helper' } })
+    await app.inject({ method: 'POST', url: `/api/family/links/${link.json().link.id}/accept`, headers: { authorization: `Bearer ${helper.token}` } })
+    await app.inject({ method: 'POST', url: '/api/assist/call', headers: { authorization: `Bearer ${caller.token}` }, payload: { callId: 'kk1', targetUserIds: [helper.id] } })
+
+    const base = `ws://127.0.0.1:${port}/ws`
+    const ws1 = new WebSocket(`${base}?token=${caller.token}`)
+    const ws2 = new WebSocket(`${base}?token=${helper.token}`)
+    await Promise.all([open(ws1), open(ws2)])
+    const joined1 = nextMessage(ws1, (m) => m.type === 'joined')
+    const joined2 = nextMessage(ws2, (m) => m.type === 'joined')
+    ws1.send(JSON.stringify({ type: 'join', callId: 'kk1', role: 'blind' }))
+    ws2.send(JSON.stringify({ type: 'join', callId: 'kk1', role: 'helper' }))
+    await Promise.all([joined1, joined2])
+
+    // 管理员强制下线 caller：其 socket 应被关闭(4001)，helper 收到 peer-left(带 caller userId) 以便干净结束通话。
+    const callerClosed = new Promise<number>((resolve) => ws1.on('close', (code) => resolve(code)))
+    const leftAtHelper = nextMessage(ws2, (m) => m.type === 'peer-left')
+    const fl = await app.inject({ method: 'POST', url: `/api/admin/users/${caller.id}/force-logout`, headers: { authorization: `Bearer ${adminTok}` } })
+    expect(fl.statusCode).toBe(200)
+    expect(await callerClosed).toBe(4001)
+    expect((await leftAtHelper).userId).toBe(caller.id)
+
+    ws2.close()
+    await app.close()
+  })
+
   it('rejects joining a call the user is not a participant of (no eavesdropping)', async () => {
     const app = buildApp(new MemoryStore())
     await app.listen({ port: 0, host: '127.0.0.1' })

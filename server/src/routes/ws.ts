@@ -21,8 +21,10 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
   // 默认(ws 库 100 MiB)对纯信令过大——通话参与者可发超大帧，被 JSON.parse 放大分配 + 转发给对端 → 内存放大 DoS。
   app.register(fastifyWebsocket, { options: { maxPayload: 256 * 1024 } })
   app.register(async (f) => {
-    // clientId → socket（转发用）。adapter 层，故用 any 规避 ws 类型摩擦。
-    const sockets = new Map<string, { send: (s: string) => void; readyState: number }>()
+    // clientId → socket（转发用）。adapter 层，故用 any 规避 ws 类型摩擦。close 供会话撤销时主动断开。
+    const sockets = new Map<string, { send: (s: string) => void; readyState: number; close: (code?: number, reason?: string) => void }>()
+    // userId → 其所有在线 clientId：供 severSessions(封禁/强制下线/改密) 即时切断该用户全部 /ws（见 disconnectUser）。
+    const userSockets = new Map<string, Set<string>>()
 
     // 管理员 REST → 推送到通话房间：强制结束。向房间各端发 end（注明 by:admin），返回端数。
     if (callControl) {
@@ -31,6 +33,17 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
         for (const p of hub.peersInCall(callId)) {
           const s = sockets.get(p.clientId)
           if (s && s.readyState === 1) { s.send(JSON.stringify({ type: 'end', by: 'admin', adminId: byAdminId })); n++ }
+        }
+        return n
+      }
+      // 会话撤销即时踢线：关闭该用户所有在线 socket。close 会触发下方 'close' 处理器，
+      // 完成 hub.leave + 向对端转发 peer-left（盲人侧据此干净结束通话）+ 两映射表清理。
+      // 快照 clientId 数组再遍历，避免 close 处理器同步改动 userSockets 造成迭代冲突。
+      callControl.disconnectUser = (userId) => {
+        let n = 0
+        for (const clientId of [...(userSockets.get(userId) ?? [])]) {
+          const s = sockets.get(clientId)
+          if (s) { try { s.close(4001, 'session_revoked') } catch { /* 已在关闭中则忽略 */ } n++ }
         }
         return n
       }
@@ -55,6 +68,10 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
       }
       const clientId = randomUUID()
       sockets.set(clientId, socket)
+      // 登记 userId → clientId，供会话撤销时按用户批量断开。
+      let userClientIds = userSockets.get(auth.sub)
+      if (!userClientIds) { userClientIds = new Set(); userSockets.set(auth.sub, userClientIds) }
+      userClientIds.add(clientId)
       let joined: Member | null = null
 
       const relay = (toClientId: string, obj: unknown) => {
@@ -171,6 +188,8 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
 
       socket.on('close', () => {
         sockets.delete(clientId)
+        const ids = userSockets.get(auth.sub)
+        if (ids) { ids.delete(clientId); if (ids.size === 0) userSockets.delete(auth.sub) }
         if (joined) {
           const { peers } = hub.leave(clientId)
           for (const p of peers) relay(p.clientId, { type: 'peer-left', userId: auth.sub })

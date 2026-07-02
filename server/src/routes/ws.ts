@@ -43,6 +43,16 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
         socket.close(4001, 'unauthorized')
         return
       }
+      // 与 REST(requireAuth) 同源的**实时账号校验**：仅验签不够——封禁(status)/改密或强制下线(tokenVersion)/
+      // 按设备登出(session) 必须即时切断信令，否则被封禁用户仍能凭尚未过期(≤1h TTL)的 access token 重新接入
+      // /ws、继续中继 offer/answer/ice/control/record-* 帧，与盲人保持在本应被封停的实时通话中（见审计 WS-AUTH）。
+      const acct = store.findById(auth.sub)
+      if (!acct || acct.status !== 'active'
+          || (acct.tokenVersion ?? 0) !== (auth.tv ?? 0)
+          || (auth.sid && !store.hasActiveSession(auth.sub, auth.sid, Date.now()))) {
+        socket.close(4001, 'unauthorized')
+        return
+      }
       const clientId = randomUUID()
       sockets.set(clientId, socket)
       let joined: Member | null = null

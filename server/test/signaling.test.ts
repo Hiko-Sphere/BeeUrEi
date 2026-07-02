@@ -141,6 +141,33 @@ describe('WebRTC signaling relay', () => {
     await app.close()
   })
 
+  it('rejects a token whose account was banned or force-logged-out after issue (WS parity with REST)', async () => {
+    // 回归：/ws 握手此前只验签(verifyAccessToken)，不查库；被封禁/改密/远程登出的用户仍能凭未过期的
+    // access token 重新接入信令、继续与盲人的实时通话。现要求握手与 requireAuth 同源实时校验 status/tokenVersion/session。
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    await app.listen({ port: 0, host: '127.0.0.1' })
+    const port = (app.server.address() as { port: number }).port
+    const reg = async (u: string, role: string) => {
+      const r = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+      return { token: r.token as string, id: r.user.id as string }
+    }
+
+    // ① 封禁：status→disabled，握手必须立即 4001（REST 亦即时 401，不等 1h TTL）。
+    const banned = await reg('ws_banned', 'helper')
+    store.updateUser(banned.id, { status: 'disabled' })
+    const wsB = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${banned.token}`)
+    expect(await new Promise<number>((resolve) => wsB.on('close', (code) => resolve(code)))).toBe(4001)
+
+    // ② 改密/强制下线：tokenVersion 递增使旧 access token 立即失效 → 握手 4001。
+    const revoked = await reg('ws_revoked', 'helper')
+    store.updateUser(revoked.id, { tokenVersion: 1 })
+    const wsR = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${revoked.token}`)
+    expect(await new Promise<number>((resolve) => wsR.on('close', (code) => resolve(code)))).toBe(4001)
+
+    await app.close()
+  })
+
   it('rejects joining a call the user is not a participant of (no eavesdropping)', async () => {
     const app = buildApp(new MemoryStore())
     await app.listen({ port: 0, host: '127.0.0.1' })

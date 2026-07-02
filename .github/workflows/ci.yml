@@ -63,9 +63,15 @@ jobs:
 
   ios-build:
     name: iOS 构建
-    runs-on: macos-14
+    # macos-14 的默认 Xcode 远旧于本仓实际工具链（本机 Xcode 26.6 构建通过、同配方 CI 恒失败）；
+    # 用最新镜像并显式选镜像内最新 Xcode。core 的 swift test 在 macos-14 一直绿，不动。
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Select newest Xcode on runner
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          xcodebuild -version
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Fetch WebRTC.xcframework (A2 真实音视频，CI 可达 GitHub)

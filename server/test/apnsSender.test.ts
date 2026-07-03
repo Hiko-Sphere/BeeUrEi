@@ -3,7 +3,7 @@ import { generateKeyPairSync, createPrivateKey } from 'node:crypto'
 import { writeFileSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { NoopPushSender, ApnsPushSender, makePushSender, buildAlertPayload, type PushSender } from '../src/push/apns'
+import { NoopPushSender, ApnsError, ApnsPushSender, makePushSender, buildAlertPayload, type PushSender } from '../src/push/apns'
 
 /// A1 VoIP/提醒推送发送器单测。不打真实 APNs（不需要 Apple 账号）：
 /// 用本机生成的 P-256 私钥走真实 ES256 JWT 签名路径，网络则指向本机已关闭端口走「失败被吞」路径。
@@ -71,5 +71,34 @@ describe('buildAlertPayload', () => {
     expect(JSON.parse(buildAlertPayload('t', 'b', {}, undefined, 5)).aps.badge).toBe(5)
     expect(JSON.parse(buildAlertPayload('t', 'b', {}, 'dm:u1', 0)).aps.badge).toBe(0) // 0 也要下发（清零角标）
     expect(JSON.parse(buildAlertPayload('t', 'b', {})).aps.badge).toBeUndefined()
+  })
+})
+
+describe('APNs 送达健康度挂钩（onOutcome）', () => {
+  // 契约是"失败只记日志绝不抛出"——外层装饰器观察不到失败，只有实现内部知道结果，故用挂钩。
+  class OkSender extends ApnsPushSender {
+    protected override post(): Promise<void> { return Promise.resolve() }
+  }
+  class FailSender extends ApnsPushSender {
+    protected override post(): Promise<void> { return Promise.reject(new ApnsError(500, 'boom')) }
+  }
+  const key = generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey
+
+  it('成功→ok=true；失败→ok=false（sendAlert 与 sendCallInvite 两路都回调）', async () => {
+    const outcomes: boolean[] = []
+    const ok = new OkSender(key, 'kid', 'team', 'topic.voip', 'host', 'topic')
+    ok.onOutcome = (o) => outcomes.push(o)
+    await ok.sendAlert('t'.repeat(64), 'T', 'B')
+    await ok.sendCallInvite('t'.repeat(64), 'c1', 'N', 'u1')
+    const fail = new FailSender(key, 'kid', 'team', 'topic.voip', 'host', 'topic')
+    fail.onOutcome = (o) => outcomes.push(o)
+    await fail.sendAlert('t'.repeat(64), 'T', 'B')      // 不抛（契约不变）
+    await fail.sendCallInvite('t'.repeat(64), 'c1', 'N', 'u1')
+    expect(outcomes).toEqual([true, true, false, false])
+  })
+
+  it('未设挂钩不影响发送（可选回调，失败安全）', async () => {
+    const s = new FailSender(key, 'kid', 'team', 'topic.voip', 'host', 'topic')
+    await expect(s.sendAlert('t'.repeat(64), 'T', 'B')).resolves.toBeUndefined()
   })
 })

@@ -132,8 +132,11 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
 
   // 业务计数预置 0 基线：使这些 series 自启动起就存在，避免 Prometheus rate() 在首次命中时断档（见复审 #5）。
   for (const name of ['calls_registered_total', 'help_requests_total', 'help_claims_total',
-                      'web_push_sent_total', 'web_push_failed_total']) metrics.inc(name, 0)
+                      'web_push_sent_total', 'web_push_failed_total',
+                      'apns_sent_total', 'apns_failed_total']) metrics.inc(name, 0)
   // Web Push 计数装饰（单点包裹，扇出调用点零改动）：送达健康度进 /metrics。
+  // APNs 送达健康度：挂钩注入（接口契约"绝不抛出"，外层装饰器观察不到失败——见 apns.ts onOutcome）。
+  pushSender.onOutcome = (ok) => metrics.inc(ok ? 'apns_sent_total' : 'apns_failed_total')
   const webPushSender: WebPushSender = new CountingWebPushSender(rawWebPushSender, (n) => metrics.inc(n))
   setNotifyWebPush(webPushSender) // notifyUser 统一投递的 Web Push 通道（模块单例，见 notify.ts）——包裹后注入，计数覆盖该路
 

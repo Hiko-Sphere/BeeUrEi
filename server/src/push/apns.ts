@@ -12,6 +12,10 @@ export interface PushSender {
   /// threadId：APNs thread-id，用于在通知中心按会话**分组折叠**（同一对话/群的多条通知不刷屏）。
   /// badge：App 图标角标数（收件人当前未读总数）——后台收到消息即在图标上递增。
   sendAlert(apnsToken: string, title: string, body: string, extra?: Record<string, string>, threadId?: string, badge?: number): Promise<void>
+  /// 送达健康度挂钩（可选，buildApp 注入 Prometheus 计数）：每次真实发送后回调 ok。
+  /// 之所以用挂钩而非外层装饰器：本接口契约是"失败只记日志绝不抛出"（不阻断呼叫/消息主流程），
+  /// 装饰器在外层观察不到失败——只有实现内部知道结果。Noop 不发送故不回调（不虚报 sent）。
+  onOutcome?: (ok: boolean) => void
 }
 
 /// 带 HTTP 状态的 APNs 错误——让发送方能区分"token 确定失效(410)"与其它失败（超时/连接错误 status=0、
@@ -38,6 +42,7 @@ export function buildAlertPayload(title: string, body: string, extra?: Record<st
 
 /// 未配置 APNs 时的空实现（前台轮询/应用内通知仍可用，仅后台横幅不弹）。
 export class NoopPushSender implements PushSender {
+  onOutcome?: (ok: boolean) => void // 挂钩存在但永不回调：Noop 不发送，计数保持 0（不虚报）
   async sendCallInvite(): Promise<void> {}
   async sendAlert(): Promise<void> {}
 }
@@ -49,6 +54,7 @@ function base64url(input: Buffer | string): string {
 /// 真实 APNs VoIP 推送。需环境变量：APNS_KEY_PATH(.p8)、APNS_KEY_ID、APNS_TEAM_ID、APNS_TOPIC(如 com.beeurei.BeeUrEi.voip)。
 /// APNS_HOST 默认沙盒 api.sandbox.push.apple.com（开发证书）；生产改 api.push.apple.com。
 export class ApnsPushSender implements PushSender {
+  onOutcome?: (ok: boolean) => void
   private cachedJwt?: { token: string; iat: number }
 
   constructor(
@@ -85,9 +91,11 @@ export class ApnsPushSender implements PushSender {
         'apns-priority': '10',
         'apns-expiration': '0',
       }, body)
+      this.onOutcome?.(true)
     } catch (err) {
       console.warn('[apns] VoIP push failed:', (err as Error).message)
       if (err instanceof ApnsError && shouldInvalidateToken(err.status)) this.onInvalidToken?.(voipToken)
+      this.onOutcome?.(false)
     }
   }
 
@@ -100,9 +108,11 @@ export class ApnsPushSender implements PushSender {
         'apns-push-type': 'alert',
         'apns-priority': '10',
       }, payload)
+      this.onOutcome?.(true)
     } catch (err) {
       console.warn('[apns] alert push failed:', (err as Error).message)
       if (err instanceof ApnsError && shouldInvalidateToken(err.status)) this.onInvalidToken?.(apnsToken)
+      this.onOutcome?.(false)
     }
   }
 

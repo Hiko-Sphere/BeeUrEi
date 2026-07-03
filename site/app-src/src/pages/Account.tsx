@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, APIError, contentBlockedText, reencodeToJpeg, uploadVerificationDoc, type SelfView, type SessionInfo, type VerificationStatusInfo } from '../lib/api'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
-import { subscribeWebPush, unsubscribeWebPush, isWebPushSubscribed, webPushSupported } from '../lib/webPush'
+import { subscribeWebPush, unsubscribeWebPush, isWebPushSubscribed, webPushSupported, resyncWebPushSubscription } from '../lib/webPush'
 import { roleLabel } from '../components/Layout'
 import { Card, Avatar, Button, Field, Input, useToast, Modal } from '../components/ui'
 
@@ -607,7 +607,9 @@ function WebPushCard() {
       if (!webPushSupported()) { if (alive) setState('unsupported'); return }
       try { await api.webVapidKey() } catch { if (alive) setState('unsupported'); return } // 服务端未配 VAPID
       if (Notification.permission === 'denied') { if (alive) setState('denied'); return }
-      if (alive) setState((await isWebPushSubscribed()) ? 'on' : 'off')
+      const subscribed = await isWebPushSubscribed()
+      if (subscribed) void resyncWebPushSubscription() // 自愈：服务端行若被驱逐/回收，此刻幂等补回（防"开关开着却收不到"的假安心）
+      if (alive) setState(subscribed ? 'on' : 'off')
     })()
     return () => { alive = false }
   }, [])

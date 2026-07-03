@@ -57,6 +57,22 @@ export async function isWebPushSubscribed(): Promise<boolean> {
   return !!(await reg?.pushManager.getSubscription())
 }
 
+/// 自愈重同步：浏览器侧订阅存在但服务端行可能已没（上限驱逐/410 回收/封禁再启用/换库恢复）
+/// ——此时设置开关显示"已开启"但实际收不到，**假安心比没有更危险**。设置页初始化时调用：
+/// 把现有浏览器订阅幂等重传服务端（upsert，端点相同不产生新行），任何分歧在用户下次看设置时
+/// 自动修复。失败静默（下次再试）。
+export async function resyncWebPushSubscription(): Promise<void> {
+  try {
+    if (!webPushSupported() || Notification.permission !== 'granted') return
+    const reg = await navigator.serviceWorker.getRegistration('/app/sw.js')
+    const sub = await reg?.pushManager.getSubscription()
+    if (!sub) return
+    const json = sub.toJSON()
+    if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return
+    await api.webPushSubscribe({ endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth } })
+  } catch { /* 尽力而为，设置页下次打开再试 */ }
+}
+
 /// 登出专用退订：与 iOS 登出注销 APNs/VoIP token 同一口径（防已登出的共享电脑继续弹出
 /// 家人的紧急告警/消息系统通知——隐私泄漏）。token 由调用方**在清除前同步快照**传入
 /// （退订是异步的，等它跑起来 tokenStore 已被清）；全程尽力而为，离线登出照常瞬时完成。

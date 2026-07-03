@@ -37,3 +37,37 @@ describe('unsubscribeWebPushOnSignOut', () => {
     expect(unsubscribe).toHaveBeenCalledOnce()
   })
 })
+
+describe('resyncWebPushSubscription（自愈重同步）', () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
+
+  it('浏览器侧已订阅 → 幂等重传服务端（upsert 同端点不产生新行）', async () => {
+    const { resyncWebPushSubscription } = await import('./webPush')
+    const { api } = await import('./api')
+    const spy = vi.spyOn(api, 'webPushSubscribe').mockResolvedValue({} as never)
+    vi.stubGlobal('Notification', { permission: 'granted' })
+    vi.stubGlobal('PushManager', function () {})
+    vi.stubGlobal('navigator', { serviceWorker: { getRegistration: vi.fn().mockResolvedValue({ pushManager: { getSubscription: () => Promise.resolve({
+      toJSON: () => ({ endpoint: 'https://e/1', keys: { p256dh: 'k', auth: 'a' } }) }) } }) } })
+    vi.stubGlobal('window', globalThis)
+    await resyncWebPushSubscription()
+    expect(spy).toHaveBeenCalledWith({ endpoint: 'https://e/1', keys: { p256dh: 'k', auth: 'a' } })
+  })
+
+  it('未订阅/权限未授 → 零请求；服务端失败不抛（下次设置页再试）', async () => {
+    const { resyncWebPushSubscription } = await import('./webPush')
+    const { api } = await import('./api')
+    const spy = vi.spyOn(api, 'webPushSubscribe').mockRejectedValue(new Error('x'))
+    vi.stubGlobal('Notification', { permission: 'denied' })
+    vi.stubGlobal('PushManager', function () {})
+    vi.stubGlobal('navigator', { serviceWorker: { getRegistration: vi.fn() } })
+    vi.stubGlobal('window', globalThis)
+    await expect(resyncWebPushSubscription()).resolves.toBeUndefined()
+    expect(spy).not.toHaveBeenCalled()
+    // 已授权但上报失败 → 仍不抛
+    vi.stubGlobal('Notification', { permission: 'granted' })
+    vi.stubGlobal('navigator', { serviceWorker: { getRegistration: vi.fn().mockResolvedValue({ pushManager: { getSubscription: () => Promise.resolve({
+      toJSON: () => ({ endpoint: 'https://e/2', keys: { p256dh: 'k', auth: 'a' } }) }) } }) } })
+    await expect(resyncWebPushSubscription()).resolves.toBeUndefined()
+  })
+})

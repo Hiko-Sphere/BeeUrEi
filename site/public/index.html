@@ -36,9 +36,92 @@
 {
   "@context": "https://schema.org",
   "@graph": [
-    { "@type": "Organization", "@id": "https://beeurei.hikosphere.com/#org", "name": "Hiko Sphere 彦穹科技", "url": "https://beeurei.hikosphere.com", "logo": "https://beeurei.hikosphere.com/assets/logo.svg", "founder": { "@type": "Person", "name": "Li Yanpei Hiko" } },
-    { "@type": "WebSite", "@id": "https://beeurei.hikosphere.com/#website", "name": "BeeUrEi 蜂之眼", "url": "https://beeurei.hikosphere.com", "inLanguage": ["zh-Hans", "en"], "publisher": { "@id": "https://beeurei.hikosphere.com/#org" } },
-    { "@type": "MobileApplication", "name": "BeeUrEi 蜂之眼", "operatingSystem": "iOS", "applicationCategory": "HealthApplication", "description": "On-device real-time obstacle avoidance, scene recognition, live remote assistance and emergency calls for blind and low-vision people. Privacy-first; all vision AI runs on the device.", "inLanguage": ["zh-Hans", "en"], "license": "https://polyformproject.org/licenses/noncommercial/1.0.0", "publisher": { "@id": "https://beeurei.hikosphere.com/#org" } }
+    {
+      "@type": "Organization",
+      "@id": "https://beeurei.hikosphere.com/#org",
+      "name": "Hiko Sphere 彦穹科技",
+      "url": "https://beeurei.hikosphere.com",
+      "logo": "https://beeurei.hikosphere.com/assets/logo.svg",
+      "founder": {
+        "@type": "Person",
+        "name": "Li Yanpei Hiko"
+      }
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://beeurei.hikosphere.com/#website",
+      "name": "BeeUrEi 蜂之眼",
+      "url": "https://beeurei.hikosphere.com",
+      "inLanguage": [
+        "zh-Hans",
+        "en"
+      ],
+      "publisher": {
+        "@id": "https://beeurei.hikosphere.com/#org"
+      }
+    },
+    {
+      "@type": "MobileApplication",
+      "name": "BeeUrEi 蜂之眼",
+      "operatingSystem": "iOS",
+      "applicationCategory": "HealthApplication",
+      "description": "On-device real-time obstacle avoidance, scene recognition, live remote assistance and emergency calls for blind and low-vision people. Privacy-first; all vision AI runs on the device.",
+      "inLanguage": [
+        "zh-Hans",
+        "en"
+      ],
+      "license": "https://polyformproject.org/licenses/noncommercial/1.0.0",
+      "publisher": {
+        "@id": "https://beeurei.hikosphere.com/#org"
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://beeurei.hikosphere.com/#faq",
+      "inLanguage": "zh-CN",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "需要哪种 iPhone？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "实时避障依赖 LiDAR，需要带激光雷达的 iPhone（iPhone 12 Pro 及更新的 Pro 机型）。其余功能（识别、远程协助、消息等）在更多机型上也可使用。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "需要联网吗？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "避障与识别在本机离线运行，不需要联网。远程协助、消息与紧急通知是联网功能。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "我的摄像头画面会被上传吗？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "默认不会。所有视觉 AI 在本机完成；只有你主动向选定的人发起远程协助、并按住「显示画面」时，画面才会实时传输。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "它能替代白手杖或导盲犬吗？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "不能。它是增强感知的辅助工具，不是安全设备，无法检测出每一个障碍。请始终保留并优先使用白手杖、导盲犬与定向行走训练。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "多少钱？什么时候上架？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "蜂之眼采用 PolyForm 非商用许可，面向其服务的视障用户不收费。目前尚未上架 App Store，正在准备中，敬请关注。"
+          }
+        }
+      ]
+    }
   ]
 }
 </script>

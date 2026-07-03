@@ -65,6 +65,14 @@ export function registerPushRoutes(app: FastifyInstance, store: Store, webPush?:
     store.clearWebPushSubscriptionFromOthers(parsed.data.endpoint, req.user!.sub)
     store.upsertWebPushSubscription({ endpoint: parsed.data.endpoint, userId: req.user!.sub,
       p256dh: parsed.data.keys.p256dh, auth: parsed.data.keys.auth, createdAt: Date.now() })
+    // 每用户订阅总量上限（默认 8，WEB_PUSH_MAX_PER_USER 可调）：subscribe 限流只限速率不限存量——
+    // 伪造 endpoint 无限囤积会让每条通知放大成 N 次推送（费时+可作三方轰炸跳板）。超限**驱逐最旧**
+    // 而非拒绝：换浏览器/清站点数据是正常 churn，最新订阅才是活跃浏览器；旧的多半已是死订阅。
+    const maxSubs = (() => { const v = Number(process.env.WEB_PUSH_MAX_PER_USER); return Number.isFinite(v) && v >= 1 ? Math.floor(v) : 8 })()
+    const mine = store.webPushSubscriptionsForUser(req.user!.sub).sort((a, b) => a.createdAt - b.createdAt)
+    for (const stale of mine.slice(0, Math.max(0, mine.length - maxSubs))) {
+      store.deleteWebPushSubscription(stale.endpoint)
+    }
     return { ok: true }
   })
 

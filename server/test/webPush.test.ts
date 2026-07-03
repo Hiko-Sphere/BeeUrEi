@@ -134,6 +134,25 @@ describe('Web Push（浏览器推送紧急告警）', () => {
     await a.close()
   })
 
+  it('每用户订阅总量上限：超限驱逐最旧（限速≠限存量；换浏览器不被卡死）', async () => {
+    process.env.WEB_PUSH_MAX_PER_USER = '3'
+    try {
+      const wp = new RecordingWebPush()
+      const { a, store, helper, hAuth } = await seed(wp)
+      // 5 个不同 endpoint（同一浏览器 upsert 不算增长，这里模拟多浏览器/伪造囤积）。
+      for (let i = 1; i <= 5; i++) {
+        const r = await a.inject({ method: 'POST', url: '/api/push/web-subscribe', headers: hAuth,
+          payload: { endpoint: `https://push.example/ep/${i}`, keys: SUB.keys } })
+        expect(r.statusCode).toBe(200) // 不拒绝——驱逐最旧
+      }
+      const subs = store.webPushSubscriptionsForUser(helper.user.id)
+      expect(subs.length).toBe(3)
+      const eps = subs.map((s2) => s2.endpoint).sort()
+      expect(eps).toEqual(['https://push.example/ep/3', 'https://push.example/ep/4', 'https://push.example/ep/5']) // 最旧的 1/2 被驱逐
+      await a.close()
+    } finally { delete process.env.WEB_PUSH_MAX_PER_USER }
+  })
+
   it('删号级联：订阅随人清除（双存储各自验证存储层）', async () => {
     const wp = new RecordingWebPush()
     const { a, store, helper, hAuth } = await seed(wp)

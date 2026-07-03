@@ -219,14 +219,30 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     return reply.send({ ...tokens, user: selfView(user) })
   })
 
-  // 用 refresh token 换新的一对 token（轮换：旧 refresh 立即作废）。
+  // 重放宽限窗：轮换后的旧 refresh 在此窗内再次出现视为"响应丢失后的合法重试"（弱网/进程被杀），
+  // 仍按原会话换发新对；超窗再现 = 被窃信号 → 吊销整个会话族（OWASP refresh rotation + reuse detection；
+  // 宽限做法同 Auth0 reuse interval）。REFRESH_REUSE_GRACE_MS 可调，默认 30s；测试置 0 走严格路径。
+  const reuseGraceMs = () => {
+    const v = Number(process.env.REFRESH_REUSE_GRACE_MS)
+    return Number.isFinite(v) && v >= 0 ? v : 30_000
+  }
+  // 用 refresh token 换新的一对 token（轮换：旧 refresh 留墓碑立即作废，重放触发会话族吊销）。
   app.post('/api/auth/refresh', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = refreshSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const now = Date.now()
     const hash = hashToken(parsed.data.refreshToken)
     const rt = store.findRefreshToken(hash)
-    if (!rt || rt.expiresAt < Date.now()) {
+    if (!rt || rt.expiresAt < now) {
       if (rt) store.deleteRefreshToken(hash)
+      return reply.code(401).send({ error: 'invalid_refresh_token' })
+    }
+    // 重放检测：墓碑再现。宽限窗内视为丢响应重试（放行换发）；超窗=此 token 曾被第二方用过 →
+    // 无从分辨窃者与本人，吊销该会话全部 token（access 因 hasActiveSession 检查随之立即失效），
+    // 强制该设备重新登录。错误码刻意与普通失效相同——不给攻击者"已被识破"的信号。
+    if (rt.rotatedAt != null && now - rt.rotatedAt > reuseGraceMs()) {
+      if (rt.sessionId) store.revokeSession(rt.userId, rt.sessionId)
+      else store.deleteRefreshToken(hash)
       return reply.code(401).send({ error: 'invalid_refresh_token' })
     }
     const user = store.findById(rt.userId)
@@ -234,7 +250,7 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
       store.deleteRefreshToken(hash)
       return reply.code(401).send({ error: 'invalid_refresh_token' })
     }
-    store.deleteRefreshToken(hash) // 轮换
+    if (rt.rotatedAt == null) store.markRefreshTokenRotated(hash, now) // 轮换：留墓碑（重放检测的基石）；宽限重试不刷新墓碑时刻
     // 续期：延续同一会话（sessionId 不变），更新 lastSeenAt，保留设备标签与创建时间——使「登录设备」列表稳定。
     const tokens = issueTokens(store, user, { sid: rt.sessionId, deviceLabel: rt.deviceLabel, createdAt: rt.createdAt })
     return reply.send({ ...tokens, user: selfView(user) })

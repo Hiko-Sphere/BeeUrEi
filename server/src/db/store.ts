@@ -283,6 +283,7 @@ export interface RefreshToken {
   deviceLabel?: string // 设备友好标签（如 "iPhone"/"Chrome · Mac"），展示用
   createdAt?: number   // 会话创建（首次登录）时间
   lastSeenAt?: number  // 最近一次活动（refresh）时间
+  rotatedAt?: number   // 墓碑：该 token 已被轮换用过的时刻。再次出现=重放（被窃信号）→ 吊销整个会话族。
 }
 
 /// 一个登录会话（去 token 哈希后对外展示）。
@@ -484,6 +485,8 @@ export interface Store {
   findRefreshToken(tokenHash: string): RefreshToken | undefined
   deleteRefreshToken(tokenHash: string): void
   deleteRefreshTokensForUser(userId: string): void
+  markRefreshTokenRotated(tokenHash: string, at: number): void // 轮换时留墓碑（供重放检测），不硬删
+  deleteExpiredRefreshTokens(nowMs: number): number // 清扫过期 token（含墓碑），返回条数
   countSessionsForUser(userId: string, nowMs: number): number // 未过期 refresh token 数（活跃会话数，供后台展示）
   // 登录设备/会话管理
   sessionsForUser(userId: string, nowMs: number): SessionInfo[] // 该用户未过期的会话（按 sessionId，最近活动倒序）
@@ -625,15 +628,25 @@ export class MemoryStore implements Store {
     for (const [k, v] of this.refreshTokens) if (v.userId === userId) { this.refreshTokens.delete(k); changed = true }
     if (changed) this.afterMutate()
   }
+  markRefreshTokenRotated(tokenHash: string, at: number): void {
+    const rt = this.refreshTokens.get(tokenHash)
+    if (rt) { this.refreshTokens.set(tokenHash, { ...rt, rotatedAt: at }); this.afterMutate() }
+  }
+  deleteExpiredRefreshTokens(nowMs: number): number {
+    let n = 0
+    for (const [k, v] of this.refreshTokens) if (v.expiresAt <= nowMs) { this.refreshTokens.delete(k); n++ }
+    if (n) this.afterMutate()
+    return n
+  }
   countSessionsForUser(userId: string, nowMs: number): number {
     let n = 0
-    for (const v of this.refreshTokens.values()) if (v.userId === userId && v.expiresAt > nowMs) n++
+    for (const v of this.refreshTokens.values()) if (v.userId === userId && v.expiresAt > nowMs && v.rotatedAt == null) n++
     return n
   }
   sessionsForUser(userId: string, nowMs: number): SessionInfo[] {
     const out = new Map<string, SessionInfo>()
     for (const v of this.refreshTokens.values()) {
-      if (v.userId !== userId || v.expiresAt <= nowMs || !v.sessionId) continue
+      if (v.userId !== userId || v.expiresAt <= nowMs || !v.sessionId || v.rotatedAt != null) continue
       const prev = out.get(v.sessionId)
       // 同会话理论上轮换后只剩一条；保险起见取最近活动的一条。
       if (!prev || (v.lastSeenAt ?? 0) > (prev.lastSeenAt ?? 0)) {
@@ -643,7 +656,7 @@ export class MemoryStore implements Store {
     return [...out.values()].sort((a, b) => (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0))
   }
   hasActiveSession(userId: string, sessionId: string, nowMs: number): boolean {
-    for (const v of this.refreshTokens.values()) if (v.userId === userId && v.sessionId === sessionId && v.expiresAt > nowMs) return true
+    for (const v of this.refreshTokens.values()) if (v.userId === userId && v.sessionId === sessionId && v.expiresAt > nowMs && v.rotatedAt == null) return true
     return false
   }
   revokeSession(userId: string, sessionId: string): void {

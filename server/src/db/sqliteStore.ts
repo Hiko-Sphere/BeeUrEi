@@ -154,6 +154,7 @@ export class SqliteStore implements Store {
     try { this.db.exec('ALTER TABLE refresh_tokens ADD COLUMN deviceLabel TEXT') } catch { /* 列已存在 */ }
     try { this.db.exec('ALTER TABLE refresh_tokens ADD COLUMN createdAt INTEGER') } catch { /* 列已存在 */ }
     try { this.db.exec('ALTER TABLE refresh_tokens ADD COLUMN lastSeenAt INTEGER') } catch { /* 列已存在 */ }
+    try { this.db.exec('ALTER TABLE refresh_tokens ADD COLUMN rotatedAt INTEGER') } catch { /* 列已存在 */ } // 墓碑：重放检测（见 auth refresh）
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_refresh_user ON refresh_tokens (userId)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_refresh_session ON refresh_tokens (userId, sessionId)')
     // 实名认证（KYC）：用户布尔徽章 + verifications 表（敏感字段 nameSealed/idNumberSealed/blobs 存 AES-256-GCM 信封 JSON）。
@@ -177,33 +178,39 @@ export class SqliteStore implements Store {
 
   // MARK: refresh tokens
   createRefreshToken(rt: RefreshToken): void {
-    this.db.prepare('INSERT OR REPLACE INTO refresh_tokens (tokenHash, userId, expiresAt, sessionId, deviceLabel, createdAt, lastSeenAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(rt.tokenHash, rt.userId, rt.expiresAt, rt.sessionId ?? null, rt.deviceLabel ?? null, rt.createdAt ?? null, rt.lastSeenAt ?? null)
+    this.db.prepare('INSERT OR REPLACE INTO refresh_tokens (tokenHash, userId, expiresAt, sessionId, deviceLabel, createdAt, lastSeenAt, rotatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(rt.tokenHash, rt.userId, rt.expiresAt, rt.sessionId ?? null, rt.deviceLabel ?? null, rt.createdAt ?? null, rt.lastSeenAt ?? null, rt.rotatedAt ?? null)
   }
   findRefreshToken(tokenHash: string): RefreshToken | undefined {
     const row = this.db.prepare('SELECT * FROM refresh_tokens WHERE tokenHash = ?').get(tokenHash) as any
-    return row ? { tokenHash: row.tokenHash, userId: row.userId, expiresAt: Number(row.expiresAt), sessionId: row.sessionId ?? undefined, deviceLabel: row.deviceLabel ?? undefined, createdAt: row.createdAt != null ? Number(row.createdAt) : undefined, lastSeenAt: row.lastSeenAt != null ? Number(row.lastSeenAt) : undefined } : undefined
+    return row ? { tokenHash: row.tokenHash, userId: row.userId, expiresAt: Number(row.expiresAt), sessionId: row.sessionId ?? undefined, deviceLabel: row.deviceLabel ?? undefined, createdAt: row.createdAt != null ? Number(row.createdAt) : undefined, lastSeenAt: row.lastSeenAt != null ? Number(row.lastSeenAt) : undefined, rotatedAt: row.rotatedAt != null ? Number(row.rotatedAt) : undefined } : undefined
   }
   deleteRefreshToken(tokenHash: string): void {
     this.db.prepare('DELETE FROM refresh_tokens WHERE tokenHash = ?').run(tokenHash)
+  }
+  markRefreshTokenRotated(tokenHash: string, at: number): void {
+    this.db.prepare('UPDATE refresh_tokens SET rotatedAt = ? WHERE tokenHash = ?').run(at, tokenHash)
+  }
+  deleteExpiredRefreshTokens(nowMs: number): number {
+    return Number(this.db.prepare('DELETE FROM refresh_tokens WHERE expiresAt <= ?').run(nowMs).changes)
   }
   deleteRefreshTokensForUser(userId: string): void {
     this.db.prepare('DELETE FROM refresh_tokens WHERE userId = ?').run(userId)
   }
   countSessionsForUser(userId: string, nowMs: number): number {
-    const row = this.db.prepare('SELECT COUNT(*) AS n FROM refresh_tokens WHERE userId = ? AND expiresAt > ?').get(userId, nowMs) as { n: number }
+    const row = this.db.prepare('SELECT COUNT(*) AS n FROM refresh_tokens WHERE userId = ? AND expiresAt > ? AND rotatedAt IS NULL').get(userId, nowMs) as { n: number }
     return Number(row.n)
   }
   sessionsForUser(userId: string, nowMs: number): SessionInfo[] {
     const rows = this.db.prepare(
       `SELECT sessionId, MAX(deviceLabel) AS deviceLabel, MIN(createdAt) AS createdAt, MAX(lastSeenAt) AS lastSeenAt, MAX(expiresAt) AS expiresAt
-       FROM refresh_tokens WHERE userId = ? AND expiresAt > ? AND sessionId IS NOT NULL
+       FROM refresh_tokens WHERE userId = ? AND expiresAt > ? AND rotatedAt IS NULL AND sessionId IS NOT NULL
        GROUP BY sessionId ORDER BY lastSeenAt DESC`,
     ).all(userId, nowMs) as any[]
     return rows.map((r) => ({ sessionId: r.sessionId, deviceLabel: r.deviceLabel ?? undefined, createdAt: r.createdAt != null ? Number(r.createdAt) : undefined, lastSeenAt: r.lastSeenAt != null ? Number(r.lastSeenAt) : undefined, expiresAt: Number(r.expiresAt) }))
   }
   hasActiveSession(userId: string, sessionId: string, nowMs: number): boolean {
-    return !!this.db.prepare('SELECT 1 FROM refresh_tokens WHERE userId = ? AND sessionId = ? AND expiresAt > ? LIMIT 1').get(userId, sessionId, nowMs)
+    return !!this.db.prepare('SELECT 1 FROM refresh_tokens WHERE userId = ? AND sessionId = ? AND expiresAt > ? AND rotatedAt IS NULL LIMIT 1').get(userId, sessionId, nowMs)
   }
   revokeSession(userId: string, sessionId: string): void {
     this.db.prepare('DELETE FROM refresh_tokens WHERE userId = ? AND sessionId = ?').run(userId, sessionId)

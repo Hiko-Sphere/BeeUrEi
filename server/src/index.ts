@@ -45,6 +45,8 @@ async function main(): Promise<void> {
     catch (e) { console.warn('[media] 清理失败:', (e as Error).message) }
     try { const x = sweepOldNotifications(store, Date.now()); if (x) console.log(`[notifications] 清理过期通知 ${x} 条`) }
     catch (e) { console.warn('[notifications] 清理失败:', (e as Error).message) }
+    try { const r = store.deleteExpiredRefreshTokens(Date.now()); if (r) console.log(`[auth] 清理过期 refresh token ${r} 条`) }
+    catch (e) { console.warn('[auth] 清理失败:', (e as Error).message) }
   }
   sweep() // 启动即清一次
   const sweepTimer = setInterval(sweep, 60 * 60 * 1000)

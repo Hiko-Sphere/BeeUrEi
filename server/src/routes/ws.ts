@@ -139,7 +139,8 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
             return
           }
 
-          const pcParticipants = pendingCalls.participants(callId, now)
+          // 用 roomParticipants：群呼首接后房间只放行「发起者 + 赢家」，防落败/未接目标抢占名额把赢家挤出（见可靠性复审）。
+          const pcParticipants = pendingCalls.roomParticipants(callId, now)
           const ohParticipants = openHelp.participants(callId, now)
           if (pcParticipants && ohParticipants) {
             socket.close(4003, 'call_conflict') // 跨表去重后理论不应发生，作为纵深防御

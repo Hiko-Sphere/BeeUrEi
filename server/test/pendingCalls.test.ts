@@ -108,4 +108,27 @@ describe('PendingCallRegistry', () => {
     r.register(base({ callId: 'new', createdAt: 2 }))
     expect(r.incomingFor('helper1', 3).map((c) => c.callId)).toEqual(['new', 'old'])
   })
+
+  it('本人拒绝后不再在其设备重复振铃，但其它未拒目标仍可接（可靠性复审）', () => {
+    const r = new PendingCallRegistry()
+    r.register(base({ callId: 'g', toUserIds: ['h1', 'h2'] }))
+    r.decline('g', 'h1', 0)
+    expect(r.incomingFor('h1', 1).length).toBe(0) // h1 拒绝后本机不再振铃
+    expect(r.incomingFor('h2', 1).length).toBe(1) // h2 仍能接听
+    // 发起方仍能经 status 看到 h1 已拒绝。
+    expect(r.status('g', 1).declinedAll).toBe(false)
+  })
+
+  it('roomParticipants：群呼首接后房间只放行「发起者+赢家」，落败/未接目标被挡（防挤占名额）', () => {
+    const r = new PendingCallRegistry()
+    r.register(base({ callId: 'g', toUserIds: ['h1', 'h2'] }))
+    // 未接听前：全体目标都可入房（盲人可能先入房等待）。
+    expect(r.roomParticipants('g', 1)).toEqual(['blind1', 'h1', 'h2'])
+    // h1 首接后：房间只剩 [发起者, h1]，h2 不在其中 → ws join 会被 not_a_participant 拒。
+    expect(r.claimAnswer('g', 'h1', 1)).toBe('h1')
+    expect(r.roomParticipants('g', 2)).toEqual(['blind1', 'h1'])
+    expect(r.roomParticipants('g', 2)!.includes('h2')).toBe(false)
+    // 而旧的 participants（用于其它场景）仍是全体——本次只收紧了信令房间视图。
+    expect(r.participants('g', 2)).toEqual(['blind1', 'h1', 'h2'])
+  })
 })

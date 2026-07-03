@@ -57,6 +57,17 @@ export class PendingCallRegistry {
     return [c.fromUserId, ...c.toUserIds]
   }
 
+  /// 信令**房间**的合法成员：一旦群呼被首接（answeredBy 已定），房间只放行「发起者 + 首接赢家」，
+  /// 而非全体目标。否则落败/未接目标可用同一 callId 抢先 join，占掉 1:1 房间的名额，把真正接听的赢家
+  /// （或盲人自己）挤在通话外（call_full）——首接抢占在 REST 层生效、却在信令层失效（见协助呼叫可靠性复审）。
+  /// 未接听前（answeredBy 未定）仍放行全体目标，因盲人可能先入房等待、任一目标随后接听。
+  roomParticipants(callId: string, now?: number): string[] | null {
+    if (now !== undefined) this.prune(now)
+    const c = this.calls.get(callId)
+    if (!c) return null
+    return c.answeredBy ? [c.fromUserId, c.answeredBy] : [c.fromUserId, ...c.toUserIds]
+  }
+
   /// 该 callId 是否有未过期登记（供跨注册表冲突检查）。
   hasActive(callId: string, now: number): boolean {
     this.prune(now)
@@ -68,7 +79,9 @@ export class PendingCallRegistry {
   incomingFor(userId: string, now: number): PendingCall[] {
     this.prune(now)
     return [...this.calls.values()]
-      .filter((c) => c.toUserIds.includes(userId) && (c.answeredBy === undefined || c.answeredBy === userId))
+      .filter((c) => c.toUserIds.includes(userId)
+        && (c.answeredBy === undefined || c.answeredBy === userId)
+        && !(c.declinedBy ?? []).includes(userId)) // 本人已拒绝 → 不再在其设备上重复振铃（发起方仍经 status 看到拒绝）
       .sort((a, b) => b.createdAt - a.createdAt)
   }
 

@@ -68,15 +68,23 @@ public enum WeatherPhrase {
         }
         var text = parts.joined(separator: language == .zh ? "，" : ", ") + (language == .zh ? "。" : ".")
         if let tip = advice(code: code, todayMax: todayMax, todayMin: todayMin,
-                            precipProbability: precipProbability, language: language) {
+                            precipProbability: precipProbability, windSpeedKmh: windSpeedKmh, language: language) {
             text += tip
         }
         return text
     }
 
-    /// 盲人出行建议：冻雨→黑冰强警告；雨雪雷暴/高降水→带伞防滑；高温/严寒提醒。无建议返回 nil。
+    /// 盲人出行建议：按对**盲人步行**的危险度排序——冻雨(黑冰)→雾(司机看不清行人)→带伞防滑→
+    /// 高温/严寒；并对大风(盖过车流声、盲人靠听觉定向避险的关键被掩)追加安全提示。无建议返回 nil。
+    /// windSpeedKmh：单位 km/h（Open-Meteo wind_speed_10m）。
     public static func advice(code: Int, todayMax: Double?, todayMin: Double?,
-                              precipProbability: Int?, language: Language) -> String? {
+                              precipProbability: Int?, windSpeedKmh: Double? = nil, language: Language) -> String? {
+        // 大风安全提示（≥40km/h≈6级"强风"）：盲人靠听觉判断车流/定向，风噪盖过车声是直接的过街危险——
+        // 阈值高于描述性"风较大"(29km/h)，只在真会掩盖车声的强风才追加。冻雨已是"避免外出"最高级，不叠加。
+        let strongWind = (windSpeedKmh ?? 0) >= 40
+        let windTip = language == .zh ? "风很大，可能盖过车流声，过马路请格外留意。"
+                                      : " Strong wind may mask traffic sounds — take extra care crossing."
+
         // 冻雨（WMO 56/57/66/67）＝黑冰天气：雨落地即冻、路面整片成冰，视觉上与湿路无异、盲杖也探不出滑——
         // 对盲人步行是**最危险**的天气。须专门强警告（建议避免外出/有人陪同），不能混进通用"带伞湿滑"。
         let freezing: Set<Int> = [56, 57, 66, 67]
@@ -84,15 +92,31 @@ public enum WeatherPhrase {
             return language == .zh ? "现在是冻雨，路面会大面积结冰、极滑，请尽量避免外出；必须出门请找人陪同。"
                                    : " Freezing rain — surfaces will ice over and become extremely slippery. Avoid going out if you can; if you must, take someone with you."
         }
+
+        // 主建议（物理/可见性条件），大风提示随后追加（若有）。
+        // windTip 已按语言定型（中文无前导空格接在"。"后；英文带前导空格）——直接拼接。
+        func withWind(_ base: String) -> String { strongWind ? base + windTip : base }
+
+        // 雾（WMO 45/48）：盲人自身不靠视觉，但**司机/协助者看不清行人**——过街/路边是被撞风险。
+        // 建议走有信号灯的路口、穿浅色/反光衣物、必要时求助。排在带伞之前（可见性安全 > 湿滑舒适）。
+        if code == 45 || code == 48 {
+            return withWind(language == .zh ? "有雾，来往车辆可能看不清你，过马路请走有信号灯的路口、格外小心。"
+                                            : " Foggy — drivers may not see you clearly; cross at signalized crossings and take extra care.")
+        }
         let wet: Set<Int> = [51, 53, 55, 61, 63, 65, 71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 99]
         if wet.contains(code) || (precipProbability ?? 0) >= 50 {
-            return language == .zh ? "出门请带伞，地面可能湿滑。" : " Bring an umbrella; the ground may be slippery."
+            return withWind(language == .zh ? "出门请带伞，地面可能湿滑。" : " Bring an umbrella; the ground may be slippery.")
         }
         if let mx = todayMax, mx >= 35 {
-            return language == .zh ? "今天高温，注意防暑补水。" : " Very hot today; stay hydrated."
+            return withWind(language == .zh ? "今天高温，注意防暑补水。" : " Very hot today; stay hydrated.")
         }
         if let mn = todayMin, mn <= 0 {
-            return language == .zh ? "气温在冰点以下，路面可能结冰，出行小心。" : " Below freezing; watch for ice."
+            return withWind(language == .zh ? "气温在冰点以下，路面可能结冰，出行小心。" : " Below freezing; watch for ice.")
+        }
+        // 无其它条件但强风：单独给大风提示（晴天大风也危险——盲人过街照样听不清车）。
+        if strongWind {
+            return language == .zh ? "风很大，可能盖过车流声，过马路请格外留意。"
+                                   : " Strong wind may mask traffic sounds — take extra care crossing."
         }
         return nil
     }

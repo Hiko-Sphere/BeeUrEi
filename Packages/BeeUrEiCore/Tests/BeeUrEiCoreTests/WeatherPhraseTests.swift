@@ -79,3 +79,39 @@ final class WeatherPhraseTests: XCTestCase {
         XCTAssertEqual(WeatherPhrase.safeTemp(.nan), 0) // 非有限退化为 0，不崩溃
     }
 }
+
+// 盲人步行特有的天气安全建议：雾（司机看不清行人）+ 大风（盖过车流声）——2026-07 补。
+extension WeatherPhraseTests {
+    func testFogAdviceForDriverVisibility() {
+        // 雾 45/48：不是让盲人看路（他本不靠视觉），而是提醒司机可能看不清他。
+        let zh = WeatherPhrase.advice(code: 45, todayMax: 20, todayMin: 10, precipProbability: 0, language: .zh)
+        XCTAssertNotNil(zh); XCTAssertTrue(zh!.contains("看不清你"))
+        XCTAssertTrue(zh!.contains("信号灯"))
+        XCTAssertTrue(WeatherPhrase.advice(code: 48, todayMax: nil, todayMin: nil, precipProbability: nil, language: .en)!.contains("Foggy"))
+        // 雾优先于带伞（可见性安全 > 湿滑舒适）：若同时湿路码……雾码 45/48 本身非 wet，故独立验证雾走雾路径。
+    }
+
+    func testStrongWindMasksTraffic() {
+        // ≥40km/h：晴天也追加大风提示（盲人过街靠听车声）。
+        let clear = WeatherPhrase.advice(code: 0, todayMax: 22, todayMin: 15, precipProbability: 0, windSpeedKmh: 45, language: .zh)
+        XCTAssertNotNil(clear); XCTAssertTrue(clear!.contains("盖过车流声"))
+        // 风不够大（39）无提示，晴天无其它建议 → nil。
+        XCTAssertNil(WeatherPhrase.advice(code: 0, todayMax: 22, todayMin: 15, precipProbability: 0, windSpeedKmh: 39, language: .zh))
+        // 雨 + 大风：带伞 + 大风提示都在。
+        let rainy = WeatherPhrase.advice(code: 61, todayMax: 18, todayMin: 12, precipProbability: 80, windSpeedKmh: 50, language: .zh)!
+        XCTAssertTrue(rainy.contains("带伞")); XCTAssertTrue(rainy.contains("盖过车流声"))
+    }
+
+    func testFreezingRainStaysHighestAndNotDilutedByWind() {
+        // 冻雨 + 大风：仍只给冻雨的最高级警告，不追加大风（避免过长、已是"避免外出"）。
+        let z = WeatherPhrase.advice(code: 66, todayMax: 1, todayMin: -3, precipProbability: 90, windSpeedKmh: 60, language: .zh)!
+        XCTAssertTrue(z.contains("冻雨"))
+        XCTAssertFalse(z.contains("盖过车流声")) // 不叠加
+    }
+
+    func testSummaryPipesWindIntoAdvice() {
+        // 端到端：summary 把风速透传给 advice（否则大风建议永远不触发）。
+        let out = WeatherPhrase.summary(temperature: 20, code: 0, windSpeedKmh: 50, todayMax: 22, todayMin: 15, precipProbability: 0, language: .zh)
+        XCTAssertTrue(out.contains("盖过车流声"))
+    }
+}

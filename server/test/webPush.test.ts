@@ -84,6 +84,20 @@ describe('Web Push（浏览器推送紧急告警）', () => {
     await a.close()
   })
 
+  it('来电扇出：呼叫登记时向被叫的浏览器订阅推送 incoming_call（关标签页也能收到来电）', async () => {
+    const wp = new RecordingWebPush()
+    const { a, helper, hAuth, auth } = await seed(wp)
+    await a.inject({ method: 'POST', url: '/api/push/web-subscribe', headers: hAuth, payload: SUB })
+    const call = await a.inject({ method: 'POST', url: '/api/assist/call', headers: auth,
+      payload: { callId: 'wpcall1', targetUserIds: [helper.user.id] } })
+    expect(call.statusCode).toBe(200)
+    expect(wp.sent.length).toBe(1)
+    const payload = JSON.parse(wp.sent[0].payload)
+    expect(payload.data).toMatchObject({ kind: 'incoming_call', callId: 'wpcall1' })
+    expect(payload.title).toContain('wpfaller') // 来电人显示名进标题
+    await a.close()
+  })
+
   it('删号级联：订阅随人清除（双存储各自验证存储层）', async () => {
     const wp = new RecordingWebPush()
     const { a, store, helper, hAuth } = await seed(wp)

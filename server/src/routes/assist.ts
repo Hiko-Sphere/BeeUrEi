@@ -12,6 +12,7 @@ import { PendingCallRegistry } from '../assist/pendingCalls'
 import { pushLang, pushStrings } from '../push/pushStrings'
 import { OpenHelpRegistry } from '../assist/openHelp'
 import { type PushSender } from '../push/apns'
+import { NoopWebPushSender, type WebPushSender } from '../push/webPush'
 import { type Metrics } from '../metrics/metrics'
 
 const heartbeatSchema = z.object({ available: z.boolean(), at: z.number().optional() })
@@ -39,6 +40,7 @@ export function registerAssistRoutes(
   openHelp: OpenHelpRegistry,
   pushSender: PushSender,
   metrics: Metrics,
+  webPush: WebPushSender = new NoopWebPushSender(),
 ): void {
   // 协助者/亲友"在线待命"心跳（客户端定期调用；available=false 即下线）。
   app.post('/api/assist/heartbeat', { preHandler: requireAuth() }, async (req, reply) => {
@@ -153,6 +155,14 @@ export function registerAssistRoutes(
                                   pushStrings.incomingCallBody(lang),
                                   { kind: 'incoming_call', callId: parsed.data.callId })
           .catch(() => {})
+      }
+      // Web Push：web-only 协助者关掉标签页也能收到来电系统通知——点开落回 /app，呼叫仍在
+      // 登记 TTL 内的话 IncomingCallHost 轮询即弹铃。与 APNs 各自 best-effort，失败不阻断呼叫。
+      if (webPush.configured && u) {
+        const lang = pushLang(u.language)
+        const payload = JSON.stringify({ title: pushStrings.incomingCallTitle(callerName, lang),
+          body: pushStrings.incomingCallBody(lang), data: { kind: 'incoming_call', callId: parsed.data.callId, fromId: from.sub } })
+        for (const sub of store.webPushSubscriptionsForUser(id)) void webPush.send(sub, payload).catch(() => {})
       }
     }
     metrics.inc('calls_registered_total')

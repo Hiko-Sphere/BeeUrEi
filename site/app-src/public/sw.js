@@ -13,16 +13,20 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(title, {
     body,
     // 系统通知走操作系统渲染，无法复用应用内的"最后已知位置"富标注——位置详情在点开后的通知页
-    // （那里有诚实标注 + 回拨）。tag 按告警去重（同一事件多次推送只留一条）。
-    tag: (data.data && data.data.fromId) ? 'emergency-' + data.data.fromId : 'beeurei',
-    requireInteraction: true, // 紧急告警不自动消失，直到用户处理
+    // （那里有诚实标注 + 回拨）。tag 去重：来电按 callId（同一通只留一条）、告警按发起人。
+    tag: (data.data && data.data.kind === 'incoming_call' && data.data.callId)
+      ? 'call-' + data.data.callId
+      : (data.data && data.data.fromId) ? 'emergency-' + data.data.fromId : 'beeurei',
+    requireInteraction: true, // 紧急告警/来电不自动消失，直到用户处理
     data: data.data || {},
   }))
 })
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  const target = new URL('/app/notifications', self.location.origin).href
+  // 来电 → 首页（IncomingCallHost 全局轮询，落到任何 /app 页都会弹铃，首页最快）；告警 → 通知页（诚实位置标注+回拨）。
+  const path = (event.notification.data && event.notification.data.kind === 'incoming_call') ? '/app/' : '/app/notifications'
+  const target = new URL(path, self.location.origin).href
   event.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
     for (const w of wins) {

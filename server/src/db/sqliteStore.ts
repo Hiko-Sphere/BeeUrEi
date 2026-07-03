@@ -652,6 +652,13 @@ export class SqliteStore implements Store {
       locSource: r.locSource ?? undefined, locAgeSec: r.locAgeSec != null ? Number(r.locAgeSec) : undefined,
       notified: Number(r.notified), contacts: Number(r.contacts), at: Number(r.at) }))
   }
+  emergencyEventsForUser(userId: string): EmergencyEvent[] {
+    const rows = this.db.prepare('SELECT * FROM emergency_events WHERE userId = ? ORDER BY at DESC').all(userId) as any[]
+    return rows.map((r) => ({ id: r.id, userId: r.userId, kind: r.kind,
+      lat: r.lat != null ? Number(r.lat) : undefined, lon: r.lon != null ? Number(r.lon) : undefined,
+      locSource: r.locSource ?? undefined, locAgeSec: r.locAgeSec != null ? Number(r.locAgeSec) : undefined,
+      notified: Number(r.notified), contacts: Number(r.contacts), at: Number(r.at) }))
+  }
   deleteEmergencyEventsForUser(userId: string): void {
     this.db.prepare('DELETE FROM emergency_events WHERE userId = ?').run(userId)
   }

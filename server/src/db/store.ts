@@ -577,6 +577,7 @@ export interface Store {
   // 紧急事件日志（治理）：
   createEmergencyEvent(e: EmergencyEvent): void
   recentEmergencyEvents(limit?: number): EmergencyEvent[] // 时间倒序
+  emergencyEventsForUser(userId: string): EmergencyEvent[] // 本人事故记录（自助导出用，时间倒序）
   deleteEmergencyEventsForUser(userId: string): void      // 删号级联（GDPR 抹除）
   deleteEmergencyEventsOlderThan(cutoffMs: number): number // 留存清扫
   // Web Push 订阅：
@@ -1106,6 +1107,9 @@ export class MemoryStore implements Store {
   }
   recentEmergencyEvents(limit = 100): EmergencyEvent[] {
     return [...this.emergencyEvents.values()].sort((a, b) => b.at - a.at).slice(0, Math.max(0, limit))
+  }
+  emergencyEventsForUser(userId: string): EmergencyEvent[] {
+    return [...this.emergencyEvents.values()].filter((e) => e.userId === userId).sort((a, b) => b.at - a.at)
   }
   deleteEmergencyEventsForUser(userId: string): void {
     let changed = false

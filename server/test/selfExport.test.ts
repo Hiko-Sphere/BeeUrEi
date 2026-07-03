@@ -20,6 +20,8 @@ describe('GET /api/account/export', () => {
     await a.inject({ method: 'POST', url: '/api/messages', headers: pAuth, payload: { toId: me.user.id, kind: 'text', text: '对方的话-秘密内容' } })
     // 我的路线
     await a.inject({ method: 'POST', url: '/api/routes', headers: auth, payload: { name: '回家', waypoints: [{ lat: 31.2, lng: 121.4 }, { lat: 31.21, lng: 121.41 }] } })
+    // 一次带坐标的手动 SOS（本人事故记录 → 应进导出）
+    await a.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth, payload: { kind: 'manual', lat: 31.2, lon: 121.4 } })
 
     const res = await a.inject({ method: 'GET', url: '/api/account/export', headers: auth })
     expect(res.statusCode).toBe(200)
@@ -30,6 +32,8 @@ describe('GET /api/account/export', () => {
     expect(body.familyLinks.length).toBe(1)
     expect(body.savedRoutes.length).toBe(1)
     expect(body.savedRoutes[0].waypoints.length).toBe(2)
+    expect(body.emergencyEvents.length).toBe(1)
+    expect(body.emergencyEvents[0]).toMatchObject({ kind: 'manual', lat: 31.2, contacts: 1 })
     expect(body.messagesSent.length).toBe(1)
     expect(body.messagesSent[0].text).toContain('幸福路')      // 自己的话，含正文
     expect(raw).not.toContain('秘密内容')                       // 对方的话绝不出现

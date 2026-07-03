@@ -7,7 +7,7 @@ import Observation
 @Observable
 final class AppRoute {
     static let shared = AppRoute()
-    enum Destination { case help, lookAround, whereAmI, obstacle }
+    enum Destination { case help, lookAround, whereAmI, obstacle, sos }
     /// 识别屏内的频道直达（Seeing AI"全频道快捷指令"惯例：一句话直达识币/扫码等具体动作）。
     enum FramingChannel { case banknote, scan, fullPage, bus, people, light, text, color }
     var pending: Destination?
@@ -29,6 +29,19 @@ struct CallHelpIntent: AppIntent {
     static let openAppWhenRun = true
     @MainActor func perform() async throws -> some IntentResult {
         AppRoute.shared.pending = .help
+        return .result()
+    }
+}
+
+/// 「嘿 Siri，用蜂有眼紧急求救」——锁屏/App 未开时唯一的语音 SOS 路径（摔倒场景 App 多半不在前台；
+/// 应用内的语音"救命"要先开着 App 按下麦克风）。openAppWhenRun 拉起 App 后路由到 manualSOS：
+/// 自带 30s 倒计时+响亮播报+可取消覆盖层，误唤醒安全。
+struct EmergencySOSIntent: AppIntent {
+    static let title: LocalizedStringResource = "紧急求救"
+    static let description = IntentDescription("30 秒倒计时后通知你的全部亲友并附位置，可随时取消")
+    static let openAppWhenRun = true
+    @MainActor func perform() async throws -> some IntentResult {
+        AppRoute.shared.pending = .sos
         return .result()
     }
 }
@@ -146,6 +159,10 @@ struct BeeAppShortcuts: AppShortcutsProvider {
                     phrases: ["用\(.applicationName)呼叫帮手", "在\(.applicationName)求助", "\(.applicationName)帮我看",
                               "Call a helper with \(.applicationName)", "Get help with \(.applicationName)"],
                     shortTitle: "求助", systemImageName: "hand.raised.fill")
+        AppShortcut(intent: EmergencySOSIntent(),
+                    phrases: ["用\(.applicationName)紧急求救", "\(.applicationName)救命", "用\(.applicationName)发求救",
+                              "Emergency with \(.applicationName)", "SOS with \(.applicationName)"],
+                    shortTitle: "紧急求救", systemImageName: "sos.circle.fill")
         AppShortcut(intent: StartGuideIntent(),
                     phrases: ["用\(.applicationName)开始导盲", "用\(.applicationName)避障", "让\(.applicationName)帮我避障",
                               "Start guide with \(.applicationName)", "Avoid obstacles with \(.applicationName)"],
@@ -178,9 +195,7 @@ struct BeeAppShortcuts: AppShortcutsProvider {
                     phrases: ["用\(.applicationName)周围的人", "问\(.applicationName)前面有没有人",
                               "People nearby with \(.applicationName)", "Is anyone ahead in \(.applicationName)"],
                     shortTitle: "周围的人", systemImageName: "person.2.fill")
-        AppShortcut(intent: ReadLightIntent(),
-                    phrases: ["用\(.applicationName)光线探测", "问\(.applicationName)灯开着吗",
-                              "Check the light with \(.applicationName)", "Is the light on in \(.applicationName)"],
-                    shortTitle: "光线", systemImageName: "sun.max.fill")
+        // 光线探测让出 Siri 短语位（Apple AppShortcuts 上限 10，SOS 生命攸关优先）：
+        // ReadLightIntent 本体保留——用户仍可在快捷指令 App 手动建短语，应用内语音"光线"照常可用。
     }
 }

@@ -66,6 +66,7 @@ struct HubView: View {
             case .lookAround: showFraming = true
             case .whereAmI: locationDescriber.describe()
             case .obstacle: enterObstacle()
+            case .sos: emergency.manualSOS() // Siri 锁屏路径：倒计时+可取消覆盖层由既有链路呈现
             }
         }
         // 双指双击 = 一键求助。

@@ -54,4 +54,16 @@ public struct DepthSampler: Sendable {
         let n = nearestDistance(depths: depths, confidences: confidences)
         return (n, zone(forNearest: n))
     }
+
+    /// 是否**确认**前方通畅：必须有有效读数、且最近有效读数在 caution 之外（真·远处空旷）。
+    ///
+    /// 安全语义（见安全复审「玻璃门假通畅」）：`nearestDistance` 返回最近**有效**样本——
+    /// 有效读数为 nil 意味着中央 ROI 零有效样本，即 LiDAR 在正前方**读不到**（玻璃/镜面/透明/
+    /// 深色湿滑/超近盲区特征性如此）。此时**绝不**确认通畅：「通畅」须由「读到远处」这一正向证据
+    /// 挣得，而非「无数据」默认得到——否则会对恰恰检测不了的近距障碍给出致命假安心。
+    /// （代价：正前方超出 LiDAR 量程的开阔空间也读不到 → 不再周期播「通畅」，仅损失安慰、绝不误报。）
+    public func isConfirmedClear(depths: [Double], confidences: [Float]? = nil) -> Bool {
+        guard let d = nearestDistance(depths: depths, confidences: confidences) else { return false } // 无读数 → 不确认
+        return d >= cautionMeters
+    }
 }

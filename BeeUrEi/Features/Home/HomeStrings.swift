@@ -185,6 +185,9 @@ enum HomeStrings {
         l == .zh ? String(format: "正前方约 %.1f 米", m) : String(format: "About %.1f m straight ahead", m)
     }
     static func proximityClear(_ l: Language) -> String { l == .zh ? "正前方通畅" : "Path ahead is clear" }
+    /// 中央 ROI 零有效深度读数（LiDAR 读不到：玻璃/镜面/超近盲区，或超出量程的开阔空间）。
+    /// 视觉如实显示"无读数"而非"通畅"，避免对低视力用户也造成假安心（见安全复审）。
+    static func proximityNoReading(_ l: Language) -> String { l == .zh ? "正前方无读数" : "No reading ahead" }
     static func clearAheadSpeech(_ l: Language) -> String { l == .zh ? "前方通畅" : "Path clear" }
     static func tapToRepeat(_ l: Language) -> String { l == .zh ? "点按重复播报" : "Tap to repeat the announcement" }
     static func cameraError(_ message: String, _ l: Language) -> String {

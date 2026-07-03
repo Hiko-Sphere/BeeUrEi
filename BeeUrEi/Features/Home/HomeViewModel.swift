@@ -453,7 +453,8 @@ final class HomeViewModel {
             proximityText = suppressMeters ? HomeStrings.proximityBlocked(lang)
                                            : HomeStrings.proximityMeters(nearest, lang)
         } else {
-            proximityText = HomeStrings.proximityClear(lang)
+            // 零有效读数：LiDAR 读不到（玻璃/镜面/超近盲区，或超量程开阔）。如实显示"无读数"而非假"通畅"。
+            proximityText = HomeStrings.proximityNoReading(lang)
         }
         if let phrase = speechComposer.announceProximity(zone, nearestMeters: suppressMeters ? nil : centralResult.nearest) {
             let minGap = zone == .danger ? 1.5 : 3.0
@@ -462,9 +463,10 @@ final class HomeViewModel {
             }
         }
 
-        // "前方通畅"周期确认（可选）。滞回后的 .clear 才算通畅，与播报分区一致。
+        // "前方通畅"周期确认（可选）。**必须有有效深度读数、且读到远处**才算通畅——绝不因中央 ROI
+        // 零有效读数(LiDAR 读不到玻璃/镜面/超近盲区)就播"通畅"，那是致命假安心（见安全复审）。
         if FeatureSettings().clearPathConfirm {
-            let clear = (zone == .clear)
+            let clear = depthSampler.isConfirmedClear(depths: samples.depths, confidences: samples.confidences)
             if clearConfirmer.update(isClear: clear, now: frame.timestamp) {
                 coordinator.submit(FeedbackEvent(priority: .status, speech: HomeStrings.clearAheadSpeech(lang)))
             }

@@ -57,7 +57,8 @@ function anyNoteBlocked(store: Store, waypoints: { note?: string }[] | undefined
 
 export function registerSavedRouteRoutes(app: FastifyInstance, store: Store, push: PushSender = new NoopPushSender()): void {
   // 建路线：给自己，或给 accepted 互链且无拉黑的联系人（亲友替盲人画路线的主通道）。
-  app.post('/api/routes', { preHandler: requireAuth() }, async (req, reply) => {
+  // 20/min 限流（与建链同档）：写端点每次全量写盘（JsonFileStore afterMutate），防 churn 型 I/O 放大与批量灌建。
+  app.post('/api/routes', { preHandler: requireAuth(), config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = createSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const me = req.user!.sub
@@ -106,7 +107,7 @@ export function registerSavedRouteRoutes(app: FastifyInstance, store: Store, pus
 
   // 改路线（名称/航点）：归属者或绘制者。绘制者与归属者已解绑后仍可编辑其画的路线——
   // 但**已拉黑**则不可（拉黑=明确不信任，绝不能让其静默改写盲人实地执行的路线；使用时刻复查，与全站同口径）。
-  app.put('/api/routes/:id', { preHandler: requireAuth() }, async (req, reply) => {
+  app.put('/api/routes/:id', { preHandler: requireAuth(), config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
     const id = (req.params as { id: string }).id
     const parsed = updateSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
@@ -128,7 +129,7 @@ export function registerSavedRouteRoutes(app: FastifyInstance, store: Store, pus
 
   // 删路线：归属者或绘制者；幂等（gone→204）。无权（含已拉黑的绘制者）一律 204 no-op——
   // 既保幂等又不泄露存在性（204/404 分叉本会成为存在性 oracle，违背"404 不泄露"设计）。
-  app.delete('/api/routes/:id', { preHandler: requireAuth() }, async (req, reply) => {
+  app.delete('/api/routes/:id', { preHandler: requireAuth(), config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
     const id = (req.params as { id: string }).id
     const route = store.findSavedRoute(id)
     const blockedCreator = route && req.user!.sub !== route.ownerId && isBlockedBetween(store, req.user!.sub, route.ownerId)

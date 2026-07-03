@@ -113,16 +113,28 @@ describe('路线库（亲友远程路线编排 Phase 1：服务端）', () => {
   })
 
   it('滥用上限：单归属者第 51 条 → 429 route_limit', async () => {
-    const { app, blind } = await setup()
+    // 直接经 store 播种 50 条（绕过 HTTP 20/min 限流——本测试要验的是每人 50 条上限，非请求速率）。
+    const { app, store, blind } = await setup()
     for (let i = 0; i < 50; i++) {
-      const r = await app.inject({ method: 'POST', url: '/api/routes', headers: blind.h,
-        payload: { name: `路线${i}`, waypoints: WP } })
-      expect(r.statusCode).toBe(200)
+      store.createSavedRoute({ id: `seed-${i}`, ownerId: blind.id, createdBy: blind.id,
+        name: `路线${i}`, waypoints: WP, createdAt: i, updatedAt: i })
     }
     const over = await app.inject({ method: 'POST', url: '/api/routes', headers: blind.h,
       payload: { name: '超限', waypoints: WP } })
     expect(over.statusCode).toBe(429)
     expect(over.json().error).toBe('route_limit')
+    await app.close()
+  })
+
+  it('写端点限流：POST /api/routes 21 次/分 → 429 too_many_requests（防 churn 型 I/O 放大）', async () => {
+    const { app, blind } = await setup()
+    let sawRateLimit = false
+    for (let i = 0; i < 22; i++) {
+      const r = await app.inject({ method: 'POST', url: '/api/routes', headers: blind.h,
+        payload: { name: `r${i}`, waypoints: WP } })
+      if (r.statusCode === 429) { sawRateLimit = true; break }
+    }
+    expect(sawRateLimit).toBe(true) // 20/min 上限，第 21 条起被限流
     await app.close()
   })
 

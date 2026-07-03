@@ -61,13 +61,13 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: P
       requestedBy: meId,
     }
     store.createLink(link)
-    // 软件外通知：提醒"被请求方"(target)有新的好友请求待确认。fire-and-forget。文案按收件人语言。
-    if (target.apnsToken) {
-      const lang = pushLang(target.language)
-      void push.sendAlert(target.apnsToken, pushStrings.friendRequestTitle(lang),
-                          pushStrings.friendRequestBody(me.displayName, link.relation, lang), { kind: 'friend_request' })
-        .catch((e) => console.warn('[push] friend_request alert failed:', (e as Error).message))
-    }
+    // 通知"被请求方"(target)有新的好友请求待确认——走 notifyUser（持久收件箱 + 尽力推送），与
+    // friend_accepted 对称：否则 web-only 亲友（无 APNs token）收到请求时零通知，只能靠翻"待确认"
+    // 页才发现（见 e70c968 friend_accepted 持久化同因）。文案按收件人语言。
+    const rlang = pushLang(target.language)
+    notifyUser(store, push, target.id, 'friend_request',
+               pushStrings.friendRequestTitle(rlang),
+               pushStrings.friendRequestBody(me.displayName, link.relation, rlang), { linkId: link.id })
     return reply.code(201).send({ link: viewLink(store, link, meId) })
   })
 

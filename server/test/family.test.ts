@@ -90,6 +90,12 @@ describe('family + emergency', () => {
     await a.inject({ method: 'POST', url: `/api/family/links/${link.json().link.id}/accept`, headers: { authorization: `Bearer ${blindLogin.json().token}` } })
     // 发起者收到持久化的 friend_accepted 通知（不依赖 push）
     expect(store.notificationsForUser(requester.user.id).some((n) => n.kind === 'friend_accepted')).toBe(true)
+    // 对称：被请求方(blindA)也应有持久化的 friend_request 通知（web-only 无 push 也能看到，附 linkId）
+    const target = store.findByUsername('blindA')!
+    const req = store.notificationsForUser(target.id).find((n) => n.kind === 'friend_request')
+    expect(req).toBeTruthy()
+    expect(req!.data?.linkId).toBe(link.json().link.id)
+    expect(req!.body).toContain('reqA') // 含发起者名
     await a.close()
   })
 

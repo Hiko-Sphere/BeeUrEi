@@ -43,6 +43,8 @@ describe('摔倒/车祸紧急警报', () => {
     // 双方注册 APNs token。
     await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(fam.token), payload: { token: 'a'.repeat(64) } })
     await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(stranger.token), payload: { token: 'b'.repeat(64) } })
+    // bind 会给被请求方(fam)写一条 friend_request 通知——标已读隔离，让本用例的 badge/feed 只反映紧急告警。
+    await app.inject({ method: 'POST', url: '/api/notifications/read-all', headers: auth(fam.token) })
 
     const res = await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token),
       payload: { kind: 'fall', lat: 39.9, lon: 116.4 } })
@@ -58,13 +60,14 @@ describe('摔倒/车祸紧急警报', () => {
 
     // 持久化：亲友在通知中心能回看这次告警（即使错过推送）；陌生人(pending)无。
     const famNotifs = await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(fam.token) })
-    const feed = (famNotifs.json() as any).notifications
+    const feed = (famNotifs.json() as any).notifications.filter((n: any) => n.kind === 'emergency_alert')
     expect(feed).toHaveLength(1)
     expect(feed[0].kind).toBe('emergency_alert')
     expect(feed[0].data.kind).toBe('fall')
     expect(feed[0].data.fromId).toBe(blind.user.id)
+    // 陌生人(pending)不收紧急告警——按 kind 过滤（其有一条来自 blind 的 friend_request，属正常）。
     const strangerNotifs = await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(stranger.token) })
-    expect((strangerNotifs.json() as any).notifications).toHaveLength(0)
+    expect((strangerNotifs.json() as any).notifications.filter((n: any) => n.kind === 'emergency_alert')).toHaveLength(0)
   })
 
   it('无 APNs token 的 accepted 亲友（如 web-only 协助者）仍写持久化通知，能在通知中心回看', async () => {
@@ -87,13 +90,13 @@ describe('摔倒/车祸紧急警报', () => {
 
     // 关键：web-only 亲友虽无推送，仍能在通知中心看到这次告警。
     const webNotifs = await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(webFam.token) })
-    const feed = (webNotifs.json() as any).notifications
+    const feed = (webNotifs.json() as any).notifications.filter((n: any) => n.kind === 'emergency_alert')
     expect(feed).toHaveLength(1)
     expect(feed[0].kind).toBe('emergency_alert')
     expect(feed[0].data.kind).toBe('fall')
-    // 有 token 的亲友同样有持久化通知。
+    // 有 token 的亲友同样有持久化的 emergency_alert 通知（各另有一条 bind 的 friend_request）。
     const iosNotifs = await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(iosFam.token) })
-    expect((iosNotifs.json() as any).notifications).toHaveLength(1)
+    expect((iosNotifs.json() as any).notifications.filter((n: any) => n.kind === 'emergency_alert')).toHaveLength(1)
   })
 
   it('非法 kind 拒绝', async () => {

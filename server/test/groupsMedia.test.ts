@@ -410,6 +410,8 @@ describe('未读汇总 /api/unread', () => {
     const b = await reg(app, 'bdgb', 'helper')
     await bind(app, a.token, b.token, 'bdgb')
     await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(b.token), payload: { token: 'c'.repeat(64) } })
+    // bind 给 b 写了 friend_request 通知（未读）——标已读隔离，让 badge 只反映聊天未读递增。
+    await app.inject({ method: 'POST', url: '/api/notifications/read-all', headers: auth(b.token) })
 
     await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, text: '第一条' } })
     await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, text: '第二条' } })

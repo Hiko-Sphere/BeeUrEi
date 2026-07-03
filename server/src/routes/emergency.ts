@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import { type Store } from '../db/store'
 import { requireAuth } from '../auth/rbac'
+import { type PresenceRegistry } from '../assist/presence'
 import { planEmergencyRoute } from '../emergency/routing'
 import { NoopPushSender, type PushSender } from '../push/apns'
 import { pushLang, pushStrings } from '../push/pushStrings'
@@ -34,14 +35,17 @@ class EmergencyAlertDedup {
 }
 
 export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
+                                        presence: PresenceRegistry,
                                         pushSender: PushSender = new NoopPushSender()): void {
   const alertDedup = new EmergencyAlertDedup()
   // 发起紧急呼叫：返回按优先级排好的呼叫目标列表（真正接通由 WebRTC 信令负责）。
   app.post('/api/emergency/trigger', { preHandler: requireAuth() }, async (req) => {
     const owner = req.user!
+    const now = Date.now()
     // 仅 accepted 的绑定可作为紧急联系人（pending 未经对方同意，不参与紧急路由，见审查 #6）。
     const links = store.linksByOwner(owner.sub).filter((l) => (l.status ?? 'accepted') === 'accepted')
-    const ordered = planEmergencyRoute(links)
+    // 同信任层级内在线者优先：遇险先接通此刻真正待命的人，不在离线联系人上白等振铃。
+    const ordered = planEmergencyRoute(links, (memberId) => presence.isAvailable(memberId, now))
     const targets = ordered.map((l) => {
       const member = store.findById(l.memberId)
       return {
@@ -49,6 +53,7 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
         memberName: member?.displayName ?? '未知',
         relation: l.relation,
         isEmergency: l.isEmergency,
+        isOnline: presence.isAvailable(l.memberId, now), // 供客户端标注"● 在线"，让用户知道先接通谁
       }
     })
     return { targets, count: targets.length }

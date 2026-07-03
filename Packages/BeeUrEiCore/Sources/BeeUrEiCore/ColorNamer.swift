@@ -9,6 +9,32 @@ public struct ColorNamer: Sendable {
         SpokenStrings.color(key(r: r, g: g, b: b), language)
     }
 
+    /// 颜色深浅。仅对**彩色**生效；黑/白/灰/棕/未知恒 normal（它们本身已含明暗信息）。
+    public enum ColorTone: Sendable, Equatable { case dark, normal, light }
+
+    /// 判定深浅（配衣服/比色刚需：海军蓝 vs 天蓝天差地别）。阈值以参考色标定：
+    /// dark = 明度低（navy/深红/墨绿）；light = 明亮且不太饱和（天蓝/浅绿/浅黄）；其余 normal（纯色）。
+    public func tone(r: Double, g: Double, b: Double) -> ColorTone {
+        switch key(r: r, g: g, b: b) {
+        case .black, .white, .gray, .brown, .unknown: return .normal // 已含明暗信息，不再加深/浅
+        default: break
+        }
+        let (_, s, v) = Self.rgbToHsv(r, g, b)
+        if v < 0.55 { return .dark }               // navy 0.50 / 深红 0.545 / 墨绿 0.39 皆入此
+        if v >= 0.85, s < 0.5 { return .light }     // 天蓝(v.92,s.43)/浅绿(v.93,s.40)/浅黄；纯色 s 高不入
+        return .normal
+    }
+
+    /// 带深浅的颜色名（如"深蓝色"/"浅绿色"；normal 时与 name 相同）。颜色功能应优先用它。
+    public func describe(r: Double, g: Double, b: Double, language: Language = .zh) -> String {
+        let base = name(r: r, g: g, b: b, language: language)
+        switch tone(r: r, g: g, b: b) {
+        case .normal: return base
+        case .dark:   return SpokenStrings.tonePrefix(dark: true, language) + base
+        case .light:  return SpokenStrings.tonePrefix(dark: false, language) + base
+        }
+    }
+
     /// 语言无关的颜色分桶键（供本地化与测试）。
     func key(r: Double, g: Double, b: Double) -> SpokenStrings.ColorKey {
         let (h, s, v) = Self.rgbToHsv(r, g, b)

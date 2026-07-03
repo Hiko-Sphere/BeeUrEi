@@ -151,7 +151,7 @@ final class FramingAssistViewModel {
         // 且 ColorSampler/ColorNamer 只在处理帧计算而非每视频帧（省电）。光探测因要跟手仍留在节流前。
         if colorContinuousOn, !docMode, findPhase == .idle, let buffer = latestBuffer,
            let rgb = ColorSampler.averageRGB(in: buffer, rect: CGRect(x: 0.4, y: 0.4, width: 0.2, height: 0.2)) {
-            let name = ColorNamer().name(r: rgb.r, g: rgb.g, b: rgb.b, language: lang)
+            let name = ColorNamer().describe(r: rgb.r, g: rgb.g, b: rgb.b, language: lang) // 带深浅（深蓝/浅绿）
             if colorThrottle.shouldSpeak(name, at: frame.timestamp) {
                 resultText = FramingStrings.colorResult(name, lang)
                 speak(FramingStrings.colorSpeak(name, lang))
@@ -821,7 +821,7 @@ final class FramingAssistViewModel {
         if tooDarkToProceed() { return nil }
         let rect = CGRect(x: 0.4, y: 0.4, width: 0.2, height: 0.2)
         if let rgb = ColorSampler.averageRGB(in: buffer, rect: rect) {
-            let name = ColorNamer().name(r: rgb.r, g: rgb.g, b: rgb.b, language: lang)
+            let name = ColorNamer().describe(r: rgb.r, g: rgb.g, b: rgb.b, language: lang) // 带深浅（深蓝/浅绿）
             resultText = FramingStrings.colorResult(name, lang)
             copyableResult = nil
             speak(FramingStrings.colorSpeak(name, lang))

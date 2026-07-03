@@ -333,6 +333,14 @@ public enum SpokenStrings {
         }
     }
 
+    /// 颜色深浅前缀（配 ColorNamer.describe）：中文"深"/"浅"直接拼色名（深蓝色）；英文带尾空格拼（dark blue）。
+    public static func tonePrefix(dark: Bool, _ lang: Language) -> String {
+        switch lang {
+        case .zh: return dark ? "深" : "浅"
+        case .en: return dark ? "dark " : "light "
+        }
+    }
+
     // MARK: 过街（CrossingAssistant / TrafficLightClassifier）
 
     public static func crossingHasLight(_ lang: Language) -> String {

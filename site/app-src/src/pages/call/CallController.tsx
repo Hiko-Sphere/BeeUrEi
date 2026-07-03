@@ -146,17 +146,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider value={{ active, startOutgoing, claimQueue, answerIncoming, presentRing, dismissRingIfGone }}>
       {children}
       {ring && !active && (
-        <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="slide-up w-full max-w-xs rounded-3xl surface border border-[var(--line)] p-6 text-center shadow-2xl">
-            <div className="mx-auto mb-4 w-fit"><Avatar name={ring.fromName} src={ring.fromAvatar} size={88} /></div>
-            <div className="text-lg font-semibold">{ring.fromName}</div>
-            <div className="mt-1 text-sm text-faint">{t('邀请你协助 · 来电', 'Incoming assist call')}</div>
-            <div className="mt-7 flex items-center justify-center gap-8">
-              <button onClick={declineRing} className="flex h-16 w-16 items-center justify-center rounded-full bg-danger text-white shadow-lg transition hover:brightness-110" aria-label={t('拒绝', 'Decline')}><IconX width={28} height={28} /></button>
-              <button onClick={answerRing} className="flex h-16 w-16 items-center justify-center rounded-full bg-ok text-white shadow-lg ring-live transition hover:brightness-110" aria-label={t('接听', 'Answer')}><IconPhone width={28} height={28} /></button>
-            </div>
-          </div>
-        </div>
+        <IncomingRing fromName={ring.fromName} fromAvatar={ring.fromAvatar} onAnswer={answerRing} onDecline={declineRing} />
       )}
       {active && <CallScreen call={active} onEnd={endActive} />}
       {/* 一次性协助守则卡（Aira 范式）：确认前不进入任何协助通话；关闭=放弃本次动作，下次仍会展示。 */}
@@ -219,3 +209,46 @@ class Ringtone {
 export function AnswerButton(props: { onClick: () => void; label: string }) {
   return <Button variant="ok" onClick={props.onClick}><IconPhone width={18} height={18} />{props.label}</Button>
 }
+
+/// 来电铃（无障碍时敏交互）：role=alertdialog + aria-modal + 焦点移入接听键 + 焦点陷阱 + 焦点恢复，
+/// 让读屏/键盘用户被明确告知有来电且能到达按钮。**刻意不设 Escape/背景=拒绝**——来电可能是紧急
+/// 求助（见 answerIncoming 注释），误触拒掉代价高，必须显式选择接听或拒绝（同真手机的来电界面）。
+function IncomingRing({ fromName, fromAvatar, onAnswer, onDecline }: {
+  fromName: string; fromAvatar?: string | null; onAnswer: () => void; onDecline: () => void
+}) {
+  const { t } = useI18n()
+  const answerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null
+    answerRef.current?.focus() // 焦点落在"接听"：读屏据 aria-label 播报来电对话框 + 当前可接听
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return // Escape 不处理：来电须显式选择，防误拒
+      const panel = panelRef.current
+      if (!panel) return
+      const f = panel.querySelectorAll<HTMLElement>('button:not([disabled])')
+      if (f.length === 0) return
+      const first = f[0], last = f[f.length - 1], active = document.activeElement
+      if (e.shiftKey && active === first) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus() }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('keydown', onKey); prev?.focus?.() }
+  }, [])
+  return (
+    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4 backdrop-blur-sm">
+      <div ref={panelRef} role="alertdialog" aria-modal="true"
+        aria-label={t(`${fromName} 邀请你协助，来电`, `Incoming assist call from ${fromName}`)}
+        className="slide-up w-full max-w-xs rounded-3xl surface border border-[var(--line)] p-6 text-center shadow-2xl outline-none">
+        <div className="mx-auto mb-4 w-fit"><Avatar name={fromName} src={fromAvatar} size={88} /></div>
+        <div className="text-lg font-semibold">{fromName}</div>
+        <div className="mt-1 text-sm text-faint">{t('邀请你协助 · 来电', 'Incoming assist call')}</div>
+        <div className="mt-7 flex items-center justify-center gap-8">
+          <button onClick={onDecline} className="flex h-16 w-16 items-center justify-center rounded-full bg-danger text-white shadow-lg transition hover:brightness-110" aria-label={t('拒绝', 'Decline')}><IconX width={28} height={28} /></button>
+          <button ref={answerRef} onClick={onAnswer} className="flex h-16 w-16 items-center justify-center rounded-full bg-ok text-white shadow-lg ring-live transition hover:brightness-110" aria-label={t('接听', 'Answer')}><IconPhone width={28} height={28} /></button>
+        </div>
+      </div>
+    </div>
+  )
+}
+

@@ -94,6 +94,9 @@ final class VoiceCommandParserTests: XCTestCase {
         // 泛指"找东西"/空 → 不是具体 find（不返回 .find）。
         XCTAssertNotEqual(VoiceCommandParser.parse("找东西"), .find("东西"))
         XCTAssertNotEqual(VoiceCommandParser.parse("找我的东西"), .find("我的东西"))
+        // 碰撞守卫：find 置于具体命令之后作兜底——"find my location"归 whereAmI（含"my location"），不被 find 抢。
+        XCTAssertEqual(VoiceCommandParser.parse("find my location"), .whereAmI)
+        XCTAssertEqual(VoiceCommandParser.parse("我在哪里"), .whereAmI)
     }
 
     /// 颜色识别（配衣服/比色刚需）须先于通用「看一看」匹配。

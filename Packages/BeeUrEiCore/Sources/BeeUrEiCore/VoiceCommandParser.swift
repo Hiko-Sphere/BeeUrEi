@@ -39,9 +39,6 @@ public enum VoiceCommandParser {
         // 发消息（含目标与内容）优先解析：「给妈妈发消息说我到了」/ "send a message to mom saying I arrived"
         if let m = parseSendMessage(text) { return m }
 
-        // 找具体物品：「找我的钥匙」/「帮我找水杯」/ "find my keys"（泛指"找东西"不算，交由 UI 菜单）。
-        if let obj = parseFindTarget(text) { return .find(obj) }
-
         func has(_ keys: [String]) -> Bool { keys.contains { t.contains($0) } }
 
         if has(["求助", "救命", "帮帮我", "呼叫", "打电话", "call for help", "get help", "help me", "call family"]) { return .help }
@@ -66,6 +63,9 @@ public enum VoiceCommandParser {
         if has(["颜色", "什么色", "识别颜色", "报颜色", "what color", "which color", "what colour", "which colour", "read color", "color of", "identify color"]) { return .readColor }
         if has(["看一看", "识别", "这是什么", "拍一下", "look", "what is this", "identify", "recognize"]) { return .look }
         if has(["再说一遍", "重复", "刚才说什么", "repeat", "say again", "say that again"]) { return .repeatLast }
+        // 找具体物品：置于具体命令**之后**作兜底——否则"find my location"(含"find my")会抢掉 whereAmI、
+        // "找一下路"等也会误当找物。到这里说明不是任何具体命令，"找X"/"find X" 才解析为找物（泛指"找东西"除外）。
+        if let obj = parseFindTarget(text) { return .find(obj) }
         // 导航意图（带目的地提取）：「带我去/导航去/去 北京西站」 / "navigate to / take me to X"
         if let dest = parseDestination(text) { return .navigate(dest) }
         if has(["导航", "navigate", "navigation", "directions"]) { return .navigate(nil) }

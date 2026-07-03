@@ -184,4 +184,25 @@ describe('OpenHelpRegistry', () => {
     expect(r.byId('c0')).toBeUndefined() // 最旧被淘汰
     expect(r.byId('c4')).toBeDefined()
   })
+
+  it('认领却接不通自愈：认领者超宽限期仍未进房间 → 释放回队列（可靠性复审，避免卡到 4 小时 TTL）', () => {
+    const r = new OpenHelpRegistry()
+    r.register(base({ callId: 'h', fromUserId: 'blind1', createdAt: 0 }))
+    expect(r.claim('h', 'vol1', 1000)?.claimedBy).toBe('vol1') // claimedAt=1000，离开公开队列
+    expect(r.open(2000).length).toBe(0) // 已认领 → 不在队列
+    const absent = () => false, present = () => true
+
+    // 宽限期内（<20s）：不释放，防误伤仍在建连者。
+    expect(r.releaseStaleClaims(1000 + 10_000, 20_000, absent)).toBe(0)
+    expect(r.byId('h')?.claimedBy).toBe('vol1')
+    // 认领者已在房间：即便超时也不动（正常通话中）。
+    expect(r.releaseStaleClaims(1000 + 30_000, 20_000, present)).toBe(0)
+    expect(r.byId('h')?.claimedBy).toBe('vol1')
+    // 超宽限期 + 认领者不在房间 → 释放回队列：清 claimedBy，重新对其他志愿者可见。
+    expect(r.releaseStaleClaims(1000 + 30_000, 20_000, absent)).toBe(1)
+    expect(r.byId('h')?.claimedBy).toBeUndefined()
+    expect(r.open(1000 + 30_000).map((x) => x.callId)).toEqual(['h']) // 回到队列
+    // 别的志愿者可再认领。
+    expect(r.claim('h', 'vol2', 1000 + 31_000)?.claimedBy).toBe('vol2')
+  })
 })

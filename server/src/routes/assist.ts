@@ -265,6 +265,9 @@ export function registerAssistRoutes(
 
   // 志愿者浏览公开求助队列（粗粒度摘要，排除自己发起的与黑名单双方；不含精确坐标/联系方式）。
   app.get('/api/assist/help/queue', { preHandler: requireAuth() }, async (req) => {
+    // "认领却接不通"自愈：志愿者本就轮询本端点浏览队列——借此把认领者超 20s 未进 ws 房间的求助释放回
+    // 队列（App 被杀/建连失败），让别的志愿者接手，而非卡在 claimed 直到 4 小时 TTL、盲人求助无人可接。
+    openHelp.releaseStaleClaims(Date.now(), 20_000, (cid, uid) => hub.peersInCall(cid).some((p) => p.userId === uid))
     const list = openHelp.summaries(Date.now(), req.user!.sub, blockedUserIdSet(store, req.user!.sub))
     return { requests: list, count: list.length }
   })

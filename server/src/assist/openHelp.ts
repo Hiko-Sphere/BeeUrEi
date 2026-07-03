@@ -174,6 +174,25 @@ export class OpenHelpRegistry {
     return false
   }
 
+  /// 众包求助的"认领却接不通"自愈（与 pendingCalls.reopenStaleAnswer 对称，见协助呼叫可靠性复审）：
+  /// 志愿者 claim 后必须尽快经 /ws 加入房间；若 claimedAt 超过 graceMs 仍未出现在房间（App 被杀/切后台/
+  /// 建连失败/只 claim 没走信令），说明"已认领却接不通"——**释放回公开队列**让别的志愿者接手，而非卡在
+  /// claimed 态直到 claimedTtl(4 小时)、期间盲人的求助无人可接。isClaimerPresent 由调用方用 hub 房间成员判定。
+  /// 返回释放的条数。graceMs 建议 ~20s（宽松防误伤仍在建连的合法认领者）。
+  releaseStaleClaims(now: number, graceMs: number, isClaimerPresent: (callId: string, claimerId: string) => boolean): number {
+    let released = 0
+    for (const [id, r] of this.reqs) {
+      if (r.claimedBy !== undefined && r.claimedAt !== undefined
+          && now - r.claimedAt > graceMs
+          && !isClaimerPresent(id, r.claimedBy)) {
+        // 释放回队列：清 claimedBy，用 requeuedAt=now 作过期基准（与 cancel 释放同口径，防陈旧 createdAt 被立即清）。
+        this.reqs.set(id, { ...r, claimedBy: undefined, claimedAt: undefined, requeuedAt: now })
+        released++
+      }
+    }
+    return released
+  }
+
   private prune(now: number): void {
     for (const [id, r] of this.reqs) {
       // 未认领条目以 requeuedAt(若曾释放)否则 createdAt 为基准计过期；已认领条目以 claimedAt 计。

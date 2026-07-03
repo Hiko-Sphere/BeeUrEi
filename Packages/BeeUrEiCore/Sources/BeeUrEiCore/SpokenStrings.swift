@@ -371,6 +371,22 @@ public enum SpokenStrings {
         }
     }
 
+    /// 新绿起步（CrossingSignalGate）：亲见红/黄→绿跳变且在稳定步行窗内，整段相位在前方，可起步。
+    public static func crossFreshGreen(_ lang: Language) -> String {
+        switch lang {
+        case .zh: return "绿灯刚亮，可以起步过街，保持直行、注意车辆"
+        case .en: return "Walk signal just started, you can begin crossing, keep straight and watch for cars"
+        }
+    }
+
+    /// 陈旧绿/新绿超窗：灯虽绿但可能快结束，起步走不完——等下一个绿灯再过更安全。
+    public static func crossWaitNextGreen(_ lang: Language) -> String {
+        switch lang {
+        case .zh: return "已是绿灯但可能快结束，请等下一个绿灯再过街"
+        case .en: return "The light is green but may end soon, wait for the next green to cross"
+        }
+    }
+
     // MARK: 取景引导（FramingGuide）
 
     public static func framingSearching(_ lang: Language) -> String {

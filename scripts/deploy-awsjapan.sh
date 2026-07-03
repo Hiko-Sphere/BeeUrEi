@@ -10,7 +10,8 @@
 # 远端命令统一 base64 编码后作参数传递——经验教训：抖动连接下 stdin 喂脚本会被截断。
 set -euo pipefail
 
-HOST=awsjapan
+# 默认走 Cloudflare Tunnel 通路（awsjapan-cf，IP 无关、任何网络可用）；DEPLOY_HOST=awsjapan 可切回直连。
+HOST="${DEPLOY_HOST:-awsjapan-cf}"
 COMPONENT="${1:-all}"
 
 say() { printf '\n\033[1;36m== %s ==\033[0m\n' "$*"; }

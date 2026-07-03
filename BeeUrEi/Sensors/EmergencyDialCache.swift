@@ -23,6 +23,13 @@ enum EmergencyDialCache {
         }
     }
 
+    /// 登出即清：UserDefaults 键是全局的——不清则**上一个账号**的紧急联系人残留（隐私残留 +
+    /// 换账号后告警失败可能拨给前任用户的家人）。与 LiveLocationManager.reset 同一防跨账号泄漏口径。
+    static func clear() {
+        UserDefaults.standard.removeObject(forKey: nameKey)
+        UserDefaults.standard.removeObject(forKey: urlKey)
+    }
+
     static var cached: (name: String, url: URL)? {
         let d = UserDefaults.standard
         guard let name = d.string(forKey: nameKey), let s = d.string(forKey: urlKey), let url = URL(string: s) else { return nil }

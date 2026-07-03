@@ -379,6 +379,14 @@ struct HubView: View {
         }
         // 摔倒/撞击监测：Hub 存续期间持续运行（含进入导盲/识别/通话后台时段，手机在身上）。
         reconcileFallDetection()
+        // 无网兜底拨号缓存的新鲜度：familyLinks 的既有加载点只有亲友页——很久不开亲友页的用户
+        // 缓存会陈旧（换过紧急联系人/解绑）。这个缓存只在**最糟糕的时刻**（告警重试全败=无网）
+        // 被读，读时无从修正，故进 Hub 就后台静默刷一次（失败无所谓，下次进 Hub 再试；
+        // APIClient.familyLinks 内部会顺手更新 EmergencyDialCache）。
+        Task.detached(priority: .utility) { [token = session.token] in
+            guard let token else { return }
+            _ = try? await APIClient().familyLinks(token: token)
+        }
         // 未读消息角标。
         unreadPollTask?.cancel()
         unreadPollTask = Task {

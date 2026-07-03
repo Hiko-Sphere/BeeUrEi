@@ -218,6 +218,7 @@ final class AuthSession {
             }
         }
         LiveLocationManager.shared.reset() // 停止位置共享/轮询，清联系人，防跨账号泄漏
+        EmergencyDialCache.clear() // 清无网兜底拨号缓存——防换账号后拨给前任用户的紧急联系人
         token = nil
         user = nil
         requiresSetup = false

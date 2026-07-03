@@ -334,7 +334,7 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
                   return (
                     <div key={m.id} className="rounded-xl surface-2 px-3 py-2">
                       <div className="flex items-center justify-between text-[11px] text-faint">
-                        <span className="font-semibold text-honey">{who}</span><span>{timeAgo(m.createdAt, lang)}</span>
+                        <span className="font-semibold text-accent">{who}</span><span>{timeAgo(m.createdAt, lang)}</span>
                       </div>
                       <div className="mt-0.5 break-words text-sm">{loc ? `📍 ${loc.name || t('位置', 'Location')}` : m.text}</div>
                     </div>
@@ -438,7 +438,7 @@ function GroupInfoDialog({ groupId, groupName, ownerId, members, meId, onClose, 
             {list.map((m) => (
               <li key={m.id} className="flex items-center gap-3 px-3 py-2.5">
                 <Avatar name={m.displayName} src={m.avatar} size={32} />
-                <span className="flex-1 truncate text-sm">{m.displayName}{m.id === ownerId && <span className="ml-2 rounded-full bg-honey/20 px-2 py-0.5 text-[10px] text-honey">{t('群主', 'Owner')}</span>}</span>
+                <span className="flex-1 truncate text-sm">{m.displayName}{m.id === ownerId && <span className="ml-2 rounded-full bg-honey/20 px-2 py-0.5 text-[10px] text-accent">{t('群主', 'Owner')}</span>}</span>
                 {isOwner && m.id !== ownerId && (
                   <button onClick={() => kick(m.id)} disabled={busy} className="text-xs text-danger hover:underline disabled:opacity-40">{t('移出', 'Remove')}</button>
                 )}

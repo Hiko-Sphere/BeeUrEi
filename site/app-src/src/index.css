@@ -21,7 +21,8 @@
   --line: #e6e2d8;
   --text: #1a1c24;
   --text-soft: #54596a;
-  --text-faint: #8b8f9e;
+  --text-faint: #656a78; /* 次要文字：≥4.5:1 于 --bg/#fff（WCAG 1.4.3 AA）；旧 #8b8f9e 仅 2.95:1 */
+  --accent-strong: #8a5f00; /* 蜂蜜作**文字**用的深色变体：亮蜂蜜 #f2a900 作文字仅 1.84:1，此值 ≥5:1 于浅底 */
 }
 .dark {
   --bg: #0f1117;
@@ -30,7 +31,8 @@
   --line: #2a2f3a;
   --text: #eef0f5;
   --text-soft: #aeb3c2;
-  --text-faint: #767c8c;
+  --text-faint: #878d9f; /* 暗色次要文字：旧 #767c8c 于 --surface 仅 ~4.2:1 擦边，提亮至 ≥4.9:1 */
+  --accent-strong: #f2a900; /* 暗色下亮蜂蜜作文字 ≥9:1 于深底，无需变暗 */
 }
 
 html, body, #root { height: 100%; }
@@ -48,6 +50,8 @@ body {
 .border-line { border-color: var(--line); }
 .text-soft { color: var(--text-soft); }
 .text-faint { color: var(--text-faint); }
+/* 蜂蜜作文字用（链接/徽章）的达标色；图标/背景填充仍用亮蜂蜜 text-honey/bg-honey。 */
+.text-accent { color: var(--accent-strong); }
 
 :where(button, a, input, textarea, select, [tabindex]):focus-visible {
   outline: 2px solid var(--color-honey);

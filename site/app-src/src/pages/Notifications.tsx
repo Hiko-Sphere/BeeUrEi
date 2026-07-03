@@ -69,7 +69,7 @@ export function NotificationsPage() {
                     // Apple Maps 网页版跨平台可开、境内自动纠偏，且与 iOS 告警/聊天位置链接口径一致。
                     <a href={`https://maps.apple.com/?ll=${n.data.lat},${n.data.lon}&q=${n.data.lat},${n.data.lon}`} target="_blank" rel="noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-honey hover:underline">
+                      className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline">
                       📍 {t('查看位置', 'View location')}
                     </a>
                   )}

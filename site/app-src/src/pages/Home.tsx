@@ -63,7 +63,7 @@ export function HomePage() {
             <div className="mt-1 text-2xl font-bold">{stats ? `${stats.online}/${stats.total}` : '—'}</div>
             <div className="text-xs text-faint">{t('在线 / 已绑定的视障用户', 'online / linked blind users')}</div>
           </div>
-          <Link to="/family" className="text-sm font-medium text-honey hover:underline">{t('管理联系人', 'Manage')}</Link>
+          <Link to="/family" className="text-sm font-medium text-accent hover:underline">{t('管理联系人', 'Manage')}</Link>
         </div>
       </Card>
 

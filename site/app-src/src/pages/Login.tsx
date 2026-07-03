@@ -135,7 +135,7 @@ export function LoginPage() {
 
         <p className="mt-6 text-center text-xs leading-relaxed text-faint">
           {t('继续即表示同意', 'By continuing you agree to our ')}
-          <a className="text-honey hover:underline" href="https://beeurei.hikosphere.com/legal/" target="_blank" rel="noreferrer">{t('隐私政策与条款', 'Privacy & Terms')}</a>。
+          <a className="text-accent hover:underline" href="https://beeurei.hikosphere.com/legal/" target="_blank" rel="noreferrer">{t('隐私政策与条款', 'Privacy & Terms')}</a>。
           <br />{t('视障用户请使用 iOS 客户端。', 'Blind users: please use the iOS app.')}
         </p>
       </div>

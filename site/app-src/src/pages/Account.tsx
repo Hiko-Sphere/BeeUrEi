@@ -66,7 +66,7 @@ export function AccountPage() {
             <div className="flex items-center gap-1.5">
               <span className="truncate text-lg font-semibold">{user.displayName}</span>
               {(self?.verified || verif?.status === 'verified') && (
-                <span title={t('已实名认证', 'Identity verified')} className="inline-flex items-center gap-0.5 rounded-full bg-honey/15 px-1.5 py-0.5 text-[10px] font-bold text-honey">✓ {t('已认证', 'Verified')}</span>
+                <span title={t('已实名认证', 'Identity verified')} className="inline-flex items-center gap-0.5 rounded-full bg-honey/15 px-1.5 py-0.5 text-[10px] font-bold text-accent">✓ {t('已认证', 'Verified')}</span>
               )}
             </div>
             <div className="truncate text-sm text-faint">@{user.username} · {roleLabel(user.role, t)}</div>
@@ -117,7 +117,7 @@ export function AccountPage() {
         <div className="flex flex-wrap gap-2">
           <Button variant="soft" onClick={() => setIdOpen(true)}>
             {t('用户名 / 手机号', 'Username / phone')}
-            {self?.usernameCustomized === false && <span className="ml-1.5 text-xs text-honey">{t('待设置', 'Set up')}</span>}
+            {self?.usernameCustomized === false && <span className="ml-1.5 text-xs text-accent">{t('待设置', 'Set up')}</span>}
           </Button>
           <Button variant="soft" onClick={() => setPwOpen(true)}>{t('修改密码', 'Change password')}</Button>
           <Button variant="soft" onClick={() => setEmailOpen(true)}>
@@ -224,7 +224,7 @@ export function VerificationDialog({ status, onClose, onChanged }: { status: Ver
 
         {step === 'status' && (
           <div className="mt-3 flex flex-col gap-3">
-            {st === 'verified' && <p className="rounded-xl bg-honey/10 p-3 text-sm text-honey">✓ {t('你已通过实名认证，账号已显示「已认证」徽章。', 'You are verified — the verified badge appears on your account.')}</p>}
+            {st === 'verified' && <p className="rounded-xl bg-honey/10 p-3 text-sm text-accent">✓ {t('你已通过实名认证，账号已显示「已认证」徽章。', 'You are verified — the verified badge appears on your account.')}</p>}
             {st === 'pending' && <p className="rounded-xl surface-2 p-3 text-sm text-soft">{t('审核中，通常 1–2 个工作日。结果会通过通知告知你。', 'Under review, usually 1–2 business days. We will notify you of the result.')}</p>}
             {st === 'rejected' && (
               <p className="rounded-xl border border-danger/30 p-3 text-sm text-soft">
@@ -333,7 +333,7 @@ function SessionsDialog({ onClose }: { onClose: () => void }) {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="truncate text-sm font-medium">{s.deviceLabel || t('未知设备', 'Unknown device')}</span>
-                  {s.current && <span className="rounded bg-[var(--color-honey)]/15 px-1.5 py-0.5 text-[10px] font-bold text-honey">{t('本机', 'This device')}</span>}
+                  {s.current && <span className="rounded bg-[var(--color-honey)]/15 px-1.5 py-0.5 text-[10px] font-bold text-accent">{t('本机', 'This device')}</span>}
                 </div>
                 <div className="text-xs text-faint">{lastSeen(s.lastSeenAt)}</div>
               </div>

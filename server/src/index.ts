@@ -7,6 +7,7 @@ import { sweepExpiredRecordings } from './recording/retention'
 import { sweepStaleVerifications } from './kyc/retention'
 import { sweepOrphanMedia } from './media/orphanSweep'
 import { ensureKycDir } from './kyc/storage'
+import { installGracefulShutdown } from './shutdown'
 
 // 从 .env 读取密钥/配置（AMAP_API_KEY / ADMIN_* / JWT_SECRET / SMTP_* / SENTRY_DSN / METRICS_TOKEN）。Node 21+ 内置。
 try {
@@ -46,15 +47,8 @@ async function main(): Promise<void> {
   const sweepTimer = setInterval(sweep, 60 * 60 * 1000)
   sweepTimer.unref?.() // 不阻止进程退出
 
-  // 优雅关闭：收到 SIGTERM/SIGINT 时先关闭 server（完成在途请求）再退出。
-  for (const sig of ['SIGTERM', 'SIGINT'] as const) {
-    process.on(sig, () => {
-      app
-        .close()
-        .then(() => process.exit(0))
-        .catch(() => process.exit(1))
-    })
-  }
+  // 有界优雅关闭：SIGTERM/SIGINT 先排空在途请求，超时兜底强退（防通话长连接让 close() 永挂）。
+  installGracefulShutdown(app, { timeoutMs: Number(process.env.SHUTDOWN_TIMEOUT_MS ?? 10_000) })
 }
 
 main().catch((err) => {

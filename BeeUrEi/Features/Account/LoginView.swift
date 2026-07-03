@@ -40,6 +40,8 @@ struct LoginView: View {
     @State private var passkeyBusy = false
     @State private var detailLoadFailed = false           // /api/me 拉取失败：别把已绑定账号显示成空
     @State private var passkeyToRemove: PasskeyInfo?       // 移除 Passkey 前确认（不可逆）
+    @State private var exportFileURL: URL?                 // 自助导出：文件就绪后出现 ShareLink
+    @State private var exportBusy = false
     @State private var showRoleChange = false              // 更改身份确认
     @State private var pendingRole: String?                // 待切换的目标身份
 
@@ -108,6 +110,19 @@ struct LoginView: View {
                         } label: {
                             Label(KYCStrings.rowLabel(lang), systemImage: "checkmark.seal")
                         }
+                    }
+                    // 自助数据导出（GDPR 可携权，与 web 对等）：两段式——先取文件再出现分享入口，
+                    // VoiceOver 各阶段有明确可读状态（准备中/可分享/失败）。
+                    if let url = exportFileURL {
+                        ShareLink(item: url) { Label(AccountStrings.exportShare(lang), systemImage: "square.and.arrow.up") }
+                    } else {
+                        Button {
+                            exportMyData()
+                        } label: {
+                            if exportBusy { Text(AccountStrings.exportPreparing(lang)) }
+                            else { Label(AccountStrings.exportMyData(lang), systemImage: "arrow.down.doc") }
+                        }
+                        .disabled(exportBusy)
                     }
                     Button(AccountStrings.logout(lang), role: .destructive) { showLogoutConfirm = true }
                     Button(AccountStrings.deleteAccount(lang), role: .destructive) { showDeleteConfirm = true }
@@ -504,6 +519,23 @@ struct LoginView: View {
             A11y.announce(AccountStrings.avatarUpdated(lang))
             await loadMe()
         } catch { avatarMsg = AccountStrings.avatarUploadFailed(lang) }
+    }
+
+    /// 自助数据导出：下载 JSON → 写临时文件 → 显示 ShareLink。失败朗读提示（accountMessage 已有呈现通道）。
+    private func exportMyData() {
+        guard let token = KeychainStore.read() else { return }
+        exportBusy = true
+        Task {
+            defer { exportBusy = false }
+            do {
+                let data = try await APIClient().exportMyData(token: token)
+                let url = FileManager.default.temporaryDirectory.appendingPathComponent("beeurei-my-data.json")
+                try data.write(to: url, options: .atomic)
+                exportFileURL = url
+            } catch {
+                accountMessage = AccountStrings.exportFailed(lang)
+            }
+        }
     }
 
     private func changePassword() {

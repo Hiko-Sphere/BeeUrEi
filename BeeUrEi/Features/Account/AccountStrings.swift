@@ -333,6 +333,7 @@ enum AccountStrings {
     static func accountErrorText(_ code: String, _ l: Language) -> String {
         switch code {
         case "username_taken": return l == .zh ? "用户名已被使用" : "Username already taken"
+        case "too_many_attempts": return l == .zh ? "尝试太频繁，请稍等片刻再试" : "Too many attempts — wait a moment and try again"
         case "password_too_short": return l == .zh ? "密码至少 8 位" : "Password must be at least 8 characters"
         case "password_too_common": return l == .zh ? "这个密码太常见，容易被猜到，请换一个更独特的" : "That password is too common — pick something more unique"
         case "invalid_username": return useridInvalid(l)
@@ -373,6 +374,7 @@ enum AccountStrings {
     static func serverErrorText(_ code: String, _ l: Language) -> String {
         switch code {
         case "username_taken": return l == .zh ? "用户名已被使用" : "Username already taken"
+        case "too_many_attempts": return l == .zh ? "尝试太频繁，请稍等片刻再试" : "Too many attempts — wait a moment and try again"
         case "password_too_short": return l == .zh ? "密码至少 8 位" : "Password must be at least 8 characters"
         case "password_too_common": return l == .zh ? "这个密码太常见，容易被猜到，请换一个更独特的" : "That password is too common — pick something more unique"
         case "email_taken": return l == .zh ? "邮箱已被使用" : "Email already in use"
@@ -421,4 +423,10 @@ enum AccountStrings {
         default: return role
         }
     }
+
+    // MARK: 自助数据导出（GDPR 可携权，与 web 对等）
+    static func exportMyData(_ l: Language) -> String { l == .zh ? "导出我的数据" : "Export my data" }
+    static func exportPreparing(_ l: Language) -> String { l == .zh ? "正在准备导出文件…" : "Preparing your export…" }
+    static func exportShare(_ l: Language) -> String { l == .zh ? "分享导出文件（JSON）" : "Share export file (JSON)" }
+    static func exportFailed(_ l: Language) -> String { l == .zh ? "导出失败，请稍后再试" : "Export failed — try again later" }
 }

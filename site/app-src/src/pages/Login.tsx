@@ -28,6 +28,7 @@ export function LoginPage() {
       case 'registration_disabled': return t('注册暂时关闭', 'Registration is currently closed')
       case 'password_too_short': return t('密码至少 8 位', 'Password must be at least 8 characters')
       case 'password_too_common': return t('这个密码太常见，容易被猜到——换一个更独特的', 'That password is too common — pick something more unique')
+      case 'too_many_attempts': return t('尝试太频繁，请稍等片刻再试', 'Too many attempts — wait a moment and try again')
       case 'account_disabled': return t('该账号已被停用，请联系管理员', 'This account has been disabled — please contact the administrator')
       case 'too_many_requests': return t('尝试过于频繁，请稍候再试', 'Too many attempts — please wait a moment')
       case 'content_blocked': return t('该内容不被允许，请换一个', "That's not allowed — please choose another")

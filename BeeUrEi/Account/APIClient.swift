@@ -1140,6 +1140,11 @@ struct APIClient {
     }
 
     /// 删除账号（App Store 要求）。
+    /// 自助数据导出（GDPR 可携权）：返回服务端整装 JSON（web 端同一端点）。
+    func exportMyData(token: String) async throws -> Data {
+        try await authedGet("/api/account/export", token: token)
+    }
+
     func deleteAccount(token: String) async throws {
         _ = try await authedSend("DELETE", "/api/account", token: token)
     }

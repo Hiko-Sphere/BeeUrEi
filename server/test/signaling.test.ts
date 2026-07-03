@@ -175,6 +175,33 @@ describe('WebRTC signaling relay', () => {
     await app.close()
   })
 
+  it('每用户并发 ws 上限：超出即 4008 拒绝（防认证用户囤积连接耗尽资源），断开后名额释放', async () => {
+    process.env.WS_MAX_PER_USER = '2'
+    try {
+      const app = buildApp(new MemoryStore())
+      await app.listen({ port: 0, host: '127.0.0.1' })
+      const port = (app.server.address() as { port: number }).port
+      const r = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'wsflood', password: 'secret123', role: 'helper' } })).json()
+      const base = `ws://127.0.0.1:${port}/ws?token=${r.token}`
+      const a = new WebSocket(base), b = new WebSocket(base)
+      await Promise.all([open(a), open(b)])
+      // 第 3 条：超上限 → 4008 关闭。
+      const c = new WebSocket(base)
+      const cClosed = new Promise<number>((resolve) => c.on('close', (code) => resolve(code)))
+      expect(await cClosed).toBe(4008)
+      // 关一条 → 名额释放，新连接可入。
+      a.close()
+      await new Promise((r2) => a.on('close', r2))
+      await new Promise((r2) => setTimeout(r2, 50)) // 等服务端 close 处理器清 map
+      const d = new WebSocket(base)
+      const dOk = new Promise<boolean>((resolve) => { d.on('open', () => resolve(true)); d.on('close', () => resolve(false)) })
+      // open 后短暂窗口内不被服务端关闭即视为被接纳。
+      expect(await dOk).toBe(true)
+      b.close(); d.close()
+      await app.close()
+    } finally { delete process.env.WS_MAX_PER_USER }
+  })
+
   it('rejects connection without a valid token', async () => {
     const app = buildApp(new MemoryStore())
     await app.listen({ port: 0, host: '127.0.0.1' })

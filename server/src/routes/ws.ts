@@ -66,6 +66,14 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
         socket.close(4001, 'unauthorized')
         return
       }
+      // 每用户并发连接上限（默认 8，WS_MAX_PER_USER 可调）：HTTP 限流只限每分钟新建速率，不限**存量并发**——
+      // 认证用户长期累积上千条 ws（各占 fd/内存/map 条目）是真实资源耗尽面。8 对合法场景很宽裕
+      // （iPhone+iPad+网页多标签+管理员旁观）；同用户重连顶替（见 join）会主动关旧连接，正常用户远达不到。
+      const maxPerUser = Math.max(1, Number(process.env.WS_MAX_PER_USER ?? 8) || 8)
+      if ((userSockets.get(auth.sub)?.size ?? 0) >= maxPerUser) {
+        socket.close(4008, 'too_many_connections')
+        return
+      }
       const clientId = randomUUID()
       sockets.set(clientId, socket)
       // 通话内实时文字（RTT）令牌桶：容量 5、每秒回填 1 条——防刷屏轰炸对端 TTS（评审定稿口径）。

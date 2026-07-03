@@ -123,17 +123,25 @@ struct WalkNavigationView: View {
                         Text(NavStrings.routesEmpty(lang)).font(.footnote).foregroundStyle(.secondary)
                     } else {
                         ForEach(savedRoutes) { route in
-                            Button {
-                                model.startCustomRoute(name: route.name,
-                                                       waypoints: route.waypoints.map { (lat: $0.lat, lon: $0.lng, note: $0.note) })
-                            } label: {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(route.name)
-                                    Text(NavStrings.routePointCount(route.waypoints.count, lang))
-                                        .font(.caption).foregroundStyle(.secondary)
+                            let wps = route.waypoints.map { (lat: $0.lat, lon: $0.lng, note: $0.note) }
+                            VStack(alignment: .leading, spacing: 6) {
+                                Button {
+                                    model.startCustomRoute(name: route.name, waypoints: wps)
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(route.name)
+                                        Text(NavStrings.routePointCount(route.waypoints.count, lang))
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
                                 }
+                                .accessibilityLabel(NavStrings.routeItemA11y(route.name, route.waypoints.count, lang))
+                                // 出发前预览：不走路先试听全程（Soundscape 街景预览对齐）。
+                                Button(NavStrings.previewRoute(lang)) {
+                                    model.previewCustomRoute(name: route.name, waypoints: wps)
+                                }
+                                .font(.footnote)
+                                .accessibilityHint(NavStrings.routePreviewHint(route.name, lang))
                             }
-                            .accessibilityLabel(NavStrings.routeItemA11y(route.name, route.waypoints.count, lang))
                         }
                     }
                 }

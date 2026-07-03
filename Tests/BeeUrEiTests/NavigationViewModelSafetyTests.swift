@@ -111,6 +111,46 @@ final class NavigationViewModelSafetyTests: XCTestCase {
         XCTAssertFalse(vm2.running) // 无轨迹：拒绝回程
     }
 
+    private let customWps: [(lat: Double, lon: Double, note: String?)] =
+        [(31.23, 121.47, "出门右转"), (31.24, 121.48, nil), (31.25, 121.49, "到菜场了")]
+
+    func testStartCustomRouteEntersRunning() {
+        var fs = FeatureSettings(); fs.navigationEnabled = true; defer { fs.navigationEnabled = false }
+        let vm = makeVM()
+        vm.startCustomRoute(name: "家到菜场", waypoints: customWps)
+        XCTAssertTrue(vm.running)
+        XCTAssertFalse(vm.previewing)
+    }
+
+    func testPreviewCustomRouteNarratesWithoutRunning() {
+        // 预览：不进实时跟踪（running=false），只逐点试听——盲人出门前先听全程（Soundscape 街景预览对齐）。
+        var fs = FeatureSettings(); fs.navigationEnabled = true; defer { fs.navigationEnabled = false }
+        let vm = makeVM()
+        vm.previewCustomRoute(name: "家到菜场", waypoints: customWps)
+        XCTAssertTrue(vm.previewing)
+        XCTAssertFalse(vm.running)   // narratePreview 内部 running=false，不启定位
+        vm.stopPreview()
+        XCTAssertFalse(vm.previewing)
+    }
+
+    func testCustomRouteRefusesTooFewWaypoints() {
+        var fs = FeatureSettings(); fs.navigationEnabled = true; defer { fs.navigationEnabled = false }
+        let vm = makeVM()
+        vm.startCustomRoute(name: "x", waypoints: [(31.2, 121.4, nil)]) // <2 点：纵深防御拒绝
+        XCTAssertFalse(vm.running)
+        vm.previewCustomRoute(name: "x", waypoints: [(31.2, 121.4, nil)])
+        XCTAssertFalse(vm.previewing)
+    }
+
+    func testCustomRouteGatedByNavigationDisabled() {
+        // 导航功能被关：点路线不静默无反应，须播报"请先开启"（复审 MED 的门控在预览路径也生效）。
+        var fs = FeatureSettings(); fs.navigationEnabled = false
+        let vm = makeVM()
+        vm.startCustomRoute(name: "家", waypoints: customWps)
+        XCTAssertFalse(vm.running)
+        XCTAssertEqual(vm.status, NavStrings.enableFirst(FeatureSettings().language))
+    }
+
     func testArrivalRequiresPreciseFix() {
         let vm = makeVM()
         recordTrail(vm) // 出发点 latOffset 0，最远点 0.0006

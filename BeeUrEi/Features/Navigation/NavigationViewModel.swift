@@ -623,14 +623,13 @@ final class NavigationViewModel {
         service.requestAuthAndStart()
     }
 
-    /// 执行路线库中的一条自定义路线（亲友编排/自存，Soundscape Guided Routes 式）：
-    /// 服务端下发的 WGS-84 航点直接喂给同一套实时引导引擎（照抄 startBacktrack 模板——
-    /// region=.overseas 即"不做 GCJ 纠偏"，与面包屑回程同约定；引导内核零改动）。
-    func startCustomRoute(name: String, waypoints: [(lat: Double, lon: Double, note: String?)]) {
+    /// 自定义路线的共享初始化（执行与预览共用）：门控 + 停旧会话 + 铺设 maneuvers/destination/routeCoords。
+    /// 返回 false 表示门控未过（已播报原因），调用方不应继续。
+    private func setupCustomRoute(name: String, waypoints: [(lat: Double, lon: Double, note: String?)]) -> Bool {
         lang = FeatureSettings().language
         // 与 start() 同门控：导航功能被关时点路线须听到原因，不静默什么都不发生（复审 MED）。
-        guard FeatureSettings().navigationEnabled else { failStatus(NavStrings.enableFirst(lang)); return }
-        guard waypoints.count >= 2 else { return } // 服务端已保证 >=2；纵深防御
+        guard FeatureSettings().navigationEnabled else { failStatus(NavStrings.enableFirst(lang)); return false }
+        guard waypoints.count >= 2 else { return false } // 服务端已保证 >=2；纵深防御
         let wasNavigating = running || previewing
         if running { stop() }
         if previewing { stopPreview() } // 预览态残留会让旁白与路线引导叠读、按钮错标"停止预览"（复审 MED）
@@ -655,6 +654,23 @@ final class NavigationViewModel {
         headingFilter = HeadingFilter()
         routeReady = true  // 航点已就绪，不走 planRoute
         replanning = false
+        return true
+    }
+
+    /// 出发前预览一条自定义路线（Soundscape 街景预览对齐）：不进实时跟踪，逐点试听"总长 + 每段方向距离"。
+    /// 盲人在家先听清路线全貌再决定是否走——与规划路线的预览（startPreview→narratePreview）同一套旁白。
+    func previewCustomRoute(name: String, waypoints: [(lat: Double, lon: Double, note: String?)]) {
+        guard setupCustomRoute(name: name, waypoints: waypoints) else { return }
+        previewing = true
+        status = NavStrings.planningPreview(lang)
+        narratePreview() // 内部 service.stop()+running=false，逐步排队朗读，可随时 stopPreview
+    }
+
+    /// 执行路线库中的一条自定义路线（亲友编排/自存，Soundscape Guided Routes 式）：
+    /// 服务端下发的 WGS-84 航点直接喂给同一套实时引导引擎（照抄 startBacktrack 模板——
+    /// region=.overseas 即"不做 GCJ 纠偏"，与面包屑回程同约定；引导内核零改动）。
+    func startCustomRoute(name: String, waypoints: [(lat: Double, lon: Double, note: String?)]) {
+        guard setupCustomRoute(name: name, waypoints: waypoints) else { return }
         running = true
         lastCallout = ProcessInfo.processInfo.systemUptime
         lastRoadGeocode = ProcessInfo.processInfo.systemUptime

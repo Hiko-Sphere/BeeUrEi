@@ -51,6 +51,9 @@ enum NavStrings {
         l == .zh ? "离线路线引导中（\(n) 个转向点）" : "Offline route guidance (\(n) turns)"
     }
     static func routePointCount(_ n: Int, _ l: Language) -> String { l == .zh ? "\(n) 个路线点" : "\(n) points" }
+    static func routePreviewHint(_ name: String, _ l: Language) -> String {
+        l == .zh ? "不走路，先听一遍\(name)的全程" : "Hear the whole \(name) route without walking it"
+    }
     static func routeItemA11y(_ name: String, _ n: Int, _ l: Language) -> String {
         l == .zh ? "路线\(name)，\(n) 个路线点，双击开始引导" : "Route \(name), \(n) points, double-tap to start"
     }

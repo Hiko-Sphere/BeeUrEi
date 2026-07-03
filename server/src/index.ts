@@ -8,6 +8,7 @@ import { sweepExpiredRecordings } from './recording/retention'
 import { sweepStaleVerifications } from './kyc/retention'
 import { sweepOrphanMedia } from './media/orphanSweep'
 import { sweepOldNotifications } from './notifications/retention'
+import { runAutoBackup } from './backup/autoBackup'
 import { ensureKycDir } from './kyc/storage'
 import { installGracefulShutdown } from './shutdown'
 
@@ -49,6 +50,12 @@ async function main(): Promise<void> {
     catch (e) { console.warn('[notifications] 清理失败:', (e as Error).message) }
     try { const r = store.deleteExpiredRefreshTokens(Date.now()); if (r) console.log(`[auth] 清理过期 refresh token ${r} 条`) }
     catch (e) { console.warn('[auth] 清理失败:', (e as Error).message) }
+    // 每日自动备份 + 轮换（按天去重，一天只落一份；BACKUP_KEEP_DAYS=0 显式关闭）。
+    try {
+      const b = runAutoBackup(store, Date.now())
+      if (b.created) console.log('[backup] 每日自动备份已落盘')
+      if (b.purged) console.log(`[backup] 轮换清理旧备份 ${b.purged} 份`)
+    } catch (e) { console.warn('[backup] 自动备份失败:', (e as Error).message) }
     // 紧急事件日志保留 180 天（duty-of-care 记录比通知(90d)略长；EMERGENCY_RETENTION_DAYS 可调，≥1）。
     try {
       const d = Number(process.env.EMERGENCY_RETENTION_DAYS)

@@ -151,6 +151,17 @@ final class VoiceCommandParserTests: XCTestCase {
     /// 摔倒的盲人喊"救命"必须走告警（倒计时→通知全部亲友+附位置），不是拨一通可能没人接的视频电话。
     /// 语速指令边界：正常/恢复须在 快/慢 之前（"恢复正常语速"含"语速"）；不误伤读文字/念一下。
     /// 详略指令不误伤朗读：裸"读整页/读文字"仍是读文档，只有明确详略说法才 adjustVerbosity。
+    /// 发消息容忍量词"发个/发条消息"（对抗复审揪出：极自然口语此前解析失败→误当"打开消息"）。
+    func testSendMessageTolerantOfMeasureWord() {
+        XCTAssertEqual(VoiceCommandParser.parse("帮我给张医生发个消息说我晚点到"), .sendMessage(to: "张医生", text: "我晚点到"))
+        XCTAssertEqual(VoiceCommandParser.parse("给妈妈发条信息说我到了"), .sendMessage(to: "妈妈", text: "我到了"))
+        XCTAssertEqual(VoiceCommandParser.parse("发个消息给老王说钥匙在门口"), .sendMessage(to: "老王", text: "钥匙在门口"))
+        // 无量词的原路径不回归。
+        XCTAssertEqual(VoiceCommandParser.parse("给妈妈发消息说我到了"), .sendMessage(to: "妈妈", text: "我到了"))
+        // 消息正文的客套**不剥**（可能是发给收件人的，与找物不同）。
+        XCTAssertEqual(VoiceCommandParser.parse("给老王发消息说钥匙在门口谢谢"), .sendMessage(to: "老王", text: "钥匙在门口谢谢"))
+    }
+
     /// 找物提取剥净首尾填充词（对抗复审揪出）：否则 FindTargetResolver 拿"钥匙在哪里"匹配已教物品必失败。
     func testFindTargetStripsFiller() {
         XCTAssertEqual(VoiceCommandParser.parse("找我的钥匙在哪里"), .find("钥匙"))

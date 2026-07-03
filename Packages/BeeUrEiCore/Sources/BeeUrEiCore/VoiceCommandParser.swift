@@ -177,16 +177,16 @@ public enum VoiceCommandParser {
     /// 「给X发消息(说)Y」/「发消息给X(说)Y」/ "send a message to X saying Y" / "tell X that Y"。
     static func parseSendMessage(_ text: String) -> VoiceCommand? {
         // 中文：给<名>发消息/发信息[说/讲]<内容>
-        if let r = text.range(of: #"给(.{1,12}?)发(消息|信息)(说|讲)?(.*)"#, options: .regularExpression) {
+        if let r = text.range(of: #"给(.{1,12}?)发[个条]?(消息|信息)(说|讲)?(.*)"#, options: .regularExpression) {
             let s = String(text[r])
-            if let m = firstMatch(in: s, pattern: #"给(.{1,12}?)发(?:消息|信息)(?:说|讲)?(.*)"#) {
+            if let m = firstMatch(in: s, pattern: #"给(.{1,12}?)发[个条]?(?:消息|信息)(?:说|讲)?(.*)"#) {
                 let body = m.1.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !body.isEmpty { return .sendMessage(to: m.0, text: body) }
                 return .messages // 没带内容：打开消息界面让用户口述
             }
         }
         // 中文语序二：发消息给<名>[说]<内容>
-        if let m = firstMatch(in: text, pattern: #"发(?:消息|信息)给(.{1,12}?)(?:说|讲)(.*)"#) {
+        if let m = firstMatch(in: text, pattern: #"发[个条]?(?:消息|信息)给(.{1,12}?)(?:说|讲)(.*)"#) {
             let body = m.1.trimmingCharacters(in: .whitespacesAndNewlines)
             if !body.isEmpty { return .sendMessage(to: m.0, text: body) }
         }

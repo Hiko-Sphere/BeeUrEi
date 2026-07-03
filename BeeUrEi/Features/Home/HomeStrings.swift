@@ -97,10 +97,23 @@ enum HomeStrings {
                           : (l == .zh ? "已经是最慢的语速了" : "Already at the slowest speed")
     }
 
+    /// 详略调节确认（按**结果档位**描述，让用户知道各档含义——尤其"最简"会不报转向，须点明）。
+    static func verbosityChanged(_ level: FeedbackVerbosity, _ l: Language) -> String {
+        switch level {
+        case .quiet:  return l == .zh ? "已切到最简播报，只报危险和障碍" : "Minimal announcements — only hazards and obstacles"
+        case .normal: return l == .zh ? "已切到正常播报，报转向和危险" : "Normal announcements — turns and hazards"
+        case .full:   return l == .zh ? "已切到详细播报，播报全部信息" : "Detailed announcements — everything"
+        }
+    }
+    static func verbosityAtLimit(_ direction: VerbosityAdjust, _ l: Language) -> String {
+        direction == .moreDetail ? (l == .zh ? "已经是最详细的播报了" : "Already at the most detailed level")
+                                 : (l == .zh ? "已经是最简的播报了" : "Already at the most minimal level")
+    }
+
     static func voiceCommandsHelp(_ l: Language) -> String {
         l == .zh
-            ? "你可以说：开始导盲、带我去某地、看一看、读一下文字、找我的钥匙、我在哪、周围有什么、天气、给某人发消息、打开消息、再说一遍、说慢点、说快点。需要人帮忙说\u{201C}求助\u{201D}；遇到危险说\u{201C}救命\u{201D}，会倒计时通知你的全部亲友。"
-            : "You can say: start guide, take me to a place, look, read this, find my keys, where am I, what's around, weather, send a message, open messages, repeat, or speak slower/faster. Say \u{201C}get help\u{201D} to call someone; say \u{201C}emergency\u{201D} if you're in danger — it counts down and alerts all your contacts."
+            ? "你可以说：开始导盲、带我去某地、看一看、读一下文字、找我的钥匙、我在哪、周围有什么、天气、给某人发消息、打开消息、再说一遍、说慢点、说快点、说简短点、说详细点。需要人帮忙说\u{201C}求助\u{201D}；遇到危险说\u{201C}救命\u{201D}，会倒计时通知你的全部亲友。"
+            : "You can say: start guide, take me to a place, look, read this, find my keys, where am I, what's around, weather, send a message, open messages, repeat, speak slower/faster, or ask for less/more detail. Say \u{201C}get help\u{201D} to call someone; say \u{201C}emergency\u{201D} if you're in danger — it counts down and alerts all your contacts."
     }
 
     static func nothingToRepeat(_ l: Language) -> String {

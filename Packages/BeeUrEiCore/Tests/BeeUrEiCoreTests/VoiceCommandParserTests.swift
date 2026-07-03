@@ -31,6 +31,8 @@ final class VoiceCommandParserTests: XCTestCase {
             ("说快点", .adjustSpeech(.faster)), ("太慢了", .adjustSpeech(.faster)), ("speak faster", .adjustSpeech(.faster)),
             ("说慢点", .adjustSpeech(.slower)), ("太快了", .adjustSpeech(.slower)), ("slow down", .adjustSpeech(.slower)),
             ("正常语速", .adjustSpeech(.normal)), ("normal speed", .adjustSpeech(.normal)),
+            ("简短点", .adjustVerbosity(.terser)), ("别啰嗦", .adjustVerbosity(.terser)), ("less detail", .adjustVerbosity(.terser)),
+            ("详细点", .adjustVerbosity(.moreDetail)), ("多说点", .adjustVerbosity(.moreDetail)), ("tell me more", .adjustVerbosity(.moreDetail)),
             ("找我的钥匙", .find("钥匙")), ("帮我找水杯", .find("水杯")), ("find my wallet", .find("wallet")),
             ("带我去北京西站", .navigate("北京西站")), ("导航到医院", .navigate("医院")),
         ]
@@ -148,6 +150,14 @@ final class VoiceCommandParserTests: XCTestCase {
     /// SOS vs help 的边界（安全攸关）：救命/紧急求助=告警广播；求助/帮帮我=协助通话。
     /// 摔倒的盲人喊"救命"必须走告警（倒计时→通知全部亲友+附位置），不是拨一通可能没人接的视频电话。
     /// 语速指令边界：正常/恢复须在 快/慢 之前（"恢复正常语速"含"语速"）；不误伤读文字/念一下。
+    /// 详略指令不误伤朗读：裸"读整页/读文字"仍是读文档，只有明确详略说法才 adjustVerbosity。
+    func testVerbosityBoundary() {
+        XCTAssertEqual(VoiceCommandParser.parse("说详细点"), .adjustVerbosity(.moreDetail))
+        XCTAssertEqual(VoiceCommandParser.parse("太啰嗦了，简短点"), .adjustVerbosity(.terser))
+        XCTAssertEqual(VoiceCommandParser.parse("读整页文档"), .readFullPage)
+        XCTAssertEqual(VoiceCommandParser.parse("读一下这段文字"), .readText)
+    }
+
     func testSpeechRateBoundary() {
         XCTAssertEqual(VoiceCommandParser.parse("恢复正常语速"), .adjustSpeech(.normal))
         XCTAssertEqual(VoiceCommandParser.parse("语速慢一点"), .adjustSpeech(.slower))

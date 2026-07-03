@@ -450,6 +450,16 @@ struct HubView: View {
                 fs.speechRate = newRate
                 SpeechHub.shared.speak(HomeStrings.speechRateChanged(adj, lang), channel: .query, rate: newRate, voiceCode: lang.voiceCode)
             }
+        case .adjustVerbosity(let dir):
+            // 语音调详略（Hub 可达；FeedbackCoordinator 真读 verbosity 门控播报）：改设置 → 播确认（点明各档含义）。
+            let cur = FeedbackVerbosity(rawValue: FeatureSettings().verbosity) ?? .full
+            if cur.atLimit(dir) {
+                speak(HomeStrings.verbosityAtLimit(dir, lang))
+            } else {
+                let next = cur.adjusted(dir)
+                var fs = FeatureSettings(); fs.verbosity = next.rawValue
+                speak(HomeStrings.verbosityChanged(next, lang))
+            }
         case .commands: speak(HomeStrings.voiceCommandsHelp(lang)) // 能力自述：语音功能的语音说明书
         case .repeatLast: speak(HomeStrings.nothingToRepeat(lang)) // Hub 无避障会话可重复
         case .unknown:

@@ -130,6 +130,51 @@ describe('WebRTC signaling relay', () => {
     await app.close()
   })
 
+  it('同一用户重连同一通话：新连接顶替旧连接（不再被自己的僵尸占位挤成 call_full）', async () => {
+    const app = buildApp(new MemoryStore())
+    await app.listen({ port: 0, host: '127.0.0.1' })
+    const port = (app.server.address() as { port: number }).port
+    const reg = async (u: string, role: string) => {
+      const r = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+      return { token: r.token as string, id: r.user.id as string }
+    }
+    const caller = await reg('rcaller', 'blind')
+    const helper = await reg('rhelper', 'helper')
+    const link = await app.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${caller.token}` },
+      payload: { username: 'rhelper', relation: '志愿者' } })
+    await app.inject({ method: 'POST', url: `/api/family/links/${link.json().link.id}/accept`, headers: { authorization: `Bearer ${helper.token}` } })
+    await app.inject({ method: 'POST', url: '/api/assist/call', headers: { authorization: `Bearer ${caller.token}` },
+      payload: { callId: 'rc1', targetUserIds: [helper.id] } })
+
+    const base = `ws://127.0.0.1:${port}/ws`
+    const ws1 = new WebSocket(`${base}?token=${caller.token}`) // 盲人第一个连接（将成"僵尸"）
+    const ws2 = new WebSocket(`${base}?token=${helper.token}`)
+    await Promise.all([open(ws1), open(ws2)])
+    const j1 = nextMessage(ws1, (m) => m.type === 'joined')
+    const j2 = nextMessage(ws2, (m) => m.type === 'joined')
+    ws1.send(JSON.stringify({ type: 'join', callId: 'rc1', role: 'blind' }))
+    ws2.send(JSON.stringify({ type: 'join', callId: 'rc1', role: 'helper' }))
+    await Promise.all([j1, j2])
+
+    // 盲人"重连"（模拟半开掉线后新建 ws；旧 ws1 未 close，僵尸仍占房间名额）。
+    const ws3 = new WebSocket(`${base}?token=${caller.token}`)
+    await open(ws3)
+    const oldClosed = new Promise<number>((resolve) => ws1.on('close', (code) => resolve(code)))
+    const j3 = nextMessage(ws3, (m) => m.type === 'joined')
+    ws3.send(JSON.stringify({ type: 'join', callId: 'rc1', role: 'blind' }))
+    // 修复前：peersInCall=[僵尸盲人, helper]=2 → ws3 被 call_full(4003) 拒，本人再也回不到通话。
+    // 修复后：旧连接被顶替（4000 replaced_by_reconnect），新连接正常入房、对端在 peers 里。
+    const joined3 = await j3
+    expect(joined3.peers.some((p: any) => p.userId === helper.id)).toBe(true)
+    expect(await oldClosed).toBe(4000)
+    // 重连后信令仍通：新连接发 offer，helper 收到（不再发进僵尸黑洞）。
+    const offerAtHelper = nextMessage(ws2, (m) => m.type === 'offer')
+    ws3.send(JSON.stringify({ type: 'offer', sdp: 'SDP_RECONNECT' }))
+    expect((await offerAtHelper).sdp).toBe('SDP_RECONNECT')
+    ws2.close(); ws3.close()
+    await app.close()
+  })
+
   it('rejects connection without a valid token', async () => {
     const app = buildApp(new MemoryStore())
     await app.listen({ port: 0, host: '127.0.0.1' })

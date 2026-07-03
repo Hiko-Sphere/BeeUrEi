@@ -156,6 +156,19 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
             const { peers: oldPeers } = hub.leave(clientId)
             for (const p of oldPeers) relay(p.clientId, { type: 'peer-left', userId: auth.sub })
           }
+          // 同一用户重连同一通话：新连接**顶替**旧连接（先逐出旧成员再关旧 socket）。半开(silent)掉线的
+          // 旧 socket 不触发 close，会作为僵尸占住 1:1 名额，把本人重连挤成 call_full、且 relay 会把关键
+          // SDP/ICE 发进 readyState 仍=1 的黑洞（见可靠性复审）。同一 userId 在同一 callId 只应有一个活跃
+          // 连接。顺序关键：先 hub.leave(旧) 再 close(旧)——hub.leave 幂等，旧 socket 的 close 处理器随后
+          // 空转（成员已不在），不会给对端补发错误的 peer-left；对端接着收到本次 join 的 peer-joined，
+          // 按 userId 更新到新连接。
+          for (const p of hub.peersInCall(callId)) {
+            if (p.userId === auth.sub && p.clientId !== clientId) {
+              hub.leave(p.clientId)
+              const old = sockets.get(p.clientId)
+              if (old) { try { old.close(4000, 'replaced_by_reconnect') } catch { /* 已在关闭中则忽略 */ } }
+            }
+          }
           // 1:1 房间最多两名**参与者**：满员拒绝第三方（旁观管理员不计入此上限）。
           if (hub.peersInCall(callId).filter((p) => p.role !== 'admin').length >= 2) {
             socket.close(4003, 'call_full')

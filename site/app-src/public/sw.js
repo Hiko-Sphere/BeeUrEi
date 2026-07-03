@@ -5,6 +5,25 @@
 self.addEventListener('install', () => { self.skipWaiting() })
 self.addEventListener('activate', (event) => { event.waitUntil(self.clients.claim()) })
 
+// 离线兜底（仅导航请求）：**刻意不缓存任何应用资源**（实时应用，陈旧缓存有害）——离线时给一页
+// 诚实的"无法连接"而非浏览器报错页。资源/接口请求原样放行（失败由应用层各自处理）。
+self.addEventListener('fetch', (event) => {
+  if (event.request.mode !== 'navigate') return
+  event.respondWith(fetch(event.request).catch(() =>
+    new Response(
+      '<!doctype html><html lang="zh-Hans"><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+      '<title>BeeUrEi · 离线</title>' +
+      '<body style="font-family:system-ui;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;background:#14161f;color:#f2f3f5">' +
+      '<div style="text-align:center;padding:24px"><div style="font-size:40px">📡</div>' +
+      '<h1 style="font-size:18px;margin:12px 0 6px">当前离线，无法连接服务器</h1>' +
+      '<p style="color:#aab1bf;font-size:14px;margin:0 0 16px">Offline — cannot reach the server.</p>' +
+      '<button onclick="location.reload()" style="font-size:15px;padding:10px 22px;border-radius:10px;border:0;background:#f2a900;color:#14161f;font-weight:600">重试 / Retry</button>' +
+      '</div></body></html>',
+      { status: 503, headers: { 'content-type': 'text/html; charset=utf-8' } },
+    )))
+})
+
 self.addEventListener('push', (event) => {
   let data = {}
   try { data = event.data ? event.data.json() : {} } catch { /* 非 JSON 负载忽略详情 */ }

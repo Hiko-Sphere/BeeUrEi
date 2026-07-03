@@ -151,11 +151,19 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     return { ok: true }
   })
 
-  // 登出其它所有设备（保留当前这台）。
+  // 登出其它所有设备（保留当前这台）。被盗设备场景的标准响应——除吊销会话外**连带清其它浏览器的
+  // 推送订阅**：否则小偷浏览器继续收告警/消息系统通知（会话死了推送订阅不死）。订阅与会话无关联
+  // （Web Push endpoint 不含 sessionId），服务端无从辨"当前浏览器"——由客户端自带 keepEndpoint
+  // （本浏览器 SW 的订阅端点）；不带（iOS 调用/无 SW）则清全部，本浏览器下次开设置页自愈重订。
   app.post('/api/account/sessions/revoke-others', { preHandler: requireAuth() }, async (req, reply) => {
     const sid = req.user!.sid
     if (!sid) return reply.code(400).send({ error: 'no_session' }) // 旧 token 无 sid，无法识别"当前"
+    const keep = (req.body as { keepEndpoint?: string } | null)?.keepEndpoint
     store.revokeOtherSessions(req.user!.sub, sid)
+    for (const sub of store.webPushSubscriptionsForUser(req.user!.sub)) {
+      if (typeof keep === 'string' && sub.endpoint === keep) continue
+      store.deleteWebPushSubscription(sub.endpoint)
+    }
     return { ok: true }
   })
 

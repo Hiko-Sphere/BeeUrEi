@@ -217,6 +217,29 @@ describe('Web Push（浏览器推送紧急告警）', () => {
     await a.close()
   })
 
+  it('登出其它设备连带清其它浏览器订阅（被盗设备不再收推送）；keepEndpoint 保留本浏览器', async () => {
+    const wp = new RecordingWebPush()
+    const { a, store, helper, hAuth } = await seed(wp)
+    // 两个"浏览器"的订阅
+    await a.inject({ method: 'POST', url: '/api/push/web-subscribe', headers: hAuth, payload: SUB })
+    await a.inject({ method: 'POST', url: '/api/push/web-subscribe', headers: hAuth,
+      payload: { endpoint: 'https://push.example/other-device', keys: SUB.keys } })
+    expect(store.webPushSubscriptionsForUser(helper.user.id).length).toBe(2)
+    // 带 keepEndpoint：清其它、留本机
+    const r = await a.inject({ method: 'POST', url: '/api/account/sessions/revoke-others', headers: hAuth,
+      payload: { keepEndpoint: SUB.endpoint } })
+    expect(r.statusCode).toBe(200)
+    const left = store.webPushSubscriptionsForUser(helper.user.id)
+    expect(left.length).toBe(1)
+    expect(left[0].endpoint).toBe(SUB.endpoint)
+    // 不带 keepEndpoint（iOS 调用/无 SW）：全清——本浏览器靠自愈重订
+    await a.inject({ method: 'POST', url: '/api/push/web-subscribe', headers: hAuth,
+      payload: { endpoint: 'https://push.example/other-device', keys: SUB.keys } })
+    await a.inject({ method: 'POST', url: '/api/account/sessions/revoke-others', headers: hAuth, payload: {} })
+    expect(store.webPushSubscriptionsForUser(helper.user.id).length).toBe(0)
+    await a.close()
+  })
+
   it('删号级联：订阅随人清除（双存储各自验证存储层）', async () => {
     const wp = new RecordingWebPush()
     const { a, store, helper, hAuth } = await seed(wp)

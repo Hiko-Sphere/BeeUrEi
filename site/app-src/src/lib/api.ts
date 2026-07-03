@@ -211,7 +211,7 @@ export const api = {
   // 登录设备 / 会话管理
   sessions: () => get('/api/account/sessions') as Promise<{ sessions: SessionInfo[] }>,
   revokeSession: (sessionId: string) => post('/api/account/sessions/revoke', { sessionId }),
-  revokeOtherSessions: () => post('/api/account/sessions/revoke-others'),
+  revokeOtherSessions: (keepEndpoint?: string) => post('/api/account/sessions/revoke-others', keepEndpoint ? { keepEndpoint } : undefined),
 
   // 两步验证（2FA / TOTP）
   twoFAStatus: () => get('/api/account/2fa') as Promise<{ enabled: boolean; recoveryCodesRemaining: number }>,

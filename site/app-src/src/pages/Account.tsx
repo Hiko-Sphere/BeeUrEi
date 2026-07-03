@@ -342,7 +342,14 @@ function SessionsDialog({ onClose }: { onClose: () => void }) {
   const revoke = async (id: string) => { setBusy(id); try { await api.revokeSession(id); await reload(); toast(t('已登出该设备', 'Device signed out'), 'ok') } catch { toast(t('操作失败', 'Failed'), 'error') } finally { setBusy(null) } }
   const revokeOthers = async () => {
     if (!confirm(t('除这台外，其它所有设备都会被立即登出。继续？', 'All devices except this one will be signed out immediately. Continue?'))) return
-    setBusy('others'); try { await api.revokeOtherSessions(); await reload(); toast(t('已登出其它设备', 'Other devices signed out'), 'ok') } catch { toast(t('操作失败', 'Failed'), 'error') } finally { setBusy(null) }
+    setBusy('others')
+    try {
+      // 本浏览器的推送订阅端点：其它设备的订阅会被服务端连带清掉（被盗设备不再收告警/消息通知），
+      // 本浏览器的凭 keepEndpoint 保留。取不到（无 SW/未订阅）就不带——全清后本页自愈重订。
+      let keep: string | undefined
+      try { keep = (await (await navigator.serviceWorker?.getRegistration('/app/sw.js'))?.pushManager.getSubscription())?.endpoint ?? undefined } catch { /* 无 SW 环境 */ }
+      await api.revokeOtherSessions(keep); await reload(); toast(t('已登出其它设备', 'Other devices signed out'), 'ok')
+    } catch { toast(t('操作失败', 'Failed'), 'error') } finally { setBusy(null) }
   }
 
   return (

@@ -33,6 +33,7 @@ import { registerNotificationRoutes } from './routes/notifications'
 import { RecordingConsentRegistry } from './recording/consentRegistry'
 import { registerDevRoutes } from './routes/dev'
 import { registerNavRoutes } from './routes/nav'
+import { registerVisionRoutes } from './routes/vision'
 import { registerLocationRoutes } from './routes/locations'
 import { registerSavedRouteRoutes } from './routes/savedRoutes'
 import { LiveLocationRegistry } from './location/liveLocations'
@@ -197,6 +198,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerNotificationRoutes(instance, store) // 站内通知收件箱（举报处理结果等）
     registerDevRoutes(instance, store)
     registerNavRoutes(instance, store)
+    registerVisionRoutes(instance, store) // AI 场景描述/图像问答（云端视觉大模型，provider 无关，未配 VISION_* 则 503）
     registerLocationRoutes(instance, store, liveLocations) // 实时位置共享（亲友/协助者 ↔ 盲人）
     registerSavedRouteRoutes(instance, store, pushSender) // 路线库（亲友远程路线编排 + 盲人自存路线）
     registerAppConfigRoutes(instance, store) // 客户端读取功能开关（控制每一个按键）

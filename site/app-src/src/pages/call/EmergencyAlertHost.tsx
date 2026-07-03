@@ -21,7 +21,7 @@ export function EmergencyAlertModal({ alert, othersCount, onAck, onCallBack }: {
   const loc = emergencyLocInfo(alert.data ?? undefined, alert.createdAt)
   const hasCoord = !!(alert.data?.lat && alert.data?.lon)
   return (
-    <Modal onClose={onAck} label={t('紧急告警', 'Emergency alert')}>
+    <Modal onClose={onAck} label={t('紧急告警', 'Emergency alert')} role="alertdialog" dismissible={false}>
       <div className="flex flex-col gap-3 p-1" data-testid="emergency-alert-modal">
         <div className="flex items-center gap-2 text-danger">
           <IconFlash />

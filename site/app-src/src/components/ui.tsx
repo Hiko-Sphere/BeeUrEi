@@ -83,8 +83,11 @@ export function Spinner() {
 // role=dialog + aria-modal（读屏将弹窗外内容视为 inert）、aria-label（弹窗有名）、Esc 关闭、
 // 点遮罩关闭、点面板内不关闭。panelClassName 传各弹窗自有的尺寸/布局类（max-w/max-h/flex 等）。
 // 注：通话类弹窗（来电/通话中）语义上不可点遮罩关闭，不走此组件。
-export function Modal({ onClose, label, panelClassName = 'w-full max-w-md', children }: {
-  onClose: () => void; label: string; panelClassName?: string; children: ReactNode
+export function Modal({ onClose, label, panelClassName = 'w-full max-w-md', dismissible = true, role = 'dialog', children }: {
+  // dismissible=false：Escape/背景点击**不**关闭——用于生命安全告警（摔倒/SOS），须显式点按钮确认，
+  // 防反射性 Escape 或误点把"家人可能摔倒了"的告警悄悄清掉（同来电铃"必须显式选择"口径）。
+  // role='alertdialog'：需要用户响应的告警对话框（读屏更强的打断式播报），一般对话框用默认 'dialog'。
+  onClose: () => void; label: string; panelClassName?: string; dismissible?: boolean; role?: 'dialog' | 'alertdialog'; children: ReactNode
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -93,7 +96,7 @@ export function Modal({ onClose, label, panelClassName = 'w-full max-w-md', chil
     const prev = document.activeElement as HTMLElement | null
     panelRef.current?.focus()
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { onClose(); return }
+      if (e.key === 'Escape') { if (dismissible) onClose(); return } // 不可关时 Escape 无效（须显式确认）
       if (e.key !== 'Tab') return
       // 焦点陷阱：Tab 在弹窗内循环，不逃逸到背景（背景已 aria-modal 视为 inert，键盘焦点也应被困住）。
       const panel = panelRef.current
@@ -109,10 +112,10 @@ export function Modal({ onClose, label, panelClassName = 'w-full max-w-md', chil
       document.removeEventListener('keydown', onKey)
       prev?.focus?.()
     }
-  }, [onClose])
+  }, [onClose, dismissible])
   return (
-    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={onClose}>
-      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={label} onClick={(e) => e.stopPropagation()}
+    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/50 p-4" onClick={dismissible ? onClose : undefined}>
+      <div ref={panelRef} tabIndex={-1} role={role} aria-modal="true" aria-label={label} onClick={(e) => e.stopPropagation()}
         className={`slide-up rounded-2xl surface border border-[var(--line)] p-6 shadow-2xl outline-none ${panelClassName}`}>
         {children}
       </div>

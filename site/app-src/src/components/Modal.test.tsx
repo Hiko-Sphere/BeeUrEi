@@ -28,6 +28,17 @@ describe('Modal 无障碍与关闭语义', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('dismissible=false + role=alertdialog：Escape/遮罩不关闭（生命安全告警须显式确认）', () => {
+    const onClose = vi.fn()
+    render(<Modal onClose={onClose} label="紧急告警" role="alertdialog" dismissible={false}><p>面板内容</p></Modal>)
+    const dlg = screen.getByRole('alertdialog') // 角色是 alertdialog（不是 dialog）
+    expect(dlg.getAttribute('aria-modal')).toBe('true')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onClose).not.toHaveBeenCalled() // Escape 无效
+    fireEvent.click(dlg.parentElement!)     // 点遮罩
+    expect(onClose).not.toHaveBeenCalled() // 遮罩也不关——须点显式按钮
+  })
+
   it('卸载后移除 keydown 监听（Esc 不再触发）', () => {
     const onClose = vi.fn()
     const { unmount } = render(<Modal onClose={onClose} label="x"><p>c</p></Modal>)

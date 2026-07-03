@@ -174,6 +174,26 @@ describe('Web Push（浏览器推送紧急告警）', () => {
     await a2.close()
   })
 
+  it('封禁连带清浏览器推送订阅（被封账号只剩泄漏面）；代设密码/强登出不清（重登后推送应还在）', async () => {
+    const wp = new RecordingWebPush()
+    const store = new MemoryStore()
+    store.createUser({ id: 'admin1', username: 'root', passwordHash: (await import('../src/auth/passwords')).hashPassword('secret123'),
+      displayName: 'root', role: 'admin', status: 'active', createdAt: 1 })
+    const a = buildApp(store, { webPushSender: wp })
+    const reg = (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'banme', password: 'secret123', role: 'helper' } })).json()
+    await a.inject({ method: 'POST', url: '/api/push/web-subscribe', headers: { authorization: `Bearer ${reg.token}` }, payload: SUB })
+    const adminTok = (await a.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'root', password: 'secret123' } })).json().token
+    const adminAuth = { authorization: `Bearer ${adminTok}` }
+    // 代设密码（severSessions 路径）：订阅保留
+    await a.inject({ method: 'POST', url: `/api/admin/users/${reg.user.id}/reset-password`, headers: adminAuth, payload: { newPassword: 'newsecret456' } })
+    expect(store.webPushSubscriptionsForUser(reg.user.id).length).toBe(1)
+    // 封禁：订阅清除
+    const ban = await a.inject({ method: 'POST', url: `/api/admin/users/${reg.user.id}/status`, headers: adminAuth, payload: { status: 'disabled' } })
+    expect(ban.statusCode).toBe(200)
+    expect(store.webPushSubscriptionsForUser(reg.user.id).length).toBe(0)
+    await a.close()
+  })
+
   it('删号级联：订阅随人清除（双存储各自验证存储层）', async () => {
     const wp = new RecordingWebPush()
     const { a, store, helper, hAuth } = await seed(wp)

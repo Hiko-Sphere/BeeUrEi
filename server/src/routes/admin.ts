@@ -65,6 +65,13 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     callControl?.disconnectUser(id)
     return updated
   }
+  // 封禁专用（在 severSessions 之上加封禁特有的清理）：连带删浏览器推送订阅——被封账号不该
+  // 继续收到家人告警/消息推送（其 web 端已无法登录，推送只剩泄漏面）。**只封禁走此路**：
+  // 代设密码/force-logout 仍走 severSessions（清订阅会静默弄断该用户重登后的推送，需其手动重开）。
+  const banUser = (id: string, currentTv: number) => {
+    store.deleteWebPushSubscriptionsForUser(id)
+    return severSessions(id, currentTv, { status: 'disabled' })
+  }
   const nameOf = (id: string) => store.findById(id)?.displayName ?? '—'
 
   // 举报处理后通知通话双方（持久站内通知 + 离线推送）。隐私：两条文案都不点名对方、
@@ -379,7 +386,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
         (action === 'delete' || action === 'disable' || (action === 'role' && role !== 'admin'))
       if (losesActiveAdmin && activeAdminCount() <= 1) { results.push({ id, ok: false, error: 'last_admin_protected' }); continue }
       try {
-        if (action === 'disable') { severSessions(id, target.tokenVersion ?? 0, { status: 'disabled' }); audit(adminId, 'user.disable', 'user', id, 'bulk') }
+        if (action === 'disable') { banUser(id, target.tokenVersion ?? 0); audit(adminId, 'user.disable', 'user', id, 'bulk') }
         else if (action === 'enable') { store.updateUser(id, { status: 'active' }); audit(adminId, 'user.enable', 'user', id, 'bulk') }
         else if (action === 'role') { store.updateUser(id, { role: role as Role }); audit(adminId, 'user.role', 'user', id, `bulk → ${role}`) }
         else if (action === 'delete') { cascadeDeleteUser(store, id); audit(adminId, 'user.delete', 'user', id, `bulk username=${target.username}`) }
@@ -542,7 +549,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     // 封禁即吊销会话（severSessions 与批量封禁/force-logout 同口径：删 refresh + 递增 tokenVersion，
     // 使在线 access token 立即失效、解封后须重新登录）。解封(enable)只改 status、不动会话。
     const updated = parsed.data.status === 'disabled'
-      ? severSessions(id, target.tokenVersion ?? 0, { status: 'disabled' })
+      ? banUser(id, target.tokenVersion ?? 0)
       : store.updateUser(id, { status: 'active' })
     audit(req.user!.sub, parsed.data.status === 'disabled' ? 'user.disable' : 'user.enable', 'user', id)
     return { user: publicUser(updated!) }
@@ -601,7 +608,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       store.createWarning({ id: randomUUID(), userId: targetId, reason, byAdminId: adminId, reportId: id, at: Date.now() })
     } else if (action === 'suspend' || action === 'ban') {
       // 重处置：封禁 + 强制下线（已签发 token 立即失效、撤销 refresh token），防被封后仍在线。
-      severSessions(targetId, target.tokenVersion ?? 0, { status: 'disabled' })
+      banUser(targetId, target.tokenVersion ?? 0)
     }
     const updated = store.updateReport(id, { status: 'resolved', decision, resolvedBy: adminId, resolvedAt: Date.now() })
     audit(adminId, `report.${action}`, 'report', id, `target=${targetId} reason=${reason}`)

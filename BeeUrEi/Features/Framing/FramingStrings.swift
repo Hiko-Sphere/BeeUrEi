@@ -405,6 +405,12 @@ enum FramingStrings {
         l == .zh ? "还没有识别记录。朗读文字、读整页、扫码、识别纸币的结果会自动存在这里（只存在本机）。"
                  : "No history yet. Text, pages, codes and banknotes you read are saved here (on this device only)."
     }
+    static func historyNoMatch(_ l: Language) -> String {
+        l == .zh ? "没有匹配的记录，换个关键词试试。" : "No matching records — try another keyword."
+    }
+    static func historySearchPrompt(_ l: Language) -> String {
+        l == .zh ? "搜索识别记录" : "Search recognized content"
+    }
     static func historyKind(_ kind: String, _ l: Language) -> String {
         switch l {
         case .zh:

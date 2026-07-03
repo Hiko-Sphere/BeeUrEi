@@ -1141,6 +1141,10 @@ private struct RecognitionHistorySheet: View {
     let model: FramingAssistViewModel
     let onClose: () -> Void
     @State private var records: [RecognitionRecord] = []
+    @State private var query = ""
+
+    /// 按搜索词过滤（核心 RecognitionHistoryStore.filter，已测）。
+    private var filtered: [RecognitionRecord] { RecognitionHistoryStore.filter(records, query: query) }
 
     var body: some View {
         NavigationStack {
@@ -1150,9 +1154,15 @@ private struct RecognitionHistorySheet: View {
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .padding()
+                } else if filtered.isEmpty {
+                    // 有记录但搜不到匹配（区别于"无历史"）——盲人搜不到时须有明确反馈。
+                    Text(FramingStrings.historyNoMatch(model.lang))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding()
                 } else {
                     List {
-                        ForEach(records) { r in
+                        ForEach(filtered) { r in
                             Button {
                                 model.speakHistory(r.content)
                             } label: {
@@ -1199,6 +1209,9 @@ private struct RecognitionHistorySheet: View {
                     Button(FramingStrings.uiDone(model.lang)) { onClose() }
                 }
             }
+            // 搜索：50 条记录里找"单号/地址"等关键词直达，免逐条 VoiceOver 翻（Seeing AI/Supersense 式）。
+            // 仅在有记录时启用搜索栏。
+            .searchable(text: $query, prompt: FramingStrings.historySearchPrompt(model.lang))
             .onAppear { records = model.historyStore.records }
             // 关闭历史面板（点完成或下滑）时停掉正在回放的语音——否则盲人回放长整页后关面板，
             // 语音会继续念（面板都没了还在读）。父视图恢复识别后新结果照常用 .query 通道播报。

@@ -49,6 +49,14 @@ final class RecognitionHistoryStore {
         persist()
     }
 
+    /// 按关键词过滤（不区分大小写；空词返回全部）——纯逻辑，供历史面板搜索。
+    /// 盲人有 50 条记录时逐条 VoiceOver 翻很累，搜"单号/地址"等关键词直达（Seeing AI/Supersense 式）。
+    static func filter(_ records: [RecognitionRecord], query: String) -> [RecognitionRecord] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return records }
+        return records.filter { $0.content.lowercased().contains(q) }
+    }
+
     private func persist() {
         // completeFileProtection：识别历史可能含信件/票据等敏感文字，锁屏后文件不可读（仅前台读写，无后台访问）。
         if let data = try? PropertyListEncoder().encode(records) {

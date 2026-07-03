@@ -52,4 +52,23 @@ final class RecognitionHistoryStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.records.first?.content, "一百元")
         XCTAssertEqual(reloaded.records.first?.kind, "banknote")
     }
+
+    func testFilterByKeyword() {
+        let recs = [
+            RecognitionRecord(id: UUID(), kind: "text", content: "快递单号 SF1234567890", date: Date()),
+            RecognitionRecord(id: UUID(), kind: "text", content: "北京市朝阳区某路 12 号", date: Date()),
+            RecognitionRecord(id: UUID(), kind: "barcode", content: "6901234567890", date: Date()),
+        ]
+        // 空词 → 全部
+        XCTAssertEqual(RecognitionHistoryStore.filter(recs, query: "  ").count, 3)
+        // 中文关键词
+        XCTAssertEqual(RecognitionHistoryStore.filter(recs, query: "朝阳").count, 1)
+        // 不区分大小写
+        XCTAssertEqual(RecognitionHistoryStore.filter(recs, query: "sf123").count, 1)
+        XCTAssertEqual(RecognitionHistoryStore.filter(recs, query: "SF123").count, 1)
+        // 无匹配
+        XCTAssertEqual(RecognitionHistoryStore.filter(recs, query: "不存在").count, 0)
+        // 数字子串
+        XCTAssertEqual(RecognitionHistoryStore.filter(recs, query: "690123").count, 1)
+    }
 }

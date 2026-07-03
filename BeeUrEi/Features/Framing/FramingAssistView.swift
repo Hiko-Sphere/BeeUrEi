@@ -1142,6 +1142,9 @@ private struct RecognitionHistorySheet: View {
     let onClose: () -> Void
     @State private var records: [RecognitionRecord] = []
     @State private var query = ""
+    // 本面板是否触发过历史回放：仅当触发过、关闭时才停 .query——否则会误停父视图（相机仍在后台识别）
+    // 正在播的识别结果，以及复制的"已复制"这类短确认（复审 MED/LOW）。
+    @State private var didReplay = false
 
     /// 按搜索词过滤（核心 RecognitionHistoryStore.filter，已测）。
     private var filtered: [RecognitionRecord] { RecognitionHistoryStore.filter(records, query: query) }
@@ -1164,6 +1167,7 @@ private struct RecognitionHistorySheet: View {
                     List {
                         ForEach(filtered) { r in
                             Button {
+                                didReplay = true // 标记触发过回放：关闭时才需停这条（可能很长的）回放
                                 model.speakHistory(r.content)
                             } label: {
                                 VStack(alignment: .leading, spacing: 4) {
@@ -1213,9 +1217,10 @@ private struct RecognitionHistorySheet: View {
             // 仅在有记录时启用搜索栏。
             .searchable(text: $query, prompt: FramingStrings.historySearchPrompt(model.lang))
             .onAppear { records = model.historyStore.records }
-            // 关闭历史面板（点完成或下滑）时停掉正在回放的语音——否则盲人回放长整页后关面板，
-            // 语音会继续念（面板都没了还在读）。父视图恢复识别后新结果照常用 .query 通道播报。
-            .onDisappear { SpeechHub.shared.stopChannel(.query) }
+            // 关闭历史面板时，仅当**本面板触发过回放**才停 .query——盲人回放长整页后关面板，语音不再
+            // 继续念（面板都没了还在读）。但不无条件停：否则会掐断父视图（相机后台仍在识别）正在播的
+            // 识别结果、以及复制的"已复制"短确认（复审 MED/LOW）。复制不置 didReplay，其确认不受影响。
+            .onDisappear { if didReplay { SpeechHub.shared.stopChannel(.query) } }
         }
     }
 }

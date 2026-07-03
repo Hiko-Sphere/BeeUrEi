@@ -199,8 +199,13 @@ final class NavigationViewModelSafetyTests: XCTestCase {
         // 远处（>announceWithin）好精度：不应触发转向触觉。
         service.onLocation?(loc(latOffset: -3 * stepDegrees, accuracy: 5))
         XCTAssertFalse(haptic.played.contains(.turn))
-        // 贴到第一转向点附近、好精度 → 高确定性"现在转向" → 触发 .turn 触觉。
+        // 贴到第一转向点附近、好精度 → 高确定性"现在转向" → 触发一记 .turn 触觉。
         service.onLocation?(loc(latOffset: stepDegrees, accuracy: 5))
-        XCTAssertTrue(haptic.played.contains(.turn))
+        XCTAssertEqual(haptic.played.filter { $0 == .turn }.count, 1)
+        // 站在原地再喂两帧同精度定位（decide 每帧仍返回同一"现在转向"）：语音去重不重念，
+        // 触觉也须去重——每个转向恰好一记，不得每帧狂震（复审 MED 回归锁）。
+        service.onLocation?(loc(latOffset: stepDegrees, accuracy: 5))
+        service.onLocation?(loc(latOffset: stepDegrees, accuracy: 5))
+        XCTAssertEqual(haptic.played.filter { $0 == .turn }.count, 1)
     }
 }

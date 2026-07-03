@@ -280,12 +280,16 @@ final class NavigationViewModel {
         let distance = Geo.distanceMeters(fromLat: lat, fromLon: lon, toLat: next.coordinate.latitude, toLon: next.coordinate.longitude)
         let decision = progress.decide(distanceToManeuverMeters: distance, instruction: next.instruction, level: level, language: lang)
         if decision.shouldAnnounce, let text = decision.text {
+            // 触觉须与语音同用去重条件：站在/慢速通过路口时 decide() 每帧都返回同一"现在转向"，
+            // 语音靠 lastSpoken 去重只念一次，但触觉若无守卫会每帧狂震（复审 MED）。须在 speak() 前
+            // 捕获"本帧是否首次播报此指令"（speak 会把 lastSpoken 改成 text），据此决定是否震。
+            let isNewAnnouncement = (text != lastSpoken)
             instruction = text
             speak(text)
             // 高确定性"现在转向"补一记转向触觉（.turn，2 下）：嘈杂路口/车流中语音被淹没时的互补确认
             // （biped/WeWalk 式方向触觉；方向本身由空间音信标编码，触觉作"该转了"的手感提示）。
-            // 只在 isHighCertainty 触发——"前方 X 米"不震，避免噪扰。
-            if decision.isHighCertainty { haptics.play(FeedbackEvent(priority: .turn, speech: nil)) }
+            // 只在 isHighCertainty 且本帧首次播报时触发——每个转向恰好一记，"前方 X 米"不震。
+            if decision.isHighCertainty, isNewAnnouncement { haptics.play(FeedbackEvent(priority: .turn, speech: nil)) }
         }
 
         // 步进推进——用"越过波谷"几何判定，而非脆弱的"必须命中 5m 窗 + precise"：

@@ -8,7 +8,8 @@
   --color-honey: #f2a900;
   --color-honey-soft: #ffce5c;
   --color-ink: #14161f;
-  --color-danger: #e5484d;
+  --color-danger: #c62f36; /* 危险色：旧 #e5484d 白字于其上仅 3.91:1（WCAG AA 需 4.5）。此值白字 ≥5.4:1；
+                              作 text-danger 于浅底亦 ≥4.9:1。暗底上的 text-danger 由 .dark .text-danger 提亮（见下）。 */
   --color-warn: #f2a900;
   --color-ok: #3fb950;
   --font-sans: "Inter", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -52,6 +53,9 @@ body {
 .text-faint { color: var(--text-faint); }
 /* 蜂蜜作文字用（链接/徽章）的达标色；图标/背景填充仍用亮蜂蜜 text-honey/bg-honey。 */
 .text-accent { color: var(--accent-strong); }
+/* 暗色下把 text-danger（文字/图标）提亮为达标红——只覆盖文字色，不动 bg-danger（仍是暗红配白字）。
+   暗红 #c62f36 于深底仅 ~3.6:1，此亮红于深底 ≥6:1。特异性 0,2,0 胜过 Tailwind 的 text-danger。 */
+.dark .text-danger { color: #f47174; }
 
 :where(button, a, input, textarea, select, [tabindex]):focus-visible {
   outline: 2px solid var(--color-honey);

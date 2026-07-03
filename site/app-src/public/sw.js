@@ -10,22 +10,31 @@ self.addEventListener('push', (event) => {
   try { data = event.data ? event.data.json() : {} } catch { /* 非 JSON 负载忽略详情 */ }
   const title = data.title || 'BeeUrEi'
   const body = data.body || ''
+  const d = data.data || {}
+  // tag 去重语义按类型：来电按 callId（同一通只留一条）、聊天按会话折叠（同 APNs threadId 口径）、
+  // 告警按发起人。requireInteraction 只给紧急告警/来电（不自动消失直到处理）；聊天消息自然消退。
+  var tag = 'beeurei'
+  if (d.kind === 'incoming_call' && d.callId) tag = 'call-' + d.callId
+  else if (d.kind === 'chat_message') tag = d.groupId ? 'group-' + d.groupId : 'dm-' + (d.fromId || '')
+  else if (d.fromId) tag = 'emergency-' + d.fromId
   event.waitUntil(self.registration.showNotification(title, {
     body,
     // 系统通知走操作系统渲染，无法复用应用内的"最后已知位置"富标注——位置详情在点开后的通知页
-    // （那里有诚实标注 + 回拨）。tag 去重：来电按 callId（同一通只留一条）、告警按发起人。
-    tag: (data.data && data.data.kind === 'incoming_call' && data.data.callId)
-      ? 'call-' + data.data.callId
-      : (data.data && data.data.fromId) ? 'emergency-' + data.data.fromId : 'beeurei',
-    requireInteraction: true, // 紧急告警/来电不自动消失，直到用户处理
-    data: data.data || {},
+    // （那里有诚实标注 + 回拨）。
+    tag,
+    requireInteraction: d.kind !== 'chat_message',
+    data: d,
   }))
 })
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  // 来电 → 首页（IncomingCallHost 全局轮询，落到任何 /app 页都会弹铃，首页最快）；告警 → 通知页（诚实位置标注+回拨）。
-  const path = (event.notification.data && event.notification.data.kind === 'incoming_call') ? '/app/' : '/app/notifications'
+  // 按类型直达：来电 → 首页（IncomingCallHost 全局轮询，任何 /app 页都弹铃，首页最快）；
+  // 聊天 → 对应会话（单聊带 fromId 直达，群聊落消息列表）；告警 → 通知页（诚实位置标注+回拨）。
+  const d0 = event.notification.data || {}
+  const path = d0.kind === 'incoming_call' ? '/app/'
+    : d0.kind === 'chat_message' ? (d0.fromId ? '/app/chat/' + encodeURIComponent(d0.fromId) : '/app/chat')
+    : '/app/notifications'
   const target = new URL(path, self.location.origin).href
   event.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })

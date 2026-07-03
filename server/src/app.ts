@@ -202,7 +202,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerFamilyRoutes(instance, store, pushSender)
     registerBlockRoutes(instance, store)
     registerEmergencyRoutes(instance, store, presence, liveLocations, pushSender, webPushSender)
-    registerMessageRoutes(instance, store, pushSender)
+    registerMessageRoutes(instance, store, pushSender, webPushSender)
     registerGroupRoutes(instance, store, pushSender)
     registerMediaRoutes(instance, store) // 视频等大文件（磁盘存储）
     registerReportRoutes(instance, store)

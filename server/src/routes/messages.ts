@@ -6,6 +6,7 @@ import { totalUnreadFor } from '../db/unread'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
 import { NoopPushSender, type PushSender } from '../push/apns'
+import { NoopWebPushSender, type WebPushSender } from '../push/webPush'
 import { pushLang, pushStrings, type PushLang } from '../push/pushStrings'
 import { removeMediaFile } from '../media/storage'
 
@@ -37,7 +38,8 @@ function locationName(text: string): string {
 /// 聊天（参照 WhatsApp/iMessage 核心集：文本 + 语音条 + 图片 + 视频 + 已读回执 + 未读数 + 推送）。
 /// 单聊互发资格 = 双方存在 **accepted** 绑定且无任一方向拉黑；群消息资格 = 群成员。
 export function registerMessageRoutes(app: FastifyInstance, store: Store,
-                                      pushSender: PushSender = new NoopPushSender()): void {
+                                      pushSender: PushSender = new NoopPushSender(),
+                                      webPush: WebPushSender = new NoopWebPushSender()): void {
 
   /// 推送预览文案（语音/图片/视频/位置用占位，文本截 80 字）。
   function previewOf(kind: ChatMessage['kind'], text: string, l: PushLang): string {
@@ -93,14 +95,21 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
         for (const memberId of group.memberIds) {
           if (memberId === me) continue
           const member = store.findById(memberId)
-          if (!member?.apnsToken) continue
+          if (!member) continue
           const l = pushLang(member.language)
-          void pushSender.sendAlert(member.apnsToken,
-            pushStrings.groupMessageTitle(sender.displayName, group.name, l),
-            pushStrings.newMessageBody(previewOf(kind, text, l), l),
-            { type: 'chat_message', groupId }, `group:${groupId}`, // 按群分组折叠通知
-            totalUnreadFor(store, memberId).total) // 图标角标=该成员未读总数（含本条）
-            .catch(() => { /* 单个成员推送失败不影响其他成员与发送回执 */ })
+          const title = pushStrings.groupMessageTitle(sender.displayName, group.name, l)
+          const body = pushStrings.newMessageBody(previewOf(kind, text, l), l)
+          if (member.apnsToken) {
+            void pushSender.sendAlert(member.apnsToken, title, body,
+              { type: 'chat_message', groupId }, `group:${groupId}`, // 按群分组折叠通知
+              totalUnreadFor(store, memberId).total) // 图标角标=该成员未读总数（含本条）
+              .catch(() => { /* 单个成员推送失败不影响其他成员与发送回执 */ })
+          }
+          // Web Push 对齐 APNs：web-only 成员关掉标签页也能收到群消息（SW 按 groupId tag 折叠）。
+          if (webPush.configured) {
+            const payload = JSON.stringify({ title, body, data: { kind: 'chat_message', groupId } })
+            for (const sub of store.webPushSubscriptionsForUser(memberId)) void webPush.send(sub, payload).catch(() => {})
+          }
         }
       }
       return reply.code(201).send({ message: msg })
@@ -117,14 +126,21 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
 
     // 提醒推送（尽力而为，不阻塞发送回执）。
     const recipient = store.findById(toId!)
-    if (recipient?.apnsToken && sender) {
+    if (recipient && sender) {
       const l = pushLang(recipient.language)
-      void pushSender.sendAlert(recipient.apnsToken,
-        pushStrings.newMessageTitle(sender.displayName, l),
-        pushStrings.newMessageBody(previewOf(kind, text, l), l),
-        { type: 'chat_message', fromId: me }, `dm:${me}`, // 按发送者分组折叠通知
-        totalUnreadFor(store, toId!).total) // 图标角标=收件人未读总数（含本条）
-        .catch(() => { /* 推送失败不影响消息已存库与发送回执 */ })
+      const title = pushStrings.newMessageTitle(sender.displayName, l)
+      const body = pushStrings.newMessageBody(previewOf(kind, text, l), l)
+      if (recipient.apnsToken) {
+        void pushSender.sendAlert(recipient.apnsToken, title, body,
+          { type: 'chat_message', fromId: me }, `dm:${me}`, // 按发送者分组折叠通知
+          totalUnreadFor(store, toId!).total) // 图标角标=收件人未读总数（含本条）
+          .catch(() => { /* 推送失败不影响消息已存库与发送回执 */ })
+      }
+      // Web Push 对齐 APNs：点开直达该对话（SW 据 fromId 路由）；按发送者 tag 折叠。
+      if (webPush.configured) {
+        const payload = JSON.stringify({ title, body, data: { kind: 'chat_message', fromId: me } })
+        for (const sub of store.webPushSubscriptionsForUser(toId!)) void webPush.send(sub, payload).catch(() => {})
+      }
     }
     return reply.code(201).send({ message: msg })
   })

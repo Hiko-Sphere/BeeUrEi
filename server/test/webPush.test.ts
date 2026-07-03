@@ -98,6 +98,25 @@ describe('Web Push（浏览器推送紧急告警）', () => {
     await a.close()
   })
 
+  it('消息扇出（与 APNs 对齐）：单聊推给收件人订阅（含 fromId 供直达会话）；发送者自己不收', async () => {
+    const wp = new RecordingWebPush()
+    const { a, helper, hAuth, auth } = await seed(wp)
+    await a.inject({ method: 'POST', url: '/api/push/web-subscribe', headers: hAuth, payload: SUB })
+    const send = await a.inject({ method: 'POST', url: '/api/messages', headers: auth,
+      payload: { toId: helper.user.id, kind: 'text', text: '你好' } })
+    expect(send.statusCode).toBe(201)
+    expect(wp.sent.length).toBe(1)
+    const payload = JSON.parse(wp.sent[0].payload)
+    expect(payload.data).toMatchObject({ kind: 'chat_message', fromId: expect.any(String) })
+    expect(payload.title).toContain('wpfaller')
+    // 反向：helper 回消息，owner 未订阅 → 零投递（不误发）。
+    wp.sent.length = 0
+    await a.inject({ method: 'POST', url: '/api/messages', headers: hAuth,
+      payload: { toId: (await a.inject({ method: 'GET', url: '/api/me', headers: auth })).json().user.id, kind: 'text', text: 'hi' } })
+    expect(wp.sent.length).toBe(0)
+    await a.close()
+  })
+
   it('删号级联：订阅随人清除（双存储各自验证存储层）', async () => {
     const wp = new RecordingWebPush()
     const { a, store, helper, hAuth } = await seed(wp)

@@ -106,6 +106,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
     try {
       const res = await api.answeredCall(callId)
       if (res.youWon) setActive({ callId, kind: 'incoming', peerName: fromName, peerAvatar: fromAvatar, waitingText: t('正在接通…', 'Connecting…') })
+      // gone=呼叫已过期/取消（无人接，只是没了）——区别于"别人先接"，措辞如实，避免误报"已被其他亲友接听"。
+      else if (res.gone) toast(t('这通来电已结束', 'This call has ended'))
       else toast(t('已被其他亲友接听', 'Answered by someone else'))
     } catch { toast(t('接听失败', 'Failed to answer'), 'error') }
   }, [active, t, toast])

@@ -93,13 +93,14 @@ struct IncomingCallView: View {
         Task {
             // 群呼首接抢占：没抢到则明确告知并退出，而不是加入失败的房间。
             if let token = KeychainStore.read() {
-                let won = await APIClient().markAnswered(token: token, callId: ring.callId)
-                guard won else {
-                    A11y.announce(CallStrings.answeredElsewhere(lang))
-                    // 盲人未开 VoiceOver 时 A11y.announce 被静默丢弃：来电屏骤然收起却无解释，用户不知被他人接走。
-                    // 补端侧 TTS（与 CallView.announceCall 同款），见无障碍审计。
+                let outcome = await APIClient().markAnswered(token: token, callId: ring.callId)
+                guard outcome == .won else {
+                    // gone=呼叫已结束/过期（无人接）；否则=被别人接走。措辞如实。
+                    let msg = outcome == .gone ? CallStrings.callEnded(lang) : CallStrings.answeredElsewhere(lang)
+                    A11y.announce(msg)
+                    // 盲人未开 VoiceOver 时 A11y.announce 被静默丢弃：来电屏骤然收起却无解释。补端侧 TTS（见无障碍审计）。
                     if role == .blind, !UIAccessibility.isVoiceOverRunning {
-                        SpeechHub.shared.speak(CallStrings.answeredElsewhere(lang), channel: .call, voiceCode: lang.voiceCode)
+                        SpeechHub.shared.speak(msg, channel: .call, voiceCode: lang.voiceCode)
                     }
                     dismiss()
                     return

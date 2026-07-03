@@ -717,13 +717,16 @@ struct APIClient {
     }
 
     /// 被叫接听 → 首接抢占 + 通话记录标记已接听。
-    /// 返回是否"抢到"了这通群呼（false=已被其他亲友先接，应提示并退出而非加入）。网络失败按抢到处理（不阻断接听）。
-    @discardableResult
-    func markAnswered(token: String, callId: String) async -> Bool {
-        struct R: Codable { let youWon: Bool? }
+    /// 接听结果：won=抢到首接可入房；takenByOther=已被其他亲友先接；gone=呼叫已过期/取消（无人接、只是没了）。
+    enum AnswerOutcome { case won, takenByOther, gone }
+
+    /// 群呼首接抢占。网络失败按 won 处理（不阻断接听）。gone 与 takenByOther 都不入房，但措辞区分。
+    func markAnswered(token: String, callId: String) async -> AnswerOutcome {
+        struct R: Codable { let youWon: Bool?; let gone: Bool? }
         guard let data = try? await authedSend("POST", "/api/assist/call/answered", token: token, body: ["callId": callId]),
-              let r = try? JSONDecoder().decode(R.self, from: data) else { return true }
-        return r.youWon ?? true
+              let r = try? JSONDecoder().decode(R.self, from: data) else { return .won }
+        if r.youWon == true { return .won }
+        return r.gone == true ? .gone : .takenByOther
     }
 
     /// 求助前：我绑定的协助者/亲友中在线人数（online）与总数（total）。

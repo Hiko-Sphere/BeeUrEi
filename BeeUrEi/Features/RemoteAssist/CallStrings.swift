@@ -223,6 +223,8 @@ enum CallStrings {
     static func answer(_ l: Language) -> String { l == .zh ? "接听" : "Answer" }
     static func decline(_ l: Language) -> String { l == .zh ? "拒绝" : "Decline" }
     static func answeredElsewhere(_ l: Language) -> String { l == .zh ? "已被其他亲友接听" : "Answered by another family member" }
+    /// 呼叫已过期/取消（无人接、只是没了）——区别于"被别人接走"，措辞如实。
+    static func callEnded(_ l: Language) -> String { l == .zh ? "这通来电已结束" : "This call has ended" }
     static func incomingAnnounce(_ name: String, _ l: Language) -> String {
         l == .zh ? "\(name) 来电" : "Incoming call from \(name)"
     }

@@ -139,12 +139,14 @@ private struct RootView: View {
             // 打开来电界面即视为"接听"（首接抢占）：群呼没抢到则告知并退出，不加入已满的房间。
             .task {
                 guard let token = KeychainStore.read() else { return }
-                let won = await APIClient().markAnswered(token: token, callId: call.callId)
-                if !won {
-                    A11y.announce(CallStrings.answeredElsewhere(lang))
+                let outcome = await APIClient().markAnswered(token: token, callId: call.callId)
+                if outcome != .won {
+                    // gone=呼叫已结束/过期（无人接）；否则=被别人接走。措辞如实。
+                    let msg = outcome == .gone ? CallStrings.callEnded(lang) : CallStrings.answeredElsewhere(lang)
+                    A11y.announce(msg)
                     // 盲人未开 VoiceOver 时 A11y.announce 被静默丢弃，补端侧 TTS（见无障碍审计）。
                     if session.user?.role == "blind", !UIAccessibility.isVoiceOverRunning {
-                        SpeechHub.shared.speak(CallStrings.answeredElsewhere(lang), channel: .call, voiceCode: lang.voiceCode)
+                        SpeechHub.shared.speak(msg, channel: .call, voiceCode: lang.voiceCode)
                     }
                     RemoteAssistService.shared.endCall()
                     incoming.clear()

@@ -330,7 +330,7 @@ struct ForgotPasswordView: View {
                             .disabled(working || username.isEmpty)
                     } else {
                         Button(AccountStrings.confirmReset(lang)) { Task { await reset() } }
-                            .disabled(working || code.isEmpty || newPassword.count < 6)
+                            .disabled(working || code.isEmpty || newPassword.count < 8) // 与服务端 passwordPolicy 同步（新设密码 ≥8）
                         Button(AccountStrings.resendCode(lang)) { Task { await sendCode() } }.font(.footnote)
                     }
                 }

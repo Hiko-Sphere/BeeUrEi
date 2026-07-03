@@ -248,7 +248,7 @@ struct LoginView: View {
                     SecureField(AccountStrings.currentPassword(lang), text: $oldPassword)
                     SecureField(AccountStrings.newPasswordPlaceholder(lang), text: $newPassword)
                     Button(AccountStrings.confirmChange(lang)) { changePassword() }
-                        .disabled(oldPassword.isEmpty || newPassword.count < 6)
+                        .disabled(oldPassword.isEmpty || newPassword.count < 8) // 与服务端 passwordPolicy 同步
                 }
                 .navigationTitle(AccountStrings.changePasswordTitle(lang))
                 .toolbar {

@@ -40,13 +40,14 @@ export function LoginPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    // 注册前端校验：与后端 auth.ts 同口径（用户名 3–32 且仅字母数字 _.- ；密码 ≥6）。
+    // 注册前端校验：与后端 auth.ts + passwordPolicy 同口径（用户名 3–32 且仅字母数字 _.- ；新设密码 ≥8）。
     // 否则非法输入要打到服务端才被 invalid_input 泛拒，用户看不出错在哪（与改密表单已有的即时校验对齐）。
+    // 登录侧**刻意不设长度预检**：存量 6-7 位老密码须能登录（免迁移），对错交给服务端判。
     if (mode === 'register') {
       const u = username.trim()
       if (u.length < 3 || u.length > 32) { setError(t('用户名需 3–32 位', 'Username must be 3–32 characters')); return }
       if (!/^[A-Za-z0-9_.-]+$/.test(u)) { setError(t('用户名只能含字母、数字和 _ . -', 'Username may only contain letters, numbers, and _ . -')); return }
-      if (password.length < 6) { setError(t('密码至少 6 位', 'Password must be at least 6 characters')); return }
+      if (password.length < 8) { setError(t('密码至少 8 位', 'Password must be at least 8 characters')); return }
     }
     setBusy(true)
     try {
@@ -125,7 +126,7 @@ export function LoginPage() {
               </>
             )}
             <Field label={t('密码', 'Password')}>
-              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required minLength={6} placeholder={t('请输入密码', 'Your password')} />
+              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required minLength={mode === 'login' ? 1 : 8} placeholder={t('请输入密码', 'Your password')} />
             </Field>
 
             {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">{error}</div>}

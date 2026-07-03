@@ -611,7 +611,7 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
         <h3 className="text-lg font-semibold">{t('修改密码', 'Change password')}</h3>
         <div className="mt-4 flex flex-col gap-4">
           <Field label={t('当前密码', 'Current password')}><Input type="password" value={oldPw} onChange={(e) => setOldPw(e.target.value)} autoComplete="current-password" /></Field>
-          <Field label={t('新密码', 'New password')} hint={t('至少 6 位', 'At least 6 characters')}><Input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} autoComplete="new-password" /></Field>
+          <Field label={t('新密码', 'New password')} hint={t('至少 8 位，避免常见密码', 'At least 8 characters; avoid common passwords')}><Input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} autoComplete="new-password" /></Field>
         </div>
         <div className="mt-5 flex gap-3">
           <Button variant="soft" className="flex-1" onClick={onClose}>{t('取消', 'Cancel')}</Button>

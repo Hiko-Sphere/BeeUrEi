@@ -100,7 +100,7 @@ enum AccountStrings {
     static func resetHeader(_ l: Language) -> String { l == .zh ? "重置密码" : "Reset password" }
     static func codePlaceholder(_ l: Language) -> String { l == .zh ? "邮箱收到的验证码" : "Code from your email" }
     static func codeA11y(_ l: Language) -> String { l == .zh ? "验证码" : "Verification code" }
-    static func newPasswordPlaceholder(_ l: Language) -> String { l == .zh ? "新密码（至少 6 位）" : "New password (6+ characters)" }
+    static func newPasswordPlaceholder(_ l: Language) -> String { l == .zh ? "新密码（至少 8 位）" : "New password (8+ characters)" }
     static func sendCode(_ l: Language) -> String { l == .zh ? "发送验证码" : "Send code" }
     static func confirmReset(_ l: Language) -> String { l == .zh ? "确认重置密码" : "Confirm reset" }
     static func resendCode(_ l: Language) -> String { l == .zh ? "重新发送验证码" : "Resend code" }

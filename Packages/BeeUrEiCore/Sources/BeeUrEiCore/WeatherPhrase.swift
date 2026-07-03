@@ -74,10 +74,17 @@ public enum WeatherPhrase {
         return text
     }
 
-    /// 盲人出行建议：雨雪雷暴/高降水→带伞防滑；高温/严寒提醒。无建议返回 nil。
+    /// 盲人出行建议：冻雨→黑冰强警告；雨雪雷暴/高降水→带伞防滑；高温/严寒提醒。无建议返回 nil。
     public static func advice(code: Int, todayMax: Double?, todayMin: Double?,
                               precipProbability: Int?, language: Language) -> String? {
-        let wet: Set<Int> = [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 99]
+        // 冻雨（WMO 56/57/66/67）＝黑冰天气：雨落地即冻、路面整片成冰，视觉上与湿路无异、盲杖也探不出滑——
+        // 对盲人步行是**最危险**的天气。须专门强警告（建议避免外出/有人陪同），不能混进通用"带伞湿滑"。
+        let freezing: Set<Int> = [56, 57, 66, 67]
+        if freezing.contains(code) {
+            return language == .zh ? "现在是冻雨，路面会大面积结冰、极滑，请尽量避免外出；必须出门请找人陪同。"
+                                   : " Freezing rain — surfaces will ice over and become extremely slippery. Avoid going out if you can; if you must, take someone with you."
+        }
+        let wet: Set<Int> = [51, 53, 55, 61, 63, 65, 71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 99]
         if wet.contains(code) || (precipProbability ?? 0) >= 50 {
             return language == .zh ? "出门请带伞，地面可能湿滑。" : " Bring an umbrella; the ground may be slippery."
         }

@@ -38,6 +38,23 @@ final class WeatherPhraseTests: XCTestCase {
         XCTAssertTrue(snow.contains("带伞"))
     }
 
+    /// 冻雨（WMO 56/57/66/67）＝黑冰：必须给专门强警告（避免外出/找人陪同），不能混进通用"带伞湿滑"。
+    /// 黑冰视觉上与湿路无异、盲杖也探不出滑，是盲人步行最危险的天气。
+    func testFreezingRainGetsDedicatedBlackIceWarning() {
+        for code in [56, 57, 66, 67] {
+            let zh = WeatherPhrase.summary(temperature: -1, code: code, language: .zh)
+            XCTAssertTrue(zh.contains("冻雨"), "code \(code) 应含冻雨")
+            XCTAssertTrue(zh.contains("避免外出"), "code \(code) 应强警告避免外出")
+            XCTAssertTrue(zh.contains("陪同"), "code \(code) 应建议找人陪同")
+            XCTAssertFalse(zh.contains("带伞"), "code \(code) 不应退化成通用带伞提示")
+            let en = WeatherPhrase.summary(temperature: -1, code: code, language: .en)
+            XCTAssertTrue(en.lowercased().contains("freezing rain"))
+            XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文混中文：\(en)")
+        }
+        // 普通小雨仍是通用带伞（不受冻雨分支影响）。
+        XCTAssertTrue(WeatherPhrase.summary(temperature: 20, code: 61, language: .zh).contains("带伞"))
+    }
+
     func testEnglishHasNoChinese() {
         let samples = [
             WeatherPhrase.summary(temperature: 23.6, code: 61, windSpeedKmh: 35,

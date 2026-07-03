@@ -240,6 +240,8 @@ docker run -e ADMIN_USERNAME=root -e ADMIN_PASSWORD=your-strong-password beeurei
 
 The production self-hosted backend runs on **AWS (Tokyo) + Cloudflare Tunnel**, with **coturn** for TURN.
 
+**Operations** — backups (daily automatic + admin download), restore procedure (WAL caveats), monitoring endpoints, and rollback: see [docs/OPS.md](docs/OPS.md).
+
 ---
 
 ## Testing & Quality

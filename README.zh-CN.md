@@ -235,6 +235,8 @@ docker run -e ADMIN_USERNAME=root -e ADMIN_PASSWORD=你的强密码 beeurei-api
 
 生产环境的自托管后端运行在 **AWS（东京）+ Cloudflare Tunnel**，并配 **coturn** 做 TURN。
 
+**运维**——备份（每日自动 + 管理面板下载）、恢复流程（WAL 注意事项）、监控端点与回滚：见 [docs/OPS.md](docs/OPS.md)。
+
 ---
 
 ## 测试与质量

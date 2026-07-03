@@ -1,0 +1,125 @@
+{
+  "sourceLanguage" : "zh-Hans",
+  "strings" : {
+    "NSCameraUsageDescription" : {
+      "comment" : "相机权限弹窗（与 project.yml 中文一致）",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used to detect obstacles ahead in real time through the camera and announce them to you, and to stream video when you call a volunteer."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用于通过摄像头实时识别前方障碍并向你语音提示，以及在你呼叫志愿者时传输画面。"
+          }
+        }
+      }
+    },
+    "NSFaceIDUsageDescription" : {
+      "comment" : "Face ID 权限弹窗",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used for App Lock: when enabled, Face ID verifies it's you before opening the app, protecting your account, live location, recordings and family contacts."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用于「应用锁」：开启后用 Face ID 验证本人才能打开 App，保护你的账号、实时位置、录音与亲友信息。"
+          }
+        }
+      }
+    },
+    "NSLocalNetworkUsageDescription" : {
+      "comment" : "局域网权限弹窗",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used to connect to your self-hosted BeeUrEi backend on the local network."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用于连接你自托管的 BeeUrEi 后端（局域网内）。"
+          }
+        }
+      }
+    },
+    "NSLocationWhenInUseUsageDescription" : {
+      "comment" : "定位权限弹窗",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used to plan walking routes and announce intersections and landmarks along the way, and — when you turn it on — to share your live location with family and helpers."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用于规划步行路线并播报你途经的路口与地标，以及在你开启时与亲友/协助者实时共享位置。"
+          }
+        }
+      }
+    },
+    "NSMicrophoneUsageDescription" : {
+      "comment" : "麦克风权限弹窗",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used for live voice conversations with remote volunteers, voice messages, and voice commands."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用于与远程志愿者实时语音交流、发送语音消息和语音指令。"
+          }
+        }
+      }
+    },
+    "NSMotionUsageDescription" : {
+      "comment" : "运动传感权限弹窗",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used for AirPods head tracking to improve spatial-audio direction accuracy, and to detect suspected falls so your family can be notified."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用于 AirPods 头部追踪提升空间音方向准确度，以及检测疑似摔倒以便通知亲友。"
+          }
+        }
+      }
+    },
+    "NSSpeechRecognitionUsageDescription" : {
+      "comment" : "语音识别权限弹窗",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used for voice commands: say things like “Where am I” or “Take me to…” to jump straight to a feature (recognition happens on-device when possible)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用于语音指令：说出'我在哪''带我去某地'等即可直达对应功能（优先在设备端识别）。"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

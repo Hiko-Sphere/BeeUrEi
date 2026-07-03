@@ -413,6 +413,7 @@ struct HubView: View {
         case .readBus: route.pendingChannel = .bus; showFraming = true
         case .describePeople: route.pendingChannel = .people; showFraming = true
         case .readLight: route.pendingChannel = .light; showFraming = true
+        case .readColor: route.pendingChannel = .color; showFraming = true
         case .navigate(let dest):
             if let dest { AppRoute.shared.pendingNavAction = .search(dest) }
             showNavigation = true

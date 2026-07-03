@@ -83,4 +83,15 @@ final class VoiceCommandParserTests: XCTestCase {
         XCTAssertEqual(VoiceCommandParser.parse("灯开着吗"), .readLight)
         XCTAssertEqual(VoiceCommandParser.parse("how bright is it"), .readLight)
     }
+
+    /// 颜色识别（配衣服/比色刚需）须先于通用「看一看」匹配。
+    func testReadColorBeatsLookOnOverlap() {
+        XCTAssertEqual(VoiceCommandParser.parse("这是什么颜色"), .readColor) // 含"这是什么"，不得被 look 抢
+        XCTAssertEqual(VoiceCommandParser.parse("识别颜色"), .readColor)       // 含"识别"，不得被 look 抢
+        XCTAssertEqual(VoiceCommandParser.parse("什么颜色"), .readColor)
+        XCTAssertEqual(VoiceCommandParser.parse("what color is this"), .readColor)
+        // 不含颜色词的通用识别仍归 look。
+        XCTAssertEqual(VoiceCommandParser.parse("这是什么"), .look)
+        XCTAssertEqual(VoiceCommandParser.parse("识别一下"), .look)
+    }
 }

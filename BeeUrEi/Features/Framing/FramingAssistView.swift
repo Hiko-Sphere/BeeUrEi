@@ -82,6 +82,7 @@ final class FramingAssistViewModel {
         case .bus: readBus()
         case .people: describePeople()
         case .light: readLight()
+        case .color: readColor() // 语音指令"什么颜色"直达（配衣服/比色）
         case .text: readText() // 语音指令"读文字"直达
         }
     }

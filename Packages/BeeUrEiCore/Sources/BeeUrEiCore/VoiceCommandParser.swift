@@ -20,6 +20,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case readBus                    // 识别公交（车号/路线）
     case describePeople             // 描述周围的人（人数/方位）
     case readLight                  // 光线/明暗（找窗户/灯）
+    case readColor                  // 识别颜色（配衣服/比色）
     case messages                   // 打开消息
     case sendMessage(to: String, text: String) // 给X发消息说Y
     case repeatLast                 // 重复刚才的播报
@@ -57,6 +58,8 @@ public enum VoiceCommandParser {
         if has(["消息", "聊天", "信息", "message", "chat", "inbox"]) { return .messages }
         // 导盲/避障须在通用「看一看」之前匹配（"识别障碍/避障"含"识别"会被 look 抢走）。
         if has(["导盲", "避障", "开始导盲", "实时避障", "obstacle", "guide me", "start guide", "avoidance"]) { return .guideMe }
+        // 颜色须在通用「看一看」之前：否则「这是什么颜色」(含"这是什么")、「识别颜色」(含"识别") 会被 look 抢走。
+        if has(["颜色", "什么色", "识别颜色", "报颜色", "what color", "which color", "what colour", "which colour", "read color", "color of", "identify color"]) { return .readColor }
         if has(["看一看", "识别", "这是什么", "拍一下", "look", "what is this", "identify", "recognize"]) { return .look }
         if has(["再说一遍", "重复", "刚才说什么", "repeat", "say again", "say that again"]) { return .repeatLast }
         // 导航意图（带目的地提取）：「带我去/导航去/去 北京西站」 / "navigate to / take me to X"

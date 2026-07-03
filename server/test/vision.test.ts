@@ -67,6 +67,17 @@ describe('visionClient（AI 视觉描述，provider 无关 / OpenAI 兼容）', 
     await expect(visionDescribe({ imageDataUrl: 'data:image/jpeg;base64,x', lang: 'zh' }))
       .rejects.toMatchObject({ name: 'VisionError', status: 429 })
   })
+
+  it('上游挂起 → 超时中止，抛 VisionError timeout（不无限等待，占住连接/限流槽/阻塞用户）', async () => {
+    setConfig()
+    process.env.VISION_TIMEOUT_MS = '20' // 20ms 超时
+    // fetch 永不解析，仅在收到 abort signal 后 reject（模拟真实 fetch 的中止语义）。
+    vi.stubGlobal('fetch', vi.fn((_url: string, opts: { signal: AbortSignal }) => new Promise((_resolve, reject) => {
+      opts.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+    })))
+    await expect(visionDescribe({ imageDataUrl: 'data:image/jpeg;base64,x', lang: 'zh' }))
+      .rejects.toMatchObject({ name: 'VisionError', detail: 'timeout' })
+  })
 })
 
 describe('POST /api/vision/describe（路由）', () => {
@@ -154,6 +165,37 @@ describe('POST /api/vision/describe（路由）', () => {
     expect(res.statusCode).toBe(502)
     expect(res.json()).toMatchObject({ error: 'ai_error' })
     expect(JSON.stringify(res.json())).not.toContain('boom') // 不外泄上游细节
+    await app.close()
+  })
+
+  it('5.5MB 图（在 8MB bodyLimit 内、超 5MB 图上限）→ 413 image_too_large（走 handler 检查而非 bodyLimit）', async () => {
+    setConfig()
+    const app = buildApp(new MemoryStore())
+    const t = await token(app)
+    // 5.5MB 解码 → ~7.3MB base64（< 8MB bodyLimit，能到达 handler），触发 MAX_IMAGE_BYTES(5MB) 检查。
+    const b64 = 'A'.repeat(Math.ceil(5.5 * 1024 * 1024 * 4 / 3))
+    const res = await app.inject({ method: 'POST', url: '/api/vision/describe', headers: { authorization: `Bearer ${t}` },
+      payload: { image: b64, mime: 'image/jpeg' } })
+    expect(res.statusCode).toBe(413)
+    expect(res.json()).toMatchObject({ error: 'image_too_large' }) // 我方检查，非 Fastify bodyLimit 的通用 413
+    await app.close()
+  })
+
+  it('客户端带 data: 前缀发来 → 剥离后正常处理（200）', async () => {
+    setConfig()
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, opts: { body: string }) => {
+      // 确认剥离前缀后送上游的 data URL 只有一个 data: 前缀（未双重拼接）。
+      const body = JSON.parse(opts.body)
+      const url = body.messages[1].content[1].image_url.url as string
+      expect(url).toBe(`data:image/jpeg;base64,${TINY_JPEG_B64}`)
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) }
+    }))
+    const app = buildApp(new MemoryStore())
+    const t = await token(app)
+    const res = await app.inject({ method: 'POST', url: '/api/vision/describe', headers: { authorization: `Bearer ${t}` },
+      payload: { image: `data:image/jpeg;base64,${TINY_JPEG_B64}`, mime: 'image/jpeg' } })
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({ text: 'ok' })
     await app.close()
   })
 })

@@ -68,26 +68,41 @@ export async function visionDescribe(input: DescribeInput): Promise<string> {
     max_tokens: Number.isFinite(c.maxTokens) && c.maxTokens > 0 ? c.maxTokens : 500,
     temperature: 0.2, // 低温：偏客观、少发挥（安全攸关，减少臆造）
   }
-  let res: Response
+  // 超时（默认 30s）：视觉大模型推理慢，上游若挂起绝不能让请求无限等待——否则占住连接、限流槽、
+  // 阻塞盲人用户拿描述。用 AbortController 硬性中止（VISION_TIMEOUT_MS 可调）。
+  const toRaw = Number(process.env.VISION_TIMEOUT_MS ?? '30000')
+  const timeoutMs = Number.isFinite(toRaw) && toRaw > 0 ? toRaw : 30000
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${c.key}` },
-      body: JSON.stringify(body),
-    })
-  } catch {
-    throw new VisionError(0, 'network') // 网络失败：不外泄细节
+    let res: Response
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${c.key}` },
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      })
+    } catch {
+      // 中止 → 超时；其余 → 网络失败。均不外泄细节。
+      throw new VisionError(0, ctrl.signal.aborted ? 'timeout' : 'network')
+    }
+    let data: unknown
+    try { data = await res.json() } catch {
+      if (ctrl.signal.aborted) throw new VisionError(0, 'timeout')
+      throw new VisionError(res.status, 'bad_json')
+    }
+    const d = data as { error?: { message?: string }; choices?: Array<{ message?: { content?: unknown } }> }
+    if (!res.ok) {
+      // 上游错误：带状态码；上游 message 截断入 detail 便于诊断，绝不外泄我方 key。
+      const msg = typeof d?.error?.message === 'string' ? d.error.message.slice(0, 200) : `http_${res.status}`
+      throw new VisionError(res.status, msg)
+    }
+    const text = d?.choices?.[0]?.message?.content
+    const out = typeof text === 'string' ? text.trim() : ''
+    if (!out) throw new VisionError(502, 'empty_response') // 空回复：fail-closed，绝不罐头兜底
+    return out
+  } finally {
+    clearTimeout(timer) // 无论成功/异常都清掉定时器，避免泄漏 handle
   }
-  let data: unknown
-  try { data = await res.json() } catch { throw new VisionError(res.status, 'bad_json') }
-  const d = data as { error?: { message?: string }; choices?: Array<{ message?: { content?: unknown } }> }
-  if (!res.ok) {
-    // 上游错误：带状态码；上游 message 截断入 detail 便于诊断，绝不外泄我方 key。
-    const msg = typeof d?.error?.message === 'string' ? d.error.message.slice(0, 200) : `http_${res.status}`
-    throw new VisionError(res.status, msg)
-  }
-  const text = d?.choices?.[0]?.message?.content
-  const out = typeof text === 'string' ? text.trim() : ''
-  if (!out) throw new VisionError(502, 'empty_response') // 空回复：fail-closed，绝不罐头兜底
-  return out
 }

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
 import { api, tokenStore, setUnauthorizedHandler, type User, type SelfView } from './api'
+import { unsubscribeWebPushOnSignOut } from './webPush'
 
 interface Session {
   user: User | null
@@ -20,7 +21,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(() => {
     const rt = tokenStore.refresh
+    const tk = tokenStore.token // 同步快照：退订是异步的，等它跑起来 token 已被清
     if (rt) void api.logout(rt).catch(() => {}) // 尽力而为：服务端吊销 refresh token；先读再清，失败/离线也照常登出
+    // 退订浏览器推送（与 iOS 登出注销 APNs/VoIP 同口径）：否则已登出的共享电脑会继续弹出
+    // 家人的紧急告警/消息系统通知。后台尽力而为，UI 登出不等网络。
+    if (tk) void unsubscribeWebPushOnSignOut(tk)
     tokenStore.clear(); setUser(null); setSelf(null)
   }, [])
 

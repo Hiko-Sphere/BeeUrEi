@@ -1,4 +1,5 @@
 import { api } from './api'
+import { apiURL } from './config'
 
 /// Web Push 订阅编排（浏览器推送紧急告警——关掉标签页也能收到系统通知）。
 /// 流程：SW 注册 → 服务端取 VAPID 公钥（未配置 503 → 'unsupported'）→ 请求通知权限 →
@@ -54,4 +55,22 @@ export async function isWebPushSubscribed(): Promise<boolean> {
   if (!webPushSupported() || Notification.permission !== 'granted') return false
   const reg = await navigator.serviceWorker.getRegistration('/app/sw.js')
   return !!(await reg?.pushManager.getSubscription())
+}
+
+/// 登出专用退订：与 iOS 登出注销 APNs/VoIP token 同一口径（防已登出的共享电脑继续弹出
+/// 家人的紧急告警/消息系统通知——隐私泄漏）。token 由调用方**在清除前同步快照**传入
+/// （退订是异步的，等它跑起来 tokenStore 已被清）；全程尽力而为，离线登出照常瞬时完成。
+export async function unsubscribeWebPushOnSignOut(token: string): Promise<void> {
+  try {
+    if (!('serviceWorker' in navigator)) return
+    const reg = await navigator.serviceWorker.getRegistration('/app/sw.js')
+    const sub = await reg?.pushManager.getSubscription()
+    if (!sub) return
+    await fetch(apiURL('/api/push/web-subscribe'), {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ endpoint: sub.endpoint }),
+    }).catch(() => {})
+    await sub.unsubscribe().catch(() => {}) // 浏览器侧也退：双保险，服务端删失败也不再收推
+  } catch { /* 尽力而为 */ }
 }

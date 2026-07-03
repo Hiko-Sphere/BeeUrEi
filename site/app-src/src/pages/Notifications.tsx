@@ -11,6 +11,8 @@ import { useCall } from './call/CallController'
 export function notifDestination(kind: string): string | null {
   if (kind.includes('friend') || kind.includes('link')) return '/family'
   if (kind.includes('group')) return '/chat'
+  if (kind.includes('route')) return '/routes' // 路线通知 → 路线库页（查看/预览亲友新加的路线；执行仍在 iOS）
+  if (kind.includes('kyc') || kind.includes('verif')) return '/account' // 实名结果 → 账户页实名认证区
   return null
 }
 

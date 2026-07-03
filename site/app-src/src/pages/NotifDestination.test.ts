@@ -11,10 +11,15 @@ describe('notifDestination 通知点击跳转目的地', () => {
     expect(notifDestination('group_removed')).toBe('/chat')
     expect(notifDestination('group_dissolved')).toBe('/chat')
   })
+  it('路线通知 → 路线库页（原断言 null 的前提"web 无路线页"已过时——/routes 库+预览页已建成）', () => {
+    expect(notifDestination('route_added')).toBe('/routes')
+  })
+  it('实名结果 → 账户页（实名认证区就在 /account）', () => {
+    expect(notifDestination('kyc_verified')).toBe('/account')
+    expect(notifDestination('kyc_rejected')).toBe('/account')
+  })
   it('无明确去处 → null（仅标已读，不跳转）', () => {
     expect(notifDestination('emergency_alert')).toBeNull() // 紧急有专属"查看位置/回拨"按钮，不整行跳转
     expect(notifDestination('report_resolved')).toBeNull()
-    expect(notifDestination('kyc_verified')).toBeNull()
-    expect(notifDestination('route_added')).toBeNull() // 路线执行在 iOS，web 无路线执行页
   })
 })

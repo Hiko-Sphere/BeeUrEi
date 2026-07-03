@@ -43,3 +43,37 @@ describe('LiveLocationRegistry（实时位置共享，纯内存 + TTL）', () =>
     expect(until).toBe(t0 + 10_000) // 被夹到上限
   })
 })
+
+describe('lastKnownForEmergency（紧急告警位置兜底）', () => {
+  const FRESH = 90_000, TTL = 60 * 60_000, EMG = 15 * 60_000
+  it('共享中但已超新鲜窗（visible 拒）→ 紧急兜底仍返回最后位置（家人最需要之时）', () => {
+    const reg = new LiveLocationRegistry(FRESH, TTL, EMG)
+    const t0 = 5_000_000
+    reg.update('u1', { lat: 31.2, lng: 121.5 }, t0, TTL) // 长共享窗
+    const t1 = t0 + 5 * 60_000 // 5 分钟后无新位置：超 90s 新鲜窗
+    expect(reg.visible('u1', t1)).toBeUndefined()             // 实时地图正确地不显示陈旧点
+    const last = reg.lastKnownForEmergency('u1', t1)
+    expect(last?.lat).toBe(31.2)                              // 但紧急兜底给出最后已知
+    expect(last?.updatedAt).toBe(t0)                          // 带原始时刻，供标注"N 分钟前"
+  })
+  it('共享已结束（sharingUntil 过） → 紧急兜底也不返回（尊重"停止=消失"，不复活轨迹）', () => {
+    const reg = new LiveLocationRegistry(FRESH, TTL, EMG)
+    const t0 = 5_000_000
+    reg.update('u1', { lat: 31.2, lng: 121.5 }, t0, 30_000) // 仅共享 30s
+    expect(reg.lastKnownForEmergency('u1', t0 + 31_000)).toBeUndefined()
+  })
+  it('超过紧急陈旧上限（>emergencyMaxAge）→ 不返回（过老无意义且可能误导）', () => {
+    const reg = new LiveLocationRegistry(FRESH, TTL, EMG)
+    const t0 = 5_000_000
+    reg.update('u1', { lat: 31.2, lng: 121.5 }, t0, TTL)
+    expect(reg.lastKnownForEmergency('u1', t0 + EMG + 1)).toBeUndefined() // 15分01秒
+    expect(reg.lastKnownForEmergency('u1', t0 + EMG)).toBeDefined()       // 恰 15 分含
+  })
+  it('主动 stop 后紧急兜底不返回', () => {
+    const reg = new LiveLocationRegistry(FRESH, TTL, EMG)
+    const t0 = 5_000_000
+    reg.update('u1', { lat: 31.2, lng: 121.5 }, t0, TTL)
+    reg.stop('u1')
+    expect(reg.lastKnownForEmergency('u1', t0 + 1000)).toBeUndefined()
+  })
+})

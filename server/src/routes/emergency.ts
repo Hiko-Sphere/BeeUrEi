@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { type Store } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { type PresenceRegistry } from '../assist/presence'
+import { type LiveLocationRegistry } from '../location/liveLocations'
 import { planEmergencyRoute } from '../emergency/routing'
 import { NoopPushSender, type PushSender } from '../push/apns'
 import { pushLang, pushStrings } from '../push/pushStrings'
@@ -36,6 +37,7 @@ class EmergencyAlertDedup {
 
 export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
                                         presence: PresenceRegistry,
+                                        live: LiveLocationRegistry,
                                         pushSender: PushSender = new NoopPushSender()): void {
   const alertDedup = new EmergencyAlertDedup()
   // 发起紧急呼叫：返回按优先级排好的呼叫目标列表（真正接通由 WebRTC 信令负责）。
@@ -75,28 +77,45 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
       if (cached !== undefined) return cached
     }
 
+    const now0 = Date.now()
     const links = store.linksByOwner(me.id).filter((l) => (l.status ?? 'accepted') === 'accepted')
     // 安全攸关：所有亲友必须**并行**收到告警，且任一推送失败绝不能中断其余推送或 500 整个请求。
     // 此前串行 await——第一个亲友的 APNs 抛错会让后面所有亲友收不到摔倒告警。
     const members = links
       .map((link) => store.findById(link.memberId))
       .filter((m): m is NonNullable<typeof m> => !!m)
-    const extraBase: Record<string, string> = { type: 'emergency_alert', kind: parsed.data.kind, fromId: me.id }
-    if (parsed.data.lat != null && parsed.data.lon != null) {
-      extraBase.lat = String(parsed.data.lat)
-      extraBase.lon = String(parsed.data.lon)
+
+    // 位置：优先用告警自带的当前坐标；**若缺（摔倒后手机丢 GPS，恰是易摔的室内/地库场景）则兜底用
+    // 用户最后已知的共享位置**——几分钟前的位置远胜于让家人完全不知道人在哪（对标 Apple Watch 跌倒检测）。
+    // 兜底位置仅取自用户主动开启、且收件人正是这批亲友的共享数据，不越权；附 locSource/locAgeSec 让客户端
+    // 诚实标注"最后已知·N 分钟前"，不谎称实时。
+    let lat = parsed.data.lat, lon = parsed.data.lon
+    let locSource: 'live' | 'lastKnown' | undefined = (lat != null && lon != null) ? 'live' : undefined
+    let locAgeSec: number | undefined
+    if (lat == null || lon == null) {
+      const last = live.lastKnownForEmergency(me.id, now0)
+      if (last) {
+        lat = last.lat; lon = last.lng
+        locSource = 'lastKnown'
+        locAgeSec = Math.round((now0 - last.updatedAt) / 1000)
+      }
     }
+    const hasLoc = lat != null && lon != null
+
+    const extraBase: Record<string, string> = { type: 'emergency_alert', kind: parsed.data.kind, fromId: me.id }
     // 通知记录的 data 形状与推送 extra 一致（去掉 type，记录的 kind 字段已表达类别）。
     // fromName：供协助端（web 通知页）渲染"回拨 X"按钮的呼叫目标显示名。
     const notifData: Record<string, string> = { kind: parsed.data.kind, fromId: me.id, fromName: me.displayName }
-    if (parsed.data.lat != null && parsed.data.lon != null) {
-      notifData.lat = String(parsed.data.lat)
-      notifData.lon = String(parsed.data.lon)
+    if (hasLoc) {
+      extraBase.lat = String(lat); extraBase.lon = String(lon)
+      notifData.lat = String(lat); notifData.lon = String(lon)
+      if (locSource) { extraBase.locSource = locSource; notifData.locSource = locSource }
+      if (locAgeSec != null) { extraBase.locAgeSec = String(locAgeSec); notifData.locAgeSec = String(locAgeSec) }
     }
     await Promise.allSettled(members.map((member) => {
       const l = pushLang(member.language)
       const title = pushStrings.emergencyAlertTitle(me.displayName, l)
-      const body = pushStrings.emergencyAlertBody(parsed.data.kind, parsed.data.lat != null, l)
+      const body = pushStrings.emergencyAlertBody(parsed.data.kind, hasLoc, l)
       // 持久化通知发给**每个** accepted 亲友（含无 APNs token 者：web-only 协助者 / 推送被拒 /
       // token 未注册）——否则这些人对摔倒/车祸告警完全无感。这正是"错过推送也能在通知中心回看"
       // 兜底要覆盖的对象，绝不能再按 token 过滤（旧实现把兜底也漏给了最需要它的人）。
@@ -111,7 +130,14 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     }))
     // notified=实际推送对象数（有 token 者）；contacts=accepted 亲友总数。
     // 二者差值 = 仅靠通知中心兜底、未收到实时推送的人——客户端可据此提示用户。
-    const result = { ok: true, notified: members.filter((m) => !!m.apnsToken).length, contacts: links.length }
+    // location：告知客户端本次告警附带的位置来源——'live'(自带当前坐标)/'lastKnown'(兜底最后已知，
+    // 带 ageSec)/'none'(既无当前定位又无可兜底的共享位置，客户端应提示用户"未附位置")。
+    const result = {
+      ok: true,
+      notified: members.filter((m) => !!m.apnsToken).length,
+      contacts: links.length,
+      location: { source: locSource ?? 'none', ...(locAgeSec != null ? { ageSec: locAgeSec } : {}) },
+    }
     if (dedupKey) alertDedup.record(dedupKey, result, Date.now()) // 记住本次结果，后续同 alertId 重试直接返回它
     return result
   })

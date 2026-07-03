@@ -15,7 +15,9 @@ export class LiveLocationRegistry {
 
   /// freshMs：超过此时长无新位置则视为"陈旧"不可见（共享中但客户端断流时不暴露旧坐标）。
   /// maxTtlMs：单次共享最长有效期（防止"忘记关"无限期暴露位置）。
-  constructor(private freshMs = 90_000, private maxTtlMs = 60 * 60_000) {}
+  /// emergencyMaxAgeMs：**仅紧急告警兜底**放宽的陈旧上限——摔倒后手机常丢 GPS，
+  /// 此时几分钟前的最后位置远胜于无；但过老（>15 分钟）无意义且可能误导，故仍有界。
+  constructor(private freshMs = 90_000, private maxTtlMs = 60 * 60_000, private emergencyMaxAgeMs = 15 * 60_000) {}
 
   /// 上报位置 + （重）激活共享，返回本次共享截止时刻。ttlMs 缺省/超限取 maxTtlMs。
   update(userId: string, p: { lat: number; lng: number; accuracy?: number; heading?: number }, now: number, ttlMs?: number): number {
@@ -45,6 +47,17 @@ export class LiveLocationRegistry {
   visible(userId: string, now: number): LiveLocation | undefined {
     const l = this.map.get(userId)
     if (!l || l.sharingUntil <= now || now - l.updatedAt > this.freshMs) return undefined
+    return l
+  }
+
+  /// **紧急告警专用**的最后已知位置：仍在有效共享窗内（sharingUntil > now）即返回，
+  /// **放宽 freshMs 新鲜度门槛**（改用更宽的 emergencyMaxAgeMs 上限）。因为摔倒/车祸后手机常丢 GPS、
+  /// 位置更新随之停顿，恰是 visible() 因陈旧而拒的区间——但此刻家人最需要"人大概在哪"。
+  /// 仍受两重约束：①必须仍在用户主动开启的共享窗内（消费同一份已同意共享给这批亲友的数据，不越权）；
+  /// ②不超过 emergencyMaxAgeMs（过老无意义且可能误导）。调用方据 updatedAt 标注"最后已知·N 分钟前"。
+  lastKnownForEmergency(userId: string, now: number): LiveLocation | undefined {
+    const l = this.map.get(userId)
+    if (!l || l.sharingUntil <= now || now - l.updatedAt > this.emergencyMaxAgeMs) return undefined
     return l
   }
 

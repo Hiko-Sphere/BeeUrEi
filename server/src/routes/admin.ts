@@ -88,6 +88,16 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
   const audit = (adminId: string, action: string, targetType: AdminAuditEntry['targetType'], targetId: string, detail?: string) =>
     store.createAuditEntry({ id: randomUUID(), adminId, action, targetType, targetId, detail, at: Date.now() })
 
+  // 紧急事件日志（值守/事后追溯）：谁在何时触发了摔倒/车祸/SOS、通知到几人、位置来源（诚实标注）。
+  // 坐标为敏感 PII——仅 admin 可见；查看不逐次审计（高频轮询会刷爆审计日志；导出级别的整库操作才审计）。
+  app.get('/api/admin/emergencies', adminOnly, async () => {
+    const events = store.recentEmergencyEvents(100).map((e) => {
+      const u = store.findById(e.userId)
+      return { ...e, userName: u?.displayName ?? null, username: u?.username ?? null }
+    })
+    return { events }
+  })
+
   // 数据库备份下载（灾难恢复，自托管运维刚需）：VACUUM INTO 一致性快照 → 流回管理员。
   // 含全部账号/亲友/通知等 PII —— admin-only + 不可抵赖审计（与旁观通话同口径）。媒体文件在磁盘
   // 目录不在库内，本备份为元数据库；未用 SQLite 驱动（内存/JSON 存储）时诚实 503，绝不给假备份。

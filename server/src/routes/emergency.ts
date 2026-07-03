@@ -138,6 +138,12 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
       contacts: links.length,
       location: { source: locSource ?? 'none', ...(locAgeSec != null ? { ageSec: locAgeSec } : {}) },
     }
+    // 紧急事件日志（治理/值守，admin 可见）：best-effort——日志失败绝不影响告警响应。
+    // alertId 重试在上方 dedup 已短路返回，不会重复落账。
+    try {
+      store.createEmergencyEvent({ id: randomUUID(), userId: me.id, kind: parsed.data.kind,
+        lat, lon, locSource: locSource ?? 'none', locAgeSec, notified: result.notified, contacts: result.contacts, at: now0 })
+    } catch { /* 日志不可阻断告警 */ }
     if (dedupKey) alertDedup.record(dedupKey, result, Date.now()) // 记住本次结果，后续同 alertId 重试直接返回它
     return result
   })

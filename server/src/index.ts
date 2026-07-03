@@ -47,6 +47,13 @@ async function main(): Promise<void> {
     catch (e) { console.warn('[notifications] 清理失败:', (e as Error).message) }
     try { const r = store.deleteExpiredRefreshTokens(Date.now()); if (r) console.log(`[auth] 清理过期 refresh token ${r} 条`) }
     catch (e) { console.warn('[auth] 清理失败:', (e as Error).message) }
+    // 紧急事件日志保留 180 天（duty-of-care 记录比通知(90d)略长；EMERGENCY_RETENTION_DAYS 可调，≥1）。
+    try {
+      const d = Number(process.env.EMERGENCY_RETENTION_DAYS)
+      const days = Number.isFinite(d) && d >= 1 ? d : 180
+      const ee = store.deleteEmergencyEventsOlderThan(Date.now() - days * 86_400_000)
+      if (ee) console.log(`[emergency] 清理过期紧急事件日志 ${ee} 条`)
+    } catch (e) { console.warn('[emergency] 清理失败:', (e as Error).message) }
   }
   sweep() // 启动即清一次
   const sweepTimer = setInterval(sweep, 60 * 60 * 1000)

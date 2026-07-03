@@ -2,7 +2,7 @@ import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, SessionInfo, ChatMessage, ChatGroup, MediaMeta, Passkey, AdminAuditEntry, Warning, AppConfig, AppConfigPatch, Notification, Verification, VerificationStatus, KycBlobRef } from './store'
+import type { Store, User, Role, EmergencyEvent, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, SessionInfo, ChatMessage, ChatGroup, MediaMeta, Passkey, AdminAuditEntry, Warning, AppConfig, AppConfigPatch, Notification, Verification, VerificationStatus, KycBlobRef } from './store'
 import { normalizeAppConfig, mergeAppConfig, type SavedRoute } from './store'
 
 // 用运行时 require + 非静态模块名加载 node:sqlite，避免打包器(vitest/vite)静态解析失败；
@@ -48,6 +48,10 @@ export class SqliteStore implements Store {
       CREATE TABLE IF NOT EXISTS config (k TEXT PRIMARY KEY, v TEXT);
       CREATE TABLE IF NOT EXISTS refresh_tokens (
         tokenHash TEXT PRIMARY KEY, userId TEXT, expiresAt INTEGER);
+      CREATE TABLE IF NOT EXISTS emergency_events (
+        id TEXT PRIMARY KEY, userId TEXT, kind TEXT, lat REAL, lon REAL,
+        locSource TEXT, locAgeSec INTEGER, notified INTEGER, contacts INTEGER, at INTEGER);
+      CREATE INDEX IF NOT EXISTS idx_emergency_at ON emergency_events(at);
       CREATE TABLE IF NOT EXISTS blocks (
         id TEXT PRIMARY KEY, blockerId TEXT, blockedId TEXT, createdAt INTEGER);
       CREATE TABLE IF NOT EXISTS call_records (
@@ -624,6 +628,23 @@ export class SqliteStore implements Store {
   }
   deleteNotificationsOlderThan(cutoffMs: number): number {
     return Number(this.db.prepare('DELETE FROM notifications WHERE createdAt < ?').run(cutoffMs).changes)
+  }
+  createEmergencyEvent(e: EmergencyEvent): void {
+    this.db.prepare('INSERT OR REPLACE INTO emergency_events (id, userId, kind, lat, lon, locSource, locAgeSec, notified, contacts, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(e.id, e.userId, e.kind, e.lat ?? null, e.lon ?? null, e.locSource ?? null, e.locAgeSec ?? null, e.notified, e.contacts, e.at)
+  }
+  recentEmergencyEvents(limit = 100): EmergencyEvent[] {
+    const rows = this.db.prepare('SELECT * FROM emergency_events ORDER BY at DESC LIMIT ?').all(Math.max(0, limit)) as any[]
+    return rows.map((r) => ({ id: r.id, userId: r.userId, kind: r.kind,
+      lat: r.lat != null ? Number(r.lat) : undefined, lon: r.lon != null ? Number(r.lon) : undefined,
+      locSource: r.locSource ?? undefined, locAgeSec: r.locAgeSec != null ? Number(r.locAgeSec) : undefined,
+      notified: Number(r.notified), contacts: Number(r.contacts), at: Number(r.at) }))
+  }
+  deleteEmergencyEventsForUser(userId: string): void {
+    this.db.prepare('DELETE FROM emergency_events WHERE userId = ?').run(userId)
+  }
+  deleteEmergencyEventsOlderThan(cutoffMs: number): number {
+    return Number(this.db.prepare('DELETE FROM emergency_events WHERE at < ?').run(cutoffMs).changes)
   }
 
   // MARK: messages

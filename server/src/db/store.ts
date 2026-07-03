@@ -118,6 +118,22 @@ export interface Report {
 
 /// 站内通知（持久化收件箱）：可靠投递事件结果（如"举报已处置"），不依赖易丢的推送。
 /// 推送（APNs sendAlert）仅作为离线提醒；权威与可回看的来源是这张表。
+/// 紧急事件日志（治理/值守）：每次摔倒/车祸/手动 SOS 告警落一条——管理员据此值守与事后追溯
+/// （"告警发出去了吗/通知到几个人/位置是实时还是兜底"）。与站内通知（发给亲友的收件箱）互补：
+/// 通知是给亲友的、随人删除；本日志是运营记录、按保留期清扫。坐标为敏感 PII，仅 admin 可见。
+export interface EmergencyEvent {
+  id: string
+  userId: string
+  kind: string          // fall | crash | manual
+  lat?: number
+  lon?: number
+  locSource?: string    // live | lastKnown | none（与告警响应口径一致，诚实标注）
+  locAgeSec?: number    // lastKnown 时：定位距告警的秒数
+  notified: number      // 实际推送到的亲友数（有 APNs token）
+  contacts: number      // accepted 亲友总数
+  at: number
+}
+
 export interface Notification {
   id: string
   userId: string            // 收件人
@@ -548,6 +564,11 @@ export interface Store {
   unreadNotificationCount(userId: string): number
   deleteNotificationsForUser(userId: string): void // 删号级联：清除该用户全部站内通知（GDPR 抹除）
   deleteNotificationsOlderThan(cutoffMs: number): number // 留存清扫：删除早于 cutoff 的通知，返回条数（数据最小化）
+  // 紧急事件日志（治理）：
+  createEmergencyEvent(e: EmergencyEvent): void
+  recentEmergencyEvents(limit?: number): EmergencyEvent[] // 时间倒序
+  deleteEmergencyEventsForUser(userId: string): void      // 删号级联（GDPR 抹除）
+  deleteEmergencyEventsOlderThan(cutoffMs: number): number // 留存清扫
 
   createMessage(m: ChatMessage): void
   findMessage(id: string): ChatMessage | undefined
@@ -608,6 +629,7 @@ export class MemoryStore implements Store {
   protected groupReads = new Map<string, number>() // `${groupId}:${userId}` → lastReadAt
   protected media = new Map<string, MediaMeta>()
   protected notifications = new Map<string, Notification>()
+  protected emergencyEvents = new Map<string, EmergencyEvent>()
   protected recordingConfig: RecordingConfig = { enabled: false, retentionDays: 7, requireConsent: true }
   protected auditLog: AdminAuditEntry[] = []
   protected warnings = new Map<string, Warning>()
@@ -1058,6 +1080,24 @@ export class MemoryStore implements Store {
     if (n) this.afterMutate()
     return n
   }
+  createEmergencyEvent(e: EmergencyEvent): void {
+    this.emergencyEvents.set(e.id, e)
+    this.afterMutate()
+  }
+  recentEmergencyEvents(limit = 100): EmergencyEvent[] {
+    return [...this.emergencyEvents.values()].sort((a, b) => b.at - a.at).slice(0, Math.max(0, limit))
+  }
+  deleteEmergencyEventsForUser(userId: string): void {
+    let changed = false
+    for (const [k, e] of this.emergencyEvents) if (e.userId === userId) { this.emergencyEvents.delete(k); changed = true }
+    if (changed) this.afterMutate()
+  }
+  deleteEmergencyEventsOlderThan(cutoffMs: number): number {
+    let n = 0
+    for (const [k, e] of this.emergencyEvents) if (e.at < cutoffMs) { this.emergencyEvents.delete(k); n++ }
+    if (n) this.afterMutate()
+    return n
+  }
 
   createMessage(m: ChatMessage): void {
     this.messages.set(m.id, m)
@@ -1239,6 +1279,7 @@ export class JsonFileStore extends MemoryStore {
           appConfig?: AppConfig
           notifications?: Notification[]
           savedRoutes?: SavedRoute[]
+          emergencyEvents?: EmergencyEvent[]
         }
         for (const u of data.users ?? []) this.users.set(u.id, u)
         for (const l of data.links ?? []) this.links.set(l.id, l)
@@ -1260,6 +1301,7 @@ export class JsonFileStore extends MemoryStore {
         if (data.appConfig) this.appConfig = data.appConfig
         for (const n of data.notifications ?? []) this.notifications.set(n.id, n)
         for (const sr of data.savedRoutes ?? []) this.savedRoutes.set(sr.id, sr)
+        for (const ee of data.emergencyEvents ?? []) this.emergencyEvents.set(ee.id, ee)
       } catch {
         /* 损坏的文件忽略，从空开始 */
       }
@@ -1289,6 +1331,7 @@ export class JsonFileStore extends MemoryStore {
       appConfig: this.appConfig,
       notifications: [...this.notifications.values()],
       savedRoutes: [...this.savedRoutes.values()],
+      emergencyEvents: [...this.emergencyEvents.values()],
     }
     // 原子写：先写临时文件再 rename 覆盖。writeFileSync 直写在写入中途崩溃/断电/磁盘满时会留下**半写**
     // 的 JSON——下次启动 JSON.parse 失败→构造函数按"损坏忽略、从空开始"处理→**静默全量丢数据**。

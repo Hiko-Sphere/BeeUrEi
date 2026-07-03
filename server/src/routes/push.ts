@@ -20,6 +20,12 @@ const webSubSchema = z.object({
   }),
 })
 const webUnsubSchema = z.object({ endpoint: z.string().url().max(1024) })
+// 轮换：旧订阅三元组（endpoint+双 key）即所有权凭证——SW 上下文无 auth token，而这三元组
+// 只有该浏览器与服务端持有（高熵能力值，off-path 不可猜）。
+const webRotateSchema = z.object({
+  old: z.object({ endpoint: z.string().url().max(1024), p256dh: z.string().min(16).max(256), auth: z.string().min(8).max(128) }),
+  sub: webSubSchema,
+})
 
 export function registerPushRoutes(app: FastifyInstance, store: Store, webPush?: WebPushSender): void {
   app.post('/api/push/register', { preHandler: requireAuth() }, async (req, reply) => {
@@ -73,6 +79,24 @@ export function registerPushRoutes(app: FastifyInstance, store: Store, webPush?:
     for (const stale of mine.slice(0, Math.max(0, mine.length - maxSubs))) {
       store.deleteWebPushSubscription(stale.endpoint)
     }
+    return { ok: true }
+  })
+
+  // 订阅轮换（SW pushsubscriptionchange）：浏览器主动更换订阅时 SW 无 auth token——用**旧订阅
+  // 三元组**证明所有权换新（行业模式：endpoint+keys 是仅浏览器与服务端持有的高熵能力值）。
+  // 三元组全比对（不只 endpoint）：拿到过期 endpoint 的旁路者无法劫持轮换把推送引到自己浏览器。
+  // 失败一律 404 不区分原因（不当存在性 oracle）。限流按 IP（无 sub 可依）。
+  app.post('/api/push/web-rotate', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
+    if (!webPush?.configured) return reply.code(503).send({ error: 'web_push_not_configured' })
+    const parsed = webRotateSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const cur = store.findWebPushSubscription(parsed.data.old.endpoint)
+    if (!cur || cur.p256dh !== parsed.data.old.p256dh || cur.auth !== parsed.data.old.auth) {
+      return reply.code(404).send({ error: 'not_found' })
+    }
+    store.deleteWebPushSubscription(cur.endpoint)
+    store.upsertWebPushSubscription({ endpoint: parsed.data.sub.endpoint, userId: cur.userId,
+      p256dh: parsed.data.sub.keys.p256dh, auth: parsed.data.sub.keys.auth, createdAt: Date.now() })
     return { ok: true }
   })
 

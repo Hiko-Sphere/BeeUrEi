@@ -582,6 +582,7 @@ export interface Store {
   // Web Push 订阅：
   upsertWebPushSubscription(sub: WebPushSubscription): void
   webPushSubscriptionsForUser(userId: string): WebPushSubscription[]
+  findWebPushSubscription(endpoint: string): WebPushSubscription | undefined // 轮换验证用（按 endpoint 单查）
   deleteWebPushSubscription(endpoint: string): void
   deleteWebPushSubscriptionsForUser(userId: string): void // 删号级联
   clearWebPushSubscriptionFromOthers(endpoint: string, exceptUserId: string): void // 设备换账号：从旧账号收回
@@ -1122,6 +1123,9 @@ export class MemoryStore implements Store {
   }
   webPushSubscriptionsForUser(userId: string): WebPushSubscription[] {
     return [...this.webPushSubs.values()].filter((s) => s.userId === userId)
+  }
+  findWebPushSubscription(endpoint: string): WebPushSubscription | undefined {
+    return this.webPushSubs.get(endpoint)
   }
   deleteWebPushSubscription(endpoint: string): void {
     if (this.webPushSubs.delete(endpoint)) this.afterMutate()

@@ -194,6 +194,29 @@ describe('Web Push（浏览器推送紧急告警）', () => {
     await a.close()
   })
 
+  it('订阅轮换：旧三元组验证通过 → 换新保持归属；错 key/未知端点一律 404（无 oracle）', async () => {
+    const wp = new RecordingWebPush()
+    const { a, store, helper, hAuth } = await seed(wp)
+    await a.inject({ method: 'POST', url: '/api/push/web-subscribe', headers: hAuth, payload: SUB })
+    const NEW = { endpoint: 'https://push.example/rotated', keys: { p256dh: 'NewKey_1234567890abc', auth: 'NewAuth_12345' } }
+    // 错 key：404 且原订阅不动（拿到过期 endpoint 的旁路者无法劫持）
+    const bad = await a.inject({ method: 'POST', url: '/api/push/web-rotate',
+      payload: { old: { endpoint: SUB.endpoint, p256dh: 'WrongKey_123456789', auth: SUB.keys.auth }, sub: NEW } })
+    expect(bad.statusCode).toBe(404)
+    expect(store.findWebPushSubscription(SUB.endpoint)).toBeDefined()
+    // 正确三元组：换新、归属不变、旧行删除（无需任何 auth 头——SW 场景）
+    const ok = await a.inject({ method: 'POST', url: '/api/push/web-rotate',
+      payload: { old: { endpoint: SUB.endpoint, p256dh: SUB.keys.p256dh, auth: SUB.keys.auth }, sub: NEW } })
+    expect(ok.statusCode).toBe(200)
+    expect(store.findWebPushSubscription(SUB.endpoint)).toBeUndefined()
+    const rotated = store.findWebPushSubscription(NEW.endpoint)
+    expect(rotated?.userId).toBe(helper.user.id)
+    // 未知端点：同样 404
+    expect((await a.inject({ method: 'POST', url: '/api/push/web-rotate',
+      payload: { old: { endpoint: 'https://push.example/ghost', p256dh: SUB.keys.p256dh, auth: SUB.keys.auth }, sub: NEW } })).statusCode).toBe(404)
+    await a.close()
+  })
+
   it('删号级联：订阅随人清除（双存储各自验证存储层）', async () => {
     const wp = new RecordingWebPush()
     const { a, store, helper, hAuth } = await seed(wp)

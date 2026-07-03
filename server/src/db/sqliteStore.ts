@@ -666,6 +666,10 @@ export class SqliteStore implements Store {
     const rows = this.db.prepare('SELECT * FROM web_push_subs WHERE userId = ?').all(userId) as any[]
     return rows.map((r) => ({ endpoint: r.endpoint, userId: r.userId, p256dh: r.p256dh, auth: r.auth, createdAt: Number(r.createdAt) }))
   }
+  findWebPushSubscription(endpoint: string): WebPushSubscription | undefined {
+    const r = this.db.prepare('SELECT * FROM web_push_subs WHERE endpoint = ?').get(endpoint) as any
+    return r ? { endpoint: r.endpoint, userId: r.userId, p256dh: r.p256dh, auth: r.auth, createdAt: Number(r.createdAt) } : undefined
+  }
   deleteWebPushSubscription(endpoint: string): void {
     this.db.prepare('DELETE FROM web_push_subs WHERE endpoint = ?').run(endpoint)
   }

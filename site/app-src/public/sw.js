@@ -24,6 +24,30 @@ self.addEventListener('fetch', (event) => {
     )))
 })
 
+// 浏览器主动轮换订阅：SW 无 auth token——用**旧订阅三元组**（endpoint+双 key，仅本浏览器与
+// 服务端持有）向 /api/push/web-rotate 证明所有权换新。失败静默：设置页的自愈重同步兜底。
+self.addEventListener('pushsubscriptionchange', (event) => {
+  event.waitUntil((async () => {
+    try {
+      const oldSub = event.oldSubscription
+      if (!oldSub) return
+      const oldJson = oldSub.toJSON()
+      const newSub = event.newSubscription
+        || await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: oldSub.options.applicationServerKey })
+      const newJson = newSub.toJSON()
+      if (!oldJson.endpoint || !oldJson.keys || !newJson.endpoint || !newJson.keys) return
+      await fetch('/api/push/web-rotate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          old: { endpoint: oldJson.endpoint, p256dh: oldJson.keys.p256dh, auth: oldJson.keys.auth },
+          sub: { endpoint: newJson.endpoint, keys: { p256dh: newJson.keys.p256dh, auth: newJson.keys.auth } },
+        }),
+      })
+    } catch { /* 尽力而为，自愈重同步兜底 */ }
+  })())
+})
+
 self.addEventListener('push', (event) => {
   let data = {}
   try { data = event.data ? event.data.json() : {} } catch { /* 非 JSON 负载忽略详情 */ }

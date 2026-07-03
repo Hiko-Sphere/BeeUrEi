@@ -105,3 +105,46 @@ describe('sw.js 通知分级（push 处理器）', () => {
       .toMatchObject({ requireInteraction: false, tag: 'n-friend_request' }) // 不误挂 emergency-
   })
 })
+
+describe('sw.js 订阅轮换（pushsubscriptionchange 处理器）', () => {
+  it('用旧三元组 POST /api/push/web-rotate 换新（含浏览器未给 newSubscription 时的重订阅）', async () => {
+    const calls: { url: string; body: unknown }[] = []
+    globalThis.fetch = (async (url: string, init: { body: string }) => { calls.push({ url, body: JSON.parse(init.body) }); return { ok: true } }) as unknown as typeof fetch
+    const h = handlers.get('pushsubscriptionchange')!
+    const oldSub = { toJSON: () => ({ endpoint: 'https://e/old', keys: { p256dh: 'oldP', auth: 'oldA' } }), options: { applicationServerKey: 'KEY' } }
+    let waited: Promise<void> | null = null
+    // 浏览器未给 newSubscription → SW 自行重订阅（用旧 applicationServerKey）
+    const subscribe = async (opts: { applicationServerKey: string }) => {
+      expect(opts.applicationServerKey).toBe('KEY')
+      return { toJSON: () => ({ endpoint: 'https://e/new', keys: { p256dh: 'newP', auth: 'newA' } }) }
+    }
+    // 重建 self（本 describe 需要 registration.pushManager.subscribe）
+    const src2 = readFileSync(join(__dirname, '../../public/sw.js'), 'utf8')
+    const localHandlers = new Map<string, Handler>()
+    const self2 = {
+      addEventListener: (n: string, f: Handler) => localHandlers.set(n, f),
+      skipWaiting: () => {}, clients: { claim: () => {} },
+      registration: { pushManager: { subscribe }, showNotification: () => {} },
+      location: { origin: 'https://x.example' },
+    }
+    new Function('self', 'Response', 'URL', 'fetch', src2)(self2, FakeResponse, URL, (...a: unknown[]) => (globalThis.fetch as (...x: unknown[]) => unknown)(...a))
+    localHandlers.get('pushsubscriptionchange')!({ oldSubscription: oldSub, newSubscription: null, waitUntil: (p: Promise<void>) => { waited = p } })
+    await waited!
+    expect(calls.length).toBe(1)
+    expect(calls[0].url).toContain('/api/push/web-rotate')
+    expect(calls[0].body).toEqual({
+      old: { endpoint: 'https://e/old', p256dh: 'oldP', auth: 'oldA' },
+      sub: { endpoint: 'https://e/new', keys: { p256dh: 'newP', auth: 'newA' } },
+    })
+    void h
+  })
+
+  it('无 oldSubscription（无凭据可证）→ 静默不请求', async () => {
+    const calls: unknown[] = []
+    globalThis.fetch = (async () => { calls.push(1); return { ok: true } }) as unknown as typeof fetch
+    let waited: Promise<void> | null = null
+    handlers.get('pushsubscriptionchange')!({ oldSubscription: null, newSubscription: null, waitUntil: (p: Promise<void>) => { waited = p } })
+    await waited!
+    expect(calls.length).toBe(0)
+  })
+})

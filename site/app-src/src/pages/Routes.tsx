@@ -98,6 +98,16 @@ export function RoutesPage() {
     setSelectedIdx(null)
   }
   const closeEditor = () => { setEditing(null); setSelectedIdx(null) }
+  // 上移(-1)/下移(+1)一个航点：交换相邻两点，选中态跟随移动的点。
+  const moveWaypoint = (i: number, dir: -1 | 1) => {
+    if (!editing) return
+    const j = i + dir
+    if (j < 0 || j >= editing.waypoints.length) return
+    const next = [...editing.waypoints]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    setEditing({ ...editing, waypoints: next })
+    setSelectedIdx(j)
+  }
 
   const save = async () => {
     if (!editing || busy) return
@@ -169,7 +179,7 @@ export function RoutesPage() {
           {wp.length === 0 && <p className="mt-2 text-sm text-faint">{t('点击地图添加第一个点（起点）', 'Click the map to add the first point (start)')}</p>}
           <ol className="mt-2 space-y-1.5">
             {wp.map((w, i) => (
-              <li key={`${i}-${w.lat}`} className={`flex flex-wrap items-center gap-2 rounded-xl px-2.5 py-1.5 ${i === selectedIdx ? 'bg-honey/15' : ''}`}>
+              <li key={i} className={`flex flex-wrap items-center gap-2 rounded-xl px-2.5 py-1.5 ${i === selectedIdx ? 'bg-honey/15' : ''}`}>
                 <button onClick={() => { setSelectedIdx(i); mapRef.current?.panTo([w.lat, w.lng]) }}
                   className="w-7 shrink-0 rounded-full bg-honey/30 py-0.5 text-center text-xs font-bold"
                   aria-label={t(`选中第 ${i + 1} 个路线点`, `Select point ${i + 1}`)}>{i + 1}</button>
@@ -181,6 +191,13 @@ export function RoutesPage() {
                   placeholder={t('到点播报（如：过了报亭右转）', 'Spoken note (e.g. turn right after the kiosk)')}
                   aria-label={t(`第 ${i + 1} 点的播报`, `Note for point ${i + 1}`)}
                   className="min-w-0 flex-1 rounded-lg border border-[var(--line)] surface-2 px-2 py-1 text-sm outline-none focus:border-honey" />
+                {/* 上移/下移：步行顺序至关重要，画错顺序可就地调，不必删了重画 */}
+                <button onClick={() => moveWaypoint(i, -1)} disabled={i === 0}
+                  className="rounded px-1.5 text-sm text-soft hover:surface-2 disabled:opacity-30"
+                  aria-label={t(`把第 ${i + 1} 个路线点上移`, `Move point ${i + 1} up`)}>↑</button>
+                <button onClick={() => moveWaypoint(i, 1)} disabled={i === wp.length - 1}
+                  className="rounded px-1.5 text-sm text-soft hover:surface-2 disabled:opacity-30"
+                  aria-label={t(`把第 ${i + 1} 个路线点下移`, `Move point ${i + 1} down`)}>↓</button>
                 <button onClick={() => {
                   setEditing({ ...editing, waypoints: wp.filter((_, j) => j !== i) }); setSelectedIdx(null)
                 }} className="text-xs text-danger hover:underline" aria-label={t(`删除第 ${i + 1} 个路线点`, `Delete point ${i + 1}`)}>

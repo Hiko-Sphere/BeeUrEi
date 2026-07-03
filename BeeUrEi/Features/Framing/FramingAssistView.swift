@@ -794,7 +794,7 @@ final class FramingAssistViewModel {
                 guard let self else { return }
                 self.copyableResult = nil
                 if let result {
-                    let name = FramingStrings.yuan(result.denomination, self.lang)
+                    let name = FramingStrings.yuan(result.denomination, jiao: result.jiao, self.lang)
                     // 屏显与语音一致地表达不确定性——别屏上"确定"、只语音含糊（见 P2 审计）。
                     self.resultText = result.confident ? FramingStrings.banknoteResult(name, self.lang)
                                                        : FramingStrings.banknoteUncertainResult(name, self.lang)

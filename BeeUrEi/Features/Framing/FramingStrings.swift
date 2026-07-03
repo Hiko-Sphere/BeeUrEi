@@ -256,7 +256,16 @@ enum FramingStrings {
         l == .zh ? "没认出纸币面额。请把纸币平整地举在镜头前约三十厘米再试"
                  : "Couldn't read the denomination. Hold the note flat about thirty centimeters away and try again."
     }
-    static func yuan(_ d: Int, _ l: Language) -> String {
+    static func yuan(_ d: Int, jiao: Bool = false, _ l: Language) -> String {
+        // 角面额（第四套 1角/2角/5角）：单位不同，绝不与"元"混说——防 5 角被读成 5 元（10 倍）。
+        if jiao {
+            switch l {
+            case .zh:
+                switch d { case 5: return "五角"; case 2: return "两角"; default: return "一角" }
+            case .en:
+                return "\(d) jiao"
+            }
+        }
         switch l {
         case .zh:
             switch d {

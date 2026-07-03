@@ -73,7 +73,38 @@ final class CurrencyClassifierTests: XCTestCase {
     }
 
     func testStandaloneNumberExtraction() {
-        XCTAssertEqual(CurrencyClassifier.standaloneNumbers(in: "No.100 元 2015"), [100, 2015])
-        XCTAssertEqual(CurrencyClassifier.standaloneNumbers(in: "abc"), [])
+        XCTAssertEqual(CurrencyClassifier.standaloneAmounts(in: "No.100 元 2015").map(\.value), [100, 2015])
+        XCTAssertTrue(CurrencyClassifier.standaloneAmounts(in: "abc").isEmpty)
+        // "5角"的 5 被标记为 jiao（不投给 5 元）。
+        let amts = CurrencyClassifier.standaloneAmounts(in: "5角")
+        XCTAssertEqual(amts.count, 1); XCTAssertEqual(amts[0].value, 5); XCTAssertTrue(amts[0].jiao)
+    }
+}
+
+// 角面额防 10 倍误报（对盲人是严重的钱数错误）——2026-07 补。
+extension CurrencyClassifierTests {
+    func testJiaoNotMisreadAsYuan() {
+        let c = CurrencyClassifier()
+        // "5角"绝不再报成 5 元：报 jiao=true。
+        let r = c.classify(texts: ["5角"], rgb: nil)
+        XCTAssertEqual(r?.denomination, 5); XCTAssertEqual(r?.jiao, true)
+        // 扫两次也不会"确信 5 元"——是确信 5 角。
+        let r2 = c.classify(texts: ["5角", "5角"], rgb: nil)
+        XCTAssertEqual(r2?.denomination, 5); XCTAssertEqual(r2?.jiao, true)
+        // 大写"伍角"识别为 5 角。
+        let r3 = c.classify(texts: ["伍角"], rgb: nil)
+        XCTAssertEqual(r3?.denomination, 5); XCTAssertEqual(r3?.jiao, true)
+        // 壹角。
+        XCTAssertEqual(c.classify(texts: ["1角"], rgb: nil)?.jiao, true)
+    }
+
+    func testYuanUnaffectedByJiaoChange() {
+        let c = CurrencyClassifier()
+        // 真 5 元（伍圆 + 角号 5）仍是 5 元、jiao=false。
+        let r = c.classify(texts: ["伍圆", "5"], rgb: nil)
+        XCTAssertEqual(r?.denomination, 5); XCTAssertEqual(r?.jiao, false)
+        // 100 元不受影响。
+        XCTAssertEqual(c.classify(texts: ["壹佰圆", "100"], rgb: nil)?.denomination, 100)
+        XCTAssertEqual(c.classify(texts: ["壹佰圆"], rgb: nil)?.jiao, false)
     }
 }

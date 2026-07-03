@@ -622,6 +622,7 @@ export interface Store {
   findMedia(id: string): MediaMeta | undefined
   deleteMedia(id: string): void
   mediaByOwner(userId: string): MediaMeta[] // 某用户上传的全部媒体（删号级联清磁盘文件用）
+  mediaBytesForOwner(userId: string): number // 某用户媒体总字节数（配额检查，防单账号撑爆磁盘）
   allMedia(): MediaMeta[] // 全部媒体元数据（孤儿清扫遍历用）
   referencedMediaIds(): Set<string> // 被视频消息(kind=video,text=mediaId)或录制(mediaId)引用的全部 mediaId（孤儿清扫判定用）
   findVideoMessageByMediaId(mediaId: string): ChatMessage | undefined // 引用该 mediaId 的视频消息（媒体访问授权：能否看该媒体＝能否看引用它的那条消息）
@@ -1270,6 +1271,11 @@ export class MemoryStore implements Store {
   }
   mediaByOwner(userId: string): MediaMeta[] {
     return [...this.media.values()].filter((m) => m.ownerId === userId)
+  }
+  mediaBytesForOwner(userId: string): number {
+    let total = 0
+    for (const m of this.media.values()) if (m.ownerId === userId) total += m.size
+    return total
   }
   allMedia(): MediaMeta[] {
     return [...this.media.values()]

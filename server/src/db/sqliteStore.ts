@@ -816,6 +816,10 @@ export class SqliteStore implements Store {
     return (this.db.prepare('SELECT * FROM media WHERE ownerId = ?').all(userId) as any[])
       .map((row) => ({ id: row.id, ownerId: row.ownerId, mime: row.mime, size: Number(row.size), createdAt: Number(row.createdAt) }))
   }
+  mediaBytesForOwner(userId: string): number {
+    const row = this.db.prepare('SELECT COALESCE(SUM(size), 0) AS total FROM media WHERE ownerId = ?').get(userId) as { total: number }
+    return Number(row.total) // 走 idx_media_owner 索引扫描；配额检查每次上传一查，量级无虞
+  }
   allMedia(): MediaMeta[] {
     return (this.db.prepare('SELECT * FROM media').all() as any[])
       .map((row) => ({ id: row.id, ownerId: row.ownerId, mime: row.mime, size: Number(row.size), createdAt: Number(row.createdAt) }))

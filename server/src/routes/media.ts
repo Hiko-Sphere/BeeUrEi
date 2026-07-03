@@ -9,6 +9,14 @@ import { ensureMediaDir, mediaPath, mediaFileExists } from '../media/storage'
 /// 单个媒体文件上限 50MB（约 1 分钟 720p H.264）；路由 bodyLimit 略放宽容纳传输开销。
 export const MAX_MEDIA_BYTES = 50 * 1024 * 1024
 
+/// 每用户媒体总量配额（默认 2GB，MEDIA_QUOTA_MB 可调，≥1）：单文件上限+限流只限速率不限存量——
+/// 10/min×50MB 可持续灌 30GB/小时，已关联消息的媒体不会被孤儿清扫，单账号即可撑爆自托管磁盘。
+/// 删除媒体（删消息/解散群/删号级联/孤儿清扫）即时释放额度。
+export function mediaQuotaBytes(env: string | undefined = process.env.MEDIA_QUOTA_MB): number {
+  const mb = Number(env)
+  return (Number.isFinite(mb) && mb >= 1 ? mb : 2048) * 1024 * 1024
+}
+
 // iOS 录制/视频消息为 .mov(quicktime)/.mp4；浏览器 MediaRecorder 通话录制为 webm（Chrome）或 mp4（Safari），
 // 纯音频录制为 webm/mp4 音频。都需接受，否则网页端录制上传被拒、无法保存（见录制反馈）。
 const allowedMimes = new Set(['video/mp4', 'video/quicktime', 'video/webm', 'audio/webm', 'audio/mp4'])
@@ -48,6 +56,10 @@ export function registerMediaRoutes(app: FastifyInstance, store: Store): void {
     const body = req.body as Buffer | undefined
     if (!body || !Buffer.isBuffer(body) || body.length === 0) return reply.code(400).send({ error: 'invalid_input' })
     if (body.length > MAX_MEDIA_BYTES) return reply.code(413).send({ error: 'media_too_large' })
+    // 总量配额：与"单文件过大"区分错误码，客户端可提示"清理旧视频消息"而非"换小文件"。
+    if (store.mediaBytesForOwner(req.user!.sub) + body.length > mediaQuotaBytes()) {
+      return reply.code(413).send({ error: 'media_quota_exceeded' })
+    }
 
     const meta: MediaMeta = { id: randomUUID(), ownerId: req.user!.sub, mime, size: body.length, createdAt: Date.now() }
     ensureMediaDir()

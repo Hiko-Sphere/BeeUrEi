@@ -62,6 +62,7 @@ export function chatErrorText(err: unknown, t: (zh: string, en: string) => strin
     case 'not_linked': return t('对方已不是你的联系人，无法发送', 'This person is no longer your contact')
     case 'not_member': return t('你已不在该群聊中', "You're no longer in this group")
     case 'media_too_large': return t('视频太大（上限 50MB），请选短一点的', 'Video too large (50MB max) — pick a shorter one')
+    case 'media_quota_exceeded': return t('你的媒体存储空间已满，请删除一些旧的视频消息', 'Your media storage is full — delete some old video messages')
     case 'unsupported_media_type': return t('不支持的文件格式', 'Unsupported file type')
     default: return fallback ?? t('发送失败', 'Failed to send')
   }

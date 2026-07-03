@@ -92,8 +92,15 @@ struct NotificationsView: View {
                                 // 紧急告警带坐标：一键在地图查看对方位置（响应救助的关键信息）。独立可点元素，不并入上面的标签。
                                 if let lat = n.data?["lat"], let lon = n.data?["lon"],
                                    let url = URL(string: "https://maps.apple.com/?ll=\(lat),\(lon)&q=\(lat),\(lon)") {
+                                    // 诚实标注（核心 EmergencyLocationTag，已测；与网页端同口径）：服务端兜底的
+                                    // 「最后已知位置」绝不能伪装成实时定位——协助者会赶去错误地点。
+                                    let loc = EmergencyLocationTag.info(data: n.data, createdAtMs: n.createdAt)
+                                    let label = loc.stale
+                                        ? (loc.fixAtMs.map { ChatStrings.lastKnownLocationAt(RecordingStrings.timeText($0, lang), lang) }
+                                           ?? ChatStrings.lastKnownLocation(lang))
+                                        : ChatStrings.openInMaps(lang)
                                     Link(destination: url) {
-                                        Label(ChatStrings.openInMaps(lang), systemImage: "mappin.and.ellipse").font(.footnote)
+                                        Label(label, systemImage: loc.stale ? "exclamationmark.triangle" : "mappin.and.ellipse").font(.footnote)
                                     }
                                     .padding(.leading, n.isUnread ? 16 : 0)
                                 }

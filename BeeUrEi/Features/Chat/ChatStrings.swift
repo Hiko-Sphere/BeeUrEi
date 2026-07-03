@@ -112,6 +112,13 @@ enum ChatStrings {
         l == .zh ? "无法获取位置，请检查定位权限" : "Couldn't get your location — check location permission"
     }
     static func openInMaps(_ l: Language) -> String { l == .zh ? "在地图中打开" : "Open in Maps" }
+    /// 紧急告警兜底位置的诚实标注（配核心 EmergencyLocationTag）：绝不把最后已知位置伪装成实时定位。
+    static func lastKnownLocationAt(_ time: String, _ l: Language) -> String {
+        l == .zh ? "最后已知位置 · \(time)" : "Last known location · \(time)"
+    }
+    static func lastKnownLocation(_ l: Language) -> String {
+        l == .zh ? "最后已知位置（非实时）" : "Last known location (not live)"
+    }
     static func unknownPlace(_ l: Language) -> String { l == .zh ? "共享的位置" : "Shared location" }
     static func newLocationSpeak(_ name: String, _ l: Language) -> String {
         l == .zh ? "\(name) 共享了位置" : "\(name) shared a location"

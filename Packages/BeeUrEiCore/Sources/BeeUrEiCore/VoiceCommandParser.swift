@@ -25,6 +25,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case messages                   // 打开消息
     case sendMessage(to: String, text: String) // 给X发消息说Y
     case find(String)               // 找某个具体物品（已教物品或可找类别，如"找我的钥匙"/"find my keys"）
+    case adjustSpeech(SpeechRateAdjust) // 语音调语速：说快点/说慢点/正常语速（找滑块成本高，语速最常想即时调）
     case commands                   // 自述能做什么（盲人无法浏览 UI 发现功能——语音能力必须能被语音发现）
     case repeatLast                 // 重复刚才的播报
     case unknown
@@ -68,6 +69,10 @@ public enum VoiceCommandParser {
         if has(["颜色", "什么色", "识别颜色", "报颜色", "what color", "which color", "what colour", "which colour", "read color", "color of", "identify color"]) { return .readColor }
         if has(["看一看", "识别", "这是什么", "拍一下", "look", "what is this", "identify", "recognize"]) { return .look }
         // 自述：刻意不收裸"帮助/help"（那是 .help 求助的领地），只收明确问能力的说法。
+        // 语速调节：正常/恢复须在 快/慢 之前（"恢复正常语速"含"语速"但意图是复位）。避免裸"快/慢"误伤。
+        if has(["正常语速", "恢复语速", "语速正常", "normal speed", "default speed", "reset speed"]) { return .adjustSpeech(.normal) }
+        if has(["说快点", "说快一点", "说话快", "快一点说", "语速快点", "语速快一点", "读快点", "念快点", "太慢了", "speak faster", "talk faster", "too slow", "faster please"]) { return .adjustSpeech(.faster) }
+        if has(["说慢点", "说慢一点", "说话慢", "慢一点说", "语速慢点", "语速慢一点", "读慢点", "念慢点", "太快了", "太快听不清", "speak slower", "talk slower", "too fast", "slower please", "slow down"]) { return .adjustSpeech(.slower) }
         if has(["你会什么", "能做什么", "你能做什么", "有什么功能", "都能干什么", "what can you do", "what can i say", "voice commands", "list commands"]) { return .commands }
         if has(["再说一遍", "重复", "刚才说什么", "repeat", "say again", "say that again"]) { return .repeatLast }
         // 找具体物品：置于具体命令**之后**作兜底——否则"find my location"(含"find my")会抢掉 whereAmI、

@@ -440,6 +440,16 @@ struct HubView: View {
             showNavigation = true
         case .messages: showMessages = true
         case .sendMessage(let to, let text): sendVoiceMessage(to: to, text: text)
+        case .adjustSpeech(let adj):
+            // 语音调语速（Hub 可达）：改设置 → 用**新语速**播确认（当场听到效果）；已到边界则提示不空调。
+            if adj != .normal && SpeechRatePolicy.atLimit(FeatureSettings().speechRate, adj) {
+                speak(HomeStrings.speechRateAtLimit(adj, lang))
+            } else {
+                var fs = FeatureSettings()
+                let newRate = SpeechRatePolicy.adjusted(from: fs.speechRate, adj)
+                fs.speechRate = newRate
+                SpeechHub.shared.speak(HomeStrings.speechRateChanged(adj, lang), channel: .query, rate: newRate, voiceCode: lang.voiceCode)
+            }
         case .commands: speak(HomeStrings.voiceCommandsHelp(lang)) // 能力自述：语音功能的语音说明书
         case .repeatLast: speak(HomeStrings.nothingToRepeat(lang)) // Hub 无避障会话可重复
         case .unknown:

@@ -28,6 +28,9 @@ final class VoiceCommandParserTests: XCTestCase {
             ("看一看这是什么", .look), ("识别一下", .look), ("what is this", .look),
             ("再说一遍", .repeatLast), ("刚才说什么", .repeatLast), ("repeat that", .repeatLast),
             ("你会什么", .commands), ("你能做什么", .commands), ("what can you do", .commands),
+            ("说快点", .adjustSpeech(.faster)), ("太慢了", .adjustSpeech(.faster)), ("speak faster", .adjustSpeech(.faster)),
+            ("说慢点", .adjustSpeech(.slower)), ("太快了", .adjustSpeech(.slower)), ("slow down", .adjustSpeech(.slower)),
+            ("正常语速", .adjustSpeech(.normal)), ("normal speed", .adjustSpeech(.normal)),
             ("找我的钥匙", .find("钥匙")), ("帮我找水杯", .find("水杯")), ("find my wallet", .find("wallet")),
             ("带我去北京西站", .navigate("北京西站")), ("导航到医院", .navigate("医院")),
         ]
@@ -144,6 +147,16 @@ final class VoiceCommandParserTests: XCTestCase {
 
     /// SOS vs help 的边界（安全攸关）：救命/紧急求助=告警广播；求助/帮帮我=协助通话。
     /// 摔倒的盲人喊"救命"必须走告警（倒计时→通知全部亲友+附位置），不是拨一通可能没人接的视频电话。
+    /// 语速指令边界：正常/恢复须在 快/慢 之前（"恢复正常语速"含"语速"）；不误伤读文字/念一下。
+    func testSpeechRateBoundary() {
+        XCTAssertEqual(VoiceCommandParser.parse("恢复正常语速"), .adjustSpeech(.normal))
+        XCTAssertEqual(VoiceCommandParser.parse("语速慢一点"), .adjustSpeech(.slower))
+        XCTAssertEqual(VoiceCommandParser.parse("说话快一点"), .adjustSpeech(.faster)) // 含"说...快"
+        // 不误伤朗读命令：裸"读一下/念一下"仍是 readText。
+        XCTAssertEqual(VoiceCommandParser.parse("读一下这段文字"), .readText)
+        XCTAssertEqual(VoiceCommandParser.parse("念一下"), .readText)
+    }
+
     func testSosVersusHelpBoundary() {
         // SOS 系：大小写不敏感、中英都认。
         for phrase in ["救命", "救命啊", "紧急求助", "一键求救", "紧急呼救", "sos", "SOS", "Emergency", "this is an emergency"] {

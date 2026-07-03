@@ -83,10 +83,24 @@ enum HomeStrings {
     }
     /// 能力自述（.commands）：盲人无法浏览 UI 发现功能——语音能力必须能被语音发现。按使用频率排序，
     /// 紧急能力放最后压轴强调（列表式播报的记忆点在首尾）。
+    /// 语速调节确认（配 SpeechRatePolicy）：改后用**新语速**播这句，让用户当场听到效果。
+    static func speechRateChanged(_ adjust: SpeechRateAdjust, _ l: Language) -> String {
+        switch adjust {
+        case .faster: return l == .zh ? "语速已加快" : "Speaking faster now"
+        case .slower: return l == .zh ? "语速已放慢" : "Speaking slower now"
+        case .normal: return l == .zh ? "语速已恢复正常" : "Speech rate reset to normal"
+        }
+    }
+    /// 已到语速上/下限（无变化时提示，不做无声调节）。
+    static func speechRateAtLimit(_ adjust: SpeechRateAdjust, _ l: Language) -> String {
+        adjust == .faster ? (l == .zh ? "已经是最快的语速了" : "Already at the fastest speed")
+                          : (l == .zh ? "已经是最慢的语速了" : "Already at the slowest speed")
+    }
+
     static func voiceCommandsHelp(_ l: Language) -> String {
         l == .zh
-            ? "你可以说：开始导盲、带我去某地、看一看、读一下文字、找我的钥匙、我在哪、周围有什么、天气、给某人发消息、打开消息、再说一遍。需要人帮忙说\u{201C}求助\u{201D}；遇到危险说\u{201C}救命\u{201D}，会倒计时通知你的全部亲友。"
-            : "You can say: start guide, take me to a place, look, read this, find my keys, where am I, what's around, weather, send a message, open messages, or repeat. Say \u{201C}get help\u{201D} to call someone; say \u{201C}emergency\u{201D} if you're in danger — it counts down and alerts all your contacts."
+            ? "你可以说：开始导盲、带我去某地、看一看、读一下文字、找我的钥匙、我在哪、周围有什么、天气、给某人发消息、打开消息、再说一遍、说慢点、说快点。需要人帮忙说\u{201C}求助\u{201D}；遇到危险说\u{201C}救命\u{201D}，会倒计时通知你的全部亲友。"
+            : "You can say: start guide, take me to a place, look, read this, find my keys, where am I, what's around, weather, send a message, open messages, repeat, or speak slower/faster. Say \u{201C}get help\u{201D} to call someone; say \u{201C}emergency\u{201D} if you're in danger — it counts down and alerts all your contacts."
     }
 
     static func nothingToRepeat(_ l: Language) -> String {

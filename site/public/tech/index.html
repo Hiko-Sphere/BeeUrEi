@@ -89,7 +89,7 @@
 <li><strong>摔倒检测与紧急呼叫</strong>：检测到疑似摔倒或用户主动触发时呼叫紧急联系人。</li>
 </ul>
 <h3 id="12-设计原则">1.2 设计原则</h3>
-<table>
+<table tabindex="0" aria-label="设计原则表（可滚动）">
 <thead>
 <tr>
 <th>原则</th>
@@ -117,7 +117,7 @@
 </table>
 <h3 id="13-总体架构">1.3 总体架构</h3>
 <p>系统由四个相互独立、边界清晰的组件构成：</p>
-<pre><code>┌─────────────────┐        WebRTC P2P 媒体(默认直连/TURN中继)        ┌─────────────────┐
+<pre tabindex="0" role="region" aria-label="架构图（可滚动）"><code>┌─────────────────┐        WebRTC P2P 媒体(默认直连/TURN中继)        ┌─────────────────┐
 │   iOS 客户端 A   │ &lt;══════════════════════════════════════════════&gt; │   iOS 客户端 B   │
 │ (视障/盲人侧)    │                                                  │ (协助者/亲友侧)  │
 └────────┬────────┘                                                  └────────┬────────┘
@@ -168,7 +168,7 @@
 <p>客户端连接 <code>/ws?token=&lt;JWT&gt;</code>，首帧发 <code>{type:'join', callId, role, caps}</code>，随后中继 <code>offer/answer/ice/video-gate/end/control/record-*/obs-*</code>。</p>
 <p><strong>参与权校验（防窃听/劫持）</strong>：<code>join</code> 时校验该 <code>callId</code> 的真实参与者——来源为定向亲友呼叫登记（<code>pendingCalls</code>，180s TTL）或公开求助队列（<code>openHelp</code>，认领后含志愿者），两表跨表去重防影子覆盖；非参与者一律 <code>close(4003)</code>。1:1 房间最多两名<strong>参与者</strong>（旁观管理员不计入）。</p>
 <p>呼叫建立时序（亲友呼叫）：</p>
-<pre><code>盲人A                          后端(/ws + pendingCalls)                协助者B
+<pre tabindex="0" role="region" aria-label="呼叫时序图（可滚动）"><code>盲人A                          后端(/ws + pendingCalls)                协助者B
   │  POST /api/assist/call (callId, targetUserIds) ──────────────────────► 登记 pendingCalls
   │  (APNs/VoIP 唤起 B 的 CallKit 来电) ─────────────────────────────────► [来电界面]
   │  WS join(callId, role=blind, caps) ──►校验参与权──► joined           │
@@ -196,7 +196,7 @@
 <p>并发安全加固（对抗式复审定稿）：普通 <code>join</code> 分支<strong>净化客户端自报角色</strong>（仅接受 <code>blind/helper</code>），杜绝参与者自报 <code>role:'admin'</code> 伪造"管理员监看"告知或污染实时总览。</p>
 <h3 id="43-obs--定向中继与媒体隔离">4.3 obs-* 定向中继与媒体隔离</h3>
 <p>旁观媒体走独立的 <code>obs-offer/obs-answer/obs-ice</code> 信令，<strong>带 <code>to</code> 字段定向</strong>到具体参与者；中继规则：</p>
-<pre><code class="language-js">let targets = peersInCall(callId, sender)
+<pre tabindex="0" role="region" aria-label="信令代码示例（可滚动）"><code class="language-js">let targets = peersInCall(callId, sender)
 if (msg.to) targets = targets.filter(p =&gt; p.userId === msg.to)        // obs-* 定向
 else if (msg.type in {offer,answer,ice}) targets = targets.filter(p =&gt; p.role !== 'admin')  // 1:1 主媒体不泄漏给旁观管理员
 </code></pre>
@@ -239,7 +239,7 @@ else if (msg.type in {offer,answer,ice}) targets = targets.filter(p =&gt; p.role
 <h3 id="62-加性迁移serversrcdbsqlitestorets">6.2 加性迁移（<code>server/src/db/sqliteStore.ts</code>）</h3>
 <p><code>CREATE TABLE IF NOT EXISTS</code> + 每个后加列用 <code>try { db.exec('ALTER TABLE x ADD COLUMN y T') } catch {}</code>——旧库就地升级、零迁移脚本、完全向后兼容。数组/对象列以 JSON TEXT 存、用容错的 <code>parseJsonOr</code> 解析（一行坏数据不致整请求 500）。</p>
 <h3 id="63-数据模型主要表">6.3 数据模型（主要表）</h3>
-<table>
+<table tabindex="0" aria-label="数据模型主要表（可滚动）">
 <thead>
 <tr>
 <th>表</th>

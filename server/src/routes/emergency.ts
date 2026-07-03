@@ -140,13 +140,17 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
       // badge=该亲友未读总数（含刚写入的本条告警），与图标角标主线一致。
       return Promise.allSettled([apnsJob, ...webJobs])
     }))
-    // notified=实际推送对象数（有 token 者）；contacts=accepted 亲友总数。
-    // 二者差值 = 仅靠通知中心兜底、未收到实时推送的人——客户端可据此提示用户。
+    // notified=有**实时推送通道**的亲友数（APNs token 或 Web Push 订阅）；contacts=accepted 亲友总数。
+    // 二者差值 = 仅靠通知中心兜底、无实时推送通道的人。**必须含 Web Push**——否则 web-only 亲友明明
+    // 经浏览器推送收到了告警，却被计成"仅兜底"，污染 admin 紧急事件日志与客户端提示（加 Web Push 后
+    // 的口径回归）。
+    const hasRealtimePush = (m: NonNullable<ReturnType<typeof store.findById>>): boolean =>
+      !!m.apnsToken || (webPush.configured && store.webPushSubscriptionsForUser(m.id).length > 0)
     // location：告知客户端本次告警附带的位置来源——'live'(自带当前坐标)/'lastKnown'(兜底最后已知，
     // 带 ageSec)/'none'(既无当前定位又无可兜底的共享位置，客户端应提示用户"未附位置")。
     const result = {
       ok: true,
-      notified: members.filter((m) => !!m.apnsToken).length,
+      notified: members.filter(hasRealtimePush).length,
       contacts: links.length,
       location: { source: locSource ?? 'none', ...(locAgeSec != null ? { ageSec: locAgeSec } : {}) },
     }

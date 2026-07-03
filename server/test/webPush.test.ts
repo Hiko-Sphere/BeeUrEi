@@ -240,6 +240,19 @@ describe('Web Push（浏览器推送紧急告警）', () => {
     await a.close()
   })
 
+  it('notified 计入 Web Push 订阅：web-only 亲友（无 APNs）经浏览器推送也算"已实时推送"', async () => {
+    const wp = new RecordingWebPush()
+    const { a, hAuth, auth } = await seed(wp)
+    // helper 只订阅 Web Push、无 APNs token（典型 web-only 协助者）。
+    await a.inject({ method: 'POST', url: '/api/push/web-subscribe', headers: hAuth, payload: SUB })
+    const res = await a.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth, payload: { kind: 'fall' } })
+    expect(res.statusCode).toBe(200)
+    // 加 Web Push 前这里会是 0（helper 无 APNs token）——现在 web 订阅算实时推送 → 1。
+    expect(res.json().notified).toBe(1)
+    expect(res.json().contacts).toBe(1)
+    await a.close()
+  })
+
   it('删号级联：订阅随人清除（双存储各自验证存储层）', async () => {
     const wp = new RecordingWebPush()
     const { a, store, helper, hAuth } = await seed(wp)

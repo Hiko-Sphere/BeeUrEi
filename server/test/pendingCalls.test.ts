@@ -131,4 +131,27 @@ describe('PendingCallRegistry', () => {
     // 而旧的 participants（用于其它场景）仍是全体——本次只收紧了信令房间视图。
     expect(r.participants('g', 2)).toEqual(['blind1', 'h1', 'h2'])
   })
+
+  it('群呼死锁自愈：接听者超宽限期仍未进房间 → 清 answeredBy 重新振铃（可靠性复审 HIGH）', () => {
+    const r = new PendingCallRegistry()
+    r.register(base({ callId: 'g', toUserIds: ['h1', 'h2'] }))
+    expect(r.claimAnswer('g', 'h1', 1000)).toBe('h1') // answeredAt=1000
+    const absent = () => false     // h1 不在 hub 房间（App 被杀/建连失败）
+    const present = () => true      // h1 已在房间（正常通话）
+
+    // 宽限期内（<20s）：绝不重开，防误伤仍在建连者。
+    expect(r.reopenStaleAnswer('g', 1000 + 10_000, 20_000, absent)).toBe(false)
+    expect(r.status('g', 1000 + 10_000).answeredBy).toBe('h1')
+    // 赢家已在房间：即便超时也不动（正常通话中）。
+    expect(r.reopenStaleAnswer('g', 1000 + 30_000, 20_000, present)).toBe(false)
+    expect(r.status('g', 1000 + 30_000).answeredBy).toBe('h1')
+    // 超宽限期 + 赢家不在房间 → 重开：answeredBy 清空，h2 重新可见能接。
+    expect(r.reopenStaleAnswer('g', 1000 + 30_000, 20_000, absent)).toBe(true)
+    expect(r.status('g', 1000 + 30_000).answeredBy).toBeNull()
+    expect(r.incomingFor('h2', 1000 + 30_000).length).toBe(1) // h2 重新振铃
+    expect(r.incomingFor('h1', 1000 + 30_000).length).toBe(1) // h1 也重新可见（可再试）
+    // 未接听的呼叫（无 answeredBy）：reopen 是 no-op。
+    r.register(base({ callId: 'g2', toUserIds: ['x'] }))
+    expect(r.reopenStaleAnswer('g2', 999_999, 20_000, absent)).toBe(false)
+  })
 })

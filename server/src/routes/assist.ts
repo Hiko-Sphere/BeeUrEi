@@ -222,6 +222,9 @@ export function registerAssistRoutes(
   app.get('/api/assist/call/status', { preHandler: requireAuth() }, async (req) => {
     const id = (req.query as { callId?: string })?.callId
     if (typeof id !== 'string' || !id) return { exists: false, declinedAll: false }
+    // 死锁自愈：呼叫方（盲人）本就在轮询本端点等接通——借此驱动"已认领却接不通"的重开。若首接者超过
+    // 20s 仍未进 ws 房间（App 被杀/建连失败），清 answeredBy 让呼叫重新对其余亲友振铃，而非死锁到 TTL。
+    pendingCalls.reopenStaleAnswer(id, Date.now(), 20_000, (uid) => hub.peersInCall(id).some((p) => p.userId === uid))
     return pendingCalls.status(id, Date.now())
   })
 

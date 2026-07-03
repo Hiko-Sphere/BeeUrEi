@@ -11,6 +11,7 @@ export interface PendingCall {
   createdAt: number
   declinedBy?: string[] // 已明确"拒绝"的目标（供发起方看到"对方已拒绝"）
   answeredBy?: string   // 首位接听者（群呼首接抢占：其余目标停止振铃、后接者得到明确反馈）
+  answeredAt?: number   // 首接时刻——用于"已认领却接不通"的死锁自愈（见 reopenStaleAnswer）
 }
 
 export class PendingCallRegistry {
@@ -92,10 +93,26 @@ export class PendingCallRegistry {
     const c = this.calls.get(callId)
     if (!c || !c.toUserIds.includes(userId)) return null
     if (c.answeredBy === undefined) {
-      this.calls.set(callId, { ...c, answeredBy: userId })
+      this.calls.set(callId, { ...c, answeredBy: userId, answeredAt: now })
       return userId
     }
     return c.answeredBy
+  }
+
+  /// 群呼死锁自愈（见协助呼叫可靠性复审）：接听者 claimAnswer 后必须尽快经 /ws 加入房间；若 answered
+  /// 超过 graceMs 仍未出现在房间（App 被杀/切后台/WebRTC 建连失败/只发了 REST 没走信令），说明"已认领
+  /// 却接不通"——清空 answeredBy 让呼叫**重新对其余目标振铃**，而非静默死锁到 TTL。isAnswererPresent
+  /// 由调用方用 hub 房间成员判定。返回 true 表示本次发生了重开。
+  /// graceMs 须 > 正常 answer→join 时延（建议 ~20s，宽松防误伤仍在建连的合法接听者）。
+  reopenStaleAnswer(callId: string, now: number, graceMs: number, isAnswererPresent: (userId: string) => boolean): boolean {
+    const c = this.calls.get(callId)
+    if (!c || c.answeredBy === undefined || c.answeredAt === undefined) return false
+    if (now - c.answeredAt <= graceMs) return false        // 仍在建连宽限期内，不动（防误伤正在接通者）
+    if (isAnswererPresent(c.answeredBy)) return false        // 赢家确已在房间 → 正常通话中，不动
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { answeredBy: _a, answeredAt: _t, ...rest } = c    // 清空接听态 → 呼叫重新振铃对其余目标可见
+    this.calls.set(callId, rest)
+    return true
   }
 
   /// 取消（归属校验，防止任意用户压制他人求助）：

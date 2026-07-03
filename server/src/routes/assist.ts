@@ -189,12 +189,12 @@ export function registerAssistRoutes(
     const id = (req.body as { callId?: string })?.callId
     if (typeof id !== 'string' || !id) return reply.code(400).send({ error: 'invalid_input' })
     const winner = pendingCalls.claimAnswer(id, req.user!.sub, Date.now())
-    const youWon = winner === req.user!.sub || winner === null
-    if (youWon) {
-      // null=非群呼登记内(如公开求助认领路径)：沿用原行为只记通话记录。
-      store.updateCallStatus(id, req.user!.sub, 'answered')
-    }
-    return { ok: true, answeredBy: winner ?? req.user!.sub, youWon }
+    // 只有**真正抢到首接**才算 youWon。winner===null 意味着呼叫已过期/不存在（/call/answered 仅用于定向
+    // 呼叫；公开求助走独立的 /help/claim）——绝不能当 youWon=true，否则接听者以为接通了、随后 ws join 因
+    // roomParticipants=null 被 not_a_participant 静默拒，"已接听却怎么都连不上"（见可靠性复审 MED）。
+    const youWon = winner === req.user!.sub
+    if (youWon) store.updateCallStatus(id, req.user!.sub, 'answered')
+    return { ok: true, answeredBy: winner, youWon, gone: winner === null }
   })
 
   // 通话记录（呼出/呼入/未接）：我作为主叫或被叫的记录，按时间倒序。

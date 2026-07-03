@@ -99,4 +99,31 @@ describe('群呼首接抢占（信任圈群呼）', () => {
     expect(st.json().answeredBy).toBe(h1.user.id)
     await a.close()
   })
+
+  it('首接者 youWon:true、别人先接 youWon:false（首接抢占语义）', async () => {
+    const a = buildApp(new MemoryStore())
+    const blind = await reg(a, 'wBlind', 'blind')
+    const h1 = await reg(a, 'wH1', 'helper')
+    const h2 = await reg(a, 'wH2', 'helper')
+    for (const [u, t, id] of [['wH1', h1.token, h1.user.id], ['wH2', h2.token, h2.user.id]] as const) {
+      const lk = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(blind.token), payload: { username: u } })
+      await a.inject({ method: 'POST', url: `/api/family/links/${lk.json().link.id}/accept`, headers: auth(t) })
+      void id
+    }
+    await a.inject({ method: 'POST', url: '/api/assist/call', headers: auth(blind.token), payload: { callId: 'w-1', targetUserIds: [h1.user.id, h2.user.id] } })
+    const r1 = await a.inject({ method: 'POST', url: '/api/assist/call/answered', headers: auth(h1.token), payload: { callId: 'w-1' } })
+    expect(r1.json()).toMatchObject({ youWon: true, answeredBy: h1.user.id, gone: false })
+    const r2 = await a.inject({ method: 'POST', url: '/api/assist/call/answered', headers: auth(h2.token), payload: { callId: 'w-1' } })
+    expect(r2.json()).toMatchObject({ youWon: false, answeredBy: h1.user.id }) // 别人先接 → 未赢
+    await a.close()
+  })
+
+  it('/call/answered 对不存在/过期 callId → youWon:false + gone:true（不误导接听者进必失败的 join）', async () => {
+    const a = buildApp(new MemoryStore())
+    const helper = await reg(a, 'goneHelper', 'helper')
+    const res = await a.inject({ method: 'POST', url: '/api/assist/call/answered', headers: auth(helper.token), payload: { callId: 'never-existed' } })
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toMatchObject({ youWon: false, gone: true, answeredBy: null })
+    await a.close()
+  })
 })

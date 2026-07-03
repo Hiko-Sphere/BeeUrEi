@@ -246,7 +246,7 @@ export const api = {
   registerCall: (callId: string, targetUserIds: string[]) => post('/api/assist/call', { callId, targetUserIds }),
   cancelCall: (callId: string) => post('/api/assist/call/cancel', { callId }),
   declineCall: (callId: string) => post('/api/assist/call/decline', { callId }),
-  answeredCall: (callId: string) => post('/api/assist/call/answered', { callId }) as Promise<{ ok: boolean; answeredBy: string; youWon: boolean }>,
+  answeredCall: (callId: string) => post('/api/assist/call/answered', { callId }) as Promise<{ ok: boolean; answeredBy: string | null; youWon: boolean; gone?: boolean }>,
   callStatus: (callId: string) => get(`/api/assist/call/status?callId=${encodeURIComponent(callId)}`) as Promise<{ exists?: boolean; declinedAll?: boolean }>,
   onlineCount: () => get('/api/assist/online-count') as Promise<{ total: number; online: number }>,
   heartbeat: (available = true) => post('/api/assist/heartbeat', { available }),

@@ -133,7 +133,7 @@ public enum VoiceCommandParser {
         let generic: Set<String> = ["东西", "我的东西", "物品", "东西们", "things", "something", "stuff", "my stuff", "my things", "my belongings"]
         for p in ["帮我找找", "帮我找", "找一下我的", "找一下", "找找我的", "找找", "找我的", "找"] {
             if let r = text.range(of: p) {
-                let x = String(text[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let x = normalizeFindTarget(String(text[r.upperBound...]))
                 if x.isEmpty || generic.contains(x) { return nil }
                 return x
             }
@@ -141,12 +141,37 @@ public enum VoiceCommandParser {
         let lower = text.lowercased()
         for p in ["help me find my ", "help me find ", "find my ", "where is my ", "where's my ", "locate my ", "find ", "locate "] {
             if let r = lower.range(of: p) {
-                let x = String(text[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let x = normalizeFindTarget(String(text[r.upperBound...]))
                 if x.isEmpty || generic.contains(x.lowercased()) { return nil }
                 return x
             }
         }
         return nil
+    }
+
+    /// 剥净"找<物品>"提取结果的首尾填充词：前缀残留（"一下/我的"——短前缀先命中时残留）+ 尾部客套
+    /// （"在哪里/好吗/谢谢/please/at"）。否则 FindTargetResolver 拿"钥匙在哪里"去匹配已教物品必失败。
+    /// 迭代剥除（多重填充如"我的手机在不在"→"手机"）；标点/空白一并清。
+    static func normalizeFindTarget(_ raw: String) -> String {
+        let punct = CharacterSet(charactersIn: "。，？！,.?!、").union(.whitespacesAndNewlines)
+        let leads = ["一下我的", "一下", "我的", "找", "帮我", "me my ", "my ", "the "]
+        // 尾部：长词先于短词（"在哪里"先于"在哪"，避免剥成"钥匙在"）。
+        let trails = ["在哪里", "在哪儿", "在不在", "在哪呢", "在哪", "好不好", "好吗", "好嘛", "谢谢你", "谢谢",
+                      "呗", "呢", "吗", "吧", "啊", "呀", "了",
+                      " please", " for me", " thank you", " thanks", " at", " now"]
+        var x = raw.trimmingCharacters(in: punct)
+        var changed = true
+        while changed {
+            changed = false
+            for l in leads where x.hasPrefix(l) && x.count > l.count {
+                x = String(x.dropFirst(l.count)).trimmingCharacters(in: punct); changed = true; break
+            }
+            let xl = x.lowercased()
+            for tr in trails where xl.hasSuffix(tr.lowercased()) && x.count > tr.count {
+                x = String(x.dropLast(tr.count)).trimmingCharacters(in: punct); changed = true; break
+            }
+        }
+        return x
     }
 
     /// 「给X发消息(说)Y」/「发消息给X(说)Y」/ "send a message to X saying Y" / "tell X that Y"。

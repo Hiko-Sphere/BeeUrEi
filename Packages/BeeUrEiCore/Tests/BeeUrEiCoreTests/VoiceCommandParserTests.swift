@@ -151,6 +151,24 @@ final class VoiceCommandParserTests: XCTestCase {
     /// 摔倒的盲人喊"救命"必须走告警（倒计时→通知全部亲友+附位置），不是拨一通可能没人接的视频电话。
     /// 语速指令边界：正常/恢复须在 快/慢 之前（"恢复正常语速"含"语速"）；不误伤读文字/念一下。
     /// 详略指令不误伤朗读：裸"读整页/读文字"仍是读文档，只有明确详略说法才 adjustVerbosity。
+    /// 找物提取剥净首尾填充词（对抗复审揪出）：否则 FindTargetResolver 拿"钥匙在哪里"匹配已教物品必失败。
+    func testFindTargetStripsFiller() {
+        XCTAssertEqual(VoiceCommandParser.parse("找我的钥匙在哪里"), .find("钥匙"))
+        XCTAssertEqual(VoiceCommandParser.parse("找我的钥匙好吗"), .find("钥匙"))
+        XCTAssertEqual(VoiceCommandParser.parse("帮我找一下钥匙"), .find("钥匙"))   // 残留前缀"一下"剥掉
+        XCTAssertEqual(VoiceCommandParser.parse("找钥匙呢"), .find("钥匙"))
+        XCTAssertEqual(VoiceCommandParser.parse("帮我找找我的手机在不在"), .find("手机")) // 多重：前"我的"+尾"在不在"
+        XCTAssertEqual(VoiceCommandParser.parse("找一下我的水杯谢谢"), .find("水杯"))
+        XCTAssertEqual(VoiceCommandParser.parse("find my keys please"), .find("keys"))
+        XCTAssertEqual(VoiceCommandParser.parse("where is my wallet at"), .find("wallet"))
+        // 干净输入不被误剥：物名本身不含填充词时原样返回。
+        XCTAssertEqual(VoiceCommandParser.parse("找我的钥匙"), .find("钥匙"))
+        XCTAssertEqual(VoiceCommandParser.parse("find my wallet"), .find("wallet"))
+        // 泛指词"东西"→ generic → nil（不当具体物品）→ 退回 UI 菜单（unknown）。
+        XCTAssertEqual(VoiceCommandParser.parse("找一下东西"), .unknown)
+        XCTAssertEqual(VoiceCommandParser.parse("找东西"), .unknown)
+    }
+
     /// 目的地解析容忍插入词（对抗复审揪出的真 bug）：赶时间的口语"带我快一点去医院"应 navigate。
     func testDestinationTolerantOfInterjections() {
         XCTAssertEqual(VoiceCommandParser.parse("带我快一点去医院"), .navigate("医院"))

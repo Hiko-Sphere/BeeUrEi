@@ -9,7 +9,12 @@ type Handler = (event: unknown) => void
 const handlers = new Map<string, Handler>()
 
 class FakeResponse {
-  constructor(public body: string, public init: { status?: number; headers?: Record<string, string> } = {}) {}
+  body: string
+  init: { status?: number; headers?: Record<string, string> }
+  constructor(body: string, init: { status?: number; headers?: Record<string, string> } = {}) {
+    this.body = body
+    this.init = init
+  }
   get status() { return this.init.status ?? 200 }
 }
 

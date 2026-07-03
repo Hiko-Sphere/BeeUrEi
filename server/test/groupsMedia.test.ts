@@ -418,4 +418,58 @@ describe('未读汇总 /api/unread', () => {
     expect(push.sent[0].badge).toBe(1) // 第一条后 b 未读=1
     expect(push.sent[1].badge).toBe(2) // 第二条后递增到 2
   })
+
+  it('群成员变更通知：被加入/被踢/群解散都通知受影响成员（收件箱 + 推送）；退群/群主不通知自己', async () => {
+    const push = new FakePush()
+    const app = buildApp(new MemoryStore(), { pushSender: push })
+    const owner = await reg(app, 'gowner', 'family')
+    const m1 = await reg(app, 'gm1', 'blind')
+    const m2 = await reg(app, 'gm2', 'blind')
+    await bind(app, owner.token, m1.token, 'gm1')
+    await bind(app, owner.token, m2.token, 'gm2')
+    // m1 注册 APNs token，验证群通知除收件箱外也走推送。
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(m1.token), payload: { token: 'd'.repeat(64) } })
+
+    // 建群含 m1 → m1 收到 group_added
+    const g = await app.inject({ method: 'POST', url: '/api/groups', headers: auth(owner.token),
+      payload: { name: '家人群', memberIds: [m1.user.id] } })
+    const gid = (g.json() as any).group.id
+    const m1Notifs = () => app.inject({ method: 'GET', url: '/api/notifications', headers: auth(m1.token) }).then((r) => (r.json() as any).notifications)
+    let n1 = await m1Notifs()
+    const added = n1.find((n: any) => n.kind === 'group_added')
+    expect(added).toBeTruthy()
+    expect(added.body).toContain('家人群')
+    expect(added.body).toContain('gowner')
+    expect(added.data.groupId).toBe(gid)
+    // 群主自己不收 group_added（建群者）
+    const ownerNotifs = (await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(owner.token) })).json() as any
+    expect(ownerNotifs.notifications.filter((n: any) => n.kind === 'group_added')).toHaveLength(0)
+
+    // 加 m2 → m2 收到 group_added
+    await app.inject({ method: 'POST', url: `/api/groups/${gid}/members`, headers: auth(owner.token), payload: { userId: m2.user.id } })
+    const m2Notifs = (await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(m2.token) })).json() as any
+    expect(m2Notifs.notifications.filter((n: any) => n.kind === 'group_added')).toHaveLength(1)
+
+    // 群主踢 m2 → m2 收到 group_removed
+    await app.inject({ method: 'DELETE', url: `/api/groups/${gid}/members/${m2.user.id}`, headers: auth(owner.token) })
+    const m2After = (await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(m2.token) })).json() as any
+    expect(m2After.notifications.filter((n: any) => n.kind === 'group_removed')).toHaveLength(1)
+
+    // m1 自愿退群 → 不通知自己
+    await app.inject({ method: 'DELETE', url: `/api/groups/${gid}/members/${m1.user.id}`, headers: auth(m1.token) })
+    n1 = await m1Notifs()
+    expect(n1.filter((n: any) => n.kind === 'group_removed')).toHaveLength(0)
+
+    // 群解散：重建含 m1 的群，群主解散 → m1 收到 group_dissolved
+    const g2 = await app.inject({ method: 'POST', url: '/api/groups', headers: auth(owner.token),
+      payload: { name: '临时群', memberIds: [m1.user.id] } })
+    const gid2 = (g2.json() as any).group.id
+    await app.inject({ method: 'DELETE', url: `/api/groups/${gid2}`, headers: auth(owner.token) })
+    n1 = await m1Notifs()
+    const dissolved = n1.find((n: any) => n.kind === 'group_dissolved')
+    expect(dissolved).toBeTruthy()
+    expect(dissolved.body).toContain('临时群')
+    // 推送也走了（sendAlert 记录了群相关标题）
+    expect(push.sent.some((s) => s.title.includes('群'))).toBe(true)
+  })
 })

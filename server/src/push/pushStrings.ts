@@ -24,6 +24,18 @@ export const pushStrings = {
   routeAddedBody: (name: string, routeName: string, l: PushLang): string =>
     l === 'en' ? `${name} added the route "${routeName}" — open Navigation to walk it`
                : `${name} 为你添加了路线「${routeName}」，可在导航里沿信标行走`,
+  groupAddedTitle: (l: PushLang): string =>
+    l === 'en' ? 'Added to a group chat' : '你被加入了群聊',
+  groupAddedBody: (name: string, groupName: string, l: PushLang): string =>
+    l === 'en' ? `${name} added you to the group "${groupName}"` : `${name} 把你加入了群聊「${groupName}」`,
+  groupRemovedTitle: (l: PushLang): string =>
+    l === 'en' ? 'Removed from a group chat' : '你已被移出群聊',
+  groupRemovedBody: (groupName: string, l: PushLang): string =>
+    l === 'en' ? `You are no longer in the group "${groupName}"` : `你已不在群聊「${groupName}」中`,
+  groupDissolvedTitle: (l: PushLang): string =>
+    l === 'en' ? 'A group chat was dissolved' : '群聊已解散',
+  groupDissolvedBody: (groupName: string, l: PushLang): string =>
+    l === 'en' ? `The group "${groupName}" has been dissolved` : `群聊「${groupName}」已被群主解散`,
   emergencyAlertTitle: (name: string, l: PushLang): string =>
     l === 'en' ? `Emergency: ${name} may need help` : `紧急：${name} 可能需要帮助`,
   emergencyAlertBody: (kind: 'fall' | 'crash' | 'manual' | string, hasLocation: boolean, l: PushLang): string => {

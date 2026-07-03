@@ -8,7 +8,7 @@ function iconFor(kind: string) {
   if (kind.includes('emergency')) return <IconFlash />
   if (kind.includes('call')) return <IconPhone />
   if (kind.includes('route')) return <IconPin /> // 路线库通知（route_added）用定位图标
-  if (kind.includes('friend') || kind.includes('link')) return <IconUsers />
+  if (kind.includes('friend') || kind.includes('link') || kind.includes('group')) return <IconUsers />
   // 实名认证（kyc_verified/kyc_rejected）与举报处置同属"账号/安全"类——用盾牌，免落到通用铃铛。
   if (kind.includes('report') || kind.includes('moderation') || kind.includes('ban') || kind.includes('kyc') || kind.includes('verif')) return <IconShield />
   if (kind.includes('record')) return <IconFilm />

@@ -5,6 +5,9 @@ import { type Store, publicUser, matchBannedTerm, areLinked } from '../db/store'
 import { dissolveGroup } from '../db/cascade'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
+import { type PushSender, NoopPushSender } from '../push/apns'
+import { pushLang, pushStrings } from '../push/pushStrings'
+import { notifyUser } from '../notifications/notify'
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(50),
@@ -15,7 +18,7 @@ const MAX_MEMBERS = 50
 
 /// 群聊（WhatsApp 式）：群主建群/加人/踢人/解散；成员可退群。
 /// 建群与加人都要求新成员是**群主**的 accepted 绑定好友——沿用"只有互相确认过的人才能进入对话"的原则。
-export function registerGroupRoutes(app: FastifyInstance, store: Store): void {
+export function registerGroupRoutes(app: FastifyInstance, store: Store, push: PushSender = new NoopPushSender()): void {
   // 建群：发起人为群主，初始成员必须都是群主的好友。
   app.post('/api/groups', { preHandler: [requireAuth(), requireFeature(store, 'groups')],
                             config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
@@ -33,6 +36,8 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store): void {
                     memberIds: [me, ...memberIds], createdAt: Date.now() }
     store.createGroup(group)
     store.setGroupRead(group.id, me, Date.now()) // 群主建群即视为已读
+    // 通知初始成员被加入群聊——否则盲人只能靠群列表突然多出一个群才发现（收件箱 + 推送）。
+    notifyGroupAdded(store, push, memberIds, me, group.name, group.id)
     return reply.code(201).send({ group })
   })
 
@@ -74,6 +79,7 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store): void {
     // 新成员的"已读时刻"置为入群此刻——否则其未读数会把**入群前**的全部历史消息(至多 200 上限)都算上，
     // 刚进群就顶着一个巨大的未读角标（历史仍可上翻查看，只是不计未读）。与建群时群主 setGroupRead 同口径。
     store.setGroupRead(group.id, userId, Date.now())
+    notifyGroupAdded(store, push, [userId], me, group.name, group.id) // 通知被加入者
     return { group: updated }
   })
 
@@ -87,6 +93,12 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store): void {
     if (userId === group.ownerId) return reply.code(400).send({ error: 'owner_must_dissolve' })
     if (me !== group.ownerId && me !== userId) return reply.code(403).send({ error: 'forbidden' })
     const updated = store.updateGroup(group.id, { memberIds: group.memberIds.filter((m) => m !== userId) })
+    // 群主踢人才通知被踢者（自愿退群不通知自己）——否则被移出的盲人只见群悄然消失、不知缘由。
+    if (me === group.ownerId && userId !== me) {
+      const l = pushLang(store.findById(userId)?.language)
+      notifyUser(store, push, userId, 'group_removed',
+                 pushStrings.groupRemovedTitle(l), pushStrings.groupRemovedBody(group.name, l), { groupId: group.id })
+    }
     return { group: updated }
   })
 
@@ -95,7 +107,24 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store): void {
     const group = store.findGroup((req.params as { id: string }).id)
     if (!group) return reply.code(404).send({ error: 'not_found' })
     if (group.ownerId !== req.user!.sub) return reply.code(403).send({ error: 'not_owner' })
+    // 通知须在 dissolveGroup（删群）**之前**捕获成员——删后 group 已不存在。群主自己不通知。
+    const others = group.memberIds.filter((m) => m !== group.ownerId)
     dissolveGroup(store, group.id) // 清群内视频媒体 + 删群；与删号级联共用同一实现
+    for (const uid of others) {
+      const l = pushLang(store.findById(uid)?.language)
+      notifyUser(store, push, uid, 'group_dissolved',
+                 pushStrings.groupDissolvedTitle(l), pushStrings.groupDissolvedBody(group.name, l))
+    }
     return { ok: true }
   })
+}
+
+/// 通知一批用户被加入群聊（建群/加人共用）。按各自语言本地化；notifyUser 内部 best-effort 隔离。
+function notifyGroupAdded(store: Store, push: PushSender, userIds: string[], actorId: string, groupName: string, groupId: string): void {
+  const actorName = store.findById(actorId)?.displayName ?? ''
+  for (const uid of userIds) {
+    const l = pushLang(store.findById(uid)?.language)
+    notifyUser(store, push, uid, 'group_added',
+               pushStrings.groupAddedTitle(l), pushStrings.groupAddedBody(actorName, groupName, l), { groupId })
+  }
 }

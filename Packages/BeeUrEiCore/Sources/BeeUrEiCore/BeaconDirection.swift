@@ -25,7 +25,13 @@ public struct BeaconDirection: Sendable, Equatable {
         self.clockHour = ((12 + offset - 1) % 12 + 12) % 12 + 1
     }
 
-    public var spokenPhrase: String { "\(clockHour) 点钟方向" }
+    /// 中文播报短语（默认中文，向后兼容）。
+    public var spokenPhrase: String { spokenPhrase(in: .zh) }
+
+    /// 播报短语（语言可选），与 ClockDirection 同口径：「3 点钟方向」/「3 o'clock」。
+    public func spokenPhrase(in language: Language) -> String {
+        SpokenStrings.clockDirection(hour: clockHour, language)
+    }
 
     /// 用「身体航向 + 头部偏航」作为朝向计算信标相对方位（AirPods 头追踪增强，见 PLAN §14 Q8）。
     /// 无头追踪时传 headYawDegrees=0 即退化为纯身体航向。

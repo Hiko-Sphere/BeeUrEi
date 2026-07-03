@@ -241,7 +241,7 @@ final class HomeViewModel {
 
     private func handleTracking(_ quality: TrackingQuality) {
         currentMode = trackingGate.mode(for: quality)
-        trackingAdvisory = trackingGate.advisory(for: quality) ?? ""
+        trackingAdvisory = trackingGate.advisory(for: quality, language: lang) ?? ""
         trackingStateText = Self.trackingText(quality)
         updateAdvisory()
     }

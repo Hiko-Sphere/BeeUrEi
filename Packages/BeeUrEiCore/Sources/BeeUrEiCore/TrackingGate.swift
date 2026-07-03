@@ -31,19 +31,20 @@ public struct TrackingGate: Sendable {
         }
     }
 
-    public func advisory(for quality: TrackingQuality) -> String? {
+    /// 按 language 出双语提示（修复前硬编码中文——这些是实时播报的降级提示，英文用户须听得懂）。
+    public func advisory(for quality: TrackingQuality, language: Language = .zh) -> String? {
         switch quality {
         case .normal:
             return nil
         case .limited(let reason):
             switch reason {
-            case .excessiveMotion:      return "跟踪不稳，请放慢移动"
-            case .insufficientFeatures: return "环境特征不足，测距精度下降"
-            case .initializing, .relocalizing: return "正在初始化跟踪，请稍候"
-            case .other:                return "跟踪受限，测距精度下降"
+            case .excessiveMotion:      return SpokenStrings.trackingUnstable(language)
+            case .insufficientFeatures: return SpokenStrings.trackingLowFeatures(language)
+            case .initializing, .relocalizing: return SpokenStrings.trackingInitializing(language)
+            case .other:                return SpokenStrings.trackingLimited(language)
             }
         case .notAvailable:
-            return "无法测距，避障已降级"
+            return SpokenStrings.trackingUnavailable(language)
         }
     }
 }

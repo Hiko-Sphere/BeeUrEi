@@ -435,6 +435,23 @@ public enum SpokenStrings {
     public static func avoidanceOff(_ lang: Language) -> String {
         switch lang { case .zh: return "避障已关闭"; case .en: return "Obstacle alerts off" }
     }
+    /// 跟踪质量降级提示（TrackingGate；中文与历史逐字一致）。
+    public static func trackingUnstable(_ lang: Language) -> String {
+        switch lang { case .zh: return "跟踪不稳，请放慢移动"; case .en: return "Tracking unstable — please move slower" }
+    }
+    public static func trackingLowFeatures(_ lang: Language) -> String {
+        switch lang { case .zh: return "环境特征不足，测距精度下降"; case .en: return "Not enough visual features — distance accuracy reduced" }
+    }
+    public static func trackingInitializing(_ lang: Language) -> String {
+        switch lang { case .zh: return "正在初始化跟踪，请稍候"; case .en: return "Starting up tracking, one moment" }
+    }
+    public static func trackingLimited(_ lang: Language) -> String {
+        switch lang { case .zh: return "跟踪受限，测距精度下降"; case .en: return "Tracking limited — distance accuracy reduced" }
+    }
+    public static func trackingUnavailable(_ lang: Language) -> String {
+        switch lang { case .zh: return "无法测距，避障已降级"; case .en: return "Can't measure distance — obstacle alerts degraded" }
+    }
+
     /// 热降级提示（serious：降频仍在保护）。
     public static func thermalSlowdown(_ lang: Language) -> String {
         switch lang { case .zh: return "设备发热，已降低处理频率"; case .en: return "Device is warm — processing rate reduced" }

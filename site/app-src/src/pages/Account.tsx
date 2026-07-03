@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, APIError, contentBlockedText, reencodeToJpeg, uploadVerificationDoc, type SelfView, type SessionInfo, type VerificationStatusInfo } from '../lib/api'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
+import { subscribeWebPush, unsubscribeWebPush, isWebPushSubscribed, webPushSupported } from '../lib/webPush'
 import { roleLabel } from '../components/Layout'
 import { Card, Avatar, Button, Field, Input, useToast, Modal } from '../components/ui'
 
@@ -110,6 +111,9 @@ export function AccountPage() {
           ))}
         </div>
       </Card>
+
+      {/* 浏览器通知（Web Push）：关掉标签页也能收到紧急告警的系统通知 */}
+      <WebPushCard />
 
       {/* 安全 */}
       <Card className="p-5">
@@ -588,5 +592,50 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
           <Button className="flex-1" loading={busy} onClick={submit} disabled={!oldPw || !newPw}>{t('确认修改', 'Confirm')}</Button>
         </div>
     </Modal>
+  )
+}
+
+/// 浏览器紧急告警通知开关（Web Push）：订阅后即使标签页关闭，摔倒/SOS 告警也会弹系统通知。
+/// 服务端未配 VAPID（503）或浏览器不支持时如实显示"不可用"；权限被拒引导去浏览器设置。
+function WebPushCard() {
+  const { t } = useI18n()
+  const toast = useToast()
+  const [state, setState] = useState<'loading' | 'on' | 'off' | 'denied' | 'unsupported'>('loading')
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      if (!webPushSupported()) { if (alive) setState('unsupported'); return }
+      try { await api.webVapidKey() } catch { if (alive) setState('unsupported'); return } // 服务端未配 VAPID
+      if (Notification.permission === 'denied') { if (alive) setState('denied'); return }
+      if (alive) setState((await isWebPushSubscribed()) ? 'on' : 'off')
+    })()
+    return () => { alive = false }
+  }, [])
+  const toggle = async () => {
+    if (state === 'on') { await unsubscribeWebPush(); setState('off'); return }
+    const r = await subscribeWebPush().catch(() => 'unsupported' as const)
+    if (r === 'subscribed') { setState('on'); toast(t('已开启：关掉页面也能收到紧急告警', 'Enabled: emergency alerts arrive even with the tab closed'), 'ok') }
+    else if (r === 'denied') setState('denied')
+    else { setState('unsupported'); toast(t('当前不可用', 'Not available'), 'error') }
+  }
+  if (state === 'unsupported') return null // 不可用就不占版面（服务端未配/浏览器不支持）
+  return (
+    <Card className="p-5">
+      <div className="mb-1 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold">{t('紧急告警浏览器通知', 'Emergency alerts in browser')}</div>
+          <p className="mt-1 text-xs text-faint">{t('开启后，即使关闭本页面，摔倒/求救告警也会弹出系统通知。', 'When on, fall/SOS alerts show a system notification even if this page is closed.')}</p>
+        </div>
+        {state === 'denied' ? (
+          <span className="shrink-0 text-xs text-danger">{t('通知权限被拒——请在浏览器设置里允许', 'Permission denied — allow notifications in browser settings')}</span>
+        ) : (
+          <button role="switch" aria-checked={state === 'on'} disabled={state === 'loading'} onClick={() => void toggle()}
+            className={`relative h-7 w-12 shrink-0 rounded-full transition ${state === 'on' ? 'bg-honey' : 'bg-[var(--line)]'}`}
+            aria-label={t('紧急告警浏览器通知', 'Emergency alerts in browser')}>
+            <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${state === 'on' ? 'left-[22px]' : 'left-0.5'}`} />
+          </button>
+        )}
+      </div>
+    </Card>
   )
 }

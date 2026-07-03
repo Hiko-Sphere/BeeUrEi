@@ -179,7 +179,7 @@ async function tryRefresh(): Promise<boolean> {
 
 const get = (p: string) => rawFetch('GET', p, undefined, true)
 const post = (p: string, b?: unknown) => rawFetch('POST', p, b, true)
-const del = (p: string) => rawFetch('DELETE', p, undefined, true)
+const del = (p: string, b?: unknown) => rawFetch('DELETE', p, b, true) // 可带 body（如按 endpoint 退订 web push）
 const put = (p: string, b?: unknown) => rawFetch('PUT', p, b, true)
 
 // ---------- API ----------
@@ -306,6 +306,10 @@ export const api = {
   unreadSummary: () => get('/api/unread') as Promise<{ messages: number; notifications: number; total: number }>,
   markNotifRead: (id: string) => post(`/api/notifications/${id}/read`),
   markAllNotifsRead: () => post('/api/notifications/read-all'),
+  // Web Push（浏览器推送紧急告警）
+  webVapidKey: () => get('/api/push/web-vapid-key') as Promise<{ key: string }>,
+  webPushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) => post('/api/push/web-subscribe', sub),
+  webPushUnsubscribe: (endpoint: string) => del('/api/push/web-subscribe', { endpoint }),
 
   // 举报
   report: (targetUserId: string, reason: string, callId?: string, evidenceRecordingId?: string) =>

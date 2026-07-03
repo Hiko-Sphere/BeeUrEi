@@ -2,7 +2,7 @@ import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { Store, User, Role, EmergencyEvent, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, SessionInfo, ChatMessage, ChatGroup, MediaMeta, Passkey, AdminAuditEntry, Warning, AppConfig, AppConfigPatch, Notification, Verification, VerificationStatus, KycBlobRef } from './store'
+import type { Store, User, Role, EmergencyEvent, WebPushSubscription, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, SessionInfo, ChatMessage, ChatGroup, MediaMeta, Passkey, AdminAuditEntry, Warning, AppConfig, AppConfigPatch, Notification, Verification, VerificationStatus, KycBlobRef } from './store'
 import { normalizeAppConfig, mergeAppConfig, type SavedRoute } from './store'
 
 // 用运行时 require + 非静态模块名加载 node:sqlite，避免打包器(vitest/vite)静态解析失败；
@@ -52,6 +52,9 @@ export class SqliteStore implements Store {
         id TEXT PRIMARY KEY, userId TEXT, kind TEXT, lat REAL, lon REAL,
         locSource TEXT, locAgeSec INTEGER, notified INTEGER, contacts INTEGER, at INTEGER);
       CREATE INDEX IF NOT EXISTS idx_emergency_at ON emergency_events(at);
+      CREATE TABLE IF NOT EXISTS web_push_subs (
+        endpoint TEXT PRIMARY KEY, userId TEXT, p256dh TEXT, auth TEXT, createdAt INTEGER);
+      CREATE INDEX IF NOT EXISTS idx_webpush_user ON web_push_subs(userId);
       CREATE TABLE IF NOT EXISTS blocks (
         id TEXT PRIMARY KEY, blockerId TEXT, blockedId TEXT, createdAt INTEGER);
       CREATE TABLE IF NOT EXISTS call_records (
@@ -645,6 +648,23 @@ export class SqliteStore implements Store {
   }
   deleteEmergencyEventsOlderThan(cutoffMs: number): number {
     return Number(this.db.prepare('DELETE FROM emergency_events WHERE at < ?').run(cutoffMs).changes)
+  }
+  upsertWebPushSubscription(sub: WebPushSubscription): void {
+    this.db.prepare('INSERT OR REPLACE INTO web_push_subs (endpoint, userId, p256dh, auth, createdAt) VALUES (?, ?, ?, ?, ?)')
+      .run(sub.endpoint, sub.userId, sub.p256dh, sub.auth, sub.createdAt)
+  }
+  webPushSubscriptionsForUser(userId: string): WebPushSubscription[] {
+    const rows = this.db.prepare('SELECT * FROM web_push_subs WHERE userId = ?').all(userId) as any[]
+    return rows.map((r) => ({ endpoint: r.endpoint, userId: r.userId, p256dh: r.p256dh, auth: r.auth, createdAt: Number(r.createdAt) }))
+  }
+  deleteWebPushSubscription(endpoint: string): void {
+    this.db.prepare('DELETE FROM web_push_subs WHERE endpoint = ?').run(endpoint)
+  }
+  deleteWebPushSubscriptionsForUser(userId: string): void {
+    this.db.prepare('DELETE FROM web_push_subs WHERE userId = ?').run(userId)
+  }
+  clearWebPushSubscriptionFromOthers(endpoint: string, exceptUserId: string): void {
+    this.db.prepare('DELETE FROM web_push_subs WHERE endpoint = ? AND userId != ?').run(endpoint, exceptUserId)
   }
 
   // MARK: messages

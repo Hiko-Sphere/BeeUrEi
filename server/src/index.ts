@@ -2,6 +2,7 @@ import { buildApp, makeDefaultStore } from './app'
 import { seedAdmin } from './bootstrap/seedAdmin'
 import { makeMailer } from './mail/mailer'
 import { makePushSender } from './push/apns'
+import { makeWebPushSender } from './push/webPush'
 import { initErrorReporting } from './monitoring/errorReporting'
 import { sweepExpiredRecordings } from './recording/retention'
 import { sweepStaleVerifications } from './kyc/retention'
@@ -26,7 +27,8 @@ async function main(): Promise<void> {
   const mailer = await makeMailer() // 配了 SMTP_* 则真实发信，否则控制台打码（D1）
   // APNs 410（token 失效）时回收该 token，避免反复空投死 token + 被 Apple 限流。
   const pushSender = makePushSender((token) => store.clearPushToken(token)) // 配了 APNS_* 则真实 VoIP 推送，否则无后台来电（A1）
-  const app = buildApp(store, { mailer, pushSender })
+  const webPushSender = makeWebPushSender((endpoint) => store.deleteWebPushSubscription(endpoint)) // 配了 VAPID_* 则浏览器推送；410 回收死订阅
+  const app = buildApp(store, { mailer, pushSender, webPushSender })
   const port = Number(process.env.PORT ?? 8787)
 
   ensureKycDir() // 实名认证证件密文目录（KYC_DIR，0700）启动即就绪

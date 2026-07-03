@@ -47,12 +47,14 @@ import { CodeRegistry } from './auth/codes'
 import { CodeSendLimiter } from './auth/sendLimiter'
 import { ConsoleMailer, type Mailer } from './mail/mailer'
 import { NoopPushSender, type PushSender } from './push/apns'
+import { NoopWebPushSender, type WebPushSender } from './push/webPush'
 import { createAppleVerifier, type AppleTokenVerifier } from './auth/apple'
 
 export interface AppOptions {
   rateLimitMax?: number
   mailer?: Mailer // 默认 ConsoleMailer（日志打码）；index.ts 可注入 SMTP 邮件器
   pushSender?: PushSender // 默认 Noop（无后台推送）；index.ts 可注入 APNs VoIP 推送（A1）
+  webPushSender?: WebPushSender // 默认 Noop；index.ts 配 VAPID_* 后注入真实浏览器推送（web 告警）
   // Apple 登录验证器：默认从 APPLE_BUNDLE_ID 环境变量构造（未配置则端点返回 503）；测试注入 fake。
   appleVerifier?: AppleTokenVerifier
   codeSend?: CodeSendLimiter // 验证码发送节流；默认 60s 冷却+窗口上限；测试可注入宽松实例
@@ -124,6 +126,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   const codeSend = options.codeSend ?? new CodeSendLimiter() // 发送侧节流：同一收件人 60s 冷却 + 窗口上限（防连点/邮件轰炸）
   const mailer = options.mailer ?? new ConsoleMailer()
   const pushSender = options.pushSender ?? new NoopPushSender()
+  const webPushSender = options.webPushSender ?? new NoopWebPushSender()
 
   // 业务计数预置 0 基线：使这些 series 自启动起就存在，避免 Prometheus rate() 在首次命中时断档（见复审 #5）。
   for (const name of ['calls_registered_total', 'help_requests_total', 'help_claims_total']) metrics.inc(name, 0)
@@ -194,11 +197,11 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerAccountRoutes(instance, store, codes, mailer, appleVerifier, codeSend)
     registerKycRoutes(instance, store) // 实名认证（KYC）：提交/查询（admin 审核端点在 admin 路由）
     registerPasskeyRoutes(instance, store) // Passkey（WebAuthn）注册/登录
-    registerPushRoutes(instance, store) // VoIP token 注册（A1）
+    registerPushRoutes(instance, store, webPushSender) // VoIP token 注册（A1）
     registerUserRoutes(instance, store)
     registerFamilyRoutes(instance, store, pushSender)
     registerBlockRoutes(instance, store)
-    registerEmergencyRoutes(instance, store, presence, liveLocations, pushSender)
+    registerEmergencyRoutes(instance, store, presence, liveLocations, pushSender, webPushSender)
     registerMessageRoutes(instance, store, pushSender)
     registerGroupRoutes(instance, store, pushSender)
     registerMediaRoutes(instance, store) // 视频等大文件（磁盘存储）

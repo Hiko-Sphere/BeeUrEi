@@ -7,6 +7,7 @@ import { type PresenceRegistry } from '../assist/presence'
 import { type LiveLocationRegistry } from '../location/liveLocations'
 import { planEmergencyRoute } from '../emergency/routing'
 import { NoopPushSender, type PushSender } from '../push/apns'
+import { NoopWebPushSender, type WebPushSender } from '../push/webPush'
 import { pushLang, pushStrings } from '../push/pushStrings'
 import { totalUnreadFor } from '../db/unread'
 
@@ -38,7 +39,8 @@ class EmergencyAlertDedup {
 export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
                                         presence: PresenceRegistry,
                                         live: LiveLocationRegistry,
-                                        pushSender: PushSender = new NoopPushSender()): void {
+                                        pushSender: PushSender = new NoopPushSender(),
+                                        webPush: WebPushSender = new NoopWebPushSender()): void {
   const alertDedup = new EmergencyAlertDedup()
   // 发起紧急呼叫：返回按优先级排好的呼叫目标列表（真正接通由 WebRTC 信令负责）。
   app.post('/api/emergency/trigger', { preHandler: requireAuth() }, async (req) => {
@@ -123,10 +125,18 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
       try {
         store.createNotification({ id: randomUUID(), userId: member.id, kind: 'emergency_alert', title, body, data: notifData, createdAt: Date.now() })
       } catch { /* 通知不可阻断安全攸关的告警推送 */ }
-      // APNs 推送仅发给有 token 的；无 token 者靠上面的持久化通知在通知中心兜底。
-      if (!member.apnsToken) return Promise.resolve()
+      // Web Push：该亲友的浏览器订阅（web-only 协助者关标签页也能收到系统通知）。
+      // 与 APNs 并行、各自 best-effort；负载给 SW 渲染系统通知 + 点击跳通知页。
+      const webJobs = webPush.configured
+        ? store.webPushSubscriptionsForUser(member.id).map((sub) =>
+            webPush.send(sub, JSON.stringify({ title, body, data: notifData })).catch(() => { /* 单订阅失败不阻断 */ }))
+        : []
+      // APNs 推送仅发给有 token 的；无 token 者靠持久化通知 + Web Push 兜底。
+      const apnsJob = member.apnsToken
+        ? pushSender.sendAlert(member.apnsToken, title, body, extraBase, undefined, totalUnreadFor(store, member.id).total)
+        : Promise.resolve()
       // badge=该亲友未读总数（含刚写入的本条告警），与图标角标主线一致。
-      return pushSender.sendAlert(member.apnsToken, title, body, extraBase, undefined, totalUnreadFor(store, member.id).total)
+      return Promise.allSettled([apnsJob, ...webJobs])
     }))
     // notified=实际推送对象数（有 token 者）；contacts=accepted 亲友总数。
     // 二者差值 = 仅靠通知中心兜底、未收到实时推送的人——客户端可据此提示用户。

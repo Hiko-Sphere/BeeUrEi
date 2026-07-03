@@ -134,6 +134,16 @@ export interface EmergencyEvent {
   at: number
 }
 
+/// Web Push 订阅（浏览器推送）：web-only 协助者关掉标签页也能收到紧急告警。
+/// endpoint 全局唯一（浏览器推送服务签发）作主键；一个用户可有多个订阅（多浏览器/多设备）。
+export interface WebPushSubscription {
+  endpoint: string
+  userId: string
+  p256dh: string   // 浏览器公钥（加密负载用）
+  auth: string     // 鉴权密钥
+  createdAt: number
+}
+
 export interface Notification {
   id: string
   userId: string            // 收件人
@@ -569,6 +579,12 @@ export interface Store {
   recentEmergencyEvents(limit?: number): EmergencyEvent[] // 时间倒序
   deleteEmergencyEventsForUser(userId: string): void      // 删号级联（GDPR 抹除）
   deleteEmergencyEventsOlderThan(cutoffMs: number): number // 留存清扫
+  // Web Push 订阅：
+  upsertWebPushSubscription(sub: WebPushSubscription): void
+  webPushSubscriptionsForUser(userId: string): WebPushSubscription[]
+  deleteWebPushSubscription(endpoint: string): void
+  deleteWebPushSubscriptionsForUser(userId: string): void // 删号级联
+  clearWebPushSubscriptionFromOthers(endpoint: string, exceptUserId: string): void // 设备换账号：从旧账号收回
 
   createMessage(m: ChatMessage): void
   findMessage(id: string): ChatMessage | undefined
@@ -630,6 +646,7 @@ export class MemoryStore implements Store {
   protected media = new Map<string, MediaMeta>()
   protected notifications = new Map<string, Notification>()
   protected emergencyEvents = new Map<string, EmergencyEvent>()
+  protected webPushSubs = new Map<string, WebPushSubscription>()
   protected recordingConfig: RecordingConfig = { enabled: false, retentionDays: 7, requireConsent: true }
   protected auditLog: AdminAuditEntry[] = []
   protected warnings = new Map<string, Warning>()
@@ -1098,6 +1115,25 @@ export class MemoryStore implements Store {
     if (n) this.afterMutate()
     return n
   }
+  upsertWebPushSubscription(sub: WebPushSubscription): void {
+    this.webPushSubs.set(sub.endpoint, sub)
+    this.afterMutate()
+  }
+  webPushSubscriptionsForUser(userId: string): WebPushSubscription[] {
+    return [...this.webPushSubs.values()].filter((s) => s.userId === userId)
+  }
+  deleteWebPushSubscription(endpoint: string): void {
+    if (this.webPushSubs.delete(endpoint)) this.afterMutate()
+  }
+  deleteWebPushSubscriptionsForUser(userId: string): void {
+    let changed = false
+    for (const [k, v] of this.webPushSubs) if (v.userId === userId) { this.webPushSubs.delete(k); changed = true }
+    if (changed) this.afterMutate()
+  }
+  clearWebPushSubscriptionFromOthers(endpoint: string, exceptUserId: string): void {
+    const cur = this.webPushSubs.get(endpoint)
+    if (cur && cur.userId !== exceptUserId) { this.webPushSubs.delete(endpoint); this.afterMutate() }
+  }
 
   createMessage(m: ChatMessage): void {
     this.messages.set(m.id, m)
@@ -1280,6 +1316,7 @@ export class JsonFileStore extends MemoryStore {
           notifications?: Notification[]
           savedRoutes?: SavedRoute[]
           emergencyEvents?: EmergencyEvent[]
+          webPushSubs?: WebPushSubscription[]
         }
         for (const u of data.users ?? []) this.users.set(u.id, u)
         for (const l of data.links ?? []) this.links.set(l.id, l)
@@ -1302,6 +1339,7 @@ export class JsonFileStore extends MemoryStore {
         for (const n of data.notifications ?? []) this.notifications.set(n.id, n)
         for (const sr of data.savedRoutes ?? []) this.savedRoutes.set(sr.id, sr)
         for (const ee of data.emergencyEvents ?? []) this.emergencyEvents.set(ee.id, ee)
+        for (const wp of data.webPushSubs ?? []) this.webPushSubs.set(wp.endpoint, wp)
       } catch {
         /* 损坏的文件忽略，从空开始 */
       }
@@ -1332,6 +1370,7 @@ export class JsonFileStore extends MemoryStore {
       notifications: [...this.notifications.values()],
       savedRoutes: [...this.savedRoutes.values()],
       emergencyEvents: [...this.emergencyEvents.values()],
+      webPushSubs: [...this.webPushSubs.values()],
     }
     // 原子写：先写临时文件再 rename 覆盖。writeFileSync 直写在写入中途崩溃/断电/磁盘满时会留下**半写**
     // 的 JSON——下次启动 JSON.parse 失败→构造函数按"损坏忽略、从空开始"处理→**静默全量丢数据**。

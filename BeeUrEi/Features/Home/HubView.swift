@@ -208,6 +208,11 @@ struct HubView: View {
                 tile(HomeStrings.tileRecordings(lang), systemImage: "waveform.circle.fill",
                      hint: HomeStrings.hintRecordings(lang)) { showRecordings = true }
             }
+            // SOS 可视入口：自动摔倒检测/语音"救命"之外的第三条路（嘈杂环境语音可能识别不了、
+            // 轻摔可能不触发检测）。manualSOS 自带 30s 倒计时+响亮播报+可取消覆盖层，误触安全；
+            // 不设 feature 门控——紧急告警端点本就不受功能开关约束（安全底线不可被关停）。
+            tile(HomeStrings.tileSOS(lang), systemImage: "sos.circle.fill",
+                 hint: HomeStrings.hintSOS(lang)) { emergency.manualSOS() }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(HomeStrings.sectionConnect(lang))

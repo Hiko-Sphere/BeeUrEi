@@ -45,6 +45,13 @@ enum HomeStrings {
         l == .zh ? "与亲友/协助者互相共享当前位置" : "Share your live location with family and helpers"
     }
     /// 亲友与紧急呼叫（管理亲友、设紧急联系人、呼叫家人）——从设置移到首屏的主要功能。
+    /// SOS 磁贴：手动紧急求救的可视入口（自动检测/语音"救命"之外的第三条路——嘈杂环境语音可能识别不了）。
+    static func tileSOS(_ l: Language) -> String { l == .zh ? "紧急求救" : "Emergency SOS" }
+    static func hintSOS(_ l: Language) -> String {
+        l == .zh ? "点按后 30 秒倒计时，可随时取消；倒计时结束通知全部亲友并附你的位置"
+                 : "Starts a 30-second cancellable countdown, then alerts all your contacts with your location"
+    }
+
     static func tileFamily(_ l: Language) -> String { l == .zh ? "亲友与紧急" : "Family & SOS" }
     static func hintFamily(_ l: Language) -> String {
         l == .zh ? "管理亲友、设置紧急联系人、直接呼叫家人；摔倒报警也会通知这里的家人"

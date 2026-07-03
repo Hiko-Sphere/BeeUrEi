@@ -119,6 +119,10 @@ struct ObstacleModeView: View {
     private var quickActionItems: [ObstacleQuickActionItem] {
         func reason(_ on: Bool) -> String? { on ? nil : HomeStrings.featureOff(lang) }
         return [
+            // SOS 置顶且永不禁用：避障行走是摔倒风险最高的场景，此处必须一步可达（呼叫协助已在
+            // 常驻控制条，SOS 是更强的告警广播——与语音 .sos/.help 分家同一语义）。
+            .init(action: .sos, title: HomeStrings.tileSOS(lang), systemImage: "sos.circle.fill",
+                  disabledReason: nil),
             .init(action: .look, title: HomeStrings.tileLook(lang), systemImage: "viewfinder",
                   disabledReason: reason(session.features.sceneScan)),
             .init(action: .navigate, title: HomeStrings.tileNav(lang), systemImage: "signpost.right.fill",
@@ -143,6 +147,9 @@ struct ObstacleModeView: View {
         guard let a = pendingQuick else { return }
         pendingQuick = nil
         switch a {
+        // SOS：触发后 Hub 侧 onChange(emergency.phase) 会 collapseAll() 收起避障全屏，
+        // 倒计时覆盖层（含取消大按钮）随即可见——呈现链路复用摔倒检测的既有路径。
+        case .sos: EmergencyAlertCenter.shared.manualSOS()
         case .look: showFraming = true
         case .navigate: showNavigation = true
         case .weather: weatherSpeaker.announce()
@@ -330,7 +337,7 @@ struct ObstacleModeView: View {
 }
 
 /// 避障内「快捷操作」可选的动作（与主页 HubView 的动作集一致；求助/重复/我在哪已常驻控制条）。
-enum ObstacleQuickAction { case look, navigate, weather, around, ahead, messages, location, settings }
+enum ObstacleQuickAction { case sos, look, navigate, weather, around, ahead, messages, location, settings }
 
 /// 一个快捷操作磁贴的描述：标题/图标 + 可选「禁用原因」（功能关闭时朗读，不用 .disabled）。
 struct ObstacleQuickActionItem: Identifiable {

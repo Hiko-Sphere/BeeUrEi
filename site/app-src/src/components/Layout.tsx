@@ -84,6 +84,10 @@ export function Layout({ children }: { children: ReactNode }) {
   return (
     <CallProvider>
       <div className="min-h-dvh">
+        {/* 跳到主要内容（WCAG 2.4.1 绕过区块，Level A）：键盘/读屏用户每进一页无需 Tab 穿过顶栏
+            + 侧栏 ~14 个焦点即可直达正文。平时 sr-only 隐藏，获焦时现身（focus:not-sr-only）。
+            用原生锚点（非 router Link）做同页片段跳转，浏览器把焦点移到可聚焦的 #main。 */}
+        <a href="#main" className="skip-link">{t('跳到主要内容', 'Skip to main content')}</a>
         {/* 路由切换朗读：持久隐藏 aria-live 区，路由变化时播报当前页名，读屏用户跳转后知道身处何页。 */}
         <div aria-live="polite" aria-atomic="true" className="sr-only">{activeLabel}</div>
         {/* 全站公告 / 维护横幅 */}
@@ -136,7 +140,8 @@ export function Layout({ children }: { children: ReactNode }) {
           <aside className="sticky top-20 hidden h-fit w-52 shrink-0 flex-col gap-1 md:flex">
             {nav.map((n) => <NavItemLink key={n.to} item={n} />)}
           </aside>
-          <main className="min-w-0 flex-1">{children}</main>
+          {/* id/tabIndex=-1：skip 链接的跳转目标；获焦不描全宽外框（正文已由 aria-live 播报页名提供上下文）。 */}
+          <main id="main" tabIndex={-1} className="min-w-0 flex-1 outline-none">{children}</main>
         </div>
 
         {/* 底部标签栏（移动）：横向可滚动，容纳全部入口，绝不裁切（任意角色项数都可达）。 */}

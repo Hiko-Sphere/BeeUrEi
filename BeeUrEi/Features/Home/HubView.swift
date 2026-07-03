@@ -414,6 +414,7 @@ struct HubView: View {
         case .describePeople: route.pendingChannel = .people; showFraming = true
         case .readLight: route.pendingChannel = .light; showFraming = true
         case .readColor: route.pendingChannel = .color; showFraming = true
+        case .find(let obj): route.pendingFind = obj; showFraming = true // 找具体物品（Framing 首帧据 resolver 派发）
         case .navigate(let dest):
             if let dest { AppRoute.shared.pendingNavAction = .search(dest) }
             showNavigation = true

@@ -84,6 +84,18 @@ final class VoiceCommandParserTests: XCTestCase {
         XCTAssertEqual(VoiceCommandParser.parse("how bright is it"), .readLight)
     }
 
+    /// 找具体物品：提取物名；泛指"找东西"不作为具体 find（交 UI 菜单）。
+    func testFindSpecificObject() {
+        XCTAssertEqual(VoiceCommandParser.parse("找我的钥匙"), .find("钥匙"))
+        XCTAssertEqual(VoiceCommandParser.parse("帮我找水杯"), .find("水杯"))
+        XCTAssertEqual(VoiceCommandParser.parse("找钥匙"), .find("钥匙"))
+        XCTAssertEqual(VoiceCommandParser.parse("find my keys"), .find("keys"))
+        XCTAssertEqual(VoiceCommandParser.parse("where's my wallet"), .find("wallet"))
+        // 泛指"找东西"/空 → 不是具体 find（不返回 .find）。
+        XCTAssertNotEqual(VoiceCommandParser.parse("找东西"), .find("东西"))
+        XCTAssertNotEqual(VoiceCommandParser.parse("找我的东西"), .find("我的东西"))
+    }
+
     /// 颜色识别（配衣服/比色刚需）须先于通用「看一看」匹配。
     func testReadColorBeatsLookOnOverlap() {
         XCTAssertEqual(VoiceCommandParser.parse("这是什么颜色"), .readColor) // 含"这是什么"，不得被 look 抢

@@ -23,6 +23,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case readColor                  // 识别颜色（配衣服/比色）
     case messages                   // 打开消息
     case sendMessage(to: String, text: String) // 给X发消息说Y
+    case find(String)               // 找某个具体物品（已教物品或可找类别，如"找我的钥匙"/"find my keys"）
     case repeatLast                 // 重复刚才的播报
     case unknown
 }
@@ -37,6 +38,9 @@ public enum VoiceCommandParser {
 
         // 发消息（含目标与内容）优先解析：「给妈妈发消息说我到了」/ "send a message to mom saying I arrived"
         if let m = parseSendMessage(text) { return m }
+
+        // 找具体物品：「找我的钥匙」/「帮我找水杯」/ "find my keys"（泛指"找东西"不算，交由 UI 菜单）。
+        if let obj = parseFindTarget(text) { return .find(obj) }
 
         func has(_ keys: [String]) -> Bool { keys.contains { t.contains($0) } }
 
@@ -82,6 +86,28 @@ public enum VoiceCommandParser {
             if let r = lower.range(of: p) {
                 let dest = String(text[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
                 return dest.isEmpty ? nil : dest
+            }
+        }
+        return nil
+    }
+
+    /// 提取"找<物品>"的物品名；泛指（东西/物品/things）或空则返回 nil（不作为具体 find，交 UI 菜单）。
+    /// 中文长前缀先匹配（"找我的X"取 X 而非"我的X"）；避免把"找东西"当具体物品。
+    static func parseFindTarget(_ text: String) -> String? {
+        let generic: Set<String> = ["东西", "我的东西", "物品", "东西们", "things", "something", "stuff", "my stuff", "my things", "my belongings"]
+        for p in ["帮我找找", "帮我找", "找一下我的", "找一下", "找找我的", "找找", "找我的", "找"] {
+            if let r = text.range(of: p) {
+                let x = String(text[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                if x.isEmpty || generic.contains(x) { return nil }
+                return x
+            }
+        }
+        let lower = text.lowercased()
+        for p in ["help me find my ", "help me find ", "find my ", "where is my ", "where's my ", "locate my ", "find ", "locate "] {
+            if let r = lower.range(of: p) {
+                let x = String(text[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                if x.isEmpty || generic.contains(x.lowercased()) { return nil }
+                return x
             }
         }
         return nil

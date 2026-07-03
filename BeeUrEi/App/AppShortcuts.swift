@@ -12,6 +12,8 @@ final class AppRoute {
     enum FramingChannel { case banknote, scan, fullPage, bus, people, light, text, color }
     var pending: Destination?
     var pendingChannel: FramingChannel?
+    /// 语音指令："找我的钥匙"→ 打开识别屏并按物名找东西（已教物品或可找类别，由 FindTargetResolver 派发）。
+    var pendingFind: String?
     /// 语音指令：导航屏待执行动作（预填目的地搜索 / 一键原路返回）。
     enum NavAction: Equatable { case search(String), backtrack }
     var pendingNavAction: NavAction?

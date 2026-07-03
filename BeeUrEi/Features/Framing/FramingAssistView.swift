@@ -72,6 +72,18 @@ final class FramingAssistViewModel {
         queuedChannel = channel
     }
 
+    /// 语音"找<物名>"：按物名派发——已教物品 → startFinding；可找类别 → startCategoryFind；都不匹配 → 提示。
+    /// 需在 refreshTaughtItems() 之后调用（taughtItems 已就绪）。核心解析用 FindTargetResolver（已测）。
+    func queueFind(_ name: String?) {
+        guard let name, !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        let cats = FramingAssistViewModel.findableCategories.map { (label: $0, name: categoryName($0)) }
+        switch FindTargetResolver.resolve(spoken: name, taughtNames: taughtItems, categories: cats) {
+        case .taught(let t): startFinding(t)
+        case .category(let label): startCategoryFind(label: label)
+        case .none: speak(FramingStrings.findNotRecognized(name, lang))
+        }
+    }
+
     private func runChannel(_ channel: AppRoute.FramingChannel) {
         // 切到光探测以外的任何动作：先停连续光探测音调，避免它与识别结果播报/其它模式抢声。
         if channel != .light { stopContinuous() }
@@ -1118,6 +1130,9 @@ struct FramingAssistView: View {
             // Siri 频道直达：取走待执行频道（无快捷指令进入时为 nil，无副作用）。
             model.queueChannel(AppRoute.shared.pendingChannel)
             AppRoute.shared.pendingChannel = nil
+            // 语音"找我的钥匙"：按物名派发到已教物品/可找类别（refreshTaughtItems 后，taughtItems 已就绪）。
+            model.queueFind(AppRoute.shared.pendingFind)
+            AppRoute.shared.pendingFind = nil
         }
         .onDisappear { model.stop(); Torch.set(false); ScreenWake.release("framing") }
         // VoiceOver 魔法轻点（双指双击）= 主操作"前方有什么"（Seeing AI 同款惯例）。

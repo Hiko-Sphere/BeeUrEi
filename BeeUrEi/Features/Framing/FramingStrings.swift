@@ -65,6 +65,11 @@ enum FramingStrings {
     static func noRecord(_ name: String, _ l: Language) -> String {
         l == .zh ? "没有找到\(name)的学习记录" : "No training record for \(name)"
     }
+    /// 语音"找X"但 X 既非已教物品也非可找类别：提示先教或换常见物名。
+    static func findNotRecognized(_ name: String, _ l: Language) -> String {
+        l == .zh ? "还不认识\(name)。可以先教我认它，或说一个常见物品，比如椅子、瓶子。"
+                 : "I don't recognize \(name) yet. Teach it first, or name a common object like a chair or bottle."
+    }
     static func findingGuidance(_ name: String, _ l: Language) -> String { l == .zh ? "寻找：\(name)" : "Finding: \(name)" }
     static func findStartTaught(_ name: String, _ l: Language) -> String {
         l == .zh ? "开始找\(name)。拿着手机慢慢左右移动扫一圈，对到了我会告诉你方位。"

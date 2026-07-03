@@ -114,14 +114,47 @@ describe('路线库（亲友远程路线编排 Phase 1：服务端）', () => {
     const upd = await app.inject({ method: 'PUT', url: `/api/routes/${id}`, headers: family.h, payload: { name: '家到新菜场' } })
     expect(upd.statusCode).toBe(200)
     expect(upd.json().route.name).toBe('家到新菜场')
-    // 无关者编辑/删除 → 404
+    // 无关者编辑 → 404（不泄露存在性）；无关者删除 → 204 no-op（幂等且不泄露存在性 oracle）
     expect((await app.inject({ method: 'PUT', url: `/api/routes/${id}`, headers: stranger.h, payload: { name: 'x' } })).statusCode).toBe(404)
-    expect((await app.inject({ method: 'DELETE', url: `/api/routes/${id}`, headers: stranger.h })).statusCode).toBe(404)
+    expect((await app.inject({ method: 'DELETE', url: `/api/routes/${id}`, headers: stranger.h })).statusCode).toBe(204)
     // 空补丁 → 400
     expect((await app.inject({ method: 'PUT', url: `/api/routes/${id}`, headers: blind.h, payload: {} })).statusCode).toBe(400)
     // 归属者删除 → 204；重复删除幂等 204
     expect((await app.inject({ method: 'DELETE', url: `/api/routes/${id}`, headers: blind.h })).statusCode).toBe(204)
     expect((await app.inject({ method: 'DELETE', url: `/api/routes/${id}`, headers: blind.h })).statusCode).toBe(204)
+    await app.close()
+  })
+
+  it('拉黑后绘制者不可改写/删除/读取盲人路线（使用时刻复查，非只在建路线时）', async () => {
+    const { app, blind, family } = await setup()
+    const id = (await app.inject({ method: 'POST', url: '/api/routes', headers: family.h,
+      payload: { forUserId: blind.id, name: '家到菜场', waypoints: WP } })).json().route.id
+    // 盲人拉黑亲友
+    await app.inject({ method: 'POST', url: '/api/blocks', headers: blind.h, payload: { userId: family.id } })
+    // 绘制者 PUT → 403 blocked（不能静默改写盲人实地执行的路线）
+    const upd = await app.inject({ method: 'PUT', url: `/api/routes/${id}`, headers: family.h, payload: { name: '恶意改名' } })
+    expect(upd.statusCode).toBe(403)
+    expect(upd.json().error).toBe('blocked')
+    // 绘制者 DELETE → 204 no-op（不泄露存在性），但路线实际未被删
+    expect((await app.inject({ method: 'DELETE', url: `/api/routes/${id}`, headers: family.h })).statusCode).toBe(204)
+    expect((await app.inject({ method: 'GET', url: '/api/routes', headers: blind.h })).json().routes).toHaveLength(1)
+    // 绘制者 GET → 不再看到该盲人的路线
+    expect((await app.inject({ method: 'GET', url: '/api/routes', headers: family.h })).json().routes).toHaveLength(0)
+    await app.close()
+  })
+
+  it('航点 note 过违禁词过滤（唯一直达盲人 TTS 的自由文本）：建/改两路径命中 → 403', async () => {
+    const { app, store, blind } = await setup()
+    store.setAppConfig({ contentFilter: { enabled: true, terms: ['badword'] } })
+    const create = await app.inject({ method: 'POST', url: '/api/routes', headers: blind.h,
+      payload: { name: '干净名', waypoints: [{ lat: 31.2, lng: 121.4, note: '含 BADWORD 的备注' }, WP[0]] } })
+    expect(create.statusCode).toBe(403)
+    expect(create.json().error).toBe('content_blocked')
+    // 先建干净路线，再 PUT 注入违禁 note → 403
+    const id = (await app.inject({ method: 'POST', url: '/api/routes', headers: blind.h, payload: { name: '干净', waypoints: WP } })).json().route.id
+    const upd = await app.inject({ method: 'PUT', url: `/api/routes/${id}`, headers: blind.h,
+      payload: { waypoints: [{ lat: 31.2, lng: 121.4, note: 'badword' }, WP[0]] } })
+    expect(upd.statusCode).toBe(403)
     await app.close()
   })
 

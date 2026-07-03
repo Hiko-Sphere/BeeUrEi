@@ -35,6 +35,9 @@ enum NavStrings {
     static func myRoutesHeader(_ l: Language) -> String { l == .zh ? "我的路线" : "My routes" }
     static func routesEmpty(_ l: Language) -> String { l == .zh ? "还没有保存的路线。亲友可在网页端为你绘制常走路线。" : "No saved routes yet. Family can draw routes for you on the web." }
     static func routesLoadFailed(_ l: Language) -> String { l == .zh ? "路线加载失败" : "Failed to load routes" }
+    static func routesLoadFailedRetry(_ l: Language) -> String { l == .zh ? "路线加载失败，点此重试" : "Failed to load routes — tap to retry" }
+    static func routesRetryHint(_ l: Language) -> String { l == .zh ? "点两下重新加载路线" : "Double-tap to reload routes" }
+    static func routesLoading(_ l: Language) -> String { l == .zh ? "正在加载路线…" : "Loading routes…" }
     // 断网降级（缓存路线，#8）：明确告知"用的是旧路线"与风险——绝不静默换路线。
     static func offlineRouteFallbackSpeak(_ days: Int, _ l: Language) -> String {
         if l == .zh {

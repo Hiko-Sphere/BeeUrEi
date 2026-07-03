@@ -9,9 +9,10 @@ struct WalkNavigationView: View {
     /// 避免国内用户用语音"带我去X"时被错误的海外引擎路由（见 P2 审计）。
     @AppStorage("nav.region") private var regionRaw = ""
     @State private var favorites: [String] = []
-    // 路线库（亲友编排/自存，服务端）：仅列可执行的（role=owner）；加载失败静默显示重试行。
+    // 路线库（亲友编排/自存，服务端）：仅列可执行的（role=owner）；加载失败显示可点重试行。
     @State private var savedRoutes: [APIClient.SavedRouteInfo] = []
     @State private var routesFailed = false
+    @State private var routesLoaded = false // 首次加载完成前不显示"还没有路线"终态（避免对 VoiceOver 断言式误报）
     let onClose: () -> Void
 
     /// 导航屏文案语言（E5）。
@@ -26,6 +27,7 @@ struct WalkNavigationView: View {
         } catch {
             routesFailed = true
         }
+        routesLoaded = true
     }
 
     var body: some View {
@@ -111,7 +113,12 @@ struct WalkNavigationView: View {
                 // 我的路线（路线库）：亲友在网页端替我画的常走路线 + 我自存的；一键沿信标执行。
                 Section(NavStrings.myRoutesHeader(lang)) {
                     if routesFailed {
-                        Button(NavStrings.routesLoadFailed(lang)) { Task { await loadRoutes() } }
+                        Button { Task { await loadRoutes() } } label: {
+                            Text(NavStrings.routesLoadFailedRetry(lang)).foregroundStyle(.secondary)
+                        }
+                        .accessibilityHint(NavStrings.routesRetryHint(lang))
+                    } else if !routesLoaded {
+                        Text(NavStrings.routesLoading(lang)).font(.footnote).foregroundStyle(.secondary)
                     } else if savedRoutes.isEmpty {
                         Text(NavStrings.routesEmpty(lang)).font(.footnote).foregroundStyle(.secondary)
                     } else {

@@ -40,6 +40,14 @@ function canEdit(r: SavedRoute, userId: string): boolean {
   return r.ownerId === userId || r.createdBy === userId
 }
 
+/// 航点备注（note）会被 iOS 端作为逐航点指令用 TTS 念给盲人——是唯一直达盲人听觉的自由文本，
+/// 必须与 name 同口径过违禁词过滤，否则拉黑关系/骚扰内容可绕过管控直接播报给视障用户。
+function anyNoteBlocked(store: Store, waypoints: { note?: string }[] | undefined): boolean {
+  if (!waypoints) return false
+  const cfg = store.getAppConfig()
+  return waypoints.some((w) => w.note != null && matchBannedTerm(cfg, w.note) != null)
+}
+
 export function registerSavedRouteRoutes(app: FastifyInstance, store: Store): void {
   // 建路线：给自己，或给 accepted 互链且无拉黑的联系人（亲友替盲人画路线的主通道）。
   app.post('/api/routes', { preHandler: requireAuth() }, async (req, reply) => {
@@ -53,7 +61,9 @@ export function registerSavedRouteRoutes(app: FastifyInstance, store: Store): vo
       if (isBlockedBetween(store, me, ownerId)) return reply.code(403).send({ error: 'blocked' })
       if (!areLinked(store, me, ownerId)) return reply.code(403).send({ error: 'not_linked' })
     }
-    if (matchBannedTerm(store.getAppConfig(), parsed.data.name)) return reply.code(403).send({ error: 'content_blocked' })
+    if (matchBannedTerm(store.getAppConfig(), parsed.data.name) || anyNoteBlocked(store, parsed.data.waypoints)) {
+      return reply.code(403).send({ error: 'content_blocked' })
+    }
     if (store.savedRoutesForUser(ownerId).length >= MAX_ROUTES_PER_OWNER) {
       return reply.code(429).send({ error: 'route_limit' })
     }
@@ -68,24 +78,29 @@ export function registerSavedRouteRoutes(app: FastifyInstance, store: Store): vo
   })
 
   // 我的路线（owner 维度）+ 我替别人画的（creator 维度），去重合并、updatedAt 倒序。
+  // 已拉黑的 owner：不再回传我替其画的路线（与其他交互面同口径，使用时刻复查拉黑，不只在建路线时）。
   app.get('/api/routes', { preHandler: requireAuth() }, async (req) => {
     const me = req.user!.sub
     const seen = new Set<string>()
     const merged = [...store.savedRoutesForUser(me), ...store.savedRoutesByCreator(me)]
       .filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)))
+      .filter((r) => r.ownerId === me || !isBlockedBetween(store, me, r.ownerId))
       .sort((a, b) => b.updatedAt - a.updatedAt)
     return { routes: merged.map((r) => routeView(r, me)) }
   })
 
   // 改路线（名称/航点）：归属者或绘制者。绘制者与归属者已解绑后仍可编辑其画的路线——
-  // 归属者不认可时可删除该路线（资产归属权在 owner）。
+  // 但**已拉黑**则不可（拉黑=明确不信任，绝不能让其静默改写盲人实地执行的路线；使用时刻复查，与全站同口径）。
   app.put('/api/routes/:id', { preHandler: requireAuth() }, async (req, reply) => {
     const id = (req.params as { id: string }).id
     const parsed = updateSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const route = store.findSavedRoute(id)
     if (!route || !canEdit(route, req.user!.sub)) return reply.code(404).send({ error: 'not_found' })
-    if (parsed.data.name && matchBannedTerm(store.getAppConfig(), parsed.data.name)) {
+    if (req.user!.sub !== route.ownerId && isBlockedBetween(store, req.user!.sub, route.ownerId)) {
+      return reply.code(403).send({ error: 'blocked' })
+    }
+    if ((parsed.data.name && matchBannedTerm(store.getAppConfig(), parsed.data.name)) || anyNoteBlocked(store, parsed.data.waypoints)) {
       return reply.code(403).send({ error: 'content_blocked' })
     }
     const updated = store.updateSavedRoute(id, {
@@ -96,12 +111,13 @@ export function registerSavedRouteRoutes(app: FastifyInstance, store: Store): vo
     return { route: routeView(updated, req.user!.sub) }
   })
 
-  // 删路线：归属者或绘制者；幂等（gone→204，与 deleteLink/deleteBlock 同式）。
+  // 删路线：归属者或绘制者；幂等（gone→204）。无权（含已拉黑的绘制者）一律 204 no-op——
+  // 既保幂等又不泄露存在性（204/404 分叉本会成为存在性 oracle，违背"404 不泄露"设计）。
   app.delete('/api/routes/:id', { preHandler: requireAuth() }, async (req, reply) => {
     const id = (req.params as { id: string }).id
     const route = store.findSavedRoute(id)
-    if (!route) return reply.code(204).send()
-    if (!canEdit(route, req.user!.sub)) return reply.code(404).send({ error: 'not_found' })
+    const blockedCreator = route && req.user!.sub !== route.ownerId && isBlockedBetween(store, req.user!.sub, route.ownerId)
+    if (!route || !canEdit(route, req.user!.sub) || blockedCreator) return reply.code(204).send()
     store.deleteSavedRoute(id)
     return reply.code(204).send()
   })

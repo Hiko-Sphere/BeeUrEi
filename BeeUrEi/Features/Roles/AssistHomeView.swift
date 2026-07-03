@@ -55,9 +55,10 @@ struct AssistHomeView: View {
         .task { await onAppear() }
         // 匹配/认领状态变化主动朗读——盲人/低视力协助者点完按钮才有语音反馈（见无障碍审计）。
         .onChange(of: statusText) { _, new in if let new, !new.isEmpty { A11y.announce(new) } }
-        // 来电(铃响或已接入)时，关掉本页可能占用的模态(匹配卡/偏好/添加)，否则根层来电界面会被吞（见来电链路深审 #3）。
+        // 来电(铃响或已接入)时，关掉本页可能占用的模态(匹配卡/偏好/添加/守则卡)，否则根层来电界面会被吞（见来电链路深审 #3）。
+        // 守则卡必须一并关闭：否则它占着 sheet 使来电被吞，而来电 callId 已被 pollIncoming 标记 dismissed → 永不再弹（复审 HIGH）。
         .onChange(of: incomingCenter.hasIncoming) { _, inCall in
-            if inCall { matched = nil; prefsShown = false; showAddFamily = false }
+            if inCall { matched = nil; prefsShown = false; showAddFamily = false; afterGuideline = nil; guidelineShown = false }
         }
         .onDisappear { stopTasks(goOffline: true) }
         // 打开 App 即在线（无手动待命开关）：回到前台立即恢复心跳；退后台停发心跳，
@@ -213,13 +214,13 @@ struct AssistHomeView: View {
         .presentationDetents([.medium, .large])
     }
 
-    /// 确认守则：服务端留痕（失败不阻塞，下次会话仍会展示）→ 标记内存态 → 收卡（onDismiss 续跑原动作）。
+    /// 确认守则：**先同步标记内存态**再收卡——若先 await 留痕，用户在网络在途时下滑关卡会让 onDismiss
+    /// 读到未标记态而丢弃续跑动作（复审 LOW）。留痕在后台进行，失败不阻塞（下次会话仍会展示，keep-first 幂等）。
     private func confirmGuideline() {
-        let token = session.token
-        Task {
-            if let token { try? await APIClient().ackHelperGuideline(token: token) }
-            session.markGuidelineAcked()
-            guidelineShown = false
+        session.markGuidelineAcked()
+        guidelineShown = false
+        if let token = session.token {
+            Task { try? await APIClient().ackHelperGuideline(token: token) }
         }
     }
 
@@ -364,6 +365,12 @@ struct AssistHomeView: View {
     private func callBound(_ l: FamilyLinkInfo) async {
         guard answering == nil, matched == nil, pendingAnswer == nil,
               !IncomingCallCenter.shared.hasIncoming, let token = session.token else { return }
+        // 主动呼叫也是"实地协助"的一种，与认领/匹配同门控：首次须过协助守则闸门（与 web 呼出路径一致）。
+        if session.user?.helperGuidelineAckAt == nil {
+            afterGuideline = { Task { await callBound(l) } }
+            guidelineShown = true
+            return
+        }
         let callId = UUID().uuidString
         do {
             try await APIClient().startEmergencyCall(token: token, callId: callId, targetUserIds: [l.memberId])

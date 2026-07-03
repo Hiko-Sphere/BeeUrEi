@@ -30,4 +30,20 @@ final class NavStringsTests: XCTestCase {
         XCTAssertEqual(NavStrings.geocodeLocale(.zh).identifier, "zh_CN")
         XCTAssertEqual(NavStrings.geocodeLocale(.en).identifier, "en_US")
     }
+
+    // 离线降级播报（#8）：含"今天/N 天前"分支——复审点名的唯一带真实分支逻辑的新文案。
+    func testOfflineFallbackSpeakBranches() {
+        XCTAssertTrue(NavStrings.offlineRouteFallbackSpeak(0, .zh).contains("今天"))
+        XCTAssertTrue(NavStrings.offlineRouteFallbackSpeak(3, .zh).contains("3 天前"))
+        XCTAssertTrue(NavStrings.offlineRouteFallbackSpeak(0, .en).contains("today"))
+        XCTAssertTrue(NavStrings.offlineRouteFallbackSpeak(1, .en).contains("1 day ago"))
+        XCTAssertTrue(NavStrings.offlineRouteFallbackSpeak(3, .en).contains("3 days ago")) // 复数
+        // 所有降级播报都须含"道路可能已变化/慢行"的安全提醒
+        XCTAssertTrue(NavStrings.offlineRouteFallbackSpeak(2, .zh).contains("谨慎"))
+        // 汇入/原路返回/离线路线文案：英文不混中文
+        for s in [NavStrings.rejoinRoute(.en), NavStrings.offRouteReturnToPath(.en),
+                  NavStrings.offlineRouteStatus(3, .en), NavStrings.customRouteStartSpeak("Home", .en)] {
+            XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文混中文：\(s)")
+        }
+    }
 }

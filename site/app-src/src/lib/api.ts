@@ -146,10 +146,12 @@ async function rawFetch(method: string, path: string, body: unknown, auth: boole
   let data: unknown = null
   try { data = await res.json() } catch { /* 204 等空体 */ }
   if (!res.ok) {
+    const bodyCode = (data && typeof data === 'object' && 'error' in data) ? String((data as { error: unknown }).error) : ''
     // 429 归一：全局限流返回 fastify 文案串、assist 端点返回 'too_many_requests'、空体→http_429——统一成
     // 'too_many_requests'，让错误映射给出"稍候再试"而非笼统"请重试"（立刻重试只会再次撞限流）。
-    if (res.status === 429) throw new APIError('too_many_requests', 429)
-    const code = (data && typeof data === 'object' && 'error' in data) ? String((data as { error: unknown }).error) : `http_${res.status}`
+    // 例外：route_limit 是**语义上限**（对方路线数已满），非限流，须原样上抛供专属文案（否则被误报"太频繁"）。
+    if (res.status === 429) throw new APIError(bodyCode === 'route_limit' ? 'route_limit' : 'too_many_requests', 429)
+    const code = bodyCode || `http_${res.status}`
     throw new APIError(code, res.status)
   }
   return data

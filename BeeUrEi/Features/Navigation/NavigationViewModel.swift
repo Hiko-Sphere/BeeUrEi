@@ -198,18 +198,25 @@ final class NavigationViewModel {
             // 盲人引上未验证的路（评审安全不变量）。改为指向最近的前方航点重新汇入（核心 RouteRejoin，已测）；
             // 前方无可达航点（>150m）则明确播报请原路返回，不乱指。
             if customRouteActive {
-                if let idx = RouteRejoin.rejoinIndex(lat: lat, lon: lon, waypoints: routeCoords, currentIndex: stepIndex) {
+                // 汇入判定必须用 **maneuvers 的坐标**而非 routeCoords：stepIndex 索引的是 maneuvers。
+                // 自定义路线两者恰好等长掩盖了错配——缓存路线（#8 降级）的 routeCoords 是整条折线
+                // （偏航检测用，点数远多于转向点），拿折线索引赋给 stepIndex 会指向错误转向点。
+                let turnPoints = maneuvers.map { Coordinate(lat: $0.0.latitude, lon: $0.0.longitude) }
+                if let idx = RouteRejoin.rejoinIndex(lat: lat, lon: lon, waypoints: turnPoints, currentIndex: stepIndex) {
                     stepIndex = min(idx, maneuvers.count)
+                    // 改了目标航点必须重置越过波谷基线：否则陈旧 minDist（偏航时距离已增大）会让下一帧的
+                    // "距离回升 > minDist+3m" 立即成立，把刚汇入的航点误判"已越过"而静默跳掉（复审 HIGH）。
+                    waypointAdvance.reset()
                     instruction = NavStrings.rejoinRoute(lang)
-                    speak(NavStrings.rejoinRoute(lang))
+                    forceSpeak(NavStrings.rejoinRoute(lang))
                 } else {
                     instruction = NavStrings.offRouteReturnToPath(lang)
-                    speak(NavStrings.offRouteReturnToPath(lang))
+                    forceSpeak(NavStrings.offRouteReturnToPath(lang))
                 }
                 return
             }
             instruction = NavStrings.offRoute(lang)
-            speak(NavStrings.offRoute(lang))
+            forceSpeak(NavStrings.offRoute(lang))
             replanning = true    // 立即门控住旧路线引导
             routeReady = false   // 下次定位触发重规划
             return
@@ -266,7 +273,7 @@ final class NavigationViewModel {
         // 转向播报（精度门控，核心 RouteProgress，已测）。
         let next = maneuvers[stepIndex]
         let distance = Geo.distanceMeters(fromLat: lat, fromLon: lon, toLat: next.coordinate.latitude, toLon: next.coordinate.longitude)
-        let decision = progress.decide(distanceToManeuverMeters: distance, instruction: next.instruction, level: level)
+        let decision = progress.decide(distanceToManeuverMeters: distance, instruction: next.instruction, level: level, language: lang)
         if decision.shouldAnnounce, let text = decision.text {
             instruction = text
             speak(text)
@@ -345,15 +352,15 @@ final class NavigationViewModel {
                     switch code {
                     case "destination_not_found": failStatus(NavStrings.destinationNotFound(lang)) // 地址错，缓存也救不了
                     case "amap_error", "amap_not_configured", "nav_unavailable":
-                        if fallbackToCachedRoute() { return } // 服务侧问题 → 缓存路线顶上（#8）
+                        if fallbackToCachedRoute(from: loc) { return } // 服务侧问题 → 缓存路线顶上（#8）
                         failStatus(NavStrings.navServiceUnavailable(lang))
                     default:
-                        if fallbackToCachedRoute() { return }
+                        if fallbackToCachedRoute(from: loc) { return }
                         failStatus(NavStrings.chinaRouteFailed(lang))
                     }
                 } else {
                     // 非服务端错误 = 网络断/超时——正是离线降级的主场景。
-                    if fallbackToCachedRoute() { return }
+                    if fallbackToCachedRoute(from: loc) { return }
                     failStatus(NavStrings.chinaRouteFailed(lang))
                 }
             }
@@ -369,7 +376,7 @@ final class NavigationViewModel {
             } else {
                 guard running, gen == navGeneration else { return }
                 // 离线时 geocode 必然失败——有缓存则顶上（缓存自带目的地坐标），没有才报"找不到"。
-                if fallbackToCachedRoute() { return }
+                if fallbackToCachedRoute(from: loc) { return }
                 failStatus(NavStrings.destinationNotFound(lang)); return
             }
             let m = await service.walkingManeuvers(from: loc.coordinate, to: dest)
@@ -385,7 +392,7 @@ final class NavigationViewModel {
             if previewing { narratePreview(); return } // 预览：不进实时跟踪，逐步试听
             if m.isEmpty {
                 // MapKit 离线/无网时返回空——有缓存则顶上（#8）。
-                if fallbackToCachedRoute() { return }
+                if fallbackToCachedRoute(from: loc) { return }
                 failStatus(NavStrings.noWalkingRoute(lang))
             } else {
                 status = NavStrings.navStartedStatus(m.count, lang)
@@ -400,6 +407,13 @@ final class NavigationViewModel {
         guard text != lastSpoken else { return }
         lastSpoken = text
         // 经共享导航语音通道：避障 obstacle/critical 播报会掐断它（跨通道仲裁，Phase 2 标准）。
+        NavVoice.shared.speak(text, rate: FeatureSettings().speechRate)
+    }
+
+    /// 绕过去重的强制播报：用于**周期性重报**的告警（如偏航每 6s 重报）——这类告警按设计要反复念，
+    /// 而 speak() 的 lastSpoken 去重（防转向指令连播）会把第二次起全部吞掉，只播一次（复审 MED）。
+    private func forceSpeak(_ text: String) {
+        lastSpoken = text
         NavVoice.shared.speak(text, rate: FeatureSettings().speechRate)
     }
 
@@ -420,14 +434,24 @@ final class NavigationViewModel {
     /// 断网/服务失败时的降级：同目的地同地区且未过期（14 天）的缓存路线直接顶上。
     /// 成功返回 true（已接管状态与播报）。缓存路线离线执行期间偏航走 RouteRejoin 汇入
     /// （customRouteActive=true）——重规划刚失败过，再试只会反复失败打断引导。
-    private func fallbackToCachedRoute() -> Bool {
+    /// - Parameter loc: 当前定位（用于把起始转向点吸附到最近前方，避免从起点把已上路的用户往回带）。
+    private func fallbackToCachedRoute(from loc: CLLocation) -> Bool {
         guard !previewing else { return false } // 预览要最新路线，失败就如实报失败
         guard let e = PlannedRouteCacheStore().find(destination: destinationQuery,
                                                     regionRaw: region == .china ? "china" : "overseas") else { return false }
         maneuvers = e.maneuvers.map { (CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon), $0.instruction) }
         routeCoords = e.route
         destination = CLLocationCoordinate2D(latitude: e.destLat, longitude: e.destLon)
-        stepIndex = 0
+        // 起始转向点吸附到当前位置最近的前方转向点：降级常发生在旅途中途（重规划失败），无条件从
+        // stepIndex=0 起会让信标把已在路上的用户一路往回带（复审 MED）。坐标系需匹配缓存条目地区。
+        let (clat, clon): (Double, Double) = {
+            let c = loc.coordinate
+            guard e.regionRaw == "china" else { return (c.latitude, c.longitude) }
+            let g = ChinaCoord.wgs84ToGcj02(lat: c.latitude, lon: c.longitude)
+            return (g.lat, g.lon)
+        }()
+        let turnPoints = maneuvers.map { Coordinate(lat: $0.0.latitude, lon: $0.0.longitude) }
+        stepIndex = RouteRejoin.rejoinIndex(lat: clat, lon: clon, waypoints: turnPoints, currentIndex: 0) ?? 0
         waypointAdvance.reset()
         offRouteStreak = 0
         customRouteActive = true
@@ -604,12 +628,16 @@ final class NavigationViewModel {
     /// region=.overseas 即"不做 GCJ 纠偏"，与面包屑回程同约定；引导内核零改动）。
     func startCustomRoute(name: String, waypoints: [(lat: Double, lon: Double, note: String?)]) {
         lang = FeatureSettings().language
+        // 与 start() 同门控：导航功能被关时点路线须听到原因，不静默什么都不发生（复审 MED）。
+        guard FeatureSettings().navigationEnabled else { failStatus(NavStrings.enableFirst(lang)); return }
         guard waypoints.count >= 2 else { return } // 服务端已保证 >=2；纵深防御
-        let wasNavigating = running
+        let wasNavigating = running || previewing
         if running { stop() }
+        if previewing { stopPreview() } // 预览态残留会让旁白与路线引导叠读、按钮错标"停止预览"（复审 MED）
         if wasNavigating { speak(NavStrings.navStoppedForNew(lang)) }
         navGeneration += 1
         customRouteActive = true
+        previewing = false
         region = .overseas // WGS-84 原始坐标：绝不过 GCJ 纠偏分支（全栈坐标约定）
         destinationQuery = name
         maneuvers = waypoints.map { (CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),

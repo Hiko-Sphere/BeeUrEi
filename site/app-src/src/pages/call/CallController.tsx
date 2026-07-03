@@ -44,22 +44,33 @@ export function CallProvider({ children }: { children: ReactNode }) {
   // fail-safe：拉不到 me 时也展示卡（多看一次无害，漏看有害）；确认后本地缓存不再打扰。
   const [guidelinePrompt, setGuidelinePrompt] = useState<null | { resolve: (ok: boolean) => void }>(null)
   const guidelineAcked = useRef<boolean | null>(null) // null=未知（惰性拉 me）
+  // 并发协助动作（同时点呼叫+认领）共用同一张守则卡：多个等待者挂进同一队列，确认/关闭时一次性 resolve 全部，
+  // 避免第二次 setGuidelinePrompt 覆盖第一个 resolve 使首个动作永远挂起。
+  const guidelineWaiters = useRef<((ok: boolean) => void)[]>([])
+  const resolveGuideline = (ok: boolean) => {
+    const ws = guidelineWaiters.current; guidelineWaiters.current = []
+    setGuidelinePrompt(null)
+    ws.forEach((w) => w(ok))
+  }
+  const resolveGuidelineRef = useRef(resolveGuideline)
+  resolveGuidelineRef.current = resolveGuideline
   const ensureGuideline = useCallback(async (): Promise<boolean> => {
     if (guidelineAcked.current === true) return true
     if (guidelineAcked.current === null) {
       try { guidelineAcked.current = !!(await api.me()).helperGuidelineAckAt } catch { guidelineAcked.current = false }
       if (guidelineAcked.current) return true
     }
-    return new Promise<boolean>((resolve) => setGuidelinePrompt({ resolve }))
+    return new Promise<boolean>((resolve) => {
+      guidelineWaiters.current.push(resolve)
+      setGuidelinePrompt({ resolve: () => {} }) // 卡已展示；实际 resolve 走 guidelineWaiters
+    })
   }, [])
   const confirmGuideline = useCallback(async () => {
     try { await api.guidelineAck() } catch { /* 留痕失败不阻塞协助（下次仍会展示） */ }
     guidelineAcked.current = true
-    setGuidelinePrompt((cur) => { cur?.resolve(true); return null })
+    resolveGuidelineRef.current(true)
   }, [])
-  const dismissGuideline = useCallback(() => {
-    setGuidelinePrompt((cur) => { cur?.resolve(false); return null })
-  }, [])
+  const dismissGuideline = useCallback(() => { resolveGuidelineRef.current(false) }, [])
 
   const startOutgoing = useCallback(async (targetUserId: string, peerName: string, peerAvatar?: string | null) => {
     if (active) { toast(t('已有进行中的通话', 'A call is already in progress'), 'error'); return }

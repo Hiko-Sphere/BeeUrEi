@@ -7,6 +7,23 @@ function user(id: string, username: string): User {
 }
 
 describe('SqliteStore (node:sqlite)', () => {
+  it('文件库启用 WAL + NORMAL + busy_timeout（服务端标准配置；崩溃安全不降级）', () => {
+    const { mkdtempSync, rmSync } = require('node:fs') as typeof import('node:fs')
+    const { tmpdir } = require('node:os') as typeof import('node:os')
+    const { join } = require('node:path') as typeof import('node:path')
+    const dir = mkdtempSync(join(tmpdir(), 'beeurei-wal-'))
+    try {
+      const store = new SqliteStore(join(dir, 'wal.db')) as unknown as { db: { prepare: (s: string) => { get: () => any } }; backupTo: (p: string) => void }
+      expect(store.db.prepare('PRAGMA journal_mode').get().journal_mode).toBe('wal')
+      expect(Number(store.db.prepare('PRAGMA synchronous').get().synchronous)).toBe(1) // NORMAL
+      expect(Number(store.db.prepare('PRAGMA busy_timeout').get().timeout)).toBe(5000)
+      // WAL 下 VACUUM INTO 备份仍产出可恢复快照（写入 → 备份 → 重开查到）。
+      ;(store as unknown as SqliteStore).createUser(user('w1', 'waluser'))
+      store.backupTo(join(dir, 'snap.db'))
+      expect(new SqliteStore(join(dir, 'snap.db')).findByUsername('waluser')?.id).toBe('w1')
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+
   it('热路径索引存在（授权/拉黑/通话历史/媒体不退化为全表扫描）', () => {
     const store = new SqliteStore(':memory:') as unknown as { db: { prepare: (s: string) => { all: () => { name: string }[] } } }
     const names = new Set(store.db.prepare("SELECT name FROM sqlite_master WHERE type='index'").all().map((r) => r.name))

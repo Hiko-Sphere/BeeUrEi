@@ -27,6 +27,15 @@ export class SqliteStore implements Store {
   constructor(path: string) {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true })
     this.db = new DatabaseSync(path)
+    // 服务端 SQLite 标准配置（此前零 pragma = rollback journal + synchronous=FULL，每写全量 fsync）：
+    // - WAL：写不阻读、崩溃安全等级不降（WAL 本身即崩溃安全）、写路径 fsync 大幅减少；
+    //   产生 -wal/-shm 伴生文件（部署卷内，正常）。:memory: 下自动忽略（返回 'memory'），无害。
+    // - synchronous=NORMAL：WAL 下的推荐档——断电最坏丢最后一笔已确认事务、库本身绝不损坏
+    //   （FULL 在 WAL 下只多防"断电丢最后一笔"，代价是每笔提交都 fsync；消息/通知高频写不值当）。
+    // - busy_timeout：外部工具（sqlite3 CLI 检查、备份脚本）并存时等待而非立刻 SQLITE_BUSY。
+    this.db.exec('PRAGMA journal_mode = WAL')
+    this.db.exec('PRAGMA synchronous = NORMAL')
+    this.db.exec('PRAGMA busy_timeout = 5000')
     // Unicode 感知的小写：SQLite 内置 LOWER() 只折叠 ASCII A-Z，非 ASCII（重音拉丁 CAFÉ/MÜLLER、
     // 西里尔/希腊、全大写拼音等）原样保留，会导致会话内搜索漏掉大写非 ASCII 文本（MemoryStore 用
     // JS toLowerCase 是 Unicode 感知的 → 两存储实现分叉：测试过而线上漏搜）。注册 ulower 镜像 JS

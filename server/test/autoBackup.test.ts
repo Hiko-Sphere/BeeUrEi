@@ -33,8 +33,10 @@ describe('自动备份', () => {
     expect(body.subarray(0, 15).toString()).toBe('SQLite format 3') // 真快照
     expect(new SqliteStore(join(bdir, files[0])).findByUsername('bk')?.id).toBe('u1') // 可恢复
     // 同日再跑：不重复创建（幂等，每小时 sweep 调用友好）。
+    // 只数本工具命名的快照——上一步用 SqliteStore 重开快照验证可恢复，WAL 配置会在旁边留
+    // -wal/-shm 伴生文件（正常，轮换与去重都只认 beeurei-*.db，语义不受影响）。
     expect(runAutoBackup(store, NOW + 3600_000, bdir, 7).created).toBe(false)
-    expect(readdirSync(bdir).length).toBe(1)
+    expect(readdirSync(bdir).filter((n) => /^beeurei-\d{8}\.db$/.test(n)).length).toBe(1)
   })
 
   it('轮换：超保留期的旧备份被清，窗内保留；目录里运营者的其他文件一概不碰', () => {

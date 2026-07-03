@@ -1,4 +1,7 @@
 import type { FastifyInstance } from 'fastify'
+import { readFileSync, unlinkSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { PKG_VERSION, gitCommit } from '../version'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
@@ -84,6 +87,25 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
   // 审计：每个有副作用的后台操作都落一条不可抵赖的日志（谁、何时、对谁、做了什么）。
   const audit = (adminId: string, action: string, targetType: AdminAuditEntry['targetType'], targetId: string, detail?: string) =>
     store.createAuditEntry({ id: randomUUID(), adminId, action, targetType, targetId, detail, at: Date.now() })
+
+  // 数据库备份下载（灾难恢复，自托管运维刚需）：VACUUM INTO 一致性快照 → 流回管理员。
+  // 含全部账号/亲友/通知等 PII —— admin-only + 不可抵赖审计（与旁观通话同口径）。媒体文件在磁盘
+  // 目录不在库内，本备份为元数据库；未用 SQLite 驱动（内存/JSON 存储）时诚实 503，绝不给假备份。
+  app.get('/api/admin/backup', adminOnly, async (req, reply) => {
+    if (typeof store.backupTo !== 'function') return reply.code(503).send({ error: 'backup_unavailable' })
+    const tmp = join(tmpdir(), `beeurei-backup-${randomUUID()}.db`)
+    try {
+      store.backupTo(tmp)
+      const buf = readFileSync(tmp)
+      audit(req.user!.sub, 'db.backup', 'config', 'database', `${buf.length} bytes`)
+      const stamp = new Date().toISOString().slice(0, 16).replaceAll(/[-:]/g, '').replace('T', '-')
+      reply.header('content-type', 'application/octet-stream')
+      reply.header('content-disposition', `attachment; filename="beeurei-backup-${stamp}.db"`)
+      return reply.send(buf)
+    } finally {
+      try { unlinkSync(tmp) } catch { /* 临时文件已清或未生成 */ }
+    }
+  })
 
   // 后台总览（仪表盘）：用户/角色/在线/举报/录制聚合统计。
   app.get('/api/admin/overview', adminOnly, async () => {

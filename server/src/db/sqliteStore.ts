@@ -292,6 +292,12 @@ export class SqliteStore implements Store {
   allUsers(): User[] {
     return this.db.prepare('SELECT * FROM users').all().map((r) => this.toUser(r))
   }
+  /// 一致性快照备份：VACUUM INTO 在线执行、不锁写、产物为紧凑的独立 .db 文件。
+  /// destPath 由服务端自生成（tmp+uuid，非用户输入）；单引号转义仅为纵深防御（VACUUM INTO 不支持绑定参数）。
+  backupTo(destPath: string): void {
+    this.db.exec(`VACUUM INTO '${destPath.replaceAll("'", "''")}'`)
+  }
+
   userCount(): number { return (this.db.prepare('SELECT COUNT(*) AS c FROM users').get() as { c: number }).c }
   updateUser(id: string, patch: Partial<User>): User | undefined {
     const cur = this.findById(id)

@@ -423,6 +423,9 @@ export interface MediaMeta {
 
 /// 持久化接口——上层只依赖它；可换内存 / JSON 文件 / 未来 SQLite。
 export interface Store {
+  /// 可选：把数据库一致性快照备份到 destPath（SQLite 用 VACUUM INTO——在线、无锁表、产物紧凑）。
+  /// 仅 SqliteStore 实现；内存/JSON 存储不提供（调用方据 undefined 判定并返回 backup_unavailable）。
+  backupTo?(destPath: string): void
   createUser(user: User): void
   findByUsername(username: string): User | undefined
   findByPhone(phone: string): User | undefined       // 手机号登录（归一化后精确匹配）

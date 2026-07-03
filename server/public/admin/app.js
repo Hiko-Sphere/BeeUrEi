@@ -128,6 +128,7 @@ const I18N = {
     // v5：公告 / 维护 / 内容过滤
     announce: '全站公告', announceActive: '启用公告', announceMsg: '公告内容', announceLevel: '级别', lvl_info: '信息', lvl_warning: '警告',
     maintenance: '维护模式', maintActive: '启用维护模式', maintDesc: '开启后所有功能写操作返回 503，App 显示维护横幅；登录与后台不受影响。', maintMsg: '维护提示',
+    backupTitle: '数据库备份（灾难恢复）', backupDesc: '下载整个数据库的一致性快照（.db 文件，含全部账号/亲友/通知等数据）。请离线加密保存到安全处；此操作会记入审计。媒体文件另存于磁盘目录，不含在此备份内。', backupBtn: '下载数据库备份', backingUp: '正在生成备份…', backupDone: '备份已下载', backupFail: '备份失败',
     contentFilterTitle: '内容过滤（防违规违法）', cfEnabled: '启用内容过滤', cfDesc: '命中违禁词的消息/群名/昵称会被拒收。每行一个词，大小写不敏感，子串匹配。默认空=不生效。',
     cfTerms: '违禁词（每行一个）', saveBtn: '保存', err_content_blocked: '内容含违禁词，已拦截', err_maintenance: '系统维护中',
     // v6：单用户功能覆盖
@@ -142,7 +143,7 @@ const I18N = {
       'user.verifyEmail': '标记邮箱已验证', 'user.unverifyEmail': '撤销邮箱验证', 'user.unlinkApple': '解绑 Apple',
       'user.clearPasskeys': '清除 Passkey', 'user.forceLogout': '强制下线', 'report.resolve': '处理举报',
       'report.dismiss': '审核·忽略', 'report.warn': '审核·警告', 'report.suspend': '审核·暂停', 'report.ban': '审核·封禁',
-      'config.update': '修改全站配置', 'user.edit': '编辑资料', 'user.resetPassword': '重设密码', 'user.delete': '删除用户', 'user.features': '功能覆盖', 'user.export': '导出数据',
+      'config.update': '修改全站配置', 'user.edit': '编辑资料', 'user.resetPassword': '重设密码', 'user.delete': '删除用户', 'user.features': '功能覆盖', 'user.export': '导出数据', 'db.backup': '数据库备份',
     },
     roles: { blind: '视障用户', helper: '协助者', family: '亲友', admin: '管理员', developer: '开发者' },
     callStatus: { answered: '已接通', declined: '已拒绝', missed: '未接', ended: '已结束', ongoing: '进行中', ringing: '振铃中' },
@@ -244,6 +245,7 @@ const I18N = {
     // v5: announcement / maintenance / content filter
     announce: 'Announcement', announceActive: 'Enable announcement', announceMsg: 'Message', announceLevel: 'Level', lvl_info: 'Info', lvl_warning: 'Warning',
     maintenance: 'Maintenance mode', maintActive: 'Enable maintenance mode', maintDesc: 'When on, all feature writes return 503 and the app shows a maintenance banner; sign-in and admin are unaffected.', maintMsg: 'Maintenance message',
+    backupTitle: 'Database backup (disaster recovery)', backupDesc: 'Download a consistent snapshot of the entire database (.db file, incl. all accounts / family links / notifications). Store it encrypted and offline; this action is audited. Media files live in a separate disk directory and are not part of this backup.', backupBtn: 'Download database backup', backingUp: 'Generating backup…', backupDone: 'Backup downloaded', backupFail: 'Backup failed',
     contentFilterTitle: 'Content filter (block violations)', cfEnabled: 'Enable content filter', cfDesc: 'Messages/group names/display names containing a banned term are rejected. One term per line, case-insensitive, substring match. Empty = no effect.',
     cfTerms: 'Banned terms (one per line)', saveBtn: 'Save', err_content_blocked: 'Content contains a banned term', err_maintenance: 'Under maintenance',
     // v6: per-user feature overrides
@@ -258,7 +260,7 @@ const I18N = {
       'user.verifyEmail': 'Mark email verified', 'user.unverifyEmail': 'Unverify email', 'user.unlinkApple': 'Unlink Apple',
       'user.clearPasskeys': 'Clear passkeys', 'user.forceLogout': 'Force sign-out', 'report.resolve': 'Resolve report',
       'report.dismiss': 'Moderate · dismiss', 'report.warn': 'Moderate · warn', 'report.suspend': 'Moderate · suspend', 'report.ban': 'Moderate · ban',
-      'config.update': 'Update site config', 'user.edit': 'Edit profile', 'user.resetPassword': 'Reset password', 'user.delete': 'Delete user', 'user.features': 'Feature override', 'user.export': 'Export data',
+      'config.update': 'Update site config', 'user.edit': 'Edit profile', 'user.resetPassword': 'Reset password', 'user.delete': 'Delete user', 'user.features': 'Feature override', 'user.export': 'Export data', 'db.backup': 'Database backup',
     },
     roles: { blind: 'Blind / low-vision', helper: 'Helper', family: 'Family', admin: 'Admin', developer: 'Developer' },
     callStatus: { answered: 'Answered', declined: 'Declined', missed: 'Missed', ended: 'Ended', ongoing: 'Ongoing', ringing: 'Ringing' },
@@ -1563,6 +1565,12 @@ function renderControls() {
         <div class="field"><label for="cfTerms">${esc(t('cfTerms'))}</label><textarea id="cfTerms" class="mod-reason" rows="5">${esc((cf.terms || []).join('\n'))}</textarea></div>
         <div class="save-row"><button class="btn primary" id="saveCf">${esc(t('saveBtn'))}</button></div>
       </div>
+    </div>
+    <div class="section"><h3>${esc(t('backupTitle'))}</h3>
+      <p class="section-sub">${esc(t('backupDesc'))}</p>
+      <div class="card">
+        <div class="save-row"><button class="btn primary" id="dbBackup">⬇︎ ${esc(t('backupBtn'))}</button></div>
+      </div>
     </div>`;
   $('#cReg').addEventListener('change', (e) => saveConfig({ registrationEnabled: e.target.checked }, e.target));
   $('#cReqVerif').addEventListener('change', (e) => saveConfig({ requireVerification: e.target.checked }, e.target));
@@ -1574,6 +1582,29 @@ function renderControls() {
     const terms = $('#cfTerms').value.split('\n').map((s) => s.trim()).filter(Boolean);
     saveConfig({ contentFilter: { enabled: $('#cfEnabled').checked, terms } });
   });
+  $('#dbBackup').addEventListener('click', downloadDbBackup);
+}
+
+// 数据库备份下载：带鉴权 fetch → blob → 触发下载。用 api() 不行（它 res.json() 会毁二进制），故直接 fetch。
+async function downloadDbBackup(ev) {
+  const btn = ev.currentTarget; btn.disabled = true;
+  toast(t('backingUp'), 'info');
+  try {
+    const res = await fetch('/api/admin/backup', { headers: { authorization: 'Bearer ' + state.token } });
+    if (res.status === 401) { logout(true); return; }
+    if (!res.ok) { let e = 'network'; try { e = (await res.json()).error || e; } catch { /* 非 JSON 错误体 */ } throw e; }
+    const blob = await res.blob();
+    // 优先用服务端 content-disposition 的文件名（含时间戳），否则退回本地时间命名。
+    const cd = res.headers.get('content-disposition') || '';
+    const m = /filename="([^"]+)"/.exec(cd);
+    const name = m ? m[1] : ('beeurei-backup-' + new Date().toISOString().slice(0, 16).replace(/[-:]/g, '').replace('T', '-') + '.db');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    toast(t('backupDone'), 'success');
+  } catch (err) {
+    toast(t('backupFail') + (typeof err === 'string' && err !== 'network' ? ' (' + err + ')' : ''), 'error');
+  } finally { btn.disabled = false; }
 }
 // 单项开关变更即保存（乐观；失败回滚 checkbox）。
 async function saveConfig(patch, el) {

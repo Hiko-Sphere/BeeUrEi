@@ -1,0 +1,8 @@
+# BeeUrEi 安全披露 / Security disclosure (RFC 9116)
+# 我们重视 BeeUrEi（盲人辅助 App，处理位置/紧急/实名等敏感数据）的安全。
+# 发现漏洞请负责任地私下报告，勿公开披露或对真实用户数据发起测试。
+Contact: mailto:beeurei@163.com
+Expires: 2027-07-03T14:09:54Z
+Preferred-Languages: zh, en
+Canonical: https://beeurei.hikosphere.com/.well-known/security.txt
+Policy: https://beeurei.hikosphere.com/legal/

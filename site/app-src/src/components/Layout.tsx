@@ -148,7 +148,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <nav className="fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t border-[var(--line)] surface md:hidden">
           {nav.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.to === '/'}
-              className={({ isActive }) => `relative flex min-w-[3.6rem] flex-1 flex-col items-center gap-0.5 py-2 text-[10px] ${isActive ? 'text-honey' : 'text-faint'}`}>
+              className={({ isActive }) => `relative flex min-w-[3.6rem] flex-1 flex-col items-center gap-0.5 py-2 text-[10px] ${isActive ? 'text-accent font-semibold' : 'text-faint'}`}>
               <span className="relative">{n.icon}{!!n.badge && n.badge > 0 && <span className="absolute -right-2 -top-1 rounded-full bg-danger px-1 text-[9px] font-bold text-white">{n.badge > 99 ? '99+' : n.badge}</span>}</span>
               {n.label}
             </NavLink>

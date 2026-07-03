@@ -1,7 +1,7 @@
 import Foundation
 
 /// 一个经纬度坐标。
-public struct Coordinate: Sendable, Equatable {
+public struct Coordinate: Sendable, Equatable, Codable {
     public let lat: Double
     public let lon: Double
     public init(lat: Double, lon: Double) {

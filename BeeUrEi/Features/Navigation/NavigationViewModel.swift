@@ -326,6 +326,7 @@ final class NavigationViewModel {
                 if let first = result.first {
                     lastResolvedDestination = destinationQuery // 成功取到路线：可入收藏（见 P2 审计）
                     if destination != nil, !maneuvers.isEmpty {
+                        cacheCurrentPlan() // 断网降级缓存（#8）
                         status = NavStrings.navStartedStatus(result.count, lang)
                         speak(NavStrings.navStartedSpeak(result.count, first.instruction, lang))
                     } else {
@@ -342,11 +343,17 @@ final class NavigationViewModel {
                 // destination_not_found=地址查不到；amap_error/amap_not_configured/nav_unavailable=服务侧问题。
                 if case let APIError.server(code) = error {
                     switch code {
-                    case "destination_not_found": failStatus(NavStrings.destinationNotFound(lang))
-                    case "amap_error", "amap_not_configured", "nav_unavailable": failStatus(NavStrings.navServiceUnavailable(lang))
-                    default: failStatus(NavStrings.chinaRouteFailed(lang))
+                    case "destination_not_found": failStatus(NavStrings.destinationNotFound(lang)) // 地址错，缓存也救不了
+                    case "amap_error", "amap_not_configured", "nav_unavailable":
+                        if fallbackToCachedRoute() { return } // 服务侧问题 → 缓存路线顶上（#8）
+                        failStatus(NavStrings.navServiceUnavailable(lang))
+                    default:
+                        if fallbackToCachedRoute() { return }
+                        failStatus(NavStrings.chinaRouteFailed(lang))
                     }
                 } else {
+                    // 非服务端错误 = 网络断/超时——正是离线降级的主场景。
+                    if fallbackToCachedRoute() { return }
                     failStatus(NavStrings.chinaRouteFailed(lang))
                 }
             }
@@ -361,6 +368,8 @@ final class NavigationViewModel {
                 destination = geocoded
             } else {
                 guard running, gen == navGeneration else { return }
+                // 离线时 geocode 必然失败——有缓存则顶上（缓存自带目的地坐标），没有才报"找不到"。
+                if fallbackToCachedRoute() { return }
                 failStatus(NavStrings.destinationNotFound(lang)); return
             }
             let m = await service.walkingManeuvers(from: loc.coordinate, to: dest)
@@ -375,11 +384,14 @@ final class NavigationViewModel {
                 + [Coordinate(lat: dest.latitude, lon: dest.longitude)]
             if previewing { narratePreview(); return } // 预览：不进实时跟踪，逐步试听
             if m.isEmpty {
+                // MapKit 离线/无网时返回空——有缓存则顶上（#8）。
+                if fallbackToCachedRoute() { return }
                 failStatus(NavStrings.noWalkingRoute(lang))
             } else {
                 status = NavStrings.navStartedStatus(m.count, lang)
                 speak(NavStrings.navStartedStatus(m.count, lang))
                 lastResolvedDestination = destinationQuery // 成功建立路线：可入收藏（见 P2 审计）
+                cacheCurrentPlan() // 断网降级缓存（#8）
             }
         }
     }
@@ -389,6 +401,42 @@ final class NavigationViewModel {
         lastSpoken = text
         // 经共享导航语音通道：避障 obstacle/critical 播报会掐断它（跨通道仲裁，Phase 2 标准）。
         NavVoice.shared.speak(text, rate: FeatureSettings().speechRate)
+    }
+
+    /// 规划成功后写入本地缓存（断网降级用，Waymap 全离线对标）。坐标按当前地区原样存
+    /// （china=GCJ-02、overseas=WGS-84），执行时还原同地区语义（见 CachedPlannedRoute 注释）。
+    private func cacheCurrentPlan() {
+        guard let dest = destination, !maneuvers.isEmpty else { return }
+        let entry = CachedPlannedRoute(
+            key: PlannedRouteCacheLogic.normalizeKey(destinationQuery),
+            regionRaw: region == .china ? "china" : "overseas",
+            maneuvers: maneuvers.map { .init(lat: $0.0.latitude, lon: $0.0.longitude, instruction: $0.1) },
+            route: routeCoords,
+            destLat: dest.latitude, destLon: dest.longitude,
+            savedAtMs: Date().timeIntervalSince1970 * 1000)
+        PlannedRouteCacheStore().save(entry)
+    }
+
+    /// 断网/服务失败时的降级：同目的地同地区且未过期（14 天）的缓存路线直接顶上。
+    /// 成功返回 true（已接管状态与播报）。缓存路线离线执行期间偏航走 RouteRejoin 汇入
+    /// （customRouteActive=true）——重规划刚失败过，再试只会反复失败打断引导。
+    private func fallbackToCachedRoute() -> Bool {
+        guard !previewing else { return false } // 预览要最新路线，失败就如实报失败
+        guard let e = PlannedRouteCacheStore().find(destination: destinationQuery,
+                                                    regionRaw: region == .china ? "china" : "overseas") else { return false }
+        maneuvers = e.maneuvers.map { (CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon), $0.instruction) }
+        routeCoords = e.route
+        destination = CLLocationCoordinate2D(latitude: e.destLat, longitude: e.destLon)
+        stepIndex = 0
+        waypointAdvance.reset()
+        offRouteStreak = 0
+        customRouteActive = true
+        lastResolvedDestination = destinationQuery
+        let days = max(0, Int((Date().timeIntervalSince1970 * 1000 - e.savedAtMs) / 86_400_000))
+        status = NavStrings.offlineRouteStatus(maneuvers.count, lang)
+        lastSpoken = "" // 降级警示必报，绕开去重
+        speak(NavStrings.offlineRouteFallbackSpeak(days, lang))
+        return true
     }
 
     /// 设置状态并朗读它（导航失败/前置条件不满足时——盲人看不到屏幕上的 status，必须听到，见 P1 审计）。

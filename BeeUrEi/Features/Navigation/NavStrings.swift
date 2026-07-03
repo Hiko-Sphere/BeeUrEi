@@ -35,6 +35,18 @@ enum NavStrings {
     static func myRoutesHeader(_ l: Language) -> String { l == .zh ? "我的路线" : "My routes" }
     static func routesEmpty(_ l: Language) -> String { l == .zh ? "还没有保存的路线。亲友可在网页端为你绘制常走路线。" : "No saved routes yet. Family can draw routes for you on the web." }
     static func routesLoadFailed(_ l: Language) -> String { l == .zh ? "路线加载失败" : "Failed to load routes" }
+    // 断网降级（缓存路线，#8）：明确告知"用的是旧路线"与风险——绝不静默换路线。
+    static func offlineRouteFallbackSpeak(_ days: Int, _ l: Language) -> String {
+        if l == .zh {
+            let age = days <= 0 ? "今天" : "\(days) 天前"
+            return "网络不可用，改用\(age)缓存的路线引导。注意，道路情况可能已变化，请谨慎慢行"
+        }
+        let age = days <= 0 ? "today" : "\(days) day\(days == 1 ? "" : "s") ago"
+        return "Network unavailable — using the route cached \(age). Roads may have changed, please walk carefully"
+    }
+    static func offlineRouteStatus(_ n: Int, _ l: Language) -> String {
+        l == .zh ? "离线路线引导中（\(n) 个转向点）" : "Offline route guidance (\(n) turns)"
+    }
     static func routePointCount(_ n: Int, _ l: Language) -> String { l == .zh ? "\(n) 个路线点" : "\(n) points" }
     static func routeItemA11y(_ name: String, _ n: Int, _ l: Language) -> String {
         l == .zh ? "路线\(name)，\(n) 个路线点，双击开始引导" : "Route \(name), \(n) points, double-tap to start"

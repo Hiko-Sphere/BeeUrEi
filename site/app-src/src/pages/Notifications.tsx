@@ -3,6 +3,7 @@ import { api, type NotificationInfo } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { Card, Button, Spinner, EmptyState, fmtTime } from '../components/ui'
 import { IconBell, IconShield, IconPhone, IconUsers, IconFilm, IconFlash, IconPin } from '../components/icons'
+import { useCall } from './call/CallController'
 
 function iconFor(kind: string) {
   if (kind.includes('emergency')) return <IconFlash />
@@ -17,6 +18,7 @@ function iconFor(kind: string) {
 
 export function NotificationsPage() {
   const { t, lang } = useI18n()
+  const { startOutgoing } = useCall()
   const [items, setItems] = useState<NotificationInfo[] | null>(null)
 
   const load = async () => { try { const r = await api.notifications(); setItems(r.notifications) } catch { setItems([]) } }
@@ -58,6 +60,14 @@ export function NotificationsPage() {
                       className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-honey hover:underline">
                       📍 {t('查看位置', 'View location')}
                     </a>
+                  )}
+                  {/* 紧急告警：一键回拨发出告警的盲人——协助者响应摔倒/求助最直接的动作，免去手动翻联系人。 */}
+                  {n.kind.includes('emergency') && n.data?.fromId && (
+                    <button onClick={(e) => { e.stopPropagation(); void startOutgoing(n.data!.fromId!, n.data!.fromName ?? t('对方', 'Them'), null) }}
+                      className="ml-3 mt-1 inline-flex items-center gap-1 text-xs font-medium text-ok hover:underline"
+                      aria-label={t(`回拨 ${n.data.fromName ?? ''}`, `Call ${n.data.fromName ?? 'back'}`)}>
+                      <IconPhone width={13} height={13} />{t('回拨', 'Call back')}
+                    </button>
                   )}
                   <div className="mt-1 text-xs text-faint">{fmtTime(n.createdAt, lang)}</div>
                 </div>

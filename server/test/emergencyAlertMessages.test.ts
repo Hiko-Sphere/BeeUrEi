@@ -65,6 +65,7 @@ describe('摔倒/车祸紧急警报', () => {
     expect(feed[0].kind).toBe('emergency_alert')
     expect(feed[0].data.kind).toBe('fall')
     expect(feed[0].data.fromId).toBe(blind.user.id)
+    expect(feed[0].data.fromName).toBe('blind1') // 供协助端"回拨 X"按钮显示名
     // 陌生人(pending)不收紧急告警——按 kind 过滤（其有一条来自 blind 的 friend_request，属正常）。
     const strangerNotifs = await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(stranger.token) })
     expect((strangerNotifs.json() as any).notifications.filter((n: any) => n.kind === 'emergency_alert')).toHaveLength(0)

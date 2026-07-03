@@ -56,7 +56,8 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
       extraBase.lon = String(parsed.data.lon)
     }
     // 通知记录的 data 形状与推送 extra 一致（去掉 type，记录的 kind 字段已表达类别）。
-    const notifData: Record<string, string> = { kind: parsed.data.kind, fromId: me.id }
+    // fromName：供协助端（web 通知页）渲染"回拨 X"按钮的呼叫目标显示名。
+    const notifData: Record<string, string> = { kind: parsed.data.kind, fromId: me.id, fromName: me.displayName }
     if (parsed.data.lat != null && parsed.data.lon != null) {
       notifData.lat = String(parsed.data.lat)
       notifData.lon = String(parsed.data.lon)

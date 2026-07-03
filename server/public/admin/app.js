@@ -577,7 +577,7 @@ function renderDashboard() {
     ${emergencySection()}
     <div class="section">
       <h3>${esc(t('version'))} · ${esc(t('uptime'))}</h3>
-      <div class="card"><div class="kv"><dt>${esc(t('version'))}</dt><dd>v${esc(o.version)}</dd><dt>${esc(t('uptime'))}</dt><dd>${esc(fmtUptime(o.uptimeSeconds))}</dd></div></div>
+      <div class="card"><dl class="kv"><dt>${esc(t('version'))}</dt><dd>v${esc(o.version)}</dd><dt>${esc(t('uptime'))}</dt><dd>${esc(fmtUptime(o.uptimeSeconds))}</dd></dl></div>
     </div>`;
   applyDims(viewEl()); // 动态尺寸经 CSSOM 落定（CSP style-src 'self' 禁内联 style）
 }
@@ -674,9 +674,9 @@ function renderUsers() {
   viewEl().innerHTML = `
     <div class="toolbar">
       <div class="search"><input id="q" type="search" placeholder="${esc(t('search'))}" value="${esc(state.usersQuery)}" /></div>
-      <select class="sel" id="fRole">${roleOpts}</select>
-      <select class="sel" id="fStatus">${statusOpts}</select>
-      <select class="sel" id="fSort">${sortOpts}</select>
+      <select class="sel" id="fRole" aria-label="${esc(t('role'))}">${roleOpts}</select>
+      <select class="sel" id="fStatus" aria-label="${esc(t('status'))}">${statusOpts}</select>
+      <select class="sel" id="fSort" aria-label="${esc(t('sortBy'))}">${sortOpts}</select>
       <button class="btn ghost" data-action="reloadUsers">↻ ${esc(t('refresh'))}</button>
       <button class="btn ghost" data-action="exportUsers" ${list.length ? '' : 'disabled'}>⬇ ${esc(t('exportCsv'))}</button>
     </div>
@@ -1546,7 +1546,7 @@ function renderControls() {
   const cf = c.contentFilter || { enabled: false, terms: [] };
   const featRow = (k) => `
     <div class="form-row"><div><div class="lab">${esc(featLabel(k))}</div><div class="desc">${esc(featDesc(k))}</div></div>
-      <label class="switch"><input type="checkbox" data-feat="${esc(k)}" ${feats[k] !== false ? 'checked' : ''}/><span class="track"></span></label></div>`;
+      <label class="switch"><input type="checkbox" data-feat="${esc(k)}" aria-label="${esc(featLabel(k))}" ${feats[k] !== false ? 'checked' : ''}/><span class="track"></span></label></div>`;
   const lockedRow = (k) => `
     <div class="form-row locked"><div><div class="lab">${esc(featLabel(k))}</div></div>
       <span class="pill ok">${esc(t('alwaysOn'))}</span></div>`;
@@ -1554,9 +1554,9 @@ function renderControls() {
     <div class="section"><h3>${esc(t('siteControls'))}</h3>
       <div class="card">
         <div class="form-row"><div><div class="lab">${esc(t('registration'))}</div><div class="desc">${esc(t('registrationDesc'))}</div></div>
-          <label class="switch"><input type="checkbox" id="cReg" ${c.registrationEnabled ? 'checked' : ''}/><span class="track"></span></label></div>
+          <label class="switch"><input type="checkbox" id="cReg" aria-label="${esc(t('registration'))}" ${c.registrationEnabled ? 'checked' : ''}/><span class="track"></span></label></div>
         <div class="form-row"><div><div class="lab">${esc(t('requireVerif'))}</div><div class="desc">${esc(t('requireVerifDesc'))}</div></div>
-          <label class="switch"><input type="checkbox" id="cReqVerif" ${c.requireVerification ? 'checked' : ''}/><span class="track"></span></label></div>
+          <label class="switch"><input type="checkbox" id="cReqVerif" aria-label="${esc(t('requireVerif'))}" ${c.requireVerification ? 'checked' : ''}/><span class="track"></span></label></div>
         <div class="form-row"><div class="desc">${esc(t('recPolicyLink'))}</div></div>
       </div>
     </div>
@@ -1571,7 +1571,7 @@ function renderControls() {
     <div class="section"><h3>${esc(t('announce'))}</h3>
       <div class="card">
         <div class="form-row"><div class="lab">${esc(t('announceActive'))}</div>
-          <label class="switch"><input type="checkbox" id="aActive" ${a.active ? 'checked' : ''}/><span class="track"></span></label></div>
+          <label class="switch"><input type="checkbox" id="aActive" aria-label="${esc(t('announceActive'))}" ${a.active ? 'checked' : ''}/><span class="track"></span></label></div>
         <div class="field"><label for="aMsg">${esc(t('announceMsg'))}</label><input id="aMsg" type="text" maxlength="500" value="${esc(a.message || '')}"/></div>
         <div class="field"><label for="aLevel">${esc(t('announceLevel'))}</label>
           <select class="sel" id="aLevel"><option value="info" ${a.level !== 'warning' ? 'selected' : ''}>${esc(t('lvl_info'))}</option><option value="warning" ${a.level === 'warning' ? 'selected' : ''}>${esc(t('lvl_warning'))}</option></select></div>
@@ -1582,7 +1582,7 @@ function renderControls() {
       <p class="section-sub">${esc(t('maintDesc'))}</p>
       <div class="card">
         <div class="form-row"><div class="lab">${esc(t('maintActive'))}</div>
-          <label class="switch"><input type="checkbox" id="mActive" ${m.active ? 'checked' : ''}/><span class="track"></span></label></div>
+          <label class="switch"><input type="checkbox" id="mActive" aria-label="${esc(t('maintActive'))}" ${m.active ? 'checked' : ''}/><span class="track"></span></label></div>
         <div class="field"><label for="mMsg">${esc(t('maintMsg'))}</label><input id="mMsg" type="text" maxlength="500" value="${esc(m.message || '')}"/></div>
         <div class="save-row"><button class="btn primary" id="saveMaint">${esc(t('saveBtn'))}</button></div>
       </div>
@@ -1591,7 +1591,7 @@ function renderControls() {
       <p class="section-sub">${esc(t('cfDesc'))}</p>
       <div class="card">
         <div class="form-row"><div class="lab">${esc(t('cfEnabled'))}</div>
-          <label class="switch"><input type="checkbox" id="cfEnabled" ${cf.enabled ? 'checked' : ''}/><span class="track"></span></label></div>
+          <label class="switch"><input type="checkbox" id="cfEnabled" aria-label="${esc(t('cfEnabled'))}" ${cf.enabled ? 'checked' : ''}/><span class="track"></span></label></div>
         <div class="field"><label for="cfTerms">${esc(t('cfTerms'))}</label><textarea id="cfTerms" class="mod-reason" rows="5">${esc((cf.terms || []).join('\n'))}</textarea></div>
         <div class="save-row"><button class="btn primary" id="saveCf">${esc(t('saveBtn'))}</button></div>
       </div>
@@ -1671,11 +1671,11 @@ function renderRecordings() {
     <div class="section"><h3>${esc(t('recPolicy'))}</h3>
       <div class="card">
         <div class="form-row"><div><div class="lab">${esc(t('allowRecording'))}</div><div class="desc">${esc(t('allowRecordingDesc'))}</div></div>
-          <label class="switch"><input type="checkbox" id="cEnabled" ${c.enabled ? 'checked' : ''}/><span class="track"></span></label></div>
+          <label class="switch"><input type="checkbox" id="cEnabled" aria-label="${esc(t('allowRecording'))}" ${c.enabled ? 'checked' : ''}/><span class="track"></span></label></div>
         <div class="form-row"><div><div class="lab">${esc(t('requireConsent'))}</div><div class="desc">${esc(t('requireConsentDesc'))}</div></div>
-          <label class="switch"><input type="checkbox" id="cConsent" ${c.requireConsent ? 'checked' : ''}/><span class="track"></span></label></div>
+          <label class="switch"><input type="checkbox" id="cConsent" aria-label="${esc(t('requireConsent'))}" ${c.requireConsent ? 'checked' : ''}/><span class="track"></span></label></div>
         <div class="form-row"><div><div class="lab">${esc(t('retentionDays'))}</div><div class="desc">${esc(t('retentionDesc'))}</div></div>
-          <div><input class="num" type="number" id="cDays" min="1" max="3650" value="${Number(c.retentionDays) || 30}"/> <span class="days-unit">${esc(t('days'))}</span></div></div>
+          <div><input class="num" type="number" id="cDays" aria-label="${esc(t('retentionDays'))}" min="1" max="3650" value="${Number(c.retentionDays) || 30}"/> <span class="days-unit">${esc(t('days'))}</span></div></div>
         <div class="save-row"><button class="btn primary" id="saveRec">${esc(t('save'))}</button></div>
       </div>
     </div>

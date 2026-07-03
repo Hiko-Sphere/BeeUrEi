@@ -58,4 +58,15 @@ final class LabelCatalogTests: XCTestCase {
         XCTAssertTrue(enH.isHighRisk(enL.localizedName("door")))  // door
         XCTAssertTrue(enH.isHighRisk(enL.localizedName("curb")))  // curb
     }
+
+    /// 跟踪分组：车辆/卡车/公交车/摩托车（中英名）互为同组，别的不跨组——供 ObstacleTracker 关联门
+    /// 吸收 YOLO 类别抖动，避免逼近车辆被碎成多轨（距离低估的假安心）。
+    func testSameTrackingGroupForMotorVehicles() {
+        XCTAssertTrue(LabelCatalog.sameTrackingGroup("车辆", "卡车"))
+        XCTAssertTrue(LabelCatalog.sameTrackingGroup("公交车", "摩托车"))
+        XCTAssertTrue(LabelCatalog.sameTrackingGroup("vehicle", "bus"))   // 英文名同样成组
+        XCTAssertTrue(LabelCatalog.sameTrackingGroup("行人", "行人"))      // 相等恒同组
+        XCTAssertFalse(LabelCatalog.sameTrackingGroup("车辆", "行人"))     // 车 vs 人：不同组，不合并
+        XCTAssertFalse(LabelCatalog.sameTrackingGroup("椅子", "卡车"))     // 椅子 vs 车：不同组
+    }
 }

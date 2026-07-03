@@ -25,6 +25,20 @@ public struct LabelCatalog: Sendable {
         map[englishLabel.lowercased()] ?? unknownName
     }
 
+    /// 大型机动车组（车辆/卡车/公交车/摩托车）。YOLO 在这些 COCO 类间**逐帧抖动**是极常见混淆——
+    /// 一辆逼近的车会被判成 car→truck→bus 交替。跟踪关联时须视为同组，否则同一物理目标被碎成多条
+    /// 互斥轨迹，每条只拿到 1/N 距离样本 → 距离被显著低估、确认被延迟（安全攸关的假安心，见安全复审）。
+    /// 中英本地化名都认（tracker 收到的是本地化名）。
+    public static let motorVehicleNames: Set<String> = [
+        "车辆", "卡车", "公交车", "摩托车", "vehicle", "truck", "bus", "motorcycle",
+    ]
+
+    /// 两个（本地化）标签是否属跟踪意义上的同一组：相等，或同为大型机动车。
+    /// 供 ObstacleTracker 关联门用——把 car/truck/bus 抖动关联到同一条轨迹。
+    public static func sameTrackingGroup(_ a: String, _ b: String) -> Bool {
+        a == b || (motorVehicleNames.contains(a) && motorVehicleNames.contains(b))
+    }
+
     /// 完整 COCO-80 类别中文映射（+ 少量街景补充）。
     public static let cocoToChinese: [String: String] = [
         "person": "行人", "bicycle": "自行车", "car": "车辆", "motorcycle": "摩托车",

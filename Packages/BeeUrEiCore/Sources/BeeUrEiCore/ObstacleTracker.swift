@@ -49,7 +49,9 @@ public final class ObstacleTrack: Identifiable {
     func matched(_ obs: TrackObservation, dt: Double, confirmHits: Int) {
         hits += 1
         misses = 0
-        label = obs.label
+        // 刻意**不**用 obs.label 覆盖 label：关联门是"同组"，组内标签逐帧抖动（车辆/卡车/公交车）不应
+        // 让本轨迹显示名跟着抖（否则播报与 announcePolicy 的 targetKey 每帧变、连珠重播）。保留首次确立的
+        // 标签，稳定播报。默认精确关联时 obs.label 恒等于 label，此处本就是 no-op（对既有行为零影响）。
         isHazard = obs.isHazard
         bearingDegrees = ObstacleTracker.emaAngle(bearingDegrees, obs.bearingDegrees, alpha: bearingAlpha)
         if let d = obs.distanceMeters { range.update(measurement: d, dt: dt) }
@@ -66,15 +68,21 @@ public final class ObstacleTracker {
     public let maxMisses: Int
     public let gateDegrees: Double
     public let bearingAlpha: Double
+    /// 关联"同组"判定：默认精确相等。上层可注入更宽的分组（如把车辆/卡车/公交车视为同组，见
+    /// LabelCatalog.sameTrackingGroup），以吸收 YOLO 逐帧类别抖动、避免同一逼近目标被碎成多条轨迹
+    /// （距离低估、确认延迟——安全攸关，见安全复审）。
+    private let sameGroup: @Sendable (String, String) -> Bool
 
     private var tracks: [ObstacleTrack] = []
     private var nextId = 1
 
-    public init(confirmHits: Int = 2, maxMisses: Int = 5, gateDegrees: Double = 18, bearingAlpha: Double = 0.5) {
+    public init(confirmHits: Int = 2, maxMisses: Int = 5, gateDegrees: Double = 18, bearingAlpha: Double = 0.5,
+                sameGroup: @escaping @Sendable (String, String) -> Bool = { $0 == $1 }) {
         self.confirmHits = confirmHits
         self.maxMisses = maxMisses
         self.gateDegrees = gateDegrees
         self.bearingAlpha = bearingAlpha
+        self.sameGroup = sameGroup
     }
 
     /// 喂入一帧观测，更新所有轨迹，返回当前 confirmed 轨迹。
@@ -85,7 +93,7 @@ public final class ObstacleTracker {
         for track in tracks.sorted(by: { ($0.confirmed ? 0 : 1, $0.id) < ($1.confirmed ? 0 : 1, $1.id) }) {
             var best: Int?
             var bestDiff = gateDegrees
-            for (j, obs) in observations.enumerated() where !used.contains(j) && obs.label == track.label {
+            for (j, obs) in observations.enumerated() where !used.contains(j) && sameGroup(obs.label, track.label) {
                 let diff = Self.angularDistance(track.bearingDegrees, obs.bearingDegrees)
                 if diff <= bestDiff { bestDiff = diff; best = j }
             }

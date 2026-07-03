@@ -72,7 +72,8 @@ final class HomeViewModel {
     @ObservationIgnored private var lang: Language = FeatureSettings().language
     @ObservationIgnored private var labels = LabelCatalog(language: FeatureSettings().language)
     @ObservationIgnored private var crossing = CrossingAssistant(language: FeatureSettings().language)
-    @ObservationIgnored private let tracker = ObstacleTracker()
+    // sameGroup：把 car/truck/bus 的逐帧类别抖动关联到同一条轨迹，避免逼近车辆被碎成多轨→距离低估（安全复审）。
+    @ObservationIgnored private let tracker = ObstacleTracker(sameGroup: LabelCatalog.sameTrackingGroup)
     @ObservationIgnored private let risk = RiskScore()
     @ObservationIgnored private var hazards = HazardCatalog(language: FeatureSettings().language)
     @ObservationIgnored private let groundHazard = GroundHazardDetector()
@@ -348,8 +349,10 @@ final class HomeViewModel {
                 trafficLight = effective
                 crossingSignal.update(effective) // 节奏音+节奏震动（色块由 HomeView 按 trafficLight 渲染）
             }
+            // 节流 key **按颜色区分**：否则刚播"绿灯可通行"后灯变红，"请等待"会被同一 key 的 4s minGap 吞掉，
+            // 盲人据"可通行"踏入车流（致命假安心，见安全复审）。分色后绿/红各自计时，变红即刻能播"请等待"。
             if let hint = TrafficLightClassifier().hint(state),
-               throttle.shouldAnnounce(key: "trafficlight", now: frame.timestamp, minGap: 4) {
+               throttle.shouldAnnounce(key: "trafficlight:\(state.rawValue)", now: frame.timestamp, minGap: 4) {
                 coordinator.submit(FeedbackEvent(priority: .turn, speech: hint))
             }
         }

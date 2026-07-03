@@ -48,6 +48,7 @@ import { CodeSendLimiter } from './auth/sendLimiter'
 import { ConsoleMailer, type Mailer } from './mail/mailer'
 import { NoopPushSender, type PushSender } from './push/apns'
 import { NoopWebPushSender, type WebPushSender } from './push/webPush'
+import { setNotifyWebPush } from './notifications/notify'
 import { createAppleVerifier, type AppleTokenVerifier } from './auth/apple'
 
 export interface AppOptions {
@@ -127,6 +128,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   const mailer = options.mailer ?? new ConsoleMailer()
   const pushSender = options.pushSender ?? new NoopPushSender()
   const webPushSender = options.webPushSender ?? new NoopWebPushSender()
+  setNotifyWebPush(webPushSender) // notifyUser 统一投递的 Web Push 通道（模块单例，见 notify.ts）
 
   // 业务计数预置 0 基线：使这些 series 自启动起就存在，避免 Prometheus rate() 在首次命中时断档（见复审 #5）。
   for (const name of ['calls_registered_total', 'help_requests_total', 'help_claims_total']) metrics.inc(name, 0)

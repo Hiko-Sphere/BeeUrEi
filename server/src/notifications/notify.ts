@@ -1,12 +1,20 @@
 import { randomUUID } from 'node:crypto'
 import type { Store } from '../db/store'
 import type { PushSender } from '../push/apns'
+import { NoopWebPushSender, type WebPushSender } from '../push/webPush'
 import { totalUnreadFor } from '../db/unread'
+
+// Web Push 发送器（模块单例，buildApp 注入——与 auth/rbac 的 setAuthStore 同一先例）：
+// notifyUser 有 11 个调用点分布 4 条注册链，穿参改动面大且易漏；统一投递本就该单点配置。
+let webPushSender: WebPushSender = new NoopWebPushSender()
+export function setNotifyWebPush(sender: WebPushSender): void { webPushSender = sender }
 
 /// 站内通知 + 离线推送的统一投递：
 /// 先**持久化**到 notifications 表（权威、可回看、登录后必能看到），
-/// 再**尽力**推送一条 APNs 横幅提醒（易丢/未配置 APNs 时为 Noop——绝不作为可靠投递来源）。
+/// 再**尽力**推送 APNs 横幅 + Web Push 浏览器通知（未配置时各自为 Noop——绝不作为可靠投递来源）。
 /// push 失败一律吞掉（best-effort），绝不影响调用方主流程或回滚已写入的通知。
+/// 经由本函数的全部通知类别（好友请求/路线添加/举报处置/群变更…）自动获得双通道，与
+/// 紧急告警/来电/聊天的手工扇出口径一致——web-only 用户不再漏任何一类实时提醒。
 export function notifyUser(
   store: Store,
   push: PushSender,
@@ -27,5 +35,9 @@ export function notifyUser(
     // 与聊天推送一致（否则图标会漏计未读通知，见 App 图标角标主线）。
     const badge = totalUnreadFor(store, userId).total
     void push.sendAlert(user.apnsToken, title, body, { kind, ...(data ?? {}) }, undefined, badge).catch(() => { /* best-effort */ })
+  }
+  if (webPushSender.configured) {
+    const payload = JSON.stringify({ title, body, data: { kind, ...(data ?? {}) } })
+    for (const sub of store.webPushSubscriptionsForUser(userId)) void webPushSender.send(sub, payload).catch(() => { /* best-effort */ })
   }
 }

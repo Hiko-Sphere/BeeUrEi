@@ -117,6 +117,23 @@ describe('Web Push（浏览器推送紧急告警）', () => {
     await a.close()
   })
 
+  it('notifyUser 双通道：好友请求等通用通知也推到浏览器订阅（web-only 不漏任何一类）', async () => {
+    const wp = new RecordingWebPush()
+    const { a, hAuth, auth } = await seed(wp)
+    // helper 订阅浏览器推送
+    await a.inject({ method: 'POST', url: '/api/push/web-subscribe', headers: hAuth, payload: SUB })
+    // owner 再发一个新的好友请求（对第三人 → 不通知 helper；对 helper 已绑定。改用：owner 解绑再申请？
+    // 更直接：注册第三人向 helper 发好友请求 → helper 收 notifyUser 通知。
+    const reg3 = (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'wpthird', password: 'secret123', role: 'blind' } })).json()
+    const res = await a.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${reg3.token}` },
+      payload: { username: 'wphelper', relation: '亲友' } })
+    expect(res.statusCode).toBe(201)
+    const friendPush = wp.sent.filter((x) => x.payload.includes('wpthird') || JSON.parse(x.payload).data.kind?.includes('friend') || JSON.parse(x.payload).data.kind?.includes('link'))
+    expect(friendPush.length).toBeGreaterThanOrEqual(1) // 好友请求经 notifyUser 双通道到达浏览器
+    void auth
+    await a.close()
+  })
+
   it('删号级联：订阅随人清除（双存储各自验证存储层）', async () => {
     const wp = new RecordingWebPush()
     const { a, store, helper, hAuth } = await seed(wp)

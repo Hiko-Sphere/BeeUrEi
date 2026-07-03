@@ -11,18 +11,25 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'BeeUrEi'
   const body = data.body || ''
   const d = data.data || {}
-  // tag 去重语义按类型：来电按 callId（同一通只留一条）、聊天按会话折叠（同 APNs threadId 口径）、
-  // 告警按发起人。requireInteraction 只给紧急告警/来电（不自动消失直到处理）；聊天消息自然消退。
+  // 分级（与应用内口径一致，紧急的才显得紧急）：
+  // - requireInteraction 只给紧急告警/来电（不自动消失直到处理）；聊天与通用通知（好友请求/路线/
+  //   举报处置…经 notifyUser 双通道）自然消退。
+  // - tag 去重：来电按 callId（同一通只留一条）、聊天按会话折叠（同 APNs threadId 口径）、
+  //   告警按发起人、通用按类别折叠。
+  // 紧急告警负载的 kind 是具体事由（fall/crash/manual，见 emergency.ts notifData），不带 emergency 前缀。
+  const urgent = d.kind === 'incoming_call' || d.kind === 'fall' || d.kind === 'crash' || d.kind === 'manual'
+    || (d.kind && String(d.kind).indexOf('emergency') === 0)
   var tag = 'beeurei'
   if (d.kind === 'incoming_call' && d.callId) tag = 'call-' + d.callId
   else if (d.kind === 'chat_message') tag = d.groupId ? 'group-' + d.groupId : 'dm-' + (d.fromId || '')
-  else if (d.fromId) tag = 'emergency-' + d.fromId
+  else if (urgent && d.fromId) tag = 'emergency-' + d.fromId
+  else if (d.kind) tag = 'n-' + d.kind
   event.waitUntil(self.registration.showNotification(title, {
     body,
     // 系统通知走操作系统渲染，无法复用应用内的"最后已知位置"富标注——位置详情在点开后的通知页
     // （那里有诚实标注 + 回拨）。
     tag,
-    requireInteraction: d.kind !== 'chat_message',
+    requireInteraction: urgent,
     data: d,
   }))
 })

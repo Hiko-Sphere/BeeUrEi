@@ -56,6 +56,12 @@ final class FramingAssistViewModel {
     /// 回放一条历史记录（供历史面板调用）。
     func speakHistory(_ text: String) { speak(text) }
 
+    /// 复制识别内容到剪贴板 + 播报确认——盲人复制后须听到"已复制"，否则不知成败（历史面板与结果按钮共用）。
+    func copyRecognition(_ text: String) {
+        UIPasteboard.general.string = text
+        SpeechHub.shared.speak(FramingStrings.copied(lang), channel: .query, voiceCode: lang.voiceCode)
+    }
+
     // MARK: Siri 频道直达
 
     @ObservationIgnored private var queuedChannel: AppRoute.FramingChannel?
@@ -1004,9 +1010,7 @@ struct FramingAssistView: View {
 
                     if let copyable = model.copyableResult {
                         Button(FramingStrings.uiCopy(model.lang)) {
-                            UIPasteboard.general.string = copyable
-                            // 盲人复制后需要听到确认（否则不知道有没有复制成功）。
-                            SpeechHub.shared.speak(FramingStrings.copied(model.lang), channel: .query, voiceCode: model.lang.voiceCode)
+                            model.copyRecognition(copyable) // 复制 + 播报确认（与历史面板共用同一路径）
                         }
                             .buttonStyle(.bordered).tint(.white)
                             .frame(minHeight: 44)
@@ -1165,13 +1169,17 @@ private struct RecognitionHistorySheet: View {
                             }
                             .accessibilityHint(FramingStrings.uiHistoryRowHint(model.lang))
                             .swipeActions {
+                                // 滑动按钮须有 accessibilityLabel：否则 VoiceOver 念 SF Symbol 名（"trash"/"doc on doc"）
+                                // 而非"删除"/"复制"——盲人是主用户，此路径无障碍名不可缺。
                                 Button(role: .destructive) {
                                     model.historyStore.delete(id: r.id)
                                     records = model.historyStore.records
                                 } label: { Image(systemName: "trash") }
-                                Button { UIPasteboard.general.string = r.content } label: {
+                                    .accessibilityLabel(FramingStrings.uiDelete(model.lang))
+                                Button { model.copyRecognition(r.content) } label: { // 复制 + 播报确认（盲人须听到成败）
                                     Image(systemName: "doc.on.doc")
                                 }
+                                    .accessibilityLabel(FramingStrings.uiCopy(model.lang))
                             }
                         }
                     }

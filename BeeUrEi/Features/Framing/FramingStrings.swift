@@ -424,6 +424,7 @@ enum FramingStrings {
         }
     }
     static func uiClearAll(_ l: Language) -> String { l == .zh ? "清空" : "Clear All" }
+    static func uiDelete(_ l: Language) -> String { l == .zh ? "删除" : "Delete" }
     static func uiHistoryRowHint(_ l: Language) -> String {
         l == .zh ? "点按朗读这条记录" : "Tap to read this entry aloud"
     }

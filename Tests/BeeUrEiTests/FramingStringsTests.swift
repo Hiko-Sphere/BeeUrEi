@@ -44,6 +44,10 @@ final class FramingStringsTests: XCTestCase {
                 XCTAssertFalse(FramingStrings.uiHint(a, l).isEmpty)
             }
         }
+        // 历史滑动操作的无障碍名（VoiceOver 靠它念"复制/删除"，而非 SF Symbol 名）。
+        XCTAssertEqual(FramingStrings.uiCopy(.zh), "复制内容")
+        XCTAssertEqual(FramingStrings.uiDelete(.zh), "删除")
+        XCTAssertEqual(FramingStrings.uiDelete(.en), "Delete")
     }
 
     func testLowConfidencePhrases() {

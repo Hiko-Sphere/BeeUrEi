@@ -59,7 +59,8 @@ export function RoutesPage() {
     if (!editing || !mapEl.current || mapRef.current) return
     const map = L.map(mapEl.current, { zoomControl: true })
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors', maxZoom: 19,
+      // OSM 瓦片使用政策要求归属可见且链接到 copyright 页（Leaflet 归属控件渲染 HTML）。
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors', maxZoom: 19,
     }).addTo(map)
     const first = editing.waypoints[0]
     map.setView(first ? [first.lat, first.lng] : [31.2304, 121.4737], first ? 17 : 12)

@@ -49,7 +49,8 @@ export function LocationsPage() {
     const m = L.map(mapEl.current, { zoomControl: true, attributionControl: true }).setView([35, 105], 3)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '© OpenStreetMap',
+      // OSM 瓦片使用政策要求归属可见且链接到 copyright 页（Leaflet 归属控件渲染 HTML）。
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
     }).addTo(m)
     map.current = m
     // 卸载：Leaflet 自行移除所有图层；组件 ref 随之释放，无需手动清 Map。

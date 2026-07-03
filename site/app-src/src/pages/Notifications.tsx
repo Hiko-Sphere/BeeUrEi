@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type NotificationInfo } from '../lib/api'
+import { emergencyLocInfo } from '../lib/emergencyLoc'
 import { useI18n } from '../lib/i18n'
 import { Card, Button, Spinner, EmptyState, fmtTime } from '../components/ui'
 import { IconBell, IconShield, IconPhone, IconUsers, IconFilm, IconFlash, IconPin } from '../components/icons'
@@ -64,17 +65,28 @@ export function NotificationsPage() {
                     {!n.readAt && <span className="h-2 w-2 shrink-0 rounded-full bg-honey" />}
                   </div>
                   {n.body && <p className="mt-0.5 text-sm text-soft">{n.body}</p>}
-                  {n.data?.lat && n.data?.lon && (
+                  {n.data?.lat && n.data?.lon && (() => {
                     // 紧急告警带坐标：协助者一键看地图定位（响应救助的关键信息）。
                     // 用 Apple Maps 而非 Google Maps：坐标为 WGS-84（iOS 只在导航时才转 GCJ-02），
                     // 而本 App 用户在国内——Google Maps 被墙且把 WGS-84 画在 GCJ-02 底图上会偏移约 500m；
                     // Apple Maps 网页版跨平台可开、境内自动纠偏，且与 iOS 告警/聊天位置链接口径一致。
-                    <a href={`https://maps.apple.com/?ll=${n.data.lat},${n.data.lon}&q=${n.data.lat},${n.data.lon}`} target="_blank" rel="noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline">
-                      📍 {t('查看位置', 'View location')}
-                    </a>
-                  )}
+                    // 诚实标注（emergencyLocInfo，已单测）：服务端兜底的「最后已知位置」绝不能伪装成实时
+                    // 定位——协助者会赶去错误地点。stale 时 ⚠️+"最后已知"+绝对定位时刻（"5 分钟前"会随阅读
+                    // 时刻漂移成谎言，绝对时刻永远为真）。色仍用达标 text-accent：--color-warn 是裸蜂蜜色，
+                    // 浅底小字对比度不达标（a11y 审计口径），诚实信号由文案而非颜色承载。
+                    const loc = emergencyLocInfo(n.data, n.createdAt)
+                    return (
+                      <a href={`https://maps.apple.com/?ll=${n.data.lat},${n.data.lon}&q=${n.data.lat},${n.data.lon}`} target="_blank" rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline">
+                        {loc.stale ? '⚠️' : '📍'} {loc.stale
+                          ? (loc.fixAt != null
+                            ? t(`最后已知位置 · ${fmtTime(loc.fixAt, lang)}`, `Last known location · ${fmtTime(loc.fixAt, lang)}`)
+                            : t('最后已知位置（非实时）', 'Last known location (not live)'))
+                          : t('查看位置', 'View location')}
+                      </a>
+                    )
+                  })()}
                   {/* 紧急告警：一键回拨发出告警的盲人——协助者响应摔倒/求助最直接的动作，免去手动翻联系人。 */}
                   {n.kind.includes('emergency') && n.data?.fromId && (
                     <button onClick={(e) => { e.stopPropagation(); void startOutgoing(n.data!.fromId!, n.data!.fromName ?? t('对方', 'Them'), null) }}

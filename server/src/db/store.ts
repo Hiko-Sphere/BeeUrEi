@@ -544,6 +544,7 @@ export interface Store {
   markAllNotificationsRead(userId: string): number
   unreadNotificationCount(userId: string): number
   deleteNotificationsForUser(userId: string): void // 删号级联：清除该用户全部站内通知（GDPR 抹除）
+  deleteNotificationsOlderThan(cutoffMs: number): number // 留存清扫：删除早于 cutoff 的通知，返回条数（数据最小化）
 
   createMessage(m: ChatMessage): void
   findMessage(id: string): ChatMessage | undefined
@@ -1035,6 +1036,14 @@ export class MemoryStore implements Store {
     let changed = false
     for (const [k, n] of this.notifications) if (n.userId === userId) { this.notifications.delete(k); changed = true }
     if (changed) this.afterMutate()
+  }
+  deleteNotificationsOlderThan(cutoffMs: number): number {
+    let n = 0
+    for (const [id, notif] of this.notifications) {
+      if (notif.createdAt < cutoffMs) { this.notifications.delete(id); n++ }
+    }
+    if (n) this.afterMutate()
+    return n
   }
 
   createMessage(m: ChatMessage): void {

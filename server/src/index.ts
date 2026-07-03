@@ -6,6 +6,7 @@ import { initErrorReporting } from './monitoring/errorReporting'
 import { sweepExpiredRecordings } from './recording/retention'
 import { sweepStaleVerifications } from './kyc/retention'
 import { sweepOrphanMedia } from './media/orphanSweep'
+import { sweepOldNotifications } from './notifications/retention'
 import { ensureKycDir } from './kyc/storage'
 import { installGracefulShutdown } from './shutdown'
 
@@ -42,6 +43,8 @@ async function main(): Promise<void> {
     // 孤儿媒体（上传后从未关联到视频消息/录制，超 7 天）：清磁盘文件+元数据，防上传不发的慢 DoS / 解散群残留累积。
     try { const o = sweepOrphanMedia(store, Date.now()); if (o) console.log(`[media] 清理孤儿媒体 ${o} 条`) }
     catch (e) { console.warn('[media] 清理失败:', (e as Error).message) }
+    try { const x = sweepOldNotifications(store, Date.now()); if (x) console.log(`[notifications] 清理过期通知 ${x} 条`) }
+    catch (e) { console.warn('[notifications] 清理失败:', (e as Error).message) }
   }
   sweep() // 启动即清一次
   const sweepTimer = setInterval(sweep, 60 * 60 * 1000)

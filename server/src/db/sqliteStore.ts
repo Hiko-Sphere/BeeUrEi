@@ -615,6 +615,9 @@ export class SqliteStore implements Store {
   deleteNotificationsForUser(userId: string): void {
     this.db.prepare('DELETE FROM notifications WHERE userId = ?').run(userId)
   }
+  deleteNotificationsOlderThan(cutoffMs: number): number {
+    return Number(this.db.prepare('DELETE FROM notifications WHERE createdAt < ?').run(cutoffMs).changes)
+  }
 
   // MARK: messages
   createMessage(m: ChatMessage): void {

@@ -138,6 +138,47 @@ describe('摔倒/车祸紧急警报', () => {
     expect(push.sent).toContain('c'.repeat(64)) // 第二位实际送达
     expect((res.json() as any).notified).toBe(2) // 派发对象数=有 token 的亲友数
   })
+
+  it('幂等：同一 alertId 重试不重复通知亲友（客户端可安全重试提高送达率）', async () => {
+    const push = new FakePush()
+    const app = buildApp(new MemoryStore(), { pushSender: push })
+    const blind = await reg(app, 'idemblind', 'blind')
+    const fam = await reg(app, 'idemfam', 'helper')
+    await bind(app, blind.token, fam.token, 'idemfam')
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(fam.token), payload: { token: 'd'.repeat(64) } })
+    await app.inject({ method: 'POST', url: '/api/notifications/read-all', headers: auth(fam.token) })
+
+    const payload = { kind: 'fall', alertId: 'evt-abc-123' }
+    const r1 = await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token), payload })
+    const r2 = await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token), payload }) // 重试（同 alertId）
+    const r3 = await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token), payload })
+    expect(r1.statusCode).toBe(200)
+    expect(r2.json()).toEqual(r1.json()) // 重试返回首次结果
+    expect(r3.json()).toEqual(r1.json())
+    // 关键：只推送一次、通知中心只一条——重试绝不重复轰炸亲友。
+    expect(push.sent).toHaveLength(1)
+    const notifs = await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(fam.token) })
+    expect((notifs.json() as any).notifications.filter((n: any) => n.kind === 'emergency_alert')).toHaveLength(1)
+
+    // 不同 alertId（真的第二次紧急事件）→ 正常再通知一次。
+    const other = await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token),
+      payload: { kind: 'fall', alertId: 'evt-different' } })
+    expect(other.statusCode).toBe(200)
+    expect(push.sent).toHaveLength(2)
+  })
+
+  it('无 alertId（旧客户端）仍照常通知，不受幂等影响（向后兼容）', async () => {
+    const push = new FakePush()
+    const app = buildApp(new MemoryStore(), { pushSender: push })
+    const blind = await reg(app, 'compatblind', 'blind')
+    const fam = await reg(app, 'compatfam', 'helper')
+    await bind(app, blind.token, fam.token, 'compatfam')
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(fam.token), payload: { token: 'e'.repeat(64) } })
+    // 两次无 alertId 请求 → 各自通知（无幂等键则不去重）。
+    await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token), payload: { kind: 'manual' } })
+    await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token), payload: { kind: 'manual' } })
+    expect(push.sent).toHaveLength(2)
+  })
 })
 
 describe('聊天（绑定好友互发）', () => {

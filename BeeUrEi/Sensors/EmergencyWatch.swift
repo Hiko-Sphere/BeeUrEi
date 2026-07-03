@@ -120,13 +120,27 @@ final class EmergencyAlertCenter: NSObject, CLLocationManagerDelegate {
             scheduleReset()
             return
         }
-        // 只带**新鲜**坐标：即便拿到 fix 也校验时间戳，>60s 的陈旧 fix 宁可不带——紧急通知附错误的旧位置
-        // 比不附位置更危险（与 LiveLocationManager 的 30s 守卫同理，此处放宽到 60s 覆盖 30s 倒计时）。
-        let fix = lastFix.flatMap { Date().timeIntervalSince($0.timestamp) < 60 ? $0 : nil }
-        let result = await APIClient().postEmergencyAlert(token: token, kind: kind,
-                                                          lat: fix?.coordinate.latitude,
-                                                          lon: fix?.coordinate.longitude)
-        if let reached = result {
+        // 带 backoff **重试**发送：紧急时网络最可能不稳（摔在地下室/电梯/信号差处、用户可能已失能无法
+        // 手动重试），单次失败绝不能放弃。间隔 0/3/6/12/20s 共 5 次（≤ 服务端 6/min 限流）；每次用**同一**
+        // alertId，服务端据此幂等去重——即便某次其实已送达只是回执丢了，重试也绝不会让亲友收到重复告警。
+        let alertId = UUID().uuidString
+        let backoffs: [Double] = [0, 3, 6, 12, 20]
+        var reached: Int?
+        for delay in backoffs {
+            if delay > 0 {
+                try? await Task.sleep(for: .seconds(delay))
+                guard case .sending = phase else { return } // 期间被取消/新状态打断则放弃重试
+            }
+            // 每次重试都取**当下最新鲜**坐标（>60s 陈旧 fix 宁可不带——附错误旧位置比不附更危险）；
+            // 重试期间若刚拿到 GPS fix 即可带上。
+            let fix = lastFix.flatMap { Date().timeIntervalSince($0.timestamp) < 60 ? $0 : nil }
+            reached = await APIClient().postEmergencyAlert(token: token, kind: kind,
+                                                           lat: fix?.coordinate.latitude,
+                                                           lon: fix?.coordinate.longitude,
+                                                           alertId: alertId)
+            if reached != nil { break }
+        }
+        if let reached {
             phase = .sent(reached: reached)
             speak(HomeStrings.fallAlertSent(reached, lang))
         } else {

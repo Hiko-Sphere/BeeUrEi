@@ -829,8 +829,10 @@ struct APIClient {
     /// 摔倒/车祸警报：推送给所有 accepted 绑定亲友。成功返回通知到的人数，失败返回 nil。
     /// 返回会被告知的亲友数：用 contacts（所有 accepted 亲友，均会收到持久化通知，含无推送 token 的
     /// web-only 协助者），而非 notified（仅实时推送数）——否则全是 web 端亲友时会误报"无人可通知"。失败返回 nil。
-    func postEmergencyAlert(token: String, kind: String, lat: Double?, lon: Double?) async -> Int? {
-        var body: [String: Any] = ["kind": kind]
+    /// 发紧急告警。alertId：同一次紧急事件的重试须带**同一** alertId，服务端据此幂等去重
+    /// （客户端可安全重试提高送达率，亲友不会收到重复告警）。
+    func postEmergencyAlert(token: String, kind: String, lat: Double?, lon: Double?, alertId: String) async -> Int? {
+        var body: [String: Any] = ["kind": kind, "alertId": alertId]
         if let lat, let lon { body["lat"] = lat; body["lon"] = lon }
         guard let data = try? await authedSend("POST", "/api/emergency/alert", token: token, body: body),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }

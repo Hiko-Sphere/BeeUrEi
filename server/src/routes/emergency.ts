@@ -13,10 +13,29 @@ const alertSchema = z.object({
 
   lat: z.number().min(-90).max(90).optional(),
   lon: z.number().min(-180).max(180).optional(),
+  // 幂等键：同一次紧急事件的多次重试带同一 alertId，服务端据此去重——客户端可安全重试提高送达率，
+  // 而亲友**不会**因重试收到重复告警（生命攸关：重试宁可有、但绝不该重复轰炸/让家人误以为摔了两次）。
+  alertId: z.string().min(1).max(64).optional(),
 })
+
+/// 紧急告警幂等去重（内存，TTL 5 分钟）：记住近期已处理的 (user:alertId) 及其响应，重试直接返回缓存、
+/// 不再重复通知。内存足矣——紧急告警罕见、重启罕见，且重启后偶发一次重复远好过漏报。
+class EmergencyAlertDedup {
+  private seen = new Map<string, { result: unknown; at: number }>()
+  private readonly ttlMs = 5 * 60 * 1000
+  check(key: string, now: number): unknown | undefined {
+    const e = this.seen.get(key)
+    return e && now - e.at < this.ttlMs ? e.result : undefined
+  }
+  record(key: string, result: unknown, now: number): void {
+    this.seen.set(key, { result, at: now })
+    for (const [k, v] of this.seen) if (now - v.at >= this.ttlMs) this.seen.delete(k) // 顺带清过期
+  }
+}
 
 export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
                                         pushSender: PushSender = new NoopPushSender()): void {
+  const alertDedup = new EmergencyAlertDedup()
   // 发起紧急呼叫：返回按优先级排好的呼叫目标列表（真正接通由 WebRTC 信令负责）。
   app.post('/api/emergency/trigger', { preHandler: requireAuth() }, async (req) => {
     const owner = req.user!
@@ -43,6 +62,13 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const me = store.findById(req.user!.sub)
     if (!me) return reply.code(404).send({ error: 'not_found' })
+
+    // 幂等：同一 alertId 的重试直接返回首次结果，绝不重复通知亲友（客户端可安全重试提高送达率）。
+    const dedupKey = parsed.data.alertId ? `${me.id}:${parsed.data.alertId}` : undefined
+    if (dedupKey) {
+      const cached = alertDedup.check(dedupKey, Date.now())
+      if (cached !== undefined) return cached
+    }
 
     const links = store.linksByOwner(me.id).filter((l) => (l.status ?? 'accepted') === 'accepted')
     // 安全攸关：所有亲友必须**并行**收到告警，且任一推送失败绝不能中断其余推送或 500 整个请求。
@@ -80,6 +106,8 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     }))
     // notified=实际推送对象数（有 token 者）；contacts=accepted 亲友总数。
     // 二者差值 = 仅靠通知中心兜底、未收到实时推送的人——客户端可据此提示用户。
-    return { ok: true, notified: members.filter((m) => !!m.apnsToken).length, contacts: links.length }
+    const result = { ok: true, notified: members.filter((m) => !!m.apnsToken).length, contacts: links.length }
+    if (dedupKey) alertDedup.record(dedupKey, result, Date.now()) // 记住本次结果，后续同 alertId 重试直接返回它
+    return result
   })
 }

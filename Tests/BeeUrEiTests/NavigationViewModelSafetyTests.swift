@@ -23,9 +23,16 @@ private final class MockSpatialCue: SpatialCueing {
     func stop() {}
 }
 
+/// 触觉间谍：记录导航触发的震动事件优先级（转向=.turn / 到达=.status），零真实引擎。
+private final class SpyHaptic: FeedbackSink {
+    var played: [FeedbackPriority] = []
+    func play(_ event: FeedbackEvent) { played.append(event.priority) }
+}
+
 @MainActor
 final class NavigationViewModelSafetyTests: XCTestCase {
     private var service: MockNavService!
+    private var haptic: SpyHaptic!
 
     /// 纬度 1° ≈ 111km：0.0003° ≈ 33m（> 8m 记路去抖、> 25m 回程路点间距）。
     private let stepDegrees = 0.0003
@@ -39,7 +46,8 @@ final class NavigationViewModelSafetyTests: XCTestCase {
 
     private func makeVM() -> NavigationViewModel {
         service = MockNavService()
-        let vm = NavigationViewModel(service: service, spatial: MockSpatialCue())
+        haptic = SpyHaptic()
+        let vm = NavigationViewModel(service: service, spatial: MockSpatialCue(), haptics: haptic)
         // 测试收尾：停导航 + 掐断 NavVoice 队列（真实 AVSpeechSynthesizer 排队播报会拖慢测试进程收尾）。
         addTeardownBlock { @MainActor in
             vm.stop()
@@ -174,5 +182,25 @@ final class NavigationViewModelSafetyTests: XCTestCase {
         service.onLocation?(loc(latOffset: 0, accuracy: 5))
         XCTAssertFalse(vm.running)
         XCTAssertEqual(vm.status, NavStrings.nearDestination(FeatureSettings().language))
+        // 到达时补一记 .status 触觉确认（盲人最需明确知道"到了"）。
+        XCTAssertTrue(haptic.played.contains(.status))
+        // 差精度的单帧逼近（accuracy=60）不得误触发到达触觉——只有精度可信的到达才震。
+        XCTAssertEqual(haptic.played.filter { $0 == .status }.count, 1)
+    }
+
+    func testTurnHapticFiresOnHighCertaintyManeuver() {
+        // 高确定性"现在转向"（好精度、贴近转向点）补一记 .turn 触觉；"前方 X 米"不震（避免噪扰）。
+        var fs = FeatureSettings(); fs.navigationEnabled = true; defer { fs.navigationEnabled = false }
+        let vm = makeVM()
+        // 起点稍远的一条自定义路线：第一转向点在 originLat 稍北。
+        vm.startCustomRoute(name: "测试", waypoints: [
+            (originLat + stepDegrees, lon, "左转"), (originLat + 3 * stepDegrees, lon, nil)])
+        XCTAssertTrue(vm.running)
+        // 远处（>announceWithin）好精度：不应触发转向触觉。
+        service.onLocation?(loc(latOffset: -3 * stepDegrees, accuracy: 5))
+        XCTAssertFalse(haptic.played.contains(.turn))
+        // 贴到第一转向点附近、好精度 → 高确定性"现在转向" → 触发 .turn 触觉。
+        service.onLocation?(loc(latOffset: stepDegrees, accuracy: 5))
+        XCTAssertTrue(haptic.played.contains(.turn))
     }
 }

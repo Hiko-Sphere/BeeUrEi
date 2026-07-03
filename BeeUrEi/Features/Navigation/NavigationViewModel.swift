@@ -35,13 +35,17 @@ final class NavigationViewModel {
     @ObservationIgnored private let progress = RouteProgress()
     @ObservationIgnored private let gate = LocationAccuracyGate()
     @ObservationIgnored private let spatial: SpatialCueing
+    @ObservationIgnored private let haptics: FeedbackSink   // 转向触觉：嘈杂路口语音听不清时的互补通道（biped/WeWalk 式）
     @ObservationIgnored private let headTracker = HeadTracker()
 
-    /// F1：定位服务与空间音可注入（mock 驱动记路/回程门控单测，零音频零定位权限）。
+    /// F1：定位服务/空间音/触觉可注入（mock 驱动门控单测，零音频零定位零触觉引擎）。
     /// 生产默认实现与初始化时序不变。
-    init(service: NavigationServicing = NavigationService(), spatial: SpatialCueing = SpatialAudioFeedback()) {
+    init(service: NavigationServicing = NavigationService(),
+         spatial: SpatialCueing = SpatialAudioFeedback(),
+         haptics: FeedbackSink = HapticFeedback()) {
         self.service = service
         self.spatial = spatial
+        self.haptics = haptics
         trailCount = BreadcrumbStore.shared.trail.count // 反映此前会话记录的轨迹（sheet 重开后"原路返回(N点)"按钮即可见）
     }
     @ObservationIgnored private let offRoute = OffRouteDetector()
@@ -260,6 +264,7 @@ final class NavigationViewModel {
             let toDest = Geo.distanceMeters(fromLat: lat, fromLon: lon, toLat: dest.latitude, toLon: dest.longitude)
             if toDest < 15 {
                 if level == .precise {
+                    haptics.play(FeedbackEvent(priority: .status, speech: nil)) // 到达触觉确认（1 下）：盲人最需明确知道"到了"
                     speak(NavStrings.nearDestination(lang))
                     stop()
                     status = NavStrings.nearDestination(lang) // 置于 stop() 之后：不被"导航已停止"覆盖（单测揪出）
@@ -277,6 +282,10 @@ final class NavigationViewModel {
         if decision.shouldAnnounce, let text = decision.text {
             instruction = text
             speak(text)
+            // 高确定性"现在转向"补一记转向触觉（.turn，2 下）：嘈杂路口/车流中语音被淹没时的互补确认
+            // （biped/WeWalk 式方向触觉；方向本身由空间音信标编码，触觉作"该转了"的手感提示）。
+            // 只在 isHighCertainty 触发——"前方 X 米"不震，避免噪扰。
+            if decision.isHighCertainty { haptics.play(FeedbackEvent(priority: .turn, speech: nil)) }
         }
 
         // 步进推进——用"越过波谷"几何判定，而非脆弱的"必须命中 5m 窗 + precise"：

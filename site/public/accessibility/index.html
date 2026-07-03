@@ -82,7 +82,7 @@
 
 <h3>已知局限</h3>
 <ul>
-<li>避障与导航依赖摄像头/传感器输入，其结果以语音与提示音呈现；如设备扬声器或听觉不可用，当前缺少等效的振动编码通道（在改进计划中）。</li>
+<li>避障与导航的方向信息主要以语音与空间音提示音呈现；转向、到达与危险等级已有可区分的振动编码作为互补通道，但完整的纯振动导航（不依赖任何声音）仍在完善中。</li>
 <li>协助者网页端的地图视图（实时位置）以视觉呈现为主；同页提供文字化的位置摘要，但地图本身的读屏体验有限。</li>
 <li>录音回放使用浏览器原生播放器控件，其无障碍体验取决于所用浏览器。</li>
 <li>管理后台面向运营人员，尚未按 WCAG 2.2 AA 完整审计。</li>
@@ -122,7 +122,7 @@
 
 <h3>Known limitations</h3>
 <ul>
-<li>Obstacle and navigation output is audio-first; an equivalent vibration-encoded channel for users who cannot rely on audio is on our roadmap.</li>
+<li>Direction from obstacle avoidance and navigation is conveyed mainly through speech and spatial audio; turns, arrival and danger levels also have distinct vibration patterns as a complementary channel, but full sound-free vibration-only navigation is still being refined.</li>
 <li>The live-location map in the helper web app is primarily visual; a text summary is provided, but the map itself has limited screen-reader support.</li>
 <li>Recording playback uses the browser's native player; its accessibility depends on the browser.</li>
 <li>The admin console targets operations staff and has not been fully audited against WCAG 2.2 AA.</li>

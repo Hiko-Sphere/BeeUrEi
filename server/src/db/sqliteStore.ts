@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { Store, User, Role, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, SessionInfo, ChatMessage, ChatGroup, MediaMeta, Passkey, AdminAuditEntry, Warning, AppConfig, AppConfigPatch, Notification, Verification, VerificationStatus, KycBlobRef } from './store'
-import { normalizeAppConfig, mergeAppConfig } from './store'
+import { normalizeAppConfig, mergeAppConfig, type SavedRoute } from './store'
 
 // 用运行时 require + 非静态模块名加载 node:sqlite，避免打包器(vitest/vite)静态解析失败；
 // 由 Node 在运行时解析（需 --experimental-sqlite，已在 npm 脚本里通过 NODE_OPTIONS 开启）。
@@ -107,6 +107,19 @@ export class SqliteStore implements Store {
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_blocks_blocked ON blocks (blockedId)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_callrec_caller ON call_records (callerId, createdAt)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_callrec_callee ON call_records (calleeId, createdAt)')
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS saved_routes (
+        id TEXT PRIMARY KEY,
+        ownerId TEXT NOT NULL,
+        createdBy TEXT NOT NULL,
+        name TEXT NOT NULL,
+        waypoints TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL
+      )
+    `)
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_saved_routes_owner ON saved_routes (ownerId, updatedAt)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_saved_routes_creator ON saved_routes (createdBy, updatedAt)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_recordings_owner ON recordings (ownerId, recordedAt)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_media_owner ON media (ownerId)')
     // recordingByMediaId 在**每次** GET /api/media 都被调（拦截录制媒体外泄），缺索引则每次媒体下载全表扫 recordings。
@@ -425,6 +438,40 @@ export class SqliteStore implements Store {
     this.db.prepare('INSERT OR REPLACE INTO config (k, v) VALUES (?, ?)').run('app', JSON.stringify(next))
     return next
   }
+  private rowToSavedRoute(r: any): SavedRoute {
+    return { id: r.id, ownerId: r.ownerId, createdBy: r.createdBy, name: r.name,
+             waypoints: JSON.parse(r.waypoints), createdAt: Number(r.createdAt), updatedAt: Number(r.updatedAt) }
+  }
+  createSavedRoute(route: SavedRoute): void {
+    this.db.prepare(
+      `INSERT OR REPLACE INTO saved_routes (id, ownerId, createdBy, name, waypoints, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(route.id, route.ownerId, route.createdBy, route.name, JSON.stringify(route.waypoints), route.createdAt, route.updatedAt)
+  }
+  savedRoutesForUser(ownerId: string): SavedRoute[] {
+    return (this.db.prepare('SELECT * FROM saved_routes WHERE ownerId = ? ORDER BY updatedAt DESC').all(ownerId) as any[]).map((r) => this.rowToSavedRoute(r))
+  }
+  savedRoutesByCreator(creatorId: string): SavedRoute[] {
+    return (this.db.prepare('SELECT * FROM saved_routes WHERE createdBy = ? ORDER BY updatedAt DESC').all(creatorId) as any[]).map((r) => this.rowToSavedRoute(r))
+  }
+  findSavedRoute(id: string): SavedRoute | undefined {
+    const r = this.db.prepare('SELECT * FROM saved_routes WHERE id = ?').get(id) as any
+    return r ? this.rowToSavedRoute(r) : undefined
+  }
+  updateSavedRoute(id: string, patch: Partial<SavedRoute>): SavedRoute | undefined {
+    const cur = this.findSavedRoute(id)
+    if (!cur) return undefined
+    const next = { ...cur, ...patch, id: cur.id, ownerId: cur.ownerId, createdBy: cur.createdBy } // 归属/绘制者不可改
+    this.createSavedRoute(next) // INSERT OR REPLACE 全列覆盖（read-merge-write，与其余 update 同式）
+    return next
+  }
+  deleteSavedRoute(id: string): void {
+    this.db.prepare('DELETE FROM saved_routes WHERE id = ?').run(id)
+  }
+  deleteSavedRoutesForOwner(ownerId: string): void {
+    this.db.prepare('DELETE FROM saved_routes WHERE ownerId = ?').run(ownerId)
+  }
+
   createRecording(rec: Recording): void {
     this.db.prepare(
       `INSERT OR REPLACE INTO recordings (id, callId, ownerId, consentBy, reason, recordedAt, mediaId, participants, durationSec, lat, lon, locationLabel, deletedAt)

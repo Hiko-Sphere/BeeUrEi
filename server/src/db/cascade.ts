@@ -39,6 +39,8 @@ export function cascadeDeleteUser(store: Store, id: string): void {
   for (const b of store.blocksInvolving(id)) store.deleteBlock(b.id)
   // 该用户的站内通知（个人收件箱）：人已删，通知无主，连带清除（GDPR 抹除）。
   store.deleteNotificationsForUser(id)
+  // 路线库：归属者删号即清其全部路线（亲友替其画的也属其资产，随主体删除）；绘制者删号不影响他人路线。
+  store.deleteSavedRoutesForOwner(id)
   // 实名认证（KYC）：删号即清除该用户的证件密文文件（最敏感 PII）。
   // 法务保留(legalHold)的记录与其证据刻意保留（取证），其余连记录带磁盘密文一并清除。
   for (const v of store.allVerifications()) {

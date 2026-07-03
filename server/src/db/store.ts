@@ -301,6 +301,19 @@ export interface RecordingConfig {
 }
 
 /// 一条录制的元数据（媒体文件本身由客户端/录制器处理，这里只管元数据与留存）。
+/// 亲友编排/自存的步行路线（路线库，Soundscape Guided Routes 式）。
+/// 坐标全程 **WGS-84**（全栈约定）：存储层绝不做坐标系转换；web 编辑器必须用 OSM/Leaflet 瓦片
+/// （amap JS 瓦片是 GCJ-02，会让存储坐标系统性偏移），iOS 执行走 startBacktrack 同款免纠偏路径。
+export interface SavedRoute {
+  id: string
+  ownerId: string    // 归属者（执行路线的盲人）；删号级联删除其全部路线
+  createdBy: string  // 绘制者（互链亲友或本人）；绘制者删号不影响路线（归属者的资产）
+  name: string
+  waypoints: { lat: number; lng: number; note?: string }[]  // WGS-84 顺序航点（≥2）
+  createdAt: number
+  updatedAt: number
+}
+
 export interface Recording {
   id: string
   callId: string
@@ -490,6 +503,14 @@ export interface Store {
 
   getRecordingConfig(): RecordingConfig
   setRecordingConfig(patch: Partial<RecordingConfig>): RecordingConfig
+  createSavedRoute(r: SavedRoute): void
+  savedRoutesForUser(ownerId: string): SavedRoute[]      // 归属者的路线，updatedAt 倒序
+  savedRoutesByCreator(creatorId: string): SavedRoute[]  // 我替别人画的路线（编辑入口）
+  findSavedRoute(id: string): SavedRoute | undefined
+  updateSavedRoute(id: string, patch: Partial<SavedRoute>): SavedRoute | undefined
+  deleteSavedRoute(id: string): void
+  deleteSavedRoutesForOwner(ownerId: string): void       // 删号级联（归属者维度）
+
   createRecording(rec: Recording): void
   allRecordings(): Recording[]
   recordingsForUser(ownerId: string): Recording[] // 某用户自己的录制（不含其软删除的），时间倒序——用户端"我的录音"
@@ -569,6 +590,7 @@ export class MemoryStore implements Store {
   protected callRecords = new Map<string, CallRecord>()
   protected reports = new Map<string, Report>()
   protected recordings = new Map<string, Recording>()
+  protected savedRoutes = new Map<string, SavedRoute>()
   protected verifications = new Map<string, Verification>()
   protected refreshTokens = new Map<string, RefreshToken>()
   protected recoveryCodes = new Map<string, RecoveryCode>() // 2FA 一次性恢复码（仅哈希），键为 id
@@ -856,6 +878,36 @@ export class MemoryStore implements Store {
     this.afterMutate()
     return { ...this.recordingConfig }
   }
+  createSavedRoute(r: SavedRoute): void {
+    this.savedRoutes.set(r.id, r)
+    this.afterMutate()
+  }
+  savedRoutesForUser(ownerId: string): SavedRoute[] {
+    return [...this.savedRoutes.values()].filter((r) => r.ownerId === ownerId).sort((a, b) => b.updatedAt - a.updatedAt)
+  }
+  savedRoutesByCreator(creatorId: string): SavedRoute[] {
+    return [...this.savedRoutes.values()].filter((r) => r.createdBy === creatorId).sort((a, b) => b.updatedAt - a.updatedAt)
+  }
+  findSavedRoute(id: string): SavedRoute | undefined {
+    return this.savedRoutes.get(id)
+  }
+  updateSavedRoute(id: string, patch: Partial<SavedRoute>): SavedRoute | undefined {
+    const r = this.savedRoutes.get(id)
+    if (!r) return undefined
+    const next = { ...r, ...patch, id: r.id, ownerId: r.ownerId, createdBy: r.createdBy } // 归属/绘制者不可改
+    this.savedRoutes.set(id, next)
+    this.afterMutate()
+    return next
+  }
+  deleteSavedRoute(id: string): void {
+    this.savedRoutes.delete(id)
+    this.afterMutate()
+  }
+  deleteSavedRoutesForOwner(ownerId: string): void {
+    for (const [k, v] of this.savedRoutes) if (v.ownerId === ownerId) this.savedRoutes.delete(k)
+    this.afterMutate()
+  }
+
   createRecording(rec: Recording): void {
     this.recordings.set(rec.id, rec)
     this.afterMutate()
@@ -1160,6 +1212,7 @@ export class JsonFileStore extends MemoryStore {
           warnings?: Warning[]
           appConfig?: AppConfig
           notifications?: Notification[]
+          savedRoutes?: SavedRoute[]
         }
         for (const u of data.users ?? []) this.users.set(u.id, u)
         for (const l of data.links ?? []) this.links.set(l.id, l)
@@ -1180,6 +1233,7 @@ export class JsonFileStore extends MemoryStore {
         for (const w of data.warnings ?? []) this.warnings.set(w.id, w)
         if (data.appConfig) this.appConfig = data.appConfig
         for (const n of data.notifications ?? []) this.notifications.set(n.id, n)
+        for (const sr of data.savedRoutes ?? []) this.savedRoutes.set(sr.id, sr)
       } catch {
         /* 损坏的文件忽略，从空开始 */
       }
@@ -1208,6 +1262,7 @@ export class JsonFileStore extends MemoryStore {
       warnings: [...this.warnings.values()],
       appConfig: this.appConfig,
       notifications: [...this.notifications.values()],
+      savedRoutes: [...this.savedRoutes.values()],
     }
     // 原子写：先写临时文件再 rename 覆盖。writeFileSync 直写在写入中途崩溃/断电/磁盘满时会留下**半写**
     // 的 JSON——下次启动 JSON.parse 失败→构造函数按"损坏忽略、从空开始"处理→**静默全量丢数据**。

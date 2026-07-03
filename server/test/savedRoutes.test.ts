@@ -1,0 +1,158 @@
+import { describe, it, expect } from 'vitest'
+import { buildApp } from '../src/app'
+import { MemoryStore } from '../src/db/store'
+import { SqliteStore } from '../src/db/sqliteStore'
+import { cascadeDeleteUser } from '../src/db/cascade'
+
+async function setup(store = new MemoryStore()) {
+  const app = buildApp(store)
+  const reg = async (u: string, role: string) => {
+    const r = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    return { token: r.token as string, id: r.user.id as string, h: { authorization: `Bearer ${r.token}` } }
+  }
+  const blind = await reg('blinduser', 'blind')
+  const family = await reg('familyuser', 'family')
+  const stranger = await reg('stranger', 'helper')
+  // blind ↔ family 建立 accepted 互链
+  const link = await app.inject({ method: 'POST', url: '/api/family/links', headers: blind.h,
+    payload: { username: 'familyuser', relation: '家人', isEmergency: false } })
+  await app.inject({ method: 'POST', url: `/api/family/links/${link.json().link.id}/accept`, headers: family.h })
+  return { app, store, blind, family, stranger }
+}
+
+const WP = [{ lat: 31.23, lng: 121.47 }, { lat: 31.24, lng: 121.48, note: '过了报亭右转' }]
+
+describe('路线库（亲友远程路线编排 Phase 1：服务端）', () => {
+  it('亲友可替互链盲人建路线；盲人 GET 可见（role=owner），亲友可见（role=creator）', async () => {
+    const { app, blind, family } = await setup()
+    const res = await app.inject({ method: 'POST', url: '/api/routes', headers: family.h,
+      payload: { forUserId: blind.id, name: '家到菜场', waypoints: WP } })
+    expect(res.statusCode).toBe(200)
+    const route = res.json().route
+    expect(route.ownerId).toBe(blind.id)
+    expect(route.createdBy).toBe(family.id)
+    expect(route.waypoints).toEqual(WP)
+
+    const mine = (await app.inject({ method: 'GET', url: '/api/routes', headers: blind.h })).json().routes
+    expect(mine).toHaveLength(1)
+    expect(mine[0].role).toBe('owner')
+    const theirs = (await app.inject({ method: 'GET', url: '/api/routes', headers: family.h })).json().routes
+    expect(theirs).toHaveLength(1)
+    expect(theirs[0].role).toBe('creator')
+    await app.close()
+  })
+
+  it('盲人可给自己建路线（实走存路线通道）；own+created 列表去重', async () => {
+    const { app, blind } = await setup()
+    const res = await app.inject({ method: 'POST', url: '/api/routes', headers: blind.h,
+      payload: { name: '家到公交站', waypoints: WP } })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().route.ownerId).toBe(blind.id)
+    expect(res.json().route.createdBy).toBe(blind.id)
+    // owner 与 creator 都是我 → 列表只出现一次
+    const mine = (await app.inject({ method: 'GET', url: '/api/routes', headers: blind.h })).json().routes
+    expect(mine).toHaveLength(1)
+    await app.close()
+  })
+
+  it('陌生人替他人建路线 403 not_linked；拉黑后 403 blocked；目标不存在 404', async () => {
+    const { app, blind, family, stranger } = await setup()
+    const r1 = await app.inject({ method: 'POST', url: '/api/routes', headers: stranger.h,
+      payload: { forUserId: blind.id, name: 'x', waypoints: WP } })
+    expect(r1.statusCode).toBe(403)
+    expect(r1.json().error).toBe('not_linked')
+
+    await app.inject({ method: 'POST', url: '/api/blocks', headers: blind.h, payload: { userId: family.id } })
+    const r2 = await app.inject({ method: 'POST', url: '/api/routes', headers: family.h,
+      payload: { forUserId: blind.id, name: 'x', waypoints: WP } })
+    expect(r2.statusCode).toBe(403)
+    expect(r2.json().error).toBe('blocked')
+
+    const r3 = await app.inject({ method: 'POST', url: '/api/routes', headers: stranger.h,
+      payload: { forUserId: 'nonexistent-user', name: 'x', waypoints: WP } })
+    expect(r3.statusCode).toBe(404)
+    await app.close()
+  })
+
+  it('校验：<2 航点 / >200 航点 / 越界坐标 / 空名 → 400；违禁名 → 403 content_blocked', async () => {
+    const { app, store, blind } = await setup()
+    const bad = async (payload: unknown) => (await app.inject({ method: 'POST', url: '/api/routes', headers: blind.h, payload: payload as object })).statusCode
+    expect(await bad({ name: 'x', waypoints: [WP[0]] })).toBe(400)
+    expect(await bad({ name: 'x', waypoints: Array(201).fill(WP[0]) })).toBe(400)
+    expect(await bad({ name: 'x', waypoints: [{ lat: 91, lng: 0 }, WP[0]] })).toBe(400)
+    expect(await bad({ name: 'x', waypoints: [{ lat: 0, lng: 181 }, WP[0]] })).toBe(400)
+    expect(await bad({ name: '  ', waypoints: WP })).toBe(400)
+
+    store.setAppConfig({ contentFilter: { enabled: true, terms: ['badname'] } })
+    const r = await app.inject({ method: 'POST', url: '/api/routes', headers: blind.h,
+      payload: { name: '有 BADNAME 的路线', waypoints: WP } })
+    expect(r.statusCode).toBe(403)
+    expect(r.json().error).toBe('content_blocked')
+    await app.close()
+  })
+
+  it('滥用上限：单归属者第 51 条 → 429 route_limit', async () => {
+    const { app, blind } = await setup()
+    for (let i = 0; i < 50; i++) {
+      const r = await app.inject({ method: 'POST', url: '/api/routes', headers: blind.h,
+        payload: { name: `路线${i}`, waypoints: WP } })
+      expect(r.statusCode).toBe(200)
+    }
+    const over = await app.inject({ method: 'POST', url: '/api/routes', headers: blind.h,
+      payload: { name: '超限', waypoints: WP } })
+    expect(over.statusCode).toBe(429)
+    expect(over.json().error).toBe('route_limit')
+    await app.close()
+  })
+
+  it('编辑/删除：绘制者与归属者都可；无关者 404（不泄露存在性）；删除幂等 gone→204', async () => {
+    const { app, blind, family, stranger } = await setup()
+    const id = (await app.inject({ method: 'POST', url: '/api/routes', headers: family.h,
+      payload: { forUserId: blind.id, name: '家到菜场', waypoints: WP } })).json().route.id
+
+    // 绘制者改名
+    const upd = await app.inject({ method: 'PUT', url: `/api/routes/${id}`, headers: family.h, payload: { name: '家到新菜场' } })
+    expect(upd.statusCode).toBe(200)
+    expect(upd.json().route.name).toBe('家到新菜场')
+    // 无关者编辑/删除 → 404
+    expect((await app.inject({ method: 'PUT', url: `/api/routes/${id}`, headers: stranger.h, payload: { name: 'x' } })).statusCode).toBe(404)
+    expect((await app.inject({ method: 'DELETE', url: `/api/routes/${id}`, headers: stranger.h })).statusCode).toBe(404)
+    // 空补丁 → 400
+    expect((await app.inject({ method: 'PUT', url: `/api/routes/${id}`, headers: blind.h, payload: {} })).statusCode).toBe(400)
+    // 归属者删除 → 204；重复删除幂等 204
+    expect((await app.inject({ method: 'DELETE', url: `/api/routes/${id}`, headers: blind.h })).statusCode).toBe(204)
+    expect((await app.inject({ method: 'DELETE', url: `/api/routes/${id}`, headers: blind.h })).statusCode).toBe(204)
+    await app.close()
+  })
+
+  it('删号级联：归属者删号清其全部路线；绘制者删号不影响归属者路线', async () => {
+    const { app, store, blind, family } = await setup()
+    await app.inject({ method: 'POST', url: '/api/routes', headers: family.h,
+      payload: { forUserId: blind.id, name: '亲友画的', waypoints: WP } })
+    await app.inject({ method: 'POST', url: '/api/routes', headers: family.h,
+      payload: { name: '亲友自己的', waypoints: WP } })
+
+    cascadeDeleteUser(store, family.id) // 绘制者删号
+    expect(store.savedRoutesForUser(blind.id)).toHaveLength(1)  // 盲人的路线仍在
+    expect(store.savedRoutesForUser(family.id)).toHaveLength(0) // 其自有路线随删号清除
+
+    cascadeDeleteUser(store, blind.id) // 归属者删号
+    expect(store.savedRoutesForUser(blind.id)).toHaveLength(0)
+    await app.close()
+  })
+
+  it('SqliteStore parity：建/查/改/删/级联 与 MemoryStore 同语义（waypoints JSON 往返无损）', async () => {
+    const { app, blind, family } = await setup(new SqliteStore(':memory:') as unknown as MemoryStore)
+    const res = await app.inject({ method: 'POST', url: '/api/routes', headers: family.h,
+      payload: { forUserId: blind.id, name: '家到菜场', waypoints: WP } })
+    expect(res.statusCode).toBe(200)
+    const mine = (await app.inject({ method: 'GET', url: '/api/routes', headers: blind.h })).json().routes
+    expect(mine[0].waypoints).toEqual(WP) // JSON 列往返：note 可选字段无损
+    const upd = await app.inject({ method: 'PUT', url: `/api/routes/${mine[0].id}`, headers: blind.h,
+      payload: { waypoints: [...WP, { lat: 31.25, lng: 121.49 }] } })
+    expect(upd.json().route.waypoints).toHaveLength(3)
+    expect((await app.inject({ method: 'DELETE', url: `/api/routes/${mine[0].id}`, headers: blind.h })).statusCode).toBe(204)
+    expect((await app.inject({ method: 'GET', url: '/api/routes', headers: blind.h })).json().routes).toHaveLength(0)
+    await app.close()
+  })
+})

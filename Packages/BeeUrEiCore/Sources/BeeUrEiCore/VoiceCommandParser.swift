@@ -53,7 +53,7 @@ public enum VoiceCommandParser {
         if has(["回家", "原路返回", "返回出发", "带我回去", "go back", "take me back", "backtrack"]) { return .goHome }
         // 读整页须在「读文字」之前：否则「朗读整页」会被 readText 的「朗读」抢走。
         if has(["整页", "整个页面", "读文档", "读整", "读全文", "whole page", "entire page", "full page", "read the page", "read the document", "read document"]) { return .readFullPage }
-        if has(["读文字", "念文字", "朗读", "读一下", "read text", "read this", "read it"]) { return .readText }
+        if has(["读文字", "念文字", "朗读", "读一下", "念一下", "念念", "念一念", "念给我听", "read text", "read this", "read it", "read aloud"]) { return .readText }
         if has(["纸币", "钱", "钞票", "多少元", "banknote", "money", "currency", "bill"]) { return .banknote }
         if has(["扫码", "二维码", "条形码", "条码", "scan", "barcode", "qr"]) { return .scanCode }
         if has(["消息", "聊天", "信息", "message", "chat", "inbox"]) { return .messages }

@@ -4,6 +4,36 @@ import XCTest
 /// 语音指令解析：中英口语变体、目的地/消息内容提取、不确定回退 unknown。
 final class VoiceCommandParserTests: XCTestCase {
 
+    /// 全命令"金句"回归网：解析器已长到 20 个命令、含微妙顺序依赖（多命令共享关键字/前缀）。
+    /// 用每个命令的多种真实说法断言正确路由，一次性锁死行为、防新增命令引入碰撞。
+    func testGoldenPhrasesRouteCorrectly() {
+        let cases: [(String, VoiceCommand)] = [
+            ("救命", .help), ("帮帮我", .help), ("call for help", .help),
+            ("我在哪", .whereAmI), ("我在哪里", .whereAmI), ("where am i", .whereAmI), ("find my location", .whereAmI),
+            ("周围有什么", .around), ("附近有什么", .around), ("what's around me", .around),
+            ("前方有什么", .ahead), ("前面有什么", .ahead), ("what's ahead", .ahead),
+            ("这里有几个人", .describePeople), ("有没有人", .describePeople), ("who's there", .describePeople),
+            ("几路车", .readBus), ("这是什么车", .readBus), ("which bus is this", .readBus),
+            ("光线怎么样", .readLight), ("灯开着吗", .readLight), ("how bright is it", .readLight),
+            ("今天天气怎么样", .weather), ("会下雨吗", .weather), ("what's the weather", .weather),
+            ("原路返回", .goHome), ("带我回去", .goHome), ("take me back", .goHome),
+            ("读整页", .readFullPage), ("读一下整页文档", .readFullPage), ("read the whole page", .readFullPage),
+            ("读一下这段文字", .readText), ("念一下", .readText), ("read this text", .readText),
+            ("这是多少钱", .banknote), ("识别纸币", .banknote), ("what banknote", .banknote),
+            ("扫一下二维码", .scanCode), ("扫码", .scanCode), ("scan this barcode", .scanCode),
+            ("打开消息", .messages), ("查看聊天", .messages), ("open chat", .messages),
+            ("开始导盲", .guideMe), ("帮我避障", .guideMe), ("start obstacle avoidance", .guideMe),
+            ("这是什么颜色", .readColor), ("什么色", .readColor), ("what color is this", .readColor),
+            ("看一看这是什么", .look), ("识别一下", .look), ("what is this", .look),
+            ("再说一遍", .repeatLast), ("刚才说什么", .repeatLast), ("repeat that", .repeatLast),
+            ("找我的钥匙", .find("钥匙")), ("帮我找水杯", .find("水杯")), ("find my wallet", .find("wallet")),
+            ("带我去北京西站", .navigate("北京西站")), ("导航到医院", .navigate("医院")),
+        ]
+        for (phrase, expected) in cases {
+            XCTAssertEqual(VoiceCommandParser.parse(phrase), expected, "『\(phrase)』应解析为 \(expected)")
+        }
+    }
+
     func testCoreIntentsZh() {
         XCTAssertEqual(VoiceCommandParser.parse("救命，帮帮我"), .help)
         XCTAssertEqual(VoiceCommandParser.parse("我在哪里"), .whereAmI)

@@ -289,6 +289,11 @@ enum FramingStrings {
         if on { return l == .zh ? "关闭光探测" : "Stop Light" }
         return uiTitle(.light, l)
     }
+    /// 颜色按钮标题：开启连续模式后变"关闭连续颜色"，否则为"识别颜色"。
+    static func colorContinuousTitle(_ on: Bool, _ l: Language) -> String {
+        if on { return l == .zh ? "关闭连续颜色" : "Stop Color" }
+        return uiTitle(.color, l)
+    }
 
     static func uiTitle(_ a: UIAction, _ l: Language) -> String {
         switch l {
@@ -333,7 +338,7 @@ enum FramingStrings {
             case .readText: return "识别并朗读相机里看到的文字"
             case .fullPage: return "引导你把整页纸放进画面，自动拍摄并按顺序朗读全文"
             case .light: return "报告明暗和亮光方向，并开启连续音调——扫动手机、越亮音越高，靠耳朵找窗户或灯"
-            case .color: return "说出画面中央的颜色"
+            case .color: return "报出画面中央的颜色，并开启连续模式——指哪报哪、颜色变了才说，适合配衣服/比色"
             case .scan: return "识别并朗读二维码或条码的内容"
             case .explore: return "定格画面后，手指滑到哪里就朗读那里的物体或文字"
             case .banknote: return "识别人民币纸币的面额"
@@ -347,7 +352,7 @@ enum FramingStrings {
             case .readText: return "Recognize and read text seen by the camera"
             case .fullPage: return "Guides you to fit the whole page, then captures and reads it in order"
             case .light: return "Report brightness and light direction, then play a continuous tone — sweep the phone, brighter is higher-pitched, to find a window or lamp by ear"
-            case .color: return "Say the color at the center of the view"
+            case .color: return "Say the center color, then keep going continuously — point and it announces on change, for matching clothes"
             case .scan: return "Recognize and read a QR code or barcode"
             case .explore: return "Freeze the view, then slide your finger to hear what you touch"
             case .banknote: return "Identify RMB banknote denominations"

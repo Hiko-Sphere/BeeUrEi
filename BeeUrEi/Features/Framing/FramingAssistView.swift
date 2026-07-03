@@ -73,7 +73,7 @@ final class FramingAssistViewModel {
 
     private func runChannel(_ channel: AppRoute.FramingChannel) {
         // 切到光探测以外的任何动作：先停连续光探测音调，避免它与识别结果播报/其它模式抢声。
-        if channel != .light { stopLightTone() }
+        if channel != .light { stopContinuous() }
         switch channel {
         case .banknote: readCurrency()
         case .scan: readBarcode()
@@ -89,6 +89,10 @@ final class FramingAssistViewModel {
     // 复用已真机验证的 ProximitySonifier（避障声呐）——只换 cue 来源（亮度而非距离），音频路径不变。
     @ObservationIgnored private let lightSonifier = ProximitySonifier()
     private(set) var lightToneOn = false
+    // 连续颜色模式（Seeing AI Color 频道式）：开启后指哪报哪，颜色变了且稳定才播（复用已测 HintThrottle）。
+    // 盲人配衣服/比色高频。与光探测互斥（同为持续背景模式）。
+    private(set) var colorContinuousOn = false
+    @ObservationIgnored private var colorThrottle = HintThrottle(stableTicks: 3, minGap: 1.0, repeatGap: 8.0)
     @ObservationIgnored private var docMode = false        // 文档模式（整页取景引导+自动拍摄）
     @ObservationIgnored private var docStableFrames = 0    // 整页完整入画的连续帧数（≥2 自动拍摄）
     @ObservationIgnored private var docCapturing = false   // OCR 进行中，防重复拍摄
@@ -114,7 +118,7 @@ final class FramingAssistViewModel {
     func stop() {
         paused = true
         source.stop()
-        stopLightTone() // 关闭/来电盖上：停连续光探测音调，避免离开界面后仍在响
+        stopContinuous() // 关闭/来电盖上：停所有持续背景模式，避免离开界面后仍在响
         SpeechHub.shared.stopChannel(.query) // 关闭/被来电盖上时立刻闭嘴，避免识别播报串入通话
     }
 
@@ -129,6 +133,15 @@ final class FramingAssistViewModel {
         // 仅在无其它持久模式时响（文档/找物/探索占屏时不响，避免抢声）。
         if lightToneOn, !docMode, findPhase == .idle, !exploring, let b = currentBrightness() {
             lightSonifier.update(LightSonification.cue(brightness: b))
+        }
+        // 连续颜色：指哪报哪——中央区颜色变了且稳定（HintThrottle，已测）才播，避免刷屏。
+        if colorContinuousOn, !docMode, findPhase == .idle, !exploring, let buffer = latestBuffer,
+           let rgb = ColorSampler.averageRGB(in: buffer, rect: CGRect(x: 0.4, y: 0.4, width: 0.2, height: 0.2)) {
+            let name = ColorNamer().name(r: rgb.r, g: rgb.g, b: rgb.b, language: lang)
+            if colorThrottle.shouldSpeak(name, at: frame.timestamp) {
+                resultText = FramingStrings.colorResult(name, lang)
+                speak(FramingStrings.colorSpeak(name, lang))
+            }
         }
 
         // Siri 频道直达（Seeing AI 全频道快捷指令惯例）：首帧就绪后自动触发排队的动作。
@@ -199,7 +212,7 @@ final class FramingAssistViewModel {
 
     /// 开始寻找一类通用物品（不需要先教，YOLO 直接认）。
     func startCategoryFind(label: String) {
-        stopLightTone() // 切到其它识别活动：停连续光探测音调
+        stopContinuous() // 切到其它识别活动：停所有持续背景模式（光探测/连续颜色）
         let name = categoryName(label)
         docMode = false
         findTarget = nil
@@ -266,7 +279,7 @@ final class FramingAssistViewModel {
 
     /// 教学：把物品举在镜头前，每 ~1s 自动拍一张特征，共 3 张后请用户命名。
     func startTeaching() {
-        stopLightTone() // 切到其它识别活动：停连续光探测音调
+        stopContinuous() // 切到其它识别活动：停所有持续背景模式（光探测/连续颜色）
         docMode = false
         findPhase = .teaching
         pendingPrints = []
@@ -465,7 +478,7 @@ final class FramingAssistViewModel {
 
     /// 进入/退出「读整页」：语音引导把整页放进画面，连续 2 帧完整入画即自动拍摄并按版面顺序朗读。
     func toggleDocumentMode() {
-        stopLightTone() // 切到其它识别活动：停连续光探测音调
+        stopContinuous() // 切到其它识别活动：停所有持续背景模式（光探测/连续颜色）
         docMode.toggle()
         docStableFrames = 0
         docCapturing = false
@@ -593,7 +606,7 @@ final class FramingAssistViewModel {
 
     /// 朗读相机里看到的文字（端侧 Vision OCR，中英文）——盲人读标牌/标签/菜单。
     func readText() {
-        stopLightTone() // 切到其它识别活动：停连续光探测音调
+        stopContinuous() // 切到其它识别活动：停所有持续背景模式（光探测/连续颜色）
         guard let live = latestBuffer else { speak(FramingStrings.aimText(lang)); return }
         if tooDarkToProceed() { return }
         guard let buffer = copyPixelBuffer(live) else { speak(FramingStrings.recognizeFailed(lang)); return } // 深拷贝供异步安全读
@@ -633,7 +646,7 @@ final class FramingAssistViewModel {
 
     /// 识别二维码/条码并朗读内容（端侧 Vision）——读 QR 海报、产品码、WiFi 码等。
     func readBarcode() {
-        stopLightTone() // 切到其它识别活动：停连续光探测音调
+        stopContinuous() // 切到其它识别活动：停所有持续背景模式（光探测/连续颜色）
         guard let live = latestBuffer else { speak(FramingStrings.aimBarcode(lang)); return }
         if tooDarkToProceed() { return }
         guard let buffer = copyPixelBuffer(live) else { speak(FramingStrings.recognizeFailed(lang)); return } // 深拷贝供异步安全读
@@ -689,7 +702,7 @@ final class FramingAssistViewModel {
     /// 隐私边界：不识别身份、不估年龄表情、不存任何人脸数据——检测完即弃。
     /// 坐标约定与 YOLO 一致（原始相机缓冲，midX 即方位；深度采样 y 由左下翻到左上）。
     func describePeople() {
-        stopLightTone() // 切到其它识别活动：停连续光探测音调
+        stopContinuous() // 切到其它识别活动：停所有持续背景模式（光探测/连续颜色）
         guard let live = latestBuffer else { speak(FramingStrings.aimAhead(lang)); return }
         if tooDarkToProceed() { return }
         guard let buffer = copyPixelBuffer(live) else { speak(FramingStrings.recognizeFailed(lang)); return } // 深拷贝供异步安全读
@@ -747,7 +760,7 @@ final class FramingAssistViewModel {
     /// 识别人民币纸币面额（端侧 OCR 角号/大写 + 票面主色，核心 CurrencyClassifier，已测）。
     /// 低置信只说"可能"，并提醒换角度确认——识币错了是真金白银，宁可多让用户拍一次。
     func readCurrency() {
-        stopLightTone() // 切到其它识别活动：停连续光探测音调
+        stopContinuous() // 切到其它识别活动：停所有持续背景模式（光探测/连续颜色）
         guard let live = latestBuffer else { speak(FramingStrings.aimBanknote(lang)); return }
         if tooDarkToProceed() { return }
         guard let buffer = copyPixelBuffer(live) else { speak(FramingStrings.recognizeFailed(lang)); return } // 深拷贝供异步安全读
@@ -780,9 +793,18 @@ final class FramingAssistViewModel {
         }
     }
 
-    /// 识别画面中央区域的颜色（端侧采样 + 核心 ColorNamer，已测）。
+    /// 识别颜色（点按）：先报一次中央区域颜色，并开启**连续模式**——之后指哪报哪，颜色变了且稳定
+    /// 才播（配衣服/比色）。再点一次「识别颜色」或离开即关。与光探测互斥。
     func readColor() {
-        stopLightTone() // 切到其它识别活动：停连续光探测音调
+        if colorContinuousOn { stopColorContinuous(); return } // 已开 → 再点关闭
+        stopLightTone() // 互斥：开颜色前停光探测
+        readColorOnce()
+        colorContinuousOn = true
+        colorThrottle = HintThrottle(stableTicks: 3, minGap: 1.0, repeatGap: 8.0) // 重置节流基线
+    }
+
+    /// 识别画面中央区域的颜色一次（端侧采样 + 核心 ColorNamer，已测）。
+    private func readColorOnce() {
         guard let buffer = latestBuffer else { speak(FramingStrings.aimObject(lang)); return }
         if tooDarkToProceed() { return }
         let rect = CGRect(x: 0.4, y: 0.4, width: 0.2, height: 0.2)
@@ -801,6 +823,7 @@ final class FramingAssistViewModel {
     /// 盲人找窗户/灯/亮着的出口通道、确认屋里灯有没有开。
     func readLight() {
         if lightToneOn { stopLightTone(); return } // 已开 → 再点关闭
+        stopColorContinuous() // 互斥：开光探测前停连续颜色
         readLightOnce()
         lightToneOn = true // 开启连续音调；帧循环据此每帧喂声呐
     }
@@ -810,6 +833,17 @@ final class FramingAssistViewModel {
         guard lightToneOn else { return }
         lightToneOn = false
         lightSonifier.stop()
+    }
+
+    /// 关闭连续颜色模式。
+    func stopColorContinuous() {
+        colorContinuousOn = false
+    }
+
+    /// 停掉所有持续背景模式（光探测 + 连续颜色）——切到其它识别活动/离开界面时统一调用。
+    func stopContinuous() {
+        stopLightTone()
+        stopColorContinuous()
     }
 
     /// 光线探测一次性概述（明暗等级 + 亮源方向，核心 LightMeter，已测）。
@@ -831,7 +865,7 @@ final class FramingAssistViewModel {
     /// 公交识别（OKO 式，端侧 YOLO+OCR）：认出公交/电车，读车头牌的线路号与终点站。
     /// 多辆车同时进站时帮盲人确认"来的是不是我要坐的那班"。行挑选在核心 BusDisplayReader（已测）。
     func readBus() {
-        stopLightTone() // 切到其它识别活动：停连续光探测音调
+        stopContinuous() // 切到其它识别活动：停所有持续背景模式（光探测/连续颜色）
         guard let live = latestBuffer else { speak(FramingStrings.aimAhead(lang)); return }
         if tooDarkToProceed() { return }
         let dets = detector.detect(in: live, regionOfInterest: CGRect(x: 0, y: 0, width: 1, height: 1))
@@ -1005,7 +1039,8 @@ struct FramingAssistView: View {
                 }
                 .padding(.horizontal)
                 HStack(spacing: BeeSpacing.sm) {
-                    overlayAction(FramingStrings.uiTitle(.color, model.lang), systemImage: "paintpalette.fill",
+                    overlayAction(FramingStrings.colorContinuousTitle(model.colorContinuousOn, model.lang),
+                                  systemImage: model.colorContinuousOn ? "paintpalette.fill" : "paintpalette",
                                   hint: FramingStrings.uiHint(.color, model.lang)) { model.readColor() }
                     overlayAction(FramingStrings.uiTitle(.scan, model.lang), systemImage: "qrcode.viewfinder",
                                   hint: FramingStrings.uiHint(.scan, model.lang)) { model.readBarcode() }

@@ -77,6 +77,17 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertEqual(FramingStrings.approx(1.5, .en), ", about 1.5 m")
     }
 
+    func testContinuousModeToggleTitles() {
+        // 光/色连续模式按钮标题随开关态切换，且英文不混中文。
+        XCTAssertEqual(FramingStrings.lightToneTitle(false, .zh), FramingStrings.uiTitle(.light, .zh)) // 关态=原标题
+        XCTAssertTrue(FramingStrings.lightToneTitle(true, .zh).contains("关闭"))
+        XCTAssertEqual(FramingStrings.colorContinuousTitle(false, .zh), FramingStrings.uiTitle(.color, .zh))
+        XCTAssertTrue(FramingStrings.colorContinuousTitle(true, .zh).contains("关闭"))
+        for s in [FramingStrings.lightToneTitle(true, .en), FramingStrings.colorContinuousTitle(true, .en)] {
+            XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文混中文：\(s)")
+        }
+    }
+
     func testSeatOccupancySuffixes() {
         // 占用后缀作为句尾追加（找空座位）：措辞保守（"可能"而非断言）；英文无中文混入。
         XCTAssertEqual(FramingStrings.seatLooksFree(.zh), "，看起来空着")

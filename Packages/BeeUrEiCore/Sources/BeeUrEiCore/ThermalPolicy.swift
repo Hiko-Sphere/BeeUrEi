@@ -28,16 +28,17 @@ public struct ThermalPlan: Sendable, Equatable {
 public struct ThermalPolicy: Sendable {
     public init() {}
 
-    public func plan(for level: ThermalLevel) -> ThermalPlan {
+    /// advisory 按 language 出双语文案（修复前硬编码中文，英文用户过热时会听到中文警告——安全提示必须双语）。
+    public func plan(for level: ThermalLevel, language: Language = .zh) -> ThermalPlan {
         switch level {
         case .nominal:
             return ThermalPlan(targetFPS: 15, downscale: false, useNanoModel: false, stopCamera: false, advisory: nil)
         case .fair:
             return ThermalPlan(targetFPS: 10, downscale: false, useNanoModel: false, stopCamera: false, advisory: nil)
         case .serious:
-            return ThermalPlan(targetFPS: 8, downscale: true, useNanoModel: true, stopCamera: false, advisory: "设备发热，已降低处理频率")
+            return ThermalPlan(targetFPS: 8, downscale: true, useNanoModel: true, stopCamera: false, advisory: SpokenStrings.thermalSlowdown(language))
         case .critical:
-            return ThermalPlan(targetFPS: 0, downscale: true, useNanoModel: true, stopCamera: true, advisory: "设备过热，避障暂停，可呼叫志愿者协助")
+            return ThermalPlan(targetFPS: 0, downscale: true, useNanoModel: true, stopCamera: true, advisory: SpokenStrings.thermalPausedVolunteer(language))
         }
     }
 }

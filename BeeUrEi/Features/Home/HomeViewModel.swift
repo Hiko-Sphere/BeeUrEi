@@ -280,7 +280,7 @@ final class HomeViewModel {
         }
 
         // 设备过热：安全停机并提示（见 PLAN §5.4）。
-        let thermalPlan = thermalPolicy.plan(for: Self.mapThermal(ProcessInfo.processInfo.thermalState))
+        let thermalPlan = thermalPolicy.plan(for: Self.mapThermal(ProcessInfo.processInfo.thermalState), language: lang)
         if thermalPlan.stopCamera {
             proximityText = thermalPlan.advisory ?? SpokenStrings.deviceOverheated(lang)
             degradeStop()
@@ -289,7 +289,7 @@ final class HomeViewModel {
         // 热/电降级真正作用到处理频率：取两方案较低的 targetFPS，按 15fps 基准等比放宽决策间隔
         // （nominal 0.5s → serious ~0.94s → 电量极低 1.5s），上限 1.5s 保证危险仍能及时发现。
         let powerPlan = powerPolicy.plan(batteryLevel: Double(UIDevice.current.batteryLevel),
-                                         lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled)
+                                         lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled, language: lang)
         let fps = max(1, min(thermalPlan.targetFPS, powerPlan.targetFPS))
         processingInterval = min(max(0.5 * 15.0 / Double(fps), 0.5), 1.5)
 
@@ -539,10 +539,10 @@ final class HomeViewModel {
     }
 
     private func degradeAdvisory() -> String? {
-        let thermalPlan = thermalPolicy.plan(for: Self.mapThermal(ProcessInfo.processInfo.thermalState))
+        let thermalPlan = thermalPolicy.plan(for: Self.mapThermal(ProcessInfo.processInfo.thermalState), language: lang)
         if let advisory = thermalPlan.advisory { return advisory }
         let powerPlan = powerPolicy.plan(batteryLevel: Double(UIDevice.current.batteryLevel),
-                                         lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled)
+                                         lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled, language: lang)
         return powerPlan.advisory
     }
 

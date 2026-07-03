@@ -24,12 +24,13 @@ public struct PowerPolicy: Sendable {
     /// - Parameters:
     ///   - batteryLevel: 0...1；负值表示未知（如模拟器）→ 视为正常。
     ///   - lowPowerMode: 系统省电模式是否开启。
-    public func plan(batteryLevel: Double, lowPowerMode: Bool) -> PowerPlan {
+    /// advisory 按 language 出双语文案（修复前硬编码中文——安全相关降级提示必须双语）。
+    public func plan(batteryLevel: Double, lowPowerMode: Bool, language: Language = .zh) -> PowerPlan {
         if batteryLevel >= 0, batteryLevel <= criticalBatteryThreshold {
-            return PowerPlan(targetFPS: 5, advisory: "电量极低，已降到最低处理频率，请尽快充电")
+            return PowerPlan(targetFPS: 5, advisory: SpokenStrings.powerCriticalLow(language))
         }
         if lowPowerMode || (batteryLevel >= 0 && batteryLevel <= lowBatteryThreshold) {
-            return PowerPlan(targetFPS: 8, advisory: "省电模式 / 低电量，已降低处理频率")
+            return PowerPlan(targetFPS: 8, advisory: SpokenStrings.powerSaverSlowdown(language))
         }
         return PowerPlan(targetFPS: 15, advisory: nil)
     }

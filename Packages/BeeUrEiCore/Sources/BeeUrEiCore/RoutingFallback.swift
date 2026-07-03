@@ -21,13 +21,14 @@ public struct RoutingFallbackDecision: Sendable, Equatable {
 public struct RoutingFallback: Sendable {
     public init() {}
 
-    public func decide(hasAccessibleData: Bool) -> RoutingFallbackDecision {
+    /// advisory 按 language 出双语文案（修复前硬编码中文）。
+    public func decide(hasAccessibleData: Bool, language: Language = .zh) -> RoutingFallbackDecision {
         if hasAccessibleData {
             return RoutingFallbackDecision(mode: .accessible, advisory: nil)
         }
         return RoutingFallbackDecision(
             mode: .ordinaryWithAvoidance,
-            advisory: "本段无盲道数据，已切换为普通步行 + 实时避障"
+            advisory: SpokenStrings.noTactilePavingFallback(language)
         )
     }
 }

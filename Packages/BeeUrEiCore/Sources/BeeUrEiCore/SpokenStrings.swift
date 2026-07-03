@@ -435,6 +435,31 @@ public enum SpokenStrings {
     public static func avoidanceOff(_ lang: Language) -> String {
         switch lang { case .zh: return "避障已关闭"; case .en: return "Obstacle alerts off" }
     }
+    /// 热降级提示（serious：降频仍在保护）。
+    public static func thermalSlowdown(_ lang: Language) -> String {
+        switch lang { case .zh: return "设备发热，已降低处理频率"; case .en: return "Device is warm — processing rate reduced" }
+    }
+
+    /// 热停机提示（critical：避障暂停 + 志愿者兜底指引）。
+    public static func thermalPausedVolunteer(_ lang: Language) -> String {
+        switch lang { case .zh: return "设备过热，避障暂停，可呼叫志愿者协助"; case .en: return "Device overheated — obstacle alerts paused. You can call a volunteer for help" }
+    }
+
+    /// 电量极低降级提示。
+    public static func powerCriticalLow(_ lang: Language) -> String {
+        switch lang { case .zh: return "电量极低，已降到最低处理频率，请尽快充电"; case .en: return "Battery critically low — running at minimum rate, please charge soon" }
+    }
+
+    /// 省电模式/低电量降级提示。
+    public static func powerSaverSlowdown(_ lang: Language) -> String {
+        switch lang { case .zh: return "省电模式 / 低电量，已降低处理频率"; case .en: return "Low Power Mode or low battery — processing rate reduced" }
+    }
+
+    /// 无盲道数据段的路线降级提示。
+    public static func noTactilePavingFallback(_ lang: Language) -> String {
+        switch lang { case .zh: return "本段无盲道数据，已切换为普通步行 + 实时避障"; case .en: return "No tactile-paving data for this segment — switched to regular walking with live obstacle alerts" }
+    }
+
     public static func deviceOverheated(_ lang: Language) -> String {
         switch lang { case .zh: return "设备过热，避障暂停"; case .en: return "Device overheated, obstacle alerts paused" }
     }

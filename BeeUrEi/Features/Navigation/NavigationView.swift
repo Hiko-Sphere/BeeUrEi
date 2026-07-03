@@ -130,11 +130,12 @@ struct WalkNavigationView: View {
                                 } label: {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(route.name)
-                                        Text(NavStrings.routePointCount(route.waypoints.count, lang))
+                                        // "N 个路线点 · 由 X 创建"——信任透明：盲人须知这条路谁画的（自己/女儿）。
+                                        Text(NavStrings.routeSubtitle(route.waypoints.count, by: route.createdByName, lang))
                                             .font(.caption).foregroundStyle(.secondary)
                                     }
                                 }
-                                .accessibilityLabel(NavStrings.routeItemA11y(route.name, route.waypoints.count, lang))
+                                .accessibilityLabel(NavStrings.routeItemA11y(route.name, route.waypoints.count, by: route.createdByName, lang))
                                 // 出发前预览：不走路先试听全程（Soundscape 街景预览对齐）。
                                 Button(NavStrings.previewRoute(lang)) {
                                     model.previewCustomRoute(name: route.name, waypoints: wps)

@@ -36,6 +36,7 @@ describe('路线库（亲友远程路线编排 Phase 1：服务端）', () => {
     const mine = (await app.inject({ method: 'GET', url: '/api/routes', headers: blind.h })).json().routes
     expect(mine).toHaveLength(1)
     expect(mine[0].role).toBe('owner')
+    expect(mine[0].createdByName).toBe('familyuser') // 盲人看到"谁画的"（信任透明）
     const theirs = (await app.inject({ method: 'GET', url: '/api/routes', headers: family.h })).json().routes
     expect(theirs).toHaveLength(1)
     expect(theirs[0].role).toBe('creator')
@@ -49,6 +50,7 @@ describe('路线库（亲友远程路线编排 Phase 1：服务端）', () => {
     expect(res.statusCode).toBe(200)
     expect(res.json().route.ownerId).toBe(blind.id)
     expect(res.json().route.createdBy).toBe(blind.id)
+    expect(res.json().route.createdByName).toBeNull() // 自存路线：无"谁画的"（客户端显示"自存"）
     // owner 与 creator 都是我 → 列表只出现一次
     const mine = (await app.inject({ method: 'GET', url: '/api/routes', headers: blind.h })).json().routes
     expect(mine).toHaveLength(1)

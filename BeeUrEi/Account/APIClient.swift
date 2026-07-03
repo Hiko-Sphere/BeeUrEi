@@ -1014,6 +1014,7 @@ struct APIClient {
         let name: String
         var waypoints: [RouteWaypoint]
         let role: String      // owner=我的路线（可执行） / creator=我替别人画的
+        var createdByName: String?  // 创建者显示名（亲友画的）；自存路线为 nil。信任透明：盲人须知"这条谁画的"
         let updatedAt: Double
     }
     struct RouteWaypoint: Codable, Sendable { let lat: Double; let lng: Double; var note: String? }

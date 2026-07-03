@@ -31,6 +31,17 @@ final class NavStringsTests: XCTestCase {
         XCTAssertEqual(NavStrings.geocodeLocale(.en).identifier, "en_US")
     }
 
+    // 路线副标题/无障碍名：创建者透明（亲友画的→"由 X"；自存→无创建者）。
+    func testRouteCreatorTransparency() {
+        XCTAssertTrue(NavStrings.routeSubtitle(3, by: "女儿", .zh).contains("由女儿创建"))
+        XCTAssertTrue(NavStrings.routeSubtitle(3, by: nil, .zh).contains("自存"))
+        XCTAssertTrue(NavStrings.routeSubtitle(3, by: "", .zh).contains("自存")) // 空名当自存
+        XCTAssertTrue(NavStrings.routeItemA11y("家到菜场", 3, by: "女儿", .zh).contains("由女儿创建"))
+        XCTAssertFalse(NavStrings.routeItemA11y("Home", 3, by: nil, .zh).contains("由")) // 自存不念创建者
+        XCTAssertTrue(NavStrings.routeSubtitle(3, by: "Daughter", .en).contains("by Daughter"))
+        XCTAssertFalse(NavStrings.routeSubtitle(3, by: "Daughter", .en).contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
+
     // 离线降级播报（#8）：含"今天/N 天前"分支——复审点名的唯一带真实分支逻辑的新文案。
     func testOfflineFallbackSpeakBranches() {
         XCTAssertTrue(NavStrings.offlineRouteFallbackSpeak(0, .zh).contains("今天"))

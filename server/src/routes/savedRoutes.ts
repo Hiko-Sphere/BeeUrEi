@@ -27,9 +27,13 @@ const updateSchema = z.object({
 }).refine((v) => v.name !== undefined || v.waypoints !== undefined, { message: 'empty_patch' })
 
 /// 视图：不多不少地回传客户端所需（含 viewer 相对角色，客户端据此分"我的路线/我替 TA 画的"）。
-function routeView(r: SavedRoute, viewerId: string) {
+/// createdByName：创建者显示名——盲人执行路线时据此知道"这条是谁画的"（自己画的 / 女儿画的），
+/// 是信任透明的关键（人工路线的可信度取决于是谁画的）。self 创建时为 null（客户端显示"自存"）。
+/// 创建者必为 owner 的 accepted 互链联系人（建路线时已强制），故对 owner 披露其名无隐私问题。
+function routeView(store: Store, r: SavedRoute, viewerId: string) {
+  const createdByName = r.createdBy === r.ownerId ? null : (store.findById(r.createdBy)?.displayName ?? null)
   return {
-    id: r.id, ownerId: r.ownerId, createdBy: r.createdBy, name: r.name,
+    id: r.id, ownerId: r.ownerId, createdBy: r.createdBy, createdByName, name: r.name,
     waypoints: r.waypoints, createdAt: r.createdAt, updatedAt: r.updatedAt,
     role: r.ownerId === viewerId ? 'owner' : 'creator',
   }
@@ -74,7 +78,7 @@ export function registerSavedRouteRoutes(app: FastifyInstance, store: Store): vo
       createdAt: now, updatedAt: now,
     }
     store.createSavedRoute(route)
-    return { route: routeView(route, me) }
+    return { route: routeView(store, route, me) }
   })
 
   // 我的路线（owner 维度）+ 我替别人画的（creator 维度），去重合并、updatedAt 倒序。
@@ -86,7 +90,7 @@ export function registerSavedRouteRoutes(app: FastifyInstance, store: Store): vo
       .filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)))
       .filter((r) => r.ownerId === me || !isBlockedBetween(store, me, r.ownerId))
       .sort((a, b) => b.updatedAt - a.updatedAt)
-    return { routes: merged.map((r) => routeView(r, me)) }
+    return { routes: merged.map((r) => routeView(store, r, me)) }
   })
 
   // 改路线（名称/航点）：归属者或绘制者。绘制者与归属者已解绑后仍可编辑其画的路线——
@@ -108,7 +112,7 @@ export function registerSavedRouteRoutes(app: FastifyInstance, store: Store): vo
       ...(parsed.data.waypoints ? { waypoints: parsed.data.waypoints } : {}),
       updatedAt: Date.now(),
     })!
-    return { route: routeView(updated, req.user!.sub) }
+    return { route: routeView(store, updated, req.user!.sub) }
   })
 
   // 删路线：归属者或绘制者；幂等（gone→204）。无权（含已拉黑的绘制者）一律 204 no-op——

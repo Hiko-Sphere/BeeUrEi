@@ -54,8 +54,15 @@ enum NavStrings {
     static func routePreviewHint(_ name: String, _ l: Language) -> String {
         l == .zh ? "不走路，先听一遍\(name)的全程" : "Hear the whole \(name) route without walking it"
     }
-    static func routeItemA11y(_ name: String, _ n: Int, _ l: Language) -> String {
-        l == .zh ? "路线\(name)，\(n) 个路线点，双击开始引导" : "Route \(name), \(n) points, double-tap to start"
+    /// 路线副标题："N 个路线点" + 创建者（亲友画的→"由 X 创建"；自存→"自存"）。信任透明：盲人须知谁画的。
+    static func routeSubtitle(_ n: Int, by creator: String?, _ l: Language) -> String {
+        let pts = routePointCount(n, l)
+        if let c = creator, !c.isEmpty { return l == .zh ? "\(pts) · 由\(c)创建" : "\(pts) · by \(c)" }
+        return l == .zh ? "\(pts) · 自存" : "\(pts) · saved by you"
+    }
+    static func routeItemA11y(_ name: String, _ n: Int, by creator: String?, _ l: Language) -> String {
+        let who = (creator?.isEmpty == false) ? (l == .zh ? "由\(creator!)创建，" : "created by \(creator!), ") : ""
+        return l == .zh ? "路线\(name)，\(n) 个路线点，\(who)双击开始引导" : "Route \(name), \(n) points, \(who)double-tap to start"
     }
     static func nearDestination(_ l: Language) -> String { l == .zh ? "已接近目的地" : "You're near the destination" }
     static func approachingDestination(_ l: Language) -> String {

@@ -91,7 +91,8 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   // - nosniff：禁 MIME 嗅探——防把媒体/JSON 被浏览器改判为 HTML/脚本执行（媒体流的存储型 XSS 兜底）。
   // - X-Frame-Options DENY：防点击劫持——尤其 /admin 后台 HTML 不得被恶意站点 iframe。
   // - Referrer-Policy：跨站只发来源、不泄完整路径。
-  // CSP/HSTS 刻意不在此设：CSP 需按页精调（易误伤 SPA），HSTS 应在 TLS 终止的反代层设。
+  // 全局 CSP/HSTS 刻意不在此设：任意响应的 CSP 需按页精调（易误伤 SPA），HSTS 应在 TLS 终止的反代层设。
+  //   （例外：自包含的 /admin 后台单独发 header CSP，见下方 fastifyStatic 注册处。）
   app.addHook('onRequest', async (_req, reply) => {
     reply.header('X-Content-Type-Options', 'nosniff')
     reply.header('X-Frame-Options', 'DENY')
@@ -208,7 +209,19 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   // 管理后台 Web 面板（静态 SPA，纯前端、零运行时依赖、与 API 同源）。
   // 服务 server/public/admin → /admin/；用 hash 路由，无需服务端 SPA 回退。
   const publicDir = dirname(fileURLToPath(import.meta.url)) + '/../public'
-  app.register(fastifyStatic, { root: join(publicDir, 'admin'), prefix: '/admin/' })
+  // /admin 后台 CSP **作为响应头**交付（严格强于 index.html 内的 <meta http-equiv> CSP）：
+  // ① meta 交付的 CSP 会被浏览器忽略 frame-ancestors/sandbox（点击劫持须靠头），且只覆盖 HTML
+  //    本身、不覆盖 app.js/styles.css 响应；② 注入若发生在 meta 标签之前则不受约束。
+  // 策略与面板内 meta 逐字一致（自包含 SPA、零外链、与 API 同源，故对已在生产运行的面板零破坏），
+  // 额外补 frame-ancestors 'none'（点击劫持的现代等价，belt-and-suspenders 于已设的 X-Frame-Options）
+  // 与 object-src 'none'（面板不用任何插件）。这是"CSP 应按页精调"的一个例外：面板自包含，策略明确。
+  const ADMIN_CSP = "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; "
+    + "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'"
+  app.register(fastifyStatic, {
+    root: join(publicDir, 'admin'),
+    prefix: '/admin/',
+    setHeaders: (res) => { res.setHeader('Content-Security-Policy', ADMIN_CSP) },
+  })
   app.get('/admin', async (_req, reply) => reply.redirect('/admin/', 301))
   // 法律文件已迁至官网同源页面 https://beeurei.hikosphere.com/legal/（不再托管于 API 域）。
   // 旧链接 301 永久重定向过去，避免外部/历史引用失效；上架隐私政策 URL 请直接填官网地址。

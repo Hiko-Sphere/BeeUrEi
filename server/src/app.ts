@@ -95,10 +95,17 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   // - Referrer-Policy：跨站只发来源、不泄完整路径。
   // 全局 CSP/HSTS 刻意不在此设：任意响应的 CSP 需按页精调（易误伤 SPA），HSTS 应在 TLS 终止的反代层设。
   //   （例外：自包含的 /admin 后台单独发 header CSP，见下方 fastifyStatic 注册处。）
-  app.addHook('onRequest', async (_req, reply) => {
+  app.addHook('onRequest', async (req, reply) => {
     reply.header('X-Content-Type-Options', 'nosniff')
     reply.header('X-Frame-Options', 'DENY')
     reply.header('Referrer-Policy', 'strict-origin-when-cross-origin')
+    // Cache-Control: no-store —— 仅对 /api/* 响应。这些几乎全部携带令牌(登录/注册/刷新)或 PII
+    // (用户资料/亲友含手机号/通知/整库备份)，绝不应被浏览器 bfcache 或中间代理缓存（OWASP 敏感数据
+    // 缓存弱点）。默认 Fastify 不设 Cache-Control → 落到启发式缓存，故显式关闭。
+    // **只 gate /api/**：静态资源(/admin 后台、官网)保持可缓存不受影响；本 app 无任何 /api 端点从
+    // 浏览器/代理缓存获益（version/metrics/health 皆无所谓，其余皆敏感）。处理器可再覆写（媒体端点
+    // 已显式设 private,no-store，与此兼容）。
+    if (req.url.startsWith('/api/')) reply.header('Cache-Control', 'no-store')
   })
 
   const hub = new SignalingHub()

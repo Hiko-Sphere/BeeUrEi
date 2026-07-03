@@ -32,6 +32,25 @@ describe('production hardening', () => {
     await a.close()
   })
 
+  it('/api/* 响应带 Cache-Control: no-store（令牌/PII 不被 bfcache 或代理缓存）', async () => {
+    const a = app()
+    // 携带令牌的认证响应：登录返回 token，绝不应被缓存。
+    const reg = await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'cacheu', password: 'secret123', role: 'helper' } })
+    expect(reg.headers['cache-control']).toBe('no-store')
+    // 普通 GET API 也一并 no-store（统一口径，无 /api 端点需要缓存）。
+    const ver = await a.inject({ method: 'GET', url: '/api/version' })
+    expect(ver.headers['cache-control']).toBe('no-store')
+    await a.close()
+  })
+
+  it('静态资源(/admin)不被 no-store 波及——仍可缓存（只 gate /api/*）', async () => {
+    const a = app()
+    const res = await a.inject({ method: 'GET', url: '/admin/' })
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['cache-control']).not.toBe('no-store') // 静态资源缓存策略不受影响
+    await a.close()
+  })
+
   it('/admin 静态资源带 CSP 响应头（含 frame-ancestors/object-src，强于面板内 meta）', async () => {
     const a = app()
     const res = await a.inject({ method: 'GET', url: '/admin/' }) // 目录请求 → index.html

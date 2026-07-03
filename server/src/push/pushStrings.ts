@@ -19,6 +19,11 @@ export const pushStrings = {
     l === 'en' ? 'Friend request accepted' : '好友请求已通过',
   friendAcceptedBody: (name: string, l: PushLang): string =>
     l === 'en' ? `${name} accepted your request` : `${name} 接受了你的请求`,
+  routeAddedTitle: (l: PushLang): string =>
+    l === 'en' ? 'A route was added for you' : '有人为你添加了路线',
+  routeAddedBody: (name: string, routeName: string, l: PushLang): string =>
+    l === 'en' ? `${name} added the route "${routeName}" — open Navigation to walk it`
+               : `${name} 为你添加了路线「${routeName}」，可在导航里沿信标行走`,
   emergencyAlertTitle: (name: string, l: PushLang): string =>
     l === 'en' ? `Emergency: ${name} may need help` : `紧急：${name} 可能需要帮助`,
   emergencyAlertBody: (kind: 'fall' | 'crash' | 'manual' | string, hasLocation: boolean, l: PushLang): string => {

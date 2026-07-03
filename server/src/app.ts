@@ -197,7 +197,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerDevRoutes(instance, store)
     registerNavRoutes(instance, store)
     registerLocationRoutes(instance, store, liveLocations) // 实时位置共享（亲友/协助者 ↔ 盲人）
-    registerSavedRouteRoutes(instance, store) // 路线库（亲友远程路线编排 + 盲人自存路线）
+    registerSavedRouteRoutes(instance, store, pushSender) // 路线库（亲友远程路线编排 + 盲人自存路线）
     registerAppConfigRoutes(instance, store) // 客户端读取功能开关（控制每一个按键）
     registerAssistRoutes(instance, store, hub, presence, pendingCalls, openHelp, pushSender, metrics)
   })

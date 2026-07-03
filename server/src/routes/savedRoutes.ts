@@ -3,6 +3,9 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { requireAuth } from '../auth/rbac'
 import { type Store, type SavedRoute, matchBannedTerm, areLinked, isBlockedBetween } from '../db/store'
+import { type PushSender, NoopPushSender } from '../push/apns'
+import { pushLang, pushStrings } from '../push/pushStrings'
+import { notifyUser } from '../notifications/notify'
 
 /// 路线库（亲友远程路线编排，Soundscape Guided Routes 式）：
 /// 亲友在网页地图上替盲人踩好常走路线（家→菜场），盲人端沿信标一键执行；盲人也可自存路线。
@@ -52,7 +55,7 @@ function anyNoteBlocked(store: Store, waypoints: { note?: string }[] | undefined
   return waypoints.some((w) => w.note != null && matchBannedTerm(cfg, w.note) != null)
 }
 
-export function registerSavedRouteRoutes(app: FastifyInstance, store: Store): void {
+export function registerSavedRouteRoutes(app: FastifyInstance, store: Store, push: PushSender = new NoopPushSender()): void {
   // 建路线：给自己，或给 accepted 互链且无拉黑的联系人（亲友替盲人画路线的主通道）。
   app.post('/api/routes', { preHandler: requireAuth() }, async (req, reply) => {
     const parsed = createSchema.safeParse(req.body)
@@ -78,6 +81,14 @@ export function registerSavedRouteRoutes(app: FastifyInstance, store: Store): vo
       createdAt: now, updatedAt: now,
     }
     store.createSavedRoute(route)
+    // 亲友替盲人建路线：通知盲人"有人为你加了路线"，否则盲人得自己去导航页翻才知道（收件箱 + 推送）。
+    // 仅当替他人建时通知（给自己建不通知自己）；notifyUser 内部 best-effort，失败不影响主操作。
+    if (ownerId !== me) {
+      const l = pushLang(store.findById(ownerId)?.language)
+      notifyUser(store, push, ownerId, 'route_added',
+                 pushStrings.routeAddedTitle(l), pushStrings.routeAddedBody(store.findById(me)?.displayName ?? '', route.name, l),
+                 { routeId: route.id })
+    }
     return { route: routeView(store, route, me) }
   })
 

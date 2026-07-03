@@ -43,6 +43,25 @@ describe('路线库（亲友远程路线编排 Phase 1：服务端）', () => {
     await app.close()
   })
 
+  it('亲友替盲人建路线 → 盲人收到 route_added 通知（附 routeId）；给自己建不通知自己', async () => {
+    const { app, blind, family } = await setup()
+    // 亲友替盲人建
+    const res = await app.inject({ method: 'POST', url: '/api/routes', headers: family.h,
+      payload: { forUserId: blind.id, name: '家到菜场', waypoints: WP } })
+    const routeId = res.json().route.id
+    const notifs = (await app.inject({ method: 'GET', url: '/api/notifications', headers: blind.h })).json().notifications
+    const added = notifs.find((n: { kind: string }) => n.kind === 'route_added')
+    expect(added).toBeTruthy()
+    expect(added.body).toContain('家到菜场')       // 含路线名
+    expect(added.body).toContain('familyuser')     // 含创建者名
+    expect(added.data.routeId).toBe(routeId)       // 附 routeId 供客户端跳转
+    // 盲人给自己建路线：不通知自己
+    await app.inject({ method: 'POST', url: '/api/routes', headers: blind.h, payload: { name: '自存', waypoints: WP } })
+    const notifs2 = (await app.inject({ method: 'GET', url: '/api/notifications', headers: blind.h })).json().notifications
+    expect(notifs2.filter((n: { kind: string }) => n.kind === 'route_added')).toHaveLength(1) // 仍只有 1 条（亲友那条）
+    await app.close()
+  })
+
   it('盲人可给自己建路线（实走存路线通道）；own+created 列表去重', async () => {
     const { app, blind } = await setup()
     const res = await app.inject({ method: 'POST', url: '/api/routes', headers: blind.h,

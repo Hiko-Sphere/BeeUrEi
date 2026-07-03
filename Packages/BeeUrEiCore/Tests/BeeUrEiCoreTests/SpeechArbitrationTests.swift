@@ -94,4 +94,23 @@ final class SpeechArbitrationTests: XCTestCase {
         XCTAssertFalse(t.shouldSpeak("往左移", at: 11.5))  // 同提示 2.5s 内不重复
         XCTAssertTrue(t.shouldSpeak("往左移", at: 13.0))   // 到点重复（持续指导）
     }
+
+    func testSeedSuppressesImmediateRepeatOfSameHint() {
+        // 场景：点按已先播了"红色"，随即进入连续模式并 seed。feed 不得在下一帧立刻重报同色，
+        // 但颜色一变即可播、同色超 repeatGap 后可重复。修复"开启瞬间口吃/重复播报"缺陷。
+        var t = HintThrottle(stableTicks: 3, minGap: 1.0, repeatGap: 8.0)
+        t.seed("红色", at: 1000.0)                          // 刚播过红色（mach 秒式的大时间戳）
+        XCTAssertFalse(t.shouldSpeak("红色", at: 1000.4))   // 下一处理帧仍红：不重报（未过 repeatGap）
+        XCTAssertFalse(t.shouldSpeak("红色", at: 1001.2))   // 仍红且未过 8s：不重报
+        XCTAssertTrue(t.shouldSpeak("红色", at: 1008.5))    // 同色超 repeatGap：温和重播
+    }
+
+    func testSeededHintStillSpeaksWhenColorChanges() {
+        // seed 后颜色变化：走稳定路径（连续 stableTicks 帧 + 距 seed 超 minGap）即开口。
+        var t = HintThrottle(stableTicks: 3, minGap: 1.0, repeatGap: 8.0)
+        t.seed("红色", at: 1000.0)
+        XCTAssertFalse(t.shouldSpeak("蓝色", at: 1000.4))   // 新色第 1 帧
+        XCTAssertFalse(t.shouldSpeak("蓝色", at: 1000.8))   // 第 2 帧
+        XCTAssertTrue(t.shouldSpeak("蓝色", at: 1001.2))    // 第 3 帧稳定且距 seed >1s → 播新色
+    }
 }

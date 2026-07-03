@@ -67,6 +67,16 @@ public struct HintThrottle: Sendable {
         pendingCount = 0
     }
 
+    /// 预置基线：把某提示登记为"此刻刚已播报"（lastHint + lastSpoke）。此后连续 feed 只在
+    /// 提示**变化**、或同提示超过 repeatGap 时才开口——用于"点按先播一次、随即进入连续模式"，
+    /// 避免新建节流器（lastSpoke=0）在下一帧立刻把刚播的同值再报一遍。
+    public mutating func seed(_ hint: String, at t: TimeInterval) {
+        lastHint = hint
+        lastSpoke = t
+        pendingHint = ""
+        pendingCount = 0
+    }
+
     /// 每个处理帧调用；返回 true 表示此刻应播报该提示。
     public mutating func shouldSpeak(_ hint: String, at t: TimeInterval) -> Bool {
         if hint == lastHint {

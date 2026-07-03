@@ -41,6 +41,7 @@ final class FramingAssistViewModel {
     @ObservationIgnored private var latestBuffer: CVPixelBuffer?
     @ObservationIgnored private var latestDepth: DepthMap?
     @ObservationIgnored private var latestCamera: CameraGeometry?
+    @ObservationIgnored private var latestTimestamp: TimeInterval = 0 // 最近帧时间戳（mach 秒），供点按动作与连续 feed 同钟
     @ObservationIgnored private var latestDetections: [DetectedObject] = []
 
     /// 真实水平视场角（有内参时计算，否则回退 68° 经验值）。
@@ -128,20 +129,12 @@ final class FramingAssistViewModel {
         latestBuffer = frame.pixelBuffer // 供"朗读文字"用最新帧
         latestDepth = frame.depth        // 供"周围的人"报距离
         latestCamera = frame.camera      // 供方位计算用真实视场角
+        latestTimestamp = frame.timestamp // 供点按动作与连续 feed 同钟
 
         // 连续光探测：每帧（不受下方 0.4s 节流约束，扫动要跟手）把整帧亮度映射成音调喂声呐。
         // 仅在无其它持久模式时响（文档/找物/探索占屏时不响，避免抢声）。
         if lightToneOn, !docMode, findPhase == .idle, !exploring, let b = currentBrightness() {
             lightSonifier.update(LightSonification.cue(brightness: b))
-        }
-        // 连续颜色：指哪报哪——中央区颜色变了且稳定（HintThrottle，已测）才播，避免刷屏。
-        if colorContinuousOn, !docMode, findPhase == .idle, !exploring, let buffer = latestBuffer,
-           let rgb = ColorSampler.averageRGB(in: buffer, rect: CGRect(x: 0.4, y: 0.4, width: 0.2, height: 0.2)) {
-            let name = ColorNamer().name(r: rgb.r, g: rgb.g, b: rgb.b, language: lang)
-            if colorThrottle.shouldSpeak(name, at: frame.timestamp) {
-                resultText = FramingStrings.colorResult(name, lang)
-                speak(FramingStrings.colorSpeak(name, lang))
-            }
         }
 
         // Siri 频道直达（Seeing AI 全频道快捷指令惯例）：首帧就绪后自动触发排队的动作。
@@ -151,6 +144,18 @@ final class FramingAssistViewModel {
         }
         guard frame.timestamp - lastProcess >= 0.4 else { return }
         lastProcess = frame.timestamp
+
+        // 连续颜色：指哪报哪——中央区颜色变了且稳定才播（避免刷屏）。放在 0.4s 处理节流之后，
+        // 让 HintThrottle 按处理帧（≈2.5/s）评估稳定性（stableTicks=3≈1.2s，与取景指导同节奏），
+        // 且 ColorSampler/ColorNamer 只在处理帧计算而非每视频帧（省电）。光探测因要跟手仍留在节流前。
+        if colorContinuousOn, !docMode, findPhase == .idle, let buffer = latestBuffer,
+           let rgb = ColorSampler.averageRGB(in: buffer, rect: CGRect(x: 0.4, y: 0.4, width: 0.2, height: 0.2)) {
+            let name = ColorNamer().name(r: rgb.r, g: rgb.g, b: rgb.b, language: lang)
+            if colorThrottle.shouldSpeak(name, at: frame.timestamp) {
+                resultText = FramingStrings.colorResult(name, lang)
+                speak(FramingStrings.colorSpeak(name, lang))
+            }
+        }
 
         // 文档模式（Seeing AI 式）：引导把整页放进画面，稳定后自动拍摄整页朗读。
         if docMode {
@@ -309,6 +314,7 @@ final class FramingAssistViewModel {
 
     /// 开始寻找某个已学物品。
     func startFinding(_ name: String) {
+        stopContinuous() // 切到找物：停所有持续背景模式（光探测/连续颜色），与 startCategoryFind 一致
         let prints = itemsStore.prints(for: name)
         guard !prints.isEmpty else { speak(FramingStrings.noRecord(name, lang)); return }
         docMode = false
@@ -409,6 +415,7 @@ final class FramingAssistViewModel {
     /// 帧先旋转为竖屏 upright，检测/OCR/显示共用**同一**定向空间——触摸↔框映射天然自洽，无方向坑。
     func captureExplore() {
         guard let live = latestBuffer, !exploring, !paused else { return }
+        stopContinuous() // 进触摸探索前停所有持续背景模式：光探测靠自治定时器发声，仅停喂帧不会闭嘴（会抢探索朗读）
         speak(FramingStrings.analyzing(lang))
         guard let oriented = Self.orientedBuffer(from: live) else { speak(FramingStrings.analyzeFailed(lang)); return }
         // 物体（YOLO 全帧，中文名）。
@@ -798,23 +805,29 @@ final class FramingAssistViewModel {
     func readColor() {
         if colorContinuousOn { stopColorContinuous(); return } // 已开 → 再点关闭
         stopLightTone() // 互斥：开颜色前停光探测
-        readColorOnce()
+        let spoken = readColorOnce()
         colorContinuousOn = true
         colorThrottle = HintThrottle(stableTicks: 3, minGap: 1.0, repeatGap: 8.0) // 重置节流基线
+        // 预置刚播的颜色为基线（与 feed 同 mach 钟），否则新节流器 lastSpoke=0 会在下一处理帧
+        // 立刻把同色再报一遍（还掐断前句）。之后仅颜色变化或超 repeatGap 才开口。
+        if let spoken { colorThrottle.seed(spoken, at: latestTimestamp) }
     }
 
-    /// 识别画面中央区域的颜色一次（端侧采样 + 核心 ColorNamer，已测）。
-    private func readColorOnce() {
-        guard let buffer = latestBuffer else { speak(FramingStrings.aimObject(lang)); return }
-        if tooDarkToProceed() { return }
+    /// 识别画面中央区域的颜色一次（端侧采样 + 核心 ColorNamer，已测）。返回实际播报的颜色名（供节流预置）。
+    @discardableResult
+    private func readColorOnce() -> String? {
+        guard let buffer = latestBuffer else { speak(FramingStrings.aimObject(lang)); return nil }
+        if tooDarkToProceed() { return nil }
         let rect = CGRect(x: 0.4, y: 0.4, width: 0.2, height: 0.2)
         if let rgb = ColorSampler.averageRGB(in: buffer, rect: rect) {
             let name = ColorNamer().name(r: rgb.r, g: rgb.g, b: rgb.b, language: lang)
             resultText = FramingStrings.colorResult(name, lang)
             copyableResult = nil
             speak(FramingStrings.colorSpeak(name, lang))
+            return name
         } else {
             speak(FramingStrings.colorFailed(lang))
+            return nil
         }
     }
 

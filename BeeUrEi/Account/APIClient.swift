@@ -615,7 +615,9 @@ struct APIClient {
     func familyLinks(token: String) async throws -> [FamilyLinkInfo] {
         struct R: Codable { let links: [FamilyLinkInfo] }
         let data = try await authedGet("/api/family/links", token: token)
-        return (try? JSONDecoder().decode(R.self, from: data))?.links ?? []
+        let links = (try? JSONDecoder().decode(R.self, from: data))?.links ?? []
+        EmergencyDialCache.update(from: links) // 无网兜底拨号缓存：每次拉到亲友列表顺手刷新（唯一数据入口）
+        return links
     }
 
     func incomingLinks(token: String) async throws -> [IncomingLinkInfo] {

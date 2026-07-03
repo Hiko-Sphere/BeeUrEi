@@ -146,6 +146,9 @@ final class EmergencyAlertCenter: NSObject, CLLocationManagerDelegate {
         } else {
             phase = .failed
             speak(HomeStrings.fallAlertFailed(lang))
+            // 无网兜底：重试全败多半是没有数据网络——tel: 蜂窝语音不依赖数据。缓存里有紧急联系人
+            // 电话就唤起系统拨号确认（不静默直拨，系统弹"呼叫…?"，VoiceOver 可确认/取消）。
+            EmergencyDialCache.dialFallbackIfAvailable(lang: lang) { speak($0) }
         }
         scheduleReset()
     }

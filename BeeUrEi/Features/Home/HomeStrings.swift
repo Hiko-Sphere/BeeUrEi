@@ -141,6 +141,12 @@ enum HomeStrings {
     static func fallAlertFailed(_ l: Language) -> String {
         l == .zh ? "通知发送失败，请直接呼叫求助。" : "Couldn't send the alert. Please call for help directly."
     }
+    /// 无网兜底拨号播报（配 EmergencyDialCache）：告警失败转蜂窝语音拨紧急联系人。
+    static func dialingFallback(_ name: String, _ l: Language) -> String {
+        l == .zh ? "正在为你拨打\(name)的电话，请在弹出的确认里选择呼叫。"
+                 : "Calling \(name) now — confirm the call in the prompt."
+    }
+
     static func fallAlertNeedLogin(_ l: Language) -> String {
         l == .zh ? "未登录，无法通知亲友。请直接呼叫求助。" : "Not signed in — can't notify family. Please call for help."
     }

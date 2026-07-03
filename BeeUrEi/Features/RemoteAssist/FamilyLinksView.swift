@@ -50,7 +50,8 @@ struct FamilyLinksView: View {
                             Spacer()
                             if let phone = l.phone, !phone.isEmpty {
                                 Button {
-                                    if let url = URL(string: "tel://\(phone)") { UIApplication.shared.open(url) }
+                                    // 经核心消毒（空格/连字符/括号会让裸插值的 URL(string:) 返回 nil——拨号静默失败）。
+                                    if let s = EmergencyPhoneFallback.telURLString(phone), let url = URL(string: s) { UIApplication.shared.open(url) }
                                 } label: {
                                     Label(AssistStrings.dial(lang), systemImage: "phone.fill")
                                 }

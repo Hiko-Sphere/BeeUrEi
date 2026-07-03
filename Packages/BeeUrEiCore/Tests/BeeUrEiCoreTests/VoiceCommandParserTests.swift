@@ -151,6 +151,28 @@ final class VoiceCommandParserTests: XCTestCase {
     /// 摔倒的盲人喊"救命"必须走告警（倒计时→通知全部亲友+附位置），不是拨一通可能没人接的视频电话。
     /// 语速指令边界：正常/恢复须在 快/慢 之前（"恢复正常语速"含"语速"）；不误伤读文字/念一下。
     /// 详略指令不误伤朗读：裸"读整页/读文字"仍是读文档，只有明确详略说法才 adjustVerbosity。
+    /// 目的地解析容忍插入词（对抗复审揪出的真 bug）：赶时间的口语"带我快一点去医院"应 navigate。
+    func testDestinationTolerantOfInterjections() {
+        XCTAssertEqual(VoiceCommandParser.parse("带我快一点去医院"), .navigate("医院"))
+        XCTAssertEqual(VoiceCommandParser.parse("我想现在就去超市"), .navigate("超市"))
+        XCTAssertEqual(VoiceCommandParser.parse("我想知道怎么去地铁站"), .navigate("地铁站")) // "怎么去X"也算导航意图
+        XCTAssertEqual(VoiceCommandParser.parse("take me quickly to the hospital"), .navigate("the hospital"))
+        // 假阳性防护：意图词后无"去X"不误判。
+        XCTAssertEqual(VoiceCommandParser.parse("我想起来了"), .unknown)
+        XCTAssertEqual(VoiceCommandParser.parse("我要买东西"), .unknown)
+        // 标准说法与"带我回去"(goHome)不受影响。
+        XCTAssertEqual(VoiceCommandParser.parse("带我去北京西站"), .navigate("北京西站"))
+        XCTAssertEqual(VoiceCommandParser.parse("带我回去"), .goHome)
+    }
+
+    /// 对抗复审固化：语速/详略的语境词不越界偷走导航/环境/朗读（"详细点"非"详细"的设计经受验证）。
+    func testAdjustCommandsDoNotStealNeighbors() {
+        XCTAssertEqual(VoiceCommandParser.parse("详细导航到医院"), .navigate("医院"))      // 详细导航≠调详略
+        XCTAssertEqual(VoiceCommandParser.parse("简短介绍一下周围"), .around)              // 简短介绍≠调详略
+        XCTAssertEqual(VoiceCommandParser.parse("慢一点走"), .unknown)                     // 走慢点≠调语速（无该命令）
+        XCTAssertEqual(VoiceCommandParser.parse("公交车太慢了"), .readBus)                 // 公交(早)胜过语速
+    }
+
     func testVerbosityBoundary() {
         XCTAssertEqual(VoiceCommandParser.parse("说详细点"), .adjustVerbosity(.moreDetail))
         XCTAssertEqual(VoiceCommandParser.parse("太啰嗦了，简短点"), .adjustVerbosity(.terser))

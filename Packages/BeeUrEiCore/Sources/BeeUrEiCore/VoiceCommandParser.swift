@@ -104,6 +104,26 @@ public enum VoiceCommandParser {
                 return dest.isEmpty ? nil : dest
             }
         }
+        // 容忍插入词的口语变体（对抗复审揪出）："带我快一点去医院""我想现在去超市"——精确前缀未命中时，
+        // 取意图词后**首个"去"**之后的目的地。仅兜底：标准说法与"带我回去"(→goHome，上游已拦)不受影响。
+        // 防假阳性：意图词后须真有"去X"且 X 非空；"我想起来了""我要买东西"(无"去")自然不匹配。
+        for intent in ["带我", "我要", "我想"] {
+            guard let s0 = text.range(of: intent) else { continue }
+            let rest = text[s0.upperBound...]
+            if let g = rest.range(of: "去") {
+                let dest = String(rest[g.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !dest.isEmpty { return dest }
+            }
+        }
+        // 英文同理："take me quickly to the hospital"——"take me" + 其后 " to " 之后为目的地。
+        // 对原始子串大小写不敏感取范围（避免 lowercased 与原串索引错位）。
+        if let s0 = text.range(of: "take me", options: .caseInsensitive) {
+            let rest = text[s0.upperBound...]
+            if let g = rest.range(of: " to ", options: .caseInsensitive) {
+                let dest = String(rest[g.upperBound...]).trimmingCharacters(in: .whitespaces)
+                if !dest.isEmpty { return dest }
+            }
+        }
         return nil
     }
 

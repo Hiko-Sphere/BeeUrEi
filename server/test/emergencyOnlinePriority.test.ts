@@ -6,21 +6,19 @@ import { MemoryStore } from '../src/db/store'
 // 且响应带 isOnline 供客户端标注。证明 planEmergencyRoute 的在线加权真正接到了 presence。
 describe('紧急呼叫目标：在线优先（端到端）', () => {
   async function seed() {
-    const a = buildApp(new MemoryStore())
+    const store = new MemoryStore()
+    const a = buildApp(store)
     const reg = async (u: string, role?: string) =>
       (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
     const owner = await reg('owner')
-    const early = await reg('early', 'family') // 更早添加的紧急联系人
-    const late = await reg('late', 'family')   // 更晚添加的紧急联系人
+    const early = await reg('early', 'family')
+    const late = await reg('late', 'family')
     const auth = { authorization: `Bearer ${owner.token}` }
-    const addEmergency = async (username: string) => {
-      const l = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth, payload: { username, relation: '家人', isEmergency: true } })
-      return l.json().link.id as string
-    }
-    const eId = await addEmergency('early')
-    const lId = await addEmergency('late')
-    await a.inject({ method: 'POST', url: `/api/family/links/${eId}/accept`, headers: { authorization: `Bearer ${early.token}` } })
-    await a.inject({ method: 'POST', url: `/api/family/links/${lId}/accept`, headers: { authorization: `Bearer ${late.token}` } })
+    // 链接直接经 store 建，**显式 createdAt（early=1000 < late=2000）**——杜绝 HTTP 两次 addEmergency
+    // 落到同一毫秒时 planEmergencyRoute 的 (createdAt,id) tie 走随机 UUID、令"添加时间序"断言 flaky
+    // （同毫秒排序的确定性由 routing.test 单测以受控 createdAt 覆盖；此处只验 presence 端到端接线）。
+    store.createLink({ id: 'link-early', ownerId: owner.user.id, memberId: early.user.id, relation: '家人', isEmergency: true, createdAt: 1000, status: 'accepted' })
+    store.createLink({ id: 'link-late', ownerId: owner.user.id, memberId: late.user.id, relation: '家人', isEmergency: true, createdAt: 2000, status: 'accepted' })
     return { a, owner, early, late, auth }
   }
 

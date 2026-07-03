@@ -333,6 +333,20 @@ public enum SpokenStrings {
         }
     }
 
+    /// 配色和谐度播报（配 ColorNamer.harmony）：措辞保守，不做主观时尚裁断。
+    public static func colorHarmony(_ h: ColorNamer.ColorHarmony, _ lang: Language) -> String {
+        switch (h, lang) {
+        case (.neutral, .zh):  return "有中性色，比较百搭"
+        case (.neutral, .en):  return "one is a neutral tone, so it goes with most things"
+        case (.similar, .zh):  return "同色系，比较协调"
+        case (.similar, .en):  return "similar tones, they coordinate well"
+        case (.contrast, .zh): return "对比色，撞色搭配，比较醒目"
+        case (.contrast, .en): return "contrasting colors, a bold and eye-catching pairing"
+        case (.caution, .zh):  return "两个颜色差异较大，拿不准的话可以问一下别人"
+        case (.caution, .en):  return "quite different colors; if you're unsure, you might ask someone"
+        }
+    }
+
     /// 颜色深浅前缀（配 ColorNamer.describe）：中文"深"/"浅"直接拼色名（深蓝色）；英文带尾空格拼（dark blue）。
     public static func tonePrefix(dark: Bool, _ lang: Language) -> String {
         switch lang {

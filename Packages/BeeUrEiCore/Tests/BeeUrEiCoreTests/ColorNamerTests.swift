@@ -49,3 +49,38 @@ final class ColorNamerTests: XCTestCase {
         XCTAssertEqual(n.tone(r: 0, g: 0, b: 0), .normal)        // 黑（中性不判深浅）
     }
 }
+
+// 配色和谐度（盲人配衣服的决策需求）——2026-07 补。
+extension ColorNamerTests {
+    func testHarmonyNeutralGoesWithAnything() {
+        // 黑/白/灰 + 任意鲜艳色 → 百搭。
+        XCTAssertEqual(n.harmony(r1: 0, g1: 0, b1: 0, r2: 1, g2: 0, b2: 0), .neutral)       // 黑+红
+        XCTAssertEqual(n.harmony(r1: 1, g1: 1, b1: 1, r2: 0, g2: 0, b2: 1), .neutral)       // 白+蓝
+        XCTAssertEqual(n.harmony(r1: 0.5, g1: 0.5, b1: 0.5, r2: 0, g2: 1, b2: 0), .neutral) // 灰+绿
+    }
+
+    func testHarmonySimilarSameFamily() {
+        // 蓝 + 青（邻近色相 ~40°? cyan~180 blue~220 差40——应 similar 或临界）。用更近的：纯蓝 + 深蓝。
+        XCTAssertEqual(n.harmony(r1: 0, g1: 0, b1: 1, r2: 0, g2: 0, b2: 0.6), .similar) // 蓝+深蓝同系
+    }
+
+    func testHarmonyContrastComplementary() {
+        // 红(h0) + 青(h180) 近互补 → 撞色。
+        XCTAssertEqual(n.harmony(r1: 1, g1: 0, b1: 0, r2: 0, g2: 1, b2: 1), .contrast)
+        // 蓝(h240) + 黄(h60) 差180 → 撞色。
+        XCTAssertEqual(n.harmony(r1: 0, g1: 0, b1: 1, r2: 1, g2: 1, b2: 0), .contrast)
+    }
+
+    func testHarmonyCautionOnlyWhenBothVivid() {
+        // 两个鲜艳、中间尴尬角度（红 h0 + 绿 h120，差120）→ 需谨慎。
+        XCTAssertEqual(n.harmony(r1: 1, g1: 0, b1: 0, r2: 0, g2: 1, b2: 0), .caution)
+        // 同样色相角度但柔和（低饱和粉红 + 浅绿）→ 降级为协调（柔色包容）。
+        XCTAssertEqual(n.harmony(r1: 1, g1: 0.7, b1: 0.7, r2: 0.7, g2: 1, b2: 0.7), .similar)
+    }
+
+    func testHarmonyStringsBilingual() {
+        XCTAssertEqual(SpokenStrings.colorHarmony(.neutral, .zh), "有中性色，比较百搭")
+        XCTAssertTrue(SpokenStrings.colorHarmony(.caution, .en).contains("ask someone"))
+        XCTAssertTrue(SpokenStrings.colorHarmony(.contrast, .zh).contains("撞色"))
+    }
+}

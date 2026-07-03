@@ -35,6 +35,32 @@ public struct ColorNamer: Sendable {
         }
     }
 
+    /// 配色和谐度（盲人配衣服的**决策**需求：扫两件衣物，想知道"搭不搭"而不只是色名）。
+    public enum ColorHarmony: Sendable, Equatable {
+        case neutral   // 含中性色（黑/白/灰/棕）：百搭
+        case similar   // 同色系/邻近色：协调
+        case contrast  // 对比/互补色：撞色，醒目（看穿着意图）
+        case caution   // 两个鲜艳色相隔尴尬角度：差异大，拿不准
+    }
+
+    /// 判定两色是否搭配（纯色彩理论，不做主观时尚裁断——措辞保守，caution 只建议"可问人"）。
+    /// 规则：任一中性→百搭；否则按色相夹角——≤35°同/邻近系(协调)、≥150°近互补(撞色)、
+    /// 中间角度**仅两个都鲜艳(s≥0.5)时**才判需谨慎（柔和/低饱和色相互包容，降级为协调）。
+    public func harmony(r1: Double, g1: Double, b1: Double,
+                        r2: Double, g2: Double, b2: Double) -> ColorHarmony {
+        let neutrals: Set<SpokenStrings.ColorKey> = [.black, .white, .gray, .brown, .unknown]
+        if neutrals.contains(key(r: r1, g: g1, b: b1)) || neutrals.contains(key(r: r2, g: g2, b: b2)) {
+            return .neutral
+        }
+        let (h1, s1, _) = Self.rgbToHsv(r1, g1, b1)
+        let (h2, s2, _) = Self.rgbToHsv(r2, g2, b2)
+        let raw = abs(h1 - h2)
+        let d = min(raw, 360 - raw) // 色相夹角 0…180
+        if d <= 35 { return .similar }
+        if d >= 150 { return .contrast }
+        return (s1 >= 0.5 && s2 >= 0.5) ? .caution : .similar
+    }
+
     /// 语言无关的颜色分桶键（供本地化与测试）。
     func key(r: Double, g: Double, b: Double) -> SpokenStrings.ColorKey {
         let (h, s, v) = Self.rgbToHsv(r, g, b)

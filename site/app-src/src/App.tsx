@@ -18,6 +18,7 @@ import { VerificationGate } from './pages/VerificationGate'
 // 其余为核心页（多数会话都用），保持 eager 避免每次导航闪烁。
 const LocationsPage = lazy(() => import('./pages/Locations').then((m) => ({ default: m.LocationsPage })))
 const AdminPage = lazy(() => import('./pages/Admin').then((m) => ({ default: m.AdminPage })))
+const RoutesPage = lazy(() => import('./pages/Routes').then((m) => ({ default: m.RoutesPage }))) // 带 Leaflet，与 Locations 同策略懒加载
 
 export function App() {
   const { user, ready, requireVerification } = useSession()
@@ -45,6 +46,7 @@ export function App() {
         <Route path="/chat/:peerId" element={<ChatPage />} />
         <Route path="/family" element={<FamilyPage />} />
         <Route path="/locations" element={<LocationsPage />} />
+        <Route path="/routes" element={<RoutesPage />} />
         <Route path="/recordings" element={<RecordingsPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/account" element={<AccountPage />} />

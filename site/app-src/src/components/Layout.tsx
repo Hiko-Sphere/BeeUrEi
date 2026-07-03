@@ -6,7 +6,7 @@ import { api, type AppConfig } from '../lib/api'
 import { getTheme, setTheme, appTitle, type Theme } from '../lib/theme'
 import { Avatar, Pill } from './ui'
 import { CallProvider } from '../pages/call/CallController'
-import { IconHome, IconPhone, IconChat, IconUsers, IconFilm, IconBell, IconUser, IconShield, IconLogo, IconPin } from './icons'
+import { IconHome, IconPhone, IconChat, IconUsers, IconFilm, IconBell, IconUser, IconShield, IconLogo, IconPin, IconFlag } from './icons'
 
 const HEARTBEAT_MS = 25_000
 const LS_AVAIL = 'beeurei.web.available'
@@ -67,6 +67,7 @@ export function Layout({ children }: { children: ReactNode }) {
     { to: '/chat', label: t('消息', 'Chat'), icon: <IconChat />, badge: chatUnread },
     { to: '/family', label: t('亲友', 'Contacts'), icon: <IconUsers /> },
     { to: '/locations', label: t('位置', 'Location'), icon: <IconPin /> },
+    { to: '/routes', label: t('路线', 'Routes'), icon: <IconFlag /> },
     { to: '/recordings', label: t('录音', 'Recordings'), icon: <IconFilm /> },
     { to: '/notifications', label: t('通知', 'Alerts'), icon: <IconBell />, badge: unread },
     { to: '/account', label: t('账户', 'Account'), icon: <IconUser /> },

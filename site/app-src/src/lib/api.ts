@@ -28,6 +28,9 @@ export interface ChatGroup { id: string; name: string; ownerId: string; memberId
 export interface GroupSummary { group: ChatGroup; members: User[]; last: ChatMessage | null; unread: number }
 export interface RecordingInfo { id: string; callId: string; ownerId: string; ownerName: string; reason: string; recordedAt: number; durationSec?: number | null; lat?: number | null; lon?: number | null; locationLabel?: string | null; participantIds: string[]; participantNames: string[]; hasMedia: boolean; deletedAt?: number | null }
 export interface NotificationInfo { id: string; userId: string; kind: string; title: string; body: string; data?: Record<string, string> | null; createdAt: number; readAt?: number | null }
+export interface RouteWaypoint { lat: number; lng: number; note?: string }
+/// 路线库条目（坐标全程 WGS-84——编辑器必须用 OSM 瓦片，绝不可换 amap GCJ-02 瓦片，会系统性偏移百米级）。
+export interface SavedRouteInfo { id: string; ownerId: string; createdBy: string; name: string; waypoints: RouteWaypoint[]; createdAt: number; updatedAt: number; role: 'owner' | 'creator' }
 export interface ContactLocation { userId: string; displayName: string; avatar?: string | null; role: string; lat: number; lng: number; accuracy?: number | null; heading?: number | null; updatedAt: number }
 export interface AppConfig {
   features: Record<string, boolean>
@@ -175,6 +178,7 @@ async function tryRefresh(): Promise<boolean> {
 const get = (p: string) => rawFetch('GET', p, undefined, true)
 const post = (p: string, b?: unknown) => rawFetch('POST', p, b, true)
 const del = (p: string) => rawFetch('DELETE', p, undefined, true)
+const put = (p: string, b?: unknown) => rawFetch('PUT', p, b, true)
 
 // ---------- API ----------
 export const api = {
@@ -246,6 +250,13 @@ export const api = {
   heartbeat: (available = true) => post('/api/assist/heartbeat', { available }),
   // 协助者行为守则确认（一次性守则卡）：服务端留痕，selfView.helperGuidelineAckAt 回传。
   guidelineAck: () => post('/api/assist/guideline-ack', {}) as Promise<{ ok: boolean; helperGuidelineAckAt: number }>,
+  // 路线库（亲友远程路线编排）：替互链盲人画常走路线 / 自存路线；服务端校验互链与上限。
+  listRoutes: () => get('/api/routes') as Promise<{ routes: SavedRouteInfo[] }>,
+  createRoute: (name: string, waypoints: RouteWaypoint[], forUserId?: string) =>
+    post('/api/routes', { name, waypoints, ...(forUserId ? { forUserId } : {}) }) as Promise<{ route: SavedRouteInfo }>,
+  updateRoute: (id: string, patch: { name?: string; waypoints?: RouteWaypoint[] }) =>
+    put(`/api/routes/${encodeURIComponent(id)}`, patch) as Promise<{ route: SavedRouteInfo }>,
+  deleteRoute: (id: string) => del(`/api/routes/${encodeURIComponent(id)}`),
   helpQueue: () => get('/api/assist/help/queue') as Promise<{ requests: HelpRequest[]; count: number }>,
   claimHelp: (callId: string) => post('/api/assist/help/claim', { callId }) as Promise<{ request: { callId: string; fromName: string; fromAvatar?: string | null; language?: string | null; locality?: string | null; topic?: string | null } }>,
 

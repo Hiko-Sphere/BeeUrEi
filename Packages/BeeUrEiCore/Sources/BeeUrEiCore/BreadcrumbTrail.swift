@@ -18,14 +18,20 @@ public struct BreadcrumbTrail: Sendable {
     public var start: Coordinate? { points.first }
 
     /// 记录一个定位点。仅当与上一点距离 ≥ minStepMeters 时入轨（返回 true）。
-    /// 超过 maxPoints 后不再记录（8m 步距 × 2000 点 ≈ 16km，足够步行场景）。
+    /// 容量满时**隔点抽稀已存轨迹**再继续记录（保首点=回程终点、保末端=回程起步段），而非静默停录——
+    /// 停录会把**最近**走过的一段（恰是回程最先要走的）整段丢失，用户毫不知情。backtrackWaypoints
+    /// 本就按 25m 抽稀使用，8m 存储粒度是 3 倍过采样：旧段变粗（16m/32m…）不影响回程可用性。
+    /// 默认 8m × 2000 点 ≈ 16km；每次抽稀覆盖里程翻倍，超长行程也永不停录。
     @discardableResult
     public mutating func record(lat: Double, lon: Double) -> Bool {
         guard lat.isFinite, lon.isFinite else { return false }
-        guard points.count < maxPoints else { return false }
         if let last = points.last {
             let d = Geo.distanceMeters(fromLat: last.lat, fromLon: last.lon, toLat: lat, toLon: lon)
             guard d >= minStepMeters else { return false }
+        }
+        while points.count >= maxPoints, points.count >= 3 {
+            let lastIdx = points.count - 1
+            points = points.enumerated().filter { $0.offset % 2 == 0 || $0.offset == lastIdx }.map(\.element)
         }
         points.append(Coordinate(lat: lat, lon: lon))
         return true

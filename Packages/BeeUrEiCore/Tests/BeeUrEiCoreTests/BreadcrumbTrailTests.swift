@@ -33,10 +33,22 @@ final class BreadcrumbTrailTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(back.count, 2)
     }
 
-    func testCapStopsRecording() {
+    /// 容量满：抽稀旧轨迹继续记录（有界），而非静默停录——起点（回程终点）与最近点（回程起步）都永不丢。
+    func testCapDecimatesInsteadOfSilentlyStopping() {
         var t = BreadcrumbTrail(minStepMeters: 8, maxPoints: 3)
-        walk(&t, steps: 10)
-        XCTAssertEqual(t.count, 3)
+        walk(&t, steps: 10) // 尝试 11 个点（每点 ~11m）
+        XCTAssertLessThanOrEqual(t.count, 3)                                // 容量始终有界
+        XCTAssertEqual(t.start?.lat ?? 0, 31.0, accuracy: 1e-9)             // 起点永不丢（回程的终点）
+        XCTAssertEqual(t.points.last?.lat ?? 0, 31.0010, accuracy: 1e-9)    // 最近点永不丢（继续记录，修复前会停在 31.0002）
+    }
+
+    /// 超容量长程后回程仍完整：第一个航点在当前位置附近、最后一个是原始起点。
+    func testBacktrackStillWorksAfterCapDecimation() {
+        var t = BreadcrumbTrail(minStepMeters: 8, maxPoints: 8)
+        walk(&t, steps: 30) // 31 点 >> 8 容量，触发多次抽稀
+        let back = t.backtrackWaypoints(minSpacingMeters: 25)
+        XCTAssertEqual(back.first?.lat ?? 0, 31.0030, accuracy: 1e-9) // 回程从"现在的位置"出发
+        XCTAssertEqual(back.last?.lat ?? 0, 31.0, accuracy: 1e-9)     // 终点仍是原始起点
     }
 
     func testResetClears() {

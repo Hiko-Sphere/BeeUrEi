@@ -81,6 +81,14 @@ enum HomeStrings {
         l == .zh ? "打开看一看、导航、天气、周围、消息、实时位置、设置等快捷操作"
                  : "Open quick actions: look around, navigation, weather, surroundings, messages, live location, settings"
     }
+    /// 能力自述（.commands）：盲人无法浏览 UI 发现功能——语音能力必须能被语音发现。按使用频率排序，
+    /// 紧急能力放最后压轴强调（列表式播报的记忆点在首尾）。
+    static func voiceCommandsHelp(_ l: Language) -> String {
+        l == .zh
+            ? "你可以说：开始导盲、带我去某地、看一看、读一下文字、找我的钥匙、我在哪、周围有什么、天气、给某人发消息、打开消息、再说一遍。需要人帮忙说\u{201C}求助\u{201D}；遇到危险说\u{201C}救命\u{201D}，会倒计时通知你的全部亲友。"
+            : "You can say: start guide, take me to a place, look, read this, find my keys, where am I, what's around, weather, send a message, open messages, or repeat. Say \u{201C}get help\u{201D} to call someone; say \u{201C}emergency\u{201D} if you're in danger — it counts down and alerts all your contacts."
+    }
+
     static func nothingToRepeat(_ l: Language) -> String {
         l == .zh ? "现在没有需要重复的播报。" : "There's nothing to repeat right now."
     }

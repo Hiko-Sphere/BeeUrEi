@@ -27,6 +27,7 @@ final class VoiceCommandParserTests: XCTestCase {
             ("这是什么颜色", .readColor), ("什么色", .readColor), ("what color is this", .readColor),
             ("看一看这是什么", .look), ("识别一下", .look), ("what is this", .look),
             ("再说一遍", .repeatLast), ("刚才说什么", .repeatLast), ("repeat that", .repeatLast),
+            ("你会什么", .commands), ("你能做什么", .commands), ("what can you do", .commands),
             ("找我的钥匙", .find("钥匙")), ("帮我找水杯", .find("水杯")), ("find my wallet", .find("wallet")),
             ("带我去北京西站", .navigate("北京西站")), ("导航到医院", .navigate("医院")),
         ]
@@ -152,6 +153,9 @@ final class VoiceCommandParserTests: XCTestCase {
         for phrase in ["求助", "帮帮我", "呼叫亲友", "打电话给家人", "call for help", "get help", "help me", "call family"] {
             XCTAssertEqual(VoiceCommandParser.parse(phrase), .help, "『\(phrase)』应为 .help")
         }
+        // 自述不吃求助的领地：裸 help/帮帮我 仍是 .help（能力自述只认明确问法）。
+        XCTAssertEqual(VoiceCommandParser.parse("help me"), .help)
+        XCTAssertEqual(VoiceCommandParser.parse("帮帮我"), .help)
         // "紧急求助"含"求助"——顺序保证 SOS 先命中；这条防未来把 sos 检查挪到 help 之后。
         XCTAssertEqual(VoiceCommandParser.parse("紧急求助"), .sos)
     }

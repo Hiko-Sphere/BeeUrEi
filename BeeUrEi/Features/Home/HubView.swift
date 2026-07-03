@@ -431,6 +431,7 @@ struct HubView: View {
             showNavigation = true
         case .messages: showMessages = true
         case .sendMessage(let to, let text): sendVoiceMessage(to: to, text: text)
+        case .commands: speak(HomeStrings.voiceCommandsHelp(lang)) // 能力自述：语音功能的语音说明书
         case .repeatLast: speak(HomeStrings.nothingToRepeat(lang)) // Hub 无避障会话可重复
         case .unknown:
             speak(transcript.isEmpty ? HomeStrings.voiceHeardNothing(lang) : HomeStrings.voiceNotUnderstood(lang))

@@ -25,6 +25,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case messages                   // 打开消息
     case sendMessage(to: String, text: String) // 给X发消息说Y
     case find(String)               // 找某个具体物品（已教物品或可找类别，如"找我的钥匙"/"find my keys"）
+    case commands                   // 自述能做什么（盲人无法浏览 UI 发现功能——语音能力必须能被语音发现）
     case repeatLast                 // 重复刚才的播报
     case unknown
 }
@@ -66,6 +67,8 @@ public enum VoiceCommandParser {
         // 颜色须在通用「看一看」之前：否则「这是什么颜色」(含"这是什么")、「识别颜色」(含"识别") 会被 look 抢走。
         if has(["颜色", "什么色", "识别颜色", "报颜色", "what color", "which color", "what colour", "which colour", "read color", "color of", "identify color"]) { return .readColor }
         if has(["看一看", "识别", "这是什么", "拍一下", "look", "what is this", "identify", "recognize"]) { return .look }
+        // 自述：刻意不收裸"帮助/help"（那是 .help 求助的领地），只收明确问能力的说法。
+        if has(["你会什么", "能做什么", "你能做什么", "有什么功能", "都能干什么", "what can you do", "what can i say", "voice commands", "list commands"]) { return .commands }
         if has(["再说一遍", "重复", "刚才说什么", "repeat", "say again", "say that again"]) { return .repeatLast }
         // 找具体物品：置于具体命令**之后**作兜底——否则"find my location"(含"find my")会抢掉 whereAmI、
         // "找一下路"等也会误当找物。到这里说明不是任何具体命令，"找X"/"find X" 才解析为找物（泛指"找东西"除外）。

@@ -1008,6 +1008,24 @@ struct APIClient {
         _ = try await authedSend("POST", "/api/account/legal-consent", token: token, body: ["version": version])
     }
 
+    /// 路线库：一条保存的路线（亲友替我画的或我自存的；坐标 WGS-84）。
+    struct SavedRouteInfo: Codable, Sendable, Identifiable {
+        let id: String
+        let name: String
+        var waypoints: [RouteWaypoint]
+        let role: String      // owner=我的路线（可执行） / creator=我替别人画的
+        let updatedAt: Double
+    }
+    struct RouteWaypoint: Codable, Sendable { let lat: Double; let lng: Double; var note: String? }
+
+    /// 拉取路线库（我的 + 我替别人画的，服务端 updatedAt 倒序）。
+    func listSavedRoutes(token: String) async throws -> [SavedRouteInfo] {
+        struct R: Codable { let routes: [SavedRouteInfo] }
+        let data = try await authedGet("/api/routes", token: token)
+        guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.decoding }
+        return r.routes
+    }
+
     /// 确认协助者行为守则（只描述、不替对方做安全决策）：服务端留痕，keep-first 幂等。
     func ackHelperGuideline(token: String) async throws {
         _ = try await authedSend("POST", "/api/assist/guideline-ack", token: token, body: [:])

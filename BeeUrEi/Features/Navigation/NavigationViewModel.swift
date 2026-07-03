@@ -52,6 +52,8 @@ final class NavigationViewModel {
     @ObservationIgnored private var stepIndex = 0
     @ObservationIgnored private var destination: CLLocationCoordinate2D?
     @ObservationIgnored private var routeReady = false
+    // 自定义路线（路线库）执行中：偏航走 RouteRejoin 汇入而非重规划——人工踩好的路线是安全路径（评审不变量）。
+    @ObservationIgnored private var customRouteActive = false
     @ObservationIgnored private var replanning = false      // 重规划进行中：期间不依旧路线引导（见审查 #2）
     @ObservationIgnored private var navGeneration = 0        // 代次令牌：旧规划任务恢复后比对，过期则丢弃（见审查 #1）
     @ObservationIgnored private var headingFilter = HeadingFilter()
@@ -98,6 +100,7 @@ final class NavigationViewModel {
 
         self.region = region
         self.destinationQuery = trimmed
+        customRouteActive = false
         routeReady = false
         replanning = false
         previewing = false  // 直接「开始导航」要清掉残留的预览态（startPreview 在本方法返回后再置位）
@@ -191,6 +194,20 @@ final class NavigationViewModel {
         if offRouteStreak >= 2, now - lastOffRouteAnnounce >= 6 {
             lastOffRouteAnnounce = now
             offRouteStreak = 0
+            // 自定义路线（路线库）：**绝不重规划**——亲友踩好的路线是经过验证的安全路径，自动重规划会把
+            // 盲人引上未验证的路（评审安全不变量）。改为指向最近的前方航点重新汇入（核心 RouteRejoin，已测）；
+            // 前方无可达航点（>150m）则明确播报请原路返回，不乱指。
+            if customRouteActive {
+                if let idx = RouteRejoin.rejoinIndex(lat: lat, lon: lon, waypoints: routeCoords, currentIndex: stepIndex) {
+                    stepIndex = min(idx, maneuvers.count)
+                    instruction = NavStrings.rejoinRoute(lang)
+                    speak(NavStrings.rejoinRoute(lang))
+                } else {
+                    instruction = NavStrings.offRouteReturnToPath(lang)
+                    speak(NavStrings.offRouteReturnToPath(lang))
+                }
+                return
+            }
             instruction = NavStrings.offRoute(lang)
             speak(NavStrings.offRoute(lang))
             replanning = true    // 立即门控住旧路线引导
@@ -490,6 +507,7 @@ final class NavigationViewModel {
         if running { stop() }
         if wasNavigating { speak(NavStrings.navStoppedForNew(lang)) } // 回程前告知"已停止当前导航"（见 P2 审计）
         navGeneration += 1
+        customRouteActive = false
         // 轨迹与 GPS 同为 WGS-84 原始坐标：回程不做 GCJ 纠偏（region 置 overseas 即"不转换"）。
         region = .overseas
         destinationQuery = NavStrings.backtrackDestinationName(lang)
@@ -514,6 +532,58 @@ final class NavigationViewModel {
         lastRoadGeocode = ProcessInfo.processInfo.systemUptime
         status = NavStrings.backtrackStatus(waypoints.count, lang)
         speak(NavStrings.backtrackStartSpeak(lang))
+        service.onLocation = { [weak self] loc in self?.handle(loc) }
+        service.onHeading = { [weak self] h in
+            guard let self else { return }
+            if self.headingFilter.isReliable(accuracyDegrees: h.headingAccuracy) {
+                let raw = h.trueHeading >= 0 ? h.trueHeading : h.magneticHeading
+                self.currentHeading = self.headingFilter.update(headingDegrees: raw, accuracyDegrees: h.headingAccuracy)
+                self.headingReliable = true
+                self.lastHeadingTime = ProcessInfo.processInfo.systemUptime
+            } else {
+                self.headingReliable = false
+            }
+        }
+        headTracker.onYaw = { [weak self] yaw in self?.spatial.setListenerYaw(Float(yaw)) }
+        headTracker.onUnavailable = { [weak self] in self?.spatial.setListenerYaw(0) }
+        headTracker.start()
+        service.onAuthDenied = { [weak self] in self?.handleLocationDenied() }
+        service.requestAuthAndStart()
+    }
+
+    /// 执行路线库中的一条自定义路线（亲友编排/自存，Soundscape Guided Routes 式）：
+    /// 服务端下发的 WGS-84 航点直接喂给同一套实时引导引擎（照抄 startBacktrack 模板——
+    /// region=.overseas 即"不做 GCJ 纠偏"，与面包屑回程同约定；引导内核零改动）。
+    func startCustomRoute(name: String, waypoints: [(lat: Double, lon: Double, note: String?)]) {
+        lang = FeatureSettings().language
+        guard waypoints.count >= 2 else { return } // 服务端已保证 >=2；纵深防御
+        let wasNavigating = running
+        if running { stop() }
+        if wasNavigating { speak(NavStrings.navStoppedForNew(lang)) }
+        navGeneration += 1
+        customRouteActive = true
+        region = .overseas // WGS-84 原始坐标：绝不过 GCJ 纠偏分支（全栈坐标约定）
+        destinationQuery = name
+        maneuvers = waypoints.map { (CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
+                                     ($0.note?.isEmpty == false) ? $0.note! : NavStrings.customRouteInstruction(lang)) }
+        destination = CLLocationCoordinate2D(latitude: waypoints[waypoints.count - 1].lat,
+                                             longitude: waypoints[waypoints.count - 1].lon)
+        routeCoords = waypoints.map { Coordinate(lat: $0.lat, lon: $0.lon) }
+        stepIndex = 0
+        waypointAdvance.reset()
+        offRouteStreak = 0
+        steps = []
+        instruction = ""
+        lastSpoken = ""
+        headingReliable = false
+        headingFilter = HeadingFilter()
+        routeReady = true  // 航点已就绪，不走 planRoute
+        replanning = false
+        running = true
+        lastCallout = ProcessInfo.processInfo.systemUptime
+        lastRoadGeocode = ProcessInfo.processInfo.systemUptime
+        status = NavStrings.customRouteStatus(name, waypoints.count, lang)
+        speak(NavStrings.customRouteStartSpeak(name, lang))
         service.onLocation = { [weak self] loc in self?.handle(loc) }
         service.onHeading = { [weak self] h in
             guard let self else { return }

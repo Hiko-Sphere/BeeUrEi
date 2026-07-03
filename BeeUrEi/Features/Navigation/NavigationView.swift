@@ -9,10 +9,24 @@ struct WalkNavigationView: View {
     /// 避免国内用户用语音"带我去X"时被错误的海外引擎路由（见 P2 审计）。
     @AppStorage("nav.region") private var regionRaw = ""
     @State private var favorites: [String] = []
+    // 路线库（亲友编排/自存，服务端）：仅列可执行的（role=owner）；加载失败静默显示重试行。
+    @State private var savedRoutes: [APIClient.SavedRouteInfo] = []
+    @State private var routesFailed = false
     let onClose: () -> Void
 
     /// 导航屏文案语言（E5）。
     private var lang: Language { FeatureSettings().language }
+
+    /// 拉路线库：只留我可执行的（role=owner）。失败置重试行，绝不让加载态卡住页面。
+    private func loadRoutes() async {
+        guard let token = KeychainStore.read() else { return }
+        do {
+            savedRoutes = try await APIClient().listSavedRoutes(token: token).filter { $0.role == "owner" }
+            routesFailed = false
+        } catch {
+            routesFailed = true
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -94,6 +108,29 @@ struct WalkNavigationView: View {
                     }
                 }
 
+                // 我的路线（路线库）：亲友在网页端替我画的常走路线 + 我自存的；一键沿信标执行。
+                Section(NavStrings.myRoutesHeader(lang)) {
+                    if routesFailed {
+                        Button(NavStrings.routesLoadFailed(lang)) { Task { await loadRoutes() } }
+                    } else if savedRoutes.isEmpty {
+                        Text(NavStrings.routesEmpty(lang)).font(.footnote).foregroundStyle(.secondary)
+                    } else {
+                        ForEach(savedRoutes) { route in
+                            Button {
+                                model.startCustomRoute(name: route.name,
+                                                       waypoints: route.waypoints.map { (lat: $0.lat, lon: $0.lng, note: $0.note) })
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(route.name)
+                                    Text(NavStrings.routePointCount(route.waypoints.count, lang))
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            .accessibilityLabel(NavStrings.routeItemA11y(route.name, route.waypoints.count, lang))
+                        }
+                    }
+                }
+
                 Section(NavStrings.statusHeader(lang)) {
                     Text(model.status)
                     if !model.instruction.isEmpty {
@@ -115,6 +152,7 @@ struct WalkNavigationView: View {
             .onAppear {
                 ScreenWake.acquire("nav")   // 步行导航期间屏不灭（同 Apple/Google 地图）
                 favorites = FavoritePlacesStore().all
+                Task { await loadRoutes() }
                 // 恢复上次地区；首次按系统区域自动判定（中国大陆→高德）。
                 switch regionRaw {
                 case "china": region = .china

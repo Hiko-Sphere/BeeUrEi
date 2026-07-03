@@ -22,6 +22,23 @@ enum NavStrings {
     }
     static func navStoppedForNew(_ l: Language) -> String { l == .zh ? "已停止当前导航" : "Stopped the current navigation" }
     static func offRoute(_ l: Language) -> String { l == .zh ? "已偏离路线，正在重新规划" : "Off route — replanning" }
+    // 自定义路线（路线库）偏航：不重规划，汇入或原路返回（评审安全不变量）。
+    static func rejoinRoute(_ l: Language) -> String { l == .zh ? "已偏离路线，带你回到最近的路线点" : "Off route — guiding you back to the nearest route point" }
+    static func offRouteReturnToPath(_ l: Language) -> String { l == .zh ? "已偏离路线较远，请沿原路返回" : "You are far off the route — please retrace your steps" }
+    static func customRouteInstruction(_ l: Language) -> String { l == .zh ? "沿路线继续" : "Continue along the route" }
+    static func customRouteStatus(_ name: String, _ n: Int, _ l: Language) -> String {
+        l == .zh ? "沿路线「\(name)」引导中（\(n) 个路线点）" : "Following route \(name) (\(n) points)"
+    }
+    static func customRouteStartSpeak(_ name: String, _ l: Language) -> String {
+        l == .zh ? "开始沿路线\(name)引导，请跟随提示音方向" : "Starting route \(name) — follow the beacon"
+    }
+    static func myRoutesHeader(_ l: Language) -> String { l == .zh ? "我的路线" : "My routes" }
+    static func routesEmpty(_ l: Language) -> String { l == .zh ? "还没有保存的路线。亲友可在网页端为你绘制常走路线。" : "No saved routes yet. Family can draw routes for you on the web." }
+    static func routesLoadFailed(_ l: Language) -> String { l == .zh ? "路线加载失败" : "Failed to load routes" }
+    static func routePointCount(_ n: Int, _ l: Language) -> String { l == .zh ? "\(n) 个路线点" : "\(n) points" }
+    static func routeItemA11y(_ name: String, _ n: Int, _ l: Language) -> String {
+        l == .zh ? "路线\(name)，\(n) 个路线点，双击开始引导" : "Route \(name), \(n) points, double-tap to start"
+    }
     static func nearDestination(_ l: Language) -> String { l == .zh ? "已接近目的地" : "You're near the destination" }
     static func approachingDestination(_ l: Language) -> String {
         l == .zh ? "正在接近目的地" : "Approaching the destination"

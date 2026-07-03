@@ -12,6 +12,7 @@ import { RecordingsPage } from './pages/Recordings'
 import { NotificationsPage } from './pages/Notifications'
 import { AccountPage } from './pages/Account'
 import { IncomingCallHost } from './pages/call/IncomingCallHost'
+import { EmergencyAlertHost } from './pages/call/EmergencyAlertHost'
 import { VerificationGate } from './pages/VerificationGate'
 
 // 懒加载重/少用页，缩小首屏主包：Locations 带 Leaflet 地图库(~140KB)、Admin 仅管理员可达。
@@ -38,6 +39,7 @@ export function App() {
   return (
     <Layout>
       <IncomingCallHost />
+      <EmergencyAlertHost />
       <Suspense fallback={<Spinner />}>
       <Routes>
         <Route path="/" element={<HomePage />} />

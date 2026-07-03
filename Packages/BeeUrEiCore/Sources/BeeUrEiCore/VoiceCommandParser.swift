@@ -14,8 +14,12 @@ public enum VoiceCommand: Equatable, Sendable {
     case navigate(String?)          // 导航（可带目的地）
     case goHome                     // 原路返回
     case readText                   // 朗读文字
+    case readFullPage               // 读整页文档（多页拼读）
     case banknote                   // 识别纸币
     case scanCode                   // 扫码
+    case readBus                    // 识别公交（车号/路线）
+    case describePeople             // 描述周围的人（人数/方位）
+    case readLight                  // 光线/明暗（找窗户/灯）
     case messages                   // 打开消息
     case sendMessage(to: String, text: String) // 给X发消息说Y
     case repeatLast                 // 重复刚才的播报
@@ -39,8 +43,14 @@ public enum VoiceCommandParser {
         if has(["我在哪", "我在哪里", "当前位置", "where am i", "my location"]) { return .whereAmI }
         if has(["周围有什么", "附近有什么", "周围", "what's around", "around me", "nearby"]) { return .around }
         if has(["前方有什么", "前面有什么", "前方", "what's ahead", "ahead of me", "in front"]) { return .ahead }
+        // 周围的人：关键词避开「周围」（那属 .around）；只在明确问「人」时触发。
+        if has(["有几个人", "有没有人", "有人吗", "多少人", "谁在", "描述人", "who is there", "who's there", "how many people", "anyone here", "anyone there", "describe people"]) { return .describePeople }
+        if has(["公交", "几路车", "哪路车", "什么车", "几路公交", "公交车", "bus", "which bus", "what bus"]) { return .readBus }
+        if has(["多亮", "光线", "亮不亮", "有没有光", "开灯了吗", "灯开着吗", "灯亮着吗", "how bright", "light level", "brightness", "is the light on", "lights on"]) { return .readLight }
         if has(["天气", "下雨", "气温", "weather", "temperature", "rain"]) { return .weather }
         if has(["回家", "原路返回", "返回出发", "带我回去", "go back", "take me back", "backtrack"]) { return .goHome }
+        // 读整页须在「读文字」之前：否则「朗读整页」会被 readText 的「朗读」抢走。
+        if has(["整页", "整个页面", "读文档", "读整", "读全文", "whole page", "entire page", "full page", "read the page", "read the document", "read document"]) { return .readFullPage }
         if has(["读文字", "念文字", "朗读", "读一下", "read text", "read this", "read it"]) { return .readText }
         if has(["纸币", "钱", "钞票", "多少元", "banknote", "money", "currency", "bill"]) { return .banknote }
         if has(["扫码", "二维码", "条形码", "条码", "scan", "barcode", "qr"]) { return .scanCode }

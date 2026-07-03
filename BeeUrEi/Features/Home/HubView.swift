@@ -407,8 +407,12 @@ struct HubView: View {
         case .weather: weatherSpeaker.announce()
         case .look: showFraming = true
         case .readText: route.pendingChannel = .text; showFraming = true
+        case .readFullPage: route.pendingChannel = .fullPage; showFraming = true
         case .banknote: route.pendingChannel = .banknote; showFraming = true
         case .scanCode: route.pendingChannel = .scan; showFraming = true
+        case .readBus: route.pendingChannel = .bus; showFraming = true
+        case .describePeople: route.pendingChannel = .people; showFraming = true
+        case .readLight: route.pendingChannel = .light; showFraming = true
         case .navigate(let dest):
             if let dest { AppRoute.shared.pendingNavAction = .search(dest) }
             showNavigation = true

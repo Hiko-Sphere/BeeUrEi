@@ -61,4 +61,26 @@ final class VoiceCommandParserTests: XCTestCase {
         XCTAssertEqual(VoiceCommandParser.parse("打开消息"), .messages)
         XCTAssertEqual(VoiceCommandParser.parse("open chat"), .messages)
     }
+
+    /// 新增 4 个映射到既有识别功能的语音命令（原先只有 Siri 快捷指令/屏上按钮能触发）。
+    func testNewlyVoiceAccessibleFeatures() {
+        // 读整页（须先于「读文字」，否则「朗读整页」被 readText 的「朗读」抢走）。
+        XCTAssertEqual(VoiceCommandParser.parse("读整页"), .readFullPage)
+        XCTAssertEqual(VoiceCommandParser.parse("朗读整页"), .readFullPage)
+        XCTAssertEqual(VoiceCommandParser.parse("read the whole page"), .readFullPage)
+        XCTAssertEqual(VoiceCommandParser.parse("读文字"), .readText) // 「读文字」仍是逐段读文字，不被整页抢
+        // 公交
+        XCTAssertEqual(VoiceCommandParser.parse("几路车"), .readBus)
+        XCTAssertEqual(VoiceCommandParser.parse("这是什么车"), .readBus)
+        XCTAssertEqual(VoiceCommandParser.parse("which bus is this"), .readBus)
+        // 周围的人（关键词避开「周围」——那属 around）
+        XCTAssertEqual(VoiceCommandParser.parse("这里有几个人"), .describePeople)
+        XCTAssertEqual(VoiceCommandParser.parse("有没有人"), .describePeople)
+        XCTAssertEqual(VoiceCommandParser.parse("who's there"), .describePeople)
+        XCTAssertEqual(VoiceCommandParser.parse("周围有什么"), .around) // 「周围」仍归 around，不被 people 抢
+        // 光线
+        XCTAssertEqual(VoiceCommandParser.parse("光线怎么样"), .readLight)
+        XCTAssertEqual(VoiceCommandParser.parse("灯开着吗"), .readLight)
+        XCTAssertEqual(VoiceCommandParser.parse("how bright is it"), .readLight)
+    }
 }

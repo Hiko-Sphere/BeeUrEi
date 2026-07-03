@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { type Store, type User, matchBannedTerm } from '../db/store'
 import { requireAuth } from '../auth/rbac'
+import { buildUserExportBundle, buildSelfExportExtras } from '../account/exportBundle'
 import { hashPassword, verifyPassword } from '../auth/passwords'
 import { generateTotpSecret, totpMatchedCounter, otpauthURI, generateRecoveryCodes, hashRecoveryCode } from '../auth/totp'
 import { type CodeRegistry } from '../auth/codes'
@@ -329,6 +330,23 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     if (!store.findById(req.user!.sub)) return reply.code(404).send({ error: 'not_found' })
     store.updateUser(req.user!.sub, { avatar: parsed.data.avatar })
     return { ok: true }
+  })
+
+  // 自助数据导出（GDPR 可携权 Art.20）：用户不求人拿走自己的数据。与 admin 代办导出共用底座
+  // （防口径漂移），另加只有本人能拿的块：路线库 + **本人发出的**文字消息（对方的话不含——
+  // 可携权不覆盖他人数据）。绝不含密码哈希/令牌（底座保证）。限流 3/小时：全量拉取偏重。
+  app.get('/api/account/export', { preHandler: requireAuth(),
+                                   config: { rateLimit: { max: 3, timeWindow: '1 hour' } } }, async (req, reply) => {
+    const id = req.user!.sub
+    const base = buildUserExportBundle(store, id, Date.now())
+    if (!base) return reply.code(404).send({ error: 'not_found' })
+    const data = {
+      ...base,
+      ...buildSelfExportExtras(store, id),
+      note: 'Your own sent text messages are included; messages from others are not (their words are their data). Voice/image/video messages list metadata only. Password hashes and tokens are never exported.',
+    }
+    reply.header('content-disposition', `attachment; filename="beeurei-my-data.json"`)
+    return data
   })
 
   // 删除账号（App Store 要求）：删除用户 + 其亲友绑定(双向) + refresh token。

@@ -601,6 +601,7 @@ export interface Store {
   unreadCount(userId: string, fromId: string): number
   /// 删除某用户收发的全部消息（单聊双向 + 其在群里的发言）——账号删除级联用。
   deleteMessagesForUser(userId: string): void
+  messagesSentBy(userId: string, limit: number): ChatMessage[] // 自助数据导出用（本人发出的消息，时间正序）
 
   // 群聊
   createGroup(g: ChatGroup): void
@@ -1195,6 +1196,10 @@ export class MemoryStore implements Store {
     let changed = false
     for (const [k, m] of this.messages) if (m.fromId === userId || m.toId === userId) { this.messages.delete(k); changed = true }
     if (changed) this.afterMutate()
+  }
+  messagesSentBy(userId: string, limit: number): ChatMessage[] {
+    return [...this.messages.values()].filter((m) => m.fromId === userId)
+      .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)).slice(0, Math.max(0, limit))
   }
 
   // MARK: 群聊

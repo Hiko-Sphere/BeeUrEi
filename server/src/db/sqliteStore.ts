@@ -737,6 +737,10 @@ export class SqliteStore implements Store {
   deleteMessagesForUser(userId: string): void {
     this.db.prepare('DELETE FROM messages WHERE fromId = ? OR toId = ?').run(userId, userId)
   }
+  messagesSentBy(userId: string, limit: number): ChatMessage[] {
+    const rows = this.db.prepare('SELECT * FROM messages WHERE fromId = ? ORDER BY createdAt ASC, id ASC LIMIT ?').all(userId, Math.max(0, limit)) as any[]
+    return rows.map((r) => this.toMessage(r))
+  }
 
   // MARK: 群聊
   createGroup(g: ChatGroup): void {

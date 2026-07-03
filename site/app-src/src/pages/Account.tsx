@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { api, APIError, contentBlockedText, reencodeToJpeg, uploadVerificationDoc, type SelfView, type SessionInfo, type VerificationStatusInfo } from '../lib/api'
+import { apiURL } from '../lib/config'
+import { api, tokenStore, APIError, contentBlockedText, reencodeToJpeg, uploadVerificationDoc, type SelfView, type SessionInfo, type VerificationStatusInfo } from '../lib/api'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { subscribeWebPush, unsubscribeWebPush, isWebPushSubscribed, webPushSupported, resyncWebPushSubscription } from '../lib/webPush'
@@ -10,6 +11,18 @@ export function AccountPage() {
   const { user, refreshMe, signOut } = useSession()
   const { t, lang, setLang } = useI18n()
   const toast = useToast()
+  // 数据导出：authed fetch → blob 存文件（走 api() 会被 JSON 解析——下载语义直接取字节）。
+  const exportMyData = async () => {
+    try {
+      const res = await fetch(apiURL('/api/account/export'), { headers: { authorization: `Bearer ${tokenStore.token}` } })
+      if (!res.ok) throw new Error(String(res.status))
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = 'beeurei-my-data.json'
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+      toast(t('已导出', 'Exported'), 'ok')
+    } catch { toast(t('导出失败，请稍后再试', 'Export failed — try again later'), 'error') }
+  }
   const [self, setSelf] = useState<SelfView | null>(null)
   const [displayName, setDisplayName] = useState('')
   const [savingName, setSavingName] = useState(false)
@@ -138,6 +151,13 @@ export function AccountPage() {
             <span className="ml-1.5 text-xs text-faint">{verifLabel(verif?.status)}</span>
           </Button>
         </div>
+      </Card>
+
+      {/* 我的数据（GDPR 可携权：不求人拿走自己的数据） */}
+      <Card className="p-5">
+        <div className="mb-1 text-sm font-semibold">{t('我的数据', 'My data')}</div>
+        <p className="mb-3 text-xs text-faint">{t('导出你的档案、亲友关系、路线与你发出的消息（JSON）。不含他人的消息内容。', 'Export your profile, contacts, routes and messages you sent (JSON). Never includes others\u2019 messages.')}</p>
+        <Button variant="soft" onClick={() => void exportMyData()}>{t('导出我的数据', 'Export my data')}</Button>
       </Card>
 
       {/* 危险区 */}

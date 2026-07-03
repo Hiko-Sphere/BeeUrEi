@@ -53,7 +53,8 @@ export function ChatPage() {
           <h1 className="text-xl font-bold tracking-tight">{t('消息', 'Messages')}</h1>
           <button onClick={() => setCreateOpen(true)} className="flex items-center gap-1 rounded-lg surface-2 px-2.5 py-1.5 text-xs font-medium text-soft hover:brightness-105"><IconPlus width={14} height={14} />{t('建群', 'New group')}</button>
         </div>
-        <div className="surface flex-1 overflow-y-auto rounded-2xl border border-[var(--line)]">
+        <div tabIndex={0} aria-label={t('会话列表', 'Conversation list')}
+          className="surface flex-1 overflow-y-auto rounded-2xl border border-[var(--line)]">
           {convos === null && groups === null ? <Spinner /> : items.length === 0 ? (
             <EmptyState icon={<IconChat />} title={t('暂无会话', 'No conversations')} message={t('从联系人页发起聊天', 'Start from Contacts')} />
           ) : (
@@ -318,7 +319,7 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
               placeholder={t('搜索这个会话的文字消息', 'Search text messages in this chat')}
               className="w-full rounded-full border border-[var(--line)] surface-2 px-4 py-2.5 text-sm outline-none focus:border-honey" />
           </div>
-          <div className="flex-1 space-y-2 overflow-y-auto px-4 pb-4">
+          <div tabIndex={0} aria-label={t('搜索结果', 'Search results')} className="flex-1 space-y-2 overflow-y-auto px-4 pb-4">
             {searchResults === null ? (
               <div className="grid h-full place-items-center text-sm text-faint">{t('输入关键词搜索本会话的文字消息', 'Type a keyword to search this chat')}</div>
             ) : searchResults.length === 0 ? (
@@ -346,7 +347,8 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
         </div>
       )}
 
-      <div className={`flex-1 space-y-2 overflow-y-auto px-4 py-4 ${searchOpen ? 'hidden' : ''}`}>
+      <div tabIndex={0} aria-label={t('消息记录', 'Message history')}
+        className={`flex-1 space-y-2 overflow-y-auto px-4 py-4 ${searchOpen ? 'hidden' : ''}`}>
         {canLoadEarlier && (
           <div className="flex justify-center pb-1">
             <button onClick={() => void loadEarlier()} disabled={loadingEarlier}

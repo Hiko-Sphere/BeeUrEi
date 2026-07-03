@@ -222,6 +222,7 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
       {chatOpen && (
         <div className="mx-4 mt-2 flex max-h-52 flex-col rounded-2xl bg-white/5 p-2">
           <div ref={rttLogRef} role="log" aria-live="polite" aria-label={t('通话文字消息', 'In-call text messages')}
+            tabIndex={0} /* 可键盘聚焦以滚动日志（WCAG 2.1.1）——纯文字气泡无可聚焦子元素 */
             className="min-h-[3.5rem] flex-1 space-y-1 overflow-y-auto px-1 py-1 text-sm">
             {rtt.length === 0 && (
               <div className="py-2 text-center text-xs text-white/40">{t('文字会实时送达对方并可被读出，适合嘈杂环境', 'Text reaches them instantly and can be read aloud — great for noisy places')}</div>

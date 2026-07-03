@@ -1200,6 +1200,9 @@ private struct RecognitionHistorySheet: View {
                 }
             }
             .onAppear { records = model.historyStore.records }
+            // 关闭历史面板（点完成或下滑）时停掉正在回放的语音——否则盲人回放长整页后关面板，
+            // 语音会继续念（面板都没了还在读）。父视图恢复识别后新结果照常用 .query 通道播报。
+            .onDisappear { SpeechHub.shared.stopChannel(.query) }
         }
     }
 }

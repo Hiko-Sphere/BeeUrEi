@@ -94,6 +94,22 @@ final class RouteProgressTests: XCTestCase {
         XCTAssertEqual(a.text, "前方约 15 米后左转")
     }
 
+    /// 距离按 5 米档取整（防逐米刷屏）：同档内文本稳定（上层据此去重、只提醒一次），跨档才变。
+    func testDistanceAnnouncedInFiveMeterBuckets() {
+        func text(_ d: Double) -> String? { progress.decide(distanceToManeuverMeters: d, instruction: "左转", level: .precise).text }
+        // 18、19、20 米同属"20 米档" → 文本相同（走路时逐米变化不会每米重播）。
+        XCTAssertEqual(text(18), "前方约 20 米后左转")
+        XCTAssertEqual(text(19), "前方约 20 米后左转")
+        XCTAssertEqual(text(20), "前方约 20 米后左转")
+        // 跨到 15 米档才变。
+        XCTAssertEqual(text(17), "前方约 15 米后左转")
+        XCTAssertEqual(text(13), "前方约 15 米后左转")
+        XCTAssertEqual(text(12), "前方约 10 米后左转")
+        // 逐米从 20 走到 12：文本只变 3 次（20→15→10），而非逐米 9 次。
+        let seq = stride(from: 20.0, through: 12.0, by: -1).map { text($0)! }
+        XCTAssertEqual(Set(seq).count, 3)
+    }
+
     func testImminentHighCertaintyOnlyWhenPrecise() {
         let precise = progress.decide(distanceToManeuverMeters: 3, instruction: "过马路", level: .precise)
         XCTAssertTrue(precise.isHighCertainty)

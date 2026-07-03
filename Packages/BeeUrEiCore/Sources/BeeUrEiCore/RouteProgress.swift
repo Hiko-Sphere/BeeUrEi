@@ -48,7 +48,11 @@ public struct RouteProgress: Sendable {
             }
         }
 
-        let meters = Int(distanceToManeuverMeters.rounded())
+        // 距离按 5 米档取整播报：上层去重靠"文本相等"，若逐米变化(18→17→16…)则每减 1 米就重播一次
+        // "X 米后转向"，走路时约每 0.7s 一次 → 20m→5m 连珠刷屏 ~15 次。竞品导航同理给**离散距离档**
+        // ("50米""20米")而非逐米连续念。取 5 米整档后同档内文本稳定、被去重，仅在跨档时提醒一次。
+        let bucket = max(imminentMeters, (distanceToManeuverMeters / 5).rounded() * 5)
+        let meters = Int(bucket)
         return ManeuverAnnouncement(shouldAnnounce: true, text: SpokenStrings.maneuverInMeters(meters, instruction: instruction, language), isHighCertainty: false)
     }
 }

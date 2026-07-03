@@ -148,6 +148,9 @@ export function nextChatAnnouncement(
   if (!lastMsg || lastMsg.id === state.id) return { text: null, state }
   const next: AnnounceState = { id: lastMsg.id, initialized: true }
   if (lastMsg.fromId === myId) return { text: null, state: next } // 自己发的不念
+  // 首次见到即已撤回（对端在本端轮询看到原消息前就撤回）：念"[已撤回]"对读屏是无意义噪声，跳过
+  // （与 iOS refresh 同口径：kind==recalled 不播报，但 state 仍前进以免卡住后续消息）。
+  if (lastMsg.kind === 'recalled') return { text: null, state: next }
   return { text: describe(lastMsg), state: next }
 }
 

@@ -41,6 +41,14 @@ describe('nextChatAnnouncement 新消息读屏播报决策', () => {
     expect(r.state).toEqual({ id: '4', initialized: true })
   })
 
+  it('首次见到即已撤回的消息不播报（与 iOS 同口径，避免念"[已撤回]"噪声）——但推进基线', () => {
+    const recalled = { id: '5', fromId: 'peer', toId: 'me', kind: 'recalled', text: '', createdAt: 5 } as ChatMessage
+    const state: AnnounceState = { id: '4', initialized: true }
+    const r = nextChatAnnouncement(recalled, state, 'me', describe_)
+    expect(r.text).toBeNull()
+    expect(r.state).toEqual({ id: '5', initialized: true }) // 基线仍前进，后续真消息不被卡住
+  })
+
   it('末尾 id 未变（如上翻"加载更早"只改头部）→ 不播报', () => {
     const state: AnnounceState = { id: '4', initialized: true }
     const r = nextChatAnnouncement(msg('4', 'peer'), state, 'me', describe_)

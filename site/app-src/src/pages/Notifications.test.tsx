@@ -2,7 +2,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
-// 只 mock api（useI18n 有默认 ctx，t 返回中文，无需 Provider）。
+// 只 mock api（useI18n 有默认 ctx，t 返回中文，无需 Provider）。useCall 有默认 ctx 无需 mock；
+// useNavigate 需 Router，无 Provider 会抛——mock 成 noop（本用例只验渲染，不验跳转；跳转逻辑另见 NotifDestination.test）。
+vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }))
 vi.mock('../lib/api', () => ({
   api: { notifications: vi.fn(), markAllNotifsRead: vi.fn(), markNotifRead: vi.fn() },
 }))

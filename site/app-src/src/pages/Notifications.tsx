@@ -1,9 +1,18 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api, type NotificationInfo } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { Card, Button, Spinner, EmptyState, fmtTime } from '../components/ui'
 import { IconBell, IconShield, IconPhone, IconUsers, IconFilm, IconFlash, IconPin } from '../components/icons'
 import { useCall } from './call/CallController'
+
+/// 点击通知跳到"可操作页"：好友请求→亲友页（去接受/拒绝）、群变更→聊天页；其余无明确去处返回 null（仅标已读）。
+/// 纯函数便于单测。
+export function notifDestination(kind: string): string | null {
+  if (kind.includes('friend') || kind.includes('link')) return '/family'
+  if (kind.includes('group')) return '/chat'
+  return null
+}
 
 function iconFor(kind: string) {
   if (kind.includes('emergency')) return <IconFlash />
@@ -19,6 +28,7 @@ function iconFor(kind: string) {
 export function NotificationsPage() {
   const { t, lang } = useI18n()
   const { startOutgoing } = useCall()
+  const navigate = useNavigate()
   const [items, setItems] = useState<NotificationInfo[] | null>(null)
 
   const load = async () => { try { const r = await api.notifications(); setItems(r.notifications) } catch { setItems([]) } }
@@ -26,6 +36,8 @@ export function NotificationsPage() {
 
   const markAll = async () => { try { await api.markAllNotifsRead(); void load() } catch { /* ignore */ } }
   const markOne = async (n: NotificationInfo) => { if (n.readAt) return; try { await api.markNotifRead(n.id); setItems((cur) => cur?.map((x) => x.id === n.id ? { ...x, readAt: Date.now() } : x) ?? cur) } catch { /* ignore */ } }
+  // 点击通知：标已读 + 跳到可操作页（好友请求→亲友页接受、群变更→聊天页）。
+  const onClickNotif = (n: NotificationInfo) => { void markOne(n); const dest = notifDestination(n.kind); if (dest) navigate(dest) }
 
   const unread = (items ?? []).filter((n) => !n.readAt).length
 
@@ -42,7 +54,7 @@ export function NotificationsPage() {
         ) : (
           <ul className="divide-y divide-[var(--line)]">
             {items.map((n) => (
-              <li key={n.id} onClick={() => markOne(n)} className={`flex cursor-pointer gap-3 px-4 py-3.5 transition hover:surface-2 ${n.readAt ? '' : 'bg-honey/5'}`}>
+              <li key={n.id} onClick={() => onClickNotif(n)} className={`flex cursor-pointer gap-3 px-4 py-3.5 transition hover:surface-2 ${n.readAt ? '' : 'bg-honey/5'}`}>
                 <div className={`mt-0.5 shrink-0 ${n.readAt ? 'text-faint' : 'text-honey'}`}>{iconFor(n.kind)}</div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">

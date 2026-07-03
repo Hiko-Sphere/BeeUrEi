@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { type Store, type User, matchBannedTerm } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { buildUserExportBundle, buildSelfExportExtras } from '../account/exportBundle'
+import { passwordPolicyError } from '../auth/passwordPolicy'
 import { hashPassword, verifyPassword } from '../auth/passwords'
 import { generateTotpSecret, totpMatchedCounter, otpauthURI, generateRecoveryCodes, hashRecoveryCode } from '../auth/totp'
 import { type CodeRegistry } from '../auth/codes'
@@ -14,7 +15,7 @@ import { cascadeDeleteUser } from '../db/cascade'
 
 const passwordSchema = z.object({
   oldPassword: z.string().min(1),
-  newPassword: z.string().min(6).max(128),
+  newPassword: z.string().min(1).max(128), // 强度校验在 handler（passwordPolicy 单点）
 })
 const emailSchema = z.object({ email: z.string().email().max(254) })
 const verifyEmailSchema = z.object({ code: z.string().min(4).max(12) })
@@ -36,6 +37,8 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
   app.post('/api/account/password', { preHandler: requireAuth(), config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = passwordSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const pwErr = passwordPolicyError(parsed.data.newPassword)
+    if (pwErr) return reply.code(400).send({ error: pwErr })
     const user = store.findById(req.user!.sub)
     if (!user) return reply.code(404).send({ error: 'not_found' })
     if (!verifyPassword(parsed.data.oldPassword, user.passwordHash)) {

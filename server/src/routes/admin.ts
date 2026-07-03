@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { readFileSync, unlinkSync } from 'node:fs'
 import { buildUserExportBundle } from '../account/exportBundle'
+import { passwordPolicyError } from '../auth/passwordPolicy'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PKG_VERSION, gitCommit } from '../version'
@@ -798,10 +799,12 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
   })
 
   // —— 管理员代设密码（客服找回；setupVersion 递增使旧令牌失效并撤销会话）——
-  const resetPwSchema = z.object({ newPassword: z.string().min(6).max(128) })
+  const resetPwSchema = z.object({ newPassword: z.string().min(1).max(128) }) // 强度校验在 handler（passwordPolicy 单点）
   app.post('/api/admin/users/:id/reset-password', adminOnly, async (req, reply) => {
     const parsed = resetPwSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const pwErr = passwordPolicyError(parsed.data.newPassword)
+    if (pwErr) return reply.code(400).send({ error: pwErr })
     const id = (req.params as { id: string }).id
     const target = store.findById(id)
     if (!target) return reply.code(404).send({ error: 'not_found' })

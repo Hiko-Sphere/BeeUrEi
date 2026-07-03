@@ -5,6 +5,7 @@ import { type Store, type Role, type User, selfView, matchBannedTerm, findByLogi
 import { hashPassword, verifyPassword } from '../auth/passwords'
 import { hashToken, generateRefreshToken } from '../auth/tokens'
 import { issueTokens, deviceLabelFromReq } from '../auth/session'
+import { passwordPolicyError } from '../auth/passwordPolicy'
 import { totpMatchedCounter, hashRecoveryCode } from '../auth/totp'
 import { normalizePhone, type AppleTokenVerifier } from '../auth/apple'
 import { type CodeRegistry } from '../auth/codes'
@@ -37,7 +38,7 @@ function twoFactorReply(reply: any, reason: 'required' | 'invalid') {
 const registerSchema = z.object({
   // 用户名/手机号/邮箱至少给一个（refine 校验）；不给用户名时自动生成（不从手机号/邮箱派生——username 进 publicUser，派生会泄露隐私标识）。
   username: z.string().trim().min(3).max(32).optional(), // 去首尾空白，避免" alice"/"alice"混淆（见审查 #4）
-  password: z.string().min(6).max(128),
+  password: z.string().min(1).max(128), // 强度校验在 handler（passwordPolicy 单点，给具体错误码）
   displayName: z.string().trim().min(1).max(64).optional(), // trim 与改昵称端点(account.ts)一致——否则可注册出纯空白/带首尾空格的昵称（盲人来电播报会念到空名）
   // 自助注册仅限这些角色；admin/developer 由后台分配。
   role: z.enum(['blind', 'helper', 'family']).optional(),
@@ -82,6 +83,10 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     }
     // 全站注册开关（管理员可在后台关闭）：关闭后拒绝新建账号；已有账号登录不受影响。
     if (!store.getAppConfig().registrationEnabled) return reply.code(403).send({ error: 'registration_disabled' })
+    // 口令策略（NIST 800-63B：长度+常见弱口令，无字符类别硬性要求）——具体错误码供客户端精确提示。
+    // 仅密码注册路径需要；Apple/邮箱验证码注册无密码。
+    const pwErr = passwordPolicyError(parsed.data.password)
+    if (pwErr) return reply.code(400).send({ error: pwErr })
     const { username: rawUsername, password, displayName, role, language, email, phone } = parsed.data
     // 昵称内容审核：与改昵称端点(account.ts)一致——否则注册时即可塞入违禁昵称绕过审核（everyone 可见）。
     if (displayName && matchBannedTerm(store.getAppConfig(), displayName)) return reply.code(403).send({ error: 'content_blocked' })

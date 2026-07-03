@@ -191,7 +191,7 @@ describe('Admin v4：全字段查看 + 编辑用户', () => {
     const aa = await adminAuth(app)
     const u = await makeUser(app, 'audited1')
     await app.inject({ method: 'PATCH', url: `/api/admin/users/${u.id}`, headers: aa, payload: { displayName: 'X' } })
-    await app.inject({ method: 'POST', url: `/api/admin/users/${u.id}/reset-password`, headers: aa, payload: { newPassword: 'aaaaaa1' } })
+    await app.inject({ method: 'POST', url: `/api/admin/users/${u.id}/reset-password`, headers: aa, payload: { newPassword: 'aaaaaa1x9' } }) // 口令策略收紧后须 ≥8（passwordPolicy）
     const audit = (await app.inject({ method: 'GET', url: '/api/admin/audit', headers: aa })).json()
     const actions = audit.entries.map((e: any) => e.action)
     expect(actions).toContain('user.edit')

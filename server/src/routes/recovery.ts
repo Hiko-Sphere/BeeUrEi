@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { type Store, findByLoginIdentifier } from '../db/store'
 import { hashPassword } from '../auth/passwords'
+import { passwordPolicyError } from '../auth/passwordPolicy'
 import { type CodeRegistry } from '../auth/codes'
 import { type Mailer } from '../mail/mailer'
 import { passwordResetMail } from '../mail/templates'
@@ -11,7 +12,7 @@ const forgotSchema = z.object({ username: z.string().trim().min(1) })
 const resetSchema = z.object({
   username: z.string().trim().min(1),
   code: z.string().min(4).max(12),
-  newPassword: z.string().min(6).max(128),
+  newPassword: z.string().min(1).max(128), // 强度校验在 handler（passwordPolicy 单点）
 })
 
 /// 找回密码（D1）：忘记密码 → 向账号绑定邮箱发验证码 → 凭码重置。
@@ -49,6 +50,8 @@ export function registerRecoveryRoutes(app: FastifyInstance, store: Store, codes
   app.post('/api/auth/reset-password', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = resetSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const pwErr = passwordPolicyError(parsed.data.newPassword)
+    if (pwErr) return reply.code(400).send({ error: pwErr })
     const user = findByLoginIdentifier(store, parsed.data.username)
     if (!user || !codes.verify(`reset:${user.id}`, parsed.data.code, Date.now())) {
       return reply.code(400).send({ error: 'invalid_code' })

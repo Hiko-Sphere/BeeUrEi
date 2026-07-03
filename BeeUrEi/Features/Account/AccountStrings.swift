@@ -333,6 +333,8 @@ enum AccountStrings {
     static func accountErrorText(_ code: String, _ l: Language) -> String {
         switch code {
         case "username_taken": return l == .zh ? "用户名已被使用" : "Username already taken"
+        case "password_too_short": return l == .zh ? "密码至少 8 位" : "Password must be at least 8 characters"
+        case "password_too_common": return l == .zh ? "这个密码太常见，容易被猜到，请换一个更独特的" : "That password is too common — pick something more unique"
         case "invalid_username": return useridInvalid(l)
         case "apple_taken": return l == .zh ? "该 Apple ID 已绑定到其它账号" : "That Apple ID is linked to another account"
         case "last_login_method":
@@ -371,6 +373,8 @@ enum AccountStrings {
     static func serverErrorText(_ code: String, _ l: Language) -> String {
         switch code {
         case "username_taken": return l == .zh ? "用户名已被使用" : "Username already taken"
+        case "password_too_short": return l == .zh ? "密码至少 8 位" : "Password must be at least 8 characters"
+        case "password_too_common": return l == .zh ? "这个密码太常见，容易被猜到，请换一个更独特的" : "That password is too common — pick something more unique"
         case "email_taken": return l == .zh ? "邮箱已被使用" : "Email already in use"
         case "phone_taken": return l == .zh ? "手机号已被使用" : "Phone number already in use"
         case "invalid_phone": return l == .zh ? "手机号格式不正确" : "Invalid phone number"

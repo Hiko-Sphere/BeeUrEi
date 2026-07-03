@@ -71,6 +71,7 @@ const I18N = {
     close: '关闭', never: '从未', justNow: '刚刚',
     err_last_admin_protected: '不能操作最后一名管理员', err_cannot_change_own_role: '不能修改自己的角色',
     err_cannot_disable_self: '不能封禁自己', err_not_found: '对象不存在', err_invalid_input: '输入有误',
+    err_password_too_short: '密码至少 8 位', err_password_too_common: '密码太常见，请换一个更独特的',
     err_forbidden: '无权操作', err_unauthorized: '登录已过期，请重新登录', err_network: '网络错误，请重试', err_cannot_review_self: '不能审核自己的实名提交',
     sessionExpired: '登录已过期，请重新登录', loading: '加载中…',
     relationships: '关系', calls: '通话', owner: '视障用户', member: '协助者 / 亲友', relationCol: '关系',
@@ -189,6 +190,7 @@ const I18N = {
     close: 'Close', never: 'never', justNow: 'just now',
     err_last_admin_protected: 'Can’t act on the last admin', err_cannot_change_own_role: 'Can’t change your own role',
     err_cannot_disable_self: 'Can’t ban yourself', err_not_found: 'Not found', err_invalid_input: 'Invalid input',
+    err_password_too_short: 'Password must be at least 8 characters', err_password_too_common: 'Password too common — pick something unique',
     err_forbidden: 'Forbidden', err_unauthorized: 'Session expired — sign in again', err_network: 'Network error, try again', err_cannot_review_self: 'You cannot review your own ID submission',
     sessionExpired: 'Session expired — sign in again', loading: 'Loading…',
     relationships: 'Relations', calls: 'Calls', owner: 'Blind user', member: 'Helper / family', relationCol: 'Relation',
@@ -926,7 +928,7 @@ async function onSupport(action, u, repaint, closeDrawer) {
     } else if (action === 'resetpw') {
       const pw = await promptDialog(t('resetPassword'), t('newPasswordPh'), 'password');
       if (pw === null) return;
-      if (pw.length < 6) { toast(t('err_invalid_input'), 'error'); return; }
+      if (pw.length < 8) { toast(t('err_password_too_short'), 'error'); return; } // 与服务端 passwordPolicy 同步
       if (!(await confirmDialog(t('confirmResetPassword')))) return;
       await api(`/api/admin/users/${u.id}/reset-password`, { method: 'POST', body: { newPassword: pw } });
       u.sessions = 0;

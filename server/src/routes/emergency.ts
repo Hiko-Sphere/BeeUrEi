@@ -10,6 +10,7 @@ import { NoopPushSender, type PushSender } from '../push/apns'
 import { NoopWebPushSender, type WebPushSender } from '../push/webPush'
 import { pushLang, pushStrings } from '../push/pushStrings'
 import { totalUnreadFor } from '../db/unread'
+import type { Metrics } from '../metrics/metrics'
 
 const alertSchema = z.object({
   kind: z.enum(['fall', 'crash', 'manual']), // manual=用户手动 SOS（未实名门禁屏等处的紧急按钮）
@@ -40,7 +41,8 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
                                         presence: PresenceRegistry,
                                         live: LiveLocationRegistry,
                                         pushSender: PushSender = new NoopPushSender(),
-                                        webPush: WebPushSender = new NoopWebPushSender()): void {
+                                        webPush: WebPushSender = new NoopWebPushSender(),
+                                        metrics?: Metrics): void {
   const alertDedup = new EmergencyAlertDedup()
   // 发起紧急呼叫：返回按优先级排好的呼叫目标列表（真正接通由 WebRTC 信令负责）。
   app.post('/api/emergency/trigger', { preHandler: requireAuth() }, async (req) => {
@@ -148,6 +150,7 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
       contacts: links.length,
       location: { source: locSource ?? 'none', ...(locAgeSec != null ? { ageSec: locAgeSec } : {}) },
     }
+    metrics?.inc('emergency_alerts_total') // 值守可观测：Prometheus 对告警速率设阈值（风暴/异常静默都值得看）
     // 紧急事件日志（治理/值守，admin 可见）：best-effort——日志失败绝不影响告警响应。
     // alertId 重试在上方 dedup 已短路返回，不会重复落账。
     try {

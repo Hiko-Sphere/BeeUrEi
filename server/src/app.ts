@@ -133,7 +133,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   const rawWebPushSender = options.webPushSender ?? new NoopWebPushSender()
 
   // 业务计数预置 0 基线：使这些 series 自启动起就存在，避免 Prometheus rate() 在首次命中时断档（见复审 #5）。
-  for (const name of ['calls_registered_total', 'help_requests_total', 'help_claims_total',
+  for (const name of ['calls_registered_total', 'help_requests_total', 'help_claims_total', 'emergency_alerts_total',
                       'web_push_sent_total', 'web_push_failed_total',
                       'apns_sent_total', 'apns_failed_total']) metrics.inc(name, 0)
   // Web Push 计数装饰（单点包裹，扇出调用点零改动）：送达健康度进 /metrics。
@@ -212,7 +212,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerUserRoutes(instance, store)
     registerFamilyRoutes(instance, store, pushSender)
     registerBlockRoutes(instance, store)
-    registerEmergencyRoutes(instance, store, presence, liveLocations, pushSender, webPushSender)
+    registerEmergencyRoutes(instance, store, presence, liveLocations, pushSender, webPushSender, metrics)
     registerMessageRoutes(instance, store, pushSender, webPushSender)
     registerGroupRoutes(instance, store, pushSender)
     registerMediaRoutes(instance, store) // 视频等大文件（磁盘存储）

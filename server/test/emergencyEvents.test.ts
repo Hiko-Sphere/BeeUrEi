@@ -38,6 +38,9 @@ describe('紧急事件日志', () => {
     const res2 = await a.inject({ method: 'GET', url: '/api/admin/emergencies', headers: { authorization: `Bearer ${adminTok}` } })
     expect(res2.json().events[0]).toMatchObject({ kind: 'manual', locSource: 'none', userName: 'evfaller' })
     expect(res2.json().events[0].lat).toBeFalsy()
+    // 值守可观测：两次告警 → Prometheus 计数 emergency_alerts_total 2（设阈值可警报风暴/异常静默）。
+    const metrics = await a.inject({ method: 'GET', url: '/metrics' })
+    expect(metrics.payload).toContain('emergency_alerts_total 2')
     void owner
     await a.close()
   })

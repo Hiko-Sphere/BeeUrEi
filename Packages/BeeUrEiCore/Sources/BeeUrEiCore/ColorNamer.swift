@@ -16,7 +16,7 @@ public struct ColorNamer: Sendable {
     /// dark = 明度低（navy/深红/墨绿）；light = 明亮且不太饱和（天蓝/浅绿/浅黄）；其余 normal（纯色）。
     public func tone(r: Double, g: Double, b: Double) -> ColorTone {
         switch key(r: r, g: g, b: b) {
-        case .black, .white, .gray, .brown, .unknown: return .normal // 已含明暗信息，不再加深/浅
+        case .black, .white, .gray, .brown, .beige, .unknown: return .normal // 已含明暗信息，不再加深/浅
         default: break
         }
         let (_, s, v) = Self.rgbToHsv(r, g, b)
@@ -48,7 +48,7 @@ public struct ColorNamer: Sendable {
     /// 中间角度**仅两个都鲜艳(s≥0.5)时**才判需谨慎（柔和/低饱和色相互包容，降级为协调）。
     public func harmony(r1: Double, g1: Double, b1: Double,
                         r2: Double, g2: Double, b2: Double) -> ColorHarmony {
-        let neutrals: Set<SpokenStrings.ColorKey> = [.black, .white, .gray, .brown, .unknown]
+        let neutrals: Set<SpokenStrings.ColorKey> = [.black, .white, .gray, .brown, .beige, .unknown] // 米色是暖中性，百搭
         if neutrals.contains(key(r: r1, g: g1, b: b1)) || neutrals.contains(key(r: r2, g: g2, b: b2)) {
             return .neutral
         }
@@ -67,6 +67,9 @@ public struct ColorNamer: Sendable {
         if v < 0.2 { return .black }
         if s < 0.15 { return v > 0.8 ? .white : .gray }
         if h >= 20 && h < 50 && v < 0.6 { return .brown }
+        // 米色/米黄（beige/tan/khaki，极常见衣物色）：暖色相但**低饱和且明亮**——否则会误报成"浅橙色"。
+        // 与橙的分界靠饱和度（s<0.35 才算米色；鲜艳暖色仍归橙）；与棕的分界靠明度（上面 v<0.6 已归棕）。
+        if h >= 20 && h < 60 && s < 0.35 && v > 0.7 { return .beige }
         switch h {
         case 0..<15, 345..<360: return .red
         case 15..<50:  return .orange

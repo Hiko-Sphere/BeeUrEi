@@ -78,6 +78,23 @@ extension ColorNamerTests {
         XCTAssertEqual(n.harmony(r1: 1, g1: 0.7, b1: 0.7, r2: 0.7, g2: 1, b2: 0.7), .similar)
     }
 
+    func testBeigeNotOrange() {
+        // 米色/米黄（低饱和暖色亮色）→ 米色，不再误报"橙色"。
+        XCTAssertEqual(n.name(r: 0.96, g: 0.89, b: 0.76), "米色")   // 典型米色 #F5E3C3 ish
+        XCTAssertEqual(n.name(r: 0.76, g: 0.69, b: 0.57), "米色")   // 卡其/tan
+        XCTAssertEqual(n.name(r: 0.96, g: 0.89, b: 0.76, language: .en), "beige")
+        // 分界守卫：鲜艳暖色（高饱和）仍是橙，不被米色抢。
+        XCTAssertEqual(n.name(r: 1, g: 0.6, b: 0.1), "橙色")        // s=0.9 饱和橙
+        // 米色不加深浅前缀（本身已是浅暖色）。
+        XCTAssertEqual(n.describe(r: 0.96, g: 0.89, b: 0.76), "米色")
+    }
+
+    func testBeigeIsNeutralInHarmony() {
+        // 米色 + 任意鲜艳色 → 百搭（时尚中米色是暖中性）。
+        XCTAssertEqual(n.harmony(r1: 0.96, g1: 0.89, b1: 0.76, r2: 0, g2: 0, b2: 1), .neutral) // 米色+蓝
+        XCTAssertEqual(n.harmony(r1: 0.96, g1: 0.89, b1: 0.76, r2: 1, g2: 0, b2: 0), .neutral) // 米色+红
+    }
+
     func testHarmonyStringsBilingual() {
         XCTAssertEqual(SpokenStrings.colorHarmony(.neutral, .zh), "有中性色，比较百搭")
         XCTAssertTrue(SpokenStrings.colorHarmony(.caution, .en).contains("ask someone"))

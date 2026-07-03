@@ -310,14 +310,14 @@ public enum SpokenStrings {
 
     // MARK: 颜色（ColorNamer）
 
-    public enum ColorKey { case black, white, gray, brown, red, orange, yellow, green, cyan, blue, purple, pink, unknown }
+    public enum ColorKey { case black, white, gray, brown, beige, red, orange, yellow, green, cyan, blue, purple, pink, unknown }
 
     public static func color(_ key: ColorKey, _ lang: Language) -> String {
         switch lang {
         case .zh:
             switch key {
             case .black: return "黑色"; case .white: return "白色"; case .gray: return "灰色"
-            case .brown: return "棕色"; case .red: return "红色"; case .orange: return "橙色"
+            case .brown: return "棕色"; case .beige: return "米色"; case .red: return "红色"; case .orange: return "橙色"
             case .yellow: return "黄色"; case .green: return "绿色"; case .cyan: return "青色"
             case .blue: return "蓝色"; case .purple: return "紫色"; case .pink: return "粉色"
             case .unknown: return "未知颜色"
@@ -325,7 +325,7 @@ public enum SpokenStrings {
         case .en:
             switch key {
             case .black: return "black"; case .white: return "white"; case .gray: return "gray"
-            case .brown: return "brown"; case .red: return "red"; case .orange: return "orange"
+            case .brown: return "brown"; case .beige: return "beige"; case .red: return "red"; case .orange: return "orange"
             case .yellow: return "yellow"; case .green: return "green"; case .cyan: return "cyan"
             case .blue: return "blue"; case .purple: return "purple"; case .pink: return "pink"
             case .unknown: return "unknown color"

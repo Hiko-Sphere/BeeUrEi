@@ -4,6 +4,7 @@ import Foundation
 /// 设计原则：宽松匹配（口语多变）、危险动作不做（不解析"挂断"以防误识别切断求助）、
 /// 不确定时返回 .unknown 由上层播报"没听懂"并复述可用指令。
 public enum VoiceCommand: Equatable, Sendable {
+    case sos                        // 紧急求助（SOS 告警：倒计时→通知全部亲友+附位置；区别于 help 的协助通话）
     case help                       // 求助/呼叫亲友
     case whereAmI                   // 我在哪
     case around                     // 周围有什么
@@ -41,7 +42,10 @@ public enum VoiceCommandParser {
 
         func has(_ keys: [String]) -> Bool { keys.contains { t.contains($0) } }
 
-        if has(["求助", "救命", "帮帮我", "呼叫", "打电话", "call for help", "get help", "help me", "call family"]) { return .help }
+        // SOS 须在 help 之前：两者都含"求助"类词，但"救命/紧急求助"是生命攸关的告警广播（倒计时→
+        // 通知全部亲友+附位置），不是"打视频电话等人接"。摔倒的盲人喊"救命"必须走告警而非拨号。
+        if has(["救命", "紧急求助", "一键求救", "紧急呼救", "sos", "emergency"]) { return .sos }
+        if has(["求助", "帮帮我", "呼叫", "打电话", "call for help", "get help", "help me", "call family"]) { return .help }
         if has(["我在哪", "我在哪里", "当前位置", "where am i", "my location"]) { return .whereAmI }
         if has(["周围有什么", "附近有什么", "周围", "what's around", "around me", "nearby"]) { return .around }
         if has(["前方有什么", "前面有什么", "前方", "what's ahead", "ahead of me", "in front"]) { return .ahead }

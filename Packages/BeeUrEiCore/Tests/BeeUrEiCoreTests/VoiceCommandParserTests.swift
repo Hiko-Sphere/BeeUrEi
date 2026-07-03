@@ -8,7 +8,8 @@ final class VoiceCommandParserTests: XCTestCase {
     /// 用每个命令的多种真实说法断言正确路由，一次性锁死行为、防新增命令引入碰撞。
     func testGoldenPhrasesRouteCorrectly() {
         let cases: [(String, VoiceCommand)] = [
-            ("救命", .help), ("帮帮我", .help), ("call for help", .help),
+            ("救命", .sos), ("紧急求助", .sos), ("SOS", .sos), ("emergency", .sos), ("一键求救", .sos),
+            ("求助", .help), ("帮帮我", .help), ("call for help", .help),
             ("我在哪", .whereAmI), ("我在哪里", .whereAmI), ("where am i", .whereAmI), ("find my location", .whereAmI),
             ("周围有什么", .around), ("附近有什么", .around), ("what's around me", .around),
             ("前方有什么", .ahead), ("前面有什么", .ahead), ("what's ahead", .ahead),
@@ -35,7 +36,7 @@ final class VoiceCommandParserTests: XCTestCase {
     }
 
     func testCoreIntentsZh() {
-        XCTAssertEqual(VoiceCommandParser.parse("救命，帮帮我"), .help)
+        XCTAssertEqual(VoiceCommandParser.parse("救命，帮帮我"), .sos) // 混合语句 SOS 优先：生命攸关压倒协助通话
         XCTAssertEqual(VoiceCommandParser.parse("我在哪里"), .whereAmI)
         XCTAssertEqual(VoiceCommandParser.parse("周围有什么"), .around)
         XCTAssertEqual(VoiceCommandParser.parse("前方有什么"), .ahead)
@@ -138,5 +139,20 @@ final class VoiceCommandParserTests: XCTestCase {
         // 不含颜色词的通用识别仍归 look。
         XCTAssertEqual(VoiceCommandParser.parse("这是什么"), .look)
         XCTAssertEqual(VoiceCommandParser.parse("识别一下"), .look)
+    }
+
+    /// SOS vs help 的边界（安全攸关）：救命/紧急求助=告警广播；求助/帮帮我=协助通话。
+    /// 摔倒的盲人喊"救命"必须走告警（倒计时→通知全部亲友+附位置），不是拨一通可能没人接的视频电话。
+    func testSosVersusHelpBoundary() {
+        // SOS 系：大小写不敏感、中英都认。
+        for phrase in ["救命", "救命啊", "紧急求助", "一键求救", "紧急呼救", "sos", "SOS", "Emergency", "this is an emergency"] {
+            XCTAssertEqual(VoiceCommandParser.parse(phrase), .sos, "『\(phrase)』应为 .sos")
+        }
+        // help 系不受影响（回归）。
+        for phrase in ["求助", "帮帮我", "呼叫亲友", "打电话给家人", "call for help", "get help", "help me", "call family"] {
+            XCTAssertEqual(VoiceCommandParser.parse(phrase), .help, "『\(phrase)』应为 .help")
+        }
+        // "紧急求助"含"求助"——顺序保证 SOS 先命中；这条防未来把 sos 检查挪到 help 之后。
+        XCTAssertEqual(VoiceCommandParser.parse("紧急求助"), .sos)
     }
 }

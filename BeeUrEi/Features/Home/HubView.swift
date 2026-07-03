@@ -399,6 +399,9 @@ struct HubView: View {
     private func handleVoiceCommand(_ command: VoiceCommand, transcript: String) {
         func speak(_ text: String) { SpeechHub.shared.speak(text, channel: .query, voiceCode: lang.voiceCode) }
         switch command {
+        // 语音 SOS：摔倒后够不到屏幕也能喊"救命"触发告警。manualSOS 自带 30s 倒计时+响亮播报+可取消
+        // 覆盖层（与摔倒检测同一套流程）——误触发有充分的撤销窗口，绝不静默直发。
+        case .sos: emergency.manualSOS()
         case .help: requestRemoteHelp()
         case .guideMe: enterObstacle()
         case .whereAmI: locationDescriber.describe()

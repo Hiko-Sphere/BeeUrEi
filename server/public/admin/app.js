@@ -488,7 +488,7 @@ function renderChrome() {
           <div><div class="name">BeeUrEi</div><div class="tag">${esc(t('console'))}</div></div></div>
         <nav>${nav}</nav>
         <div class="spacer"></div>
-        <div class="foot">Hiko Sphere 彦穹科技<br/>v${esc(state.overview ? state.overview.version : '')}</div>
+        <div class="foot">Hiko Sphere 彦穹科技<br/>v${esc(state.overview ? state.overview.version : '')}${state.overview && state.overview.commit && state.overview.commit !== 'unknown' ? ' · ' + esc(state.overview.commit.slice(0, 7)) : ''}</div>
       </aside>
       <main class="main">
         <header class="topbar">

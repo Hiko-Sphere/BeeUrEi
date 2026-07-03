@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+import { PKG_VERSION, gitCommit } from '../version'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import { type Store, type Role, type User, type AdminAuditEntry, type FeatureKey, FEATURE_KEYS, publicUser } from '../db/store'
@@ -43,7 +44,7 @@ const kycRejectSchema = z.object({
   note: z.string().trim().max(280).optional(),
 })
 
-const SERVER_VERSION = '0.1.0'
+
 const START_MS = Date.now()
 
 export function registerAdminRoutes(app: FastifyInstance, store: Store, presence: PresenceRegistry, hub?: SignalingHub, callControl?: CallControlBridge, push: PushSender = new NoopPushSender()): void {
@@ -129,7 +130,8 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       recordings: { total: store.allRecordings().length, config: store.getRecordingConfig() },
       verifications: { pending: store.countPendingVerifications(), total: store.allVerifications().length },
       growth: { newUsers7d, newUsers30d, trend },
-      version: SERVER_VERSION,
+      version: PKG_VERSION,
+      commit: gitCommit(), // 部署验证：后台一眼确认线上提交
       uptimeSeconds: Math.floor((now - START_MS) / 1000),
       nowMs: now,
     }

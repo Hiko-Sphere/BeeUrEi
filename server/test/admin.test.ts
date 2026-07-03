@@ -254,6 +254,8 @@ describe('admin + reports', () => {
     expect(growth).toBeDefined()
     expect(growth.trend.length).toBe(30) // 最近 30 个自然日
     expect(growth.newUsers30d).toBeGreaterThanOrEqual(3) // root + frank + gina
+    expect(ov.json().version).toBe('0.1.0') // 与 package.json 单一真相（原 admin 自己硬编码一份）
+    expect(ov.json().commit).toBe('unknown') // 测试未注入 GIT_SHA → 诚实 unknown；部署后=构建时 SHA
 
     // 非管理员被拒
     const ginaToken = await login(app, 'gina', 'secret123')

@@ -9,6 +9,9 @@ RUN npm ci --no-audit --no-fund
 
 COPY . .
 
+# 构建期注入 Git 提交号（deploy 脚本 --build-arg GIT_SHA=$SHA），/api/version 据此报告线上版本。
+ARG GIT_SHA=unknown
+ENV GIT_SHA=$GIT_SHA
 ENV PORT=8787
 ENV DB_PATH=/app/data/beeurei.db
 EXPOSE 8787

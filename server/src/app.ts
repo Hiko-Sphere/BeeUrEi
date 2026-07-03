@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import Fastify, { type FastifyInstance } from 'fastify'
 import rateLimit from '@fastify/rate-limit'
 import fastifyStatic from '@fastify/static'
@@ -56,6 +57,13 @@ export interface AppOptions {
   appleVerifier?: AppleTokenVerifier
   codeSend?: CodeSendLimiter // 验证码发送节流；默认 60s 冷却+窗口上限；测试可注入宽松实例
 }
+
+/// package.json 的 version（启动时读一次；读不到退化 '0.0.0' 不崩——版本探针绝不影响服务可用性）。
+const PKG_VERSION: string = (() => {
+  try {
+    return (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version?: string }).version ?? '0.0.0'
+  } catch { return '0.0.0' }
+})()
 
 /// 构建 Fastify 应用（与 listen 分离，便于用 app.inject() 单测）。
 /// 测试传入 MemoryStore；生产/开发默认 SQLite 持久化（见 makeDefaultStore）。
@@ -157,7 +165,9 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
       reply.type('application/json')
       return { webcredentials: { apps: [`${teamId}.${bundleId}`] } }
     })
-    instance.get('/api/version', async () => ({ version: '0.1.0' }))
+    // 版本探针（部署验证）：version 读自 package.json（单一真相），commit 由 Docker build-arg 注入
+    // GIT_SHA（未注入=本地开发 → 'unknown'）。运维据此确认线上跑的是哪个提交，而非猜。
+    instance.get('/api/version', async () => ({ version: PKG_VERSION, commit: process.env.GIT_SHA?.trim() || 'unknown' }))
     // Prometheus 抓取端点（D3）。设了 METRICS_TOKEN 则要求 Bearer 鉴权，否则开放（自托管内网场景）。
     instance.get('/metrics', async (req, reply) => {
       // trim：避免误写 METRICS_TOKEN=（空白）被当作 falsy 而静默关闭鉴权（见审查 #14）。

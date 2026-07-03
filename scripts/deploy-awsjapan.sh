@@ -33,7 +33,7 @@ remote 'cd ~/repo/BeeUrEi && git pull --ff-only origin main -q && echo "远端�
 
 deploy_api() {
   say "构建 beeurei-api:$SHA（npm ci 锁定版本）"
-  remote "cd ~/repo/BeeUrEi && docker build -q -t beeurei-api:$SHA -t beeurei-api:latest server/"
+  remote "cd ~/repo/BeeUrEi && docker build -q --build-arg GIT_SHA=$SHA -t beeurei-api:$SHA -t beeurei-api:latest server/"
 
   say "重建容器 beeurei-api"
   # 改过 .env 也生效：docker restart 不重读 env-file，必须 stop/rm/run 重建。

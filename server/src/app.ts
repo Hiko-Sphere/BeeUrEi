@@ -45,6 +45,7 @@ import { Metrics } from './metrics/metrics'
 import { captureException } from './monitoring/errorReporting'
 import { CodeRegistry } from './auth/codes'
 import { CodeSendLimiter } from './auth/sendLimiter'
+import { LoginThrottle } from './auth/loginThrottle'
 import { ConsoleMailer, type Mailer } from './mail/mailer'
 import { NoopPushSender, type PushSender } from './push/apns'
 import { CountingWebPushSender, NoopWebPushSender, type WebPushSender } from './push/webPush'
@@ -59,6 +60,7 @@ export interface AppOptions {
   // Apple 登录验证器：默认从 APPLE_BUNDLE_ID 环境变量构造（未配置则端点返回 503）；测试注入 fake。
   appleVerifier?: AppleTokenVerifier
   codeSend?: CodeSendLimiter // 验证码发送节流；默认 60s 冷却+窗口上限；测试可注入宽松实例
+  loginThrottle?: LoginThrottle // 按账号登录节流（NIST 800-63B）；测试可注入短延迟实例
 }
 
 /// 构建 Fastify 应用（与 listen 分离，便于用 app.inject() 单测）。
@@ -201,7 +203,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     setAuthStore(store) // 让 requireAuth 能实时校验账号状态/tokenVersion（见审查 #1/#2）
     const bundleId = process.env.APPLE_BUNDLE_ID?.trim()
     const appleVerifier = options.appleVerifier ?? (bundleId ? createAppleVerifier(bundleId) : undefined)
-    registerAuthRoutes(instance, store, codes, mailer, appleVerifier, codeSend)
+    registerAuthRoutes(instance, store, codes, mailer, appleVerifier, codeSend, options.loginThrottle)
     registerRecoveryRoutes(instance, store, codes, mailer, codeSend) // 找回密码（D1）
     registerAccountRoutes(instance, store, codes, mailer, appleVerifier, codeSend)
     registerKycRoutes(instance, store) // 实名认证（KYC）：提交/查询（admin 审核端点在 admin 路由）

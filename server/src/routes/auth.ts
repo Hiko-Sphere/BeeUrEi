@@ -6,6 +6,7 @@ import { hashPassword, verifyPassword } from '../auth/passwords'
 import { hashToken, generateRefreshToken } from '../auth/tokens'
 import { issueTokens, deviceLabelFromReq } from '../auth/session'
 import { passwordPolicyError } from '../auth/passwordPolicy'
+import { LoginThrottle } from '../auth/loginThrottle'
 import { totpMatchedCounter, hashRecoveryCode } from '../auth/totp'
 import { normalizePhone, type AppleTokenVerifier } from '../auth/apple'
 import { type CodeRegistry } from '../auth/codes'
@@ -74,7 +75,10 @@ const emailCodeVerifySchema = z.object({
   totpCode: z.string().max(64).optional(), // 已开 2FA 的账号：邮箱码登录也须二次验证（否则邮箱即可绕过 2FA）
 })
 
-export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer, appleVerifier?: AppleTokenVerifier, codeSend: CodeSendLimiter = new CodeSendLimiter()): void {
+export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer, appleVerifier?: AppleTokenVerifier, codeSend: CodeSendLimiter = new CodeSendLimiter(), loginThrottle: LoginThrottle = new LoginThrottle()): void {
+  // 按账号登录节流（NIST 800-63B）见 loginThrottle.ts：默认 ≥10 连败后每 30s 一试、≥50 冷却
+  // 15 分钟；参数经形参注入（测试用短延迟实例，与 mailer/codeSend 同一测试缝）。
+
   // 注册/登录/refresh 是凭证暴破与刷号的高危端点，给独立且更严格的限流（防口令暴破/凭证填充/批量刷号，见审查 #3）。
   app.post('/api/auth/register', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = registerSchema.safeParse(req.body)
@@ -151,15 +155,28 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
       verifyPassword(parsed.data.password, DUMMY_PASSWORD_HASH)
       return reply.code(401).send({ error: 'invalid_credentials' })
     }
+    // 按账号节流：密码校验**之前**判（正确与否一视同仁——否则撞库者猜中即进）。
+    // retry-after 秒数下发，客户端可如实提示"稍后再试"。
+    const th = loginThrottle.check(user.id, Date.now())
+    if (!th.allowed) {
+      reply.header('retry-after', String(Math.ceil((th.retryAfterMs ?? 0) / 1000)))
+      return reply.code(429).send({ error: 'too_many_attempts' })
+    }
     if (!verifyPassword(parsed.data.password, user.passwordHash)) {
+      loginThrottle.recordFailure(user.id, Date.now())
       return reply.code(401).send({ error: 'invalid_credentials' })
     }
     if (user.status === 'disabled') {
       return reply.code(403).send({ error: 'account_disabled' })
     }
-    // 两步验证：密码已校验通过后，再要求 TOTP/恢复码（已开启时）。
+    // 两步验证：密码已校验通过后，再要求 TOTP/恢复码（已开启时）。失败同计入账号节流
+    // （2FA 爆破也是对该账号的连续失败尝试）；two_factor_required（未带码的首步）不计——那是正常流程。
     const tf = passTwoFactor(store, user, parsed.data.totpCode, Date.now())
-    if (!tf.ok) return twoFactorReply(reply, tf.reason!)
+    if (!tf.ok) {
+      if (tf.reason === 'invalid') loginThrottle.recordFailure(user.id, Date.now())
+      return twoFactorReply(reply, tf.reason!)
+    }
+    loginThrottle.recordSuccess(user.id) // 完整成功才清零
     const tokens = issueTokens(store, user, { deviceLabel: deviceLabelFromReq(req.headers, (req.body as { deviceName?: string } | undefined)?.deviceName) })
     return reply.send({ ...tokens, user: selfView(user) })
   })

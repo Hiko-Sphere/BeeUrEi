@@ -137,6 +137,22 @@ public enum SpokenStrings {
         }
     }
 
+    // MARK: 头/胸高悬空障碍（OverheadHazardDetector）——盲杖探不到，措辞明确护头/上身。
+
+    public static func overheadHead(metersStr: String, _ lang: Language) -> String {
+        switch lang {
+        case .zh: return "当心头部，前方约\(metersStr)有高处障碍"
+        case .en: return "Careful, head-height obstacle about \(metersStr) ahead"
+        }
+    }
+
+    public static func overheadTorso(metersStr: String, _ lang: Language) -> String {
+        switch lang {
+        case .zh: return "当心，前方约\(metersStr)有齐胸障碍"
+        case .en: return "Careful, chest-height obstacle about \(metersStr) ahead"
+        }
+    }
+
     // MARK: 场景概述（SceneSummarizer）
 
     public static func sceneEmpty(_ lang: Language) -> String {

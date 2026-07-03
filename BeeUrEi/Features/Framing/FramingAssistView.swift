@@ -72,6 +72,8 @@ final class FramingAssistViewModel {
     }
 
     private func runChannel(_ channel: AppRoute.FramingChannel) {
+        // 切到光探测以外的任何动作：先停连续光探测音调，避免它与识别结果播报/其它模式抢声。
+        if channel != .light { stopLightTone() }
         switch channel {
         case .banknote: readCurrency()
         case .scan: readBarcode()
@@ -83,6 +85,10 @@ final class FramingAssistViewModel {
         }
     }
     @ObservationIgnored private var paused = false // 关闭/被来电盖上后：停止播报并丢弃在途帧/异步识别结果
+    // 连续光探测音调（Seeing AI Light/Envision 式）：开启后扫动手机、音高随亮度实时升降定位光源。
+    // 复用已真机验证的 ProximitySonifier（避障声呐）——只换 cue 来源（亮度而非距离），音频路径不变。
+    @ObservationIgnored private let lightSonifier = ProximitySonifier()
+    private(set) var lightToneOn = false
     @ObservationIgnored private var docMode = false        // 文档模式（整页取景引导+自动拍摄）
     @ObservationIgnored private var docStableFrames = 0    // 整页完整入画的连续帧数（≥2 自动拍摄）
     @ObservationIgnored private var docCapturing = false   // OCR 进行中，防重复拍摄
@@ -108,6 +114,7 @@ final class FramingAssistViewModel {
     func stop() {
         paused = true
         source.stop()
+        stopLightTone() // 关闭/来电盖上：停连续光探测音调，避免离开界面后仍在响
         SpeechHub.shared.stopChannel(.query) // 关闭/被来电盖上时立刻闭嘴，避免识别播报串入通话
     }
 
@@ -117,6 +124,12 @@ final class FramingAssistViewModel {
         latestBuffer = frame.pixelBuffer // 供"朗读文字"用最新帧
         latestDepth = frame.depth        // 供"周围的人"报距离
         latestCamera = frame.camera      // 供方位计算用真实视场角
+
+        // 连续光探测：每帧（不受下方 0.4s 节流约束，扫动要跟手）把整帧亮度映射成音调喂声呐。
+        // 仅在无其它持久模式时响（文档/找物/探索占屏时不响，避免抢声）。
+        if lightToneOn, !docMode, findPhase == .idle, !exploring, let b = currentBrightness() {
+            lightSonifier.update(LightSonification.cue(brightness: b))
+        }
 
         // Siri 频道直达（Seeing AI 全频道快捷指令惯例）：首帧就绪后自动触发排队的动作。
         if let channel = queuedChannel {
@@ -186,6 +199,7 @@ final class FramingAssistViewModel {
 
     /// 开始寻找一类通用物品（不需要先教，YOLO 直接认）。
     func startCategoryFind(label: String) {
+        stopLightTone() // 切到其它识别活动：停连续光探测音调
         let name = categoryName(label)
         docMode = false
         findTarget = nil
@@ -252,6 +266,7 @@ final class FramingAssistViewModel {
 
     /// 教学：把物品举在镜头前，每 ~1s 自动拍一张特征，共 3 张后请用户命名。
     func startTeaching() {
+        stopLightTone() // 切到其它识别活动：停连续光探测音调
         docMode = false
         findPhase = .teaching
         pendingPrints = []
@@ -450,6 +465,7 @@ final class FramingAssistViewModel {
 
     /// 进入/退出「读整页」：语音引导把整页放进画面，连续 2 帧完整入画即自动拍摄并按版面顺序朗读。
     func toggleDocumentMode() {
+        stopLightTone() // 切到其它识别活动：停连续光探测音调
         docMode.toggle()
         docStableFrames = 0
         docCapturing = false
@@ -577,6 +593,7 @@ final class FramingAssistViewModel {
 
     /// 朗读相机里看到的文字（端侧 Vision OCR，中英文）——盲人读标牌/标签/菜单。
     func readText() {
+        stopLightTone() // 切到其它识别活动：停连续光探测音调
         guard let live = latestBuffer else { speak(FramingStrings.aimText(lang)); return }
         if tooDarkToProceed() { return }
         guard let buffer = copyPixelBuffer(live) else { speak(FramingStrings.recognizeFailed(lang)); return } // 深拷贝供异步安全读
@@ -616,6 +633,7 @@ final class FramingAssistViewModel {
 
     /// 识别二维码/条码并朗读内容（端侧 Vision）——读 QR 海报、产品码、WiFi 码等。
     func readBarcode() {
+        stopLightTone() // 切到其它识别活动：停连续光探测音调
         guard let live = latestBuffer else { speak(FramingStrings.aimBarcode(lang)); return }
         if tooDarkToProceed() { return }
         guard let buffer = copyPixelBuffer(live) else { speak(FramingStrings.recognizeFailed(lang)); return } // 深拷贝供异步安全读
@@ -671,6 +689,7 @@ final class FramingAssistViewModel {
     /// 隐私边界：不识别身份、不估年龄表情、不存任何人脸数据——检测完即弃。
     /// 坐标约定与 YOLO 一致（原始相机缓冲，midX 即方位；深度采样 y 由左下翻到左上）。
     func describePeople() {
+        stopLightTone() // 切到其它识别活动：停连续光探测音调
         guard let live = latestBuffer else { speak(FramingStrings.aimAhead(lang)); return }
         if tooDarkToProceed() { return }
         guard let buffer = copyPixelBuffer(live) else { speak(FramingStrings.recognizeFailed(lang)); return } // 深拷贝供异步安全读
@@ -728,6 +747,7 @@ final class FramingAssistViewModel {
     /// 识别人民币纸币面额（端侧 OCR 角号/大写 + 票面主色，核心 CurrencyClassifier，已测）。
     /// 低置信只说"可能"，并提醒换角度确认——识币错了是真金白银，宁可多让用户拍一次。
     func readCurrency() {
+        stopLightTone() // 切到其它识别活动：停连续光探测音调
         guard let live = latestBuffer else { speak(FramingStrings.aimBanknote(lang)); return }
         if tooDarkToProceed() { return }
         guard let buffer = copyPixelBuffer(live) else { speak(FramingStrings.recognizeFailed(lang)); return } // 深拷贝供异步安全读
@@ -762,6 +782,7 @@ final class FramingAssistViewModel {
 
     /// 识别画面中央区域的颜色（端侧采样 + 核心 ColorNamer，已测）。
     func readColor() {
+        stopLightTone() // 切到其它识别活动：停连续光探测音调
         guard let buffer = latestBuffer else { speak(FramingStrings.aimObject(lang)); return }
         if tooDarkToProceed() { return }
         let rect = CGRect(x: 0.4, y: 0.4, width: 0.2, height: 0.2)
@@ -775,9 +796,24 @@ final class FramingAssistViewModel {
         }
     }
 
-    /// 光线探测（Seeing AI Light 频道式）：报明暗等级 + 亮源方向（左右半区亮度对比，核心 LightMeter，已测）。
+    /// 光线探测（点按）：先说一次明暗+亮源方向的概述，并开启**连续音调模式**——之后扫动手机、
+    /// 音高随亮度实时升降，靠耳朵定位窗户/灯（再点一次「光线探测」或离开即关）。
     /// 盲人找窗户/灯/亮着的出口通道、确认屋里灯有没有开。
     func readLight() {
+        if lightToneOn { stopLightTone(); return } // 已开 → 再点关闭
+        readLightOnce()
+        lightToneOn = true // 开启连续音调；帧循环据此每帧喂声呐
+    }
+
+    /// 关闭连续光探测音调。
+    func stopLightTone() {
+        guard lightToneOn else { return }
+        lightToneOn = false
+        lightSonifier.stop()
+    }
+
+    /// 光线探测一次性概述（明暗等级 + 亮源方向，核心 LightMeter，已测）。
+    private func readLightOnce() {
         guard let buffer = latestBuffer else { speak(FramingStrings.aimAhead(lang)); return }
         guard let whole = ColorSampler.averageRGB(in: buffer, rect: CGRect(x: 0, y: 0, width: 1, height: 1)),
               let left = ColorSampler.averageRGB(in: buffer, rect: CGRect(x: 0, y: 0, width: 0.33, height: 1)),
@@ -795,6 +831,7 @@ final class FramingAssistViewModel {
     /// 公交识别（OKO 式，端侧 YOLO+OCR）：认出公交/电车，读车头牌的线路号与终点站。
     /// 多辆车同时进站时帮盲人确认"来的是不是我要坐的那班"。行挑选在核心 BusDisplayReader（已测）。
     func readBus() {
+        stopLightTone() // 切到其它识别活动：停连续光探测音调
         guard let live = latestBuffer else { speak(FramingStrings.aimAhead(lang)); return }
         if tooDarkToProceed() { return }
         let dets = detector.detect(in: live, regionOfInterest: CGRect(x: 0, y: 0, width: 1, height: 1))
@@ -962,7 +999,8 @@ struct FramingAssistView: View {
                                   hint: FramingStrings.uiHint(.readText, model.lang)) { model.readText() }
                     overlayAction(FramingStrings.uiTitle(.fullPage, model.lang), systemImage: "doc.text.viewfinder",
                                   hint: FramingStrings.uiHint(.fullPage, model.lang)) { model.toggleDocumentMode() }
-                    overlayAction(FramingStrings.uiTitle(.light, model.lang), systemImage: "sun.max.fill",
+                    overlayAction(FramingStrings.lightToneTitle(model.lightToneOn, model.lang),
+                                  systemImage: model.lightToneOn ? "sun.max.circle.fill" : "sun.max.fill",
                                   hint: FramingStrings.uiHint(.light, model.lang)) { model.readLight() }
                 }
                 .padding(.horizontal)

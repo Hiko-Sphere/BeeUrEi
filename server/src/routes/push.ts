@@ -76,6 +76,19 @@ export function registerPushRoutes(app: FastifyInstance, store: Store, webPush?:
     return { ok: true }
   })
 
+  // 自测推送：把一条测试通知发到**本人**的全部浏览器订阅——运营者配完 VAPID、用户开完开关，
+  // 一键验证端到端真通（订阅存在≠推送能到：VAPID 配错/浏览器厂商侧失败只有真发一次才知道）。
+  app.post('/api/push/web-test', { preHandler: requireAuth(),
+                                   config: { rateLimit: { max: 6, timeWindow: '1 minute' } } }, async (req, reply) => {
+    if (!webPush?.configured) return reply.code(503).send({ error: 'web_push_not_configured' })
+    const subs = store.webPushSubscriptionsForUser(req.user!.sub)
+    if (subs.length === 0) return reply.code(404).send({ error: 'no_subscription' })
+    const payload = JSON.stringify({ title: 'BeeUrEi', body: '测试通知 / Test notification', data: { kind: 'push_test' } })
+    const results = await Promise.allSettled(subs.map((sub) => webPush.send(sub, payload)))
+    const sent = results.filter((r) => r.status === 'fulfilled').length
+    return { ok: true, sent, total: subs.length } // sent<total 时客户端提示部分失败
+  })
+
   app.delete('/api/push/web-subscribe', { preHandler: requireAuth() }, async (req, reply) => {
     const parsed = webUnsubSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })

@@ -47,7 +47,7 @@ import { CodeRegistry } from './auth/codes'
 import { CodeSendLimiter } from './auth/sendLimiter'
 import { ConsoleMailer, type Mailer } from './mail/mailer'
 import { NoopPushSender, type PushSender } from './push/apns'
-import { NoopWebPushSender, type WebPushSender } from './push/webPush'
+import { CountingWebPushSender, NoopWebPushSender, type WebPushSender } from './push/webPush'
 import { setNotifyWebPush } from './notifications/notify'
 import { createAppleVerifier, type AppleTokenVerifier } from './auth/apple'
 
@@ -127,11 +127,15 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   const codeSend = options.codeSend ?? new CodeSendLimiter() // 发送侧节流：同一收件人 60s 冷却 + 窗口上限（防连点/邮件轰炸）
   const mailer = options.mailer ?? new ConsoleMailer()
   const pushSender = options.pushSender ?? new NoopPushSender()
-  const webPushSender = options.webPushSender ?? new NoopWebPushSender()
-  setNotifyWebPush(webPushSender) // notifyUser 统一投递的 Web Push 通道（模块单例，见 notify.ts）
+  // 计数包裹须在 metrics 构造之后——见下方 webPushSender 最终定型处。
+  const rawWebPushSender = options.webPushSender ?? new NoopWebPushSender()
 
   // 业务计数预置 0 基线：使这些 series 自启动起就存在，避免 Prometheus rate() 在首次命中时断档（见复审 #5）。
-  for (const name of ['calls_registered_total', 'help_requests_total', 'help_claims_total']) metrics.inc(name, 0)
+  for (const name of ['calls_registered_total', 'help_requests_total', 'help_claims_total',
+                      'web_push_sent_total', 'web_push_failed_total']) metrics.inc(name, 0)
+  // Web Push 计数装饰（单点包裹，扇出调用点零改动）：送达健康度进 /metrics。
+  const webPushSender: WebPushSender = new CountingWebPushSender(rawWebPushSender, (n) => metrics.inc(n))
+  setNotifyWebPush(webPushSender) // notifyUser 统一投递的 Web Push 通道（模块单例，见 notify.ts）——包裹后注入，计数覆盖该路
 
   // 监控（D3）：记录每次响应的状态码族，供 /metrics 暴露给 Prometheus。
   // 跳过 /metrics 自身——否则每次抓取都会把自己计入 2xx，污染请求量指标（见复审 #4）。

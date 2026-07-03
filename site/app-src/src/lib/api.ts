@@ -311,6 +311,7 @@ export const api = {
   webVapidKey: () => get('/api/push/web-vapid-key') as Promise<{ key: string }>,
   webPushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) => post('/api/push/web-subscribe', sub),
   webPushUnsubscribe: (endpoint: string) => del('/api/push/web-subscribe', { endpoint }),
+  webPushTest: () => post('/api/push/web-test') as Promise<{ ok: boolean; sent: number; total: number }>,
 
   // 举报
   report: (targetUserId: string, reason: string, callId?: string, evidenceRecordingId?: string) =>

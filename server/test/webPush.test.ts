@@ -153,6 +153,27 @@ describe('Web Push（浏览器推送紧急告警）', () => {
     } finally { delete process.env.WEB_PUSH_MAX_PER_USER }
   })
 
+  it('自测推送端点：发到本人全部订阅并回报计数；未配置 503/无订阅 404；计数进 /metrics', async () => {
+    const wp = new RecordingWebPush()
+    const { a, hAuth } = await seed(wp)
+    // 无订阅 → 404
+    expect((await a.inject({ method: 'POST', url: '/api/push/web-test', headers: hAuth })).statusCode).toBe(404)
+    await a.inject({ method: 'POST', url: '/api/push/web-subscribe', headers: hAuth, payload: SUB })
+    const r = await a.inject({ method: 'POST', url: '/api/push/web-test', headers: hAuth })
+    expect(r.statusCode).toBe(200)
+    expect(r.json()).toMatchObject({ ok: true, sent: 1, total: 1 })
+    expect(JSON.parse(wp.sent[0].payload).data.kind).toBe('push_test')
+    // 计数装饰器：送达健康度进 /metrics（buildApp 单点包裹，任何扇出路径都被计入）。
+    const metrics = await a.inject({ method: 'GET', url: '/metrics' })
+    expect(metrics.payload).toContain('web_push_sent_total 1')
+    expect(metrics.payload).toContain('web_push_failed_total 0')
+    await a.close()
+    // 未配置（Noop）→ 503
+    const { a: a2, hAuth: h2 } = await seed()
+    expect((await a2.inject({ method: 'POST', url: '/api/push/web-test', headers: h2 })).statusCode).toBe(503)
+    await a2.close()
+  })
+
   it('删号级联：订阅随人清除（双存储各自验证存储层）', async () => {
     const wp = new RecordingWebPush()
     const { a, store, helper, hAuth } = await seed(wp)

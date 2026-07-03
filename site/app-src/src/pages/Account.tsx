@@ -636,6 +636,16 @@ function WebPushCard() {
           </button>
         )}
       </div>
+      {state === 'on' && (
+        // 端到端自测：订阅存在≠推送能到（VAPID 配错/浏览器厂商侧失败只有真发一次才知道）。
+        <button onClick={() => void api.webPushTest()
+          .then((r) => toast(r.sent === r.total ? t('测试通知已发出，请留意系统通知', 'Test sent — check your system notifications')
+                                                : t(`部分发送失败（${r.sent}/${r.total}）`, `Partially failed (${r.sent}/${r.total})`), r.sent === r.total ? 'ok' : 'error'))
+          .catch(() => toast(t('发送失败', 'Failed to send'), 'error'))}
+          className="mt-2 text-xs font-medium text-accent hover:underline">
+          {t('发送测试通知', 'Send a test notification')}
+        </button>
+      )}
     </Card>
   )
 }

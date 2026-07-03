@@ -49,6 +49,24 @@ export class VapidWebPushSender implements WebPushSender {
   }
 }
 
+/// 计数装饰器：把任意 WebPushSender 包上 Prometheus 计数——推送已是紧急链路的承重通道，
+/// 送达健康度必须可观测（web_push_sent_total / web_push_failed_total）。在 buildApp 单点包裹，
+/// 四处扇出调用点（emergency/assist/messages/notifyUser）零改动。
+/// 口径：sent=send 正常返回（含 410 回收死订阅——那是"正确处理"非故障）；failed=抛错（上游 5xx/网络）。
+export class CountingWebPushSender implements WebPushSender {
+  constructor(private inner: WebPushSender, private count: (name: string) => void) {}
+  get configured(): boolean { return this.inner.configured }
+  async send(sub: WebPushSubscriptionKeys, payload: string): Promise<void> {
+    try {
+      await this.inner.send(sub, payload)
+      this.count('web_push_sent_total')
+    } catch (e) {
+      this.count('web_push_failed_total')
+      throw e
+    }
+  }
+}
+
 /// 从环境构造：三个 VAPID 变量齐才真发（subject 须为 mailto: 或 https: URL，规范要求）。
 export function makeWebPushSender(onGone?: (endpoint: string) => void): WebPushSender {
   const pub = process.env.VAPID_PUBLIC_KEY

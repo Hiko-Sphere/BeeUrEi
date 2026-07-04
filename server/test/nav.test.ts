@@ -166,6 +166,28 @@ describe('AMap walking nav proxy', () => {
     await app.close()
   })
 
+  it('/around?keywords= 定向检索：关键词转发到高德（"最近的X"用），并回显 radius', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    const fetchMock = vi.fn(async (_url: string) => ({
+      ok: true, status: 200,
+      json: async () => ({ status: '1', infocode: '10000', pois: [{ name: '同仁堂药店', location: '116.4,39.9', distance: '88', type: '医疗保健;药店' }] }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const app = buildApp(new MemoryStore())
+    const t = await token(app)
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/nav/around?lat=39.9&lon=116.4&radius=1000&keywords=' + encodeURIComponent('药店'),
+      headers: { authorization: `Bearer ${t}` },
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().radius).toBe(1000)
+    const calledUrl = String(fetchMock.mock.calls[0]?.[0] ?? '')
+    expect(calledUrl).toContain('keywords=' + encodeURIComponent('药店')) // 关键词确实透传给高德
+    expect(calledUrl).toContain('radius=1000')
+    await app.close()
+  })
+
   it('/around：AMap key 平台不符 → 502 amap_error（不静默当"周围什么都没有"）；坐标非法 → 400；未配 → 503', async () => {
     // 未配置
     delete process.env.AMAP_API_KEY

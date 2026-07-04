@@ -448,6 +448,7 @@ struct HubView: View {
         case .around: locationDescriber.describeAround()
         case .ahead: locationDescriber.describeAhead()
         case .facing: locationDescriber.describeFacing()
+        case .findNearest(let cat): locationDescriber.findNearest(cat) // 「最近的厕所/药店」就近找地点
         case .weather: weatherSpeaker.announce()
         case .look: showFraming = true
         case .readText: route.pendingChannel = .text; showFraming = true

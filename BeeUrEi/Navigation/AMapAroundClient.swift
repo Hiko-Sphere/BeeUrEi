@@ -17,15 +17,20 @@ struct AMapAroundResponse: Decodable {
 /// 「周围有什么」国内数据源：调用自托管后端 `/api/nav/around`（后端持高德 key）。
 /// 传入 **GCJ-02** 经纬度（与步行导航同约定——App 已把用户 WGS-84 位置转 GCJ-02 再传）。
 struct AMapAroundClient {
-    func around(latGcj: Double, lonGcj: Double, radiusMeters: Int) async throws -> AMapAroundResponse {
+    /// keywords 非空时定向检索（"最近的X"用），空则周边全类型（"周围有什么"用）。
+    func around(latGcj: Double, lonGcj: Double, radiusMeters: Int, keywords: String? = nil) async throws -> AMapAroundResponse {
         guard let token = KeychainStore.read() else { throw APIError.server("请先登录") }
         guard var comps = URLComponents(url: ServerConfig.baseURL.appendingPathComponent("api/nav/around"),
                                         resolvingAgainstBaseURL: false) else { throw APIError.network }
-        comps.queryItems = [
+        var items = [
             URLQueryItem(name: "lat", value: String(latGcj)),
             URLQueryItem(name: "lon", value: String(lonGcj)),
             URLQueryItem(name: "radius", value: String(radiusMeters)),
         ]
+        if let kw = keywords?.trimmingCharacters(in: .whitespacesAndNewlines), !kw.isEmpty {
+            items.append(URLQueryItem(name: "keywords", value: kw))
+        }
+        comps.queryItems = items
         guard let url = comps.url else { throw APIError.network }
         var req = URLRequest(url: url)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

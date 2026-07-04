@@ -92,6 +92,34 @@ final class PoiCalloutComposerTests: XCTestCase {
         XCTAssertTrue(out.contains("店1") && out.contains("店2") && !out.contains("店3"))
     }
 
+    func testNearestPicksClosestQualifyingWithDirection() {
+        let out = PoiCalloutComposer.nearest(
+            from: [poi("远药店", 300, 90), poi("近药店", 80, 0), poi("脚下药店", 2, 0)], // 2m 太近(所在建筑)剔除
+            query: "药店", radiusMeters: 1000, language: .zh)
+        XCTAssertEqual(out, "最近的药店：近药店，12点钟方向约80米")
+    }
+
+    func testNearestWithoutHeadingDistanceOnly() {
+        let out = PoiCalloutComposer.nearest(
+            from: [poi("公共卫生间", 120, nil)], query: "厕所", radiusMeters: 1000, language: .zh)
+        XCTAssertEqual(out, "最近的厕所：公共卫生间，约120米") // 无方位只报距离，绝不编方向
+    }
+
+    func testNearestNoneFound() {
+        XCTAssertEqual(
+            PoiCalloutComposer.nearest(from: [], query: "药店", radiusMeters: 1000, language: .zh),
+            "附近1000米内没找到药店")
+        XCTAssertEqual(
+            PoiCalloutComposer.nearest(from: [poi("  ", 50, 0)], query: "pharmacy", radiusMeters: 800, language: .en),
+            "No pharmacy found within 800 meters") // 只有空名/被过滤者=没找到
+    }
+
+    func testNearestEnglish() {
+        XCTAssertEqual(
+            PoiCalloutComposer.nearest(from: [poi("Boots", 50, 90)], query: "pharmacy", radiusMeters: 1000, language: .en),
+            "Nearest pharmacy: Boots, about 50 meters, 3 o'clock")
+    }
+
     func testEnglishPhrasing() {
         let out = PoiCalloutComposer.compose(
             pois: [poi("Blue Bottle", 30, 0)],

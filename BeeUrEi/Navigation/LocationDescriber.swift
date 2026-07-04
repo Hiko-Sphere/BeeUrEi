@@ -10,12 +10,13 @@ import AVFoundation
 /// - 「前方有什么」：只报朝向 ±50° 扇区内的地点。
 /// 不导航也能建立心理地图。端侧 CLGeocoder/MKLocalSearch，无需后端。
 final class LocationDescriber: NSObject, CLLocationManagerDelegate {
-    enum Mode { case whereAmI, around, ahead, facing }
+    enum Mode { case whereAmI, around, ahead, facing, nearest } // nearest 的类别另存 nearestQuery（保 Mode 简单可 == 比较）
 
     private let manager = CLLocationManager()
     private let geocoder = CLGeocoder()
     private var isDescribing = false // 防重入：上一次还在解析时忽略新点击（见审查 #3）
     private var mode: Mode = .whereAmI
+    private var nearestQuery = "" // 「最近的X」的类别（.nearest 模式用）
     private var lastHeading: Double? // 最近真北航向（罗盘），供相对方位计算
     private var watchdog: DispatchWorkItem? // 看门狗：定位/解析无回调时复位，避免永久卡死
     private var lang: Language = FeatureSettings().language // 播报语言（E5，每次触发时解析）
@@ -30,6 +31,11 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
     func describeAround() { run(.around) }
     func describeAhead() { run(.ahead) }
     func describeFacing() { run(.facing) }
+    /// 「最近的X」：就近查找某类公共地点，报最近一家的店名 + 时钟方位 + 距离。
+    func findNearest(_ query: String) {
+        nearestQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        run(.nearest)
+    }
 
     private func promptFor(_ m: Mode) -> String {
         switch m {
@@ -37,6 +43,7 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
         case .around: return lang == .zh ? "正在查看周围有什么" : "Checking what's around you"
         case .ahead: return lang == .zh ? "正在查看前方有什么" : "Checking what's ahead"
         case .facing: return lang == .zh ? "正在确定你的朝向" : "Checking which way you're facing"
+        case .nearest: return lang == .zh ? "正在查找最近的\(nearestQuery)" : "Finding the nearest \(nearestQuery)"
         }
     }
 
@@ -112,8 +119,63 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
             }
         case .around, .ahead:
             poiCallouts(loc)
+        case .nearest:
+            nearestCallouts(loc, query: nearestQuery)
         case .facing:
             break // 朝向只依赖罗盘（didUpdateHeading 里播报并复位），不需要定位点
+        }
+    }
+
+    /// 就近找某类地点：国内高德定向检索、海外 MapKit 自然语言检索；统一走 core 的 nearest 播报。
+    private func nearestCallouts(_ loc: CLLocation, query: String) {
+        let radius = 1000 // 找特定地点比"周围有什么"(250m)放宽到 1km——值得为一个厕所/药店走远些
+        if ChinaCoord.isInChina(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude) {
+            amapNearest(loc, query: query, radius: radius)
+        } else {
+            mapKitNearest(loc, query: query, radius: radius)
+        }
+    }
+
+    private func amapNearest(_ loc: CLLocation, query: String, radius: Int) {
+        let g = ChinaCoord.wgs84ToGcj02(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude)
+        let heading = lastHeading
+        let lang = self.lang
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let resp = try await AMapAroundClient().around(latGcj: g.lat, lonGcj: g.lon, radiusMeters: radius, keywords: query)
+                let obs = resp.pois.map { p in
+                    PoiObservation(name: p.name, distanceMeters: p.distanceMeters,
+                                   relativeBearingDegrees: self.relativeBearing(fromLat: g.lat, fromLon: g.lon,
+                                                                                toLat: p.lat, toLon: p.lon, heading: heading))
+                }
+                let text = PoiCalloutComposer.nearest(from: obs, query: query, radiusMeters: resp.radius, language: lang)
+                await MainActor.run { self.finish(text) }
+            } catch {
+                await MainActor.run { self.mapKitNearest(loc, query: query, radius: radius) } // 高德失败回退 MapKit
+            }
+        }
+    }
+
+    private func mapKitNearest(_ loc: CLLocation, query: String, radius: Int) {
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = query
+        request.region = MKCoordinateRegion(center: loc.coordinate,
+                                            latitudinalMeters: CLLocationDistance(radius * 2),
+                                            longitudinalMeters: CLLocationDistance(radius * 2))
+        MKLocalSearch(request: request).start { [weak self] response, _ in
+            guard let self else { return }
+            let heading = self.lastHeading
+            let obs: [PoiObservation] = (response?.mapItems ?? []).prefix(15).compactMap { item in
+                guard let name = item.name, let ploc = item.placemark.location else { return nil }
+                return PoiObservation(
+                    name: name,
+                    distanceMeters: loc.distance(from: ploc),
+                    relativeBearingDegrees: self.relativeBearing(fromLat: loc.coordinate.latitude, fromLon: loc.coordinate.longitude,
+                                                                 toLat: ploc.coordinate.latitude, toLon: ploc.coordinate.longitude, heading: heading))
+            }
+            let text = PoiCalloutComposer.nearest(from: obs, query: query, radiusMeters: radius, language: self.lang)
+            self.finish(text)
         }
     }
 

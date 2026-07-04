@@ -44,10 +44,40 @@ final class VoiceCommandParserTests: XCTestCase {
             ("详细点", .adjustVerbosity(.moreDetail)), ("多说点", .adjustVerbosity(.moreDetail)), ("tell me more", .adjustVerbosity(.moreDetail)),
             ("找我的钥匙", .find("钥匙")), ("帮我找水杯", .find("水杯")), ("find my wallet", .find("wallet")),
             ("带我去北京西站", .navigate("北京西站")), ("导航到医院", .navigate("医院")),
+            ("最近的厕所在哪", .findNearest("厕所")), ("离我最近的药店", .findNearest("药店")),
+            ("附近哪里有便利店", .findNearest("便利店")), ("nearest pharmacy", .findNearest("pharmacy")),
+            ("where can i find a restroom", .findNearest("restroom")),
         ]
         for (phrase, expected) in cases {
             XCTAssertEqual(VoiceCommandParser.parse(phrase), expected, "『\(phrase)』应解析为 \(expected)")
         }
+    }
+
+    func testFindNearestSpatialVariants() {
+        // 各种空间说法都提取到地点类别。
+        XCTAssertEqual(VoiceCommandParser.parse("最近的厕所在哪"), .findNearest("厕所"))
+        XCTAssertEqual(VoiceCommandParser.parse("离我最近的地铁站"), .findNearest("地铁站"))
+        XCTAssertEqual(VoiceCommandParser.parse("带我去最近的医院"), .findNearest("医院"))     // "去最近的"路由到就近找，而非按名字搜"最近的医院"必失败
+        XCTAssertEqual(VoiceCommandParser.parse("附近有没有超市"), .findNearest("超市"))
+        XCTAssertEqual(VoiceCommandParser.parse("这附近哪里有卫生间"), .findNearest("卫生间"))
+        XCTAssertEqual(VoiceCommandParser.parse("最近的公交站怎么走"), .findNearest("公交站"))
+        XCTAssertEqual(VoiceCommandParser.parse("closest coffee shop"), .findNearest("coffee shop"))
+        XCTAssertEqual(VoiceCommandParser.parse("take me to the nearest bathroom"), .findNearest("bathroom"))
+        XCTAssertEqual(VoiceCommandParser.parse("is there a pharmacy nearby"), .findNearest("pharmacy"))
+        XCTAssertEqual(VoiceCommandParser.parse("find me the closest restroom"), .findNearest("restroom"))
+    }
+
+    func testFindNearestDoesNotStealTemporalOrAround() {
+        // 中文"最近"的时间义（近来）不该被当空间"最近"触发就近找地点（具体落到读文字/读消息是既有行为，此处只验不误触）。
+        if case .findNearest = VoiceCommandParser.parse("读一下最近的消息") { XCTFail("时间义『最近的消息』不应触发就近找地点") }
+        XCTAssertEqual(VoiceCommandParser.parse("最近的新闻"), .unknown)          // 无空间语境+时间宾语→不误触，落 unknown
+        XCTAssertEqual(VoiceCommandParser.parse("最近怎么样"), .unknown)
+        // 泛问周围仍归 around，不被就近找抢。
+        XCTAssertEqual(VoiceCommandParser.parse("周围有什么"), .around)
+        XCTAssertEqual(VoiceCommandParser.parse("附近有什么"), .around)
+        // 找个人物品仍归 find，不被就近找抢。
+        XCTAssertEqual(VoiceCommandParser.parse("找我的钥匙"), .find("钥匙"))
+        XCTAssertEqual(VoiceCommandParser.parse("find my wallet"), .find("wallet"))
     }
 
     func testReadPhoneVsCallPerson() {

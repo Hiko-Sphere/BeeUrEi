@@ -90,4 +90,27 @@ public enum PoiCalloutComposer {
         let prefix = mode == .ahead ? (zh ? "前方：" : "Ahead: ") : (zh ? "周围：" : "Around you: ")
         return prefix + picked.joined(separator: sep)
     }
+
+    /// 就近找**单个**地点的播报（voice「最近的X」/"nearest X"）：从候选里挑最近的合格者
+    /// （距离有限 >5m、名字非空），报店名 + 时钟方位 + 距离；无合格者 → "附近没找到<query>"。
+    /// query=用户所问类别（"厕所"），name=实际店名——两者都念，盲人才知道到底是哪家。
+    public static func nearest(from pois: [PoiObservation], query: String, radiusMeters: Int, language: Language) -> String {
+        let zh = language == .zh
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let best = pois
+            .filter { $0.distanceMeters.isFinite && $0.distanceMeters > minDistanceMeters
+                      && !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .min { $0.distanceMeters < $1.distanceMeters }
+        guard let best else {
+            return zh ? "附近\(radiusMeters)米内没找到\(q)" : "No \(q) found within \(radiusMeters) meters"
+        }
+        let name = best.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let m = Int(best.distanceMeters.rounded())
+        if let rel = best.relativeBearingDegrees, rel.isFinite {
+            let hour = ClockDirection(angleDegrees: rel).hour
+            return zh ? "最近的\(q)：\(name)，\(hour)点钟方向约\(m)米"
+                      : "Nearest \(q): \(name), about \(m) meters, \(hour) o'clock"
+        }
+        return zh ? "最近的\(q)：\(name)，约\(m)米" : "Nearest \(q): \(name), about \(m) meters"
+    }
 }

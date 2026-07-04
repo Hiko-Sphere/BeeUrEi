@@ -33,6 +33,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case sendMessage(to: String, text: String) // 给X发消息说Y
     case sendLocation(to: String)   // 把我的位置发给X（"告诉妈妈我在哪"）——盲人免进聊天找按钮，一句话共享位置
     case find(String)               // 找某个具体物品（已教物品或可找类别，如"找我的钥匙"/"find my keys"）
+    case findNearest(String)        // 就近找**公共地点类别**（"最近的厕所在哪"/"nearest pharmacy"）——区别于 find(个人物品)与 around(泛问周围)
     case adjustSpeech(SpeechRateAdjust) // 语音调语速：说快点/说慢点/正常语速（找滑块成本高，语速最常想即时调）
     case adjustVerbosity(VerbosityAdjust) // 语音调详略：说简短点/说详细点（赶路想精简/熟悉后嫌啰嗦）
     case commands                   // 自述能做什么（盲人无法浏览 UI 发现功能——语音能力必须能被语音发现）
@@ -71,6 +72,9 @@ public enum VoiceCommandParser {
         // "where i am"/"where i'm"（陈述语序）与"where am i"（疑问语序）都收——"tell me where I am"（问自己在哪，
         // 收件人是代词、parseSendLocation 已返回 nil）此前因只匹配疑问语序而落到 unknown。
         if has(["我在哪", "我在哪里", "当前位置", "where am i", "where i am", "where i'm", "my location"]) { return .whereAmI }
+        // 就近找地点（"最近的厕所在哪"/"nearest pharmacy"）须在 .around（"周围有什么"含裸"周围"）与 .find（"找X"）、
+        // .navigate（"去X"）之前——否则"周围哪里有药店"被 around 抢、"找最近的厕所"被 find 抢、"去最近的厕所"被导航搜名字失败。
+        if let cat = parseFindNearest(text) { return .findNearest(cat) }
         if has(["周围有什么", "附近有什么", "周围", "what's around", "around me", "nearby"]) { return .around }
         if has(["前方有什么", "前面有什么", "前方", "what's ahead", "ahead of me", "in front"]) { return .ahead }
         // 朝向（罗盘方位）：盲人看不到罗盘/太阳，"我正朝哪"是方向感的基础。置于此处、导航解析之前——用具体短语
@@ -217,6 +221,62 @@ public enum VoiceCommandParser {
             }
         }
         return x
+    }
+
+    /// 「最近的X在哪」「离我最近的X」「附近哪里有X」「哪里有X」「去最近的X」/ "nearest X"/"closest X"/
+    /// "where can I find X"/"take me to the nearest X"：提取要**就近查找的公共地点类别**（如"厕所""药店""公交站"）。
+    /// 区别于 .find（找个人物品）与 .around（泛问周围有什么）。
+    /// **核心难点**：中文"最近"有时间义（"最近的消息"=近来的消息）——故仅在有**空间锚点**
+    /// （"离我"/"哪里有"/位置疑问后缀"在哪|怎么走"/"去|到最近的"）或英文 nearest/closest 时才触发；
+    /// 类别须非空且非时间类宾语（消息/新闻…），否则返回 nil 不误触。
+    static func parseFindNearest(_ text: String) -> String? {
+        let nonPlace: Set<String> = ["消息", "信息", "新闻", "事", "事情", "情况", "动态",
+                                     "message", "messages", "news", "update", "updates"]
+        func clean(_ s: String) -> String? {
+            let punct = CharacterSet(charactersIn: "。，？！,.?!、").union(.whitespacesAndNewlines)
+            let trails = ["在哪里", "在哪儿", "在哪呢", "在哪", "怎么走", "怎么去", "咋走", "远不远", "有多远",
+                          "呢", "吗", "吧", "啊", "呀",
+                          " nearby", " near me", " around here", " please", " to me"]
+            let leads = ["一个", "一家", "一间", "一处", "个", "家", "间", "处",
+                         "a ", "an ", "the ", "some ", "any "]
+            var x = s.trimmingCharacters(in: punct)
+            var changed = true
+            while changed {
+                changed = false
+                let xl = x.lowercased()
+                for tr in trails where xl.hasSuffix(tr.lowercased()) && x.count > tr.count {
+                    x = String(x.dropLast(tr.count)).trimmingCharacters(in: punct); changed = true; break
+                }
+                for l in leads where x.lowercased().hasPrefix(l.lowercased()) && x.count > l.count {
+                    x = String(x.dropFirst(l.count)).trimmingCharacters(in: punct); changed = true; break
+                }
+            }
+            if x.isEmpty || nonPlace.contains(x.lowercased()) { return nil }
+            return x
+        }
+        // 中文：均带明确空间语境，避开时间义"最近"。
+        let zhPatterns = [
+            #"离我最近的(.{1,12}?)$"#,                              // 离我最近的药店
+            #"最近的(.{1,12}?)(?:在哪[里儿]?|怎么走|怎么去|有多远)"#,   // 最近的厕所在哪（须空间后缀）
+            #"(?:去|到)最近的(.{1,12}?)$"#,                         // (带我)去最近的厕所
+            #"(?:附近|周围|这附近|这周围)(?:哪里|哪儿|哪)有(.{1,12}?)$"#, // 附近哪里有便利店
+            #"(?:哪里|哪儿)有(.{1,12}?)$"#,                         // 哪里有厕所
+            #"(?:附近|周围)有没有(.{1,12}?)$"#,                      // 附近有没有药店
+        ]
+        for p in zhPatterns {
+            if let m = firstMatchSingle(in: text, pattern: p), let c = clean(m) { return c }
+        }
+        // 英文：只在明确 nearest/closest 或 where-can-I-find / is-there…nearby 时触发（保守，不吃泛问）。
+        let enPatterns = [
+            #"(?i)(?:the\s+)?(?:nearest|closest)\s+(.{1,30}?)$"#,                       // (the) nearest pharmacy（也吃 "take me to the nearest X"）
+            #"(?i)where\s+can\s+i\s+(?:find|get)\s+(?:the\s+|a\s+|an\s+)?(?:nearest\s+|closest\s+)?(.{1,30}?)$"#,
+            #"(?i)find\s+(?:me\s+)?(?:the\s+|a\s+|an\s+)?(?:nearest|closest)\s+(.{1,30}?)$"#,
+            #"(?i)is\s+there\s+(?:a\s+|an\s+)?(.{1,30}?)\s+(?:nearby|near me|around here)$"#,
+        ]
+        for p in enPatterns {
+            if let m = firstMatchSingle(in: text, pattern: p), let c = clean(m) { return c }
+        }
+        return nil
     }
 
     /// 「给X打电话」/「打电话给X」/「呼叫X」/ "call [my] X"：提取要**定向拨打**的联系人名字。

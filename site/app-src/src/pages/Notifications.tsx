@@ -14,6 +14,7 @@ export function notifDestination(kind: string): string | null {
   if (kind.includes('group')) return '/chat'
   if (kind.includes('route')) return '/routes' // 路线通知 → 路线库页（查看/预览亲友新加的路线；执行仍在 iOS）
   if (kind.includes('kyc') || kind.includes('verif')) return '/account' // 实名结果 → 账户页实名认证区
+  if (kind.includes('security')) return '/account' // 安全变更预警（改密/改邮箱/2FA）→ 账户页去处理
   return null
 }
 
@@ -23,7 +24,7 @@ function iconFor(kind: string) {
   if (kind.includes('route') || kind.includes('arrival') || kind.includes('place')) return <IconPin /> // 路线库/到达围栏（route_added/place_arrival）用定位图标
   if (kind.includes('friend') || kind.includes('link') || kind.includes('group')) return <IconUsers />
   // 实名认证（kyc_verified/kyc_rejected）与举报处置同属"账号/安全"类——用盾牌，免落到通用铃铛。
-  if (kind.includes('report') || kind.includes('moderation') || kind.includes('ban') || kind.includes('kyc') || kind.includes('verif')) return <IconShield />
+  if (kind.includes('report') || kind.includes('moderation') || kind.includes('ban') || kind.includes('kyc') || kind.includes('verif') || kind.includes('security')) return <IconShield />
   if (kind.includes('record')) return <IconFilm />
   return <IconBell />
 }

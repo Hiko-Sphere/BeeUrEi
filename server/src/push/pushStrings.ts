@@ -115,6 +115,24 @@ export const pushStrings = {
     l === 'en'
       ? 'Your safety check-in expired while the service was unreachable, so we did not alert your contacts. If you still need help, please send an SOS now.'
       : '你的安全报到到期时服务暂时无法访问，我们未替你通知亲友。如果你仍需要帮助，请立即手动发起求助。',
+  // 账号安全敏感变更通知本人（改密/改邮箱/开关 2FA…）：**未授权变更即时预警**——盗号者一旦改密/关 2FA，
+  // 真实用户在自己设备上立刻收到（本人操作则是确认）。industry-standard（各家都"密码已修改"邮件/通知）。
+  securityNotice: (event: 'password_changed' | 'password_reset' | 'email_changed' | '2fa_enabled' | '2fa_disabled',
+                   l: PushLang): { title: string; body: string } => {
+    const en = l === 'en'
+    switch (event) {
+      case 'password_changed': return { title: en ? 'Password changed' : '账号密码已修改',
+        body: en ? 'Your account password was just changed. If this wasn’t you, reset your password immediately.' : '你的账号密码刚刚被修改。若非本人操作，请立即重置密码。' }
+      case 'password_reset': return { title: en ? 'Password was reset' : '账号密码已被重置',
+        body: en ? 'Your password was just reset via account recovery. If this wasn’t you, secure your account now.' : '你的账号密码刚刚通过“找回密码”被重置。若非本人操作，请立即处理。' }
+      case 'email_changed': return { title: en ? 'Account email changed' : '账号邮箱已更改',
+        body: en ? 'The email on your account was just changed. If this wasn’t you, secure your account now.' : '你的账号邮箱刚刚被更改。若非本人操作，请立即处理。' }
+      case '2fa_enabled': return { title: en ? 'Two-factor turned on' : '已开启两步验证',
+        body: en ? 'Two-factor authentication was enabled on your account.' : '你的账号刚刚开启了两步验证。' }
+      case '2fa_disabled': return { title: en ? 'Two-factor turned off' : '已关闭两步验证',
+        body: en ? 'Two-factor authentication was disabled. If this wasn’t you, change your password and re-enable it now.' : '你的账号刚刚关闭了两步验证。若非本人操作，请立即修改密码并重新开启。' }
+    }
+  },
   newMessageTitle: (name: string, l: PushLang): string =>
     l === 'en' ? `Message from ${name}` : `${name} 发来消息`,
   groupMessageTitle: (name: string, group: string, l: PushLang): string =>

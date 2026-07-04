@@ -12,6 +12,9 @@ import { emailVerificationMail } from '../mail/templates'
 import { CodeSendLimiter } from '../auth/sendLimiter'
 import { normalizePhone, type AppleTokenVerifier } from '../auth/apple'
 import { cascadeDeleteUser } from '../db/cascade'
+import { notifyUser } from '../notifications/notify'
+import { pushLang, pushStrings } from '../push/pushStrings'
+import { NoopPushSender, type PushSender } from '../push/apns'
 
 const passwordSchema = z.object({
   oldPassword: z.string().min(1),
@@ -28,7 +31,12 @@ const avatarSchema = z.object({
   avatar: z.string().regex(/^data:image\/(png|jpeg|jpg|webp);base64,/).max(600_000),
 })
 
-export function registerAccountRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer, appleVerifier?: AppleTokenVerifier, codeSend: CodeSendLimiter = new CodeSendLimiter()): void {
+export function registerAccountRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer, appleVerifier?: AppleTokenVerifier, codeSend: CodeSendLimiter = new CodeSendLimiter(), pushSender: PushSender = new NoopPushSender()): void {
+  // 账号安全敏感变更 → 通知本人（in-app 持久化 + best-effort 推送到本人设备）：未授权变更即时预警。
+  const notifySecurity = (u: User, event: 'password_changed' | 'password_reset' | 'email_changed' | '2fa_enabled' | '2fa_disabled') => {
+    const { title, body } = pushStrings.securityNotice(event, pushLang(u.language))
+    notifyUser(store, pushSender, u.id, `security_${event}`, title, body)
+  }
   // 修改密码：验证旧密码 → 设新密码 → 递增 tokenVersion(令已签发的 access token 立即失效) → 撤销所有 refresh token。
   // 递增 tokenVersion 是关键：否则被盗号者手里的 access token 在改密后仍可用最长 1h，改密自救形同虚设（见审查 #2）。
   // 限流：校验 oldPassword 而无内置尝试上限（不同于走 CodeRegistry 5 次上限的验证码端点）。
@@ -50,6 +58,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
       tokenVersion: (user.tokenVersion ?? 0) + 1,
     })
     store.deleteRefreshTokensForUser(user.id)
+    notifySecurity(user, 'password_changed')
     return { ok: true }
   })
 
@@ -102,6 +111,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     store.replaceRecoveryCodes(user.id, codes.map(hashRecoveryCode))
     // 同时记录启用所用的时间步：避免同一码在 90s 内被重放到首次登录（单次使用从启用即生效）。
     store.updateUser(user.id, { totpEnabled: true, totpLastCounter: counter })
+    notifySecurity(user, '2fa_enabled')
     return { ok: true, recoveryCodes: codes }
   })
 
@@ -115,6 +125,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     if (!verifySecondFactor(user, parsed.data.code, Date.now())) return reply.code(400).send({ error: 'invalid_code' })
     store.updateUser(user.id, { totpEnabled: false, totpSecret: undefined })
     store.deleteRecoveryCodesForUser(user.id)
+    notifySecurity(user, '2fa_disabled')
     return { ok: true }
   })
 
@@ -309,6 +320,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
       console.warn('[mail] 验证码发送失败:', (e as Error).message)
       return reply.code(503).send({ error: 'mail_unavailable' })
     }
+    notifySecurity(user, 'email_changed') // 邮箱已改（待验证）——未授权改邮箱是接管账号常见第一步，即时预警本人
     return { ok: true }
   })
 

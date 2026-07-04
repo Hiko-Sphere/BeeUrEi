@@ -18,6 +18,11 @@ describe('notifDestination 通知点击跳转目的地', () => {
     expect(notifDestination('kyc_verified')).toBe('/account')
     expect(notifDestination('kyc_rejected')).toBe('/account')
   })
+  it('账号安全变更预警 → 账户页（去改密/重开 2FA）', () => {
+    expect(notifDestination('security_password_changed')).toBe('/account')
+    expect(notifDestination('security_2fa_disabled')).toBe('/account')
+    expect(notifDestination('security_email_changed')).toBe('/account')
+  })
   it('无明确去处 → null（仅标已读，不跳转）', () => {
     expect(notifDestination('emergency_alert')).toBeNull() // 紧急有专属"查看位置/回拨"按钮，不整行跳转
     expect(notifDestination('report_resolved')).toBeNull()

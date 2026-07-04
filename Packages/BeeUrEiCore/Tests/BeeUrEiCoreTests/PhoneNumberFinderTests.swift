@@ -55,4 +55,19 @@ final class PhoneNumberFinderTests: XCTestCase {
         // 同号不同印刷分隔 → 只算一个。
         XCTAssertEqual(PhoneNumberFinder.find(texts: ["13812345678", "138 1234 5678", "138-1234-5678"]).count, 1)
     }
+
+    /// 对抗复审 HIGH：+1 美/加号（区号 3-9）裸数字恰为 11 位/1 开头/次位 3-9，绝不能误当中国 130 号段手机（拨错人）。
+    func testUSNumberNotMisreadAsChineseMobile() {
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["+1 305 555 0199"]), ["+1 305 555 0199"]) // 国际号原样读，不重组
+        XCTAssertFalse(PhoneNumberFinder.find(texts: ["+1 702 555 0100"]).contains("170 2555 0100"))
+        // 真中国手机（无 +）仍正常分组；+86 仍逐组念。
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["13812345678"]), ["138 1234 5678"])
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["+8613812345678"]), ["+86 138 1234 5678"])
+    }
+
+    /// 对抗复审 MED：IP/坐标式点分串（数字恰以 400 开头）不得误当 400 客服号读给盲人。
+    func testDottedCoordinateNotMisreadAs400Service() {
+        XCTAssertTrue(PhoneNumberFinder.find(texts: ["定位 400.820.88.20"]).isEmpty) // 4 组点分=坐标/IP，拒
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["客服 400-820-8820"]), ["400-820-8820"]) // 真 400 号仍识别
+    }
 }

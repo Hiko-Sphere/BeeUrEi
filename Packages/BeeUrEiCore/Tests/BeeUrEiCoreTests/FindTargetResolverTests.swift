@@ -37,4 +37,19 @@ final class FindTargetResolverTests: XCTestCase {
         let r = FindTargetResolver.resolve(spoken: "KEYS", taughtNames: ["my keys"], categories: [])
         XCTAssertEqual(r, .taught("my keys"))
     }
+
+    /// 对抗复审 MED：精确类别命中优先于模糊已教命中——已教"杯子架"不得在用户说"杯子"时抢过精确类别"杯子"。
+    func testExactCategoryBeatsFuzzyTaught() {
+        let r = FindTargetResolver.resolve(spoken: "杯子", taughtNames: ["杯子架"], categories: [(label: "cup", name: "杯子")])
+        XCTAssertEqual(r, .category("cup"))
+    }
+
+    /// 对抗复审 MED：短已教名/ASCII 子串不得靠包含劫持无关查询（"机"不命中"手机"；"key"不命中"monkey"）。
+    func testShortOrSubstringTaughtDoesNotHijack() {
+        XCTAssertEqual(FindTargetResolver.resolve(spoken: "手机", taughtNames: ["机"], categories: []), .none)     // 1 字候选不子串
+        XCTAssertEqual(FindTargetResolver.resolve(spoken: "monkey", taughtNames: ["key"], categories: []), .none) // ASCII 须词边界
+        // 正常双向包含仍工作。
+        XCTAssertEqual(FindTargetResolver.resolve(spoken: "钥匙", taughtNames: ["我的钥匙"], categories: []), .taught("我的钥匙"))
+        XCTAssertEqual(FindTargetResolver.resolve(spoken: "my keys", taughtNames: ["keys"], categories: []), .taught("keys"))
+    }
 }

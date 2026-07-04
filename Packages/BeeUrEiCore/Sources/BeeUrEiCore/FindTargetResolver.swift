@@ -17,24 +17,38 @@ public enum FindTargetResolver {
         let q = norm(spoken)
         guard !q.isEmpty else { return .none }
 
-        // ① 已教物品（本人的东西）优先。
-        if let t = taughtNames.first(where: { norm($0) == q })
-            ?? taughtNames.first(where: { contains(norm($0), q) }) {
-            return .taught(t)
-        }
-        // ② 通用类别（按本地化名匹配）。
-        if let c = categories.first(where: { norm($0.name) == q })
-            ?? categories.first(where: { contains(norm($0.name), q) }) {
-            return .category(c.label)
-        }
+        // ① 精确匹配优先（跨两表）：已教精确 → 类别精确。
+        // 否则模糊命中的已教物会盖过精确命中的类别（如已教"杯子架"在用户说"杯子"时抢过精确类别"杯子"，对抗复审 MED）。
+        if let t = taughtNames.first(where: { norm($0) == q }) { return .taught(t) }
+        if let c = categories.first(where: { norm($0.name) == q }) { return .category(c.label) }
+        // ② 再模糊（双向包含）：已教模糊 → 类别模糊（同层已教优先，本人的东西）。
+        if let t = taughtNames.first(where: { contains(norm($0), q) }) { return .taught(t) }
+        if let c = categories.first(where: { contains(norm($0.name), q) }) { return .category(c.label) }
         return .none
     }
 
     private static func norm(_ s: String) -> String {
         s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
-    /// 双向包含：候选含查询、或查询含候选（"我的钥匙"含"钥匙"；"keys"含于"my keys"）。候选须非空防空串误配。
+    /// 双向包含（"我的钥匙"含"钥匙"；"keys"含于"my keys"）。**内子串须 ≥2 字符**——否则 1 字候选（"机"含于"手机"）
+    /// 会劫持无关查询；**含 ASCII 字母的内子串还须落在词边界**——否则 "key" 会命中 "monkey"（对抗复审 MED）。
     private static func contains(_ candidate: String, _ query: String) -> Bool {
-        !candidate.isEmpty && (candidate.contains(query) || query.contains(candidate))
+        guard candidate.count >= 2, query.count >= 2 else { return false }
+        if candidate.contains(query), boundarySafe(query, in: candidate) { return true }   // 查询是内子串
+        if query.contains(candidate), boundarySafe(candidate, in: query) { return true }   // 候选是内子串
+        return false
+    }
+    /// 内子串 sub 若含 ASCII 字母，须在容器 str 中落在词边界（前后非字母/数字）；纯 CJK 子串无词边界概念，恒 true。
+    private static func boundarySafe(_ sub: String, in str: String) -> Bool {
+        guard sub.contains(where: { $0.isASCII && $0.isLetter }) else { return true }
+        func isWord(_ c: Character) -> Bool { c.isASCII && (c.isLetter || c.isNumber) }
+        var lo = str.startIndex
+        while let r = str.range(of: sub, range: lo..<str.endIndex) {
+            let leftOK = r.lowerBound == str.startIndex || !isWord(str[str.index(before: r.lowerBound)])
+            let rightOK = r.upperBound == str.endIndex || !isWord(str[r.upperBound])
+            if leftOK && rightOK { return true }
+            lo = str.index(after: r.lowerBound)
+        }
+        return false
     }
 }

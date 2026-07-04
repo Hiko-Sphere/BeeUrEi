@@ -20,7 +20,8 @@ public enum BarcodePayload {
         if upper.hasPrefix("WIFI:") { return .wifi(ssid: wifiSSID(trimmed)) }
         if upper.hasPrefix("HTTP://") || upper.hasPrefix("HTTPS://") { return .url(host: host(of: trimmed)) }
         if upper.hasPrefix("TEL:") {
-            return .phone(number: String(trimmed.dropFirst("TEL:".count)).trimmingCharacters(in: .whitespaces))
+            let n = String(trimmed.dropFirst("TEL:".count)).trimmingCharacters(in: .whitespaces)
+            return n.isEmpty ? .text : .phone(number: n) // 空 tel: 回落文本，不谎报"这是电话号码"却没号可拨（对抗复审 LOW，与 mailto/sms 同口径）
         }
         // 邮箱：`mailto:addr?subject=...` → addr（去掉 ? 之后的参数）。常见联系人 QR，读原始"mailto 冒号…"体验差。
         if upper.hasPrefix("MAILTO:") {
@@ -53,12 +54,25 @@ public enum BarcodePayload {
         return nil
     }
 
-    /// `http(s)://host[:port]/path` → host。
+    /// `http(s)://[userinfo@]host[:port]/path` → host。正确剥离 userinfo（user:pass@）与 IPv6 字面量 [::1]
+    /// （对抗复审 LOW：原实现遇 "user:pass@example.com" 停在第一个 ':' 把用户名当 host、遇 IPv6 把 "[2001" 当 host）。
     static func host(of url: String) -> String? {
         guard let schemeEnd = url.range(of: "://") else { return nil }
         let rest = url[schemeEnd.upperBound...]
-        let end = rest.firstIndex { $0 == "/" || $0 == ":" || $0 == "?" || $0 == "#" } ?? rest.endIndex
-        let host = String(rest[..<end])
+        // authority = 到第一个 /?# 为止（其内为 [userinfo@]host[:port]）。
+        let authEnd = rest.firstIndex { $0 == "/" || $0 == "?" || $0 == "#" } ?? rest.endIndex
+        var authority = rest[..<authEnd]
+        // 剥 userinfo：@ 之前（含）的都不是 host。
+        if let at = authority.lastIndex(of: "@") { authority = authority[authority.index(after: at)...] }
+        // IPv6 字面量 [2001:db8::1]：取方括号内为 host。
+        if authority.first == "[" {
+            guard let close = authority.firstIndex(of: "]") else { return nil }
+            let inner = authority[authority.index(after: authority.startIndex)..<close]
+            return inner.isEmpty ? nil : String(inner)
+        }
+        // 普通 host：到 :(端口) 为止。
+        let hostEnd = authority.firstIndex(of: ":") ?? authority.endIndex
+        let host = String(authority[..<hostEnd])
         return host.isEmpty ? nil : host
     }
 }

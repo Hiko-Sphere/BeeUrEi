@@ -45,8 +45,10 @@ public enum PhoneNumberFinder {
         let hasPlus = span.contains("+")
         let digits = span.filter(\.isNumber)
         let d = Array(digits)
-        // 中国手机：11 位，1 开头，第二位 3-9 → 分 3-4-4（TTS 逐组念清）。
-        if d.count == 11, d[0] == "1", let sec = d[1].wholeNumberValue, (3...9).contains(sec) {
+        // 中国手机：**无国家码**、11 位、1 开头、第二位 3-9 → 分 3-4-4（TTS 逐组念清）。
+        // **必须 !hasPlus**：否则 "+1 305 555 0199"（美/加号，区号 3-9 开头）裸数字恰为 "13055550199"=11 位、
+        // 1 开头、次位 3——会被丢掉 + 与国家码 1、误当中国 130 号段手机读出一个真实存在的**错号**（拨错人，对抗复审 HIGH）。
+        if !hasPlus, d.count == 11, d[0] == "1", let sec = d[1].wholeNumberValue, (3...9).contains(sec) {
             return groupedMobile(digits)
         }
         // 带国家码 +86 的中国手机（+86 + 11 位手机）→ "+86 3-4-4"。否则会落到通用国际分支被 13 位连读，
@@ -58,8 +60,12 @@ public enum PhoneNumberFinder {
             }
         }
         let trimmed = span.trimmingCharacters(in: .whitespaces)
-        // 座机（区号 0 开头，10-12 位）/ 服务号（400/800）：保留印刷分隔（更贴合区号-号码），原样返回。
-        if d.count >= 10, d.count <= 12, (digits.hasPrefix("0") || digits.hasPrefix("400") || digits.hasPrefix("800")) {
+        // 座机（区号 0 开头，10-12 位；欧洲点分写法照收）：保留印刷分隔，原样返回。
+        if d.count >= 10, d.count <= 12, digits.hasPrefix("0") { return trimmed }
+        // 服务号 400/800：真号恒为 **10 位**（400/800 + 7 位），且不写成 IP/坐标式的 **4+ 组点分**——
+        // 否则 "400.820.88.20"（坐标/IP-like，数字恰 4008208820）会被误当客服号读给盲人（对抗复审 MED）。
+        if d.count == 10, (digits.hasPrefix("400") || digits.hasPrefix("800")),
+           span.filter({ $0 == "." }).count < 3 {
             return trimmed
         }
         // 国际：带 + 且 8-15 位。

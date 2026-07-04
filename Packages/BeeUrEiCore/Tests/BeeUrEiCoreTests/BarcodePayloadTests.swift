@@ -37,6 +37,19 @@ final class BarcodePayloadTests: XCTestCase {
         XCTAssertEqual(BarcodePayload.classify("MECARD:N:李四;;"), .contact)
     }
 
+    /// 对抗复审 LOW：空/纯空白 tel: 回落文本，不谎报"电话号码"却无号可拨（与 mailto/sms 同口径）。
+    func testEmptyTelFallsBackToText() {
+        XCTAssertEqual(BarcodePayload.classify("tel:"), .text)
+        XCTAssertEqual(BarcodePayload.classify("tel:   "), .text)
+        XCTAssertEqual(BarcodePayload.classify("tel:13812345678"), .phone(number: "13812345678")) // 正常仍识别
+    }
+
+    /// 对抗复审 LOW：URL 含 userinfo(user:pass@) / IPv6 时正确取 host，不把用户名/"[段"当 host。
+    func testUrlHostWithUserinfoAndIPv6() {
+        XCTAssertEqual(BarcodePayload.classify("http://user:pass@example.com/x"), .url(host: "example.com"))
+        XCTAssertEqual(BarcodePayload.classify("http://[2001:db8::1]:8080/x"), .url(host: "2001:db8::1"))
+    }
+
     func testEmail() {
         XCTAssertEqual(BarcodePayload.classify("mailto:hi@example.com"), .email(address: "hi@example.com"))
         XCTAssertEqual(BarcodePayload.classify("MAILTO:a@b.cn?subject=Hello"), .email(address: "a@b.cn")) // 去 ?参数

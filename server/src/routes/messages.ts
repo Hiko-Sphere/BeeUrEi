@@ -8,6 +8,7 @@ import { requireFeature } from '../auth/featureGate'
 import { NoopPushSender, type PushSender } from '../push/apns'
 import { NoopWebPushSender, type WebPushSender } from '../push/webPush'
 import { pushLang, pushStrings, type PushLang } from '../push/pushStrings'
+import { shouldSuppressPush } from '../notifications/quietHours'
 import { removeMediaFile } from '../media/storage'
 
 const sendSchema = z.object({
@@ -99,6 +100,8 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
           try {
             const member = store.findById(memberId)
             if (!member) continue
+            // 勿扰时段：群消息推送横幅在成员本地勿扰时段内抑制（消息已存库，其打开即见、未读数照增）。
+            if (shouldSuppressPush(member.quietHours, 'chat_message', Date.now())) continue
             const l = pushLang(member.language)
             const title = pushStrings.groupMessageTitle(sender.displayName, group.name, l)
             const body = pushStrings.newMessageBody(previewOf(kind, text, l), l)
@@ -130,7 +133,8 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
 
     // 提醒推送（尽力而为，不阻塞发送回执）。
     const recipient = store.findById(toId!)
-    if (recipient && sender) {
+    // 勿扰时段：单聊推送横幅在收件人本地勿扰时段内抑制（消息已存库、未读数照增，其打开即见）。
+    if (recipient && sender && !shouldSuppressPush(recipient.quietHours, 'chat_message', Date.now())) {
       // 同步 store 读（未读角标/web 订阅）抛错（SQLITE_BUSY 等）绝不能在消息已存库后 500，让发送方重试→重复单聊。
       try {
         const l = pushLang(recipient.language)

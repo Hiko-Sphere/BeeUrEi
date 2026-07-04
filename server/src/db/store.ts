@@ -39,6 +39,17 @@ export interface User {
   // 实名认证（KYC，管理员人工审核通过）。仅此布尔进对外视图——真实姓名/证件绝不经此外泄，
   // 明文姓名仅在 admin 审核详情端点解密一次（审计留痕），证件图片落隔离加密目录、审核后按留存策略清除。
   identityVerified?: boolean
+  // 勿扰时段（Do-Not-Disturb）：在此时段内**抑制软通知的推送横幅**（好友请求/聊天/到家提醒等），
+  // 但站内通知照常持久化（醒来可回看）。**紧急告警/来电/SOS 走独立扇出、绝不受此影响**（见 quietHours.ts）。
+  quietHours?: QuietHours
+}
+
+/// 勿扰时段配置（服务端据收件人本地时刻判定，正确处理跨午夜与时区/DST）。
+export interface QuietHours {
+  enabled: boolean
+  startMinute: number  // 本地分钟-of-day [0,1439]（如 22:00 = 1320）
+  endMinute: number    // 本地分钟-of-day [0,1439]（如 07:00 = 420）；start>end 表示跨午夜
+  tz: string           // IANA 时区（如 "Asia/Shanghai"）——服务端据此算收件人本地时刻
 }
 
 /// 一次性恢复码（2FA）：丢失验证器时用。库里只存 SHA-256 哈希，明文仅生成时给用户一次。

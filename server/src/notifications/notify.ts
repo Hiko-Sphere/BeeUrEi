@@ -3,6 +3,7 @@ import type { Store } from '../db/store'
 import type { PushSender } from '../push/apns'
 import { NoopWebPushSender, type WebPushSender } from '../push/webPush'
 import { totalUnreadFor } from '../db/unread'
+import { shouldSuppressPush } from './quietHours'
 
 // Web Push 发送器（模块单例，buildApp 注入——与 auth/rbac 的 setAuthStore 同一先例）：
 // notifyUser 有 11 个调用点分布 4 条注册链，穿参改动面大且易漏；统一投递本就该单点配置。
@@ -30,6 +31,9 @@ export function notifyUser(
   try {
     store.createNotification({ id: randomUUID(), userId, kind, title, body, data, createdAt: Date.now() })
   } catch { /* 通知不可作为主流程成功的前置条件 */ }
+  // 勿扰时段：在收件人本地勿扰时段内**只抑制推送横幅**（软通知不半夜吵醒），站内通知已持久化、醒来照常可见。
+  // 紧急告警/来电/SOS 走独立扇出、绝不经此；此处 isAlwaysThrough 再兜一层，防未来有紧急类误走本函数被静默。
+  if (shouldSuppressPush(user.quietHours, kind, Date.now())) return
   // best-effort 推送：badge(totalUnreadFor) 与订阅(webPushSubscriptionsForUser) 都是**同步** store 读，
   // better-sqlite3 的 .all()/.get() 在 SQLITE_BUSY/IOERR 时会**同步抛**——绝不能让它 500 已提交的主操作
   // （封禁/举报处置/加好友/路线添加等早已生效）。写入(createNotification)上面已单独 try/catch，读这里补齐同款隔离

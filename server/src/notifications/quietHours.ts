@@ -1,0 +1,46 @@
+import type { QuietHours } from '../db/store'
+
+/// 勿扰时段判定（纯逻辑，可单测）。**安全原则：一切坏/缺配置一律 fail-open（返回 false=不勿扰）**——
+/// 绝不因配置错误静默吞掉本该送达的通知（漏推比多推更糟）。紧急告警/来电/SOS 不经此（走独立扇出）。
+
+/// 给定 IANA 时区在某 UTC 毫秒时刻的"本地分钟-of-day" [0,1439]；非法时区/异常 → null。
+/// 用 Intl（Node 内置 tz 数据库，正确处理 DST），不手算偏移。
+export function localMinuteOfDay(nowMs: number, tz: string): number | null {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(new Date(nowMs))
+    const h = Number(parts.find((p) => p.type === 'hour')?.value)
+    const m = Number(parts.find((p) => p.type === 'minute')?.value)
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return null
+    return (h % 24) * 60 + m // hour12:false 在部分实现午夜返回 "24"，取模归一到 [0,1439]
+  } catch {
+    return null // 非法 tz 字符串 → Intl 抛 RangeError → 视作无勿扰
+  }
+}
+
+/// 现在是否处于该用户的勿扰时段。未启用/配置非法/时区非法一律返回 false（fail-open）。
+export function isQuietedNow(q: QuietHours | undefined, nowMs: number): boolean {
+  if (!q || !q.enabled) return false
+  const { startMinute: s, endMinute: e } = q
+  if (!Number.isInteger(s) || !Number.isInteger(e) || s < 0 || s > 1439 || e < 0 || e > 1439) return false
+  if (s === e) return false // 起==止：空区间，视作未设（避免"全天勿扰=永远吞通知"的危险歧义）
+  const cur = localMinuteOfDay(nowMs, q.tz)
+  if (cur == null) return false
+  // 不跨午夜（s<e）：[s, e)；跨午夜（s>e，如 22:00→07:00）：[s,1440) ∪ [0,e)。
+  return s < e ? (cur >= s && cur < e) : (cur >= s || cur < e)
+}
+
+/// 某通知类别是否**无视勿扰、始终推送**（纵深防御：即便将来有紧急/安全类通知误走 notifyUser 也不会被静默）。
+/// 当前经 notifyUser/聊天的都是软通知；紧急告警/来电/SOS/安全报到本就走独立扇出、不经勿扰门。此为防御性兜底。
+/// 含 checkin|safety：覆盖安全报到自身/过期自通知（safety_checkin_expired）——与本兜底"安全类不被静默"的初衷对齐
+/// （对抗复审 LOW#1；当前这些也走独立扇出，此为将来若改走 notifyUser 的保险）。
+export function isAlwaysThrough(kind: string): boolean {
+  return /emergency|sos|\bcall\b|incoming|escalat|alert|checkin|safety/i.test(kind)
+}
+
+/// 组合门：该通知此刻是否应**抑制推送横幅**（站内通知仍照常持久化）。
+export function shouldSuppressPush(q: QuietHours | undefined, kind: string, nowMs: number): boolean {
+  if (isAlwaysThrough(kind)) return false
+  return isQuietedNow(q, nowMs)
+}

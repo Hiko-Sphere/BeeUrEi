@@ -769,7 +769,8 @@ export class MemoryStore implements Store {
     return undefined
   }
   passkeysForUser(userId: string): Passkey[] {
-    return [...this.passkeys.values()].filter((p) => p.userId === userId)
+    // createdAt 降序：与生产 SqliteStore（ORDER BY createdAt DESC）一致（passkey 管理列表/账户导出的展示序）。
+    return [...this.passkeys.values()].filter((p) => p.userId === userId).sort((a, b) => b.createdAt - a.createdAt)
   }
   updatePasskeyCounter(id: string, counter: number): void {
     const p = this.passkeys.get(id)
@@ -852,7 +853,9 @@ export class MemoryStore implements Store {
     return [...this.links.values()].filter((l) => l.memberId === memberId)
   }
   allLinks(): FamilyLink[] {
-    return [...this.links.values()]
+    // createdAt 降序：与生产 SqliteStore（ORDER BY createdAt DESC）一致。否则管理后台在测试(Memory，插入序)与
+    // 线上(SQLite，最新在前)看到不同排序，且测试可能锁死 Memory 的插入序而线上悄悄不符（prod/test 分叉）。
+    return [...this.links.values()].sort((a, b) => b.createdAt - a.createdAt)
   }
   findLink(id: string): FamilyLink | undefined {
     return this.links.get(id)

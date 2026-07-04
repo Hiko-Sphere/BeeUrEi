@@ -240,6 +240,33 @@ describe('SqliteStore (node:sqlite)', () => {
     expect(memLatest[0].id).toBe('x3')
   })
 
+  it('allLinks / passkeysForUser 顺序两存储一致：createdAt 降序（最新在前）', () => {
+    // 列表读接口在 SqliteStore(ORDER BY createdAt DESC) 与 MemoryStore 必须同序，否则管理后台/账户导出/passkey
+    // 管理列表在测试(Memory)与线上(SQLite)看到不同排序，且测试可能锁死 Memory 插入序而线上悄悄不符（prod/test 分叉）。
+    const seedLinks = (s: SqliteStore | MemoryStore) => {
+      s.createLink({ id: 'lB', ownerId: 'u1', memberId: 'u2', relation: '', isEmergency: false, createdAt: 2000, status: 'accepted' })
+      s.createLink({ id: 'lC', ownerId: 'u1', memberId: 'u3', relation: '', isEmergency: false, createdAt: 3000, status: 'accepted' }) // 最新
+      s.createLink({ id: 'lA', ownerId: 'u1', memberId: 'u4', relation: '', isEmergency: false, createdAt: 1000, status: 'accepted' }) // 最早
+    }
+    const sq = new SqliteStore(':memory:'); seedLinks(sq)
+    const mem = new MemoryStore(); seedLinks(mem)
+    const expectedLinks = ['lC', 'lB', 'lA'] // createdAt 3000>2000>1000
+    expect(sq.allLinks().map((l) => l.id)).toEqual(expectedLinks)
+    expect(mem.allLinks().map((l) => l.id)).toEqual(expectedLinks) // 修复前 Memory 返回插入序 [lB,lC,lA] → 失败
+
+    const seedKeys = (s: SqliteStore | MemoryStore) => {
+      s.createPasskey({ id: 'kB', userId: 'u1', credentialId: 'cB', publicKey: 'p', counter: 0, createdAt: 2000 })
+      s.createPasskey({ id: 'kC', userId: 'u1', credentialId: 'cC', publicKey: 'p', counter: 0, createdAt: 3000 }) // 最新
+      s.createPasskey({ id: 'kA', userId: 'u1', credentialId: 'cA', publicKey: 'p', counter: 0, createdAt: 1000 })
+      s.createPasskey({ id: 'kX', userId: 'u9', credentialId: 'cX', publicKey: 'p', counter: 0, createdAt: 9000 }) // 他人：不混入
+    }
+    const sq2 = new SqliteStore(':memory:'); seedKeys(sq2)
+    const mem2 = new MemoryStore(); seedKeys(mem2)
+    const expectedKeys = ['kC', 'kB', 'kA']
+    expect(sq2.passkeysForUser('u1').map((k) => k.id)).toEqual(expectedKeys)
+    expect(mem2.passkeysForUser('u1').map((k) => k.id)).toEqual(expectedKeys)
+  })
+
   it('persists across reopen (file-backed)', () => {
     const path = `/tmp/beeurei-test-${Math.floor(performance.now())}.db`
     const a = new SqliteStore(path)

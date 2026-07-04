@@ -28,6 +28,12 @@ enum NavStrings {
         l == .zh ? "需要定位权限才能导航，请在系统设置开启定位。"
                  : "Location access is needed for navigation. Enable Location in Settings."
     }
+    /// 仅粗略定位（用户关了「精确位置」）：逐步导航无法进行，给**可操作**指引（去设置开精确位置）。
+    /// 不是"定位中"或"精度低"那种会自愈的临时话——这是个用户能一步修好的设置。
+    static func preciseLocationNeeded(_ l: Language) -> String {
+        l == .zh ? "当前只能大致定位，无法逐步引导。请到系统设置 → 蜂之眼 → 位置，打开「精确位置」。"
+                 : "Only approximate location is available, so turn-by-turn guidance can't run. In Settings → BeeUrEi → Location, turn on Precise Location."
+    }
     static func navStoppedForNew(_ l: Language) -> String { l == .zh ? "已停止当前导航" : "Stopped the current navigation" }
     static func offRoute(_ l: Language) -> String { l == .zh ? "已偏离路线，正在重新规划" : "Off route — replanning" }
     // 自定义路线（路线库）偏航：不重规划，汇入或原路返回（评审安全不变量）。

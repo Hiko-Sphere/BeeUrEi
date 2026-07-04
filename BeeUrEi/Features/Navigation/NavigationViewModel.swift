@@ -66,6 +66,7 @@ final class NavigationViewModel {
     @ObservationIgnored private var headingFilter = HeadingFilter()
     @ObservationIgnored private var headingReliable = false // 罗盘是否可信（磁干扰时为假，抑制信标，见审查 #3）
     @ObservationIgnored private var lastSpoken = ""
+    @ObservationIgnored private var announcedReducedAccuracy = false // 仅粗略定位指引每次导航只播一次
 
     @ObservationIgnored private var routeCoords: [Coordinate] = []
     @ObservationIgnored private var currentHeading: Double = 0
@@ -151,6 +152,8 @@ final class NavigationViewModel {
         headTracker.onUnavailable = { [weak self] in self?.spatial.setListenerYaw(0) }
         headTracker.start()
         service.onAuthDenied = { [weak self] in self?.handleLocationDenied() }
+        service.onReducedAccuracy = { [weak self] in self?.handleReducedAccuracy() }
+        announcedReducedAccuracy = false // 每次导航重新判定精确位置
         service.requestAuthAndStart()
     }
 
@@ -543,6 +546,14 @@ final class NavigationViewModel {
         failStatus(NavStrings.locationDenied(lang))
     }
 
+    /// 仅粗略定位（用户关了「精确位置」）：不像被拒那样停下，而是**继续**（粗略方位聊胜于无、开了精确即时生效），
+    /// 但主动朗读一次可操作指引——这是用户能一步修好的设置，不是会自愈的临时"定位中"。每次导航只提示一次。
+    private func handleReducedAccuracy() {
+        guard !announcedReducedAccuracy else { return }
+        announcedReducedAccuracy = true
+        speak(NavStrings.preciseLocationNeeded(lang))
+    }
+
     // MARK: 街景预览（出门前虚拟试听整条路线）
 
     /// 预览路线：正常规划，但**不**进入实时跟踪——拿到路线后停定位，逐步朗读全程。
@@ -617,6 +628,8 @@ final class NavigationViewModel {
         speak(NavStrings.trailStartSpeak(lang))
         service.onLocation = { [weak self] loc in self?.handleTrail(loc) }
         service.onAuthDenied = { [weak self] in self?.handleLocationDenied() }
+        service.onReducedAccuracy = { [weak self] in self?.handleReducedAccuracy() }
+        announcedReducedAccuracy = false // 每次导航重新判定精确位置
         service.requestAuthAndStart()
     }
 
@@ -683,6 +696,8 @@ final class NavigationViewModel {
         headTracker.onUnavailable = { [weak self] in self?.spatial.setListenerYaw(0) }
         headTracker.start()
         service.onAuthDenied = { [weak self] in self?.handleLocationDenied() }
+        service.onReducedAccuracy = { [weak self] in self?.handleReducedAccuracy() }
+        announcedReducedAccuracy = false // 每次导航重新判定精确位置
         service.requestAuthAndStart()
     }
 
@@ -756,6 +771,8 @@ final class NavigationViewModel {
         headTracker.onUnavailable = { [weak self] in self?.spatial.setListenerYaw(0) }
         headTracker.start()
         service.onAuthDenied = { [weak self] in self?.handleLocationDenied() }
+        service.onReducedAccuracy = { [weak self] in self?.handleReducedAccuracy() }
+        announcedReducedAccuracy = false // 每次导航重新判定精确位置
         service.requestAuthAndStart()
     }
 

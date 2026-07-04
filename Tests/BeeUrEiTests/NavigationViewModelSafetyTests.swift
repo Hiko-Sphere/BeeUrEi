@@ -9,6 +9,7 @@ private final class MockNavService: NavigationServicing {
     var onLocation: ((CLLocation) -> Void)?
     var onHeading: ((CLHeading) -> Void)?
     var onAuthDenied: (() -> Void)?
+    var onReducedAccuracy: (() -> Void)?
     var startCount = 0
     var stopCount = 0
     func requestAuthAndStart() { startCount += 1 }

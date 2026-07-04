@@ -13,6 +13,15 @@ final class NavStringsTests: XCTestCase {
         XCTAssertEqual(NavStrings.passingBy("银行", .zh), "途经银行")
     }
 
+    func testPreciseLocationNeededIsActionable() {
+        // 必须是"可操作"指引（指向设置里的精确位置），而非会自愈的"定位中/精度低"临时话。
+        let zh = NavStrings.preciseLocationNeeded(.zh)
+        XCTAssertTrue(zh.contains("精确位置") && zh.contains("设置"))
+        let en = NavStrings.preciseLocationNeeded(.en)
+        XCTAssertTrue(en.contains("Precise Location") && en.contains("Settings"))
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
+
     func testStatusRecapForMagicTap() {
         // 有转向+剩余 → 拼接（走路时"下一步 + 还有多远"一手势听全）。
         XCTAssertEqual(NavStrings.statusRecap(instruction: "前方右转", remaining: "还有约200米，约3分钟", status: "导航中", .zh),

@@ -9,6 +9,8 @@ protocol NavigationServicing: AnyObject {
     var onHeading: ((CLHeading) -> Void)? { get set }
     /// 定位权限被拒/受限（首次拒绝或本就拒绝）——上层据此朗读"请开启定位"并停下，避免永久卡在"正在定位…"（见 P0 审计）。
     var onAuthDenied: (() -> Void)? { get set }
+    /// 已授权但仅**粗略定位**（用户关了「精确位置」）——导航/避障需要精确定位才能逐步引导，上层据此朗读可操作指引。
+    var onReducedAccuracy: (() -> Void)? { get set }
     func requestAuthAndStart()
     func stop()
     func geocode(_ query: String) async -> CLLocationCoordinate2D?
@@ -23,6 +25,7 @@ final class NavigationService: NSObject, NavigationServicing {
     var onLocation: ((CLLocation) -> Void)?
     var onHeading: ((CLHeading) -> Void)?
     var onAuthDenied: (() -> Void)?
+    var onReducedAccuracy: (() -> Void)?
 
     override init() {
         super.init()
@@ -44,6 +47,10 @@ final class NavigationService: NSObject, NavigationServicing {
     }
 
     private func startUpdates() {
+        // 已授权但精度被降级（用户关了「精确位置」→ 只有 ~1–5km 粗略定位）：逐步导航/避障无从谈起，
+        // 回报上层给**可操作**指引（去设置开精确位置）。仍照常 startUpdates：粗略方位聊胜于无，且用户若
+        // 中途开启精确位置会即时生效。
+        if locationManager.accuracyAuthorization == .reducedAccuracy { onReducedAccuracy?() }
         locationManager.startUpdatingLocation()
         locationManager.startUpdatingHeading()
     }

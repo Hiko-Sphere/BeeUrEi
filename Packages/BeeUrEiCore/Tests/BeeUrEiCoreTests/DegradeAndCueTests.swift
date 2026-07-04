@@ -72,6 +72,23 @@ final class OffRouteDetectorTests: XCTestCase {
         let toEndpoint = Geo.distanceMeters(fromLat: 0, fromLon: -0.0005, toLat: 0, toLon: 0)
         XCTAssertEqual(d, toEndpoint, accuracy: 0.5)
     }
+
+    // 回归（HIGH）：坏 GPS 帧（NaN/±inf 坐标）在多点路线上曾被 min(.greatestFiniteMagnitude, NaN)
+    // 洗成 1.8e308（有限、>阈值）→ 误判偏航、触发乱重规划/"请回到路线"。补 isFinite 守卫后一律
+    // "未知不动作"：distanceToRoute→nil、isOffRoute→false。且单点/多点行为一致。
+    func testNonFiniteFixNotOffRoute() {
+        let multi = [Coordinate(lat: 0, lon: 0), Coordinate(lat: 0, lon: 0.001), Coordinate(lat: 0, lon: 0.002)]
+        for badLat in [Double.nan, .infinity, -.infinity] {
+            XCTAssertNil(detector.distanceToRoute(lat: badLat, lon: 0.0015, route: multi))
+            XCTAssertFalse(detector.isOffRoute(lat: badLat, lon: 0.0015, route: multi))
+            // 单点路线同样一致（此前走 Geo 返 NaN，现统一返 nil）。
+            XCTAssertNil(detector.distanceToRoute(lat: badLat, lon: 0.0015, route: [Coordinate(lat: 0, lon: 0.001)]))
+            XCTAssertFalse(detector.isOffRoute(lat: badLat, lon: 0.0015, route: [Coordinate(lat: 0, lon: 0.001)]))
+        }
+        // 非有限经度亦然。
+        XCTAssertNil(detector.distanceToRoute(lat: 0, lon: .nan, route: multi))
+        XCTAssertFalse(detector.isOffRoute(lat: 0, lon: .nan, route: multi))
+    }
 }
 
 final class ProximityCueTests: XCTestCase {

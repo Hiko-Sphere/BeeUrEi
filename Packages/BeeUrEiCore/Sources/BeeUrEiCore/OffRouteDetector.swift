@@ -19,8 +19,16 @@ public struct OffRouteDetector: Sendable {
         self.thresholdMeters = thresholdMeters
     }
 
-    /// 当前点到路线折线的最近距离（米）。空路线返回 nil。
+    /// 当前点到路线折线的最近距离（米）。空路线返回 nil；非有限坐标（坏 GPS 帧）也返回 nil。
+    ///
+    /// ⚠️ 必须先挡非有限坐标：NaN/±inf 的 lat 会让 `pointToSegmentMeters` 每段返回 NaN，而
+    /// `min(.greatestFiniteMagnitude, NaN)` 在 Swift 里返回**有限的**第一参数 → `best` 停在
+    /// `.greatestFiniteMagnitude`（1.8e308），`isOffRoute` 里 `1.8e308 > 25` 为 true → **坏 GPS 帧
+    /// 被误判偏航、触发乱重规划/"请回到路线"**（盲人只靠语音、看不出自己其实在路上，被引离正确路线极危险）。
+    /// 且单点路线走 Geo（NaN→isOffRoute false）与多点路线（→误判 true）不一致。全库对非有限经纬度一律
+    /// "未知不动作"（RouteRejoin/BreadcrumbTrail/WaypointAdvance 均有 isFinite 守卫），此处补齐同一不变量。
     public func distanceToRoute(lat: Double, lon: Double, route: [Coordinate]) -> Double? {
+        guard lat.isFinite, lon.isFinite else { return nil }
         guard !route.isEmpty else { return nil }
         if route.count == 1 {
             return Geo.distanceMeters(fromLat: lat, fromLon: lon, toLat: route[0].lat, toLon: route[0].lon)

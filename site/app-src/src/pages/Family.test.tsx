@@ -27,4 +27,17 @@ describe('FamilyPage 黑名单渲染（回归：b.user.displayName，非已废�
     // 后端返回 { id, user: publicUser }；渲染须取 b.user.displayName。
     expect(await screen.findByText('张三')).toBeInTheDocument()
   })
+
+  it('已建立且在线的联系人显示"在线"标识；离线的不显示', async () => {
+    mock(api.blocks).mockResolvedValue({ blocks: [] })
+    mock(api.familyLinks).mockResolvedValue({ links: [
+      { id: 'l1', memberId: 'u1', memberName: '妈妈', relation: '家人', isEmergency: false, status: 'accepted', online: true },
+      { id: 'l2', memberId: 'u2', memberName: '老王', relation: '邻居', isEmergency: false, status: 'accepted', online: false },
+    ] })
+    render(<FamilyPage />)
+    expect(await screen.findByText('妈妈')).toBeInTheDocument()
+    expect(screen.getByText('老王')).toBeInTheDocument()
+    // 恰一个"在线"标识（妈妈在线、老王离线）。
+    expect(screen.getAllByText(/在线/)).toHaveLength(1)
+  })
 })

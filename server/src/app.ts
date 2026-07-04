@@ -218,7 +218,8 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerPasskeyRoutes(instance, store) // Passkey（WebAuthn）注册/登录
     registerPushRoutes(instance, store, webPushSender) // VoIP token 注册（A1）
     registerUserRoutes(instance, store)
-    registerFamilyRoutes(instance, store, pushSender)
+    registerFamilyRoutes(instance, store, pushSender,
+      (id) => presence.isAvailable(id, Date.now()) || hub.isOnline(id)) // 亲友列表显示对方在线/待命（与紧急路由同口径）
     registerBlockRoutes(instance, store)
     registerEmergencyRoutes(instance, store, presence, liveLocations, pushSender, webPushSender, metrics)
     registerMessageRoutes(instance, store, pushSender, webPushSender)

@@ -16,7 +16,8 @@ const addLinkSchema = z.object({
   phone: z.string().max(32).optional(),
 }).refine((d) => d.username || d.userId, { message: 'username_or_userId_required' })
 
-export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: PushSender = new NoopPushSender()): void {
+export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: PushSender = new NoopPushSender(),
+                                     isOnline: (userId: string) => boolean = () => false): void {
   // 发起加亲友/协助者请求（**双向**：盲人或协助者/亲友任一方都可发起，由另一方确认才建立关系）。
   // owner 恒为视障侧（保证匹配/紧急用 linksByOwner(blind) 成立）；requestedBy 记录发起方。
   // 限流：好友请求会向目标发推送。200 条上限只约束**并发** link 数，挡不住"发满→删除→再发"的循环刷推送
@@ -105,7 +106,7 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: P
   app.get('/api/family/links', { preHandler: requireAuth() }, async (req) => {
     const meId = req.user!.sub
     const mine = [...store.linksByOwner(meId), ...store.linksByMember(meId)]
-    return { links: mine.map((l) => viewLink(store, l, meId)) }
+    return { links: mine.map((l) => viewLink(store, l, meId, isOnline)) }
   })
 
   // 待我确认的请求（对方发起、我还没接受；双向通用）。
@@ -136,9 +137,10 @@ function counterpartId(link: FamilyLink, meId: string): string {
 }
 
 /// 关系视图（memberId/memberName 表示"对方"，沿用 iOS FamilyLinkInfo 字段名）。
-function viewLink(store: Store, link: FamilyLink, meId: string) {
+function viewLink(store: Store, link: FamilyLink, meId: string, isOnline: (userId: string) => boolean = () => false) {
   const otherId = counterpartId(link, meId)
   const other = store.findById(otherId)
+  const accepted = (link.status ?? 'accepted') === 'accepted'
   return {
     id: link.id,
     memberId: otherId,
@@ -149,6 +151,7 @@ function viewLink(store: Store, link: FamilyLink, meId: string) {
     phone: link.phone,
     status: link.status ?? 'accepted',
     outgoing: (link.status ?? 'accepted') === 'pending' && link.requestedBy === meId, // 我发起、待对方确认
+    online: accepted && isOnline(otherId), // 对方此刻在线/待命（仅已建立关系才算——pending 未确认不显示状态）
   }
 }
 

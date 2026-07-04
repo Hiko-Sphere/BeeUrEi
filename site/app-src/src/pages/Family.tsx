@@ -80,7 +80,14 @@ export function FamilyPage() {
                 <Avatar name={l.memberName} src={l.memberAvatar} size={40} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{l.memberName}</div>
-                  <div className="text-xs text-faint">{l.relation}{l.isEmergency ? ` · ${t('紧急联系人', 'Emergency')}` : ''}</div>
+                  <div className="text-xs">
+                    {l.online && (
+                      <span className="mr-1 inline-flex items-center gap-1 font-medium text-ok">
+                        <span className="h-1.5 w-1.5 rounded-full bg-ok" aria-hidden="true" />{t('在线', 'Online')} ·{' '}
+                      </span>
+                    )}
+                    <span className="text-faint">{l.relation}{l.isEmergency ? ` · ${t('紧急联系人', 'Emergency')}` : ''}</span>
+                  </div>
                 </div>
                 <button onClick={() => startOutgoing(l.memberId, l.memberName, l.memberAvatar)} disabled={!!active}
                   className="flex h-9 w-9 items-center justify-center rounded-full bg-honey/15 text-honey disabled:opacity-40" aria-label={t('呼叫', 'Call')}><IconPhone width={18} height={18} /></button>

@@ -613,6 +613,7 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
     } catch (e) {
       const msg = e instanceof APIError && e.code === 'invalid_credentials' ? t('原密码不正确', 'Wrong current password')
         : e instanceof APIError && e.code === 'password_too_common' ? t('这个密码太常见，容易被猜到——换一个更独特的', 'That password is too common — pick something more unique')
+        : e instanceof APIError && e.code === 'password_too_similar' ? t('新密码里不要包含你的用户名或邮箱', "Don't include your username or email in the new password")
         : e instanceof APIError && e.code === 'password_too_short' ? t('新密码至少 8 位', 'At least 8 characters')
         : t('修改失败', 'Failed')
       toast(msg, 'error')

@@ -50,7 +50,8 @@ export function registerRecoveryRoutes(app: FastifyInstance, store: Store, codes
   app.post('/api/auth/reset-password', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = resetSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
-    const pwErr = passwordPolicyError(parsed.data.newPassword)
+    // 上下文用**提交的登录标识**（不查库→不泄露账号是否存在；标识含 '@' 则本地部分也纳入词元）。
+    const pwErr = passwordPolicyError(parsed.data.newPassword, { username: parsed.data.username, email: parsed.data.username })
     if (pwErr) return reply.code(400).send({ error: pwErr })
     const user = findByLoginIdentifier(store, parsed.data.username)
     if (!user || !codes.verify(`reset:${user.id}`, parsed.data.code, Date.now())) {

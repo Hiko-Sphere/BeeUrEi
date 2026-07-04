@@ -803,11 +803,12 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
   app.post('/api/admin/users/:id/reset-password', adminOnly, async (req, reply) => {
     const parsed = resetPwSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
-    const pwErr = passwordPolicyError(parsed.data.newPassword)
-    if (pwErr) return reply.code(400).send({ error: pwErr })
     const id = (req.params as { id: string }).id
     const target = store.findById(id)
     if (!target) return reply.code(404).send({ error: 'not_found' })
+    // 口令策略含上下文相似（代设也不得用该用户的用户名/邮箱当密码）——先取到 target 才有身份字段。
+    const pwErr = passwordPolicyError(parsed.data.newPassword, { username: target.username, email: target.email })
+    if (pwErr) return reply.code(400).send({ error: pwErr })
     severSessions(id, target.tokenVersion ?? 0, { passwordHash: hashPassword(parsed.data.newPassword) }) // 改密即撤销所有会话
     audit(req.user!.sub, 'user.resetPassword', 'user', id)
     return { ok: true }

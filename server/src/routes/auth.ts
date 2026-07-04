@@ -89,7 +89,7 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     if (!store.getAppConfig().registrationEnabled) return reply.code(403).send({ error: 'registration_disabled' })
     // 口令策略（NIST 800-63B：长度+常见弱口令，无字符类别硬性要求）——具体错误码供客户端精确提示。
     // 仅密码注册路径需要；Apple/邮箱验证码注册无密码。
-    const pwErr = passwordPolicyError(parsed.data.password)
+    const pwErr = passwordPolicyError(parsed.data.password, { username: parsed.data.username, email: parsed.data.email })
     if (pwErr) return reply.code(400).send({ error: pwErr })
     const { username: rawUsername, password, displayName, role, language, email, phone } = parsed.data
     // 昵称内容审核：与改昵称端点(account.ts)一致——否则注册时即可塞入违禁昵称绕过审核（everyone 可见）。

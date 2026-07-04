@@ -37,10 +37,11 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
   app.post('/api/account/password', { preHandler: requireAuth(), config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = passwordSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
-    const pwErr = passwordPolicyError(parsed.data.newPassword)
-    if (pwErr) return reply.code(400).send({ error: pwErr })
     const user = store.findById(req.user!.sub)
     if (!user) return reply.code(404).send({ error: 'not_found' })
+    // 口令策略含上下文相似（不得用自己的用户名/邮箱当密码）——须先取到 user 才有身份字段。
+    const pwErr = passwordPolicyError(parsed.data.newPassword, { username: user.username, email: user.email })
+    if (pwErr) return reply.code(400).send({ error: pwErr })
     if (!verifyPassword(parsed.data.oldPassword, user.passwordHash)) {
       return reply.code(401).send({ error: 'invalid_credentials' })
     }

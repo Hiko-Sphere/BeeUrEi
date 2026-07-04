@@ -61,12 +61,12 @@ describe('登录节流（端到端）', () => {
 
   it('节流按账号隔离：他人账号不受影响；2FA 错码同计入', async () => {
     const a = shortApp()
-    await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'victim01', password: 'victim-pass9', role: 'helper' } })
-    await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'bystander', password: 'bystander-p9', role: 'helper' } })
+    await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'victim01', password: 'kestrel-nine-9', role: 'helper' } })
+    await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'bystander', password: 'meadow-seven-7', role: 'helper' } })
     const attempt = (u: string, pw: string) => a.inject({ method: 'POST', url: '/api/auth/login', payload: { username: u, password: pw } })
     for (let i = 0; i < 3; i++) await attempt('victim01', 'x-wrong-' + i)
-    expect((await attempt('victim01', 'victim-pass9')).statusCode).toBe(429)
-    expect((await attempt('bystander', 'bystander-p9')).statusCode).toBe(200) // 无辜者不受累
+    expect((await attempt('victim01', 'kestrel-nine-9')).statusCode).toBe(429)
+    expect((await attempt('bystander', 'meadow-seven-7')).statusCode).toBe(200) // 无辜者不受累
     await a.close()
   })
 })

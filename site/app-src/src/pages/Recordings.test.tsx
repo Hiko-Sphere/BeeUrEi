@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 
 // RecordingsPage 仅用 useI18n(默认 ctx)+useToast(no-op 默认)+api；fetchRecordingObjectURL 仅播放时调用，渲染不触及。
 vi.mock('../lib/api', () => ({
@@ -8,7 +8,7 @@ vi.mock('../lib/api', () => ({
   fetchRecordingObjectURL: vi.fn(),
   APIError: class extends Error { code = ''; status = 0 },
 }))
-import { api } from '../lib/api'
+import { api, fetchRecordingObjectURL } from '../lib/api'
 import { RecordingsPage } from './Recordings'
 
 const mock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
@@ -41,5 +41,20 @@ describe('RecordingsPage 列表渲染（防字段漂移）', () => {
     mock(api.myRecordings).mockResolvedValue({ recordings: [] })
     render(<RecordingsPage />)
     expect(await screen.findByText('暂无录音')).toBeInTheDocument()
+  })
+
+  it('播放请求在途时卸载 → 就地释放已建的 blob URL（不泄漏，复审 LOW）', async () => {
+    mock(api.myRecordings).mockResolvedValue({
+      recordings: [{ id: 'r1', recordedAt: 1_700_000_000_000, durationSec: 10, hasMedia: true, participantNames: [] }],
+    })
+    let resolveFetch: (u: string) => void = () => {}
+    mock(fetchRecordingObjectURL).mockReturnValue(new Promise((r) => { resolveFetch = r }))
+    const revoke = vi.fn();
+    (globalThis.URL as unknown as { revokeObjectURL: (u: string) => void }).revokeObjectURL = revoke
+    const { unmount } = render(<RecordingsPage />)
+    fireEvent.click(await screen.findByRole('button', { name: /播放/ })) // play() 开始 await fetch
+    unmount()                                                            // 在途卸载
+    await act(async () => { resolveFetch('blob:leak'); await Promise.resolve(); await Promise.resolve() })
+    expect(revoke).toHaveBeenCalledWith('blob:leak')                     // 未挂载→就地 revoke，不泄漏
   })
 })

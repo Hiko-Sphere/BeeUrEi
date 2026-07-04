@@ -112,6 +112,7 @@ export function LocationsPage() {
 
   const stopSharing = useCallback(() => {
     activeRef.current = false // 同步置否：任何在途/后续 publish 立即变为 no-op
+    lastPos.current = null // 清陈旧坐标：否则**再次**共享时的即时 publish() 会把上一段行程的旧位置当"当前实时"广播给亲友（隐私，复审 HIGH）——清空后靠 `if(!p)return` 兜到新定位到达
     if (watchId.current != null) { navigator.geolocation.clearWatch(watchId.current); watchId.current = null }
     if (publishTimer.current) { clearInterval(publishTimer.current); publishTimer.current = null }
     void api.stopSharingLocation().catch(() => {})
@@ -148,6 +149,7 @@ export function LocationsPage() {
   // 卸载时停止本地采集（不主动停服务端共享：用户可能切页继续共享——但定时器须清，避免泄漏）。
   useEffect(() => () => {
     activeRef.current = false
+    lastPos.current = null // 同 stopSharing：卸载清陈旧坐标，防重挂后即时 publish 广播旧位置
     if (watchId.current != null) navigator.geolocation.clearWatch(watchId.current)
     if (publishTimer.current) clearInterval(publishTimer.current)
   }, [])

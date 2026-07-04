@@ -501,7 +501,10 @@ function EmailDialog({ currentEmail, verified, onClose, onChanged }: { currentEm
 
   const sendCode = async () => {
     setBusy(true)
-    try { await api.setEmail(email.trim()); toast(t('验证码已发送', 'Code sent'), 'ok'); setStage('verify') }
+    // setEmail 成功即已在服务端换成新邮箱且置 emailVerified=false。必须 onChanged() 让父组件重拉 self——
+    // 否则用户若未输码就关弹窗，安全卡仍显示**旧邮箱 + 绿色"已验证"**（找回密码等会寄到错误/未验证地址，
+    // 安全误导；复审 MED）。onChanged 不卸载本弹窗，verify 流程照常。
+    try { await api.setEmail(email.trim()); toast(t('验证码已发送', 'Code sent'), 'ok'); onChanged(); setStage('verify') }
     catch (e) { toast(errText(e), 'error') } finally { setBusy(false) }
   }
   const verify = async () => {

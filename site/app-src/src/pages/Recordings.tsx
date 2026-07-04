@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, APIError, fetchRecordingObjectURL, type RecordingInfo } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { Card, Button, Pill, Spinner, EmptyState, useToast, fmtTime, fmtDuration } from '../components/ui'
@@ -15,12 +15,17 @@ export function RecordingsPage() {
   useEffect(() => { void load() }, [])
   // 回放用的是 blob objectURL：关闭弹窗 / 换播另一条 / 卸载时释放，避免内存泄漏。
   useEffect(() => { const u = playing?.url; return () => { if (u) URL.revokeObjectURL(u) } }, [playing?.url])
+  // 卸载守卫：若在 fetchRecordingObjectURL 在途时卸载，setPlaying 是 no-op，新建的 blob URL 永不进 state、
+  // 也就永不被上面的 effect 释放 → 泄漏到标签页关闭。故 await 后重检 alive，未挂载则就地 revoke（复审 LOW）。
+  const alive = useRef(true)
+  useEffect(() => () => { alive.current = false }, [])
 
   const play = async (rec: RecordingInfo) => {
     if (!rec.hasMedia) { toast(t('该录制暂无可播放媒体', 'No playable media'), 'error'); return }
     setLoadingId(rec.id)
     try {
       const url = await fetchRecordingObjectURL(rec.id) // Bearer→blob：无 60s 令牌过期、拖动/重播不再请求服务端
+      if (!alive.current) { URL.revokeObjectURL(url); return } // 卸载于在途：就地释放，不泄漏
       setPlaying({ rec, url })
     } catch (e) {
       const msg = e instanceof APIError && e.status === 403 ? t('该录制已删除或无权查看', 'Recording deleted or no access')

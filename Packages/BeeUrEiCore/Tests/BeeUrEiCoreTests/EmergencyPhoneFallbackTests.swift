@@ -52,4 +52,16 @@ final class EmergencyPhoneFallbackTests: XCTestCase {
         XCTAssertNil(EmergencyPhoneFallback.telURLString("12"))       // 太短
         XCTAssertNil(EmergencyPhoneFallback.telURLString("no phone")) // 无数字
     }
+
+    func testTelURLRejectsNonAsciiDigits() {
+        // 回归：全角数字（从中文网页复制电话号极常见）/中文数字/阿拉伯-印度数字 曾因 Character.isNumber
+        // 对它们亦为 true 而被保留进 tel:// URL——iOS 拨不出去。无数据网兜底拨号宁可返回 nil 让调用方
+        // 播报"请直接呼叫求助"，也不生成拨不出去的 URL。
+        XCTAssertNil(EmergencyPhoneFallback.telURLString("１３８００００００００"))   // 全角数字
+        XCTAssertNil(EmergencyPhoneFallback.telURLString("一三八零零零零"))         // 中文数字
+        XCTAssertNil(EmergencyPhoneFallback.telURLString("١٢٣٤٥٦"))               // 阿拉伯-印度数字
+        // 全角/半角混排：仅半角部分算可拨；不足 3 位半角数字则不可拨。
+        XCTAssertNil(EmergencyPhoneFallback.telURLString("１２ 3"))                 // 仅 1 位半角
+        XCTAssertEqual(EmergencyPhoneFallback.telURLString("１２ 345"), "tel://345") // 半角部分够 3 位
+    }
 }

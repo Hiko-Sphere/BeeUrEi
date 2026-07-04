@@ -24,12 +24,18 @@ public enum EmergencyPhoneFallback {
         return usable.first(where: { $0.isEmergency }) ?? usable.first
     }
 
-    /// 电话号 → tel URL 字符串。只保留数字与前导 +（空格/连字符/括号是常见输入，直接插值会让
+    /// 电话号 → tel URL 字符串。只保留**阿拉伯数字**与前导 +（空格/连字符/括号是常见输入，直接插值会让
     /// URL(string:) 返回 nil——亲友页现拨号入口即有此隐患）；净化后不足 3 位视为不可拨返回 nil。
+    ///
+    /// ⚠️ 必须用 `isASCII && isNumber`，不能用裸 `isNumber`：Swift 的 `Character.isNumber` 对**全角数字
+    /// （１２３，从中文网页复制电话号极常见）/中文数字/阿拉伯-印度数字**也为 true，这些字符进 `tel://`
+    /// iOS **无法拨号**。此路径是**无数据网时的最后兜底拨号**，宁可净化后返回 nil 让调用方播报"请直接
+    /// 呼叫求助"，也绝不生成一个拨不出去的 URL。（与 CurrencyClassifier/BusDisplayReader 同根的 isNumber 坑。）
     public static func telURLString(_ raw: String) -> String? {
-        var digits = raw.filter { $0.isNumber }
+        func isAsciiDigit(_ ch: Character) -> Bool { ch.isASCII && ch.isNumber }
+        var digits = raw.filter(isAsciiDigit)
         if raw.trimmingCharacters(in: .whitespaces).hasPrefix("+") { digits = "+" + digits }
-        guard digits.filter({ $0.isNumber }).count >= 3 else { return nil }
+        guard digits.filter(isAsciiDigit).count >= 3 else { return nil }
         return "tel://\(digits)"
     }
 }

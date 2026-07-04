@@ -62,6 +62,38 @@ describe('紧急医疗信息 /api/account/medical + /api/family/:id/medical', ()
     await a.close()
   })
 
+  it('访问透明：紧急亲友查看 → 本人收 medical_info_viewed 通知（带查看者名）；10 分钟内去重；本人自看不通知', async () => {
+    const { a, store, owner, emerg, ownerId } = await seed()
+    await a.inject({ method: 'PUT', url: '/api/account/medical', headers: bearer(owner.token), payload: { text: '哮喘' } })
+    const viewedNotifs = () => store.notificationsForUser(ownerId).filter((n) => n.kind === 'medical_info_viewed')
+    // 紧急亲友查看 → 本人收到一条透明通知。
+    await a.inject({ method: 'GET', url: `/api/family/${ownerId}/medical`, headers: bearer(emerg.token) })
+    expect(viewedNotifs()).toHaveLength(1)
+    expect(viewedNotifs()[0].title).toContain('medemerg')          // 查看者名
+    expect(viewedNotifs()[0].data).toMatchObject({ viewerId: store.findByUsername('medemerg')!.id })
+    // 同一查看者短时间内再看 → 去重，不重复通知。
+    await a.inject({ method: 'GET', url: `/api/family/${ownerId}/medical`, headers: bearer(emerg.token) })
+    expect(viewedNotifs()).toHaveLength(1)
+    // 本人查看自己的 → 不产生透明通知（自看无需问责）。
+    await a.inject({ method: 'GET', url: `/api/account/medical`, headers: bearer(owner.token) })
+    expect(viewedNotifs()).toHaveLength(1)
+    await a.close()
+  })
+
+  it('未授权/未填的查看不产生访问透明通知', async () => {
+    const { a, store, owner, plain, stranger, emerg, ownerId } = await seed()
+    const viewedNotifs = () => store.notificationsForUser(ownerId).filter((n) => n.kind === 'medical_info_viewed')
+    // 未填时授权亲友查看（404）→ 无通知（没东西可看，不算访问）。
+    await a.inject({ method: 'GET', url: `/api/family/${ownerId}/medical`, headers: bearer(emerg.token) })
+    expect(viewedNotifs()).toHaveLength(0)
+    // 填好后，普通亲友/陌生人（403）查看 → 无通知（未授权、没看到）。
+    await a.inject({ method: 'PUT', url: '/api/account/medical', headers: bearer(owner.token), payload: { text: '糖尿病' } })
+    await a.inject({ method: 'GET', url: `/api/family/${ownerId}/medical`, headers: bearer(plain.token) })
+    await a.inject({ method: 'GET', url: `/api/family/${ownerId}/medical`, headers: bearer(stranger.token) })
+    expect(viewedNotifs()).toHaveLength(0)
+    await a.close()
+  })
+
   it('对方未填 → 授权亲友得 404（no_medical_info）', async () => {
     const { a, emerg, ownerId } = await seed()
     const r = await a.inject({ method: 'GET', url: `/api/family/${ownerId}/medical`, headers: bearer(emerg.token) })

@@ -27,6 +27,9 @@ describe('notifDestination 通知点击跳转目的地', () => {
     expect(notifDestination('security_2fa_disabled')).toBe('/account')
     expect(notifDestination('security_email_changed')).toBe('/account')
   })
+  it('医疗信息被查看（访问透明）→ 账户页（管理你的医疗信息）', () => {
+    expect(notifDestination('medical_info_viewed')).toBe('/account')
+  })
   it('无明确去处 → null（仅标已读，不跳转）', () => {
     expect(notifDestination('emergency_alert')).toBeNull() // 紧急有专属"查看位置/回拨"按钮，不整行跳转
     expect(notifDestination('report_resolved')).toBeNull()

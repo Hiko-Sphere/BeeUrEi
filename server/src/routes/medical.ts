@@ -3,6 +3,9 @@ import { z } from 'zod'
 import { type Store } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { sealField, openField, type Sealed } from '../kyc/crypto'
+import { type PushSender, NoopPushSender } from '../push/apns'
+import { pushLang, pushStrings } from '../push/pushStrings'
+import { notifyUser } from '../notifications/notify'
 
 /// 紧急医疗信息（Apple Medical ID / Life360 式）：本人填写关键健康信息（血型/过敏/用药/病史/紧急备注），
 /// 供其**指定的紧急亲友**在遇险时了解、辅助施救。
@@ -16,8 +19,11 @@ import { sealField, openField, type Sealed } from '../kyc/crypto'
 const AAD_KIND = 'medical_info'
 const putSchema = z.object({ text: z.string().max(4000) }) // 空串=清除
 
-export function registerMedicalRoutes(app: FastifyInstance, store: Store): void {
+export function registerMedicalRoutes(app: FastifyInstance, store: Store, push: PushSender = new NoopPushSender()): void {
   const aadFor = (userId: string) => ({ submissionId: userId, kind: AAD_KIND })
+  // 访问透明去重：同一(查看者:被查看者)10 分钟内只通知本人一次——避免施救者刷新/多次拉取轰炸遇险者的通知。
+  const viewNotified = new Map<string, number>()
+  const VIEW_DEDUP_MS = 10 * 60_000
 
   /// 解密某用户的医疗信息明文；无记录/解密失败返回 undefined（fail-closed，绝不吐半解密/错误内容）。
   const decrypt = (userId: string): { text: string; updatedAt: number } | undefined => {
@@ -60,6 +66,23 @@ export function registerMedicalRoutes(app: FastifyInstance, store: Store): void 
     const m = decrypt(targetId)
     if (!m) return reply.code(404).send({ error: 'no_medical_info' }) // 对方未填：诚实告知无信息（非泄漏存在性——已过授权）
     const target = store.findById(targetId)
+    // 访问透明/问责（GDPR Art.9 健康数据）：真被查看即通知本人"X 查看了你的医疗信息"（对标"新登录提醒"）。
+    // 去重 10 分钟（刷新/多次拉取不轰炸）；信息类通知（走 notifyUser，遵守勿扰，非告警）。best-effort，不阻断读取。
+    const now = Date.now()
+    const key = `${me}:${targetId}`
+    const last = viewNotified.get(key)
+    if (last === undefined || now - last >= VIEW_DEDUP_MS) {
+      viewNotified.set(key, now)
+      if (viewNotified.size > 5000) for (const [k, t] of viewNotified) if (now - t >= VIEW_DEDUP_MS) viewNotified.delete(k) // 有界清理
+      const viewer = store.findById(me)
+      if (viewer) {
+        const l = pushLang(target?.language)
+        notifyUser(store, push, targetId, 'medical_info_viewed',
+          pushStrings.medicalInfoViewedTitle(viewer.displayName, l),
+          pushStrings.medicalInfoViewedBody(viewer.displayName, l),
+          { viewerId: me, viewerName: viewer.displayName })
+      }
+    }
     return { medicalInfo: m.text, fromName: target?.displayName ?? '', updatedAt: m.updatedAt }
   })
 }

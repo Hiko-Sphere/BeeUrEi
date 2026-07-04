@@ -110,6 +110,13 @@ export const pushStrings = {
   emergencyClearBody: (name: string, l: PushLang): string =>
     l === 'en' ? `${name} marked the earlier emergency alert as resolved — false alarm or they're OK now.`
                : `${name} 已解除刚才的紧急求助——是误报，或现在已经没事了。`,
+  // 紧急联系人查看了你的紧急医疗信息 → 通知本人（特殊类别健康数据的**访问透明/问责**，对标"新登录提醒"）。
+  // 只在真被查看时发；很可能是在紧急协助你时——非告警，信息类（遵守勿扰）。
+  medicalInfoViewedTitle: (viewerName: string, l: PushLang): string =>
+    l === 'en' ? `${viewerName} viewed your medical info` : `${viewerName} 查看了你的紧急医疗信息`,
+  medicalInfoViewedBody: (viewerName: string, l: PushLang): string =>
+    l === 'en' ? `${viewerName}, your emergency contact, opened your emergency medical info — likely while helping you.`
+               : `你的紧急联系人 ${viewerName} 查看了你的紧急医疗信息——很可能是在协助你时。`,
   // 安全报到到期未确认 → 自动告警亲友（personal-safety "safety timer" 到点未 check-in）。
   // 复用 emergency_alert 通知类别（亲友端已有的告警显著度/回拨/图标全部生效），正文点明是"未按时报平安"
   // 而非摔倒，并带上本人设定的备注（"步行回家"）帮助判断去哪找人。

@@ -200,6 +200,27 @@ describe('SqliteStore (node:sqlite)', () => {
     }
   })
 
+  it('AI 视觉每日配额计数：Sqlite 与 Memory 同口径（同日累加 / 跨日重置 / 用户隔离）', () => {
+    // recordVisionCall 的 upsert 用 SQL 的 ON CONFLICT+CASE WHEN day=excluded.day，是"prod SQLite vs 测试
+    // Memory 语义分叉"的高危处——必须两存储行为逐格一致，否则线上配额与测试不符（漏计=烧超额，多计=误封）。
+    const exercise = (s: SqliteStore | MemoryStore) => {
+      const seq: number[] = []
+      seq.push(s.visionCallsOnDay('u1', '2026-07-04'))            // 0：初始
+      s.recordVisionCall('u1', '2026-07-04'); seq.push(s.visionCallsOnDay('u1', '2026-07-04')) // 1
+      s.recordVisionCall('u1', '2026-07-04'); seq.push(s.visionCallsOnDay('u1', '2026-07-04')) // 2：同日累加
+      seq.push(s.visionCallsOnDay('u1', '2026-07-05'))            // 0：另一日独立
+      s.recordVisionCall('u1', '2026-07-05'); seq.push(s.visionCallsOnDay('u1', '2026-07-05')) // 1：跨日重置为 1
+      seq.push(s.visionCallsOnDay('u1', '2026-07-04'))            // 0：单行/用户，旧日的计数已被覆盖
+      seq.push(s.visionCallsOnDay('u2', '2026-07-05'))            // 0：用户隔离
+      s.deleteVisionUsageForUser('u1'); seq.push(s.visionCallsOnDay('u1', '2026-07-05')) // 0：删号级联清
+      return seq
+    }
+    const sq = exercise(new SqliteStore(':memory:'))
+    const mem = exercise(new MemoryStore())
+    expect(sq).toEqual([0, 1, 2, 0, 1, 0, 0, 0])
+    expect(mem).toEqual(sq) // 两存储逐格一致
+  })
+
   it('latestMessagesPerPeer：对端最新两条同毫秒时只返回一条（不重复出现在会话列表）', () => {
     const store = new SqliteStore(':memory:')
     store.createMessage({ id: 'x1', fromId: 'u1', toId: 'u2', kind: 'text', text: '1', createdAt: 5000 })

@@ -626,6 +626,10 @@ export interface Store {
   deleteMedia(id: string): void
   mediaByOwner(userId: string): MediaMeta[] // 某用户上传的全部媒体（删号级联清磁盘文件用）
   mediaBytesForOwner(userId: string): number // 某用户媒体总字节数（配额检查，防单账号撑爆磁盘）
+  // AI 视觉每日配额：护外部付费视觉模型额度（10/min 限流只限速率、不限当日总量）。单行/用户，跨 UTC 日自动重置。
+  visionCallsOnDay(userId: string, day: string): number // 该用户在 day(UTC yyyy-mm-dd)当日已成功的视觉调用次数
+  recordVisionCall(userId: string, day: string): void   // 记一次成功调用（同日累加，跨日重置为 1）
+  deleteVisionUsageForUser(userId: string): void        // 删号级联清计数
   allMedia(): MediaMeta[] // 全部媒体元数据（孤儿清扫遍历用）
   referencedMediaIds(): Set<string> // 被视频消息(kind=video,text=mediaId)或录制(mediaId)引用的全部 mediaId（孤儿清扫判定用）
   findVideoMessageByMediaId(mediaId: string): ChatMessage | undefined // 引用该 mediaId 的视频消息（媒体访问授权：能否看该媒体＝能否看引用它的那条消息）
@@ -651,6 +655,7 @@ export class MemoryStore implements Store {
   protected notifications = new Map<string, Notification>()
   protected emergencyEvents = new Map<string, EmergencyEvent>()
   protected webPushSubs = new Map<string, WebPushSubscription>()
+  protected visionUsage = new Map<string, { day: string; count: number }>() // AI 视觉每日配额：单行/用户，跨日自动重置
   protected recordingConfig: RecordingConfig = { enabled: false, retentionDays: 7, requireConsent: true }
   protected auditLog: AdminAuditEntry[] = []
   protected warnings = new Map<string, Warning>()
@@ -1290,6 +1295,19 @@ export class MemoryStore implements Store {
     for (const m of this.media.values()) if (m.ownerId === userId) total += m.size
     return total
   }
+  visionCallsOnDay(userId: string, day: string): number {
+    const e = this.visionUsage.get(userId)
+    return e && e.day === day ? e.count : 0 // 跨日的旧行视为 0（下次 record 会重置）
+  }
+  recordVisionCall(userId: string, day: string): void {
+    const e = this.visionUsage.get(userId)
+    if (e && e.day === day) e.count += 1
+    else this.visionUsage.set(userId, { day, count: 1 }) // 新用户或跨日：重置为 1
+    this.afterMutate()
+  }
+  deleteVisionUsageForUser(userId: string): void {
+    if (this.visionUsage.delete(userId)) this.afterMutate()
+  }
   allMedia(): MediaMeta[] {
     return [...this.media.values()]
   }
@@ -1336,6 +1354,7 @@ export class JsonFileStore extends MemoryStore {
           savedRoutes?: SavedRoute[]
           emergencyEvents?: EmergencyEvent[]
           webPushSubs?: WebPushSubscription[]
+          visionUsage?: Record<string, { day: string; count: number }>
         }
         for (const u of data.users ?? []) this.users.set(u.id, u)
         for (const l of data.links ?? []) this.links.set(l.id, l)
@@ -1359,6 +1378,7 @@ export class JsonFileStore extends MemoryStore {
         for (const sr of data.savedRoutes ?? []) this.savedRoutes.set(sr.id, sr)
         for (const ee of data.emergencyEvents ?? []) this.emergencyEvents.set(ee.id, ee)
         for (const wp of data.webPushSubs ?? []) this.webPushSubs.set(wp.endpoint, wp)
+        for (const [k, v] of Object.entries(data.visionUsage ?? {})) this.visionUsage.set(k, v)
       } catch {
         /* 损坏的文件忽略，从空开始 */
       }
@@ -1390,6 +1410,7 @@ export class JsonFileStore extends MemoryStore {
       savedRoutes: [...this.savedRoutes.values()],
       emergencyEvents: [...this.emergencyEvents.values()],
       webPushSubs: [...this.webPushSubs.values()],
+      visionUsage: Object.fromEntries(this.visionUsage),
     }
     // 原子写：先写临时文件再 rename 覆盖。writeFileSync 直写在写入中途崩溃/断电/磁盘满时会留下**半写**
     // 的 JSON——下次启动 JSON.parse 失败→构造函数按"损坏忽略、从空开始"处理→**静默全量丢数据**。

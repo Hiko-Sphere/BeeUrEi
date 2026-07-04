@@ -16,6 +16,7 @@ function clearConfig() {
   delete process.env.VISION_API_BASE
   delete process.env.VISION_MODEL
   delete process.env.VISION_MAX_TOKENS
+  delete process.env.VISION_DAILY_MAX
 }
 async function token(app: ReturnType<typeof buildApp>, username = 'visionuser') {
   const r = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username, password: 'secret123' } })
@@ -178,6 +179,60 @@ describe('POST /api/vision/describe（路由）', () => {
       payload: { image: b64, mime: 'image/jpeg' } })
     expect(res.statusCode).toBe(413)
     expect(res.json()).toMatchObject({ error: 'image_too_large' }) // 我方检查，非 Fastify bodyLimit 的通用 413
+    await app.close()
+  })
+
+  it('每日配额：达当日上限 → 429 ai_daily_quota_exceeded，且不再打上游', async () => {
+    setConfig()
+    process.env.VISION_DAILY_MAX = '2' // 低配额便于测
+    const upstream = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) }))
+    vi.stubGlobal('fetch', upstream)
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const t = await token(app)
+    const call = () => app.inject({ method: 'POST', url: '/api/vision/describe', headers: { authorization: `Bearer ${t}` },
+      payload: { image: TINY_JPEG_B64, mime: 'image/jpeg' } })
+    expect((await call()).statusCode).toBe(200) // 1
+    expect((await call()).statusCode).toBe(200) // 2 → 达上限
+    const third = await call()                   // 3 → 超配额
+    expect(third.statusCode).toBe(429)
+    expect(third.json()).toMatchObject({ error: 'ai_daily_quota_exceeded' })
+    expect(upstream).toHaveBeenCalledTimes(2) // 超配额那次绝不打上游（省付费额度）
+    await app.close()
+  })
+
+  it('每日配额：失败调用不烧用户额度（只有成功才计入）', async () => {
+    setConfig()
+    process.env.VISION_DAILY_MAX = '1'
+    // 上游先失败一次（不应计入配额），再成功一次（计入），第三次才被 429。
+    let n = 0
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      n += 1
+      if (n === 1) return { ok: false, status: 500, json: async () => ({ error: { message: 'boom' } }) }
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) }
+    }))
+    const app = buildApp(new MemoryStore())
+    const t = await token(app)
+    const call = () => app.inject({ method: 'POST', url: '/api/vision/describe', headers: { authorization: `Bearer ${t}` },
+      payload: { image: TINY_JPEG_B64, mime: 'image/jpeg' } })
+    expect((await call()).statusCode).toBe(502) // 失败：不计入配额
+    expect((await call()).statusCode).toBe(200) // 成功：计入 → 达上限 1
+    expect((await call()).statusCode).toBe(429) // 超配额
+    await app.close()
+  })
+
+  it('每日配额按用户隔离：一个用户超额不影响另一用户', async () => {
+    setConfig()
+    process.env.VISION_DAILY_MAX = '1'
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) })))
+    const app = buildApp(new MemoryStore())
+    const a = await token(app, 'visionA')
+    const b = await token(app, 'visionB')
+    const call = (t: string) => app.inject({ method: 'POST', url: '/api/vision/describe', headers: { authorization: `Bearer ${t}` },
+      payload: { image: TINY_JPEG_B64, mime: 'image/jpeg' } })
+    expect((await call(a)).statusCode).toBe(200)
+    expect((await call(a)).statusCode).toBe(429) // A 超额
+    expect((await call(b)).statusCode).toBe(200) // B 不受影响
     await app.close()
   })
 

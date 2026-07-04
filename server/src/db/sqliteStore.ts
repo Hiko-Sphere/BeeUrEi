@@ -81,6 +81,7 @@ export class SqliteStore implements Store {
       CREATE TABLE IF NOT EXISTS passkeys (
         id TEXT PRIMARY KEY, userId TEXT, credentialId TEXT UNIQUE, publicKey TEXT, counter INTEGER, deviceName TEXT, createdAt INTEGER);
       CREATE INDEX IF NOT EXISTS idx_passkeys_user ON passkeys (userId);
+      CREATE TABLE IF NOT EXISTS vision_usage (userId TEXT PRIMARY KEY, day TEXT, count INTEGER);
     `)
     // 迁移：旧库 links 表补 phone 列、users 表补 language 列（已存在则忽略）。
     try { this.db.exec('ALTER TABLE links ADD COLUMN phone TEXT') } catch { /* 列已存在 */ }
@@ -839,6 +840,20 @@ export class SqliteStore implements Store {
   mediaByOwner(userId: string): MediaMeta[] {
     return (this.db.prepare('SELECT * FROM media WHERE ownerId = ?').all(userId) as any[])
       .map((row) => ({ id: row.id, ownerId: row.ownerId, mime: row.mime, size: Number(row.size), createdAt: Number(row.createdAt) }))
+  }
+  visionCallsOnDay(userId: string, day: string): number {
+    const row = this.db.prepare('SELECT count FROM vision_usage WHERE userId = ? AND day = ?').get(userId, day) as { count: number } | undefined
+    return row ? Number(row.count) : 0
+  }
+  recordVisionCall(userId: string, day: string): void {
+    // 单行/用户 upsert：同日累加、跨日重置为 1（day 变即视为新的一天，count 归 1）。
+    this.db.prepare(
+      `INSERT INTO vision_usage (userId, day, count) VALUES (?, ?, 1)
+       ON CONFLICT(userId) DO UPDATE SET count = CASE WHEN day = excluded.day THEN count + 1 ELSE 1 END, day = excluded.day`,
+    ).run(userId, day)
+  }
+  deleteVisionUsageForUser(userId: string): void {
+    this.db.prepare('DELETE FROM vision_usage WHERE userId = ?').run(userId)
   }
   mediaBytesForOwner(userId: string): number {
     const row = this.db.prepare('SELECT COALESCE(SUM(size), 0) AS total FROM media WHERE ownerId = ?').get(userId) as { total: number }

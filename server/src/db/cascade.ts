@@ -42,6 +42,7 @@ export function cascadeDeleteUser(store: Store, id: string): void {
   // 紧急事件日志：人已删，坐标等敏感 PII 随主体抹除（治理留痕由管理员审计日志承担，其不含坐标）。
   store.deleteEmergencyEventsForUser(id)
   store.deleteWebPushSubscriptionsForUser(id) // 浏览器推送订阅：人已删，端点随之清（否则继续空投）
+  store.deleteVisionUsageForUser(id) // AI 视觉每日配额计数：删号即清，不留无主行
   // 路线库：归属者删号即清其全部路线（亲友替其画的也属其资产，随主体删除）；绘制者删号不影响他人路线。
   store.deleteSavedRoutesForOwner(id)
   // 实名认证（KYC）：删号即清除该用户的证件密文文件（最敏感 PII）。

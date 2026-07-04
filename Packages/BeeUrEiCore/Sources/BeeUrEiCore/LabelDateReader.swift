@@ -7,11 +7,26 @@ import Foundation
 /// 如实读出，判断交给用户（误判"没过期"会让盲人吃过期食品/药，代价太高）。始终附"请核对"。
 /// **关键字门控**（行里既要有日期标签、又要有日期样式）保证高精度：流水号/条码等无标签的数字串不会被误读成日期。
 public enum LabelDateReader {
-    /// 日期标签关键字（中/英）。短英文词（exp/mfg）靠"同一行还须有日期样式"的门控兜住精度。
+    /// 日期标签关键字（中/英）。中文/多词/长英文词按子串匹配即可（够specific）。
     static let labels: [String] = [
         "保质期", "有效期", "到期", "保存期", "生产日期", "此日期前", "食用日期", "限期", "赏味期",
-        "best before", "best by", "use by", "expiry", "expires", "exp", "mfg", "manufactured", "sell by", "production date",
+        "best before", "best by", "use by", "expiry", "expires", "manufactured", "sell by", "production date",
     ]
+
+    /// 短英文缩写标签（exp/mfg）须**词边界**：它们是别的词的子串——exp ⊂ export/express/expo/expensive，
+    /// 若按子串匹配，"Express delivery July 2026"/"Export lot 2026-01" 会被误当"有效期日期"读给盲人。
+    /// 边界用 `(?<![a-z]) … (?![a-z])`：前后不许字母，但**允许数字/句点/空格**——喷码 "EXP20261130"、
+    /// "EXP." 等真标签仍命中。大小写不敏感。
+    private static let boundedLabelRegexes: [NSRegularExpression] = ["exp", "mfg"].compactMap {
+        try? NSRegularExpression(pattern: "(?<![a-z])" + $0 + "(?![a-z])", options: [.caseInsensitive])
+    }
+
+    /// 行内是否含日期标签：长/中文/多词标签按子串；短缩写（exp/mfg）按词边界（防子串误配）。
+    static func hasDateLabel(_ lower: String) -> Bool {
+        if labels.contains(where: { lower.contains($0) }) { return true }
+        let r = NSRange(lower.startIndex..., in: lower)
+        return boundedLabelRegexes.contains { $0.firstMatch(in: lower, range: r) != nil }
+    }
 
     /// 日期样式（ASCII 数字，避免 CJK 数字误配）：年(19/20xx)+分隔、d/m/yy(yy)、m/yyyy，
     /// 以及**无分隔/空格分隔的喷码**（食品药品包装最常见的批次喷码写法）。
@@ -53,7 +68,7 @@ public enum LabelDateReader {
             let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !line.isEmpty else { continue }
             let lower = line.lowercased()
-            guard labels.contains(where: { lower.contains($0) }), lineHasDate(line) else { continue }
+            guard hasDateLabel(lower), lineHasDate(line) else { continue }
             guard seen.insert(line).inserted else { continue } // 去重（OCR 常重复同一行）
             hits.append(line)
             if hits.count >= 3 { break } // 至多 3 条，避免长包装刷屏

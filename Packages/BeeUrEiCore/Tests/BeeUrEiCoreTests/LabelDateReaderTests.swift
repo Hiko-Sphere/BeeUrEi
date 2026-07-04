@@ -83,6 +83,18 @@ final class LabelDateReaderTests: XCTestCase {
         XCTAssertNil(LabelDateReader.find(texts: ["exp JUL 20260731999"], language: .en))
     }
 
+    func testShortLabelExpRequiresWordBoundary() {
+        // "exp" 是 export/express/expo 的子串——这些普通词不该把整行误当"有效期日期"读给盲人。
+        // （尤其配合月份名识别后，"Express … July 2026" 会同时满足标签+日期两关）。
+        XCTAssertNil(LabelDateReader.find(texts: ["Express delivery July 2026"], language: .en))
+        XCTAssertNil(LabelDateReader.find(texts: ["Export lot 2026-01"], language: .en))
+        XCTAssertNil(LabelDateReader.find(texts: ["Expo 2026-08 hall"], language: .en))
+        // 真的 EXP 标签仍识别：带空格、带句点、紧贴喷码日期（EXP20261130）。
+        XCTAssertNotNil(LabelDateReader.find(texts: ["EXP 12/2026"], language: .en))
+        XCTAssertNotNil(LabelDateReader.find(texts: ["EXP. 2026-08"], language: .en))
+        XCTAssertTrue(LabelDateReader.find(texts: ["EXP20261130"], language: .en)!.contains("20261130"))
+    }
+
     func testDedupAndCap() {
         // OCR 常重复同一行：去重。
         let r = LabelDateReader.find(texts: ["保质期 2026.07.15", "保质期 2026.07.15"], language: .zh)!

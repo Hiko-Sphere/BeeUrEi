@@ -549,6 +549,11 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, repliedT
           {mine && m.kind !== 'recalled' && !isGroup && (
             <span className={m.readAt ? 'font-medium' : 'opacity-70'}>{m.readAt ? t('已读', 'Read') : t('已送达', 'Delivered')}</span>
           )}
+          {/* 群已读回执：仅自己发的群消息、群里有其他成员时显示「已读 N/总」（后端只回计数，不暴露具体是谁）。 */}
+          {mine && m.kind !== 'recalled' && isGroup && m.readTotal != null && m.readTotal > 0 && (
+            <span data-testid="group-receipt" className={m.readBy === m.readTotal ? 'font-medium' : 'opacity-70'}>
+              {t(`已读 ${m.readBy ?? 0}/${m.readTotal}`, `Read ${m.readBy ?? 0}/${m.readTotal}`)}</span>
+          )}
         </div>
         {picking && (
           <div className="absolute -top-9 right-0 z-10 flex gap-1 rounded-full surface border border-[var(--line)] px-2 py-1 shadow-lg">

@@ -177,7 +177,17 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
       const group = store.findGroup(q.group)
       if (!group) return reply.code(404).send({ error: 'not_found' })
       if (!group.memberIds.includes(me)) return reply.code(403).send({ error: 'not_member' })
-      return { messages: store.groupMessages(q.group, limit, before, beforeId) }
+      const msgs = store.groupMessages(q.group, limit, before, beforeId)
+      // 群已读回执（对齐 WhatsApp「已读 N」）：仅对**我自己发的**非撤回消息，附「几位其他成员已读到该条」。
+      // 已读判定＝该成员的 groupReadAt ≥ 该条 createdAt（读到时 setGroupRead=Date.now() ≥ 更早消息）。
+      // 其他成员的 readAt 一次性取好（O(成员数)），再逐条比较；隐私上只暴露计数不暴露具体是谁读了。
+      const others = group.memberIds.filter((id) => id !== me)
+      const readTotal = others.length
+      const otherReadAt = others.map((id) => store.groupReadAt(group.id, id))
+      const withReceipts = msgs.map((m) => (m.fromId === me && m.kind !== 'recalled')
+        ? { ...m, readBy: otherReadAt.filter((t) => t >= m.createdAt).length, readTotal }
+        : m)
+      return { messages: withReceipts }
     }
     const peer = q.with
     if (!peer) return reply.code(400).send({ error: 'invalid_input' })

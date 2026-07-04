@@ -90,6 +90,14 @@ export const pushStrings = {
   emergencyAckBody: (name: string, l: PushLang): string =>
     l === 'en' ? `${name} acknowledged your emergency alert and knows you may need help.`
                : `${name} 已确认收到你的紧急求助，知道你可能需要帮助。`,
+  // 有亲友开始响应 → **安静**通知其余亲友"已有人在处理"（响应者协调：避免全体同时赶去/同时打电话把遇险者
+  // 淹没，也避免"都以为别人在管"没人去）。匿名（不点名响应者）——收件人本就都收到了该次告警，只补"正被处理"
+  // 一条信息，不新增任何关于遇险者或响应者身份的暴露。绝非告警：kind=emergency_responding 不触发响铃大模态。
+  emergencyRespondingTitle: (senderName: string, l: PushLang): string =>
+    l === 'en' ? `Someone is responding to ${senderName}'s alert` : `已有人在响应 ${senderName} 的求助`,
+  emergencyRespondingBody: (senderName: string, l: PushLang): string =>
+    l === 'en' ? `Another of ${senderName}'s contacts has acknowledged the emergency and is responding. Coordinate if you can help too.`
+               : `${senderName} 的另一位亲友已确认这次紧急求助并开始响应。若你也能帮忙，请与其协调。`,
   // 升级重呼：告警发出后达阈值时长仍无任何亲友确认 → 再推一次、措辞更急，争取抓住第一次漏看的人（医疗警报的 escalation）。
   emergencyEscalateTitle: (name: string, l: PushLang): string =>
     l === 'en' ? `Still unanswered: ${name} needs help` : `仍无人回应：${name} 需要帮助`,

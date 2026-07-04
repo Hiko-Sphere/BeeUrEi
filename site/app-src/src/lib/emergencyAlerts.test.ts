@@ -41,11 +41,12 @@ describe('pickUnreadEmergencies（告警实时弹出的挑选规则）', () => {
     expect(picked[0].data?.escalated).toBe('1')                        // 展示的是升级版（措辞更急）
   })
 
-  it('回执 emergency_ack / 报平安 emergency_clear 都不弹告警模态（反馈类，非新告警）', () => {
+  it('白名单：只有 emergency_alert 弹告警模态；ack/clear/responding 等 emergency_* 反馈协调类都不弹', () => {
     const list = [
-      notif('a', 'emergency_alert', 100), // 真告警：弹
-      notif('k', 'emergency_ack', 300),   // 回执：kind 含 emergency 但绝不弹
-      notif('c', 'emergency_clear', 400), // 报平安：反馈类，绝不弹
+      notif('a', 'emergency_alert', 100),      // 真告警：弹
+      notif('k', 'emergency_ack', 300),        // 回执：kind 含 emergency 但绝不弹
+      notif('c', 'emergency_clear', 400),      // 报平安：反馈类，绝不弹
+      notif('r', 'emergency_responding', 350), // 有人在响应：协调类，绝不弹（白名单杜绝误弹）
     ]
     expect(pickUnreadEmergencies(list, none).map((n) => n.id)).toEqual(['a'])
   })

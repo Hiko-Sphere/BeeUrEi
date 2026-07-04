@@ -59,6 +59,69 @@ describe('紧急告警回执 /api/emergency/ack', () => {
   })
 })
 
+// 响应者协调：第一位亲友响应 → **安静**通知其余亲友"已有人在处理"（避免全体同时赶去/都以为别人在管）。
+describe('紧急响应者协调 /api/emergency/ack → emergency_responding', () => {
+  const bearer = (t: string) => ({ authorization: `Bearer ${t}` })
+  async function seed() {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const reg = async (u: string, role: string) =>
+      (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const owner = await reg('crsender', 'blind')     // 遇险者
+    const h1 = await reg('crhelper1', 'helper')      // 亲友 A（响应者）
+    const h2 = await reg('crhelper2', 'helper')      // 亲友 B（应收"有人在响应"）
+    for (const u of ['crhelper1', 'crhelper2']) {
+      const l = await a.inject({ method: 'POST', url: '/api/family/links', headers: bearer(owner.token),
+        payload: { username: u, relation: '家人', isEmergency: true } })
+      const tok = u === 'crhelper1' ? h1.token : h2.token
+      await a.inject({ method: 'POST', url: `/api/family/links/${l.json().link.id}/accept`, headers: bearer(tok) })
+    }
+    const ownerId = store.findByUsername('crsender')!.id
+    const h1Id = store.findByUsername('crhelper1')!.id
+    const h2Id = store.findByUsername('crhelper2')!.id
+    // 发一次真实告警，拿到真实 eventId。
+    await a.inject({ method: 'POST', url: '/api/emergency/alert', headers: bearer(owner.token), payload: { kind: 'manual' } })
+    const eventId = store.emergencyEventsForUser(ownerId)[0].id
+    return { a, store, owner, h1, h2, ownerId, h1Id, h2Id, eventId }
+  }
+  const responding = (store: MemoryStore, uid: string) =>
+    store.notificationsForUser(uid).filter((n) => n.kind === 'emergency_responding')
+
+  it('首个响应者确认 → 其余亲友收到 emergency_responding（匿名）；响应者本人与发起人都不收到该协调通知', async () => {
+    const { a, store, h1, ownerId, h1Id, h2Id, eventId } = await seed()
+    const r = await a.inject({ method: 'POST', url: '/api/emergency/ack', headers: bearer(h1.token), payload: { fromId: ownerId, eventId } })
+    expect(r.statusCode).toBe(200)
+    // B 收到协调通知；匿名（不含响应者 h1 的名字），但带遇险者名与 eventId。
+    expect(responding(store, h2Id)).toHaveLength(1)
+    expect(responding(store, h2Id)[0].kind).toBe('emergency_responding')
+    expect(responding(store, h2Id)[0].title).toContain('crsender')     // 遇险者名（协调对象）
+    expect(responding(store, h2Id)[0].title).not.toContain('crhelper1') // 匿名：不点名响应者
+    expect(responding(store, h2Id)[0].data).toMatchObject({ eventId })
+    // 响应者本人不收到"有人在响应"（他就是那个人）；发起人收到的是 ack 回执、不是 responding。
+    expect(responding(store, h1Id)).toHaveLength(0)
+    expect(responding(store, ownerId)).toHaveLength(0)
+    await a.close()
+  })
+
+  it('第二位亲友再确认 → 不重复广播协调通知（一次事件一条）', async () => {
+    const { a, store, h1, h2, ownerId, h1Id, h2Id, eventId } = await seed()
+    await a.inject({ method: 'POST', url: '/api/emergency/ack', headers: bearer(h1.token), payload: { fromId: ownerId, eventId } })
+    expect(responding(store, h2Id)).toHaveLength(1)
+    // B 也确认（成为响应者）→ 不再向 A 广播（已确认过，isFirstAck=false）。
+    await a.inject({ method: 'POST', url: '/api/emergency/ack', headers: bearer(h2.token), payload: { fromId: ownerId, eventId } })
+    expect(responding(store, h1Id)).toHaveLength(0) // A 不因 B 的确认收到协调通知
+    expect(responding(store, h2Id)).toHaveLength(1) // B 仍只有最初那条
+    await a.close()
+  })
+
+  it('伪造/不存在的 eventId 不触发协调广播（防捏造事件骚扰其余亲友）', async () => {
+    const { a, store, h1, ownerId, h2Id } = await seed()
+    await a.inject({ method: 'POST', url: '/api/emergency/ack', headers: bearer(h1.token), payload: { fromId: ownerId, eventId: 'totally-fake-id' } })
+    expect(responding(store, h2Id)).toHaveLength(0) // 无真实事件 → 不广播
+    await a.close()
+  })
+})
+
 // 报平安（all-clear）：告警发出后发起人确认没事 → 广播给所有已接受亲友，让担心的人安心（安全类标配"解除"闭环）。
 describe('紧急报平安 /api/emergency/all-clear', () => {
   async function seed() {

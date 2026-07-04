@@ -217,6 +217,11 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     const key = `${fromId}:${eventId ?? 'noid'}:${acker.id}`
     if (ackDedup.check(key, now) !== undefined) return { ok: true, deduped: true } // 已回告过，不再重复打扰遇险者
 
+    // 是否**首个**确认（据此只在第一位响应者出现时向其余亲友广播"已有人在响应"，一次事件一条协调通知）。
+    // 须在 markEmergencyAcked **之前**读；须是**真实存在且未确认**的事件——防伪造 eventId 触发虚假协调广播
+    // （acker 已过"须为发起人已接受亲友"授权，但仍不该凭空捏造事件骚扰其余亲友）。无 eventId 的老告警不广播。
+    const ackedEvent = eventId ? store.emergencyEventsForUser(fromId).find((e) => e.id === eventId) : undefined
+    const isFirstAck = !!ackedEvent && !ackedEvent.ackedAt
     // 有亲友确认 → 记 ackedAt：后台升级重呼据此跳过（已有人在响应，不必再打扰全体）。best-effort。
     if (eventId) { try { store.markEmergencyAcked(eventId, now) } catch { /* 标记失败不阻断回告 */ } }
 
@@ -237,6 +242,29 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
       ? pushSender.sendAlert(sender.apnsToken, title, body, { type: 'emergency_ack', fromId: acker.id }, undefined, totalUnreadFor(store, sender.id).total)
       : Promise.resolve()
     await Promise.allSettled([apnsJob, ...webJobs])
+
+    // 响应者协调：第一位亲友响应时，**安静**通知发起人的其余已接受亲友"已有人在处理"——避免全体同时赶去/
+    // 同时打电话把遇险者淹没，也避免"都以为别人在管"没人去。匿名（不点名响应者，零新增身份暴露：收件人本就
+    // 都收到了该次告警）。kind='emergency_responding' 不在 web 告警白名单里→绝不弹响铃大模态，只作普通通知。
+    if (isFirstAck) {
+      const coResponders = store.linksByOwner(fromId)
+        .filter((l) => (l.status ?? 'accepted') === 'accepted' && l.memberId !== acker.id)
+        .map((l) => store.findById(l.memberId))
+        .filter((m): m is NonNullable<typeof m> => !!m)
+      const rData: Record<string, string> = { kind: 'emergency_responding', fromId: sender.id, fromName: sender.displayName }
+      if (eventId) rData.eventId = eventId
+      const jobs: Promise<unknown>[] = []
+      for (const m of coResponders) {
+        const ml = pushLang(m.language)
+        const rTitle = pushStrings.emergencyRespondingTitle(sender.displayName, ml)
+        const rBody = pushStrings.emergencyRespondingBody(sender.displayName, ml)
+        try { store.createNotification({ id: randomUUID(), userId: m.id, kind: 'emergency_responding', title: rTitle, body: rBody, data: rData, createdAt: Date.now() }) } catch { /* 单条通知失败不阻断其余 */ }
+        if (webPush.configured) for (const sub of safeWebPushSubs(m.id)) jobs.push(webPush.send(sub, JSON.stringify({ title: rTitle, body: rBody, data: rData })).catch(() => { /* 单订阅失败不阻断 */ }))
+        if (m.apnsToken) jobs.push(pushSender.sendAlert(m.apnsToken, rTitle, rBody, { type: 'emergency_responding', fromId: sender.id }, undefined, safeBadge(m.id)).catch(() => { /* 单点失败不阻断 */ }))
+      }
+      await Promise.allSettled(jobs)
+    }
+
     ackDedup.record(key, { ok: true }, now)
     return { ok: true }
   })

@@ -1,4 +1,5 @@
 import SwiftUI
+import AudioToolbox // 新求助进队短提示音（系统短音，不占语音总线/来电铃）
 
 /// 协助端主界面（协助者 + 亲友**合并**）：三个标签页，同时具备两个角色的全部功能。
 /// ①「帮助大家」公开求助队列 + 随机/偏好匹配（帮陌生人）
@@ -13,6 +14,7 @@ struct AssistHomeView: View {
 
     @State private var queue: [HelpRequestSummary] = []
     @State private var queueError = false
+    @State private var alertedQueueIds: Set<String> = [] // 已声音提示过的求助 id（HelpQueueArrivals.diff 维护）
     @State private var pendingLinks: [IncomingLinkInfo] = []   // 待我确认的请求
     @State private var myLinks: [FamilyLinkInfo] = []           // 我的关系（已建立 + 我发出的待确认）
     @State private var linkBusy: Set<String> = []
@@ -451,7 +453,18 @@ struct AssistHomeView: View {
 
     private func refreshQueue() async {
         guard let token = session.token else { return }
-        do { queue = try await APIClient().helpQueue(token: token); queueError = false }
+        do {
+            let q = try await APIClient().helpQueue(token: token)
+            // 新求助进队 → 短提示音 + VoiceOver 公告（web 端 R74 同款感知层）：志愿者停在别的标签页/
+            // 注意力不在屏幕时也能察觉，否则盲人在队列里干等。离队自动剪、同 id 再回队会再次提示（core 已测）。
+            let (fresh, next) = HelpQueueArrivals.diff(current: q.map(\.callId), alerted: alertedQueueIds)
+            alertedQueueIds = next
+            if !fresh.isEmpty, answering == nil {
+                AudioServicesPlaySystemSound(1007) // 系统"收到消息"三连音：引起注意但区别于来电铃/紧急告警
+                A11y.announce(AssistStrings.newHelpInQueue(fresh.count, lang)) // 协助端惯例通道（VO 关则系统静默丢弃）
+            }
+            queue = q; queueError = false
+        }
         catch { queueError = true }
     }
 

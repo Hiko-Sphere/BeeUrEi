@@ -72,3 +72,12 @@ public struct RemoteAssistCall {
 
     public mutating func reset() { state = .idle }
 }
+
+/// 求助队列"新到"判定（纯逻辑，可单测；与 web 端 pickNewHelpRequests 同口径）：
+/// 与已提示集合比对取新到 id；下一轮集合=当前队列全量 id——离队自动剪掉（有界），同 id 再回队会再次提示
+/// （它确实又在等人）。志愿者感知层用：新求助进队要出声，否则盲人在队列里干等而志愿者毫无察觉。
+public enum HelpQueueArrivals {
+    public static func diff(current: [String], alerted: Set<String>) -> (fresh: [String], next: Set<String>) {
+        (current.filter { !alerted.contains($0) }, Set(current))
+    }
+}

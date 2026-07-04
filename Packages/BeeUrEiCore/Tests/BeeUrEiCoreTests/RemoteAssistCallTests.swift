@@ -11,6 +11,20 @@ final class RemoteAssistCallTests: XCTestCase {
         ]
     }
 
+    func testHelpQueueArrivalsDiff() {
+        // 首轮全新（打开页面时已有排队者也提示——他们正在等）；已提示不重复；集合随队列更新。
+        let r1 = HelpQueueArrivals.diff(current: ["a", "b"], alerted: [])
+        XCTAssertEqual(r1.fresh, ["a", "b"])
+        XCTAssertEqual(r1.next, ["a", "b"])
+        let r2 = HelpQueueArrivals.diff(current: ["a", "b", "c"], alerted: r1.next)
+        XCTAssertEqual(r2.fresh, ["c"]) // 只提示新来的
+        // 离队剪掉（有界）；同 id 再回队重新提示（确实又在等）。
+        let r3 = HelpQueueArrivals.diff(current: [], alerted: r2.next)
+        XCTAssertEqual(r3.fresh, [])
+        XCTAssertTrue(r3.next.isEmpty)
+        XCTAssertEqual(HelpQueueArrivals.diff(current: ["a"], alerted: r3.next).fresh, ["a"])
+    }
+
     func testCallableFiltersOnlineAndLanguage() {
         let callable = RemoteAssistCall.callable(from: contacts(), language: "zh")
         XCTAssertEqual(callable.map(\.id), ["1"])  // 在线且中文

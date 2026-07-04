@@ -142,6 +142,11 @@ enum AssistStrings {
     static func helpSent(_ l: Language) -> String {
         l == .zh ? "已发出求助，正在等待志愿者接入…" : "Request sent — waiting for a volunteer to join…"
     }
+    /// 新求助进队的 VoiceOver 公告（协助端；与提示音同发）。
+    static func newHelpInQueue(_ count: Int, _ l: Language) -> String {
+        if l == .zh { return count > 1 ? "有 \(count) 条新的求助等待接听" : "有新的求助等待接听" }
+        return count > 1 ? "\(count) new help requests waiting" : "New help request waiting"
+    }
     static func helpFailed(_ l: Language) -> String {
         l == .zh ? "求助未送达，请检查网络后重试，或改为呼叫亲友。"
                  : "Request didn't go through. Check your network and retry, or call family instead."

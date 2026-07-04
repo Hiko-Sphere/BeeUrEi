@@ -24,10 +24,14 @@ final class WeatherPhraseTests: XCTestCase {
         let zh = WeatherPhrase.summary(temperature: 20, code: 61, language: .zh)
         XCTAssertTrue(zh.contains("带伞"))
         XCTAssertTrue(zh.contains("湿滑")) // 盲杖用户路滑提示
-        // 高降水概率即使当前没下雨也提醒。
+        // 高降水概率即使当前没下雨也提醒带伞——但**不谎称地面已湿滑**（晴/多云此刻路面是干的）。
         let pre = WeatherPhrase.summary(temperature: 20, code: 2, precipProbability: 60, language: .zh)
         XCTAssertTrue(pre.contains("带伞"))
         XCTAssertTrue(pre.contains("降水概率百分之60"))
+        XCTAssertFalse(pre.contains("湿滑")) // 现在没下雨：不说"地面湿滑"（准确性修正）
+        // 正在下雨(wet code)才说地面湿滑。
+        XCTAssertTrue(WeatherPhrase.advice(code: 63, todayMax: 20, todayMin: 12, precipProbability: nil, language: .zh)!.contains("湿滑"))
+        XCTAssertTrue(WeatherPhrase.advice(code: 2, todayMax: 20, todayMin: 12, precipProbability: 70, language: .en)!.lowercased().contains("rain is likely"))
     }
 
     func testFreezingAdvice() {

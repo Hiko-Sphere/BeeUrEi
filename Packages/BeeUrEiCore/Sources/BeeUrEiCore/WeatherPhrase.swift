@@ -107,8 +107,14 @@ public enum WeatherPhrase {
                                             : " Foggy — drivers may not see you clearly; cross at signalized crossings and take extra care.")
         }
         let wet: Set<Int> = [51, 53, 55, 61, 63, 65, 71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 99]
-        if wet.contains(code) || (precipProbability ?? 0) >= 50 {
-            return withWind(language == .zh ? "出门请带伞，地面可能湿滑。" : " Bring an umbrella; the ground may be slippery.")
+        if wet.contains(code) {
+            // 正在下雨/雪：地面确实湿滑（盲杖用户尤需防滑）。
+            return withWind(language == .zh ? "出门请带伞，地面湿滑。" : " Bring an umbrella; the ground is slippery.")
+        }
+        if (precipProbability ?? 0) >= 50 {
+            // 现在没下但今天很可能下：提醒带伞，但**不谎称地面已湿滑**——此刻路面是干的，湿滑要等真下雨才成立
+            // （"现在是否在说错"：晴天却报"地面湿滑"是当下的错误信号）。
+            return withWind(language == .zh ? "今天很可能下雨，出门记得带伞。" : " Rain is likely today; bring an umbrella.")
         }
         // 高紫外线（Open-Meteo uv_index）：盲人看不到日照强弱，晴天高 UV 下极易在不知不觉中晒伤——
         // ≥6 为 WHO"高"档（约 25 分钟即可致敏），主动提示防晒；与高温常同现（晴热），合并成一句更自然。

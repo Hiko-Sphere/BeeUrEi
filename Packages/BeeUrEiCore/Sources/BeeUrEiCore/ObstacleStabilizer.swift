@@ -34,23 +34,40 @@ public final class ObstacleStabilizer {
             return held
         }
 
-        missCount = 0
-
+        // 同一目标：刷新距离/方向，"未再确认"计数清零。
         if let h = held, Self.isSame(h, obs) {
-            held = obs              // 同一目标：刷新距离/方向
+            held = obs
+            missCount = 0
             candidate = nil
             candidateCount = 0
             return held
         }
 
+        // 尚无目标：立即采用。
         if held == nil {
-            held = obs              // 首次获取，立即生效
+            held = obs
+            missCount = 0
             candidate = nil
             candidateCount = 0
             return held
         }
 
-        // 有旧目标但来了不同目标：需连续确认才切换。
+        // 有旧目标、这一帧却是**不同**目标：旧目标本帧未获再确认 → 计入迟滞。
+        // 关键：missCount 计"held 距上次被确认过了几帧"，**不能**因本帧检测到别的障碍就清零——否则当 held
+        // 已消失、而另有两个障碍逐帧交替出现（B,C,B,C…）时，交替候选永远凑不满 confirmFrames、missCount 又被
+        // 每帧检测清零，held 会**永久卡在已消失的旧目标上**（陈旧误报 + 漏报眼前真障碍，杂乱环境下的安全隐患）。
+        missCount += 1
+        if missCount > releaseFrames {
+            // 旧目标已连续 >releaseFrames 帧未再被看到 → 判定已消失。眼前就有真实障碍 obs，直接采用
+            // （不返回 nil：避免 1 帧假"畅通"空档，让上层立即拿到当前真障碍）。
+            held = obs
+            missCount = 0
+            candidate = nil
+            candidateCount = 0
+            return held
+        }
+
+        // 旧目标尚未判定消失：不同目标需连续确认 confirmFrames 帧才切换（防抖动误切）。
         if let c = candidate, Self.isSame(c, obs) {
             candidate = obs
             candidateCount += 1
@@ -60,6 +77,7 @@ public final class ObstacleStabilizer {
         }
         if candidateCount >= confirmFrames {
             held = obs
+            missCount = 0
             candidate = nil
             candidateCount = 0
         }

@@ -131,6 +131,20 @@ enum HomeStrings {
     }
     static func batteryUnknown(_ l: Language) -> String { l == .zh ? "暂时无法读取电量。" : "Battery level unavailable right now." }
 
+    /// 主动低电量告警：点明**手机没电会同时失去导盲、导航和求助**（盲人看不到电量图标，不知严重性）。
+    /// critical=10% 档，措辞更急并提示插上充电或备用电源。
+    static func lowBatterySpeak(percent: Int, critical: Bool, _ l: Language) -> String {
+        let p = min(max(percent, 0), 100)
+        if l == .zh {
+            return critical
+                ? "电量只剩百分之\(p)，即将关机。请立即充电——手机没电会同时失去导盲、导航和紧急求助。"
+                : "电量剩百分之\(p)，建议尽快充电，以免失去导盲、导航和求助功能。"
+        }
+        return critical
+            ? "Battery critically low at \(p) percent — about to shut down. Charge now: a dead phone loses obstacle guidance, navigation, and emergency SOS."
+            : "Battery at \(p) percent — charge soon so you don't lose obstacle guidance, navigation, and SOS."
+    }
+
     static func nothingToRepeat(_ l: Language) -> String {
         l == .zh ? "现在没有需要重复的播报。" : "There's nothing to repeat right now."
     }

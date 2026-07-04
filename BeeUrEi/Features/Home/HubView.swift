@@ -25,6 +25,7 @@ struct HubView: View {
     @State private var incoming = IncomingCallCenter.shared
     @State private var route = AppRoute.shared
     @State private var unreadTotal = 0
+    @State private var batteryWarner = LowBatteryWarner() // 主动低电量告警去抖（跌破 20%/10% 各出声一次）
     @State private var unreadPollTask: Task<Void, Never>?
     @State private var didSpeakGreeting = false
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -49,6 +50,10 @@ struct HubView: View {
         .onChange(of: voice.phase) { _, phase in
             if phase == .denied { SpeechHub.shared.speak(HomeStrings.voiceMicDenied(lang), channel: .query, voiceCode: lang.voiceCode) }
         }
+        // 主动低电量告警：盲人看不到电量图标，手机没电=同时失去导盲/导航/求助。电量或充电状态一变即检查，
+        // 跌破 20%/10% 各出声一次（LowBatteryWarner 去抖）。拔充电器(state 变)也复检，避免拔线后漏警。
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.batteryLevelDidChangeNotification)) { _ in checkBattery() }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.batteryStateDidChangeNotification)) { _ in checkBattery() }
         // 摔倒/撞击警报是安全攸关、必须盖在最上层：触发即收起一切模态（含导盲全屏），让全屏警报卡可见可操作；
         // 警报卡呈现期间保持常亮，让用户看清并能点「我没事/立即通知」（倒计时结束也会自动发送）。
         .onChange(of: emergency.phase) { _, phase in
@@ -381,6 +386,8 @@ struct HubView: View {
         }
         // 摔倒/撞击监测：Hub 存续期间持续运行（含进入导盲/识别/通话后台时段，手机在身上）。
         reconcileFallDetection()
+        UIDevice.current.isBatteryMonitoringEnabled = true // 主动低电量告警需要，且不影响其它电量读取
+        checkBattery() // 进 Hub 即检查一次：开 App 时已低电就当即提醒，不等下一次 1% 变化
         // 无网兜底拨号缓存的新鲜度：familyLinks 的既有加载点只有亲友页——很久不开亲友页的用户
         // 缓存会陈旧（换过紧急联系人/解绑）。这个缓存只在**最糟糕的时刻**（告警重试全败=无网）
         // 被读，读时无从修正，故进 Hub 就后台静默刷一次（失败无所谓，下次进 Hub 再试；
@@ -399,6 +406,19 @@ struct HubView: View {
                 }
                 try? await Task.sleep(for: .seconds(15))
             }
+        }
+    }
+
+    /// 检查电量，跌破 20%/10% 各主动出声一次（去抖在 LowBatteryWarner）。未知电量(-1)不播。
+    /// 用 .query 通道：让位于避障/导航等安全播报，繁忙时排队、不打断更紧要的提示。
+    private func checkBattery() {
+        let lvl = UIDevice.current.batteryLevel
+        guard lvl >= 0 else { return } // 未知（未开监控/模拟器）：不猜不播
+        let pct = Int((lvl * 100).rounded())
+        let st = UIDevice.current.batteryState
+        if let alert = batteryWarner.update(percent: pct, charging: st == .charging || st == .full) {
+            SpeechHub.shared.speak(HomeStrings.lowBatterySpeak(percent: pct, critical: alert == .critical, lang),
+                                   channel: .query, voiceCode: lang.voiceCode)
         }
     }
 

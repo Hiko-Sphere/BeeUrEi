@@ -26,6 +26,20 @@ final class HomeStringsTests: XCTestCase {
         }
     }
 
+    func testLowBatterySpeakConveysStakes() {
+        // 必须点明"手机没电=同时失去导盲/导航/求助"（盲人看不到电量图标，不知严重性）。
+        let low = HomeStrings.lowBatterySpeak(percent: 20, critical: false, .zh)
+        XCTAssertTrue(low.contains("百分之20"))
+        XCTAssertTrue(low.contains("导盲") && low.contains("求助"))
+        let crit = HomeStrings.lowBatterySpeak(percent: 9, critical: true, .zh)
+        XCTAssertTrue(crit.contains("立即") || crit.contains("即将关机")) // 紧急档措辞更急
+        let en = HomeStrings.lowBatterySpeak(percent: 20, critical: false, .en)
+        XCTAssertTrue(en.lowercased().contains("obstacle") && en.lowercased().contains("sos"))
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+        // 越界百分比夹取，不崩不越 0–100。
+        XCTAssertTrue(HomeStrings.lowBatterySpeak(percent: 150, critical: false, .zh).contains("百分之100"))
+    }
+
     func testUnreadReadout() {
         typealias C = HomeStrings.UnreadConversation
         // 无未读 → 明确告知，不静默。

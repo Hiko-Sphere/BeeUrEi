@@ -16,6 +16,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case navigate(String?)          // 导航（可带目的地）
     case goHome                     // 原路返回
     case readText                   // 朗读文字
+    case readDates                  // 读包装日期（保质期/生产日期——盲人看不到食品/药品日期，高频刚需）
     case readFullPage               // 读整页文档（多页拼读）
     case banknote                   // 识别纸币
     case scanCode                   // 扫码
@@ -70,6 +71,9 @@ public enum VoiceCommandParser {
         // 置于具体命令之后、通用 look 之前：与现有触发词无子串冲突（"打电话"含"电话"非"电量"；readBus 的"几路"非"几点"）。
         if has(["几点", "报时", "报个时", "现在时间", "什么时间", "时间是", "what time", "the time", "tell me the time"]) { return .time }
         if has(["电量", "电池", "多少电", "还有多少电", "剩多少电", "还剩多少电", "battery", "battery level", "power left", "how much power"]) { return .battery }
+        // 包装日期（保质期/生产日期）须在 .date（今天几号）之前：这些短语含"日期"，会被 .date 的"日期"抢；
+        // 但 .date 的裸"日期"/"几号"仍归 .date（这里的键都不含裸"日期"）。读的是包装印刷日期，非今天日期。
+        if has(["保质期", "有效期", "生产日期", "保存期", "赏味期", "读日期", "看日期", "包装日期", "过期", "expir", "best before", "use by", "shelf life"]) { return .readDates }
         if has(["几号", "今天几号", "日期", "星期几", "礼拜几", "周几", "今天星期", "today's date", "what's the date", "what day", "what date"]) { return .date }
         if has(["回家", "原路返回", "返回出发", "带我回去", "go back", "take me back", "backtrack"]) { return .goHome }
         // 读整页须在「读文字」之前：否则「朗读整页」会被 readText 的「朗读」抢走。

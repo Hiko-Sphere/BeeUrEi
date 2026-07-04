@@ -99,6 +99,7 @@ final class FramingAssistViewModel {
         case .color: readColor() // 语音指令"什么颜色"直达（配衣服/比色）
         case .colorMatch: matchColors() // 语音"这两件搭不搭"：扫两次比配色
         case .text: readText() // 语音指令"读文字"直达
+        case .dates: readDates() // 语音"保质期/日期"：读包装上的日期
         }
     }
     @ObservationIgnored private var paused = false // 关闭/被来电盖上后：停止播报并丢弃在途帧/异步识别结果
@@ -647,6 +648,38 @@ final class FramingAssistViewModel {
                 self.copyableResult = joined.isEmpty ? nil : joined
                 if !joined.isEmpty { self.historyStore.add(kind: "text", content: joined) }
                 self.speak(out)
+            }
+        }
+        request.recognitionLanguages = ocrLanguages
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? VNImageRequestHandler(cvPixelBuffer: buffer, options: [:]).perform([request])
+        }
+    }
+
+    /// 读包装日期（保质期/生产日期等）：OCR → 核心 LabelDateReader 挑出带日期标签的行，原样播报 + "请核对"。
+    /// 盲人看不到食品/药品上的日期（高频刚需）。安全：只如实读印出的日期，绝不判是否过期（LabelDateReader）。
+    func readDates() {
+        stopContinuous()
+        guard let live = latestBuffer else { speak(FramingStrings.aimText(lang)); return }
+        if tooDarkToProceed() { return }
+        guard let buffer = copyPixelBuffer(live) else { speak(FramingStrings.recognizeFailed(lang)); return }
+        resultText = FramingStrings.readingDates(lang)
+        let request = VNRecognizeTextRequest { [weak self] req, _ in
+            let texts = (req.results as? [VNRecognizedTextObservation])?
+                .compactMap { $0.topCandidates(1).first?.string } ?? []
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if let out = LabelDateReader.find(texts: texts, language: self.lang) {
+                    self.resultText = out
+                    self.copyableResult = out
+                    self.speak(out)
+                } else {
+                    self.resultText = FramingStrings.noDatesFound(self.lang)
+                    self.copyableResult = nil
+                    self.speak(self.resultText)
+                }
             }
         }
         request.recognitionLanguages = ocrLanguages

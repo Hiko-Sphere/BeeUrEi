@@ -209,6 +209,10 @@ enum FramingStrings {
     }
     static func recognizeFailed(_ l: Language) -> String { l == .zh ? "识别失败，请重试" : "Recognition failed, please try again" }
     static func readingText(_ l: Language) -> String { l == .zh ? "正在识别文字…" : "Reading text…" }
+    static func readingDates(_ l: Language) -> String { l == .zh ? "正在找日期…" : "Looking for dates…" }
+    static func noDatesFound(_ l: Language) -> String {
+        l == .zh ? "没找到带标签的日期，可以说“读文字”听完整文字" : "No labeled date found — say “read text” to hear all the text"
+    }
 
     // MARK: 扫码
 

@@ -21,6 +21,7 @@ final class VoiceCommandParserTests: XCTestCase {
             ("原路返回", .goHome), ("带我回去", .goHome), ("take me back", .goHome),
             ("读整页", .readFullPage), ("读一下整页文档", .readFullPage), ("read the whole page", .readFullPage),
             ("读一下这段文字", .readText), ("念一下", .readText), ("read this text", .readText),
+            ("看看保质期", .readDates), ("这个生产日期是多少", .readDates), ("best before when", .readDates), ("has this expired", .readDates),
             ("这是多少钱", .banknote), ("识别纸币", .banknote), ("what banknote", .banknote),
             ("扫一下二维码", .scanCode), ("扫码", .scanCode), ("scan this barcode", .scanCode),
             ("打开消息", .messages), ("查看聊天", .messages), ("open chat", .messages),
@@ -45,6 +46,16 @@ final class VoiceCommandParserTests: XCTestCase {
         for (phrase, expected) in cases {
             XCTAssertEqual(VoiceCommandParser.parse(phrase), expected, "『\(phrase)』应解析为 \(expected)")
         }
+    }
+
+    func testReadDatesVsTodayDateVsReadText() {
+        // 包装日期意图 → readDates；今天几号 → date；读文字 → readText（互不抢）。
+        XCTAssertEqual(VoiceCommandParser.parse("看看保质期"), .readDates)
+        XCTAssertEqual(VoiceCommandParser.parse("生产日期是哪天"), .readDates) // 含"日期"但先被 readDates 捕获
+        XCTAssertEqual(VoiceCommandParser.parse("has this expired"), .readDates)
+        XCTAssertEqual(VoiceCommandParser.parse("今天几号"), .date)           // 裸"几号/日期"仍归今天日期
+        XCTAssertEqual(VoiceCommandParser.parse("今天日期"), .date)
+        XCTAssertEqual(VoiceCommandParser.parse("读一下文字"), .readText)
     }
 
     func testMatchColorsBeatsReadColorOnMatchIntent() {

@@ -1,5 +1,21 @@
 import { describe, it, expect } from 'vitest'
-import { parseLocation } from './location'
+import { parseLocation, appleMapsUrl } from './location'
+
+describe('appleMapsUrl', () => {
+  it('有 label：编码作查询名；坐标为 WGS-84 原样', () => {
+    expect(appleMapsUrl(31.23, 121.47, '阿明')).toBe(`https://maps.apple.com/?ll=31.23,121.47&q=${encodeURIComponent('阿明')}`)
+  })
+  it('无 label / 空白 label：用"经,纬"当查询名（不编码，与紧急告警/通知一致）', () => {
+    expect(appleMapsUrl(31.23, 121.47)).toBe('https://maps.apple.com/?ll=31.23,121.47&q=31.23,121.47')
+    expect(appleMapsUrl(31.23, 121.47, '   ')).toBe('https://maps.apple.com/?ll=31.23,121.47&q=31.23,121.47')
+  })
+  it('label 含特殊字符：编码，绝不破坏 URL/HTML 属性', () => {
+    const u = appleMapsUrl(1, 2, 'a&b "c" <x>')
+    expect(u).toContain(`&q=${encodeURIComponent('a&b "c" <x>')}`)
+    expect(u).not.toContain('"') // 编码后无裸引号，可安全放入 href="..."
+    expect(u).not.toContain('<')
+  })
+})
 
 describe('parseLocation', () => {
   it('JSON 形态：合法经纬度 + 可选 name', () => {

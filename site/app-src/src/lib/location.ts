@@ -2,6 +2,13 @@
 //  ① JSON {lat,lng,name?}（App/web 主动发的位置）
 //  ② 内嵌 https://maps.apple.com/?ll=lat,lng&q=name 文本链接（iOS 兼容未升级服务端时发的形态）
 // 均做经纬度范围与有限性校验；任何畸形/越界/非位置输入返回 null（绝不抛错——文本来自用户可控消息）。
+/// 构造 Apple Maps 链接（项目约定：地图链接一律 Apple Maps——境内可打开且自动 WGS-84→GCJ 纠偏，OSM 境内常不可达）。
+/// 坐标为 WGS-84（全栈约定）。有 label 则编码作查询名（如联系人名）；无 label 用"经,纬"当查询名。
+export function appleMapsUrl(lat: number | string, lng: number | string, label?: string): string {
+  const q = label && String(label).trim() ? encodeURIComponent(label) : `${lat},${lng}`
+  return `https://maps.apple.com/?ll=${lat},${lng}&q=${q}`
+}
+
 export function parseLocation(text: string): { lat: number; lng: number; name?: string } | null {
   // 防御：text 类型虽为 string，但消息字段可能因后端数据异常为 null/undefined——
   // 下方 text.indexOf 在 try/catch 之外，无此守卫会抛 TypeError、连累整条聊天列表/会话渲染崩。

@@ -5,6 +5,7 @@ import { api, APIError, type ContactLocation } from '../lib/api'
 import { pollWhileVisible } from '../lib/poll'
 import { batteryBadge } from '../lib/battery'
 import { validAccuracyMeters, accuracyText } from '../lib/geoAccuracy'
+import { appleMapsUrl } from '../lib/location'
 import { useI18n } from '../lib/i18n'
 import { useSession } from '../lib/session'
 import { roleLabel } from '../components/Layout'
@@ -105,7 +106,10 @@ export function LocationsPage() {
       // 精度文字（协助者读屏/看不清圈时也知道有多准）："精确到约 20 米"。
       const accLabel = accuracyText(c.accuracy, t)
       const accHtml = accLabel ? ` · ${escapeHtml(accLabel)}` : ''
-      mk.bindPopup(`<b>${escapeHtml(c.displayName)}</b><br>${roleLabel(c.role, t)} · ${timeAgo(c.updatedAt, lang)}${battHtml}${accHtml}`)
+      // 「在地图中打开」：协助者要去找/接盲人时，一键在自己的地图 App 里导航到其位置（Apple Maps，境内可开+WGS-84 纠偏）。
+      const mapsUrl = appleMapsUrl(c.lat, c.lng, c.displayName)
+      const openHtml = `<br><a href="${mapsUrl}" target="_blank" rel="noreferrer" class="underline">${escapeHtml(t('在地图中打开', 'Open in Maps'))}</a>`
+      mk.bindPopup(`<b>${escapeHtml(c.displayName)}</b><br>${roleLabel(c.role, t)} · ${timeAgo(c.updatedAt, lang)}${battHtml}${accHtml}${openHtml}`)
     }
     // 移除已不再共享的联系人标记 + 其精度圈。
     for (const [id, mk] of markers.current) if (!seen.has(id)) { m.removeLayer(mk); markers.current.delete(id) }

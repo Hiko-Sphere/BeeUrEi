@@ -45,15 +45,17 @@ final class HomeStringsTests: XCTestCase {
         // 无未读 → 明确告知，不静默。
         XCTAssertEqual(HomeStrings.unreadReadout([], .zh), "没有未读消息。")
         XCTAssertEqual(HomeStrings.unreadReadout([C(name: "妈妈", kind: "text", text: "到了吗", unread: 0)], .zh), "没有未读消息。")
-        // 文本原样读；非文本报类型；多条附计数；已读会话不计入。
+        // 文本原样读；非文本报类型；多条附计数；已读会话不计入；群聊点名"群「X」"。
         let r = HomeStrings.unreadReadout([
             C(name: "妈妈", kind: "text", text: "到家了吗", unread: 1),
             C(name: "小明", kind: "audio", text: "data:audio/m4a;base64,AAAA", unread: 3),
+            C(name: "家人群", kind: "text", text: "晚上吃饭", unread: 2, isGroup: true),
             C(name: "已读的人", kind: "text", text: "旧消息", unread: 0),
         ], .zh)
-        XCTAssertTrue(r.contains("你有 2 位联系人的未读消息"))
+        XCTAssertTrue(r.contains("你有 3 个会话有未读消息")) // 单聊+群聊都计入
         XCTAssertTrue(r.contains("妈妈：到家了吗"))
         XCTAssertTrue(r.contains("小明：语音消息（等 3 条）"))
+        XCTAssertTrue(r.contains("群「家人群」：晚上吃饭（等 2 条）")) // 群聊点名"群"
         XCTAssertFalse(r.contains("已读的人")) // unread=0 不读
         // 超过 cap 提示"等"；英文不串中文。
         let many = (1...7).map { C(name: "P\($0)", kind: "text", text: "hi", unread: 1) }

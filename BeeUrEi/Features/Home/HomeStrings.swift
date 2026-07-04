@@ -271,8 +271,8 @@ enum HomeStrings {
 
     static func voiceReadFailed(_ l: Language) -> String { l == .zh ? "读取消息失败，请稍后再试。" : "Couldn't read messages. Try again later." }
 
-    /// 语音"读消息"的一条会话输入（各会话与对端最新一条 + 未读数）。
-    struct UnreadConversation { let name: String; let kind: String; let text: String; let unread: Int }
+    /// 语音"读消息"的一条会话输入（单聊或群聊：对端/群名 + 最新一条 + 未读数）。isGroup 标记群聊，播报时点明"群"。
+    struct UnreadConversation { let name: String; let kind: String; let text: String; let unread: Int; var isGroup: Bool = false }
 
     /// 非文本消息的可读占位（与服务端推送预览同口径）；文本原样、截断防超长；Apple 地图链接文本视作位置。
     static func messageReadoutPreview(kind: String, text: String, _ l: Language) -> String {
@@ -288,18 +288,19 @@ enum HomeStrings {
         }
     }
 
-    /// 语音"读消息"汇报：只读**有未读**会话的最新一条（隐私+简短，不逐条翻历史），至多 cap 位，超出提示"等"。
-    /// 无未读→"没有未读消息"。让盲人不进聊天界面、一句话即可听到谁发了什么（对标 Siri「读消息」）。
+    /// 语音"读消息"汇报：只读**有未读**会话（单聊+群聊）的最新一条（隐私+简短，不逐条翻历史），至多 cap 个，超出提示"等"。
+    /// 无未读→"没有未读消息"。群聊点名"群「X」"以与联系人区分。让盲人不进聊天界面、一句话即可听到谁发了什么（对标 Siri）。
     static func unreadReadout(_ items: [UnreadConversation], cap: Int = 5, _ l: Language) -> String {
         let withUnread = items.filter { $0.unread > 0 }
         guard !withUnread.isEmpty else { return l == .zh ? "没有未读消息。" : "No unread messages." }
         let shown = withUnread.prefix(max(1, cap))
         let parts = shown.map { c -> String in
             let preview = messageReadoutPreview(kind: c.kind, text: c.text, l)
+            let name = c.isGroup ? (l == .zh ? "群「\(c.name)」" : "group “\(c.name)”") : c.name
             let more = c.unread > 1 ? (l == .zh ? "（等 \(c.unread) 条）" : " (\(c.unread) unread)") : ""
-            return l == .zh ? "\(c.name)：\(preview)\(more)" : "\(c.name): \(preview)\(more)"
+            return l == .zh ? "\(name)：\(preview)\(more)" : "\(name): \(preview)\(more)"
         }
-        let head = l == .zh ? "你有 \(withUnread.count) 位联系人的未读消息。" : "\(withUnread.count) contact\(withUnread.count > 1 ? "s" : "") with unread messages. "
+        let head = l == .zh ? "你有 \(withUnread.count) 个会话有未读消息。" : "\(withUnread.count) conversation\(withUnread.count > 1 ? "s" : "") with unread messages. "
         let body = parts.joined(separator: l == .zh ? "；" : "; ")
         let tail = withUnread.count > shown.count ? (l == .zh ? "；等" : "; and more") : ""
         return head + body + tail

@@ -15,8 +15,10 @@ describe('JsonFileStore 持久化 + 原子写', () => {
   it('mutation 后落盘，新实例从同一文件读回（round-trip）', () => {
     const s1 = new JsonFileStore(path)
     s1.createUser(user('u1', 'alice'))
+    s1.setMedicalInfo({ userId: 'u1', sealed: 'sealed-ct-blob', updatedAt: 42 }) // 紧急医疗信息（加密信封）也须落盘
     const s2 = new JsonFileStore(path)
     expect(s2.findById('u1')?.username).toBe('alice')
+    expect(s2.getMedicalInfo('u1')).toMatchObject({ userId: 'u1', sealed: 'sealed-ct-blob', updatedAt: 42 }) // 载盘后仍在
   })
 
   it('原子写：主文件始终是完整合法 JSON，rename 后不残留 .tmp', () => {

@@ -40,6 +40,7 @@ import { registerLocationRoutes } from './routes/locations'
 import { registerSavedRouteRoutes } from './routes/savedRoutes'
 import { registerSavedPlaceRoutes } from './routes/savedPlaces'
 import { registerSafetyRoutes } from './routes/safety'
+import { registerMedicalRoutes } from './routes/medical'
 import { LiveLocationRegistry } from './location/liveLocations'
 import { registerRecoveryRoutes } from './routes/recovery'
 import { registerPushRoutes } from './routes/push'
@@ -254,6 +255,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerSavedRouteRoutes(instance, store, pushSender) // 路线库（亲友远程路线编排 + 盲人自存路线）
     registerSavedPlaceRoutes(instance, store) // 保存的地点（家/公司/自定义，快捷导航）
     registerSafetyRoutes(instance, store, pushSender, webPushSender) // 安全报到计时器（到期未确认平安 → 后台自动告警亲友；/complete 报平安复用 all-clear）
+    registerMedicalRoutes(instance, store) // 紧急医疗信息（本人加密填写；紧急亲友遇险时按需拉取）
     registerAppConfigRoutes(instance, store) // 客户端读取功能开关（控制每一个按键）
     registerAssistRoutes(instance, store, hub, presence, pendingCalls, openHelp, pushSender, metrics, webPushSender)
   })

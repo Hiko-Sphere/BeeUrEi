@@ -1,4 +1,5 @@
 import type { Store } from '../db/store'
+import { openField, type Sealed } from '../kyc/crypto'
 
 /// 用户数据导出的公共构建器（GDPR 可携权）：admin 代办导出与用户自助导出共用同一底座，
 /// 防两处口径漂移（尤其"绝不导出密码哈希/令牌"这条安全底线）。
@@ -73,6 +74,14 @@ export function buildSelfExportExtras(store: Store, id: string) {
     // 安全报到历史（备注/时长/状态）：本人独有数据，含出行备注可能敏感，仅自助版。
     safetyTimers: store.safetyTimersForUser(id).map((t) => ({ note: t.note ?? null, startedAt: t.startedAt, dueAt: t.dueAt, status: t.status,
       firedAt: t.firedAt ?? null, completedAt: t.completedAt ?? null, canceledAt: t.canceledAt ?? null })),
+    // 紧急医疗信息（特殊类别健康数据）：本人自填的明文，GDPR 访问/可携权覆盖。**仅自助版**（admin 代办导出绝不含
+    // 用户健康数据）。落库是密文，导出前解密还给本人；解密失败则省略（不吐错误内容）。
+    medicalInfo: (() => {
+      const rec = store.getMedicalInfo(id)
+      if (!rec) return null
+      try { return { text: openField(JSON.parse(rec.sealed) as Sealed, { submissionId: id, kind: 'medical_info' }), updatedAt: rec.updatedAt } }
+      catch { return null }
+    })(),
     // 本人的紧急事故记录（摔倒/车祸/SOS）：坐标是本人的、通知计数是本人事件的——完整可携。
     emergencyEvents: store.emergencyEventsForUser(id).map((e) => ({ kind: e.kind, lat: e.lat ?? null, lon: e.lon ?? null,
       locSource: e.locSource ?? null, notified: e.notified, contacts: e.contacts, at: e.at, resolvedAt: e.resolvedAt ?? null })),

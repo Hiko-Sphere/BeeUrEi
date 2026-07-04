@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { Store, User, Role, EmergencyEvent, WebPushSubscription, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, SessionInfo, ChatMessage, ChatGroup, MediaMeta, Passkey, AdminAuditEntry, Warning, AppConfig, AppConfigPatch, Notification, Verification, VerificationStatus, KycBlobRef } from './store'
-import { normalizeAppConfig, mergeAppConfig, type SavedRoute, type SavedPlace, type SafetyTimer, type QuietHours } from './store'
+import { normalizeAppConfig, mergeAppConfig, type SavedRoute, type SavedPlace, type SafetyTimer, type QuietHours, type MedicalInfo } from './store'
 
 // 用运行时 require + 非静态模块名加载 node:sqlite，避免打包器(vitest/vite)静态解析失败；
 // 由 Node 在运行时解析（需 --experimental-sqlite，已在 npm 脚本里通过 NODE_OPTIONS 开启）。
@@ -168,6 +168,14 @@ export class SqliteStore implements Store {
       )
     `)
     try { this.db.exec('ALTER TABLE safety_timers ADD COLUMN remindedAt INTEGER') } catch { /* 列已存在 */ } // 到期前提醒本人时刻（防遗忘误报）
+    // 紧急医疗信息（加密信封，1:1 于用户）：sealed 为 JSON.stringify(Sealed) 的密文，DB 只存密文不存明文。
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS medical_info (
+        userId TEXT PRIMARY KEY,
+        sealed TEXT NOT NULL,
+        updatedAt INTEGER NOT NULL
+      )
+    `)
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_safety_owner_status ON safety_timers (ownerId, status)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_safety_due ON safety_timers (status, dueAt)') // 后台每分钟扫到期 active
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_recordings_owner ON recordings (ownerId, recordedAt)')
@@ -604,6 +612,17 @@ export class SqliteStore implements Store {
   deleteSafetyTimersOlderThan(cutoffMs: number): number {
     // 只清终态：active 无论多老都保留（免误删待触发的报到）。
     return Number(this.db.prepare("DELETE FROM safety_timers WHERE status != 'active' AND startedAt < ?").run(cutoffMs).changes)
+  }
+
+  getMedicalInfo(userId: string): MedicalInfo | undefined {
+    const r = this.db.prepare('SELECT userId, sealed, updatedAt FROM medical_info WHERE userId = ?').get(userId) as any
+    return r ? { userId: r.userId, sealed: r.sealed, updatedAt: Number(r.updatedAt) } : undefined
+  }
+  setMedicalInfo(m: MedicalInfo): void {
+    this.db.prepare('INSERT OR REPLACE INTO medical_info (userId, sealed, updatedAt) VALUES (?, ?, ?)').run(m.userId, m.sealed, m.updatedAt)
+  }
+  deleteMedicalInfoForUser(userId: string): void {
+    this.db.prepare('DELETE FROM medical_info WHERE userId = ?').run(userId)
   }
 
   createRecording(rec: Recording): void {

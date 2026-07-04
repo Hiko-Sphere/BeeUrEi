@@ -59,6 +59,8 @@ export function cascadeDeleteUser(store: Store, id: string): void {
   store.deleteSavedPlacesForOwner(id)
   // 安全报到计时器：归属者独有数据，删号即清（含任何进行中的——人已删，无从告警亦无从确认）。
   store.deleteSafetyTimersForOwner(id)
+  // 紧急医疗信息（加密健康数据 PII）：归属者独有，删号即清（GDPR 抹除；密文虽不可解仍属其 PII，不留孤儿）。
+  store.deleteMedicalInfoForUser(id)
   // 实名认证（KYC）：删号即清除该用户的证件密文文件（最敏感 PII）。
   // 法务保留(legalHold)的记录与其证据刻意保留（取证），其余连记录带磁盘密文一并清除。
   for (const v of store.allVerifications()) {

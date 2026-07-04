@@ -387,6 +387,16 @@ export interface SafetyTimer {
   remindedAt?: number  // 到期前提醒本人的时刻（防遗忘误报）；只提醒一次；extend 时清零以对新到期重新提醒
 }
 
+/// 紧急医疗信息（Apple Medical ID / Life360 式）：本人填写的关键健康信息（血型/过敏/用药/病史/紧急备注），
+/// 供**指定的紧急亲友**在其遇险时了解、辅助施救。GDPR Art.9 特殊类别健康数据——**加密落库**（复用 KYC 信封
+/// 加密 AES-256-GCM，见 kyc/crypto）：存储层只当不透明密文（sealed=JSON.stringify(Sealed)），不碰明文。
+/// 1:1 于用户；本人可改可清；删号级联清除。
+export interface MedicalInfo {
+  userId: string
+  sealed: string     // JSON.stringify(Sealed)——加密的医疗信息信封；存储层不解密、不感知内容
+  updatedAt: number
+}
+
 export interface Recording {
   id: string
   callId: string
@@ -605,6 +615,10 @@ export interface Store {
   deleteSafetyTimersForOwner(ownerId: string): void      // 删号级联
   deleteSafetyTimersOlderThan(cutoffMs: number): number  // 留存清扫：仅清终态（非 active），按 startedAt
 
+  getMedicalInfo(userId: string): MedicalInfo | undefined // 紧急医疗信息（加密信封，1:1）
+  setMedicalInfo(m: MedicalInfo): void                    // 覆盖写（本人填写/更新）
+  deleteMedicalInfoForUser(userId: string): void          // 本人清除 + 删号级联
+
   createRecording(rec: Recording): void
   allRecordings(): Recording[]
   recordingsForUser(ownerId: string): Recording[] // 某用户自己的录制（不含其软删除的），时间倒序——用户端"我的录音"
@@ -711,6 +725,7 @@ export class MemoryStore implements Store {
   protected savedRoutes = new Map<string, SavedRoute>()
   protected savedPlaces = new Map<string, SavedPlace>() // 键 = `${ownerId}\x00${label}`（复合唯一）
   protected safetyTimers = new Map<string, SafetyTimer>() // 键 = id（安全报到计时器）
+  protected medicalInfo = new Map<string, MedicalInfo>()  // 键 = userId（紧急医疗信息，加密信封，1:1）
   protected verifications = new Map<string, Verification>()
   protected refreshTokens = new Map<string, RefreshToken>()
   protected recoveryCodes = new Map<string, RecoveryCode>() // 2FA 一次性恢复码（仅哈希），键为 id
@@ -1119,6 +1134,10 @@ export class MemoryStore implements Store {
     return n
   }
 
+  getMedicalInfo(userId: string): MedicalInfo | undefined { return this.medicalInfo.get(userId) }
+  setMedicalInfo(m: MedicalInfo): void { this.medicalInfo.set(m.userId, m); this.afterMutate() }
+  deleteMedicalInfoForUser(userId: string): void { if (this.medicalInfo.delete(userId)) this.afterMutate() }
+
   createRecording(rec: Recording): void {
     this.recordings.set(rec.id, rec)
     this.afterMutate()
@@ -1523,6 +1542,7 @@ export class JsonFileStore extends MemoryStore {
           savedRoutes?: SavedRoute[]
           savedPlaces?: SavedPlace[]
           safetyTimers?: SafetyTimer[]
+          medicalInfo?: MedicalInfo[]
           emergencyEvents?: EmergencyEvent[]
           webPushSubs?: WebPushSubscription[]
           visionUsage?: Record<string, { day: string; count: number }>
@@ -1549,6 +1569,7 @@ export class JsonFileStore extends MemoryStore {
         for (const sr of data.savedRoutes ?? []) this.savedRoutes.set(sr.id, sr)
         for (const sp of data.savedPlaces ?? []) this.savedPlaces.set(this.placeKey(sp.ownerId, sp.label), sp)
         for (const st of data.safetyTimers ?? []) this.safetyTimers.set(st.id, st)
+        for (const mi of data.medicalInfo ?? []) this.medicalInfo.set(mi.userId, mi)
         for (const ee of data.emergencyEvents ?? []) this.emergencyEvents.set(ee.id, ee)
         for (const wp of data.webPushSubs ?? []) this.webPushSubs.set(wp.endpoint, wp)
         for (const [k, v] of Object.entries(data.visionUsage ?? {})) this.visionUsage.set(k, v)
@@ -1583,6 +1604,7 @@ export class JsonFileStore extends MemoryStore {
       savedRoutes: [...this.savedRoutes.values()],
       savedPlaces: [...this.savedPlaces.values()],
       safetyTimers: [...this.safetyTimers.values()],
+      medicalInfo: [...this.medicalInfo.values()],
       emergencyEvents: [...this.emergencyEvents.values()],
       webPushSubs: [...this.webPushSubs.values()],
       visionUsage: Object.fromEntries(this.visionUsage),

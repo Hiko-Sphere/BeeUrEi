@@ -707,7 +707,7 @@ export class MemoryStore implements Store {
   protected reports = new Map<string, Report>()
   protected recordings = new Map<string, Recording>()
   protected savedRoutes = new Map<string, SavedRoute>()
-  protected savedPlaces = new Map<string, SavedPlace>() // 键 = `${ownerId} ${label}`（复合唯一）
+  protected savedPlaces = new Map<string, SavedPlace>() // 键 = `${ownerId}\x00${label}`（复合唯一）
   protected safetyTimers = new Map<string, SafetyTimer>() // 键 = id（安全报到计时器）
   protected verifications = new Map<string, Verification>()
   protected refreshTokens = new Map<string, RefreshToken>()
@@ -1048,7 +1048,10 @@ export class MemoryStore implements Store {
     for (const [k, v] of this.savedRoutes) if (v.ownerId === ownerId) this.savedRoutes.delete(k)
     this.afterMutate()
   }
-  private placeKey(ownerId: string, label: string): string { return `${ownerId} ${label}` }
+  // 复合唯一键 (ownerId,label)：用 \x00 分隔（UUID/标签均不含 NUL，绝不碰撞）。
+  // protected：JsonFileStore 载盘时必须复用**同一**键构造，否则写入(NUL)与查找(NUL)对不上
+  // 会漏读——曾因载盘处内联成空格分隔键，重启后"家/公司"地址全部查不到（本次修复）。
+  protected placeKey(ownerId: string, label: string): string { return `${ownerId}\x00${label}` }
   savedPlacesForUser(ownerId: string): SavedPlace[] {
     return [...this.savedPlaces.values()].filter((p) => p.ownerId === ownerId).sort((a, b) => b.updatedAt - a.updatedAt)
   }
@@ -1533,7 +1536,7 @@ export class JsonFileStore extends MemoryStore {
         if (data.appConfig) this.appConfig = data.appConfig
         for (const n of data.notifications ?? []) this.notifications.set(n.id, n)
         for (const sr of data.savedRoutes ?? []) this.savedRoutes.set(sr.id, sr)
-        for (const sp of data.savedPlaces ?? []) this.savedPlaces.set(`${sp.ownerId} ${sp.label}`, sp)
+        for (const sp of data.savedPlaces ?? []) this.savedPlaces.set(this.placeKey(sp.ownerId, sp.label), sp)
         for (const st of data.safetyTimers ?? []) this.safetyTimers.set(st.id, st)
         for (const ee of data.emergencyEvents ?? []) this.emergencyEvents.set(ee.id, ee)
         for (const wp of data.webPushSubs ?? []) this.webPushSubs.set(wp.endpoint, wp)

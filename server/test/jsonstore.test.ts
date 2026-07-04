@@ -33,4 +33,40 @@ describe('JsonFileStore 持久化 + 原子写', () => {
     const s = new JsonFileStore(path)
     expect(s.allUsers()).toEqual([])
   })
+
+  // 回归：常用地点(家/公司)的复合键在**载盘路径**曾内联成空格分隔，而写入/查找用 \x00 分隔——
+  // 重启后同一 (ownerId,label) 写的键与查的键对不上。列表读取按 value.ownerId 过滤（与键无关）故幸存，
+  // 但**按键操作**受害：重启后 deleteSavedPlace 静默空操作（删 NUL 键、空格键残留→地址删不掉又复活）、
+  // upsert 造重复/显示旧地址。修=载盘复用 placeKey 单一真源。
+  describe('SavedPlace 复合键重启一致性（回归）', () => {
+    const place = (label: string): { ownerId: string; label: string; address: string; updatedAt: number } =>
+      ({ ownerId: 'u1', label, address: `${label}-addr`, updatedAt: 1 })
+
+    it('保存地点→新实例载盘后列表读回完整（value 过滤，键无关——旧码此路亦通，作正向守卫）', () => {
+      const s1 = new JsonFileStore(path)
+      s1.createUser(user('u1', 'alice'))
+      s1.upsertSavedPlace(place('home'))
+      s1.upsertSavedPlace(place('work'))
+      // 载盘：全新实例从同一文件重建（等价服务重启）。
+      const s2 = new JsonFileStore(path)
+      expect(s2.savedPlacesForUser('u1').map((p) => p.label).sort()).toEqual(['home', 'work'])
+      expect(s2.savedPlacesForUser('u1').find((p) => p.label === 'home')?.address).toBe('home-addr')
+    })
+
+    it('载盘后 delete/upsert 仍作用于同一条（键一致，无重复/无残留——旧码此路失败）', () => {
+      const s1 = new JsonFileStore(path)
+      s1.createUser(user('u1', 'alice'))
+      s1.upsertSavedPlace(place('home'))
+      const s2 = new JsonFileStore(path)
+      // 载盘后覆盖：同 (owner,home) 必须覆盖而非新增（修复前键不一致会变两条）。
+      s2.upsertSavedPlace({ ...place('home'), address: 'new-home', updatedAt: 2 })
+      expect(s2.savedPlacesForUser('u1')).toHaveLength(1)
+      expect(s2.savedPlacesForUser('u1')[0].address).toBe('new-home')
+      // 载盘后删除必须命中（修复前空格键 → NUL 删除漏删，地址删不掉）。
+      s2.deleteSavedPlace('u1', 'home')
+      expect(s2.savedPlacesForUser('u1')).toHaveLength(0)
+      // 再次载盘确认删除已落盘。
+      expect(new JsonFileStore(path).savedPlacesForUser('u1')).toHaveLength(0)
+    })
+  })
 })

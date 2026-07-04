@@ -41,7 +41,9 @@ public enum BusDisplayReader {
             if minutes == nil, let n = numberBefore(units: ["分钟", "min"], in: lower) { minutes = n }
             if stops == nil, let n = numberBefore(units: ["站", "stop"], in: lower) { stops = n }
         }
-        if imminent { return zh ? "即将到站" : "arriving now" }
+        // 倒计时读到 0（"0分钟"/"0 min"/"0站"）= 车已到站——必须当即将到站播报，绝不能因 ≥1 门槛回落成 nil
+        // 让站台上的盲人对已进站的车毫无提示（会错过车/以为还早）。
+        if imminent || minutes == 0 || stops == 0 { return zh ? "即将到站" : "arriving now" }
         if let m = minutes, m >= 1, m < 120 { return zh ? "还有约\(m)分钟" : "about \(m) min" }
         if let s = stops, s >= 1, s < 100 { return zh ? "还有\(s)站" : "\(s) stops away" }
         return nil

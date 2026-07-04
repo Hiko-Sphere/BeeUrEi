@@ -70,6 +70,16 @@ final class BusDisplayReaderTests: XCTestCase {
         XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["Arriving"], language: .en), "arriving now")
     }
 
+    func testArrivalHintZeroCountdownIsImminent() {
+        // 倒计时读到 0 = 车已到站，必须播即将到站（此前 ≥1 门槛让 "0分钟"/"0站" 回落 nil，
+        // 站台上的盲人对已进站的车毫无提示 → 错过车/以为还早）。
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["103路", "还有0分钟"], language: .zh), "即将到站")
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["0 min"], language: .en), "arriving now")
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["还有0站"], language: .zh), "即将到站")
+        // 0 只来自真实"0分钟/0站"；地名里"站/分钟"前无数字仍不误报（stops/minutes 为 nil≠0）。
+        XCTAssertNil(BusDisplayReader.arrivalHint(texts: ["开往火车站"], language: .zh))
+    }
+
     func testArrivalHintNoFalsePositiveOnPlaceNames() {
         // CJK 地名里的"站/分钟"前无阿拉伯数字，绝不误报到站信息。
         XCTAssertNil(BusDisplayReader.arrivalHint(texts: ["开往二七广场火车站"], language: .zh)) // "站"前是"车"

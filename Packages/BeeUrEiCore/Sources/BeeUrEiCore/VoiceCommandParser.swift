@@ -5,7 +5,8 @@ import Foundation
 /// 不确定时返回 .unknown 由上层播报"没听懂"并复述可用指令。
 public enum VoiceCommand: Equatable, Sendable {
     case sos                        // 紧急求助（SOS 告警：倒计时→通知全部亲友+附位置；区别于 help 的协助通话）
-    case help                       // 求助/呼叫亲友
+    case help                       // 求助/呼叫亲友（泛指：广播给在线亲友/志愿者）
+    case callContact(String)        // 定向呼叫某位具体亲友（"给妈妈打电话"/"call my daughter"）——区别于 help 的泛广播
     case whereAmI                   // 我在哪
     case around                     // 周围有什么
     case ahead                      // 前方有什么
@@ -57,6 +58,10 @@ public enum VoiceCommandParser {
         // SOS 须在 help 之前：两者都含"求助"类词，但"救命/紧急求助"是生命攸关的告警广播（倒计时→
         // 通知全部亲友+附位置），不是"打视频电话等人接"。摔倒的盲人喊"救命"必须走告警而非拨号。
         if has(["救命", "紧急求助", "一键求救", "紧急呼救", "sos", "emergency"]) { return .sos }
+        // 定向呼叫具体亲友须在 .help 之前：两者都含"打电话/呼叫/call"，但"给妈妈打电话/call my daughter"是拨给
+        // **某个人**，不是广播求助。提取到具体名字才走 callContact；泛指（"打电话/呼叫/call for help"无名字或名字是
+        // "亲友/家人/help/family"等）返回 nil，落到下面的 .help 泛广播。
+        if let name = parseCallContact(text) { return .callContact(name) }
         if has(["求助", "帮帮我", "呼叫", "打电话", "call for help", "get help", "help me", "call family"]) { return .help }
         if has(["我在哪", "我在哪里", "当前位置", "where am i", "my location"]) { return .whereAmI }
         if has(["周围有什么", "附近有什么", "周围", "what's around", "around me", "nearby"]) { return .around }
@@ -201,6 +206,46 @@ public enum VoiceCommandParser {
             }
         }
         return x
+    }
+
+    /// 「给X打电话」/「打电话给X」/「呼叫X」/ "call [my] X"：提取要**定向拨打**的联系人名字。
+    /// 返回 nil 表示这是泛指求助（无名字，或名字是"帮助/家人/别人/help/family/someone"等占位词），交上层 .help 广播。
+    static func parseCallContact(_ text: String) -> String? {
+        // 占位词：不是具体联系人，落到 .help（通用求助/呼叫亲友），绝不当成名叫"求助"的人去拨。
+        let generic: Set<String> = ["帮助", "求助", "帮手", "帮忙", "亲友", "家人", "家里人", "朋友", "别人", "谁", "人",
+                                    "我", "我自己", "自己", "me", "myself",  // "给我打电话/call me" 非拨给联系人，落 help
+                                    "help", "for help", "family", "someone", "somebody", "anyone", "assistance", "emergency", "for assistance"]
+        func clean(_ s: String) -> String? {
+            var x = s.trimmingCharacters(in: CharacterSet(charactersIn: "。，？！,.?!、").union(.whitespacesAndNewlines))
+            for tr in [" please", " now", " for me", "一下", "吧", "呢", "吗", "啊", "呀"]
+                where x.lowercased().hasSuffix(tr.lowercased()) && x.count > tr.count {
+                x = String(x.dropLast(tr.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            // 去首部物主词（"给我妈妈打电话"→妈妈；英文 my 已在正则里剥，这里兜中文）。
+            for ld in ["我的", "我", "the "] where x.lowercased().hasPrefix(ld.lowercased()) && x.count > ld.count {
+                x = String(x.dropFirst(ld.count)).trimmingCharacters(in: .whitespacesAndNewlines); break
+            }
+            if x.isEmpty || generic.contains(x.lowercased()) { return nil }
+            return x
+        }
+        // 中文：给<名>打/拨/回[个]电话
+        if let m = firstMatchSingle(in: text, pattern: #"给(.{1,12}?)(?:打|拨|回)[个]?电话"#) { return clean(m) }
+        // 中文：打/拨[个电话]给<名> / 打给<名>
+        if let m = firstMatchSingle(in: text, pattern: #"(?:打|拨)(?:[个]?电话)?给(.{1,12}?)$"#) { return clean(m) }
+        // 中文：呼叫<名>（呼叫单独或"呼叫亲友"等占位由 generic 过滤）
+        if let m = firstMatchSingle(in: text, pattern: #"呼叫(.{1,12}?)$"#) { return clean(m) }
+        // 英文：[please] call [my] <名>
+        if let m = firstMatchSingle(in: text, pattern: #"(?i)\bcall\s+(?:my\s+)?(.{1,24}?)$"#) { return clean(m) }
+        return nil
+    }
+
+    /// 第一个正则匹配的**单个**捕获组（parseCallContact 用）。
+    private static func firstMatchSingle(in text: String, pattern: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let range = NSRange(text.startIndex..., in: text)
+        guard let m = regex.firstMatch(in: text, range: range), m.numberOfRanges >= 2,
+              let r1 = Range(m.range(at: 1), in: text) else { return nil }
+        return String(text[r1])
     }
 
     /// 「给X发消息(说)Y」/「发消息给X(说)Y」/ "send a message to X saying Y" / "tell X that Y"。

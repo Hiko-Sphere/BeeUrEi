@@ -54,8 +54,30 @@ final class VoiceCommandParserTests: XCTestCase {
         // "读电话号码" = 读出号码；"打电话/呼叫" = 拨号给人（help），互不抢。
         XCTAssertEqual(VoiceCommandParser.parse("读一下上面的电话"), .readPhone)
         XCTAssertEqual(VoiceCommandParser.parse("电话号码是多少"), .readPhone)
-        XCTAssertEqual(VoiceCommandParser.parse("打电话求助"), .help)      // 拨号给人仍是 help
+        XCTAssertEqual(VoiceCommandParser.parse("打电话求助"), .help)      // 泛指拨号给人仍是 help
         XCTAssertEqual(VoiceCommandParser.parse("呼叫亲友"), .help)
+    }
+
+    func testCallContactByName() {
+        // 定向呼叫具体亲友：提取名字 → callContact；泛指（无名字/占位词）仍落 help。
+        XCTAssertEqual(VoiceCommandParser.parse("给妈妈打电话"), .callContact("妈妈"))
+        XCTAssertEqual(VoiceCommandParser.parse("给我女儿打个电话"), .callContact("女儿"))   // 剥"我"物主
+        XCTAssertEqual(VoiceCommandParser.parse("打电话给小明"), .callContact("小明"))
+        XCTAssertEqual(VoiceCommandParser.parse("给张医生回个电话"), .callContact("张医生"))  // 回电话也认
+        XCTAssertEqual(VoiceCommandParser.parse("呼叫李阿姨"), .callContact("李阿姨"))
+        XCTAssertEqual(VoiceCommandParser.parse("call mom"), .callContact("mom"))
+        XCTAssertEqual(VoiceCommandParser.parse("please call my daughter"), .callContact("daughter")) // 剥 my
+        // 泛指/占位词绝不当人名去拨——落到 .help 广播（保命：这些是求助意图）。
+        XCTAssertEqual(VoiceCommandParser.parse("打电话"), .help)
+        XCTAssertEqual(VoiceCommandParser.parse("呼叫"), .help)
+        XCTAssertEqual(VoiceCommandParser.parse("给我打电话"), .help) // "我"被剥成空 → 泛指 help
+        XCTAssertEqual(VoiceCommandParser.parse("call for help"), .help)
+        XCTAssertEqual(VoiceCommandParser.parse("call family"), .help)
+        XCTAssertEqual(VoiceCommandParser.parse("呼叫家人"), .help)
+        // 发消息给具体人仍是 sendMessage（parseSendMessage 先行），不被 callContact 抢。
+        XCTAssertEqual(VoiceCommandParser.parse("给妈妈发消息说我到了"), .sendMessage(to: "妈妈", text: "我到了"))
+        // 救命最高优先：即便含"呼叫"也走 sos。
+        XCTAssertEqual(VoiceCommandParser.parse("救命"), .sos)
     }
 
     func testReadDatesVsTodayDateVsReadText() {

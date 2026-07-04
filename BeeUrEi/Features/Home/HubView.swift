@@ -419,6 +419,10 @@ struct HubView: View {
         // 覆盖层（与摔倒检测同一套流程）——误触发有充分的撤销窗口，绝不静默直发。
         case .sos: emergency.manualSOS()
         case .help: requestRemoteHelp()
+        // 定向呼叫具体亲友（"给妈妈打电话"）：与 .help 同一求助界面，但预置待拨名字，进入后自动按名拨打。
+        case .callContact(let name):
+            if helpEnabled { route.pendingCallName = name; showRemoteAssist = true }
+            else { speak(HomeStrings.featureOff(lang)) }
         case .guideMe: enterObstacle()
         case .whereAmI: locationDescriber.describe()
         case .around: locationDescriber.describeAround()

@@ -19,6 +19,9 @@ final class AppRoute {
     var pendingNavAction: NavAction?
     /// 语音指令：聊天待发送（"给妈妈发消息说我到了"→ 打开消息并按收件人名预填）。
     var pendingMessage: (to: String, text: String)?
+    /// 语音指令：定向呼叫某位亲友（"给妈妈打电话"→ 打开求助界面并按名字自动拨打）。**一次性**：
+    /// RemoteAssistView 加载联系人后消费即清，绝不因重开界面重复拨打（拨号是外呼副作用，必须严格一次）。
+    var pendingCallName: String?
     private init() {}
 }
 

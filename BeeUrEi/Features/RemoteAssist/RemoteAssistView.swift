@@ -138,7 +138,7 @@ struct RemoteAssistView: View {
                 Text(AssistStrings.topicMessage(lang))
             }
         }
-        .task { ScreenWake.acquire("assist"); await load(); startOnlinePolling() }   // 求助/呼叫等待期间屏不灭
+        .task { ScreenWake.acquire("assist"); await load(); await consumePendingCall(); startOnlinePolling() }   // 求助/呼叫等待期间屏不灭
         .refreshable { await load() }
         .onDisappear { onlineTask?.cancel(); onlineTask = nil; ScreenWake.release("assist") }
         // 所有求助/呼叫/错误状态变化主动朗读——盲人点完按钮后才能得到语音反馈，不会以为没反应反复点（见无障碍审计）。
@@ -331,6 +331,20 @@ struct RemoteAssistView: View {
                 + targets.map(\.memberName).joined(separator: " → ")
             activeCall = ActiveBlindCall(id: callId, isVolunteer: false)
         } catch { statusText = AssistStrings.callErrorText(error, fallback: AssistStrings.familyCallFailed(lang), lang) }
+    }
+
+    /// 消费语音"给X打电话"的待拨请求：加载完联系人后，按名字唯一匹配则自动拨打；找不到/多个则留在列表让用户选。
+    /// **严格一次性**：进入即清 pendingCallName（拨号是外呼副作用，绝不因重开界面/刷新重复拨打）。
+    private func consumePendingCall() async {
+        guard let name = AppRoute.shared.pendingCallName else { return }
+        AppRoute.shared.pendingCallName = nil
+        let matches = links.filter { $0.isAccepted && $0.memberName.localizedCaseInsensitiveContains(name) }
+        if matches.count == 1, let target = matches.first {
+            await call(target) // 复用既有定向呼叫（内部已 guard 不重复/未登录）
+        } else {
+            // 0 或多个：不猜、不误拨，留在联系人列表并语音说明（statusText 经 .onChange 朗读）。
+            statusText = AssistStrings.voiceCallNoContact(name, ambiguous: matches.count > 1, lang)
+        }
     }
 
     /// 定向呼叫某位已绑定的亲友/协助者。

@@ -166,6 +166,15 @@ enum AssistStrings {
         l == .zh ? "呼叫 \(name) 未送达，请重试或改用电话联系。"
                  : "Couldn't reach \(name). Retry, or use a phone call instead."
     }
+    /// 语音"给X打电话"没找到唯一联系人：不猜、不误拨，提示从列表里选。ambiguous=匹配到多个（名字太笼统）。
+    static func voiceCallNoContact(_ name: String, ambiguous: Bool, _ l: Language) -> String {
+        if ambiguous {
+            return l == .zh ? "有多位亲友的名字含「\(name)」，请从下面的联系人里选一位。"
+                            : "Several contacts match “\(name)”. Please pick one from the list below."
+        }
+        return l == .zh ? "没找到叫「\(name)」的亲友，请从下面的联系人里选一位。"
+                        : "No contact named “\(name)”. Please pick one from the list below."
+    }
 
     /// 管理员关闭呼叫/求助功能或系统维护时，求助路径返回这些码——必须明确告知是"暂不可用"
     /// 而非网络问题，否则盲人会对着一个被关停的求助按钮反复重试。其余错误回退到 `fallback`。

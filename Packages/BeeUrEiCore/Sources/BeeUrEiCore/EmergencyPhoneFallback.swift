@@ -34,7 +34,9 @@ public enum EmergencyPhoneFallback {
     public static func telURLString(_ raw: String) -> String? {
         func isAsciiDigit(_ ch: Character) -> Bool { ch.isASCII && ch.isNumber }
         var digits = raw.filter(isAsciiDigit)
-        if raw.trimmingCharacters(in: .whitespaces).hasPrefix("+") { digits = "+" + digits }
+        // whitespacesAndNewlines：`.whitespaces` 只含空格/制表符，前导**换行/回车**（多行联系人粘贴常见）会
+        // 让 hasPrefix("+") 落空、国家码 + 被丢，生成拨不通的错号——正是本兜底路要防的假安心（对抗复审 LOW）。
+        if raw.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("+") { digits = "+" + digits }
         guard digits.filter(isAsciiDigit).count >= 3 else { return nil }
         return "tel://\(digits)"
     }

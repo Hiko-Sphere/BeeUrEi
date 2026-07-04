@@ -64,4 +64,11 @@ final class EmergencyPhoneFallbackTests: XCTestCase {
         XCTAssertNil(EmergencyPhoneFallback.telURLString("１２ 3"))                 // 仅 1 位半角
         XCTAssertEqual(EmergencyPhoneFallback.telURLString("１２ 345"), "tel://345") // 半角部分够 3 位
     }
+
+    /// 对抗复审 LOW：前导换行/回车（多行联系人粘贴常见）不得丢掉国家码 + 前缀（否则生成拨不通的错号）。
+    func testLeadingNewlineKeepsPlusPrefix() {
+        XCTAssertEqual(EmergencyPhoneFallback.telURLString("\n+8613800000001"), "tel://+8613800000001")
+        XCTAssertEqual(EmergencyPhoneFallback.telURLString("\r\n +8613800000001"), "tel://+8613800000001")
+        XCTAssertEqual(EmergencyPhoneFallback.telURLString("\t+8613800000001"), "tel://+8613800000001") // tab 原本就对
+    }
 }

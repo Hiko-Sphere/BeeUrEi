@@ -37,4 +37,12 @@ final class EmergencyLocationTagTests: XCTestCase {
         let r = EmergencyLocationTag.info(data: ["locSource": "lastKnown", "locAgeSec": "0"], createdAtMs: createdAt)
         XCTAssertEqual(r, EmergencyLocationTag.Info(stale: true, fixAtMs: createdAt))
     }
+
+    /// 对抗复审 LOW：age 巨值使 age*1000 溢出成 inf → fixAtMs 变 -inf/NaN 被当坏时刻展示。
+    /// 算不出有限定位时刻就只标"最后已知"、不给时刻（stale 仍为 true）。
+    func testHugeAgeDoesNotProduceNonFiniteFixTime() {
+        let r = EmergencyLocationTag.info(data: ["locSource": "lastKnown", "locAgeSec": "1e308"], createdAtMs: createdAt)
+        XCTAssertTrue(r.stale)
+        XCTAssertNil(r.fixAtMs) // 非有限 → 不给时刻
+    }
 }

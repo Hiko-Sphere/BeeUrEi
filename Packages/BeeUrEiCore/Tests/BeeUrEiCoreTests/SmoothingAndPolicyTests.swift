@@ -68,6 +68,17 @@ final class AnnouncementPolicyTests: XCTestCase {
         _ = p.decide(targetKey: "a", urgency: 2, isSpeaking: false, now: 0)
         XCTAssertEqual(p.decide(targetKey: "c", urgency: 1.2, isSpeaking: true, now: 1), .silent)
     }
+
+    /// 对抗复审 LOW：一帧 NaN 紧急度（坏深度/TTC）不得毒化升级门——否则其后真骤升被 `>NaN` 恒 false 静音，
+    /// 盲人可能已撞上。NaN 当 0 处理、绝不 commit 进 lastUrgency。
+    func testNaNUrgencyDoesNotPoisonEscalation() {
+        let p = AnnouncementPolicy(refreshInterval: 6, urgencyMargin: 1.3)
+        _ = p.decide(targetKey: "car", urgency: 1, isSpeaking: false, now: 0)          // 建立 lastUrgency=1
+        _ = p.decide(targetKey: "car", urgency: Double.nan, isSpeaking: false, now: 10) // NaN 经刷新路（修复前会 commit NaN）
+        let spike = p.decide(targetKey: "car", urgency: 5, isSpeaking: true, now: 11)   // 真骤升
+        XCTAssertTrue(spike.announce)   // 修复前 `5 > NaN*1.3`=false → 静音（撞车风险）
+        XCTAssertTrue(spike.interrupt)
+    }
 }
 
 final class ClockAngleAndConciseTests: XCTestCase {

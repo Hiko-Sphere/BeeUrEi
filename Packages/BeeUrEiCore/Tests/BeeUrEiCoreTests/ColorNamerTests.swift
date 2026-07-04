@@ -22,6 +22,14 @@ final class ColorNamerTests: XCTestCase {
         XCTAssertEqual(n.name(r: 0.5, g: 0.3, b: 0.1), "棕色")
     }
 
+    /// 对抗复审 MED：标准浅灰（lightgray/gainsboro）不得被念成"白色"（盲人无法复核的错色）。
+    func testLightGrayIsNotWhite() {
+        XCTAssertEqual(n.name(r: 0.827, g: 0.827, b: 0.827), "灰色") // lightgray #D3D3D3 (v≈0.83)
+        XCTAssertEqual(n.name(r: 0.863, g: 0.863, b: 0.863), "灰色") // gainsboro #DCDCDC (v≈0.86)
+        XCTAssertEqual(n.name(r: 0.96, g: 0.96, b: 0.96), "白色")    // whitesmoke #F5F5F5 (v≈0.96) 仍近白
+        XCTAssertEqual(n.name(r: 1, g: 1, b: 1), "白色")             // 纯白
+    }
+
     /// 深浅描述（配衣服/比色刚需）：以参考色标定——navy/深红/墨绿→深；天蓝/浅绿→浅；纯色→原名。
     func testTonedDescribe() {
         // 深色（明度低）

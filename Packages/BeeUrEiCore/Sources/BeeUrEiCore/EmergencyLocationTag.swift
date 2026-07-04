@@ -28,6 +28,10 @@ public enum EmergencyLocationTag {
         // ageSec 缺失/坏值/负值：仍如实标"最后已知"（stale 不依赖时效解析），只是不给定位时刻。
         guard let s = data["locAgeSec"], let age = Double(s), age.isFinite, age >= 0,
               createdAtMs.isFinite else { return Info(stale: true, fixAtMs: nil) }
-        return Info(stale: true, fixAtMs: createdAtMs - age * 1000)
+        // 输出也要有限：age 巨值时 age*1000 可能溢出成 +inf → fixAtMs 变 -inf/NaN，被下游当成一个坏的绝对时刻
+        // 展示（对抗复审 LOW）。定位时刻算不出就只标"最后已知"、不给时刻（诚实兜底）。
+        let fix = createdAtMs - age * 1000
+        guard fix.isFinite else { return Info(stale: true, fixAtMs: nil) }
+        return Info(stale: true, fixAtMs: fix)
     }
 }

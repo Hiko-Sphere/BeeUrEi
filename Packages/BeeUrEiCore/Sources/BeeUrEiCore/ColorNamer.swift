@@ -65,7 +65,10 @@ public struct ColorNamer: Sendable {
     func key(r: Double, g: Double, b: Double) -> SpokenStrings.ColorKey {
         let (h, s, v) = Self.rgbToHsv(r, g, b)
         if v < 0.2 { return .black }
-        if s < 0.15 { return v > 0.8 ? .white : .gray }
+        // 白/灰分界取 v>0.9：真白约 0.95+，而 0.80–0.90 是 lightgray(#D3D3D3,0.83)/gainsboro(#DCDCDC,0.86) 等
+        // 标准浅灰——阈值取 0.8 会把它们误报成"白色"（盲人无法复核的错色，对抗复审 MED）。0.9 让浅灰归灰、
+        // whitesmoke(#F5F5F5,0.96) 仍归白。
+        if s < 0.15 { return v > 0.9 ? .white : .gray }
         if h >= 20 && h < 50 && v < 0.6 { return .brown }
         // 米色/米黄（beige/tan/khaki，极常见衣物色）：暖色相但**低饱和且明亮**——否则会误报成"浅橙色"。
         // 与橙的分界靠饱和度（s<0.35 才算米色；鲜艳暖色仍归橙）；与棕的分界靠明度（上面 v<0.6 已归棕）。

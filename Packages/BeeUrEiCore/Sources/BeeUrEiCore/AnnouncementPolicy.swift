@@ -28,6 +28,10 @@ public final class AnnouncementPolicy {
     ///   - urgency: 紧急度（越大越紧急，如 1/距离 或 1/TTC）。
     ///   - isSpeaking: 当前是否正在播报。
     public func decide(targetKey: String, urgency: Double, isSpeaking: Bool, now: TimeInterval) -> AnnouncementDecision {
+        // 非有限紧急度（坏深度/TTC 帧 → 1/max(NaN,..)=NaN）净化为 0：NaN 参与 `>` 比较恒 false，会**静默禁掉
+        // 打断/升级路**（骤近危险不再抢断当前句），且一旦 commit 进 lastUrgency 会毒化后续所有帧的比较门
+        // （对抗复审 LOW）。当 0 处理：坏帧不抢断（无从判定紧急），但绝不毒化——下一个有限帧照常升级打断。
+        let urgency = urgency.isFinite ? urgency : 0
         if targetKey == lastKey {
             // 同一目标危险骤升（如车辆/行人快速逼近）：即使正在播报也立即打断更新，
             // 否则会被静音到当前句说完+刷新间隔，盲人可能已撞上（安全攸关，见审查 #1）。

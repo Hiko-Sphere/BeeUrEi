@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { writeFileSync, createReadStream, statSync } from 'node:fs'
-import { type Store, type MediaMeta, areLinked } from '../db/store'
+import { type Store, type MediaMeta, areLinked, isBlockedBetween } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
 import { ensureMediaDir, mediaPath, mediaFileExists } from '../media/storage'
@@ -76,8 +76,13 @@ export function registerMediaRoutes(app: FastifyInstance, store: Store): void {
     // 录制捕获了被录方音视频，必须走录制作用域端点（owner∨admin，且尊重 deletedAt）。返回 404 不泄漏存在性。
     if (store.recordingByMediaId(id)) return reply.code(404).send({ error: 'not_found' })
     const me = req.user!.sub
-    if (me !== meta.ownerId && !areLinked(store, me, meta.ownerId) && !sharesGroup(me, meta.ownerId)
-        && !sharedViaVisibleMessage(me, id)) {
+    // 授权三条（任一即可）：①本人；②经**可见消息**共享（能看到引用它的那条消息就能看媒体——无条件，
+    //   即便之后互相拉黑，历史消息仍可见）；③好友/同群的"便捷取"（凭现有关系按 UUID 直取），
+    //   但便捷取须**未互相拉黑**——拉黑不解绑（areLinked 仍 true），若不额外查 isBlockedBetween，被拉黑者可凭
+    //   旧绑定拉取对方**未发给自己**的媒体 UUID，绕过黑名单（与建群/加人/单聊同口径）。
+    const viaRelationship = (areLinked(store, me, meta.ownerId) || sharesGroup(me, meta.ownerId))
+      && !isBlockedBetween(store, me, meta.ownerId)
+    if (me !== meta.ownerId && !sharedViaVisibleMessage(me, id) && !viaRelationship) {
       return reply.code(403).send({ error: 'forbidden' })
     }
     const path = mediaPath(meta.id)

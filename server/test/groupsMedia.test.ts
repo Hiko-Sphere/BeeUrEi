@@ -283,6 +283,30 @@ describe('视频消息（服务器磁盘媒体存储）', () => {
     const dl = await app.inject({ method: 'GET', url: `/api/media/${mediaId}`, headers: auth(mem.token) })
     expect(dl.statusCode).toBe(200) // 同群成员可下载
   })
+
+  it('拉黑绕过防护：互拉黑后好友"便捷取"媒体被撤（但经可见消息共享的仍可取）', async () => {
+    const app = buildApp(new MemoryStore())
+    const a = await reg(app, 'mbA', 'blind'); const b = await reg(app, 'mbB', 'helper')
+    await bind(app, a.token, b.token, 'mbB')
+    // a 上传两份媒体：M1 之后会作为消息发给 b；M2 从不发给 b（仅凭好友关系便捷取）。
+    const up1 = await app.inject({ method: 'POST', url: '/api/media', headers: { ...auth(a.token), 'content-type': 'video/mp4' }, payload: Buffer.from('m1') })
+    const m1 = (up1.json() as any).media.id as string
+    const up2 = await app.inject({ method: 'POST', url: '/api/media', headers: { ...auth(a.token), 'content-type': 'video/mp4' }, payload: Buffer.from('m2') })
+    const m2 = (up2.json() as any).media.id as string
+    // 基线（未拉黑）：好友 b 便捷取 M2（无消息引用）→ 200（走 areLinked，回归守卫）
+    expect((await app.inject({ method: 'GET', url: `/api/media/${m2}`, headers: auth(b.token) })).statusCode).toBe(200)
+    // a 把 M1 作为视频消息发给 b（此后 M1 经"可见消息"共享）
+    await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, kind: 'video', text: m1 } })
+    // b 拉黑 a
+    await app.inject({ method: 'POST', url: '/api/blocks', headers: auth(b.token), payload: { userId: a.user.id } })
+    // M2（仅凭好友关系可取）→ 拉黑后 403（便捷取被撤，旧逻辑会 200）
+    expect((await app.inject({ method: 'GET', url: `/api/media/${m2}`, headers: auth(b.token) })).statusCode).toBe(403)
+    // M1（经可见消息共享）→ 拉黑后仍可取（能看到那条消息就能看媒体，无条件）
+    expect((await app.inject({ method: 'GET', url: `/api/media/${m1}`, headers: auth(b.token) })).statusCode).toBe(200)
+    // 本人始终可取自己的媒体
+    expect((await app.inject({ method: 'GET', url: `/api/media/${m2}`, headers: auth(a.token) })).statusCode).toBe(200)
+    await app.close()
+  })
 })
 
 describe('会话内消息搜索', () => {

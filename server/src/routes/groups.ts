@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import { type Store, publicUser, matchBannedTerm, areLinked } from '../db/store'
+import { type Store, publicUser, matchBannedTerm, areLinked, isBlockedBetween } from '../db/store'
 import { dissolveGroup } from '../db/cascade'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
@@ -31,6 +31,9 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store, push: Pu
     for (const id of memberIds) {
       if (!store.findById(id)) return reply.code(404).send({ error: 'not_found' })
       if (!areLinked(store, me, id)) return reply.code(403).send({ error: 'not_linked' })
+      // 拉黑绕过防护：拉黑不解除底层绑定（areLinked 仍 true），故须**额外**查 isBlockedBetween——否则被拉黑者
+      // 可把拉黑自己的人拉进新群、借群消息骚扰，绕过 1:1 黑名单（与单聊发送/表情回应同口径，那两处已查此前群漏查）。
+      if (isBlockedBetween(store, me, id)) return reply.code(403).send({ error: 'blocked' })
     }
     const group = { id: randomUUID(), name: parsed.data.name, ownerId: me,
                     memberIds: [me, ...memberIds], createdAt: Date.now() }
@@ -75,6 +78,8 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store, push: Pu
     if (group.memberIds.length >= MAX_MEMBERS) return reply.code(400).send({ error: 'group_full' })
     if (!store.findById(userId)) return reply.code(404).send({ error: 'not_found' })
     if (!areLinked(store, me, userId)) return reply.code(403).send({ error: 'not_linked' })
+    // 拉黑绕过防护（同建群）：拉黑不解除绑定，须额外查 isBlockedBetween，否则群主可把与自己互拉黑者塞进群骚扰。
+    if (isBlockedBetween(store, me, userId)) return reply.code(403).send({ error: 'blocked' })
     const updated = store.updateGroup(group.id, { memberIds: [...group.memberIds, userId] })
     // 新成员的"已读时刻"置为入群此刻——否则其未读数会把**入群前**的全部历史消息(至多 200 上限)都算上，
     // 刚进群就顶着一个巨大的未读角标（历史仍可上翻查看，只是不计未读）。与建群时群主 setGroupRead 同口径。

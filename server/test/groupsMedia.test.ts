@@ -475,3 +475,50 @@ describe('未读汇总 /api/unread', () => {
     expect(push.sent.some((s) => s.title.includes('群'))).toBe(true)
   })
 })
+
+describe('拉黑绕过防护：不能借群把互拉黑者拉进来骚扰（回归）', () => {
+  // 背景：拉黑只加拉黑记录、**不解除底层绑定**（areLinked 仍 true）。单聊发送/表情回应已额外查 isBlockedBetween，
+  // 建群/加人此前只查 areLinked → 被拉黑者可把拉黑自己的人拉进新群、借群消息骚扰，绕过 1:1 黑名单。
+  const block = (app: ReturnType<typeof buildApp>, blockerToken: string, blockedUserId: string) =>
+    app.inject({ method: 'POST', url: '/api/blocks', headers: auth(blockerToken), payload: { userId: blockedUserId } })
+
+  it('建群：任一方向互拉黑 → 不能把对方作为初始成员（403 blocked，双向都挡）', async () => {
+    const app = buildApp(new MemoryStore())
+    const a = await reg(app, 'blkA'); const b = await reg(app, 'blkB')
+    await bind(app, a.token, b.token, 'blkB') // 先成为好友
+    await block(app, b.token, a.user.id)       // B 拉黑 A
+    // A（被拉黑者）想把 B 拉进新群 → 挡
+    const byA = await app.inject({ method: 'POST', url: '/api/groups', headers: auth(a.token), payload: { name: '骚扰群', memberIds: [b.user.id] } })
+    expect(byA.statusCode).toBe(403)
+    expect(byA.json().error).toBe('blocked')
+    // B（拉黑者）想把 A 拉进新群 → 同样挡（isBlockedBetween 双向）
+    const byB = await app.inject({ method: 'POST', url: '/api/groups', headers: auth(b.token), payload: { name: '群', memberIds: [a.user.id] } })
+    expect(byB.statusCode).toBe(403)
+    expect(byB.json().error).toBe('blocked')
+    await app.close()
+  })
+
+  it('加人：群主不能把与自己互拉黑者加进已有群（403 blocked）', async () => {
+    const app = buildApp(new MemoryStore())
+    const owner = await reg(app, 'blkOwner'); const p = await reg(app, 'blkP'); const q = await reg(app, 'blkQ')
+    await bind(app, owner.token, p.token, 'blkP')
+    await bind(app, owner.token, q.token, 'blkQ')
+    // 群主先与 Q 建群（正常），再拉黑 P
+    const g = await app.inject({ method: 'POST', url: '/api/groups', headers: auth(owner.token), payload: { name: '家人群', memberIds: [q.user.id] } })
+    const gid = g.json().group.id as string
+    await block(app, owner.token, p.user.id) // 群主拉黑 P
+    const add = await app.inject({ method: 'POST', url: `/api/groups/${gid}/members`, headers: auth(owner.token), payload: { userId: p.user.id } })
+    expect(add.statusCode).toBe(403)
+    expect(add.json().error).toBe('blocked')
+    await app.close()
+  })
+
+  it('未拉黑仍可正常建群/加人（不误伤）', async () => {
+    const app = buildApp(new MemoryStore())
+    const owner = await reg(app, 'okOwner'); const m = await reg(app, 'okM')
+    await bind(app, owner.token, m.token, 'okM')
+    const g = await app.inject({ method: 'POST', url: '/api/groups', headers: auth(owner.token), payload: { name: '正常群', memberIds: [m.user.id] } })
+    expect(g.statusCode).toBe(201)
+    await app.close()
+  })
+})

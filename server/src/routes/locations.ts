@@ -13,11 +13,10 @@ import { notifyUser } from '../notifications/notify'
 /// 重启即清（重启后首个更新可能重复提示一次到达，可接受）；规模化可换 Redis。同 PresenceRegistry 惯例。
 class GeofenceState {
   private map = new Map<string, Set<string>>()
+  has(userId: string): boolean { return this.map.has(userId) } // 是否已建立本会话基线（区分"会话首更新"与"在外全部地点"）
   get(userId: string): Set<string> { return this.map.get(userId) ?? new Set() }
-  set(userId: string, labels: string[]): void {
-    if (labels.length === 0) this.map.delete(userId)
-    else this.map.set(userId, new Set(labels))
-  }
+  set(userId: string, labels: string[]): void { this.map.set(userId, new Set(labels)) } // **总是**写（含空集）：标记会话基线已建
+  clear(userId: string): void { this.map.delete(userId) } // 停止共享/会话结束：清基线，下次共享首更新重建
 }
 
 // 坐标用 z.number()（JSON body，非查询串）：拒非有限值与越界，绝不接受 NaN/Infinity 污染地图。
@@ -45,9 +44,12 @@ export function registerLocationRoutes(app: FastifyInstance, store: Store, live:
     try {
       const places = store.savedPlacesForUser(me).filter((p) => p.lat != null && p.lng != null)
       if (places.length === 0) return
+      // **会话首个更新只建立基线、不触发**（含 /stop 清后重开）：首更新分不清"刚到达"与"早已在此"，
+      // 若在此触发会在每次重开共享（人已在家）时误报"已到家"（复审#3）。真到达=会话内"外→内"转换。
+      const firstOfSession = !geofence.has(me)
       const { arrived, insideLabels } = evaluateGeofences({ lat, lon: lng }, places, geofence.get(me))
       geofence.set(me, insideLabels)
-      if (arrived.length === 0) return
+      if (firstOfSession || arrived.length === 0) return
       const sender = store.findById(me)
       if (!sender) return
       for (const place of arrived) {
@@ -79,6 +81,7 @@ export function registerLocationRoutes(app: FastifyInstance, store: Store, live:
   // 立即停止共享（删除记录；之后联系人查询不再可见）。任何已登录用户可随时停止自己的共享。
   app.post('/api/locations/stop', { preHandler: requireAuth() }, async (req) => {
     live.stop(req.user!.sub)
+    geofence.clear(req.user!.sub) // 清围栏基线：下次共享的首更新重建，避免跨会话陈旧态漏报/误报（复审#1/#3）
     return { ok: true }
   })
 

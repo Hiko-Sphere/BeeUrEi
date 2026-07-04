@@ -45,12 +45,15 @@ describe('到达围栏提醒（geofence：到家/公司通知家人）', () => {
     await app.close()
   })
 
-  it('盲人到达已存坐标的家 → 家人收到 place_arrival；停留不重复；离开再回再报', async () => {
+  it('会话内"外→内"转换才报到达；首更新只建基线；停留去重；离开再回再报；陌生人不收到', async () => {
     const { app, store, blind, family, stranger } = await setup()
     store.upsertSavedPlace({ ownerId: blind.id, label: 'home', address: '家', lat: 39.9042, lng: 116.4074, updatedAt: Date.now() })
     const update = (lat: number, lng: number) => app.inject({ method: 'POST', url: '/api/locations/update', headers: blind.h, payload: { lat, lng } })
 
-    await update(39.9042, 116.4074) // 到家
+    await update(39.9042, 116.42)   // 会话首更新（在外，约 1km）：只建基线，不触发
+    expect(arrivals(store, family.id)).toHaveLength(0)
+
+    await update(39.9042, 116.4074) // 外→内：真到达 → 通知
     expect(arrivals(store, family.id)).toHaveLength(1)
     expect(arrivals(store, family.id)[0].data?.label).toBe('home')
     expect(arrivals(store, stranger.id)).toHaveLength(0) // 非互链陌生人绝不收到（授权=accepted 联系人）
@@ -58,9 +61,24 @@ describe('到达围栏提醒（geofence：到家/公司通知家人）', () => {
     await update(39.9042, 116.4074) // 停留：去重
     expect(arrivals(store, family.id)).toHaveLength(1)
 
-    await update(39.9042, 116.42)   // 离开（约 1km > exit 200m）
+    await update(39.9042, 116.42)   // 离开
     await update(39.9042, 116.4074) // 回家 → 再报
     expect(arrivals(store, family.id)).toHaveLength(2)
+    await app.close()
+  })
+
+  it('停止共享清基线：重新共享仍在原地时首更新不误报"已到家"（复审#1/#3）', async () => {
+    const { app, store, blind, family } = await setup()
+    store.upsertSavedPlace({ ownerId: blind.id, label: 'home', address: '家', lat: 39.9042, lng: 116.4074, updatedAt: Date.now() })
+    const update = (lat: number, lng: number) => app.inject({ method: 'POST', url: '/api/locations/update', headers: blind.h, payload: { lat, lng } })
+
+    await update(39.9042, 116.42)   // 基线（在外）
+    await update(39.9042, 116.4074) // 到家 → 1 次
+    expect(arrivals(store, family.id)).toHaveLength(1)
+
+    await app.inject({ method: 'POST', url: '/api/locations/stop', headers: blind.h }) // 停止 → 清基线
+    await update(39.9042, 116.4074) // 重开共享，人仍在家：首更新只建基线，**不**误报
+    expect(arrivals(store, family.id)).toHaveLength(1) // 仍 1
     await app.close()
   })
 

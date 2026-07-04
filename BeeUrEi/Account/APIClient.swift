@@ -610,6 +610,30 @@ struct APIClient {
         return data
     }
 
+    // MARK: 保存的地点（家/公司/自定义，快捷导航）
+
+    struct SavedPlace: Decodable, Equatable, Identifiable {
+        let ownerId: String
+        let label: String
+        let address: String
+        let updatedAt: Double
+        var id: String { label } // (ownerId 固定为本人) label 唯一
+    }
+    func savedPlaces(token: String) async throws -> [SavedPlace] {
+        struct R: Decodable { let places: [SavedPlace] }
+        let data = try await authedGet("/api/places", token: token)
+        return try JSONDecoder().decode(R.self, from: data).places
+    }
+    private func placePath(_ label: String) -> String {
+        "/api/places/\(label.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? label)"
+    }
+    func setSavedPlace(token: String, label: String, address: String) async throws {
+        _ = try await authedSend("PUT", placePath(label), token: token, body: ["address": address])
+    }
+    func deleteSavedPlace(token: String, label: String) async throws {
+        _ = try await authedSend("DELETE", placePath(label), token: token)
+    }
+
     // MARK: 亲友 / 紧急
 
     func familyLinks(token: String) async throws -> [FamilyLinkInfo] {

@@ -48,6 +48,8 @@ final class VoiceCommandParserTests: XCTestCase {
             ("附近哪里有便利店", .findNearest("便利店")), ("nearest pharmacy", .findNearest("pharmacy")),
             ("where can i find a restroom", .findNearest("restroom")),
             ("坐地铁去西单", .transit("西单")), ("坐公交车去医院", .transit("医院")), ("take transit to the airport", .transit("the airport")),
+            ("回家", .navigateHome), ("带我回家", .navigateHome), ("take me home", .navigateHome),
+            ("去公司", .navigateWork), ("去上班", .navigateWork), ("take me to work", .navigateWork),
         ]
         for (phrase, expected) in cases {
             XCTAssertEqual(VoiceCommandParser.parse(phrase), expected, "『\(phrase)』应解析为 \(expected)")
@@ -122,6 +124,24 @@ final class VoiceCommandParserTests: XCTestCase {
         XCTAssertEqual(VoiceCommandParser.parse("导航到医院"), .navigate("医院"))
         // "这是什么车"是识别公交（readBus），不是坐车出行。
         XCTAssertEqual(VoiceCommandParser.parse("这是什么车"), .readBus)
+    }
+
+    func testNavigateHomeWorkVsBacktrackVsTransit() {
+        // "回家/去公司" = 导航到已存地址；"原路返回/带我回去" = 面包屑折返（不同意图，勿混）。
+        XCTAssertEqual(VoiceCommandParser.parse("回家"), .navigateHome)
+        XCTAssertEqual(VoiceCommandParser.parse("带我回家"), .navigateHome)
+        XCTAssertEqual(VoiceCommandParser.parse("去公司"), .navigateWork)
+        XCTAssertEqual(VoiceCommandParser.parse("带我去上班"), .navigateWork)
+        XCTAssertEqual(VoiceCommandParser.parse("原路返回"), .goHome)
+        XCTAssertEqual(VoiceCommandParser.parse("带我回去"), .goHome)      // 回去=折返，不是回家
+        XCTAssertEqual(VoiceCommandParser.parse("take me back"), .goHome)
+        // 带交通方式词仍走公交规划（cue 在更前），不被 navigateWork 抢。
+        XCTAssertEqual(VoiceCommandParser.parse("坐公交去公司"), .transit("公司"))
+        // 复审 F1：目的地名**包含**"去公司/回家"子串，不该被快捷指令抢——整句匹配才算。
+        XCTAssertEqual(VoiceCommandParser.parse("带我去公司附近的药店"), .navigate("公司附近的药店"))
+        XCTAssertEqual(VoiceCommandParser.parse("导航到回家路小学"), .navigate("回家路小学")) // 回家路=街名
+        // 复审 F2：折返 cue（沿原路）+"回家" → 折返，不是导航回家。
+        XCTAssertEqual(VoiceCommandParser.parse("带我沿原路回家"), .goHome)
     }
 
     func testTransitDestinationExtractionRobustness() {

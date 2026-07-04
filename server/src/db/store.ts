@@ -345,6 +345,16 @@ export interface SavedRoute {
   updatedAt: number
 }
 
+/// 保存的地点（"家"/"公司"/自定义如"医院"）：盲人日常通勤"带我回家/去公司"免每次报地址。
+/// **只存地址名字符串，不存坐标**——导航时由 walking/transit 端点实时 geocode（避坐标系纠缠：geocode 出 GCJ-02
+/// 而全栈存 WGS-84，存坐标须转换；存地址则每次导航重解析、始终一致）。每个归属者每个 label 唯一（upsert 语义）。
+export interface SavedPlace {
+  ownerId: string   // 归属者（盲人本人）；删号级联删除其全部地点
+  label: string     // "home" / "work" / 自定义标签；(ownerId,label) 复合主键
+  address: string   // 地点名或地址（导航时 geocode）
+  updatedAt: number
+}
+
 export interface Recording {
   id: string
   callId: string
@@ -548,6 +558,11 @@ export interface Store {
   deleteSavedRoute(id: string): void
   deleteSavedRoutesForOwner(ownerId: string): void       // 删号级联（归属者维度）
 
+  savedPlacesForUser(ownerId: string): SavedPlace[]      // 某人保存的地点，updatedAt 倒序
+  upsertSavedPlace(p: SavedPlace): void                  // 按 (ownerId,label) 覆盖写（家/公司唯一）
+  deleteSavedPlace(ownerId: string, label: string): void
+  deleteSavedPlacesForOwner(ownerId: string): void       // 删号级联
+
   createRecording(rec: Recording): void
   allRecordings(): Recording[]
   recordingsForUser(ownerId: string): Recording[] // 某用户自己的录制（不含其软删除的），时间倒序——用户端"我的录音"
@@ -652,6 +667,7 @@ export class MemoryStore implements Store {
   protected reports = new Map<string, Report>()
   protected recordings = new Map<string, Recording>()
   protected savedRoutes = new Map<string, SavedRoute>()
+  protected savedPlaces = new Map<string, SavedPlace>() // 键 = `${ownerId} ${label}`（复合唯一）
   protected verifications = new Map<string, Verification>()
   protected refreshTokens = new Map<string, RefreshToken>()
   protected recoveryCodes = new Map<string, RecoveryCode>() // 2FA 一次性恢复码（仅哈希），键为 id
@@ -989,6 +1005,22 @@ export class MemoryStore implements Store {
   }
   deleteSavedRoutesForOwner(ownerId: string): void {
     for (const [k, v] of this.savedRoutes) if (v.ownerId === ownerId) this.savedRoutes.delete(k)
+    this.afterMutate()
+  }
+  private placeKey(ownerId: string, label: string): string { return `${ownerId} ${label}` }
+  savedPlacesForUser(ownerId: string): SavedPlace[] {
+    return [...this.savedPlaces.values()].filter((p) => p.ownerId === ownerId).sort((a, b) => b.updatedAt - a.updatedAt)
+  }
+  upsertSavedPlace(p: SavedPlace): void {
+    this.savedPlaces.set(this.placeKey(p.ownerId, p.label), p) // (ownerId,label) 唯一：同 label 覆盖
+    this.afterMutate()
+  }
+  deleteSavedPlace(ownerId: string, label: string): void {
+    this.savedPlaces.delete(this.placeKey(ownerId, label))
+    this.afterMutate()
+  }
+  deleteSavedPlacesForOwner(ownerId: string): void {
+    for (const [k, v] of this.savedPlaces) if (v.ownerId === ownerId) this.savedPlaces.delete(k)
     this.afterMutate()
   }
 
@@ -1394,6 +1426,7 @@ export class JsonFileStore extends MemoryStore {
           appConfig?: AppConfig
           notifications?: Notification[]
           savedRoutes?: SavedRoute[]
+          savedPlaces?: SavedPlace[]
           emergencyEvents?: EmergencyEvent[]
           webPushSubs?: WebPushSubscription[]
           visionUsage?: Record<string, { day: string; count: number }>
@@ -1418,6 +1451,7 @@ export class JsonFileStore extends MemoryStore {
         if (data.appConfig) this.appConfig = data.appConfig
         for (const n of data.notifications ?? []) this.notifications.set(n.id, n)
         for (const sr of data.savedRoutes ?? []) this.savedRoutes.set(sr.id, sr)
+        for (const sp of data.savedPlaces ?? []) this.savedPlaces.set(`${sp.ownerId} ${sp.label}`, sp)
         for (const ee of data.emergencyEvents ?? []) this.emergencyEvents.set(ee.id, ee)
         for (const wp of data.webPushSubs ?? []) this.webPushSubs.set(wp.endpoint, wp)
         for (const [k, v] of Object.entries(data.visionUsage ?? {})) this.visionUsage.set(k, v)
@@ -1450,6 +1484,7 @@ export class JsonFileStore extends MemoryStore {
       appConfig: this.appConfig,
       notifications: [...this.notifications.values()],
       savedRoutes: [...this.savedRoutes.values()],
+      savedPlaces: [...this.savedPlaces.values()],
       emergencyEvents: [...this.emergencyEvents.values()],
       webPushSubs: [...this.webPushSubs.values()],
       visionUsage: Object.fromEntries(this.visionUsage),

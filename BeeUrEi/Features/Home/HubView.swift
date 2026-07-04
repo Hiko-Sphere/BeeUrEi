@@ -472,6 +472,8 @@ struct HubView: View {
         case .goHome:
             AppRoute.shared.pendingNavAction = .backtrack
             showNavigation = true
+        case .navigateHome: navigateToSaved(label: "home") // 「回家」：导航到已保存的家地址
+        case .navigateWork: navigateToSaved(label: "work") // 「去公司」：导航到已保存的公司地址
         case .messages: showMessages = true
         case .readMessages: readVoiceMessages()
         case .sendMessage(let to, let text): sendVoiceMessage(to: to, text: text)
@@ -517,6 +519,25 @@ struct HubView: View {
     }
 
     /// 语音"读消息"：拉取会话列表 → 汇报有未读的最新一条（对标 Siri「读消息」，盲人不必进聊天界面逐条滑）。
+    /// 「回家/去公司」：拉已保存地点 → 有则导航到其地址（步行导航实时 geocode），无则提示去设置里添加。
+    private func navigateToSaved(label: String) {
+        func speak(_ t: String) { SpeechHub.shared.speak(t, channel: .query, voiceCode: lang.voiceCode) }
+        guard let token = session.token else { speak(HomeStrings.voiceNeedLogin(lang)); return }
+        let isHome = label == "home"
+        Task {
+            let places = (try? await APIClient().savedPlaces(token: token)) ?? []
+            await MainActor.run {
+                if let p = places.first(where: { $0.label == label }), !p.address.isEmpty {
+                    speak(isHome ? HomeStrings.navigatingHome(lang) : HomeStrings.navigatingWork(lang))
+                    AppRoute.shared.pendingNavAction = .search(p.address)
+                    showNavigation = true
+                } else {
+                    speak(isHome ? HomeStrings.noHomeSet(lang) : HomeStrings.noWorkSet(lang))
+                }
+            }
+        }
+    }
+
     private func readVoiceMessages() {
         func speak(_ t: String) { SpeechHub.shared.speak(t, channel: .query, voiceCode: lang.voiceCode) }
         guard let token = session.token else { speak(HomeStrings.voiceNeedLogin(lang)); return }

@@ -338,6 +338,9 @@ struct AdvancedSettingsView: View {
     /// 导航地区——很少需要改；以前只在导航屏内自动判定，这里上升为可常驻设置。
     @ViewBuilder private var navRegionSection: some View {
         Section {
+            NavigationLink { SavedPlacesView() } label: {
+                Label(SettingsStrings.savedPlacesTitle(lang), systemImage: "house.fill")
+            } // 常用地点（家/公司）：语音"回家/去公司"直达
             Picker(NavStrings.regionPickerLabel(lang), selection: $regionRaw) {
                 Text(NavStrings.regionAuto(lang)).tag("")
                 Text(NavStrings.regionChina(lang)).tag("china")

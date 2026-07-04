@@ -38,6 +38,7 @@ import { registerVisionRoutes } from './routes/vision'
 import { registerProductRoutes } from './routes/product'
 import { registerLocationRoutes } from './routes/locations'
 import { registerSavedRouteRoutes } from './routes/savedRoutes'
+import { registerSavedPlaceRoutes } from './routes/savedPlaces'
 import { LiveLocationRegistry } from './location/liveLocations'
 import { registerRecoveryRoutes } from './routes/recovery'
 import { registerPushRoutes } from './routes/push'
@@ -228,6 +229,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerProductRoutes(instance) // 商品条码→商品名（Open Food Facts 代理，免密钥）
     registerLocationRoutes(instance, store, liveLocations) // 实时位置共享（亲友/协助者 ↔ 盲人）
     registerSavedRouteRoutes(instance, store, pushSender) // 路线库（亲友远程路线编排 + 盲人自存路线）
+    registerSavedPlaceRoutes(instance, store) // 保存的地点（家/公司/自定义，快捷导航）
     registerAppConfigRoutes(instance, store) // 客户端读取功能开关（控制每一个按键）
     registerAssistRoutes(instance, store, hub, presence, pendingCalls, openHelp, pushSender, metrics, webPushSender)
   })

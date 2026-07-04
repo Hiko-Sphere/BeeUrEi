@@ -186,6 +186,22 @@ enum SettingsStrings {
     }
     static func helpHeader(_ l: Language) -> String { l == .zh ? "帮助" : "Help" }
     static func replayTutorial(_ l: Language) -> String { l == .zh ? "重看使用教程" : "Replay the tutorial" }
+    // 常用地点（家/公司）
+    static func savedPlacesTitle(_ l: Language) -> String { l == .zh ? "常用地点" : "Saved Places" }
+    static func savedPlacesFooter(_ l: Language) -> String {
+        l == .zh ? "填好地址后，说\u{201C}回家\u{201D}或\u{201C}去公司\u{201D}即可直接导航。" : "Once set, say \u{201C}take me home\u{201D} or \u{201C}go to work\u{201D} to navigate directly."
+    }
+    static func homeHeader(_ l: Language) -> String { l == .zh ? "家" : "Home" }
+    static func workHeader(_ l: Language) -> String { l == .zh ? "公司" : "Work" }
+    static func homeAddressPlaceholder(_ l: Language) -> String { l == .zh ? "家的地址或地点名" : "Home address or place name" }
+    static func workAddressPlaceholder(_ l: Language) -> String { l == .zh ? "公司的地址或地点名" : "Work address or place name" }
+    static func saveHome(_ l: Language) -> String { l == .zh ? "保存家的地址" : "Save home" }
+    static func saveWork(_ l: Language) -> String { l == .zh ? "保存公司地址" : "Save work" }
+    static func clearPlace(_ l: Language) -> String { l == .zh ? "清除" : "Clear" }
+    static func placeSaved(_ l: Language) -> String { l == .zh ? "已保存" : "Saved" }
+    static func placeSaveFailed(_ l: Language) -> String { l == .zh ? "保存失败，请稍后再试" : "Couldn't save — please try again" }
+    static func placeCleared(_ l: Language) -> String { l == .zh ? "已清除" : "Cleared" }
+
     static func aboutHeader(_ l: Language) -> String { l == .zh ? "关于" : "About" }
     static func orgLabel(_ l: Language) -> String { l == .zh ? "组织" : "Organization" }
     static func producerLabel(_ l: Language) -> String { l == .zh ? "软件制作人" : "Producer" }

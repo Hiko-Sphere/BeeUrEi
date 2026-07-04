@@ -16,7 +16,9 @@ public enum VoiceCommand: Equatable, Sendable {
     case guideMe                    // 开始导盲/避障（进入实时避障模式）
     case navigate(String?)          // 步行导航（可带目的地）
     case transit(String)            // 公交/地铁出行到某地（"坐公交去X"/"take transit to X"）——过城刚需，区别于 navigate 的步行
-    case goHome                     // 原路返回
+    case goHome                     // 原路返回（面包屑折返回来路起点）——区别于 navigateHome（导航到已保存的家）
+    case navigateHome               // 导航到已保存的"家"地址（"回家"）
+    case navigateWork               // 导航到已保存的"公司"地址（"去公司/上班"）
     case readText                   // 朗读文字
     case readDates                  // 读包装日期（保质期/生产日期——盲人看不到食品/药品日期，高频刚需）
     case readPhone                  // 读电话号码（名片/海报上的号码——盲人读不到也拨不了；只读不自动拨）
@@ -99,7 +101,13 @@ public enum VoiceCommandParser {
         // 但 .date 的裸"日期"/"几号"仍归 .date（这里的键都不含裸"日期"）。读的是包装印刷日期，非今天日期。
         if has(["保质期", "有效期", "生产日期", "保存期", "赏味期", "读日期", "看日期", "包装日期", "过期", "expir", "best before", "use by", "shelf life"]) { return .readDates }
         if has(["几号", "今天几号", "日期", "星期几", "礼拜几", "周几", "今天星期", "today's date", "what's the date", "what day", "what date"]) { return .date }
-        if has(["回家", "原路返回", "返回出发", "带我回去", "go back", "take me back", "backtrack"]) { return .goHome }
+        // 原路返回（面包屑折返）须在回家/去公司之前：使"带我沿原路回家"走折返而非回家（复审 F2）。
+        if has(["原路返回", "返回出发", "带我回去", "沿原路", "go back", "take me back", "backtrack"]) { return .goHome }
+        // 回家/去公司：导航到**已保存的**家/公司地址。用**整句匹配**（去礼貌前后缀后恰好是这些短语），而非子串——
+        // 否则"带我去公司附近的药店"（含"去公司"）会被误当"去公司"快捷、导去错地方（复审 F1）。须在步行导航之前
+        // （否则"去公司"被 parseDestination 当搜"公司"这个名字）；transit（"坐公交去公司"）在更前，故仍走公交。
+        if isWholeCommand(t, ["回家", "回家去", "回趟家", "take me home", "go home", "navigate home", "head home"]) { return .navigateHome }
+        if isWholeCommand(t, ["去公司", "到公司", "去上班", "去单位", "到单位", "上班", "take me to work", "go to work", "navigate to work", "head to work"]) { return .navigateWork }
         // 读电话号码：名片/海报上的号码。用"电话号码/读电话/读号码"等明确说法，与 .help 的"打电话/呼叫"(拨号给人)
         // 区分开——这里是**读出**号码交用户核对，绝不自动拨。置于 look/find 之前。
         if has(["电话号码", "读电话", "读号码", "念电话", "念号码", "读一下电话", "看电话", "上面的电话", "名片电话", "phone number", "read the number", "read the phone", "read number"]) { return .readPhone }
@@ -141,6 +149,22 @@ public enum VoiceCommandParser {
         if let dest = parseDestination(text) { return .navigate(dest) }
         if has(["导航", "navigate", "navigation", "directions"]) { return .navigate(nil) }
         return .unknown
+    }
+
+    /// 去掉礼貌前缀/尾缀后，整句是否**恰好**是这些短语之一（而非子串）——用于"回家/去公司"这类无参数快捷指令，
+    /// 避免"带我去公司附近的药店"被"去公司"子串抢（复审 F1）。入参为已 lowercased 的整句。
+    static func isWholeCommand(_ lowered: String, _ phrases: [String]) -> Bool {
+        let trimSet = CharacterSet(charactersIn: "。，？！,.?!、").union(.whitespacesAndNewlines)
+        var x = lowered.trimmingCharacters(in: trimSet)
+        let prefixes = ["带我", "请", "帮我", "我要", "我想", "现在", "导航", "i want to ", "i wanna ", "let's ", "can you ", "please "]
+        let suffixes = ["吧", "呢", "啊", "呀", "一下", "了", " now", " please"]
+        var changed = true
+        while changed {
+            changed = false
+            for p in prefixes where x.hasPrefix(p) && x.count > p.count { x = String(x.dropFirst(p.count)).trimmingCharacters(in: trimSet); changed = true; break }
+            for s in suffixes where x.hasSuffix(s) && x.count > s.count { x = String(x.dropLast(s.count)).trimmingCharacters(in: trimSet); changed = true; break }
+        }
+        return phrases.contains(x)
     }
 
     /// 「坐公交/地铁去X」「怎么坐车到X」/ "take transit/the bus to X"、"how do I get to X by subway"：

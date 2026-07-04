@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { Store, User, Role, EmergencyEvent, WebPushSubscription, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, SessionInfo, ChatMessage, ChatGroup, MediaMeta, Passkey, AdminAuditEntry, Warning, AppConfig, AppConfigPatch, Notification, Verification, VerificationStatus, KycBlobRef } from './store'
-import { normalizeAppConfig, mergeAppConfig, type SavedRoute } from './store'
+import { normalizeAppConfig, mergeAppConfig, type SavedRoute, type SavedPlace } from './store'
 
 // 用运行时 require + 非静态模块名加载 node:sqlite，避免打包器(vitest/vite)静态解析失败；
 // 由 Node 在运行时解析（需 --experimental-sqlite，已在 npm 脚本里通过 NODE_OPTIONS 开启）。
@@ -140,6 +140,15 @@ export class SqliteStore implements Store {
     `)
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_saved_routes_owner ON saved_routes (ownerId, updatedAt)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_saved_routes_creator ON saved_routes (createdBy, updatedAt)')
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS saved_places (
+        ownerId TEXT NOT NULL,
+        label TEXT NOT NULL,
+        address TEXT NOT NULL,
+        updatedAt INTEGER NOT NULL,
+        PRIMARY KEY (ownerId, label)
+      )
+    `)
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_recordings_owner ON recordings (ownerId, recordedAt)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_media_owner ON media (ownerId)')
     // recordingByMediaId 在**每次** GET /api/media 都被调（拦截录制媒体外泄），缺索引则每次媒体下载全表扫 recordings。
@@ -506,6 +515,22 @@ export class SqliteStore implements Store {
   }
   deleteSavedRoutesForOwner(ownerId: string): void {
     this.db.prepare('DELETE FROM saved_routes WHERE ownerId = ?').run(ownerId)
+  }
+  private rowToSavedPlace(r: any): SavedPlace {
+    return { ownerId: r.ownerId, label: r.label, address: r.address, updatedAt: Number(r.updatedAt) }
+  }
+  savedPlacesForUser(ownerId: string): SavedPlace[] {
+    return (this.db.prepare('SELECT * FROM saved_places WHERE ownerId = ? ORDER BY updatedAt DESC').all(ownerId) as any[]).map((r) => this.rowToSavedPlace(r))
+  }
+  upsertSavedPlace(p: SavedPlace): void {
+    this.db.prepare('INSERT OR REPLACE INTO saved_places (ownerId, label, address, updatedAt) VALUES (?, ?, ?, ?)')
+      .run(p.ownerId, p.label, p.address, p.updatedAt) // 复合主键 (ownerId,label)：同 label 覆盖
+  }
+  deleteSavedPlace(ownerId: string, label: string): void {
+    this.db.prepare('DELETE FROM saved_places WHERE ownerId = ? AND label = ?').run(ownerId, label)
+  }
+  deleteSavedPlacesForOwner(ownerId: string): void {
+    this.db.prepare('DELETE FROM saved_places WHERE ownerId = ?').run(ownerId)
   }
 
   createRecording(rec: Recording): void {

@@ -48,6 +48,8 @@ export function cascadeDeleteUser(store: Store, id: string): void {
   store.deleteVisionUsageForUser(id) // AI 视觉每日配额计数：删号即清，不留无主行
   // 路线库：归属者删号即清其全部路线（亲友替其画的也属其资产，随主体删除）；绘制者删号不影响他人路线。
   store.deleteSavedRoutesForOwner(id)
+  // 保存的地点（家/公司/自定义）：归属者独有数据，删号即清。
+  store.deleteSavedPlacesForOwner(id)
   // 实名认证（KYC）：删号即清除该用户的证件密文文件（最敏感 PII）。
   // 法务保留(legalHold)的记录与其证据刻意保留（取证），其余连记录带磁盘密文一并清除。
   for (const v of store.allVerifications()) {

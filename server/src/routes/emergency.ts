@@ -82,6 +82,9 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     }
 
     const now0 = Date.now()
+    // 本次告警的事件 id：先生成，既用于事件日志，又随通知/推送下发给每个亲友——亲友"知道了"回执(ack)
+    // 据此精确定位是哪一次告警（同一发起人短时间内多次告警时不混淆）。
+    const eventId = randomUUID()
     const links = store.linksByOwner(me.id).filter((l) => (l.status ?? 'accepted') === 'accepted')
     // 安全攸关：所有亲友必须**并行**收到告警，且任一推送失败绝不能中断其余推送或 500 整个请求。
     // 此前串行 await——第一个亲友的 APNs 抛错会让后面所有亲友收不到摔倒告警。
@@ -106,10 +109,10 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     }
     const hasLoc = lat != null && lon != null
 
-    const extraBase: Record<string, string> = { type: 'emergency_alert', kind: parsed.data.kind, fromId: me.id }
+    const extraBase: Record<string, string> = { type: 'emergency_alert', kind: parsed.data.kind, fromId: me.id, eventId }
     // 通知记录的 data 形状与推送 extra 一致（去掉 type，记录的 kind 字段已表达类别）。
-    // fromName：供协助端（web 通知页）渲染"回拨 X"按钮的呼叫目标显示名。
-    const notifData: Record<string, string> = { kind: parsed.data.kind, fromId: me.id, fromName: me.displayName }
+    // fromName：供协助端（web 通知页）渲染"回拨 X"按钮的呼叫目标显示名。eventId：供"知道了"回执定位本次告警。
+    const notifData: Record<string, string> = { kind: parsed.data.kind, fromId: me.id, fromName: me.displayName, eventId }
     if (hasLoc) {
       extraBase.lat = String(lat); extraBase.lon = String(lon)
       notifData.lat = String(lat); notifData.lon = String(lon)
@@ -158,10 +161,57 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     // 紧急事件日志（治理/值守，admin 可见）：best-effort——日志失败绝不影响告警响应。
     // alertId 重试在上方 dedup 已短路返回，不会重复落账。
     try {
-      store.createEmergencyEvent({ id: randomUUID(), userId: me.id, kind: parsed.data.kind,
+      store.createEmergencyEvent({ id: eventId, userId: me.id, kind: parsed.data.kind,
         lat, lon, locSource: locSource ?? 'none', locAgeSec, notified: result.notified, contacts: result.contacts, at: now0 })
     } catch { /* 日志不可阻断告警 */ }
     if (dedupKey) alertDedup.record(dedupKey, result, Date.now()) // 记住本次结果，后续同 alertId 重试直接返回它
     return result
+  })
+
+  // 亲友确认已看到某条紧急告警 → 回告发起人"X 已看到你的求助"。医疗警报/安全类 App 的标配：遇险者
+  // 最需要的反馈是"有人在响应"，而非石沉大海。发起人经既有通知+推送链路收到（盲人端 VoiceOver 会念）。
+  const ackDedup = new EmergencyAlertDedup() // 复用 TTL 去重：同一(发起人:事件:确认者)5 分钟内只回告一次，防连点轰炸遇险者
+  const ackSchema = z.object({
+    fromId: z.string().min(1).max(64),           // 发起紧急告警的人（当前用户是其已接受亲友）
+    eventId: z.string().min(1).max(64).optional(), // 哪一次告警（缺省则按发起人维度去重）
+  })
+  app.post('/api/emergency/ack', { preHandler: requireAuth(),
+                                   config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const parsed = ackSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const acker = store.findById(req.user!.sub)
+    if (!acker) return reply.code(404).send({ error: 'not_found' })
+    const { fromId, eventId } = parsed.data
+    if (fromId === acker.id) return reply.code(400).send({ error: 'invalid_input' }) // 不能确认自己的告警
+    // 授权：确认者必须是发起人的**已接受**亲友（发起人是 owner、亲友是 member）——否则任何人都能给
+    // 陌生人发"已看到你的求助"骚扰。
+    const isContact = store.linksByOwner(fromId).some((l) => (l.status ?? 'accepted') === 'accepted' && l.memberId === acker.id)
+    if (!isContact) return reply.code(403).send({ error: 'not_contact' })
+    const sender = store.findById(fromId)
+    if (!sender) return reply.code(404).send({ error: 'not_found' })
+
+    const now = Date.now()
+    const key = `${fromId}:${eventId ?? 'noid'}:${acker.id}`
+    if (ackDedup.check(key, now) !== undefined) return { ok: true, deduped: true } // 已回告过，不再重复打扰遇险者
+
+    const l = pushLang(sender.language)
+    const title = pushStrings.emergencyAckTitle(acker.displayName, l)
+    const body = pushStrings.emergencyAckBody(acker.displayName, l)
+    // kind='emergency_ack'：客户端据此区别于 'emergency_alert'——**绝不**触发遇险告警的响铃/大模态，
+    // 只作普通通知（web pickUnreadEmergencies 已排除本 kind；iOS 告警模态仅由本机跌倒检测驱动，不受推送触发）。
+    const data: Record<string, string> = { kind: 'emergency_ack', fromId: acker.id, fromName: acker.displayName }
+    if (eventId) data.eventId = eventId
+    try {
+      store.createNotification({ id: randomUUID(), userId: sender.id, kind: 'emergency_ack', title, body, data, createdAt: Date.now() })
+    } catch { /* 通知失败不阻断回告推送 */ }
+    const webJobs = webPush.configured
+      ? store.webPushSubscriptionsForUser(sender.id).map((sub) => webPush.send(sub, JSON.stringify({ title, body, data })).catch(() => { /* 单订阅失败不阻断 */ }))
+      : []
+    const apnsJob = sender.apnsToken
+      ? pushSender.sendAlert(sender.apnsToken, title, body, { type: 'emergency_ack', fromId: acker.id }, undefined, totalUnreadFor(store, sender.id).total)
+      : Promise.resolve()
+    await Promise.allSettled([apnsJob, ...webJobs])
+    ackDedup.record(key, { ok: true }, now)
+    return { ok: true }
   })
 }

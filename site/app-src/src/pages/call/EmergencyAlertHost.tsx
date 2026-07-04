@@ -100,6 +100,8 @@ export function EmergencyAlertHost() {
     dismissedRef.current.add(top.id)
     setAlerts((cur) => cur.filter((n) => n.id !== top.id))
     void api.markNotifRead(top.id).catch(() => {}) // 失败也已会话内静默；下次刷新以服务端为准
+    // 回告发起人"我已看到你的求助"（遇险者最需要的反馈）。best-effort：失败不影响本端"知道了"。
+    if (top.data?.fromId) void api.emergencyAck(top.data.fromId, top.data.eventId ?? undefined).catch(() => {})
   }, [top])
 
   const callBack = useCallback(() => {

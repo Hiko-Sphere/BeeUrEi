@@ -307,6 +307,8 @@ export const api = {
   unreadSummary: () => get('/api/unread') as Promise<{ messages: number; notifications: number; total: number }>,
   markNotifRead: (id: string) => post(`/api/notifications/${id}/read`),
   markAllNotifsRead: () => post('/api/notifications/read-all'),
+  // 紧急告警"知道了"回执：回告发起人"有人已看到你的求助"（fromId=发起人，eventId=哪一次告警）。
+  emergencyAck: (fromId: string, eventId?: string) => post('/api/emergency/ack', { fromId, eventId }),
   // Web Push（浏览器推送紧急告警）
   webVapidKey: () => get('/api/push/web-vapid-key') as Promise<{ key: string }>,
   webPushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) => post('/api/push/web-subscribe', sub),

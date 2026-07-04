@@ -51,6 +51,12 @@ export const pushStrings = {
     const what = kind === 'crash' ? '剧烈撞击（疑似车祸）' : '疑似摔倒'
     return `App 检测到${what}且无人响应。${hasLocation ? '已附带位置。' : ''}请立即联系或呼叫对方。`
   },
+  // 亲友确认收到你的紧急求助 → 回告发起人"有人在响应"（遇险者最需要的反馈：知道不是石沉大海）。
+  emergencyAckTitle: (name: string, l: PushLang): string =>
+    l === 'en' ? `${name} saw your alert` : `${name} 已看到你的求助`,
+  emergencyAckBody: (name: string, l: PushLang): string =>
+    l === 'en' ? `${name} acknowledged your emergency alert and knows you may need help.`
+               : `${name} 已确认收到你的紧急求助，知道你可能需要帮助。`,
   newMessageTitle: (name: string, l: PushLang): string =>
     l === 'en' ? `Message from ${name}` : `${name} 发来消息`,
   groupMessageTitle: (name: string, group: string, l: PushLang): string =>

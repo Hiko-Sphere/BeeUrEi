@@ -28,4 +28,12 @@ describe('pickUnreadEmergencies（告警实时弹出的挑选规则）', () => {
     expect(pickUnreadEmergencies([], none)).toEqual([])
     expect(pickUnreadEmergencies([notif('a', 'emergency_alert', 100, 150)], none)).toEqual([])
   })
+
+  it('回执 emergency_ack 不弹告警模态（"X 已看到你的求助"是给发起人的反馈，非新告警）', () => {
+    const list = [
+      notif('a', 'emergency_alert', 100), // 真告警：弹
+      notif('k', 'emergency_ack', 300),   // 回执：kind 含 emergency 但绝不弹响铃大模态
+    ]
+    expect(pickUnreadEmergencies(list, none).map((n) => n.id)).toEqual(['a'])
+  })
 })

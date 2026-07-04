@@ -140,6 +140,30 @@ describe('SqliteStore (node:sqlite)', () => {
     expect(store.messagesBetween('u1', 'u2', 10).length).toBe(3) // d1 + 搜索测试加的 s2(text)/s3(image)，群解散不影响单聊
   })
 
+  it('消息可选元数据 replyTo/editedAt/reaction 往返（SqliteStore 列+映射，与 MemoryStore 同形）', () => {
+    // 这三个可选字段都是分批加列的（reaction/编辑/引用回复）；prod 走 SqliteStore 而测试多用 MemoryStore，
+    // 列 DDL/迁移/INSERT/toMessage 任一处漏掉都不会被 MemoryStore 测试发现。此处直接比对两库形状一致。
+    const stores = [new SqliteStore(':memory:'), new MemoryStore()] as const
+    for (const store of stores) {
+      const full: import('../src/db/store').ChatMessage =
+        { id: 'r1', fromId: 'u1', toId: 'u2', kind: 'text', text: '收到', createdAt: 1000, reaction: '👍', editedAt: 1500, replyTo: 'orig1' }
+      store.createMessage(full)
+      // 全字段完整还原。
+      expect(store.findMessage('r1')).toMatchObject({ reaction: '👍', editedAt: 1500, replyTo: 'orig1' })
+      // 经列表路径（messagesBetween）同样保留 replyTo（不只 findMessage）。
+      expect(store.messagesBetween('u1', 'u2', 10).find((m) => m.id === 'r1')?.replyTo).toBe('orig1')
+      // 不设可选字段 → 读回 undefined（不是 null/0），两库一致（映射须用 ?? undefined）。
+      store.createMessage({ id: 'r2', fromId: 'u1', toId: 'u2', kind: 'text', text: '无附加', createdAt: 2000 })
+      const bare = store.findMessage('r2')!
+      expect(bare.replyTo).toBeUndefined()
+      expect(bare.editedAt).toBeUndefined()
+      expect(bare.reaction).toBeUndefined()
+      // 编辑更新后 editedAt 落库并读回（updateMessage 路径）。
+      store.updateMessage('r2', { text: '改了', editedAt: 2500 })
+      expect(store.findMessage('r2')).toMatchObject({ text: '改了', editedAt: 2500 })
+    }
+  })
+
   it('翻页复合游标 (createdAt,id)：同毫秒边界消息不漏（修严格 < 游标的历史丢失）', () => {
     const store = new SqliteStore(':memory:')
     // 三条同毫秒(1000) + 一条更早(900)；id 决定同毫秒内顺序。

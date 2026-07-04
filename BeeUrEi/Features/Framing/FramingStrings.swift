@@ -476,6 +476,8 @@ enum FramingStrings {
             case "page": return "整页"
             case "barcode": return "扫码"
             case "banknote": return "纸币"
+            case "dates": return "日期"
+            case "phone": return "电话"
             default: return "文字"
             }
         case .en:
@@ -483,6 +485,8 @@ enum FramingStrings {
             case "page": return "Page"
             case "barcode": return "Code"
             case "banknote": return "Banknote"
+            case "dates": return "Date"
+            case "phone": return "Phone"
             default: return "Text"
             }
         }

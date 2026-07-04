@@ -675,6 +675,7 @@ final class FramingAssistViewModel {
                 if let out = LabelDateReader.find(texts: texts, language: self.lang) {
                     self.resultText = out
                     self.copyableResult = out
+                    self.historyStore.add(kind: "dates", content: out) // 存识别历史，供事后搜索/回看（与 readText 口径一致）
                     self.speak(out)
                 } else {
                     self.resultText = FramingStrings.noDatesFound(self.lang)
@@ -711,6 +712,7 @@ final class FramingAssistViewModel {
                 } else {
                     self.resultText = FramingStrings.phoneResult(numbers, self.lang)
                     self.copyableResult = numbers.joined(separator: "\n")
+                    self.historyStore.add(kind: "phone", content: numbers.joined(separator: "\n")) // 存识别历史，供事后回看/复制拨打
                 }
                 self.speak(self.resultText)
             }

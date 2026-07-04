@@ -333,6 +333,8 @@ struct HubView: View {
                     ProgressView().tint(.white).scaleEffect(1.6)
                 case .sent(let n):
                     Text(HomeStrings.fallAlertSent(n, lang)).font(.title3).foregroundStyle(.white).multilineTextAlignment(.center).padding(.horizontal)
+                    // 告警已发出后报平安：广播解除，让刚收到告警而担心/正赶来的亲友立刻安心（安全类 all-clear 闭环）。
+                    BeeBigButton(HomeStrings.allClearButton(lang), systemImage: "checkmark.circle.fill", tint: .beeSuccess, foreground: .white) { emergency.allClear() }
                 case .failed:
                     Text(HomeStrings.fallAlertFailed(lang)).font(.title3).foregroundStyle(.white).multilineTextAlignment(.center).padding(.horizontal)
                     BeeBigButton(HomeStrings.helpTitle(lang), systemImage: "hand.raised.fill", tint: .beeHoney) { requestRemoteHelp() }

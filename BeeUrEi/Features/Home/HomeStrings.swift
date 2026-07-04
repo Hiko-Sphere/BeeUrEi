@@ -187,6 +187,11 @@ enum HomeStrings {
     }
     static func imOK(_ l: Language) -> String { l == .zh ? "我没事" : "I'm OK" }
     static func notifyNow(_ l: Language) -> String { l == .zh ? "立即通知亲友" : "Notify family now" }
+    /// 告警**已发出后**的"报平安"按钮与播报：广播解除，让刚收到告警而担心的亲友安心。
+    static func allClearButton(_ l: Language) -> String { l == .zh ? "报平安（我没事了）" : "I'm OK — send all-clear" }
+    static func allClearSpeak(_ l: Language) -> String {
+        l == .zh ? "已向亲友报平安，解除刚才的求助。" : "All-clear sent to your family — the alert is resolved."
+    }
     static func fallAlertTitle(_ l: Language) -> String { l == .zh ? "检测到可能的意外" : "Possible accident detected" }
     static func magicTapHint(_ l: Language) -> String {
         l == .zh ? "双指双击可一键求助" : "Two-finger double-tap to call for help"

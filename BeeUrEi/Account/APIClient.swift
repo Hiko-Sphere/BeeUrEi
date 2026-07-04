@@ -844,6 +844,14 @@ struct APIClient {
         return obj["contacts"] as? Int ?? 0
     }
 
+    /// 报平安（all-clear）：告警发出后确认没事 → 广播给亲友解除。best-effort；alertId 关联那次告警。
+    @discardableResult
+    func postEmergencyAllClear(token: String, alertId: String?) async -> Bool {
+        var body: [String: Any] = [:]
+        if let alertId { body["alertId"] = alertId }
+        return (try? await authedSend("POST", "/api/emergency/all-clear", token: token, body: body)) != nil
+    }
+
     // MARK: 聊天（绑定亲友/协助者互发）
 
     func sendMessage(token: String, toId: String, kind: String, text: String) async throws -> ChatMessageInfo {

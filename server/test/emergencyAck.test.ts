@@ -58,3 +58,45 @@ describe('紧急告警回执 /api/emergency/ack', () => {
     await a.close()
   })
 })
+
+// 报平安（all-clear）：告警发出后发起人确认没事 → 广播给所有已接受亲友，让担心的人安心（安全类标配"解除"闭环）。
+describe('紧急报平安 /api/emergency/all-clear', () => {
+  async function seed() {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const reg = async (u: string, role: string) =>
+      (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const owner = await reg('clearsender', 'blind')
+    const helper = await reg('clearhelper', 'helper')
+    const ownerAuth = { authorization: `Bearer ${owner.token}` }
+    const l = await a.inject({ method: 'POST', url: '/api/family/links', headers: ownerAuth,
+      payload: { username: 'clearhelper', relation: '家人', isEmergency: true } })
+    await a.inject({ method: 'POST', url: `/api/family/links/${l.json().link.id}/accept`,
+      headers: { authorization: `Bearer ${helper.token}` } })
+    const helperId = store.findByUsername('clearhelper')!.id
+    return { a, store, owner, helperId }
+  }
+
+  it('发起人报平安 → 每个已接受亲友收到 emergency_clear 通知（带 alertId）', async () => {
+    const { a, store, owner, helperId } = await seed()
+    const res = await a.inject({ method: 'POST', url: '/api/emergency/all-clear',
+      headers: { authorization: `Bearer ${owner.token}` }, payload: { alertId: 'a1' } })
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toMatchObject({ ok: true, notified: 1 })
+    const clear = store.notificationsForUser(helperId).find((n) => n.kind === 'emergency_clear')
+    expect(clear).toBeTruthy()
+    expect(clear!.title).toContain('clearsender')          // 谁报的平安
+    expect(clear!.data).toMatchObject({ kind: 'emergency_clear', alertId: 'a1' }) // 带 alertId 供客户端消对应告警模态
+  })
+
+  it('去重：同一 alertId 多次报平安只广播一次；未登录 401', async () => {
+    const { a, store, owner, helperId } = await seed()
+    const clr = () => a.inject({ method: 'POST', url: '/api/emergency/all-clear',
+      headers: { authorization: `Bearer ${owner.token}` }, payload: { alertId: 'a2' } })
+    await clr(); const r2 = await clr()
+    expect(r2.json()).toMatchObject({ deduped: true })
+    expect(store.notificationsForUser(helperId).filter((n) => n.kind === 'emergency_clear').length).toBe(1)
+    expect((await a.inject({ method: 'POST', url: '/api/emergency/all-clear', payload: { alertId: 'x' } })).statusCode).toBe(401)
+    await a.close()
+  })
+})

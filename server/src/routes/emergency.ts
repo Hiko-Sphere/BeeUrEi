@@ -214,4 +214,43 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     ackDedup.record(key, { ok: true }, now)
     return { ok: true }
   })
+
+  // 报平安（all-clear）：告警发出后，发起人确认没事 → 广播给所有已接受亲友，让刚收到告警而担心/赶来的人
+  // 立刻安心。安全类 App（医疗警报/Life360）的标配——告警是单向的、必须有"解除"闭环，否则误报会让家人白跑。
+  // 只能解除**自己**的告警（广播给自己的亲友，无需对方是谁的授权检查——发的是给自己联系人的安心消息）。
+  const clearDedup = new EmergencyAlertDedup() // 同一(发起人:alertId)5 分钟内只广播一次，防连点
+  const clearSchema = z.object({ alertId: z.string().min(1).max(64).optional() }) // 关联哪次告警（供客户端消掉对应告警模态）
+  app.post('/api/emergency/all-clear', { preHandler: requireAuth(),
+                                         config: { rateLimit: { max: 6, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const parsed = clearSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const me = store.findById(req.user!.sub)
+    if (!me) return reply.code(404).send({ error: 'not_found' })
+    const now = Date.now()
+    const key = `${me.id}:${parsed.data.alertId ?? 'noid'}`
+    if (clearDedup.check(key, now) !== undefined) return { ok: true, deduped: true }
+    const links = store.linksByOwner(me.id).filter((l) => (l.status ?? 'accepted') === 'accepted')
+    const members = links.map((l) => store.findById(l.memberId)).filter((m): m is NonNullable<typeof m> => !!m)
+    // kind='emergency_clear'：客户端据此区别于告警——绝不触发响铃/大模态，只作普通通知；带 alertId 供
+    // 客户端把对应的那条 emergency_alert 告警模态就地消掉（"对方已报平安"）。
+    const data: Record<string, string> = { kind: 'emergency_clear', fromId: me.id, fromName: me.displayName }
+    if (parsed.data.alertId) data.alertId = parsed.data.alertId
+    await Promise.allSettled(members.map((member) => {
+      const l = pushLang(member.language)
+      const title = pushStrings.emergencyClearTitle(me.displayName, l)
+      const body = pushStrings.emergencyClearBody(me.displayName, l)
+      try {
+        store.createNotification({ id: randomUUID(), userId: member.id, kind: 'emergency_clear', title, body, data, createdAt: Date.now() })
+      } catch { /* 通知失败不阻断广播 */ }
+      const webJobs = webPush.configured
+        ? store.webPushSubscriptionsForUser(member.id).map((sub) => webPush.send(sub, JSON.stringify({ title, body, data })).catch(() => { /* 单订阅失败不阻断 */ }))
+        : []
+      const apnsJob = member.apnsToken
+        ? pushSender.sendAlert(member.apnsToken, title, body, { type: 'emergency_clear', fromId: me.id }, undefined, totalUnreadFor(store, member.id).total)
+        : Promise.resolve()
+      return Promise.allSettled([apnsJob, ...webJobs])
+    }))
+    clearDedup.record(key, { ok: true }, now)
+    return { ok: true, notified: members.length }
+  })
 }

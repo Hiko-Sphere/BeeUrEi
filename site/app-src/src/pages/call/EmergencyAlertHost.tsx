@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type NotificationInfo } from '../../lib/api'
-import { pickUnreadEmergencies, playEmergencyChime } from '../../lib/emergencyAlerts'
+import { pickUnreadEmergencies, playEmergencyChime, clearedSenderIds } from '../../lib/emergencyAlerts'
 import { emergencyLocInfo } from '../../lib/emergencyLoc'
 import { useI18n } from '../../lib/i18n'
 import { Modal, fmtTime } from '../../components/ui'
@@ -78,7 +78,10 @@ export function EmergencyAlertHost() {
       try {
         const { notifications } = await api.notifications()
         if (!alive) return
+        // 发起人已报平安(emergency_clear)的告警就地消掉——对方已没事，让担心的亲友立刻安心，不再弹/响。
+        const cleared = clearedSenderIds(notifications)
         const urgent = pickUnreadEmergencies(notifications, dismissedRef.current)
+          .filter((n) => !(n.data?.fromId && cleared.has(n.data.fromId)))
         setAlerts(urgent)
         // 只对首次见到的告警响铃（轮询重复到达不再响）。
         const fresh = urgent.filter((n) => !chimedRef.current.has(n.id))

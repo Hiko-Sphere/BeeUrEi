@@ -5,15 +5,24 @@ import type { NotificationInfo } from './api'
 /// 背景：摔倒/车祸/手动 SOS 告警此前在网页端只是角标 +1——正盯着聊天页的协助者完全不会注意到。
 /// 告警链路（在线优先→位置兜底→诚实标注）的最后一米是"到达即被看见"：未读紧急告警须弹模态+提示音。
 ///
-/// 规则：kind 含 emergency 且**不是回执(emergency_ack)** 且未读且未被本次会话内"稍后"过 → 按时间倒序。
+/// 规则：kind 是**真告警**（emergency_alert，不含回执 ack / 报平安 clear）且未读且未被本次会话内"稍后"过 → 时间倒序。
 /// - 以**服务端 readAt** 为真相：点"知道了"标已读后永不再弹（跨设备一致）；
 /// - "稍后"只记在内存（sessionDismissed）：本会话不再骚扰，但刷新后仍会弹——告警未确认前不该被永久静默。
-/// - **排除 emergency_ack**："X 已看到你的求助"是给发起人的反馈，绝不能当成新告警弹响铃大模态
-///   （否则 web 端既发过告警又收到回执的用户会被自己联系人的"知道了"误弹一次紧急模态）。
+/// - **排除 emergency_ack / emergency_clear**：回执"X 已看到"与报平安"X 报平安了"都是反馈类、绝不能当新告警
+///   弹响铃大模态（否则 web 端既发过告警又收到反馈的用户会被自己联系人的反馈误弹一次紧急模态）。
 export function pickUnreadEmergencies(list: NotificationInfo[], sessionDismissed: ReadonlySet<string>): NotificationInfo[] {
   return list
-    .filter((n) => n.kind.includes('emergency') && n.kind !== 'emergency_ack' && !n.readAt && !sessionDismissed.has(n.id))
+    .filter((n) => n.kind.includes('emergency') && n.kind !== 'emergency_ack' && n.kind !== 'emergency_clear' && !n.readAt && !sessionDismissed.has(n.id))
     .sort((a, b) => b.createdAt - a.createdAt)
+}
+
+/// 已被发起人"报平安(emergency_clear)"解除的告警发起人 id 集合：其名下所有告警应就地消掉（对方已没事，
+/// 让担心的亲友立刻安心）。按 **fromId** 关联而非精确 id——告警通知带 eventId、报平安带 alertId（两套 id
+/// 空间不同），且"X 报平安"本就意味 X 的所有未决告警都可解除，按发起人聚合正是想要的语义。
+export function clearedSenderIds(list: NotificationInfo[]): Set<string> {
+  const s = new Set<string>()
+  for (const n of list) if (n.kind === 'emergency_clear' && n.data?.fromId) s.add(n.data.fromId)
+  return s
 }
 
 /// 提示音（三声短促蜂鸣）：紧急告警到达时把听觉注意力拉回来。浏览器自动播放策略下 AudioContext

@@ -46,6 +46,7 @@ final class EmergencyAlertCenter: NSObject, CLLocationManagerDelegate {
     @ObservationIgnored private var countdownTask: Task<Void, Never>?
     @ObservationIgnored private let location = CLLocationManager()
     @ObservationIgnored private var lastFix: CLLocation?
+    @ObservationIgnored private var lastAlertId: String?   // 最近一次发出告警的 alertId，供"报平安"关联那次告警
     private var lang: Language { FeatureSettings().language }
 
     private override init() {
@@ -95,6 +96,16 @@ final class EmergencyAlertCenter: NSObject, CLLocationManagerDelegate {
         speak(HomeStrings.fallAlertCancelled(lang))
     }
 
+    /// 告警**已发出后**报平安：广播"我没事了"给亲友，解除刚才那次告警（让担心/正赶来的人立刻安心）。
+    /// 安全类 App 的 all-clear 闭环——倒计时内取消(cancel)是不发告警；发出后才用本方法解除。仅 .sent 后可用。
+    func allClear() {
+        guard case .sent = phase else { return }
+        let aid = lastAlertId
+        phase = .idle
+        speak(HomeStrings.allClearSpeak(lang))
+        Task { if let token = KeychainStore.read() { _ = await APIClient().postEmergencyAllClear(token: token, alertId: aid) } }
+    }
+
     /// 立即通知（不等倒计时）。
     func sendNow() {
         guard case .countdown = phase else { return }
@@ -124,6 +135,7 @@ final class EmergencyAlertCenter: NSObject, CLLocationManagerDelegate {
         // 手动重试），单次失败绝不能放弃。间隔 0/3/6/12/20s 共 5 次（≤ 服务端 6/min 限流）；每次用**同一**
         // alertId，服务端据此幂等去重——即便某次其实已送达只是回执丢了，重试也绝不会让亲友收到重复告警。
         let alertId = UUID().uuidString
+        lastAlertId = alertId   // 记住本次告警 id，供发出后"报平安"关联解除
         let backoffs: [Double] = [0, 3, 6, 12, 20]
         var reached: Int?
         for delay in backoffs {
@@ -143,20 +155,21 @@ final class EmergencyAlertCenter: NSObject, CLLocationManagerDelegate {
         if let reached {
             phase = .sent(reached: reached)
             speak(HomeStrings.fallAlertSent(reached, lang))
+            scheduleReset(after: 30) // .sent 停留更久：给盲人 VoiceOver 足够时间找到并点"报平安"解除告警
         } else {
             phase = .failed
             speak(HomeStrings.fallAlertFailed(lang))
             // 无网兜底：重试全败多半是没有数据网络——tel: 蜂窝语音不依赖数据。缓存里有紧急联系人
             // 电话就唤起系统拨号确认（不静默直拨，系统弹"呼叫…?"，VoiceOver 可确认/取消）。
             EmergencyDialCache.dialFallbackIfAvailable(lang: lang) { speak($0) }
+            scheduleReset()
         }
-        scheduleReset()
     }
 
-    /// 结果展示 8s 后回到待命（期间界面可见结果）。
-    private func scheduleReset() {
+    /// 结果展示若干秒后回到待命（期间界面可见结果）。默认 8s；.sent 用更长窗口，供"报平安"操作。
+    private func scheduleReset(after seconds: Double = 8) {
         Task { [weak self] in
-            try? await Task.sleep(for: .seconds(8))
+            try? await Task.sleep(for: .seconds(seconds))
             guard let self, self.phase != .idle else { return }
             if case .countdown = self.phase { return } // 新一轮警报进行中不打扰
             self.phase = .idle

@@ -57,6 +57,12 @@ export const pushStrings = {
   emergencyAckBody: (name: string, l: PushLang): string =>
     l === 'en' ? `${name} acknowledged your emergency alert and knows you may need help.`
                : `${name} 已确认收到你的紧急求助，知道你可能需要帮助。`,
+  // 发起人在告警发出后报平安 → 回告亲友"解除"，让刚收到告警而担心/赶来的人立刻安心（安全类 App 的 all-clear）。
+  emergencyClearTitle: (name: string, l: PushLang): string =>
+    l === 'en' ? `${name} is OK` : `${name} 报平安了`,
+  emergencyClearBody: (name: string, l: PushLang): string =>
+    l === 'en' ? `${name} marked the earlier emergency alert as resolved — false alarm or they're OK now.`
+               : `${name} 已解除刚才的紧急求助——是误报，或现在已经没事了。`,
   newMessageTitle: (name: string, l: PushLang): string =>
     l === 'en' ? `Message from ${name}` : `${name} 发来消息`,
   groupMessageTitle: (name: string, group: string, l: PushLang): string =>

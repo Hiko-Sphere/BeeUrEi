@@ -93,7 +93,8 @@ export function registerSafetyRoutes(app: FastifyInstance, store: Store,
     // base 取 max(原到期, now)：即便已略过期未被 tick 触发，延长也总把到期推到未来（不会立刻被扫触发）。
     const base = Math.max(t.dueAt, now)
     const newDue = Math.min(base + parsed.data.addMinutes * 60_000, now + MAX_DUE_MS)
-    store.updateSafetyTimer(t.id, { dueAt: newDue })
+    // 清 remindedAt：延长后到期时刻推后，本人应对**新**到期重新获得一次提前提醒（否则延长后就再不提醒了）。
+    store.updateSafetyTimer(t.id, { dueAt: newDue, remindedAt: undefined })
     return { timer: view({ ...t, dueAt: newDue }, now) }
   })
 

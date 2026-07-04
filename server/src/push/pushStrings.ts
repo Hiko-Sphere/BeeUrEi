@@ -109,6 +109,18 @@ export const pushStrings = {
   },
   // 安全报到到期时服务端正好宕机、恢复后已超陈旧宽限 → **不惊动亲友**（免重启误报风暴），但给**本人**留一条
   // 通知：诚实告知"断网期间到期、未替你通知亲友"，若仍需帮助可手动求助。非静默兜底（对抗复审 CONFIRMED#2）。
+  // 到期前提醒**本人**（防遗忘误报）：dead-man's switch 的头号失败模式是用户忘了确认→亲友被无谓惊动→告警疲劳。
+  // 提前 leadMs 给本人一条"快到期了，请报平安或延长"的提示（industry-standard：Kitestring/bSafe/Life360 皆有）。
+  safetyCheckinReminderTitle: (l: PushLang): string =>
+    l === 'en' ? 'Safety check-in due soon' : '安全报到即将到期',
+  safetyCheckinReminderBody: (remainMinutes: number, note: string | undefined, l: PushLang): string => {
+    const m = Math.max(1, Math.round(remainMinutes))
+    const n = (note ?? '').trim()
+    const noteSeg = n ? (l === 'en' ? ` (${n})` : `（${n}）`) : ''
+    return l === 'en'
+      ? `Your safety check-in${noteSeg} ends in about ${m} min. Confirm you're safe, or extend it — otherwise your contacts will be alerted.`
+      : `你的安全报到${noteSeg}约 ${m} 分钟后到期。请确认平安或延长，否则将自动通知你的亲友。`
+  },
   safetyCheckinExpiredSelfTitle: (l: PushLang): string =>
     l === 'en' ? 'Safety check-in expired offline' : '安全报到已过期（曾断网）',
   safetyCheckinExpiredSelfBody: (l: PushLang): string =>

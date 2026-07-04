@@ -384,6 +384,7 @@ export interface SafetyTimer {
   completedAt?: number
   canceledAt?: number
   eventId?: string     // fired 时触发的紧急事件 id（供关联/审计/报平安解除）
+  remindedAt?: number  // 到期前提醒本人的时刻（防遗忘误报）；只提醒一次；extend 时清零以对新到期重新提醒
 }
 
 export interface Recording {
@@ -600,6 +601,7 @@ export interface Store {
   activeSafetyTimerForOwner(ownerId: string): SafetyTimer | undefined // 某人当前进行中的报到（至多一个）
   safetyTimersForUser(ownerId: string): SafetyTimer[]    // 某人的报到历史，startedAt 倒序（自助导出/展示）
   expiredActiveSafetyTimers(now: number): SafetyTimer[]  // 到期候选：status=active ∧ dueAt≤now（供后台自动告警）
+  dueSoonUnremindedSafetyTimers(now: number, leadMs: number): SafetyTimer[] // 即将到期未提醒：提前 leadMs 提醒本人防遗忘误报
   deleteSafetyTimersForOwner(ownerId: string): void      // 删号级联
   deleteSafetyTimersOlderThan(cutoffMs: number): number  // 留存清扫：仅清终态（非 active），按 startedAt
 
@@ -1093,6 +1095,15 @@ export class MemoryStore implements Store {
   expiredActiveSafetyTimers(now: number): SafetyTimer[] {
     return [...this.safetyTimers.values()]
       .filter((t) => t.status === 'active' && t.dueAt <= now)
+      .sort((a, b) => a.dueAt - b.dueAt)
+  }
+  dueSoonUnremindedSafetyTimers(now: number, leadMs: number): SafetyTimer[] {
+    return [...this.safetyTimers.values()]
+      .filter((t) => t.status === 'active' && t.remindedAt == null
+        // 仅对"总时长 > 提前量"的计时器提醒：短计时器(如 5min，用户正盯着)提前 10min 提醒会在创建即触发、纯噪声。
+        && t.dueAt - t.startedAt > leadMs
+        // 进入提前窗口 [dueAt-leadMs, dueAt)：已到期(≥dueAt)交由 expiredActiveSafetyTimers 告警，不在此重复处理。
+        && now >= t.dueAt - leadMs && now < t.dueAt)
       .sort((a, b) => a.dueAt - b.dueAt)
   }
   deleteSafetyTimersForOwner(ownerId: string): void {

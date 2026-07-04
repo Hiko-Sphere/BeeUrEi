@@ -10,7 +10,7 @@ import { sweepOrphanMedia } from './media/orphanSweep'
 import { sweepOldNotifications } from './notifications/retention'
 import { runAutoBackup } from './backup/autoBackup'
 import { escalateUnackedEmergencies } from './emergency/escalation'
-import { fireExpiredSafetyTimers } from './safety/checkin'
+import { fireExpiredSafetyTimers, remindDueSoonSafetyTimers } from './safety/checkin'
 import { ensureKycDir } from './kyc/storage'
 import { installGracefulShutdown } from './shutdown'
 
@@ -82,9 +82,15 @@ async function main(): Promise<void> {
   const escalateAfterMs = (() => { const v = Number(process.env.ESCALATE_AFTER_MS); return Number.isFinite(v) && v >= 60_000 ? v : 5 * 60_000 })()
   // 安全报到到期宽限：到期时若服务端宕机、恢复后已超此窗则不迟发告警（免陈旧误报风暴）。默认 60 分钟（≥60s）。
   const safetyStaleGraceMs = (() => { const v = Number(process.env.SAFETY_TIMER_STALE_GRACE_MS); return Number.isFinite(v) && v >= 60_000 ? v : 60 * 60_000 })()
+  // 到期前提前提醒本人的提前量：默认 10 分钟（防遗忘误报）。设 0 或非法值即禁用提醒（仍照常到期告警）。
+  const safetyRemindLeadMs = (() => { const v = Number(process.env.SAFETY_TIMER_REMIND_LEAD_MS); return Number.isFinite(v) && v >= 0 ? v : 10 * 60_000 })()
   const escalateTimer = setInterval(() => {
     try { const n = escalateUnackedEmergencies(store, pushSender, webPushSender, Date.now(), escalateAfterMs); if (n) console.log(`[emergency] 升级重呼无人响应的求助 ${n} 条`) }
     catch (e) { console.warn('[emergency] 升级重呼失败:', (e as Error).message) }
+    // 到期前提醒本人（善意提示，防遗忘误报；只给本人、不惊动亲友）——须在到期告警**之前**跑，同一 tick 里
+    // 已到期的走告警、快到期的走提醒，两窗口不相交（<dueAt vs ≥dueAt）。
+    try { const r = remindDueSoonSafetyTimers(store, pushSender, webPushSender, Date.now(), safetyRemindLeadMs); if (r) console.log(`[safety] 到期前提醒本人 ${r} 条`) }
+    catch (e) { console.warn('[safety] 报到提醒失败:', (e as Error).message) }
     // 安全报到到期未确认平安 → 自动告警亲友（与升级重呼同 60s tick，共用 push 通道）。
     try { const f = fireExpiredSafetyTimers(store, pushSender, webPushSender, Date.now(), safetyStaleGraceMs); if (f) console.log(`[safety] 到期未报到自动告警 ${f} 条`) }
     catch (e) { console.warn('[safety] 报到告警失败:', (e as Error).message) }

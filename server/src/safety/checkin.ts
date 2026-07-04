@@ -15,6 +15,41 @@ import { totalUnreadFor } from '../db/unread'
 /// **陈旧宽限（防误报风暴）**：若到期时服务端正好宕机、恢复后已超 staleGraceMs（默认 60 分钟），**不迟发告警**
 /// （几十分钟前的"未报到"迟发既可能是虚惊、又会在重启时对一批过期计时器同时轰炸亲友）——仅记终态 'expired'。
 /// 正常运行时 tick 每 60s 扫一次，到期至多晚 ~60s 触发，远在宽限内。返回**实际告警（fired）**的计时器数。
+/// 到期前提醒**本人**（防遗忘误报——dead-man's switch 头号失败模式：用户忘确认→亲友被无谓惊动→告警疲劳）。
+/// 由后台每分钟 tick 调用（与 fireExpiredSafetyTimers 同）。对进入 [dueAt-leadMs, dueAt) 窗口且**足够长**的
+/// active 计时器，给本人发一条"快到期，请报平安或延长"的提示，**只发一次**（remindedAt 幂等，绝不重复打扰）。
+/// - 只发给**本人**（owner），绝不惊动亲友——这是善意提醒，不是告警；
+/// - 先置 remindedAt 再扇出：即便推送失败也不重复提醒（与 fired 幂等同理）；
+/// - best-effort：站内通知持久化 + 尽力推送本人设备，单通道失败不中断。
+/// 返回实际提醒的计时器数。
+export function remindDueSoonSafetyTimers(
+  store: Store, push: PushSender, webPush: WebPushSender, now: number, leadMs: number,
+): number {
+  if (!(leadMs > 0)) return 0
+  const due = store.dueSoonUnremindedSafetyTimers(now, leadMs)
+  const safeSubs = (uid: string) => { try { return store.webPushSubscriptionsForUser(uid) } catch { return [] } }
+  const safeBadge = (uid: string): number | undefined => { try { return totalUnreadFor(store, uid).total } catch { return undefined } }
+  let reminded = 0
+  for (const t of due) {
+    try {
+      // 先落 remindedAt：即便下面推送失败也不再重复提醒（幂等，防打扰）。
+      store.updateSafetyTimer(t.id, { remindedAt: now })
+      const owner = store.findById(t.ownerId)
+      if (!owner) continue // 归属者已删号：无从提醒（已置 remindedAt，免反复扫）
+      const l = pushLang(owner.language)
+      const remainMin = (t.dueAt - now) / 60_000
+      const title = pushStrings.safetyCheckinReminderTitle(l)
+      const body = pushStrings.safetyCheckinReminderBody(remainMin, t.note, l)
+      const data: Record<string, string> = { kind: 'checkin_reminder', timerId: t.id }
+      try { store.createNotification({ id: randomUUID(), userId: owner.id, kind: 'safety_checkin_reminder', title, body, data, createdAt: now }) } catch { /* 通知失败不阻断推送 */ }
+      if (webPush.configured) for (const sub of safeSubs(owner.id)) void webPush.send(sub, JSON.stringify({ title, body, data })).catch(() => { /* 单订阅失败不阻断 */ })
+      if (owner.apnsToken) void push.sendAlert(owner.apnsToken, title, body, { type: 'safety_checkin_reminder', timerId: t.id }, undefined, safeBadge(owner.id)).catch(() => { /* 单点失败不阻断 */ })
+      reminded++
+    } catch { /* 单条提醒失败不阻断其余（已置 remindedAt 则不再重试同一条） */ }
+  }
+  return reminded
+}
+
 export function fireExpiredSafetyTimers(
   store: Store, push: PushSender, webPush: WebPushSender, now: number, staleGraceMs: number,
 ): number {

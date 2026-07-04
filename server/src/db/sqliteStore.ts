@@ -163,9 +163,11 @@ export class SqliteStore implements Store {
         firedAt INTEGER,
         completedAt INTEGER,
         canceledAt INTEGER,
-        eventId TEXT
+        eventId TEXT,
+        remindedAt INTEGER
       )
     `)
+    try { this.db.exec('ALTER TABLE safety_timers ADD COLUMN remindedAt INTEGER') } catch { /* 列已存在 */ } // 到期前提醒本人时刻（防遗忘误报）
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_safety_owner_status ON safety_timers (ownerId, status)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_safety_due ON safety_timers (status, dueAt)') // 后台每分钟扫到期 active
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_recordings_owner ON recordings (ownerId, recordedAt)')
@@ -563,11 +565,12 @@ export class SqliteStore implements Store {
       firedAt: r.firedAt != null ? Number(r.firedAt) : undefined,
       completedAt: r.completedAt != null ? Number(r.completedAt) : undefined,
       canceledAt: r.canceledAt != null ? Number(r.canceledAt) : undefined,
-      eventId: r.eventId ?? undefined }
+      eventId: r.eventId ?? undefined,
+      remindedAt: r.remindedAt != null ? Number(r.remindedAt) : undefined }
   }
   private writeSafetyTimer(t: SafetyTimer): void {
-    this.db.prepare('INSERT OR REPLACE INTO safety_timers (id, ownerId, note, startedAt, dueAt, status, firedAt, completedAt, canceledAt, eventId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(t.id, t.ownerId, t.note ?? null, t.startedAt, t.dueAt, t.status, t.firedAt ?? null, t.completedAt ?? null, t.canceledAt ?? null, t.eventId ?? null)
+    this.db.prepare('INSERT OR REPLACE INTO safety_timers (id, ownerId, note, startedAt, dueAt, status, firedAt, completedAt, canceledAt, eventId, remindedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(t.id, t.ownerId, t.note ?? null, t.startedAt, t.dueAt, t.status, t.firedAt ?? null, t.completedAt ?? null, t.canceledAt ?? null, t.eventId ?? null, t.remindedAt ?? null)
   }
   createSafetyTimer(t: SafetyTimer): void { this.writeSafetyTimer(t) }
   getSafetyTimer(id: string): SafetyTimer | undefined {
@@ -588,6 +591,12 @@ export class SqliteStore implements Store {
   }
   expiredActiveSafetyTimers(now: number): SafetyTimer[] {
     return (this.db.prepare("SELECT * FROM safety_timers WHERE status = 'active' AND dueAt <= ? ORDER BY dueAt ASC").all(now) as any[]).map(SqliteStore.mapSafetyRow)
+  }
+  dueSoonUnremindedSafetyTimers(now: number, leadMs: number): SafetyTimer[] {
+    // active ∧ 未提醒 ∧ 总时长>leadMs（短计时器不提前提醒） ∧ 进入 [dueAt-leadMs, dueAt) 窗口（未到期）。
+    return (this.db.prepare(
+      "SELECT * FROM safety_timers WHERE status = 'active' AND remindedAt IS NULL AND (dueAt - startedAt) > ? AND ? >= (dueAt - ?) AND ? < dueAt ORDER BY dueAt ASC")
+      .all(leadMs, now, leadMs, now) as any[]).map(SqliteStore.mapSafetyRow)
   }
   deleteSafetyTimersForOwner(ownerId: string): void {
     this.db.prepare('DELETE FROM safety_timers WHERE ownerId = ?').run(ownerId)

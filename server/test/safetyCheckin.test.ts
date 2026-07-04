@@ -4,7 +4,7 @@ import { MemoryStore, type SafetyTimer, type Store } from '../src/db/store'
 import { SqliteStore } from '../src/db/sqliteStore'
 import { NoopPushSender } from '../src/push/apns'
 import { NoopWebPushSender } from '../src/push/webPush'
-import { fireExpiredSafetyTimers } from '../src/safety/checkin'
+import { fireExpiredSafetyTimers, remindDueSoonSafetyTimers } from '../src/safety/checkin'
 import { cascadeDeleteUser } from '../src/db/cascade'
 
 async function setup(store: Store = new MemoryStore()) {
@@ -23,6 +23,8 @@ async function setup(store: Store = new MemoryStore()) {
 }
 const missed = (store: Store, uid: string) =>
   store.notificationsForUser(uid).filter((n) => n.kind === 'emergency_alert' && n.data?.kind === 'checkin')
+const reminders = (store: Store, uid: string) =>
+  store.notificationsForUser(uid).filter((n) => n.kind === 'safety_checkin_reminder')
 
 describe('安全报到端点', () => {
   it('start 建 active + GET 返回剩余时间；重开取消旧的（至多一个 active）', async () => {
@@ -172,6 +174,84 @@ describe('安全报到到期自动告警（fireExpiredSafetyTimers）', () => {
   })
 })
 
+describe('安全报到到期前提醒本人（remindDueSoonSafetyTimers）', () => {
+  const push = new NoopPushSender()
+  const webPush = new NoopWebPushSender()
+  const LEAD = 10 * 60_000 // 提前 10 分钟
+
+  it('进入提前窗口 → 只提醒本人一次；不惊动亲友；再扫幂等（remindedAt 已置）', async () => {
+    const { store, blind, family } = await setup()
+    const now = Date.now()
+    // 60 分钟计时器，现在处于到期前 8 分钟（在 10 分钟提前窗口内）。
+    store.createSafetyTimer({ id: 'r1', ownerId: blind.id, note: '走夜路', startedAt: now - 52 * 60_000, dueAt: now + 8 * 60_000, status: 'active' })
+    expect(remindDueSoonSafetyTimers(store, push, webPush, now, LEAD)).toBe(1)
+    expect(reminders(store, blind.id)).toHaveLength(1)
+    expect(reminders(store, blind.id)[0].body).toContain('8 分钟') // 剩余约 8 分钟
+    expect(reminders(store, blind.id)[0].body).toContain('走夜路') // 带备注
+    expect(reminders(store, family.id)).toHaveLength(0)            // 亲友绝不收到提醒（这是善意提示非告警）
+    expect(store.getSafetyTimer('r1')!.remindedAt).toBe(now)       // 置 remindedAt
+    expect(store.getSafetyTimer('r1')!.status).toBe('active')      // 仍 active（提醒不改状态）
+    // 幂等：下一 tick 不重复提醒
+    expect(remindDueSoonSafetyTimers(store, push, webPush, now + 60_000, LEAD)).toBe(0)
+    expect(reminders(store, blind.id)).toHaveLength(1)
+  })
+
+  it('窗口外不提醒：离到期还早（now < dueAt-lead）', async () => {
+    const { store, blind } = await setup()
+    const now = Date.now()
+    store.createSafetyTimer({ id: 'r2', ownerId: blind.id, startedAt: now, dueAt: now + 60 * 60_000, status: 'active' }) // 到期还有 60 分钟
+    expect(remindDueSoonSafetyTimers(store, push, webPush, now, LEAD)).toBe(0)
+  })
+
+  it('短计时器不提前提醒：总时长 ≤ 提前量（用户正盯着，提醒纯噪声）', async () => {
+    const { store, blind } = await setup()
+    const now = Date.now()
+    // 5 分钟计时器 < 10 分钟提前量 → 创建即在"窗口内"，但按设计不提醒。
+    store.createSafetyTimer({ id: 'r3', ownerId: blind.id, startedAt: now, dueAt: now + 5 * 60_000, status: 'active' })
+    expect(remindDueSoonSafetyTimers(store, push, webPush, now + 60_000, LEAD)).toBe(0)
+    expect(reminders(store, blind.id)).toHaveLength(0)
+  })
+
+  it('已到期不走提醒（交由到期告警）：now ≥ dueAt', async () => {
+    const { store, blind } = await setup()
+    const now = Date.now()
+    store.createSafetyTimer({ id: 'r4', ownerId: blind.id, startedAt: now - 60 * 60_000, dueAt: now - 1000, status: 'active' })
+    expect(remindDueSoonSafetyTimers(store, push, webPush, now, LEAD)).toBe(0)
+  })
+
+  it('终态计时器不提醒（completed/canceled/fired）', async () => {
+    const { store, blind } = await setup()
+    const now = Date.now()
+    for (const s of ['completed', 'canceled', 'fired'] as const)
+      store.createSafetyTimer({ id: `rs-${s}`, ownerId: blind.id, startedAt: now - 52 * 60_000, dueAt: now + 8 * 60_000, status: s })
+    expect(remindDueSoonSafetyTimers(store, push, webPush, now, LEAD)).toBe(0)
+  })
+
+  it('leadMs=0 禁用提醒（返回 0、不置 remindedAt）', async () => {
+    const { store, blind } = await setup()
+    const now = Date.now()
+    store.createSafetyTimer({ id: 'r5', ownerId: blind.id, startedAt: now - 52 * 60_000, dueAt: now + 8 * 60_000, status: 'active' })
+    expect(remindDueSoonSafetyTimers(store, push, webPush, now, 0)).toBe(0)
+    expect(store.getSafetyTimer('r5')!.remindedAt).toBeUndefined()
+  })
+
+  it('延长(/extend)清 remindedAt → 对新到期重新提醒一次', async () => {
+    const { app, store, blind } = await setup()
+    const now = Date.now()
+    // 已提醒过的计时器，快到期（+3 分钟）
+    store.createSafetyTimer({ id: 'r6', ownerId: blind.id, startedAt: now - 57 * 60_000, dueAt: now + 3 * 60_000, status: 'active', remindedAt: now - 60_000 })
+    // 用户延长 30 分钟 → dueAt 推后、remindedAt 应清空
+    const ext = await app.inject({ method: 'POST', url: '/api/safety/checkin/extend', headers: blind.h, payload: { addMinutes: 30 } })
+    expect(ext.statusCode).toBe(200)
+    expect(store.getSafetyTimer('r6')!.remindedAt).toBeUndefined() // 已清空
+    // 新到期约 now+33min；快到该新到期时（新窗口内）再次提醒一次。
+    const near = now + 24 * 60_000 // 距新到期 ~9 分钟，进入 10 分钟窗口
+    expect(remindDueSoonSafetyTimers(store, push, webPush, near, LEAD)).toBe(1)
+    expect(reminders(store, blind.id)).toHaveLength(1)
+    await app.close()
+  })
+})
+
 describe('SafetyTimer 存储 parity（Memory ↔ Sqlite）', () => {
   for (const make of [() => new MemoryStore(), () => new SqliteStore(':memory:')]) {
     const store = make()
@@ -191,6 +271,22 @@ describe('SafetyTimer 存储 parity（Memory ↔ Sqlite）', () => {
       store.createSafetyTimer({ id: 't2', ownerId: 'u1', startedAt: now, dueAt: now - 1, status: 'active' })
       store.createSafetyTimer({ id: 't3', ownerId: 'u2', startedAt: now, dueAt: now + 999, status: 'active' }) // 未到期
       expect(store.expiredActiveSafetyTimers(now).map((t) => t.id)).toEqual(['t2'])
+
+      // dueSoonUnreminded：active∧未提醒∧总时长>lead∧进入[dueAt-lead,dueAt)窗口
+      const lead = 10 * 60_000
+      const base = 5_000_000
+      store.createSafetyTimer({ id: 'due1', ownerId: 'u3', startedAt: base, dueAt: base + 60 * 60_000, status: 'active' }) // 60min 计时器
+      const inWin = base + 55 * 60_000 // 距到期 5min，在窗口内
+      expect(store.dueSoonUnremindedSafetyTimers(inWin, lead).map((t) => t.id)).toEqual(['due1'])
+      expect(store.dueSoonUnremindedSafetyTimers(base + 40 * 60_000, lead)).toHaveLength(0) // 窗口外（还早）
+      // remindedAt round-trip + 已提醒不再入选
+      store.updateSafetyTimer('due1', { remindedAt: inWin })
+      expect(store.getSafetyTimer('due1')!.remindedAt).toBe(inWin) // 字段持久化往返
+      expect(store.dueSoonUnremindedSafetyTimers(inWin, lead)).toHaveLength(0) // 已提醒排除
+      // 短计时器（时长≤lead）不入选
+      store.createSafetyTimer({ id: 'due2', ownerId: 'u3', startedAt: base, dueAt: base + 5 * 60_000, status: 'active' })
+      expect(store.dueSoonUnremindedSafetyTimers(base + 60_000, lead).some((t) => t.id === 'due2')).toBe(false)
+      store.deleteSafetyTimersForOwner('u3')
 
       // 历史倒序
       expect(store.safetyTimersForUser('u1').map((t) => t.id).sort()).toEqual(['t1', 't2'])

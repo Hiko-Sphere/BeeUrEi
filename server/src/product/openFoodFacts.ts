@@ -7,6 +7,11 @@ export interface ProductInfo {
   /// 包装**标注**的过敏原（OFF allergens_tags 规范化标签去掉 "en:" 前缀，如 "peanuts"/"milk"）。
   /// 只在有标注时给出；空数组=无数据——**缺数据≠不含过敏原**，客户端只能播"标注含有X"、绝不能播"不含"。
   allergens: string[]
+  /// 营养分级 Nutri-Score（'a'..'e'，a 最优 e 最差）。盲人读不到营养标签，这是可听的整体营养质量。
+  /// 无数据/不适用（如水/酒）→ null；只给可信的 a..e，绝不猜。
+  nutriScore?: string | null
+  /// 加工程度 NOVA 组（1=未/微加工 … 4=超加工）。"超加工食品"是可听的健康提示。无数据→ null。
+  novaGroup?: number | null
 }
 
 type FetchLike = (url: string, init?: unknown) => Promise<{ ok: boolean; json: () => Promise<unknown> }>
@@ -44,6 +49,19 @@ export function extractAllergens(tags: unknown): string[] {
   return out
 }
 
+/// Nutri-Score 分级：只接受可信的 a..e（OFF 用小写；'unknown'/'not-applicable'/空/其它 → null，绝不猜）。
+export function parseNutriScore(grade: unknown): string | null {
+  if (typeof grade !== 'string') return null
+  const g = grade.trim().toLowerCase()
+  return ['a', 'b', 'c', 'd', 'e'].includes(g) ? g : null
+}
+
+/// NOVA 加工组：只接受 1..4（OFF 可能返回数字或字符串）；其它/无数据 → null。
+export function parseNovaGroup(g: unknown): number | null {
+  const n = typeof g === 'number' ? g : (typeof g === 'string' ? Number(g.trim()) : NaN)
+  return Number.isInteger(n) && n >= 1 && n <= 4 ? n : null
+}
+
 /// 查询结果三态：found=命中；notFound=上游明确未收录/有记录但无名（可长缓存）；
 /// failed=超时/网络/非200/解析异常（**瞬时故障，路由层不可长缓存**——否则一次抖动使该条码对全体 404 一天，
 /// iOS 端用户随后自己起名后 name(for:) 本地命中永不再回源、过敏原标注永久缺失，见复审#5/#10）。
@@ -54,7 +72,7 @@ export type LookupOutcome =
 
 /// 查一个条码，区分"真未收录(notFound)"与"瞬时故障(failed)"（用于差异化缓存；两者对客户端都表现为拿不到名字）。
 export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeoutMs = 5000): Promise<LookupOutcome> {
-  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,allergens_tags`
+  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,allergens_tags,nutriscore_grade,nova_group`
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
@@ -68,7 +86,12 @@ export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeo
     const name = composeProductName(data.product)
     if (!name) return { kind: 'notFound' } // 有记录但无可读名：等同未收录
     const p = data.product as Record<string, unknown> | undefined
-    return { kind: 'found', info: { name, allergens: extractAllergens(p?.allergens_tags) } }
+    return { kind: 'found', info: {
+      name,
+      allergens: extractAllergens(p?.allergens_tags),
+      nutriScore: parseNutriScore(p?.nutriscore_grade),
+      novaGroup: parseNovaGroup(p?.nova_group),
+    } }
   } catch {
     return { kind: 'failed' } // 超时/网络/解析异常：瞬时故障，不长缓存，绝不编造商品名
   } finally {

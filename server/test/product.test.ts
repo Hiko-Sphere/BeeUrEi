@@ -1,5 +1,7 @@
-import { describe, it, expect } from 'vitest'
-import { composeProductName, extractAllergens, lookupProduct } from '../src/product/openFoodFacts'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { composeProductName, extractAllergens, lookupProduct, parseNutriScore, parseNovaGroup } from '../src/product/openFoodFacts'
+import { buildApp } from '../src/app'
+import { MemoryStore } from '../src/db/store'
 
 describe('Open Food Facts 商品查询', () => {
   it('组名：品牌+商品名；多品牌取首；名字已含品牌不重复；均空→null', () => {
@@ -29,16 +31,71 @@ describe('Open Food Facts 商品查询', () => {
 
   it('lookup 三态：found（含过敏原）/notFound（未收录·无名）/failed（非200·异常）——区分瞬时故障与真未收录', async () => {
     const respond = (body: unknown) => async () => ({ ok: true, json: async () => body })
-    expect(await lookupProduct('6901234567890', respond({ status: 1, product: { brands: '蒙牛', product_name: '纯牛奶', allergens_tags: ['en:milk'] } })))
-      .toEqual({ kind: 'found', info: { name: '蒙牛 纯牛奶', allergens: ['milk'] } })
-    // 无 allergens_tags → 空数组（缺数据≠不含；客户端只在非空时播"标注含有"）。
+    expect(await lookupProduct('6901234567890', respond({ status: 1, product: { brands: '蒙牛', product_name: '纯牛奶', allergens_tags: ['en:milk'], nutriscore_grade: 'c', nova_group: 4 } })))
+      .toEqual({ kind: 'found', info: { name: '蒙牛 纯牛奶', allergens: ['milk'], nutriScore: 'c', novaGroup: 4 } })
+    // 无 allergens_tags → 空数组（缺数据≠不含；客户端只在非空时播"标注含有"）；无营养分级 → null（不猜）。
     expect(await lookupProduct('6901234567890', respond({ status: 1, product: { brands: '蒙牛', product_name: '纯牛奶' } })))
-      .toEqual({ kind: 'found', info: { name: '蒙牛 纯牛奶', allergens: [] } })
+      .toEqual({ kind: 'found', info: { name: '蒙牛 纯牛奶', allergens: [], nutriScore: null, novaGroup: null } })
     // status 0（明确未收录）与"有记录但无名"→ notFound（路由可长缓存）。
     expect(await lookupProduct('0000000000000', respond({ status: 0 }))).toEqual({ kind: 'notFound' })
     expect(await lookupProduct('6901234567890', respond({ status: 1, product: {} }))).toEqual({ kind: 'notFound' })
     // 非 200 与网络/超时异常 → failed（**瞬时故障，路由绝不长缓存**，复审#5/#10）。
     expect(await lookupProduct('6901234567890', async () => ({ ok: false, json: async () => ({}) }))).toEqual({ kind: 'failed' })
     expect(await lookupProduct('6901234567890', async () => { throw new Error('network') })).toEqual({ kind: 'failed' })
+  })
+
+  it('parseNutriScore：只接受 a..e（大小写/空白归一）；unknown/not-applicable/其它→null（不猜）', () => {
+    expect(parseNutriScore('a')).toBe('a')
+    expect(parseNutriScore('E')).toBe('e')       // 大写归一
+    expect(parseNutriScore(' d ')).toBe('d')     // 去空白
+    expect(parseNutriScore('unknown')).toBeNull()
+    expect(parseNutriScore('not-applicable')).toBeNull()
+    expect(parseNutriScore('f')).toBeNull()
+    expect(parseNutriScore(3)).toBeNull()
+    expect(parseNutriScore(undefined)).toBeNull()
+  })
+
+  it('parseNovaGroup：只接受 1..4（数字或字符串）；越界/坏值→null', () => {
+    expect(parseNovaGroup(1)).toBe(1)
+    expect(parseNovaGroup(4)).toBe(4)
+    expect(parseNovaGroup('3')).toBe(3)          // 字符串数字
+    expect(parseNovaGroup(0)).toBeNull()
+    expect(parseNovaGroup(5)).toBeNull()
+    expect(parseNovaGroup(2.5)).toBeNull()       // 非整数
+    expect(parseNovaGroup('x')).toBeNull()
+    expect(parseNovaGroup(null)).toBeNull()
+  })
+})
+
+describe('/api/product/:barcode 端点', () => {
+  afterEach(() => vi.unstubAllGlobals())
+  it('返回名+过敏原+营养分级(nutriScore/novaGroup)；命中缓存不重复回源', async () => {
+    const app = buildApp(new MemoryStore())
+    const reg = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'produ', password: 'secret123', role: 'blind' } })).json()
+    const auth = { authorization: `Bearer ${reg.token}` }
+    let calls = 0
+    const body = { status: 1, product: { brands: '蒙牛', product_name: '纯牛奶', allergens_tags: ['en:milk'], nutriscore_grade: 'c', nova_group: 4 } }
+    vi.stubGlobal('fetch', vi.fn(async () => { calls++; return { ok: true, json: async () => body } }))
+    const r1 = await app.inject({ method: 'GET', url: '/api/product/6901234567890', headers: auth })
+    expect(r1.statusCode).toBe(200)
+    expect(r1.json()).toMatchObject({ name: '蒙牛 纯牛奶', allergens: ['milk'], nutriScore: 'c', novaGroup: 4 })
+    // 缓存命中：第二次不回源，营养分级仍在（缓存也存了新字段）。
+    const r2 = await app.inject({ method: 'GET', url: '/api/product/6901234567890', headers: auth })
+    expect(r2.json().nutriScore).toBe('c'); expect(r2.json().novaGroup).toBe(4)
+    expect(calls).toBe(1) // 只回源一次
+    await app.close()
+  })
+
+  it('无营养数据的商品：nutriScore/novaGroup 为 null（不猜）；非法条码 400', async () => {
+    const app = buildApp(new MemoryStore())
+    const reg = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'produ2', password: 'secret123', role: 'blind' } })).json()
+    const auth = { authorization: `Bearer ${reg.token}` }
+    const body2 = { status: 1, product: { product_name: '苏打饼干' } }
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => body2 })))
+    const r = await app.inject({ method: 'GET', url: '/api/product/12345678', headers: auth })
+    expect(r.json()).toMatchObject({ name: '苏打饼干', nutriScore: null, novaGroup: null })
+    // 非法条码（含字母）→ 400，不回源。
+    expect((await app.inject({ method: 'GET', url: '/api/product/abc', headers: auth })).statusCode).toBe(400)
+    await app.close()
   })
 })

@@ -50,7 +50,9 @@ final class AuthSession {
         restoreFailed = false
         defer { isRestoring = false }
         do {
-            user = try await api.me(token: token)
+            let full = try await api.me(token: token)
+            guard self.token != nil else { return } // 拉取期间已登出 → 不复活（与下方 refresh 分支第 69 行同守卫；happy-path 曾漏）
+            user = full
             await refreshAppConfig()
             return
         } catch APIError.unauthorized {

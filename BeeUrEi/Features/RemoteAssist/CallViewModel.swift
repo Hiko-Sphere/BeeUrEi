@@ -557,6 +557,10 @@ final class CallViewModel {
     private func beginRecording() async {
         do {
             try await recorder.start()
+            // 若录制启动的 await（ReplayKit 首次授权弹窗/系统启动可停留）期间通话已结束：hangUp() 当时看到
+            // VM 的 isRecording 还是 false、没停到本录制器——此处必须立刻停采集并丢弃，绝不让 ReplayKit 在
+            // 通话结束后继续录屏（隐私泄漏）。与 start()/refreshMe 同类"await 后重检 ended/登出态"的守卫。
+            if ended { await recorder.cancel(); return }
             isRecording = true
             recordingStartedAt = Date() // 算时长
             recordStatus = nil

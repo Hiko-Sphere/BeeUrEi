@@ -312,6 +312,10 @@ export const api = {
   // 勿扰时段：软通知在此时段只抑制推送横幅、站内通知照常；紧急/来电不受影响。
   quietHours: () => get('/api/notifications/quiet-hours') as Promise<{ quietHours: QuietHoursInfo | null }>,
   setQuietHours: (q: QuietHoursInfo) => put('/api/notifications/quiet-hours', q) as Promise<{ quietHours: QuietHoursInfo }>,
+  // 紧急医疗信息：本人查看/填写自己的；作为紧急亲友查看某遇险者的（施救辅助）。
+  medicalInfo: () => get('/api/account/medical') as Promise<{ medicalInfo: string; updatedAt: number | null }>,
+  setMedicalInfo: (text: string) => put('/api/account/medical', { text }) as Promise<{ ok: boolean; cleared?: boolean }>,
+  contactMedicalInfo: (userId: string) => get(`/api/family/${userId}/medical`) as Promise<{ medicalInfo: string; fromName?: string; updatedAt: number | null }>,
   // 紧急告警"知道了"回执：回告发起人"有人已看到你的求助"（fromId=发起人，eventId=哪一次告警）。
   emergencyAck: (fromId: string, eventId?: string) => post('/api/emergency/ack', { fromId, eventId }),
   // Web Push（浏览器推送紧急告警）

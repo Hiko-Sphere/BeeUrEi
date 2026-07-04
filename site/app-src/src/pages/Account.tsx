@@ -131,6 +131,9 @@ export function AccountPage() {
       {/* 勿扰时段：软通知在此时段只抑制推送横幅，紧急告警/来电不受影响 */}
       <QuietHoursCard />
 
+      {/* 紧急医疗信息：仅紧急联系人遇险时可见，辅助施救 */}
+      <MedicalInfoCard />
+
       {/* 安全 */}
       <Card className="p-5">
         <div className="mb-3 text-sm font-semibold">{t('安全', 'Security')}</div>
@@ -706,6 +709,50 @@ function QuietHoursCard() {
           <p className="w-full text-xs text-faint">{t(`时区：${tz}（跨午夜如 22:00–07:00 自动识别）`, `Time zone: ${tz} (overnight windows like 22:00–07:00 are handled)`)}</p>
         </div>
       )}
+    </Card>
+  )
+}
+
+/// 紧急医疗信息：本人填写关键健康信息，供指定紧急亲友遇险时查看施救。加密存储（服务端 AES-256-GCM）。
+function MedicalInfoCard() {
+  const { t } = useI18n()
+  const toast = useToast()
+  const [loading, setLoading] = useState(true)
+  const [text, setText] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      try { const { medicalInfo } = await api.medicalInfo(); if (alive) setText(medicalInfo) }
+      catch { /* 读取失败：留空 */ } finally { if (alive) setLoading(false) }
+    })()
+    return () => { alive = false }
+  }, [])
+
+  const save = async () => {
+    setSaving(true)
+    try { await api.setMedicalInfo(text); toast(text.trim() ? t('已保存', 'Saved') : t('已清除', 'Cleared'), 'ok') }
+    catch { toast(t('保存失败', 'Failed to save'), 'error') } finally { setSaving(false) }
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="text-sm font-semibold">{t('紧急医疗信息', 'Emergency medical info')}</div>
+      <p className="mt-1 text-xs text-faint">
+        {t('血型、过敏、正在服用的药物、慢性病、紧急备注等。仅你**已接受的紧急联系人**在你遇险时可查看，用于辅助施救；加密存储，不会公开或进入推送内容。',
+          'Blood type, allergies, medications, conditions, emergency notes. Visible only to your **accepted emergency contacts** when you need help — to assist responders. Encrypted at rest; never public or in push notifications.')}
+      </p>
+      <textarea
+        value={text} onChange={(e) => setText(e.target.value)} disabled={loading || saving}
+        rows={4} maxLength={4000}
+        placeholder={t('例：A 型血；青霉素过敏；服用华法林；家庭医生 138…', 'e.g. Type A; penicillin allergy; on warfarin; GP 555…')}
+        aria-label={t('紧急医疗信息', 'Emergency medical info')}
+        className="mt-3 w-full resize-y rounded-xl border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-honey disabled:opacity-50" />
+      <div className="mt-2 flex items-center justify-between">
+        <span className="text-xs text-faint">{text.length}/4000</span>
+        <Button variant="soft" onClick={save} disabled={loading || saving}>{t('保存', 'Save')}</Button>
+      </div>
     </Card>
   )
 }

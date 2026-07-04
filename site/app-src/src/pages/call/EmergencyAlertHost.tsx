@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, type NotificationInfo } from '../../lib/api'
+import { api, APIError, type NotificationInfo } from '../../lib/api'
 import { pickUnreadEmergencies, playEmergencyChime, clearedSenderIds, ackEventNotifIds, respondingEventIds } from '../../lib/emergencyAlerts'
 import { emergencyLocInfo } from '../../lib/emergencyLoc'
 import { useI18n } from '../../lib/i18n'
@@ -8,6 +8,43 @@ import { IconPhone, IconFlash, IconCheck } from '../../components/icons'
 import { useCall } from './CallController'
 
 const POLL_MS = 10_000
+
+/// 紧急医疗信息按需查看（自包含，可独立组件测试）：施救者点开才拉取遇险者的医疗信息（血型/过敏/用药…）。
+/// 授权在服务端（仅其 accepted isEmergency 亲友可读）：403=非紧急联系人、404=对方未填。不自动拉取（敏感，
+/// 且并非每次都需要），点击才请求。
+export function ContactMedicalInfo({ userId }: { userId: string }) {
+  const { t } = useI18n()
+  const [state, setState] = useState<{ kind: 'idle' | 'loading' | 'ok' | 'none' | 'denied' | 'error'; text?: string }>({ kind: 'idle' })
+  const load = async () => {
+    setState({ kind: 'loading' })
+    try {
+      const { medicalInfo } = await api.contactMedicalInfo(userId)
+      setState({ kind: 'ok', text: medicalInfo })
+    } catch (e) {
+      const s = e instanceof APIError ? e.status : 0
+      setState({ kind: s === 404 ? 'none' : s === 403 ? 'denied' : 'error' })
+    }
+  }
+  if (state.kind === 'idle') {
+    return (
+      <button onClick={load} data-testid="view-medical-btn"
+        className="inline-flex items-center gap-1.5 self-start rounded-lg border border-[var(--line)] px-3 py-1.5 text-sm font-medium hover:surface-2">
+        🩺 {t('查看紧急医疗信息', 'View emergency medical info')}
+      </button>
+    )
+  }
+  if (state.kind === 'loading') return <p className="text-sm text-faint">{t('加载中…', 'Loading…')}</p>
+  if (state.kind === 'ok') return (
+    <div data-testid="medical-info-content" className="rounded-xl border border-honey/40 bg-honey/5 p-3">
+      <div className="mb-1 text-xs font-semibold text-soft">🩺 {t('紧急医疗信息', 'Emergency medical info')}</div>
+      <p className="whitespace-pre-wrap break-words text-sm">{state.text}</p>
+    </div>
+  )
+  const msg = state.kind === 'none' ? t('对方未填写医疗信息', 'No medical info provided')
+    : state.kind === 'denied' ? t('仅遇险者的紧急联系人可查看', 'Only their emergency contacts can view this')
+    : t('加载失败', 'Failed to load')
+  return <p className="text-sm text-faint" data-testid="medical-info-msg">{msg}</p>
+}
 
 /// 紧急告警的模态展示（纯展示，可组件测试）：谁、发生了什么、位置（诚实标注实时/最后已知）、
 /// 一键回拨、确认。role=alertdialog 由 Modal 的 aria 承担；文案 zh/en。
@@ -50,6 +87,8 @@ export function EmergencyAlertModal({ alert, othersCount, beingHandled, onAck, o
         {othersCount > 0 && (
           <p className="text-xs text-faint">{t(`还有 ${othersCount} 条未读紧急告警，见通知页`, `${othersCount} more unread emergency alert(s) in Alerts`)}</p>
         )}
+        {/* 施救辅助：按需查看遇险者的紧急医疗信息（授权在服务端，仅其紧急联系人可读）。 */}
+        {alert.data?.fromId && <ContactMedicalInfo userId={alert.data.fromId} />}
         <div className="mt-1 flex gap-2">
           {alert.data?.fromId && (
             <button onClick={onCallBack}

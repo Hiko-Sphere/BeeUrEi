@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { buildApp } from '../src/app'
-import { MemoryStore } from '../src/db/store'
+import { MemoryStore, type WebPushSubscription } from '../src/db/store'
 import type { PushSender } from '../src/push/apns'
+import type { WebPushSender } from '../src/push/webPush'
 
 const auth = (t: string) => ({ authorization: `Bearer ${t}` })
 
@@ -137,6 +138,47 @@ describe('摔倒/车祸紧急警报', () => {
     expect(calls).toBe(2) // 两位都尝试到了（未在第一位抛错处中断）
     expect(push.sent).toContain('c'.repeat(64)) // 第二位实际送达
     expect((res.json() as any).notified).toBe(2) // 派发对象数=有 token 的亲友数
+  })
+
+  it('安全攸关：同步 store 读抛错（SQLITE_BUSY 等）不中断告警扇出、不 500、不破坏幂等', async () => {
+    // 复审揪出的真 bug：扇出循环里每个亲友的**同步** store 读（web-push 订阅/未读角标）此前无 try/catch。
+    // better-sqlite3 的 .all()/.get() 会同步抛（SQLITE_BUSY/IOERR），而这些读在 members.map() 同步构建阶段
+    // 执行——一个亲友抛错会 500 整个告警、掐断其余亲友，且未走到 dedup.record → 客户端重试会重复扇出。
+    class ThrowingSubsStore extends MemoryStore {
+      webPushSubscriptionsForUser(_userId: string): WebPushSubscription[] {
+        throw new Error('SQLITE_BUSY: database is locked') // 模拟并发写占锁超时/磁盘错
+      }
+    }
+    class ConfiguredWebPush implements WebPushSender {
+      readonly configured = true // 迫使走 webPushSubscriptionsForUser 读路径
+      async send(): Promise<void> {}
+    }
+    const push = new FakePush()
+    const app = buildApp(new ThrowingSubsStore(), { pushSender: push, webPushSender: new ConfiguredWebPush() })
+    const blind = await reg(app, 'busyblind', 'blind')
+    const f1 = await reg(app, 'busyfam1', 'helper')
+    const f2 = await reg(app, 'busyfam2', 'family')
+    await bind(app, blind.token, f1.token, 'busyfam1')
+    await bind(app, blind.token, f2.token, 'busyfam2')
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(f1.token), payload: { token: 'a'.repeat(64) } })
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(f2.token), payload: { token: 'c'.repeat(64) } })
+
+    const payload = { kind: 'crash', alertId: 'busy-evt-1' }
+    const res = await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token), payload })
+    expect(res.statusCode).toBe(200) // web-push 订阅读抛错不再 500 整个告警
+
+    // 关键：两位亲友都拿到持久化告警（扇出没被第一位的读抛错掐断）。
+    const f1n = await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(f1.token) })
+    const f2n = await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(f2.token) })
+    expect((f1n.json() as any).notifications.filter((n: any) => n.kind === 'emergency_alert')).toHaveLength(1)
+    expect((f2n.json() as any).notifications.filter((n: any) => n.kind === 'emergency_alert')).toHaveLength(1)
+    expect(push.sent).toHaveLength(2) // 两位 APNs 都尝试到（扇出完整）
+
+    // 幂等仍成立：dedup 已记录 → 同 alertId 重试不重复扇出（此前 500 时不落 dedup，重试会翻倍轰炸）。
+    const retry = await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token), payload })
+    expect(retry.json()).toEqual(res.json())
+    expect(push.sent).toHaveLength(2) // 未因重试翻倍
+    await app.close()
   })
 
   it('幂等：同一 alertId 重试不重复通知亲友（客户端可安全重试提高送达率）', async () => {

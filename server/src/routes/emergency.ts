@@ -44,6 +44,18 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
                                         webPush: WebPushSender = new NoopWebPushSender(),
                                         metrics?: Metrics): void {
   const alertDedup = new EmergencyAlertDedup()
+  // 安全攸关：告警/报平安扇出循环里对每个亲友的**同步 store 读**（web-push 订阅、未读角标）必须各自兜底。
+  // better-sqlite3 的 .all()/.get() 会**同步抛**（SQLITE_BUSY 超时/IOERR/坏行），而这些读发生在 members.map()
+  // 同步构建 job 数组阶段（在 Promise.allSettled 之前）——一个亲友的读抛错会冒出 map、500 整个请求，掐断对
+  // 其余亲友的告警；且此时尚未走到 alertDedup.record，客户端带同一 alertId 重试会重新扇出全体，既漏报又重复
+  // 告警（违反第 89 行"任一失败绝不中断其余或 500"与第 77 行"绝不重复告警"两条不变量）。写入(createNotification)
+  // 早已 try/catch，读却漏了——此处补齐这条不对称。
+  const safeWebPushSubs = (uid: string): ReturnType<Store['webPushSubscriptionsForUser']> => {
+    try { return store.webPushSubscriptionsForUser(uid) } catch { return [] }
+  }
+  const safeBadge = (uid: string): number | undefined => {
+    try { return totalUnreadFor(store, uid).total } catch { return undefined }
+  }
   // 发起紧急呼叫：返回按优先级排好的呼叫目标列表（真正接通由 WebRTC 信令负责）。
   app.post('/api/emergency/trigger', { preHandler: requireAuth() }, async (req) => {
     const owner = req.user!
@@ -133,12 +145,12 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
       // Web Push：该亲友的浏览器订阅（web-only 协助者关标签页也能收到系统通知）。
       // 与 APNs 并行、各自 best-effort；负载给 SW 渲染系统通知 + 点击跳通知页。
       const webJobs = webPush.configured
-        ? store.webPushSubscriptionsForUser(member.id).map((sub) =>
+        ? safeWebPushSubs(member.id).map((sub) =>
             webPush.send(sub, JSON.stringify({ title, body, data: notifData })).catch(() => { /* 单订阅失败不阻断 */ }))
         : []
       // APNs 推送仅发给有 token 的；无 token 者靠持久化通知 + Web Push 兜底。
       const apnsJob = member.apnsToken
-        ? pushSender.sendAlert(member.apnsToken, title, body, extraBase, undefined, totalUnreadFor(store, member.id).total)
+        ? pushSender.sendAlert(member.apnsToken, title, body, extraBase, undefined, safeBadge(member.id))
         : Promise.resolve()
       // badge=该亲友未读总数（含刚写入的本条告警），与图标角标主线一致。
       return Promise.allSettled([apnsJob, ...webJobs])
@@ -148,7 +160,7 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     // 经浏览器推送收到了告警，却被计成"仅兜底"，污染 admin 紧急事件日志与客户端提示（加 Web Push 后
     // 的口径回归）。
     const hasRealtimePush = (m: NonNullable<ReturnType<typeof store.findById>>): boolean =>
-      !!m.apnsToken || (webPush.configured && store.webPushSubscriptionsForUser(m.id).length > 0)
+      !!m.apnsToken || (webPush.configured && safeWebPushSubs(m.id).length > 0)
     // location：告知客户端本次告警附带的位置来源——'live'(自带当前坐标)/'lastKnown'(兜底最后已知，
     // 带 ageSec)/'none'(既无当前定位又无可兜底的共享位置，客户端应提示用户"未附位置")。
     const result = {
@@ -246,10 +258,10 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
         store.createNotification({ id: randomUUID(), userId: member.id, kind: 'emergency_clear', title, body, data, createdAt: Date.now() })
       } catch { /* 通知失败不阻断广播 */ }
       const webJobs = webPush.configured
-        ? store.webPushSubscriptionsForUser(member.id).map((sub) => webPush.send(sub, JSON.stringify({ title, body, data })).catch(() => { /* 单订阅失败不阻断 */ }))
+        ? safeWebPushSubs(member.id).map((sub) => webPush.send(sub, JSON.stringify({ title, body, data })).catch(() => { /* 单订阅失败不阻断 */ }))
         : []
       const apnsJob = member.apnsToken
-        ? pushSender.sendAlert(member.apnsToken, title, body, { type: 'emergency_clear', fromId: me.id }, undefined, totalUnreadFor(store, member.id).total)
+        ? pushSender.sendAlert(member.apnsToken, title, body, { type: 'emergency_clear', fromId: me.id }, undefined, safeBadge(member.id))
         : Promise.resolve()
       return Promise.allSettled([apnsJob, ...webJobs])
     }))

@@ -119,6 +119,120 @@ export async function amapAround(location: string, radiusMeters: number, keyword
   return out
 }
 
+/// 高德数值字段一律是**字符串**（如距离"1200"、时长"600"）。转有限非负数，否则 0——绝不外发 NaN/负值。
+function numOrZero(s: string | undefined): number {
+  const n = Number(s ?? 0)
+  return Number.isFinite(n) && n >= 0 ? n : 0
+}
+
+/// 逆地理编码取行政区 adcode（公交路径规划的 city 参数必填，用起点 adcode）。key/配额等错误抛 AmapError；无 key/无匹配→undefined。
+/// 注意：高德 regeo 的 city 字段在直辖市会返回空数组，故用恒为字符串的 adcode，不用 city。
+export async function amapRegeoAdcode(location: string): Promise<string | undefined> {
+  const key = apiKey()
+  if (!key) return undefined
+  const url = `${AMAP_BASE}/geocode/regeo?location=${location}&extensions=base&key=${key}`
+  const res = await fetch(url)
+  const data = (await res.json()) as {
+    status?: string; info?: string; infocode?: string
+    regeocode?: { addressComponent?: { adcode?: string; citycode?: string } }
+  }
+  assertAmapOk(res, data)
+  const adcode = data.regeocode?.addressComponent?.adcode
+  return adcode && /^\d{4,8}$/.test(adcode) ? adcode : undefined
+}
+
+/// 一段公交出行腿：步行 / 公交 / 地铁 / 火车。数值均米/秒（已由字符串转安全数）。
+export type TransitLegKind = 'walk' | 'bus' | 'subway' | 'railway'
+export interface TransitLeg {
+  kind: TransitLegKind
+  line?: string           // 线路名（"1号线"/"300路"/车次），已去掉"(始发-终点)"括注
+  fromStop?: string       // 上车站
+  toStop?: string         // 下车站
+  stops?: number          // 乘坐站数（含到站）
+  distanceMeters: number  // 步行距离 或 乘车区间距离
+  durationSeconds: number
+}
+/// 一个完整公交方案（取高德推荐的第一条）：总时长/总步行 + 有序的腿。
+export interface TransitPlan {
+  durationSeconds: number
+  walkingDistanceMeters: number
+  legs: TransitLeg[]
+}
+
+/// 线路名去掉括注："300路(北京站东-马家堡)" → "300路"；"地铁1号线(苹果园--四惠东)" → "地铁1号线"。
+function cleanLineName(name: string | undefined): string {
+  const n = (name ?? '').trim()
+  const cut = n.search(/[(（]/)
+  return (cut > 0 ? n.slice(0, cut) : n).trim()
+}
+
+/// 公交/地铁路径规划（origin/destination="经度,纬度" GCJ-02，city=起点 adcode）。返回高德推荐的第一条方案；
+/// 无方案（太近应步行/无公交覆盖/跨城无直达）→ null（路由据此回 404，区别于 key 错误）。key/配额等错误抛 AmapError。
+/// 高德会把每个 segment 的 walking/bus/entrance/exit/railway 键都返回、空的用空对象/空数组占位——故按**内容非空**判定该腿是否存在。
+export async function amapTransit(origin: string, destination: string, city: string): Promise<TransitPlan | null> {
+  const key = apiKey()
+  if (!key) return null
+  const url = `${AMAP_BASE}/direction/transit/integrated?origin=${origin}&destination=${destination}`
+    + `&city=${encodeURIComponent(city)}&strategy=0&nightflag=0&key=${key}`
+  const res = await fetch(url)
+  interface Stop { name?: string }
+  interface Busline {
+    name?: string; type?: string; via_num?: string; distance?: string; duration?: string
+    departure_stop?: Stop; arrival_stop?: Stop
+  }
+  interface Segment {
+    walking?: { distance?: string; duration?: string }
+    bus?: { buslines?: Busline[] }
+    railway?: { name?: string; trip?: string; distance?: string; time?: string; departure_stop?: Stop; arrival_stop?: Stop }
+  }
+  const data = (await res.json()) as {
+    status?: string; info?: string; infocode?: string
+    route?: { transits?: Array<{ duration?: string; walking_distance?: string; segments?: Segment[] }> }
+  }
+  assertAmapOk(res, data)
+  const transit = data.route?.transits?.[0]
+  if (!transit) return null // 无公交方案
+  const legs: TransitLeg[] = []
+  for (const seg of transit.segments ?? []) {
+    const wDist = numOrZero(seg.walking?.distance)
+    // 只在步行距离 >0 时报步行腿：站内换乘的 0 米步行由相邻乘车腿的"换乘"措辞承载，报"步行0米"反而困惑（复审#1，刻意）。
+    if (wDist > 0) legs.push({ kind: 'walk', distanceMeters: wDist, durationSeconds: numOrZero(seg.walking?.duration) })
+    const line = seg.bus?.buslines?.[0] // 同段多线路只取首条：给盲人一条明确指令，胜过"坐300或特8或快1"的听觉负担（复审#4，刻意）
+    if (line && (line.name ?? '').trim()) {
+      // 地铁判定只认权威的 type（含"地铁"/"轨道"）或名字含"地铁"；**不**用"号线$"结尾猜——
+      // "旅游1号线""社区5号线"等是普通公交却以"号线"结尾，会被误报成地铁把盲人指去找不存在的地铁站（复审#3）。
+      const isSubway = (line.type ?? '').includes('地铁') || (line.type ?? '').includes('轨道') || cleanLineName(line.name).includes('地铁')
+      // via_num=途经中间站数，+1=含到站的乘坐站数。**缺该字段时不臆造**——否则 numOrZero→0→"坐1站"会让盲人在第一站就下车（复审#2）。
+      const viaRaw = line.via_num
+      const stops = viaRaw != null && viaRaw !== '' && Number.isFinite(Number(viaRaw)) && Number(viaRaw) >= 0
+        ? Number(viaRaw) + 1 : undefined
+      legs.push({
+        kind: isSubway ? 'subway' : 'bus',
+        line: cleanLineName(line.name),
+        fromStop: (line.departure_stop?.name ?? '').trim() || undefined,
+        toStop: (line.arrival_stop?.name ?? '').trim() || undefined,
+        stops,
+        distanceMeters: numOrZero(line.distance),
+        durationSeconds: numOrZero(line.duration),
+      })
+    }
+    const rw = seg.railway
+    const rwName = (rw?.trip || rw?.name || '').trim()
+    if (rw && rwName) {
+      legs.push({
+        kind: 'railway',
+        line: rwName,
+        fromStop: (rw.departure_stop?.name ?? '').trim() || undefined,
+        toStop: (rw.arrival_stop?.name ?? '').trim() || undefined,
+        distanceMeters: numOrZero(rw.distance),
+        durationSeconds: numOrZero(rw.time),
+      })
+    }
+  }
+  if (legs.length === 0) return null // 有 transit 壳但无可用腿（异常数据）→ 视为无方案
+  return { durationSeconds: numOrZero(transit.duration), walkingDistanceMeters: numOrZero(transit.walking_distance), legs }
+}
+
 /// 高德折线 "lon,lat;lon,lat;…"（GCJ-02）→ [[lat, lon]]。非法点跳过，绝不外发 NaN。
 function parsePolyline(raw: string | undefined): Array<[number, number]> {
   if (!raw) return []

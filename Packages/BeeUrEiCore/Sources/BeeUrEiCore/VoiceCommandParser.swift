@@ -14,7 +14,8 @@ public enum VoiceCommand: Equatable, Sendable {
     case weather                    // 天气
     case look                       // 打开识别（看一看）
     case guideMe                    // 开始导盲/避障（进入实时避障模式）
-    case navigate(String?)          // 导航（可带目的地）
+    case navigate(String?)          // 步行导航（可带目的地）
+    case transit(String)            // 公交/地铁出行到某地（"坐公交去X"/"take transit to X"）——过城刚需，区别于 navigate 的步行
     case goHome                     // 原路返回
     case readText                   // 朗读文字
     case readDates                  // 读包装日期（保质期/生产日期——盲人看不到食品/药品日期，高频刚需）
@@ -84,6 +85,9 @@ public enum VoiceCommandParser {
         // 朝向（罗盘方位）：盲人看不到罗盘/太阳，"我正朝哪"是方向感的基础。置于此处、导航解析之前——用具体短语
         // （"朝哪个方向"/"面朝"/"which way am i facing"）避开与导航("哪个方向走"意图另说)/around 的关键字冲突。
         if has(["朝哪个方向", "哪个方向", "什么方向", "朝哪个方位", "哪个方位", "面朝", "朝向", "我朝哪", "which way am i facing", "which way i'm facing", "which direction am i", "what direction am i", "which way am i", "my heading", "compass direction"]) { return .facing }
+        // 公交/地铁出行须在 readBus（"公交/公交车"识别车辆）之前——都含"公交"，但带**乘坐位交通方式词+目的地**
+        // （"坐公交去X"）走公交规划（过城刚需）；无目的地的"几路车/这是什么车"仍归 readBus（parseTransit 无 dest 返 nil）。
+        if let dest = parseTransit(text) { return .transit(dest) }
         if has(["公交", "几路车", "哪路车", "什么车", "几路公交", "公交车", "bus", "which bus", "what bus"]) { return .readBus }
         if has(["多亮", "光线", "亮不亮", "有没有光", "开灯了吗", "灯开着吗", "灯亮着吗", "how bright", "light level", "brightness", "is the light on", "lights on"]) { return .readLight }
         if has(["天气", "下雨", "气温", "weather", "temperature", "rain"]) { return .weather }
@@ -137,6 +141,49 @@ public enum VoiceCommandParser {
         if let dest = parseDestination(text) { return .navigate(dest) }
         if has(["导航", "navigate", "navigation", "directions"]) { return .navigate(nil) }
         return .unknown
+    }
+
+    /// 「坐公交/地铁去X」「怎么坐车到X」/ "take transit/the bus to X"、"how do I get to X by subway"：
+    /// 提取公交出行目的地。须明确带交通方式词（公交/地铁/坐车/by bus 等），否则不触发（泛"去X"归步行 navigate）。
+    /// 目的地为空返回 nil。
+    static func parseTransit(_ text: String) -> String? {
+        let t = text.lowercased()
+        // 交通方式词须在**乘坐位**——"坐{公交/地铁/车}"或"{公交/地铁}去/到"，而非出现在目的地名里（"去地铁站"的"地铁"不算）。
+        let zhCue = ["坐公交", "坐地铁", "坐车", "坐公交车", "坐轻轨", "坐公共汽车", "公共交通", "换乘"].contains { text.contains($0) }
+            || text.range(of: #"(?:公交|地铁|轻轨|公共汽车)(?:车)?(?:去|到)"#, options: .regularExpression) != nil
+        let enCue = ["by bus", "by subway", "by metro", "by transit", "by train", "take transit", "take the bus",
+                     "take the subway", "take the metro", "take a bus", "public transport", "public transit", "transit to"].contains { t.contains($0) }
+        guard zhCue || enCue else { return nil }
+        let punct = CharacterSet(charactersIn: "。，？！,.?!、").union(.whitespacesAndNewlines)
+        // 目的地若本身就是交通方式词/泛站名（"坐地铁"/"公交站"/"站"）→ 非真实地点，让位步行导航（复审语音#2/#3）。
+        let modeNouns: Set<String> = ["坐地铁", "坐公交", "坐车", "坐公交车", "坐轻轨", "公共交通", "地铁", "公交",
+                                      "公交站", "地铁站", "车站", "站", "the subway", "the bus", "the metro",
+                                      "transit", "a bus", "the train"]
+        func tidy(_ s: Substring) -> String? {
+            var x = String(s).trimmingCharacters(in: punct)
+            // 连接词处截断（"…然后回家"/"…再去别处"）——只取第一个目的地（复审语音#1，与 parseFindNearest 同款）。
+            for cut in ["然后", "再去", "再到", "再坐", " and ", " then "] {
+                if let r = x.range(of: cut, options: cut.hasPrefix(" ") ? .caseInsensitive : []) {
+                    x = String(x[..<r.lowerBound]).trimmingCharacters(in: punct)
+                }
+            }
+            // 剥尾部交通方式词（"…by bus"/"…坐地铁"出现在目的地之后的语序）与客套。
+            for tr in [" by bus", " by subway", " by metro", " by transit", " by train", " please", "怎么走", "怎么去", "坐地铁", "坐公交", "坐车"] {
+                if x.lowercased().hasSuffix(tr.lowercased()) && x.count > tr.count { x = String(x.dropLast(tr.count)).trimmingCharacters(in: punct) }
+            }
+            if x.isEmpty || modeNouns.contains(x.lowercased()) || x.hasPrefix("坐") { return nil }
+            return x
+        }
+        // 中文：取**最早**的"去/到"之后作目的地（多目的地取第一个；连接词已在 tidy 截断）。
+        let goR = text.range(of: "去"), toR = text.range(of: "到")
+        if let r = [goR, toR].compactMap({ $0 }).min(by: { $0.lowerBound < $1.lowerBound }) {
+            if let d = tidy(text[r.upperBound...]) { return d }
+        }
+        // 英文：第一个" to X"（大小写不敏感），尾部" by bus"已在 tidy 里剥。
+        if let r = text.range(of: " to ", options: .caseInsensitive) {
+            if let d = tidy(text[r.upperBound...]) { return d }
+        }
+        return nil
     }
 
     /// 提取导航目的地；无导航意图返回 nil；有意图但没说去哪 → .navigate(nil) 由上面兜底。
@@ -252,7 +299,7 @@ public enum VoiceCommandParser {
             let punct = CharacterSet(charactersIn: "。，？！,.?!、").union(.whitespacesAndNewlines)
             // 尾部：位置疑问/量词/客套 + 常见"目的短语"（…买东西/上厕所）+ 英文尾问词（…called/address）。
             let trails = ["在哪里", "在哪儿", "在哪呢", "在哪", "怎么走", "怎么去", "咋走", "远不远", "有多远",
-                          "买东西", "买点东西", "上厕所", "吃饭", "歇脚", "休息", "充电",
+                          "买东西", "买点东西", "上厕所", "吃饭", "歇脚", "休息", "充电", "坐地铁", "坐公交", "坐车",
                           "呢", "吗", "吧", "啊", "呀",
                           " called", " address", " located", " open", " nearby", " near me", " around here", " please", " to me"]
             let leads = ["一个", "一家", "一间", "一处", "个", "家", "间", "处",

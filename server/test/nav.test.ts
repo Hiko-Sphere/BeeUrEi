@@ -188,6 +188,151 @@ describe('AMap walking nav proxy', () => {
     await app.close()
   })
 
+  // 公交/地铁路径规划：三段响应（regeo 取城市 / geocode 目的地 / transit 方案），mock 按 URL 分派。
+  const TRANSIT_OK = {
+    status: '1', infocode: '10000',
+    route: { transits: [ {
+      duration: '1980', walking_distance: '350', nightflag: '0',
+      segments: [
+        { walking: { distance: '200', duration: '170' }, bus: { buslines: [] } }, // 步行段（bus 空占位）
+        { walking: {}, bus: { buslines: [ {                                        // 地铁段（walking 空占位）
+          name: '地铁1号线(苹果园--四惠东)', type: '地铁线路', via_num: '5',
+          distance: '6000', duration: '900',
+          departure_stop: { name: '西单站' }, arrival_stop: { name: '国贸站' },
+        } ] } },
+        { walking: { distance: '150', duration: '130' }, bus: { buslines: [] } },
+      ],
+    } ] },
+  }
+  const transitFetch = (transitBody: unknown) => vi.fn(async (url: string) =>
+    ({ ok: true, status: 200, json: async () =>
+      String(url).includes('/geocode/regeo') ? { status: '1', infocode: '10000', regeocode: { addressComponent: { adcode: '110000' } } }
+      : String(url).includes('/geocode/geo') ? { status: '1', infocode: '10000', geocodes: [{ location: '116.45,39.92' }] }
+      : String(url).includes('/direction/transit') ? transitBody
+      : { status: '0', info: 'unexpected', infocode: '20000' } }))
+
+  it('/transit 解析公交方案：步行→地铁→步行，空占位段不误当腿，字符串数值转安全数', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    vi.stubGlobal('fetch', transitFetch(TRANSIT_OK))
+    const app = buildApp(new MemoryStore())
+    const t = await token(app)
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/nav/transit?originLat=39.9&originLon=116.4&destination=' + encodeURIComponent('国贸'),
+      headers: { authorization: `Bearer ${t}` },
+    })
+    expect(res.statusCode).toBe(200)
+    const body = res.json()
+    expect(body.durationSeconds).toBe(1980)
+    expect(body.walkingDistanceMeters).toBe(350)
+    expect(body.legs).toEqual([
+      { kind: 'walk', distanceMeters: 200, durationSeconds: 170 },
+      { kind: 'subway', line: '地铁1号线', fromStop: '西单站', toStop: '国贸站', stops: 6, distanceMeters: 6000, durationSeconds: 900 },
+      { kind: 'walk', distanceMeters: 150, durationSeconds: 130 },
+    ])
+    await app.close()
+  })
+
+  it('/transit 普通公交线路 → kind=bus，线路名去括注', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    const busPlan = { status: '1', infocode: '10000', route: { transits: [ { duration: '600', walking_distance: '100',
+      segments: [ { walking: {}, bus: { buslines: [ { name: '300路(北京站东-马家堡)', type: '普通公交线路', via_num: '3',
+        distance: '2000', duration: '480', departure_stop: { name: '甲站' }, arrival_stop: { name: '乙站' } } ] } } ] } ] } }
+    vi.stubGlobal('fetch', transitFetch(busPlan))
+    const app = buildApp(new MemoryStore())
+    const t = await token(app)
+    const res = await app.inject({ method: 'GET', url: '/api/nav/transit?originLat=39.9&originLon=116.4&destLat=39.92&destLon=116.45', headers: { authorization: `Bearer ${t}` } })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().legs[0]).toEqual({ kind: 'bus', line: '300路', fromStop: '甲站', toStop: '乙站', stops: 4, distanceMeters: 2000, durationSeconds: 480 })
+    await app.close()
+  })
+
+  it('/transit 缺 via_num 不臆造站数（复审#2：否则"坐1站"让盲人第一站就下车）', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    const plan = { status: '1', infocode: '10000', route: { transits: [ { duration: '1200', walking_distance: '0',
+      segments: [ { walking: {}, bus: { buslines: [ { name: '快线2号(甲-乙)', type: '普通公交线路', // 无 via_num
+        distance: '8000', duration: '1200', departure_stop: { name: '甲' }, arrival_stop: { name: '乙' } } ] } } ] } ] } }
+    vi.stubGlobal('fetch', transitFetch(plan))
+    const app = buildApp(new MemoryStore())
+    const t = await token(app)
+    const res = await app.inject({ method: 'GET', url: '/api/nav/transit?originLat=39.9&originLon=116.4&destLat=39.92&destLon=116.45', headers: { authorization: `Bearer ${t}` } })
+    expect(res.statusCode).toBe(200)
+    const leg = res.json().legs[0]
+    expect(leg.kind).toBe('bus')
+    expect(leg).not.toHaveProperty('stops') // 缺 via_num → 不带 stops，绝不臆造"坐1站"
+    await app.close()
+  })
+
+  it('/transit 以"号线"结尾的普通公交不误当地铁（复审#3：type 权威，"旅游1号线"是公交）', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    const plan = { status: '1', infocode: '10000', route: { transits: [ { duration: '600', walking_distance: '0',
+      segments: [ { walking: {}, bus: { buslines: [ { name: '旅游1号线', type: '普通公交线路', via_num: '4',
+        distance: '3000', duration: '600', departure_stop: { name: '甲' }, arrival_stop: { name: '乙' } } ] } } ] } ] } }
+    vi.stubGlobal('fetch', transitFetch(plan))
+    const app = buildApp(new MemoryStore())
+    const t = await token(app)
+    const res = await app.inject({ method: 'GET', url: '/api/nav/transit?originLat=39.9&originLon=116.4&destLat=39.92&destLon=116.45', headers: { authorization: `Bearer ${t}` } })
+    expect(res.json().legs[0]).toMatchObject({ kind: 'bus', line: '旅游1号线', stops: 5 })
+    await app.close()
+  })
+
+  it('/transit 解析火车/城际腿（railway 分支：车次名 + 起终站）', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    const plan = { status: '1', infocode: '10000', route: { transits: [ { duration: '3600', walking_distance: '200',
+      segments: [
+        { walking: { distance: '200', duration: '170' }, bus: { buslines: [] } },
+        { walking: {}, bus: { buslines: [] }, railway: { trip: 'G123', name: '城际', distance: '80000', time: '2400',
+          departure_stop: { name: '北京南' }, arrival_stop: { name: '天津' } } },
+      ] } ] } }
+    vi.stubGlobal('fetch', transitFetch(plan))
+    const app = buildApp(new MemoryStore())
+    const t = await token(app)
+    const res = await app.inject({ method: 'GET', url: '/api/nav/transit?originLat=39.9&originLon=116.4&destLat=39.92&destLon=116.45', headers: { authorization: `Bearer ${t}` } })
+    expect(res.json().legs).toEqual([
+      { kind: 'walk', distanceMeters: 200, durationSeconds: 170 },
+      { kind: 'railway', line: 'G123', fromStop: '北京南', toStop: '天津', distanceMeters: 80000, durationSeconds: 2400 },
+    ])
+    await app.close()
+  })
+
+  it('/transit 无公交方案（transits 空）→ 404 no_transit_route；目的地查不到 → 404 destination_not_found', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    vi.stubGlobal('fetch', transitFetch({ status: '1', infocode: '10000', route: { transits: [] } }))
+    let app = buildApp(new MemoryStore())
+    let t = await token(app)
+    let res = await app.inject({ method: 'GET', url: '/api/nav/transit?originLat=39.9&originLon=116.4&destLat=39.92&destLon=116.45', headers: { authorization: `Bearer ${t}` } })
+    expect(res.statusCode).toBe(404)
+    expect(res.json()).toMatchObject({ error: 'no_transit_route' })
+    await app.close()
+    // 目的地名 geocode 空
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => ({ ok: true, status: 200, json: async () =>
+      String(url).includes('/geocode/regeo') ? { status: '1', infocode: '10000', regeocode: { addressComponent: { adcode: '110000' } } }
+      : { status: '1', infocode: '10000', geocodes: [] } })))
+    app = buildApp(new MemoryStore())
+    t = await token(app)
+    res = await app.inject({ method: 'GET', url: '/api/nav/transit?originLat=39.9&originLon=116.4&destination=' + encodeURIComponent('不存在xyz'), headers: { authorization: `Bearer ${t}` } })
+    expect(res.statusCode).toBe(404)
+    expect(res.json()).toMatchObject({ error: 'destination_not_found' })
+    await app.close()
+  })
+
+  it('/transit AMap key 平台不符 → 502 amap_error；未配 → 503', async () => {
+    process.env.AMAP_API_KEY = 'ios_sdk_key'
+    vi.stubGlobal('fetch', transitFetch({ status: '0', info: 'USERKEY_PLAT_NOMATCH', infocode: '10009' }))
+    let app = buildApp(new MemoryStore())
+    let t = await token(app)
+    let res = await app.inject({ method: 'GET', url: '/api/nav/transit?originLat=39.9&originLon=116.4&destLat=39.92&destLon=116.45', headers: { authorization: `Bearer ${t}` } })
+    expect(res.statusCode).toBe(502)
+    expect(res.json()).toMatchObject({ error: 'amap_error', infocode: '10009' })
+    await app.close()
+    delete process.env.AMAP_API_KEY
+    app = buildApp(new MemoryStore())
+    t = await token(app)
+    res = await app.inject({ method: 'GET', url: '/api/nav/transit?originLat=39.9&originLon=116.4&destLat=39.92&destLon=116.45', headers: { authorization: `Bearer ${t}` } })
+    expect(res.statusCode).toBe(503)
+    await app.close()
+  })
+
   it('/around：AMap key 平台不符 → 502 amap_error（不静默当"周围什么都没有"）；坐标非法 → 400；未配 → 503', async () => {
     // 未配置
     delete process.env.AMAP_API_KEY

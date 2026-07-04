@@ -19,6 +19,7 @@ struct HubView: View {
     @State private var showTutorial = false
     @State private var locationDescriber = LocationDescriber()
     @State private var weatherSpeaker = WeatherSpeaker()
+    @State private var transitPlanner = TransitPlanner()
     @State private var motionMonitor = MotionMonitor()
     @State private var emergency = EmergencyAlertCenter.shared
     @State private var voice = VoiceCommandListener()
@@ -467,6 +468,7 @@ struct HubView: View {
         case .navigate(let dest):
             if let dest { AppRoute.shared.pendingNavAction = .search(dest) }
             showNavigation = true
+        case .transit(let dest): transitPlanner.plan(to: dest) // 「坐公交/地铁去X」：语音直接朗读整段公交路线
         case .goHome:
             AppRoute.shared.pendingNavAction = .backtrack
             showNavigation = true

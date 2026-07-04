@@ -47,6 +47,7 @@ final class VoiceCommandParserTests: XCTestCase {
             ("最近的厕所在哪", .findNearest("厕所")), ("离我最近的药店", .findNearest("药店")),
             ("附近哪里有便利店", .findNearest("便利店")), ("nearest pharmacy", .findNearest("pharmacy")),
             ("where can i find a restroom", .findNearest("restroom")),
+            ("坐地铁去西单", .transit("西单")), ("坐公交车去医院", .transit("医院")), ("take transit to the airport", .transit("the airport")),
         ]
         for (phrase, expected) in cases {
             XCTAssertEqual(VoiceCommandParser.parse(phrase), expected, "『\(phrase)』应解析为 \(expected)")
@@ -107,6 +108,33 @@ final class VoiceCommandParserTests: XCTestCase {
         // 保留正常类别不误伤。
         XCTAssertEqual(VoiceCommandParser.parse("where can i find a restroom"), .findNearest("restroom"))
         XCTAssertEqual(VoiceCommandParser.parse("附近哪里有便利店"), .findNearest("便利店"))
+    }
+
+    func testTransitVsWalkingNavigate() {
+        // 带交通方式词 → 公交规划；否则泛"去X"归步行 navigate。
+        XCTAssertEqual(VoiceCommandParser.parse("坐公交去北京西站"), .transit("北京西站"))
+        XCTAssertEqual(VoiceCommandParser.parse("坐地铁到国贸"), .transit("国贸"))
+        XCTAssertEqual(VoiceCommandParser.parse("怎么坐车去机场"), .transit("机场"))
+        XCTAssertEqual(VoiceCommandParser.parse("how do i get to the museum by bus"), .transit("the museum")) // 剥尾部"by bus"
+        XCTAssertEqual(VoiceCommandParser.parse("take the subway to downtown"), .transit("downtown"))
+        // 无交通方式词：仍是步行导航，不被公交抢。
+        XCTAssertEqual(VoiceCommandParser.parse("带我去北京西站"), .navigate("北京西站"))
+        XCTAssertEqual(VoiceCommandParser.parse("导航到医院"), .navigate("医院"))
+        // "这是什么车"是识别公交（readBus），不是坐车出行。
+        XCTAssertEqual(VoiceCommandParser.parse("这是什么车"), .readBus)
+    }
+
+    func testTransitDestinationExtractionRobustness() {
+        // 复审语音#1：连接词后的从句不该混进目的地（取第一个目的地）。
+        XCTAssertEqual(VoiceCommandParser.parse("坐公交去公司然后回家"), .transit("公司"))
+        XCTAssertEqual(VoiceCommandParser.parse("坐公交去机场再去酒店"), .transit("机场"))
+        // 复审语音#2：目的地本身是交通方式词/泛站名 → 不当公交目的地（让位，绝不把"坐地铁"当地点去 geocode）。
+        if case .transit = VoiceCommandParser.parse("带我去坐地铁") { XCTFail("『坐地铁』不是目的地") }
+        if case .transit = VoiceCommandParser.parse("坐地铁到公交站") { XCTFail("泛站名『公交站』不当公交目的地") }
+        // 真实车站名（非泛"站"）仍可作目的地。
+        XCTAssertEqual(VoiceCommandParser.parse("坐公交到火车站"), .transit("火车站"))
+        // 复审语音#4：findNearest 尾部"坐地铁"不泄漏进类别。
+        XCTAssertEqual(VoiceCommandParser.parse("去最近的地铁站坐地铁"), .findNearest("地铁站"))
     }
 
     func testReadPhoneVsCallPerson() {

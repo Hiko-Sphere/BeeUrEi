@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { type Store } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
-import { amapConfigured, amapGeocode, amapWalking, amapAround, AmapError } from '../nav/amapClient'
+import { amapConfigured, amapGeocode, amapWalking, amapAround, amapTransit, amapRegeoAdcode, AmapError } from '../nav/amapClient'
 
 // 坐标校验：从原始字符串校验而非 z.coerce.number()——后者会把空串/空白静默 coerce 成 0，
 // 从 (0,0)Null Island 起算路线（看似正常却完全错误，对盲人导航安全攸关，见审查 round5 #2）；
@@ -96,6 +96,48 @@ export function registerNavRoutes(app: FastifyInstance, store: Store): void {
         return reply.code(502).send({ error: 'amap_error', infocode: e.infocode, info: e.info })
       }
       console.error('[nav/around] unexpected error', e)
+      return reply.code(502).send({ error: 'nav_unavailable' })
+    }
+  })
+
+  // 公交/地铁路径规划（跨城市出行的关键——步行导航只能覆盖短途，盲人过城全靠公共交通）。
+  // 目的地传名字（服务端 geocode）或已知 GCJ-02 坐标（destLat/destLon）；起点城市由服务端对 origin 逆地理编码取 adcode。
+  const transitSchema = z.object({
+    originLat: coord(-90, 90),
+    originLon: coord(-180, 180),
+    destination: z.string().trim().min(1).optional(),
+    destLat: coord(-90, 90).optional(),
+    destLon: coord(-180, 180).optional(),
+  }).refine((d) => (d.destLat != null && d.destLon != null) || (d.destination != null),
+    { message: 'destination_or_coord_required' })
+  app.get('/api/nav/transit', { preHandler: [requireAuth(), requireFeature(store, 'navigation')],
+                                config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
+    if (!amapConfigured()) return reply.code(503).send({ error: 'amap_not_configured' })
+    const parsed = transitSchema.safeParse(req.query)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const { originLat, originLon, destination, destLat, destLon } = parsed.data
+    const origin = `${originLon},${originLat}` // 高德序：经度,纬度（GCJ-02）
+    try {
+      let dest: string
+      if (destLat != null && destLon != null) {
+        dest = `${destLon},${destLat}`
+      } else {
+        const geocoded = await amapGeocode(destination!) // refine 已保证二者其一
+        if (!geocoded) return reply.code(404).send({ error: 'destination_not_found' })
+        dest = geocoded
+      }
+      const city = await amapRegeoAdcode(origin) // 公交 API 的 city 必填：起点行政区 adcode
+      if (!city) return reply.code(502).send({ error: 'city_unresolved' }) // 逆地理无 adcode（极少）→ 无法规划公交
+      const plan = await amapTransit(origin, dest, city)
+      if (!plan) return reply.code(404).send({ error: 'no_transit_route' }) // 太近应步行/无公交覆盖/跨城无直达
+      return plan
+    } catch (e) {
+      if (e instanceof AmapError) {
+        req.log?.error?.({ infocode: e.infocode, info: e.info }, '[nav/transit] AMap request failed')
+        console.error('[nav/transit] AMap error infocode=%s info=%s', e.infocode, e.info)
+        return reply.code(502).send({ error: 'amap_error', infocode: e.infocode, info: e.info })
+      }
+      console.error('[nav/transit] unexpected error', e)
       return reply.code(502).send({ error: 'nav_unavailable' })
     }
   })

@@ -30,8 +30,10 @@ public struct ProximityCueMapper: Sendable {
     }
 
     /// 超过 maxDistance 或无效距离返回 nil（不发提示音）。
+    /// maxDistance<=0（退化配置）也返回 nil——否则下方 t = d/maxDistance 会 0/0=NaN、外发 NaN 音高/节奏
+    /// （对抗复审 LOW）。distanceMeters 非有限亦被 `>=0`/`<=` 比较自然挡下（NaN 比较恒 false）。
     public func cue(distanceMeters: Double) -> ProximityCue? {
-        guard distanceMeters >= 0, distanceMeters <= maxDistance else { return nil }
+        guard maxDistance > 0, distanceMeters >= 0, distanceMeters <= maxDistance else { return nil }
         let t = distanceMeters / maxDistance   // 0(近)...1(远)
         let interval = nearInterval + t * (farInterval - nearInterval)
         let pitch = nearPitch - t * (nearPitch - farPitch)

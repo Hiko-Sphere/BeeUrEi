@@ -139,4 +139,16 @@ extension CurrencyClassifierTests {
         XCTAssertEqual(c.classify(texts: ["壹佰圆", "100"], rgb: nil)?.denomination, 100)
         XCTAssertEqual(c.classify(texts: ["壹佰圆"], rgb: nil)?.jiao, false)
     }
+
+    /// 对抗复审 HIGH：OCR 把数字后误插"角"（相邻文字/水印）不得投出**不存在的角面额**。
+    /// 角只有 1/2/5——"100角/20角/3角"应被丢弃（返回 nil），绝不当确定结果播出（否则把 100 元误报成"100 角"=10 倍钱数错）。
+    func testBogusJiaoDenominationsRejected() {
+        for bogus in ["100 角", "20 角", "3 角", "50 角"] {
+            XCTAssertNil(c.classify(texts: [bogus, bogus], rgb: nil), "\(bogus) 不是合法角面额，应丢弃")
+        }
+        // 合法角面额（1/2/5 角）仍正常识别、不误伤。
+        let r = c.classify(texts: ["5 角", "5 角"], rgb: nil)
+        XCTAssertEqual(r?.denomination, 5); XCTAssertEqual(r?.jiao, true)
+        XCTAssertEqual(c.classify(texts: ["2 角", "2 角"], rgb: nil)?.denomination, 2)
+    }
 }

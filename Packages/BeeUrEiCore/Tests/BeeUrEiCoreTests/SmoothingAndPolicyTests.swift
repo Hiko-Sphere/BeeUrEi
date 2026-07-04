@@ -91,4 +91,14 @@ final class ClockAngleAndConciseTests: XCTestCase {
         XCTAssertEqual(composer.conciseMeters(0.4), "很近")
         XCTAssertEqual(composer.conciseMeters(0.7), "半米")
     }
+
+    /// 对抗复审 MEDIUM：两个相反方向平滑相消 → 合向量≈0 → smoothedAngle 判为方向不定(nil)，
+    /// 绝不外发一个数值噪声角当"确定方向"；update 回退到当前帧原始角。
+    func testDirectionSmootherOpposingAnglesAreIndeterminate() {
+        let s = DirectionSmoother(alpha: 0.5)
+        _ = s.update(angleDegrees: 90, distanceMeters: nil)
+        let r = s.update(angleDegrees: -90, distanceMeters: nil) // 与 90° 相消 → 合向量≈0
+        XCTAssertNil(s.smoothedAngle)                  // 方向不定
+        XCTAssertEqual(r.angle, -90, accuracy: 1e-6)   // 回退到当前帧原始角，而非噪声角
+    }
 }

@@ -116,4 +116,11 @@ final class ProximityCueTests: XCTestCase {
         XCTAssertLessThan(mapper.cue(distanceMeters: 1)!.beepIntervalSeconds,
                           mapper.cue(distanceMeters: 3)!.beepIntervalSeconds)
     }
+
+    /// 对抗复审 LOW：maxDistance<=0 退化配置时 cue 必须返回 nil，绝不外发 0/0=NaN 的音高/节奏。
+    func testDegenerateMaxDistanceReturnsNilNotNaN() {
+        XCTAssertNil(ProximityCueMapper(maxDistance: 0).cue(distanceMeters: 0))
+        XCTAssertNil(ProximityCueMapper(maxDistance: -1).cue(distanceMeters: 0))
+        XCTAssertNotNil(ProximityCueMapper(maxDistance: 4).cue(distanceMeters: 2)) // 正常配置仍工作
+    }
 }

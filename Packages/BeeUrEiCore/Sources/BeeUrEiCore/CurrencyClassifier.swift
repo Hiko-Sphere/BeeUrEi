@@ -38,6 +38,11 @@ public struct CurrencyClassifier: Sendable {
         ("伍角", 5), ("贰角", 2), ("壹角", 1),
     ]
 
+    /// 合法"角"面额白名单：只有 1/2/5 角。**必须与元支路的 hueRanges.keys 白名单对称**——否则 OCR 把
+    /// 任意数字后误插一个"角"（相邻文字/水印）就会以 jiao 支路无门槛投票，把"100 角/20 角/3 角"这类**不存在
+    /// 的面额**当确定结果播出（如把 100 元钞误报成"100 角"=10 元，正是本模块要防的 10 倍钱数错，见对抗复审 HIGH）。
+    static let jiaoDenoms: Set<Int> = [1, 2, 5]
+
     /// texts：OCR 识别行；rgb：票面中央平均色（0...1，可为 nil）。无任何面额文字时返回 nil（纯颜色不猜——红衣服≠一百元）。
     /// 面额键：数值 + 单位（角/元分开，杜绝"5角"投给"5元"的 10 倍误报）。
     struct Denom: Hashable, Comparable {
@@ -53,7 +58,7 @@ public struct CurrencyClassifier: Sendable {
             if let cap = Self.capitalDenomination(in: raw) { votes[Denom(value: cap, jiao: false), default: 0] += 1 }
             if let cj = Self.capitalJiao(in: raw) { votes[Denom(value: cj, jiao: true), default: 0] += 1 }
             for (v, isJiao) in Self.standaloneAmounts(in: raw) {
-                if isJiao { votes[Denom(value: v, jiao: true), default: 0] += 1 }
+                if isJiao { if Self.jiaoDenoms.contains(v) { votes[Denom(value: v, jiao: true), default: 0] += 1 } } // 只认 1/2/5 角，堵住"100角"这类假面额
                 else if Self.hueRanges.keys.contains(v) { votes[Denom(value: v, jiao: false), default: 0] += 1 }
             }
         }

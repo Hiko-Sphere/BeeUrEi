@@ -12,6 +12,10 @@ public struct PeopleSummarizer: Sendable {
                         horizontalFOVDegrees: Double = 68,
                         language: Language = .zh) -> String {
         guard !people.isEmpty else { return SpokenStrings.peopleNone(language) }
+        // 距离先净化：非有限(NaN/±inf)或 ≤0 的 LiDAR 值一律当"无距离"(nil)。否则坏值会被当成有效距离、
+        // 排成"最近的人"并念成"就在眼前/0 米"——对盲人是假的"有人贴身"误报（对抗复审 MEDIUM）。真实距离恒 >0。
+        let people = people.map { (normalizedX: $0.normalizedX,
+                                   distanceMeters: $0.distanceMeters.flatMap { ($0.isFinite && $0 > 0) ? $0 : nil }) }
         let sorted = people.sorted { a, b in
             switch (a.distanceMeters, b.distanceMeters) {
             case let (x?, y?): return x < y

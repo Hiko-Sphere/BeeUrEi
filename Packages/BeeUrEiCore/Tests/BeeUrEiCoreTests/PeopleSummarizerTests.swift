@@ -42,4 +42,15 @@ final class PeopleSummarizerTests: XCTestCase {
         let text = s.summary(people: [(0.5, 1.5), (0.9, nil)], language: .en)
         XCTAssertEqual(text, "2 people. Nearest ahead, about 1.5 m; others ahead right")
     }
+
+    /// 对抗复审 MEDIUM：坏距离(NaN/±inf/负/0)不得被当成有效距离、排成"最近的人"并念成贴身距离——净化为无距离。
+    func testInvalidDistanceNotTreatedAsNearest() {
+        // nan 距离的人被净化为无距离；真实 3m 的人才是最近，并报其真实距离（而非 nan 人被念成"0 米/很近"）。
+        let zh = s.summary(people: [(0.5, 3.0), (0.9, Double.nan)])
+        XCTAssertTrue(zh.contains("3.0"), "真实 3m 的人应为最近并报其距离；实际: \(zh)")
+        XCTAssertFalse(zh.contains("很近"), "nan 人不得被当最近念成'很近'；实际: \(zh)")
+        // 负距离 / +inf 同样净化：都无有效距离 → 绝不报出任何距离（不谎称"很近/0 米"）。
+        let bad = s.summary(people: [(0.5, -1.0), (0.9, Double.infinity)])
+        XCTAssertFalse(bad.contains("米"), "全为坏距离 → 不应报出任何距离; 实际: \(bad)")
+    }
 }

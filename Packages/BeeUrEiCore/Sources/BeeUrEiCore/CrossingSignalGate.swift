@@ -28,12 +28,21 @@ public final class CrossingSignalGate {
     /// 默认 5s 偏保守；盲人步速慢、清空相位按明眼人标定，起步窗应取相位下限而非全程。
     public let freshWindow: TimeInterval
 
+    /// 前置红/黄相位的**最短驻留**（秒）：只有绿灯之前那段红/黄相位持续 ≥ 此时长，才认这段绿是"亲见新绿"。
+    /// 用于挡掉稳定态里偶发的 1–2 帧红/黄误判（眩光/车灯/遮挡）——真实信号周期里黄+红相长达数十秒，此门槛
+    /// （默认 3s）远高于抖动、远低于任何真实红相，既拒毛刺又不误拒真周期。**否则单帧黄误判会把陈旧绿重新
+    /// 武装成 crossNow＝假安心，让盲人踏进随时会变红的绿灯**（对抗复审 HIGH）。宁可偶尔多等一轮（安全），
+    /// 绝不在毛刺后误判新绿。
+    public let minRedYellowDwellSeconds: TimeInterval
+
     private var lastConfirmed: TrafficLightState = .unknown
     private var greenIsFresh = false
     private var greenStartedAt: TimeInterval = 0
+    private var nonGreenSince: TimeInterval?   // 当前这段"非绿"连续相位的起始时刻；nil=尚未观察到非绿相
 
-    public init(freshWindow: TimeInterval = 5) {
+    public init(freshWindow: TimeInterval = 5, minRedYellowDwellSeconds: TimeInterval = 3) {
         self.freshWindow = max(0, freshWindow)
+        self.minRedYellowDwellSeconds = max(0, minRedYellowDwellSeconds)
     }
 
     /// 喂入本次**已稳定**的 confirmed 状态与单调递增时间戳（秒），返回当前起步建议。
@@ -41,12 +50,22 @@ public final class CrossingSignalGate {
     public func update(confirmed: TrafficLightState, at t: TimeInterval) -> Advice {
         if confirmed == .green {
             if lastConfirmed != .green {
-                // 进入新的一段绿：只有见证 红/黄 → 绿 的跳变才算"新绿"。
+                // 进入新的一段绿：只有见证 红/黄 → 绿 的跳变、**且那段红/黄相位够长**才算"新绿"。
                 // unknown → 绿 视为"半路赶到"（很可能一直是绿、只是先前判不出），保守当陈旧绿。
-                greenIsFresh = (lastConfirmed == .red || lastConfirmed == .yellow)
+                // dwell = 本次绿之前那段连续非绿相位的持续时长；未观察到非绿相(nonGreenSince=nil)→dwell=0。
+                // 够长门槛挡掉稳定绿里 1–2 帧红/黄误判把陈旧绿误武装成新绿（对抗复审 HIGH）。
+                let priorWasRedYellow = (lastConfirmed == .red || lastConfirmed == .yellow)
+                let priorDwell = nonGreenSince.map { t - $0 } ?? 0
+                greenIsFresh = priorWasRedYellow && priorDwell >= minRedYellowDwellSeconds
                 greenStartedAt = t
             }
             // 同一段绿持续（green → green）：保持既有 fresh 判定与起始时刻不变。
+        } else {
+            // 非绿（红/黄/未知）：开始/延续对这段非绿相位计时——从"刚离开绿"或首次出现非绿那刻起，
+            // 跨 yellow→red 不重置（一整段非绿的总驻留才是判据）。
+            if lastConfirmed == .green || nonGreenSince == nil {
+                nonGreenSince = t
+            }
         }
         lastConfirmed = confirmed
         return advice(at: t)
@@ -68,6 +87,7 @@ public final class CrossingSignalGate {
         lastConfirmed = .unknown
         greenIsFresh = false
         greenStartedAt = 0
+        nonGreenSince = nil
     }
 
     /// 起步建议的播报语；红/黄/未知返回 nil（由 `TrafficLightClassifier.hint` 播报具体色，避免重复）。

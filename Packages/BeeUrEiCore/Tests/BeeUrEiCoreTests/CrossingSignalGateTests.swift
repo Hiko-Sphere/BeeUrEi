@@ -5,12 +5,12 @@ final class CrossingSignalGateTests: XCTestCase {
 
     // MARK: 核心安全语义：新绿可起步、陈旧绿不可
 
-    /// 见证 红 → 绿 跳变 = 新绿，整段相位在前方 → 可起步。
+    /// 见证 红 → 绿 跳变（红相位够长）= 新绿，整段相位在前方 → 可起步。
     func testFreshGreenAfterRedAllowsCrossing() {
         let g = CrossingSignalGate()
         XCTAssertEqual(g.update(confirmed: .red, at: 0), .wait)
-        XCTAssertEqual(g.update(confirmed: .red, at: 1), .wait)
-        XCTAssertEqual(g.update(confirmed: .green, at: 2), .crossNow) // 亲见 红→绿
+        XCTAssertEqual(g.update(confirmed: .red, at: 3), .wait)
+        XCTAssertEqual(g.update(confirmed: .green, at: 4), .crossNow) // 亲见 红→绿，红驻留 4s ≥3
     }
 
     /// 一上来就是绿（半路赶到，unknown → 绿）：无法保证剩余时间 → 等下一个绿灯。这是本门控的关键安全增益。
@@ -21,11 +21,31 @@ final class CrossingSignalGateTests: XCTestCase {
         XCTAssertEqual(g.update(confirmed: .green, at: 1), .waitForNextGreen) // 持续绿仍陈旧
     }
 
-    /// 黄 → 绿 也算新绿（灯完整循环回绿）。
+    /// 黄 → 绿 也算新绿（灯完整循环回绿），前提是黄相位驻留够长（非毛刺）。
     func testGreenAfterYellowIsFresh() {
         let g = CrossingSignalGate()
         _ = g.update(confirmed: .yellow, at: 0)
-        XCTAssertEqual(g.update(confirmed: .green, at: 1), .crossNow)
+        _ = g.update(confirmed: .yellow, at: 3)
+        XCTAssertEqual(g.update(confirmed: .green, at: 4), .crossNow) // 黄驻留 4s ≥3
+    }
+
+    /// 对抗复审 HIGH：陈旧绿中途**单帧红/黄误判**（眩光/车灯/遮挡）绝不得把陈旧绿重新武装成 crossNow
+    /// ——否则会让盲人踏进随时会变红的绿灯。
+    func testShortYellowGlitchDoesNotReArmStaleGreen() {
+        let g = CrossingSignalGate(minRedYellowDwellSeconds: 3)
+        XCTAssertEqual(g.update(confirmed: .green, at: 0), .waitForNextGreen)  // 半路赶到=陈旧绿
+        XCTAssertEqual(g.update(confirmed: .green, at: 10), .waitForNextGreen)
+        _ = g.update(confirmed: .yellow, at: 11)                              // 中途 1 帧黄误判（驻留仅 1s）
+        XCTAssertEqual(g.update(confirmed: .green, at: 12), .waitForNextGreen) // 驻留<3s → 仍陈旧（修复前会误判 crossNow）
+    }
+
+    /// 不误伤真周期：真实的黄→红相位（驻留数十秒）后转绿仍正确判为新绿。
+    func testLongRealPhaseStillArmsFreshGreen() {
+        let g = CrossingSignalGate(minRedYellowDwellSeconds: 3)
+        XCTAssertEqual(g.update(confirmed: .green, at: 0), .waitForNextGreen) // 陈旧绿
+        _ = g.update(confirmed: .yellow, at: 20)                              // 变黄（真周期开始，非绿相位从此计时）
+        _ = g.update(confirmed: .red, at: 23)                                 // 变红（同一段非绿延续）
+        XCTAssertEqual(g.update(confirmed: .green, at: 45), .crossNow)        // 非绿驻留 45-20=25s ≥3 → 新绿
     }
 
     // MARK: 时间窗：新绿超窗降级
@@ -44,9 +64,9 @@ final class CrossingSignalGateTests: XCTestCase {
     func testWindowMeasuredFromGreenStartNotLatestFrame() {
         let g = CrossingSignalGate(freshWindow: 5)
         _ = g.update(confirmed: .red, at: 0)
-        XCTAssertEqual(g.update(confirmed: .green, at: 1), .crossNow)  // 绿起始 = t1
-        _ = g.update(confirmed: .green, at: 4)                        // 中途再喂绿，不应重置起始
-        XCTAssertEqual(g.update(confirmed: .green, at: 7), .waitForNextGreen) // 距起始 6s > 5s
+        XCTAssertEqual(g.update(confirmed: .green, at: 4), .crossNow)  // 绿起始 = t4（红驻留 4s ≥3）
+        _ = g.update(confirmed: .green, at: 7)                        // 中途再喂绿，不应重置起始
+        XCTAssertEqual(g.update(confirmed: .green, at: 10), .waitForNextGreen) // 距起始 6s > 5s
     }
 
     // MARK: 循环与重置
@@ -55,26 +75,26 @@ final class CrossingSignalGateTests: XCTestCase {
     func testNewGreenEpisodeAfterRedIsFreshAgain() {
         let g = CrossingSignalGate(freshWindow: 5)
         _ = g.update(confirmed: .red, at: 0)
-        XCTAssertEqual(g.update(confirmed: .green, at: 1), .crossNow)
-        XCTAssertEqual(g.advice(at: 10), .waitForNextGreen) // 首段绿已超窗
-        _ = g.update(confirmed: .red, at: 11)               // 变红
-        XCTAssertEqual(g.update(confirmed: .green, at: 12), .crossNow) // 新一段绿，又是新绿
+        XCTAssertEqual(g.update(confirmed: .green, at: 4), .crossNow)  // 红驻留 4s → 新绿
+        XCTAssertEqual(g.advice(at: 12), .waitForNextGreen) // 首段绿已超窗（8s>5s）
+        _ = g.update(confirmed: .red, at: 13)               // 变红
+        XCTAssertEqual(g.update(confirmed: .green, at: 17), .crossNow) // 新一段绿，红驻留 4s → 又是新绿
     }
 
     func testResetClearsFreshness() {
         let g = CrossingSignalGate()
         _ = g.update(confirmed: .red, at: 0)
-        XCTAssertEqual(g.update(confirmed: .green, at: 1), .crossNow)
+        XCTAssertEqual(g.update(confirmed: .green, at: 4), .crossNow) // 红驻留 4s → 新绿
         g.reset()
-        // reset 后 lastConfirmed=unknown；再来绿 = 半路赶到 = 陈旧。
-        XCTAssertEqual(g.update(confirmed: .green, at: 2), .waitForNextGreen)
+        // reset 后 lastConfirmed=unknown、nonGreenSince=nil；再来绿 = 半路赶到 = 陈旧。
+        XCTAssertEqual(g.update(confirmed: .green, at: 5), .waitForNextGreen)
     }
 
     /// 单调时间保护：即便查询时间戳早于起始，也不误判超窗（elapsed 夹到 ≥0）。
     func testNonIncreasingTimestampDoesNotFalselyExpire() {
         let g = CrossingSignalGate(freshWindow: 5)
         _ = g.update(confirmed: .red, at: 100)
-        XCTAssertEqual(g.update(confirmed: .green, at: 101), .crossNow)
+        XCTAssertEqual(g.update(confirmed: .green, at: 104), .crossNow) // 红驻留 4s → 新绿
         XCTAssertEqual(g.advice(at: 100), .crossNow) // t < start → elapsed 夹 0，仍算窗内
     }
 

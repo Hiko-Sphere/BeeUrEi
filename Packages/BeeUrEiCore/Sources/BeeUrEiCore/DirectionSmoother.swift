@@ -35,6 +35,10 @@ public final class DirectionSmoother {
 
     public var smoothedAngle: Double? {
         guard let vx, let vy else { return nil }
+        // 相反方向平滑相消 → 合向量趋近 0，atan2 的角度只是数值噪声（毫无意义却会被当"确定方向"）。
+        // 幅值过小时判为**方向不定**返回 nil（调用方回退到当前帧原始角，见 update 兜底）——对抗复审 MEDIUM。
+        let mag = (vx * vx + vy * vy).squareRoot()
+        guard mag >= 1e-3 else { return nil }
         return atan2(vy, vx) * 180 / .pi
     }
 

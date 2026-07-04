@@ -425,8 +425,13 @@ enum FramingStrings {
         l == .zh ? "把识别到的文字或码内容复制到剪贴板" : "Copy the recognized text or code to the clipboard"
     }
     static func uiDial(_ l: Language) -> String { l == .zh ? "拨打" : "Call" }
-    static func uiDialHint(_ l: Language) -> String {
-        l == .zh ? "打开系统拨号盘并预填这个号码——号码可能识别有误，请在拨号盘核对后再拨" : "Open the phone dialer prefilled with this number — it may be misread, so verify in the dialer before calling"
+    static func uiOpenLink(_ l: Language) -> String { l == .zh ? "打开链接" : "Open link" }
+    static func uiSendEmail(_ l: Language) -> String { l == .zh ? "发邮件" : "Email" }
+    static func uiSendSms(_ l: Language) -> String { l == .zh ? "发短信" : "Text" }
+    /// 一键动作通用提示：打开系统应用并预填，绝不代执行——先核对内容。
+    static func uiActionHint(_ l: Language) -> String {
+        l == .zh ? "用系统对应的应用打开并预填（拨号盘／浏览器／邮件／信息）——内容可能识别有误或来源不明，请先核对再操作"
+                 : "Opens the matching system app prefilled (dialer/browser/mail/messages) — the content may be misread or untrusted, so verify before acting"
     }
     static func uiCancel(_ l: Language) -> String { l == .zh ? "取消" : "Cancel" }
     static func uiSave(_ l: Language) -> String { l == .zh ? "保存" : "Save" }

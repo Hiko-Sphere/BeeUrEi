@@ -14,6 +14,9 @@ struct ExploreItem: Identifiable {
     let isText: Bool
 }
 
+/// 识别结果的一键系统动作（拨号盘/浏览器/邮件/信息）：label 供按钮显示，url 供 UIApplication.open 打开预填。
+struct FramingAction: Equatable { let label: String; let url: URL }
+
 /// 取景识别：用相机 + YOLO 找最大目标，语音指引把它移到画面中央对准，对准后说出"这是什么"。
 /// 解决竞品最弱的"盲人不知镜头对着哪"。决策逻辑在核心 `FramingGuide`（已测）。
 @Observable
@@ -22,9 +25,10 @@ final class FramingAssistViewModel {
     private(set) var guidanceText = FramingStrings.starting(FeatureSettings().language)
     private(set) var resultText = ""
     private(set) var copyableResult: String?   // OCR/扫码的原始内容，可复制
-    // 读到**唯一**电话号码时的 tel:// URL：驱动结果区"拨打"按钮打开系统拨号盘**预填**（不自动拨——OCR 可能错位，
-    // 由用户在拨号盘 VoiceOver 复核后再拨）。切到任何其它识别（stopContinuous）即清，不残留过期按钮。
-    private(set) var dialablePhone: String?
+    // 识别到「可执行内容」（唯一电话/QR 里的链接·邮箱·短信·电话）时的一键动作：驱动结果区一个按钮，点它**打开系统
+    // 对应应用并预填**（拨号盘/浏览器/邮件/信息），iOS 要求用户再确认——绝不代拨/代发（OCR 或 QR 可能有误/恶意，
+    // 由用户复核后再操作）。切到任何其它识别（stopContinuous）即清，不残留过期按钮。
+    private(set) var resultAction: FramingAction?
 
     @ObservationIgnored private let source = ARDepthCameraSource()
     // 真实 YOLO 检测器；模型缺失时自身返回空（识别为空、不崩溃），无需占位实现。
@@ -717,7 +721,9 @@ final class FramingAssistViewModel {
                     self.copyableResult = numbers.joined(separator: "\n")
                     self.historyStore.add(kind: "phone", content: numbers.joined(separator: "\n")) // 存识别历史，供事后回看/复制拨打
                     // 唯一号码 → 提供"拨打"（打开系统拨号盘预填，不自动拨）。多个号码则不猜该拨哪个，只读+可复制。
-                    self.dialablePhone = numbers.count == 1 ? EmergencyPhoneFallback.telURLString(numbers[0]) : nil
+                    if numbers.count == 1, let tel = EmergencyPhoneFallback.telURLString(numbers[0]), let url = URL(string: tel) {
+                        self.resultAction = FramingAction(label: FramingStrings.uiDial(self.lang), url: url)
+                    }
                 }
                 self.speak(self.resultText)
             }
@@ -779,15 +785,29 @@ final class FramingAssistViewModel {
                 case .url(let host):
                     self.resultText = FramingStrings.urlResult(first, self.lang)
                     self.speak(FramingStrings.urlSpeak(host, self.lang))
+                    // 仅 http(s) 提供"打开链接"（.url 分类本就是 http(s)）；用户先听到域名、点按才打开浏览器（不自动跳）。
+                    if let url = URL(string: first), let s = url.scheme?.lowercased(), s == "http" || s == "https" {
+                        self.resultAction = FramingAction(label: FramingStrings.uiOpenLink(self.lang), url: url)
+                    }
                 case .phone(let number):
                     self.resultText = FramingStrings.phoneResult(number, self.lang)
                     self.speak(FramingStrings.phoneSpeak(number, self.lang))
+                    if let tel = EmergencyPhoneFallback.telURLString(number), let url = URL(string: tel) {
+                        self.resultAction = FramingAction(label: FramingStrings.uiDial(self.lang), url: url) // 打开拨号盘预填
+                    }
                 case .email(let addr):
                     self.resultText = FramingStrings.emailResult(addr, self.lang)
                     self.speak(FramingStrings.emailSpeak(addr, self.lang))
+                    if let a = addr, let url = URL(string: "mailto:\(a)") {
+                        self.resultAction = FramingAction(label: FramingStrings.uiSendEmail(self.lang), url: url) // 打开邮件撰写
+                    }
                 case .sms(let number):
                     self.resultText = FramingStrings.smsResult(number, self.lang)
                     self.speak(FramingStrings.smsSpeak(number, self.lang))
+                    let digits = (number ?? "").filter { $0.isNumber || $0 == "+" }
+                    if !digits.isEmpty, let url = URL(string: "sms:\(digits)") {
+                        self.resultAction = FramingAction(label: FramingStrings.uiSendSms(self.lang), url: url) // 打开信息
+                    }
                 case .contact:
                     self.resultText = FramingStrings.contactResult(self.lang)
                     self.speak(FramingStrings.contactSpeak(self.lang))
@@ -984,7 +1004,7 @@ final class FramingAssistViewModel {
     func stopContinuous() {
         stopLightTone()
         stopColorContinuous()
-        dialablePhone = nil // 切到其它识别：清掉上次读电话遗留的"拨打"按钮
+        resultAction = nil // 切到其它识别：清掉上次结果遗留的一键动作按钮
     }
 
     /// 光线探测一次性概述（明暗等级 + 亮源方向，核心 LightMeter，已测）。
@@ -1239,12 +1259,12 @@ struct FramingAssistView: View {
                             .frame(minHeight: 44)
                             .accessibilityHint(FramingStrings.uiCopyHint(model.lang))
                     }
-                    // 读到唯一电话号码：一键打开系统拨号盘（预填，不自动拨——用户在拨号盘复核后再拨）。
-                    if let tel = model.dialablePhone, let url = URL(string: tel) {
-                        Button(FramingStrings.uiDial(model.lang)) { UIApplication.shared.open(url) }
+                    // 可执行内容（电话/链接/邮箱/短信）：一键打开系统对应应用并预填（不代拨/代发——用户复核后再操作）。
+                    if let action = model.resultAction {
+                        Button(action.label) { UIApplication.shared.open(action.url) }
                             .buttonStyle(.borderedProminent).tint(.beeHoney)
                             .frame(minHeight: 44)
-                            .accessibilityHint(FramingStrings.uiDialHint(model.lang))
+                            .accessibilityHint(FramingStrings.uiActionHint(model.lang))
                     }
                 }
                 .padding()

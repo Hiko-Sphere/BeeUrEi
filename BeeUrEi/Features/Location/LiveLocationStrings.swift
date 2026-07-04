@@ -52,10 +52,13 @@ enum LiveLocationStrings {
     }
 
     /// 联系人单元的合并无障碍标签（battery 为 nil 时不含电量段）。
-    static func contactA11y(name: String, role: String, distance: String, updated: String, battery: String? = nil, _ l: Language) -> String {
-        let base = l == .zh ? "\(name)，\(role)，\(distance)，\(updated)" : "\(name), \(role), \(distance), \(updated)"
-        guard let battery else { return base }
-        return l == .zh ? "\(base)，\(battery)" : "\(base), \(battery)"
+    static func contactA11y(name: String, role: String, distance: String, accuracy: String? = nil, updated: String, battery: String? = nil, _ l: Language) -> String {
+        let sep = l == .zh ? "，" : ", "
+        var base = l == .zh ? "\(name)，\(role)，\(distance)" : "\(name), \(role), \(distance)"
+        if let accuracy { base += sep + accuracy }   // 精度紧跟距离/方位——盲人据此知道位置有多准
+        base += sep + updated
+        if let battery { base += sep + battery }
+        return base
     }
 
     static func featureOffTitle(_ l: Language) -> String { l == .zh ? "位置共享已关闭" : "Location sharing is off" }

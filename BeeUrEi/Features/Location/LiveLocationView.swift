@@ -118,6 +118,7 @@ struct LiveLocationView: View {
 
     private func contactRow(_ c: ContactLocationInfo) -> some View {
         let distanceText = distanceBearing(to: c)
+        let accuracy = SharedLocationAccuracy.phrase(accuracyMeters: c.accuracy, language: lang) // nil=无精度信息，不显示
         let updated = LiveLocationStrings.updatedAgo(secondsSince(c.updatedAt), lang)
         let battery = LiveLocationStrings.batteryText(c.battery, lang) // nil=对端未上报（老客户端），不显示不猜
         let batteryLow = (c.battery ?? 100) <= 20
@@ -130,7 +131,7 @@ struct LiveLocationView: View {
                     AvatarView(dataURL: c.avatar, name: c.displayName, size: 40)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(c.displayName).font(.headline)
-                        Text("\(AccountStrings.roleName(c.role, lang)) · \(distanceText)").font(.caption).foregroundStyle(.secondary)
+                        Text("\(AccountStrings.roleName(c.role, lang)) · \(distanceText)\(accuracy.map { " · \($0)" } ?? "")").font(.caption).foregroundStyle(.secondary)
                         if let battery {
                             // 低电量标红（对端手机快没电=其导盲/求助将失效，趁失联前主动联系）；视觉之外语义已在文字（"偏低"）。
                             Text("\(updated) · \(battery)").font(.caption2).foregroundStyle(batteryLow ? Color.beeDanger : Color.secondary)
@@ -146,7 +147,7 @@ struct LiveLocationView: View {
         .buttonStyle(BeePressStyle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel(LiveLocationStrings.contactA11y(name: c.displayName, role: AccountStrings.roleName(c.role, lang),
-                                                            distance: distanceText, updated: updated, battery: battery, lang))
+                                                            distance: distanceText, accuracy: accuracy, updated: updated, battery: battery, lang))
     }
 
     // MARK: 计算

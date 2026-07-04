@@ -28,6 +28,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case readLight                  // 光线/明暗（找窗户/灯）
     case readColor                  // 识别颜色（配衣服/比色）
     case matchColors                // 两件配色比对（扫两次判"搭不搭"——盲人配衣决策刚需；harmony 判定在核心已测）
+    case readMessages               // 朗读未读消息（"读一下消息/有新消息吗"）——区别于 messages 只打开界面
     case messages                   // 打开消息
     case sendMessage(to: String, text: String) // 给X发消息说Y
     case find(String)               // 找某个具体物品（已教物品或可找类别，如"找我的钥匙"/"find my keys"）
@@ -88,6 +89,10 @@ public enum VoiceCommandParser {
         if has(["电话号码", "读电话", "读号码", "念电话", "念号码", "读一下电话", "看电话", "上面的电话", "名片电话", "phone number", "read the number", "read the phone", "read number"]) { return .readPhone }
         // 读邮箱地址：名片/信笺上的邮箱。用"邮箱/邮件地址"等明确说法，读出交用户核对再写信（绝不代发）。
         if has(["读邮箱", "邮箱地址", "念邮箱", "读邮件地址", "读一下邮箱", "看邮箱", "上面的邮箱", "read email", "read the email", "email address"]) { return .readEmail }
+        // 读消息须在「读文字」(读一下/念一下) 与「打开消息」(消息) 之前：盲人不必进聊天界面逐条滑，一句"读一下
+        // 消息/有新消息吗"直接听未读。用"读/念…消息""(有)新消息""未读消息"等明确说法，与"打开消息"(.messages)区分。
+        if has(["读消息", "念消息", "读一下消息", "念一下消息", "读未读", "未读消息", "有新消息", "有没有新消息", "有没有消息",
+                "read my message", "read messages", "read my messages", "any new message", "any unread", "unread messages"]) { return .readMessages }
         // 读整页须在「读文字」之前：否则「朗读整页」会被 readText 的「朗读」抢走。
         if has(["整页", "整个页面", "读文档", "读整", "读全文", "whole page", "entire page", "full page", "read the page", "read the document", "read document"]) { return .readFullPage }
         if has(["读文字", "念文字", "朗读", "读一下", "念一下", "念念", "念一念", "念给我听", "read text", "read this", "read it", "read aloud"]) { return .readText }

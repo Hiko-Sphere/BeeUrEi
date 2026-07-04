@@ -450,6 +450,7 @@ struct HubView: View {
             AppRoute.shared.pendingNavAction = .backtrack
             showNavigation = true
         case .messages: showMessages = true
+        case .readMessages: readVoiceMessages()
         case .sendMessage(let to, let text): sendVoiceMessage(to: to, text: text)
         case .adjustSpeech(let adj):
             // 语音调语速（Hub 可达）：改设置 → 用**新语速**播确认（当场听到效果）；已到边界则提示不空调。
@@ -488,6 +489,19 @@ struct HubView: View {
         case .openSettings: showSettings = true // 语音直达设置（语言/无障碍/摔倒检测等非语音可调项）
         case .unknown:
             speak(transcript.isEmpty ? HomeStrings.voiceHeardNothing(lang) : HomeStrings.voiceNotUnderstood(lang))
+        }
+    }
+
+    /// 语音"读消息"：拉取会话列表 → 汇报有未读的最新一条（对标 Siri「读消息」，盲人不必进聊天界面逐条滑）。
+    private func readVoiceMessages() {
+        func speak(_ t: String) { SpeechHub.shared.speak(t, channel: .query, voiceCode: lang.voiceCode) }
+        guard let token = session.token else { speak(HomeStrings.voiceNeedLogin(lang)); return }
+        Task {
+            guard let convos = try? await APIClient().conversations(token: token) else {
+                speak(HomeStrings.voiceReadFailed(lang)); return
+            }
+            let items = convos.map { HomeStrings.UnreadConversation(name: $0.peer.displayName, kind: $0.last.kind, text: $0.last.text, unread: $0.unread) }
+            speak(HomeStrings.unreadReadout(items, lang))
         }
     }
 

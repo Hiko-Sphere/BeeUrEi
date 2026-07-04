@@ -26,12 +26,39 @@ final class HomeStringsTests: XCTestCase {
         }
     }
 
+    func testUnreadReadout() {
+        typealias C = HomeStrings.UnreadConversation
+        // 无未读 → 明确告知，不静默。
+        XCTAssertEqual(HomeStrings.unreadReadout([], .zh), "没有未读消息。")
+        XCTAssertEqual(HomeStrings.unreadReadout([C(name: "妈妈", kind: "text", text: "到了吗", unread: 0)], .zh), "没有未读消息。")
+        // 文本原样读；非文本报类型；多条附计数；已读会话不计入。
+        let r = HomeStrings.unreadReadout([
+            C(name: "妈妈", kind: "text", text: "到家了吗", unread: 1),
+            C(name: "小明", kind: "audio", text: "data:audio/m4a;base64,AAAA", unread: 3),
+            C(name: "已读的人", kind: "text", text: "旧消息", unread: 0),
+        ], .zh)
+        XCTAssertTrue(r.contains("你有 2 位联系人的未读消息"))
+        XCTAssertTrue(r.contains("妈妈：到家了吗"))
+        XCTAssertTrue(r.contains("小明：语音消息（等 3 条）"))
+        XCTAssertFalse(r.contains("已读的人")) // unread=0 不读
+        // 超过 cap 提示"等"；英文不串中文。
+        let many = (1...7).map { C(name: "P\($0)", kind: "text", text: "hi", unread: 1) }
+        XCTAssertTrue(HomeStrings.unreadReadout(many, cap: 5, .zh).contains("等"))
+        let en = HomeStrings.unreadReadout([C(name: "Mom", kind: "image", text: "data:image/png;base64,AA", unread: 1)], .en)
+        XCTAssertTrue(en.contains("Mom: a photo"))
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+        // Apple 地图链接文本按位置读（与列表预览一致）。
+        XCTAssertTrue(HomeStrings.unreadReadout([C(name: "爸", kind: "text", text: "https://maps.apple.com/?ll=39.9,116.4", unread: 1)], .zh).contains("一个位置"))
+    }
+
     func testVoiceCommandsHelpAdvertisesCallByName() {
         // 语音能力必须能被语音发现：自述里要提"给某人打电话"，否则加了 callContact 盲人也无从得知。
         XCTAssertTrue(HomeStrings.voiceCommandsHelp(.zh).contains("给某人打电话"))
         XCTAssertTrue(HomeStrings.voiceCommandsHelp(.en).lowercased().contains("call a family member"))
-        // 发消息能力仍在（别改串了），且英文自述不混中文。
+        // 发消息 + 读消息能力都在（别改串了），且英文自述不混中文。
         XCTAssertTrue(HomeStrings.voiceCommandsHelp(.zh).contains("给某人发消息"))
+        XCTAssertTrue(HomeStrings.voiceCommandsHelp(.zh).contains("读一下消息"))
+        XCTAssertTrue(HomeStrings.voiceCommandsHelp(.en).lowercased().contains("read my messages"))
         XCTAssertFalse(HomeStrings.voiceCommandsHelp(.en).contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
 

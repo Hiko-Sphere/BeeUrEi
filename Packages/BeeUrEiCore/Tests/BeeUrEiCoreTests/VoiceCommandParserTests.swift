@@ -80,6 +80,23 @@ final class VoiceCommandParserTests: XCTestCase {
         XCTAssertEqual(VoiceCommandParser.parse("救命"), .sos)
     }
 
+    func testReadMessagesVsOpenMessages() {
+        // "读/念消息""有新消息吗" → 朗读未读；"打开消息/聊天" → 只开界面（互不抢，且不被 readText 的"读一下"抢）。
+        XCTAssertEqual(VoiceCommandParser.parse("读一下消息"), .readMessages)
+        XCTAssertEqual(VoiceCommandParser.parse("念消息"), .readMessages)
+        XCTAssertEqual(VoiceCommandParser.parse("有新消息吗"), .readMessages)
+        XCTAssertEqual(VoiceCommandParser.parse("有没有未读消息"), .readMessages)
+        XCTAssertEqual(VoiceCommandParser.parse("read my messages"), .readMessages)
+        XCTAssertEqual(VoiceCommandParser.parse("any new messages"), .readMessages)
+        XCTAssertEqual(VoiceCommandParser.parse("打开消息"), .messages)
+        XCTAssertEqual(VoiceCommandParser.parse("聊天"), .messages)
+        XCTAssertEqual(VoiceCommandParser.parse("open messages"), .messages)
+        // "读一下"(无"消息") 仍是读文字，不被误抢。
+        XCTAssertEqual(VoiceCommandParser.parse("读一下"), .readText)
+        // 给某人发消息仍是 sendMessage（parseSendMessage 先行）。
+        XCTAssertEqual(VoiceCommandParser.parse("给妈妈发消息说我到了"), .sendMessage(to: "妈妈", text: "我到了"))
+    }
+
     func testReadDatesVsTodayDateVsReadText() {
         // 包装日期意图 → readDates；今天几号 → date；读文字 → readText（互不抢）。
         XCTAssertEqual(VoiceCommandParser.parse("看看保质期"), .readDates)

@@ -112,8 +112,8 @@ enum HomeStrings {
 
     static func voiceCommandsHelp(_ l: Language) -> String {
         l == .zh
-            ? "你可以说：开始导盲、带我去某地、看一看、读一下文字、看看保质期、读电话号码、读邮箱、找我的钥匙、我在哪、周围有什么、我朝哪个方向、这是什么颜色、这两件搭不搭、天气、现在几点、还有多少电、今天几号、给某人发消息、给某人打电话、打开消息、打开设置、再说一遍、说慢点、说快点、说简短点、说详细点。需要人帮忙说\u{201C}求助\u{201D}；遇到危险说\u{201C}救命\u{201D}，会倒计时通知你的全部亲友。"
-            : "You can say: start guide, take me to a place, look, read this, check the expiry date, read a phone number, read an email, find my keys, where am I, what's around, which way am I facing, what color is this, do these two match, weather, what time is it, battery level, what's the date, send a message, call a family member by name, open messages, open settings, repeat, speak slower/faster, or ask for less/more detail. Say \u{201C}get help\u{201D} to reach anyone available; say \u{201C}emergency\u{201D} if you're in danger — it counts down and alerts all your contacts."
+            ? "你可以说：开始导盲、带我去某地、看一看、读一下文字、看看保质期、读电话号码、读邮箱、找我的钥匙、我在哪、周围有什么、我朝哪个方向、这是什么颜色、这两件搭不搭、天气、现在几点、还有多少电、今天几号、给某人发消息、给某人打电话、读一下消息、打开消息、打开设置、再说一遍、说慢点、说快点、说简短点、说详细点。需要人帮忙说\u{201C}求助\u{201D}；遇到危险说\u{201C}救命\u{201D}，会倒计时通知你的全部亲友。"
+            : "You can say: start guide, take me to a place, look, read this, check the expiry date, read a phone number, read an email, find my keys, where am I, what's around, which way am I facing, what color is this, do these two match, weather, what time is it, battery level, what's the date, send a message, call a family member by name, read my messages, open messages, open settings, repeat, speak slower/faster, or ask for less/more detail. Say \u{201C}get help\u{201D} to reach anyone available; say \u{201C}emergency\u{201D} if you're in danger — it counts down and alerts all your contacts."
     }
 
     /// 时间/日期播报：值用系统本地化格式（"下午3:25"/"3:25 PM"、"7月4日星期五"），TTS 读得自然。
@@ -253,6 +253,42 @@ enum HomeStrings {
     }
     static func voiceSent(_ name: String, _ l: Language) -> String {
         l == .zh ? "已发送给\(name)。" : "Sent to \(name)."
+    }
+
+    static func voiceReadFailed(_ l: Language) -> String { l == .zh ? "读取消息失败，请稍后再试。" : "Couldn't read messages. Try again later." }
+
+    /// 语音"读消息"的一条会话输入（各会话与对端最新一条 + 未读数）。
+    struct UnreadConversation { let name: String; let kind: String; let text: String; let unread: Int }
+
+    /// 非文本消息的可读占位（与服务端推送预览同口径）；文本原样、截断防超长；Apple 地图链接文本视作位置。
+    static func messageReadoutPreview(kind: String, text: String, _ l: Language) -> String {
+        switch kind {
+        case "audio": return l == .zh ? "语音消息" : "a voice message"
+        case "image": return l == .zh ? "一张图片" : "a photo"
+        case "video": return l == .zh ? "一段视频" : "a video"
+        case "location": return l == .zh ? "一个位置" : "a location"
+        default:
+            if text.contains("https://maps.apple.com/?ll=") { return l == .zh ? "一个位置" : "a location" }
+            let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return t.count > 60 ? String(t.prefix(60)) + "…" : t
+        }
+    }
+
+    /// 语音"读消息"汇报：只读**有未读**会话的最新一条（隐私+简短，不逐条翻历史），至多 cap 位，超出提示"等"。
+    /// 无未读→"没有未读消息"。让盲人不进聊天界面、一句话即可听到谁发了什么（对标 Siri「读消息」）。
+    static func unreadReadout(_ items: [UnreadConversation], cap: Int = 5, _ l: Language) -> String {
+        let withUnread = items.filter { $0.unread > 0 }
+        guard !withUnread.isEmpty else { return l == .zh ? "没有未读消息。" : "No unread messages." }
+        let shown = withUnread.prefix(max(1, cap))
+        let parts = shown.map { c -> String in
+            let preview = messageReadoutPreview(kind: c.kind, text: c.text, l)
+            let more = c.unread > 1 ? (l == .zh ? "（等 \(c.unread) 条）" : " (\(c.unread) unread)") : ""
+            return l == .zh ? "\(c.name)：\(preview)\(more)" : "\(c.name): \(preview)\(more)"
+        }
+        let head = l == .zh ? "你有 \(withUnread.count) 位联系人的未读消息。" : "\(withUnread.count) contact\(withUnread.count > 1 ? "s" : "") with unread messages. "
+        let body = parts.joined(separator: l == .zh ? "；" : "; ")
+        let tail = withUnread.count > shown.count ? (l == .zh ? "；等" : "; and more") : ""
+        return head + body + tail
     }
 
     // MARK: 红绿灯横幅（Oko 式第三通道）

@@ -11,9 +11,19 @@ import type { NotificationInfo } from './api'
 /// - **排除 emergency_ack / emergency_clear**：回执"X 已看到"与报平安"X 报平安了"都是反馈类、绝不能当新告警
 ///   弹响铃大模态（否则 web 端既发过告警又收到反馈的用户会被自己联系人的反馈误弹一次紧急模态）。
 export function pickUnreadEmergencies(list: NotificationInfo[], sessionDismissed: ReadonlySet<string>): NotificationInfo[] {
-  return list
+  const filtered = list
     .filter((n) => n.kind.includes('emergency') && n.kind !== 'emergency_ack' && n.kind !== 'emergency_clear' && !n.readAt && !sessionDismissed.has(n.id))
-    .sort((a, b) => b.createdAt - a.createdAt)
+    .sort((a, b) => b.createdAt - a.createdAt) // 时间倒序：最新（升级重呼版）在前
+  // 同一次告警事件的多条通知（首呼 + 升级重呼，共用同一 eventId）合并为一条——取**最新**那条（升级版措辞更急、
+  // 是当前状态）。否则漏看首呼、开 App 时才拾取的协助者会看到同一次求助弹两遍。无 eventId 的老通知不合并。
+  const seenEvent = new Set<string>()
+  return filtered.filter((n) => {
+    const ev = n.data?.eventId
+    if (!ev) return true
+    if (seenEvent.has(ev)) return false
+    seenEvent.add(ev)
+    return true
+  })
 }
 
 /// 已被发起人"报平安(emergency_clear)"解除的告警发起人 id 集合：其名下所有告警应就地消掉（对方已没事，

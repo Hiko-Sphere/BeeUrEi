@@ -29,6 +29,18 @@ describe('pickUnreadEmergencies（告警实时弹出的挑选规则）', () => {
     expect(pickUnreadEmergencies([notif('a', 'emergency_alert', 100, 150)], none)).toEqual([])
   })
 
+  it('同一 eventId 的首呼+升级重呼合并为一条（取最新/升级版）；无 eventId 不合并', () => {
+    const list = [
+      notif('orig', 'emergency_alert', 100, undefined, { fromId: 'x', eventId: 'e1' }),                 // 首呼
+      notif('esc', 'emergency_alert', 200, undefined, { fromId: 'x', eventId: 'e1', escalated: '1' }),  // 升级重呼（更新）
+      notif('other', 'emergency_alert', 150, undefined, { fromId: 'y', eventId: 'e2' }),                // 另一次事件
+      notif('noev', 'emergency_alert', 120),                                                            // 无 eventId：不合并
+    ]
+    const picked = pickUnreadEmergencies(list, none)
+    expect(picked.map((n) => n.id)).toEqual(['esc', 'other', 'noev']) // e1 只留最新 esc；e2 留；无 eventId 留
+    expect(picked[0].data?.escalated).toBe('1')                        // 展示的是升级版（措辞更急）
+  })
+
   it('回执 emergency_ack / 报平安 emergency_clear 都不弹告警模态（反馈类，非新告警）', () => {
     const list = [
       notif('a', 'emergency_alert', 100), // 真告警：弹

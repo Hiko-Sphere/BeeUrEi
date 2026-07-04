@@ -30,14 +30,20 @@ export function notifyUser(
   try {
     store.createNotification({ id: randomUUID(), userId, kind, title, body, data, createdAt: Date.now() })
   } catch { /* 通知不可作为主流程成功的前置条件 */ }
-  if (user.apnsToken) {
-    // badge=该用户未读总数（含刚写入的本条通知）：后台收到通知类推送时图标角标同样递增，
-    // 与聊天推送一致（否则图标会漏计未读通知，见 App 图标角标主线）。
-    const badge = totalUnreadFor(store, userId).total
-    void push.sendAlert(user.apnsToken, title, body, { kind, ...(data ?? {}) }, undefined, badge).catch(() => { /* best-effort */ })
-  }
-  if (webPushSender.configured) {
-    const payload = JSON.stringify({ title, body, data: { kind, ...(data ?? {}) } })
-    for (const sub of store.webPushSubscriptionsForUser(userId)) void webPushSender.send(sub, payload).catch(() => { /* best-effort */ })
-  }
+  // best-effort 推送：badge(totalUnreadFor) 与订阅(webPushSubscriptionsForUser) 都是**同步** store 读，
+  // better-sqlite3 的 .all()/.get() 在 SQLITE_BUSY/IOERR 时会**同步抛**——绝不能让它 500 已提交的主操作
+  // （封禁/举报处置/加好友/路线添加等早已生效）。写入(createNotification)上面已单独 try/catch，读这里补齐同款隔离
+  // （见 SOS 扇出复审：写有兜底、读却漏了的同类不对称守卫缺口）。
+  try {
+    if (user.apnsToken) {
+      // badge=该用户未读总数（含刚写入的本条通知）：后台收到通知类推送时图标角标同样递增，
+      // 与聊天推送一致（否则图标会漏计未读通知，见 App 图标角标主线）。
+      const badge = totalUnreadFor(store, userId).total
+      void push.sendAlert(user.apnsToken, title, body, { kind, ...(data ?? {}) }, undefined, badge).catch(() => { /* best-effort */ })
+    }
+    if (webPushSender.configured) {
+      const payload = JSON.stringify({ title, body, data: { kind, ...(data ?? {}) } })
+      for (const sub of store.webPushSubscriptionsForUser(userId)) void webPushSender.send(sub, payload).catch(() => { /* best-effort */ })
+    }
+  } catch { /* 推送读失败绝不阻断/500 调用方已提交的主流程 */ }
 }

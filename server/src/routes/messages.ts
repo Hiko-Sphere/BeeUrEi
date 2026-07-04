@@ -94,22 +94,26 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
       if (sender) {
         for (const memberId of group.memberIds) {
           if (memberId === me) continue
-          const member = store.findById(memberId)
-          if (!member) continue
-          const l = pushLang(member.language)
-          const title = pushStrings.groupMessageTitle(sender.displayName, group.name, l)
-          const body = pushStrings.newMessageBody(previewOf(kind, text, l), l)
-          if (member.apnsToken) {
-            void pushSender.sendAlert(member.apnsToken, title, body,
-              { type: 'chat_message', groupId }, `group:${groupId}`, // 按群分组折叠通知
-              totalUnreadFor(store, memberId).total) // 图标角标=该成员未读总数（含本条）
-              .catch(() => { /* 单个成员推送失败不影响其他成员与发送回执 */ })
-          }
-          // Web Push 对齐 APNs：web-only 成员关掉标签页也能收到群消息（SW 按 groupId tag 折叠）。
-          if (webPush.configured) {
-            const payload = JSON.stringify({ title, body, data: { kind: 'chat_message', groupId } })
-            for (const sub of store.webPushSubscriptionsForUser(memberId)) void webPush.send(sub, payload).catch(() => {})
-          }
+          // 单个成员的**同步** store 读（findById/未读角标/web 订阅）抛错（SQLITE_BUSY/IOERR）绝不能掐断对其余
+          // 成员的推送——更不能在消息已存库(createMessage)后 500，让发送方重试→重复群发（见 SOS 扇出复审同类）。
+          try {
+            const member = store.findById(memberId)
+            if (!member) continue
+            const l = pushLang(member.language)
+            const title = pushStrings.groupMessageTitle(sender.displayName, group.name, l)
+            const body = pushStrings.newMessageBody(previewOf(kind, text, l), l)
+            if (member.apnsToken) {
+              void pushSender.sendAlert(member.apnsToken, title, body,
+                { type: 'chat_message', groupId }, `group:${groupId}`, // 按群分组折叠通知
+                totalUnreadFor(store, memberId).total) // 图标角标=该成员未读总数（含本条）
+                .catch(() => { /* 单个成员推送失败不影响其他成员与发送回执 */ })
+            }
+            // Web Push 对齐 APNs：web-only 成员关掉标签页也能收到群消息（SW 按 groupId tag 折叠）。
+            if (webPush.configured) {
+              const payload = JSON.stringify({ title, body, data: { kind: 'chat_message', groupId } })
+              for (const sub of store.webPushSubscriptionsForUser(memberId)) void webPush.send(sub, payload).catch(() => {})
+            }
+          } catch { /* 单成员推送准备失败不阻断其余成员与 201 发送回执 */ }
         }
       }
       return reply.code(201).send({ message: msg })
@@ -127,20 +131,23 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     // 提醒推送（尽力而为，不阻塞发送回执）。
     const recipient = store.findById(toId!)
     if (recipient && sender) {
-      const l = pushLang(recipient.language)
-      const title = pushStrings.newMessageTitle(sender.displayName, l)
-      const body = pushStrings.newMessageBody(previewOf(kind, text, l), l)
-      if (recipient.apnsToken) {
-        void pushSender.sendAlert(recipient.apnsToken, title, body,
-          { type: 'chat_message', fromId: me }, `dm:${me}`, // 按发送者分组折叠通知
-          totalUnreadFor(store, toId!).total) // 图标角标=收件人未读总数（含本条）
-          .catch(() => { /* 推送失败不影响消息已存库与发送回执 */ })
-      }
-      // Web Push 对齐 APNs：点开直达该对话（SW 据 fromId 路由）；按发送者 tag 折叠。
-      if (webPush.configured) {
-        const payload = JSON.stringify({ title, body, data: { kind: 'chat_message', fromId: me } })
-        for (const sub of store.webPushSubscriptionsForUser(toId!)) void webPush.send(sub, payload).catch(() => {})
-      }
+      // 同步 store 读（未读角标/web 订阅）抛错（SQLITE_BUSY 等）绝不能在消息已存库后 500，让发送方重试→重复单聊。
+      try {
+        const l = pushLang(recipient.language)
+        const title = pushStrings.newMessageTitle(sender.displayName, l)
+        const body = pushStrings.newMessageBody(previewOf(kind, text, l), l)
+        if (recipient.apnsToken) {
+          void pushSender.sendAlert(recipient.apnsToken, title, body,
+            { type: 'chat_message', fromId: me }, `dm:${me}`, // 按发送者分组折叠通知
+            totalUnreadFor(store, toId!).total) // 图标角标=收件人未读总数（含本条）
+            .catch(() => { /* 推送失败不影响消息已存库与发送回执 */ })
+        }
+        // Web Push 对齐 APNs：点开直达该对话（SW 据 fromId 路由）；按发送者 tag 折叠。
+        if (webPush.configured) {
+          const payload = JSON.stringify({ title, body, data: { kind: 'chat_message', fromId: me } })
+          for (const sub of store.webPushSubscriptionsForUser(toId!)) void webPush.send(sub, payload).catch(() => {})
+        }
+      } catch { /* 推送准备失败不影响消息已存库与 201 发送回执 */ }
     }
     return reply.code(201).send({ message: msg })
   })

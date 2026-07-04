@@ -145,25 +145,29 @@ export function registerAssistRoutes(
       targets.map((id) => (store.findById(id)?.voipToken ? 1 : 0)),
       targets.map((id) => (store.findById(id)?.apnsToken ? 1 : 0)))
     for (const id of targets) {
-      const u = store.findById(id)
-      if (u?.voipToken) void pushSender.sendCallInvite(u.voipToken, parsed.data.callId, callerName, from.sub)
-      // 兜底：同时发一条普通提醒推送（万一 CallKit 未弹，至少出现"来电"横幅，可点开 App 接听）。
-      // 文案按收件人语言（users.language，pushStrings）——推送在 App 外展示，客户端文案表够不着。
-      if (u?.apnsToken) {
-        const lang = pushLang(u.language)
-        void pushSender.sendAlert(u.apnsToken, pushStrings.incomingCallTitle(callerName, lang),
-                                  pushStrings.incomingCallBody(lang),
-                                  { kind: 'incoming_call', callId: parsed.data.callId })
-          .catch(() => {})
-      }
-      // Web Push：web-only 协助者关掉标签页也能收到来电系统通知——点开落回 /app，呼叫仍在
-      // 登记 TTL 内的话 IncomingCallHost 轮询即弹铃。与 APNs 各自 best-effort，失败不阻断呼叫。
-      if (webPush.configured && u) {
-        const lang = pushLang(u.language)
-        const payload = JSON.stringify({ title: pushStrings.incomingCallTitle(callerName, lang),
-          body: pushStrings.incomingCallBody(lang), data: { kind: 'incoming_call', callId: parsed.data.callId, fromId: from.sub } })
-        for (const sub of store.webPushSubscriptionsForUser(id)) void webPush.send(sub, payload).catch(() => {})
-      }
+      // 单个目标的**同步** store 读（findById/web 订阅）抛错（SQLITE_BUSY 等）绝不能掐断对其余目标的来电投递
+      // ——盲人求助时希望触达尽可能多的协助者（见 SOS 扇出复审同类）。
+      try {
+        const u = store.findById(id)
+        if (u?.voipToken) void pushSender.sendCallInvite(u.voipToken, parsed.data.callId, callerName, from.sub)
+        // 兜底：同时发一条普通提醒推送（万一 CallKit 未弹，至少出现"来电"横幅，可点开 App 接听）。
+        // 文案按收件人语言（users.language，pushStrings）——推送在 App 外展示，客户端文案表够不着。
+        if (u?.apnsToken) {
+          const lang = pushLang(u.language)
+          void pushSender.sendAlert(u.apnsToken, pushStrings.incomingCallTitle(callerName, lang),
+                                    pushStrings.incomingCallBody(lang),
+                                    { kind: 'incoming_call', callId: parsed.data.callId })
+            .catch(() => {})
+        }
+        // Web Push：web-only 协助者关掉标签页也能收到来电系统通知——点开落回 /app，呼叫仍在
+        // 登记 TTL 内的话 IncomingCallHost 轮询即弹铃。与 APNs 各自 best-effort，失败不阻断呼叫。
+        if (webPush.configured && u) {
+          const lang = pushLang(u.language)
+          const payload = JSON.stringify({ title: pushStrings.incomingCallTitle(callerName, lang),
+            body: pushStrings.incomingCallBody(lang), data: { kind: 'incoming_call', callId: parsed.data.callId, fromId: from.sub } })
+          for (const sub of store.webPushSubscriptionsForUser(id)) void webPush.send(sub, payload).catch(() => {})
+        }
+      } catch { /* 单目标推送准备失败不阻断对其余目标的来电投递 */ }
     }
     metrics.inc('calls_registered_total')
     return { ok: true }

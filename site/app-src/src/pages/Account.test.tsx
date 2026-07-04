@@ -4,10 +4,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 vi.mock('../lib/session', () => ({ useSession: () => ({ user: { id: 'u1', username: 'amin', displayName: '阿明', role: 'helper' }, refreshMe: vi.fn(), signOut: vi.fn() }) }))
 vi.mock('../lib/api', () => ({
-  api: { me: vi.fn(), verificationStatus: vi.fn(), setProfile: vi.fn(), setRole: vi.fn(), setLanguage: vi.fn(), deleteAccount: vi.fn(), setEmail: vi.fn(), quietHours: vi.fn(), setQuietHours: vi.fn(), withdrawVerification: vi.fn() },
+  api: { me: vi.fn(), verificationStatus: vi.fn(), setProfile: vi.fn(), setRole: vi.fn(), setLanguage: vi.fn(), deleteAccount: vi.fn(), setEmail: vi.fn(), quietHours: vi.fn(), setQuietHours: vi.fn(), withdrawVerification: vi.fn(), submitVerification: vi.fn() },
   APIError: class extends Error { code = ''; status = 0 },
+  reencodeToJpeg: vi.fn(), uploadVerificationDoc: vi.fn(),
 }))
-import { api } from '../lib/api'
+import { api, reencodeToJpeg, uploadVerificationDoc } from '../lib/api'
 import { AccountPage, VerificationDialog } from './Account'
 
 const mock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
@@ -103,5 +104,48 @@ describe('VerificationDialog 撤回待审申请', () => {
     expect(api.withdrawVerification).not.toHaveBeenCalled() // 用户取消了 confirm
     rerender(<VerificationDialog status={{ status: 'none' }} onClose={vi.fn()} onChanged={vi.fn()} />)
     expect(screen.queryByTestId('withdraw-verif')).toBeNull() // none 状态无撤回入口
+  })
+})
+
+describe('VerificationDialog 提交部分失败自动回滚', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('证件上传中途失败 → 自动 withdrawVerification 回滚，不留缺图 pending', async () => {
+    mock(api.submitVerification).mockResolvedValue({ id: 'v1' })
+    mock(reencodeToJpeg).mockImplementation(async (f: File) => f)
+    mock(uploadVerificationDoc).mockImplementation(async (_id: string, kind: string) => { if (kind === 'selfie') throw new Error('network') })
+    mock(api.withdrawVerification).mockResolvedValue({ ok: true })
+    render(<VerificationDialog status={{ status: 'none' }} onClose={vi.fn()} onChanged={vi.fn()} />)
+    fireEvent.click(screen.getByText('开始认证'))
+    fireEvent.click(screen.getByText('我同意并继续'))
+    const boxes = screen.getAllByRole('textbox')
+    fireEvent.change(boxes[0], { target: { value: '张三' } })
+    fireEvent.change(boxes[1], { target: { value: '1234' } })
+    const file = new File(['x'], 'id.jpg', { type: 'image/jpeg' })
+    fireEvent.change(screen.getByLabelText('证件正面照片'), { target: { files: [file] } })
+    fireEvent.change(screen.getByLabelText('本人自拍'), { target: { files: [file] } })
+    fireEvent.click(screen.getByText('提交审核'))
+    await waitFor(() => expect(uploadVerificationDoc).toHaveBeenCalledWith('v1', 'selfie', expect.anything()))
+    await waitFor(() => expect(api.withdrawVerification).toHaveBeenCalled())
+  })
+
+  it('全部成功 → 不回滚（withdrawVerification 不被调用）', async () => {
+    mock(api.submitVerification).mockResolvedValue({ id: 'v2' })
+    mock(reencodeToJpeg).mockImplementation(async (f: File) => f)
+    mock(uploadVerificationDoc).mockResolvedValue(undefined)
+    mock(api.withdrawVerification).mockResolvedValue({ ok: true })
+    const onClose = vi.fn()
+    render(<VerificationDialog status={{ status: 'none' }} onClose={onClose} onChanged={vi.fn()} />)
+    fireEvent.click(screen.getByText('开始认证'))
+    fireEvent.click(screen.getByText('我同意并继续'))
+    const boxes = screen.getAllByRole('textbox')
+    fireEvent.change(boxes[0], { target: { value: '张三' } })
+    fireEvent.change(boxes[1], { target: { value: '1234' } })
+    const file = new File(['x'], 'id.jpg', { type: 'image/jpeg' })
+    fireEvent.change(screen.getByLabelText('证件正面照片'), { target: { files: [file] } })
+    fireEvent.change(screen.getByLabelText('本人自拍'), { target: { files: [file] } })
+    fireEvent.click(screen.getByText('提交审核'))
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    expect(api.withdrawVerification).not.toHaveBeenCalled()
   })
 })

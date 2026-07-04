@@ -230,16 +230,22 @@ export function VerificationDialog({ status, onClose, onChanged }: { status: Ver
     if (!/^[0-9A-Za-z]{4}$/.test(idLast4)) { setErr(t('请填写证件号后 4 位', 'Enter the last 4 of the ID number')); return }
     if (!frontFile || !selfieFile) { setErr(t('请上传证件正面与本人自拍', 'Upload the document front and a selfie')); return }
     setBusy(true)
+    let createdId: string | null = null // 记录已建的待审 id，供文档上传失败时回滚
     try {
       const { id } = await api.submitVerification({ legalName: legalName.trim(), idType, idNumberLast4: idLast4, consentVersion: KYC_CONSENT_VERSION })
+      createdId = id
       const front = await reencodeToJpeg(frontFile)
       const selfie = await reencodeToJpeg(selfieFile)
       await uploadVerificationDoc(id, 'front', front)
       await uploadVerificationDoc(id, 'selfie', selfie)
+      createdId = null // 证件已传全，无需回滚
       toast(t('已提交，等待人工审核', 'Submitted — pending review'), 'ok')
       await onChanged()
       onClose()
     } catch (e) {
+      // 记录已建但证件没传全（reencode/上传中途失败）→ 自动回滚该 pending，让用户能**立即重试**，
+      // 而非被 already_pending 卡死、也不给审核员留一份缺图的申请（回滚失败还有"撤回申请"按钮兜底）。
+      if (createdId) { try { await api.withdrawVerification() } catch { /* 回滚也失败：留给状态页「撤回申请」按钮 */ } }
       const code = e instanceof APIError ? e.code : ''
       setErr(code === 'already_pending' ? t('已有一份待审核的申请', 'You already have a pending submission')
         : code === 'already_verified' ? t('你已通过实名认证', 'You are already verified')

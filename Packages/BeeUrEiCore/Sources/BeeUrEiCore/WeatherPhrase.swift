@@ -60,12 +60,21 @@ public enum WeatherPhrase {
                                precipProbability: Int? = nil,
                                uvIndex: Double? = nil,
                                rainInHours: Int? = nil,
+                               apparentTemp: Double? = nil,
                                language: Language) -> String {
         let cond = condition(code: code, language: language)
         let t = safeTemp(temperature)
+        // 体感温度（风寒/湿热）：盲人看不到日头也感不清风力对体感的影响，与实测差 ≥3°才提（否则赘述）。
+        // 非有限体感（异常 API 响应）跳过，绝不报"体感0度"这种假数（safeTemp(NaN)=0 会被 ≥3 差值放行）。
+        let feels: Int? = {
+            guard let ap = apparentTemp, ap.isFinite else { return nil }
+            let f = safeTemp(ap)
+            return abs(f - t) >= 3 ? f : nil
+        }()
         var parts: [String] = []
         if language == .zh {
             parts.append("现在\(cond)，气温\(t)度")
+            if let f = feels { parts.append("体感\(f)度") }
             if let mx = todayMax, let mn = todayMin {
                 parts.append("今天最高\(safeTemp(mx))度，最低\(safeTemp(mn))度")
             }
@@ -73,6 +82,7 @@ public enum WeatherPhrase {
             if let w = windSpeedKmh, w >= 29 { parts.append("风较大") } // ≥5级（29km/h）才提醒
         } else {
             parts.append("It's \(cond), \(t) degrees")
+            if let f = feels { parts.append("feels like \(f)") }
             if let mx = todayMax, let mn = todayMin {
                 parts.append("today's high \(safeTemp(mx)), low \(safeTemp(mn))")
             }

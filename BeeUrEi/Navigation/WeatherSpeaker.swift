@@ -88,7 +88,7 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
         c.queryItems = [
             .init(name: "latitude", value: String(format: "%.3f", lat)),   // 坐标降精到 ~百米级，最小化外发
             .init(name: "longitude", value: String(format: "%.3f", lon)),
-            .init(name: "current", value: "temperature_2m,weather_code,wind_speed_10m,uv_index"),
+            .init(name: "current", value: "temperature_2m,apparent_temperature,weather_code,wind_speed_10m,uv_index"),
             .init(name: "daily", value: "temperature_2m_max,temperature_2m_min,precipitation_probability_max"),
             .init(name: "hourly", value: "precipitation_probability"), // 逐小时降水概率 → 近期"约N小时后可能下雨"
             .init(name: "forecast_days", value: "1"),
@@ -98,6 +98,7 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
             struct Current: Decodable {
                 let time: String            // 当前小时时间戳（用于在 hourly 里定位当前小时）
                 let temperature_2m: Double
+                let apparent_temperature: Double?
                 let weather_code: Int
                 let wind_speed_10m: Double?
                 let uv_index: Double?
@@ -138,6 +139,7 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
                                      precipProbability: r.daily?.precipitation_probability_max?.first ?? nil,
                                      uvIndex: r.current.uv_index,
                                      rainInHours: rainInHours,
+                                     apparentTemp: r.current.apparent_temperature,
                                      language: l)
     }
 

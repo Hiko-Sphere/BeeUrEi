@@ -150,6 +150,17 @@ extension WeatherPhraseTests {
         XCTAssertTrue(out.contains("防晒"))
     }
 
+    func testApparentTemperature() {
+        // 体感与实测差 ≥3° 才报（风寒/湿热）。
+        XCTAssertTrue(WeatherPhrase.summary(temperature: 5, code: 0, apparentTemp: 0, language: .zh).contains("体感0度"))  // 风寒 -5°
+        XCTAssertTrue(WeatherPhrase.summary(temperature: 30, code: 0, apparentTemp: 36, language: .en).contains("feels like 36")) // 湿热 +6°
+        // 差 <3°：不赘述；无体感：不提。
+        XCTAssertFalse(WeatherPhrase.summary(temperature: 20, code: 0, apparentTemp: 21, language: .zh).contains("体感"))
+        XCTAssertFalse(WeatherPhrase.summary(temperature: 20, code: 0, language: .zh).contains("体感"))
+        // 非有限体感（异常读数）跳过，绝不报"体感0度"假数。
+        XCTAssertFalse(WeatherPhrase.summary(temperature: 20, code: 0, apparentTemp: .nan, language: .zh).contains("体感"))
+    }
+
     func testHoursUntilLikelyRain() {
         let probs: [Int?] = [10,10,10,10,10,10,10,10,10,10, 20, 30, 70, 80, 10] // 索引12(=当前+2h)首达 70
         XCTAssertEqual(WeatherPhrase.hoursUntilLikelyRain(probabilities: probs, startIndex: 10), 2)

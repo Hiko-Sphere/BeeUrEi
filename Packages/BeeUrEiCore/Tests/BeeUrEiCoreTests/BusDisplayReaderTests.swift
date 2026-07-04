@@ -88,4 +88,21 @@ final class BusDisplayReaderTests: XCTestCase {
         // 越界值不当分钟（把长数字/杂讯误当分钟）。
         XCTAssertNil(BusDisplayReader.arrivalHint(texts: ["还有999分钟"], language: .zh)) // ≥120 视为杂讯
     }
+
+    func testArrivalHintUnitWordBoundaries() {
+        // 回归：单位是别的词的**子串**时，前面的数字绝不误当到站信息（此前 substring 匹配会误报）。
+        // 英文 min ⊂ Mint/Minster/Ministry；stop ⊂ stopover。
+        XCTAssertNil(BusDisplayReader.arrivalHint(texts: ["5 Mint Street"], language: .en))     // 曾误报 "about 5 min"
+        XCTAssertNil(BusDisplayReader.arrivalHint(texts: ["8 Minster Road"], language: .en))
+        XCTAssertNil(BusDisplayReader.arrivalHint(texts: ["3 Ministry Ave"], language: .en))
+        // 中文"站台"(月台) ⊃ "站"：不能把 "2站台"(Platform 2) 误读成 "还有2站"。
+        XCTAssertNil(BusDisplayReader.arrivalHint(texts: ["2站台"], language: .zh))              // 曾误报 "还有2站"
+        XCTAssertNil(BusDisplayReader.arrivalHint(texts: ["在3站台候车"], language: .zh))
+        // 真到站信息仍准确读出（整词命中）。
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["5 minutes"], language: .en), "about 5 min")
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["3 mins"], language: .en), "about 3 min")
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["4 stops"], language: .en), "4 stops away")
+        // 月台杂讯与真到站同现：跳过站台、命中真的"3站"。
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["2站台", "还有3站"], language: .zh), "还有3站")
+    }
 }

@@ -38,8 +38,8 @@ public enum BusDisplayReader {
             if t.contains("即将") || t.contains("进站") || lower.contains("arriv") || lower.contains("approach") || lower.contains(" due") || lower == "due" {
                 imminent = true
             }
-            if minutes == nil, let n = numberBefore(units: ["分钟", "min"], in: lower) { minutes = n }
-            if stops == nil, let n = numberBefore(units: ["站", "stop"], in: lower) { stops = n }
+            if minutes == nil, let n = firstNumber(minutesRegexes, in: lower) { minutes = n }
+            if stops == nil, let n = firstNumber(stopsRegexes, in: lower) { stops = n }
         }
         // 倒计时读到 0（"0分钟"/"0 min"/"0站"）= 车已到站——必须当即将到站播报，绝不能因 ≥1 门槛回落成 nil
         // 让站台上的盲人对已进站的车毫无提示（会错过车/以为还早）。
@@ -49,24 +49,29 @@ public enum BusDisplayReader {
         return nil
     }
 
-    /// 找到紧跟在某单位（分钟/站/min/stop…，允许中间一个空格）之前的阿拉伯数字，如 "3分钟"→3、"5 min"→5。
-    /// 从单位处**向前**读连续 ascii 数字——单位前非数字（如"火车站"的"车"）自然不匹配，故 CJK 地名不会误触。
-    static func numberBefore(units: [String], in lower: String) -> Int? {
-        for unit in units {
-            var range = lower.startIndex..<lower.endIndex
-            while let r = lower.range(of: unit, range: range) {
-                var idx = r.lowerBound
-                if idx > lower.startIndex, lower[lower.index(before: idx)] == " " { idx = lower.index(before: idx) } // 容一个空格
-                var digits = ""
-                while idx > lower.startIndex {
-                    let p = lower.index(before: idx)
-                    let c = lower[p]
-                    guard c.isASCII, c.isNumber else { break }
-                    digits.insert(c, at: digits.startIndex); idx = p
-                }
-                if let n = Int(digits) { return n }
-                range = r.upperBound..<lower.endIndex
-            }
+    /// 到站单位正则（阿拉伯数字紧跟单位，捕获数字）。**整词/边界门控**是关键：
+    /// - 英文 min/stop 是别的词的子串——`(?![a-z])` 保证只认整词，不把 "5 Mint St"/"8 Minster Rd"/
+    ///   "3 Ministry Ave"/"stopover" 里的数字误当到站时间（此前 substring 匹配会误报"约5分钟"）。
+    /// - 中文"站"用 `(?!台)` 排除"站台"(月台)——"2站台"(Platform 2) 不能被误读成"还有2站"。
+    /// - 中文"分钟"无需边界（"分钟后/分钟内"不受影响）。大小写不敏感。
+    /// 数字须紧邻单位（容零或多个空格），故 CJK 地名（火车站的"车"、分钟寺的"往"）前无数字自然不匹配。
+    private static let minutesRegexes: [NSRegularExpression] = [
+        "([0-9]+)\\s*分钟",
+        "([0-9]+)\\s*(?:minutes?|mins?)(?![a-z])",
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
+    private static let stopsRegexes: [NSRegularExpression] = [
+        "([0-9]+)\\s*站(?!台)",
+        "([0-9]+)\\s*stops?(?![a-z])",
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
+
+    /// 返回首个匹配的「单位前阿拉伯数字」，如 "还有3分钟"→3、"5 min"→5。多处出现取最左（"2站台 还有3站"
+    /// 会跳过月台、命中真的"3站"）。无匹配返回 nil。
+    static func firstNumber(_ regexes: [NSRegularExpression], in text: String) -> Int? {
+        let range = NSRange(text.startIndex..., in: text)
+        for re in regexes {
+            guard let m = re.firstMatch(in: text, range: range),
+                  let r = Range(m.range(at: 1), in: text), let n = Int(text[r]) else { continue }
+            return n
         }
         return nil
     }

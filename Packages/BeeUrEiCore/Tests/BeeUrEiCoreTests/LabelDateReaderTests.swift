@@ -61,6 +61,28 @@ final class LabelDateReaderTests: XCTestCase {
         XCTAssertNil(LabelDateReader.find(texts: ["有效期 18990101"], language: .zh))
     }
 
+    func testEnglishMonthNameDates() {
+        // 进口食品/药品最常见的月份名写法（此前纯数字正则完全漏识）。
+        XCTAssertTrue(LabelDateReader.find(texts: ["BEST BEFORE JUL 2026"], language: .en)!.contains("BEST BEFORE JUL 2026"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["EXP DEC 2025"], language: .en)!.contains("EXP DEC 2025"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["use by December 2025"], language: .en)!.contains("December 2025"))
+        // 带日：月 日, 年 / 日 月 年 两种顺序。
+        XCTAssertTrue(LabelDateReader.find(texts: ["best before Jul 31, 2026"], language: .en)!.contains("Jul 31, 2026"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["EXPIRY 31 JUL 2026"], language: .en)!.contains("31 JUL 2026"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["use by 31st July 2026"], language: .en)!.contains("31st July 2026"))
+        // 大小写不敏感 + 中文标签同英文月名混排也读出。
+        XCTAssertTrue(LabelDateReader.find(texts: ["保质期 Aug 2027"], language: .zh)!.contains("Aug 2027"))
+    }
+
+    func testMonthNameDoesNotFalseMatchOrdinaryWords() {
+        // "MARKET 2026"含"mar"但后面不是"月末+年"结构 → 不误判为日期（有标签也不猜）。
+        XCTAssertNil(LabelDateReader.find(texts: ["exp MARKET 2026 lot"], language: .en))
+        // "MAY CONTAIN NUTS"：may 后非年份 → 不误配。
+        XCTAssertNil(LabelDateReader.find(texts: ["best before MAY CONTAIN NUTS"], language: .en))
+        // 月份名后跟的是超长数字串（非 4 位年）→ 不当日期。
+        XCTAssertNil(LabelDateReader.find(texts: ["exp JUL 20260731999"], language: .en))
+    }
+
     func testDedupAndCap() {
         // OCR 常重复同一行：去重。
         let r = LabelDateReader.find(texts: ["保质期 2026.07.15", "保质期 2026.07.15"], language: .zh)!

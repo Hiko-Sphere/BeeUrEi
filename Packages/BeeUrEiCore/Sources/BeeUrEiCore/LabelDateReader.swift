@@ -16,7 +16,7 @@ public enum LabelDateReader {
     /// 日期样式（ASCII 数字，避免 CJK 数字误配）：年(19/20xx)+分隔、d/m/yy(yy)、m/yyyy，
     /// 以及**无分隔/空格分隔的喷码**（食品药品包装最常见的批次喷码写法）。
     private static let dateRegexes: [NSRegularExpression] = {
-        let pats = [
+        let numeric = [
             "(?:19|20)[0-9]{2}\\s*[.\\-/年]",                       // 2026./2026-/2026年（后接月日或止于年）
             "[0-9]{1,2}[./][0-9]{1,2}[./](?:19|20)?[0-9]{2}",       // 15/07/2026、15/07/26
             "[0-9]{1,2}[./](?:19|20)[0-9]{2}",                     // 07/2026
@@ -26,7 +26,18 @@ public enum LabelDateReader {
             // 空格分隔 2026 07 / 2026 07 31（喷码另一常见写法）：须年后紧跟 2 位月，"2026 出厂"类不误配。
             "(?<![0-9])(?:19|20)[0-9]{2}\\s+[01][0-9](?:\\s+[0-3][0-9])?(?![0-9])",
         ]
-        return pats.compactMap { try? NSRegularExpression(pattern: $0) }
+        // 英文月份名日期（进口食品/药品最常见：BEST BEFORE JUL 2026 / EXP DEC 2025 / 31 JUL 2026 /
+        // July 31, 2026）——此前纯数字正则**完全漏识**。月份名是强信号，配合上面「同行须有日期标签」
+        // 的门控，精度依旧高。全名在缩写前（交替优先匹配长者）；大小写不敏感。
+        let month = "(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)"
+        let monthNamed = [
+            // 月[日]年：JUL 2026 / JUL 31 2026 / JUL 31, 2026 / December 2025
+            "\\b" + month + "\\.?\\s+(?:[0-9]{1,2}(?:st|nd|rd|th)?,?\\s+)?(?:19|20)[0-9]{2}\\b",
+            // 日月年：31 JUL 2026 / 31st July, 2026
+            "\\b[0-9]{1,2}(?:st|nd|rd|th)?\\s+" + month + "\\.?,?\\s+(?:19|20)[0-9]{2}\\b",
+        ]
+        return numeric.compactMap { try? NSRegularExpression(pattern: $0) }
+            + monthNamed.compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
     }()
 
     static func lineHasDate(_ line: String) -> Bool {

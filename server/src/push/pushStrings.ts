@@ -40,6 +40,13 @@ export const pushStrings = {
     const place = placeLabelName(label, l)
     return l === 'en' ? `${name} has safely arrived at ${place}.` : `${name}已经安全到达${place}。`
   },
+  // 共享位置者电量低（Life360/Find My "X 的手机电量低"式）：手机是盲人导航+SOS 的唯一工具，
+  // 家人在其失联前主动联系。只在跌破阈值那次提醒（滞回防抖）。
+  contactLowBatteryTitle: (name: string, l: PushLang): string =>
+    l === 'en' ? `${name}'s phone battery is low` : `${name}的手机电量低`,
+  contactLowBatteryBody: (name: string, pct: number, l: PushLang): string =>
+    l === 'en' ? `${name}'s phone is at ${pct}% while sharing location — they may go offline soon. Consider checking in.`
+               : `${name}正在共享位置，手机电量仅剩 ${pct}%，可能很快失联。建议主动联系确认。`,
   groupAddedTitle: (l: PushLang): string =>
     l === 'en' ? 'Added to a group chat' : '你被加入了群聊',
   groupAddedBody: (name: string, groupName: string, l: PushLang): string =>

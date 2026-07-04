@@ -14,6 +14,10 @@ describe('notifDestination 通知点击跳转目的地', () => {
   it('路线通知 → 路线库页（原断言 null 的前提"web 无路线页"已过时——/routes 库+预览页已建成）', () => {
     expect(notifDestination('route_added')).toBe('/routes')
   })
+  it('到达围栏/共享者低电量 → 位置页（去地图看对方在哪）', () => {
+    expect(notifDestination('place_arrival')).toBe('/locations')
+    expect(notifDestination('contact_low_battery')).toBe('/locations')
+  })
   it('实名结果 → 账户页（实名认证区就在 /account）', () => {
     expect(notifDestination('kyc_verified')).toBe('/account')
     expect(notifDestination('kyc_rejected')).toBe('/account')

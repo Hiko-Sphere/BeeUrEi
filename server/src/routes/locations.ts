@@ -5,6 +5,7 @@ import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
 import { type LiveLocationRegistry } from '../location/liveLocations'
 import { evaluateGeofences } from '../location/geofence'
+import { decideLowBatteryWarn } from '../location/lowBattery'
 import { type PushSender, NoopPushSender } from '../push/apns'
 import { pushLang, pushStrings } from '../push/pushStrings'
 import { notifyUser } from '../notifications/notify'
@@ -34,8 +35,33 @@ const updateSchema = z.object({
 export function registerLocationRoutes(app: FastifyInstance, store: Store, live: LiveLocationRegistry,
                                        push: PushSender = new NoopPushSender()): void {
   const geofence = new GeofenceState()
+  // 低电量预警会话态：userId → 是否已就本次跌破提醒过（滞回复位见 decideLowBatteryWarn）。停止共享即清。
+  const lowBatteryWarned = new Map<string, boolean>()
+  // 阈值：跌到 warnAt(默认15%)提醒家人；回升到 clearAt(=warnAt+10)才复位（滞回防抖）。env 可调，夹 [5,50]。
+  const warnAtPct = (() => { const v = Number(process.env.SHARE_LOW_BATTERY_WARN_PCT); return Number.isFinite(v) && v >= 5 && v <= 50 ? Math.round(v) : 15 })()
+  const clearAtPct = Math.min(100, warnAtPct + 10)
   /// 我的"已接受"联系人（双向，排除黑名单双方）——位置可见性的授权集合。单点口径见 store.acceptedContactIds。
   const contactIds = (me: string): string[] => [...acceptedContactIds(store, me)]
+
+  /// 共享位置期间电量跌破阈值 → 通知**本就能看其位置的**已接受亲友（不增新暴露，同到达围栏口径）。
+  /// 只在跌破那一刻提醒一次（滞回 + 会话态去重）；缺电量读数不改变状态。best-effort，绝不阻断位置上报。
+  function checkLowBattery(me: string, battery: number | undefined): void {
+    try {
+      const decision = decideLowBatteryWarn(lowBatteryWarned.get(me) ?? false, battery, warnAtPct, clearAtPct)
+      lowBatteryWarned.set(me, decision.warned)
+      if (!decision.warn) return
+      const sender = store.findById(me)
+      if (!sender || battery == null) return
+      const pct = Math.round(battery)
+      for (const contactId of acceptedContactIds(store, me)) {
+        const l = pushLang(store.findById(contactId)?.language)
+        notifyUser(store, push, contactId, 'contact_low_battery',
+          pushStrings.contactLowBatteryTitle(sender.displayName, l),
+          pushStrings.contactLowBatteryBody(sender.displayName, pct, l),
+          { fromId: me, battery: String(pct) })
+      }
+    } catch { /* 低电量预警失败绝不阻断位置上报 */ }
+  }
 
   /// 到达围栏判定 + 通知（best-effort，绝不阻断位置上报）：盲人到达已存坐标的"家/公司"时，
   /// 通知**正在能看其共享位置的家人**（= accepted 联系人，本就能看，故到达提醒不增加新暴露、只是更省心）。
@@ -75,6 +101,7 @@ export function registerLocationRoutes(app: FastifyInstance, store: Store, live:
     const me = req.user!.sub
     const sharingUntil = live.update(me, parsed.data, now, parsed.data.ttlSec ? parsed.data.ttlSec * 1000 : undefined)
     checkGeofences(me, parsed.data.lat, parsed.data.lng) // 到达"家/公司"→ 通知家人（内部 best-effort）
+    checkLowBattery(me, parsed.data.battery)             // 电量跌破阈值 → 提醒家人主动联系（内部 best-effort）
     return { ok: true, sharingUntil }
   })
 
@@ -82,6 +109,7 @@ export function registerLocationRoutes(app: FastifyInstance, store: Store, live:
   app.post('/api/locations/stop', { preHandler: requireAuth() }, async (req) => {
     live.stop(req.user!.sub)
     geofence.clear(req.user!.sub) // 清围栏基线：下次共享的首更新重建，避免跨会话陈旧态漏报/误报（复审#1/#3）
+    lowBatteryWarned.delete(req.user!.sub) // 清低电量会话态：下次共享重新按跌破提醒（充电后重开共享不因陈旧已提醒态而漏报）
     return { ok: true }
   })
 

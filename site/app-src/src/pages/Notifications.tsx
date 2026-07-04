@@ -4,7 +4,7 @@ import { api, type NotificationInfo } from '../lib/api'
 import { emergencyLocInfo } from '../lib/emergencyLoc'
 import { useI18n } from '../lib/i18n'
 import { Card, Button, Spinner, EmptyState, fmtTime, RelativeTime } from '../components/ui'
-import { IconBell, IconShield, IconPhone, IconUsers, IconFilm, IconFlash, IconPin } from '../components/icons'
+import { IconBell, IconShield, IconPhone, IconUsers, IconFilm, IconFlash, IconPin, IconBattery } from '../components/icons'
 import { useCall } from './call/CallController'
 
 /// 点击通知跳到"可操作页"：好友请求→亲友页（去接受/拒绝）、群变更→聊天页；其余无明确去处返回 null（仅标已读）。
@@ -13,6 +13,7 @@ export function notifDestination(kind: string): string | null {
   if (kind.includes('friend') || kind.includes('link')) return '/family'
   if (kind.includes('group')) return '/chat'
   if (kind.includes('route')) return '/routes' // 路线通知 → 路线库页（查看/预览亲友新加的路线；执行仍在 iOS）
+  if (kind.includes('arrival') || kind.includes('battery')) return '/locations' // 到达围栏/低电量 → 位置页看对方在哪
   if (kind.includes('kyc') || kind.includes('verif')) return '/account' // 实名结果 → 账户页实名认证区
   if (kind.includes('security')) return '/account' // 安全变更预警（改密/改邮箱/2FA）→ 账户页去处理
   return null
@@ -20,6 +21,7 @@ export function notifDestination(kind: string): string | null {
 
 function iconFor(kind: string) {
   if (kind.includes('emergency')) return <IconFlash />
+  if (kind.includes('battery')) return <IconBattery /> // 共享者低电量提醒
   if (kind.includes('call')) return <IconPhone />
   if (kind.includes('route') || kind.includes('arrival') || kind.includes('place')) return <IconPin /> // 路线库/到达围栏（route_added/place_arrival）用定位图标
   if (kind.includes('friend') || kind.includes('link') || kind.includes('group')) return <IconUsers />

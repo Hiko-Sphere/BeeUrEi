@@ -129,6 +129,15 @@ export class CallEngine {
       this.cb.onMicDenied?.()
     }
 
+    // 若在 getUserMedia 挂起期间已被挂断/卸载（hangUp 此时 pc/ws 还是 null、关不掉任何东西，只置了 ended）：
+    // 绝不再往下建 PeerConnection/WebSocket——否则会建出无人引用的活 PC + 麦克风轨 + 已 join 房间的 ws，
+    // 泄漏到标签页关闭，并让服务端以为协助者加入了一个已被放弃的通话。这里补停已拿到的麦克风轨并返回。
+    if (this.ended) {
+      for (const t of this.localStream.getTracks()) t.stop()
+      this.localStream = null
+      return
+    }
+
     this.pc = this.newPeerConnection()
     for (const t of this.localStream.getTracks()) this.pc.addTrack(t, this.localStream)
 

@@ -33,6 +33,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (!tokenStore.token) { setUser(null); return }
     try {
       const me = await api.me()
+      // 在途期间用户可能已显式登出（signOut 同步清了 token）：绝不把已登出的用户"复活"回 React 状态、
+      // 也不把 LS_USER 重新写回磁盘。token 被清即视为会话已终止，跳过提交。
+      if (!tokenStore.token) return
       setSelf(me); setUser(me); tokenStore.setUser(me)
       // 拉取全站配置以获知是否要求实名认证（fail-open：失败保持现状，不误锁）。app-config 对未认证用户也放行。
       try { const cfg = await api.appConfig(); setRequireVerification(!!cfg.requireVerification) } catch { /* 保持现状 */ }

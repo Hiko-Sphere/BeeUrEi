@@ -27,13 +27,17 @@ export function ChatPage() {
   }, [])
   useEffect(() => { void loadLists(); return pollWhileVisible(loadLists, 8000) }, [loadLists])
 
-  // 由路由 /chat/:peerId 预选单聊对象。
+  // 由路由 /chat/:peerId 预选单聊对象。**每个 peerId 只预选一次**：effect 依赖 convos（首帧 convos 为
+  // null 时要等它到达才能解析对端名），但会话列表每 8s 轮询刷新一次——若不设一次性守卫，每次轮询都会把
+  // 用户从其手动打开的另一会话强拉回 URL 里的 peer，丢掉草稿/滚动位置/已加载历史（复审 HIGH）。
+  const appliedPeer = useRef<string | null>(null)
   useEffect(() => {
-    if (!peerId) return
+    if (!peerId) { appliedPeer.current = null; return } // 离开单聊路由：允许下次深链同一 peer 再预选
+    if (appliedPeer.current === peerId) return           // 本 peerId 已预选过：后续 convos 轮询刷新不再抢回选择
     const c = convos?.find((x) => x.peer.id === peerId)
-    if (c) setSel({ kind: 'peer', id: peerId, name: c.peer.displayName, avatar: c.peer.avatar })
-    else void api.lookupUser(peerId).then((r) => { if (r.user) setSel({ kind: 'peer', id: peerId, name: r.user.displayName, avatar: r.user.avatar }) }).catch(() => {
-      void api.familyLinks().then(({ links }) => { const l = links.find((x) => x.memberId === peerId); if (l) setSel({ kind: 'peer', id: peerId, name: l.memberName, avatar: l.memberAvatar }) })
+    if (c) { appliedPeer.current = peerId; setSel({ kind: 'peer', id: peerId, name: c.peer.displayName, avatar: c.peer.avatar }) }
+    else void api.lookupUser(peerId).then((r) => { if (r.user) { appliedPeer.current = peerId; setSel({ kind: 'peer', id: peerId, name: r.user.displayName, avatar: r.user.avatar }) } }).catch(() => {
+      void api.familyLinks().then(({ links }) => { const l = links.find((x) => x.memberId === peerId); if (l) { appliedPeer.current = peerId; setSel({ kind: 'peer', id: peerId, name: l.memberName, avatar: l.memberAvatar }) } })
     })
   }, [peerId, convos])
 

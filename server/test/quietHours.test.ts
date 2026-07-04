@@ -18,6 +18,9 @@ describe('quietHours 纯逻辑', () => {
     expect(localMinuteOfDay(E, 'America/New_York')).toBe(10 * 60 + 30) // 630（1 月 EST，UTC-5）
     expect(localMinuteOfDay(E, 'Not/AZone')).toBeNull()
     expect(localMinuteOfDay(E, '')).toBeNull()
+    // 缺失/非串 tz 必须 null（Intl 对 undefined 不抛错而回退服务器时区——绝不能被当成有效换算）。
+    expect(localMinuteOfDay(E, undefined as unknown as string)).toBeNull()
+    expect(localMinuteOfDay(E, '   ')).toBeNull()
   })
 
   it('isQuietedNow：不跨午夜区间 [start,end)', () => {
@@ -45,6 +48,8 @@ describe('quietHours 纯逻辑', () => {
     expect(isQuietedNow(qh({ startMinute: 540, endMinute: 1440 }), E)).toBe(false)
     expect(isQuietedNow(qh({ startMinute: 600, endMinute: 600 }), E)).toBe(false) // 空区间
     expect(isQuietedNow(qh({ startMinute: 0, endMinute: 1439, tz: 'Bad/Zone' }), E)).toBe(false)
+    // 缺 tz（陈旧/损坏 JSON 行 enabled 却无 tz）：绝不用服务器时区误判勿扰而吞盲人通知 → fail-open false。
+    expect(isQuietedNow(qh({ startMinute: 540, endMinute: 1020, tz: undefined as unknown as string }), E)).toBe(false)
   })
 
   it('isAlwaysThrough：紧急/来电/SOS/安全类恒推送；软通知可勿扰', () => {

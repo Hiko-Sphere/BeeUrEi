@@ -6,6 +6,10 @@ import type { QuietHours } from '../db/store'
 /// 给定 IANA 时区在某 UTC 毫秒时刻的"本地分钟-of-day" [0,1439]；非法时区/异常 → null。
 /// 用 Intl（Node 内置 tz 数据库，正确处理 DST），不手算偏移。
 export function localMinuteOfDay(nowMs: number, tz: string): number | null {
+  // 缺失/空 tz 必须 fail-open：Intl 对 timeZone:undefined **不抛错**、而是回退到**服务器本地时区**，
+  // 会用服务器时间误判勿扰、在错误时段吞掉盲人的通知（QuietHours 来自未校验的 JSON 反序列化，
+  // 陈旧/损坏行可能 enabled 却无 tz）。空字符串走 Intl 会抛 → 已被 catch，但 undefined/非串须在此显式挡。
+  if (typeof tz !== 'string' || tz.trim() === '') return null
   try {
     const parts = new Intl.DateTimeFormat('en-US', {
       timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false,

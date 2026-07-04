@@ -365,6 +365,7 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
           <div className="grid h-full place-items-center text-sm text-faint">{t('开始你们的对话', 'Say hello')}</div>
         ) : msgs.map((m) => (
           <Bubble key={m.id} m={m} mine={m.fromId === user?.id} lang={lang} t={t} onRecall={() => recall(m)} onReact={(e) => react(m, e)}
+            isGroup={sel.kind === 'group'}
             senderName={sel.kind === 'group' && m.fromId !== user?.id ? (sel.members.find((mm) => mm.id === m.fromId)?.displayName ?? '') : undefined} />
         ))}
         <div ref={bottomRef} />
@@ -480,7 +481,7 @@ function GroupInfoDialog({ groupId, groupName, ownerId, members, meId, onClose, 
 
 const REACTION_CHOICES = ['👍', '❤️', '😂', '😮', '😢', '🙏'] // 与 iOS ChatStrings.reactionChoices 对齐
 
-function Bubble({ m, mine, lang, t, onRecall, onReact, senderName }: { m: ChatMessage; mine: boolean; lang: 'zh' | 'en'; t: (z: string, e: string) => string; onRecall: () => void; onReact: (emoji: string) => void; senderName?: string }) {
+function Bubble({ m, mine, lang, t, onRecall, onReact, senderName, isGroup }: { m: ChatMessage; mine: boolean; lang: 'zh' | 'en'; t: (z: string, e: string) => string; onRecall: () => void; onReact: (emoji: string) => void; senderName?: string; isGroup?: boolean }) {
   const recallable = mine && m.kind !== 'recalled' && Date.now() - m.createdAt < 2 * 60_000
   const reactable = m.kind !== 'recalled'
   const [picking, setPicking] = useState(false)
@@ -498,6 +499,10 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, senderName }: { m: ChatMe
                     className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('回应', 'React')}</button>
           )}
           {recallable && <button onClick={onRecall} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('撤回', 'Recall')}</button>}
+          {/* 已读回执（与 iOS 对齐；仅自己发的单聊，撤回的不显示）：可见文字对读屏助手直接可读，无需图标 + aria-label。 */}
+          {mine && m.kind !== 'recalled' && !isGroup && (
+            <span className={m.readAt ? 'font-medium' : 'opacity-70'}>{m.readAt ? t('已读', 'Read') : t('已送达', 'Delivered')}</span>
+          )}
         </div>
         {picking && (
           <div className="absolute -top-9 right-0 z-10 flex gap-1 rounded-full surface border border-[var(--line)] px-2 py-1 shadow-lg">

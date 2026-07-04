@@ -73,13 +73,41 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
     }
 
     /// 网络取天气 → 主线程复位状态并播报（所有共享状态只在主线程改，见 P2 审计）。
+    /// 天气与空气质量两个请求并发跑（async let），空气质量是"锦上添花"：失败/超时只是不追加、绝不拖垮天气。
     private func fetch(lat: Double, lon: Double, lang l: Language) async {
-        let phrase = await fetchPhrase(lat: lat, lon: lon, lang: l)
+        async let phraseTask = fetchPhrase(lat: lat, lon: lon, lang: l)
+        async let pmTask = fetchAirPM25(lat: lat, lon: lon)
+        var phrase = await phraseTask
+        // 空气质量健康提醒（盲人看不到雾霾）：仅"污染"档才追加，优/良不打扰。
+        if let pm = await pmTask, let air = WeatherPhrase.airQualityAdvice(pm25: pm, language: l) {
+            phrase += air
+        }
         await MainActor.run {
             self.watchdog?.cancel(); self.watchdog = nil
             self.fetching = false
             SpeechHub.shared.speak(phrase, channel: .query, voiceCode: l.voiceCode)
         }
+    }
+
+    /// 空气质量 PM2.5（µg/m³）：Open-Meteo 空气质量 API（免 key、仅发坐标）。best-effort——任何失败返回 nil。
+    private func fetchAirPM25(lat: Double, lon: Double) async -> Double? {
+        var c = URLComponents(string: "https://air-quality-api.open-meteo.com/v1/air-quality")!
+        c.queryItems = [
+            .init(name: "latitude", value: String(format: "%.3f", lat)),
+            .init(name: "longitude", value: String(format: "%.3f", lon)),
+            .init(name: "current", value: "pm2_5"),
+            .init(name: "timezone", value: "auto"),
+        ]
+        struct Response: Decodable {
+            struct Current: Decodable { let pm2_5: Double? }
+            let current: Current?
+        }
+        var request = URLRequest(url: c.url!)
+        request.timeoutInterval = 8 // 短于天气看门狗；空气慢/挂不拖累天气播报
+        guard let (data, resp) = try? await URLSession.shared.data(for: request),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              let r = try? JSONDecoder().decode(Response.self, from: data) else { return nil }
+        return r.current?.pm2_5
     }
 
     /// 纯网络请求，不触碰任何实例状态（线程安全）。返回要播报的文案。

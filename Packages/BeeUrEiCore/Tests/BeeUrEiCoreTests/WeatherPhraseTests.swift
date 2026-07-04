@@ -214,4 +214,28 @@ extension WeatherPhraseTests {
         XCTAssertTrue(WeatherPhrase.twilightSafety(nowMinuteOfDay: sunset - 10, sunsetMinuteOfDay: sunset, language: .en)!.contains("getting dark"))
         XCTAssertTrue(WeatherPhrase.twilightSafety(nowMinuteOfDay: sunset + 20, sunsetMinuteOfDay: sunset, language: .en)!.contains("just got dark"))
     }
+
+    func testAirQualityAdvice() {
+        // 优/良（<75）：不打扰。
+        XCTAssertNil(WeatherPhrase.airQualityAdvice(pm25: 20, language: .zh))
+        XCTAssertNil(WeatherPhrase.airQualityAdvice(pm25: 74.9, language: .zh))
+        // 轻度污染（75~115）：敏感人群戴口罩。
+        XCTAssertEqual(WeatherPhrase.airQualityAdvice(pm25: 90, language: .zh), "空气轻度污染，对呼吸道敏感的人建议戴口罩。")
+        // 中度（115~150）。
+        XCTAssertTrue(WeatherPhrase.airQualityAdvice(pm25: 130, language: .zh)!.contains("中度污染"))
+        // 重度（150~250）。
+        XCTAssertTrue(WeatherPhrase.airQualityAdvice(pm25: 200, language: .zh)!.contains("重度污染"))
+        // 严重（≥250）：尽量别出门。
+        XCTAssertTrue(WeatherPhrase.airQualityAdvice(pm25: 300, language: .zh)!.contains("严重污染"))
+        XCTAssertTrue(WeatherPhrase.airQualityAdvice(pm25: 300, language: .zh)!.contains("尽量别出门"))
+        // 边界：恰 75 进入轻度、恰 250 进入严重。
+        XCTAssertTrue(WeatherPhrase.airQualityAdvice(pm25: 75, language: .zh)!.contains("轻度污染"))
+        XCTAssertTrue(WeatherPhrase.airQualityAdvice(pm25: 250, language: .zh)!.contains("严重污染"))
+        // 非有限/负值：绝不瞎报（异常响应）。
+        XCTAssertNil(WeatherPhrase.airQualityAdvice(pm25: .nan, language: .zh))
+        XCTAssertNil(WeatherPhrase.airQualityAdvice(pm25: -5, language: .zh))
+        XCTAssertNil(WeatherPhrase.airQualityAdvice(pm25: nil, language: .zh))
+        // 英文。
+        XCTAssertTrue(WeatherPhrase.airQualityAdvice(pm25: 130, language: .en)!.contains("mask"))
+    }
 }

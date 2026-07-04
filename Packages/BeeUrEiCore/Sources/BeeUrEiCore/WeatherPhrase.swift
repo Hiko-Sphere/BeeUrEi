@@ -197,6 +197,25 @@ public enum WeatherPhrase {
         }
     }
 
+    /// 空气质量（PM2.5，µg/m³）健康提醒：盲人看不到雾霾，无法自行判断该不该戴口罩。按中国 AQI 的 PM2.5
+    /// 分级——只在"污染"档（≥75，即轻度污染起）才播报（优/良不提，免打扰、保持高信噪）；污染越重措辞越强。
+    /// 非有限或负值（异常 API 响应）返回 nil——绝不据此瞎报一个空气等级（宁可不说）。
+    public static func airQualityAdvice(pm25: Double?, language: Language) -> String? {
+        guard let v = pm25, v.isFinite, v >= 0 else { return nil }
+        let zh = language == .zh
+        switch v {
+        case ..<75:   return nil                                  // 优 / 良：不提
+        case ..<115:  return zh ? "空气轻度污染，对呼吸道敏感的人建议戴口罩。"
+                                : " Air quality is unhealthy for sensitive groups; if you're sensitive, wear a mask."
+        case ..<150:  return zh ? "空气中度污染，外出建议戴口罩。"
+                                : " Air quality is unhealthy; wear a mask outdoors."
+        case ..<250:  return zh ? "空气重度污染，建议戴口罩、减少外出。"
+                                : " Air quality is very unhealthy; wear a mask and limit time outside."
+        default:      return zh ? "空气严重污染，尽量别出门；必须外出请戴口罩。"
+                                : " Air quality is hazardous; stay indoors if you can, and wear a mask if you must go out."
+        }
+    }
+
     /// 取数过程提示与失败文案（App 层播报用，集中在此保持双语一致）。
     public static func fetching(_ l: Language) -> String { l == .zh ? "正在获取天气" : "Getting the weather" }
     public static func failed(_ l: Language) -> String {

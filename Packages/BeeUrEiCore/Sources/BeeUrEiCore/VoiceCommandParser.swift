@@ -18,6 +18,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case readText                   // 朗读文字
     case readDates                  // 读包装日期（保质期/生产日期——盲人看不到食品/药品日期，高频刚需）
     case readPhone                  // 读电话号码（名片/海报上的号码——盲人读不到也拨不了；只读不自动拨）
+    case readEmail                  // 读邮箱地址（名片/信笺上的邮箱——盲人读不到也写不了；只读不代发）
     case readFullPage               // 读整页文档（多页拼读）
     case banknote                   // 识别纸币
     case scanCode                   // 扫码
@@ -80,6 +81,8 @@ public enum VoiceCommandParser {
         // 读电话号码：名片/海报上的号码。用"电话号码/读电话/读号码"等明确说法，与 .help 的"打电话/呼叫"(拨号给人)
         // 区分开——这里是**读出**号码交用户核对，绝不自动拨。置于 look/find 之前。
         if has(["电话号码", "读电话", "读号码", "念电话", "念号码", "读一下电话", "看电话", "上面的电话", "名片电话", "phone number", "read the number", "read the phone", "read number"]) { return .readPhone }
+        // 读邮箱地址：名片/信笺上的邮箱。用"邮箱/邮件地址"等明确说法，读出交用户核对再写信（绝不代发）。
+        if has(["读邮箱", "邮箱地址", "念邮箱", "读邮件地址", "读一下邮箱", "看邮箱", "上面的邮箱", "read email", "read the email", "email address"]) { return .readEmail }
         // 读整页须在「读文字」之前：否则「朗读整页」会被 readText 的「朗读」抢走。
         if has(["整页", "整个页面", "读文档", "读整", "读全文", "whole page", "entire page", "full page", "read the page", "read the document", "read document"]) { return .readFullPage }
         if has(["读文字", "念文字", "朗读", "读一下", "念一下", "念念", "念一念", "念给我听", "read text", "read this", "read it", "read aloud"]) { return .readText }

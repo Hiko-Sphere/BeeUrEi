@@ -23,6 +23,7 @@ final class VoiceCommandParserTests: XCTestCase {
             ("读一下这段文字", .readText), ("念一下", .readText), ("read this text", .readText),
             ("看看保质期", .readDates), ("这个生产日期是多少", .readDates), ("best before when", .readDates), ("has this expired", .readDates),
             ("读一下电话号码", .readPhone), ("念一下电话号码", .readPhone), ("read the phone number", .readPhone),
+            ("读一下邮箱地址", .readEmail), ("上面的邮箱是多少", .readEmail), ("read the email", .readEmail),
             ("这是多少钱", .banknote), ("识别纸币", .banknote), ("what banknote", .banknote),
             ("扫一下二维码", .scanCode), ("扫码", .scanCode), ("scan this barcode", .scanCode),
             ("打开消息", .messages), ("查看聊天", .messages), ("open chat", .messages),

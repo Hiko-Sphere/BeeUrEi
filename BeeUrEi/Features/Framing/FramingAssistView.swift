@@ -108,6 +108,7 @@ final class FramingAssistViewModel {
         case .text: readText() // 语音指令"读文字"直达
         case .dates: readDates() // 语音"保质期/日期"：读包装上的日期
         case .phone: readPhoneNumbers() // 语音"读电话号码"：读名片/海报上的号码
+        case .email: readEmails() // 语音"读邮箱"：读名片/信笺上的邮箱地址
         }
     }
     @ObservationIgnored private var paused = false // 关闭/被来电盖上后：停止播报并丢弃在途帧/异步识别结果
@@ -723,6 +724,41 @@ final class FramingAssistViewModel {
                     // 唯一号码 → 提供"拨打"（打开系统拨号盘预填，不自动拨）。多个号码则不猜该拨哪个，只读+可复制。
                     if numbers.count == 1, let tel = EmergencyPhoneFallback.telURLString(numbers[0]), let url = URL(string: tel) {
                         self.resultAction = FramingAction(label: FramingStrings.uiDial(self.lang), url: url)
+                    }
+                }
+                self.speak(self.resultText)
+            }
+        }
+        request.recognitionLanguages = ocrLanguages
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? VNImageRequestHandler(cvPixelBuffer: buffer, options: [:]).perform([request])
+        }
+    }
+
+    /// 读邮箱地址（名片/信笺）：OCR → 核心 EmailFinder 抽出邮箱，读出 + 唯一邮箱可一键写邮件（mailto:，不代发）。
+    func readEmails() {
+        stopContinuous()
+        guard let live = latestBuffer else { speak(FramingStrings.aimText(lang)); return }
+        if tooDarkToProceed() { return }
+        guard let buffer = copyPixelBuffer(live) else { speak(FramingStrings.recognizeFailed(lang)); return }
+        resultText = FramingStrings.readingEmail(lang)
+        let request = VNRecognizeTextRequest { [weak self] req, _ in
+            let texts = (req.results as? [VNRecognizedTextObservation])?
+                .compactMap { $0.topCandidates(1).first?.string } ?? []
+            let emails = EmailFinder.find(texts: texts)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if emails.isEmpty {
+                    self.resultText = FramingStrings.noEmailFound(self.lang)
+                    self.copyableResult = nil
+                } else {
+                    self.resultText = FramingStrings.emailFoundResult(emails, self.lang)
+                    self.copyableResult = emails.joined(separator: "\n")
+                    self.historyStore.add(kind: "email", content: emails.joined(separator: "\n"))
+                    if emails.count == 1, let url = URL(string: "mailto:\(emails[0])") {
+                        self.resultAction = FramingAction(label: FramingStrings.uiSendEmail(self.lang), url: url) // 打开邮件撰写预填
                     }
                 }
                 self.speak(self.resultText)

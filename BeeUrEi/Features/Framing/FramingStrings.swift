@@ -222,6 +222,14 @@ enum FramingStrings {
         let joined = numbers.joined(separator: l == .zh ? "；" : "; ")
         return l == .zh ? "识别到电话号码，请核对后再拨：\(joined)" : "Found phone number(s), please verify before dialing: \(joined)"
     }
+    static func readingEmail(_ l: Language) -> String { l == .zh ? "正在找邮箱…" : "Looking for email addresses…" }
+    static func noEmailFound(_ l: Language) -> String {
+        l == .zh ? "没找到邮箱，可以说“读文字”听完整文字" : "No email address found — say “read text” to hear all the text"
+    }
+    static func emailFoundResult(_ emails: [String], _ l: Language) -> String {
+        let joined = emails.joined(separator: l == .zh ? "；" : "; ")
+        return l == .zh ? "识别到邮箱，请核对后再发：\(joined)" : "Found email address(es), please verify before sending: \(joined)"
+    }
 
     // MARK: 扫码
 
@@ -498,6 +506,7 @@ enum FramingStrings {
             case "banknote": return "纸币"
             case "dates": return "日期"
             case "phone": return "电话"
+            case "email": return "邮箱"
             default: return "文字"
             }
         case .en:
@@ -507,6 +516,7 @@ enum FramingStrings {
             case "banknote": return "Banknote"
             case "dates": return "Date"
             case "phone": return "Phone"
+            case "email": return "Email"
             default: return "Text"
             }
         }

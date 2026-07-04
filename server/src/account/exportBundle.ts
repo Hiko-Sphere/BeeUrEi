@@ -1,6 +1,18 @@
 import type { Store } from '../db/store'
 import { openField, type Sealed } from '../kyc/crypto'
 
+/// 位置消息载荷（text 里的 JSON `{lat,lng,name?}`）→ 结构化坐标，供自助导出。校验经纬度真实有界
+/// （与 messages 路由的 locationSchema 同口径），坏数据/非位置一律返回 null（不吐可疑内容进下载）。
+function parseLocationPayload(text: string): { lat: number; lng: number; name: string | null } | null {
+  try {
+    const p = JSON.parse(text) as { lat?: unknown; lng?: unknown; name?: unknown }
+    if (typeof p?.lat !== 'number' || typeof p?.lng !== 'number') return null
+    if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) return null
+    if (p.lat < -90 || p.lat > 90 || p.lng < -180 || p.lng > 180) return null
+    return { lat: p.lat, lng: p.lng, name: typeof p.name === 'string' ? p.name : null }
+  } catch { return null }
+}
+
 /// 用户数据导出的公共构建器（GDPR 可携权）：admin 代办导出与用户自助导出共用同一底座，
 /// 防两处口径漂移（尤其"绝不导出密码哈希/令牌"这条安全底线）。
 /// 聊天正文刻意不在底座里：admin 版**不含任何正文**（管理员不读消息）；自助版另行追加
@@ -88,7 +100,10 @@ export function buildSelfExportExtras(store: Store, id: string) {
     messagesSent: store.messagesSentBy(id, 5000).map((m) => ({
       to: m.groupId ? `group:${m.groupId}` : nameOf(m.toId),
       kind: m.kind,
-      text: m.kind === 'text' ? m.text : null, // 非文字只给元信息（data URL/mediaId 不内联）
+      text: m.kind === 'text' ? m.text : null, // 图片/视频/语音是 data URL/mediaId，只给元信息不内联
+      // 位置消息的坐标是**本人自己分享的位置**（本人 PII，非他人数据），且体积极小（无 data URL 顾虑）——
+      // 纳入可携权，否则用户导出里只剩"我发过一条位置"却查不到发的是哪里，可携权不完整。解析失败则省略。
+      location: m.kind === 'location' ? parseLocationPayload(m.text) : null,
       createdAt: m.createdAt,
     })),
     // 本人的通知收件箱（收到的告警/好友请求/回执等——是关于本人的数据，GDPR 访问/可携权覆盖）。

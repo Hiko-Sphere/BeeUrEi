@@ -85,7 +85,27 @@ describe('GET /api/account/export', () => {
     const m = res.json().messagesSent[0]
     expect(m.kind).toBe('audio')
     expect(m.text).toBeNull()                       // 元信息 only
+    expect(m.location).toBeNull()                   // 非位置 → 无坐标
     expect(res.payload).not.toContain('base64,AAAA') // data URL 绝不内联
+    await a.close()
+  })
+
+  it('位置消息导出坐标（本人自己分享的位置属可携权；坏坐标省略）', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const reg = async (u: string, role: string) =>
+      (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const me = await reg('exportloc', 'blind')
+    const peer = await reg('exportloc2', 'helper')
+    const auth = { authorization: `Bearer ${me.token}` }
+    const l = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth, payload: { username: 'exportloc2', relation: '亲友' } })
+    await a.inject({ method: 'POST', url: `/api/family/links/${l.json().link.id}/accept`, headers: { authorization: `Bearer ${peer.token}` } })
+    await a.inject({ method: 'POST', url: '/api/messages', headers: auth, payload: { toId: peer.user.id, kind: 'location', text: JSON.stringify({ lat: 31.23, lng: 121.47, name: '人民广场' }) } })
+    const body = (await a.inject({ method: 'GET', url: '/api/account/export', headers: auth })).json()
+    const m = body.messagesSent[0]
+    expect(m.kind).toBe('location')
+    expect(m.text).toBeNull()                                              // location 不走 text 字段
+    expect(m.location).toMatchObject({ lat: 31.23, lng: 121.47, name: '人民广场' }) // 本人分享的坐标进导出
     await a.close()
   })
 

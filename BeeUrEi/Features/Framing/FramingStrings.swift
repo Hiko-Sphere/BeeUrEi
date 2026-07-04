@@ -246,6 +246,8 @@ enum FramingStrings {
         l == .zh ? "是商品条码，我还不认识它。给它起个名字，下次扫到我直接报名字。"
                  : "It's a product barcode I don't know yet. Give it a name and I'll say it next time."
     }
+    /// 在线查询商品名时的即时提示（可丢弃）：避免网络往返期间盲人以为卡住/没反应。
+    static func productLookingUp(_ l: Language) -> String { l == .zh ? "正在查询商品…" : "Looking up the product…" }
     static func wifiResult(_ ssid: String?, _ l: Language) -> String {
         (l == .zh ? "无线网络码" : "Wi-Fi code") + (ssid.map { l == .zh ? "：\($0)" : ": \($0)" } ?? "")
     }

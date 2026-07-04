@@ -812,10 +812,10 @@ final class FramingAssistViewModel {
                         self.resultText = FramingStrings.productResult(name, self.lang)
                         self.speak(FramingStrings.thisIs(name, self.lang))
                     } else {
+                        // 本地没起过名：先在线查一次（Open Food Facts）——查到直接报名字并记住（对标 Seeing AI），
+                        // 查不到/离线再回退到"用户起名"（严格附加，绝不回退失败）。
                         self.resultText = FramingStrings.productCodeResult(first, self.lang)
-                        self.pendingProductCode = first
-                        self.showProductNaming = true
-                        self.speak(FramingStrings.productUnknownSpeak(self.lang))
+                        self.lookUpProductOnline(barcode: first)
                     }
                 case .wifi(let ssid):
                     self.resultText = FramingStrings.wifiResult(ssid, self.lang)
@@ -1161,6 +1161,30 @@ final class FramingAssistViewModel {
         guard let buffer = latestBuffer,
               let rgb = ColorSampler.averageRGB(in: buffer, rect: CGRect(x: 0, y: 0, width: 1, height: 1)) else { return nil }
         return LightMeter.luminance(r: rgb.r, g: rgb.g, b: rgb.b)
+    }
+
+    /// 未知商品条码：先在线查一次商品名（服务端代理 Open Food Facts）。查到 → 报名字并存进本地商品库（下次离线也能报）；
+    /// 查不到/离线/未登录/任何错误 → 回退到"用户起名"弹窗（与改动前完全一致，严格附加、绝不回退失败）。
+    private func lookUpProductOnline(barcode: String) {
+        speak(FramingStrings.productLookingUp(lang), hint: true) // 即时可丢弃提示，避免网络期间盲人以为卡住
+        Task { [weak self] in
+            guard let self else { return }
+            var found: String?
+            if let token = KeychainStore.read() {
+                found = await APIClient().lookupProduct(token: token, barcode: barcode)
+            }
+            guard !self.paused else { return } // 已关闭/被来电盖上：不再改 UI/播报
+            if let name = found {
+                self.productStore.save(barcode: barcode, name: name)
+                self.resultText = FramingStrings.productResult(name, self.lang)
+                self.speak(FramingStrings.thisIs(name, self.lang))
+            } else {
+                // 回退：原"起名"路径（弹窗 + 提示），与在线查询前行为一致。
+                self.pendingProductCode = barcode
+                self.showProductNaming = true
+                self.speak(FramingStrings.productUnknownSpeak(self.lang))
+            }
+        }
     }
 
     /// 太暗则处理并返回 true（识别/OCR 在暗处会失败）。**关键**：设备有手电筒就自动点亮解决问题——

@@ -147,28 +147,41 @@ enum NavStrings {
     static func passingBy(_ name: String, _ l: Language) -> String { l == .zh ? "途经\(name)" : "Passing \(name)" }
     static func enteringRoad(_ name: String, _ l: Language) -> String { l == .zh ? "进入\(name)" : "Entering \(name)" }
 
-    /// 剩余路程 + 预计到达播报（导航中跨里程碑时报一次）："还有约 300 米，预计 4 分钟"。
-    /// 距离 ≥1 公里用公里一位小数，否则取整到 10 米；ETA 缺测(nil)则省略，<60s 说"不到 1 分钟"。
-    static func remainingDistance(meters: Int, etaSeconds: Double?, _ l: Language) -> String {
-        let dist: String
+    /// 距离短语："1.2 公里"（≥1km 用公里一位小数）/ "300 米"（否则取整到 10 米）。
+    private static func distancePhrase(meters: Int, _ l: Language) -> String {
         if meters >= 1000 {
             let km = (Double(meters) / 100).rounded() / 10   // 一位小数
-            dist = l == .zh ? "\(km) 公里" : "\(km) km"
-        } else {
-            let m = Int((Double(meters) / 10).rounded()) * 10  // 取整到 10 米
-            dist = l == .zh ? "\(m) 米" : "\(m) m"
+            return l == .zh ? "\(km) 公里" : "\(km) km"
         }
-        guard let eta = etaSeconds, eta.isFinite, eta >= 0 else {
+        let m = Int((Double(meters) / 10).rounded()) * 10    // 取整到 10 米
+        return l == .zh ? "\(m) 米" : "\(m) m"
+    }
+
+    /// ETA 短语（缺测/非有限→nil，调用方省略）："预计 4 分钟" / "预计不到 1 分钟"。
+    private static func etaPhrase(_ etaSeconds: Double?, _ l: Language) -> String? {
+        guard let eta = etaSeconds, eta.isFinite, eta >= 0 else { return nil }
+        if eta < 60 { return l == .zh ? "预计不到 1 分钟" : "~under a minute" }
+        let mins = Int((eta / 60).rounded())
+        return l == .zh ? "预计 \(mins) 分钟" : "~\(mins) min"
+    }
+
+    /// 剩余路程 + 预计到达播报（导航中跨里程碑时报一次）："还有约 300 米，预计 4 分钟"。
+    static func remainingDistance(meters: Int, etaSeconds: Double?, _ l: Language) -> String {
+        let dist = distancePhrase(meters: meters, l)
+        guard let eta = etaPhrase(etaSeconds, l) else {
             return l == .zh ? "还有约\(dist)" : "About \(dist) to go"
         }
-        let etaText: String
-        if eta < 60 {
-            etaText = l == .zh ? "预计不到 1 分钟" : "~under a minute"
-        } else {
-            let mins = Int((eta / 60).rounded())
-            etaText = l == .zh ? "预计 \(mins) 分钟" : "~\(mins) min"
+        return l == .zh ? "还有约\(dist)，\(eta)" : "About \(dist) to go, \(eta)"
+    }
+
+    /// 出发时的全程概览（导航开始先报整条路线长度与预计时长，给盲人整体预期）："全程约 1.2 公里，预计 15 分钟"。
+    /// 竞品(Apple/Google/Soundscape)均在开始导航时先报路线总览；ETA 为初始估计（尚未起步、用默认步速）。
+    static func journeyOverview(meters: Int, etaSeconds: Double?, _ l: Language) -> String {
+        let dist = distancePhrase(meters: meters, l)
+        guard let eta = etaPhrase(etaSeconds, l) else {
+            return l == .zh ? "全程约\(dist)" : "Route is about \(dist)"
         }
-        return l == .zh ? "还有约\(dist)，\(etaText)" : "About \(dist) to go, \(etaText)"
+        return l == .zh ? "全程约\(dist)，\(eta)" : "Route is about \(dist), \(eta)"
     }
 
     /// 步骤列表行："右转（30 米）" / "Turn right (30 m)"。

@@ -61,6 +61,19 @@ final class NavStringsTests: XCTestCase {
         }
     }
 
+    // 出发全程概览："全程约 X，预计 Y"（距离/ETA 档与 remainingDistance 共用同一格式化）。
+    func testJourneyOverviewFormatting() {
+        XCTAssertEqual(NavStrings.journeyOverview(meters: 1234, etaSeconds: 900, .zh), "全程约1.2 公里，预计 15 分钟")
+        XCTAssertEqual(NavStrings.journeyOverview(meters: 320, etaSeconds: nil, .zh), "全程约320 米")
+        XCTAssertFalse(NavStrings.journeyOverview(meters: 320, etaSeconds: nil, .zh).contains("分钟"))
+        // 英文不混中文。
+        for s in [NavStrings.journeyOverview(meters: 1234, etaSeconds: 900, .en),
+                  NavStrings.journeyOverview(meters: 320, etaSeconds: nil, .en)] {
+            XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文混中文：\(s)")
+            XCTAssertTrue(s.hasPrefix("Route is about"))
+        }
+    }
+
     // 离线降级播报（#8）：含"今天/N 天前"分支——复审点名的唯一带真实分支逻辑的新文案。
     func testOfflineFallbackSpeakBranches() {
         XCTAssertTrue(NavStrings.offlineRouteFallbackSpeak(0, .zh).contains("今天"))

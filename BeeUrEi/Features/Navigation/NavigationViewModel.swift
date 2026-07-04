@@ -375,6 +375,9 @@ final class NavigationViewModel {
                         cacheCurrentPlan() // 断网降级缓存（#8）
                         status = NavStrings.navStartedStatus(result.count, lang)
                         speak(NavStrings.navStartedSpeak(result.count, first.instruction, lang))
+                        // 全程概览：国内 maneuvers 是 GCJ-02，起点须同系纠偏后再累距。
+                        let gO = ChinaCoord.wgs84ToGcj02(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude)
+                        announceJourneyOverview(fromLat: gO.lat, fromLon: gO.lon)
                     } else {
                         // 后端未带折线（旧版本）：退化为静态步骤读出。
                         status = NavStrings.staticRouteStatus(result.count, lang)
@@ -438,8 +441,26 @@ final class NavigationViewModel {
                 speak(NavStrings.navStartedStatus(m.count, lang))
                 lastResolvedDestination = destinationQuery // 成功建立路线：可入收藏（见 P2 审计）
                 cacheCurrentPlan() // 断网降级缓存（#8）
+                announceJourneyOverview(fromLat: loc.coordinate.latitude, fromLon: loc.coordinate.longitude) // 海外 WGS-84 直用
             }
         }
+    }
+
+    /// 出发时的全程概览播报（"全程约 X，预计 Y"）——竞品在导航开始都会先报整条路线的长度与预计时长，
+    /// 给盲人一个整体预期（要不要带够时间/中途歇脚）。用核心 RouteRemaining 从起点沿路累距（真实路程
+    /// 非直线）；初始 ETA 用默认步速（尚未起步无实测速度，途中里程碑播报会用真实 loc.speed 精化）。
+    /// 经 NavVoice 排在开始指令之后朗读；坐标系须与 maneuvers 一致（china=GCJ、overseas/自定义=WGS-84）。
+    private func announceJourneyOverview(fromLat lat: Double, fromLon lon: Double) {
+        guard let dest = destination, !maneuvers.isEmpty else { return }
+        let mans = maneuvers.map { Coordinate(lat: $0.coordinate.latitude, lon: $0.coordinate.longitude) }
+        guard let total = RouteRemaining.distanceMeters(currentLat: lat, currentLon: lon,
+                                                        remainingManeuvers: mans,
+                                                        destination: Coordinate(lat: dest.latitude, lon: dest.longitude)) else { return }
+        let eta = RouteRemaining.etaSeconds(remainingMeters: total,
+                                            speedMps: RouteRemaining.effectiveWalkingSpeed(rawMps: nil))
+        // 直接经 NavVoice 排队（不走 VM 的去重 speak，避免占用 lastSpoken 干扰下个转向指令去重）。
+        NavVoice.shared.speak(NavStrings.journeyOverview(meters: Int(total.rounded()), etaSeconds: eta, lang),
+                              rate: FeatureSettings().speechRate)
     }
 
     private func speak(_ text: String) {

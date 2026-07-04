@@ -35,6 +35,10 @@ jobs:
           cache: npm
           cache-dependency-path: server/package-lock.json
       - run: npm ci
+      # 供应链门禁：生产依赖出现 high/critical 通告即红——服务端跑着位置/紧急/实名等敏感数据，
+      # 新通告要立刻被看见。--omit=dev 排除构建链噪音（不随服务运行），门槛 high 保持"红=真要处理"。
+      - name: audit (prod deps, high+)
+        run: npm audit --omit=dev --audit-level=high
       - name: typecheck
         run: npm run typecheck
       - name: test
@@ -54,6 +58,10 @@ jobs:
           cache: npm
           cache-dependency-path: site/app-src/package-lock.json
       - run: npm ci
+      # 供应链门禁（同后端理由）：web 的生产依赖会打进浏览器包（React 等），high/critical 即红；
+      # dev 依赖（vite/eslint 链）不进包，排除以免无关通告卡住合并。
+      - name: audit (prod deps, high+)
+        run: npm audit --omit=dev --audit-level=high
       - name: lint
         run: npm run lint
       - name: test

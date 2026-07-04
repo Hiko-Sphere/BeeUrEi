@@ -242,6 +242,7 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
       ? pushSender.sendAlert(sender.apnsToken, title, body, { type: 'emergency_ack', fromId: acker.id }, undefined, totalUnreadFor(store, sender.id).total)
       : Promise.resolve()
     await Promise.allSettled([apnsJob, ...webJobs])
+    metrics?.inc('emergency_acks_total') // 人响应漏斗：确认数 vs 告警数（ack 率低=告警没被看见/没人管，值得告警）
 
     // 响应者协调：第一位亲友响应时，**安静**通知发起人的其余已接受亲友"已有人在处理"——避免全体同时赶去/
     // 同时打电话把遇险者淹没，也避免"都以为别人在管"没人去。匿名（不点名响应者，零新增身份暴露：收件人本就
@@ -263,6 +264,7 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
         if (m.apnsToken) jobs.push(pushSender.sendAlert(m.apnsToken, rTitle, rBody, { type: 'emergency_responding', fromId: sender.id }, undefined, safeBadge(m.id)).catch(() => { /* 单点失败不阻断 */ }))
       }
       await Promise.allSettled(jobs)
+      metrics?.inc('emergency_responding_total') // 协调触发数（有人开始响应、通知了其余亲友）
     }
 
     ackDedup.record(key, { ok: true }, now)
@@ -289,6 +291,7 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     // 免逻辑分叉）。alertId 供客户端消掉对应告警模态。
     const res = broadcastAllClear(store, pushSender, webPush, me.id, now,
       parsed.data.alertId ? { alertId: parsed.data.alertId } : {})
+    metrics?.inc('emergency_allclears_total') // 人响应漏斗：报平安数（解除闭环——告警最终有多少被本人解除）
     clearDedup.record(key, { ok: true }, now)
     return { ok: true, notified: res.notified }
   })

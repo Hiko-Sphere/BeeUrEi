@@ -60,6 +60,7 @@ import { createAppleVerifier, type AppleTokenVerifier } from './auth/apple'
 declare module 'fastify' {
   interface FastifyInstance {
     liveLocations: LiveLocationRegistry
+    metrics: Metrics
   }
 }
 
@@ -147,11 +148,18 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
 
   // 业务计数预置 0 基线：使这些 series 自启动起就存在，避免 Prometheus rate() 在首次命中时断档（见复审 #5）。
   for (const name of ['calls_registered_total', 'help_requests_total', 'help_claims_total', 'emergency_alerts_total',
+                      // 紧急链路"人响应"漏斗（补齐可观测性）：告警(alerts)→确认(acks)→有人响应协调(responding)→
+                      // 报平安(allclears)；无人响应升级重呼(escalations)；安全报到到期告警(checkin_fires)/到期前提醒(checkin_reminders)。
+                      // 送达健康看 apns/web_push_*；这几条看**人的响应侧**：ack 率低/升级率高=告警没被看见或没人管，值得告警。
+                      'emergency_acks_total', 'emergency_responding_total', 'emergency_allclears_total',
+                      'emergency_escalations_total', 'safety_checkin_fires_total', 'safety_checkin_reminders_total',
                       'web_push_sent_total', 'web_push_failed_total',
                       'apns_sent_total', 'apns_failed_total',
                       'vision_describe_total', 'vision_quota_exceeded_total', 'vision_errors_total',
                       'amap_calls_total', 'amap_timeouts_total', 'amap_errors_total', 'amap_upstream_errors_total',
                       'amap_breaker_open_total', 'amap_breaker_rejected_total']) metrics.inc(name, 0)
+  // 暴露 metrics 给后台 tick（index.ts）：升级重呼/安全报到到期告警发生在 tick 里，计数须在那里 inc。
+  app.decorate('metrics', metrics)
   setAmapMetrics((name) => metrics.inc(name)) // 高德外部依赖可观测性（限额/计费，监控量/超时/网络/上游错误）
   // Web Push 计数装饰（单点包裹，扇出调用点零改动）：送达健康度进 /metrics。
   // APNs 送达健康度：挂钩注入（接口契约"绝不抛出"，外层装饰器观察不到失败——见 apns.ts onOutcome）。

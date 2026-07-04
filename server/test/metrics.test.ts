@@ -51,6 +51,40 @@ describe('Metrics', () => {
     await a.close()
   })
 
+  it('紧急链路"人响应"漏斗计数：0 基线预置 + ack/all-clear 增量反映在 /metrics', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const reg = async (u: string, role: string) =>
+      (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const owner = await reg('mfowner', 'blind')
+    const h1 = await reg('mfh1', 'helper')
+    const h2 = await reg('mfh2', 'helper')
+    const bearer = (t: string) => ({ authorization: `Bearer ${t}` })
+    // 0 基线：新增 series 自启动即存在（Prometheus rate() 不断档）。
+    const base = (await a.inject({ method: 'GET', url: '/metrics' })).body
+    for (const s of ['emergency_acks_total', 'emergency_responding_total', 'emergency_allclears_total',
+                     'emergency_escalations_total', 'safety_checkin_fires_total', 'safety_checkin_reminders_total']) {
+      expect(base).toContain(`beeurei_${s} 0`)
+    }
+    // 两位亲友接受绑定
+    for (const u of ['mfh1', 'mfh2']) {
+      const l = await a.inject({ method: 'POST', url: '/api/family/links', headers: bearer(owner.token), payload: { username: u, relation: '家人', isEmergency: true } })
+      await a.inject({ method: 'POST', url: `/api/family/links/${l.json().link.id}/accept`, headers: bearer(u === 'mfh1' ? h1.token : h2.token) })
+    }
+    const ownerId = store.findByUsername('mfowner')!.id
+    // 告警 → h1 确认（首个响应者：ack + responding 各 +1）→ 报平安（allclear +1）
+    await a.inject({ method: 'POST', url: '/api/emergency/alert', headers: bearer(owner.token), payload: { kind: 'manual' } })
+    const eventId = store.emergencyEventsForUser(ownerId)[0].id
+    await a.inject({ method: 'POST', url: '/api/emergency/ack', headers: bearer(h1.token), payload: { fromId: ownerId, eventId } })
+    await a.inject({ method: 'POST', url: '/api/emergency/all-clear', headers: bearer(owner.token), payload: { alertId: 'ac1' } })
+    const out = (await a.inject({ method: 'GET', url: '/metrics' })).body
+    expect(out).toContain('beeurei_emergency_alerts_total 1')
+    expect(out).toContain('beeurei_emergency_acks_total 1')
+    expect(out).toContain('beeurei_emergency_responding_total 1') // 首个响应者触发协调广播
+    expect(out).toContain('beeurei_emergency_allclears_total 1')
+    await a.close()
+  })
+
   it('设了 METRICS_TOKEN 时 /metrics 需 Bearer 鉴权', async () => {
     process.env.METRICS_TOKEN = 'secret-scrape'
     try {

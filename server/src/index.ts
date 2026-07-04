@@ -85,15 +85,15 @@ async function main(): Promise<void> {
   // 到期前提前提醒本人的提前量：默认 10 分钟（防遗忘误报）。设 0 或非法值即禁用提醒（仍照常到期告警）。
   const safetyRemindLeadMs = (() => { const v = Number(process.env.SAFETY_TIMER_REMIND_LEAD_MS); return Number.isFinite(v) && v >= 0 ? v : 10 * 60_000 })()
   const escalateTimer = setInterval(() => {
-    try { const n = escalateUnackedEmergencies(store, pushSender, webPushSender, Date.now(), escalateAfterMs); if (n) console.log(`[emergency] 升级重呼无人响应的求助 ${n} 条`) }
+    try { const n = escalateUnackedEmergencies(store, pushSender, webPushSender, Date.now(), escalateAfterMs); if (n) { app.metrics.inc('emergency_escalations_total', n); console.log(`[emergency] 升级重呼无人响应的求助 ${n} 条`) } }
     catch (e) { console.warn('[emergency] 升级重呼失败:', (e as Error).message) }
     // 到期前提醒本人（善意提示，防遗忘误报；只给本人、不惊动亲友）——须在到期告警**之前**跑，同一 tick 里
     // 已到期的走告警、快到期的走提醒，两窗口不相交（<dueAt vs ≥dueAt）。
-    try { const r = remindDueSoonSafetyTimers(store, pushSender, webPushSender, Date.now(), safetyRemindLeadMs); if (r) console.log(`[safety] 到期前提醒本人 ${r} 条`) }
+    try { const r = remindDueSoonSafetyTimers(store, pushSender, webPushSender, Date.now(), safetyRemindLeadMs); if (r) { app.metrics.inc('safety_checkin_reminders_total', r); console.log(`[safety] 到期前提醒本人 ${r} 条`) } }
     catch (e) { console.warn('[safety] 报到提醒失败:', (e as Error).message) }
     // 安全报到到期未确认平安 → 自动告警亲友（与升级重呼同 60s tick，共用 push 通道）。
     // 传 app.liveLocations：若本人在共享位置，取最后已知位置兜底附给亲友（家人才知去哪找人，与 SOS 同款）。
-    try { const f = fireExpiredSafetyTimers(store, pushSender, webPushSender, Date.now(), safetyStaleGraceMs, app.liveLocations); if (f) console.log(`[safety] 到期未报到自动告警 ${f} 条`) }
+    try { const f = fireExpiredSafetyTimers(store, pushSender, webPushSender, Date.now(), safetyStaleGraceMs, app.liveLocations); if (f) { app.metrics.inc('safety_checkin_fires_total', f); console.log(`[safety] 到期未报到自动告警 ${f} 条`) } }
     catch (e) { console.warn('[safety] 报到告警失败:', (e as Error).message) }
   }, 60_000)
   escalateTimer.unref?.()

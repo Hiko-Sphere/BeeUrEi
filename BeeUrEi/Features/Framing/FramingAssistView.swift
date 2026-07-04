@@ -87,6 +87,8 @@ final class FramingAssistViewModel {
     private func runChannel(_ channel: AppRoute.FramingChannel) {
         // 切到光探测以外的任何动作：先停连续光探测音调，避免它与识别结果播报/其它模式抢声。
         if channel != .light { stopContinuous() }
+        // 切到配色比对以外的任何动作 → 放弃未完成的配色第一件（避免拿旧色和无关物比对）。
+        if channel != .colorMatch { colorMatchFirst = nil }
         switch channel {
         case .banknote: readCurrency()
         case .scan: readBarcode()
@@ -95,6 +97,7 @@ final class FramingAssistViewModel {
         case .people: describePeople()
         case .light: readLight()
         case .color: readColor() // 语音指令"什么颜色"直达（配衣服/比色）
+        case .colorMatch: matchColors() // 语音"这两件搭不搭"：扫两次比配色
         case .text: readText() // 语音指令"读文字"直达
         }
     }
@@ -107,6 +110,8 @@ final class FramingAssistViewModel {
     // 盲人配衣服/比色高频。与光探测互斥（同为持续背景模式）。
     private(set) var colorContinuousOn = false
     @ObservationIgnored private var colorThrottle = HintThrottle(stableTicks: 3, minGap: 1.0, repeatGap: 8.0)
+    // 配色比对的"第一件"颜色（扫两次的中间态）：切到别的动作/关闭识别屏时清空（见 runChannel/onDisappear）。
+    @ObservationIgnored private var colorMatchFirst: (r: Double, g: Double, b: Double)?
     @ObservationIgnored private var docMode = false        // 文档模式（整页取景引导+自动拍摄）
     @ObservationIgnored private var docStableFrames = 0    // 整页完整入画的连续帧数（≥2 自动拍摄）
     @ObservationIgnored private var docCapturing = false   // OCR 进行中，防重复拍摄
@@ -847,6 +852,36 @@ final class FramingAssistViewModel {
         } else {
             speak(FramingStrings.colorFailed(lang))
             return nil
+        }
+    }
+
+    /// 配色比对（扫两次判"搭不搭"——盲人配衣决策刚需；和谐度判定在核心 ColorNamer.harmony，已测）。
+    /// 第一次扫：记住第一件颜色并提示对准第二件；第二次扫：比对两色并播报和谐度，随后复位。
+    func matchColors() {
+        if colorContinuousOn { stopColorContinuous() } // 与连续颜色互斥
+        stopLightTone()
+        guard let buffer = latestBuffer else { speak(FramingStrings.aimObject(lang)); return }
+        if tooDarkToProceed() { return }
+        let rect = CGRect(x: 0.4, y: 0.4, width: 0.2, height: 0.2)
+        guard let rgb = ColorSampler.averageRGB(in: buffer, rect: rect) else {
+            speak(FramingStrings.colorFailed(lang)); return
+        }
+        let namer = ColorNamer()
+        copyableResult = nil
+        if let first = colorMatchFirst {
+            // 第二件 → 比对并播报，随后复位（下一次从头开始）。
+            let firstName = namer.describe(r: first.r, g: first.g, b: first.b, language: lang)
+            let secondName = namer.describe(r: rgb.r, g: rgb.g, b: rgb.b, language: lang)
+            let verdict = SpokenStrings.colorHarmony(
+                namer.harmony(r1: first.r, g1: first.g, b1: first.b, r2: rgb.r, g2: rgb.g, b2: rgb.b), lang)
+            colorMatchFirst = nil
+            resultText = FramingStrings.colorMatchResult(firstName, secondName, verdict, lang)
+            speak(resultText)
+        } else {
+            // 第一件 → 记住并提示对准第二件。
+            colorMatchFirst = rgb
+            resultText = FramingStrings.colorMatchFirstStored(namer.describe(r: rgb.r, g: rgb.g, b: rgb.b, language: lang), lang)
+            speak(resultText)
         }
     }
 

@@ -26,6 +26,7 @@ final class VoiceCommandParserTests: XCTestCase {
             ("打开消息", .messages), ("查看聊天", .messages), ("open chat", .messages),
             ("开始导盲", .guideMe), ("帮我避障", .guideMe), ("start obstacle avoidance", .guideMe),
             ("这是什么颜色", .readColor), ("什么色", .readColor), ("what color is this", .readColor),
+            ("这两件搭配吗", .matchColors), ("颜色搭不搭", .matchColors), ("does this match", .matchColors), ("do these two match", .matchColors),
             ("看一看这是什么", .look), ("识别一下", .look), ("what is this", .look),
             ("再说一遍", .repeatLast), ("刚才说什么", .repeatLast), ("repeat that", .repeatLast),
             ("你会什么", .commands), ("你能做什么", .commands), ("what can you do", .commands),
@@ -44,6 +45,15 @@ final class VoiceCommandParserTests: XCTestCase {
         for (phrase, expected) in cases {
             XCTAssertEqual(VoiceCommandParser.parse(phrase), expected, "『\(phrase)』应解析为 \(expected)")
         }
+    }
+
+    func testMatchColorsBeatsReadColorOnMatchIntent() {
+        // "搭/配"意图走配色比对，纯问色仍走 readColor。
+        XCTAssertEqual(VoiceCommandParser.parse("这两件颜色搭不搭"), .matchColors)
+        XCTAssertEqual(VoiceCommandParser.parse("搭配吗"), .matchColors)
+        XCTAssertEqual(VoiceCommandParser.parse("does this match my shirt"), .matchColors)
+        XCTAssertEqual(VoiceCommandParser.parse("这是什么颜色"), .readColor)   // 纯问色不被抢
+        XCTAssertEqual(VoiceCommandParser.parse("what color is this"), .readColor)
     }
 
     func testFacingDoesNotStealNeighbors() {

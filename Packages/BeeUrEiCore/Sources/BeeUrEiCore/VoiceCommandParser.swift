@@ -23,6 +23,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case describePeople             // 描述周围的人（人数/方位）
     case readLight                  // 光线/明暗（找窗户/灯）
     case readColor                  // 识别颜色（配衣服/比色）
+    case matchColors                // 两件配色比对（扫两次判"搭不搭"——盲人配衣决策刚需；harmony 判定在核心已测）
     case messages                   // 打开消息
     case sendMessage(to: String, text: String) // 给X发消息说Y
     case find(String)               // 找某个具体物品（已教物品或可找类别，如"找我的钥匙"/"find my keys"）
@@ -81,6 +82,8 @@ public enum VoiceCommandParser {
         if has(["打开设置", "设置", "偏好设置", "settings", "open settings", "preferences"]) { return .openSettings }
         // 导盲/避障须在通用「看一看」之前匹配（"识别障碍/避障"含"识别"会被 look 抢走）。
         if has(["导盲", "避障", "开始导盲", "实时避障", "obstacle", "guide me", "start guide", "avoidance"]) { return .guideMe }
+        // 配色比对须在 readColor 之前（"颜色搭不搭"含"颜色"会被 readColor 抢）：明确的"搭/配"意图先走比对。
+        if has(["搭配", "搭不搭", "配不配", "配色", "两件搭", "衣服搭", "颜色搭", "does this match", "do these match", "do these two match", "do they match", "colors match", "colours match", "color match", "go together"]) { return .matchColors }
         // 颜色须在通用「看一看」之前：否则「这是什么颜色」(含"这是什么")、「识别颜色」(含"识别") 会被 look 抢走。
         if has(["颜色", "什么色", "识别颜色", "报颜色", "what color", "which color", "what colour", "which colour", "read color", "color of", "identify color"]) { return .readColor }
         if has(["看一看", "识别", "这是什么", "拍一下", "look", "what is this", "identify", "recognize"]) { return .look }

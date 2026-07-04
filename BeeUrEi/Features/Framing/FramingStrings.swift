@@ -191,6 +191,17 @@ enum FramingStrings {
     }
     static func busInfoSeparator(_ l: Language) -> String { l == .zh ? "，" : ", " }
 
+    /// 配色比对：记住第一件后提示对准第二件。
+    static func colorMatchFirstStored(_ name: String, _ l: Language) -> String {
+        l == .zh ? "第一件是\(name)。现在把第二件对准中间，再说一次“搭配”。"
+                 : "First item is \(name). Now aim at the second item and say “does this match” again."
+    }
+    /// 配色比对结果：两件颜色 + 和谐度结论（结论文案来自核心 SpokenStrings.colorHarmony）。
+    static func colorMatchResult(_ first: String, _ second: String, _ verdict: String, _ l: Language) -> String {
+        l == .zh ? "第一件\(first)，第二件\(second)：\(verdict)。"
+                 : "First \(first), second \(second): \(verdict)."
+    }
+
     // MARK: 朗读文字
 
     static func aimText(_ l: Language) -> String {

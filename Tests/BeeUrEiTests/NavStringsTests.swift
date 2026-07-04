@@ -61,6 +61,10 @@ final class NavStringsTests: XCTestCase {
         XCTAssertEqual(NavStrings.remainingDistance(meters: 1234, etaSeconds: 240, .zh), "还有约1.2 公里，预计 4 分钟")
         // <1km → 取整到 10 米。487 → 490。
         XCTAssertEqual(NavStrings.remainingDistance(meters: 487, etaSeconds: 200, .zh), "还有约490 米，预计 3 分钟")
+        // 末段 <10 米报精确值，绝不抹成"0 米"（临门一脚 1–4 米最要紧；≤30 加"快到了"前缀）。
+        XCTAssertEqual(NavStrings.remainingDistance(meters: 4, etaSeconds: nil, .zh), "快到了，还有约4 米")
+        XCTAssertFalse(NavStrings.remainingDistance(meters: 3, etaSeconds: nil, .zh).contains("0 米")) // 不再报 0 米
+        XCTAssertEqual(NavStrings.remainingDistance(meters: 7, etaSeconds: nil, .en), "Almost there — about 7 m to go")
         // ETA <60s → "不到 1 分钟"。
         XCTAssertTrue(NavStrings.remainingDistance(meters: 30, etaSeconds: 25, .zh).contains("不到 1 分钟"))
         // ETA 缺测(nil) → 省略 ETA，只报距离。

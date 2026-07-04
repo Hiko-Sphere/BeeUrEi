@@ -155,11 +155,17 @@ enum NavStrings {
     static func passingBy(_ name: String, _ l: Language) -> String { l == .zh ? "途经\(name)" : "Passing \(name)" }
     static func enteringRoad(_ name: String, _ l: Language) -> String { l == .zh ? "进入\(name)" : "Entering \(name)" }
 
-    /// 距离短语："1.2 公里"（≥1km 用公里一位小数）/ "300 米"（否则取整到 10 米）。
+    /// 距离短语："1.2 公里"（≥1km 用公里一位小数）/ "300 米"（≥10m 取整到 10 米）/ "4 米"（<10m 报精确值）。
     private static func distancePhrase(meters: Int, _ l: Language) -> String {
         if meters >= 1000 {
             let km = (Double(meters) / 100).rounded() / 10   // 一位小数
             return l == .zh ? "\(km) 公里" : "\(km) km"
+        }
+        // <10 米：报**精确**值——末段临门一脚是最要紧的近距，取整到 10 会把 1–4 米抹成"还有约 0 米"
+        // （荒谬且误导：明明还有几步却说 0，盲人找门的关键时刻反被坑）。max(0,) 防越过点的负值噪声。
+        if meters < 10 {
+            let m = max(0, meters)
+            return l == .zh ? "\(m) 米" : "\(m) m"
         }
         let m = Int((Double(meters) / 10).rounded()) * 10    // 取整到 10 米
         return l == .zh ? "\(m) 米" : "\(m) m"

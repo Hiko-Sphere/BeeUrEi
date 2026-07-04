@@ -115,6 +115,46 @@ describe('安全报到到期自动告警（fireExpiredSafetyTimers）', () => {
     expect(store.unacknowledgedEmergencyEvents(now, now).some((e) => e.id === after.eventId)).toBe(true)
   })
 
+  // 最后已知位置来源 stub（形状同 LiveLocationRegistry.lastKnownForEmergency）。
+  const liveStub = (loc?: { lat: number; lng: number; updatedAt: number }) => ({ lastKnownForEmergency: () => loc })
+
+  it('本人在共享位置 → 未报到告警附最后已知位置（emergency_event + 亲友通知 data，locSource=lastKnown）', async () => {
+    const { store, blind, family } = await setup()
+    const now = Date.now()
+    store.createSafetyTimer({ id: 'stLoc', ownerId: blind.id, note: '走夜路', startedAt: now - 30 * 60_000, dueAt: now - 1000, status: 'active' })
+    const live = liveStub({ lat: 31.23, lng: 121.47, updatedAt: now - 120_000 }) // 2 分钟前的最后位置
+    expect(fireExpiredSafetyTimers(store, push, webPush, now, GRACE, live)).toBe(1)
+    // emergency_event 带位置 + 诚实标注
+    const ev = store.emergencyEventsForUser(blind.id)[0]
+    expect(ev).toMatchObject({ lat: 31.23, lon: 121.47, locSource: 'lastKnown' })
+    expect(ev.locAgeSec).toBe(120) // 2 分钟 = 120 秒
+    // 亲友通知 data 带 lat/lon（web/iOS 据此渲染"最后已知位置"地图链接，零客户端改动）
+    const nd = missed(store, family.id)[0].data!
+    expect(nd.lat).toBe('31.23')
+    expect(nd.lon).toBe('121.47')
+    expect(nd.locSource).toBe('lastKnown')
+  })
+
+  it('本人未共享位置（live 无兜底）→ locSource=none、不附坐标（诚实：不谎称有位置）', async () => {
+    const { store, blind, family } = await setup()
+    const now = Date.now()
+    store.createSafetyTimer({ id: 'stNoLoc', ownerId: blind.id, startedAt: now - 30 * 60_000, dueAt: now - 1000, status: 'active' })
+    // 传 live 但无最后位置（未共享/已过时）→ 与不传 live 一致：无坐标。
+    expect(fireExpiredSafetyTimers(store, push, webPush, now, GRACE, liveStub(undefined))).toBe(1)
+    const ev = store.emergencyEventsForUser(blind.id)[0]
+    expect(ev.locSource).toBe('none')
+    expect(ev.lat).toBeUndefined()
+    expect(missed(store, family.id)[0].data?.lat).toBeUndefined()
+  })
+
+  it('最后位置坐标非有限（坏 GPS 帧）→ 当作无位置（不把 NaN 附给亲友）', async () => {
+    const { store, blind } = await setup()
+    const now = Date.now()
+    store.createSafetyTimer({ id: 'stBadLoc', ownerId: blind.id, startedAt: now - 30 * 60_000, dueAt: now - 1000, status: 'active' })
+    expect(fireExpiredSafetyTimers(store, push, webPush, now, GRACE, liveStub({ lat: NaN, lng: 121, updatedAt: now }))).toBe(1)
+    expect(store.emergencyEventsForUser(blind.id)[0].locSource).toBe('none')
+  })
+
   it('幂等：再扫不重复告警（已 fired 不在 active 候选里）', async () => {
     const { store, blind, family } = await setup()
     const now = Date.now()

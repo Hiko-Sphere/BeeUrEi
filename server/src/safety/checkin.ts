@@ -5,6 +5,12 @@ import type { WebPushSender } from '../push/webPush'
 import { pushLang, pushStrings } from '../push/pushStrings'
 import { totalUnreadFor } from '../db/unread'
 
+/// 最后已知位置来源（结构化，便于单测注入）。生产传 LiveLocationRegistry（其 lastKnownForEmergency 恰匹配此形状）。
+/// 只消费**用户主动开启、且收件人正是这批亲友的共享数据**（该方法内已做窗口/时效约束），不越权。
+export interface LastKnownLocationSource {
+  lastKnownForEmergency(userId: string, now: number): { lat: number; lng: number; updatedAt: number } | undefined
+}
+
 /// 到期未确认平安的安全报到 → 自动告警亲友（personal-safety "safety timer" 的核心：dead-man's switch）。
 /// 由后台每分钟的定时器调用（index.ts，与紧急升级重呼同 tick），无 HTTP 上下文——扇出模板照搬 escalation.ts：
 /// - **先标记状态再扇出**：即便下面推送部分失败也绝不重复告警（幂等，防告警疲劳）；
@@ -52,6 +58,7 @@ export function remindDueSoonSafetyTimers(
 
 export function fireExpiredSafetyTimers(
   store: Store, push: PushSender, webPush: WebPushSender, now: number, staleGraceMs: number,
+  live?: LastKnownLocationSource,
 ): number {
   const due = store.expiredActiveSafetyTimers(now)
   const safeSubs = (uid: string) => { try { return store.webPushSubscriptionsForUser(uid) } catch { return [] } }
@@ -91,16 +98,29 @@ export function fireExpiredSafetyTimers(
         !!apnsToken || (webPush.configured && safeSubs(uid).length > 0)
       const notified = members.filter((m) => hasRealtimePush(m.id, m.apnsToken)).length
 
-      // emergency_event：无位置（后台 tick 拿不到实时定位；本人若开着实时共享，亲友本就另可见）。
+      // 位置兜底：后台 tick 无实时定位，但若本人正在共享位置，取其**最后已知位置**附给亲友——否则"未报到"
+      // 告警不带位置，家人不知道去哪找人。与 SOS/摔倒告警同款 lastKnownForEmergency（只取用户主动开启、
+      // 且收件人正是这批亲友的共享数据，不越权；locSource='lastKnown'+locAgeSec 让客户端诚实标注"最后已知·N 分钟前"）。
+      let lat: number | undefined, lon: number | undefined, locSource = 'none', locAgeSec: number | undefined
+      const last = live?.lastKnownForEmergency(sender.id, now)
+      if (last && Number.isFinite(last.lat) && Number.isFinite(last.lng)) {
+        lat = last.lat; lon = last.lng; locSource = 'lastKnown'
+        locAgeSec = Math.max(0, Math.round((now - last.updatedAt) / 1000))
+      }
+
       // kind='checkin' 供 admin/审计区分"未报到"与摔倒/车祸/手动 SOS。notified/contacts 口径同告警首呼。
       try {
         store.createEmergencyEvent({ id: eventId, userId: sender.id, kind: 'checkin',
-          locSource: 'none', notified, contacts: members.length, at: now })
+          lat, lon, locSource, locAgeSec, notified, contacts: members.length, at: now })
       } catch { /* 事件日志失败不阻断告警扇出 */ }
 
-      // 通知类别用 'emergency_alert'：亲友端已有的告警显著度/图标/"回拨"按钮全部生效（零客户端改动）。
-      // data.kind='checkin' + data.fromName 供渲染与回拨目标；正文点明是"未报到"并带备注。
+      // 通知类别用 'emergency_alert'：亲友端已有的告警显著度/图标/"回拨"按钮/**位置地图链接**全部生效（零客户端改动）。
+      // data.kind='checkin' + data.fromName 供渲染与回拨目标；正文点明是"未报到"并带备注；带 lat/lon 则 web/iOS 渲染地图链接。
       const notifData: Record<string, string> = { kind: 'checkin', fromId: sender.id, fromName: sender.displayName, eventId }
+      if (lat != null && lon != null) {
+        notifData.lat = String(lat); notifData.lon = String(lon); notifData.locSource = locSource
+        if (locAgeSec != null) notifData.locAgeSec = String(locAgeSec)
+      }
       for (const m of members) {
         const l = pushLang(m.language)
         const title = pushStrings.safetyCheckinMissedTitle(sender.displayName, l)
@@ -110,6 +130,10 @@ export function fireExpiredSafetyTimers(
         if (webPush.configured) for (const sub of safeSubs(m.id)) void webPush.send(sub, JSON.stringify({ title, body, data: notifData })).catch(() => { /* 单订阅失败不阻断 */ })
         if (m.apnsToken) {
           const extra: Record<string, string> = { type: 'emergency_alert', kind: 'checkin', fromId: sender.id, eventId }
+          if (lat != null && lon != null) {
+            extra.lat = String(lat); extra.lon = String(lon); extra.locSource = locSource
+            if (locAgeSec != null) extra.locAgeSec = String(locAgeSec)
+          }
           void push.sendAlert(m.apnsToken, title, body, extra, undefined, safeBadge(m.id)).catch(() => { /* 单点失败不阻断 */ })
         }
       }

@@ -56,6 +56,13 @@ import { setNotifyWebPush } from './notifications/notify'
 import { setAmapMetrics } from './nav/amapClient'
 import { createAppleVerifier, type AppleTokenVerifier } from './auth/apple'
 
+// 把实时位置登记表挂到 app 实例上，供后台 tick（index.ts 的安全报到到期告警）读最后已知位置兜底。
+declare module 'fastify' {
+  interface FastifyInstance {
+    liveLocations: LiveLocationRegistry
+  }
+}
+
 export interface AppOptions {
   rateLimitMax?: number
   mailer?: Mailer // 默认 ConsoleMailer（日志打码）；index.ts 可注入 SMTP 邮件器
@@ -122,6 +129,8 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   const pendingCalls = new PendingCallRegistry()
   const openHelp = new OpenHelpRegistry()
   const liveLocations = new LiveLocationRegistry() // 实时位置共享（纯内存，不落库）
+  // 暴露给后台 tick（index.ts）：安全报到到期告警需读**最后已知位置**兜底附给亲友（与 SOS 同款）。
+  app.decorate('liveLocations', liveLocations)
   const callControl = new CallControlBridge() // 管理员 REST → 通话房间（强制结束等）；由信令层填实现
   // 两类会话(定向亲友呼叫 / 公开求助)共享 callId 字符串空间。互相做跨表去重，
   // 防止任意用户用同名 callId 在另一表抢注、影子覆盖参与权、窃听/锁出他人通话（见审查 #1/#7）。

@@ -92,7 +92,8 @@ async function main(): Promise<void> {
     try { const r = remindDueSoonSafetyTimers(store, pushSender, webPushSender, Date.now(), safetyRemindLeadMs); if (r) console.log(`[safety] 到期前提醒本人 ${r} 条`) }
     catch (e) { console.warn('[safety] 报到提醒失败:', (e as Error).message) }
     // 安全报到到期未确认平安 → 自动告警亲友（与升级重呼同 60s tick，共用 push 通道）。
-    try { const f = fireExpiredSafetyTimers(store, pushSender, webPushSender, Date.now(), safetyStaleGraceMs); if (f) console.log(`[safety] 到期未报到自动告警 ${f} 条`) }
+    // 传 app.liveLocations：若本人在共享位置，取最后已知位置兜底附给亲友（家人才知去哪找人，与 SOS 同款）。
+    try { const f = fireExpiredSafetyTimers(store, pushSender, webPushSender, Date.now(), safetyStaleGraceMs, app.liveLocations); if (f) console.log(`[safety] 到期未报到自动告警 ${f} 条`) }
     catch (e) { console.warn('[safety] 报到告警失败:', (e as Error).message) }
   }, 60_000)
   escalateTimer.unref?.()

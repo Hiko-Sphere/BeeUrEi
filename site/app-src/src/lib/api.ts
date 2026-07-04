@@ -23,7 +23,7 @@ export interface IncomingCall { callId: string; fromName: string; fromUserId: st
 // 与后端 HelpSummary 对齐：队列对外的安全摘要（不暴露 fromUserId）。
 export interface HelpRequest { callId: string; fromName: string; fromAvatar?: string | null; language?: string; locality?: string; topic?: string; waitedSeconds: number }
 export interface ChatMessage { id: string; fromId: string; toId: string; kind: string; text: string; createdAt: number; readAt?: number; reaction?: string; groupId?: string; editedAt?: number; replyTo?: string; readBy?: number; readTotal?: number }
-export interface Conversation { peer: User; last: ChatMessage; unread: number }
+export interface Conversation { peer: User; last: ChatMessage; unread: number; muted?: boolean }
 export interface ChatGroup { id: string; name: string; ownerId: string; memberIds: string[]; createdAt: number }
 export interface GroupSummary { group: ChatGroup; members: User[]; last: ChatMessage | null; unread: number; muted?: boolean }
 export interface RecordingInfo { id: string; callId: string; ownerId: string; ownerName: string; reason: string; recordedAt: number; durationSec?: number | null; lat?: number | null; lon?: number | null; locationLabel?: string | null; participantIds: string[]; participantNames: string[]; hasMedia: boolean; deletedAt?: number | null }
@@ -279,6 +279,7 @@ export const api = {
 
   // 聊天
   conversations: () => get('/api/conversations') as Promise<{ conversations: Conversation[] }>,
+  muteConversation: (peerId: string, muted: boolean) => post(`/api/conversations/${encodeURIComponent(peerId)}/mute`, { muted }) as Promise<{ muted: boolean }>,
   // before+beforeId 组成 (createdAt,id) 复合游标，翻页边界遇同毫秒消息不漏。
   messagesWith: (peerId: string, before?: number, beforeId?: string) => get(`/api/messages?with=${encodeURIComponent(peerId)}${before ? `&before=${before}` : ''}${beforeId ? `&beforeId=${encodeURIComponent(beforeId)}` : ''}`) as Promise<{ messages: ChatMessage[] }>,
   groupMessages: (groupId: string, before?: number, beforeId?: string) => get(`/api/messages?group=${encodeURIComponent(groupId)}${before ? `&before=${before}` : ''}${beforeId ? `&beforeId=${encodeURIComponent(beforeId)}` : ''}`) as Promise<{ messages: ChatMessage[] }>,

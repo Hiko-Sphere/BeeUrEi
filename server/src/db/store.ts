@@ -704,6 +704,10 @@ export interface Store {
   setGroupMuted(groupId: string, userId: string, muted: boolean): void
   isGroupMuted(groupId: string, userId: string): boolean
   deleteGroupMutesForUser(userId: string): void // 删号级联：清该用户在所有群的静音标记（同已读游标，非群主退群路径须显式清）
+  /// 单聊免打扰：muter 是否静音了与 peer 的会话（只压推送横幅，消息/未读照常）。键为 (muter,peer) **有向**。
+  setDmMuted(muterId: string, peerId: string, muted: boolean): void
+  isDmMuted(muterId: string, peerId: string): boolean
+  deleteDmMutesForUser(userId: string): void // 删号级联：清该用户作为 muter **或** peer 的所有单聊静音（有向键两侧都涉及）
 
   // 媒体（视频消息等：元数据在库，实体文件在磁盘 media/）
   createMedia(m: MediaMeta): void
@@ -740,6 +744,7 @@ export class MemoryStore implements Store {
   protected groups = new Map<string, ChatGroup>()
   protected groupReads = new Map<string, number>() // `${groupId}:${userId}` → lastReadAt
   protected groupMutes = new Set<string>() // `${groupId}:${userId}` 存在 = 该人静音该群推送
+  protected dmMutes = new Set<string>() // `${muterId}:${peerId}` 存在 = muter 静音了与 peer 的单聊推送（有向）
   protected media = new Map<string, MediaMeta>()
   protected notifications = new Map<string, Notification>()
   protected emergencyEvents = new Map<string, EmergencyEvent>()
@@ -1483,6 +1488,19 @@ export class MemoryStore implements Store {
     for (const k of [...this.groupMutes]) if (k.endsWith(`:${userId}`)) { this.groupMutes.delete(k); changed = true }
     if (changed) this.afterMutate()
   }
+  setDmMuted(muterId: string, peerId: string, muted: boolean): void {
+    const k = `${muterId}:${peerId}`
+    if (muted ? (this.dmMutes.has(k) ? false : (this.dmMutes.add(k), true)) : this.dmMutes.delete(k)) this.afterMutate()
+  }
+  isDmMuted(muterId: string, peerId: string): boolean {
+    return this.dmMutes.has(`${muterId}:${peerId}`)
+  }
+  deleteDmMutesForUser(userId: string): void {
+    let changed = false
+    // 有向键 `${muter}:${peer}`：该用户作为 muter（前缀）或 peer（后缀）的都清（UUID 无冒号，前后缀唯一）。
+    for (const k of [...this.dmMutes]) if (k.startsWith(`${userId}:`) || k.endsWith(`:${userId}`)) { this.dmMutes.delete(k); changed = true }
+    if (changed) this.afterMutate()
+  }
 
   // MARK: 媒体
   createMedia(m: MediaMeta): void {
@@ -1554,6 +1572,7 @@ export class JsonFileStore extends MemoryStore {
           groups?: ChatGroup[]
           groupReads?: Record<string, number>
           groupMutes?: string[]
+          dmMutes?: string[]
           media?: MediaMeta[]
           passkeys?: Passkey[]
           auditLog?: AdminAuditEntry[]
@@ -1582,6 +1601,7 @@ export class JsonFileStore extends MemoryStore {
         for (const g of data.groups ?? []) this.groups.set(g.id, g)
         for (const [k, v] of Object.entries(data.groupReads ?? {})) this.groupReads.set(k, v)
         for (const k of data.groupMutes ?? []) this.groupMutes.add(k)
+        for (const k of data.dmMutes ?? []) this.dmMutes.add(k)
         for (const md of data.media ?? []) this.media.set(md.id, md)
         for (const pk of data.passkeys ?? []) this.passkeys.set(pk.id, pk)
         if (data.auditLog) this.auditLog = data.auditLog
@@ -1618,6 +1638,7 @@ export class JsonFileStore extends MemoryStore {
       groups: [...this.groups.values()],
       groupReads: Object.fromEntries(this.groupReads),
       groupMutes: [...this.groupMutes],
+      dmMutes: [...this.dmMutes],
       media: [...this.media.values()],
       passkeys: [...this.passkeys.values()],
       auditLog: this.auditLog,

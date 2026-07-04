@@ -78,6 +78,8 @@ export class SqliteStore implements Store {
         groupId TEXT, userId TEXT, lastReadAt INTEGER, PRIMARY KEY (groupId, userId));
       CREATE TABLE IF NOT EXISTS group_mutes (
         groupId TEXT, userId TEXT, PRIMARY KEY (groupId, userId));
+      CREATE TABLE IF NOT EXISTS dm_mutes (
+        muterId TEXT, peerId TEXT, PRIMARY KEY (muterId, peerId));
       CREATE TABLE IF NOT EXISTS media (
         id TEXT PRIMARY KEY, ownerId TEXT, mime TEXT, size INTEGER, createdAt INTEGER);
       CREATE TABLE IF NOT EXISTS passkeys (
@@ -984,6 +986,16 @@ export class SqliteStore implements Store {
   }
   deleteGroupMutesForUser(userId: string): void {
     this.db.prepare('DELETE FROM group_mutes WHERE userId = ?').run(userId)
+  }
+  setDmMuted(muterId: string, peerId: string, muted: boolean): void {
+    if (muted) this.db.prepare('INSERT OR IGNORE INTO dm_mutes (muterId, peerId) VALUES (?, ?)').run(muterId, peerId)
+    else this.db.prepare('DELETE FROM dm_mutes WHERE muterId = ? AND peerId = ?').run(muterId, peerId)
+  }
+  isDmMuted(muterId: string, peerId: string): boolean {
+    return !!this.db.prepare('SELECT 1 FROM dm_mutes WHERE muterId = ? AND peerId = ?').get(muterId, peerId)
+  }
+  deleteDmMutesForUser(userId: string): void {
+    this.db.prepare('DELETE FROM dm_mutes WHERE muterId = ? OR peerId = ?').run(userId, userId)
   }
 
   // MARK: 媒体

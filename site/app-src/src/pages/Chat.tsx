@@ -8,7 +8,7 @@ import { parseLocation } from '../lib/location'
 import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo, Modal } from '../components/ui'
 import { IconChat, IconSend, IconPlus, IconX } from '../components/icons'
 
-type Selection = { kind: 'peer'; id: string; name: string; avatar?: string | null } | { kind: 'group'; id: string; name: string; members: User[]; ownerId: string; muted: boolean }
+type Selection = { kind: 'peer'; id: string; name: string; avatar?: string | null; muted?: boolean } | { kind: 'group'; id: string; name: string; members: User[]; ownerId: string; muted: boolean }
 
 export function ChatPage() {
   const { peerId } = useParams()
@@ -35,7 +35,7 @@ export function ChatPage() {
     if (!peerId) { appliedPeer.current = null; return } // 离开单聊路由：允许下次深链同一 peer 再预选
     if (appliedPeer.current === peerId) return           // 本 peerId 已预选过：后续 convos 轮询刷新不再抢回选择
     const c = convos?.find((x) => x.peer.id === peerId)
-    if (c) { appliedPeer.current = peerId; setSel({ kind: 'peer', id: peerId, name: c.peer.displayName, avatar: c.peer.avatar }) }
+    if (c) { appliedPeer.current = peerId; setSel({ kind: 'peer', id: peerId, name: c.peer.displayName, avatar: c.peer.avatar, muted: c.muted ?? false }) }
     else void api.lookupUser(peerId).then((r) => { if (r.user) { appliedPeer.current = peerId; setSel({ kind: 'peer', id: peerId, name: r.user.displayName, avatar: r.user.avatar }) } }).catch(() => {
       void api.familyLinks().then(({ links }) => { const l = links.find((x) => x.memberId === peerId); if (l) { appliedPeer.current = peerId; setSel({ kind: 'peer', id: peerId, name: l.memberName, avatar: l.memberAvatar }) } })
     })
@@ -65,7 +65,7 @@ export function ChatPage() {
             <ul className="divide-y divide-[var(--line)]">
               {items.map((it) => it.kind === 'peer' ? (
                 <ConvoRow key={it.key} active={sel?.kind === 'peer' && sel.id === it.c.peer.id} convo={it.c} lang={lang} t={t}
-                  onClick={() => setSel({ kind: 'peer', id: it.c.peer.id, name: it.c.peer.displayName, avatar: it.c.peer.avatar })} />
+                  onClick={() => setSel({ kind: 'peer', id: it.c.peer.id, name: it.c.peer.displayName, avatar: it.c.peer.avatar, muted: it.c.muted ?? false })} />
               ) : (
                 <GroupRow key={it.key} active={sel?.kind === 'group' && sel.id === it.g.group.id} g={it.g} lang={lang} t={t}
                   onClick={() => setSel({ kind: 'group', id: it.g.group.id, name: it.g.group.name, members: it.g.members, ownerId: it.g.group.ownerId, muted: it.g.muted ?? false })} />
@@ -94,7 +94,8 @@ function ConvoRow({ convo, active, onClick, lang, t }: { convo: Conversation; ac
       <button type="button" onClick={onClick} className="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:surface-2">
         <Avatar name={convo.peer.displayName} src={convo.peer.avatar} size={44} />
         <div className="min-w-0 flex-1">
-          <div className="truncate font-medium">{convo.peer.displayName}</div>
+          <div className="flex items-center gap-1.5"><span className="truncate font-medium">{convo.peer.displayName}</span>
+            {convo.muted && <span role="img" aria-label={t('已静音', 'Muted')} title={t('已静音', 'Muted')} className="shrink-0 text-xs text-faint">🔕</span>}</div>
           <div className="truncate text-xs text-faint">{preview(convo.last, t)}</div>
         </div>
         <div className="flex flex-col items-end gap-1">
@@ -184,18 +185,20 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
   const [loadingEarlier, setLoadingEarlier] = useState(false)
   const [reachedStart, setReachedStart] = useState(false)
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null) // 正在引用回复的消息
-  const [muted, setMuted] = useState(sel.kind === 'group' ? sel.muted : false) // 群免打扰（乐观切换 + 回滚）
+  const [muted, setMuted] = useState(sel.muted ?? false) // 会话免打扰（群/单聊通用；乐观切换 + 回滚）
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const PAGE = 50 // 与后端单次返回条数一致
 
-  // 群免打扰切换：乐观更新即时反馈，失败回滚 + 提示；成功后刷新会话列表让行内静音标记同步。
+  // 会话免打扰切换（群/单聊通用）：乐观更新即时反馈，失败回滚 + 提示；成功后刷新列表让行内🔕标记同步。
   const toggleMute = async () => {
-    if (sel.kind !== 'group') return
     const next = !muted
     setMuted(next)
-    try { await api.muteGroup(sel.id, next); onSent() }
-    catch (e) { setMuted(!next); toast(chatErrorText(e, t, t('操作失败', 'Failed')), 'error') }
+    try {
+      if (sel.kind === 'group') await api.muteGroup(sel.id, next)
+      else await api.muteConversation(sel.id, next)
+      onSent()
+    } catch (e) { setMuted(!next); toast(chatErrorText(e, t, t('操作失败', 'Failed')), 'error') }
   }
 
   const fetchWindow = useCallback((before?: number, beforeId?: string) =>
@@ -330,13 +333,11 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
           className="rounded-full surface-2 px-3 py-1.5 text-xs font-medium text-soft" aria-label={t('搜索消息', 'Search messages')}>
           {searchOpen ? t('完成', 'Done') : t('搜索', 'Search')}
         </button>
-        {sel.kind === 'group' && (
-          <button onClick={() => void toggleMute()} data-testid="mute-toggle" aria-pressed={muted}
-            className="rounded-full surface-2 px-3 py-1.5 text-xs font-medium text-soft"
-            aria-label={muted ? t('取消静音该群', 'Unmute group') : t('静音该群', 'Mute group')}>
-            {muted ? t('🔕 已静音', '🔕 Muted') : t('静音', 'Mute')}
-          </button>
-        )}
+        <button onClick={() => void toggleMute()} data-testid="mute-toggle" aria-pressed={muted}
+          className="rounded-full surface-2 px-3 py-1.5 text-xs font-medium text-soft"
+          aria-label={muted ? t('取消静音该会话', 'Unmute conversation') : t('静音该会话', 'Mute conversation')}>
+          {muted ? t('🔕 已静音', '🔕 Muted') : t('静音', 'Mute')}
+        </button>
         {sel.kind === 'group' && (
           <button onClick={() => setShowInfo(true)} className="rounded-full surface-2 px-3 py-1.5 text-xs font-medium text-soft" aria-label={t('群信息', 'Group info')}>{t('群信息', 'Group info')}</button>
         )}

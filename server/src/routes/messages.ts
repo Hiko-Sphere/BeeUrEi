@@ -145,8 +145,8 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
 
     // 提醒推送（尽力而为，不阻塞发送回执）。
     const recipient = store.findById(toId!)
-    // 勿扰时段：单聊推送横幅在收件人本地勿扰时段内抑制（消息已存库、未读数照增，其打开即见）。
-    if (recipient && sender && !shouldSuppressPush(recipient.quietHours, 'chat_message', Date.now())) {
+    // 单聊免打扰 + 勿扰时段：收件人把与发送者的会话静音、或处于本地勿扰时段 → 压推送横幅（消息已存库、未读照增）。
+    if (recipient && sender && !store.isDmMuted(toId!, me) && !shouldSuppressPush(recipient.quietHours, 'chat_message', Date.now())) {
       // 同步 store 读（未读角标/web 订阅）抛错（SQLITE_BUSY 等）绝不能在消息已存库后 500，让发送方重试→重复单聊。
       try {
         const l = pushLang(recipient.language)
@@ -300,9 +300,22 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
         peer: peer ? publicUser(peer) : { id: peerId, username: '', displayName: '已注销用户', role: '', status: '', avatar: null },
         last: m,
         unread: store.unreadCount(me, peerId),
+        muted: store.isDmMuted(me, peerId), // 我是否静音了与该对端的单聊（前端显示🔕，免打扰不影响未读）
       }
     })
     return { conversations }
+  })
+
+  // 单聊免打扰开关（作用于本人，有向）：静音只压该会话的推送横幅——消息照常存库、未读照增，打开即见。
+  // 与群免打扰同口径；对端须存在（避免给不存在的会话落垃圾静音）。
+  app.post('/api/conversations/:peerId/mute', { preHandler: requireAuth() }, async (req, reply) => {
+    const parsed = z.object({ muted: z.boolean() }).safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const me = req.user!.sub
+    const peerId = (req.params as { peerId: string }).peerId
+    if (peerId === me || !store.findById(peerId)) return reply.code(404).send({ error: 'not_found' })
+    store.setDmMuted(me, peerId, parsed.data.muted)
+    return { muted: parsed.data.muted }
   })
 
   /// 未读汇总（单聊 + 群聊 + 铃铛通知）：供网页标签标题/导航徽标一次性轻量拉取，

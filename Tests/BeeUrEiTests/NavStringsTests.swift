@@ -13,6 +13,19 @@ final class NavStringsTests: XCTestCase {
         XCTAssertEqual(NavStrings.passingBy("银行", .zh), "途经银行")
     }
 
+    func testStatusRecapForMagicTap() {
+        // 有转向+剩余 → 拼接（走路时"下一步 + 还有多远"一手势听全）。
+        XCTAssertEqual(NavStrings.statusRecap(instruction: "前方右转", remaining: "还有约200米，约3分钟", status: "导航中", .zh),
+                       "前方右转。还有约200米，约3分钟")
+        // 缺一取另一。
+        XCTAssertEqual(NavStrings.statusRecap(instruction: "", remaining: "还有约50米", status: "导航中", .zh), "还有约50米")
+        XCTAssertEqual(NavStrings.statusRecap(instruction: "Turn right", remaining: "", status: "Navigating", .en), "Turn right")
+        // 转向/剩余都空 → 回落状态行；全空 → "正在定位…"（Magic Tap 永不静默，静默会让盲人以为没生效）。
+        XCTAssertEqual(NavStrings.statusRecap(instruction: "", remaining: "", status: "导航中", .zh), "导航中")
+        XCTAssertEqual(NavStrings.statusRecap(instruction: "", remaining: "", status: "", .zh), NavStrings.locating(.zh))
+        XCTAssertEqual(NavStrings.statusRecap(instruction: "", remaining: "", status: "", .en), "Locating…")
+    }
+
     func testEnglishHasNoChinese() {
         let samples = [
             NavStrings.offRoute(.en), NavStrings.navStartedSpeak(5, "Head east", .en),

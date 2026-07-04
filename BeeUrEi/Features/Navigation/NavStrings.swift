@@ -15,6 +15,14 @@ enum NavStrings {
     }
     static func enterDestination(_ l: Language) -> String { l == .zh ? "请输入目的地" : "Please enter a destination" }
     static func locating(_ l: Language) -> String { l == .zh ? "正在定位…" : "Locating…" }
+    /// Magic Tap 状态回述：走路时一手势重播"下一步转向 + 还有多远/ETA"（盲人随时想确认，此前只能自动里程碑播报
+    /// 或去屏上找那行文字）。转向/剩余都空(刚起步/定位中)时回落状态行或"正在定位…"——手势必须永远有语音反馈，
+    /// 静默会让盲人以为没生效。
+    static func statusRecap(instruction: String, remaining: String, status: String, _ l: Language) -> String {
+        let core = [instruction, remaining].filter { !$0.isEmpty }.joined(separator: "。")
+        if !core.isEmpty { return core }
+        return status.isEmpty ? locating(l) : status
+    }
     static func navStopped(_ l: Language) -> String { l == .zh ? "导航已停止" : "Navigation stopped" }
     static func locationDenied(_ l: Language) -> String {
         l == .zh ? "需要定位权限才能导航，请在系统设置开启定位。"

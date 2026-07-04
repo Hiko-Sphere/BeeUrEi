@@ -181,6 +181,11 @@ struct WalkNavigationView: View {
             }
             // 任何方式关闭（完成/下滑/系统）都彻底停止导航——否则定位、信标音、语音引导会在后台继续（见 P1 审计）。
             .onDisappear { model.stop(); ScreenWake.release("nav") }
+            // Magic Tap（双指双击屏幕任意处，VoiceOver 全局手势）：随时重播"下一步转向 + 还有多远/ETA"。
+            // 此前剩余距离只在跨里程碑时自动播；走路的盲人想随时确认，只能去屏上找那行文字（不现实）。
+            .accessibilityAction(.magicTap) {
+                NavVoice.shared.speakCallout(NavStrings.statusRecap(instruction: model.instruction, remaining: model.remaining, status: model.status, lang))
+            }
             // 语音指令直达："带我去X"→ 预填并直接开始导航；"原路返回"→ 一键回程。
             .task {
                 guard let action = AppRoute.shared.pendingNavAction else { return }

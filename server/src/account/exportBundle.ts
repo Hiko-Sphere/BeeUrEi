@@ -24,6 +24,9 @@ export function buildUserExportBundle(store: Store, id: string, now: number) {
       ...store.linksByOwner(id).map((l) => ({ direction: 'owner', other: nameOf(l.memberId), relation: l.relation, isEmergency: l.isEmergency, status: l.status ?? 'accepted', createdAt: l.createdAt })),
       ...store.linksByMember(id).map((l) => ({ direction: 'member', other: nameOf(l.ownerId), relation: l.relation, isEmergency: l.isEmergency, status: l.status ?? 'accepted', createdAt: l.createdAt })),
     ],
+    // 群聊归属（与 familyLinks 同为关联数据、非消息正文，admin 版也含）：此前导出漏了群成员关系——
+    // 用户能看到"我发给 group:xxx 的消息"却查不到 xxx 是什么群，可携权不完整。补群名/角色/成员数。
+    groups: store.groupsFor(id).map((g) => ({ name: g.name, role: g.ownerId === id ? 'owner' : 'member', memberCount: g.memberIds.length, createdAt: g.createdAt })),
     blocks: {
       blocking: involving.filter((b) => b.blockerId === id).map((b) => ({ other: nameOf(b.blockedId), createdAt: b.createdAt })),
       blockedBy: involving.filter((b) => b.blockedId === id).map((b) => ({ other: nameOf(b.blockerId), createdAt: b.createdAt })),
@@ -57,6 +60,12 @@ export function buildSelfExportExtras(store: Store, id: string) {
       kind: m.kind,
       text: m.kind === 'text' ? m.text : null, // 非文字只给元信息（data URL/mediaId 不内联）
       createdAt: m.createdAt,
+    })),
+    // 本人的通知收件箱（收到的告警/好友请求/回执等——是关于本人的数据，GDPR 访问/可携权覆盖）。
+    // **仅自助版**：标题/正文含预览文案，admin 不读用户收件箱（同"admin 不含消息正文"口径）。只给
+    // 元信息(kind/title/body/时间/已读)，不含 data 载荷（避免把他人坐标等经推送数据二次外泄给收件人导出）。
+    notifications: store.notificationsForUser(id, 5000).map((n) => ({
+      kind: n.kind, title: n.title, body: n.body, createdAt: n.createdAt, readAt: n.readAt ?? null,
     })),
   }
 }

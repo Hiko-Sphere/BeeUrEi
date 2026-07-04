@@ -22,6 +22,9 @@ describe('GET /api/account/export', () => {
     await a.inject({ method: 'POST', url: '/api/routes', headers: auth, payload: { name: '回家', waypoints: [{ lat: 31.2, lng: 121.4 }, { lat: 31.21, lng: 121.41 }] } })
     // 一次带坐标的手动 SOS（本人事故记录 → 应进导出）
     await a.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth, payload: { kind: 'manual', lat: 31.2, lon: 121.4 } })
+    // 群聊（本人为群主 → 应进导出的 groups；此前漏了群归属）
+    const g = await a.inject({ method: 'POST', url: '/api/groups', headers: auth, payload: { name: '家庭群', memberIds: [peer.user.id] } })
+    expect(g.statusCode).toBe(201)
 
     const res = await a.inject({ method: 'GET', url: '/api/account/export', headers: auth })
     expect(res.statusCode).toBe(200)
@@ -36,6 +39,11 @@ describe('GET /api/account/export', () => {
     expect(body.emergencyEvents[0]).toMatchObject({ kind: 'manual', lat: 31.2, contacts: 1 })
     expect(body.messagesSent.length).toBe(1)
     expect(body.messagesSent[0].text).toContain('幸福路')      // 自己的话，含正文
+    // 群归属（回归：此前漏导出）
+    expect(body.groups.length).toBe(1)
+    expect(body.groups[0]).toMatchObject({ name: '家庭群', role: 'owner' })
+    // 通知收件箱（回归：此前漏导出）——peer 接受我的好友请求 → 我(请求者)收到 friend_accepted
+    expect(body.notifications.some((n: { kind: string }) => n.kind === 'friend_accepted')).toBe(true)
     expect(raw).not.toContain('秘密内容')                       // 对方的话绝不出现
     expect(raw).not.toContain('passwordHash')                   // 安全底线（底座保证）
     expect(raw.toLowerCase()).not.toContain('refreshtoken')

@@ -189,7 +189,10 @@ enum SettingsStrings {
     // 常用地点（家/公司）
     static func savedPlacesTitle(_ l: Language) -> String { l == .zh ? "常用地点" : "Saved Places" }
     static func savedPlacesFooter(_ l: Language) -> String {
-        l == .zh ? "填好地址后，说\u{201C}回家\u{201D}或\u{201C}去公司\u{201D}即可直接导航。" : "Once set, say \u{201C}take me home\u{201D} or \u{201C}go to work\u{201D} to navigate directly."
+        // 透明告知：保存地点除了语音直达，还会在你**正共享位置**时、**到达该地点**时提醒能看到你位置的家人（若地址可定位）。
+        l == .zh
+            ? "填好地址后，说\u{201C}回家\u{201D}或\u{201C}去公司\u{201D}即可直接导航。你正在共享位置时，到达这些地点会提醒能看到你位置的家人（如\u{201C}已到家\u{201D}），让他们安心。"
+            : "Once set, say \u{201C}take me home\u{201D} or \u{201C}go to work\u{201D} to navigate directly. While you're sharing your location, arriving at these places notifies the family who can see your location (e.g. \u{201C}arrived home\u{201D}), for their peace of mind."
     }
     static func homeHeader(_ l: Language) -> String { l == .zh ? "家" : "Home" }
     static func workHeader(_ l: Language) -> String { l == .zh ? "公司" : "Work" }

@@ -72,6 +72,10 @@ public enum VoiceCommandParser {
         // "where i am"/"where i'm"（陈述语序）与"where am i"（疑问语序）都收——"tell me where I am"（问自己在哪，
         // 收件人是代词、parseSendLocation 已返回 nil）此前因只匹配疑问语序而落到 unknown。
         if has(["我在哪", "我在哪里", "当前位置", "where am i", "where i am", "where i'm", "my location"]) { return .whereAmI }
+        // 周围的人：只在明确问「人」时触发。**须在 around 与 findNearest 之前**——否则"周围有没有人/附近有没有人"
+        // 被 around 的裸"周围"或 findNearest 的"有没有X"抢走（对抗复审 F2：这是先前就被 around 遮蔽的潜在 bug）。
+        // 关键词都是明确"人"的问法，不含裸"周围"，故不会误吃"周围有什么"（那仍归 around）。
+        if has(["有几个人", "有没有人", "有人吗", "多少人", "谁在", "描述人", "who is there", "who's there", "how many people", "anyone here", "anyone there", "describe people"]) { return .describePeople }
         // 就近找地点（"最近的厕所在哪"/"nearest pharmacy"）须在 .around（"周围有什么"含裸"周围"）与 .find（"找X"）、
         // .navigate（"去X"）之前——否则"周围哪里有药店"被 around 抢、"找最近的厕所"被 find 抢、"去最近的厕所"被导航搜名字失败。
         if let cat = parseFindNearest(text) { return .findNearest(cat) }
@@ -80,8 +84,6 @@ public enum VoiceCommandParser {
         // 朝向（罗盘方位）：盲人看不到罗盘/太阳，"我正朝哪"是方向感的基础。置于此处、导航解析之前——用具体短语
         // （"朝哪个方向"/"面朝"/"which way am i facing"）避开与导航("哪个方向走"意图另说)/around 的关键字冲突。
         if has(["朝哪个方向", "哪个方向", "什么方向", "朝哪个方位", "哪个方位", "面朝", "朝向", "我朝哪", "which way am i facing", "which way i'm facing", "which direction am i", "what direction am i", "which way am i", "my heading", "compass direction"]) { return .facing }
-        // 周围的人：关键词避开「周围」（那属 .around）；只在明确问「人」时触发。
-        if has(["有几个人", "有没有人", "有人吗", "多少人", "谁在", "描述人", "who is there", "who's there", "how many people", "anyone here", "anyone there", "describe people"]) { return .describePeople }
         if has(["公交", "几路车", "哪路车", "什么车", "几路公交", "公交车", "bus", "which bus", "what bus"]) { return .readBus }
         if has(["多亮", "光线", "亮不亮", "有没有光", "开灯了吗", "灯开着吗", "灯亮着吗", "how bright", "light level", "brightness", "is the light on", "lights on"]) { return .readLight }
         if has(["天气", "下雨", "气温", "weather", "temperature", "rain"]) { return .weather }
@@ -230,16 +232,38 @@ public enum VoiceCommandParser {
     /// （"离我"/"哪里有"/位置疑问后缀"在哪|怎么走"/"去|到最近的"）或英文 nearest/closest 时才触发；
     /// 类别须非空且非时间类宾语（消息/新闻…），否则返回 nil 不误触。
     static func parseFindNearest(_ text: String) -> String? {
-        let nonPlace: Set<String> = ["消息", "信息", "新闻", "事", "事情", "情况", "动态",
-                                     "message", "messages", "news", "update", "updates"]
+        // 提取到的"类别"其实属于别的意图/非地点 → findNearest 让位（返回 nil），交链上更具体的意图或落 unknown。
+        // 精度守卫（对抗复审 F1/F2/F5）：宽松的"哪里有X/有没有X/where can I find X"会误抢读消息/描述人/找物品；
+        // 过度匹配会误导盲人做错的事，比漏匹配（用户改说一次）更糟——故宁可拒。
+        func notAPlaceCategory(_ x: String) -> Bool {
+            if x.isEmpty { return true }
+            let lower = x.lowercased()
+            // 消息/资讯（时间义"最近"的常见宾语，或"哪里有新消息"）：子串匹配——"新消息"含"消息"也拒。
+            if ["消息", "信息", "新闻", "动态", "短信", "message", "news", "text", "email", "notification"].contains(where: { lower.contains($0) }) { return true }
+            // 人 → 让位 describePeople（"有没有人"/"哪里有认识的人"）。
+            if x == "人" || x == "人吗" || x.hasSuffix("的人") || ["people", "anyone", "someone", "somebody"].contains(lower) { return true }
+            // 泛 idiom / 非地点名词。
+            if ["问题", "事", "事儿", "事情", "办法", "毛病", "peace", "problem", "trouble", "help"].contains(lower) { return true }
+            // 个人物品占有格 → 让位 find（"where can I find my keys"/"我的钥匙"）。
+            if lower.hasPrefix("my ") || lower.hasPrefix("our ") || x.hasPrefix("我的") { return true }
+            return false
+        }
         func clean(_ s: String) -> String? {
             let punct = CharacterSet(charactersIn: "。，？！,.?!、").union(.whitespacesAndNewlines)
+            // 尾部：位置疑问/量词/客套 + 常见"目的短语"（…买东西/上厕所）+ 英文尾问词（…called/address）。
             let trails = ["在哪里", "在哪儿", "在哪呢", "在哪", "怎么走", "怎么去", "咋走", "远不远", "有多远",
+                          "买东西", "买点东西", "上厕所", "吃饭", "歇脚", "休息", "充电",
                           "呢", "吗", "吧", "啊", "呀",
-                          " nearby", " near me", " around here", " please", " to me"]
+                          " called", " address", " located", " open", " nearby", " near me", " around here", " please", " to me"]
             let leads = ["一个", "一家", "一间", "一处", "个", "家", "间", "处",
                          "a ", "an ", "the ", "some ", "any "]
             var x = s.trimmingCharacters(in: punct)
+            // 连接词处截断（"…然后带我去"/"…再去别处"/"X and Y"/"X then Y"）——只取地点本身。
+            for cut in ["然后", "再去", "再到", " and ", " then "] {
+                if let r = x.range(of: cut, options: cut.hasPrefix(" ") ? .caseInsensitive : []) {
+                    x = String(x[..<r.lowerBound]).trimmingCharacters(in: punct)
+                }
+            }
             var changed = true
             while changed {
                 changed = false
@@ -251,8 +275,7 @@ public enum VoiceCommandParser {
                     x = String(x.dropFirst(l.count)).trimmingCharacters(in: punct); changed = true; break
                 }
             }
-            if x.isEmpty || nonPlace.contains(x.lowercased()) { return nil }
-            return x
+            return notAPlaceCategory(x) ? nil : x
         }
         // 中文：均带明确空间语境，避开时间义"最近"。
         let zhPatterns = [

@@ -80,6 +80,35 @@ final class VoiceCommandParserTests: XCTestCase {
         XCTAssertEqual(VoiceCommandParser.parse("find my wallet"), .find("wallet"))
     }
 
+    func testFindNearestPrecisionDoesNotStealOtherIntents() {
+        // 对抗复审揪出的过度匹配（findNearest 排在前面，宽松"哪里有X/有没有X/where can I find X"会抢别的意图）。
+        // 精度优先：过度匹配（误导盲人做错的事）比漏匹配（用户改说一次）更糟。
+        // F1: "哪里有新消息" 属读消息，不是找地点（"新消息"含"消息"→拒）。
+        if case .findNearest = VoiceCommandParser.parse("哪里有新消息") { XCTFail("『哪里有新消息』不应被就近找地点抢") }
+        XCTAssertEqual(VoiceCommandParser.parse("哪里有新消息"), .readMessages)
+        // F2: "周围/附近有没有人" 属描述周围的人（describePeople 已上移到 around/findNearest 之前）。
+        XCTAssertEqual(VoiceCommandParser.parse("周围有没有人"), .describePeople)
+        XCTAssertEqual(VoiceCommandParser.parse("附近有没有人"), .describePeople)
+        XCTAssertEqual(VoiceCommandParser.parse("这附近有几个人"), .describePeople)
+        // idiom："是不是哪里有问题" 不是找地点（"问题"→拒）。
+        if case .findNearest = VoiceCommandParser.parse("是不是哪里有问题") { XCTFail("『哪里有问题』不应被就近找地点抢") }
+        // F5: "where can I find my keys" 属找个人物品（占有格 my → 让位 find）。
+        XCTAssertEqual(VoiceCommandParser.parse("where can i find my keys"), .find("keys"))
+        // "哪里有认识的人" 让位（"的人"结尾→拒），不误当地点。
+        if case .findNearest = VoiceCommandParser.parse("哪里有认识的人") { XCTFail("『认识的人』不应被就近找地点抢") }
+    }
+
+    func testFindNearestStripsTrailingFiller() {
+        // F3/F4: 尾部目的短语/疑问词不该泄漏进发给高德的类别关键词。
+        XCTAssertEqual(VoiceCommandParser.parse("去最近的便利店买东西"), .findNearest("便利店")) // 剥"买东西"
+        XCTAssertEqual(VoiceCommandParser.parse("最近的厕所在哪然后带我去"), .findNearest("厕所"))  // "然后…"截断
+        XCTAssertEqual(VoiceCommandParser.parse("what is the nearest coffee shop called"), .findNearest("coffee shop")) // 剥"called"
+        XCTAssertEqual(VoiceCommandParser.parse("the nearest pharmacy address"), .findNearest("pharmacy")) // 剥"address"
+        // 保留正常类别不误伤。
+        XCTAssertEqual(VoiceCommandParser.parse("where can i find a restroom"), .findNearest("restroom"))
+        XCTAssertEqual(VoiceCommandParser.parse("附近哪里有便利店"), .findNearest("便利店"))
+    }
+
     func testReadPhoneVsCallPerson() {
         // "读电话号码" = 读出号码；"打电话/呼叫" = 拨号给人（help），互不抢。
         XCTAssertEqual(VoiceCommandParser.parse("读一下上面的电话"), .readPhone)

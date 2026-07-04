@@ -15,6 +15,7 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     private let geocoder = CLGeocoder()
     private var isDescribing = false // 防重入：上一次还在解析时忽略新点击（见审查 #3）
+    private var hasFix = false // 本轮是否已拿到定位点（看门狗据此区分"定位没来"与"定位来了但 POI 检索慢"，复审并发#2）
     private var mode: Mode = .whereAmI
     private var nearestQuery = "" // 「最近的X」的类别（.nearest 模式用）
     private var lastHeading: Double? // 最近真北航向（罗盘），供相对方位计算
@@ -33,6 +34,9 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
     func describeFacing() { run(.facing) }
     /// 「最近的X」：就近查找某类公共地点，报最近一家的店名 + 时钟方位 + 距离。
     func findNearest(_ query: String) {
+        // 与 run 同一门禁提前到写 nearestQuery **之前**：否则在途请求未完时，被 run 拒掉的第二次请求
+        // 已经把 nearestQuery 覆盖了，第一次请求的定位回调会据此播报错误的类别（复审并发#1）。
+        guard !isDescribing else { return }
         nearestQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         run(.nearest)
     }
@@ -52,16 +56,23 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
         lang = FeatureSettings().language
         mode = m
         isDescribing = true
+        hasFix = false // 本轮尚未拿到定位点（用于看门狗区分"定位没来"与"定位来了但 POI 检索慢"）
         speak(promptFor(m))
         // 看门狗：20s 无结果就复位（含网络 POI 检索），避免 requestLocation 无回调导致永久卡死后再点无反应。
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.isDescribing else { return }
-            // 朝向超时（罗盘迟迟不可信）给校准指引，而非"定位超时"——两者根因不同。
-            let msg = self.mode == .facing
-                ? (self.lang == .zh ? "暂时无法确定朝向，请把手机平举、水平画几个 8 字校准罗盘后再试"
-                                    : "Can't determine your heading yet — hold the phone flat and wave it in a figure-8 to calibrate, then retry")
-                : (self.lang == .zh ? "定位超时，请检查定位权限与信号后重试"
-                                    : "Locating timed out — check location permission and signal, then retry")
+            // 三种超时根因给不同指引：①朝向不可信→校准；②定位已拿到但 POI 检索慢→查询超时（**不**误导去查定位权限）；
+            // ③定位始终没来→定位超时，查权限/信号（复审并发#2：此前一律报"定位超时"，POI 后端慢时误导用户）。
+            let msg: String
+            if self.mode == .facing {
+                msg = self.lang == .zh ? "暂时无法确定朝向，请把手机平举、水平画几个 8 字校准罗盘后再试"
+                                       : "Can't determine your heading yet — hold the phone flat and wave it in a figure-8 to calibrate, then retry"
+            } else if self.hasFix {
+                msg = self.lang == .zh ? "查询超时，请稍后再试" : "The lookup timed out — please try again"
+            } else {
+                msg = self.lang == .zh ? "定位超时，请检查定位权限与信号后重试"
+                                       : "Locating timed out — check location permission and signal, then retry"
+            }
             self.finish(msg)
         }
         watchdog = work
@@ -106,6 +117,7 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let loc = locations.last else { return }
+        hasFix = true // 定位点已到：此后若超时是 POI 检索慢（查询超时），非定位问题（复审并发#2）
         switch mode {
         case .whereAmI:
             geocoder.reverseGeocodeLocation(loc, preferredLocale: Locale(identifier: lang.localeIdentifier)) { [weak self] placemarks, _ in
@@ -152,7 +164,8 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
                 let text = PoiCalloutComposer.nearest(from: obs, query: query, radiusMeters: resp.radius, language: lang)
                 await MainActor.run { self.finish(text) }
             } catch {
-                await MainActor.run { self.mapKitNearest(loc, query: query, radius: radius) } // 高德失败回退 MapKit
+                // 高德失败回退 MapKit——但若看门狗已超时复位则不再做无用检索（复审并发#2）。
+                await MainActor.run { if self.isDescribing { self.mapKitNearest(loc, query: query, radius: radius) } }
             }
         }
     }
@@ -222,7 +235,8 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
                                                       headingAvailable: heading != nil, language: lang)
                 await MainActor.run { self.finish(text) }
             } catch {
-                await MainActor.run { self.mapKitPoiCallouts(loc, radius: radius) } // 高德不可用 → 回退 MapKit
+                // 高德不可用 → 回退 MapKit；但看门狗已超时复位则不再做无用检索（复审并发#2）。
+                await MainActor.run { if self.isDescribing { self.mapKitPoiCallouts(loc, radius: radius) } }
             }
         }
     }

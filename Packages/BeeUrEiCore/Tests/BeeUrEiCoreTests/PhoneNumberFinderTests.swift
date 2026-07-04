@@ -1,0 +1,38 @@
+import XCTest
+@testable import BeeUrEiCore
+
+/// 电话号码抽取：手机分组、座机/服务号/国际、非电话数字串不误配、去重。
+final class PhoneNumberFinderTests: XCTestCase {
+    func testMobileGrouped() {
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["联系电话 13812345678"]), ["138 1234 5678"])
+        // 印刷带分隔也能识别，统一按 3-4-4 念。
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["139-1234-5678"]), ["139 1234 5678"])
+    }
+
+    func testLandlineServiceInternational() {
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["座机 010-87654321"]), ["010-87654321"])
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["客服 400-820-8820"]), ["400-820-8820"])
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["Tel +44 20 7946 0958"]), ["+44 20 7946 0958"])
+    }
+
+    func testMultipleNumbersOneCard() {
+        let r = PhoneNumberFinder.find(texts: ["手机 13800001111", "传真 020-12345678"])
+        XCTAssertEqual(r.count, 2)
+        XCTAssertEqual(r[0], "138 0000 1111")
+        XCTAssertTrue(r[1].contains("020"))
+    }
+
+    func testNonPhoneDigitsRejected() {
+        // 年份/价格/条码/日期都不是电话前缀 → 不误配。
+        XCTAssertTrue(PhoneNumberFinder.find(texts: ["2026.07.15", "￥12345", "6901234567890"]).isEmpty)
+        // 11 位但非 1[3-9] 开头（如 2 开头）不算手机。
+        XCTAssertTrue(PhoneNumberFinder.find(texts: ["20260715999"]).isEmpty)
+        // 手机第二位 1/2（不在 3-9）不算。
+        XCTAssertTrue(PhoneNumberFinder.find(texts: ["12012345678"]).isEmpty)
+    }
+
+    func testDedup() {
+        // 同号不同印刷分隔 → 只算一个。
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["13812345678", "138 1234 5678", "138-1234-5678"]).count, 1)
+    }
+}

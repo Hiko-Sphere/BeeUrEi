@@ -428,6 +428,7 @@ struct HubView: View {
         case .look: showFraming = true
         case .readText: route.pendingChannel = .text; showFraming = true
         case .readDates: route.pendingChannel = .dates; showFraming = true // "保质期/生产日期"：读包装日期
+        case .readPhone: route.pendingChannel = .phone; showFraming = true // "读电话号码"：读名片/海报号码
         case .readFullPage: route.pendingChannel = .fullPage; showFraming = true
         case .banknote: route.pendingChannel = .banknote; showFraming = true
         case .scanCode: route.pendingChannel = .scan; showFraming = true

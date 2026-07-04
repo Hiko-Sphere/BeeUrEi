@@ -100,6 +100,7 @@ final class FramingAssistViewModel {
         case .colorMatch: matchColors() // 语音"这两件搭不搭"：扫两次比配色
         case .text: readText() // 语音指令"读文字"直达
         case .dates: readDates() // 语音"保质期/日期"：读包装上的日期
+        case .phone: readPhoneNumbers() // 语音"读电话号码"：读名片/海报上的号码
         }
     }
     @ObservationIgnored private var paused = false // 关闭/被来电盖上后：停止播报并丢弃在途帧/异步识别结果
@@ -680,6 +681,38 @@ final class FramingAssistViewModel {
                     self.copyableResult = nil
                     self.speak(self.resultText)
                 }
+            }
+        }
+        request.recognitionLanguages = ocrLanguages
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? VNImageRequestHandler(cvPixelBuffer: buffer, options: [:]).perform([request])
+        }
+    }
+
+    /// 读电话号码（名片/海报）：OCR → 核心 PhoneNumberFinder 抽出号码，逐个读出 + "请核对再拨"。
+    /// 盲人读不到印刷号码。安全：只读不自动拨（OCR 可能错位，拨错号代价高，见 PhoneNumberFinder）。
+    func readPhoneNumbers() {
+        stopContinuous()
+        guard let live = latestBuffer else { speak(FramingStrings.aimText(lang)); return }
+        if tooDarkToProceed() { return }
+        guard let buffer = copyPixelBuffer(live) else { speak(FramingStrings.recognizeFailed(lang)); return }
+        resultText = FramingStrings.readingPhone(lang)
+        let request = VNRecognizeTextRequest { [weak self] req, _ in
+            let texts = (req.results as? [VNRecognizedTextObservation])?
+                .compactMap { $0.topCandidates(1).first?.string } ?? []
+            let numbers = PhoneNumberFinder.find(texts: texts)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if numbers.isEmpty {
+                    self.resultText = FramingStrings.noPhoneFound(self.lang)
+                    self.copyableResult = nil
+                } else {
+                    self.resultText = FramingStrings.phoneResult(numbers, self.lang)
+                    self.copyableResult = numbers.joined(separator: "\n")
+                }
+                self.speak(self.resultText)
             }
         }
         request.recognitionLanguages = ocrLanguages

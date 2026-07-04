@@ -22,6 +22,7 @@ final class VoiceCommandParserTests: XCTestCase {
             ("读整页", .readFullPage), ("读一下整页文档", .readFullPage), ("read the whole page", .readFullPage),
             ("读一下这段文字", .readText), ("念一下", .readText), ("read this text", .readText),
             ("看看保质期", .readDates), ("这个生产日期是多少", .readDates), ("best before when", .readDates), ("has this expired", .readDates),
+            ("读一下电话号码", .readPhone), ("念一下电话号码", .readPhone), ("read the phone number", .readPhone),
             ("这是多少钱", .banknote), ("识别纸币", .banknote), ("what banknote", .banknote),
             ("扫一下二维码", .scanCode), ("扫码", .scanCode), ("scan this barcode", .scanCode),
             ("打开消息", .messages), ("查看聊天", .messages), ("open chat", .messages),
@@ -46,6 +47,14 @@ final class VoiceCommandParserTests: XCTestCase {
         for (phrase, expected) in cases {
             XCTAssertEqual(VoiceCommandParser.parse(phrase), expected, "『\(phrase)』应解析为 \(expected)")
         }
+    }
+
+    func testReadPhoneVsCallPerson() {
+        // "读电话号码" = 读出号码；"打电话/呼叫" = 拨号给人（help），互不抢。
+        XCTAssertEqual(VoiceCommandParser.parse("读一下上面的电话"), .readPhone)
+        XCTAssertEqual(VoiceCommandParser.parse("电话号码是多少"), .readPhone)
+        XCTAssertEqual(VoiceCommandParser.parse("打电话求助"), .help)      // 拨号给人仍是 help
+        XCTAssertEqual(VoiceCommandParser.parse("呼叫亲友"), .help)
     }
 
     func testReadDatesVsTodayDateVsReadText() {

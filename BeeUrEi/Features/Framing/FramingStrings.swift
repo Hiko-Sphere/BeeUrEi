@@ -213,6 +213,15 @@ enum FramingStrings {
     static func noDatesFound(_ l: Language) -> String {
         l == .zh ? "没找到带标签的日期，可以说“读文字”听完整文字" : "No labeled date found — say “read text” to hear all the text"
     }
+    static func readingPhone(_ l: Language) -> String { l == .zh ? "正在找电话号码…" : "Looking for phone numbers…" }
+    static func noPhoneFound(_ l: Language) -> String {
+        l == .zh ? "没找到电话号码，可以说“读文字”听完整文字" : "No phone number found — say “read text” to hear all the text"
+    }
+    /// 号码逐个读出 + 核对提醒（绝不自动拨——OCR 可能错位）。
+    static func phoneResult(_ numbers: [String], _ l: Language) -> String {
+        let joined = numbers.joined(separator: l == .zh ? "；" : "; ")
+        return l == .zh ? "识别到电话号码，请核对后再拨：\(joined)" : "Found phone number(s), please verify before dialing: \(joined)"
+    }
 
     // MARK: 扫码
 

@@ -1,0 +1,54 @@
+import Foundation
+
+/// 从 OCR 文本里抽取电话号码（纯逻辑，可单测）：名片/海报/说明书上的号码，盲人读不到也拨不了。
+/// 识别中国手机(1[3-9]+11位)/座机(区号0开头)/服务号(400/800)/国际(+)。手机分 3-4-4 便于 TTS 逐组念清。
+///
+/// 安全：**只如实读出号码、绝不自动拨号**——OCR 可能错一位，拨错号代价高（骚扰/费用/错过真号）。把号码读出来
+/// 交给用户核对再拨（同 LabelDateReader "不判断只如实读"的取向）。精确前缀门控（手机 1[3-9]、座机 0、服务 400/800）
+/// 保证不把价格/年份/条码等数字串误当电话。
+public enum PhoneNumberFinder {
+    /// 返回识别到的号码（去重，保序）；无返回空数组。
+    public static func find(texts: [String]) -> [String] {
+        var out: [String] = []
+        var seen = Set<String>()
+        for raw in texts {
+            for span in candidateSpans(raw) {
+                guard let formatted = validateAndFormat(span) else { continue }
+                let key = formatted.filter(\.isNumber) // 去重按纯数字（同号不同印刷分隔视为一个）
+                if seen.insert(key).inserted { out.append(formatted) }
+            }
+        }
+        return out
+    }
+
+    /// 电话候选片段：连续的「数字/空格/-/+/()」串。地名/文字自然截断（"电话13812345678" 的"电话"非电话字符）。
+    static func candidateSpans(_ s: String) -> [String] {
+        var spans: [String] = []
+        var cur = ""
+        for ch in s {
+            if ch.isASCII, ch.isNumber || "+-() ".contains(ch) { cur.append(ch) }
+            else { if !cur.isEmpty { spans.append(cur); cur = "" } }
+        }
+        if !cur.isEmpty { spans.append(cur) }
+        return spans
+    }
+
+    /// 校验并格式化：命中电话样式返回可读串，否则 nil。
+    static func validateAndFormat(_ span: String) -> String? {
+        let hasPlus = span.contains("+")
+        let digits = span.filter(\.isNumber)
+        let d = Array(digits)
+        // 中国手机：11 位，1 开头，第二位 3-9 → 分 3-4-4（TTS 逐组念清）。
+        if d.count == 11, d[0] == "1", let sec = d[1].wholeNumberValue, (3...9).contains(sec) {
+            return "\(digits.prefix(3)) \(digits.dropFirst(3).prefix(4)) \(digits.dropFirst(7))"
+        }
+        let trimmed = span.trimmingCharacters(in: .whitespaces)
+        // 座机（区号 0 开头，10-12 位）/ 服务号（400/800）：保留印刷分隔（更贴合区号-号码），原样返回。
+        if d.count >= 10, d.count <= 12, (digits.hasPrefix("0") || digits.hasPrefix("400") || digits.hasPrefix("800")) {
+            return trimmed
+        }
+        // 国际：带 + 且 8-15 位。
+        if hasPlus, d.count >= 8, d.count <= 15 { return trimmed }
+        return nil
+    }
+}

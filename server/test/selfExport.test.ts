@@ -52,6 +52,24 @@ describe('GET /api/account/export', () => {
     await a.close()
   })
 
+  it('含常用地点/安全报到历史/勿扰时段（本人 PII，GDPR 访问完整性回归）', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const me = (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'exportpii', password: 'a-strong-pass-9', role: 'blind' } })).json()
+    const auth = { authorization: `Bearer ${me.token}` }
+    await a.inject({ method: 'PUT', url: '/api/places/home', headers: auth, payload: { address: '幸福路1号' } })          // 常用地点
+    await a.inject({ method: 'POST', url: '/api/safety/checkin/start', headers: auth, payload: { durationMinutes: 30, note: '走夜路' } }) // 安全报到
+    await a.inject({ method: 'PUT', url: '/api/notifications/quiet-hours', headers: auth, payload: { enabled: true, startMinute: 1320, endMinute: 420, tz: 'Asia/Shanghai' } }) // 勿扰
+
+    const body = (await a.inject({ method: 'GET', url: '/api/account/export', headers: auth })).json()
+    expect(body.savedPlaces.length).toBe(1)
+    expect(body.savedPlaces[0]).toMatchObject({ label: 'home', address: '幸福路1号' })
+    expect(body.safetyTimers.length).toBe(1)
+    expect(body.safetyTimers[0]).toMatchObject({ note: '走夜路', status: 'active' })
+    expect(body.profile.quietHours).toMatchObject({ enabled: true, startMinute: 1320, endMinute: 420, tz: 'Asia/Shanghai' })
+    await a.close()
+  })
+
   it('非文字消息只给元信息（data URL/mediaId 不内联）', async () => {
     const store = new MemoryStore()
     const a = buildApp(store)

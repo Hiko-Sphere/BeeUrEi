@@ -19,6 +19,7 @@ export function buildUserExportBundle(store: Store, id: string, now: number) {
       appleLinked: !!u.appleSub, usernameCustomized: !!u.usernameCustomized,
       legalConsentVersion: u.legalConsentVersion ?? null, legalConsentAt: u.legalConsentAt ?? null,
       hasAvatar: !!u.avatar, featureOverrides: u.featureOverrides ?? {},
+      quietHours: u.quietHours ?? null, // 勿扰时段设置（本人配置，GDPR 访问覆盖）
     },
     familyLinks: [
       ...store.linksByOwner(id).map((l) => ({ direction: 'owner', other: nameOf(l.memberId), relation: l.relation, isEmergency: l.isEmergency, status: l.status ?? 'accepted', createdAt: l.createdAt })),
@@ -66,6 +67,12 @@ export function buildSelfExportExtras(store: Store, id: string) {
   const nameOf = (uid: string) => store.findById(uid)?.displayName ?? '—'
   return {
     savedRoutes: store.savedRoutesForUser(id).map((r) => ({ name: r.name, waypoints: r.waypoints, createdAt: r.createdAt, updatedAt: r.updatedAt })),
+    // 常用地点（家/公司/自定义）：本人独有 PII（含住址与坐标）——GDPR 访问/可携权覆盖。与路线同为
+    // 位置敏感数据，**仅自助版**（admin 代办导出不含，免管理员随手看到用户家庭住址）。
+    savedPlaces: store.savedPlacesForUser(id).map((p) => ({ label: p.label, address: p.address, lat: p.lat ?? null, lng: p.lng ?? null, updatedAt: p.updatedAt })),
+    // 安全报到历史（备注/时长/状态）：本人独有数据，含出行备注可能敏感，仅自助版。
+    safetyTimers: store.safetyTimersForUser(id).map((t) => ({ note: t.note ?? null, startedAt: t.startedAt, dueAt: t.dueAt, status: t.status,
+      firedAt: t.firedAt ?? null, completedAt: t.completedAt ?? null, canceledAt: t.canceledAt ?? null })),
     // 本人的紧急事故记录（摔倒/车祸/SOS）：坐标是本人的、通知计数是本人事件的——完整可携。
     emergencyEvents: store.emergencyEventsForUser(id).map((e) => ({ kind: e.kind, lat: e.lat ?? null, lon: e.lon ?? null,
       locSource: e.locSource ?? null, notified: e.notified, contacts: e.contacts, at: e.at, resolvedAt: e.resolvedAt ?? null })),

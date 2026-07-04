@@ -17,7 +17,52 @@ function amapTimeoutMs(): number {
 let amapMetric: (name: string) => void = () => {}
 export function setAmapMetrics(hook: (name: string) => void): void { amapMetric = hook }
 
-async function amapFetch(url: string): Promise<Response> {
+/// 熔断器（circuit breaker，resilience 标配）：高德持续故障（超时/网络失败）时**快速失败**而非每次都等满超时。
+/// 三态：closed（正常）→ 连续失败达阈值 → open（冷却期内直接快失败，不再打高德）→ 冷却满 → halfOpen（放一个探测请求）
+/// → 成功则 closed、失败则重新 open。**只统计 fetch 层失败**（超时/网络）——语义错误（status!=1）在 fetch 成功后抛，
+/// 记为成功、不拖垮熔断（key 配错本就快失败、无需熔断）。收益：高德挂时盲人瞬间得到"导航暂不可用"（而非苦等 6-12s），
+/// 且不再向已挂的上游堆连接。纯状态机（now 由调用方传，可单测）。
+export class AmapCircuit {
+  private failures = 0
+  private openedAt = 0
+  private state: 'closed' | 'open' | 'halfOpen' = 'closed'
+  constructor(private readonly threshold: number, private readonly cooldownMs: number) {}
+  /// 现在是否放行请求。open 且冷却已满 → 转 halfOpen 放**一个**探测（返回 true）；冷却未满 → false（快失败）。
+  /// halfOpen 期间其余请求一律快失败——**单探测**，避免恢复瞬间一批并发请求同时涌向可能仍挂的上游（惊群）。
+  canRequest(now: number): boolean {
+    if (this.state === 'open') {
+      if (now - this.openedAt >= this.cooldownMs) { this.state = 'halfOpen'; return true } // 这一个请求即探测
+      return false
+    }
+    if (this.state === 'halfOpen') return false // 探测进行中，其余快失败
+    return true // closed
+  }
+  onSuccess(): void { this.failures = 0; this.state = 'closed' }
+  /// 记一次失败；返回本次是否**刚**跳到 open（供只计一次开路指标）。halfOpen 下任一失败立即重新 open。
+  onFailure(now: number): boolean {
+    this.failures++
+    if (this.state !== 'open' && (this.state === 'halfOpen' || this.failures >= this.threshold)) {
+      this.state = 'open'; this.openedAt = now
+      return true
+    }
+    return false
+  }
+  reset(): void { this.failures = 0; this.openedAt = 0; this.state = 'closed' }
+  get stateName(): 'closed' | 'open' | 'halfOpen' { return this.state }
+}
+
+function makeAmapBreaker(): AmapCircuit {
+  const th = Number(process.env.AMAP_BREAKER_THRESHOLD)   // 连续失败阈值（默认 5）
+  const cd = Number(process.env.AMAP_BREAKER_COOLDOWN_MS)  // 冷却毫秒（默认 30s）
+  return new AmapCircuit(Number.isFinite(th) && th >= 1 ? th : 5, Number.isFinite(cd) && cd >= 1000 ? cd : 30_000)
+}
+let amapBreaker = makeAmapBreaker()
+/// 测试隔离/配置重载：按当前 env 重建熔断器（生产不调用——buildApp 只构造一次）。
+export function resetAmapBreaker(): void { amapBreaker = makeAmapBreaker() }
+
+/// 带硬超时 + 网络瞬断重试一次的实际调用（不含熔断）。allowRetry=false 时**不重试**——用于 halfOpen 探测：
+/// 探测只为尽快判定"高德恢复了没"，失败无论如何都要重新熔断，多等一次重试只会把恢复判定拖慢一倍（复审 MEDIUM）。
+async function amapFetchInner(url: string, allowRetry: boolean): Promise<Response> {
   for (let attempt = 0; ; attempt++) {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), amapTimeoutMs())
@@ -26,10 +71,29 @@ async function amapFetch(url: string): Promise<Response> {
       return await fetch(url, { signal: ctrl.signal })
     } catch (e) {
       amapMetric(ctrl.signal.aborted ? 'amap_timeouts_total' : 'amap_errors_total')
-      if (ctrl.signal.aborted || attempt >= 1) throw e // 超时不重试；已重试过一次则放弃
+      if (ctrl.signal.aborted || !allowRetry || attempt >= 1) throw e // 超时不重试；探测不重试；已重试过一次则放弃
     } finally {
       clearTimeout(timer) // 成功/失败都清定时器，避免泄漏
     }
+  }
+}
+
+/// 高德调用（含熔断）：open 期间直接快失败（AmapError('breaker_open')，被 nav 路由映射为 502），
+/// 不再苦等超时、不再向已挂上游堆连接。fetch 成功 → 复位；fetch 失败（超时/网络）→ 计入熔断。
+async function amapFetch(url: string): Promise<Response> {
+  if (!amapBreaker.canRequest(Date.now())) {
+    amapMetric('amap_breaker_rejected_total')
+    throw new AmapError('breaker_open', 'AMap 暂时不可用（连续故障已熔断，稍后自动恢复）')
+  }
+  // canRequest 刚把 open 转成 halfOpen 时，本次即"探测请求"——不重试，尽快得到恢复判定。
+  const isProbe = amapBreaker.stateName === 'halfOpen'
+  try {
+    const res = await amapFetchInner(url, !isProbe)
+    amapBreaker.onSuccess()
+    return res
+  } catch (e) {
+    if (amapBreaker.onFailure(Date.now())) amapMetric('amap_breaker_open_total') // 刚跳 open，计一次
+    throw e
   }
 }
 

@@ -424,6 +424,10 @@ enum FramingStrings {
     static func uiCopyHint(_ l: Language) -> String {
         l == .zh ? "把识别到的文字或码内容复制到剪贴板" : "Copy the recognized text or code to the clipboard"
     }
+    static func uiDial(_ l: Language) -> String { l == .zh ? "拨打" : "Call" }
+    static func uiDialHint(_ l: Language) -> String {
+        l == .zh ? "打开系统拨号盘并预填这个号码——号码可能识别有误，请在拨号盘核对后再拨" : "Open the phone dialer prefilled with this number — it may be misread, so verify in the dialer before calling"
+    }
     static func uiCancel(_ l: Language) -> String { l == .zh ? "取消" : "Cancel" }
     static func uiSave(_ l: Language) -> String { l == .zh ? "保存" : "Save" }
 

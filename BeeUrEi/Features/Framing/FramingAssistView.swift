@@ -22,6 +22,9 @@ final class FramingAssistViewModel {
     private(set) var guidanceText = FramingStrings.starting(FeatureSettings().language)
     private(set) var resultText = ""
     private(set) var copyableResult: String?   // OCR/扫码的原始内容，可复制
+    // 读到**唯一**电话号码时的 tel:// URL：驱动结果区"拨打"按钮打开系统拨号盘**预填**（不自动拨——OCR 可能错位，
+    // 由用户在拨号盘 VoiceOver 复核后再拨）。切到任何其它识别（stopContinuous）即清，不残留过期按钮。
+    private(set) var dialablePhone: String?
 
     @ObservationIgnored private let source = ARDepthCameraSource()
     // 真实 YOLO 检测器；模型缺失时自身返回空（识别为空、不崩溃），无需占位实现。
@@ -713,6 +716,8 @@ final class FramingAssistViewModel {
                     self.resultText = FramingStrings.phoneResult(numbers, self.lang)
                     self.copyableResult = numbers.joined(separator: "\n")
                     self.historyStore.add(kind: "phone", content: numbers.joined(separator: "\n")) // 存识别历史，供事后回看/复制拨打
+                    // 唯一号码 → 提供"拨打"（打开系统拨号盘预填，不自动拨）。多个号码则不猜该拨哪个，只读+可复制。
+                    self.dialablePhone = numbers.count == 1 ? EmergencyPhoneFallback.telURLString(numbers[0]) : nil
                 }
                 self.speak(self.resultText)
             }
@@ -979,6 +984,7 @@ final class FramingAssistViewModel {
     func stopContinuous() {
         stopLightTone()
         stopColorContinuous()
+        dialablePhone = nil // 切到其它识别：清掉上次读电话遗留的"拨打"按钮
     }
 
     /// 光线探测一次性概述（明暗等级 + 亮源方向，核心 LightMeter，已测）。
@@ -1232,6 +1238,13 @@ struct FramingAssistView: View {
                             .buttonStyle(.bordered).tint(.white)
                             .frame(minHeight: 44)
                             .accessibilityHint(FramingStrings.uiCopyHint(model.lang))
+                    }
+                    // 读到唯一电话号码：一键打开系统拨号盘（预填，不自动拨——用户在拨号盘复核后再拨）。
+                    if let tel = model.dialablePhone, let url = URL(string: tel) {
+                        Button(FramingStrings.uiDial(model.lang)) { UIApplication.shared.open(url) }
+                            .buttonStyle(.borderedProminent).tint(.beeHoney)
+                            .frame(minHeight: 44)
+                            .accessibilityHint(FramingStrings.uiDialHint(model.lang))
                     }
                 }
                 .padding()

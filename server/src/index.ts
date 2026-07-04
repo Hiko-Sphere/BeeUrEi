@@ -9,6 +9,7 @@ import { sweepStaleVerifications } from './kyc/retention'
 import { sweepOrphanMedia } from './media/orphanSweep'
 import { sweepOldNotifications } from './notifications/retention'
 import { runAutoBackup } from './backup/autoBackup'
+import { escalateUnackedEmergencies } from './emergency/escalation'
 import { ensureKycDir } from './kyc/storage'
 import { installGracefulShutdown } from './shutdown'
 
@@ -67,6 +68,15 @@ async function main(): Promise<void> {
   sweep() // 启动即清一次
   const sweepTimer = setInterval(sweep, 60 * 60 * 1000)
   sweepTimer.unref?.() // 不阻止进程退出
+
+  // 紧急升级重呼：告警发出满阈值（ESCALATE_AFTER_MS，默认 5 分钟）仍无任何亲友确认(ack)、未报平安 → 再推一次
+  // 更急的告警，兜住"全体亲友都漏看首呼"（睡着/静音）的最坏情形。每 60s 检查一次（升级至多一次）。
+  const escalateAfterMs = (() => { const v = Number(process.env.ESCALATE_AFTER_MS); return Number.isFinite(v) && v >= 60_000 ? v : 5 * 60_000 })()
+  const escalateTimer = setInterval(() => {
+    try { const n = escalateUnackedEmergencies(store, pushSender, webPushSender, Date.now(), escalateAfterMs); if (n) console.log(`[emergency] 升级重呼无人响应的求助 ${n} 条`) }
+    catch (e) { console.warn('[emergency] 升级重呼失败:', (e as Error).message) }
+  }, 60_000)
+  escalateTimer.unref?.()
 
   // 有界优雅关闭：SIGTERM/SIGINT 先排空在途请求，超时兜底强退（防通话长连接让 close() 永挂）。
   installGracefulShutdown(app, { timeoutMs: Number(process.env.SHUTDOWN_TIMEOUT_MS ?? 10_000) })

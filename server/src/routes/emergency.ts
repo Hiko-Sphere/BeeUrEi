@@ -206,6 +206,9 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     const key = `${fromId}:${eventId ?? 'noid'}:${acker.id}`
     if (ackDedup.check(key, now) !== undefined) return { ok: true, deduped: true } // 已回告过，不再重复打扰遇险者
 
+    // 有亲友确认 → 记 ackedAt：后台升级重呼据此跳过（已有人在响应，不必再打扰全体）。best-effort。
+    if (eventId) { try { store.markEmergencyAcked(eventId, now) } catch { /* 标记失败不阻断回告 */ } }
+
     const l = pushLang(sender.language)
     const title = pushStrings.emergencyAckTitle(acker.displayName, l)
     const body = pushStrings.emergencyAckBody(acker.displayName, l)

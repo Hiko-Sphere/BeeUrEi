@@ -57,6 +57,12 @@ export const pushStrings = {
   emergencyAckBody: (name: string, l: PushLang): string =>
     l === 'en' ? `${name} acknowledged your emergency alert and knows you may need help.`
                : `${name} 已确认收到你的紧急求助，知道你可能需要帮助。`,
+  // 升级重呼：告警发出后达阈值时长仍无任何亲友确认 → 再推一次、措辞更急，争取抓住第一次漏看的人（医疗警报的 escalation）。
+  emergencyEscalateTitle: (name: string, l: PushLang): string =>
+    l === 'en' ? `Still unanswered: ${name} needs help` : `仍无人回应：${name} 需要帮助`,
+  emergencyEscalateBody: (minutes: number, hasLocation: boolean, l: PushLang): string =>
+    l === 'en' ? `Their emergency alert has gone unanswered for about ${minutes} minutes.${hasLocation ? ' Location attached.' : ''} Please check on them now.`
+               : `对方的紧急求助已约 ${minutes} 分钟无人回应。${hasLocation ? '已附带位置。' : ''}请立即查看。`,
   // 发起人在告警发出后报平安 → 回告亲友"解除"，让刚收到告警而担心/赶来的人立刻安心（安全类 App 的 all-clear）。
   emergencyClearTitle: (name: string, l: PushLang): string =>
     l === 'en' ? `${name} is OK` : `${name} 报平安了`,

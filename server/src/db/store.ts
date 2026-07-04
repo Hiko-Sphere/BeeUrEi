@@ -133,6 +133,8 @@ export interface EmergencyEvent {
   contacts: number      // accepted 亲友总数
   at: number
   resolvedAt?: number   // 发起人报平安(all-clear)解除的时刻；未解除则 undefined。供 admin 区分"已解除/误报"与"可能仍在进行"
+  ackedAt?: number      // 首个亲友"知道了"(ack)的时刻；有则不升级重呼（有人在响应）
+  escalatedAt?: number  // 无人响应达阈值 → 升级重呼的时刻；只升级一次
 }
 
 /// Web Push 订阅（浏览器推送）：web-only 协助者关掉标签页也能收到紧急告警。
@@ -581,6 +583,9 @@ export interface Store {
   recentEmergencyEvents(limit?: number): EmergencyEvent[] // 时间倒序
   emergencyEventsForUser(userId: string): EmergencyEvent[] // 本人事故记录（自助导出用，时间倒序）
   resolveLatestEmergencyEvent(userId: string, now: number): boolean // 报平安：标记该用户最近一条未解除的事件为已解除；有则 true
+  markEmergencyAcked(eventId: string, at: number): void   // 首个亲友确认：记 ackedAt（升级重呼据此跳过；后续确认不覆盖）
+  markEmergencyEscalated(eventId: string, at: number): void // 升级重呼后标记，只升级一次
+  unacknowledgedEmergencyEvents(olderThanAt: number, now: number): EmergencyEvent[] // 升级候选：未解除∧未确认∧未升级∧at≤olderThanAt
   deleteEmergencyEventsForUser(userId: string): void      // 删号级联（GDPR 抹除）
   deleteEmergencyEventsOlderThan(cutoffMs: number): number // 留存清扫
   // Web Push 订阅：
@@ -1136,6 +1141,19 @@ export class MemoryStore implements Store {
     latest.resolvedAt = now
     this.afterMutate()
     return true
+  }
+  markEmergencyAcked(eventId: string, at: number): void {
+    const e = this.emergencyEvents.get(eventId)
+    if (e && e.ackedAt == null) { e.ackedAt = at; this.afterMutate() } // 只记首个确认
+  }
+  markEmergencyEscalated(eventId: string, at: number): void {
+    const e = this.emergencyEvents.get(eventId)
+    if (e) { e.escalatedAt = at; this.afterMutate() }
+  }
+  unacknowledgedEmergencyEvents(olderThanAt: number, now: number): EmergencyEvent[] {
+    return [...this.emergencyEvents.values()]
+      .filter((e) => e.resolvedAt == null && e.ackedAt == null && e.escalatedAt == null && e.at <= olderThanAt)
+      .sort((a, b) => a.at - b.at)
   }
   deleteEmergencyEventsForUser(userId: string): void {
     let changed = false

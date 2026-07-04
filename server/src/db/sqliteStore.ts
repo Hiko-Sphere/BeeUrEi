@@ -84,6 +84,8 @@ export class SqliteStore implements Store {
       CREATE TABLE IF NOT EXISTS vision_usage (userId TEXT PRIMARY KEY, day TEXT, count INTEGER);
     `)
     try { this.db.exec('ALTER TABLE emergency_events ADD COLUMN resolvedAt INTEGER') } catch { /* 列已存在 */ } // 报平安解除时刻
+    try { this.db.exec('ALTER TABLE emergency_events ADD COLUMN ackedAt INTEGER') } catch { /* 列已存在 */ } // 首个亲友"知道了"时刻（有则不升级重呼）
+    try { this.db.exec('ALTER TABLE emergency_events ADD COLUMN escalatedAt INTEGER') } catch { /* 列已存在 */ } // 无人响应升级重呼时刻（只升级一次）
     // 迁移：旧库 links 表补 phone 列、users 表补 language 列（已存在则忽略）。
     try { this.db.exec('ALTER TABLE links ADD COLUMN phone TEXT') } catch { /* 列已存在 */ }
     try { this.db.exec('ALTER TABLE users ADD COLUMN language TEXT') } catch { /* 列已存在 */ }
@@ -650,21 +652,20 @@ export class SqliteStore implements Store {
     this.db.prepare('INSERT OR REPLACE INTO emergency_events (id, userId, kind, lat, lon, locSource, locAgeSec, notified, contacts, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .run(e.id, e.userId, e.kind, e.lat ?? null, e.lon ?? null, e.locSource ?? null, e.locAgeSec ?? null, e.notified, e.contacts, e.at)
   }
-  recentEmergencyEvents(limit = 100): EmergencyEvent[] {
-    const rows = this.db.prepare('SELECT * FROM emergency_events ORDER BY at DESC LIMIT ?').all(Math.max(0, limit)) as any[]
-    return rows.map((r) => ({ id: r.id, userId: r.userId, kind: r.kind,
+  private static mapEmergencyRow(r: any): EmergencyEvent {
+    return { id: r.id, userId: r.userId, kind: r.kind,
       lat: r.lat != null ? Number(r.lat) : undefined, lon: r.lon != null ? Number(r.lon) : undefined,
       locSource: r.locSource ?? undefined, locAgeSec: r.locAgeSec != null ? Number(r.locAgeSec) : undefined,
       notified: Number(r.notified), contacts: Number(r.contacts), at: Number(r.at),
-      resolvedAt: r.resolvedAt != null ? Number(r.resolvedAt) : undefined }))
+      resolvedAt: r.resolvedAt != null ? Number(r.resolvedAt) : undefined,
+      ackedAt: r.ackedAt != null ? Number(r.ackedAt) : undefined,
+      escalatedAt: r.escalatedAt != null ? Number(r.escalatedAt) : undefined }
+  }
+  recentEmergencyEvents(limit = 100): EmergencyEvent[] {
+    return (this.db.prepare('SELECT * FROM emergency_events ORDER BY at DESC LIMIT ?').all(Math.max(0, limit)) as any[]).map(SqliteStore.mapEmergencyRow)
   }
   emergencyEventsForUser(userId: string): EmergencyEvent[] {
-    const rows = this.db.prepare('SELECT * FROM emergency_events WHERE userId = ? ORDER BY at DESC').all(userId) as any[]
-    return rows.map((r) => ({ id: r.id, userId: r.userId, kind: r.kind,
-      lat: r.lat != null ? Number(r.lat) : undefined, lon: r.lon != null ? Number(r.lon) : undefined,
-      locSource: r.locSource ?? undefined, locAgeSec: r.locAgeSec != null ? Number(r.locAgeSec) : undefined,
-      notified: Number(r.notified), contacts: Number(r.contacts), at: Number(r.at),
-      resolvedAt: r.resolvedAt != null ? Number(r.resolvedAt) : undefined }))
+    return (this.db.prepare('SELECT * FROM emergency_events WHERE userId = ? ORDER BY at DESC').all(userId) as any[]).map(SqliteStore.mapEmergencyRow)
   }
   resolveLatestEmergencyEvent(userId: string, now: number): boolean {
     const info = this.db.prepare(
@@ -672,6 +673,21 @@ export class SqliteStore implements Store {
        WHERE id = (SELECT id FROM emergency_events WHERE userId = ? AND resolvedAt IS NULL ORDER BY at DESC LIMIT 1)`,
     ).run(now, userId)
     return Number(info.changes) > 0
+  }
+  markEmergencyAcked(eventId: string, at: number): void {
+    // 只在首个确认时落 ackedAt（后续确认者不覆盖首次时刻）。
+    this.db.prepare('UPDATE emergency_events SET ackedAt = ? WHERE id = ? AND ackedAt IS NULL').run(at, eventId)
+  }
+  markEmergencyEscalated(eventId: string, at: number): void {
+    this.db.prepare('UPDATE emergency_events SET escalatedAt = ? WHERE id = ?').run(at, eventId)
+  }
+  unacknowledgedEmergencyEvents(olderThanAt: number, now: number): EmergencyEvent[] {
+    // 升级候选：未报平安 ∧ 无亲友确认 ∧ 未升级过 ∧ 已发出满阈值时长。不设过老下限——由留存清扫另行删旧。
+    return (this.db.prepare(
+      `SELECT * FROM emergency_events
+       WHERE resolvedAt IS NULL AND ackedAt IS NULL AND escalatedAt IS NULL AND at <= ?
+       ORDER BY at ASC`,
+    ).all(olderThanAt) as any[]).map(SqliteStore.mapEmergencyRow)
   }
   deleteEmergencyEventsForUser(userId: string): void {
     this.db.prepare('DELETE FROM emergency_events WHERE userId = ?').run(userId)

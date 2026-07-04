@@ -25,6 +25,34 @@ final class BarcodePayloadTests: XCTestCase {
         XCTAssertEqual(BarcodePayload.classify("WIFI:t:wpa;s:CoffeeShop;p:pass;;"), .wifi(ssid: "CoffeeShop"))
     }
 
+    func testWifiCredentialFull() {
+        // 完整凭据含**密码**（盲人扫码看不到密码，这是能否联网的关键）。
+        let c = BarcodePayload.parseWifi("WIFI:T:WPA;S:MyHome;P:secret;;")
+        XCTAssertEqual(c, WifiCredential(ssid: "MyHome", password: "secret", security: "WPA", hidden: false))
+        // 小写键 + 隐藏网络。
+        let h = BarcodePayload.parseWifi("wifi:t:WPA2;s:Hid;p:pw;h:true;;")
+        XCTAssertEqual(h?.ssid, "Hid"); XCTAssertEqual(h?.password, "pw"); XCTAssertEqual(h?.hidden, true)
+    }
+
+    func testWifiCredentialEscaping() {
+        // 密码常含特殊字符：`\;` `\\` `\:` `\,` 必须正确展开，否则 naive 按 ; 切会把密码切断/读错。
+        let c = BarcodePayload.parseWifi(#"WIFI:T:WPA;S:Cafe;P:pa\;ss\\wo\:rd;;"#)
+        XCTAssertEqual(c?.ssid, "Cafe")
+        XCTAssertEqual(c?.password, #"pa;ss\wo:rd"#) // \; → ; ; \\ → \ ; \: → :
+        // SSID 本身带转义分号也不被切断。
+        XCTAssertEqual(BarcodePayload.parseWifi(#"WIFI:S:My\;Net;P:x;;"#)?.ssid, "My;Net")
+    }
+
+    func testWifiCredentialOpenAndInvalid() {
+        // 开放网络：nopass 或无密码 → password 为 nil。
+        XCTAssertNil(BarcodePayload.parseWifi("WIFI:T:nopass;S:Free;;")?.password)
+        XCTAssertNil(BarcodePayload.parseWifi("WIFI:S:Open;;")?.password)
+        XCTAssertEqual(BarcodePayload.parseWifi("WIFI:T:nopass;S:Free;;")?.ssid, "Free")
+        // 无 SSID / 非 WIFI → nil。
+        XCTAssertNil(BarcodePayload.parseWifi("WIFI:T:WPA;P:secret;;"))
+        XCTAssertNil(BarcodePayload.parseWifi("https://example.com"))
+    }
+
     func testUrl() {
         XCTAssertEqual(BarcodePayload.classify("https://example.com/path?q=1"), .url(host: "example.com"))
         XCTAssertEqual(BarcodePayload.classify("http://shop.taobao.com"), .url(host: "shop.taobao.com"))

@@ -12,6 +12,17 @@ public enum BarcodePayloadKind: Equatable, Sendable {
     case text                           // 其余普通文本
 }
 
+/// WiFi 配置码解析出的完整凭据。盲人扫 WiFi 码看不到密码——密码是能否联网的关键。
+public struct WifiCredential: Equatable, Sendable {
+    public let ssid: String
+    public let password: String?  // nil = 开放网络（nopass / 无密码）
+    public let security: String?  // "WPA"/"WEP"/"nopass"… 原样（大小写不动）
+    public let hidden: Bool
+    public init(ssid: String, password: String?, security: String?, hidden: Bool) {
+        self.ssid = ssid; self.password = password; self.security = security; self.hidden = hidden
+    }
+}
+
 /// 条码 payload 分类（纯逻辑，可单测）。
 public enum BarcodePayload {
     public static func classify(_ payload: String) -> BarcodePayloadKind {
@@ -42,16 +53,62 @@ public enum BarcodePayload {
         return .text
     }
 
-    /// `WIFI:T:WPA;S:MyHome;P:pass;;` → "MyHome"。S 字段带转义的罕见情况不展开（原样读出已可用）。
-    static func wifiSSID(_ payload: String) -> String? {
-        let body = payload.dropFirst("WIFI:".count)
-        // 字段**键**大小写不敏感（与 classify 的 upper.hasPrefix("WIFI:") 同口径）——否则非标准
-        // 生成器的 `s:` 小写键会漏读 SSID；但**值**保持原样大小写（网络名区分大小写）。
-        for field in body.split(separator: ";") where field.uppercased().hasPrefix("S:") {
-            let v = String(field.dropFirst(2)) // 从原始 field 去掉 2 字符键，保留值大小写
-            return v.isEmpty ? nil : v
+    /// `WIFI:T:WPA;S:MyHome;P:pass;;` → 完整凭据（含**密码**）。
+    /// **正确处理转义**（`\;` `\,` `\:` `\\` `\"`——WiFi 密码常含分号/反斜杠等特殊字符，naive 按 ; 切会切错）。
+    /// 键大小写不敏感（非标准生成器可能用 `s:`/`p:` 小写）；值保持原样大小写（SSID/密码区分大小写）。
+    /// 非 WIFI: 或无 SSID 返回 nil。security=nopass 或无密码 → password 为 nil（开放网络）。
+    public static func parseWifi(_ payload: String) -> WifiCredential? {
+        let trimmed = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.uppercased().hasPrefix("WIFI:") else { return nil }
+        let body = String(trimmed.dropFirst("WIFI:".count))
+        var ssid: String?, password: String?, security: String?, hidden = false
+        for field in splitUnescaped(body, on: ";") {
+            guard let colon = field.firstIndex(of: ":") else { continue }
+            let key = String(field[field.startIndex..<colon]).uppercased()
+            let value = unescapeWifi(String(field[field.index(after: colon)...]))
+            switch key {
+            case "S": ssid = value
+            case "P": password = value
+            case "T": security = value
+            case "H": hidden = value.lowercased() == "true"
+            default: break
+            }
         }
-        return nil
+        guard let s = ssid, !s.isEmpty else { return nil }
+        let isOpen = (security ?? "").uppercased() == "NOPASS" || (password?.isEmpty ?? true)
+        return WifiCredential(ssid: s,
+                              password: isOpen ? nil : password,
+                              security: (security?.isEmpty ?? true) ? nil : security,
+                              hidden: hidden)
+    }
+
+    /// SSID 便捷取（分类用）：委托 parseWifi，与完整解析同口径（含转义处理）。
+    static func wifiSSID(_ payload: String) -> String? { parseWifi(payload)?.ssid }
+
+    /// 按**未转义**的分隔符切分（`\<sep>` 不切）；反斜杠保留在片段里，交 unescapeWifi 展开。
+    private static func splitUnescaped(_ s: String, on sep: Character) -> [String] {
+        var out: [String] = [], cur = "", escaped = false
+        for ch in s {
+            if escaped { cur.append("\\"); cur.append(ch); escaped = false }
+            else if ch == "\\" { escaped = true }
+            else if ch == sep { out.append(cur); cur = "" }
+            else { cur.append(ch) }
+        }
+        if escaped { cur.append("\\") } // 末尾孤立反斜杠
+        out.append(cur)
+        return out
+    }
+
+    /// 展开 WiFi 值转义：`\;`→`;` `\,`→`,` `\:`→`:` `\\`→`\` `\"`→`"`（未知转义原样保留其后字符）。
+    private static func unescapeWifi(_ s: String) -> String {
+        var out = "", escaped = false
+        for ch in s {
+            if escaped { out.append(ch); escaped = false }
+            else if ch == "\\" { escaped = true }
+            else { out.append(ch) }
+        }
+        if escaped { out.append("\\") }
+        return out
     }
 
     /// `http(s)://[userinfo@]host[:port]/path` → host。正确剥离 userinfo（user:pass@）与 IPv6 字面量 [::1]

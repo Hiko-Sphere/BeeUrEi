@@ -40,6 +40,20 @@ export function buildUserExportBundle(store: Store, id: string, now: number) {
     callRecords: store.callRecordsForUser(id, 1000).map((c) => ({ direction: c.callerId === id ? 'outgoing' : 'incoming', peer: nameOf(c.callerId === id ? c.calleeId : c.callerId), status: c.status, createdAt: c.createdAt })),
     passkeys: store.passkeysForUser(id).map((p) => ({ deviceName: p.deviceName ?? null, createdAt: p.createdAt })),
     activeSessions: store.countSessionsForUser(id, now),
+    // 实名认证（KYC）元数据：本人提交的身份数据属本人 PII，GDPR 访问/可携权覆盖，此前导出漏了。
+    // **只导出元信息**（状态/证件类型/尾4位[模型标注非PII]/时间/拒绝码/次数）；姓名与完整证件号以 AES-256
+    // 密文留存，**绝不在导出里解密**（数据最小化——用户本就知道自己的姓名/证件号，落一份明文进下载得不偿失）。
+    kyc: (() => {
+      const v = store.latestVerificationForUser(id)
+      if (!v) return null
+      return {
+        status: v.status, idType: v.idType, idLast4: v.idLast4 ?? null,
+        submittedVia: v.submittedVia, submittedAt: v.submittedAt, decidedAt: v.decidedAt ?? null,
+        rejectReasonCode: v.rejectReasonCode ?? null, attempt: v.attempt,
+        consentVersion: v.consentVersion ?? null,
+        legalNameOnFile: !!v.nameSealed, // 姓名以密文留存（true=在档），不解密导出
+      }
+    })(),
   }
 }
 

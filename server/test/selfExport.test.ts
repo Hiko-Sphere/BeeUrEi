@@ -70,4 +70,32 @@ describe('GET /api/account/export', () => {
     expect(res.payload).not.toContain('base64,AAAA') // data URL 绝不内联
     await a.close()
   })
+
+  it('含本人 KYC 元数据（状态/证件类型/尾4位/在档姓名标记）；绝不把姓名/证件号密文解密进导出', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const me = (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'kycexport', password: 'secret123', role: 'helper' } })).json()
+    // 直接造一条已通过的认证：含密文姓名 + 明文尾4位。
+    store.createVerification({
+      id: 'vx', userId: me.user.id, status: 'verified', idType: 'national_id', idLast4: '1234',
+      nameSealed: { keyId: 'k1', wrappedDek: 'wrapWWW', iv: 'ivZZZ', tag: 'tagQQQ', ct: 'SECRET_NAME_CIPHERTEXT' },
+      submittedVia: 'self', submittedById: me.user.id, submittedAt: 1000, decidedAt: 2000, attempt: 1, consentVersion: 'kyc-v1',
+    } as any)
+    const res = await a.inject({ method: 'GET', url: '/api/account/export', headers: { authorization: `Bearer ${me.token}` } })
+    const body = res.json()
+    expect(body.kyc).toMatchObject({ status: 'verified', idType: 'national_id', idLast4: '1234', legalNameOnFile: true, attempt: 1, consentVersion: 'kyc-v1' })
+    // 数据最小化：密文姓名与 sealed 结构绝不出现在导出里。
+    expect(res.payload).not.toContain('SECRET_NAME_CIPHERTEXT')
+    expect(res.payload.toLowerCase()).not.toContain('namesealed')
+    await a.close()
+  })
+
+  it('无 KYC 记录则 kyc 为 null', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const me = (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'nokyc', password: 'secret123', role: 'blind' } })).json()
+    const res = await a.inject({ method: 'GET', url: '/api/account/export', headers: { authorization: `Bearer ${me.token}` } })
+    expect(res.json().kyc).toBeNull()
+    await a.close()
+  })
 })

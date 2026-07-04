@@ -809,8 +809,19 @@ final class FramingAssistViewModel {
                         self.resultAction = FramingAction(label: FramingStrings.uiSendSms(self.lang), url: url) // 打开信息
                     }
                 case .contact:
-                    self.resultText = FramingStrings.contactResult(self.lang)
-                    self.speak(FramingStrings.contactSpeak(self.lang))
+                    // 解析名片（vCard/MECARD，核心 VCardParser 已测）：读出姓名/单位/电话/邮箱，唯一电话可一键拨打。
+                    if let c = VCardParser.parse(first) {
+                        self.resultText = FramingStrings.contactDetail(name: c.name, org: c.org, phones: c.phones, emails: c.emails, self.lang)
+                        // 可复制内容改为解析后的可读信息（比原始 vCard 文本更有用）。
+                        self.copyableResult = self.resultText
+                        self.speak(self.resultText)
+                        if c.phones.count == 1, let tel = EmergencyPhoneFallback.telURLString(c.phones[0]), let url = URL(string: tel) {
+                            self.resultAction = FramingAction(label: FramingStrings.uiDial(self.lang), url: url)
+                        }
+                    } else {
+                        self.resultText = FramingStrings.contactResult(self.lang)
+                        self.speak(FramingStrings.contactSpeak(self.lang)) // 解析不出字段：退化为"这是名片，可复制"
+                    }
                 case .text:
                     self.resultText = FramingStrings.codeContent(first, self.lang)
                     self.speak(FramingStrings.recognizedResult(first, self.lang))

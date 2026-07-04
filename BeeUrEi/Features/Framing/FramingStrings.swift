@@ -265,6 +265,17 @@ enum FramingStrings {
     static func contactSpeak(_ l: Language) -> String {
         l == .zh ? "是一张电子名片，内容已可复制" : "It's a contact card; you can copy it"
     }
+    /// 已解析的名片：读出姓名/单位/电话/邮箱（核心 VCardParser）。
+    static func contactDetail(name: String?, org: String?, phones: [String], emails: [String], _ l: Language) -> String {
+        let sep = l == .zh ? "，" : ", "
+        var parts: [String] = []
+        if let name, !name.isEmpty { parts.append(name) }
+        if let org, !org.isEmpty { parts.append(org) }
+        if !phones.isEmpty { parts.append((l == .zh ? "电话 " : "phone ") + phones.joined(separator: l == .zh ? "、" : ", ")) }
+        if !emails.isEmpty { parts.append((l == .zh ? "邮箱 " : "email ") + emails.joined(separator: l == .zh ? "、" : ", ")) }
+        let body = parts.joined(separator: sep)
+        return l == .zh ? "名片：\(body)" : "Contact card: \(body)"
+    }
     static func codeContent(_ payload: String, _ l: Language) -> String { l == .zh ? "码内容：\(payload)" : "Code: \(payload)" }
     static func rememberedResult(_ name: String, _ l: Language) -> String { l == .zh ? "已记住：\(name)" : "Saved: \(name)" }
     static func rememberedSpeak(_ name: String, _ l: Language) -> String {

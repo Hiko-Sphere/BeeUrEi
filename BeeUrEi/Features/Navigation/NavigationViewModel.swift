@@ -344,7 +344,9 @@ final class NavigationViewModel {
                                                    destination: destinationQuery)
                 guard running, gen == navGeneration else { return } // 已被新导航/停止作废，丢弃旧结果
                 let result = route.steps
-                steps = result.map { NavStrings.stepListItem($0.instruction, meters: Int($0.distanceMeters ?? 0), lang) }
+                // 步距经 safeRoundedInt：distanceMeters 是后端 JSON 原样解码的 Double?，巨值有限数（如上游 bug
+                // 给出 1e19 > Int.max）直接 Int() 会**溢出陷阱崩溃**；?? 0 只挡 nil、挡不住量级（复审确认可达）。
+                steps = result.map { NavStrings.stepListItem($0.instruction, meters: SpokenStrings.safeRoundedInt($0.distanceMeters ?? 0), lang) }
 
                 // 实时逐向引导（与海外同一引擎）：每步折线首点=转向点；全折线供偏航检测；目的地坐标供到达判定。
                 let withLine = result.filter { ($0.polyline?.first?.count ?? 0) >= 2 }

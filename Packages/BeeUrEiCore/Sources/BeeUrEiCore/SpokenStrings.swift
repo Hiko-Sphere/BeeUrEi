@@ -40,7 +40,9 @@ public enum SpokenStrings {
 
     /// 安全四舍五入为非负 Int：非有限退化为 0，并夹到安全范围——防 `Int(非有限/越界 Double)` 陷阱崩溃
     /// （异常视觉帧可产生 NaN/∞/巨值距离；`.isFinite` 挡不住量级。见 ClockDirection 同类修复）。
-    static func safeRoundedInt(_ v: Double) -> Int {
+    /// public：App 层任何"来自传感器/路线 API/服务器的 Double 距离转 Int"都应经此——如后端返回巨值
+    /// distanceMeters（>Int.max）直接 Int() 会溢出崩溃（见导航步距崩溃修复）。
+    public static func safeRoundedInt(_ v: Double) -> Int {
         guard v.isFinite else { return 0 }
         return Int(min(max(v, 0), 1_000_000).rounded())
     }

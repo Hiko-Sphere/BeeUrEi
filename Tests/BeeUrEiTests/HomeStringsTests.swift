@@ -26,6 +26,15 @@ final class HomeStringsTests: XCTestCase {
         }
     }
 
+    func testVoiceCommandsHelpAdvertisesCallByName() {
+        // 语音能力必须能被语音发现：自述里要提"给某人打电话"，否则加了 callContact 盲人也无从得知。
+        XCTAssertTrue(HomeStrings.voiceCommandsHelp(.zh).contains("给某人打电话"))
+        XCTAssertTrue(HomeStrings.voiceCommandsHelp(.en).lowercased().contains("call a family member"))
+        // 发消息能力仍在（别改串了），且英文自述不混中文。
+        XCTAssertTrue(HomeStrings.voiceCommandsHelp(.zh).contains("给某人发消息"))
+        XCTAssertFalse(HomeStrings.voiceCommandsHelp(.en).contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
+
     func testFallCancelHintTeachesMagicTapUnderVoiceOver() {
         // VoiceOver 开：教 Magic Tap（双指双击全屏任意处）——摔倒/撞击后手机常够不到，"找我没事按钮"极不可靠。
         let voZh = HomeStrings.fallCancelHint(voiceOver: true, .zh)

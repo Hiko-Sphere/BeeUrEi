@@ -113,7 +113,7 @@ describe('摔倒/车祸紧急警报', () => {
     expect(res.statusCode).toBe(400)
   })
 
-  it('安全攸关：坏电量值只丢弃该字段，绝不 400 掉整条告警；不带电量则正文不提', async () => {
+  it('安全攸关：任何附注字段坏值都只丢弃该字段，绝不 400 掉告警/回执/报平安', async () => {
     const push = new FakePush()
     const app = buildApp(new MemoryStore(), { pushSender: push })
     const blind = await reg(app, 'blind9', 'blind')
@@ -129,6 +129,30 @@ describe('摔倒/车祸紧急警报', () => {
     expect(push.sent[0].body).not.toContain('电量')
     expect(push.sent[0].body.toLowerCase()).not.toContain('battery')
     expect(push.sent[0].extra?.battery).toBeUndefined()
+
+    // 坐标越界（GPS 毛刺 lat=200）+ 坏 alertId（超长）：丢坐标与幂等键、告警照发且不称"已附带位置"。
+    const res2 = await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token),
+      payload: { kind: 'fall', lat: 200, lon: 116.4, alertId: 'x'.repeat(80) } })
+    expect(res2.statusCode).toBe(200)
+    expect((res2.json() as any).notified).toBe(1)
+    const last = push.sent[push.sent.length - 1]
+    expect(last.extra?.lat).toBeUndefined()          // 坏坐标不透传
+    expect(last.body).not.toContain('Location attached') // 英文收件人：不谎称附带位置
+    expect(last.body).not.toContain('已附带位置')
+
+    // 坏 eventId 的 ack：照回告（遇险者仍收到"有人已看到"），绝不 400。
+    const ack = await app.inject({ method: 'POST', url: '/api/emergency/ack', headers: auth(fam.token),
+      payload: { fromId: blind.user.id, eventId: 'e'.repeat(80) } })
+    expect(ack.statusCode).toBe(200)
+    const blindFeed = (await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(blind.token) })).json() as any
+    expect(blindFeed.notifications.filter((n: any) => n.kind === 'emergency_ack')).toHaveLength(1)
+
+    // 坏 alertId 的报平安：照广播（亲友仍收到"我没事了"），绝不 400。
+    const clear = await app.inject({ method: 'POST', url: '/api/emergency/all-clear', headers: auth(blind.token),
+      payload: { alertId: '' } }) // 空串违反 min(1) → 丢弃
+    expect(clear.statusCode).toBe(200)
+    const famFeed = (await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(fam.token) })).json() as any
+    expect(famFeed.notifications.filter((n: any) => n.kind === 'emergency_clear')).toHaveLength(1)
   })
 
   it('安全攸关：单个亲友推送失败不中断其余亲友，也不 500 整个告警', async () => {

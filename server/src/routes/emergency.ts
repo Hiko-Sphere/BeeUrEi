@@ -15,15 +15,17 @@ import type { Metrics } from '../metrics/metrics'
 const alertSchema = z.object({
   kind: z.enum(['fall', 'crash', 'manual']), // manual=用户手动 SOS（未实名门禁屏等处的紧急按钮）
 
-  lat: z.number().min(-90).max(90).optional(),
-  lon: z.number().min(-180).max(180).optional(),
+  // ⚠️ 本 schema 的**全部 optional 附注字段都必须 .catch(undefined)**：坏值只丢弃该字段，绝不能 400 掉
+  // 整条生命攸关的告警（核心字段 kind 保持严格——没有类别就没有告警语义）。
+  // 坐标：GPS 毛刺给出越界值（lat 200 等）→ 丢坐标照发（"附错误位置比不附更危险"同理，hasLoc 对半对儿也免疫）。
+  lat: z.number().min(-90).max(90).optional().catch(undefined),
+  lon: z.number().min(-180).max(180).optional().catch(undefined),
   // 告警发出时刻的手机电量%：亲友据此判断联系窗口（≤20% 文案点明"可能很快关机"）。仅入首呼即时消息，
   // 不持久化、不随升级重呼重播（几分钟后已陈旧、重播会误导）。
-  // .catch(undefined)：电量是锦上添花的附注——坏值(150/NaN)只丢弃该字段，**绝不能 400 掉整条生命攸关的告警**。
   battery: z.number().int().min(0).max(100).optional().catch(undefined),
   // 幂等键：同一次紧急事件的多次重试带同一 alertId，服务端据此去重——客户端可安全重试提高送达率，
-  // 而亲友**不会**因重试收到重复告警（生命攸关：重试宁可有、但绝不该重复轰炸/让家人误以为摔了两次）。
-  alertId: z.string().min(1).max(64).optional(),
+  // 而亲友**不会**因重试收到重复告警。坏 id → 丢弃（失去幂等，重复告警远好过没有告警）。
+  alertId: z.string().min(1).max(64).optional().catch(undefined),
 })
 
 /// 紧急告警幂等去重（内存，TTL 5 分钟）：记住近期已处理的 (user:alertId) 及其响应，重试直接返回缓存、
@@ -190,8 +192,10 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
   // 最需要的反馈是"有人在响应"，而非石沉大海。发起人经既有通知+推送链路收到（盲人端 VoiceOver 会念）。
   const ackDedup = new EmergencyAlertDedup() // 复用 TTL 去重：同一(发起人:事件:确认者)5 分钟内只回告一次，防连点轰炸遇险者
   const ackSchema = z.object({
-    fromId: z.string().min(1).max(64),           // 发起紧急告警的人（当前用户是其已接受亲友）
-    eventId: z.string().min(1).max(64).optional(), // 哪一次告警（缺省则按发起人维度去重）
+    fromId: z.string().min(1).max(64),           // 发起紧急告警的人（核心字段保持严格：没有对象就没有回告语义）
+    // 哪一次告警（缺省则按发起人维度去重）。坏 id → 丢弃照回告：否则整个 ack 400——遇险者收不到
+    // "有人已看到"的救命反馈，且 markEmergencyAcked 不落、升级重呼会在已有人响应时仍轰炸全体。
+    eventId: z.string().min(1).max(64).optional().catch(undefined),
   })
   app.post('/api/emergency/ack', { preHandler: requireAuth(),
                                    config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
@@ -240,7 +244,9 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
   // 立刻安心。安全类 App（医疗警报/Life360）的标配——告警是单向的、必须有"解除"闭环，否则误报会让家人白跑。
   // 只能解除**自己**的告警（广播给自己的亲友，无需对方是谁的授权检查——发的是给自己联系人的安心消息）。
   const clearDedup = new EmergencyAlertDedup() // 同一(发起人:alertId)5 分钟内只广播一次，防连点
-  const clearSchema = z.object({ alertId: z.string().min(1).max(64).optional() }) // 关联哪次告警（供客户端消掉对应告警模态）
+  // 关联哪次告警（供客户端消掉对应告警模态）。坏 id → 丢弃照广播："我没事了"的报平安 400 掉的话，
+  // 亲友会继续担心/赶路（安心信号与告警同等生命攸关）。
+  const clearSchema = z.object({ alertId: z.string().min(1).max(64).optional().catch(undefined) })
   app.post('/api/emergency/all-clear', { preHandler: requireAuth(),
                                          config: { rateLimit: { max: 6, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = clearSchema.safeParse(req.body)

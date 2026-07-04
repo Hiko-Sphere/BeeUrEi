@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pickUnreadEmergencies, clearedSenderIds } from './emergencyAlerts'
+import { pickUnreadEmergencies, clearedSenderIds, ackEventNotifIds } from './emergencyAlerts'
 import type { NotificationInfo } from './api'
 
 function notif(id: string, kind: string, createdAt: number, readAt?: number, data?: Record<string, string>): NotificationInfo {
@@ -62,5 +62,49 @@ describe('pickUnreadEmergencies（告警实时弹出的挑选规则）', () => {
     // 应用到告警选择：X 的告警消掉、Y 的保留（EmergencyAlertHost 同款过滤）
     const shown = pickUnreadEmergencies(list, none).filter((n) => !(n.data?.fromId && cleared.has(n.data.fromId)))
     expect(shown.map((n) => n.id)).toEqual(['a2'])
+  })
+})
+
+describe('ackEventNotifIds（"知道了"时收敛同一事件的全部告警通知）', () => {
+  it('同 eventId 的首呼+升级重呼一起标读——否则被折叠隐藏的兄弟下轮重新弹', () => {
+    const list = [
+      notif('orig', 'emergency_alert', 100, undefined, { fromId: 'x', eventId: 'e1' }),
+      notif('esc', 'emergency_alert', 200, undefined, { fromId: 'x', eventId: 'e1', escalated: '1' }),
+      notif('other', 'emergency_alert', 150, undefined, { fromId: 'y', eventId: 'e2' }), // 不同事件：不收
+    ]
+    // top = 展示的升级版 esc；确认应连带首呼 orig 一起清（都属 e1），但不碰 e2
+    const ids = ackEventNotifIds(list, list[1])
+    expect([...ids].sort()).toEqual(['esc', 'orig'])
+  })
+
+  it('无 eventId 的老通知只收敛自身（向后兼容）', () => {
+    const top = notif('solo', 'emergency_alert', 100)
+    expect(ackEventNotifIds([top, notif('n2', 'emergency_alert', 90)], top)).toEqual(['solo'])
+  })
+
+  it('反馈类(ack/clear)不被裹入；top 自身始终包含（即便不在列表里）', () => {
+    const top = notif('esc', 'emergency_alert', 200, undefined, { eventId: 'e1' })
+    const list = [
+      notif('orig', 'emergency_alert', 100, undefined, { eventId: 'e1' }),
+      notif('ackn', 'emergency_ack', 150, undefined, { eventId: 'e1' }),   // 回执：不裹
+      notif('clr', 'emergency_clear', 160, undefined, { eventId: 'e1' }),  // 报平安：不裹
+    ] // 注意 top(esc) 不在 list 里
+    expect([...ackEventNotifIds(list, top)].sort()).toEqual(['esc', 'orig'])
+  })
+
+  // 端到端回归（在逻辑层复现 host 两轮轮询）：确认升级告警后，被折叠隐藏的首呼不该在下一轮重新弹。
+  // 修复前 host 只标 top(esc) 一条 → 下轮 orig 仍未读被重新拾起、重弹+响铃。
+  it('回归：确认升级告警后，被折叠的首呼不再于下一轮重新弹出', () => {
+    let list = [
+      notif('orig', 'emergency_alert', 100, undefined, { fromId: 'x', eventId: 'e1' }),
+      notif('esc', 'emergency_alert', 200, undefined, { fromId: 'x', eventId: 'e1', escalated: '1' }),
+    ]
+    const dismissed = new Set<string>()
+    const round1 = pickUnreadEmergencies(list, dismissed)
+    expect(round1.map((n) => n.id)).toEqual(['esc'])            // 第一轮：折叠后只展示升级版
+    const acked = ackEventNotifIds(list, round1[0])            // "知道了"：收敛同事件全部 id
+    acked.forEach((id) => dismissed.add(id))
+    list = list.map((n) => (acked.includes(n.id) ? { ...n, readAt: 300 } as NotificationInfo : n)) // 服务端标读
+    expect(pickUnreadEmergencies(list, dismissed)).toEqual([]) // 第二轮：首呼不再弹（修复前会返回 ['orig']）
   })
 })

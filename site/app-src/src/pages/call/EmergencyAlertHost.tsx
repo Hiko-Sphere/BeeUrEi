@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type NotificationInfo } from '../../lib/api'
-import { pickUnreadEmergencies, playEmergencyChime, clearedSenderIds } from '../../lib/emergencyAlerts'
+import { pickUnreadEmergencies, playEmergencyChime, clearedSenderIds, ackEventNotifIds } from '../../lib/emergencyAlerts'
 import { emergencyLocInfo } from '../../lib/emergencyLoc'
 import { useI18n } from '../../lib/i18n'
 import { Modal, fmtTime } from '../../components/ui'
@@ -66,6 +66,7 @@ export function EmergencyAlertHost() {
   const { active, startOutgoing } = useCall()
   const { t } = useI18n()
   const [alerts, setAlerts] = useState<NotificationInfo[]>([])
+  const notifsRef = useRef<NotificationInfo[]>([]) // 上轮完整通知列表：确认时据此收敛同事件的兄弟告警
   const dismissedRef = useRef<Set<string>>(new Set())
   const chimedRef = useRef<Set<string>>(new Set())
   const activeRef = useRef(active)
@@ -78,6 +79,7 @@ export function EmergencyAlertHost() {
       try {
         const { notifications } = await api.notifications()
         if (!alive) return
+        notifsRef.current = notifications // 存下完整列表：确认时按 eventId 收敛同事件兄弟告警
         // 发起人已报平安(emergency_clear)的告警就地消掉——对方已没事，让担心的亲友立刻安心，不再弹/响。
         const cleared = clearedSenderIds(notifications)
         const urgent = pickUnreadEmergencies(notifications, dismissedRef.current)
@@ -100,9 +102,11 @@ export function EmergencyAlertHost() {
 
   const ack = useCallback(() => {
     if (!top) return
-    dismissedRef.current.add(top.id)
-    setAlerts((cur) => cur.filter((n) => n.id !== top.id))
-    void api.markNotifRead(top.id).catch(() => {}) // 失败也已会话内静默；下次刷新以服务端为准
+    // 收敛同一事件的**全部**告警通知（首呼 + 升级重呼）：只标 top 一条会让另一条下轮重新弹（详见 ackEventNotifIds）。
+    const ids = ackEventNotifIds(notifsRef.current, top)
+    ids.forEach((id) => dismissedRef.current.add(id))
+    setAlerts((cur) => cur.filter((n) => !ids.includes(n.id)))
+    ids.forEach((id) => void api.markNotifRead(id).catch(() => {})) // 失败也已会话内静默；下次刷新以服务端为准
     // 回告发起人"我已看到你的求助"（遇险者最需要的反馈）。best-effort：失败不影响本端"知道了"。
     if (top.data?.fromId) void api.emergencyAck(top.data.fromId, top.data.eventId ?? undefined).catch(() => {})
   }, [top])

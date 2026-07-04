@@ -26,6 +26,22 @@ export function pickUnreadEmergencies(list: NotificationInfo[], sessionDismissed
   })
 }
 
+/// "知道了"时应一并标已读 + 会话静默的**同一告警事件**全部通知 id。
+///
+/// 背景：R48 升级重呼会为同一次事件（同 eventId）再建一条通知，pickUnreadEmergencies 已把"首呼 + 升级重呼"
+/// 折叠成一条展示。但若"知道了"只标被展示那一条（升级版）已读，另一条（首呼）仍未读——下一轮轮询又被拾起、
+/// 重新弹模态 + 响铃：协助者明明已确认，同一次求助却在几秒后诡异地又冒出来。故按 eventId 收敛：确认时把该事件
+/// 的**全部**告警通知一起标读 + 静默。无 eventId 的老通知只收敛自身（向后兼容）。top 自身始终包含（防御：即便
+/// 它不在传入列表里）。
+export function ackEventNotifIds(list: NotificationInfo[], top: NotificationInfo): string[] {
+  const ev = top.data?.eventId
+  if (!ev) return [top.id]
+  const ids = list
+    .filter((n) => n.data?.eventId === ev && n.kind.includes('emergency') && n.kind !== 'emergency_ack' && n.kind !== 'emergency_clear')
+    .map((n) => n.id)
+  return ids.includes(top.id) ? ids : [top.id, ...ids]
+}
+
 /// 已被发起人"报平安(emergency_clear)"解除的告警发起人 id 集合：其名下所有告警应就地消掉（对方已没事，
 /// 让担心的亲友立刻安心）。按 **fromId** 关联而非精确 id——告警通知带 eventId、报平安带 alertId（两套 id
 /// 空间不同），且"X 报平安"本就意味 X 的所有未决告警都可解除，按发起人聚合正是想要的语义。

@@ -29,6 +29,9 @@ public enum VoiceCommand: Equatable, Sendable {
     case adjustVerbosity(VerbosityAdjust) // 语音调详略：说简短点/说详细点（赶路想精简/熟悉后嫌啰嗦）
     case commands                   // 自述能做什么（盲人无法浏览 UI 发现功能——语音能力必须能被语音发现）
     case repeatLast                 // 重复刚才的播报
+    case time                       // 现在几点（盲人看不到时钟，最高频的语音查询）
+    case battery                    // 电量还剩多少（手机没电=丢失导航/求助工具，盲人尤需随时确认）
+    case date                       // 今天几号/星期几
     case unknown
 }
 
@@ -57,6 +60,11 @@ public enum VoiceCommandParser {
         if has(["公交", "几路车", "哪路车", "什么车", "几路公交", "公交车", "bus", "which bus", "what bus"]) { return .readBus }
         if has(["多亮", "光线", "亮不亮", "有没有光", "开灯了吗", "灯开着吗", "灯亮着吗", "how bright", "light level", "brightness", "is the light on", "lights on"]) { return .readLight }
         if has(["天气", "下雨", "气温", "weather", "temperature", "rain"]) { return .weather }
+        // 日常信息（时间/电量/日期）：盲人看不到时钟/电量图标/日历，靠语音随时查——最高频的日常查询。
+        // 置于具体命令之后、通用 look 之前：与现有触发词无子串冲突（"打电话"含"电话"非"电量"；readBus 的"几路"非"几点"）。
+        if has(["几点", "报时", "报个时", "现在时间", "什么时间", "时间是", "what time", "the time", "tell me the time"]) { return .time }
+        if has(["电量", "电池", "多少电", "还有多少电", "剩多少电", "还剩多少电", "battery", "battery level", "power left", "how much power"]) { return .battery }
+        if has(["几号", "今天几号", "日期", "星期几", "礼拜几", "周几", "今天星期", "today's date", "what's the date", "what day", "what date"]) { return .date }
         if has(["回家", "原路返回", "返回出发", "带我回去", "go back", "take me back", "backtrack"]) { return .goHome }
         // 读整页须在「读文字」之前：否则「朗读整页」会被 readText 的「朗读」抢走。
         if has(["整页", "整个页面", "读文档", "读整", "读全文", "whole page", "entire page", "full page", "read the page", "read the document", "read document"]) { return .readFullPage }

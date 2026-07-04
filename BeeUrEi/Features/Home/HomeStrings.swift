@@ -112,9 +112,24 @@ enum HomeStrings {
 
     static func voiceCommandsHelp(_ l: Language) -> String {
         l == .zh
-            ? "你可以说：开始导盲、带我去某地、看一看、读一下文字、找我的钥匙、我在哪、周围有什么、天气、给某人发消息、打开消息、再说一遍、说慢点、说快点、说简短点、说详细点。需要人帮忙说\u{201C}求助\u{201D}；遇到危险说\u{201C}救命\u{201D}，会倒计时通知你的全部亲友。"
-            : "You can say: start guide, take me to a place, look, read this, find my keys, where am I, what's around, weather, send a message, open messages, repeat, speak slower/faster, or ask for less/more detail. Say \u{201C}get help\u{201D} to call someone; say \u{201C}emergency\u{201D} if you're in danger — it counts down and alerts all your contacts."
+            ? "你可以说：开始导盲、带我去某地、看一看、读一下文字、找我的钥匙、我在哪、周围有什么、天气、现在几点、还有多少电、今天几号、给某人发消息、打开消息、再说一遍、说慢点、说快点、说简短点、说详细点。需要人帮忙说\u{201C}求助\u{201D}；遇到危险说\u{201C}救命\u{201D}，会倒计时通知你的全部亲友。"
+            : "You can say: start guide, take me to a place, look, read this, find my keys, where am I, what's around, weather, what time is it, battery level, what's the date, send a message, open messages, repeat, speak slower/faster, or ask for less/more detail. Say \u{201C}get help\u{201D} to call someone; say \u{201C}emergency\u{201D} if you're in danger — it counts down and alerts all your contacts."
     }
+
+    /// 时间/日期播报：值用系统本地化格式（"下午3:25"/"3:25 PM"、"7月4日星期五"），TTS 读得自然。
+    static func timeSpeak(_ time: String, _ l: Language) -> String { l == .zh ? "现在\(time)。" : "It's \(time)." }
+    static func dateSpeak(_ date: String, _ l: Language) -> String { l == .zh ? "今天\(date)。" : "Today is \(date)." }
+    /// 电量播报：百分比 + 充电中；未充电且 ≤20% 追加"偏低，建议充电"（手机没电=盲人丢失导航/求助工具）。
+    static func batterySpeak(percent: Int, charging: Bool, _ l: Language) -> String {
+        let p = min(max(percent, 0), 100)
+        if l == .zh {
+            if charging { return "电量百分之\(p)，正在充电。" }
+            return p <= 20 ? "电量百分之\(p)，电量偏低，建议尽快充电。" : "电量百分之\(p)。"
+        }
+        if charging { return "Battery \(p) percent, charging." }
+        return p <= 20 ? "Battery \(p) percent — running low, charge soon." : "Battery \(p) percent."
+    }
+    static func batteryUnknown(_ l: Language) -> String { l == .zh ? "暂时无法读取电量。" : "Battery level unavailable right now." }
 
     static func nothingToRepeat(_ l: Language) -> String {
         l == .zh ? "现在没有需要重复的播报。" : "There's nothing to repeat right now."

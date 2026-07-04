@@ -464,6 +464,18 @@ struct HubView: View {
             }
         case .commands: speak(HomeStrings.voiceCommandsHelp(lang)) // 能力自述：语音功能的语音说明书
         case .repeatLast: speak(HomeStrings.nothingToRepeat(lang)) // Hub 无避障会话可重复
+        case .time:
+            let f = DateFormatter(); f.locale = Locale(identifier: lang == .zh ? "zh_CN" : "en_US"); f.dateStyle = .none; f.timeStyle = .short
+            speak(HomeStrings.timeSpeak(f.string(from: Date()), lang)) // 系统本地化短时间（盲人看不到时钟）
+        case .date:
+            let f = DateFormatter(); f.locale = Locale(identifier: lang == .zh ? "zh_CN" : "en_US"); f.dateStyle = .full; f.timeStyle = .none
+            speak(HomeStrings.dateSpeak(f.string(from: Date()), lang)) // .full 含星期
+        case .battery:
+            UIDevice.current.isBatteryMonitoringEnabled = true
+            let lvl = UIDevice.current.batteryLevel // 未知时为 -1（如未开监控/模拟器）
+            let st = UIDevice.current.batteryState
+            if lvl < 0 { speak(HomeStrings.batteryUnknown(lang)) }
+            else { speak(HomeStrings.batterySpeak(percent: Int((lvl * 100).rounded()), charging: st == .charging || st == .full, lang)) }
         case .unknown:
             speak(transcript.isEmpty ? HomeStrings.voiceHeardNothing(lang) : HomeStrings.voiceNotUnderstood(lang))
         }

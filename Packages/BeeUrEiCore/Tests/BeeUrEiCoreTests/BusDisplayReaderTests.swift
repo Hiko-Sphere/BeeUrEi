@@ -57,4 +57,25 @@ final class BusDisplayReaderTests: XCTestCase {
         XCTAssertFalse("机场一线".contains(where: BusDisplayReader.isAsciiDigit))
         XCTAssertTrue("103路".contains(where: BusDisplayReader.isAsciiDigit))
     }
+
+    func testArrivalHintMinutesStopsImminent() {
+        // 分钟。
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["103路", "还有3分钟"], language: .zh), "还有约3分钟")
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["B12", "5 min"], language: .en), "about 5 min")
+        // 站数（分钟缺失时）。
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["还有2站"], language: .zh), "还有2站")
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["3 stops"], language: .en), "3 stops away")
+        // 即将到站（最高优先，压过分钟/站）。
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["即将进站", "还有3分钟"], language: .zh), "即将到站")
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["Arriving"], language: .en), "arriving now")
+    }
+
+    func testArrivalHintNoFalsePositiveOnPlaceNames() {
+        // CJK 地名里的"站/分钟"前无阿拉伯数字，绝不误报到站信息。
+        XCTAssertNil(BusDisplayReader.arrivalHint(texts: ["开往二七广场火车站"], language: .zh)) // "站"前是"车"
+        XCTAssertNil(BusDisplayReader.arrivalHint(texts: ["开往分钟寺"], language: .zh))         // "分钟"前是"往"
+        XCTAssertNil(BusDisplayReader.arrivalHint(texts: ["103路", "开往人民广场"], language: .zh)) // 纯线路+终点，无到站信号
+        // 越界值不当分钟（把长数字/杂讯误当分钟）。
+        XCTAssertNil(BusDisplayReader.arrivalHint(texts: ["还有999分钟"], language: .zh)) // ≥120 视为杂讯
+    }
 }

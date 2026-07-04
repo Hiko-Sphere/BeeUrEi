@@ -920,10 +920,19 @@ final class FramingAssistViewModel {
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.copyableResult = nil
+                // 到站信息（还有约N分钟 / N站 / 即将到站）：站台上盲人最想知道"我的车还有多久到"。
+                let arrival = BusDisplayReader.arrivalHint(texts: texts, language: self.lang)
+                let sep = FramingStrings.busInfoSeparator(self.lang)
                 if picked.isEmpty {
-                    self.resultText = FramingStrings.busNoText(busName, where_, self.lang)
+                    // 没读清线路/终点，但读到了到站信息 → 至少把它报出来，比"没读清"有用。
+                    if let arrival {
+                        self.resultText = FramingStrings.busResult(busName, where_, arrival, self.lang)
+                    } else {
+                        self.resultText = FramingStrings.busNoText(busName, where_, self.lang)
+                    }
                 } else {
-                    let info = picked.joined(separator: FramingStrings.busInfoSeparator(self.lang))
+                    var info = picked.joined(separator: sep)
+                    if let arrival { info += sep + arrival }
                     self.resultText = FramingStrings.busResult(busName, where_, info, self.lang)
                 }
                 self.speak(self.resultText)

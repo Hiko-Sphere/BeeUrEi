@@ -23,6 +23,52 @@ public enum BusDisplayReader {
         return Array((routes + destinations).prefix(maxItems))
     }
 
+    /// 到站信息（LED 报站牌）：盲人在站台最想知道"我的车还有多久到"。从 OCR 行提取到站提示——
+    /// **即将到站 / 还有约 N 分钟 / 还有 N 站**（即将 > 分钟 > 站 优先）。仅认阿拉伯数字（与 pick 同口径；
+    /// 中文数字属地名）。多线路牌只取最显著的一条（关联到具体线路留待后续）；无任何到站信号返回 nil。
+    public static func arrivalHint(texts: [String], language: Language) -> String? {
+        let zh = language == .zh
+        var minutes: Int?
+        var stops: Int?
+        var imminent = false
+        for raw in texts {
+            let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            let lower = t.lowercased()
+            // 即将到站类（无需数字）：中文"即将/进站"，英文 arriving/approaching/due。
+            if t.contains("即将") || t.contains("进站") || lower.contains("arriv") || lower.contains("approach") || lower.contains(" due") || lower == "due" {
+                imminent = true
+            }
+            if minutes == nil, let n = numberBefore(units: ["分钟", "min"], in: lower) { minutes = n }
+            if stops == nil, let n = numberBefore(units: ["站", "stop"], in: lower) { stops = n }
+        }
+        if imminent { return zh ? "即将到站" : "arriving now" }
+        if let m = minutes, m >= 1, m < 120 { return zh ? "还有约\(m)分钟" : "about \(m) min" }
+        if let s = stops, s >= 1, s < 100 { return zh ? "还有\(s)站" : "\(s) stops away" }
+        return nil
+    }
+
+    /// 找到紧跟在某单位（分钟/站/min/stop…，允许中间一个空格）之前的阿拉伯数字，如 "3分钟"→3、"5 min"→5。
+    /// 从单位处**向前**读连续 ascii 数字——单位前非数字（如"火车站"的"车"）自然不匹配，故 CJK 地名不会误触。
+    static func numberBefore(units: [String], in lower: String) -> Int? {
+        for unit in units {
+            var range = lower.startIndex..<lower.endIndex
+            while let r = lower.range(of: unit, range: range) {
+                var idx = r.lowerBound
+                if idx > lower.startIndex, lower[lower.index(before: idx)] == " " { idx = lower.index(before: idx) } // 容一个空格
+                var digits = ""
+                while idx > lower.startIndex {
+                    let p = lower.index(before: idx)
+                    let c = lower[p]
+                    guard c.isASCII, c.isNumber else { break }
+                    digits.insert(c, at: digits.startIndex); idx = p
+                }
+                if let n = Int(digits) { return n }
+                range = r.upperBound..<lower.endIndex
+            }
+        }
+        return nil
+    }
+
     /// 阿拉伯数字判定。**不含**中文数字（一二三…十百）——中文数字是地名/终点站文本的一部分，
     /// 不是线路号信号。与 longestDigitRun 的电话号识别口径一致。
     static func isAsciiDigit(_ ch: Character) -> Bool { ch.isASCII && ch.isNumber }

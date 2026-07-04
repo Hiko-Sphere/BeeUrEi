@@ -30,6 +30,24 @@ describe('AMap walking nav proxy', () => {
     await app.close()
   })
 
+  it('高德瞬时网络抖动 → 自动重试一次透明恢复（盲人无感；语义错误与超时不重试）', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    let calls = 0
+    vi.stubGlobal('fetch', vi.fn(async (_url: string) => {
+      calls++
+      if (calls === 1) throw new TypeError('network error') // 首次纯网络抖动（非超时、非 amap 语义错误）
+      return { ok: true, status: 200, json: async () => ({ status: '1', infocode: '10000',
+        pois: [{ name: '便利店', location: '116.4,39.9', distance: '30', type: '便民商店;便利店' }] }) }
+    }))
+    const app = buildApp(new MemoryStore())
+    const t = await token(app)
+    const res = await app.inject({ method: 'GET', url: '/api/nav/around?lat=39.9&lon=116.4', headers: { authorization: `Bearer ${t}` } })
+    expect(res.statusCode).toBe(200) // 重试后成功
+    expect(res.json().pois).toHaveLength(1)
+    expect(calls).toBe(2) // 恰好重试一次（不无限重试）
+    await app.close()
+  })
+
   it('503 when AMAP key not configured', async () => {
     delete process.env.AMAP_API_KEY
     const app = buildApp(new MemoryStore())

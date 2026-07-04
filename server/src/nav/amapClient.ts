@@ -8,13 +8,21 @@ function amapTimeoutMs(): number {
   const n = Number(process.env.AMAP_TIMEOUT_MS)
   return Number.isFinite(n) && n > 0 ? n : 6000
 }
+/// 带硬超时 + **瞬时网络失败重试一次**的高德调用。重试策略刻意保守：
+/// - 我们自己的超时（signal.aborted）**不重试**——已等满一个超时窗，再等一次会让盲人多等一倍；
+/// - 高德的语义错误（status!=1，如 USERKEY_PLAT_NOMATCH/未找到）不走这里（在 assertAmapOk 抛），不会被重试；
+/// - 只对纯网络瞬断（连接被拒/重置等 fetch 抛错）重试一次，透明恢复高德侧的偶发抖动，盲人无感。
 async function amapFetch(url: string): Promise<Response> {
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), amapTimeoutMs())
-  try {
-    return await fetch(url, { signal: ctrl.signal })
-  } finally {
-    clearTimeout(timer) // 成功/失败都清定时器，避免泄漏
+  for (let attempt = 0; ; attempt++) {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), amapTimeoutMs())
+    try {
+      return await fetch(url, { signal: ctrl.signal })
+    } catch (e) {
+      if (ctrl.signal.aborted || attempt >= 1) throw e // 超时不重试；已重试过一次则放弃
+    } finally {
+      clearTimeout(timer) // 成功/失败都清定时器，避免泄漏
+    }
   }
 }
 

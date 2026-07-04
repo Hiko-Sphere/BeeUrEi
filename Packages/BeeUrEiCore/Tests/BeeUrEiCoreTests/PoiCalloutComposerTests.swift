@@ -66,6 +66,24 @@ final class PoiCalloutComposerTests: XCTestCase {
         XCTAssertEqual(out, "周围：12点钟方向约40米，全家便利店")
     }
 
+    func testAheadDedupDoesNotLetFilteredSameNameStealSlot() {
+        // 回归：更近的同名"全家"在正后方(170°,被 ahead 扇区过滤)，更远的"全家"在正前方(10°,该播)。
+        // 去重名额若在过滤前就被后方那个占掉，前方这个会被误当"已见"丢弃——盲人正走向它却听不到。
+        let out = PoiCalloutComposer.compose(
+            pois: [poi("全家便利店", 30, 170), poi("全家便利店", 60, 10)],
+            mode: .ahead, radiusMeters: 400, headingAvailable: true, language: .zh)
+        XCTAssertTrue(out.contains("全家便利店"), "前方的同名 POI 不应被后方被过滤的同名占掉去重名额")
+        XCTAssertTrue(out.contains("60米")) // 播的是前方那个(60m)，不是后方被过滤的(30m)
+    }
+
+    func testTooCloseSameNameDoesNotSuppressValidFarther() {
+        // 同理：<5m 的同名(所在建筑)被距离过滤后，不应压掉稍远处该播的同名。
+        let out = PoiCalloutComposer.compose(
+            pois: [poi("星巴克", 3, 0), poi("星巴克", 40, 0)],
+            mode: .around, radiusMeters: 250, headingAvailable: true, language: .zh)
+        XCTAssertEqual(out, "周围：12点钟方向约40米，星巴克")
+    }
+
     func testMaxCountLimitsSpokenEntries() {
         let many = (1...10).map { poi("店\($0)", Double($0 * 10), 0) }
         let out = PoiCalloutComposer.compose(

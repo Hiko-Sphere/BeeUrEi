@@ -49,21 +49,24 @@ public enum PoiCalloutComposer {
             guard !name.isEmpty else { continue }
             let dist = poi.distanceMeters
             guard dist.isFinite, dist > minDistanceMeters else { continue }
-            let key = name.lowercased()
-            guard seenNames.insert(key).inserted else { continue } // 已有同名（更近的先来）→ 跳过
 
+            // 先算出这条**是否可播报**及其文案；去重登记留到**确定要 append 时**再做——
+            // 否则一个被扇区/距离过滤掉的同名 POI（如正后方的"全家"）会先占掉去重名额，
+            // 使一个真正在前方、该播的同名 POI 被当"已见"丢弃（盲人正走向它却听不到，安全攸关）。
             let m = Int(dist.rounded())
+            let phrase: String
             if let rel = poi.relativeBearingDegrees, rel.isFinite {
                 if mode == .ahead, abs(rel) > 50 { continue } // 前方模式只留朝向 ±50° 扇区
                 let hour = ClockDirection(angleDegrees: rel).hour
-                let phrase = zh ? "\(hour)点钟方向约\(m)米，\(name)"
-                                : "\(name), about \(m) meters, \(hour) o'clock"
-                entries.append((phrase, dist))
+                phrase = zh ? "\(hour)点钟方向约\(m)米，\(name)"
+                            : "\(name), about \(m) meters, \(hour) o'clock"
             } else {
                 if mode == .ahead { continue } // 没有可信朝向，"前方"无从判定——下面给校准提示
-                let phrase = zh ? "约\(m)米，\(name)" : "\(name), about \(m) meters"
-                entries.append((phrase, dist))
+                phrase = zh ? "约\(m)米，\(name)" : "\(name), about \(m) meters"
             }
+
+            guard seenNames.insert(name.lowercased()).inserted else { continue } // 同名只留首个**可播报**的（即最近的合格者）
+            entries.append((phrase, dist))
         }
 
         let limit = maxCount ?? (mode == .ahead ? 3 : 4)

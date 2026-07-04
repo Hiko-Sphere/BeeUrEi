@@ -48,16 +48,19 @@ describe('摔倒/车祸紧急警报', () => {
     await app.inject({ method: 'POST', url: '/api/notifications/read-all', headers: auth(fam.token) })
 
     const res = await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token),
-      payload: { kind: 'fall', lat: 39.9, lon: 116.4 } })
+      payload: { kind: 'fall', lat: 39.9, lon: 116.4, battery: 8 } })
     expect(res.statusCode).toBe(200)
     expect((res.json() as any).notified).toBe(1) // 仅 accepted 的 fam1
     expect(push.sent).toHaveLength(1)
-    
+
     expect(push.sent[0].title).toContain('blind1') // 收件人英文 → 英文文案
     expect(push.sent[0].title).toContain('Emergency')
     expect(push.sent[0].extra?.lat).toBe('39.9')
     expect(push.sent[0].extra?.kind).toBe('fall')
     expect(push.sent[0].badge).toBe(1) // 图标角标=亲友未读总数（这条告警）
+    // 告警时刻电量：≤20% 正文点明"可能很快关机"（英文收件人英文文案）+ 结构化 extra/data 随带。
+    expect(push.sent[0].body).toContain('battery only 8%')
+    expect(push.sent[0].extra?.battery).toBe('8')
 
     // 持久化：亲友在通知中心能回看这次告警（即使错过推送）；陌生人(pending)无。
     const famNotifs = await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(fam.token) })
@@ -67,6 +70,7 @@ describe('摔倒/车祸紧急警报', () => {
     expect(feed[0].data.kind).toBe('fall')
     expect(feed[0].data.fromId).toBe(blind.user.id)
     expect(feed[0].data.fromName).toBe('blind1') // 供协助端"回拨 X"按钮显示名
+    expect(feed[0].data.battery).toBe('8')       // 持久化通知同样带电量（通知中心回看可见）
     // 陌生人(pending)不收紧急告警——按 kind 过滤（其有一条来自 blind 的 friend_request，属正常）。
     const strangerNotifs = await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(stranger.token) })
     expect((strangerNotifs.json() as any).notifications.filter((n: any) => n.kind === 'emergency_alert')).toHaveLength(0)
@@ -107,6 +111,24 @@ describe('摔倒/车祸紧急警报', () => {
     const res = await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token),
       payload: { kind: 'oops' } })
     expect(res.statusCode).toBe(400)
+  })
+
+  it('安全攸关：坏电量值只丢弃该字段，绝不 400 掉整条告警；不带电量则正文不提', async () => {
+    const push = new FakePush()
+    const app = buildApp(new MemoryStore(), { pushSender: push })
+    const blind = await reg(app, 'blind9', 'blind')
+    const fam = await reg(app, 'fam9', 'helper')
+    await bind(app, blind.token, fam.token, 'fam9')
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(fam.token), payload: { token: 'c'.repeat(64) } })
+    // battery=150（越界坏值）：告警必须照发（电量是附注，绝不能拦下 SOS），正文/extra 均无电量。
+    const res = await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token),
+      payload: { kind: 'manual', battery: 150 } })
+    expect(res.statusCode).toBe(200)
+    expect((res.json() as any).notified).toBe(1)
+    expect(push.sent).toHaveLength(1)
+    expect(push.sent[0].body).not.toContain('电量')
+    expect(push.sent[0].body.toLowerCase()).not.toContain('battery')
+    expect(push.sent[0].extra?.battery).toBeUndefined()
   })
 
   it('安全攸关：单个亲友推送失败不中断其余亲友，也不 500 整个告警', async () => {

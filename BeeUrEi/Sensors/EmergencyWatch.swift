@@ -147,11 +147,14 @@ final class EmergencyAlertCenter: NSObject, CLLocationManagerDelegate {
                 guard case .sending = phase else { return } // 期间被取消/新状态打断则放弃重试
             }
             // 每次重试都取**当下最新鲜**坐标（>60s 陈旧 fix 宁可不带——附错误旧位置比不附更危险）；
-            // 重试期间若刚拿到 GPS fix 即可带上。
+            // 重试期间若刚拿到 GPS fix 即可带上。电量同理取当下值（未知 -1 不带），亲友据此判断联系窗口。
             let fix = lastFix.flatMap { Date().timeIntervalSince($0.timestamp) < 60 ? $0 : nil }
+            UIDevice.current.isBatteryMonitoringEnabled = true
+            let lvl = UIDevice.current.batteryLevel
             reached = await APIClient().postEmergencyAlert(token: token, kind: kind,
                                                            lat: fix?.coordinate.latitude,
                                                            lon: fix?.coordinate.longitude,
+                                                           battery: lvl >= 0 ? Int((lvl * 100).rounded()) : nil,
                                                            alertId: alertId)
             if reached != nil { break }
         }

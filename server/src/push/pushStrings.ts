@@ -38,18 +38,28 @@ export const pushStrings = {
     l === 'en' ? `The group "${groupName}" has been dissolved` : `群聊「${groupName}」已被群主解散`,
   emergencyAlertTitle: (name: string, l: PushLang): string =>
     l === 'en' ? `Emergency: ${name} may need help` : `紧急：${name} 可能需要帮助`,
-  emergencyAlertBody: (kind: 'fall' | 'crash' | 'manual' | string, hasLocation: boolean, l: PushLang): string => {
+  /// 告警正文的电量段（battery=告警**发出时刻**的手机电量%）：≤20% 点明"可能很快关机"——亲友知道联系窗口
+  /// 有限、要立刻行动。未知(undefined)不提。只在首呼即时消息里用，**不**随升级重呼重播（几分钟后早已陈旧、会误导）。
+  emergencyBatterySegment: (battery: number | undefined, l: PushLang): string => {
+    if (battery == null || battery < 0 || battery > 100) return ''
+    if (battery <= 20) {
+      return l === 'en' ? ` Phone battery only ${battery}% — it may shut down soon.` : `手机电量仅剩 ${battery}%，可能很快关机。`
+    }
+    return l === 'en' ? ` Phone battery ${battery}%.` : `手机电量 ${battery}%。`
+  },
+  emergencyAlertBody: (kind: 'fall' | 'crash' | 'manual' | string, hasLocation: boolean, l: PushLang, battery?: number): string => {
+    const batt = pushStrings.emergencyBatterySegment(battery, l)
     if (kind === 'manual') {
       return l === 'en'
-        ? `${'They'} pressed the emergency button and may need help.${hasLocation ? ' Location attached.' : ''} Please contact or call them now.`
-        : `对方按下了紧急求助按钮，可能需要帮助。${hasLocation ? '已附带位置。' : ''}请立即联系或呼叫对方。`
+        ? `${'They'} pressed the emergency button and may need help.${hasLocation ? ' Location attached.' : ''}${batt} Please contact or call them now.`
+        : `对方按下了紧急求助按钮，可能需要帮助。${hasLocation ? '已附带位置。' : ''}${batt}请立即联系或呼叫对方。`
     }
     if (l === 'en') {
       const what = kind === 'crash' ? 'a severe impact (possible crash)' : 'a possible fall'
-      return `The app detected ${what} and no response.${hasLocation ? ' Location attached.' : ''} Please check in or call now.`
+      return `The app detected ${what} and no response.${hasLocation ? ' Location attached.' : ''}${batt} Please check in or call now.`
     }
     const what = kind === 'crash' ? '剧烈撞击（疑似车祸）' : '疑似摔倒'
-    return `App 检测到${what}且无人响应。${hasLocation ? '已附带位置。' : ''}请立即联系或呼叫对方。`
+    return `App 检测到${what}且无人响应。${hasLocation ? '已附带位置。' : ''}${batt}请立即联系或呼叫对方。`
   },
   // 亲友确认收到你的紧急求助 → 回告发起人"有人在响应"（遇险者最需要的反馈：知道不是石沉大海）。
   emergencyAckTitle: (name: string, l: PushLang): string =>

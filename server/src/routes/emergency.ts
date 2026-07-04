@@ -17,6 +17,10 @@ const alertSchema = z.object({
 
   lat: z.number().min(-90).max(90).optional(),
   lon: z.number().min(-180).max(180).optional(),
+  // 告警发出时刻的手机电量%：亲友据此判断联系窗口（≤20% 文案点明"可能很快关机"）。仅入首呼即时消息，
+  // 不持久化、不随升级重呼重播（几分钟后已陈旧、重播会误导）。
+  // .catch(undefined)：电量是锦上添花的附注——坏值(150/NaN)只丢弃该字段，**绝不能 400 掉整条生命攸关的告警**。
+  battery: z.number().int().min(0).max(100).optional().catch(undefined),
   // 幂等键：同一次紧急事件的多次重试带同一 alertId，服务端据此去重——客户端可安全重试提高送达率，
   // 而亲友**不会**因重试收到重复告警（生命攸关：重试宁可有、但绝不该重复轰炸/让家人误以为摔了两次）。
   alertId: z.string().min(1).max(64).optional(),
@@ -131,10 +135,12 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
       if (locSource) { extraBase.locSource = locSource; notifData.locSource = locSource }
       if (locAgeSec != null) { extraBase.locAgeSec = String(locAgeSec); notifData.locAgeSec = String(locAgeSec) }
     }
+    // 告警时刻电量（结构化随带，正文段见 emergencyAlertBody）：亲友据此判断联系窗口。
+    if (parsed.data.battery != null) { extraBase.battery = String(parsed.data.battery); notifData.battery = String(parsed.data.battery) }
     await Promise.allSettled(members.map((member) => {
       const l = pushLang(member.language)
       const title = pushStrings.emergencyAlertTitle(me.displayName, l)
-      const body = pushStrings.emergencyAlertBody(parsed.data.kind, hasLoc, l)
+      const body = pushStrings.emergencyAlertBody(parsed.data.kind, hasLoc, l, parsed.data.battery)
       // 持久化通知发给**每个** accepted 亲友（含无 APNs token 者：web-only 协助者 / 推送被拒 /
       // token 未注册）——否则这些人对摔倒/车祸告警完全无感。这正是"错过推送也能在通知中心回看"
       // 兜底要覆盖的对象，绝不能再按 token 过滤（旧实现把兜底也漏给了最需要它的人）。

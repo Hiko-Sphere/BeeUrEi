@@ -5,7 +5,9 @@ import Foundation
 /// 且认的是用户自己的常用商品（药盒/调料/饮料），比通用库更贴身。
 final class ProductMemoryStore {
     private var items: [String: String] = [:] // 条码 → 名字
+    private var allergenItems: [String: [String]] = [:] // 条码 → 包装标注过敏原（OFF 规范词，在线查到时随名字一起存）
     private let fileURL: URL
+    private let allergensURL: URL // 独立旁路文件：老版本的名字 plist 原样不动（零迁移风险），缺文件=全空
 
     /// fileURL 可注入（单测用临时目录）；默认存 Application Support。
     init(fileURL: URL? = nil) {
@@ -17,6 +19,7 @@ final class ProductMemoryStore {
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             self.fileURL = dir.appendingPathComponent("product-memory.plist")
         }
+        self.allergensURL = self.fileURL.deletingPathExtension().appendingPathExtension("allergens.plist")
         load()
     }
 
@@ -24,15 +27,21 @@ final class ProductMemoryStore {
 
     func name(for barcode: String) -> String? { items[barcode] }
 
-    func save(barcode: String, name: String) {
+    /// 包装标注过敏原（在线查到时存下的）。空=无数据——**缺数据≠不含**，上层只在非空时播"标注含有"。
+    func allergens(for barcode: String) -> [String] { allergenItems[barcode] ?? [] }
+
+    /// allergens 只在**非空**时覆盖——用户手动改名（save(barcode:name:) 默认空）不得抹掉已存的过敏原标注。
+    func save(barcode: String, name: String, allergens: [String] = []) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !barcode.isEmpty else { return }
         items[barcode] = trimmed
+        if !allergens.isEmpty { allergenItems[barcode] = allergens }
         persist()
     }
 
     func delete(barcode: String) {
         items.removeValue(forKey: barcode)
+        allergenItems.removeValue(forKey: barcode)
         persist()
     }
 
@@ -41,11 +50,19 @@ final class ProductMemoryStore {
         if let data = try? PropertyListEncoder().encode(items) {
             try? data.write(to: fileURL, options: [.atomic, .completeFileProtection])
         }
+        if let data = try? PropertyListEncoder().encode(allergenItems) {
+            try? data.write(to: allergensURL, options: [.atomic, .completeFileProtection])
+        }
     }
 
     private func load() {
-        guard let data = try? Data(contentsOf: fileURL),
-              let decoded = try? PropertyListDecoder().decode([String: String].self, from: data) else { return }
-        items = decoded
+        if let data = try? Data(contentsOf: fileURL),
+           let decoded = try? PropertyListDecoder().decode([String: String].self, from: data) {
+            items = decoded
+        }
+        if let data = try? Data(contentsOf: allergensURL),
+           let decoded = try? PropertyListDecoder().decode([String: [String]].self, from: data) {
+            allergenItems = decoded
+        }
     }
 }

@@ -809,8 +809,10 @@ final class FramingAssistViewModel {
                 switch BarcodePayload.classify(first) {
                 case .productCode:
                     if let name = self.productStore.name(for: first) {
-                        self.resultText = FramingStrings.productResult(name, self.lang)
-                        self.speak(FramingStrings.thisIs(name, self.lang))
+                        // 过敏原后缀与名字**一次 speak**（.query 通道替换语义，分两次会吞前半句）。
+                        let allergenSuffix = FramingStrings.productAllergensSpeak(self.productStore.allergens(for: first), self.lang)
+                        self.resultText = FramingStrings.productResult(name, self.lang) + (allergenSuffix ?? "")
+                        self.speak(FramingStrings.thisIs(name, self.lang) + (allergenSuffix ?? ""))
                     } else {
                         // 本地没起过名：先在线查一次（Open Food Facts）——查到直接报名字并记住（对标 Seeing AI），
                         // 查不到/离线再回退到"用户起名"（严格附加，绝不回退失败）。
@@ -1169,15 +1171,17 @@ final class FramingAssistViewModel {
         speak(FramingStrings.productLookingUp(lang), hint: true) // 即时可丢弃提示，避免网络期间盲人以为卡住
         Task { [weak self] in
             guard let self else { return }
-            var found: String?
+            var found: APIClient.ProductLookupInfo?
             if let token = KeychainStore.read() {
                 found = await APIClient().lookupProduct(token: token, barcode: barcode)
             }
             guard !self.paused else { return } // 已关闭/被来电盖上：不再改 UI/播报
-            if let name = found {
-                self.productStore.save(barcode: barcode, name: name)
-                self.resultText = FramingStrings.productResult(name, self.lang)
-                self.speak(FramingStrings.thisIs(name, self.lang))
+            if let info = found {
+                let allergens = info.allergens ?? []
+                self.productStore.save(barcode: barcode, name: info.name, allergens: allergens) // 过敏原随名字存，下次离线也能报
+                let allergenSuffix = FramingStrings.productAllergensSpeak(allergens, self.lang)
+                self.resultText = FramingStrings.productResult(info.name, self.lang) + (allergenSuffix ?? "")
+                self.speak(FramingStrings.thisIs(info.name, self.lang) + (allergenSuffix ?? "")) // 一次 speak：.query 替换语义
             } else {
                 // 回退：原"起名"路径（弹窗 + 提示），与在线查询前行为一致。
                 self.pendingProductCode = barcode

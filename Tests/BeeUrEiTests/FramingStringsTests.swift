@@ -4,6 +4,22 @@ import XCTest
 /// 识别屏播报文案表（E5 多语言）：中文与历史一致、英文不串中文、组合短语正确。
 final class FramingStringsTests: XCTestCase {
 
+    func testProductAllergensSpeakOnlyPresenceNeverAbsence() {
+        // 已知过敏原走本地化表；未知不丢弃（连字符转空格原词读出，丢了会造成"只含这些"的假完整）。
+        XCTAssertEqual(FramingStrings.allergenDisplay("peanuts", .zh), "花生")
+        XCTAssertEqual(FramingStrings.allergenDisplay("sulphur-dioxide-and-sulphites", .zh), "二氧化硫及亚硫酸盐")
+        XCTAssertEqual(FramingStrings.allergenDisplay("some-rare-thing", .zh), "some rare thing") // 未知：原词读出
+        XCTAssertEqual(FramingStrings.allergenDisplay("soybeans", .en), "soy")
+        // 组句：报"标注含有"，一次拼接（.query 替换语义）；空 = nil，**绝不**生成"不含过敏原"（缺数据≠不含）。
+        let zh = FramingStrings.productAllergensSpeak(["peanuts", "milk"], .zh)
+        XCTAssertEqual(zh, "。包装标注含有：花生、牛奶")
+        XCTAssertNil(FramingStrings.productAllergensSpeak([], .zh))
+        let en = FramingStrings.productAllergensSpeak(["wheat"], .en)!
+        XCTAssertTrue(en.contains("Label lists allergens: wheat"))
+        XCTAssertFalse(en.lowercased().contains("no allergen")) // 永不播"不含"
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
+
     func testTorchAutoOnTellsUserItWasSolved() {
         // 太暗自动点灯的播报：须点明已打开手电筒 + 提示重试（而非只说"太暗"卡住）。
         let zh = FramingStrings.torchAutoOn(.zh)

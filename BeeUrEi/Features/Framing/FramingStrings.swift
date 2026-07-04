@@ -248,6 +248,31 @@ enum FramingStrings {
     }
     /// 在线查询商品名时的即时提示（可丢弃）：避免网络往返期间盲人以为卡住/没反应。
     static func productLookingUp(_ l: Language) -> String { l == .zh ? "正在查询商品…" : "Looking up the product…" }
+
+    /// 过敏原规范词（Open Food Facts 标签）→ 本地化名。欧盟 14 大类 + 常见（小麦）。
+    private static let allergenNames: [String: (zh: String, en: String)] = [
+        "gluten": ("麸质", "gluten"), "crustaceans": ("甲壳类", "crustaceans"), "eggs": ("鸡蛋", "eggs"),
+        "fish": ("鱼", "fish"), "peanuts": ("花生", "peanuts"), "soybeans": ("大豆", "soy"),
+        "milk": ("牛奶", "milk"), "nuts": ("坚果", "tree nuts"), "celery": ("芹菜", "celery"),
+        "mustard": ("芥末", "mustard"), "sesame-seeds": ("芝麻", "sesame"),
+        "sulphur-dioxide-and-sulphites": ("二氧化硫及亚硫酸盐", "sulphites"),
+        "lupin": ("羽扇豆", "lupin"), "molluscs": ("贝类", "molluscs"), "wheat": ("小麦", "wheat"),
+    ]
+
+    /// 单个过敏原显示名：已知走表；未知**不丢弃**（丢了会造成"只含这些"的假完整），连字符转空格原词读出。
+    static func allergenDisplay(_ tag: String, _ l: Language) -> String {
+        if let n = allergenNames[tag.lowercased()] { return l == .zh ? n.zh : n.en }
+        return tag.replacingOccurrences(of: "-", with: " ")
+    }
+
+    /// 过敏原播报后缀（拼接在"这是X"之后，一次 speak 播完——.query 通道是替换语义，分两次会吞前半句）。
+    /// 只报包装**标注含有**的；空=无数据→nil（**绝不播"不含过敏原"**——缺数据≠不含，误导可致命）。
+    static func productAllergensSpeak(_ tags: [String], _ l: Language) -> String? {
+        guard !tags.isEmpty else { return nil }
+        let names = tags.map { allergenDisplay($0, l) }
+        return l == .zh ? "。包装标注含有：\(names.joined(separator: "、"))"
+                        : ". Label lists allergens: \(names.joined(separator: ", "))"
+    }
     static func wifiResult(_ ssid: String?, _ l: Language) -> String {
         (l == .zh ? "无线网络码" : "Wi-Fi code") + (ssid.map { l == .zh ? "：\($0)" : ": \($0)" } ?? "")
     }

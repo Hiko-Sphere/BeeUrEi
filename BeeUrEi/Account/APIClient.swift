@@ -876,11 +876,13 @@ struct APIClient {
         return try JSONDecoder().decode(R.self, from: data).conversations
     }
 
-    /// 商品条码 → 商品名（服务端代理 Open Food Facts）。查不到/离线/任何错误一律 nil（上层回退"用户起名"，绝不编造）。
-    func lookupProduct(token: String, barcode: String) async -> String? {
+    /// 商品条码在线查询结果：名字 + 包装标注过敏原（空=无数据，缺数据≠不含）。
+    struct ProductLookupInfo: Codable { let name: String; let allergens: [String]? }
+
+    /// 商品条码 → 商品名+标注过敏原（服务端代理 Open Food Facts）。查不到/离线/任何错误一律 nil（上层回退"用户起名"，绝不编造）。
+    func lookupProduct(token: String, barcode: String) async -> ProductLookupInfo? {
         guard let data = try? await authedGet("/api/product/\(barcode)", token: token) else { return nil }
-        struct R: Codable { let name: String }
-        return (try? JSONDecoder().decode(R.self, from: data))?.name
+        return try? JSONDecoder().decode(ProductLookupInfo.self, from: data)
     }
 
     func markMessagesRead(token: String, fromId: String) async {

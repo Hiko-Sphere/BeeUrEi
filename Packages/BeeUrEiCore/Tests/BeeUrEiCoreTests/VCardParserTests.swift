@@ -30,6 +30,26 @@ final class VCardParserTests: XCTestCase {
         XCTAssertEqual(c.org, "某公司")
     }
 
+    func testVCardParameterizedNameKeysCharset() {
+        // 回归：中文名片常带 CHARSET 参数（FN;CHARSET=UTF-8）。旧码精确匹配 "FN" 会漏、姓名丢失。
+        let v = "BEGIN:VCARD\nVERSION:2.1\nFN;CHARSET=UTF-8:张三\nORG;CHARSET=UTF-8:蜂之眼\nTEL;TYPE=CELL:13812345678\nEND:VCARD"
+        let c = VCardParser.parse(v)!
+        XCTAssertEqual(c.name, "张三")   // 关键：带参数的 FN 仍取到姓名
+        XCTAssertEqual(c.org, "蜂之眼")
+        XCTAssertEqual(c.phones, ["13812345678"])
+        // N 带参数亦然（无 FN 时兜底）。
+        let v2 = "BEGIN:VCARD\nN;CHARSET=UTF-8:李;四;;;\nTEL:010-8888\nEND:VCARD"
+        XCTAssertEqual(VCardParser.parse(v2)?.name, "李 四")
+    }
+
+    func testVCardGroupedPropertiesAndNoNicknameConfusion() {
+        // Apple 分组属性 item1.TEL → 剥组前缀后当 TEL；NICKNAME/NOTE 绝不被当成姓名(N)。
+        let v = "BEGIN:VCARD\nFN:王五\nitem1.TEL;TYPE=CELL:13700001234\nNICKNAME:阿五\nNOTE:随便写\nEND:VCARD"
+        let c = VCardParser.parse(v)!
+        XCTAssertEqual(c.name, "王五")            // FN 取名，NICKNAME/NOTE 不干扰
+        XCTAssertEqual(c.phones, ["13700001234"]) // 分组的 item1.TEL 被正确收集
+    }
+
     func testNotAContactReturnsNil() {
         XCTAssertNil(VCardParser.parse("https://example.com"))
         XCTAssertNil(VCardParser.parse("just some text"))

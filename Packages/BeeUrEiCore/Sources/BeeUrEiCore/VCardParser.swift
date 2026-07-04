@@ -31,14 +31,18 @@ public enum VCardParser {
         for rawLine in text.split(whereSeparator: { $0 == "\n" || $0 == "\r" }) {
             let line = String(rawLine)
             guard let colon = line.firstIndex(of: ":") else { continue }
-            let key = line[line.startIndex..<colon].uppercased()
+            let rawKey = line[line.startIndex..<colon].uppercased()
+            // **基础键**：剥参数（`FN;CHARSET=UTF-8`→FN——中文名片常带 CHARSET，精确匹配 FN 会丢姓名）
+            // 与 Apple 分组前缀（`item1.TEL`→TEL）。剥完再精确比对：N 不能用 hasPrefix（会吞 NICKNAME/NOTE）。
+            var key = String(rawKey.prefix(while: { $0 != ";" }))
+            if let dot = key.lastIndex(of: ".") { key = String(key[key.index(after: dot)...]) }
             let value = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
             guard !value.isEmpty else { continue }
             if key == "FN" { fn = value }
             else if key == "N" { n = value.replacingOccurrences(of: ";", with: " ").trimmingCharacters(in: .whitespaces) }
-            else if key.hasPrefix("TEL") { phones.append(value) }
-            else if key.hasPrefix("EMAIL") { emails.append(value) }
-            else if key.hasPrefix("ORG") { org = value.replacingOccurrences(of: ";", with: " ").trimmingCharacters(in: .whitespaces) }
+            else if key == "TEL" { phones.append(value) }
+            else if key == "EMAIL" { emails.append(value) }
+            else if key == "ORG" { org = value.replacingOccurrences(of: ";", with: " ").trimmingCharacters(in: .whitespaces) }
         }
         return Contact(name: fn ?? n, phones: dedup(phones), emails: dedup(emails), org: org)
     }

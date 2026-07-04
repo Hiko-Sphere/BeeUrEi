@@ -149,4 +149,29 @@ extension WeatherPhraseTests {
         let out = WeatherPhrase.summary(temperature: 28, code: 0, todayMax: 30, todayMin: 20, precipProbability: 0, uvIndex: 8, language: .zh)
         XCTAssertTrue(out.contains("防晒"))
     }
+
+    func testHoursUntilLikelyRain() {
+        let probs: [Int?] = [10,10,10,10,10,10,10,10,10,10, 20, 30, 70, 80, 10] // 索引12(=当前+2h)首达 70
+        XCTAssertEqual(WeatherPhrase.hoursUntilLikelyRain(probabilities: probs, startIndex: 10), 2)
+        XCTAssertEqual(WeatherPhrase.hoursUntilLikelyRain(probabilities: Array(repeating: 60, count: 15), startIndex: 10), 0) // 当前小时就高
+        var far = [Int?](repeating: 10, count: 20); far[16] = 90                 // +6h 超默认 lookahead 4
+        XCTAssertNil(WeatherPhrase.hoursUntilLikelyRain(probabilities: far, startIndex: 10))
+        XCTAssertNil(WeatherPhrase.hoursUntilLikelyRain(probabilities: probs, startIndex: 99))  // 越界不崩
+        XCTAssertNil(WeatherPhrase.hoursUntilLikelyRain(probabilities: probs, startIndex: -1))
+        XCTAssertNil(WeatherPhrase.hoursUntilLikelyRain(probabilities: [nil,nil,nil], startIndex: 0)) // nil 当 0
+    }
+
+    func testNearTermRainAdvicePrefersTiming() {
+        // 有逐小时时点：给"约 N 小时后"而非笼统"今天"，且不谎称湿滑。
+        let z = WeatherPhrase.advice(code: 2, todayMax: 24, todayMin: 16, precipProbability: 60, rainInHours: 2, language: .zh)!
+        XCTAssertTrue(z.contains("约2小时后")); XCTAssertTrue(z.contains("带伞")); XCTAssertFalse(z.contains("湿滑"))
+        XCTAssertTrue(WeatherPhrase.advice(code: 2, todayMax: 24, todayMin: 16, precipProbability: nil, rainInHours: 0, language: .zh)!.contains("接下来一小时内"))
+        // 无逐小时但日概率高 → 退回"今天很可能"。
+        XCTAssertTrue(WeatherPhrase.advice(code: 2, todayMax: 24, todayMin: 16, precipProbability: 60, rainInHours: nil, language: .zh)!.contains("今天很可能"))
+        // 正在下雨(wet code)优先"地面湿滑"，不被近期雨时点覆盖。
+        XCTAssertTrue(WeatherPhrase.advice(code: 63, todayMax: 20, todayMin: 12, precipProbability: nil, rainInHours: 1, language: .zh)!.contains("湿滑"))
+        // 英文单复数。
+        XCTAssertTrue(WeatherPhrase.advice(code: 2, todayMax: 24, todayMin: 16, precipProbability: nil, rainInHours: 3, language: .en)!.contains("3 hours"))
+        XCTAssertTrue(WeatherPhrase.advice(code: 2, todayMax: 24, todayMin: 16, precipProbability: nil, rainInHours: 1, language: .en)!.contains("1 hour;"))
+    }
 }

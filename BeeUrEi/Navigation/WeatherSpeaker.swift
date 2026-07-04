@@ -90,11 +90,13 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
             .init(name: "longitude", value: String(format: "%.3f", lon)),
             .init(name: "current", value: "temperature_2m,weather_code,wind_speed_10m,uv_index"),
             .init(name: "daily", value: "temperature_2m_max,temperature_2m_min,precipitation_probability_max"),
+            .init(name: "hourly", value: "precipitation_probability"), // 逐小时降水概率 → 近期"约N小时后可能下雨"
             .init(name: "forecast_days", value: "1"),
             .init(name: "timezone", value: "auto"),
         ]
         struct Response: Decodable {
             struct Current: Decodable {
+                let time: String            // 当前小时时间戳（用于在 hourly 里定位当前小时）
                 let temperature_2m: Double
                 let weather_code: Int
                 let wind_speed_10m: Double?
@@ -105,8 +107,13 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
                 let temperature_2m_min: [Double]
                 let precipitation_probability_max: [Int?]?
             }
+            struct Hourly: Decodable {
+                let time: [String]
+                let precipitation_probability: [Int?]?
+            }
             let current: Current
             let daily: Daily?
+            let hourly: Hourly?
         }
         var request = URLRequest(url: c.url!)
         request.timeoutInterval = 10
@@ -115,6 +122,14 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
               let r = try? JSONDecoder().decode(Response.self, from: data) else {
             return WeatherPhrase.failed(l)
         }
+        // 近期降水时点：在 hourly 里按「当前小时前缀」（"2026-07-04T15"）定位当前小时索引，交给核心算「约几小时后下雨」。
+        var rainInHours: Int?
+        if let hourly = r.hourly, let probs = hourly.precipitation_probability {
+            let hourPrefix = String(r.current.time.prefix(13)) // yyyy-MM-ddTHH
+            if let idx = hourly.time.firstIndex(where: { $0.hasPrefix(hourPrefix) }) {
+                rainInHours = WeatherPhrase.hoursUntilLikelyRain(probabilities: probs, startIndex: idx)
+            }
+        }
         return WeatherPhrase.summary(temperature: r.current.temperature_2m,
                                      code: r.current.weather_code,
                                      windSpeedKmh: r.current.wind_speed_10m,
@@ -122,6 +137,7 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
                                      todayMin: r.daily?.temperature_2m_min.first,
                                      precipProbability: r.daily?.precipitation_probability_max?.first ?? nil,
                                      uvIndex: r.current.uv_index,
+                                     rainInHours: rainInHours,
                                      language: l)
     }
 

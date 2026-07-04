@@ -43,11 +43,23 @@ public enum WeatherPhrase {
         return Int(min(max(v, -1000), 1000).rounded())
     }
 
+    /// 从逐小时降水概率数组算「还有几小时开始下雨」：从 startIndex(当前小时) 起向后 lookahead 小时内，
+    /// 第一个概率 ≥ threshold 的小时距现在多少小时（0=接下来这一小时，1=下一小时……）；无则 nil。
+    /// 盲人看不到天上云层聚集，"约 N 小时后可能下雨"比"今天可能下雨"更能决定现在走还是等（纯逻辑，可单测）。
+    public static func hoursUntilLikelyRain(probabilities: [Int?], startIndex: Int,
+                                            threshold: Int = 55, lookahead: Int = 4) -> Int? {
+        guard startIndex >= 0, startIndex < probabilities.count else { return nil }
+        let end = min(startIndex + lookahead, probabilities.count - 1)
+        for i in startIndex...end where (probabilities[i] ?? 0) >= threshold { return i - startIndex }
+        return nil
+    }
+
     public static func summary(temperature: Double, code: Int,
                                windSpeedKmh: Double? = nil,
                                todayMax: Double? = nil, todayMin: Double? = nil,
                                precipProbability: Int? = nil,
                                uvIndex: Double? = nil,
+                               rainInHours: Int? = nil,
                                language: Language) -> String {
         let cond = condition(code: code, language: language)
         let t = safeTemp(temperature)
@@ -70,7 +82,7 @@ public enum WeatherPhrase {
         var text = parts.joined(separator: language == .zh ? "，" : ", ") + (language == .zh ? "。" : ".")
         if let tip = advice(code: code, todayMax: todayMax, todayMin: todayMin,
                             precipProbability: precipProbability, windSpeedKmh: windSpeedKmh,
-                            uvIndex: uvIndex, language: language) {
+                            uvIndex: uvIndex, rainInHours: rainInHours, language: language) {
             text += tip
         }
         return text
@@ -81,7 +93,7 @@ public enum WeatherPhrase {
     /// windSpeedKmh：单位 km/h（Open-Meteo wind_speed_10m）。
     public static func advice(code: Int, todayMax: Double?, todayMin: Double?,
                               precipProbability: Int?, windSpeedKmh: Double? = nil,
-                              uvIndex: Double? = nil, language: Language) -> String? {
+                              uvIndex: Double? = nil, rainInHours: Int? = nil, language: Language) -> String? {
         // 大风安全提示（≥40km/h≈6级"强风"）：盲人靠听觉判断车流/定向，风噪盖过车声是直接的过街危险——
         // 阈值高于描述性"风较大"(29km/h)，只在真会掩盖车声的强风才追加。冻雨已是"避免外出"最高级，不叠加。
         let strongWind = (windSpeedKmh ?? 0) >= 40
@@ -111,9 +123,15 @@ public enum WeatherPhrase {
             // 正在下雨/雪：地面确实湿滑（盲杖用户尤需防滑）。
             return withWind(language == .zh ? "出门请带伞，地面湿滑。" : " Bring an umbrella; the ground is slippery.")
         }
+        // 现在没下但很可能下：优先用逐小时得到的**近期时点**（"约 N 小时后"，盲人看不到云层聚集、据此
+        // 决定现在走还是等）；无逐小时数据时退回日最高概率的"今天很可能下雨"。均只提醒带伞、不谎称路面已湿滑。
+        if let h = rainInHours {
+            let tip: String = language == .zh
+                ? (h <= 0 ? "接下来一小时内可能下雨，出门记得带伞。" : "预计约\(h)小时后可能下雨，出门记得带伞。")
+                : (h <= 0 ? " Rain likely within the hour; bring an umbrella." : " Rain likely in about \(h) hour\(h > 1 ? "s" : ""); bring an umbrella.")
+            return withWind(tip)
+        }
         if (precipProbability ?? 0) >= 50 {
-            // 现在没下但今天很可能下：提醒带伞，但**不谎称地面已湿滑**——此刻路面是干的，湿滑要等真下雨才成立
-            // （"现在是否在说错"：晴天却报"地面湿滑"是当下的错误信号）。
             return withWind(language == .zh ? "今天很可能下雨，出门记得带伞。" : " Rain is likely today; bring an umbrella.")
         }
         // 高紫外线（Open-Meteo uv_index）：盲人看不到日照强弱，晴天高 UV 下极易在不知不觉中晒伤——

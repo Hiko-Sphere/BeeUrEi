@@ -24,10 +24,9 @@ beforeAll(() => {
     addEventListener: (name: string, fn: Handler) => handlers.set(name, fn),
     skipWaiting: () => {},
     clients: { claim: () => {}, matchAll: async () => [], openWindow: async () => {} },
-    registration: { showNotification: (..._a: unknown[]) => {} },
+    registration: { showNotification: () => {} },
     location: { origin: 'https://beeurei.hikosphere.com' },
   }
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval
   // fetch 传转发器而非直传引用：sw.js 内的 fetch 形参会遮蔽全局——转发器让每个用例改 globalThis.fetch 即时生效。
   new Function('self', 'Response', 'URL', 'fetch', src)(self, FakeResponse, URL, (...a: unknown[]) => (globalThis.fetch as (...x: unknown[]) => unknown)(...a))
 })

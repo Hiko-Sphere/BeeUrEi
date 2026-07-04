@@ -43,6 +43,24 @@ final class LabelDateReaderTests: XCTestCase {
         XCTAssertNotNil(LabelDateReader.find(texts: ["use by 2026-08"], language: .en))
     }
 
+    func testCompactAndSpacedYmdCodes() {
+        // 喷码 YYYYMMDD 无分隔（此前完全漏识——食品药品包装最常见的写法）。
+        XCTAssertTrue(LabelDateReader.find(texts: ["生产日期20260731"], language: .zh)!.contains("20260731"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["有效期至20261231"], language: .zh)!.contains("20261231"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["EXP20261130"], language: .en)!.contains("20261130"))
+        // 空格分隔 2026 07 31 / 2026 07。
+        XCTAssertTrue(LabelDateReader.find(texts: ["保质期 2026 07 31"], language: .zh)!.contains("2026 07 31"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["best before 2026 12"], language: .en)!.contains("2026 12"))
+    }
+
+    func testCompactCodeDoesNotFalseMatchBarcodesOrSerials() {
+        // 数字边界保护：即便同行有日期标签，13 位条码/长流水号里的一段也不当日期（防误读害盲人核对错东西）。
+        XCTAssertNil(LabelDateReader.find(texts: ["保质期见喷码 6920260731000"], language: .zh)) // 长串里含 20260731 但被数字边界排除
+        XCTAssertNil(LabelDateReader.find(texts: ["exp lot 20260731999"], language: .en))        // 11 位流水号，非日期
+        // 年份门控仍在：非 19/20 开头的 8 位数（即便有日期标签）不当日期。
+        XCTAssertNil(LabelDateReader.find(texts: ["有效期 18990101"], language: .zh))
+    }
+
     func testDedupAndCap() {
         // OCR 常重复同一行：去重。
         let r = LabelDateReader.find(texts: ["保质期 2026.07.15", "保质期 2026.07.15"], language: .zh)!

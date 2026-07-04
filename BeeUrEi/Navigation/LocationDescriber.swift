@@ -10,7 +10,7 @@ import AVFoundation
 /// - 「前方有什么」：只报朝向 ±50° 扇区内的地点。
 /// 不导航也能建立心理地图。端侧 CLGeocoder/MKLocalSearch，无需后端。
 final class LocationDescriber: NSObject, CLLocationManagerDelegate {
-    enum Mode { case whereAmI, around, ahead }
+    enum Mode { case whereAmI, around, ahead, facing }
 
     private let manager = CLLocationManager()
     private let geocoder = CLGeocoder()
@@ -29,12 +29,14 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
     func describe() { run(.whereAmI) }
     func describeAround() { run(.around) }
     func describeAhead() { run(.ahead) }
+    func describeFacing() { run(.facing) }
 
     private func promptFor(_ m: Mode) -> String {
         switch m {
         case .whereAmI: return lang == .zh ? "正在确定你的位置" : "Finding your location"
         case .around: return lang == .zh ? "正在查看周围有什么" : "Checking what's around you"
         case .ahead: return lang == .zh ? "正在查看前方有什么" : "Checking what's ahead"
+        case .facing: return lang == .zh ? "正在确定你的朝向" : "Checking which way you're facing"
         }
     }
 
@@ -47,8 +49,13 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
         // 看门狗：20s 无结果就复位（含网络 POI 检索），避免 requestLocation 无回调导致永久卡死后再点无反应。
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.isDescribing else { return }
-            self.finish(self.lang == .zh ? "定位超时，请检查定位权限与信号后重试"
-                                         : "Locating timed out — check location permission and signal, then retry")
+            // 朝向超时（罗盘迟迟不可信）给校准指引，而非"定位超时"——两者根因不同。
+            let msg = self.mode == .facing
+                ? (self.lang == .zh ? "暂时无法确定朝向，请把手机平举、水平画几个 8 字校准罗盘后再试"
+                                    : "Can't determine your heading yet — hold the phone flat and wave it in a figure-8 to calibrate, then retry")
+                : (self.lang == .zh ? "定位超时，请检查定位权限与信号后重试"
+                                    : "Locating timed out — check location permission and signal, then retry")
+            self.finish(msg)
         }
         watchdog = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: work)
@@ -81,7 +88,13 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
 
     func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
         guard newHeading.headingAccuracy >= 0 else { return } // 罗盘不可信不更新
-        lastHeading = newHeading.trueHeading >= 0 ? newHeading.trueHeading : newHeading.magneticHeading
+        let h = newHeading.trueHeading >= 0 ? newHeading.trueHeading : newHeading.magneticHeading
+        lastHeading = h
+        // 「我朝哪个方向」：拿到第一个可信罗盘读数即播报八方位并复位（finish 停罗盘，后续读数不再重复播）。
+        // 非有限读数 CompassRose 返回 nil → 不 finish，继续等下一个可信读数（不会播"方向未知"这种废话）。
+        if mode == .facing, isDescribing, let cardinal = CompassRose.cardinal(degrees: h, language: lang) {
+            finish(lang == .zh ? "你正面朝\(cardinal)" : "You're facing \(cardinal)")
+        }
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
@@ -99,6 +112,8 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
             }
         case .around, .ahead:
             poiCallouts(loc)
+        case .facing:
+            break // 朝向只依赖罗盘（didUpdateHeading 里播报并复位），不需要定位点
         }
     }
 

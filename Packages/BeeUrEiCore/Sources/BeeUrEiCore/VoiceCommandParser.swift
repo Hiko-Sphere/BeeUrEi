@@ -9,6 +9,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case whereAmI                   // 我在哪
     case around                     // 周围有什么
     case ahead                      // 前方有什么
+    case facing                     // 我正朝哪个方向（罗盘八方位——盲人看不到罗盘/太阳，建立方向感与找路的基础）
     case weather                    // 天气
     case look                       // 打开识别（看一看）
     case guideMe                    // 开始导盲/避障（进入实时避障模式）
@@ -56,6 +57,9 @@ public enum VoiceCommandParser {
         if has(["我在哪", "我在哪里", "当前位置", "where am i", "my location"]) { return .whereAmI }
         if has(["周围有什么", "附近有什么", "周围", "what's around", "around me", "nearby"]) { return .around }
         if has(["前方有什么", "前面有什么", "前方", "what's ahead", "ahead of me", "in front"]) { return .ahead }
+        // 朝向（罗盘方位）：盲人看不到罗盘/太阳，"我正朝哪"是方向感的基础。置于此处、导航解析之前——用具体短语
+        // （"朝哪个方向"/"面朝"/"which way am i facing"）避开与导航("哪个方向走"意图另说)/around 的关键字冲突。
+        if has(["朝哪个方向", "哪个方向", "什么方向", "朝哪个方位", "哪个方位", "面朝", "朝向", "我朝哪", "which way am i facing", "which way i'm facing", "which direction am i", "what direction am i", "which way am i", "my heading", "compass direction"]) { return .facing }
         // 周围的人：关键词避开「周围」（那属 .around）；只在明确问「人」时触发。
         if has(["有几个人", "有没有人", "有人吗", "多少人", "谁在", "描述人", "who is there", "who's there", "how many people", "anyone here", "anyone there", "describe people"]) { return .describePeople }
         if has(["公交", "几路车", "哪路车", "什么车", "几路公交", "公交车", "bus", "which bus", "what bus"]) { return .readBus }

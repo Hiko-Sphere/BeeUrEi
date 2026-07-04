@@ -13,6 +13,7 @@ final class VoiceCommandParserTests: XCTestCase {
             ("我在哪", .whereAmI), ("我在哪里", .whereAmI), ("where am i", .whereAmI), ("find my location", .whereAmI),
             ("周围有什么", .around), ("附近有什么", .around), ("what's around me", .around),
             ("前方有什么", .ahead), ("前面有什么", .ahead), ("what's ahead", .ahead),
+            ("我朝哪个方向", .facing), ("我现在面朝哪", .facing), ("which way am i facing", .facing), ("what direction am i facing", .facing),
             ("这里有几个人", .describePeople), ("有没有人", .describePeople), ("who's there", .describePeople),
             ("几路车", .readBus), ("这是什么车", .readBus), ("which bus is this", .readBus),
             ("光线怎么样", .readLight), ("灯开着吗", .readLight), ("how bright is it", .readLight),
@@ -43,6 +44,16 @@ final class VoiceCommandParserTests: XCTestCase {
         for (phrase, expected) in cases {
             XCTAssertEqual(VoiceCommandParser.parse(phrase), expected, "『\(phrase)』应解析为 \(expected)")
         }
+    }
+
+    func testFacingDoesNotStealNeighbors() {
+        // 朝向命令用具体短语，不误伤 around/ahead/导航。
+        XCTAssertEqual(VoiceCommandParser.parse("我朝哪个方向"), .facing)
+        XCTAssertEqual(VoiceCommandParser.parse("面朝哪边"), .facing)
+        XCTAssertEqual(VoiceCommandParser.parse("which way am I facing"), .facing)
+        XCTAssertEqual(VoiceCommandParser.parse("周围有什么"), .around)      // 不被朝向抢
+        XCTAssertEqual(VoiceCommandParser.parse("前方有什么"), .ahead)
+        XCTAssertEqual(VoiceCommandParser.parse("带我去医院"), .navigate("医院")) // 导航仍正常
     }
 
     func testCoreIntentsZh() {

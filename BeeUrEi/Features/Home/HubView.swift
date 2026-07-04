@@ -423,6 +423,7 @@ struct HubView: View {
         case .whereAmI: locationDescriber.describe()
         case .around: locationDescriber.describeAround()
         case .ahead: locationDescriber.describeAhead()
+        case .facing: locationDescriber.describeFacing()
         case .weather: weatherSpeaker.announce()
         case .look: showFraming = true
         case .readText: route.pendingChannel = .text; showFraming = true

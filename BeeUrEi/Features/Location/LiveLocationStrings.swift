@@ -37,13 +37,10 @@ enum LiveLocationStrings {
     }
     static func distanceUnknown(_ l: Language) -> String { l == .zh ? "距离未知（需开启你自己的定位）" : "distance unknown (enable your own location)" }
 
-    /// 八方位中文/英文。
+    /// 八方位中文/英文。委托核心 CompassRose（含 isFinite 守卫）——非有限方位（NaN，如同点/坏坐标算出的
+    /// bearing）退化为"方向未知"而非 `Int(NaN)` 陷阱崩溃（历史坑：此处原直接 Int(...) 无守卫）。
     static func compass(_ degrees: Double, _ l: Language) -> String {
-        let names = l == .zh
-            ? ["正北", "东北", "正东", "东南", "正南", "西南", "正西", "西北"]
-            : ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"]
-        let idx = Int((degrees.truncatingRemainder(dividingBy: 360) + 360 + 22.5).truncatingRemainder(dividingBy: 360) / 45)
-        return names[min(idx, 7)]
+        CompassRose.cardinal(degrees: degrees, language: l) ?? (l == .zh ? "方向未知" : "unknown direction")
     }
 
     /// 联系人单元的合并无障碍标签。

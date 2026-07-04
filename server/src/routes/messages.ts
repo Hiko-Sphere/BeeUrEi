@@ -211,6 +211,22 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     return { message: updated }
   })
 
+  // 编辑自己发出的**文字**消息（WhatsApp 式：改内容 + 标"已编辑"）。限发出后 15 分钟内、仅 text 类。
+  // 新内容同样过违禁词（防先发合规再编辑成违禁绕过审核）与长度限制。
+  app.post('/api/messages/:id/edit', { preHandler: [requireAuth(), requireFeature(store, 'messaging')] }, async (req, reply) => {
+    const parsed = z.object({ text: z.string().trim().min(1).max(4000) }).safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const id = (req.params as { id: string }).id
+    const msg = store.findMessage(id)
+    if (!msg) return reply.code(404).send({ error: 'not_found' })
+    if (msg.fromId !== req.user!.sub) return reply.code(403).send({ error: 'not_yours' })
+    if (msg.kind !== 'text') return reply.code(400).send({ error: 'not_editable' }) // 仅文字可编辑（媒体/位置/已撤回不可）
+    if (Date.now() - msg.createdAt > 15 * 60_000) return reply.code(400).send({ error: 'edit_window_passed' })
+    if (matchBannedTerm(store.getAppConfig(), parsed.data.text)) return reply.code(403).send({ error: 'content_blocked' })
+    const updated = store.updateMessage(id, { text: parsed.data.text, editedAt: Date.now() })
+    return { message: updated }
+  })
+
   // 表情回应（WhatsApp 式：单 emoji，最新覆盖；空字符串取消）。单聊双方或群成员可操作。
   app.post('/api/messages/:id/reaction', { preHandler: [requireAuth(), requireFeature(store, 'messaging')] }, async (req, reply) => {
     const parsed = z.object({ emoji: z.string().max(16) }).safeParse(req.body)

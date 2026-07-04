@@ -471,6 +471,7 @@ export interface ChatMessage {
   readAt?: number // 单聊：收件人已读时间（已读回执）。群聊不用此字段（见 groupReads）
   reaction?: string // 表情回应（WhatsApp 式，单个 emoji，最新覆盖；空=无）
   groupId?: string // 群消息所属群
+  editedAt?: number // 编辑时刻（WhatsApp 式，仅文字消息、限窗口内）；有值 → 客户端标"已编辑"
 }
 
 /// 消息稳定全序比较：先 createdAt，再 id。让同毫秒消息排序确定、与翻页复合游标口径一致。

@@ -69,7 +69,7 @@ export class SqliteStore implements Store {
       CREATE TABLE IF NOT EXISTS call_records (
         id TEXT PRIMARY KEY, callId TEXT, callerId TEXT, calleeId TEXT, status TEXT, createdAt INTEGER);
       CREATE TABLE IF NOT EXISTS messages (
-        id TEXT PRIMARY KEY, fromId TEXT, toId TEXT, kind TEXT, text TEXT, createdAt INTEGER, readAt INTEGER, reaction TEXT, groupId TEXT);
+        id TEXT PRIMARY KEY, fromId TEXT, toId TEXT, kind TEXT, text TEXT, createdAt INTEGER, readAt INTEGER, reaction TEXT, groupId TEXT, editedAt INTEGER);
       CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages (fromId, toId, createdAt);
       CREATE INDEX IF NOT EXISTS idx_messages_to ON messages (toId, readAt);
       CREATE TABLE IF NOT EXISTS groups (
@@ -118,6 +118,7 @@ export class SqliteStore implements Store {
     try { this.db.exec('ALTER TABLE recordings ADD COLUMN mediaId TEXT') } catch { /* 列已存在 */ } // 录制关联的媒体文件
     try { this.db.exec('ALTER TABLE messages ADD COLUMN reaction TEXT') } catch { /* 列已存在 */ } // 表情回应
     try { this.db.exec('ALTER TABLE messages ADD COLUMN groupId TEXT') } catch { /* 列已存在 */ } // 群消息
+    try { this.db.exec('ALTER TABLE messages ADD COLUMN editedAt INTEGER') } catch { /* 列已存在 */ } // 消息编辑时刻
     // 群消息索引必须在 groupId 列迁移之后建——否则旧库（无此列）在 CREATE INDEX 处直接崩。
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_messages_group ON messages (groupId, createdAt)')
     // 热路径索引：授权判定(areLinked/acceptedContactIds)每次都查 links、拉黑检查每次都查 blocks；
@@ -836,8 +837,8 @@ export class SqliteStore implements Store {
 
   // MARK: messages
   createMessage(m: ChatMessage): void {
-    this.db.prepare('INSERT OR REPLACE INTO messages (id, fromId, toId, kind, text, createdAt, readAt, reaction, groupId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(m.id, m.fromId, m.toId, m.kind, m.text, m.createdAt, m.readAt ?? null, m.reaction ?? null, m.groupId ?? null)
+    this.db.prepare('INSERT OR REPLACE INTO messages (id, fromId, toId, kind, text, createdAt, readAt, reaction, groupId, editedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(m.id, m.fromId, m.toId, m.kind, m.text, m.createdAt, m.readAt ?? null, m.reaction ?? null, m.groupId ?? null, m.editedAt ?? null)
   }
   findMessage(id: string): ChatMessage | undefined {
     const row = this.db.prepare('SELECT * FROM messages WHERE id = ?').get(id)
@@ -1024,7 +1025,8 @@ export class SqliteStore implements Store {
   private toMessage(r: any): ChatMessage {
     return { id: r.id, fromId: r.fromId, toId: r.toId, kind: (r.kind as ChatMessage['kind']) ?? 'text',
              text: r.text, createdAt: Number(r.createdAt), readAt: r.readAt != null ? Number(r.readAt) : undefined,
-             reaction: r.reaction ?? undefined, groupId: r.groupId ?? undefined }
+             reaction: r.reaction ?? undefined, groupId: r.groupId ?? undefined,
+             editedAt: r.editedAt != null ? Number(r.editedAt) : undefined }
   }
   private toGroup(r: any): ChatGroup {
     let memberIds: string[] = []

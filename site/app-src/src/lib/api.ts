@@ -22,7 +22,7 @@ export interface IceServer { urls: string[] | string; username?: string; credent
 export interface IncomingCall { callId: string; fromName: string; fromUserId: string; fromAvatar?: string | null }
 // 与后端 HelpSummary 对齐：队列对外的安全摘要（不暴露 fromUserId）。
 export interface HelpRequest { callId: string; fromName: string; fromAvatar?: string | null; language?: string; locality?: string; topic?: string; waitedSeconds: number }
-export interface ChatMessage { id: string; fromId: string; toId: string; kind: string; text: string; createdAt: number; readAt?: number; reaction?: string; groupId?: string }
+export interface ChatMessage { id: string; fromId: string; toId: string; kind: string; text: string; createdAt: number; readAt?: number; reaction?: string; groupId?: string; editedAt?: number }
 export interface Conversation { peer: User; last: ChatMessage; unread: number }
 export interface ChatGroup { id: string; name: string; ownerId: string; memberIds: string[]; createdAt: number }
 export interface GroupSummary { group: ChatGroup; members: User[]; last: ChatMessage | null; unread: number }
@@ -291,6 +291,7 @@ export const api = {
   markRead: (fromId: string) => post('/api/messages/read', { fromId }),
   markGroupRead: (groupId: string) => post('/api/messages/read', { groupId }),
   recallMessage: (id: string) => post(`/api/messages/${id}/recall`) as Promise<{ message: ChatMessage }>,
+  editMessage: (id: string, text: string) => post(`/api/messages/${id}/edit`, { text }) as Promise<{ message: ChatMessage }>,
   reactMessage: (id: string, emoji: string) => post(`/api/messages/${id}/reaction`, { emoji }) as Promise<{ message: ChatMessage }>,
   groups: () => get('/api/groups') as Promise<{ groups: GroupSummary[] }>,
   createGroup: (name: string, memberIds: string[]) => post('/api/groups', { name, memberIds }),

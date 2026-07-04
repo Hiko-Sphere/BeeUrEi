@@ -290,6 +290,13 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
     try { await api.recallMessage(m.id); await load() } catch { toast(t('撤回失败（超过 2 分钟？）', 'Recall failed'), 'error') }
   }
 
+  // 编辑自己的文字消息（限 15 分钟内）：改内容并标"已编辑"。
+  const edit = async (m: ChatMessage, newText: string) => {
+    const body = newText.trim()
+    if (!body || body === m.text) return
+    try { await api.editMessage(m.id, body); await load() } catch (e) { toast(chatErrorText(e, t, t('编辑失败（超过 15 分钟？）', 'Edit failed')), 'error') }
+  }
+
   // 表情回应（与 iOS 对齐）：再次点同一表情=取消（后端空串清除）。
   const react = async (m: ChatMessage, emoji: string) => {
     try { await api.reactMessage(m.id, m.reaction === emoji ? '' : emoji); await load() }
@@ -364,7 +371,7 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
         {msgs === null ? <Spinner /> : msgs.length === 0 ? (
           <div className="grid h-full place-items-center text-sm text-faint">{t('开始你们的对话', 'Say hello')}</div>
         ) : msgs.map((m) => (
-          <Bubble key={m.id} m={m} mine={m.fromId === user?.id} lang={lang} t={t} onRecall={() => recall(m)} onReact={(e) => react(m, e)}
+          <Bubble key={m.id} m={m} mine={m.fromId === user?.id} lang={lang} t={t} onRecall={() => recall(m)} onReact={(e) => react(m, e)} onEdit={(nt) => edit(m, nt)}
             isGroup={sel.kind === 'group'}
             senderName={sel.kind === 'group' && m.fromId !== user?.id ? (sel.members.find((mm) => mm.id === m.fromId)?.displayName ?? '') : undefined} />
         ))}
@@ -481,18 +488,34 @@ function GroupInfoDialog({ groupId, groupName, ownerId, members, meId, onClose, 
 
 const REACTION_CHOICES = ['👍', '❤️', '😂', '😮', '😢', '🙏'] // 与 iOS ChatStrings.reactionChoices 对齐
 
-function Bubble({ m, mine, lang, t, onRecall, onReact, senderName, isGroup }: { m: ChatMessage; mine: boolean; lang: 'zh' | 'en'; t: (z: string, e: string) => string; onRecall: () => void; onReact: (emoji: string) => void; senderName?: string; isGroup?: boolean }) {
+function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, senderName, isGroup }: { m: ChatMessage; mine: boolean; lang: 'zh' | 'en'; t: (z: string, e: string) => string; onRecall: () => void; onReact: (emoji: string) => void; onEdit: (newText: string) => void; senderName?: string; isGroup?: boolean }) {
   const recallable = mine && m.kind !== 'recalled' && Date.now() - m.createdAt < 2 * 60_000
+  const editable = mine && m.kind === 'text' && Date.now() - m.createdAt < 15 * 60_000
   const reactable = m.kind !== 'recalled'
   const [picking, setPicking] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(m.text)
+  const saveEdit = () => { onEdit(draft); setEditing(false) }
   return (
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div className={`group relative max-w-[78%] rounded-2xl px-3.5 py-2 text-sm ${mine ? 'bg-honey text-ink' : 'surface-2 text-[var(--text)]'} ${m.kind === 'recalled' ? 'italic opacity-60' : ''}`}>
         {/* 群聊里别人的消息署名——否则多人群聊分不清谁说的。 */}
         {senderName && <div className="mb-0.5 text-xs font-semibold text-honey">{senderName}</div>}
-        <MessageBody m={m} t={t} />
+        {editing ? (
+          <div className="flex flex-col gap-1.5" data-testid="edit-box">
+            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} maxLength={4000}
+              aria-label={t('编辑消息', 'Edit message')}
+              className="w-full resize-y rounded-lg border border-[var(--line)] bg-white/80 px-2 py-1 text-sm text-ink outline-none" />
+            <div className="flex justify-end gap-2 text-xs">
+              <button onClick={() => { setDraft(m.text); setEditing(false) }} className="hover:underline">{t('取消', 'Cancel')}</button>
+              <button onClick={saveEdit} className="font-semibold hover:underline">{t('保存', 'Save')}</button>
+            </div>
+          </div>
+        ) : <MessageBody m={m} t={t} />}
         <div className={`mt-1 flex items-center gap-2 text-[10px] ${mine ? 'text-ink/60' : 'text-faint'}`}>
           <span>{timeAgo(m.createdAt, lang)}</span>
+          {m.editedAt && m.kind !== 'recalled' && <span data-testid="edited-tag">{t('已编辑', 'edited')}</span>}
+          {editable && !editing && <button onClick={() => { setDraft(m.text); setEditing(true) }} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('编辑', 'Edit')}</button>}
           {m.reaction && <span className="text-sm">{m.reaction}</span>}
           {reactable && (
             <button onClick={() => setPicking((v) => !v)} aria-label={t('表情回应', 'React')}

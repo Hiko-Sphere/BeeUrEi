@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 // 经 /chat/:peerId 预选打开 Thread：mock useParams 给 peerId、useSession 给本人、api 给会话+消息。
 vi.mock('react-router-dom', () => ({ useParams: () => ({ peerId: 'p1' }), useNavigate: () => vi.fn() }))
@@ -8,7 +8,7 @@ vi.mock('../lib/session', () => ({ useSession: () => ({ user: { id: 'me', displa
 vi.mock('../lib/api', () => ({
   api: {
     conversations: vi.fn(), groups: vi.fn(), messagesWith: vi.fn(), markRead: vi.fn(),
-    lookupUser: vi.fn(), familyLinks: vi.fn(), searchMessages: vi.fn(),
+    lookupUser: vi.fn(), familyLinks: vi.fn(), searchMessages: vi.fn(), editMessage: vi.fn(),
   },
   APIError: class extends Error { code = ''; status = 0 },
 }))
@@ -58,6 +58,29 @@ describe('ChatPage 线程消息气泡渲染（防字段漂移：按 kind 渲染�
     await screen.findByText('我到家了')
     expect(screen.getAllByText('已读')).toHaveLength(1)     // 仅 r1（对端 r3 虽 readAt 有也不显示回执）
     expect(screen.getAllByText('已送达')).toHaveLength(1)   // 仅 r2
+  })
+
+  it('自己近期文字消息可编辑：点"编辑"→改文→保存调 editMessage；带 editedAt 显示"已编辑"', async () => {
+    const now = Date.now()
+    mock(api.editMessage).mockResolvedValue({ message: {} })
+    mock(api.messagesWith).mockResolvedValue({
+      messages: [
+        msg({ id: 'e1', fromId: 'me', toId: 'p1', kind: 'text', text: '打错的字', createdAt: now }),                    // 近期自己发 → 可编辑
+        msg({ id: 'e2', fromId: 'me', toId: 'p1', kind: 'text', text: '改过了', createdAt: now, editedAt: now }),        // 已编辑标记
+        msg({ id: 'e3', fromId: 'p1', toId: 'me', kind: 'text', text: '对端消息', createdAt: now }),                     // 对端消息 → 无编辑按钮
+      ],
+    })
+    render(<ChatPage />)
+    await screen.findByText('打错的字')
+    expect(screen.getAllByTestId('edited-tag')).toHaveLength(1)  // 仅 e2 标"已编辑"
+    // 自己的两条可编辑（e1/e2），对端 e3 不可 → 恰两个"编辑"按钮。
+    const editBtns = screen.getAllByText('编辑')
+    expect(editBtns).toHaveLength(2)
+    fireEvent.click(editBtns[0])                                 // 编辑 e1
+    const box = await screen.findByTestId('edit-box')
+    fireEvent.change(box.querySelector('textarea')!, { target: { value: '打对的字' } })
+    fireEvent.click(screen.getByText('保存'))
+    await waitFor(() => expect(api.editMessage).toHaveBeenCalledWith('e1', '打对的字'))
   })
 
   it('文本式位置消息在气泡里渲染为带坐标的位置链接（而非裸 maps URL）', async () => {

@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css'
 import { api, APIError, type ContactLocation } from '../lib/api'
 import { pollWhileVisible } from '../lib/poll'
 import { batteryBadge } from '../lib/battery'
+import { validAccuracyMeters, accuracyText } from '../lib/geoAccuracy'
 import { useI18n } from '../lib/i18n'
 import { useSession } from '../lib/session'
 import { roleLabel } from '../components/Layout'
@@ -32,6 +33,7 @@ export function LocationsPage() {
   const mapEl = useRef<HTMLDivElement>(null)
   const map = useRef<L.Map | null>(null)
   const markers = useRef<Map<string, L.Marker>>(new Map())
+  const accuracyCircles = useRef<Map<string, L.Circle>>(new Map()) // 每个联系人的 GPS 精度圈（Find My 式，让协助者看清位置有多准）
   const selfMarker = useRef<L.Marker | null>(null)
   const watchId = useRef<number | null>(null)
   const lastPos = useRef<GeolocationCoordinates | null>(null)
@@ -87,13 +89,27 @@ export function LocationsPage() {
       } else {
         mk.setLatLng(ll)
       }
+      // GPS 精度圈（Find My/Google Maps 式）：位置有多准，协助者一眼看清——大圈="在这一带"、小圈=精确。
+      // 只在精度有效(有限、正值)时画；interactive:false 让点击穿透到标记。半径=米。
+      const acc = validAccuracyMeters(c.accuracy)
+      let circle = accuracyCircles.current.get(c.userId)
+      if (acc != null) {
+        if (!circle) {
+          circle = L.circle(ll, { radius: acc, color: '#ffce5c', weight: 1, fillColor: '#ffce5c', fillOpacity: 0.12, interactive: false }).addTo(m)
+          accuracyCircles.current.set(c.userId, circle)
+        } else { circle.setLatLng(ll); circle.setRadius(acc) }
+      } else if (circle) { m.removeLayer(circle); accuracyCircles.current.delete(c.userId) } // 本次无精度：撤掉旧圈
       // danger 用 text-danger 类（项目无 --danger 变量；类还自带暗色主题对比度覆盖 .dark .text-danger）。
       const batt = batteryBadge(c.battery, lang)
       const battHtml = batt ? ` · <span class="${batt.danger ? 'text-danger font-semibold' : ''}">${escapeHtml(batt.text)}</span>` : ''
-      mk.bindPopup(`<b>${escapeHtml(c.displayName)}</b><br>${roleLabel(c.role, t)} · ${timeAgo(c.updatedAt, lang)}${battHtml}`)
+      // 精度文字（协助者读屏/看不清圈时也知道有多准）："精确到约 20 米"。
+      const accLabel = accuracyText(c.accuracy, t)
+      const accHtml = accLabel ? ` · ${escapeHtml(accLabel)}` : ''
+      mk.bindPopup(`<b>${escapeHtml(c.displayName)}</b><br>${roleLabel(c.role, t)} · ${timeAgo(c.updatedAt, lang)}${battHtml}${accHtml}`)
     }
-    // 移除已不再共享的联系人标记。
+    // 移除已不再共享的联系人标记 + 其精度圈。
     for (const [id, mk] of markers.current) if (!seen.has(id)) { m.removeLayer(mk); markers.current.delete(id) }
+    for (const [id, cir] of accuracyCircles.current) if (!seen.has(id)) { m.removeLayer(cir); accuracyCircles.current.delete(id) }
     // 首次有数据时自适应视野。
     if (!fitted.current) {
       const pts: L.LatLngExpression[] = contacts.map((c) => [c.lat, c.lng])

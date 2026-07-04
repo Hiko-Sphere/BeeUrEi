@@ -2,6 +2,22 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { requireAuth } from '../auth/rbac'
 import { type Store, type SavedPlace, matchBannedTerm } from '../db/store'
+import { amapGeocode } from '../nav/amapClient'
+import { gcj02ToWgs84 } from '../nav/chinaCoord'
+
+/// 保存时一次性地理编码出 WGS-84 坐标缓存（供"到家了"围栏判定，不改导航路径）。best-effort：
+/// 未配 amap / 境外地址 / 查不到 / 出错 → 返回 undefined，地点照存、只是无围栏。amapGeocode 返回 GCJ-02，转回 WGS-84。
+async function geocodeToWgs(address: string): Promise<{ lat: number; lng: number } | undefined> {
+  try {
+    const g = await amapGeocode(address) // "经度,纬度" GCJ-02
+    if (!g) return undefined
+    const [lonS, latS] = g.split(',')
+    const lon = Number(lonS), lat = Number(latS)
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return undefined
+    const w = gcj02ToWgs84(lat, lon)
+    return { lat: w.lat, lng: w.lon }
+  } catch { return undefined } // 地理编码失败绝不阻断保存
+}
 
 /// 保存的地点（"家"/"公司"/自定义如"医院"）：盲人日常"带我回家/去公司"免每次报地址。
 /// 只存**本人**地点、**只存地址字符串**（导航时由 walking/transit 端点实时 geocode，不存坐标、免坐标系纠缠）。
@@ -32,7 +48,8 @@ export function registerSavedPlaceRoutes(app: FastifyInstance, store: Store): vo
     if (!existing.some((p) => p.label === label) && existing.length >= MAX_PLACES_PER_USER) {
       return reply.code(429).send({ error: 'place_limit' })
     }
-    const place: SavedPlace = { ownerId: me, label, address, updatedAt: Date.now() }
+    const coord = await geocodeToWgs(address) // 缓存坐标供到达围栏；失败则无坐标、地点照存
+    const place: SavedPlace = { ownerId: me, label, address, lat: coord?.lat, lng: coord?.lng, updatedAt: Date.now() }
     store.upsertSavedPlace(place)
     return { place }
   })

@@ -6,6 +6,13 @@ export function pushLang(language?: string): PushLang {
   return language?.toLowerCase().startsWith('en') ? 'en' : 'zh'
 }
 
+/// 地点 label 展示名：home/work 是保留 label，本地化为"家/公司"；自定义 label（如"医院"）原样。
+function placeLabelName(label: string, l: PushLang): string {
+  if (label === 'home') return l === 'en' ? 'home' : '家'
+  if (label === 'work') return l === 'en' ? 'work' : '公司'
+  return label
+}
+
 export const pushStrings = {
   incomingCallTitle: (caller: string, l: PushLang): string =>
     l === 'en' ? `Incoming call from ${caller}` : `${caller} 来电`,
@@ -24,6 +31,15 @@ export const pushStrings = {
   routeAddedBody: (name: string, routeName: string, l: PushLang): string =>
     l === 'en' ? `${name} added the route "${routeName}" — open Navigation to walk it`
                : `${name} 为你添加了路线「${routeName}」，可在导航里沿信标行走`,
+  // 到达围栏（Life360/Find My "已到家"式）：家/公司 是保留 label，本地化；自定义 label 原样。
+  placeArrivalTitle: (name: string, label: string, l: PushLang): string => {
+    const place = placeLabelName(label, l)
+    return l === 'en' ? `${name} arrived at ${place}` : `${name}已到达${place}`
+  },
+  placeArrivalBody: (name: string, label: string, l: PushLang): string => {
+    const place = placeLabelName(label, l)
+    return l === 'en' ? `${name} has safely arrived at ${place}.` : `${name}已经安全到达${place}。`
+  },
   groupAddedTitle: (l: PushLang): string =>
     l === 'en' ? 'Added to a group chat' : '你被加入了群聊',
   groupAddedBody: (name: string, groupName: string, l: PushLang): string =>

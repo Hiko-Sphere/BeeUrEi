@@ -145,6 +145,8 @@ export class SqliteStore implements Store {
         ownerId TEXT NOT NULL,
         label TEXT NOT NULL,
         address TEXT NOT NULL,
+        lat REAL,
+        lng REAL,
         updatedAt INTEGER NOT NULL,
         PRIMARY KEY (ownerId, label)
       )
@@ -517,14 +519,19 @@ export class SqliteStore implements Store {
     this.db.prepare('DELETE FROM saved_routes WHERE ownerId = ?').run(ownerId)
   }
   private rowToSavedPlace(r: any): SavedPlace {
-    return { ownerId: r.ownerId, label: r.label, address: r.address, updatedAt: Number(r.updatedAt) }
+    return {
+      ownerId: r.ownerId, label: r.label, address: r.address,
+      lat: r.lat != null ? Number(r.lat) : undefined, // NULL → undefined（未 geocode 出坐标）
+      lng: r.lng != null ? Number(r.lng) : undefined,
+      updatedAt: Number(r.updatedAt),
+    }
   }
   savedPlacesForUser(ownerId: string): SavedPlace[] {
     return (this.db.prepare('SELECT * FROM saved_places WHERE ownerId = ? ORDER BY updatedAt DESC').all(ownerId) as any[]).map((r) => this.rowToSavedPlace(r))
   }
   upsertSavedPlace(p: SavedPlace): void {
-    this.db.prepare('INSERT OR REPLACE INTO saved_places (ownerId, label, address, updatedAt) VALUES (?, ?, ?, ?)')
-      .run(p.ownerId, p.label, p.address, p.updatedAt) // 复合主键 (ownerId,label)：同 label 覆盖
+    this.db.prepare('INSERT OR REPLACE INTO saved_places (ownerId, label, address, lat, lng, updatedAt) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(p.ownerId, p.label, p.address, p.lat ?? null, p.lng ?? null, p.updatedAt) // 复合主键 (ownerId,label)：同 label 覆盖
   }
   deleteSavedPlace(ownerId: string, label: string): void {
     this.db.prepare('DELETE FROM saved_places WHERE ownerId = ? AND label = ?').run(ownerId, label)

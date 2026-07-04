@@ -346,12 +346,14 @@ export interface SavedRoute {
 }
 
 /// 保存的地点（"家"/"公司"/自定义如"医院"）：盲人日常通勤"带我回家/去公司"免每次报地址。
-/// **只存地址名字符串，不存坐标**——导航时由 walking/transit 端点实时 geocode（避坐标系纠缠：geocode 出 GCJ-02
-/// 而全栈存 WGS-84，存坐标须转换；存地址则每次导航重解析、始终一致）。每个归属者每个 label 唯一（upsert 语义）。
+/// 存地址串（导航时实时 geocode），另**在保存时**一次性 geocode 出 WGS-84 坐标缓存（lat/lng）——供到达围栏判定
+/// （"到家了"提醒），不改导航路径。坐标可空（geocode 失败/未配 amap/境外无法地理编码时）。每归属者每 label 唯一。
 export interface SavedPlace {
   ownerId: string   // 归属者（盲人本人）；删号级联删除其全部地点
   label: string     // "home" / "work" / 自定义标签；(ownerId,label) 复合主键
   address: string   // 地点名或地址（导航时 geocode）
+  lat?: number      // WGS-84（保存时 geocode 缓存，供到达围栏；可空）
+  lng?: number
   updatedAt: number
 }
 

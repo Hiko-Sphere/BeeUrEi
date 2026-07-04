@@ -227,7 +227,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerNavRoutes(instance, store)
     registerVisionRoutes(instance, store, metrics) // AI 场景描述/图像问答（云端视觉大模型，provider 无关，未配 VISION_* 则 503）
     registerProductRoutes(instance) // 商品条码→商品名（Open Food Facts 代理，免密钥）
-    registerLocationRoutes(instance, store, liveLocations) // 实时位置共享（亲友/协助者 ↔ 盲人）
+    registerLocationRoutes(instance, store, liveLocations, pushSender) // 实时位置共享 + 到达围栏提醒（亲友 ↔ 盲人）
     registerSavedRouteRoutes(instance, store, pushSender) // 路线库（亲友远程路线编排 + 盲人自存路线）
     registerSavedPlaceRoutes(instance, store) // 保存的地点（家/公司/自定义，快捷导航）
     registerAppConfigRoutes(instance, store) // 客户端读取功能开关（控制每一个按键）

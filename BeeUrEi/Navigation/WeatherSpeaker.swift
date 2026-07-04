@@ -88,7 +88,7 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
         c.queryItems = [
             .init(name: "latitude", value: String(format: "%.3f", lat)),   // 坐标降精到 ~百米级，最小化外发
             .init(name: "longitude", value: String(format: "%.3f", lon)),
-            .init(name: "current", value: "temperature_2m,weather_code,wind_speed_10m"),
+            .init(name: "current", value: "temperature_2m,weather_code,wind_speed_10m,uv_index"),
             .init(name: "daily", value: "temperature_2m_max,temperature_2m_min,precipitation_probability_max"),
             .init(name: "forecast_days", value: "1"),
             .init(name: "timezone", value: "auto"),
@@ -98,6 +98,7 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
                 let temperature_2m: Double
                 let weather_code: Int
                 let wind_speed_10m: Double?
+                let uv_index: Double?
             }
             struct Daily: Decodable {
                 let temperature_2m_max: [Double]
@@ -120,6 +121,7 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
                                      todayMax: r.daily?.temperature_2m_max.first,
                                      todayMin: r.daily?.temperature_2m_min.first,
                                      precipProbability: r.daily?.precipitation_probability_max?.first ?? nil,
+                                     uvIndex: r.current.uv_index,
                                      language: l)
     }
 

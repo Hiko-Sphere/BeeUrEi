@@ -114,4 +114,35 @@ extension WeatherPhraseTests {
         let out = WeatherPhrase.summary(temperature: 20, code: 0, windSpeedKmh: 50, todayMax: 22, todayMin: 15, precipProbability: 0, language: .zh)
         XCTAssertTrue(out.contains("盖过车流声"))
     }
+
+    func testHighUVGetsSunProtectionAdvice() {
+        // 晴天高 UV(≥6)：盲人看不到日照强弱，主动提示防晒。
+        let zh = WeatherPhrase.advice(code: 0, todayMax: 26, todayMin: 18, precipProbability: 0, uvIndex: 8, language: .zh)
+        XCTAssertNotNil(zh); XCTAssertTrue(zh!.contains("防晒"))
+        XCTAssertTrue(WeatherPhrase.advice(code: 0, todayMax: 26, todayMin: 18, precipProbability: 0, uvIndex: 8, language: .en)!.lowercased().contains("uv"))
+        // UV 不够高(5) + 晴天无其它建议 → nil（不啰嗦）。
+        XCTAssertNil(WeatherPhrase.advice(code: 0, todayMax: 26, todayMin: 18, precipProbability: 0, uvIndex: 5, language: .zh))
+    }
+
+    func testHotAndHighUVCombinedIntoOneTip() {
+        // 高温(≥35)+高 UV：合并"防暑+防晒"一句；高温但低 UV(阴热)只防暑。
+        let both = WeatherPhrase.advice(code: 0, todayMax: 37, todayMin: 26, precipProbability: 0, uvIndex: 9, language: .zh)!
+        XCTAssertTrue(both.contains("防暑")); XCTAssertTrue(both.contains("防晒"))
+        let hotOnly = WeatherPhrase.advice(code: 3, todayMax: 37, todayMin: 26, precipProbability: 0, uvIndex: 2, language: .zh)!
+        XCTAssertTrue(hotOnly.contains("防暑")); XCTAssertFalse(hotOnly.contains("防晒"))
+    }
+
+    func testUVYieldsToWetAndFogSafety() {
+        // 阴雨/雾天：能见度/湿滑安全优先，先返回，绝不给 UV 提示（那些码本就 UV 低）。
+        let rainy = WeatherPhrase.advice(code: 61, todayMax: 20, todayMin: 14, precipProbability: 80, uvIndex: 7, language: .zh)!
+        XCTAssertTrue(rainy.contains("带伞")); XCTAssertFalse(rainy.contains("防晒"))
+        let foggy = WeatherPhrase.advice(code: 45, todayMax: 20, todayMin: 14, precipProbability: 0, uvIndex: 7, language: .zh)!
+        XCTAssertTrue(foggy.contains("看不清你")); XCTAssertFalse(foggy.contains("防晒"))
+    }
+
+    func testSummaryPipesUVIntoAdvice() {
+        // 端到端：summary 把 uvIndex 透传给 advice（否则 UV 建议永远不触发）。
+        let out = WeatherPhrase.summary(temperature: 28, code: 0, todayMax: 30, todayMin: 20, precipProbability: 0, uvIndex: 8, language: .zh)
+        XCTAssertTrue(out.contains("防晒"))
+    }
 }

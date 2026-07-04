@@ -47,6 +47,7 @@ public enum WeatherPhrase {
                                windSpeedKmh: Double? = nil,
                                todayMax: Double? = nil, todayMin: Double? = nil,
                                precipProbability: Int? = nil,
+                               uvIndex: Double? = nil,
                                language: Language) -> String {
         let cond = condition(code: code, language: language)
         let t = safeTemp(temperature)
@@ -68,7 +69,8 @@ public enum WeatherPhrase {
         }
         var text = parts.joined(separator: language == .zh ? "，" : ", ") + (language == .zh ? "。" : ".")
         if let tip = advice(code: code, todayMax: todayMax, todayMin: todayMin,
-                            precipProbability: precipProbability, windSpeedKmh: windSpeedKmh, language: language) {
+                            precipProbability: precipProbability, windSpeedKmh: windSpeedKmh,
+                            uvIndex: uvIndex, language: language) {
             text += tip
         }
         return text
@@ -78,7 +80,8 @@ public enum WeatherPhrase {
     /// 高温/严寒；并对大风(盖过车流声、盲人靠听觉定向避险的关键被掩)追加安全提示。无建议返回 nil。
     /// windSpeedKmh：单位 km/h（Open-Meteo wind_speed_10m）。
     public static func advice(code: Int, todayMax: Double?, todayMin: Double?,
-                              precipProbability: Int?, windSpeedKmh: Double? = nil, language: Language) -> String? {
+                              precipProbability: Int?, windSpeedKmh: Double? = nil,
+                              uvIndex: Double? = nil, language: Language) -> String? {
         // 大风安全提示（≥40km/h≈6级"强风"）：盲人靠听觉判断车流/定向，风噪盖过车声是直接的过街危险——
         // 阈值高于描述性"风较大"(29km/h)，只在真会掩盖车声的强风才追加。冻雨已是"避免外出"最高级，不叠加。
         let strongWind = (windSpeedKmh ?? 0) >= 40
@@ -107,8 +110,17 @@ public enum WeatherPhrase {
         if wet.contains(code) || (precipProbability ?? 0) >= 50 {
             return withWind(language == .zh ? "出门请带伞，地面可能湿滑。" : " Bring an umbrella; the ground may be slippery.")
         }
+        // 高紫外线（Open-Meteo uv_index）：盲人看不到日照强弱，晴天高 UV 下极易在不知不觉中晒伤——
+        // ≥6 为 WHO"高"档（约 25 分钟即可致敏），主动提示防晒；与高温常同现（晴热），合并成一句更自然。
+        // 落在 fog/wet 之后：阴雨天 UV 本就低，且那些条件的能见度/湿滑安全优先级更高，先返回。
+        let highUV = (uvIndex ?? 0) >= 6
         if let mx = todayMax, mx >= 35 {
-            return withWind(language == .zh ? "今天高温，注意防暑补水。" : " Very hot today; stay hydrated.")
+            return withWind(highUV
+                ? (language == .zh ? "今天高温且阳光强烈，注意防暑补水、做好防晒。" : " Very hot with strong sun; stay hydrated and use sun protection.")
+                : (language == .zh ? "今天高温，注意防暑补水。" : " Very hot today; stay hydrated."))
+        }
+        if highUV {
+            return withWind(language == .zh ? "紫外线较强，外出请注意防晒（帽子、防晒霜）。" : " High UV; use sun protection (hat, sunscreen) outdoors.")
         }
         if let mn = todayMin, mn <= 0 {
             return withWind(language == .zh ? "气温在冰点以下，路面可能结冰，出行小心。" : " Below freezing; watch for ice.")

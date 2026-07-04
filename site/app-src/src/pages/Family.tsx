@@ -5,7 +5,7 @@ import { classifyIdentifier } from '../lib/identifier'
 import { useI18n } from '../lib/i18n'
 import { useCall } from './call/CallController'
 import { Card, Avatar, Button, Pill, Spinner, EmptyState, Field, Input, useToast, Modal } from '../components/ui'
-import { IconUsers, IconPhone, IconChat, IconPlus, IconCheck, IconX, IconShield } from '../components/icons'
+import { IconUsers, IconPhone, IconChat, IconPlus, IconCheck, IconX, IconShield, IconFlash } from '../components/icons'
 
 export function FamilyPage() {
   const { t } = useI18n()
@@ -29,6 +29,11 @@ export function FamilyPage() {
 
   const accept = async (id: string) => { try { await api.acceptLink(id); toast(t('已接受', 'Accepted'), 'ok'); void reload() } catch { toast(t('操作失败', 'Failed'), 'error') } }
   const remove = async (id: string) => { try { await api.deleteLink(id); void reload() } catch { toast(t('操作失败', 'Failed'), 'error') } }
+  // 切换某联系人是否为我的紧急联系人（紧急告警优先/升级/医疗信息可见都依赖此标志）。仅我作为 owner 的链可改。
+  const toggleEmergency = async (l: FamilyLink) => {
+    try { await api.setLinkEmergency(l.id, !l.isEmergency); toast(l.isEmergency ? t('已取消紧急联系人', 'Removed from emergency contacts') : t('已设为紧急联系人', 'Set as emergency contact'), 'ok'); void reload() }
+    catch { toast(t('操作失败', 'Failed'), 'error') }
+  }
   const unblock = async (id: string) => { try { await api.unblock(id); void reload() } catch { toast(t('操作失败', 'Failed'), 'error') } }
   // 拉黑联系人（不必正在通话也能拉黑：经聊天骚扰也可在此处理）：拉黑 + 解除绑定，之后互不可呼叫/发消息。
   const blockContact = async (link: FamilyLink) => {
@@ -89,6 +94,14 @@ export function FamilyPage() {
                     <span className="text-faint">{l.relation}{l.isEmergency ? ` · ${t('紧急联系人', 'Emergency')}` : ''}</span>
                   </div>
                 </div>
+                {l.amOwner && (
+                  <button onClick={() => toggleEmergency(l)} aria-pressed={l.isEmergency}
+                    className={`flex h-9 w-9 items-center justify-center rounded-full ${l.isEmergency ? 'bg-danger/15 text-danger' : 'surface-2 text-faint'}`}
+                    title={l.isEmergency ? t('紧急联系人（点击取消）', 'Emergency contact (tap to remove)') : t('设为紧急联系人', 'Set as emergency contact')}
+                    aria-label={l.isEmergency ? t('取消紧急联系人', 'Remove from emergency contacts') : t('设为紧急联系人', 'Set as emergency contact')}>
+                    <IconFlash width={16} height={16} />
+                  </button>
+                )}
                 <button onClick={() => startOutgoing(l.memberId, l.memberName, l.memberAvatar)} disabled={!!active}
                   className="flex h-9 w-9 items-center justify-center rounded-full bg-honey/15 text-honey disabled:opacity-40" aria-label={t('呼叫', 'Call')}><IconPhone width={18} height={18} /></button>
                 <button onClick={() => nav(`/chat/${l.memberId}`)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-soft" aria-label={t('消息', 'Message')}><IconChat width={18} height={18} /></button>

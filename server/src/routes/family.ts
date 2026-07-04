@@ -102,6 +102,20 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: P
     return { ok: true }
   })
 
+  // 切换某联系人是否为**紧急联系人**（isEmergency）。此前只能在建链时设、之后无法改——
+  // 而紧急告警优先级/升级重呼/医疗信息可见都依赖它，用户必须能事后调整谁是自己的紧急联系人。
+  // 授权：仅链的 **owner**（= 设置"谁是我的紧急联系人"的一方，与建链时 owner 设 isEmergency 同口径）可改。
+  app.post('/api/family/links/:id/emergency', { preHandler: requireAuth() }, async (req, reply) => {
+    const parsed = z.object({ isEmergency: z.boolean() }).safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const meId = req.user!.sub
+    const link = store.findLink((req.params as { id: string }).id)
+    if (!link) return reply.code(404).send({ error: 'not_found' })
+    if (link.ownerId !== meId) return reply.code(403).send({ error: 'not_owner' }) // 仅 owner 可指定其紧急联系人
+    store.createLink({ ...link, isEmergency: parsed.data.isEmergency }) // 读-合并-写（INSERT OR REPLACE，同 accept 改 status）
+    return { link: viewLink(store, { ...link, isEmergency: parsed.data.isEmergency }, meId, isOnline) }
+  })
+
   // 我的关系列表（我作为 owner 或 member 任一方都列出；展示"对方"）。
   app.get('/api/family/links', { preHandler: requireAuth() }, async (req) => {
     const meId = req.user!.sub
@@ -148,6 +162,7 @@ function viewLink(store: Store, link: FamilyLink, meId: string, isOnline: (userI
     memberAvatar: other?.avatar ?? null,
     relation: link.relation,
     isEmergency: link.isEmergency,
+    amOwner: link.ownerId === meId, // 我是否为该链 owner（= 能否指定其为我的紧急联系人）
     phone: link.phone,
     status: link.status ?? 'accepted',
     outgoing: (link.status ?? 'accepted') === 'pending' && link.requestedBy === meId, // 我发起、待对方确认

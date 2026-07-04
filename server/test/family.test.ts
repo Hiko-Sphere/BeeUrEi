@@ -220,4 +220,38 @@ describe('family + emergency', () => {
     expect(limited).toBeGreaterThan(0)      // 超额后触发限流（否则刷推送环路无界）
     await a.close()
   })
+
+  it('可事后切换联系人的紧急标志（isEmergency）；仅 owner 可改，非 owner/member 403', async () => {
+    const { a, reg } = setup()
+    const owner = await reg('emgowner', 'blind')
+    const contact = await reg('emgcontact', 'family')
+    const stranger = await reg('emgstranger', 'helper')
+    const auth = (t: string) => ({ authorization: `Bearer ${t}` })
+    // 建链时**非**紧急联系人
+    const l = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(owner.token), payload: { username: 'emgcontact', relation: '家人', isEmergency: false } })
+    const id = l.json().link.id as string
+    expect(l.json().link.isEmergency).toBe(false)
+    await a.inject({ method: 'POST', url: `/api/family/links/${id}/accept`, headers: auth(contact.token) })
+
+    // owner 事后提升为紧急联系人
+    const on = await a.inject({ method: 'POST', url: `/api/family/links/${id}/emergency`, headers: auth(owner.token), payload: { isEmergency: true } })
+    expect(on.statusCode).toBe(200)
+    expect(on.json().link.isEmergency).toBe(true)
+    // 列表反映
+    const list = await a.inject({ method: 'GET', url: '/api/family/links', headers: auth(owner.token) })
+    expect(list.json().links.find((x: any) => x.id === id).isEmergency).toBe(true)
+    // 再降级
+    const off = await a.inject({ method: 'POST', url: `/api/family/links/${id}/emergency`, headers: auth(owner.token), payload: { isEmergency: false } })
+    expect(off.json().link.isEmergency).toBe(false)
+
+    // member（对方）不能改（仅 owner 指定其紧急联系人）
+    const byMember = await a.inject({ method: 'POST', url: `/api/family/links/${id}/emergency`, headers: auth(contact.token), payload: { isEmergency: true } })
+    expect(byMember.statusCode).toBe(403)
+    // 陌生人 404（看不到该链）
+    const bySelf = await a.inject({ method: 'POST', url: `/api/family/links/${id}/emergency`, headers: auth(stranger.token), payload: { isEmergency: true } })
+    expect(bySelf.statusCode).toBe(403) // 存在但非 owner → 403（不泄漏存在性差异：非 owner 一律 403）
+    // 非法 body 400
+    expect((await a.inject({ method: 'POST', url: `/api/family/links/${id}/emergency`, headers: auth(owner.token), payload: {} })).statusCode).toBe(400)
+    await a.close()
+  })
 })

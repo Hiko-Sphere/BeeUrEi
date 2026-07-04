@@ -32,6 +32,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case time                       // 现在几点（盲人看不到时钟，最高频的语音查询）
     case battery                    // 电量还剩多少（手机没电=丢失导航/求助工具，盲人尤需随时确认）
     case date                       // 今天几号/星期几
+    case openSettings               // 打开设置（语言/无障碍/摔倒检测等非语音可调项——语音直达免找按钮）
     case unknown
 }
 
@@ -72,6 +73,8 @@ public enum VoiceCommandParser {
         if has(["纸币", "钱", "钞票", "多少元", "banknote", "money", "currency", "bill"]) { return .banknote }
         if has(["扫码", "二维码", "条形码", "条码", "scan", "barcode", "qr"]) { return .scanCode }
         if has(["消息", "聊天", "信息", "message", "chat", "inbox"]) { return .messages }
+        // 打开设置：语言/无障碍/摔倒检测等非语音可调项，语音直达免盲人找按钮。"设置"无其它命令子串冲突。
+        if has(["打开设置", "设置", "偏好设置", "settings", "open settings", "preferences"]) { return .openSettings }
         // 导盲/避障须在通用「看一看」之前匹配（"识别障碍/避障"含"识别"会被 look 抢走）。
         if has(["导盲", "避障", "开始导盲", "实时避障", "obstacle", "guide me", "start guide", "avoidance"]) { return .guideMe }
         // 颜色须在通用「看一看」之前：否则「这是什么颜色」(含"这是什么")、「识别颜色」(含"识别") 会被 look 抢走。

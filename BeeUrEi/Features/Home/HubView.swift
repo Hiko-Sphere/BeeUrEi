@@ -476,6 +476,7 @@ struct HubView: View {
             let st = UIDevice.current.batteryState
             if lvl < 0 { speak(HomeStrings.batteryUnknown(lang)) }
             else { speak(HomeStrings.batterySpeak(percent: Int((lvl * 100).rounded()), charging: st == .charging || st == .full, lang)) }
+        case .openSettings: showSettings = true // 语音直达设置（语言/无障碍/摔倒检测等非语音可调项）
         case .unknown:
             speak(transcript.isEmpty ? HomeStrings.voiceHeardNothing(lang) : HomeStrings.voiceNotUnderstood(lang))
         }

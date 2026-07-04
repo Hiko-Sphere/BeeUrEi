@@ -31,6 +31,7 @@ final class VoiceCommandParserTests: XCTestCase {
             ("现在几点", .time), ("几点了", .time), ("报时", .time), ("what time is it", .time),
             ("还有多少电", .battery), ("电量多少", .battery), ("剩多少电", .battery), ("battery level", .battery),
             ("今天几号", .date), ("今天星期几", .date), ("what's the date", .date), ("what day is it", .date),
+            ("打开设置", .openSettings), ("设置", .openSettings), ("open settings", .openSettings), ("preferences", .openSettings),
             ("说快点", .adjustSpeech(.faster)), ("太慢了", .adjustSpeech(.faster)), ("speak faster", .adjustSpeech(.faster)),
             ("说慢点", .adjustSpeech(.slower)), ("太快了", .adjustSpeech(.slower)), ("slow down", .adjustSpeech(.slower)),
             ("正常语速", .adjustSpeech(.normal)), ("normal speed", .adjustSpeech(.normal)),

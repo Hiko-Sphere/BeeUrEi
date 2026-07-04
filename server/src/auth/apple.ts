@@ -19,7 +19,11 @@ export function createAppleVerifier(audience: string): AppleTokenVerifier {
 
   async function jwks(): Promise<any[]> {
     if (jwksCache && Date.now() - jwksCache.fetchedAt < 3_600_000) return jwksCache.keys
-    const res = await fetch(JWKS_URL)
+    // 硬超时：Apple JWKS 慢/挂时，裸 fetch 会无限期挂住登录请求（无缓存的首个 Apple 登录尤甚）。
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 6000)
+    let res: Response
+    try { res = await fetch(JWKS_URL, { signal: ctrl.signal }) } finally { clearTimeout(timer) }
     if (!res.ok) throw new Error(`jwks_fetch_failed_${res.status}`)
     const body = (await res.json()) as { keys: any[] }
     jwksCache = { keys: body.keys ?? [], fetchedAt: Date.now() }

@@ -11,6 +11,23 @@ describe('AMap walking nav proxy', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     delete process.env.AMAP_API_KEY
+    delete process.env.AMAP_TIMEOUT_MS
+  })
+
+  it('高德慢/挂 → AbortController 硬超时快速失败（不无限期挂住服务端连接，慢上游型 DoS 防护）', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    process.env.AMAP_TIMEOUT_MS = '50' // 测试用短超时
+    // fetch 永不 resolve，只在 abort 触发时 reject（模拟高德挂起）；无超时则本测试会挂到 vitest 5s 兜底而失败。
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: { signal?: AbortSignal }) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+      })))
+    const app = buildApp(new MemoryStore())
+    const t = await token(app)
+    const res = await app.inject({ method: 'GET', url: '/api/nav/around?lat=39.9&lon=116.4', headers: { authorization: `Bearer ${t}` } })
+    expect(res.statusCode).toBe(502) // 超时中止 → nav_unavailable，而非 200 或永久挂起
+    expect(res.json()).toMatchObject({ error: 'nav_unavailable' })
+    await app.close()
   })
 
   it('503 when AMAP key not configured', async () => {

@@ -1,6 +1,23 @@
 /// 高德 Web 服务客户端（国内步行导航）。Key 从环境变量读取（.env，仅后端持有，不进 App）。
 const AMAP_BASE = 'https://restapi.amap.com/v3'
 
+/// 每次高德调用的硬超时（毫秒，AMAP_TIMEOUT_MS 可调，默认 6s）。**必须有**：Node fetch 无默认超时，
+/// 高德慢/挂/被墙时裸 fetch 会无限期挂住服务端连接，nav 端点每次还要打 2-3 次高德 → 请求堆积、资源耗尽
+/// （慢上游型 DoS）。与商品查询/AI 视觉同款 AbortController 硬中止。每次调用读 env（便于测试注入短超时）。
+function amapTimeoutMs(): number {
+  const n = Number(process.env.AMAP_TIMEOUT_MS)
+  return Number.isFinite(n) && n > 0 ? n : 6000
+}
+async function amapFetch(url: string): Promise<Response> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), amapTimeoutMs())
+  try {
+    return await fetch(url, { signal: ctrl.signal })
+  } finally {
+    clearTimeout(timer) // 成功/失败都清定时器，避免泄漏
+  }
+}
+
 export interface WalkStep {
   instruction: string
   distanceMeters: number
@@ -41,7 +58,7 @@ export async function amapGeocode(address: string): Promise<string | undefined> 
   const key = apiKey()
   if (!key) return undefined
   const url = `${AMAP_BASE}/geocode/geo?address=${encodeURIComponent(address)}&key=${key}`
-  const res = await fetch(url)
+  const res = await amapFetch(url)
   const data = (await res.json()) as { status?: string; info?: string; infocode?: string; geocodes?: Array<{ location?: string }> }
   assertAmapOk(res, data) // key 平台不符/配额等 → 抛 AmapError，不静默退化成"未找到"
   return data.geocodes?.[0]?.location
@@ -52,7 +69,7 @@ export async function amapWalking(origin: string, destination: string): Promise<
   const key = apiKey()
   if (!key) return []
   const url = `${AMAP_BASE}/direction/walking?origin=${origin}&destination=${destination}&key=${key}`
-  const res = await fetch(url)
+  const res = await amapFetch(url)
   const data = (await res.json()) as {
     status?: string; info?: string; infocode?: string
     route?: { paths?: Array<{ steps?: Array<{ instruction?: string; distance?: string; polyline?: string }> }> }
@@ -92,7 +109,7 @@ export async function amapAround(location: string, radiusMeters: number, keyword
   const kw = keywords && keywords.trim() ? `&keywords=${encodeURIComponent(keywords.trim())}` : ''
   const url = `${AMAP_BASE}/place/around?location=${location}&radius=${radiusMeters}${kw}`
     + `&offset=25&page=1&extensions=base&sortrule=distance&key=${key}`
-  const res = await fetch(url)
+  const res = await amapFetch(url)
   const data = (await res.json()) as {
     status?: string; info?: string; infocode?: string
     pois?: Array<{ name?: string; location?: string; distance?: string; type?: string }>
@@ -131,7 +148,7 @@ export async function amapRegeoAdcode(location: string): Promise<string | undefi
   const key = apiKey()
   if (!key) return undefined
   const url = `${AMAP_BASE}/geocode/regeo?location=${location}&extensions=base&key=${key}`
-  const res = await fetch(url)
+  const res = await amapFetch(url)
   const data = (await res.json()) as {
     status?: string; info?: string; infocode?: string
     regeocode?: { addressComponent?: { adcode?: string; citycode?: string } }
@@ -174,7 +191,7 @@ export async function amapTransit(origin: string, destination: string, city: str
   if (!key) return null
   const url = `${AMAP_BASE}/direction/transit/integrated?origin=${origin}&destination=${destination}`
     + `&city=${encodeURIComponent(city)}&strategy=0&nightflag=0&key=${key}`
-  const res = await fetch(url)
+  const res = await amapFetch(url)
   interface Stop { name?: string }
   interface Busline {
     name?: string; type?: string; via_num?: string; distance?: string; duration?: string

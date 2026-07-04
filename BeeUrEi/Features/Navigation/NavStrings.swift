@@ -166,12 +166,14 @@ enum NavStrings {
     }
 
     /// 剩余路程 + 预计到达播报（导航中跨里程碑时报一次）："还有约 300 米，预计 4 分钟"。
+    /// 末段（≤30 米）加"快到了"前缀——50 之后临近到达，盲人最想听到的语义提示（放慢、准备找门）。
     static func remainingDistance(meters: Int, etaSeconds: Double?, _ l: Language) -> String {
         let dist = distancePhrase(meters: meters, l)
+        let nearPrefix = meters <= 30 ? (l == .zh ? "快到了，" : "Almost there — ") : ""
         guard let eta = etaPhrase(etaSeconds, l) else {
-            return l == .zh ? "还有约\(dist)" : "About \(dist) to go"
+            return l == .zh ? "\(nearPrefix)还有约\(dist)" : "\(nearPrefix)about \(dist) to go"
         }
-        return l == .zh ? "还有约\(dist)，\(eta)" : "About \(dist) to go, \(eta)"
+        return l == .zh ? "\(nearPrefix)还有约\(dist)，\(eta)" : "\(nearPrefix)about \(dist) to go, \(eta)"
     }
 
     /// 出发时的全程概览（导航开始先报整条路线长度与预计时长，给盲人整体预期）："全程约 1.2 公里，预计 15 分钟"。

@@ -108,6 +108,16 @@ final class RouteRemainingTests: XCTestCase {
         XCTAssertEqual(a.update(remainingMeters: 190), 200)  // 可再次报 200
     }
 
+    func testAnnouncerFinalApproachMilestone() {
+        // 末段 25 米里程碑：50 之后仍报一次"快到了"（25），补齐 50→到达 的空白。
+        var a = RemainingDistanceAnnouncer()
+        _ = a.update(remainingMeters: 60)                    // 基线
+        XCTAssertEqual(a.update(remainingMeters: 45), 50)    // 跨 50
+        XCTAssertNil(a.update(remainingMeters: 30))          // 50 与 25 间无里程碑
+        XCTAssertEqual(a.update(remainingMeters: 20), 25)    // 跨 25 → 末段提示
+        XCTAssertNil(a.update(remainingMeters: 16))          // 25 已报，不重复
+    }
+
     func testAnnouncerIgnoresNonFinite() {
         var a = RemainingDistanceAnnouncer()
         _ = a.update(remainingMeters: 220)

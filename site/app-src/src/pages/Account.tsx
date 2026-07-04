@@ -248,6 +248,16 @@ export function VerificationDialog({ status, onClose, onChanged }: { status: Ver
     } finally { setBusy(false) }
   }
 
+  // 撤回待审申请：让用户从「卡住的/照片不佳的」pending 中脱身重交（此前 UI 无入口，only already_pending 拦着
+  // 无从恢复——尤其提交时文档上传半途失败会留下不完整的 pending）。服务端 DELETE 会清掉证件密文与 blob。
+  const withdraw = async () => {
+    if (!confirm(t('撤回后当前审核申请将作废，可重新提交。确定撤回？', 'Withdrawing cancels the current review; you can resubmit afterward. Withdraw?'))) return
+    setErr(null); setBusy(true)
+    try { await api.withdrawVerification(); toast(t('已撤回，可重新提交', 'Withdrawn — you can resubmit'), 'ok'); await onChanged() }
+    catch { setErr(t('撤回失败，请重试', 'Withdrawal failed — please try again')) }
+    finally { setBusy(false) }
+  }
+
   return (
     <Modal onClose={onClose} label={t('实名认证', 'Identity verification')} panelClassName="max-h-[88dvh] w-full max-w-md overflow-auto">
         <h3 className="text-lg font-semibold">{t('实名认证', 'Identity verification')}</h3>
@@ -263,8 +273,10 @@ export function VerificationDialog({ status, onClose, onChanged }: { status: Ver
               </p>
             )}
             {st === 'none' && <p className="text-sm text-faint">{t('通过实名认证可获得「已认证」徽章，让联系人更信任你。', 'Verify your identity to earn a trusted badge your contacts can see.')}</p>}
+            {err && <p className="text-sm text-danger">{err}</p>}
             <div className="mt-2 flex gap-3">
               {canStart && <Button className="flex-1" onClick={() => setStep('consent')}>{st === 'rejected' ? t('重新提交', 'Resubmit') : t('开始认证', 'Start')}</Button>}
+              {st === 'pending' && <Button variant="soft" className="flex-1" loading={busy} onClick={withdraw} data-testid="withdraw-verif">{t('撤回申请', 'Withdraw')}</Button>}
               <Button variant="soft" className="flex-1" onClick={onClose}>{t('完成', 'Done')}</Button>
             </div>
           </div>

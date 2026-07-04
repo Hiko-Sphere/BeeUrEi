@@ -117,50 +117,70 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
         }
     }
 
-    /// 周围/前方：POI 按时钟方位 + 距离播报（朝向不可用时退化为只报距离）。
+    /// 周围/前方：POI 按时钟方位 + 距离播报。国内改用高德 POI（Apple Maps 境内覆盖稀疏），海外用 MapKit。
+    /// 组织播报统一走 core `PoiCalloutComposer`（已单测），两条数据源行为一致。
     private func poiCallouts(_ loc: CLLocation) {
-        let radius: CLLocationDistance = mode == .ahead ? 400 : 250
-        let request = MKLocalPointsOfInterestRequest(center: loc.coordinate, radius: radius)
+        let radius = mode == .ahead ? 400 : 250
+        // 境内用高德（数据密集且中文准确）；境外用 MapKit。isInChina 用真实经纬度判定（近海边界少量误判无害，会自动回退）。
+        if ChinaCoord.isInChina(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude) {
+            amapPoiCallouts(loc, radius: radius)
+        } else {
+            mapKitPoiCallouts(loc, radius: radius)
+        }
+    }
+
+    private var composerMode: PoiCalloutMode { mode == .ahead ? .ahead : .around }
+
+    /// 相对朝向方位角（度，(-180,180]），罗盘不可用返回 nil。from/to 必须同坐标系。
+    private func relativeBearing(fromLat: Double, fromLon: Double, toLat: Double, toLon: Double, heading: Double?) -> Double? {
+        guard let heading else { return nil }
+        let bearing = Geo.initialBearing(fromLat: fromLat, fromLon: fromLon, toLat: toLat, toLon: toLon)
+        var rel = (bearing - heading).truncatingRemainder(dividingBy: 360)
+        if rel > 180 { rel -= 360 } else if rel < -180 { rel += 360 }
+        return rel
+    }
+
+    /// 高德周边 POI（国内）：用户位置 WGS-84→GCJ-02（与步行导航同约定），使方位角与高德 POI（GCJ-02）同系。
+    /// 距离直接用高德算好的值（权威，勿再客户端算免混坐标系）。任何失败回退 Apple Maps POI，功能不因国内源失效而全哑。
+    private func amapPoiCallouts(_ loc: CLLocation, radius: Int) {
+        let g = ChinaCoord.wgs84ToGcj02(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude)
+        let heading = lastHeading
+        let mode = composerMode
+        let lang = self.lang
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let resp = try await AMapAroundClient().around(latGcj: g.lat, lonGcj: g.lon, radiusMeters: radius)
+                let obs = resp.pois.map { p in
+                    PoiObservation(name: p.name, distanceMeters: p.distanceMeters,
+                                   relativeBearingDegrees: self.relativeBearing(fromLat: g.lat, fromLon: g.lon,
+                                                                                toLat: p.lat, toLon: p.lon, heading: heading))
+                }
+                let text = PoiCalloutComposer.compose(pois: obs, mode: mode, radiusMeters: resp.radius,
+                                                      headingAvailable: heading != nil, language: lang)
+                await MainActor.run { self.finish(text) }
+            } catch {
+                await MainActor.run { self.mapKitPoiCallouts(loc, radius: radius) } // 高德不可用 → 回退 MapKit
+            }
+        }
+    }
+
+    /// Apple Maps 周边 POI（境外，或国内高德失败回退）。
+    private func mapKitPoiCallouts(_ loc: CLLocation, radius: Int) {
+        let request = MKLocalPointsOfInterestRequest(center: loc.coordinate, radius: CLLocationDistance(radius))
         MKLocalSearch(request: request).start { [weak self] response, _ in
             guard let self else { return }
             let heading = self.lastHeading
-            let ahead = self.mode == .ahead
-            var entries: [(text: String, dist: Double)] = []
-            for item in (response?.mapItems ?? []).prefix(15) {
-                guard let name = item.name, let ploc = item.placemark.location else { continue }
-                let dist = loc.distance(from: ploc)
-                guard dist > 5 else { continue }
-                if let heading {
-                    let bearing = Geo.initialBearing(fromLat: loc.coordinate.latitude, fromLon: loc.coordinate.longitude,
-                                                     toLat: ploc.coordinate.latitude, toLon: ploc.coordinate.longitude)
-                    var rel = (bearing - heading).truncatingRemainder(dividingBy: 360)
-                    if rel > 180 { rel -= 360 } else if rel < -180 { rel += 360 }
-                    if ahead, abs(rel) > 50 { continue } // 前方模式：只要朝向 ±50° 扇区
-                    let hour = ClockDirection(angleDegrees: rel).hour
-                    let m = Int(dist.rounded())
-                    let phrase = self.lang == .zh ? "\(hour)点钟方向约\(m)米，\(name)"
-                                                  : "\(name), about \(m) meters, \(hour) o'clock"
-                    entries.append((phrase, dist))
-                } else {
-                    if ahead { continue } // 没有朝向，"前方"无从谈起——下面会提示
-                    let m = Int(dist.rounded())
-                    entries.append((self.lang == .zh ? "约\(m)米，\(name)" : "\(name), about \(m) meters", dist))
-                }
+            let obs: [PoiObservation] = (response?.mapItems ?? []).prefix(15).compactMap { item in
+                guard let name = item.name, let ploc = item.placemark.location else { return nil }
+                return PoiObservation(
+                    name: name,
+                    distanceMeters: loc.distance(from: ploc),
+                    relativeBearingDegrees: self.relativeBearing(fromLat: loc.coordinate.latitude, fromLon: loc.coordinate.longitude,
+                                                                 toLat: ploc.coordinate.latitude, toLon: ploc.coordinate.longitude, heading: heading))
             }
-            entries.sort { $0.dist < $1.dist }
-            let picked = entries.prefix(ahead ? 3 : 4).map(\.text)
-            let zh = self.lang == .zh
-            let text: String
-            if picked.isEmpty {
-                text = ahead
-                    ? (heading == nil ? (zh ? "无法确定你的朝向，请稍后再试" : "Can't determine your heading — try again")
-                                      : (zh ? "前方\(Int(radius))米内没有查到地点" : "No places found within \(Int(radius)) meters ahead"))
-                    : (zh ? "周围\(Int(radius))米内没有查到地点" : "No places found within \(Int(radius)) meters around you")
-            } else {
-                let sep = zh ? "。" : ". "
-                let prefix = ahead ? (zh ? "前方：" : "Ahead: ") : (zh ? "周围：" : "Around you: ")
-                text = prefix + picked.joined(separator: sep)
-            }
+            let text = PoiCalloutComposer.compose(pois: obs, mode: self.composerMode, radiusMeters: radius,
+                                                  headingAvailable: heading != nil, language: self.lang)
             self.finish(text)
         }
     }

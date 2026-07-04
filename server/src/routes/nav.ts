@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { type Store } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
-import { amapConfigured, amapGeocode, amapWalking, AmapError } from '../nav/amapClient'
+import { amapConfigured, amapGeocode, amapWalking, amapAround, AmapError } from '../nav/amapClient'
 
 // 坐标校验：从原始字符串校验而非 z.coerce.number()——后者会把空串/空白静默 coerce 成 0，
 // 从 (0,0)Null Island 起算路线（看似正常却完全错误，对盲人导航安全攸关，见审查 round5 #2）；
@@ -66,6 +66,36 @@ export function registerNavRoutes(app: FastifyInstance, store: Store): void {
         return reply.code(502).send({ error: 'amap_error', infocode: e.infocode, info: e.info })
       }
       console.error('[nav] unexpected error', e)
+      return reply.code(502).send({ error: 'nav_unavailable' })
+    }
+  })
+
+  // 周边 POI（「周围有什么」国内数据源）：国内 Apple Maps POI 覆盖稀疏，改用高德 place/around 拿密集中文地点，
+  // App 端按时钟方位播报。lat/lon 由 App 传 **GCJ-02**（与步行导航同约定：App 已把用户 WGS-84 位置转 GCJ-02）。
+  const aroundSchema = z.object({
+    lat: coord(-90, 90),
+    lon: coord(-180, 180),
+    radius: z.string().trim().transform(Number).refine(Number.isFinite, 'invalid')
+      .refine((v) => v >= 50 && v <= 3000, 'out_of_range').optional(), // 50m..3km，缺省 250
+    keywords: z.string().trim().max(40).optional(), // 可选定向检索（如"卫生间"）
+  })
+  app.get('/api/nav/around', { preHandler: [requireAuth(), requireFeature(store, 'navigation')],
+                               config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
+    if (!amapConfigured()) return reply.code(503).send({ error: 'amap_not_configured' })
+    const parsed = aroundSchema.safeParse(req.query)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const { lat, lon, radius, keywords } = parsed.data
+    const r = radius ?? 250
+    try {
+      const pois = await amapAround(`${lon},${lat}`, r, keywords) // 高德序：经度,纬度（GCJ-02）
+      return { radius: r, pois }
+    } catch (e) {
+      if (e instanceof AmapError) {
+        req.log?.error?.({ infocode: e.infocode, info: e.info }, '[nav/around] AMap request failed')
+        console.error('[nav/around] AMap error infocode=%s info=%s', e.infocode, e.info)
+        return reply.code(502).send({ error: 'amap_error', infocode: e.infocode, info: e.info })
+      }
+      console.error('[nav/around] unexpected error', e)
       return reply.code(502).send({ error: 'nav_unavailable' })
     }
   })

@@ -134,4 +134,61 @@ describe('AMap walking nav proxy', () => {
     expect(res.statusCode).toBe(400)
     await app.close()
   })
+
+  it('/around 返回周边 POI（名/GCJ-02坐标/高德算的距离/分类），坏点剔除、距离非有限归 0', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true, status: 200,
+      json: async () => ({
+        status: '1', infocode: '10000',
+        pois: [
+          { name: '全家便利店', location: '116.398,39.909', distance: '42', type: '购物服务;便利店;便利店' },
+          { name: '', location: '116.4,39.9', distance: '10', type: 'x' },              // 空名 → 剔
+          { name: '坏坐标', location: 'abc,def', distance: '5', type: 'y' },            // 非法坐标 → 剔
+          { name: '距离坏了', location: '116.40,39.90', distance: 'NaN', type: '公厕' }, // 距离非有限 → 归 0
+        ],
+      }),
+    })))
+    const app = buildApp(new MemoryStore())
+    const t = await token(app)
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/nav/around?lat=39.908&lon=116.397&radius=250',
+      headers: { authorization: `Bearer ${t}` },
+    })
+    expect(res.statusCode).toBe(200)
+    const body = res.json()
+    expect(body.radius).toBe(250)
+    expect(body.pois).toEqual([
+      { name: '全家便利店', lat: 39.909, lon: 116.398, distanceMeters: 42, category: '便利店' },
+      { name: '距离坏了', lat: 39.9, lon: 116.4, distanceMeters: 0, category: '公厕' }, // NaN 距离 → 0，绝不外发 NaN
+    ])
+    await app.close()
+  })
+
+  it('/around：AMap key 平台不符 → 502 amap_error（不静默当"周围什么都没有"）；坐标非法 → 400；未配 → 503', async () => {
+    // 未配置
+    delete process.env.AMAP_API_KEY
+    let app = buildApp(new MemoryStore())
+    let t = await token(app)
+    let res = await app.inject({ method: 'GET', url: '/api/nav/around?lat=39.9&lon=116.4', headers: { authorization: `Bearer ${t}` } })
+    expect(res.statusCode).toBe(503)
+    await app.close()
+    // 坐标非法
+    process.env.AMAP_API_KEY = 'webkey'
+    app = buildApp(new MemoryStore())
+    t = await token(app)
+    res = await app.inject({ method: 'GET', url: '/api/nav/around?lat=999&lon=116.4', headers: { authorization: `Bearer ${t}` } })
+    expect(res.statusCode).toBe(400)
+    await app.close()
+    // key 平台不符
+    process.env.AMAP_API_KEY = 'ios_sdk_key'
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ status: '0', info: 'USERKEY_PLAT_NOMATCH', infocode: '10009' }) })))
+    app = buildApp(new MemoryStore())
+    t = await token(app)
+    res = await app.inject({ method: 'GET', url: '/api/nav/around?lat=39.9&lon=116.4', headers: { authorization: `Bearer ${t}` } })
+    expect(res.statusCode).toBe(502)
+    expect(res.json()).toMatchObject({ error: 'amap_error', infocode: '10009' })
+    await app.close()
+  })
 })

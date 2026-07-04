@@ -71,6 +71,54 @@ export async function amapWalking(origin: string, destination: string): Promise<
   })
 }
 
+/// 周边 POI（GCJ-02 坐标 + 名称 + 类型 + 高德算好的直线距离米）。用于「周围有什么」——国内 Apple Maps POI
+/// 覆盖稀疏，改用高德 place/around 拿到密集且中文准确的地点，App 端再按时钟方位播报（PoiCalloutComposer）。
+export interface AroundPoi {
+  name: string
+  /// GCJ-02 纬度/经度（与 App 把用户位置转 GCJ-02 后同系，方位角计算才正确）。
+  lat: number
+  lon: number
+  /// 高德返回的直线距离（米，权威，直接用于播报，勿客户端再算免坐标系混用）。
+  distanceMeters: number
+  /// 地点大类中文描述（如"便利店""餐饮"），高德 type 的首段；无则空串。
+  category: string
+}
+
+/// 周边 POI 检索（location="经度,纬度" GCJ-02，radius 米）。key/配额等错误抛 AmapError；无 key 返回 []。
+/// keywords 可选（如"便利店""卫生间"）；空则按距离取周边全部类型。上限 offset=25/页取第一页足够播报。
+export async function amapAround(location: string, radiusMeters: number, keywords?: string): Promise<AroundPoi[]> {
+  const key = apiKey()
+  if (!key) return []
+  const kw = keywords && keywords.trim() ? `&keywords=${encodeURIComponent(keywords.trim())}` : ''
+  const url = `${AMAP_BASE}/place/around?location=${location}&radius=${radiusMeters}${kw}`
+    + `&offset=25&page=1&extensions=base&sortrule=distance&key=${key}`
+  const res = await fetch(url)
+  const data = (await res.json()) as {
+    status?: string; info?: string; infocode?: string
+    pois?: Array<{ name?: string; location?: string; distance?: string; type?: string }>
+  }
+  assertAmapOk(res, data) // key 平台不符/配额 → 抛 AmapError，不静默当"周围什么都没有"
+  const out: AroundPoi[] = []
+  for (const p of data.pois ?? []) {
+    const name = (p.name ?? '').trim()
+    if (!name) continue
+    const [lonS, latS] = (p.location ?? '').split(',')
+    const lon = Number(lonS), lat = Number(latS)
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) continue
+    const d = Number(p.distance ?? 0)
+    // type 形如"餐饮服务;中餐厅;..."，取末段最具体的分类中文；无则空。
+    const cats = (p.type ?? '').split(';').map((s) => s.trim()).filter(Boolean)
+    out.push({
+      name,
+      lat,
+      lon,
+      distanceMeters: Number.isFinite(d) && d >= 0 ? d : 0, // 绝不外发 NaN/负距离
+      category: cats[cats.length - 1] ?? '',
+    })
+  }
+  return out
+}
+
 /// 高德折线 "lon,lat;lon,lat;…"（GCJ-02）→ [[lat, lon]]。非法点跳过，绝不外发 NaN。
 function parsePolyline(raw: string | undefined): Array<[number, number]> {
   if (!raw) return []

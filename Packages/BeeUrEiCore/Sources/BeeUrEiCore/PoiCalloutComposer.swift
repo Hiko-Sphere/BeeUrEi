@@ -1,0 +1,90 @@
+import Foundation
+
+/// 「周围有什么」「前方有什么」的播报组织（Soundscape/BlindSquare 式环境播报的纯逻辑核）。
+/// 把 POI 列表 + 相对朝向组织成一段中/英文时钟方位播报——此前这段过滤/排序/时钟/本地化逻辑内联在
+/// `LocationDescriber`（App 层、无单测），提取到 core 后：① 可单测（时钟方位对盲人建立心理地图至关重要，
+/// 说错方向 = 把人指向错的路口）；② 端侧 MapKit POI 与国内高德 POI **两条来源共用同一实现**，行为一致。
+public enum PoiCalloutMode: Sendable, Equatable {
+    case around // 四周（不限扇区）
+    case ahead  // 仅朝向 ±50° 扇区内
+}
+
+/// 一条 POI 观测（已由调用方按各自坐标系算好距离与相对方位）。
+public struct PoiObservation: Sendable, Equatable {
+    public let name: String
+    /// 直线距离（米）。
+    public let distanceMeters: Double
+    /// 相对用户朝向的方位角（度，规范化到 (-180,180]，0=正前、正=右手/顺时针）；nil=朝向不可用（罗盘未校准）。
+    public let relativeBearingDegrees: Double?
+    public init(name: String, distanceMeters: Double, relativeBearingDegrees: Double?) {
+        self.name = name
+        self.distanceMeters = distanceMeters
+        self.relativeBearingDegrees = relativeBearingDegrees
+    }
+}
+
+public enum PoiCalloutComposer {
+    /// 距用户过近（<5m，多半是所在建筑本身）不播；也过滤非有限距离/方位（坏定位不该崩或乱报）。
+    private static let minDistanceMeters = 5.0
+
+    /// 组织一段完整播报串。
+    /// - pois: 候选 POI（顺序无所谓，内部按距离排序）。
+    /// - mode: around=四周 / ahead=仅前方扇区。
+    /// - radiusMeters: 检索半径（仅用于「没查到」文案，如"周围 250 米内没有查到地点"）。
+    /// - headingAvailable: 罗盘是否可信（用于 ahead 无朝向时给"确定不了朝向"而非"前方没有地点"的准确文案）。
+    /// - language: 播报语言。
+    /// - maxCount: 最多播几条（默认 around 4 / ahead 3，听觉不宜过载）。
+    public static func compose(pois: [PoiObservation],
+                              mode: PoiCalloutMode,
+                              radiusMeters: Int,
+                              headingAvailable: Bool,
+                              language: Language,
+                              maxCount: Int? = nil) -> String {
+        let zh = language == .zh
+        var seenNames = Set<String>() // 同名去重（保留最近的那个）——听觉上重复念"全家便利店"是噪音
+        var entries: [(text: String, dist: Double)] = []
+
+        for poi in pois.sorted(by: { $0.distanceMeters < $1.distanceMeters }) {
+            let name = poi.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { continue }
+            let dist = poi.distanceMeters
+            guard dist.isFinite, dist > minDistanceMeters else { continue }
+            let key = name.lowercased()
+            guard seenNames.insert(key).inserted else { continue } // 已有同名（更近的先来）→ 跳过
+
+            let m = Int(dist.rounded())
+            if let rel = poi.relativeBearingDegrees, rel.isFinite {
+                if mode == .ahead, abs(rel) > 50 { continue } // 前方模式只留朝向 ±50° 扇区
+                let hour = ClockDirection(angleDegrees: rel).hour
+                let phrase = zh ? "\(hour)点钟方向约\(m)米，\(name)"
+                                : "\(name), about \(m) meters, \(hour) o'clock"
+                entries.append((phrase, dist))
+            } else {
+                if mode == .ahead { continue } // 没有可信朝向，"前方"无从判定——下面给校准提示
+                let phrase = zh ? "约\(m)米，\(name)" : "\(name), about \(m) meters"
+                entries.append((phrase, dist))
+            }
+        }
+
+        let limit = maxCount ?? (mode == .ahead ? 3 : 4)
+        let picked = entries.prefix(limit).map(\.text)
+
+        if picked.isEmpty {
+            switch mode {
+            case .ahead:
+                if !headingAvailable {
+                    return zh ? "无法确定你的朝向，请稍后再试" : "Can't determine your heading — try again"
+                }
+                return zh ? "前方\(radiusMeters)米内没有查到地点"
+                          : "No places found within \(radiusMeters) meters ahead"
+            case .around:
+                return zh ? "周围\(radiusMeters)米内没有查到地点"
+                          : "No places found within \(radiusMeters) meters around you"
+            }
+        }
+
+        let sep = zh ? "。" : ". "
+        let prefix = mode == .ahead ? (zh ? "前方：" : "Ahead: ") : (zh ? "周围：" : "Around you: ")
+        return prefix + picked.joined(separator: sep)
+    }
+}

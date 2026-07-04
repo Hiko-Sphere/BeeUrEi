@@ -26,6 +26,29 @@ final class HomeStringsTests: XCTestCase {
         }
     }
 
+    func testFallCancelHintTeachesMagicTapUnderVoiceOver() {
+        // VoiceOver 开：教 Magic Tap（双指双击全屏任意处）——摔倒/撞击后手机常够不到，"找我没事按钮"极不可靠。
+        let voZh = HomeStrings.fallCancelHint(voiceOver: true, .zh)
+        XCTAssertTrue(voZh.contains("双指") && voZh.contains("双击"), "VoiceOver 中文提示应教双指双击：\(voZh)")
+        XCTAssertFalse(voZh.contains("按钮"), "VoiceOver 提示不该再叫用户找按钮：\(voZh)")
+        XCTAssertTrue(HomeStrings.fallCancelHint(voiceOver: true, .en).lowercased().contains("two-finger"))
+        // VoiceOver 关（低视力/明眼）：仍指向「我没事」大按钮。
+        XCTAssertTrue(HomeStrings.fallCancelHint(voiceOver: false, .zh).contains("我没事"))
+        XCTAssertTrue(HomeStrings.fallCancelHint(voiceOver: false, .en).contains("I'm OK"))
+        // 三条倒计时播报都按 voiceOver 带上对应提示（完整版为"双指在屏幕上双击"，故分别查两个词元）。
+        let spoken = HomeStrings.fallAlertSpeak(kind: "fall", voiceOver: true, .zh)
+        XCTAssertTrue(spoken.contains("双指") && spoken.contains("双击"), "摔倒播报应含双指双击提示：\(spoken)")
+        XCTAssertTrue(HomeStrings.fallAlertSpeak(kind: "crash", voiceOver: false, .zh).contains("按钮"))
+        XCTAssertTrue(HomeStrings.manualSosSpeak(voiceOver: true, .en).lowercased().contains("two-finger"))
+        XCTAssertTrue(HomeStrings.fallAlertReminder(15, voiceOver: true, .zh).contains("双指双击屏幕可取消"))
+        // 英文变体不串中文。
+        for s in [HomeStrings.fallAlertSpeak(kind: "fall", voiceOver: true, .en),
+                  HomeStrings.manualSosSpeak(voiceOver: false, .en),
+                  HomeStrings.fallAlertReminder(15, voiceOver: true, .en)] {
+            XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文混中文：\(s)")
+        }
+    }
+
     func testBatterySpeakLevelsAndCharging() {
         // 充电中：报百分比 + 充电，不给"偏低"提示。
         XCTAssertTrue(HomeStrings.batterySpeak(percent: 15, charging: true, .zh).contains("正在充电"))

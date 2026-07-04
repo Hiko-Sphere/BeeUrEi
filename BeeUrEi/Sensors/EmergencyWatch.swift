@@ -2,6 +2,7 @@ import Foundation
 import CoreMotion
 import CoreLocation
 import SwiftUI
+import UIKit // UIAccessibility.isVoiceOverRunning：倒计时取消提示按是否开 VoiceOver 切换（教 Magic Tap vs 指按钮）
 
 /// 摔倒/剧烈撞击监测（加速度计 20Hz → 核心 FallDetector 状态机，已测）。
 /// 主页运行期间持续监测（手机在口袋/手中行走是主要场景）。
@@ -48,6 +49,8 @@ final class EmergencyAlertCenter: NSObject, CLLocationManagerDelegate {
     @ObservationIgnored private var lastFix: CLLocation?
     @ObservationIgnored private var lastAlertId: String?   // 最近一次发出告警的 alertId，供"报平安"关联那次告警
     private var lang: Language { FeatureSettings().language }
+    // 盲人开 VoiceOver 时，取消提示改教 Magic Tap（双指双击全屏任意处），比"找我没事按钮"在摔倒后可靠得多。
+    private var voiceOverOn: Bool { UIAccessibility.isVoiceOverRunning }
 
     private override init() {
         super.init()
@@ -74,14 +77,14 @@ final class EmergencyAlertCenter: NSObject, CLLocationManagerDelegate {
         lastFix = nil
         location.requestWhenInUseAuthorization()
         location.requestLocation() // 提前定位，发送时带上
-        speak(kind == "manual" ? HomeStrings.manualSosSpeak(lang) : HomeStrings.fallAlertSpeak(kind: kind, lang))
+        speak(kind == "manual" ? HomeStrings.manualSosSpeak(voiceOver: voiceOverOn, lang) : HomeStrings.fallAlertSpeak(kind: kind, voiceOver: voiceOverOn, lang))
         countdownTask = Task { [weak self] in
             for remaining in stride(from: 29, through: 0, by: -1) {
                 try? await Task.sleep(for: .seconds(1))
                 guard let self, !Task.isCancelled else { return }
                 guard case .countdown(let k, _) = self.phase else { return }
                 self.phase = .countdown(kind: k, secondsLeft: remaining)
-                if remaining == 15 { self.speak(HomeStrings.fallAlertReminder(remaining, self.lang)) }
+                if remaining == 15 { self.speak(HomeStrings.fallAlertReminder(remaining, voiceOver: self.voiceOverOn, self.lang)) }
             }
             guard let self, !Task.isCancelled, case .countdown = self.phase else { return }
             await self.send()

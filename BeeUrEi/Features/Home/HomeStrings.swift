@@ -169,19 +169,34 @@ enum HomeStrings {
 
     // MARK: 摔倒/撞击警报
 
-    static func fallAlertSpeak(kind: String, _ l: Language) -> String {
+    /// 取消提示。**VoiceOver 用户教 Magic Tap**（双指在屏幕**任意处**双击，全屏生效、无需先定位按钮）——摔倒/
+    /// 撞击后手机常在口袋或手够不到，逐个滑动找「我没事」按钮在 30s 压力下极不可靠；双指双击是 iOS 全局手势，
+    /// 落在盖满全屏的警报层上直达 cancel()，是盲人取消误报最快的路径。非 VoiceOver（低视力/明眼）仍指向大按钮。
+    /// short=倒计时提醒里的精简版。
+    static func fallCancelHint(voiceOver: Bool, short: Bool = false, _ l: Language) -> String {
+        switch (voiceOver, l) {
+        case (true, .zh):  return short ? "双指双击屏幕可取消。" : "如果你没事，双指在屏幕上双击即可取消。"
+        case (true, .en):  return short ? "Two-finger double-tap to cancel." : "If you're OK, two-finger double-tap the screen to cancel."
+        case (false, .zh): return short ? "点「我没事」可取消。" : "如果你没事，请点击屏幕上的「我没事」按钮。"
+        case (false, .en): return short ? "Tap I'm OK to cancel." : "If you're OK, tap the I'm OK button."
+        }
+    }
+    static func fallAlertSpeak(kind: String, voiceOver: Bool, _ l: Language) -> String {
         let what = kind == "crash" ? (l == .zh ? "剧烈撞击" : "a severe impact")
                                    : (l == .zh ? "疑似摔倒" : "a possible fall")
-        return l == .zh ? "检测到\(what)。30 秒内无操作将自动通知你的亲友。如果你没事，请点击屏幕上的「我没事」按钮。"
-                        : "Detected \(what). Your family will be notified in 30 seconds. If you're OK, tap the I'm OK button."
+        let hint = fallCancelHint(voiceOver: voiceOver, l)
+        return l == .zh ? "检测到\(what)。30 秒内无操作将自动通知你的亲友。\(hint)"
+                        : "Detected \(what). Your family will be notified in 30 seconds. \(hint)"
     }
-    static func manualSosSpeak(_ l: Language) -> String {
-        l == .zh ? "正在发起紧急求助。30 秒后将通知你的亲友并附带位置。如果你没事，请点击「我没事」取消。"
-                 : "Starting an emergency SOS. Your family will be notified with your location in 30 seconds. Tap I'm OK to cancel."
+    static func manualSosSpeak(voiceOver: Bool, _ l: Language) -> String {
+        let hint = fallCancelHint(voiceOver: voiceOver, l)
+        return l == .zh ? "正在发起紧急求助。30 秒后将通知你的亲友并附带位置。\(hint)"
+                        : "Starting an emergency SOS. Your family will be notified with your location in 30 seconds. \(hint)"
     }
-    static func fallAlertReminder(_ seconds: Int, _ l: Language) -> String {
-        l == .zh ? "还有 \(seconds) 秒将通知亲友。点「我没事」可取消。"
-                 : "\(seconds) seconds until your family is notified. Tap I'm OK to cancel."
+    static func fallAlertReminder(_ seconds: Int, voiceOver: Bool, _ l: Language) -> String {
+        let hint = fallCancelHint(voiceOver: voiceOver, short: true, l)
+        return l == .zh ? "还有 \(seconds) 秒将通知亲友。\(hint)"
+                        : "\(seconds) seconds until your family is notified. \(hint)"
     }
     static func fallAlertCancelled(_ l: Language) -> String { l == .zh ? "已取消，注意安全。" : "Cancelled. Stay safe." }
     static func fallAlertSent(_ n: Int, _ l: Language) -> String {

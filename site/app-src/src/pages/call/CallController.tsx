@@ -32,6 +32,11 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const [active, setActive] = useState<ActiveCall | null>(null)
   const [ring, setRing] = useState<RingState | null>(null)
   const ringtone = useRef<Ringtone | null>(null)
+  // 同步"启动中"闩：呼叫/认领/接听在 setActive 之前有 await(守则卡/registerCall/answered)，其间 active 仍为 null。
+  // 若只用 active 门控，并发/连点(或无 active 守卫的紧急回拨按钮)会各注册一通、第二个 setActive 覆盖第一个，
+  // 首个 callId 被孤立在服务器——盲人求助者可接入那个"没有协助者在场"的房间空等到 TTL 过期(见通话可靠性复审)。
+  // ref 读取实时值、不被闭包捕获为旧值，故能挡住 await 窗口内的并发。
+  const startingRef = useRef(false)
 
   useEffect(() => {
     if (ring) { ringtone.current ??= new Ringtone(); ringtone.current.start() }
@@ -73,27 +78,33 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const dismissGuideline = useCallback(() => { resolveGuidelineRef.current(false) }, [])
 
   const startOutgoing = useCallback(async (targetUserId: string, peerName: string, peerAvatar?: string | null) => {
-    if (active) { toast(t('已有进行中的通话', 'A call is already in progress'), 'error'); return }
-    if (!(await ensureGuideline())) return
-    const callId = crypto.randomUUID()
+    if (active || startingRef.current) { toast(t('已有进行中的通话', 'A call is already in progress'), 'error'); return }
+    startingRef.current = true // 先上闩再 await：挡住守则卡/网络往返窗口内的并发第二通
     try {
+      if (!(await ensureGuideline())) return
+      const callId = crypto.randomUUID()
       await api.registerCall(callId, [targetUserId])
       setActive({ callId, kind: 'outgoing', peerUserId: targetUserId, peerName, peerAvatar, waitingText: t('正在呼叫…', 'Calling…') })
     } catch (e) {
       toast(callErrorText(e, t, t('呼叫失败', 'Call failed')), 'error')
+    } finally {
+      startingRef.current = false
     }
   }, [active, t, toast, ensureGuideline])
 
   const claimQueue = useCallback(async (callId: string, fromName: string, fromAvatar?: string | null) => {
-    if (active) { toast(t('已有进行中的通话', 'A call is already in progress'), 'error'); return false }
-    if (!(await ensureGuideline())) return false
+    if (active || startingRef.current) { toast(t('已有进行中的通话', 'A call is already in progress'), 'error'); return false }
+    startingRef.current = true
     try {
+      if (!(await ensureGuideline())) return false
       await api.claimHelp(callId)
       setActive({ callId, kind: 'queue', peerName: fromName, peerAvatar: fromAvatar, waitingText: t('正在接入求助者…', 'Connecting to requester…') })
       return true
     } catch (e) {
       toast(callErrorText(e, t, t('认领失败', 'Claim failed')), 'error')
       return false
+    } finally {
+      startingRef.current = false
     }
   }, [active, t, toast, ensureGuideline])
 
@@ -101,7 +112,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
   // 接听路径**刻意不设**守则卡阻断：来电可能是紧急求助，接听延迟的安全代价高于教育收益——
   // 守则教育由（非紧急的）呼出/认领闸门 + 通话内常驻提示条完成。
   const answerIncoming = useCallback(async (callId: string, fromName: string, fromAvatar?: string | null) => {
-    if (active) { toast(t('已有进行中的通话', 'A call is already in progress'), 'error'); return }
+    if (active || startingRef.current) { toast(t('已有进行中的通话', 'A call is already in progress'), 'error'); return }
+    startingRef.current = true // 先上闩再 await：挡住连点接听/接听与其它协助动作并发
     setRing(null)
     try {
       const res = await api.answeredCall(callId)
@@ -109,7 +121,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
       // gone=呼叫已过期/取消（无人接，只是没了）——区别于"别人先接"，措辞如实，避免误报"已被其他亲友接听"。
       else if (res.gone) toast(t('这通来电已结束', 'This call has ended'))
       else toast(t('已被其他亲友接听', 'Answered by someone else'))
-    } catch { toast(t('接听失败', 'Failed to answer'), 'error') }
+    } catch { toast(t('接听失败', 'Failed to answer'), 'error') } finally {
+      startingRef.current = false
+    }
   }, [active, t, toast])
 
   const presentRing = useCallback((r: RingState) => { setRing((cur) => cur || active ? cur : r) }, [active])

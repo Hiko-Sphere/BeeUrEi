@@ -4,6 +4,7 @@ import { type Store } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
 import { visionConfigured, visionDescribe, VisionError } from '../vision/visionClient'
+import type { Metrics } from '../metrics/metrics'
 
 /// 单张图片解码上限 5MB（约 4–6MP JPEG，足够场景描述；更大只是徒增上游 token 成本与延迟）。
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -30,7 +31,7 @@ const bodySchema = z.object({
 
 /// AI 场景描述 / 图像问答（云端视觉大模型；provider 无关，见 visionClient）。
 /// 未配置 VISION_* → 503 ai_not_configured（fail-closed，绝不假装成功、绝无罐头回复）。
-export function registerVisionRoutes(app: FastifyInstance, store: Store): void {
+export function registerVisionRoutes(app: FastifyInstance, store: Store, metrics?: Metrics): void {
   // 限流 10/min：每次都打一次**有额度/计费**的视觉大模型（比高德更贵更慢）。全局 300/min 太松。
   // bodyLimit：base64 会膨胀 ~33%，5MB 图 → ~6.8MB JSON，留足余量到 8MB。
   app.post('/api/vision/describe', {
@@ -53,6 +54,7 @@ export function registerVisionRoutes(app: FastifyInstance, store: Store): void {
     // 每日配额（护外部付费额度；见 visionDailyMax）：当日已达上限即 429，绝不再打上游。
     const day = utcDay()
     if (store.visionCallsOnDay(req.user!.sub, day) >= visionDailyMax()) {
+      metrics?.inc('vision_quota_exceeded_total') // 值守：单账号撞每日上限的速率（异常飙升=滥用/配额过紧）
       return reply.code(429).send({ error: 'ai_daily_quota_exceeded' })
     }
 
@@ -63,9 +65,11 @@ export function registerVisionRoutes(app: FastifyInstance, store: Store): void {
         lang: lang ?? 'zh',
       })
       store.recordVisionCall(req.user!.sub, day) // 仅成功计入配额（失败不烧用户额度，失败速率已由 10/min 限流兜住）
+      metrics?.inc('vision_describe_total') // 值守：成功描述数≈外部付费调用量（乘单价即成本，可对账/告警）
       return { text }
     } catch (e) {
       // 不外泄上游细节/密钥；仅入服务端日志便于运维定位（如 VISION_* 配置错误、上游 4xx/5xx）。
+      metrics?.inc('vision_errors_total') // 值守：上游失败率（飙升=provider 故障/配额耗尽/配置错，可告警）
       if (e instanceof VisionError) {
         console.error('[vision] describe failed status=%s detail=%s', e.status, e.detail)
         return reply.code(502).send({ error: 'ai_error' })

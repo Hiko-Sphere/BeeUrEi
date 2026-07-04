@@ -236,6 +236,33 @@ describe('POST /api/vision/describe（路由）', () => {
     await app.close()
   })
 
+  it('metrics 值守：成功→vision_describe_total、超配额→vision_quota_exceeded_total（进 /metrics 供 Prometheus）', async () => {
+    setConfig()
+    process.env.VISION_DAILY_MAX = '1' // 便于触发配额
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) })))
+    const app = buildApp(new MemoryStore())
+    const t = await token(app, 'vmetrics')
+    const call = () => app.inject({ method: 'POST', url: '/api/vision/describe', headers: { authorization: `Bearer ${t}` }, payload: { image: TINY_JPEG_B64, mime: 'image/jpeg' } })
+    expect((await call()).statusCode).toBe(200) // 成功 → describe_total 1（配额用满 1）
+    expect((await call()).statusCode).toBe(429) // 超配额 → quota_exceeded 1（不打上游）
+    const m = (await app.inject({ method: 'GET', url: '/metrics' })).payload
+    expect(m).toContain('vision_describe_total 1')
+    expect(m).toContain('vision_quota_exceeded_total 1')
+    await app.close()
+  })
+
+  it('metrics 值守：上游失败 → vision_errors_total（provider 故障可告警）', async () => {
+    setConfig()
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, json: async () => ({ error: { message: 'boom' } }) })))
+    const app = buildApp(new MemoryStore())
+    const t = await token(app, 'vmetrics2')
+    const res = await app.inject({ method: 'POST', url: '/api/vision/describe', headers: { authorization: `Bearer ${t}` }, payload: { image: TINY_JPEG_B64, mime: 'image/jpeg' } })
+    expect(res.statusCode).toBe(502)
+    const m = (await app.inject({ method: 'GET', url: '/metrics' })).payload
+    expect(m).toContain('vision_errors_total 1')
+    await app.close()
+  })
+
   it('客户端带 data: 前缀发来 → 剥离后正常处理（200）', async () => {
     setConfig()
     vi.stubGlobal('fetch', vi.fn(async (_url: string, opts: { body: string }) => {

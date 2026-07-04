@@ -135,7 +135,8 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   // 业务计数预置 0 基线：使这些 series 自启动起就存在，避免 Prometheus rate() 在首次命中时断档（见复审 #5）。
   for (const name of ['calls_registered_total', 'help_requests_total', 'help_claims_total', 'emergency_alerts_total',
                       'web_push_sent_total', 'web_push_failed_total',
-                      'apns_sent_total', 'apns_failed_total']) metrics.inc(name, 0)
+                      'apns_sent_total', 'apns_failed_total',
+                      'vision_describe_total', 'vision_quota_exceeded_total', 'vision_errors_total']) metrics.inc(name, 0)
   // Web Push 计数装饰（单点包裹，扇出调用点零改动）：送达健康度进 /metrics。
   // APNs 送达健康度：挂钩注入（接口契约"绝不抛出"，外层装饰器观察不到失败——见 apns.ts onOutcome）。
   pushSender.onOutcome = (ok) => metrics.inc(ok ? 'apns_sent_total' : 'apns_failed_total')
@@ -222,7 +223,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     registerNotificationRoutes(instance, store) // 站内通知收件箱（举报处理结果等）
     registerDevRoutes(instance, store)
     registerNavRoutes(instance, store)
-    registerVisionRoutes(instance, store) // AI 场景描述/图像问答（云端视觉大模型，provider 无关，未配 VISION_* 则 503）
+    registerVisionRoutes(instance, store, metrics) // AI 场景描述/图像问答（云端视觉大模型，provider 无关，未配 VISION_* 则 503）
     registerLocationRoutes(instance, store, liveLocations) // 实时位置共享（亲友/协助者 ↔ 盲人）
     registerSavedRouteRoutes(instance, store, pushSender) // 路线库（亲友远程路线编排 + 盲人自存路线）
     registerAppConfigRoutes(instance, store) // 客户端读取功能开关（控制每一个按键）

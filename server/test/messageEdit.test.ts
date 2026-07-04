@@ -82,3 +82,50 @@ describe('消息编辑 /api/messages/:id/edit', () => {
     await app.close()
   })
 })
+
+describe('引用回复 replyTo /api/messages', () => {
+  it('引用同会话消息 → 存 replyTo；引用不存在的 id → 丢弃但照发', async () => {
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const a = await reg(app, 'rplya', 'blind')
+    const b = await reg(app, 'rplyb', 'helper')
+    await bind(app, a.token, b.token, 'rplyb')
+    const first = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, kind: 'text', text: '原始消息' } })
+    const originId = (first.json() as any).message.id as string
+    // b 引用 a 的原始消息回复。
+    const reply = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(b.token), payload: { toId: a.user.id, kind: 'text', text: '收到', replyTo: originId } })
+    expect(reply.statusCode).toBe(201)
+    expect((reply.json() as any).message.replyTo).toBe(originId)
+    // 不存在的 replyTo → 丢弃（undefined），消息仍发出。
+    const bad = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(b.token), payload: { toId: a.user.id, kind: 'text', text: 'x', replyTo: 'no-such-message' } })
+    expect(bad.statusCode).toBe(201)
+    expect((bad.json() as any).message.replyTo).toBeUndefined()
+    await app.close()
+  })
+
+  it('跨会话引用被拒（丢弃）：单聊不能引用群消息、群不能引用别处消息', async () => {
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const a = await reg(app, 'xrepa', 'blind')
+    const b = await reg(app, 'xrepb', 'helper')
+    await bind(app, a.token, b.token, 'xrepb')
+    // a 建群（含 b），在群里发一条消息。
+    const grp = await app.inject({ method: 'POST', url: '/api/groups', headers: auth(a.token), payload: { name: '群', memberIds: [b.user.id] } })
+    const gid = (grp.json() as any).group.id as string
+    const gMsg = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { groupId: gid, kind: 'text', text: '群消息' } })
+    const gMsgId = (gMsg.json() as any).message.id as string
+    // a 在**单聊**里引用**群**消息 → 丢弃（群消息 r.groupId 存在，单聊分支要求 !r.groupId）。
+    const inDm = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, kind: 'text', text: '串到单聊', replyTo: gMsgId } })
+    expect(inDm.statusCode).toBe(201)
+    expect((inDm.json() as any).message.replyTo).toBeUndefined()
+    // 单聊里的消息在**群**里被引用 → 丢弃（单聊消息 groupId 不等于 gid）。
+    const dm = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, kind: 'text', text: '单聊消息' } })
+    const dmId = (dm.json() as any).message.id as string
+    const inG = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { groupId: gid, kind: 'text', text: '串到群', replyTo: dmId } })
+    expect((inG.json() as any).message.replyTo).toBeUndefined()
+    // 同群内引用群消息 → 有效保留。
+    const good = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { groupId: gid, kind: 'text', text: '群内回复', replyTo: gMsgId } })
+    expect((good.json() as any).message.replyTo).toBe(gMsgId)
+    await app.close()
+  })
+})

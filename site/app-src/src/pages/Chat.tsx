@@ -182,6 +182,7 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
   const [searchResults, setSearchResults] = useState<ChatMessage[] | null>(null)
   const [loadingEarlier, setLoadingEarlier] = useState(false)
   const [reachedStart, setReachedStart] = useState(false)
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null) // 正在引用回复的消息
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const PAGE = 50 // 与后端单次返回条数一致
@@ -260,7 +261,7 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
     const body = text.trim()
     if (!body || sending) return
     setSending(true)
-    try { await api.sendMessage(target, 'text', body); setText(''); await load(); onSent() }
+    try { await api.sendMessage(target, 'text', body, replyingTo?.id); setText(''); setReplyingTo(null); await load(); onSent() }
     catch (e) { toast(chatErrorText(e, t), 'error') } finally { setSending(false) }
   }
 
@@ -372,12 +373,24 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
           <div className="grid h-full place-items-center text-sm text-faint">{t('开始你们的对话', 'Say hello')}</div>
         ) : msgs.map((m) => (
           <Bubble key={m.id} m={m} mine={m.fromId === user?.id} lang={lang} t={t} onRecall={() => recall(m)} onReact={(e) => react(m, e)} onEdit={(nt) => edit(m, nt)}
+            onReply={() => setReplyingTo(m)}
+            repliedTo={m.replyTo ? msgs.find((x) => x.id === m.replyTo) : undefined}
+            repliedName={(rid) => { const r = msgs.find((x) => x.id === rid); return r ? (r.fromId === user?.id ? t('你', 'You') : (sel.kind === 'group' ? (sel.members.find((mm) => mm.id === r.fromId)?.displayName ?? t('成员', 'Member')) : sel.name)) : '' }}
             isGroup={sel.kind === 'group'}
             senderName={sel.kind === 'group' && m.fromId !== user?.id ? (sel.members.find((mm) => mm.id === m.fromId)?.displayName ?? '') : undefined} />
         ))}
         <div ref={bottomRef} />
       </div>
 
+      {/* 正在引用回复：composer 上方显示被引消息预览 + 取消。 */}
+      {replyingTo && (
+        <div className="flex items-center gap-2 border-t border-[var(--line)] bg-honey/5 px-3 py-2 text-xs" data-testid="reply-bar">
+          <span className="shrink-0 font-semibold text-honey">↩ {t('回复', 'Reply')}{' '}
+            {replyingTo.fromId === user?.id ? t('你', 'You') : (sel.kind === 'group' ? (sel.members.find((mm) => mm.id === replyingTo.fromId)?.displayName ?? t('成员', 'Member')) : sel.name)}</span>
+          <span className="min-w-0 flex-1 truncate text-soft">{preview(replyingTo, t)}</span>
+          <button onClick={() => setReplyingTo(null)} className="shrink-0 text-faint hover:text-danger" aria-label={t('取消回复', 'Cancel reply')}><IconX width={16} height={16} /></button>
+        </div>
+      )}
       <div className="flex items-center gap-2 border-t border-[var(--line)] p-3">
         <input ref={fileRef} type="file" accept="image/*,video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) { void (f.type.startsWith('video/') ? sendVideo(f) : sendImage(f)) } e.target.value = '' }} />
         <button onClick={() => fileRef.current?.click()} disabled={sending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full surface-2 text-soft disabled:opacity-40" aria-label={t('发送图片或视频', 'Send image or video')}><IconPlus /></button>
@@ -488,10 +501,11 @@ function GroupInfoDialog({ groupId, groupName, ownerId, members, meId, onClose, 
 
 const REACTION_CHOICES = ['👍', '❤️', '😂', '😮', '😢', '🙏'] // 与 iOS ChatStrings.reactionChoices 对齐
 
-function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, senderName, isGroup }: { m: ChatMessage; mine: boolean; lang: 'zh' | 'en'; t: (z: string, e: string) => string; onRecall: () => void; onReact: (emoji: string) => void; onEdit: (newText: string) => void; senderName?: string; isGroup?: boolean }) {
+function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, repliedTo, repliedName, senderName, isGroup }: { m: ChatMessage; mine: boolean; lang: 'zh' | 'en'; t: (z: string, e: string) => string; onRecall: () => void; onReact: (emoji: string) => void; onEdit: (newText: string) => void; onReply: () => void; repliedTo?: ChatMessage; repliedName?: (id: string) => string; senderName?: string; isGroup?: boolean }) {
   const recallable = mine && m.kind !== 'recalled' && Date.now() - m.createdAt < 2 * 60_000
   const editable = mine && m.kind === 'text' && Date.now() - m.createdAt < 15 * 60_000
   const reactable = m.kind !== 'recalled'
+  const replyable = m.kind !== 'recalled'
   const [picking, setPicking] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(m.text)
@@ -501,6 +515,14 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, senderName, isGro
       <div className={`group relative max-w-[78%] rounded-2xl px-3.5 py-2 text-sm ${mine ? 'bg-honey text-ink' : 'surface-2 text-[var(--text)]'} ${m.kind === 'recalled' ? 'italic opacity-60' : ''}`}>
         {/* 群聊里别人的消息署名——否则多人群聊分不清谁说的。 */}
         {senderName && <div className="mb-0.5 text-xs font-semibold text-honey">{senderName}</div>}
+        {/* 引用回复的原消息预览（WhatsApp 式）：已加载则显示"名字：内容"，未加载则显示占位。 */}
+        {m.replyTo && (
+          <div data-testid="quoted" className={`mb-1 rounded-lg border-l-2 px-2 py-1 text-xs ${mine ? 'border-ink/40 bg-ink/5' : 'border-honey bg-honey/10'}`}>
+            {repliedTo
+              ? <><span className="font-semibold">{repliedName?.(m.replyTo)}</span><span className="ml-1 opacity-80">{preview(repliedTo, t)}</span></>
+              : <span className="opacity-70">{t('引用的消息', 'Quoted message')}</span>}
+          </div>
+        )}
         {editing ? (
           <div className="flex flex-col gap-1.5" data-testid="edit-box">
             <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} maxLength={4000}
@@ -516,6 +538,7 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, senderName, isGro
           <span>{timeAgo(m.createdAt, lang)}</span>
           {m.editedAt && m.kind !== 'recalled' && <span data-testid="edited-tag">{t('已编辑', 'edited')}</span>}
           {editable && !editing && <button onClick={() => { setDraft(m.text); setEditing(true) }} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('编辑', 'Edit')}</button>}
+          {replyable && !editing && <button onClick={onReply} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('回复', 'Reply')}</button>}
           {m.reaction && <span className="text-sm">{m.reaction}</span>}
           {reactable && (
             <button onClick={() => setPicking((v) => !v)} aria-label={t('表情回应', 'React')}

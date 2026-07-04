@@ -22,7 +22,7 @@ export interface IceServer { urls: string[] | string; username?: string; credent
 export interface IncomingCall { callId: string; fromName: string; fromUserId: string; fromAvatar?: string | null }
 // 与后端 HelpSummary 对齐：队列对外的安全摘要（不暴露 fromUserId）。
 export interface HelpRequest { callId: string; fromName: string; fromAvatar?: string | null; language?: string; locality?: string; topic?: string; waitedSeconds: number }
-export interface ChatMessage { id: string; fromId: string; toId: string; kind: string; text: string; createdAt: number; readAt?: number; reaction?: string; groupId?: string; editedAt?: number }
+export interface ChatMessage { id: string; fromId: string; toId: string; kind: string; text: string; createdAt: number; readAt?: number; reaction?: string; groupId?: string; editedAt?: number; replyTo?: string }
 export interface Conversation { peer: User; last: ChatMessage; unread: number }
 export interface ChatGroup { id: string; name: string; ownerId: string; memberIds: string[]; createdAt: number }
 export interface GroupSummary { group: ChatGroup; members: User[]; last: ChatMessage | null; unread: number }
@@ -282,7 +282,7 @@ export const api = {
   // before+beforeId 组成 (createdAt,id) 复合游标，翻页边界遇同毫秒消息不漏。
   messagesWith: (peerId: string, before?: number, beforeId?: string) => get(`/api/messages?with=${encodeURIComponent(peerId)}${before ? `&before=${before}` : ''}${beforeId ? `&beforeId=${encodeURIComponent(beforeId)}` : ''}`) as Promise<{ messages: ChatMessage[] }>,
   groupMessages: (groupId: string, before?: number, beforeId?: string) => get(`/api/messages?group=${encodeURIComponent(groupId)}${before ? `&before=${before}` : ''}${beforeId ? `&beforeId=${encodeURIComponent(beforeId)}` : ''}`) as Promise<{ messages: ChatMessage[] }>,
-  sendMessage: (target: { toId?: string; groupId?: string }, kind: string, text: string) => post('/api/messages', { ...target, kind, text }) as Promise<{ message: ChatMessage }>,
+  sendMessage: (target: { toId?: string; groupId?: string }, kind: string, text: string, replyTo?: string) => post('/api/messages', { ...target, kind, text, ...(replyTo ? { replyTo } : {}) }) as Promise<{ message: ChatMessage }>,
   // 会话内搜索文本消息（时间倒序）：peerId 或 groupId 二选一。
   searchMessages: (scope: { peerId?: string; groupId?: string }, query: string) => {
     const s = scope.groupId ? `group=${encodeURIComponent(scope.groupId)}` : `with=${encodeURIComponent(scope.peerId ?? '')}`

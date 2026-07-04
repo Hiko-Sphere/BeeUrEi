@@ -18,6 +18,7 @@ const sendSchema = z.object({
   // text：正文 ≤4000 字；audio/image：data URL（base64）≤ 550KB；video：mediaId（先 POST /api/media 上传）；
   // location：JSON {lat,lng,name?}。
   text: z.string().min(1).max(550_000),
+  replyTo: z.string().min(1).max(64).optional(), // 引用回复的消息 id（须为同一会话内的消息，否则丢弃）
 })
 
 const audioPrefix = /^data:audio\/(m4a|mp4|aac|x-m4a);base64,/
@@ -60,8 +61,17 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     const parsed = sendSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const me = req.user!.sub
-    const { toId, groupId, kind, text } = parsed.data
+    const { toId, groupId, kind, text, replyTo } = parsed.data
     if ((toId ? 1 : 0) + (groupId ? 1 : 0) !== 1) return reply.code(400).send({ error: 'invalid_input' }) // 恰好一个目标
+    // 引用回复：被引消息须**存在且属同一会话**（群内引群消息 / 单聊引同一对端往来），否则丢弃（不因陈旧引用拒发）。
+    const validReplyTo = ((): string | undefined => {
+      if (!replyTo) return undefined
+      const r = store.findMessage(replyTo)
+      if (!r) return undefined
+      if (groupId) return r.groupId === groupId ? replyTo : undefined
+      const pair = (r.fromId === me && r.toId === toId) || (r.fromId === toId && r.toId === me)
+      return !r.groupId && pair ? replyTo : undefined
+    })()
     if (kind === 'text' && text.length > 4000) return reply.code(400).send({ error: 'message_too_long' })
     // 内容过滤（主动审核）：text 类消息命中违禁词则拒收（默认空词表=不生效）。
     if (kind === 'text' && matchBannedTerm(store.getAppConfig(), text)) return reply.code(403).send({ error: 'content_blocked' })
@@ -85,7 +95,7 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
       if (!group) return reply.code(404).send({ error: 'not_found' })
       if (!group.memberIds.includes(me)) return reply.code(403).send({ error: 'not_member' })
 
-      const msg: ChatMessage = { id: randomUUID(), fromId: me, toId: '', groupId, kind, text, createdAt: Date.now() }
+      const msg: ChatMessage = { id: randomUUID(), fromId: me, toId: '', groupId, kind, text, createdAt: Date.now(), replyTo: validReplyTo }
       store.createMessage(msg)
       store.setGroupRead(groupId, me, msg.createdAt) // 自己发的群消息对自己即读
 
@@ -128,7 +138,7 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     if (!areLinked(store, me, toId!)) return reply.code(403).send({ error: 'not_linked' })       // 仅绑定好友可互发
     if (isBlockedBetween(store, me, toId!)) return reply.code(403).send({ error: 'blocked' })
 
-    const msg: ChatMessage = { id: randomUUID(), fromId: me, toId: toId!, kind, text, createdAt: Date.now() }
+    const msg: ChatMessage = { id: randomUUID(), fromId: me, toId: toId!, kind, text, createdAt: Date.now(), replyTo: validReplyTo }
     store.createMessage(msg)
 
     // 提醒推送（尽力而为，不阻塞发送回执）。

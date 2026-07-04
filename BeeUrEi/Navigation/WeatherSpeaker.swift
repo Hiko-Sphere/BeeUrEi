@@ -77,9 +77,12 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
     private func fetch(lat: Double, lon: Double, lang l: Language) async {
         async let phraseTask = fetchPhrase(lat: lat, lon: lon, lang: l)
         async let pmTask = fetchAirPM25(lat: lat, lon: lon)
-        var phrase = await phraseTask
-        // 空气质量健康提醒（盲人看不到雾霾）：仅"污染"档才追加，优/良不打扰。
-        if let pm = await pmTask, let air = WeatherPhrase.airQualityAdvice(pm25: pm, language: l) {
+        let weather = await phraseTask  // nil = 天气取数失败
+        let pm = await pmTask
+        // 天气失败：只报失败，**绝不**把空气质量拼到失败句后（否则"天气获取失败…空气中度污染"自相矛盾且无分隔，见自审 #1）。
+        var phrase = weather ?? WeatherPhrase.failed(l)
+        // 空气质量健康提醒（盲人看不到雾霾）：仅天气成功且"污染"档才追加，优/良不打扰。
+        if weather != nil, let pm, let air = WeatherPhrase.airQualityAdvice(pm25: pm, language: l) {
             phrase += air
         }
         await MainActor.run {
@@ -110,8 +113,9 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
         return r.current?.pm2_5
     }
 
-    /// 纯网络请求，不触碰任何实例状态（线程安全）。返回要播报的文案。
-    private func fetchPhrase(lat: Double, lon: Double, lang l: Language) async -> String {
+    /// 纯网络请求，不触碰任何实例状态（线程安全）。成功返回文案，**失败返回 nil**（由 fetch() 决定是否只报失败、
+    /// 不与空气质量拼接，见自审 #1）。
+    private func fetchPhrase(lat: Double, lon: Double, lang l: Language) async -> String? {
         var c = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
         c.queryItems = [
             .init(name: "latitude", value: String(format: "%.3f", lat)),   // 坐标降精到 ~百米级，最小化外发
@@ -150,7 +154,7 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
         guard let (data, resp) = try? await URLSession.shared.data(for: request),
               (resp as? HTTPURLResponse)?.statusCode == 200,
               let r = try? JSONDecoder().decode(Response.self, from: data) else {
-            return WeatherPhrase.failed(l)
+            return nil // 取数失败：由 fetch() 统一映射为失败文案，且不拼接空气质量
         }
         // 近期降水时点：在 hourly 里按「当前小时前缀」（"2026-07-04T15"）定位当前小时索引，交给核心算「约几小时后下雨」。
         var rainInHours: Int?

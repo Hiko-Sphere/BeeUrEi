@@ -184,7 +184,7 @@ final class CallViewModel {
         media.onCallQuality = { [weak self] q in
             guard let self else { return }
             self.callQuality = q
-            guard !self.ended else { return } // 通话已结束：不再播报信号（防挂断后残留回调播"信号弱"）
+            guard !self.ended, !self.callEnded else { return } // 通话已结束(本端挂断 或 对方/管理员结束)：不再播报信号（防残留回调播"信号弱"，见自审 #3）
             let level: CallSignalLevel
             switch q { case .good: level = .good; case .fair: level = .fair; case .weak: level = .weak; case .unknown: level = .unknown }
             if let phrase = self.qualityAnnouncer.update(level, language: self.lang) {

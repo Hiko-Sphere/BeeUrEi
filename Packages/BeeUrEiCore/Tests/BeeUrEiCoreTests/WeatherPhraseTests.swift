@@ -186,6 +186,16 @@ extension WeatherPhraseTests {
         XCTAssertTrue(WeatherPhrase.advice(code: 2, todayMax: 24, todayMin: 16, precipProbability: nil, rainInHours: 1, language: .en)!.contains("1 hour;"))
     }
 
+    func testFeelsLikeThresholdUsesRawNotRoundedDiff() {
+        // 20.4 / 22.6：真实差 2.2°（<3），不该因各自四舍五入成 20/23 的"整 3 度"假差而误报（自审 #2）。
+        XCTAssertFalse(WeatherPhrase.summary(temperature: 20.4, code: 0, apparentTemp: 22.6, language: .zh).contains("体感"))
+        // 20.6 / 23.4：真实差 2.8°（<3），同样不提。
+        XCTAssertFalse(WeatherPhrase.summary(temperature: 20.6, code: 0, apparentTemp: 23.4, language: .zh).contains("体感"))
+        // 真实差 ≥3 仍提（20.0 / 23.1 = 3.1°）：取整播报 20/23。
+        let s = WeatherPhrase.summary(temperature: 20.0, code: 0, apparentTemp: 23.1, language: .zh)
+        XCTAssertTrue(s.contains("体感23度"))
+    }
+
     func testMinuteOfDayParsing() {
         XCTAssertEqual(WeatherPhrase.minuteOfDay(fromISO: "2026-07-04T19:45"), 19 * 60 + 45)
         XCTAssertEqual(WeatherPhrase.minuteOfDay(fromISO: "2026-07-04T05:12:00"), 5 * 60 + 12) // 带秒

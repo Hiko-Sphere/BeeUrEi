@@ -105,8 +105,17 @@ extension CurrencyClassifierTests {
         XCTAssertEqual(amts.count, 1); XCTAssertEqual(amts[0].value, 5); XCTAssertTrue(amts[0].jiao)
         let r = c.classify(texts: ["5 角"], rgb: nil)
         XCTAssertEqual(r?.denomination, 5); XCTAssertEqual(r?.jiao, true)
-        // 中间掺标点同理（如"5·角"）。
         XCTAssertTrue(CurrencyClassifier.standaloneAmounts(in: "1 角").first?.jiao == true)
+    }
+
+    /// 有界扫描（自审 #4）：只跳空格找"角"，不跨越标点/符号——否则 5 元会被远处的"角"错配成 5 角（反向钱数错误）。
+    func testJiaoScanIsBoundedToWhitespace() {
+        // "5·角"（数字与角之间是标点）：不判角——"·"截断，5 仍是元。
+        XCTAssertEqual(CurrencyClassifier.standaloneAmounts(in: "5·角").first?.jiao, false)
+        // "5-角" 同理。
+        XCTAssertEqual(CurrencyClassifier.standaloneAmounts(in: "5-角").first?.jiao, false)
+        // 但纯空格分隔仍判角（真实 OCR 场景，回归护栏）。
+        XCTAssertEqual(CurrencyClassifier.standaloneAmounts(in: "5 角").first?.jiao, true)
     }
 
     /// 小数金额 "0.5"（0.5 元 = 5 角）：绝不能把小数位的 "5" 当独立面额投给"5 元"（10 倍误报）。

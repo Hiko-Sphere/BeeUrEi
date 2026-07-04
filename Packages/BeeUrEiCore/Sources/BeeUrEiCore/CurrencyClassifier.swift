@@ -118,21 +118,21 @@ public struct CurrencyClassifier: Sendable {
             if runStart >= 2, chars[runStart - 1] == ".", chars[runStart - 2].isASCII, chars[runStart - 2].isNumber {
                 continue
             }
-            // 其后是否跟"角"单位：向后跳过 OCR 可能误插的空格/标点，取第一个"有意义"字符（数字或文字）判断——
-            // 不再要求"角"与数字紧邻。真钞把"5角"排得紧，但 OCR 常拆成 "5 角"，紧邻判据会把 5 角漏成 5 元。
-            let followedByJiao = (Self.nextMeaningful(chars, from: i) == "角")
+            // 其后是否跟"角"单位：**只**跳过 OCR 可能误插的空格，取第一个非空白字符判断——真钞把"5角"排得紧，
+            // 但 OCR 常拆成 "5 角"，紧邻判据会把 5 角漏成 5 元。故跳空格；但**不跨越标点/符号**（见自审 #4）。
+            let followedByJiao = (Self.firstNonSpace(chars, from: i) == "角")
             result.append((value: v, jiao: followedByJiao))
         }
         return result
     }
 
-    /// 从 index 起向后跳过"无意义"分隔符（空白/标点/符号），返回第一个"有意义"字符（数字或文字）；无则 nil。
-    /// 用于判断数字串后面（可能隔着 OCR 误插的空格/点）是否跟着"角"单位，而不必与数字字符紧邻。
-    static func nextMeaningful(_ chars: [Character], from index: Int) -> Character? {
+    /// 从 index 起**只跳过空白**，返回第一个非空白字符；无则 nil。
+    /// 只跳空白（OCR 常在数字与"角"间插空格 "5 角"），**不跨越标点/符号**——否则 "5" 与很远处的一个"角"会被错配成
+    /// 5 角（把 5 元误报成 5 角，同样是钱数错误、只是反向）。有界扫描，杜绝"隔着一串标点吸附远处的角"。
+    static func firstNonSpace(_ chars: [Character], from index: Int) -> Character? {
         var j = index
         while j < chars.count {
-            let c = chars[j]
-            if (c.isASCII && c.isNumber) || c.isLetter { return c }
+            if !chars[j].isWhitespace { return chars[j] }
             j += 1
         }
         return nil

@@ -98,6 +98,29 @@ extension CurrencyClassifierTests {
         XCTAssertEqual(c.classify(texts: ["1角"], rgb: nil)?.jiao, true)
     }
 
+    /// OCR 常把票面"5角"拆成"5 角"（中间掺空格）。紧邻判据会漏成 5 元（10 倍误报）——这里必须仍判 5 角。
+    func testSpaceSeparatedJiaoStillJiao() {
+        let c = CurrencyClassifier()
+        let amts = CurrencyClassifier.standaloneAmounts(in: "5 角")
+        XCTAssertEqual(amts.count, 1); XCTAssertEqual(amts[0].value, 5); XCTAssertTrue(amts[0].jiao)
+        let r = c.classify(texts: ["5 角"], rgb: nil)
+        XCTAssertEqual(r?.denomination, 5); XCTAssertEqual(r?.jiao, true)
+        // 中间掺标点同理（如"5·角"）。
+        XCTAssertTrue(CurrencyClassifier.standaloneAmounts(in: "1 角").first?.jiao == true)
+    }
+
+    /// 小数金额 "0.5"（0.5 元 = 5 角）：绝不能把小数位的 "5" 当独立面额投给"5 元"（10 倍误报）。
+    /// 无单位信号时宁可不猜（返回 nil），也不谎报。
+    func testDecimalFractionNotVotedAsYuan() {
+        let c = CurrencyClassifier()
+        XCTAssertFalse(CurrencyClassifier.standaloneAmounts(in: "0.5").contains { $0.value == 5 })
+        XCTAssertNil(c.classify(texts: ["0.5"], rgb: nil))
+        // "12.50" 的 "50" 是小数位，不能投成 50 元。
+        XCTAssertFalse(CurrencyClassifier.standaloneAmounts(in: "12.50").contains { $0.value == 50 })
+        // 但冠字号 "No.100" 的点前是字母，100 仍要正常投票（回归护栏）。
+        XCTAssertTrue(CurrencyClassifier.standaloneAmounts(in: "No.100").contains { $0.value == 100 })
+    }
+
     func testYuanUnaffectedByJiaoChange() {
         let c = CurrencyClassifier()
         // 真 5 元（伍圆 + 角号 5）仍是 5 元、jiao=false。

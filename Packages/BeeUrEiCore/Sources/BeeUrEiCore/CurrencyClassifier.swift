@@ -98,24 +98,43 @@ public struct CurrencyClassifier: Sendable {
         return nil
     }
 
-    /// 提取"独立"ASCII 数字串（两侧非数字），并标记其后是否紧跟"角"——防止 100 里的 10、年号 2015、
+    /// 提取"独立"ASCII 数字串（两侧非数字），并标记其后是否跟"角"——防止 100 里的 10、年号 2015、
     /// 序列号误配，且**"5角"标记为 jiao、绝不投给 5 元**（10 倍钱数错误对盲人是严重误导）。
     static func standaloneAmounts(in text: String) -> [(value: Int, jiao: Bool)] {
-        var result: [(Int, Bool)] = []
-        var current = ""
+        var result: [(value: Int, jiao: Bool)] = []
         let chars = Array(text)
-        for i in 0...chars.count {
-            let ch: Character? = i < chars.count ? chars[i] : nil // 尾部哨兵冲洗最后一段
-            if let ch, ch.isASCII, ch.isNumber {
-                current.append(ch)
-            } else {
-                if !current.isEmpty, let v = Int(current) {
-                    let followedByJiao = (ch == "角")
-                    result.append((v, followedByJiao))
-                }
-                current = ""
+        var i = 0
+        while i < chars.count {
+            guard chars[i].isASCII, chars[i].isNumber else { i += 1; continue }
+            let runStart = i
+            var current = ""
+            while i < chars.count, chars[i].isASCII, chars[i].isNumber {
+                current.append(chars[i]); i += 1
             }
+            guard let v = Int(current) else { continue } // 溢出等：跳过（i 已越过该串，不会死循环）
+            // 小数位（形如 "0.5" 的 "5"、"12.50" 的 "50"）：前面是"数字+."，是"零点几元"的小数部分而非独立面额。
+            // 绝不当"元"投票（否则 "0.5" 被读成 "5 元"——10 倍钱数错误）；也不瞎猜角/分，直接跳过（无信号不猜）。
+            // 只在"点前是数字"时才判小数——避免误伤冠字号 "No.100"（那个点前是字母，100 仍要投票）。
+            if runStart >= 2, chars[runStart - 1] == ".", chars[runStart - 2].isASCII, chars[runStart - 2].isNumber {
+                continue
+            }
+            // 其后是否跟"角"单位：向后跳过 OCR 可能误插的空格/标点，取第一个"有意义"字符（数字或文字）判断——
+            // 不再要求"角"与数字紧邻。真钞把"5角"排得紧，但 OCR 常拆成 "5 角"，紧邻判据会把 5 角漏成 5 元。
+            let followedByJiao = (Self.nextMeaningful(chars, from: i) == "角")
+            result.append((value: v, jiao: followedByJiao))
         }
         return result
+    }
+
+    /// 从 index 起向后跳过"无意义"分隔符（空白/标点/符号），返回第一个"有意义"字符（数字或文字）；无则 nil。
+    /// 用于判断数字串后面（可能隔着 OCR 误插的空格/点）是否跟着"角"单位，而不必与数字字符紧邻。
+    static func nextMeaningful(_ chars: [Character], from index: Int) -> Character? {
+        var j = index
+        while j < chars.count {
+            let c = chars[j]
+            if (c.isASCII && c.isNumber) || c.isLetter { return c }
+            j += 1
+        }
+        return nil
     }
 }

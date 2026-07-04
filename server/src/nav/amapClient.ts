@@ -12,13 +12,20 @@ function amapTimeoutMs(): number {
 /// - 我们自己的超时（signal.aborted）**不重试**——已等满一个超时窗，再等一次会让盲人多等一倍；
 /// - 高德的语义错误（status!=1，如 USERKEY_PLAT_NOMATCH/未找到）不走这里（在 assertAmapOk 抛），不会被重试；
 /// - 只对纯网络瞬断（连接被拒/重置等 fetch 抛错）重试一次，透明恢复高德侧的偶发抖动，盲人无感。
+/// 可观测性钩子（buildApp 注入，与 notify 的 setNotifyWebPush 同先例）：高德是**限额/计费**外部依赖，
+/// 监控调用量/超时/网络失败/上游错误(key 平台不符·配额耗尽)对运维至关重要。默认 noop（未注入不计）。
+let amapMetric: (name: string) => void = () => {}
+export function setAmapMetrics(hook: (name: string) => void): void { amapMetric = hook }
+
 async function amapFetch(url: string): Promise<Response> {
   for (let attempt = 0; ; attempt++) {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), amapTimeoutMs())
     try {
+      amapMetric('amap_calls_total') // 每次实际 fetch（含重试）——监控配额消耗
       return await fetch(url, { signal: ctrl.signal })
     } catch (e) {
+      amapMetric(ctrl.signal.aborted ? 'amap_timeouts_total' : 'amap_errors_total')
       if (ctrl.signal.aborted || attempt >= 1) throw e // 超时不重试；已重试过一次则放弃
     } finally {
       clearTimeout(timer) // 成功/失败都清定时器，避免泄漏
@@ -57,8 +64,8 @@ export class AmapError extends Error {
 /// 高德成功 status='1' 且 infocode='10000'；失败 status='0' 且带 info/infocode。
 /// 不校验会把"key 配置错误"静默当成"目的地未找到"，对盲人导航是致命的误导（见审查）。
 function assertAmapOk(res: Response, data: { status?: string; info?: string; infocode?: string }): void {
-  if (!res.ok) throw new AmapError(`http_${res.status}`, `HTTP ${res.status}`)
-  if (data.status !== '1') throw new AmapError(data.infocode ?? 'unknown', data.info ?? 'unknown')
+  if (!res.ok) { amapMetric('amap_upstream_errors_total'); throw new AmapError(`http_${res.status}`, `HTTP ${res.status}`) }
+  if (data.status !== '1') { amapMetric('amap_upstream_errors_total'); throw new AmapError(data.infocode ?? 'unknown', data.info ?? 'unknown') }
 }
 
 /// 地址 → "经度,纬度"（GCJ-02）。返回 undefined 表示**地址确实无匹配**；key/配额等错误抛 AmapError。

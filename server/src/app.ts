@@ -52,6 +52,7 @@ import { ConsoleMailer, type Mailer } from './mail/mailer'
 import { NoopPushSender, type PushSender } from './push/apns'
 import { CountingWebPushSender, NoopWebPushSender, type WebPushSender } from './push/webPush'
 import { setNotifyWebPush } from './notifications/notify'
+import { setAmapMetrics } from './nav/amapClient'
 import { createAppleVerifier, type AppleTokenVerifier } from './auth/apple'
 
 export interface AppOptions {
@@ -138,7 +139,9 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   for (const name of ['calls_registered_total', 'help_requests_total', 'help_claims_total', 'emergency_alerts_total',
                       'web_push_sent_total', 'web_push_failed_total',
                       'apns_sent_total', 'apns_failed_total',
-                      'vision_describe_total', 'vision_quota_exceeded_total', 'vision_errors_total']) metrics.inc(name, 0)
+                      'vision_describe_total', 'vision_quota_exceeded_total', 'vision_errors_total',
+                      'amap_calls_total', 'amap_timeouts_total', 'amap_errors_total', 'amap_upstream_errors_total']) metrics.inc(name, 0)
+  setAmapMetrics((name) => metrics.inc(name)) // 高德外部依赖可观测性（限额/计费，监控量/超时/网络/上游错误）
   // Web Push 计数装饰（单点包裹，扇出调用点零改动）：送达健康度进 /metrics。
   // APNs 送达健康度：挂钩注入（接口契约"绝不抛出"，外层装饰器观察不到失败——见 apns.ts onOutcome）。
   pushSender.onOutcome = (ok) => metrics.inc(ok ? 'apns_sent_total' : 'apns_failed_total')

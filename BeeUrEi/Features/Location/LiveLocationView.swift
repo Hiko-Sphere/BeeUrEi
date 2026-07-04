@@ -119,6 +119,8 @@ struct LiveLocationView: View {
     private func contactRow(_ c: ContactLocationInfo) -> some View {
         let distanceText = distanceBearing(to: c)
         let updated = LiveLocationStrings.updatedAgo(secondsSince(c.updatedAt), lang)
+        let battery = LiveLocationStrings.batteryText(c.battery, lang) // nil=对端未上报（老客户端），不显示不猜
+        let batteryLow = (c.battery ?? 100) <= 20
         return Button {
             camera = .region(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: c.lat, longitude: c.lng),
                                                  latitudinalMeters: 400, longitudinalMeters: 400))
@@ -129,7 +131,12 @@ struct LiveLocationView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(c.displayName).font(.headline)
                         Text("\(AccountStrings.roleName(c.role, lang)) · \(distanceText)").font(.caption).foregroundStyle(.secondary)
-                        Text(updated).font(.caption2).foregroundStyle(.secondary)
+                        if let battery {
+                            // 低电量标红（对端手机快没电=其导盲/求助将失效，趁失联前主动联系）；视觉之外语义已在文字（"偏低"）。
+                            Text("\(updated) · \(battery)").font(.caption2).foregroundStyle(batteryLow ? Color.beeDanger : Color.secondary)
+                        } else {
+                            Text(updated).font(.caption2).foregroundStyle(.secondary)
+                        }
                     }
                     Spacer(minLength: 0)
                     Circle().fill(Color.beeSuccess).frame(width: 9, height: 9)
@@ -139,7 +146,7 @@ struct LiveLocationView: View {
         .buttonStyle(BeePressStyle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel(LiveLocationStrings.contactA11y(name: c.displayName, role: AccountStrings.roleName(c.role, lang),
-                                                            distance: distanceText, updated: updated, lang))
+                                                            distance: distanceText, updated: updated, battery: battery, lang))
     }
 
     // MARK: 计算

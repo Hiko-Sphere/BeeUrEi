@@ -43,9 +43,19 @@ enum LiveLocationStrings {
         CompassRose.cardinal(degrees: degrees, language: l) ?? (l == .zh ? "方向未知" : "unknown direction")
     }
 
-    /// 联系人单元的合并无障碍标签。
-    static func contactA11y(name: String, role: String, distance: String, updated: String, _ l: Language) -> String {
-        l == .zh ? "\(name)，\(role)，\(distance)，\(updated)" : "\(name), \(role), \(distance), \(updated)"
+    /// 对端电量文案（0–100 之外/未知返回 nil：老客户端不上报，不显示不猜）。≤20% 点明"偏低"——
+    /// 尤其 VoiceOver 用户听不到"红色"，语义必须在文字里（趁对方手机没电失联前主动联系）。
+    static func batteryText(_ pct: Int?, _ l: Language) -> String? {
+        guard let pct, (0...100).contains(pct) else { return nil }
+        if pct <= 20 { return l == .zh ? "电量 \(pct)%，偏低" : "battery \(pct)%, low" }
+        return l == .zh ? "电量 \(pct)%" : "battery \(pct)%"
+    }
+
+    /// 联系人单元的合并无障碍标签（battery 为 nil 时不含电量段）。
+    static func contactA11y(name: String, role: String, distance: String, updated: String, battery: String? = nil, _ l: Language) -> String {
+        let base = l == .zh ? "\(name)，\(role)，\(distance)，\(updated)" : "\(name), \(role), \(distance), \(updated)"
+        guard let battery else { return base }
+        return l == .zh ? "\(base)，\(battery)" : "\(base), \(battery)"
     }
 
     static func featureOffTitle(_ l: Language) -> String { l == .zh ? "位置共享已关闭" : "Location sharing is off" }

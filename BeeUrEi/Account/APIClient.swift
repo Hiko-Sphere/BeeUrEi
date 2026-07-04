@@ -1411,6 +1411,7 @@ struct ContactLocationInfo: Codable, Identifiable {
     let lng: Double
     let accuracy: Double?
     let heading: Double?
+    let battery: Int?   // 对端手机电量%（0–100；老客户端不上报为 nil）——失联前主动联系的信号
     let updatedAt: Double
     var id: String { userId }
 }

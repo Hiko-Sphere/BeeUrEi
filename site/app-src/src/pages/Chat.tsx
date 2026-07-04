@@ -8,7 +8,7 @@ import { parseLocation } from '../lib/location'
 import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo, Modal } from '../components/ui'
 import { IconChat, IconSend, IconPlus, IconX } from '../components/icons'
 
-type Selection = { kind: 'peer'; id: string; name: string; avatar?: string | null } | { kind: 'group'; id: string; name: string; members: User[]; ownerId: string }
+type Selection = { kind: 'peer'; id: string; name: string; avatar?: string | null } | { kind: 'group'; id: string; name: string; members: User[]; ownerId: string; muted: boolean }
 
 export function ChatPage() {
   const { peerId } = useParams()
@@ -68,7 +68,7 @@ export function ChatPage() {
                   onClick={() => setSel({ kind: 'peer', id: it.c.peer.id, name: it.c.peer.displayName, avatar: it.c.peer.avatar })} />
               ) : (
                 <GroupRow key={it.key} active={sel?.kind === 'group' && sel.id === it.g.group.id} g={it.g} lang={lang} t={t}
-                  onClick={() => setSel({ kind: 'group', id: it.g.group.id, name: it.g.group.name, members: it.g.members, ownerId: it.g.group.ownerId })} />
+                  onClick={() => setSel({ kind: 'group', id: it.g.group.id, name: it.g.group.name, members: it.g.members, ownerId: it.g.group.ownerId, muted: it.g.muted ?? false })} />
               ))}
             </ul>
           )}
@@ -111,7 +111,8 @@ function GroupRow({ g, active, onClick, lang, t }: { g: GroupSummary; active: bo
       <button type="button" onClick={onClick} className="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:surface-2">
         <span className="flex h-11 w-11 items-center justify-center rounded-full bg-honey/15 text-honey"><IconChat /></span>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5"><span className="truncate font-medium">{g.group.name}</span><Pill>{g.members.length}</Pill></div>
+          <div className="flex items-center gap-1.5"><span className="truncate font-medium">{g.group.name}</span><Pill>{g.members.length}</Pill>
+            {g.muted && <span role="img" aria-label={t('已静音', 'Muted')} title={t('已静音', 'Muted')} className="shrink-0 text-xs text-faint">🔕</span>}</div>
           <div className="truncate text-xs text-faint">{preview(g.last, t)}</div>
         </div>
         <div className="flex flex-col items-end gap-1">
@@ -183,9 +184,19 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
   const [loadingEarlier, setLoadingEarlier] = useState(false)
   const [reachedStart, setReachedStart] = useState(false)
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null) // 正在引用回复的消息
+  const [muted, setMuted] = useState(sel.kind === 'group' ? sel.muted : false) // 群免打扰（乐观切换 + 回滚）
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const PAGE = 50 // 与后端单次返回条数一致
+
+  // 群免打扰切换：乐观更新即时反馈，失败回滚 + 提示；成功后刷新会话列表让行内静音标记同步。
+  const toggleMute = async () => {
+    if (sel.kind !== 'group') return
+    const next = !muted
+    setMuted(next)
+    try { await api.muteGroup(sel.id, next); onSent() }
+    catch (e) { setMuted(!next); toast(chatErrorText(e, t, t('操作失败', 'Failed')), 'error') }
+  }
 
   const fetchWindow = useCallback((before?: number, beforeId?: string) =>
     sel.kind === 'peer' ? api.messagesWith(sel.id, before, beforeId) : api.groupMessages(sel.id, before, beforeId), [sel])
@@ -319,6 +330,13 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
           className="rounded-full surface-2 px-3 py-1.5 text-xs font-medium text-soft" aria-label={t('搜索消息', 'Search messages')}>
           {searchOpen ? t('完成', 'Done') : t('搜索', 'Search')}
         </button>
+        {sel.kind === 'group' && (
+          <button onClick={() => void toggleMute()} data-testid="mute-toggle" aria-pressed={muted}
+            className="rounded-full surface-2 px-3 py-1.5 text-xs font-medium text-soft"
+            aria-label={muted ? t('取消静音该群', 'Unmute group') : t('静音该群', 'Mute group')}>
+            {muted ? t('🔕 已静音', '🔕 Muted') : t('静音', 'Mute')}
+          </button>
+        )}
         {sel.kind === 'group' && (
           <button onClick={() => setShowInfo(true)} className="rounded-full surface-2 px-3 py-1.5 text-xs font-medium text-soft" aria-label={t('群信息', 'Group info')}>{t('群信息', 'Group info')}</button>
         )}

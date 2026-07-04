@@ -76,6 +76,8 @@ export class SqliteStore implements Store {
         id TEXT PRIMARY KEY, name TEXT, ownerId TEXT, memberIds TEXT, createdAt INTEGER);
       CREATE TABLE IF NOT EXISTS group_reads (
         groupId TEXT, userId TEXT, lastReadAt INTEGER, PRIMARY KEY (groupId, userId));
+      CREATE TABLE IF NOT EXISTS group_mutes (
+        groupId TEXT, userId TEXT, PRIMARY KEY (groupId, userId));
       CREATE TABLE IF NOT EXISTS media (
         id TEXT PRIMARY KEY, ownerId TEXT, mime TEXT, size INTEGER, createdAt INTEGER);
       CREATE TABLE IF NOT EXISTS passkeys (
@@ -924,6 +926,7 @@ export class SqliteStore implements Store {
     this.db.prepare('DELETE FROM groups WHERE id = ?').run(id)
     this.db.prepare('DELETE FROM messages WHERE groupId = ?').run(id)
     this.db.prepare('DELETE FROM group_reads WHERE groupId = ?').run(id)
+    this.db.prepare('DELETE FROM group_mutes WHERE groupId = ?').run(id)
   }
   groupMessages(groupId: string, limit: number, beforeMs?: number, beforeId?: string): ChatMessage[] {
     const bm = beforeMs ?? null, bi = beforeId ?? null
@@ -971,6 +974,16 @@ export class SqliteStore implements Store {
   }
   deleteGroupReadsForUser(userId: string): void {
     this.db.prepare('DELETE FROM group_reads WHERE userId = ?').run(userId)
+  }
+  setGroupMuted(groupId: string, userId: string, muted: boolean): void {
+    if (muted) this.db.prepare('INSERT OR IGNORE INTO group_mutes (groupId, userId) VALUES (?, ?)').run(groupId, userId)
+    else this.db.prepare('DELETE FROM group_mutes WHERE groupId = ? AND userId = ?').run(groupId, userId)
+  }
+  isGroupMuted(groupId: string, userId: string): boolean {
+    return !!this.db.prepare('SELECT 1 FROM group_mutes WHERE groupId = ? AND userId = ?').get(groupId, userId)
+  }
+  deleteGroupMutesForUser(userId: string): void {
+    this.db.prepare('DELETE FROM group_mutes WHERE userId = ?').run(userId)
   }
 
   // MARK: 媒体

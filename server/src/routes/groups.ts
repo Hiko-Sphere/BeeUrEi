@@ -58,6 +58,7 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store, push: Pu
         }),
         last: recent.length > 0 ? recent[recent.length - 1] : null,
         unread: recent.filter((m) => m.createdAt > readAt && m.fromId !== me && m.kind !== 'recalled').length,
+        muted: store.isGroupMuted(g.id, me), // 我是否静音此群（前端显示静音图标 + 免打扰不影响未读数）
       }
     })
     // 最近活跃的群在前（无消息按建群时间）。
@@ -121,6 +122,19 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store, push: Pu
                  pushStrings.groupDissolvedTitle(l), pushStrings.groupDissolvedBody(group.name, l))
     }
     return { ok: true }
+  })
+
+  // 群免打扰开关（仅成员，作用于本人）：静音只压该群的推送横幅——消息照常存库、未读数照增，
+  // 打开群即见。区别于全局勿扰时段（quietHours）：这是"某个吵闹的群单独静音"，家庭大群刚需。
+  app.post('/api/groups/:id/mute', { preHandler: requireAuth() }, async (req, reply) => {
+    const parsed = z.object({ muted: z.boolean() }).safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const me = req.user!.sub
+    const group = store.findGroup((req.params as { id: string }).id)
+    if (!group) return reply.code(404).send({ error: 'not_found' })
+    if (!group.memberIds.includes(me)) return reply.code(403).send({ error: 'not_member' })
+    store.setGroupMuted(group.id, me, parsed.data.muted)
+    return { muted: parsed.data.muted }
   })
 }
 

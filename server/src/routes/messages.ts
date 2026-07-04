@@ -110,6 +110,8 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
           try {
             const member = store.findById(memberId)
             if (!member) continue
+            // 群免打扰：该成员把此群静音 → 压推送横幅（消息已存库、未读照增，其打开即见）。比勿扰更细：只静此群。
+            if (store.isGroupMuted(groupId, memberId)) continue
             // 勿扰时段：群消息推送横幅在成员本地勿扰时段内抑制（消息已存库，其打开即见、未读数照增）。
             if (shouldSuppressPush(member.quietHours, 'chat_message', Date.now())) continue
             const l = pushLang(member.language)

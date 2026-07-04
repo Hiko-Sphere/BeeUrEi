@@ -25,6 +25,7 @@ export function cascadeDeleteUser(store: Store, id: string): void {
   // 非群主退群仅改 memberIds、不经 deleteGroup，其在这些群的已读游标(group_reads)会残留成孤儿——
   // 显式清除，兑现"不留孤儿"。群主的群已由 dissolveGroup→deleteGroup 连带清掉，这里重复清也无副作用。
   store.deleteGroupReadsForUser(id)
+  store.deleteGroupMutesForUser(id) // 同已读游标：非群主退群不经 deleteGroup，其群静音标记须显式清，不留孤儿
   store.deleteMessagesForUser(id)
   // 通话记录（我作为主叫或被叫的通话历史）：非证据、非审计，纯属该用户 PII——删号即清，否则残留"谁给谁打过电话"
   // 的孤儿记录（录制才有取证/留存价值并刻意保留；通话元数据本身无此价值，见上"刻意保留"未列 call_records）。

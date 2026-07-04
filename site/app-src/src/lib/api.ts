@@ -25,7 +25,7 @@ export interface HelpRequest { callId: string; fromName: string; fromAvatar?: st
 export interface ChatMessage { id: string; fromId: string; toId: string; kind: string; text: string; createdAt: number; readAt?: number; reaction?: string; groupId?: string; editedAt?: number; replyTo?: string; readBy?: number; readTotal?: number }
 export interface Conversation { peer: User; last: ChatMessage; unread: number }
 export interface ChatGroup { id: string; name: string; ownerId: string; memberIds: string[]; createdAt: number }
-export interface GroupSummary { group: ChatGroup; members: User[]; last: ChatMessage | null; unread: number }
+export interface GroupSummary { group: ChatGroup; members: User[]; last: ChatMessage | null; unread: number; muted?: boolean }
 export interface RecordingInfo { id: string; callId: string; ownerId: string; ownerName: string; reason: string; recordedAt: number; durationSec?: number | null; lat?: number | null; lon?: number | null; locationLabel?: string | null; participantIds: string[]; participantNames: string[]; hasMedia: boolean; deletedAt?: number | null }
 export interface NotificationInfo { id: string; userId: string; kind: string; title: string; body: string; data?: Record<string, string> | null; createdAt: number; readAt?: number | null }
 /// 勿扰时段：分钟-of-day [0,1439] + IANA 时区。start>end 表跨午夜（22:00→07:00）。
@@ -294,6 +294,7 @@ export const api = {
   editMessage: (id: string, text: string) => post(`/api/messages/${id}/edit`, { text }) as Promise<{ message: ChatMessage }>,
   reactMessage: (id: string, emoji: string) => post(`/api/messages/${id}/reaction`, { emoji }) as Promise<{ message: ChatMessage }>,
   groups: () => get('/api/groups') as Promise<{ groups: GroupSummary[] }>,
+  muteGroup: (groupId: string, muted: boolean) => post(`/api/groups/${encodeURIComponent(groupId)}/mute`, { muted }) as Promise<{ muted: boolean }>,
   createGroup: (name: string, memberIds: string[]) => post('/api/groups', { name, memberIds }),
   // 后端期望单个 { userId }（非 memberIds 数组）——此前形状不匹配会 400。逐个加。
   addGroupMember: (id: string, userId: string) => post(`/api/groups/${id}/members`, { userId }),

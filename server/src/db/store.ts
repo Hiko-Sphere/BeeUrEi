@@ -700,6 +700,10 @@ export interface Store {
   setGroupRead(groupId: string, userId: string, at: number): void
   groupReadAt(groupId: string, userId: string): number
   deleteGroupReadsForUser(userId: string): void // 删号级联：清该用户在所有群的已读游标（非群主退群路径不经 deleteGroup，否则残留孤儿）
+  /// 群免打扰：某人是否静音某群的推送横幅（消息仍存库、未读照增，只压推送）。与已读游标同为「每人每群」软状态。
+  setGroupMuted(groupId: string, userId: string, muted: boolean): void
+  isGroupMuted(groupId: string, userId: string): boolean
+  deleteGroupMutesForUser(userId: string): void // 删号级联：清该用户在所有群的静音标记（同已读游标，非群主退群路径须显式清）
 
   // 媒体（视频消息等：元数据在库，实体文件在磁盘 media/）
   createMedia(m: MediaMeta): void
@@ -735,6 +739,7 @@ export class MemoryStore implements Store {
   protected messages = new Map<string, ChatMessage>()
   protected groups = new Map<string, ChatGroup>()
   protected groupReads = new Map<string, number>() // `${groupId}:${userId}` → lastReadAt
+  protected groupMutes = new Set<string>() // `${groupId}:${userId}` 存在 = 该人静音该群推送
   protected media = new Map<string, MediaMeta>()
   protected notifications = new Map<string, Notification>()
   protected emergencyEvents = new Map<string, EmergencyEvent>()
@@ -1424,6 +1429,7 @@ export class MemoryStore implements Store {
     this.groups.delete(id)
     for (const [k, m] of this.messages) if (m.groupId === id) this.messages.delete(k)
     for (const k of [...this.groupReads.keys()]) if (k.startsWith(`${id}:`)) this.groupReads.delete(k)
+    for (const k of [...this.groupMutes]) if (k.startsWith(`${id}:`)) this.groupMutes.delete(k)
     this.afterMutate()
   }
   groupMessages(groupId: string, limit: number, beforeMs?: number, beforeId?: string): ChatMessage[] {
@@ -1463,6 +1469,18 @@ export class MemoryStore implements Store {
     let changed = false
     // key = `${groupId}:${userId}`（groupId/userId 均为 UUID，无冒号），故按 `:${userId}` 结尾唯一匹配该用户。
     for (const k of [...this.groupReads.keys()]) if (k.endsWith(`:${userId}`)) { this.groupReads.delete(k); changed = true }
+    if (changed) this.afterMutate()
+  }
+  setGroupMuted(groupId: string, userId: string, muted: boolean): void {
+    const k = `${groupId}:${userId}`
+    if (muted ? (this.groupMutes.has(k) ? false : (this.groupMutes.add(k), true)) : this.groupMutes.delete(k)) this.afterMutate()
+  }
+  isGroupMuted(groupId: string, userId: string): boolean {
+    return this.groupMutes.has(`${groupId}:${userId}`)
+  }
+  deleteGroupMutesForUser(userId: string): void {
+    let changed = false
+    for (const k of [...this.groupMutes]) if (k.endsWith(`:${userId}`)) { this.groupMutes.delete(k); changed = true }
     if (changed) this.afterMutate()
   }
 
@@ -1535,6 +1553,7 @@ export class JsonFileStore extends MemoryStore {
           messages?: ChatMessage[]
           groups?: ChatGroup[]
           groupReads?: Record<string, number>
+          groupMutes?: string[]
           media?: MediaMeta[]
           passkeys?: Passkey[]
           auditLog?: AdminAuditEntry[]
@@ -1562,6 +1581,7 @@ export class JsonFileStore extends MemoryStore {
         for (const m of data.messages ?? []) this.messages.set(m.id, m)
         for (const g of data.groups ?? []) this.groups.set(g.id, g)
         for (const [k, v] of Object.entries(data.groupReads ?? {})) this.groupReads.set(k, v)
+        for (const k of data.groupMutes ?? []) this.groupMutes.add(k)
         for (const md of data.media ?? []) this.media.set(md.id, md)
         for (const pk of data.passkeys ?? []) this.passkeys.set(pk.id, pk)
         if (data.auditLog) this.auditLog = data.auditLog
@@ -1597,6 +1617,7 @@ export class JsonFileStore extends MemoryStore {
       messages: [...this.messages.values()],
       groups: [...this.groups.values()],
       groupReads: Object.fromEntries(this.groupReads),
+      groupMutes: [...this.groupMutes],
       media: [...this.media.values()],
       passkeys: [...this.passkeys.values()],
       auditLog: this.auditLog,

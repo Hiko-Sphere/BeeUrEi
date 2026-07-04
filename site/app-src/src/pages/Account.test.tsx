@@ -4,7 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 vi.mock('../lib/session', () => ({ useSession: () => ({ user: { id: 'u1', username: 'amin', displayName: '阿明', role: 'helper' }, refreshMe: vi.fn(), signOut: vi.fn() }) }))
 vi.mock('../lib/api', () => ({
-  api: { me: vi.fn(), verificationStatus: vi.fn(), setProfile: vi.fn(), setRole: vi.fn(), setLanguage: vi.fn(), deleteAccount: vi.fn(), setEmail: vi.fn() },
+  api: { me: vi.fn(), verificationStatus: vi.fn(), setProfile: vi.fn(), setRole: vi.fn(), setLanguage: vi.fn(), deleteAccount: vi.fn(), setEmail: vi.fn(), quietHours: vi.fn(), setQuietHours: vi.fn() },
   APIError: class extends Error { code = ''; status = 0 },
 }))
 import { api } from '../lib/api'
@@ -16,6 +16,7 @@ describe('AccountPage 资料渲染（防字段漂移）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mock(api.verificationStatus).mockResolvedValue({ status: 'none' })
+    mock(api.quietHours).mockResolvedValue({ quietHours: null }) // 勿扰卡默认无配置
   })
 
   it('锁定 username/email/emailVerified/twoFactorEnabled 渲染键', async () => {
@@ -55,5 +56,29 @@ describe('AccountPage 资料渲染（防字段漂移）', () => {
     await waitFor(() => expect(api.setEmail).toHaveBeenCalledWith('new@y.com'))
     // onChanged 已在 sendCode 成功后触发 → 再次拉 /api/me 使父 self 同步为新（未验证）邮箱，安全卡不再留旧值
     await waitFor(() => expect(mock(api.me).mock.calls.length).toBeGreaterThan(meCallsBefore))
+  })
+
+  it('勿扰时段：开关切换即保存并回显；已配置则回填时间', async () => {
+    mock(api.me).mockResolvedValue({ id: 'u1', username: 'amin', displayName: '阿明', role: 'helper', usernameCustomized: true, verified: false })
+    mock(api.quietHours).mockResolvedValue({ quietHours: null })
+    mock(api.setQuietHours).mockResolvedValue({ quietHours: { enabled: true, startMinute: 1320, endMinute: 420, tz: 'Asia/Shanghai' } })
+    render(<AccountPage />)
+    const sw = await screen.findByRole('switch', { name: '勿扰时段' })
+    expect(sw).toHaveAttribute('aria-checked', 'false')
+    fireEvent.click(sw)
+    // 切换即保存，且用服务端回值回显（enabled + 22:00–07:00 时间）
+    await waitFor(() => expect(api.setQuietHours).toHaveBeenCalledWith(expect.objectContaining({ enabled: true })))
+    await waitFor(() => expect(screen.getByRole('switch', { name: '勿扰时段' })).toHaveAttribute('aria-checked', 'true'))
+    expect((screen.getByLabelText('勿扰开始时间') as HTMLInputElement).value).toBe('22:00') // 1320 分 → 22:00
+    expect((screen.getByLabelText('勿扰结束时间') as HTMLInputElement).value).toBe('07:00') // 420 分 → 07:00
+  })
+
+  it('勿扰时段：已有配置进入即回填、开关为开', async () => {
+    mock(api.me).mockResolvedValue({ id: 'u1', username: 'amin', displayName: '阿明', role: 'helper', usernameCustomized: true, verified: false })
+    mock(api.quietHours).mockResolvedValue({ quietHours: { enabled: true, startMinute: 1350, endMinute: 390, tz: 'Asia/Shanghai' } })
+    render(<AccountPage />)
+    await waitFor(() => expect(screen.getByRole('switch', { name: '勿扰时段' })).toHaveAttribute('aria-checked', 'true'))
+    expect((screen.getByLabelText('勿扰开始时间') as HTMLInputElement).value).toBe('22:30') // 1350
+    expect((screen.getByLabelText('勿扰结束时间') as HTMLInputElement).value).toBe('06:30') // 390
   })
 })

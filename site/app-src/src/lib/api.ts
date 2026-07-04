@@ -28,6 +28,8 @@ export interface ChatGroup { id: string; name: string; ownerId: string; memberId
 export interface GroupSummary { group: ChatGroup; members: User[]; last: ChatMessage | null; unread: number }
 export interface RecordingInfo { id: string; callId: string; ownerId: string; ownerName: string; reason: string; recordedAt: number; durationSec?: number | null; lat?: number | null; lon?: number | null; locationLabel?: string | null; participantIds: string[]; participantNames: string[]; hasMedia: boolean; deletedAt?: number | null }
 export interface NotificationInfo { id: string; userId: string; kind: string; title: string; body: string; data?: Record<string, string> | null; createdAt: number; readAt?: number | null }
+/// 勿扰时段：分钟-of-day [0,1439] + IANA 时区。start>end 表跨午夜（22:00→07:00）。
+export interface QuietHoursInfo { enabled: boolean; startMinute: number; endMinute: number; tz: string }
 export interface RouteWaypoint { lat: number; lng: number; note?: string }
 /// 路线库条目（坐标全程 WGS-84——编辑器必须用 OSM 瓦片，绝不可换 amap GCJ-02 瓦片，会系统性偏移百米级）。
 export interface SavedRouteInfo { id: string; ownerId: string; createdBy: string; name: string; waypoints: RouteWaypoint[]; createdAt: number; updatedAt: number; role: 'owner' | 'creator' }
@@ -307,6 +309,9 @@ export const api = {
   unreadSummary: () => get('/api/unread') as Promise<{ messages: number; notifications: number; total: number }>,
   markNotifRead: (id: string) => post(`/api/notifications/${id}/read`),
   markAllNotifsRead: () => post('/api/notifications/read-all'),
+  // 勿扰时段：软通知在此时段只抑制推送横幅、站内通知照常；紧急/来电不受影响。
+  quietHours: () => get('/api/notifications/quiet-hours') as Promise<{ quietHours: QuietHoursInfo | null }>,
+  setQuietHours: (q: QuietHoursInfo) => put('/api/notifications/quiet-hours', q) as Promise<{ quietHours: QuietHoursInfo }>,
   // 紧急告警"知道了"回执：回告发起人"有人已看到你的求助"（fromId=发起人，eventId=哪一次告警）。
   emergencyAck: (fromId: string, eventId?: string) => post('/api/emergency/ack', { fromId, eventId }),
   // Web Push（浏览器推送紧急告警）

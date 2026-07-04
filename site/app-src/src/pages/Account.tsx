@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apiURL } from '../lib/config'
-import { api, tokenStore, APIError, contentBlockedText, reencodeToJpeg, uploadVerificationDoc, type SelfView, type SessionInfo, type VerificationStatusInfo } from '../lib/api'
+import { api, tokenStore, APIError, contentBlockedText, reencodeToJpeg, uploadVerificationDoc, type SelfView, type SessionInfo, type VerificationStatusInfo, type QuietHoursInfo } from '../lib/api'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { subscribeWebPush, unsubscribeWebPush, isWebPushSubscribed, webPushSupported, resyncWebPushSubscription } from '../lib/webPush'
@@ -127,6 +127,9 @@ export function AccountPage() {
 
       {/* 浏览器通知（Web Push）：关掉标签页也能收到紧急告警的系统通知 */}
       <WebPushCard />
+
+      {/* 勿扰时段：软通知在此时段只抑制推送横幅，紧急告警/来电不受影响 */}
+      <QuietHoursCard />
 
       {/* 安全 */}
       <Card className="p-5">
@@ -633,6 +636,79 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
 
 /// 浏览器紧急告警通知开关（Web Push）：订阅后即使标签页关闭，摔倒/SOS 告警也会弹系统通知。
 /// 服务端未配 VAPID（503）或浏览器不支持时如实显示"不可用"；权限被拒引导去浏览器设置。
+// 分钟-of-day ↔ "HH:MM"（<input type=time> 用），本地纯转换。
+const minToHHMM = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+const hhmmToMin = (s: string) => { const [h, m] = s.split(':').map(Number); return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0) }
+function browserTz(): string { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai' } catch { return 'Asia/Shanghai' } }
+
+/// 勿扰时段设置：软通知（好友请求/聊天/到家提醒等）在此时段只抑制推送横幅，站内通知照常持久化；
+/// 紧急告警/来电/SOS 绝不受影响（服务端保证）。时区自动取浏览器 IANA 时区。
+function QuietHoursCard() {
+  const { t } = useI18n()
+  const toast = useToast()
+  const [loading, setLoading] = useState(true)
+  const [enabled, setEnabled] = useState(false)
+  const [start, setStart] = useState('22:00')
+  const [end, setEnd] = useState('07:00')
+  const [tz, setTz] = useState(browserTz())
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      try {
+        const { quietHours } = await api.quietHours()
+        if (alive && quietHours) {
+          setEnabled(quietHours.enabled); setStart(minToHHMM(quietHours.startMinute)); setEnd(minToHHMM(quietHours.endMinute)); setTz(quietHours.tz)
+        }
+      } catch { /* 读取失败：留默认 */ } finally { if (alive) setLoading(false) }
+    })()
+    return () => { alive = false }
+  }, [])
+
+  const persist = async (next: QuietHoursInfo) => {
+    setSaving(true)
+    try {
+      const res = await api.setQuietHours(next)
+      setEnabled(res.quietHours.enabled); setStart(minToHHMM(res.quietHours.startMinute)); setEnd(minToHHMM(res.quietHours.endMinute)); setTz(res.quietHours.tz)
+      toast(t('已保存', 'Saved'), 'ok')
+    } catch { toast(t('保存失败', 'Failed to save'), 'error') } finally { setSaving(false) }
+  }
+  const toggle = () => { const next = !enabled; setEnabled(next); void persist({ enabled: next, startMinute: hhmmToMin(start), endMinute: hhmmToMin(end), tz }) }
+  const saveTimes = () => {
+    if (hhmmToMin(start) === hhmmToMin(end)) { toast(t('开始与结束时间不能相同', 'Start and end cannot be the same'), 'error'); return }
+    void persist({ enabled, startMinute: hhmmToMin(start), endMinute: hhmmToMin(end), tz })
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold">{t('勿扰时段', 'Quiet hours')}</div>
+          <p className="mt-1 text-xs text-faint">{t('此时段内不弹出消息、好友请求等提醒的推送横幅（仍会记入通知列表）。紧急告警与来电不受影响。', 'During this window, non-urgent push banners (messages, requests…) are muted (still saved to your notifications). Emergency alerts and calls are never affected.')}</p>
+        </div>
+        <button role="switch" aria-checked={enabled} disabled={loading || saving} onClick={toggle}
+          className={`relative h-7 w-12 shrink-0 rounded-full transition ${enabled ? 'bg-honey' : 'bg-[var(--line)]'} disabled:opacity-50`}
+          aria-label={t('勿扰时段', 'Quiet hours')}>
+          <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${enabled ? 'left-[22px]' : 'left-0.5'}`} />
+        </button>
+      </div>
+      {enabled && (
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <Field label={t('开始', 'From')}>
+            <Input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="w-32" aria-label={t('勿扰开始时间', 'Quiet hours start')} />
+          </Field>
+          <Field label={t('结束', 'To')}>
+            <Input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="w-32" aria-label={t('勿扰结束时间', 'Quiet hours end')} />
+          </Field>
+          <Button variant="soft" onClick={saveTimes} disabled={saving}>{t('保存时间', 'Save times')}</Button>
+          <p className="w-full text-xs text-faint">{t(`时区：${tz}（跨午夜如 22:00–07:00 自动识别）`, `Time zone: ${tz} (overnight windows like 22:00–07:00 are handled)`)}</p>
+        </div>
+      )}
+    </Card>
+  )
+}
+
 function WebPushCard() {
   const { t } = useI18n()
   const toast = useToast()

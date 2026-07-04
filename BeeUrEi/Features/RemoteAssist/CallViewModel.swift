@@ -215,6 +215,10 @@ final class CallViewModel {
         }
         // 录制策略（全站开关 + 是否需同意）：决定是否显示录制按钮、是否走同意握手。失败按默认（关闭+需同意）。
         if let cfg = try? await APIClient().appConfig(token: token) { recordingPolicy = cfg.recording }
+        // 若在上面各 await（麦克风授权弹窗可长时间停留、拉 ICE、拉配置）期间已挂断/界面消失（ended），
+        // 绝不再启动媒体引擎与信令——否则会在 hangUp() 之后建出**无人再释放**的相机/麦克风采集 + WebSocket
+        // + 房间 join：相机在用户已取消后仍采集（隐私）、服务端以为参与者仍在。与 web CallEngine 同类竞态对齐。
+        guard !ended else { return }
         media.start(asCaller: role == .blind)
         signaling.connect(token: token, baseURL: ServerConfig.baseURL)
         if role == .adminObserver {

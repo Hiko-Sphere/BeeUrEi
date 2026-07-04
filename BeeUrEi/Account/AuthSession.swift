@@ -192,7 +192,10 @@ final class AuthSession {
     /// 重新拉取本人信息（改用户名/绑邮箱/绑 Apple/加 passkey 后同步内存态）。
     func refreshMe() async {
         guard let token else { return }
-        if let full = try? await api.me(token: token) { user = full }
+        if let full = try? await api.me(token: token) {
+            guard self.token != nil else { return } // 拉取期间用户已登出 → 不复活（与 renewIfNeeded 第 98 行同守卫；曾漏此处）
+            user = full
+        }
         await refreshAppConfig()
     }
 

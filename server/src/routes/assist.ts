@@ -15,20 +15,25 @@ import { type PushSender } from '../push/apns'
 import { NoopWebPushSender, type WebPushSender } from '../push/webPush'
 import { type Metrics } from '../metrics/metrics'
 
-const heartbeatSchema = z.object({ available: z.boolean(), at: z.number().optional() })
-const matchSchema = z.object({ emergency: z.boolean().optional(), preferredLanguage: z.string().optional() })
+// ⚠️ 求助/待命是仅次于 SOS 的生命线：schema 的 **optional 附注字段一律 .catch(undefined)**（坏值丢字段、
+// 请求照常），核心字段（available/callId/targetUserIds）保持严格——与 emergency.ts 同一范式（R71/R72）。
+// at：客户端时钟戳，处理器本就有 ?? Date.now() 兜底——坏值 400 会把待命心跳打断、协助者凭空显示离线。
+const heartbeatSchema = z.object({ available: z.boolean(), at: z.number().optional().catch(undefined) })
+// emergency/preferredLanguage 是匹配偏好：坏值退化为默认匹配，远好过"一键求助"在匹配一步就 400。
+const matchSchema = z.object({ emergency: z.boolean().optional().catch(undefined), preferredLanguage: z.string().max(16).optional().catch(undefined) })
 const callSchema = z.object({ callId: z.string().min(1).max(128), targetUserIds: z.array(z.string().min(1)).min(1).max(20) })
-// 公开求助（面向陌生志愿者）：
+// 公开求助（面向陌生志愿者）：language/locality/topic 只是路由/展示提示——locality 来自反向地理编码，
+// 编码器给出超长地名时绝不能 400 掉整个求助（盲人听到"求助失败"且重试还是同一地名，死路）。
 const helpRequestSchema = z.object({
   callId: z.string().min(1).max(128),
-  language: z.string().max(8).optional(),
-  locality: z.string().max(80).optional(),
-  topic: z.string().max(200).optional(),
+  language: z.string().max(8).optional().catch(undefined),
+  locality: z.string().max(80).optional().catch(undefined),
+  topic: z.string().max(200).optional().catch(undefined),
 })
 const helpClaimSchema = z.object({ callId: z.string().min(1).max(128) })
 const helpMatchSchema = z.object({
-  preferredLanguage: z.string().max(8).optional(),
-  requireLanguageMatch: z.boolean().optional(),
+  preferredLanguage: z.string().max(8).optional().catch(undefined),
+  requireLanguageMatch: z.boolean().optional().catch(undefined),
 })
 
 export function registerAssistRoutes(

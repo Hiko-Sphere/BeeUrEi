@@ -123,4 +123,33 @@ describe('公开求助 topic/locality 内容审核', () => {
     expect(ok.statusCode).toBe(200)
     await a.close()
   })
+
+  it('生命线附注字段坏值只丢字段、绝不 400（求助/心跳/匹配——与 emergency 同一 .catch 范式）', async () => {
+    const a = app()
+    const blind = await reg(a, 'cat_blind', 'blind')
+    const helper = await reg(a, 'cat_helper', 'helper')
+    const auth = (t: string) => ({ authorization: `Bearer ${t}` })
+    // 绑定（供 match 有对象）。
+    const linkRes = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(blind.token),
+      payload: { username: 'cat_helper', relation: '亲友' } })
+    const linkId = (linkRes.json() as any).link.id
+    await a.inject({ method: 'POST', url: `/api/family/links/${linkId}/accept`, headers: auth(helper.token) })
+
+    // 心跳带坏 at（字符串）：照常记为待命（处理器有 ?? Date.now() 兜底），绝不 400 打断待命。
+    const hb = await a.inject({ method: 'POST', url: '/api/assist/heartbeat', headers: auth(helper.token),
+      payload: { available: true, at: 'garbage' } })
+    expect(hb.statusCode).toBe(200)
+
+    // 匹配带坏 emergency（字符串）：退化为默认匹配照常返回（上面心跳已生效 → helper 在列）。
+    const match = await a.inject({ method: 'POST', url: '/api/assist/match', headers: auth(blind.token),
+      payload: { emergency: 'yes' } })
+    expect(match.statusCode).toBe(200)
+    expect((match.json() as any).targets.map((h: any) => h.memberId)).toContain(helper.user.id)
+
+    // 求助带超长 locality（反向地理编码毛刺）+ 超长 language：丢字段照发（志愿者仍能收到求助）。
+    const help = await a.inject({ method: 'POST', url: '/api/assist/help/request', headers: auth(blind.token),
+      payload: { callId: 'c-long', locality: '区'.repeat(120), language: 'x'.repeat(30), topic: '帮我看路牌' } })
+    expect(help.statusCode).toBe(200)
+    await a.close()
+  })
 })

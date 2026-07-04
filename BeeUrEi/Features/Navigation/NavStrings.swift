@@ -28,6 +28,11 @@ enum NavStrings {
         l == .zh ? "需要定位权限才能导航，请在系统设置开启定位。"
                  : "Location access is needed for navigation. Enable Location in Settings."
     }
+    /// 聊天位置卡上的"用蜂之眼导航去这里"（收到亲友位置后直接用**盲人优化导航**过去，而非只能跳 Apple 地图）。
+    static func navigateHereFromChat(_ l: Language) -> String {
+        l == .zh ? "用蜂之眼导航去这里" : "Navigate there with BeeUrEi"
+    }
+
     /// 仅粗略定位（用户关了「精确位置」）：逐步导航无法进行，给**可操作**指引（去设置开精确位置）。
     /// 不是"定位中"或"精度低"那种会自愈的临时话——这是个用户能一步修好的设置。
     static func preciseLocationNeeded(_ l: Language) -> String {

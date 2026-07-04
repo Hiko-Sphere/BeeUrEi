@@ -13,6 +13,15 @@ final class NavStringsTests: XCTestCase {
         XCTAssertEqual(NavStrings.passingBy("银行", .zh), "途经银行")
     }
 
+    func testNavigateHereFromChatBilingual() {
+        // 聊天位置卡的"用蜂之眼导航"入口：中文点名蜂之眼，英文不串中文（区别于跳 Apple 地图的通用引导）。
+        XCTAssertTrue(NavStrings.navigateHereFromChat(.zh).contains("蜂之眼"))
+        XCTAssertTrue(NavStrings.navigateHereFromChat(.zh).contains("导航"))
+        let en = NavStrings.navigateHereFromChat(.en)
+        XCTAssertTrue(en.contains("Navigate") && en.contains("BeeUrEi"))
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
+
     func testPreciseLocationNeededIsActionable() {
         // 必须是"可操作"指引（指向设置里的精确位置），而非会自愈的"定位中/精度低"临时话。
         let zh = NavStrings.preciseLocationNeeded(.zh)

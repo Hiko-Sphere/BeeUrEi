@@ -406,7 +406,8 @@ struct ChatView: View {
     private func bubbleContent(_ m: ChatMessageInfo, mine: Bool) -> some View {
         if let payload = LocationPayload.from(m) {
             // 位置：地图缩略图气泡（kind=location 的 JSON 或 text 内嵌的地图链接都走这里）。
-            LocationBubble(payload: payload, lang: lang)
+            // mine：自己发的不显示"用蜂之眼导航去这里"（导航到自己脚下无意义）。
+            LocationBubble(payload: payload, lang: lang, mine: mine)
         } else {
             switch m.kind {
             case "audio":

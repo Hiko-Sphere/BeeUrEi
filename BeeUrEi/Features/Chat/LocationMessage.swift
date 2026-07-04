@@ -143,11 +143,36 @@ final class LocationShareFetcher: NSObject, CLLocationManagerDelegate {
 struct LocationBubble: View {
     let payload: LocationPayload
     let lang: Language
+    var mine: Bool = false          // 自己发的位置无需"导航去这里"（导航到自己脚下无意义）
     @State private var snapshot: UIImage?
+    @State private var showNav = false
 
     private var place: String { payload.name ?? ChatStrings.unknownPlace(lang) }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            mapCard
+            // 收到亲友的位置（"我在这儿等你"）→ 直接用**蜂之眼盲人优化导航**过去（信标/钟点方位/避障联动），
+            // 而非只能跳 Apple 地图的通用引导。经既有 pendingNavAction=.search(地址) 种子——与语音"带我去X"
+            // 同一条已验证路径；地址为空（发送端反查失败，罕见）时不提供（无可搜之名），地图卡仍走 Apple 地图。
+            if !mine, let name = payload.name, !name.isEmpty {
+                Button {
+                    AppRoute.shared.pendingNavAction = .search(name)
+                    showNav = true
+                } label: {
+                    Label(NavStrings.navigateHereFromChat(lang), systemImage: "figure.walk.circle.fill")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.beeHoney)
+                .foregroundStyle(Color.beeInk)
+            }
+        }
+        // 在聊天自身语境上盖全屏导航（sheet 之上盖 fullScreenCover 合法）：不做跨 sheet 关此开彼的编排。
+        .fullScreenCover(isPresented: $showNav) { WalkNavigationView { showNav = false } }
+    }
+
+    private var mapCard: some View {
         Button { payload.openInMaps() } label: {
             VStack(alignment: .leading, spacing: 0) {
                 ZStack {

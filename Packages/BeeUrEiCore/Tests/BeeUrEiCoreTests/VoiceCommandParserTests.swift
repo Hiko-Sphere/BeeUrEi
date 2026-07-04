@@ -80,6 +80,25 @@ final class VoiceCommandParserTests: XCTestCase {
         XCTAssertEqual(VoiceCommandParser.parse("救命"), .sos)
     }
 
+    func testSendLocationExtraction() {
+        // 各语序都提取到收件人。
+        XCTAssertEqual(VoiceCommandParser.parse("把我的位置发给妈妈"), .sendLocation(to: "妈妈"))
+        XCTAssertEqual(VoiceCommandParser.parse("发位置给小明"), .sendLocation(to: "小明"))
+        XCTAssertEqual(VoiceCommandParser.parse("给家人群发位置"), .sendLocation(to: "家人群"))     // 群也可
+        XCTAssertEqual(VoiceCommandParser.parse("给妈妈发一下我的位置"), .sendLocation(to: "妈妈"))
+        XCTAssertEqual(VoiceCommandParser.parse("告诉妈妈我在哪"), .sendLocation(to: "妈妈"))
+        XCTAssertEqual(VoiceCommandParser.parse("告诉爸爸我在哪里"), .sendLocation(to: "爸爸"))
+        XCTAssertEqual(VoiceCommandParser.parse("share my location with mom"), .sendLocation(to: "mom"))
+        XCTAssertEqual(VoiceCommandParser.parse("send my location to my daughter"), .sendLocation(to: "my daughter"))
+        XCTAssertEqual(VoiceCommandParser.parse("tell mom where I am"), .sendLocation(to: "mom"))
+        // 裸"我在哪"（无收件人）仍是问位置，不被抢。
+        XCTAssertEqual(VoiceCommandParser.parse("我在哪"), .whereAmI)
+        XCTAssertEqual(VoiceCommandParser.parse("where am i"), .whereAmI)
+        // 发消息（含"说"）不被抢；"tell X that Y" 仍是发消息。
+        XCTAssertEqual(VoiceCommandParser.parse("给妈妈发消息说我在哪"), .sendMessage(to: "妈妈", text: "我在哪"))
+        XCTAssertEqual(VoiceCommandParser.parse("tell mom that I'm home"), .sendMessage(to: "mom", text: "I'm home"))
+    }
+
     func testReadMessagesVsOpenMessages() {
         // "读/念消息""有新消息吗" → 朗读未读；"打开消息/聊天" → 只开界面（互不抢，且不被 readText 的"读一下"抢）。
         XCTAssertEqual(VoiceCommandParser.parse("读一下消息"), .readMessages)

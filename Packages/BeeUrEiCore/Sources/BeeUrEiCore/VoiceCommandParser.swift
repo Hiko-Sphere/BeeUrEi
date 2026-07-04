@@ -31,6 +31,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case readMessages               // 朗读未读消息（"读一下消息/有新消息吗"）——区别于 messages 只打开界面
     case messages                   // 打开消息
     case sendMessage(to: String, text: String) // 给X发消息说Y
+    case sendLocation(to: String)   // 把我的位置发给X（"告诉妈妈我在哪"）——盲人免进聊天找按钮，一句话共享位置
     case find(String)               // 找某个具体物品（已教物品或可找类别，如"找我的钥匙"/"find my keys"）
     case adjustSpeech(SpeechRateAdjust) // 语音调语速：说快点/说慢点/正常语速（找滑块成本高，语速最常想即时调）
     case adjustVerbosity(VerbosityAdjust) // 语音调详略：说简短点/说详细点（赶路想精简/熟悉后嫌啰嗦）
@@ -53,6 +54,9 @@ public enum VoiceCommandParser {
 
         // 发消息（含目标与内容）优先解析：「给妈妈发消息说我到了」/ "send a message to mom saying I arrived"
         if let m = parseSendMessage(text) { return m }
+        // 发位置（含目标）：须在 whereAmI 之前——"告诉妈妈我在哪"含"我在哪"，但意图是发位置给妈妈；
+        // 裸"我在哪"无收件人，parseSendLocation 返回 nil，仍走 whereAmI。
+        if let m = parseSendLocation(text) { return m }
 
         func has(_ keys: [String]) -> Bool { keys.contains { t.contains($0) } }
 
@@ -251,6 +255,29 @@ public enum VoiceCommandParser {
         guard let m = regex.firstMatch(in: text, range: range), m.numberOfRanges >= 2,
               let r1 = Range(m.range(at: 1), in: text) else { return nil }
         return String(text[r1])
+    }
+
+    /// 「把(我的)位置发给X」/「发(我的)位置给X」/「给X发(我的)位置」/「告诉X我在哪」/
+    /// "send/share my location to/with X"：提取发位置的收件人。无收件人（裸"我在哪/发位置"）返回 nil。
+    static func parseSendLocation(_ text: String) -> VoiceCommand? {
+        func clean(_ s: String) -> String? {
+            let x = s.trimmingCharacters(in: CharacterSet(charactersIn: "。，？！,.?!、").union(.whitespacesAndNewlines))
+            return x.isEmpty ? nil : x
+        }
+        let zhPatterns = [
+            #"把?我?的?位置发给(.{1,12}?)$"#,           // 把我的位置发给妈妈 / 位置发给妈妈
+            #"发我?的?位置给(.{1,12}?)$"#,               // 发位置给妈妈 / 发我的位置给妈妈
+            #"给(.{1,12}?)发一?下?我?的?位置$"#,          // 给妈妈发位置 / 给妈妈发一下我的位置
+            #"告诉(.{1,12}?)我在哪[里儿]?$"#,             // 告诉妈妈我在哪（裸"我在哪"无收件人不匹配）
+        ]
+        for p in zhPatterns {
+            if let m = firstMatchSingle(in: text, pattern: p), let name = clean(m) { return .sendLocation(to: name) }
+        }
+        if let m = firstMatchSingle(in: text, pattern: #"(?i)(?:send|share)\s+my\s+location\s+(?:to|with)\s+(.{1,24}?)$"#),
+           let name = clean(m) { return .sendLocation(to: name) }
+        if let m = firstMatchSingle(in: text, pattern: #"(?i)\btell\s+(.{1,24}?)\s+where\s+i\s+am\b"#),
+           let name = clean(m) { return .sendLocation(to: name) }
+        return nil
     }
 
     /// 「给X发消息(说)Y」/「发消息给X(说)Y」/ "send a message to X saying Y" / "tell X that Y"。

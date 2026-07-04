@@ -472,6 +472,7 @@ struct HubView: View {
         case .messages: showMessages = true
         case .readMessages: readVoiceMessages()
         case .sendMessage(let to, let text): sendVoiceMessage(to: to, text: text)
+        case .sendLocation(let to): sendVoiceLocation(to: to)
         case .adjustSpeech(let adj):
             // 语音调语速（Hub 可达）：改设置 → 用**新语速**播确认（当场听到效果）；已到边界则提示不空调。
             if adj != .normal && SpeechRatePolicy.atLimit(FeatureSettings().speechRate, adj) {
@@ -533,6 +534,33 @@ struct HubView: View {
             }
             let items = withTime.sorted { $0.at > $1.at }.map(\.item) // 最新的未读会话先读
             speak(HomeStrings.unreadReadout(items, lang))
+        }
+    }
+
+    /// 语音"把我的位置发给X"：解析收件人（联系人+群，R64 同款）→ 取一次精确定位+反查地址 →
+    /// 以聊天位置消息发出（与聊天页"发送位置"按钮同链路：kind=text + Apple 地图链接，接收端渲染为位置卡）。
+    /// 盲人免进聊天找按钮，一句话共享位置；定位失败/找不到人都有语音反馈，绝不静默。
+    private func sendVoiceLocation(to name: String) {
+        func speak(_ t: String) { SpeechHub.shared.speak(t, channel: .query, voiceCode: lang.voiceCode) }
+        guard let token = session.token else { speak(HomeStrings.voiceNeedLogin(lang)); return }
+        Task {
+            async let linksCall = APIClient().familyLinks(token: token)
+            async let groupsCall = APIClient().groups(token: token)
+            let links = (try? await linksCall) ?? []
+            let groups = (try? await groupsCall) ?? []
+            let contacts = links.filter { $0.isAccepted }.map { (id: $0.memberId, name: $0.memberName) }
+            let groupList = groups.map { (id: $0.group.id, name: $0.group.name) }
+            guard let target = HomeStrings.resolveVoiceRecipient(name: name, contacts: contacts, groups: groupList) else {
+                speak(HomeStrings.voiceNoContact(name, lang)); showMessages = true; return
+            }
+            speak(ChatStrings.locatingNow(lang)) // 定位需要几秒，先告知在做什么（不静默）
+            guard let payload = await LocationShareFetcher().fetch() else {
+                speak(ChatStrings.locationFailed(lang)); return
+            }
+            let sent = target.isGroup
+                ? (try? await APIClient().sendGroupMessage(token: token, groupId: target.id, kind: "text", text: payload.asText()))
+                : (try? await APIClient().sendMessage(token: token, toId: target.id, kind: "text", text: payload.asText()))
+            speak(sent != nil ? HomeStrings.voiceLocationSent(target.name, lang) : ChatStrings.sendFailed(lang))
         }
     }
 

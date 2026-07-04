@@ -92,8 +92,10 @@ final class HomeStringsTests: XCTestCase {
         // 语音能力必须能被语音发现：自述里要提"给某人打电话"，否则加了 callContact 盲人也无从得知。
         XCTAssertTrue(HomeStrings.voiceCommandsHelp(.zh).contains("给某人打电话"))
         XCTAssertTrue(HomeStrings.voiceCommandsHelp(.en).lowercased().contains("call a family member"))
-        // 发消息 + 读消息能力都在（别改串了），且英文自述不混中文。
+        // 发消息 + 发位置 + 读消息能力都在（别改串了），且英文自述不混中文。
         XCTAssertTrue(HomeStrings.voiceCommandsHelp(.zh).contains("给某人发消息"))
+        XCTAssertTrue(HomeStrings.voiceCommandsHelp(.zh).contains("把位置发给某人"))
+        XCTAssertTrue(HomeStrings.voiceCommandsHelp(.en).lowercased().contains("share my location"))
         XCTAssertTrue(HomeStrings.voiceCommandsHelp(.zh).contains("读一下消息"))
         XCTAssertTrue(HomeStrings.voiceCommandsHelp(.en).lowercased().contains("read my messages"))
         XCTAssertFalse(HomeStrings.voiceCommandsHelp(.en).contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))

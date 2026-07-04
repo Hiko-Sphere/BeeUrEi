@@ -29,6 +29,8 @@ final class FramingAssistViewModel {
     // 对应应用并预填**（拨号盘/浏览器/邮件/信息），iOS 要求用户再确认——绝不代拨/代发（OCR 或 QR 可能有误/恶意，
     // 由用户复核后再操作）。切到任何其它识别（stopContinuous）即清，不残留过期按钮。
     private(set) var resultAction: FramingAction?
+    var torchOn = false                                       // 手电筒开关（手动按钮 + 太暗自动点亮共用；视图绑定）
+    @ObservationIgnored private var didAutoTorch = false       // 太暗自动点亮至多一次/会话，之后尊重手动开关不较劲
 
     @ObservationIgnored private let source = ARDepthCameraSource()
     // 真实 YOLO 检测器；模型缺失时自身返回空（识别为空、不崩溃），无需占位实现。
@@ -1161,14 +1163,19 @@ final class FramingAssistViewModel {
         return LightMeter.luminance(r: rgb.r, g: rgb.g, b: rgb.b)
     }
 
-    /// 太暗则播报提示并返回 true（识别/OCR 在暗处会失败，先提醒）。
+    /// 太暗则处理并返回 true（识别/OCR 在暗处会失败）。**关键**：设备有手电筒就自动点亮解决问题——
+    /// 盲人正因看不见才用 App，无从自己找灯/开手电；只提醒"太暗"却不点灯等于把人卡在死路。点亮后本帧仍暗、
+    /// 提示重新对准，连续模式随后帧被照亮自动继续。每会话至多自动点一次，之后尊重用户手动开关、不反复较劲。
     private func tooDarkToProceed() -> Bool {
-        if let b = currentBrightness(), let warning = LightMeter().warning(brightness: b, language: lang),
-           LightMeter().level(brightness: b) == .dark {
-            speak(warning)
+        guard let b = currentBrightness(), LightMeter().level(brightness: b) == .dark else { return false }
+        if !torchOn, !didAutoTorch, Torch.set(true) {
+            torchOn = true
+            didAutoTorch = true
+            speak(FramingStrings.torchAutoOn(lang))
             return true
         }
-        return false
+        speak(LightMeter().warning(brightness: b, language: lang) ?? SpokenStrings.lightLowWarning(lang))
+        return true
     }
 
     /// OCR 识别语言优先级跟随 App 语言（英文用户优先英文模型，识别更准）。
@@ -1186,7 +1193,6 @@ final class FramingAssistViewModel {
 
 struct FramingAssistView: View {
     @State private var model = FramingAssistViewModel()
-    @State private var torchOn = false
     @State private var showFindMenu = false
     @State private var teachName = ""
     @State private var productName = ""
@@ -1209,18 +1215,18 @@ struct FramingAssistView: View {
                 HStack {
                     Button {
                         // 只有真开成功才翻状态——否则图标/标签会谎报"已开"而灯是灭的（见审计 P1）。
-                        if Torch.set(!torchOn) {
-                            torchOn.toggle()
+                        if Torch.set(!model.torchOn) {
+                            model.torchOn.toggle()
                         } else {
                             SpeechHub.shared.speak(FramingStrings.torchFailed(model.lang), channel: .query, voiceCode: model.lang.voiceCode)
                         }
                     } label: {
-                        Image(systemName: torchOn ? "flashlight.on.fill" : "flashlight.off.fill")
+                        Image(systemName: model.torchOn ? "flashlight.on.fill" : "flashlight.off.fill")
                             .font(.title2)
                             .padding()
                             .background(.ultraThinMaterial, in: Circle())
                     }
-                    .accessibilityLabel(FramingStrings.uiTorch(on: torchOn, model.lang))
+                    .accessibilityLabel(FramingStrings.uiTorch(on: model.torchOn, model.lang))
                     .padding(.leading)
                     Button { showHistory = true } label: {
                         Image(systemName: "clock.arrow.circlepath")

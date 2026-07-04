@@ -438,6 +438,11 @@ enum FramingStrings {
         case .en: return on ? "Turn off flashlight" : "Turn on flashlight"
         }
     }
+    /// 太暗→自动点亮手电筒后的播报：告诉盲人已用手电筒解决"太暗"（而非只说太暗后卡住），并提示重新对准。
+    static func torchAutoOn(_ l: Language) -> String {
+        l == .zh ? "光线太暗，已为你打开手电筒，请重新对准再试。"
+                 : "Too dark — I turned on the flashlight. Point at it again."
+    }
     static func uiDone(_ l: Language) -> String { l == .zh ? "完成" : "Done" }
     static func uiCopy(_ l: Language) -> String { l == .zh ? "复制内容" : "Copy" }
     static func uiCopyHint(_ l: Language) -> String {

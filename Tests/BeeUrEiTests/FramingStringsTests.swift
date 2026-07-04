@@ -4,6 +4,15 @@ import XCTest
 /// 识别屏播报文案表（E5 多语言）：中文与历史一致、英文不串中文、组合短语正确。
 final class FramingStringsTests: XCTestCase {
 
+    func testTorchAutoOnTellsUserItWasSolved() {
+        // 太暗自动点灯的播报：须点明已打开手电筒 + 提示重试（而非只说"太暗"卡住）。
+        let zh = FramingStrings.torchAutoOn(.zh)
+        XCTAssertTrue(zh.contains("手电筒") && (zh.contains("太暗") || zh.contains("暗")))
+        let en = FramingStrings.torchAutoOn(.en)
+        XCTAssertTrue(en.lowercased().contains("flashlight") && en.lowercased().contains("dark"))
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
+
     func testChineseMatchesLegacyPhrases() {
         // 关键短语与历史播报逐字一致（防止 i18n 改造悄悄改了中文体验）
         XCTAssertEqual(FramingStrings.thisIs("椅子", .zh), "这是椅子")

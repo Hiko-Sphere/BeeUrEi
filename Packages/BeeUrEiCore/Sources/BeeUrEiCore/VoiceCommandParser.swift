@@ -63,7 +63,11 @@ public enum VoiceCommandParser {
 
         // SOS 须在**发位置/help 之前**：生命攸关最高优先——"救命，把我的位置发给妈妈"这种慌乱句仍先走告警广播
         // （复审：parseSendLocation 曾抢在 SOS 前，含"救命"的发位置句被劫走不再触发紧急）。
-        if has(["救命", "紧急求助", "一键求救", "紧急呼救", "sos", "emergency"]) { return .sos }
+        // 含急救服务的呼救（"call an ambulance/911"/"叫救护车"/"报警"）走 SOS——绝不能被下面的 parseCallContact
+        // 当成"拨给一个名叫 ambulance 的联系人"（查无此人、静默失败，慌乱中盲人以为已求助，对抗复审 HIGH）。
+        if has(["救命", "紧急求助", "一键求救", "紧急呼救", "sos", "emergency",
+                "叫救护车", "打120", "打110", "报警", "call an ambulance", "call ambulance",
+                "call 911", "call the police", "call police", "call the fire"]) { return .sos }
         // 发位置（含目标）：须在 whereAmI 之前——"告诉妈妈我在哪"含"我在哪"，但意图是发位置给妈妈；
         // 裸"我在哪"/"告诉我我在哪"（收件人是代词，见 parseSendLocation 排除）返回 nil，仍走 whereAmI。
         if let m = parseSendLocation(text) { return m }
@@ -74,7 +78,10 @@ public enum VoiceCommandParser {
         if has(["求助", "帮帮我", "呼叫", "打电话", "call for help", "get help", "help me", "call family"]) { return .help }
         // "where i am"/"where i'm"（陈述语序）与"where am i"（疑问语序）都收——"tell me where I am"（问自己在哪，
         // 收件人是代词、parseSendLocation 已返回 nil）此前因只匹配疑问语序而落到 unknown。
-        if has(["我在哪", "我在哪里", "当前位置", "where am i", "where i am", "where i'm", "my location"]) { return .whereAmI }
+        // 补常见问法：外指的"这是哪里/这是什么地方"、含插入词的"我现在在哪/我在哪儿"（"我现在在哪"断了"我在哪"连续子串）。
+        // 均带地点/第一人称锚点，不会误吃"钥匙在哪儿"（那不含"我在哪儿"）。
+        if has(["我在哪", "我在哪里", "我在哪儿", "我现在在哪", "我这是在哪", "这是哪里", "这是哪儿", "这是什么地方",
+                "当前位置", "where am i", "where i am", "where i'm", "my location"]) { return .whereAmI }
         // 周围的人：只在明确问「人」时触发。**须在 around 与 findNearest 之前**——否则"周围有没有人/附近有没有人"
         // 被 around 的裸"周围"或 findNearest 的"有没有X"抢走（对抗复审 F2：这是先前就被 around 遮蔽的潜在 bug）。
         // 关键词都是明确"人"的问法，不含裸"周围"，故不会误吃"周围有什么"（那仍归 around）。
@@ -83,19 +90,21 @@ public enum VoiceCommandParser {
         // .navigate（"去X"）之前——否则"周围哪里有药店"被 around 抢、"找最近的厕所"被 find 抢、"去最近的厕所"被导航搜名字失败。
         if let cat = parseFindNearest(text) { return .findNearest(cat) }
         if has(["周围有什么", "附近有什么", "周围", "what's around", "around me", "nearby"]) { return .around }
-        if has(["前方有什么", "前面有什么", "前方", "what's ahead", "ahead of me", "in front"]) { return .ahead }
+        if has(["前方有什么", "前面有什么", "前面是什么", "前方是什么", "前边有什么", "前边是什么", "前方", "what's ahead", "ahead of me", "in front"]) { return .ahead }
         // 朝向（罗盘方位）：盲人看不到罗盘/太阳，"我正朝哪"是方向感的基础。置于此处、导航解析之前——用具体短语
         // （"朝哪个方向"/"面朝"/"which way am i facing"）避开与导航("哪个方向走"意图另说)/around 的关键字冲突。
-        if has(["朝哪个方向", "哪个方向", "什么方向", "朝哪个方位", "哪个方位", "面朝", "朝向", "我朝哪", "which way am i facing", "which way i'm facing", "which direction am i", "what direction am i", "which way am i", "my heading", "compass direction"]) { return .facing }
+        // 朝向须带**第一人称锚点**——去掉裸"哪个方向/什么方向/哪个方位"，否则"厕所在什么方向"（问某地点方位）
+        // 会被误当成"我朝哪"报出自己的罗盘朝向，对盲人是危险误导（对抗复审 HIGH）。
+        if has(["朝哪个方向", "朝哪个方位", "我朝哪个方向", "我朝什么方向", "面朝", "朝向", "我朝哪", "我面朝哪", "which way am i facing", "which way i'm facing", "which direction am i", "what direction am i", "which way am i", "my heading", "compass direction"]) { return .facing }
         // 公交/地铁出行须在 readBus（"公交/公交车"识别车辆）之前——都含"公交"，但带**乘坐位交通方式词+目的地**
         // （"坐公交去X"）走公交规划（过城刚需）；无目的地的"几路车/这是什么车"仍归 readBus（parseTransit 无 dest 返 nil）。
         if let dest = parseTransit(text) { return .transit(dest) }
         if has(["公交", "几路车", "哪路车", "什么车", "几路公交", "公交车", "bus", "which bus", "what bus"]) { return .readBus }
-        if has(["多亮", "光线", "亮不亮", "有没有光", "开灯了吗", "灯开着吗", "灯亮着吗", "how bright", "light level", "brightness", "is the light on", "lights on"]) { return .readLight }
+        if has(["多亮", "光线", "亮不亮", "有没有光线", "有没有光亮", "开灯了吗", "灯开着吗", "灯亮着吗", "how bright", "light level", "brightness", "is the light on", "lights on"]) { return .readLight }
         if has(["天气", "下雨", "气温", "weather", "temperature", "rain"]) { return .weather }
         // 日常信息（时间/电量/日期）：盲人看不到时钟/电量图标/日历，靠语音随时查——最高频的日常查询。
         // 置于具体命令之后、通用 look 之前：与现有触发词无子串冲突（"打电话"含"电话"非"电量"；readBus 的"几路"非"几点"）。
-        if has(["几点", "报时", "报个时", "现在时间", "什么时间", "时间是", "what time", "the time", "tell me the time"]) { return .time }
+        if has(["几点", "报时", "报个时", "报一下时间", "报下时间", "告诉我时间", "现在时间", "什么时间", "时间是", "what time", "the time", "tell me the time"]) { return .time }
         if has(["电量", "电池", "多少电", "还有多少电", "剩多少电", "还剩多少电", "battery", "battery level", "power left", "how much power"]) { return .battery }
         // 包装日期（保质期/生产日期）须在 .date（今天几号）之前：这些短语含"日期"，会被 .date 的"日期"抢；
         // 但 .date 的裸"日期"/"几号"仍归 .date（这里的键都不含裸"日期"）。读的是包装印刷日期，非今天日期。
@@ -107,7 +116,7 @@ public enum VoiceCommandParser {
         // 否则"带我去公司附近的药店"（含"去公司"）会被误当"去公司"快捷、导去错地方（复审 F1）。须在步行导航之前
         // （否则"去公司"被 parseDestination 当搜"公司"这个名字）；transit（"坐公交去公司"）在更前，故仍走公交。
         if isWholeCommand(t, ["回家", "回家去", "回趟家", "take me home", "go home", "navigate home", "head home"]) { return .navigateHome }
-        if isWholeCommand(t, ["去公司", "到公司", "去上班", "去单位", "到单位", "上班", "take me to work", "go to work", "navigate to work", "head to work"]) { return .navigateWork }
+        if isWholeCommand(t, ["去公司", "到公司", "去上班", "去单位", "到单位", "上班", "去办公室", "到办公室", "办公室", "take me to work", "go to work", "navigate to work", "head to work", "to the office", "go to the office"]) { return .navigateWork }
         // 读电话号码：名片/海报上的号码。用"电话号码/读电话/读号码"等明确说法，与 .help 的"打电话/呼叫"(拨号给人)
         // 区分开——这里是**读出**号码交用户核对，绝不自动拨。置于 look/find 之前。
         if has(["电话号码", "读电话", "读号码", "念电话", "念号码", "读一下电话", "看电话", "上面的电话", "名片电话", "phone number", "read the number", "read the phone", "read number"]) { return .readPhone }
@@ -116,13 +125,17 @@ public enum VoiceCommandParser {
         // 读消息须在「读文字」(读一下/念一下) 与「打开消息」(消息) 之前：盲人不必进聊天界面逐条滑，一句"读一下
         // 消息/有新消息吗"直接听未读。用"读/念…消息""(有)新消息""未读消息"等明确说法，与"打开消息"(.messages)区分。
         if has(["读消息", "念消息", "读一下消息", "念一下消息", "读未读", "未读消息", "有新消息", "有没有新消息", "有没有消息",
-                "read my message", "read messages", "read my messages", "any new message", "any unread", "unread messages"]) { return .readMessages }
+                "read my message", "read messages", "read my messages", "read this message", "read the message", "any new message", "any unread", "unread messages"]) { return .readMessages }
         // 读整页须在「读文字」之前：否则「朗读整页」会被 readText 的「朗读」抢走。
         if has(["整页", "整个页面", "读文档", "读整", "读全文", "whole page", "entire page", "full page", "read the page", "read the document", "read document"]) { return .readFullPage }
-        if has(["读文字", "念文字", "朗读", "读一下", "念一下", "念念", "念一念", "念给我听", "read text", "read this", "read it", "read aloud"]) { return .readText }
-        if has(["纸币", "钱", "钞票", "多少元", "banknote", "money", "currency", "bill"]) { return .banknote }
-        if has(["扫码", "二维码", "条形码", "条码", "scan", "barcode", "qr"]) { return .scanCode }
-        if has(["消息", "聊天", "信息", "message", "chat", "inbox"]) { return .messages }
+        if has(["读文字", "念文字", "朗读", "读一下", "念一下", "念念", "念一念", "念给我听", "读给我听", "read text", "read this", "read it", "read aloud"]) { return .readText }
+        // 识币：**不用裸"钱"**——"钱"是"钱包/花钱/有钱"的子串，会把"找我的钱包"劫走误当识币（对抗复审 HIGH）。
+        // 改用带面值语义的说法（多少钱/多少元/面额/认钱）；"钱包"不含这些，落到下面 parseFindTarget 正确解析为找物。
+        if has(["纸币", "钞票", "多少钱", "多少元", "面额", "认钱", "认一下钱", "banknote", "money", "currency", "bill"]) { return .banknote }
+        if has(["扫码", "扫个码", "扫一下码", "扫描二维码", "二维码", "条形码", "条码", "scan", "barcode", "qr"]) { return .scanCode }
+        // 打开消息：**去掉裸"聊天"/"信息"**——"聊天"是"聊聊天"子串（"陪我聊聊天"闲聊被误开消息）、"信息"吃掉
+        // "航班信息/个人信息/车次信息"等一切含"信息"的句子（对抗复审 MED）。改用"打开聊天/聊天记录"等明确说法。
+        if has(["消息", "打开聊天", "查看聊天", "聊天记录", "看消息", "message", "chat", "inbox"]) { return .messages }
         // 打开设置：语言/无障碍/摔倒检测等非语音可调项，语音直达免盲人找按钮。"设置"无其它命令子串冲突。
         if has(["打开设置", "设置", "偏好设置", "settings", "open settings", "preferences"]) { return .openSettings }
         // 导盲/避障须在通用「看一看」之前匹配（"识别障碍/避障"含"识别"会被 look 抢走）。
@@ -191,9 +204,15 @@ public enum VoiceCommandParser {
                     x = String(x[..<r.lowerBound]).trimmingCharacters(in: punct)
                 }
             }
-            // 剥尾部交通方式词（"…by bus"/"…坐地铁"出现在目的地之后的语序）与客套。
-            for tr in [" by bus", " by subway", " by metro", " by transit", " by train", " please", "怎么走", "怎么去", "坐地铁", "坐公交", "坐车"] {
-                if x.lowercased().hasSuffix(tr.lowercased()) && x.count > tr.count { x = String(x.dropLast(tr.count)).trimmingCharacters(in: punct) }
+            // 剥尾部交通方式词（"…by bus"/"…坐地铁"）、客套、以及**目的短语**（"…买东西/上厕所/吃饭"——去某地做某事，
+            // 地点才是目的地，目的短语混进去会让地理编码搜不到，对抗复审 MED，与 parseFindNearest 同款）。迭代剥多重。
+            var cut2 = true
+            while cut2 {
+                cut2 = false
+                for tr in [" by bus", " by subway", " by metro", " by transit", " by train", " please", "怎么走", "怎么去",
+                           "坐地铁", "坐公交", "坐车", "买东西", "买点东西", "上厕所", "吃饭", "看病", "办事", "歇脚", "充电"] {
+                    if x.lowercased().hasSuffix(tr.lowercased()) && x.count > tr.count { x = String(x.dropLast(tr.count)).trimmingCharacters(in: punct); cut2 = true; break }
+                }
             }
             if x.isEmpty || modeNouns.contains(x.lowercased()) || x.hasPrefix("坐") { return nil }
             return x
@@ -212,10 +231,16 @@ public enum VoiceCommandParser {
 
     /// 提取导航目的地；无导航意图返回 nil；有意图但没说去哪 → .navigate(nil) 由上面兜底。
     static func parseDestination(_ text: String) -> String? {
+        // "带我去趟超市""导航到一趟医院"——口语量词"趟/一趟"混进目的地会让地理编码搜"趟超市"搜不到；剥掉。
+        func strip(_ s: String) -> String {
+            var x = s
+            for m in ["一趟", "趟"] where x.hasPrefix(m) && x.count > m.count { x = String(x.dropFirst(m.count)).trimmingCharacters(in: .whitespacesAndNewlines); break }
+            return x
+        }
         let zhPrefixes = ["带我去", "导航去", "导航到", "我要去", "我想去"]
         for p in zhPrefixes {
             if let r = text.range(of: p) {
-                let dest = String(text[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let dest = strip(String(text[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines))
                 return dest.isEmpty ? nil : dest
             }
         }
@@ -233,7 +258,7 @@ public enum VoiceCommandParser {
             guard let s0 = text.range(of: intent) else { continue }
             let rest = text[s0.upperBound...]
             if let g = rest.range(of: "去") {
-                let dest = String(rest[g.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let dest = strip(String(rest[g.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines))
                 if !dest.isEmpty { return dest }
             }
         }
@@ -252,6 +277,9 @@ public enum VoiceCommandParser {
     /// 提取"找<物品>"的物品名；泛指（东西/物品/things）或空则返回 nil（不作为具体 find，交 UI 菜单）。
     /// 中文长前缀先匹配（"找我的X"取 X 而非"我的X"）；避免把"找东西"当具体物品。
     static func parseFindTarget(_ text: String) -> String? {
+        // "找不到/找不着/找不见"是"迷路/找不着东西"的**陈述**（"找不到路了"），不是"找X"命令——绝不切成物名
+        // "不到路"去查（垃圾查询，对抗复审 MED）。用具体否定短语（非裸"找不"）避免误伤"帮我找不锈钢杯"。
+        if text.contains("找不到") || text.contains("找不着") || text.contains("找不见") { return nil }
         let generic: Set<String> = ["东西", "我的东西", "物品", "东西们", "things", "something", "stuff", "my stuff", "my things", "my belongings"]
         for p in ["帮我找找", "帮我找", "找一下我的", "找一下", "找找我的", "找找", "找我的", "找"] {
             if let r = text.range(of: p) {
@@ -379,12 +407,23 @@ public enum VoiceCommandParser {
         // 占位词：不是具体联系人，落到 .help（通用求助/呼叫亲友），绝不当成名叫"求助"的人去拨。
         let generic: Set<String> = ["帮助", "求助", "帮手", "帮忙", "亲友", "家人", "家里人", "朋友", "别人", "谁", "人",
                                     "我", "我自己", "自己", "me", "myself",  // "给我打电话/call me" 非拨给联系人，落 help
-                                    "help", "for help", "family", "someone", "somebody", "anyone", "assistance", "emergency", "for assistance"]
+                                    "help", "for help", "family", "someone", "somebody", "anyone", "assistance", "emergency", "for assistance",
+                                    // 急救服务/非人称呼叫目标：不是通讯录里的人，别捏造成 callContact（多数已在 SOS 拦下，这里兜底）。
+                                    "救护车", "an ambulance", "ambulance", "911", "the police", "police", "paramedics",
+                                    "a taxi", "an uber", "a cab", "a ride", "a doctor", "reception", "the front desk"]
         func clean(_ s: String) -> String? {
             var x = s.trimmingCharacters(in: CharacterSet(charactersIn: "。，？！,.?!、").union(.whitespacesAndNewlines))
-            for tr in [" please", " now", " for me", "一下", "吧", "呢", "吗", "啊", "呀"]
-                where x.lowercased().hasSuffix(tr.lowercased()) && x.count > tr.count {
-                x = String(x.dropLast(tr.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            // 尾部客套/回拨语气词/线路限定词（"call mom back"/"on her cell"）——**迭代**剥除（可叠多个），否则会
+            // 把"mom back"/"mom on her cell"整段当联系人名去查、必失败（对抗复审）。
+            var trimmed = true
+            while trimmed {
+                trimmed = false
+                for tr in [" please", " now", " for me", " back", " later", " on her cell", " on his cell",
+                           " on speaker", " on the phone", " on her phone", " on his phone",
+                           "一下", "吧", "呢", "吗", "啊", "呀"]
+                    where x.lowercased().hasSuffix(tr.lowercased()) && x.count > tr.count {
+                    x = String(x.dropLast(tr.count)).trimmingCharacters(in: .whitespacesAndNewlines); trimmed = true; break
+                }
             }
             // 去首部物主词（"给我妈妈打电话"→妈妈；英文 my 已在正则里剥，这里兜中文）。
             for ld in ["我的", "我", "the "] where x.lowercased().hasPrefix(ld.lowercased()) && x.count > ld.count {
@@ -424,6 +463,11 @@ public enum VoiceCommandParser {
             // 剥尾部时态/客套（"现在/一下/please/now"），避免"我现在""me now"绕过代词判定。
             for tr in ["现在", "一下", " now", " please"] where x.lowercased().hasSuffix(tr) && x.count > tr.count {
                 x = String(x.dropLast(tr.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            // 收件人前导物主词："发给我妈"→联系人"妈"（与 parseCallContact 一致）。仅当其后还有内容才剥，
+            // 故裸"我"（发给我=自己）保持不变→落到 pronouns→nil（不给自己发位置，回归 whereAmI 语义）。
+            for ld in ["我的", "我"] where x.hasPrefix(ld) && x.count > ld.count {
+                x = String(x.dropFirst(ld.count)).trimmingCharacters(in: .whitespacesAndNewlines); break
             }
             if x.isEmpty || pronouns.contains(x.lowercased()) { return nil }
             return x

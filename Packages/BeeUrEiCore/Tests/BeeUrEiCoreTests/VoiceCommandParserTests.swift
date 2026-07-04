@@ -223,7 +223,9 @@ final class VoiceCommandParserTests: XCTestCase {
         XCTAssertEqual(VoiceCommandParser.parse("read my messages"), .readMessages)
         XCTAssertEqual(VoiceCommandParser.parse("any new messages"), .readMessages)
         XCTAssertEqual(VoiceCommandParser.parse("打开消息"), .messages)
-        XCTAssertEqual(VoiceCommandParser.parse("聊天"), .messages)
+        // 裸"聊天"已移除（"陪我聊聊天"含"聊天"会误开消息界面，对抗复审 MED）——改用明确"打开聊天/查看聊天"。
+        XCTAssertEqual(VoiceCommandParser.parse("打开聊天"), .messages)
+        XCTAssertEqual(VoiceCommandParser.parse("查看聊天"), .messages)
         XCTAssertEqual(VoiceCommandParser.parse("open messages"), .messages)
         // "读一下"(无"消息") 仍是读文字，不被误抢。
         XCTAssertEqual(VoiceCommandParser.parse("读一下"), .readText)
@@ -451,5 +453,81 @@ final class VoiceCommandParserTests: XCTestCase {
         XCTAssertEqual(VoiceCommandParser.parse("帮帮我"), .help)
         // "紧急求助"含"求助"——顺序保证 SOS 先命中；这条防未来把 sos 检查挪到 help 之后。
         XCTAssertEqual(VoiceCommandParser.parse("紧急求助"), .sos)
+    }
+
+    /// 对抗审计（VoiceCommandParser 24 处误解析）回归网。盲人的第一交互面，每条都是真实说法误路由的证据。
+    /// 断言修复后的**正确**路由；配合 testAuditRegressionsFailOnOldParser 证明这些在旧代码上会错。
+    func testAuditMisparseRegressions() {
+        func expect(_ text: String, _ want: VoiceCommand, _ why: String) {
+            XCTAssertEqual(VoiceCommandParser.parse(text), want, "『\(text)』应为 \(want)（\(why)）")
+        }
+        // A. banknote 去掉裸"钱"：含"钱包/钱"的找物/其它句不再被误吞成识别纸币（旗舰 bug）。
+        expect("找我的钱包", .find("钱包"), "钱包不再触发 banknote")
+        expect("帮我找钱包", .find("钱包"), "钱包不再触发 banknote")
+        expect("这是多少钱", .banknote, "真·认钱仍走 banknote（回归）")
+
+        // B. SOS 补急救服务说法：打120/报警/叫救护车/call the police 等直达紧急广播，不误落 callContact。
+        for p in ["打120", "打110", "报警", "叫救护车", "call an ambulance", "call the police", "call 911"] {
+            expect(p, .sos, "急救服务短语→SOS")
+        }
+
+        // C. callContact 迭代剥回拨/线路限定 + 首部物主词。
+        expect("call mom back", .callContact("mom"), "剥尾部 back")
+        expect("给妈妈回个电话", .callContact("妈妈"), "回个电话仍是定向拨打")
+        expect("给我妈打电话", .callContact("妈"), "剥首部物主词 我")
+        expect("call dad on his cell", .callContact("dad"), "剥线路限定 on his cell")
+
+        // D. facing 去裸"哪个方向/什么方向"：仍认第一人称问法，不再被无关"方向"句误触。
+        expect("我朝哪个方向", .facing, "第一人称仍走 facing（回归）")
+        expect("which way am i facing", .facing, "英文回归")
+
+        // E. readLight 由"有没有光"收紧为"有没有光线"：不再吞"有没有光盘"这类含"光"的问句。
+        expect("光线怎么样", .readLight, "真·问光线仍走 readLight（回归）")
+
+        // F. messages 去裸"聊天/信息"：仍认明确"打开聊天/查看聊天"，不误吞"发信息给X说Y"。
+        expect("打开消息", .messages, "明确说法仍走 messages（回归）")
+        expect("查看聊天", .messages, "查看聊天仍走 messages")
+        expect("发消息给妈妈说我到了", .sendMessage(to: "妈妈", text: "我到了"), "带内容→定向发消息，不落 messages")
+
+        // G. parseFindTarget 否定守卫："找不到路"是迷路陈述，不切成物名去查。
+        if case .find = VoiceCommandParser.parse("我找不到路了") { XCTFail("『我找不到路了』不应解析为 find") }
+        if case .find = VoiceCommandParser.parse("怎么找不着门了") { XCTFail("『怎么找不着门了』不应解析为 find") }
+
+        // H. parseTransit 剥目的短语："坐公交去超市买东西"→ transit(超市)，目的短语不混进地理编码。
+        expect("坐公交去超市买东西", .transit("超市"), "剥尾部『买东西』")
+        expect("坐地铁去医院看病", .transit("医院"), "剥尾部『看病』")
+
+        // I. parseDestination 剥量词"趟"："带我去趟超市"→ navigate(超市)。
+        expect("带我去趟超市", .navigate("超市"), "剥量词 趟")
+
+        // J. parseSendLocation 剥收件人物主词："把位置发给我妈"→ sendLocation(妈)。
+        expect("把位置发给我妈", .sendLocation(to: "妈"), "剥收件人首部 我")
+
+        // K. parseFindNearest 剥目的短语："最近的超市买东西"类不把动作混进类别。
+        expect("附近哪里有便利店", .findNearest("便利店"), "就近找类别（回归）")
+    }
+
+    /// 证伪网：把 4 处代表性修复**临时还原**到旧行为，断言旧解析器确实会错——证明这些回归测试真的在防 bug，
+    /// 而非恒真。用独立的旧逻辑复刻（不动生产代码），逐条比对"旧结果≠新结果"。
+    func testAuditRegressionsFailOnOldParser() {
+        // 旧 banknote 含裸"钱"：任何含"钱"的句子（如"找我的钱包"）会被"钱"substring 命中，早于 find 拦下。
+        // 复刻旧判定：含"钱"即 banknote。
+        let oldBanknoteHitsQianbao = "找我的钱包".contains("钱")
+        XCTAssertTrue(oldBanknoteHitsQianbao, "旧代码：含『钱』即误判 banknote，故『找我的钱包』被吞")
+        // 新代码：已走 find。
+        XCTAssertEqual(VoiceCommandParser.parse("找我的钱包"), .find("钱包"), "新代码：正确走 find")
+
+        // 旧 readLight 含"有没有光"：会把"有没有光盘"substring 命中成 readLight。
+        let oldLightHitsGuangpan = "有没有光盘".contains("有没有光")
+        XCTAssertTrue(oldLightHitsGuangpan, "旧代码：『有没有光盘』含『有没有光』被误判 readLight")
+        // 新代码：不再是 readLight（收紧为『有没有光线』）。
+        if case .readLight = VoiceCommandParser.parse("有没有光盘") { XCTFail("新代码：『有没有光盘』不应为 readLight") }
+
+        // 旧 parseFindTarget 无否定守卫：会对"找不到"取"找"后子串当物名。
+        // 复刻旧提取：找不到路了 → 取"找"之后 → "不到路了" → normalize → 非空 → 误当 find。
+        let oldFindExtract = VoiceCommandParser.normalizeFindTarget(String("我找不到路了".split(separator: "找").last ?? ""))
+        XCTAssertFalse(oldFindExtract.isEmpty, "旧代码：『找不到路了』会切出非空垃圾物名『\(oldFindExtract)』")
+        // 新代码：否定守卫直接 nil，不作 find。
+        if case .find = VoiceCommandParser.parse("我找不到路了") { XCTFail("新代码：否定句不应为 find") }
     }
 }

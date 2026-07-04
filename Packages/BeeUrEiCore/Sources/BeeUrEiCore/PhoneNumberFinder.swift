@@ -21,16 +21,23 @@ public enum PhoneNumberFinder {
         return out
     }
 
-    /// 电话候选片段：连续的「数字/空格/-/+/()」串。地名/文字自然截断（"电话13812345678" 的"电话"非电话字符）。
+    /// 电话候选片段：连续的「数字/空格/-/+/()/.」串。地名/文字自然截断（"电话13812345678" 的"电话"非电话字符）。
+    /// 含 **.**（点分隔）：名片/欧洲写法常用点分隔（138.1234.5678 / 01.42.34.56.78），此前会被点截断成碎片而漏识；
+    /// 非电话的点分数字串（日期 2026.07.15、价格 13.50、IP 192.168.1.1）由后续长度+前缀门控照旧拒绝，不会误配。
     static func candidateSpans(_ s: String) -> [String] {
         var spans: [String] = []
         var cur = ""
         for ch in s {
-            if ch.isASCII, ch.isNumber || "+-() ".contains(ch) { cur.append(ch) }
+            if ch.isASCII, ch.isNumber || "+-() .".contains(ch) { cur.append(ch) }
             else { if !cur.isEmpty { spans.append(cur); cur = "" } }
         }
         if !cur.isEmpty { spans.append(cur) }
         return spans
+    }
+
+    /// 11 位中国手机分 3-4-4（TTS 逐组念清，便于用户核对逐位）。入参须为 11 位纯数字。
+    static func groupedMobile(_ digits: String) -> String {
+        "\(digits.prefix(3)) \(digits.dropFirst(3).prefix(4)) \(digits.dropFirst(7))"
     }
 
     /// 校验并格式化：命中电话样式返回可读串，否则 nil。
@@ -40,7 +47,15 @@ public enum PhoneNumberFinder {
         let d = Array(digits)
         // 中国手机：11 位，1 开头，第二位 3-9 → 分 3-4-4（TTS 逐组念清）。
         if d.count == 11, d[0] == "1", let sec = d[1].wholeNumberValue, (3...9).contains(sec) {
-            return "\(digits.prefix(3)) \(digits.dropFirst(3).prefix(4)) \(digits.dropFirst(7))"
+            return groupedMobile(digits)
+        }
+        // 带国家码 +86 的中国手机（+86 + 11 位手机）→ "+86 3-4-4"。否则会落到通用国际分支被 13 位连读，
+        // 盲人 TTS 听不清；逐组念清对拨号核对至关重要。
+        if hasPlus, digits.hasPrefix("86"), d.count == 13 {
+            let rest = String(digits.dropFirst(2)), r = Array(rest)
+            if r[0] == "1", let sec = r[1].wholeNumberValue, (3...9).contains(sec) {
+                return "+86 \(groupedMobile(rest))"
+            }
         }
         let trimmed = span.trimmingCharacters(in: .whitespaces)
         // 座机（区号 0 开头，10-12 位）/ 服务号（400/800）：保留印刷分隔（更贴合区号-号码），原样返回。

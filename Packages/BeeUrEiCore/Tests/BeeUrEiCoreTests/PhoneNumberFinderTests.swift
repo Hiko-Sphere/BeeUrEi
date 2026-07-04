@@ -31,6 +31,26 @@ final class PhoneNumberFinderTests: XCTestCase {
         XCTAssertTrue(PhoneNumberFinder.find(texts: ["12012345678"]).isEmpty)
     }
 
+    func testDotSeparatedNumbers() {
+        // 点分隔（名片/欧洲写法常见）此前被点截断成碎片而漏识——现能识别。
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["电话 138.1234.5678"]), ["138 1234 5678"]) // 手机点分→统一 3-4-4
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["Tél 01.42.34.56.78"]), ["01.42.34.56.78"]) // 法式座机点分（0 开头 10 位）
+        XCTAssertTrue(PhoneNumberFinder.find(texts: ["座机 010.8765.4321"]).first!.contains("010"))
+    }
+
+    func testDotSeparatedNonPhonesStillRejected() {
+        // 加了点分隔字符后，日期/价格/IP/版本号仍被长度+前缀门控拒绝（不误配）。
+        XCTAssertTrue(PhoneNumberFinder.find(texts: ["日期 2026.07.15", "价格 13.50", "IP 192.168.1.100", "版本 2.0.1"]).isEmpty)
+    }
+
+    func testChinaMobileWithCountryCodeGrouped() {
+        // +86 + 11 位手机 → "+86 3-4-4"（否则 13 位连读，盲人 TTS 听不清）。
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["+8613812345678"]), ["+86 138 1234 5678"])
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["联系 +86 138 0000 1111"]), ["+86 138 0000 1111"])
+        // 非中国的 + 号国际号仍原样（不强套 3-4-4）。
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["+44 20 7946 0958"]), ["+44 20 7946 0958"])
+    }
+
     func testDedup() {
         // 同号不同印刷分隔 → 只算一个。
         XCTAssertEqual(PhoneNumberFinder.find(texts: ["13812345678", "138 1234 5678", "138-1234-5678"]).count, 1)

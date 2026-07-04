@@ -69,6 +69,19 @@ jobs:
       - name: build
         run: npm run build
 
+  site:
+    name: 官网静态质量门禁
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # 零依赖脚本（无 npm install）：lang/h1/img-alt/锚点命中/站内链接可达/sitemap↔页面互查/robots 声明。
+      # 曾人工审计过一次（全绿），固化成门禁防回归——断链/丢 alt 对官网（盲人辅助产品的门面）格外难堪。
+      - name: check-site
+        run: node scripts/check-site.mjs
+
   ios-build:
     name: iOS 构建
     # macos-14 的默认 Xcode 远旧于本仓实际工具链（本机 Xcode 26.6 构建通过、同配方 CI 恒失败）；

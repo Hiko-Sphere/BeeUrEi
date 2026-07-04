@@ -624,6 +624,13 @@ struct ChatView: View {
         if older.count < chatPageLimit { reachedStart = true; canLoadEarlier = false } // 不足一页 = 已到开头
     }
 
+    /// 发送成功后把回流消息并入列表——**按 id 去重**：轮询可能在 `await send` 的窗口里已先带回同一条，
+    /// 裸 append 会瞬时重复（盲人 TTS 把同一条念两遍），要等下次 merged() 才自愈。已存在则替换为新版本。
+    private func appendSent(_ m: ChatMessageInfo) {
+        if let i = messages.firstIndex(where: { $0.id == m.id }) { messages[i] = m }
+        else { messages.append(m) }
+    }
+
     /// 服务器最新窗口 ∪ 已显示但不在该窗口的消息（更早历史 + 本地待回流），按 id 去重、时间排序。
     private func merged(server: [ChatMessageInfo]) -> [ChatMessageInfo] {
         let serverIds = Set(server.map(\.id))
@@ -663,7 +670,7 @@ struct ChatView: View {
             defer { sending = false }
             do {
                 let m = try await send(kind: "text", text: text)
-                messages.append(m)
+                appendSent(m)
                 errorText = nil
             } catch {
                 let msg = ChatStrings.sendErrorText(error, lang)
@@ -688,7 +695,7 @@ struct ChatView: View {
             }
             do {
                 let m = try await send(kind: "text", text: payload.asText())
-                messages.append(m)
+                appendSent(m)
                 errorText = nil
             } catch {
                 let msg = ChatStrings.sendErrorText(error, lang)
@@ -717,7 +724,7 @@ struct ChatView: View {
         defer { sending = false }
         do {
             let m = try await send(kind: "image", text: b64)
-            messages.append(m)
+            appendSent(m)
             errorText = nil // 成功清掉上一条失败横幅，避免误导
         } catch {
             let msg = ChatStrings.sendErrorText(error, lang)
@@ -745,7 +752,7 @@ struct ChatView: View {
         do {
             let mediaId = try await APIClient().uploadMedia(token: token, data: raw, mime: Self.videoMime(raw))
             let m = try await send(kind: "video", text: mediaId)
-            messages.append(m)
+            appendSent(m)
             errorText = nil
         } catch {
             // mediaUpload 功能被关 / 维护 / 聊天被关 都会到这里——给具体原因，不让盲人徒劳重试。
@@ -804,7 +811,7 @@ struct ChatView: View {
                     defer { sending = false }
                     do {
                         let m = try await send(kind: "audio", text: b64)
-                        messages.append(m)
+                        appendSent(m)
                         errorText = nil
                     } catch {
                         // 盲人看不到红字横幅——发送失败要朗读，且区分"功能关闭/维护"等不可重试原因。

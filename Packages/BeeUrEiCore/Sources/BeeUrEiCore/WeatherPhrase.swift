@@ -167,6 +167,36 @@ public enum WeatherPhrase {
         return nil
     }
 
+    /// 从 ISO 时间戳（形如 "2026-07-04T19:45" 或带秒 "…:45:00"）取"当日第几分钟"（0...1439）。
+    /// 纯字符解析，不依赖时区/DateFormatter（Open-Meteo timezone=auto 已给本地时刻）。malformed 返回 nil。
+    /// Int(子串) 只认 ASCII 数字，天然不被全角/CJK 数字骗（见 isAsciiDigit 一类的历史坑）。
+    public static func minuteOfDay(fromISO iso: String) -> Int? {
+        guard let t = iso.firstIndex(of: "T") else { return nil }
+        let comps = iso[iso.index(after: t)...].split(separator: ":")  // ["19","45"] 或 ["19","45","00"]
+        guard comps.count >= 2, let h = Int(comps[0]), let m = Int(comps[1]),
+              (0...23).contains(h), (0...59).contains(m) else { return nil }
+        return h * 60 + m
+    }
+
+    /// 黄昏（日落前后）行人安全提醒：盲人无法感知天色转暗，而黄昏是行人被撞的高发时段——司机在弱光里
+    /// 看不清行人。当"现在"落在日落前 30 分钟到日落后 45 分钟窗口内，提醒过马路格外小心；白天/深夜不提
+    /// （深夜警告可行动性低、且免打扰）。入参为"当日第几分钟"；sunset 缺失或时刻非法则不提醒（不瞎报）。
+    public static func twilightSafety(nowMinuteOfDay now: Int, sunsetMinuteOfDay sunset: Int?,
+                                      language: Language) -> String? {
+        guard let sunset, (0...1439).contains(now), (0...1439).contains(sunset) else { return nil }
+        let delta = now - sunset  // 负=日落前，正=日落后
+        guard delta >= -30, delta <= 45 else { return nil }
+        if language == .zh {
+            return delta < 0
+                ? "天快黑了，来往车辆会越来越难看清你，过马路请走有信号灯的路口、格外小心。"
+                : "天刚黑，来往车辆不易看清你，过马路请走有信号灯的路口、格外小心。"
+        } else {
+            return delta < 0
+                ? " It's getting dark; drivers will see you less and less easily — cross at signalized crossings and take extra care."
+                : " It just got dark; drivers may not see you clearly — cross at signalized crossings and take extra care."
+        }
+    }
+
     /// 取数过程提示与失败文案（App 层播报用，集中在此保持双语一致）。
     public static func fetching(_ l: Language) -> String { l == .zh ? "正在获取天气" : "Getting the weather" }
     public static func failed(_ l: Language) -> String {

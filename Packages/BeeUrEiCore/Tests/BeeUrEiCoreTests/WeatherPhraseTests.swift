@@ -185,4 +185,33 @@ extension WeatherPhraseTests {
         XCTAssertTrue(WeatherPhrase.advice(code: 2, todayMax: 24, todayMin: 16, precipProbability: nil, rainInHours: 3, language: .en)!.contains("3 hours"))
         XCTAssertTrue(WeatherPhrase.advice(code: 2, todayMax: 24, todayMin: 16, precipProbability: nil, rainInHours: 1, language: .en)!.contains("1 hour;"))
     }
+
+    func testMinuteOfDayParsing() {
+        XCTAssertEqual(WeatherPhrase.minuteOfDay(fromISO: "2026-07-04T19:45"), 19 * 60 + 45)
+        XCTAssertEqual(WeatherPhrase.minuteOfDay(fromISO: "2026-07-04T05:12:00"), 5 * 60 + 12) // 带秒
+        XCTAssertEqual(WeatherPhrase.minuteOfDay(fromISO: "2026-01-01T00:00"), 0)
+        XCTAssertNil(WeatherPhrase.minuteOfDay(fromISO: "2026-07-04"))     // 无 T
+        XCTAssertNil(WeatherPhrase.minuteOfDay(fromISO: "garbage"))
+        XCTAssertNil(WeatherPhrase.minuteOfDay(fromISO: "2026-07-04T25:99")) // 越界
+    }
+
+    func testTwilightSafety() {
+        let sunset = 19 * 60 + 45  // 19:45
+        // 日落前 15 分钟：天快黑了。
+        let before = WeatherPhrase.twilightSafety(nowMinuteOfDay: sunset - 15, sunsetMinuteOfDay: sunset, language: .zh)
+        XCTAssertNotNil(before); XCTAssertTrue(before!.contains("天快黑了")); XCTAssertTrue(before!.contains("信号灯"))
+        // 日落后 15 分钟：天刚黑。
+        let after = WeatherPhrase.twilightSafety(nowMinuteOfDay: sunset + 15, sunsetMinuteOfDay: sunset, language: .zh)
+        XCTAssertNotNil(after); XCTAssertTrue(after!.contains("天刚黑"))
+        // 窗口外（日落前 45 分钟、日落后 46 分钟）：不提醒（免打扰 + 深夜低可行动性）。
+        XCTAssertNil(WeatherPhrase.twilightSafety(nowMinuteOfDay: sunset - 45, sunsetMinuteOfDay: sunset, language: .zh))
+        XCTAssertNil(WeatherPhrase.twilightSafety(nowMinuteOfDay: sunset + 46, sunsetMinuteOfDay: sunset, language: .zh))
+        XCTAssertNil(WeatherPhrase.twilightSafety(nowMinuteOfDay: 12 * 60, sunsetMinuteOfDay: sunset, language: .zh)) // 大白天
+        // sunset 缺失 / 时刻非法：不瞎报。
+        XCTAssertNil(WeatherPhrase.twilightSafety(nowMinuteOfDay: sunset, sunsetMinuteOfDay: nil, language: .zh))
+        XCTAssertNil(WeatherPhrase.twilightSafety(nowMinuteOfDay: 5000, sunsetMinuteOfDay: sunset, language: .zh))
+        // 英文。
+        XCTAssertTrue(WeatherPhrase.twilightSafety(nowMinuteOfDay: sunset - 10, sunsetMinuteOfDay: sunset, language: .en)!.contains("getting dark"))
+        XCTAssertTrue(WeatherPhrase.twilightSafety(nowMinuteOfDay: sunset + 20, sunsetMinuteOfDay: sunset, language: .en)!.contains("just got dark"))
+    }
 }

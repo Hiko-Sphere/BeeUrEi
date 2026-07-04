@@ -89,7 +89,7 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
             .init(name: "latitude", value: String(format: "%.3f", lat)),   // 坐标降精到 ~百米级，最小化外发
             .init(name: "longitude", value: String(format: "%.3f", lon)),
             .init(name: "current", value: "temperature_2m,apparent_temperature,weather_code,wind_speed_10m,uv_index"),
-            .init(name: "daily", value: "temperature_2m_max,temperature_2m_min,precipitation_probability_max"),
+            .init(name: "daily", value: "temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunset"),
             .init(name: "hourly", value: "precipitation_probability"), // 逐小时降水概率 → 近期"约N小时后可能下雨"
             .init(name: "forecast_days", value: "1"),
             .init(name: "timezone", value: "auto"),
@@ -107,6 +107,7 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
                 let temperature_2m_max: [Double]
                 let temperature_2m_min: [Double]
                 let precipitation_probability_max: [Int?]?
+                let sunset: [String]?   // 当日日落时刻（ISO，本地时区）→ 黄昏行人安全提醒
             }
             struct Hourly: Decodable {
                 let time: [String]
@@ -131,16 +132,25 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
                 rainInHours = WeatherPhrase.hoursUntilLikelyRain(probabilities: probs, startIndex: idx)
             }
         }
-        return WeatherPhrase.summary(temperature: r.current.temperature_2m,
-                                     code: r.current.weather_code,
-                                     windSpeedKmh: r.current.wind_speed_10m,
-                                     todayMax: r.daily?.temperature_2m_max.first,
-                                     todayMin: r.daily?.temperature_2m_min.first,
-                                     precipProbability: r.daily?.precipitation_probability_max?.first ?? nil,
-                                     uvIndex: r.current.uv_index,
-                                     rainInHours: rainInHours,
-                                     apparentTemp: r.current.apparent_temperature,
-                                     language: l)
+        let base = WeatherPhrase.summary(temperature: r.current.temperature_2m,
+                                         code: r.current.weather_code,
+                                         windSpeedKmh: r.current.wind_speed_10m,
+                                         todayMax: r.daily?.temperature_2m_max.first,
+                                         todayMin: r.daily?.temperature_2m_min.first,
+                                         precipProbability: r.daily?.precipitation_probability_max?.first ?? nil,
+                                         uvIndex: r.current.uv_index,
+                                         rainInHours: rainInHours,
+                                         apparentTemp: r.current.apparent_temperature,
+                                         language: l)
+        // 黄昏行人安全：盲人感知不到天色变暗，而日落前后是行人被撞高发时段（司机弱光看不清）。
+        // 现在时刻与今日日落时刻都来自同一响应（timezone=auto 本地时刻），交给核心判是否在窗口内。
+        if let nowMin = WeatherPhrase.minuteOfDay(fromISO: r.current.time),
+           let sunsetISO = r.daily?.sunset?.first ?? nil,
+           let sunsetMin = WeatherPhrase.minuteOfDay(fromISO: sunsetISO),
+           let dusk = WeatherPhrase.twilightSafety(nowMinuteOfDay: nowMin, sunsetMinuteOfDay: sunsetMin, language: l) {
+            return base + dusk
+        }
+        return base
     }
 
     private func speak(_ text: String) {

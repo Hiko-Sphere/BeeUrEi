@@ -1,19 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type NotificationInfo } from '../../lib/api'
-import { pickUnreadEmergencies, playEmergencyChime, clearedSenderIds, ackEventNotifIds } from '../../lib/emergencyAlerts'
+import { pickUnreadEmergencies, playEmergencyChime, clearedSenderIds, ackEventNotifIds, respondingEventIds } from '../../lib/emergencyAlerts'
 import { emergencyLocInfo } from '../../lib/emergencyLoc'
 import { useI18n } from '../../lib/i18n'
 import { Modal, fmtTime } from '../../components/ui'
-import { IconPhone, IconFlash } from '../../components/icons'
+import { IconPhone, IconFlash, IconCheck } from '../../components/icons'
 import { useCall } from './CallController'
 
 const POLL_MS = 10_000
 
 /// 紧急告警的模态展示（纯展示，可组件测试）：谁、发生了什么、位置（诚实标注实时/最后已知）、
 /// 一键回拨、确认。role=alertdialog 由 Modal 的 aria 承担；文案 zh/en。
-export function EmergencyAlertModal({ alert, othersCount, onAck, onCallBack }: {
+export function EmergencyAlertModal({ alert, othersCount, beingHandled, onAck, onCallBack }: {
   alert: NotificationInfo
   othersCount: number          // 除当前外还有几条未读告警（提示"还有 N 条"）
+  beingHandled?: boolean       // 已有其他亲友在响应此事件（提示协调，不消模态——本人仍可继续帮忙）
   onAck: () => void            // 知道了：标已读，永不再弹
   onCallBack: () => void       // 回拨发出告警的盲人
 }) {
@@ -28,6 +29,12 @@ export function EmergencyAlertModal({ alert, othersCount, onAck, onCallBack }: {
           <h2 className="text-lg font-bold">{alert.title}</h2>
         </div>
         {alert.body && <p className="text-sm text-soft">{alert.body}</p>}
+        {beingHandled && (
+          // 已有其他亲友在响应：协调提示（用达标的 text-ok 承载，非仅靠颜色——文案本身表意）。不消模态。
+          <p className="inline-flex items-center gap-1.5 text-sm font-medium text-ok" data-testid="emergency-being-handled">
+            <IconCheck width={15} height={15} />{t('已有其他亲友在响应——若你也能帮忙可继续，否则可放心', 'Another contact is responding — you can still help, or stand by')}
+          </p>
+        )}
         <div className="text-xs text-faint">{fmtTime(alert.createdAt, lang)}</div>
         {hasCoord && (
           <a href={`https://maps.apple.com/?ll=${alert.data!.lat},${alert.data!.lon}&q=${alert.data!.lat},${alert.data!.lon}`}
@@ -66,6 +73,7 @@ export function EmergencyAlertHost() {
   const { active, startOutgoing } = useCall()
   const { t } = useI18n()
   const [alerts, setAlerts] = useState<NotificationInfo[]>([])
+  const [respondingEvents, setRespondingEvents] = useState<ReadonlySet<string>>(new Set()) // 已有人在响应的事件 id
   const notifsRef = useRef<NotificationInfo[]>([]) // 上轮完整通知列表：确认时据此收敛同事件的兄弟告警
   const dismissedRef = useRef<Set<string>>(new Set())
   const chimedRef = useRef<Set<string>>(new Set())
@@ -85,6 +93,7 @@ export function EmergencyAlertHost() {
         const urgent = pickUnreadEmergencies(notifications, dismissedRef.current)
           .filter((n) => !(n.data?.fromId && cleared.has(n.data.fromId)))
         setAlerts(urgent)
+        setRespondingEvents(respondingEventIds(notifications)) // 已有人在响应的事件（模态显示协调提示）
         // 只对首次见到的告警响铃（轮询重复到达不再响）。
         const fresh = urgent.filter((n) => !chimedRef.current.has(n.id))
         if (fresh.length > 0) {
@@ -120,5 +129,6 @@ export function EmergencyAlertHost() {
   }, [top, ack, startOutgoing, t])
 
   if (!top) return null
-  return <EmergencyAlertModal alert={top} othersCount={alerts.length - 1} onAck={ack} onCallBack={callBack} />
+  const beingHandled = !!(top.data?.eventId && respondingEvents.has(top.data.eventId))
+  return <EmergencyAlertModal alert={top} othersCount={alerts.length - 1} beingHandled={beingHandled} onAck={ack} onCallBack={callBack} />
 }

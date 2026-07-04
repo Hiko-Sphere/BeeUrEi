@@ -43,4 +43,19 @@ describe('EmergencyAlertModal（告警模态展示）', () => {
     expect(screen.queryByRole('link')).toBeNull()
     expect(screen.getByText('知道了')).toBeInTheDocument()
   })
+
+  it('beingHandled：显示"已有其他亲友在响应"协调提示；仍保留回拨/确认（不消模态）', () => {
+    render(<EmergencyAlertModal alert={alert({ fromId: 'u1', fromName: 'faller' })} othersCount={0}
+      beingHandled onAck={() => {}} onCallBack={() => {}} />)
+    expect(screen.getByTestId('emergency-being-handled')).toBeInTheDocument()
+    expect(screen.getByText(/已有其他亲友在响应/)).toBeInTheDocument()
+    // 仍可回拨/确认——提示不剥夺本人继续帮忙的能力。
+    expect(screen.getByText(/回拨/)).toBeInTheDocument()
+    expect(screen.getByText('知道了')).toBeInTheDocument()
+  })
+
+  it('默认不显示协调提示（无人响应时）', () => {
+    render(<EmergencyAlertModal alert={alert({ fromId: 'u1', fromName: 'x' })} othersCount={0} onAck={() => {}} onCallBack={() => {}} />)
+    expect(screen.queryByTestId('emergency-being-handled')).toBeNull()
+  })
 })

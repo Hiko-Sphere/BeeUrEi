@@ -52,6 +52,15 @@ export function clearedSenderIds(list: NotificationInfo[]): Set<string> {
   return s
 }
 
+/// **已有其他亲友在响应**（emergency_responding）的告警事件 id 集合：供告警模态显示"有人正在响应"，
+/// 让同样收到告警的其余亲友知道已有人在处理——避免全体同时赶去/都以为别人在管。**仅提示、不消模态**：
+/// 当前亲友若更近/更能帮，仍可继续确认/回拨（不同于 clear 的"对方已没事就地消掉"）。按 eventId 精确关联。
+export function respondingEventIds(list: NotificationInfo[]): Set<string> {
+  const s = new Set<string>()
+  for (const n of list) if (n.kind === 'emergency_responding' && n.data?.eventId) s.add(n.data.eventId)
+  return s
+}
+
 /// 提示音（三声短促蜂鸣）：紧急告警到达时把听觉注意力拉回来。浏览器自动播放策略下 AudioContext
 /// 需用户先有过手势——协助者通常已交互过；失败静默忽略（模态仍在，视觉兜底）。
 export function playEmergencyChime(): void {

@@ -41,6 +41,8 @@ final class CallViewModel {
     private(set) var remoteVideoAvailable = false    // 协助者：已收到远端视频轨（轨道存在；是否有画面再看 frames）
     private(set) var remoteVideoFrames = false       // 协助者：远端视频真的有画面帧（对方已开启并在传）
     private(set) var callQuality: CallQuality = .unknown // 通话信号强弱（WebRTC 实测往返时延）
+    // 盲人看不到信号格：把"转弱/从弱恢复"用语音告诉盲人（防抖判定在核心可单测）。协助者侧 SpeechHub 静默、不受扰。
+    private var qualityAnnouncer = CallQualityAnnouncer()
     private(set) var declined = false                     // 发起方：对方已拒绝
     private(set) var unanswered = false                   // 发起方：40s 无人接听（A4 回退志愿者）
     private(set) var muted = false                        // 本端是否静音
@@ -179,7 +181,16 @@ final class CallViewModel {
             }
         }
         media.onRemoteVideoTrack = { [weak self] in self?.remoteVideoAvailable = true }
-        media.onCallQuality = { [weak self] q in self?.callQuality = q }
+        media.onCallQuality = { [weak self] q in
+            guard let self else { return }
+            self.callQuality = q
+            guard !self.ended else { return } // 通话已结束：不再播报信号（防挂断后残留回调播"信号弱"）
+            let level: CallSignalLevel
+            switch q { case .good: level = .good; case .fair: level = .fair; case .weak: level = .weak; case .unknown: level = .unknown }
+            if let phrase = self.qualityAnnouncer.update(level, language: self.lang) {
+                SpeechHub.shared.speak(phrase, channel: .call, voiceCode: self.lang.voiceCode)
+            }
+        }
         // 旁观媒体（与 1:1 主通道隔离）：本端 obs SDP/ICE 经信令**定向**发给对应 peer。
         media.onObserverLocalDescription = { [weak self] peerId, type, sdp in
             self?.signaling.send(["type": type == "offer" ? "obs-offer" : "obs-answer", "to": peerId, "sdp": sdp])

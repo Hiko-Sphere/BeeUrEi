@@ -31,7 +31,14 @@ export function cascadeDeleteUser(store: Store, id: string): void {
   store.deleteCallRecordsForUser(id)
   // 该用户上传的媒体（视频消息文件等）：删号即清磁盘文件 + 元数据，否则视频文件成孤儿、
   // 留存其 PII（cascade 承诺"不留孤儿"；deleteMessagesForUser 只删消息记录不碰磁盘文件）。
-  for (const m of store.mediaByOwner(id)) { removeMediaFile(m.id); store.deleteMedia(m.id) }
+  // **例外：通话录制的媒体不在此删**——录制记录与其媒体是一个整体、同生共死（Recording.mediaId 契约
+  // "删录制时一并删媒体"；retention/DELETE 都成对处理）。录制记录**刻意保留**作证据，若这里把它的媒体删了，
+  // 会把"保留的录制"掏空成指向已删文件的悬垂记录（举报证据失效、状态不一致，且与 referencedMediaIds
+  // 对录制媒体的孤儿清扫保护自相矛盾）。录制媒体随其记录由 sweepExpiredRecordings 到期成对清除。
+  for (const m of store.mediaByOwner(id)) {
+    if (store.recordingByMediaId(m.id)) continue // 录制媒体：与录制记录同生共死，跟随记录保留
+    removeMediaFile(m.id); store.deleteMedia(m.id)
+  }
   for (const l of store.linksByOwner(id)) store.deleteLink(l.id)
   for (const l of store.linksByMember(id)) store.deleteLink(l.id)
   for (const pk of store.passkeysForUser(id)) store.deletePasskey(pk.id, id)

@@ -59,6 +59,23 @@ describe('cascadeDeleteUser — 抹除完整性', () => {
     expect(store.findMedia('vid-u2')).toBeTruthy()      // 他人媒体不受影响
   })
 
+  it('录制方删号：其**录制**媒体随刻意保留的录制记录一并保留（不掏空成悬垂证据）；普通视频媒体照清', () => {
+    const store = new MemoryStore()
+    store.createUser(user('rec'))
+    // 该用户既有一条录制媒体（挂在录制记录上，作证据保留），又有一条普通视频消息媒体（应随删号清）。
+    store.createMedia({ id: 'rec-media', ownerId: 'rec', mime: 'video/quicktime', size: 500, createdAt: 1 })
+    store.createMedia({ id: 'plain-vid', ownerId: 'rec', mime: 'video/mp4', size: 100, createdAt: 2 })
+    store.createRecording({ id: 'r1', callId: 'c1', ownerId: 'rec', consentBy: ['rec', 'peer'], reason: 'evidence', recordedAt: 1, mediaId: 'rec-media' })
+
+    cascadeDeleteUser(store, 'rec')
+
+    // 录制记录刻意保留（证据）；其媒体也须保留——否则记录指向已删文件成悬垂证据（Recording.mediaId 契约：同生共死）。
+    expect(store.findRecording('r1')).toBeTruthy()
+    expect(store.findMedia('rec-media')).toBeTruthy()
+    // 普通视频消息媒体照常随删号清除（不留孤儿 PII）。
+    expect(store.findMedia('plain-vid')).toBeUndefined()
+  })
+
   it('群主删号 → 解散其群时一并清群内视频消息媒体（含他人发的，与解散端点同口径）', () => {
     const store = new MemoryStore()
     store.createUser(user('owner'))

@@ -55,7 +55,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     // 前台也显示横幅（否则 App 开着时收不到提醒）。
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        [.banner, .sound, .badge]
+        // 紧急"回执"（家人已收到 emergency_ack / 报平安 emergency_clear）**读出来**：发起 SOS 的盲人此刻
+        // 最需要听到"家人已收到、正在赶来"，而横幅是视觉的、默认提示音不传达内容——对盲人等于没收到（无障碍攸关）。
+        let content = notification.request.content
+        if let text = EmergencyReplyAnnouncement.spokenText(kind: content.userInfo["kind"] as? String,
+                                                            title: content.title, body: content.body,
+                                                            language: FeatureSettings().language) {
+            let voice = FeatureSettings().language.voiceCode
+            await MainActor.run { SpeechHub.shared.speak(text, channel: .query, voiceCode: voice) }
+        }
+        return [.banner, .sound, .badge]
     }
 
     // 点击通知：来电横幅 → 直接进入接听界面；其余 → 打开 App 即可（应用内已展示请求）。

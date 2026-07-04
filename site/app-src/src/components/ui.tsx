@@ -162,6 +162,13 @@ export function timeAgo(ms: number, lang: 'zh' | 'en'): string {
 export function fmtTime(ms: number, lang: 'zh' | 'en'): string {
   return new Date(ms).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' })
 }
+/// 相对时间展示（复用既有 timeAgo 措辞，全站一致）：可见文本相对（"刚刚"/"5 分钟前"），
+/// 语义 <time> + `title`/`dateTime` 携带**精确绝对时间**——悬停可见、屏幕阅读器可取，无障碍。
+/// ⚠️ 相对措辞仅宜用于"何时发生"的列表；**紧急"最后已知位置"等安全攸关时刻绝不可用**（相对会随阅读时刻
+/// 漂移成谎言，把协助者指向错误的时间/地点，见 iOS EmergencyLocationTag 同一铁律）——那些保持 fmtTime 绝对。
+export function RelativeTime({ ms, lang, className }: { ms: number; lang: 'zh' | 'en'; className?: string }) {
+  return <time dateTime={new Date(ms).toISOString()} title={fmtTime(ms, lang)} className={className}>{timeAgo(ms, lang)}</time>
+}
 /// 时长 m:ss；≥1 小时用 h:mm:ss（否则服务器 uptime 等长时长会溢出成 "1666:40" 这类分钟数，管理台不可读）。
 /// 非有限/负值兜底 0:00，避免任何调用点传入坏值时渲染 "NaN:NaN"。
 export function fmtDuration(sec: number): string {

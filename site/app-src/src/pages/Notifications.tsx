@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api, type NotificationInfo } from '../lib/api'
 import { emergencyLocInfo } from '../lib/emergencyLoc'
 import { useI18n } from '../lib/i18n'
-import { Card, Button, Spinner, EmptyState, fmtTime } from '../components/ui'
+import { Card, Button, Spinner, EmptyState, fmtTime, RelativeTime } from '../components/ui'
 import { IconBell, IconShield, IconPhone, IconUsers, IconFilm, IconFlash, IconPin } from '../components/icons'
 import { useCall } from './call/CallController'
 
@@ -96,7 +96,7 @@ export function NotificationsPage() {
                       <IconPhone width={13} height={13} />{t('回拨', 'Call back')}
                     </button>
                   )}
-                  <div className="mt-1 text-xs text-faint">{fmtTime(n.createdAt, lang)}</div>
+                  <RelativeTime ms={n.createdAt} lang={lang} className="mt-1 block text-xs text-faint" />
                 </div>
               </li>
             ))}

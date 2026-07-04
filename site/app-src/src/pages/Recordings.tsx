@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, APIError, fetchRecordingObjectURL, type RecordingInfo } from '../lib/api'
 import { useI18n } from '../lib/i18n'
-import { Card, Button, Pill, Spinner, EmptyState, useToast, fmtTime, fmtDuration } from '../components/ui'
+import { Card, Button, Pill, Spinner, EmptyState, useToast, fmtTime, fmtDuration, RelativeTime } from '../components/ui'
 import { IconFilm, IconX } from '../components/icons'
 
 export function RecordingsPage() {
@@ -56,7 +56,7 @@ export function RecordingsPage() {
             <Card key={r.id} className="flex flex-col gap-3 p-4">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <div className="font-semibold">{fmtTime(r.recordedAt, lang)}</div>
+                  <RelativeTime ms={r.recordedAt} lang={lang} className="font-semibold" />
                   <div className="mt-0.5 flex flex-wrap gap-1.5 text-xs">
                     {typeof r.durationSec === 'number' && <Pill>{fmtDuration(r.durationSec)}</Pill>}
                     {r.hasMedia ? <Pill tone="ok">{t('可播放', 'Playable')}</Pill> : <Pill tone="danger">{t('无媒体', 'No media')}</Pill>}

@@ -24,21 +24,25 @@ describe('实时位置共享 /api/locations', () => {
     const B = await register(app, 'loc_b', 'helper')
     await link(app, A, B.id, B.token)
 
-    // B 上报位置 → A 在 /contacts 中看到 B。
-    await app.inject({ method: 'POST', url: '/api/locations/update', headers: auth(B.token), payload: { lat: 39.9, lng: 116.4, accuracy: 10 } })
+    // B 上报位置（含电量）→ A 在 /contacts 中看到 B 及其电量（亲友据此在其没电前主动联系）。
+    await app.inject({ method: 'POST', url: '/api/locations/update', headers: auth(B.token), payload: { lat: 39.9, lng: 116.4, accuracy: 10, battery: 15 } })
     let res = await app.inject({ method: 'GET', url: '/api/locations/contacts', headers: auth(A.token) })
     expect(res.statusCode).toBe(200)
     let body = res.json()
     expect(body.contacts).toHaveLength(1)
-    expect(body.contacts[0]).toMatchObject({ userId: B.id, lat: 39.9, lng: 116.4 })
+    expect(body.contacts[0]).toMatchObject({ userId: B.id, lat: 39.9, lng: 116.4, battery: 15 })
     expect(body.sharing).toBe(false) // A 自己尚未共享
 
-    // A 也上报 → A.sharing=true，且 B 能看到 A。
+    // A 也上报（不带电量：老客户端）→ A.sharing=true，B 看到 A 且 battery=null（可选字段向后兼容）。
     await app.inject({ method: 'POST', url: '/api/locations/update', headers: auth(A.token), payload: { lat: 31.2, lng: 121.5 } })
     res = await app.inject({ method: 'GET', url: '/api/locations/contacts', headers: auth(A.token) })
     expect(res.json().sharing).toBe(true)
     res = await app.inject({ method: 'GET', url: '/api/locations/contacts', headers: auth(B.token) })
-    expect(res.json().contacts[0]).toMatchObject({ userId: A.id, lat: 31.2, lng: 121.5 })
+    expect(res.json().contacts[0]).toMatchObject({ userId: A.id, lat: 31.2, lng: 121.5, battery: null })
+
+    // 越界电量被 schema 拒绝（不污染登记表）。
+    const bad = await app.inject({ method: 'POST', url: '/api/locations/update', headers: auth(B.token), payload: { lat: 1, lng: 2, battery: 150 } })
+    expect(bad.statusCode).toBe(400)
 
     // B 停止共享 → A 不再可见 B。
     await app.inject({ method: 'POST', url: '/api/locations/stop', headers: auth(B.token) })

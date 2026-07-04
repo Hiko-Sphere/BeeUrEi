@@ -169,7 +169,11 @@ final class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         lastPublish = Date()
         let course = loc.course >= 0 ? loc.course : nil
         let acc = loc.horizontalAccuracy >= 0 ? loc.horizontalAccuracy : nil
-        if let until = try? await APIClient().updateLocation(token: token, lat: loc.coordinate.latitude, lng: loc.coordinate.longitude, accuracy: acc, heading: course) {
+        // 随位置附上电量%（Find My/Life360 惯例）：亲友看到"快没电"可在盲人失联前主动联系。未知(-1)不带。
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        let lvl = UIDevice.current.batteryLevel
+        let battery = lvl >= 0 ? Int((lvl * 100).rounded()) : nil
+        if let until = try? await APIClient().updateLocation(token: token, lat: loc.coordinate.latitude, lng: loc.coordinate.longitude, accuracy: acc, heading: course, battery: battery) {
             sharingUntil = until
         }
     }

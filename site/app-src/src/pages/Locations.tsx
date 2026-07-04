@@ -3,6 +3,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { api, APIError, type ContactLocation } from '../lib/api'
 import { pollWhileVisible } from '../lib/poll'
+import { batteryBadge } from '../lib/battery'
 import { useI18n } from '../lib/i18n'
 import { useSession } from '../lib/session'
 import { roleLabel } from '../components/Layout'
@@ -86,7 +87,10 @@ export function LocationsPage() {
       } else {
         mk.setLatLng(ll)
       }
-      mk.bindPopup(`<b>${escapeHtml(c.displayName)}</b><br>${roleLabel(c.role, t)} · ${timeAgo(c.updatedAt, lang)}`)
+      // danger 用 text-danger 类（项目无 --danger 变量；类还自带暗色主题对比度覆盖 .dark .text-danger）。
+      const batt = batteryBadge(c.battery, lang)
+      const battHtml = batt ? ` · <span class="${batt.danger ? 'text-danger font-semibold' : ''}">${escapeHtml(batt.text)}</span>` : ''
+      mk.bindPopup(`<b>${escapeHtml(c.displayName)}</b><br>${roleLabel(c.role, t)} · ${timeAgo(c.updatedAt, lang)}${battHtml}`)
     }
     // 移除已不再共享的联系人标记。
     for (const [id, mk] of markers.current) if (!seen.has(id)) { m.removeLayer(mk); markers.current.delete(id) }
@@ -199,7 +203,10 @@ export function LocationsPage() {
                       <Avatar name={c.displayName} src={c.avatar} size={38} />
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-medium">{c.displayName}</div>
-                        <div className="text-xs text-faint">{roleLabel(c.role, t)} · {t('更新于', 'updated')} {timeAgo(c.updatedAt, lang)}</div>
+                        <div className="text-xs text-faint">
+                          {roleLabel(c.role, t)} · {t('更新于', 'updated')} {timeAgo(c.updatedAt, lang)}
+                          {(() => { const b = batteryBadge(c.battery, lang); return b ? <> · <span className={b.danger ? 'font-semibold text-danger' : ''}>{b.text}</span></> : null })()}
+                        </div>
                       </div>
                       <span className="inline-block h-2 w-2 rounded-full bg-ok ring-live" />
                     </button>

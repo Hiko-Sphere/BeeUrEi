@@ -6,6 +6,7 @@ export interface LiveLocation {
   lng: number
   accuracy?: number   // 水平精度（米）
   heading?: number    // 行进方向（度，0–360）
+  battery?: number    // 共享者手机电量%（0–100）——亲友看到"快没电"可在其失联前主动联系（Find My/Life360 惯例）
   updatedAt: number   // 服务器接收时刻(ms)
   sharingUntil: number // 共享有效期截止(ms)；超过即视为停止共享
 }
@@ -20,10 +21,10 @@ export class LiveLocationRegistry {
   constructor(private freshMs = 90_000, private maxTtlMs = 60 * 60_000, private emergencyMaxAgeMs = 15 * 60_000) {}
 
   /// 上报位置 + （重）激活共享，返回本次共享截止时刻。ttlMs 缺省/超限取 maxTtlMs。
-  update(userId: string, p: { lat: number; lng: number; accuracy?: number; heading?: number }, now: number, ttlMs?: number): number {
+  update(userId: string, p: { lat: number; lng: number; accuracy?: number; heading?: number; battery?: number }, now: number, ttlMs?: number): number {
     const ttl = Math.min(Math.max(Number.isFinite(ttlMs) ? (ttlMs as number) : this.maxTtlMs, 0), this.maxTtlMs)
     const sharingUntil = now + ttl
-    this.map.set(userId, { lat: p.lat, lng: p.lng, accuracy: p.accuracy, heading: p.heading, updatedAt: now, sharingUntil })
+    this.map.set(userId, { lat: p.lat, lng: p.lng, accuracy: p.accuracy, heading: p.heading, battery: p.battery, updatedAt: now, sharingUntil })
     this.prune(now)
     return sharingUntil
   }

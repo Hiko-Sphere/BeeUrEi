@@ -1376,10 +1376,11 @@ struct APIClient {
 
     /// 上报当前位置 + （重）激活共享。返回本次共享截止时刻（毫秒）。
     @discardableResult
-    func updateLocation(token: String, lat: Double, lng: Double, accuracy: Double?, heading: Double?, ttlSec: Int? = nil) async throws -> Double {
+    func updateLocation(token: String, lat: Double, lng: Double, accuracy: Double?, heading: Double?, battery: Int? = nil, ttlSec: Int? = nil) async throws -> Double {
         var body: [String: Any] = ["lat": lat, "lng": lng]
         if let accuracy, accuracy.isFinite, accuracy >= 0 { body["accuracy"] = accuracy }
         if let heading, heading.isFinite, heading >= 0, heading <= 360 { body["heading"] = heading }
+        if let battery, (0...100).contains(battery) { body["battery"] = battery } // 电量%（越界/未知不带，服务端 schema 同界）
         if let ttlSec { body["ttlSec"] = ttlSec }
         let data = try await authedSend("POST", "/api/locations/update", token: token, body: body)
         struct R: Codable { let sharingUntil: Double }

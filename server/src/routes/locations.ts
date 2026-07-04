@@ -11,6 +11,7 @@ const updateSchema = z.object({
   lng: z.number().finite().min(-180).max(180),
   accuracy: z.number().finite().min(0).max(100_000).optional(), // 米
   heading: z.number().finite().min(0).max(360).optional(),      // 度
+  battery: z.number().int().min(0).max(100).optional(),         // 共享者手机电量%（亲友据此在没电前主动联系）
   ttlSec: z.number().int().min(60).max(3600).optional(),        // 本次共享时长（默认/上限见 registry）
 })
 
@@ -57,6 +58,7 @@ export function registerLocationRoutes(app: FastifyInstance, store: Store, live:
           lng: loc.lng,
           accuracy: loc.accuracy ?? null,
           heading: loc.heading ?? null,
+          battery: loc.battery ?? null,
           updatedAt: loc.updatedAt,
         }
       })

@@ -132,6 +132,7 @@ export interface EmergencyEvent {
   notified: number      // 实际推送到的亲友数（有 APNs token）
   contacts: number      // accepted 亲友总数
   at: number
+  resolvedAt?: number   // 发起人报平安(all-clear)解除的时刻；未解除则 undefined。供 admin 区分"已解除/误报"与"可能仍在进行"
 }
 
 /// Web Push 订阅（浏览器推送）：web-only 协助者关掉标签页也能收到紧急告警。
@@ -578,6 +579,7 @@ export interface Store {
   createEmergencyEvent(e: EmergencyEvent): void
   recentEmergencyEvents(limit?: number): EmergencyEvent[] // 时间倒序
   emergencyEventsForUser(userId: string): EmergencyEvent[] // 本人事故记录（自助导出用，时间倒序）
+  resolveLatestEmergencyEvent(userId: string, now: number): boolean // 报平安：标记该用户最近一条未解除的事件为已解除；有则 true
   deleteEmergencyEventsForUser(userId: string): void      // 删号级联（GDPR 抹除）
   deleteEmergencyEventsOlderThan(cutoffMs: number): number // 留存清扫
   // Web Push 订阅：
@@ -1115,6 +1117,17 @@ export class MemoryStore implements Store {
   }
   emergencyEventsForUser(userId: string): EmergencyEvent[] {
     return [...this.emergencyEvents.values()].filter((e) => e.userId === userId).sort((a, b) => b.at - a.at)
+  }
+  resolveLatestEmergencyEvent(userId: string, now: number): boolean {
+    // 报平安解除的是"当前那次"告警：取该用户最近一条尚未解除的事件标记 resolvedAt（客户端 alertId 与
+    // 事件 id 是两套 id 空间，不做精确关联；"最近未解除"正是 all-clear 的语义）。
+    const latest = [...this.emergencyEvents.values()]
+      .filter((e) => e.userId === userId && e.resolvedAt == null)
+      .sort((a, b) => b.at - a.at)[0]
+    if (!latest) return false
+    latest.resolvedAt = now
+    this.afterMutate()
+    return true
   }
   deleteEmergencyEventsForUser(userId: string): void {
     let changed = false

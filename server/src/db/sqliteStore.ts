@@ -83,6 +83,7 @@ export class SqliteStore implements Store {
       CREATE INDEX IF NOT EXISTS idx_passkeys_user ON passkeys (userId);
       CREATE TABLE IF NOT EXISTS vision_usage (userId TEXT PRIMARY KEY, day TEXT, count INTEGER);
     `)
+    try { this.db.exec('ALTER TABLE emergency_events ADD COLUMN resolvedAt INTEGER') } catch { /* 列已存在 */ } // 报平安解除时刻
     // 迁移：旧库 links 表补 phone 列、users 表补 language 列（已存在则忽略）。
     try { this.db.exec('ALTER TABLE links ADD COLUMN phone TEXT') } catch { /* 列已存在 */ }
     try { this.db.exec('ALTER TABLE users ADD COLUMN language TEXT') } catch { /* 列已存在 */ }
@@ -651,14 +652,23 @@ export class SqliteStore implements Store {
     return rows.map((r) => ({ id: r.id, userId: r.userId, kind: r.kind,
       lat: r.lat != null ? Number(r.lat) : undefined, lon: r.lon != null ? Number(r.lon) : undefined,
       locSource: r.locSource ?? undefined, locAgeSec: r.locAgeSec != null ? Number(r.locAgeSec) : undefined,
-      notified: Number(r.notified), contacts: Number(r.contacts), at: Number(r.at) }))
+      notified: Number(r.notified), contacts: Number(r.contacts), at: Number(r.at),
+      resolvedAt: r.resolvedAt != null ? Number(r.resolvedAt) : undefined }))
   }
   emergencyEventsForUser(userId: string): EmergencyEvent[] {
     const rows = this.db.prepare('SELECT * FROM emergency_events WHERE userId = ? ORDER BY at DESC').all(userId) as any[]
     return rows.map((r) => ({ id: r.id, userId: r.userId, kind: r.kind,
       lat: r.lat != null ? Number(r.lat) : undefined, lon: r.lon != null ? Number(r.lon) : undefined,
       locSource: r.locSource ?? undefined, locAgeSec: r.locAgeSec != null ? Number(r.locAgeSec) : undefined,
-      notified: Number(r.notified), contacts: Number(r.contacts), at: Number(r.at) }))
+      notified: Number(r.notified), contacts: Number(r.contacts), at: Number(r.at),
+      resolvedAt: r.resolvedAt != null ? Number(r.resolvedAt) : undefined }))
+  }
+  resolveLatestEmergencyEvent(userId: string, now: number): boolean {
+    const info = this.db.prepare(
+      `UPDATE emergency_events SET resolvedAt = ?
+       WHERE id = (SELECT id FROM emergency_events WHERE userId = ? AND resolvedAt IS NULL ORDER BY at DESC LIMIT 1)`,
+    ).run(now, userId)
+    return Number(info.changes) > 0
   }
   deleteEmergencyEventsForUser(userId: string): void {
     this.db.prepare('DELETE FROM emergency_events WHERE userId = ?').run(userId)

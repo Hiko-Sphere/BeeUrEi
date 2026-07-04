@@ -229,6 +229,9 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     const now = Date.now()
     const key = `${me.id}:${parsed.data.alertId ?? 'noid'}`
     if (clearDedup.check(key, now) !== undefined) return { ok: true, deduped: true }
+    // 治理可观测：把该用户最近一条未解除的紧急事件标记为已解除，admin 事件列表据此区分"已报平安/误报"
+    // 与"可能仍在进行"。best-effort，不阻断广播。
+    try { store.resolveLatestEmergencyEvent(me.id, now) } catch { /* 解除标记失败不影响报平安广播 */ }
     const links = store.linksByOwner(me.id).filter((l) => (l.status ?? 'accepted') === 'accepted')
     const members = links.map((l) => store.findById(l.memberId)).filter((m): m is NonNullable<typeof m> => !!m)
     // kind='emergency_clear'：客户端据此区别于告警——绝不触发响铃/大模态，只作普通通知；带 alertId 供

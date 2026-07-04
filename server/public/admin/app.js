@@ -132,7 +132,7 @@ const I18N = {
     announce: '全站公告', announceActive: '启用公告', announceMsg: '公告内容', announceLevel: '级别', lvl_info: '信息', lvl_warning: '警告',
     maintenance: '维护模式', maintActive: '启用维护模式', maintDesc: '开启后所有功能写操作返回 503，App 显示维护横幅；登录与后台不受影响。', maintMsg: '维护提示',
     auditSearch: '搜索（管理员/对象/详情）', auditAllActions: '全部动作', auditNoMatch: '无匹配记录（共 {n} 条）',
-    emergTitle: '紧急事件（近 100 条）', emergEmpty: '暂无紧急事件', emergKind_fall: '疑似摔倒', emergKind_crash: '疑似撞击', emergKind_manual: '手动 SOS', emergNotified: '推送', emergContacts: '亲友', emergLive: '实时位置', emergLastKnown: '最后已知', emergNoLoc: '无位置',
+    emergTitle: '紧急事件（近 100 条）', emergEmpty: '暂无紧急事件', emergKind_fall: '疑似摔倒', emergKind_crash: '疑似撞击', emergKind_manual: '手动 SOS', emergNotified: '推送', emergContacts: '亲友', emergLive: '实时位置', emergLastKnown: '最后已知', emergNoLoc: '无位置', emergResolved: '已报平安',
     backupTitle: '数据库备份（灾难恢复）', backupDesc: '下载整个数据库的一致性快照（.db 文件，含全部账号/亲友/通知等数据）。请离线加密保存到安全处；此操作会记入审计。媒体文件另存于磁盘目录，不含在此备份内。', backupBtn: '下载数据库备份', backingUp: '正在生成备份…', backupDone: '备份已下载', backupFail: '备份失败',
     contentFilterTitle: '内容过滤（防违规违法）', cfEnabled: '启用内容过滤', cfDesc: '命中违禁词的消息/群名/昵称会被拒收。每行一个词，大小写不敏感，子串匹配。默认空=不生效。',
     cfTerms: '违禁词（每行一个）', saveBtn: '保存', err_content_blocked: '内容含违禁词，已拦截', err_maintenance: '系统维护中',
@@ -252,7 +252,7 @@ const I18N = {
     announce: 'Announcement', announceActive: 'Enable announcement', announceMsg: 'Message', announceLevel: 'Level', lvl_info: 'Info', lvl_warning: 'Warning',
     maintenance: 'Maintenance mode', maintActive: 'Enable maintenance mode', maintDesc: 'When on, all feature writes return 503 and the app shows a maintenance banner; sign-in and admin are unaffected.', maintMsg: 'Maintenance message',
     auditSearch: 'Search (admin / target / detail)', auditAllActions: 'All actions', auditNoMatch: 'No matches (of {n} entries)',
-    emergTitle: 'Emergency events (last 100)', emergEmpty: 'No emergency events', emergKind_fall: 'Suspected fall', emergKind_crash: 'Suspected crash', emergKind_manual: 'Manual SOS', emergNotified: 'pushed', emergContacts: 'contacts', emergLive: 'live location', emergLastKnown: 'last known', emergNoLoc: 'no location',
+    emergTitle: 'Emergency events (last 100)', emergEmpty: 'No emergency events', emergKind_fall: 'Suspected fall', emergKind_crash: 'Suspected crash', emergKind_manual: 'Manual SOS', emergNotified: 'pushed', emergContacts: 'contacts', emergLive: 'live location', emergLastKnown: 'last known', emergNoLoc: 'no location', emergResolved: 'resolved',
     backupTitle: 'Database backup (disaster recovery)', backupDesc: 'Download a consistent snapshot of the entire database (.db file, incl. all accounts / family links / notifications). Store it encrypted and offline; this action is audited. Media files live in a separate disk directory and are not part of this backup.', backupBtn: 'Download database backup', backingUp: 'Generating backup…', backupDone: 'Backup downloaded', backupFail: 'Backup failed',
     contentFilterTitle: 'Content filter (block violations)', cfEnabled: 'Enable content filter', cfDesc: 'Messages/group names/display names containing a banned term are rejected. One term per line, case-insensitive, substring match. Empty = no effect.',
     cfTerms: 'Banned terms (one per line)', saveBtn: 'Save', err_content_blocked: 'Content contains a banned term', err_maintenance: 'Under maintenance',
@@ -602,8 +602,9 @@ function emergencySection() {
             : `📍 ${t('emergLive')}`;
           loc = `<a href="https://maps.apple.com/?ll=${e.lat},${e.lon}&q=${e.lat},${e.lon}" target="_blank" rel="noreferrer">${esc(label)}</a>`;
         }
+        const resolved = e.resolvedAt != null ? `<span class="pill ok">✓ ${esc(t('emergResolved'))}</span>` : '';
         return `<div class="bar-row"><span class="pill ${e.kind === 'manual' ? '' : 'danger'}">${esc(kind)}</span>
-          <span>${who}</span><span>${loc}</span>
+          <span>${who}</span><span>${loc}</span>${resolved}
           <span class="n">${esc(t('emergNotified'))} ${e.notified}/${e.contacts} ${esc(t('emergContacts'))}</span>
           <span class="n">${esc(fmtDate(e.at))}</span></div>`;
       }).join('');

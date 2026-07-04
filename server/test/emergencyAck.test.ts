@@ -89,6 +89,17 @@ describe('紧急报平安 /api/emergency/all-clear', () => {
     expect(clear!.data).toMatchObject({ kind: 'emergency_clear', alertId: 'a1' }) // 带 alertId 供客户端消对应告警模态
   })
 
+  it('报平安把该用户最近的紧急事件标记为已解除（admin 事件列表可区分误报/已解除）', async () => {
+    const { a, store, owner } = await seed()
+    const ownerId = store.findByUsername('clearsender')!.id
+    // 先发一次告警（落一条事件），再报平安
+    await a.inject({ method: 'POST', url: '/api/emergency/alert', headers: { authorization: `Bearer ${owner.token}` }, payload: { kind: 'manual' } })
+    expect(store.emergencyEventsForUser(ownerId)[0].resolvedAt).toBeUndefined()
+    await a.inject({ method: 'POST', url: '/api/emergency/all-clear', headers: { authorization: `Bearer ${owner.token}` }, payload: { alertId: 'aX' } })
+    expect(store.emergencyEventsForUser(ownerId)[0].resolvedAt).toBeTruthy() // 事件已被标记解除
+    await a.close()
+  })
+
   it('去重：同一 alertId 多次报平安只广播一次；未登录 401', async () => {
     const { a, store, owner, helperId } = await seed()
     const clr = () => a.inject({ method: 'POST', url: '/api/emergency/all-clear',

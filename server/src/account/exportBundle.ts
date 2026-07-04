@@ -54,7 +54,7 @@ export function buildSelfExportExtras(store: Store, id: string) {
     savedRoutes: store.savedRoutesForUser(id).map((r) => ({ name: r.name, waypoints: r.waypoints, createdAt: r.createdAt, updatedAt: r.updatedAt })),
     // 本人的紧急事故记录（摔倒/车祸/SOS）：坐标是本人的、通知计数是本人事件的——完整可携。
     emergencyEvents: store.emergencyEventsForUser(id).map((e) => ({ kind: e.kind, lat: e.lat ?? null, lon: e.lon ?? null,
-      locSource: e.locSource ?? null, notified: e.notified, contacts: e.contacts, at: e.at })),
+      locSource: e.locSource ?? null, notified: e.notified, contacts: e.contacts, at: e.at, resolvedAt: e.resolvedAt ?? null })),
     messagesSent: store.messagesSentBy(id, 5000).map((m) => ({
       to: m.groupId ? `group:${m.groupId}` : nameOf(m.toId),
       kind: m.kind,

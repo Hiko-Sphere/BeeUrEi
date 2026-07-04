@@ -87,4 +87,24 @@ describe('紧急事件日志', () => {
     expect(e2.lat).toBeUndefined()
     expect(e2.locSource).toBe(undefined)
   })
+
+  it('resolveLatestEmergencyEvent（双存储同口径）：解除最近一条未解除的，逐条推进，都解除后 false', () => {
+    for (const store of [new MemoryStore(), new SqliteStore(':memory:')]) {
+      store.createEmergencyEvent({ id: 'e1', userId: 'u', kind: 'fall', notified: 1, contacts: 1, at: 1000 })
+      store.createEmergencyEvent({ id: 'e2', userId: 'u', kind: 'manual', notified: 0, contacts: 1, at: 2000 })
+      store.createEmergencyEvent({ id: 'x', userId: 'other', kind: 'fall', notified: 0, contacts: 0, at: 3000 })
+      // 报平安解除 u 的最近一条(e2, at=2000)
+      expect(store.resolveLatestEmergencyEvent('u', 5000)).toBe(true)
+      const byId = (id: string) => store.emergencyEventsForUser('u').find((e) => e.id === id)!
+      expect(byId('e2').resolvedAt).toBe(5000)
+      expect(byId('e1').resolvedAt).toBeUndefined()  // 更早的那条不动
+      // 再解除 → 现在最近未解除的是 e1
+      expect(store.resolveLatestEmergencyEvent('u', 6000)).toBe(true)
+      expect(byId('e1').resolvedAt).toBe(6000)
+      // 都已解除 → false（不误标）
+      expect(store.resolveLatestEmergencyEvent('u', 7000)).toBe(false)
+      // 别人的事件不受影响
+      expect(store.emergencyEventsForUser('other')[0].resolvedAt).toBeUndefined()
+    }
+  })
 })

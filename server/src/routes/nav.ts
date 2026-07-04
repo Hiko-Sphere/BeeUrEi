@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { type Store } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
-import { amapConfigured, amapGeocode, amapWalking, amapAround, amapTransit, amapRegeoAdcode, AmapError } from '../nav/amapClient'
+import { amapConfigured, amapGeocode, amapWalking, amapAround, amapTransit, amapRegeoAdcode, amapReverseGeocode, AmapError } from '../nav/amapClient'
 
 // 坐标校验：从原始字符串校验而非 z.coerce.number()——后者会把空串/空白静默 coerce 成 0，
 // 从 (0,0)Null Island 起算路线（看似正常却完全错误，对盲人导航安全攸关，见审查 round5 #2）；
@@ -96,6 +96,31 @@ export function registerNavRoutes(app: FastifyInstance, store: Store): void {
         return reply.code(502).send({ error: 'amap_error', infocode: e.infocode, info: e.info })
       }
       console.error('[nav/around] unexpected error', e)
+      return reply.code(502).send({ error: 'nav_unavailable' })
+    }
+  })
+
+  // 逆地理编码「我在哪」（国内数据源）：境内 Apple CLGeocoder 中文地址粒度粗、门牌常缺，改用高德 regeo
+  // 拿准确街道门牌 + 最近地标绝对方位——盲人可据此向出租车/路人/家人精确转述所在（BlindSquare/Soundscape 的
+  // "My Location" 刚需）。lat/lon 由 App 传 **GCJ-02**（与 around/walking 同约定：App 已转好）。
+  const whereamiSchema = z.object({ lat: coord(-90, 90), lon: coord(-180, 180) })
+  app.get('/api/nav/whereami', { preHandler: [requireAuth(), requireFeature(store, 'navigation')],
+                                 config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
+    if (!amapConfigured()) return reply.code(503).send({ error: 'amap_not_configured' })
+    const parsed = whereamiSchema.safeParse(req.query)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const { lat, lon } = parsed.data
+    try {
+      const result = await amapReverseGeocode(`${lon},${lat}`) // 高德序：经度,纬度（GCJ-02）
+      if (!result) return reply.code(404).send({ error: 'address_not_found' }) // 高德无结果（海上/极偏）→ App 回退 Apple
+      return result
+    } catch (e) {
+      if (e instanceof AmapError) {
+        req.log?.error?.({ infocode: e.infocode, info: e.info }, '[nav/whereami] AMap request failed')
+        console.error('[nav/whereami] AMap error infocode=%s info=%s', e.infocode, e.info)
+        return reply.code(502).send({ error: 'amap_error', infocode: e.infocode, info: e.info })
+      }
+      console.error('[nav/whereami] unexpected error', e)
       return reply.code(502).send({ error: 'nav_unavailable' })
     }
   })

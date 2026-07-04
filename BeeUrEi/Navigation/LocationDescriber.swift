@@ -120,14 +120,12 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
         hasFix = true // 定位点已到：此后若超时是 POI 检索慢（查询超时），非定位问题（复审并发#2）
         switch mode {
         case .whereAmI:
-            geocoder.reverseGeocodeLocation(loc, preferredLocale: Locale(identifier: lang.localeIdentifier)) { [weak self] placemarks, _ in
-                guard let self else { return }
-                let address = Self.addressString(placemarks?.first, self.lang)
-                self.findNearby(loc) { nearby in
-                    let near = self.lang == .zh ? "。附近有：" : ". Nearby: "
-                    let text = nearby.isEmpty ? address : address + near + nearby
-                    self.finish(text)
-                }
+            // 境内改用高德 regeo（准确街道门牌 + 最近地标绝对方位——盲人可精确转述给出租车/家人）；
+            // 境外/高德失败回退 Apple CLGeocoder。与「周围有什么/最近的X」同一数据源分流原则。
+            if ChinaCoord.isInChina(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude) {
+                amapWhereAmI(loc)
+            } else {
+                appleWhereAmI(loc)
             }
         case .around, .ahead:
             poiCallouts(loc)
@@ -135,6 +133,36 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
             nearestCallouts(loc, query: nearestQuery)
         case .facing:
             break // 朝向只依赖罗盘（didUpdateHeading 里播报并复位），不需要定位点
+        }
+    }
+
+    /// 「我在哪」国内高德逆地理：准确街道门牌 + 最近地标绝对方位，经 core WhereAmIComposer 组织播报。
+    private func amapWhereAmI(_ loc: CLLocation) {
+        let g = ChinaCoord.wgs84ToGcj02(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude)
+        let lang = self.lang
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let result = try await AMapReverseGeocodeClient().whereAmI(latGcj: g.lat, lonGcj: g.lon)
+                let text = WhereAmIComposer.compose(result, language: lang)
+                await MainActor.run { self.finish(text) }
+            } catch {
+                // 高德失败（未配 key/查不到/网络）回退 Apple——但若看门狗已超时复位则不再做无用逆编码（复审并发#2）。
+                await MainActor.run { if self.isDescribing { self.appleWhereAmI(loc) } }
+            }
+        }
+    }
+
+    /// 「我在哪」海外/兜底路径：Apple CLGeocoder 逆地理 + MapKit 附近 POI。
+    private func appleWhereAmI(_ loc: CLLocation) {
+        geocoder.reverseGeocodeLocation(loc, preferredLocale: Locale(identifier: lang.localeIdentifier)) { [weak self] placemarks, _ in
+            guard let self else { return }
+            let address = Self.addressString(placemarks?.first, self.lang)
+            self.findNearby(loc) { nearby in
+                let near = self.lang == .zh ? "。附近有：" : ". Nearby: "
+                let text = nearby.isEmpty ? address : address + near + nearby
+                self.finish(text)
+            }
         }
     }
 

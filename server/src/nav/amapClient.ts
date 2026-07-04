@@ -157,6 +157,63 @@ function numOrZero(s: string | undefined): number {
   return Number.isFinite(n) && n >= 0 ? n : 0
 }
 
+/// 高德 regeo 的"空"字段返回**空数组 []**（而非空串/缺省）——这是 regeo 特有大坑：不归一会把 [] 当地址、
+/// 或对 [] 调 .trim() 崩。一律归一成字符串，非字符串一律空串。
+function amapStr(v: unknown): string {
+  return typeof v === 'string' ? v : ''
+}
+
+/// 逆地理编码结果：可播报的完整地址 + 最近显著地标（"我在哪"国内数据源）。
+export interface AmapReverseGeocode {
+  /// 高德格式化地址（如"北京市朝阳区呼家楼街道…"）；无则空串。
+  address: string
+  /// 街道/乡镇（addressComponent.township），供更口语的"你在X街道附近"。空则空串。
+  township: string
+  /// 最近的显著地标：POI 名 + **绝对方位词**（东/东北…，与用户朝向无关，便于向出租车/路人转述）+ 直线距离米。缺则 undefined。
+  landmark?: { name: string; direction: string; distanceMeters: number }
+}
+
+/// 逆地理编码（location="经度,纬度" GCJ-02）→ 可播报地址 + 最近地标。
+/// 境内 Apple CLGeocoder 的中文地址粒度粗、门牌常缺；高德 regeo 更准更细且带周边 POI 绝对方位，
+/// 与「周围有什么」改用高德同因（境内 Apple 数据稀疏）。key/配额等错误抛 AmapError；无 key/无结果→undefined。
+export async function amapReverseGeocode(location: string): Promise<AmapReverseGeocode | undefined> {
+  const key = apiKey()
+  if (!key) return undefined
+  // extensions=all 才返回 pois/roads（base 只有行政区划）；radius=200 限定"最近地标"的检索半径。
+  const url = `${AMAP_BASE}/geocode/regeo?location=${location}&extensions=all&radius=200&key=${key}`
+  const res = await amapFetch(url)
+  const data = (await res.json()) as {
+    status?: string; info?: string; infocode?: string
+    regeocode?: {
+      formatted_address?: unknown
+      addressComponent?: { township?: unknown }
+      pois?: Array<{ name?: unknown; direction?: unknown; distance?: unknown }>
+    }
+  }
+  assertAmapOk(res, data)
+  const rc = data.regeocode
+  if (!rc) return undefined
+  const address = amapStr(rc.formatted_address).trim()
+  const township = amapStr(rc.addressComponent?.township).trim()
+  // 最近地标：POI 里距离最小的**有效**项（高德未必按距离排序，必须自己挑）。
+  let landmark: AmapReverseGeocode['landmark'] | undefined
+  let best = Infinity
+  for (const p of rc.pois ?? []) {
+    const name = amapStr(p.name).trim()
+    if (!name) continue
+    // 空距离必须先剔：高德空字段是 []→amapStr→''，而 **Number('')===0**，会把无距离的 POI 伪装成"0 米"、
+    // 抢占最近地标名额，向盲人报错的地标且称"就在脚下"（对转述定位的功能是危险误导，见对抗复审 BUG 1）。
+    // 真正 0 米的 POI 会以字符串 '0' 到达、照常保留。
+    const ds = amapStr(p.distance).trim()
+    if (!ds) continue
+    const d = Number(ds)
+    if (!Number.isFinite(d) || d < 0) continue
+    if (d < best) { best = d; landmark = { name, direction: amapStr(p.direction).trim(), distanceMeters: d } }
+  }
+  if (!address && !township && !landmark) return undefined // 什么都没有 → 视作无结果（上层回退 Apple）
+  return { address, township, landmark }
+}
+
 /// 逆地理编码取行政区 adcode（公交路径规划的 city 参数必填，用起点 adcode）。key/配额等错误抛 AmapError；无 key/无匹配→undefined。
 /// 注意：高德 regeo 的 city 字段在直辖市会返回空数组，故用恒为字符串的 adcode，不用 city。
 export async function amapRegeoAdcode(location: string): Promise<string | undefined> {

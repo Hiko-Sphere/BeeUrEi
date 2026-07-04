@@ -194,6 +194,10 @@ struct WalkNavigationView: View {
                 case .search(let dest):
                     destination = dest
                     await model.start(destination: dest, region: region)
+                case .coordinate(let lat, let lon, let name):
+                    // 聊天分享位置：导航到**精确坐标**，不按名字重搜（复审#8/#9）。name 仅填入搜索框供屏显。
+                    destination = name
+                    await model.start(toLat: lat, lon: lon, name: name, region: region)
                 case .backtrack:
                     model.startBacktrack()
                 }

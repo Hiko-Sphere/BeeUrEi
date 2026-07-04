@@ -15,7 +15,9 @@ final class AppRoute {
     /// 语音指令："找我的钥匙"→ 打开识别屏并按物名找东西（已教物品或可找类别，由 FindTargetResolver 派发）。
     var pendingFind: String?
     /// 语音指令：导航屏待执行动作（预填目的地搜索 / 一键原路返回）。
-    enum NavAction: Equatable { case search(String), backtrack }
+    /// search=按名字搜索目的地（geocode）；coordinate=**已知精确坐标**（WGS-84，聊天分享位置直用，绝不再搜名字，
+    /// 见复审#8/#9：再搜名字可能命中别处、把盲人导去错的地方）；backtrack=原路返回。
+    enum NavAction: Equatable { case search(String), coordinate(lat: Double, lon: Double, name: String), backtrack }
     var pendingNavAction: NavAction?
     /// 语音指令：聊天待发送（"给妈妈发消息说我到了"→ 打开消息并按收件人名预填）。
     var pendingMessage: (to: String, text: String)?

@@ -54,21 +54,23 @@ public enum VoiceCommandParser {
 
         // 发消息（含目标与内容）优先解析：「给妈妈发消息说我到了」/ "send a message to mom saying I arrived"
         if let m = parseSendMessage(text) { return m }
-        // 发位置（含目标）：须在 whereAmI 之前——"告诉妈妈我在哪"含"我在哪"，但意图是发位置给妈妈；
-        // 裸"我在哪"无收件人，parseSendLocation 返回 nil，仍走 whereAmI。
-        if let m = parseSendLocation(text) { return m }
 
         func has(_ keys: [String]) -> Bool { keys.contains { t.contains($0) } }
 
-        // SOS 须在 help 之前：两者都含"求助"类词，但"救命/紧急求助"是生命攸关的告警广播（倒计时→
-        // 通知全部亲友+附位置），不是"打视频电话等人接"。摔倒的盲人喊"救命"必须走告警而非拨号。
+        // SOS 须在**发位置/help 之前**：生命攸关最高优先——"救命，把我的位置发给妈妈"这种慌乱句仍先走告警广播
+        // （复审：parseSendLocation 曾抢在 SOS 前，含"救命"的发位置句被劫走不再触发紧急）。
         if has(["救命", "紧急求助", "一键求救", "紧急呼救", "sos", "emergency"]) { return .sos }
+        // 发位置（含目标）：须在 whereAmI 之前——"告诉妈妈我在哪"含"我在哪"，但意图是发位置给妈妈；
+        // 裸"我在哪"/"告诉我我在哪"（收件人是代词，见 parseSendLocation 排除）返回 nil，仍走 whereAmI。
+        if let m = parseSendLocation(text) { return m }
         // 定向呼叫具体亲友须在 .help 之前：两者都含"打电话/呼叫/call"，但"给妈妈打电话/call my daughter"是拨给
         // **某个人**，不是广播求助。提取到具体名字才走 callContact；泛指（"打电话/呼叫/call for help"无名字或名字是
         // "亲友/家人/help/family"等）返回 nil，落到下面的 .help 泛广播。
         if let name = parseCallContact(text) { return .callContact(name) }
         if has(["求助", "帮帮我", "呼叫", "打电话", "call for help", "get help", "help me", "call family"]) { return .help }
-        if has(["我在哪", "我在哪里", "当前位置", "where am i", "my location"]) { return .whereAmI }
+        // "where i am"/"where i'm"（陈述语序）与"where am i"（疑问语序）都收——"tell me where I am"（问自己在哪，
+        // 收件人是代词、parseSendLocation 已返回 nil）此前因只匹配疑问语序而落到 unknown。
+        if has(["我在哪", "我在哪里", "当前位置", "where am i", "where i am", "where i'm", "my location"]) { return .whereAmI }
         if has(["周围有什么", "附近有什么", "周围", "what's around", "around me", "nearby"]) { return .around }
         if has(["前方有什么", "前面有什么", "前方", "what's ahead", "ahead of me", "in front"]) { return .ahead }
         // 朝向（罗盘方位）：盲人看不到罗盘/太阳，"我正朝哪"是方向感的基础。置于此处、导航解析之前——用具体短语
@@ -260,9 +262,17 @@ public enum VoiceCommandParser {
     /// 「把(我的)位置发给X」/「发(我的)位置给X」/「给X发(我的)位置」/「告诉X我在哪」/
     /// "send/share my location to/with X"：提取发位置的收件人。无收件人（裸"我在哪/发位置"）返回 nil。
     static func parseSendLocation(_ text: String) -> VoiceCommand? {
+        // 代词占位：收件人若是"我/自己/me/myself"等，说明是问自己在哪（"告诉我我在哪"），而非发给某人——
+        // 返回 nil 让上层落到 whereAmI（复审：曾把"告诉我我在哪"误吃成 sendLocation(to:"我")，回归 whereAmI）。
+        let pronouns: Set<String> = ["我", "我现在", "自己", "我自己", "咱", "me", "myself"]
         func clean(_ s: String) -> String? {
-            let x = s.trimmingCharacters(in: CharacterSet(charactersIn: "。，？！,.?!、").union(.whitespacesAndNewlines))
-            return x.isEmpty ? nil : x
+            var x = s.trimmingCharacters(in: CharacterSet(charactersIn: "。，？！,.?!、").union(.whitespacesAndNewlines))
+            // 剥尾部时态/客套（"现在/一下/please/now"），避免"我现在""me now"绕过代词判定。
+            for tr in ["现在", "一下", " now", " please"] where x.lowercased().hasSuffix(tr) && x.count > tr.count {
+                x = String(x.dropLast(tr.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            if x.isEmpty || pronouns.contains(x.lowercased()) { return nil }
+            return x
         }
         let zhPatterns = [
             #"把?我?的?位置发给(.{1,12}?)$"#,           // 把我的位置发给妈妈 / 位置发给妈妈

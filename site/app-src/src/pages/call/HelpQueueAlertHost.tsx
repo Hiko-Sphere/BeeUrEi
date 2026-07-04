@@ -17,6 +17,7 @@ export function HelpQueueAlertHost() {
   const { t } = useI18n()
   const toast = useToast()
   const alertedRef = useRef<Set<string>>(new Set())
+  const genRef = useRef(0) // 代际号：只应用**最新**一次 tick 的结果，丢弃慢响应的陈旧快照（复审#2）
   const activeRef = useRef(active)
   activeRef.current = active
 
@@ -26,8 +27,12 @@ export function HelpQueueAlertHost() {
       let avail = false
       try { avail = localStorage.getItem(LS_AVAIL) === '1' } catch { /* ignore */ }
       if (!avail) return // 未待命：不拉队列也不出声（明确表示不接单的人不被打扰）
+      const gen = ++genRef.current
       try {
         const { requests } = await api.helpQueue()
+        // 陈旧响应丢弃：若期间有更新的 tick 已发起，本次（可能是 30s 前的空快照）绝不能覆盖已提示集合，
+        // 否则会把刚提示过的求助从集合抹掉、下轮对同一求助重复响铃+toast（复审#2）。
+        if (gen !== genRef.current) return
         const { fresh, nextAlerted } = pickNewHelpRequests(requests, alertedRef.current)
         alertedRef.current = nextAlerted
         if (fresh.length > 0) {

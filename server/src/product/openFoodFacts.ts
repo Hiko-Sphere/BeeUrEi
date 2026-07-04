@@ -44,8 +44,16 @@ export function extractAllergens(tags: unknown): string[] {
   return out
 }
 
-/// 查一个条码；找到且有名 → ProductInfo，否则 null（未收录/字段空/非 200/超时/网络异常一律 null，不猜）。
-export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeoutMs = 5000): Promise<ProductInfo | null> {
+/// 查询结果三态：found=命中；notFound=上游明确未收录/有记录但无名（可长缓存）；
+/// failed=超时/网络/非200/解析异常（**瞬时故障，路由层不可长缓存**——否则一次抖动使该条码对全体 404 一天，
+/// iOS 端用户随后自己起名后 name(for:) 本地命中永不再回源、过敏原标注永久缺失，见复审#5/#10）。
+export type LookupOutcome =
+  | { kind: 'found'; info: ProductInfo }
+  | { kind: 'notFound' }
+  | { kind: 'failed' }
+
+/// 查一个条码，区分"真未收录(notFound)"与"瞬时故障(failed)"（用于差异化缓存；两者对客户端都表现为拿不到名字）。
+export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeoutMs = 5000): Promise<LookupOutcome> {
   const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,allergens_tags`
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
@@ -54,15 +62,15 @@ export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeo
       signal: ctrl.signal,
       headers: { 'User-Agent': 'BeeUrEi/1.0 (self-hosted assistive app for blind users)' },
     })
-    if (!res.ok) return null
+    if (!res.ok) return { kind: 'failed' } // 非 200：上游侧问题，视为瞬时故障不长缓存
     const data = (await res.json()) as Record<string, unknown> | null
-    if (!data || data.status !== 1) return null // status 1=收录，0=未收录
+    if (!data || data.status !== 1) return { kind: 'notFound' } // status 1=收录，0=明确未收录
     const name = composeProductName(data.product)
-    if (!name) return null
+    if (!name) return { kind: 'notFound' } // 有记录但无可读名：等同未收录
     const p = data.product as Record<string, unknown> | undefined
-    return { name, allergens: extractAllergens(p?.allergens_tags) }
+    return { kind: 'found', info: { name, allergens: extractAllergens(p?.allergens_tags) } }
   } catch {
-    return null // 超时/网络/解析异常：回退用户起名，绝不编造商品名
+    return { kind: 'failed' } // 超时/网络/解析异常：瞬时故障，不长缓存，绝不编造商品名
   } finally {
     clearTimeout(timer)
   }

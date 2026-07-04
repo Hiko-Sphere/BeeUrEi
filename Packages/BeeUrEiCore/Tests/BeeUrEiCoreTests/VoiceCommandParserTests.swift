@@ -94,6 +94,14 @@ final class VoiceCommandParserTests: XCTestCase {
         // 裸"我在哪"（无收件人）仍是问位置，不被抢。
         XCTAssertEqual(VoiceCommandParser.parse("我在哪"), .whereAmI)
         XCTAssertEqual(VoiceCommandParser.parse("where am i"), .whereAmI)
+        // 复审#6/#11：收件人是代词=问自己在哪，不当发位置 → 仍走 whereAmI。
+        XCTAssertEqual(VoiceCommandParser.parse("告诉我我在哪"), .whereAmI)
+        XCTAssertEqual(VoiceCommandParser.parse("告诉我我在哪里"), .whereAmI)
+        XCTAssertEqual(VoiceCommandParser.parse("请告诉我现在我在哪里"), .whereAmI)
+        XCTAssertEqual(VoiceCommandParser.parse("tell me where I am"), .whereAmI)
+        // 复审#7：慌乱句含"救命"→ 生命攸关，SOS 压过发位置。
+        XCTAssertEqual(VoiceCommandParser.parse("救命，把我的位置发给妈妈"), .sos)
+        XCTAssertEqual(VoiceCommandParser.parse("emergency, send my location to mom"), .sos)
         // 发消息（含"说"）不被抢；"tell X that Y" 仍是发消息。
         XCTAssertEqual(VoiceCommandParser.parse("给妈妈发消息说我在哪"), .sendMessage(to: "妈妈", text: "我在哪"))
         XCTAssertEqual(VoiceCommandParser.parse("tell mom that I'm home"), .sendMessage(to: "mom", text: "I'm home"))

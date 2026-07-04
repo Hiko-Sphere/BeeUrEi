@@ -58,6 +58,7 @@ final class NavigationViewModel {
     @ObservationIgnored private var maneuvers: [(coordinate: CLLocationCoordinate2D, instruction: String)] = []
     @ObservationIgnored private var stepIndex = 0
     @ObservationIgnored private var destination: CLLocationCoordinate2D?
+    @ObservationIgnored private var fixedDestinationWGS: CLLocationCoordinate2D? // 聊天分享位置的精确坐标(WGS-84)：给了就路由到它、绝不按名字搜(复审#8/#9)
     @ObservationIgnored private var routeReady = false
     // 自定义路线（路线库）执行中：偏航走 RouteRejoin 汇入而非重规划——人工踩好的路线是安全路径（评审不变量）。
     @ObservationIgnored private var customRouteActive = false
@@ -94,7 +95,13 @@ final class NavigationViewModel {
     // 街景预览（Soundscape Street Preview 式）：出门前在家试听整条路线。
     private(set) var previewing = false
 
-    func start(destination query: String, region: Region) async {
+    /// 导航到聊天分享位置的**精确坐标**（WGS-84）：绝不按名字重搜（复审#8/#9 名字可能命中别处、导去错地方）。
+    /// name 仅供屏显/播报。复用 start()：China 把坐标转 GCJ 传 amap 跳过 geocode；overseas 直接用坐标路由。
+    func start(toLat lat: Double, lon: Double, name: String, region: Region) async {
+        await start(destination: name, region: region, fixedCoordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon))
+    }
+
+    func start(destination query: String, region: Region, fixedCoordinate: CLLocationCoordinate2D? = nil) async {
         lang = FeatureSettings().language   // 进导航解析一次（设置页改语言后重开生效）
         guard FeatureSettings().navigationEnabled else {
             failStatus(NavStrings.enableFirst(lang)) // 盲人点完按钮须听到原因（见 P1 审计）
@@ -119,6 +126,7 @@ final class NavigationViewModel {
         routeCoords = []
         maneuvers = []
         destination = nil        // 关键：清空旧目的地，使新查询会重新 geocode（见审查 #5）
+        fixedDestinationWGS = fixedCoordinate // 精确坐标导航（聊天分享位置）；普通按名字导航为 nil
         lastSpoken = ""
         headingReliable = false
         headingFilter = HeadingFilter()
@@ -342,9 +350,12 @@ final class NavigationViewModel {
             do {
                 // 高德以 GCJ-02 计算路线：起点须把 GPS(WGS-84) 先纠偏，否则起点偏移致整条路线错位（C1）。
                 let gOrigin = ChinaCoord.wgs84ToGcj02(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude)
+                // 精确坐标导航（聊天分享位置）：WGS-84 → GCJ-02（高德系）传给后端跳过 geocode，绝不按名字重搜。
+                let gDest = fixedDestinationWGS.map { ChinaCoord.wgs84ToGcj02(lat: $0.latitude, lon: $0.longitude) }
                 let route = try await amap.walking(originLat: gOrigin.lat,
                                                    originLon: gOrigin.lon,
-                                                   destination: destinationQuery)
+                                                   destination: destinationQuery,
+                                                   destGcj: gDest.map { (lat: $0.lat, lon: $0.lon) })
                 guard running, gen == navGeneration else { return } // 已被新导航/停止作废，丢弃旧结果
                 let result = route.steps
                 // 步距经 safeRoundedInt：distanceMeters 是后端 JSON 原样解码的 Double?，巨值有限数（如上游 bug
@@ -414,7 +425,9 @@ final class NavigationViewModel {
         case .overseas:
             // 重规划时复用已知目的地，不重复 geocode（少一个失败点、避免返回不同坐标，见审查 #2）。
             let dest: CLLocationCoordinate2D
-            if let existing = destination {
+            if let fixed = fixedDestinationWGS {
+                dest = fixed; destination = fixed // 精确坐标导航：直用分享坐标(WGS-84)，MapKit 路由，绝不 geocode 名字(复审#8/#9)
+            } else if let existing = destination {
                 dest = existing
             } else if let geocoded = await service.geocode(destinationQuery) {
                 guard running, gen == navGeneration else { return }

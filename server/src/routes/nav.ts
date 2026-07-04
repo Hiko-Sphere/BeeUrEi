@@ -15,8 +15,13 @@ const coord = (min: number, max: number) =>
 const querySchema = z.object({
   originLat: coord(-90, 90),
   originLon: coord(-180, 180),
-  destination: z.string().trim().min(1),
-})
+  destination: z.string().trim().min(1).optional(),
+  // 已知精确目的地坐标（GCJ-02，App 分享位置精确导航）：给了就跳过 geocode 直接路由，绝不再按名字搜（可能命中别处、
+  // 把盲人导去错的地方，见复审#8/#9）。二者传其一，destLat/destLon 优先。
+  destLat: coord(-90, 90).optional(),
+  destLon: coord(-180, 180).optional(),
+}).refine((d) => (d.destLat != null && d.destLon != null) || (d.destination != null),
+  { message: 'destination_or_coord_required' })
 
 /// 国内步行导航：用高德 Web 服务（key 仅后端持有），App 通过本接口取路线。
 export function registerNavRoutes(app: FastifyInstance, store: Store): void {
@@ -28,10 +33,18 @@ export function registerNavRoutes(app: FastifyInstance, store: Store): void {
     const parsed = querySchema.safeParse(req.query)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
 
-    const { originLat, originLon, destination } = parsed.data
+    const { originLat, originLon, destination, destLat, destLon } = parsed.data
     try {
-      const dest = await amapGeocode(destination)
-      if (!dest) return reply.code(404).send({ error: 'destination_not_found' }) // 地址确实查不到
+      // 已知精确坐标 → 直接构造 GCJ-02 "经度,纬度" 目的地串（amapWalking 接受坐标串），跳过 geocode——
+      // 聊天分享位置精确导航，绝不再按名字搜命中别处。否则回退按名字 geocode。
+      let dest: string
+      if (destLat != null && destLon != null) {
+        dest = `${destLon},${destLat}`
+      } else {
+        const geocoded = await amapGeocode(destination!) // refine 已保证二者其一，此处 destination 必有
+        if (!geocoded) return reply.code(404).send({ error: 'destination_not_found' }) // 地址确实查不到
+        dest = geocoded
+      }
 
       const origin = `${originLon},${originLat}` // 高德为 经度,纬度
       const steps = await amapWalking(origin, dest)

@@ -155,9 +155,10 @@ struct LocationBubble: View {
             // 收到亲友的位置（"我在这儿等你"）→ 直接用**蜂之眼盲人优化导航**过去（信标/钟点方位/避障联动），
             // 而非只能跳 Apple 地图的通用引导。经既有 pendingNavAction=.search(地址) 种子——与语音"带我去X"
             // 同一条已验证路径；地址为空（发送端反查失败，罕见）时不提供（无可搜之名），地图卡仍走 Apple 地图。
-            if !mine, let name = payload.name, !name.isEmpty {
+            if !mine {
                 Button {
-                    AppRoute.shared.pendingNavAction = .search(name)
+                    // 导航到**分享的精确坐标**(WGS-84)，绝不按地名重搜(复审#8/#9：地名可能命中别处、把盲人导去错地方)。
+                    AppRoute.shared.pendingNavAction = .coordinate(lat: payload.lat, lon: payload.lng, name: payload.name ?? place)
                     showNav = true
                 } label: {
                     Label(NavStrings.navigateHereFromChat(lang), systemImage: "figure.walk.circle.fill")

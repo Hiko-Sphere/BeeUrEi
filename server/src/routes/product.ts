@@ -22,9 +22,16 @@ export function registerProductRoutes(app: FastifyInstance): void {
     if (hit && now - hit.at < TTL) {
       return hit.name ? { name: hit.name, allergens: hit.allergens } : reply.code(404).send({ error: 'not_found' })
     }
-    const info = await lookupProduct(barcode, fetch as never)
+    const outcome = await lookupProduct(barcode, fetch as never)
+    // **只缓存确定结果**（found/notFound）；瞬时故障(failed)绝不缓存——否则一次上游抖动使该条码对全体 404 一天，
+    // 且 iOS 端用户随后自己起名后永不再回源、过敏原标注永久缺失（复审#5/#10）。failed 返回 503 让客户端下次重试。
+    if (outcome.kind === 'failed') return reply.code(503).send({ error: 'lookup_unavailable' })
     if (cache.size >= MAX) { const oldest = cache.keys().next().value; if (oldest !== undefined) cache.delete(oldest) }
-    cache.set(barcode, { name: info?.name ?? null, allergens: info?.allergens ?? [], at: now })
-    return info ? { name: info.name, allergens: info.allergens } : reply.code(404).send({ error: 'not_found' })
+    if (outcome.kind === 'found') {
+      cache.set(barcode, { name: outcome.info.name, allergens: outcome.info.allergens, at: now })
+      return { name: outcome.info.name, allergens: outcome.info.allergens }
+    }
+    cache.set(barcode, { name: null, allergens: [], at: now }) // notFound：可长缓存（真未收录短期不会变）
+    return reply.code(404).send({ error: 'not_found' })
   })
 }

@@ -15,6 +15,7 @@ struct AssistHomeView: View {
     @State private var queue: [HelpRequestSummary] = []
     @State private var queueError = false
     @State private var alertedQueueIds: Set<String> = [] // 已声音提示过的求助 id（HelpQueueArrivals.diff 维护）
+    @State private var queueGeneration = 0               // refreshQueue 代际号：丢弃多入口并发的陈旧响应（复审#4）
     @State private var pendingLinks: [IncomingLinkInfo] = []   // 待我确认的请求
     @State private var myLinks: [FamilyLinkInfo] = []           // 我的关系（已建立 + 我发出的待确认）
     @State private var linkBusy: Set<String> = []
@@ -48,6 +49,7 @@ struct AssistHomeView: View {
     var body: some View {
         TabView {
             queueTab.tabItem { Label(HelperStrings.tabQueue(lang), systemImage: "hand.raised.fill") }
+                .badge(queue.count) // 视觉兜底（复审#12）：明眼且未开 VoiceOver 的志愿者停在别的标签页时，队列数徽标提示有人在等
             familyTab.tabItem { Label(HelperStrings.tabFamily(lang), systemImage: "person.2.fill") }
             ConversationsView(session: session)
                 .tabItem { Label(ChatStrings.navTitle(lang), systemImage: "bubble.left.and.bubble.right.fill") }
@@ -453,19 +455,32 @@ struct AssistHomeView: View {
 
     private func refreshQueue() async {
         guard let token = session.token else { return }
+        queueGeneration += 1
+        let gen = queueGeneration
         do {
             let q = try await APIClient().helpQueue(token: token)
-            // 新求助进队 → 短提示音 + VoiceOver 公告（web 端 R74 同款感知层）：志愿者停在别的标签页/
-            // 注意力不在屏幕时也能察觉，否则盲人在队列里干等。离队自动剪、同 id 再回队会再次提示（core 已测）。
-            let (fresh, next) = HelpQueueArrivals.diff(current: q.map(\.callId), alerted: alertedQueueIds)
-            alertedQueueIds = next
-            if !fresh.isEmpty, answering == nil {
-                AudioServicesPlaySystemSound(1007) // 系统"收到消息"三连音：引起注意但区别于来电铃/紧急告警
-                A11y.announce(AssistStrings.newHelpInQueue(fresh.count, lang)) // 协助端惯例通道（VO 关则系统静默丢弃）
+            // 陈旧响应丢弃：多入口（5s 轮询 / 下拉刷新 / claim 失败 / cancelHelp）可并发，慢响应恢复后
+            // 绝不能覆盖新会话的 queue 与 alertedQueueIds（复审#4：否则队列回退闪烁 + 对同一求助重复提示）。
+            guard gen == queueGeneration else { return }
+            // **通话中只更新列表、不动 alertedQueueIds、不出声**（复审#3）：否则在途请求恢复时新求助被标记已提示，
+            // 通话结束后该求助永不再声音提示——公开求助又无推送兜底，正是本功能要解决的场景失效。
+            if answering == nil {
+                let (fresh, next) = HelpQueueArrivals.diff(current: q.map(\.callId), alerted: alertedQueueIds)
+                alertedQueueIds = next
+                if !fresh.isEmpty { notifyNewHelpInQueue(count: fresh.count) }
             }
             queue = q; queueError = false
         }
-        catch { queueError = true }
+        catch { guard gen == queueGeneration else { return }; queueError = true }
+    }
+
+    /// 新求助进队的多感知层提示（复审#12：单一系统音会被静音开关吞、A11y.announce 在 VO 关时静默）：
+    /// ①系统提示音（有声时）②震动（静音开关下仍能察觉）③VoiceOver 公告（盲人志愿者）。
+    /// 视觉兜底=队列标签徽标（.badge(queue.count)，明眼且未开 VO 者停在别的标签页也看得到）。
+    private func notifyNewHelpInQueue(count: Int) {
+        AudioServicesPlaySystemSound(1007)                        // 系统"收到消息"三连音（区别于来电铃/紧急）
+        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)      // 触觉：静音开关吞掉系统音时仍震动提醒
+        A11y.announce(AssistStrings.newHelpInQueue(count, lang))  // VoiceOver 用户
     }
 
     /// 打开 App 即在线：周期心跳(20s，立即先发一次) + 轮询亲人来电(3s)。可重复调用（先撤旧任务）。

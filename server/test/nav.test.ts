@@ -97,4 +97,41 @@ describe('AMap walking nav proxy', () => {
     expect(res.json()).toMatchObject({ error: 'destination_not_found' })
     await app.close()
   })
+
+  it('给了 destLat/destLon → 跳过 geocode，直接按精确坐标路由（聊天分享位置精确导航，绝不按名字搜命中别处，复审#8/#9）', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes('geocode')) throw new Error('geocode 不应被调用：给了精确坐标就直接路由')
+      return { ok: true, status: 200,
+        json: async () => ({ status: '1', infocode: '10000', route: { paths: [{ steps: [{ instruction: '到达目的地', distance: '0' }] }] } }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const app = buildApp(new MemoryStore())
+    const t = await token(app)
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/nav/walking?originLat=39.9&originLon=116.4&destLat=39.908&destLon=116.397',
+      headers: { authorization: `Bearer ${t}` },
+    })
+    expect(res.statusCode).toBe(200)
+    const body = res.json()
+    expect(body.destination).toBe('116.397,39.908') // 高德序：经度,纬度
+    expect(body.destinationLat).toBe(39.908)
+    expect(body.destinationLon).toBe(116.397)
+    expect(fetchMock.mock.calls.every(([u]) => !String(u).includes('geocode'))).toBe(true) // 全程零 geocode 调用
+    await app.close()
+  })
+
+  it('既无 destination 也无 destLat/destLon → 400（refine 兜底，二者必传其一）', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    const app = buildApp(new MemoryStore())
+    const t = await token(app)
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/nav/walking?originLat=39.9&originLon=116.4',
+      headers: { authorization: `Bearer ${t}` },
+    })
+    expect(res.statusCode).toBe(400)
+    await app.close()
+  })
 })

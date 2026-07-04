@@ -114,6 +114,7 @@ final class FramingAssistViewModel {
         }
     }
     @ObservationIgnored private var paused = false // 关闭/被来电盖上后：停止播报并丢弃在途帧/异步识别结果
+    @ObservationIgnored private var scanGeneration = 0 // 每识别一个新条码 +1：在线查商品的慢响应回来后据此丢弃（复审#1，防错报别的商品过敏原）
     // 连续光探测音调（Seeing AI Light/Envision 式）：开启后扫动手机、音高随亮度实时升降定位光源。
     // 复用已真机验证的 ProximitySonifier（避障声呐）——只换 cue 来源（亮度而非距离），音频路径不变。
     @ObservationIgnored private let lightSonifier = ProximitySonifier()
@@ -804,6 +805,7 @@ final class FramingAssistViewModel {
                     return
                 }
                 self.copyableResult = first
+                self.scanGeneration += 1 // 新条码入账：任何在途在线查询（上一个未知商品）从此作废，避免慢响应错报到本次结果上（复审#1）
                 self.historyStore.add(kind: "barcode", content: first)
                 // 先说"这是什么类型"再读内容（核心 BarcodePayload，已测）；商品条码走本地商品库。
                 switch BarcodePayload.classify(first) {
@@ -1169,6 +1171,7 @@ final class FramingAssistViewModel {
     /// 查不到/离线/未登录/任何错误 → 回退到"用户起名"弹窗（与改动前完全一致，严格附加、绝不回退失败）。
     private func lookUpProductOnline(barcode: String) {
         speak(FramingStrings.productLookingUp(lang), hint: true) // 即时可丢弃提示，避免网络期间盲人以为卡住
+        let gen = scanGeneration // 本次查询绑定当前扫码代际
         Task { [weak self] in
             guard let self else { return }
             var found: APIClient.ProductLookupInfo?
@@ -1176,6 +1179,8 @@ final class FramingAssistViewModel {
                 found = await APIClient().lookupProduct(token: token, barcode: barcode)
             }
             guard !self.paused else { return } // 已关闭/被来电盖上：不再改 UI/播报
+            // 期间又扫了新条码（gen 已变）→ 丢弃这次的慢响应：否则会把 A 商品的名字/过敏原报到已切换的 B 结果上（复审#1，安全）
+            guard gen == self.scanGeneration else { return }
             if let info = found {
                 let allergens = info.allergens ?? []
                 self.productStore.save(barcode: barcode, name: info.name, allergens: allergens) // 过敏原随名字存，下次离线也能报

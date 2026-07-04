@@ -489,6 +489,7 @@ export interface Store {
   createCallRecord(rec: CallRecord): void
   updateCallStatus(callId: string, calleeId: string, status: CallRecordStatus): void
   callRecordsForUser(userId: string, limit?: number): CallRecord[] // 我作为主叫或被叫，按时间倒序
+  deleteCallRecordsForUser(userId: string): void // 删号级联：清该用户参与的全部通话记录（PII，非证据）
   allCallRecords(limit?: number): CallRecord[] // 管理后台：全站通话，按时间倒序
 
   createReport(report: Report): void
@@ -888,6 +889,13 @@ export class MemoryStore implements Store {
       .filter((r) => r.callerId === userId || r.calleeId === userId)
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, limit)
+  }
+  deleteCallRecordsForUser(userId: string): void {
+    let changed = false
+    for (const [k, r] of this.callRecords) {
+      if (r.callerId === userId || r.calleeId === userId) { this.callRecords.delete(k); changed = true }
+    }
+    if (changed) this.afterMutate()
   }
   allCallRecords(limit = 200): CallRecord[] {
     return [...this.callRecords.values()]

@@ -91,4 +91,22 @@ describe('cascadeDeleteUser — 抹除完整性', () => {
     expect(store.groupReadAt('g1', 'mem')).toBe(0)           // mem 的已读游标已清（旧实现残留孤儿）
     expect(store.groupReadAt('g1', 'owner')).toBe(100)       // 群主游标不受影响
   })
+
+  it('清除被删用户参与的通话记录（PII，非证据）；他人无关记录保留', () => {
+    const store = new MemoryStore()
+    store.createUser(user('u1')); store.createUser(user('u2')); store.createUser(user('u3'))
+    // u1 主叫 u2、u3 主叫 u1（任一方向含 u1，须随删号清）；u2 主叫 u3（与 u1 无关，须保留）。
+    store.createCallRecord({ id: 'c1', callId: 'call1', callerId: 'u1', calleeId: 'u2', status: 'answered', createdAt: 1 })
+    store.createCallRecord({ id: 'c2', callId: 'call2', callerId: 'u3', calleeId: 'u1', status: 'missed', createdAt: 2 })
+    store.createCallRecord({ id: 'c3', callId: 'call3', callerId: 'u2', calleeId: 'u3', status: 'declined', createdAt: 3 })
+    expect(store.callRecordsForUser('u1')).toHaveLength(2)
+
+    cascadeDeleteUser(store, 'u1')
+
+    // 涉及 u1 的记录(c1/c2)清除，无关的 c3 保留——被删 id 不再残留于任何通话记录（否则"谁给谁打过电话"成孤儿 PII）。
+    expect(store.callRecordsForUser('u1')).toHaveLength(0)
+    expect(store.callRecordsForUser('u2')).toHaveLength(1) // 只剩 c3
+    expect(store.callRecordsForUser('u3')).toHaveLength(1) // 只剩 c3
+    expect(store.allCallRecords().map((r) => r.id)).toEqual(['c3'])
+  })
 })

@@ -26,6 +26,9 @@ export function cascadeDeleteUser(store: Store, id: string): void {
   // 显式清除，兑现"不留孤儿"。群主的群已由 dissolveGroup→deleteGroup 连带清掉，这里重复清也无副作用。
   store.deleteGroupReadsForUser(id)
   store.deleteMessagesForUser(id)
+  // 通话记录（我作为主叫或被叫的通话历史）：非证据、非审计，纯属该用户 PII——删号即清，否则残留"谁给谁打过电话"
+  // 的孤儿记录（录制才有取证/留存价值并刻意保留；通话元数据本身无此价值，见上"刻意保留"未列 call_records）。
+  store.deleteCallRecordsForUser(id)
   // 该用户上传的媒体（视频消息文件等）：删号即清磁盘文件 + 元数据，否则视频文件成孤儿、
   // 留存其 PII（cascade 承诺"不留孤儿"；deleteMessagesForUser 只删消息记录不碰磁盘文件）。
   for (const m of store.mediaByOwner(id)) { removeMediaFile(m.id); store.deleteMedia(m.id) }

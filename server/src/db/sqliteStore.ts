@@ -403,6 +403,9 @@ export class SqliteStore implements Store {
       .all(userId, userId, limit)
       .map((r: any) => ({ id: r.id, callId: r.callId, callerId: r.callerId, calleeId: r.calleeId, status: r.status as CallRecordStatus, createdAt: Number(r.createdAt) }))
   }
+  deleteCallRecordsForUser(userId: string): void {
+    this.db.prepare('DELETE FROM call_records WHERE callerId = ? OR calleeId = ?').run(userId, userId)
+  }
   allCallRecords(limit = 200): CallRecord[] {
     return this.db.prepare('SELECT * FROM call_records ORDER BY createdAt DESC LIMIT ?')
       .all(limit)

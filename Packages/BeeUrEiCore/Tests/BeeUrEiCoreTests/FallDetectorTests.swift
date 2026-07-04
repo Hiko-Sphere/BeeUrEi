@@ -55,6 +55,34 @@ final class FallDetectorTests: XCTestCase {
         XCTAssertEqual(run(caught), .none)
     }
 
+    func testCoarseSampling_freefallEndsIntoDeceleration_thenImpact_triggers() {
+        // 边界采样漏报修复：失重在"恰跨过 0.25s 时长阈值"的同一采样里结束（|a| 升到减速档 1.5g、尚未到撞击尖峰），
+        // 紧随一采样才出现 4g 撞击尖峰 → 应报疑似摔倒。修复前会在减速档误 idle、漏掉紧随的撞击（假阴性）。
+        let freefall = Array(repeating: 0.1, count: 5)   // t=0..0.20 <0.35
+        let ended = [1.5]                                 // t=0.25：失重结束、减速中（未到 2.8）
+        let impact = [4.0]                                // t=0.30：撞击尖峰
+        let still = Array(repeating: 1.0, count: 54)
+        XCTAssertEqual(run(freefall + ended + impact + still), .suspectedFall)
+    }
+
+    func testLongFreefall_impactAtEnd_triggers() {
+        // 长时间坠落（如坠入楼梯井/站台/阳台）末尾撞击 → 应报（正是本功能存在意义的高后果事件）。
+        // 修复前撞击窗从坠落**中途**（跨过 0.25s 时长阈值那刻，deadline=0.25+1.2=1.45s）起算：坠落续到 t=1.50 时
+        // 该窗在半空中超时→idle，紧随 t=1.55 的落地撞击落进 idle 被丢弃＝漏报（复审 Issue#1）。撞击窗须从落地那刻起算。
+        let freefall = Array(repeating: 0.1, count: 31)  // t=0..1.50 持续失重（跨过旧 deadline 1.45）
+        let impact = [4.0]                                // t=1.55 落地撞击
+        let still = Array(repeating: 1.0, count: 54)
+        XCTAssertEqual(run(freefall + impact + still), .suspectedFall)
+    }
+
+    func testFreefallEndsIntoDeceleration_butNoImpact_doesNotTrigger() {
+        // 上述路径的假阳性守卫：失重结束进入减速档后，若始终无 >2.8g 撞击（被稳稳接住/轻放）→ 绝不触发。
+        let freefall = Array(repeating: 0.1, count: 5)
+        let ended = [1.2]                                 // 减速档，进入 awaitingImpact
+        let calm = Array(repeating: 1.0, count: 60)       // 之后无撞击 → 等待窗超时 → 复位
+        XCTAssertEqual(run(freefall + ended + calm), .none)
+    }
+
     func testNonFiniteInputIgnored() {
         var d = FallDetector()
         XCTAssertEqual(d.ingest(magnitude: .nan, at: 0), .none)

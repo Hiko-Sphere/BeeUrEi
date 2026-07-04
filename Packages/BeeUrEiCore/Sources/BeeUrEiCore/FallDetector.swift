@@ -53,15 +53,22 @@ public struct FallDetector: Sendable {
 
         case .freefall(let since):
             if magnitude < Self.freefallG {
-                if t - since >= Self.freefallMinDuration {
-                    state = .awaitingImpact(deadline: t + Self.impactWindow)
-                }
+                // 仍在失重：保持 .freefall 等落地。**不在此启动撞击等待窗**——否则长时间坠落（如坠入楼梯井/
+                // 站台/阳台，>1.5s）会在半空中就让 1.2s 撞击窗超时、落地撞击落进 idle 被丢弃＝**漏报真摔倒**
+                // （复审 Issue#1，假阴性，安全攸关）。撞击窗一律从"失重结束（落地/减速）那一刻"起算（见下方 ≥0.35g 分支）。
                 return .none
             }
-            // 落体足够长且立即出现撞击（同一采样跨越两段）。
-            if t - since >= Self.freefallMinDuration, magnitude > Self.impactG {
-                state = .stillness(until: t + Self.stillnessDuration, crash: false)
-                stillSamples = []
+            // 落体足够长（≥0.25s）：撞击可能就在这一采样、也可能紧随一两采样才出现（采样不必恰好抓到尖峰）。
+            if t - since >= Self.freefallMinDuration {
+                if magnitude > Self.impactG {
+                    state = .stillness(until: t + Self.stillnessDuration, crash: false) // 同一采样已跨到撞击尖峰
+                    stillSamples = []
+                } else {
+                    // 失重结束但这一采样还只是减速档（0.35g<|a|<2.8g）：进入撞击等待窗，**别直接 idle**——
+                    // 否则粗采样(如恰 10Hz)下"跨过 0.25s 时长阈值"与"失重结束"落在同一采样时，会漏掉紧随一采样
+                    // 才到的撞击尖峰＝**漏报真摔倒**（假阴性，安全攸关）。等待窗仍要求 >2.8g 撞击+静止，不增误报。
+                    state = .awaitingImpact(deadline: t + Self.impactWindow)
+                }
                 return .none
             }
             state = .idle // 失重太短：普通晃动

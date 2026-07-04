@@ -540,17 +540,20 @@ struct HubView: View {
         func speak(_ t: String) { SpeechHub.shared.speak(t, channel: .query, voiceCode: lang.voiceCode) }
         guard let token = session.token else { speak(HomeStrings.voiceNeedLogin(lang)); return }
         Task {
-            let links = (try? await APIClient().familyLinks(token: token)) ?? []
-            let accepted = links.filter { $0.isAccepted }
-            let matches = accepted.filter { $0.memberName.localizedCaseInsensitiveContains(name) }
-            guard matches.count == 1, let target = matches.first else {
+            // 联系人 + 群都可作收件人（能读群消息就该能发群消息，口径一致）。并发拉取，在两者里唯一匹配名字。
+            async let linksCall = APIClient().familyLinks(token: token)
+            async let groupsCall = APIClient().groups(token: token)
+            let links = (try? await linksCall) ?? []
+            let groups = (try? await groupsCall) ?? []
+            let contacts = links.filter { $0.isAccepted }.map { (id: $0.memberId, name: $0.memberName) }
+            let groupList = groups.map { (id: $0.group.id, name: $0.group.name) }
+            guard let target = HomeStrings.resolveVoiceRecipient(name: name, contacts: contacts, groups: groupList) else {
                 speak(HomeStrings.voiceNoContact(name, lang)); showMessages = true; return
             }
-            if (try? await APIClient().sendMessage(token: token, toId: target.memberId, kind: "text", text: text)) != nil {
-                speak(HomeStrings.voiceSent(target.memberName, lang))
-            } else {
-                speak(ChatStrings.sendFailed(lang))
-            }
+            let sent = target.isGroup
+                ? (try? await APIClient().sendGroupMessage(token: token, groupId: target.id, kind: "text", text: text))
+                : (try? await APIClient().sendMessage(token: token, toId: target.id, kind: "text", text: text))
+            speak(sent != nil ? HomeStrings.voiceSent(target.name, lang) : ChatStrings.sendFailed(lang))
         }
     }
 }

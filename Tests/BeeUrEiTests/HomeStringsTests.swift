@@ -40,6 +40,27 @@ final class HomeStringsTests: XCTestCase {
         XCTAssertTrue(HomeStrings.lowBatterySpeak(percent: 150, critical: false, .zh).contains("百分之100"))
     }
 
+    func testResolveVoiceRecipientAcrossContactsAndGroups() {
+        let contacts = [(id: "u1", name: "妈妈"), (id: "u2", name: "小明")]
+        let groups = [(id: "g1", name: "家人群"), (id: "g2", name: "同事群")]
+        // 联系人唯一命中。
+        XCTAssertEqual(HomeStrings.resolveVoiceRecipient(name: "妈妈", contacts: contacts, groups: groups),
+                       HomeStrings.VoiceRecipient(id: "u1", name: "妈妈", isGroup: false))
+        // 群唯一命中（能读群就该能发群）。
+        XCTAssertEqual(HomeStrings.resolveVoiceRecipient(name: "家人群", contacts: contacts, groups: groups),
+                       HomeStrings.VoiceRecipient(id: "g1", name: "家人群", isGroup: true))
+        // 子串命中群。
+        XCTAssertEqual(HomeStrings.resolveVoiceRecipient(name: "同事", contacts: contacts, groups: groups)?.id, "g2")
+        // 精确整名优先：说"妈妈"即便有"妈妈的朋友"也直取"妈妈"（否则子串双命中→歧义）。
+        let withOverlap = contacts + [(id: "u3", name: "妈妈的朋友")]
+        XCTAssertEqual(HomeStrings.resolveVoiceRecipient(name: "妈妈", contacts: withOverlap, groups: [])?.id, "u1")
+        // 歧义（同时子串命中一个联系人和一个群，均非精确）→ nil，交 UI 让用户选。
+        XCTAssertNil(HomeStrings.resolveVoiceRecipient(name: "群", contacts: [(id: "x", name: "群主")], groups: groups))
+        // 无匹配 / 空名 → nil。
+        XCTAssertNil(HomeStrings.resolveVoiceRecipient(name: "查无此人", contacts: contacts, groups: groups))
+        XCTAssertNil(HomeStrings.resolveVoiceRecipient(name: "  ", contacts: contacts, groups: groups))
+    }
+
     func testUnreadReadout() {
         typealias C = HomeStrings.UnreadConversation
         // 无未读 → 明确告知，不静默。

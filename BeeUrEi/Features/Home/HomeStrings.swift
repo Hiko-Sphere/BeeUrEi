@@ -263,10 +263,29 @@ enum HomeStrings {
         l == .zh ? "请先登录才能发消息。" : "Sign in first to send messages."
     }
     static func voiceNoContact(_ name: String, _ l: Language) -> String {
-        l == .zh ? "没有找到叫\(name)的亲友，已打开消息列表。" : "Couldn't find a contact named \(name). Opening messages."
+        l == .zh ? "没有找到叫\(name)的联系人或群，已打开消息列表。" : "Couldn't find a contact or group named \(name). Opening messages."
     }
     static func voiceSent(_ name: String, _ l: Language) -> String {
         l == .zh ? "已发送给\(name)。" : "Sent to \(name)."
+    }
+
+    /// 语音发消息的收件人（联系人或群）。
+    struct VoiceRecipient: Equatable { let id: String; let name: String; let isGroup: Bool }
+
+    /// 语音"给X发消息"的收件人解析：在**联系人 + 群**里按口语名唯一匹配（大小写/子串不敏感）。
+    /// 恰好一个匹配才返回；**精确整名优先**（说"妈妈"时即便有"妈妈的朋友"也直取"妈妈"），否则 0/多个歧义返回 nil。
+    /// contacts/groups 传 (id, 显示名) 列表。同时命中一个联系人和一个群且都非精确 → 歧义 nil（交 UI 让用户选）。
+    static func resolveVoiceRecipient(name spoken: String,
+                                      contacts: [(id: String, name: String)],
+                                      groups: [(id: String, name: String)]) -> VoiceRecipient? {
+        let q = spoken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return nil }
+        var hits: [VoiceRecipient] = []
+        for c in contacts where c.name.localizedCaseInsensitiveContains(q) { hits.append(VoiceRecipient(id: c.id, name: c.name, isGroup: false)) }
+        for g in groups where g.name.localizedCaseInsensitiveContains(q) { hits.append(VoiceRecipient(id: g.id, name: g.name, isGroup: true)) }
+        let exact = hits.filter { $0.name.caseInsensitiveCompare(q) == .orderedSame }
+        if exact.count == 1 { return exact[0] }
+        return hits.count == 1 ? hits[0] : nil
     }
 
     static func voiceReadFailed(_ l: Language) -> String { l == .zh ? "读取消息失败，请稍后再试。" : "Couldn't read messages. Try again later." }

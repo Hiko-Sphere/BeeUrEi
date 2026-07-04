@@ -152,9 +152,12 @@ struct WalkNavigationView: View {
                     if !model.instruction.isEmpty {
                         Text(model.instruction).font(.headline)
                     }
+                    if !model.remaining.isEmpty {
+                        Text(model.remaining).font(.subheadline).foregroundStyle(.secondary)
+                    }
                 }
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel(model.instruction.isEmpty ? model.status : "\(model.status)。\(model.instruction)")
+                .accessibilityLabel([model.status, model.instruction, model.remaining].filter { !$0.isEmpty }.joined(separator: "。"))
 
                 if !model.steps.isEmpty {
                     Section(NavStrings.stepsHeader(lang)) {

@@ -24,6 +24,9 @@ final class NavigationViewModel {
 
     private(set) var status = NavStrings.idleStatus(FeatureSettings().language)
     private(set) var instruction = ""
+    /// 实时剩余路程 + 预计到达文案（"还有约 300 米，预计 4 分钟"）；空串=暂无（未开始/无有效路线/坏定位）。
+    /// 逐帧更新供屏幕显示（VoiceOver 可读）；语音只在跨里程碑时播一次（见 handle 内 remainingAnnouncer）。
+    private(set) var remaining = ""
     @ObservationIgnored private var lang: Language = FeatureSettings().language // 播报语言（E5，进导航/预览/记路时解析）
     private(set) var steps: [String] = []     // 国内：路线步骤列表（VoiceOver 可读）
     private(set) var running = false
@@ -70,6 +73,7 @@ final class NavigationViewModel {
     @ObservationIgnored private var lastOffRouteAnnounce: TimeInterval = 0
     @ObservationIgnored private var lastHeadingTime: TimeInterval = 0   // 最近一次可信航向的时刻(单调钟)；陈旧则抑制信标（见审查 #4）
     @ObservationIgnored private var waypointAdvance = WaypointAdvance() // "越过波谷"几何推进判定（核心，已测；见回归 #1/#2）
+    @ObservationIgnored private var remainingAnnouncer = RemainingDistanceAnnouncer() // 剩余里程碑播报（核心，已测）
     @ObservationIgnored private var offRouteStreak = 0                  // 连续判定偏航的帧数，需≥2 抗单帧抖动（见审查 #3）
     @ObservationIgnored private var lastCallout: TimeInterval = 0       // 沿途地标 callout 节流
     @ObservationIgnored private var lastCalloutName = ""                // 上次报过的地标（不重复报同一个）
@@ -118,6 +122,7 @@ final class NavigationViewModel {
         headingReliable = false
         headingFilter = HeadingFilter()
         waypointAdvance.reset()
+        remainingAnnouncer.reset(); remaining = "" // 新目的地：清空剩余里程碑基线与屏显
         offRouteStreak = 0
         lastHeadingTime = 0
         running = true
@@ -157,6 +162,7 @@ final class NavigationViewModel {
         headTracker.stop()
         spatial.stop()   // 释放空间音引擎（见审查 #11）
         NavVoice.shared.stop() // 停掉仍在念的导航指令
+        remaining = "" // 清屏显剩余里程
         status = NavStrings.navStopped(lang)
     }
 
@@ -240,6 +246,26 @@ final class NavigationViewModel {
             // 距离传给信标：越接近目标音量越大（Phase 2「靠近音量增大」）。
             let targetDist = Geo.distanceMeters(fromLat: lat, fromLon: lon, toLat: target.latitude, toLon: target.longitude)
             spatial.playCue(azimuthDegrees: Float(beacon.relativeAzimuthDegrees), distanceMeters: targetDist)
+        }
+
+        // 剩余路程 + ETA（Soundscape/BlindSquare/Apple/Google 标配，盲人的方位感与信心来源）：
+        // 沿路累距（当前→剩余转向点→终点）经核心 RouteRemaining；ETA 用**真实测得步速** loc.speed
+        // （缺测才回退默认），非 CLLocation 的假设常数。逐帧更新屏显；语音只在跨里程碑(1km/500/200/100/50m)
+        // 时经 speakCallout 报一次——信息性，让位于转向指令、不刷屏（核心 RemainingDistanceAnnouncer，已测）。
+        if level != .none {
+            let remainingMans: [Coordinate] = stepIndex < maneuvers.count
+                ? maneuvers[stepIndex...].map { Coordinate(lat: $0.coordinate.latitude, lon: $0.coordinate.longitude) }
+                : []
+            if let rem = RouteRemaining.distanceMeters(currentLat: lat, currentLon: lon,
+                                                       remainingManeuvers: remainingMans,
+                                                       destination: Coordinate(lat: dest.latitude, lon: dest.longitude)) {
+                let speed = RouteRemaining.effectiveWalkingSpeed(rawMps: loc.speed)
+                let eta = RouteRemaining.etaSeconds(remainingMeters: rem, speedMps: speed)
+                remaining = NavStrings.remainingDistance(meters: Int(rem.rounded()), etaSeconds: eta, lang)
+                if remainingAnnouncer.update(remainingMeters: rem) != nil {
+                    NavVoice.shared.speakCallout(remaining)
+                }
+            }
         }
 
         // 沿途地标 callout（Soundscape 式，Phase 2 交付物⑥）：精度可信时每 75s 报一次"途经 X"。
@@ -603,6 +629,7 @@ final class NavigationViewModel {
         routeCoords = waypoints
         stepIndex = 0
         waypointAdvance.reset()
+        remainingAnnouncer.reset(); remaining = "" // 新回程目的地：清空剩余里程碑基线与屏显
         offRouteStreak = 0
         steps = []
         instruction = ""
@@ -659,6 +686,7 @@ final class NavigationViewModel {
         routeCoords = waypoints.map { Coordinate(lat: $0.lat, lon: $0.lon) }
         stepIndex = 0
         waypointAdvance.reset()
+        remainingAnnouncer.reset(); remaining = "" // 新自定义路线：清空剩余里程碑基线与屏显
         offRouteStreak = 0
         steps = []
         instruction = ""

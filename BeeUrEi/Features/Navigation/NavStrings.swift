@@ -147,6 +147,30 @@ enum NavStrings {
     static func passingBy(_ name: String, _ l: Language) -> String { l == .zh ? "途经\(name)" : "Passing \(name)" }
     static func enteringRoad(_ name: String, _ l: Language) -> String { l == .zh ? "进入\(name)" : "Entering \(name)" }
 
+    /// 剩余路程 + 预计到达播报（导航中跨里程碑时报一次）："还有约 300 米，预计 4 分钟"。
+    /// 距离 ≥1 公里用公里一位小数，否则取整到 10 米；ETA 缺测(nil)则省略，<60s 说"不到 1 分钟"。
+    static func remainingDistance(meters: Int, etaSeconds: Double?, _ l: Language) -> String {
+        let dist: String
+        if meters >= 1000 {
+            let km = (Double(meters) / 100).rounded() / 10   // 一位小数
+            dist = l == .zh ? "\(km) 公里" : "\(km) km"
+        } else {
+            let m = Int((Double(meters) / 10).rounded()) * 10  // 取整到 10 米
+            dist = l == .zh ? "\(m) 米" : "\(m) m"
+        }
+        guard let eta = etaSeconds, eta.isFinite, eta >= 0 else {
+            return l == .zh ? "还有约\(dist)" : "About \(dist) to go"
+        }
+        let etaText: String
+        if eta < 60 {
+            etaText = l == .zh ? "预计不到 1 分钟" : "~under a minute"
+        } else {
+            let mins = Int((eta / 60).rounded())
+            etaText = l == .zh ? "预计 \(mins) 分钟" : "~\(mins) min"
+        }
+        return l == .zh ? "还有约\(dist)，\(etaText)" : "About \(dist) to go, \(etaText)"
+    }
+
     /// 步骤列表行："右转（30 米）" / "Turn right (30 m)"。
     static func stepListItem(_ instruction: String, meters: Int, _ l: Language) -> String {
         l == .zh ? "\(instruction)（\(meters) 米）" : "\(instruction) (\(meters) m)"

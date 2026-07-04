@@ -42,6 +42,25 @@ final class NavStringsTests: XCTestCase {
         XCTAssertFalse(NavStrings.routeSubtitle(3, by: "Daughter", .en).contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
 
+    // 剩余路程 + ETA 播报：距离档（公里/米）+ ETA 档（分钟/不到 1 分钟/缺测省略）三向组合正确、英文不混中文。
+    func testRemainingDistanceFormatting() {
+        // ≥1km → 公里一位小数（1234m=1.2km）；ETA 正常分钟（240s=4min）。
+        XCTAssertEqual(NavStrings.remainingDistance(meters: 1234, etaSeconds: 240, .zh), "还有约1.2 公里，预计 4 分钟")
+        // <1km → 取整到 10 米。487 → 490。
+        XCTAssertEqual(NavStrings.remainingDistance(meters: 487, etaSeconds: 200, .zh), "还有约490 米，预计 3 分钟")
+        // ETA <60s → "不到 1 分钟"。
+        XCTAssertTrue(NavStrings.remainingDistance(meters: 30, etaSeconds: 25, .zh).contains("不到 1 分钟"))
+        // ETA 缺测(nil) → 省略 ETA，只报距离。
+        XCTAssertEqual(NavStrings.remainingDistance(meters: 200, etaSeconds: nil, .zh), "还有约200 米")
+        XCTAssertFalse(NavStrings.remainingDistance(meters: 200, etaSeconds: nil, .zh).contains("分钟"))
+        // 英文档不混中文。
+        for s in [NavStrings.remainingDistance(meters: 1234, etaSeconds: 240, .en),
+                  NavStrings.remainingDistance(meters: 487, etaSeconds: 25, .en),
+                  NavStrings.remainingDistance(meters: 200, etaSeconds: nil, .en)] {
+            XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文混中文：\(s)")
+        }
+    }
+
     // 离线降级播报（#8）：含"今天/N 天前"分支——复审点名的唯一带真实分支逻辑的新文案。
     func testOfflineFallbackSpeakBranches() {
         XCTAssertTrue(NavStrings.offlineRouteFallbackSpeak(0, .zh).contains("今天"))

@@ -228,6 +228,15 @@ enum FramingStrings {
     }
     static func phoneResult(_ n: String, _ l: Language) -> String { l == .zh ? "电话：\(n)" : "Phone: \(n)" }
     static func phoneSpeak(_ n: String, _ l: Language) -> String { l == .zh ? "是电话号码：\(n)" : "It's a phone number: \(n)" }
+    static func emailResult(_ a: String?, _ l: Language) -> String { l == .zh ? "邮箱：\(a ?? "")" : "Email: \(a ?? "")" }
+    static func emailSpeak(_ a: String?, _ l: Language) -> String {
+        l == .zh ? "是电子邮箱地址" + (a.map { "：\($0)" } ?? "") + "，内容已可复制"
+                 : "It's an email address" + (a.map { ": \($0)" } ?? "") + "; you can copy it"
+    }
+    static func smsResult(_ n: String?, _ l: Language) -> String { l == .zh ? "短信：\(n ?? "")" : "SMS: \(n ?? "")" }
+    static func smsSpeak(_ n: String?, _ l: Language) -> String {
+        l == .zh ? "是发短信的码" + (n.map { "，号码\($0)" } ?? "") : "It's a text-message code" + (n.map { ", number \($0)" } ?? "")
+    }
     static func contactResult(_ l: Language) -> String { l == .zh ? "名片码" : "Contact card" }
     static func contactSpeak(_ l: Language) -> String {
         l == .zh ? "是一张电子名片，内容已可复制" : "It's a contact card; you can copy it"

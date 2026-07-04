@@ -37,8 +37,22 @@ final class BarcodePayloadTests: XCTestCase {
         XCTAssertEqual(BarcodePayload.classify("MECARD:N:李四;;"), .contact)
     }
 
+    func testEmail() {
+        XCTAssertEqual(BarcodePayload.classify("mailto:hi@example.com"), .email(address: "hi@example.com"))
+        XCTAssertEqual(BarcodePayload.classify("MAILTO:a@b.cn?subject=Hello"), .email(address: "a@b.cn")) // 去 ?参数
+        XCTAssertEqual(BarcodePayload.classify("mailto:"), .email(address: nil))                            // 空地址
+    }
+
+    func testSMS() {
+        XCTAssertEqual(BarcodePayload.classify("SMSTO:13800138000:你好"), .sms(number: "13800138000"))     // 到 : 为止
+        XCTAssertEqual(BarcodePayload.classify("sms:+8613912345678?body=hi"), .sms(number: "+8613912345678")) // 到 ? 为止
+        XCTAssertEqual(BarcodePayload.classify("SMSTO:"), .sms(number: nil))
+    }
+
     func testPlainText() {
         XCTAssertEqual(BarcodePayload.classify("你好，世界"), .text)
         XCTAssertEqual(BarcodePayload.classify(""), .text)
+        // 纯 12 位数字仍是商品码，不被 sms/email 误吞（前缀不匹配）。
+        XCTAssertEqual(BarcodePayload.classify("036000291452"), .productCode(chinaPrefix: false))
     }
 }

@@ -704,6 +704,12 @@ final class FramingAssistViewModel {
                 case .phone(let number):
                     self.resultText = FramingStrings.phoneResult(number, self.lang)
                     self.speak(FramingStrings.phoneSpeak(number, self.lang))
+                case .email(let addr):
+                    self.resultText = FramingStrings.emailResult(addr, self.lang)
+                    self.speak(FramingStrings.emailSpeak(addr, self.lang))
+                case .sms(let number):
+                    self.resultText = FramingStrings.smsResult(number, self.lang)
+                    self.speak(FramingStrings.smsSpeak(number, self.lang))
                 case .contact:
                     self.resultText = FramingStrings.contactResult(self.lang)
                     self.speak(FramingStrings.contactSpeak(self.lang))

@@ -59,6 +59,19 @@ final class WeatherPhraseTests: XCTestCase {
         XCTAssertTrue(WeatherPhrase.summary(temperature: 20, code: 61, language: .zh).contains("带伞"))
     }
 
+    /// 雷暴（WMO 95/96/99）：不是普通"带伞湿滑"——有雷击/冰雹风险，须专门强警告（尽快入室、避开空旷/树/金属）。
+    func testThunderstormGetsDedicatedShelterWarning() {
+        for code in [95, 96, 99] {
+            let zh = WeatherPhrase.summary(temperature: 22, code: code, language: .zh)
+            XCTAssertTrue(zh.contains("雷暴"), "code \(code) 应含雷暴")
+            XCTAssertTrue(zh.contains("室内") || zh.contains("避雨"), "code \(code) 应建议尽快入室")
+            XCTAssertFalse(zh.contains("请带伞"), "code \(code) 不应退化成普通带伞提示")
+            let en = WeatherPhrase.summary(temperature: 22, code: code, language: .en)
+            XCTAssertTrue(en.lowercased().contains("thunderstorm") && en.lowercased().contains("indoors"))
+            XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文混中文：\(en)")
+        }
+    }
+
     func testEnglishHasNoChinese() {
         let samples = [
             WeatherPhrase.summary(temperature: 23.6, code: 61, windSpeedKmh: 35,

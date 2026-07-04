@@ -119,6 +119,14 @@ public enum WeatherPhrase {
                                    : " Freezing rain — surfaces will ice over and become extremely slippery. Avoid going out if you can; if you must, take someone with you."
         }
 
+        // 雷暴（WMO 95/96/99，96/99 含冰雹）：不是普通"带伞湿滑"——有雷击/冰雹/强降雨风险，且盲人看不到天色
+        // 骤暗、闪电将至。须专门强警告（尽快入室、避开空旷处与树下），不能混进通用带伞提示。排在冻雨之后、雾之前。
+        let thunderstorm: Set<Int> = [95, 96, 99]
+        if thunderstorm.contains(code) {
+            return language == .zh ? "有雷暴，可能伴随强降雨或冰雹，请尽快到室内避雨，避开空旷处、大树和金属栏杆。"
+                                   : " Thunderstorm — heavy rain or hail possible. Get indoors soon and stay away from open areas, tall trees and metal railings."
+        }
+
         // 主建议（物理/可见性条件），大风提示随后追加（若有）。
         // windTip 已按语言定型（中文无前导空格接在"。"后；英文带前导空格）——直接拼接。
         func withWind(_ base: String) -> String { strongWind ? base + windTip : base }
@@ -129,7 +137,7 @@ public enum WeatherPhrase {
             return withWind(language == .zh ? "有雾，来往车辆可能看不清你，过马路请走有信号灯的路口、格外小心。"
                                             : " Foggy — drivers may not see you clearly; cross at signalized crossings and take extra care.")
         }
-        let wet: Set<Int> = [51, 53, 55, 61, 63, 65, 71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 99]
+        let wet: Set<Int> = [51, 53, 55, 61, 63, 65, 71, 73, 75, 77, 80, 81, 82, 85, 86] // 雷暴 95/96/99 已在上方单独强警告
         if wet.contains(code) {
             // 正在下雨/雪：地面确实湿滑（盲杖用户尤需防滑）。
             return withWind(language == .zh ? "出门请带伞，地面湿滑。" : " Bring an umbrella; the ground is slippery.")

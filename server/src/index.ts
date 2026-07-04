@@ -10,6 +10,7 @@ import { sweepOrphanMedia } from './media/orphanSweep'
 import { sweepOldNotifications } from './notifications/retention'
 import { runAutoBackup } from './backup/autoBackup'
 import { escalateUnackedEmergencies } from './emergency/escalation'
+import { fireExpiredSafetyTimers } from './safety/checkin'
 import { ensureKycDir } from './kyc/storage'
 import { installGracefulShutdown } from './shutdown'
 
@@ -49,6 +50,13 @@ async function main(): Promise<void> {
     catch (e) { console.warn('[media] 清理失败:', (e as Error).message) }
     try { const x = sweepOldNotifications(store, Date.now()); if (x) console.log(`[notifications] 清理过期通知 ${x} 条`) }
     catch (e) { console.warn('[notifications] 清理失败:', (e as Error).message) }
+    // 安全报到历史（仅终态 completed/canceled/fired/expired，active 永不清）：留存 90 天（SAFETY_TIMER_RETENTION_DAYS 可调，≥1）。
+    try {
+      const d = Number(process.env.SAFETY_TIMER_RETENTION_DAYS)
+      const days = Number.isFinite(d) && d >= 1 ? d : 90
+      const s = store.deleteSafetyTimersOlderThan(Date.now() - days * 86_400_000)
+      if (s) console.log(`[safety] 清理过期报到历史 ${s} 条`)
+    } catch (e) { console.warn('[safety] 清理失败:', (e as Error).message) }
     try { const r = store.deleteExpiredRefreshTokens(Date.now()); if (r) console.log(`[auth] 清理过期 refresh token ${r} 条`) }
     catch (e) { console.warn('[auth] 清理失败:', (e as Error).message) }
     // 每日自动备份 + 轮换（按天去重，一天只落一份；BACKUP_KEEP_DAYS=0 显式关闭）。
@@ -72,9 +80,14 @@ async function main(): Promise<void> {
   // 紧急升级重呼：告警发出满阈值（ESCALATE_AFTER_MS，默认 5 分钟）仍无任何亲友确认(ack)、未报平安 → 再推一次
   // 更急的告警，兜住"全体亲友都漏看首呼"（睡着/静音）的最坏情形。每 60s 检查一次（升级至多一次）。
   const escalateAfterMs = (() => { const v = Number(process.env.ESCALATE_AFTER_MS); return Number.isFinite(v) && v >= 60_000 ? v : 5 * 60_000 })()
+  // 安全报到到期宽限：到期时若服务端宕机、恢复后已超此窗则不迟发告警（免陈旧误报风暴）。默认 60 分钟（≥60s）。
+  const safetyStaleGraceMs = (() => { const v = Number(process.env.SAFETY_TIMER_STALE_GRACE_MS); return Number.isFinite(v) && v >= 60_000 ? v : 60 * 60_000 })()
   const escalateTimer = setInterval(() => {
     try { const n = escalateUnackedEmergencies(store, pushSender, webPushSender, Date.now(), escalateAfterMs); if (n) console.log(`[emergency] 升级重呼无人响应的求助 ${n} 条`) }
     catch (e) { console.warn('[emergency] 升级重呼失败:', (e as Error).message) }
+    // 安全报到到期未确认平安 → 自动告警亲友（与升级重呼同 60s tick，共用 push 通道）。
+    try { const f = fireExpiredSafetyTimers(store, pushSender, webPushSender, Date.now(), safetyStaleGraceMs); if (f) console.log(`[safety] 到期未报到自动告警 ${f} 条`) }
+    catch (e) { console.warn('[safety] 报到告警失败:', (e as Error).message) }
   }, 60_000)
   escalateTimer.unref?.()
 

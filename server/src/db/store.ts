@@ -357,6 +357,24 @@ export interface SavedPlace {
   updatedAt: number
 }
 
+/// 安全报到计时器（personal-safety "safety timer" / dead-man's switch，对标 Life360/bSafe/Noonlight）：
+/// 盲人独自出行前设一个到期时刻，**未在到期前确认平安（complete）则服务端自动向其亲友告警**（复用紧急链路）。
+/// 这是**主动**安全网，区别于摔倒检测/SOS 那种**被动/事后**告警。归属者独有数据，删号级联清除。
+export interface SafetyTimer {
+  id: string
+  ownerId: string
+  note?: string        // 可选说明（"步行回家"）；到期告警时展示给亲友，帮助判断去哪找人
+  startedAt: number
+  dueAt: number        // 到期时刻：未在此前 complete/cancel（或 extend 推后）则自动告警
+  // active=进行中；completed=本人已报平安；canceled=本人取消；fired=到期自动告警已发出；
+  // expired=到期时服务端宕机、恢复后已超宽限期 → 不迟发告警（免陈旧误报风暴），仅记终态。
+  status: 'active' | 'completed' | 'canceled' | 'fired' | 'expired'
+  firedAt?: number
+  completedAt?: number
+  canceledAt?: number
+  eventId?: string     // fired 时触发的紧急事件 id（供关联/审计/报平安解除）
+}
+
 export interface Recording {
   id: string
   callId: string
@@ -565,6 +583,15 @@ export interface Store {
   deleteSavedPlace(ownerId: string, label: string): void
   deleteSavedPlacesForOwner(ownerId: string): void       // 删号级联
 
+  createSafetyTimer(t: SafetyTimer): void
+  getSafetyTimer(id: string): SafetyTimer | undefined
+  updateSafetyTimer(id: string, patch: Partial<SafetyTimer>): void // 读-合并-写（状态流转由调用方决定）
+  activeSafetyTimerForOwner(ownerId: string): SafetyTimer | undefined // 某人当前进行中的报到（至多一个）
+  safetyTimersForUser(ownerId: string): SafetyTimer[]    // 某人的报到历史，startedAt 倒序（自助导出/展示）
+  expiredActiveSafetyTimers(now: number): SafetyTimer[]  // 到期候选：status=active ∧ dueAt≤now（供后台自动告警）
+  deleteSafetyTimersForOwner(ownerId: string): void      // 删号级联
+  deleteSafetyTimersOlderThan(cutoffMs: number): number  // 留存清扫：仅清终态（非 active），按 startedAt
+
   createRecording(rec: Recording): void
   allRecordings(): Recording[]
   recordingsForUser(ownerId: string): Recording[] // 某用户自己的录制（不含其软删除的），时间倒序——用户端"我的录音"
@@ -670,6 +697,7 @@ export class MemoryStore implements Store {
   protected recordings = new Map<string, Recording>()
   protected savedRoutes = new Map<string, SavedRoute>()
   protected savedPlaces = new Map<string, SavedPlace>() // 键 = `${ownerId} ${label}`（复合唯一）
+  protected safetyTimers = new Map<string, SafetyTimer>() // 键 = id（安全报到计时器）
   protected verifications = new Map<string, Verification>()
   protected refreshTokens = new Map<string, RefreshToken>()
   protected recoveryCodes = new Map<string, RecoveryCode>() // 2FA 一次性恢复码（仅哈希），键为 id
@@ -1024,6 +1052,46 @@ export class MemoryStore implements Store {
   deleteSavedPlacesForOwner(ownerId: string): void {
     for (const [k, v] of this.savedPlaces) if (v.ownerId === ownerId) this.savedPlaces.delete(k)
     this.afterMutate()
+  }
+
+  createSafetyTimer(t: SafetyTimer): void {
+    this.safetyTimers.set(t.id, t)
+    this.afterMutate()
+  }
+  getSafetyTimer(id: string): SafetyTimer | undefined {
+    return this.safetyTimers.get(id)
+  }
+  updateSafetyTimer(id: string, patch: Partial<SafetyTimer>): void {
+    const t = this.safetyTimers.get(id)
+    if (!t) return
+    this.safetyTimers.set(id, { ...t, ...patch })
+    this.afterMutate()
+  }
+  activeSafetyTimerForOwner(ownerId: string): SafetyTimer | undefined {
+    // 至多一个 active（start 时取消旧的）；若并存多个，取最近开始的（最新的意图）。
+    return [...this.safetyTimers.values()]
+      .filter((t) => t.ownerId === ownerId && t.status === 'active')
+      .sort((a, b) => b.startedAt - a.startedAt)[0]
+  }
+  safetyTimersForUser(ownerId: string): SafetyTimer[] {
+    return [...this.safetyTimers.values()].filter((t) => t.ownerId === ownerId).sort((a, b) => b.startedAt - a.startedAt)
+  }
+  expiredActiveSafetyTimers(now: number): SafetyTimer[] {
+    return [...this.safetyTimers.values()]
+      .filter((t) => t.status === 'active' && t.dueAt <= now)
+      .sort((a, b) => a.dueAt - b.dueAt)
+  }
+  deleteSafetyTimersForOwner(ownerId: string): void {
+    let changed = false
+    for (const [k, t] of this.safetyTimers) if (t.ownerId === ownerId) { this.safetyTimers.delete(k); changed = true }
+    if (changed) this.afterMutate()
+  }
+  deleteSafetyTimersOlderThan(cutoffMs: number): number {
+    let n = 0
+    // 只清终态：active 无论多老都保留（免误删待触发的报到；宕机后迟到的由自动告警的宽限逻辑处理）。
+    for (const [k, t] of this.safetyTimers) if (t.status !== 'active' && t.startedAt < cutoffMs) { this.safetyTimers.delete(k); n++ }
+    if (n) this.afterMutate()
+    return n
   }
 
   createRecording(rec: Recording): void {
@@ -1429,6 +1497,7 @@ export class JsonFileStore extends MemoryStore {
           notifications?: Notification[]
           savedRoutes?: SavedRoute[]
           savedPlaces?: SavedPlace[]
+          safetyTimers?: SafetyTimer[]
           emergencyEvents?: EmergencyEvent[]
           webPushSubs?: WebPushSubscription[]
           visionUsage?: Record<string, { day: string; count: number }>
@@ -1454,6 +1523,7 @@ export class JsonFileStore extends MemoryStore {
         for (const n of data.notifications ?? []) this.notifications.set(n.id, n)
         for (const sr of data.savedRoutes ?? []) this.savedRoutes.set(sr.id, sr)
         for (const sp of data.savedPlaces ?? []) this.savedPlaces.set(`${sp.ownerId} ${sp.label}`, sp)
+        for (const st of data.safetyTimers ?? []) this.safetyTimers.set(st.id, st)
         for (const ee of data.emergencyEvents ?? []) this.emergencyEvents.set(ee.id, ee)
         for (const wp of data.webPushSubs ?? []) this.webPushSubs.set(wp.endpoint, wp)
         for (const [k, v] of Object.entries(data.visionUsage ?? {})) this.visionUsage.set(k, v)
@@ -1487,6 +1557,7 @@ export class JsonFileStore extends MemoryStore {
       notifications: [...this.notifications.values()],
       savedRoutes: [...this.savedRoutes.values()],
       savedPlaces: [...this.savedPlaces.values()],
+      safetyTimers: [...this.safetyTimers.values()],
       emergencyEvents: [...this.emergencyEvents.values()],
       webPushSubs: [...this.webPushSubs.values()],
       visionUsage: Object.fromEntries(this.visionUsage),

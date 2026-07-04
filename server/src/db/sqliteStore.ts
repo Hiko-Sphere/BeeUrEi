@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { Store, User, Role, EmergencyEvent, WebPushSubscription, UserStatus, FamilyLink, LinkStatus, Block, CallRecord, CallRecordStatus, Report, ReportStatus, Recording, RecordingConfig, RefreshToken, SessionInfo, ChatMessage, ChatGroup, MediaMeta, Passkey, AdminAuditEntry, Warning, AppConfig, AppConfigPatch, Notification, Verification, VerificationStatus, KycBlobRef } from './store'
-import { normalizeAppConfig, mergeAppConfig, type SavedRoute, type SavedPlace } from './store'
+import { normalizeAppConfig, mergeAppConfig, type SavedRoute, type SavedPlace, type SafetyTimer } from './store'
 
 // 用运行时 require + 非静态模块名加载 node:sqlite，避免打包器(vitest/vite)静态解析失败；
 // 由 Node 在运行时解析（需 --experimental-sqlite，已在 npm 脚本里通过 NODE_OPTIONS 开启）。
@@ -151,6 +151,22 @@ export class SqliteStore implements Store {
         PRIMARY KEY (ownerId, label)
       )
     `)
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS safety_timers (
+        id TEXT PRIMARY KEY,
+        ownerId TEXT NOT NULL,
+        note TEXT,
+        startedAt INTEGER NOT NULL,
+        dueAt INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        firedAt INTEGER,
+        completedAt INTEGER,
+        canceledAt INTEGER,
+        eventId TEXT
+      )
+    `)
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_safety_owner_status ON safety_timers (ownerId, status)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_safety_due ON safety_timers (status, dueAt)') // 后台每分钟扫到期 active
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_recordings_owner ON recordings (ownerId, recordedAt)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_media_owner ON media (ownerId)')
     // recordingByMediaId 在**每次** GET /api/media 都被调（拦截录制媒体外泄），缺索引则每次媒体下载全表扫 recordings。
@@ -538,6 +554,46 @@ export class SqliteStore implements Store {
   }
   deleteSavedPlacesForOwner(ownerId: string): void {
     this.db.prepare('DELETE FROM saved_places WHERE ownerId = ?').run(ownerId)
+  }
+
+  private static mapSafetyRow(r: any): SafetyTimer {
+    return { id: r.id, ownerId: r.ownerId, note: r.note ?? undefined,
+      startedAt: Number(r.startedAt), dueAt: Number(r.dueAt), status: r.status,
+      firedAt: r.firedAt != null ? Number(r.firedAt) : undefined,
+      completedAt: r.completedAt != null ? Number(r.completedAt) : undefined,
+      canceledAt: r.canceledAt != null ? Number(r.canceledAt) : undefined,
+      eventId: r.eventId ?? undefined }
+  }
+  private writeSafetyTimer(t: SafetyTimer): void {
+    this.db.prepare('INSERT OR REPLACE INTO safety_timers (id, ownerId, note, startedAt, dueAt, status, firedAt, completedAt, canceledAt, eventId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(t.id, t.ownerId, t.note ?? null, t.startedAt, t.dueAt, t.status, t.firedAt ?? null, t.completedAt ?? null, t.canceledAt ?? null, t.eventId ?? null)
+  }
+  createSafetyTimer(t: SafetyTimer): void { this.writeSafetyTimer(t) }
+  getSafetyTimer(id: string): SafetyTimer | undefined {
+    const r = this.db.prepare('SELECT * FROM safety_timers WHERE id = ?').get(id) as any
+    return r ? SqliteStore.mapSafetyRow(r) : undefined
+  }
+  updateSafetyTimer(id: string, patch: Partial<SafetyTimer>): void {
+    const cur = this.getSafetyTimer(id) // 读-合并-写：避免动态 SQL，与其它实体 upsert 口径一致
+    if (!cur) return
+    this.writeSafetyTimer({ ...cur, ...patch })
+  }
+  activeSafetyTimerForOwner(ownerId: string): SafetyTimer | undefined {
+    const r = this.db.prepare("SELECT * FROM safety_timers WHERE ownerId = ? AND status = 'active' ORDER BY startedAt DESC LIMIT 1").get(ownerId) as any
+    return r ? SqliteStore.mapSafetyRow(r) : undefined
+  }
+  safetyTimersForUser(ownerId: string): SafetyTimer[] {
+    return (this.db.prepare('SELECT * FROM safety_timers WHERE ownerId = ? ORDER BY startedAt DESC').all(ownerId) as any[]).map(SqliteStore.mapSafetyRow)
+  }
+  expiredActiveSafetyTimers(now: number): SafetyTimer[] {
+    return (this.db.prepare("SELECT * FROM safety_timers WHERE status = 'active' AND dueAt <= ? ORDER BY dueAt ASC").all(now) as any[]).map(SqliteStore.mapSafetyRow)
+  }
+  deleteSafetyTimersForOwner(ownerId: string): void {
+    this.db.prepare('DELETE FROM safety_timers WHERE ownerId = ?').run(ownerId)
+  }
+  deleteSafetyTimersOlderThan(cutoffMs: number): number {
+    // 只清终态：active 无论多老都保留（免误删待触发的报到）。
+    return Number(this.db.prepare("DELETE FROM safety_timers WHERE status != 'active' AND startedAt < ?").run(cutoffMs).changes)
   }
 
   createRecording(rec: Recording): void {

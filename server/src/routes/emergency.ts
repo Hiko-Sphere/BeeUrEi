@@ -6,6 +6,7 @@ import { requireAuth } from '../auth/rbac'
 import { type PresenceRegistry } from '../assist/presence'
 import { type LiveLocationRegistry } from '../location/liveLocations'
 import { planEmergencyRoute } from '../emergency/routing'
+import { broadcastAllClear } from '../emergency/allClear'
 import { NoopPushSender, type PushSender } from '../push/apns'
 import { NoopWebPushSender, type WebPushSender } from '../push/webPush'
 import { pushLang, pushStrings } from '../push/pushStrings'
@@ -256,31 +257,11 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     const now = Date.now()
     const key = `${me.id}:${parsed.data.alertId ?? 'noid'}`
     if (clearDedup.check(key, now) !== undefined) return { ok: true, deduped: true }
-    // 治理可观测：把该用户最近一条未解除的紧急事件标记为已解除，admin 事件列表据此区分"已报平安/误报"
-    // 与"可能仍在进行"。best-effort，不阻断广播。
-    try { store.resolveLatestEmergencyEvent(me.id, now) } catch { /* 解除标记失败不影响报平安广播 */ }
-    const links = store.linksByOwner(me.id).filter((l) => (l.status ?? 'accepted') === 'accepted')
-    const members = links.map((l) => store.findById(l.memberId)).filter((m): m is NonNullable<typeof m> => !!m)
-    // kind='emergency_clear'：客户端据此区别于告警——绝不触发响铃/大模态，只作普通通知；带 alertId 供
-    // 客户端把对应的那条 emergency_alert 告警模态就地消掉（"对方已报平安"）。
-    const data: Record<string, string> = { kind: 'emergency_clear', fromId: me.id, fromName: me.displayName }
-    if (parsed.data.alertId) data.alertId = parsed.data.alertId
-    await Promise.allSettled(members.map((member) => {
-      const l = pushLang(member.language)
-      const title = pushStrings.emergencyClearTitle(me.displayName, l)
-      const body = pushStrings.emergencyClearBody(me.displayName, l)
-      try {
-        store.createNotification({ id: randomUUID(), userId: member.id, kind: 'emergency_clear', title, body, data, createdAt: Date.now() })
-      } catch { /* 通知失败不阻断广播 */ }
-      const webJobs = webPush.configured
-        ? safeWebPushSubs(member.id).map((sub) => webPush.send(sub, JSON.stringify({ title, body, data })).catch(() => { /* 单订阅失败不阻断 */ }))
-        : []
-      const apnsJob = member.apnsToken
-        ? pushSender.sendAlert(member.apnsToken, title, body, { type: 'emergency_clear', fromId: me.id }, undefined, safeBadge(member.id))
-        : Promise.resolve()
-      return Promise.allSettled([apnsJob, ...webJobs])
-    }))
+    // 解除最近一条未解除事件 + 广播"我没事了"给已接受亲友（共用 broadcastAllClear——与安全报到 /complete 同一条解除路径，
+    // 免逻辑分叉）。alertId 供客户端消掉对应告警模态。
+    const res = broadcastAllClear(store, pushSender, webPush, me.id, now,
+      parsed.data.alertId ? { alertId: parsed.data.alertId } : {})
     clearDedup.record(key, { ok: true }, now)
-    return { ok: true, notified: members.length }
+    return { ok: true, notified: res.notified }
   })
 }

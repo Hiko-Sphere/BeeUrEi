@@ -95,6 +95,26 @@ export const pushStrings = {
   emergencyClearBody: (name: string, l: PushLang): string =>
     l === 'en' ? `${name} marked the earlier emergency alert as resolved — false alarm or they're OK now.`
                : `${name} 已解除刚才的紧急求助——是误报，或现在已经没事了。`,
+  // 安全报到到期未确认 → 自动告警亲友（personal-safety "safety timer" 到点未 check-in）。
+  // 复用 emergency_alert 通知类别（亲友端已有的告警显著度/回拨/图标全部生效），正文点明是"未按时报平安"
+  // 而非摔倒，并带上本人设定的备注（"步行回家"）帮助判断去哪找人。
+  safetyCheckinMissedTitle: (name: string, l: PushLang): string =>
+    l === 'en' ? `${name} missed a safety check-in` : `${name} 未按时报平安`,
+  safetyCheckinMissedBody: (note: string | undefined, l: PushLang): string => {
+    const n = (note ?? '').trim()
+    const noteSeg = n ? (l === 'en' ? ` Note: "${n}".` : `备注：“${n}”。`) : ''
+    return l === 'en'
+      ? `They set a safety check-in timer and didn't confirm they're safe in time.${noteSeg} Please contact or check on them now.`
+      : `对方设置了安全报到，但未在约定时间确认平安。${noteSeg}请立即联系或确认对方是否安全。`
+  },
+  // 安全报到到期时服务端正好宕机、恢复后已超陈旧宽限 → **不惊动亲友**（免重启误报风暴），但给**本人**留一条
+  // 通知：诚实告知"断网期间到期、未替你通知亲友"，若仍需帮助可手动求助。非静默兜底（对抗复审 CONFIRMED#2）。
+  safetyCheckinExpiredSelfTitle: (l: PushLang): string =>
+    l === 'en' ? 'Safety check-in expired offline' : '安全报到已过期（曾断网）',
+  safetyCheckinExpiredSelfBody: (l: PushLang): string =>
+    l === 'en'
+      ? 'Your safety check-in expired while the service was unreachable, so we did not alert your contacts. If you still need help, please send an SOS now.'
+      : '你的安全报到到期时服务暂时无法访问，我们未替你通知亲友。如果你仍需要帮助，请立即手动发起求助。',
   newMessageTitle: (name: string, l: PushLang): string =>
     l === 'en' ? `Message from ${name}` : `${name} 发来消息`,
   groupMessageTitle: (name: string, group: string, l: PushLang): string =>

@@ -36,8 +36,9 @@ public struct TransitPlan: Decodable, Sendable, Equatable {
 public enum TransitPlanFormatter {
     public static func summary(_ plan: TransitPlan, language: Language) -> String {
         let zh = language == .zh
-        let mins = max(1, Int((plan.durationSeconds / 60).rounded()))
-        let walkM = Int(max(0, plan.walkingDistanceMeters).rounded())
+        // safeRoundedInt：巨大有限时长/距离(上游脏数据) Int() 会溢出陷阱崩溃，须夹取到 [0, 1e6]。
+        let mins = max(1, SpokenStrings.safeRoundedInt(plan.durationSeconds / 60))
+        let walkM = SpokenStrings.safeRoundedInt(plan.walkingDistanceMeters)
         let header = zh ? "全程约\(mins)分钟，步行共\(walkM)米。"
                         : "About \(mins) minutes total, \(walkM) meters of walking. "
 
@@ -45,7 +46,7 @@ public enum TransitPlanFormatter {
         var hasRidden = false // 第一段乘车用"乘坐"，其后用"换乘"
         for (i, leg) in plan.legs.enumerated() {
             let isLast = i == plan.legs.count - 1
-            let m = Int(max(0, leg.distanceMeters).rounded())
+            let m = SpokenStrings.safeRoundedInt(leg.distanceMeters) // 溢出安全（见 header 注）
             switch leg.kind {
             case .walk:
                 if zh { parts.append(isLast ? "步行\(m)米到达" : "步行\(m)米") }

@@ -120,6 +120,16 @@ final class PoiCalloutComposerTests: XCTestCase {
             "Nearest pharmacy: Boots, about 50 meters, 3 o'clock")
     }
 
+    func testHugeFiniteDistanceDoesNotOverflowCrash() {
+        // 上游脏数据给出巨大有限距离（>Int.max）：原 Int() 会溢出陷阱崩溃；safeRoundedInt 夹取到 1e6，不崩、有界。
+        let out = PoiCalloutComposer.compose(
+            pois: [poi("坏数据", 1e19, 0)],
+            mode: .around, radiusMeters: 250, headingAvailable: true, language: .zh)
+        XCTAssertEqual(out, "周围：12点钟方向约1000000米，坏数据")
+        let n = PoiCalloutComposer.nearest(from: [poi("坏数据", 1e19, 0)], query: "药店", radiusMeters: 1000, language: .zh)
+        XCTAssertTrue(n.contains("1000000米"))
+    }
+
     func testEnglishPhrasing() {
         let out = PoiCalloutComposer.compose(
             pois: [poi("Blue Bottle", 30, 0)],

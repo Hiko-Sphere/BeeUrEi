@@ -53,6 +53,15 @@ final class TransitPlanFormatterTests: XCTestCase {
         XCTAssertTrue(out.hasPrefix("全程约1分钟"))
     }
 
+    func testHugeFiniteValuesDoNotOverflowCrash() {
+        // 巨大有限时长/距离（>Int.max）：原 Int() 溢出陷阱崩溃；safeRoundedInt 夹取到 1e6，不崩。
+        let plan = TransitPlan(durationSeconds: 1e19, walkingDistanceMeters: 1e19,
+                               legs: [TransitLeg(kind: .bus, line: "1路", fromStop: "甲", toStop: "乙", stops: 2,
+                                                 distanceMeters: 1e19, durationSeconds: 1e19)])
+        let out = TransitPlanFormatter.summary(plan, language: .zh)
+        XCTAssertTrue(out.contains("1000000")) // 夹取有界，无崩溃
+    }
+
     func testDecodesFromServerJSON() throws {
         // 与服务端 /api/nav/transit 的 JSON 契约：字段名一致，可直接解码。
         let json = """

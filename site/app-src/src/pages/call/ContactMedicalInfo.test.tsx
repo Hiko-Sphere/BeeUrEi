@@ -18,7 +18,14 @@ describe('ContactMedicalInfo（施救时按需查看遇险者医疗信息）', (
   it('默认只显示按钮，不自动拉取（敏感数据点击才请求）', () => {
     render(<ContactMedicalInfo userId="u1" />)
     expect(screen.getByTestId('view-medical-btn')).toBeInTheDocument()
+    expect(screen.getByTestId('view-medical-btn')).toHaveTextContent('查看紧急医疗信息')
     expect(api.contactMedicalInfo).not.toHaveBeenCalled()
+  })
+
+  it('emphasize（告警带 hasMedical）→ 醒目提示"此人有紧急医疗信息，点击查看"', () => {
+    render(<ContactMedicalInfo userId="u1" emphasize />)
+    expect(screen.getByTestId('view-medical-btn')).toHaveTextContent('此人有紧急医疗信息')
+    expect(api.contactMedicalInfo).not.toHaveBeenCalled() // 仍点击才拉取
   })
 
   it('点击 → 拉取并显示明文医疗信息', async () => {

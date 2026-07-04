@@ -140,6 +140,9 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     }
     // 告警时刻电量（结构化随带，正文段见 emergencyAlertBody）：亲友据此判断联系窗口。
     if (parsed.data.battery != null) { extraBase.battery = String(parsed.data.battery); notifData.battery = String(parsed.data.battery) }
+    // 发起人是否填了紧急医疗信息：置 hasMedical 标志，让**紧急联系人**在告警模态里被显式提示"有医疗信息，请查看"
+    // （否则关键信息藏在一个可能 404 的按钮后、施救者可能不点。真正的读取仍走授权端点，仅紧急联系人可见）。
+    if (store.getMedicalInfo(me.id)) { extraBase.hasMedical = '1'; notifData.hasMedical = '1' }
     await Promise.allSettled(members.map((member) => {
       const l = pushLang(member.language)
       const title = pushStrings.emergencyAlertTitle(me.displayName, l)

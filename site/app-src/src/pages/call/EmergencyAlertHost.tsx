@@ -12,7 +12,7 @@ const POLL_MS = 10_000
 /// 紧急医疗信息按需查看（自包含，可独立组件测试）：施救者点开才拉取遇险者的医疗信息（血型/过敏/用药…）。
 /// 授权在服务端（仅其 accepted isEmergency 亲友可读）：403=非紧急联系人、404=对方未填。不自动拉取（敏感，
 /// 且并非每次都需要），点击才请求。
-export function ContactMedicalInfo({ userId }: { userId: string }) {
+export function ContactMedicalInfo({ userId, emphasize }: { userId: string; emphasize?: boolean }) {
   const { t } = useI18n()
   const [state, setState] = useState<{ kind: 'idle' | 'loading' | 'ok' | 'none' | 'denied' | 'error'; text?: string }>({ kind: 'idle' })
   const load = async () => {
@@ -26,7 +26,13 @@ export function ContactMedicalInfo({ userId }: { userId: string }) {
     }
   }
   if (state.kind === 'idle') {
-    return (
+    // emphasize（告警带 hasMedical=1，即发起人确有医疗信息）：显式提示 + 醒目按钮，避免施救者忽略关键信息。
+    return emphasize ? (
+      <button onClick={load} data-testid="view-medical-btn"
+        className="inline-flex items-center gap-1.5 self-start rounded-lg border border-danger/50 bg-danger/5 px-3 py-2 text-sm font-semibold text-danger hover:bg-danger/10">
+        🩺 {t('此人有紧急医疗信息，点击查看', 'They have emergency medical info — tap to view')}
+      </button>
+    ) : (
       <button onClick={load} data-testid="view-medical-btn"
         className="inline-flex items-center gap-1.5 self-start rounded-lg border border-[var(--line)] px-3 py-1.5 text-sm font-medium hover:surface-2">
         🩺 {t('查看紧急医疗信息', 'View emergency medical info')}
@@ -87,8 +93,9 @@ export function EmergencyAlertModal({ alert, othersCount, beingHandled, onAck, o
         {othersCount > 0 && (
           <p className="text-xs text-faint">{t(`还有 ${othersCount} 条未读紧急告警，见通知页`, `${othersCount} more unread emergency alert(s) in Alerts`)}</p>
         )}
-        {/* 施救辅助：按需查看遇险者的紧急医疗信息（授权在服务端，仅其紧急联系人可读）。 */}
-        {alert.data?.fromId && <ContactMedicalInfo userId={alert.data.fromId} />}
+        {/* 施救辅助：按需查看遇险者的紧急医疗信息（授权在服务端，仅其紧急联系人可读）。
+            hasMedical=1（发起人确有医疗信息）→ 醒目提示，避免施救者忽略。 */}
+        {alert.data?.fromId && <ContactMedicalInfo userId={alert.data.fromId} emphasize={!!alert.data.hasMedical} />}
         <div className="mt-1 flex gap-2">
           {alert.data?.fromId && (
             <button onClick={onCallBack}

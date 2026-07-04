@@ -121,6 +121,8 @@ export function fireExpiredSafetyTimers(
         notifData.lat = String(lat); notifData.lon = String(lon); notifData.locSource = locSource
         if (locAgeSec != null) notifData.locAgeSec = String(locAgeSec)
       }
+      // 发起人有紧急医疗信息 → 提示紧急联系人查看（与 SOS 首呼同口径；读取仍走授权端点）。
+      if (store.getMedicalInfo(sender.id)) notifData.hasMedical = '1'
       for (const m of members) {
         const l = pushLang(m.language)
         const title = pushStrings.safetyCheckinMissedTitle(sender.displayName, l)

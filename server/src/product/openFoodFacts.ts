@@ -21,6 +21,10 @@ export interface ProductInfo {
   /// 清真/洁食(宗教)、糖尿病(无糖)。**是厂商标注的认证**（多为法规监管），措辞用"标注"如实转述、不替用户判定。
   /// 空数组=无该项标注数据（同过敏原：**缺数据≠不含/不符**）。
   dietaryLabels: string[]
+  /// 净含量/规格文本（OFF quantity，如 "500 ml"/"200 g"/"1 L"）。盲人看不到包装规格，而它决定份量与选对大小
+  /// （330ml vs 1.5L、大小罐/盒难靠手感区分）——对标 Seeing AI 产品频道读规格。**原样读**、不做单位换算/解析
+  /// （自由文本、各国写法不一，原样最不失真）。空串=无数据。
+  quantity: string
 }
 
 type FetchLike = (url: string, init?: unknown) => Promise<{ ok: boolean; json: () => Promise<unknown> }>
@@ -89,6 +93,12 @@ export function extractDietaryLabels(tags: unknown): string[] {
   return out
 }
 
+/// 净含量文本（OFF quantity 自由文本，如 "500 ml"/"200 g"）：去多余空白、截断防超长；非字符串/空→空串。
+/// **不做单位换算/解析**——各国写法不一（"500ml"/"500 mL"/"1L"/"6 x 1.5 L"/"500毫升"），原样读最不失真。
+export function parseQuantity(v: unknown): string {
+  return typeof v === 'string' ? v.trim().replace(/\s+/g, ' ').slice(0, 40) : ''
+}
+
 /// Nutri-Score 分级：只接受可信的 a..e（OFF 用小写；'unknown'/'not-applicable'/空/其它 → null，绝不猜）。
 export function parseNutriScore(grade: unknown): string | null {
   if (typeof grade !== 'string') return null
@@ -112,7 +122,7 @@ export type LookupOutcome =
 
 /// 查一个条码，区分"真未收录(notFound)"与"瞬时故障(failed)"（用于差异化缓存；两者对客户端都表现为拿不到名字）。
 export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeoutMs = 5000): Promise<LookupOutcome> {
-  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,allergens_tags,traces_tags,nutriscore_grade,nova_group,labels_tags`
+  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,allergens_tags,traces_tags,nutriscore_grade,nova_group,labels_tags,quantity`
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
@@ -133,6 +143,7 @@ export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeo
       nutriScore: parseNutriScore(p?.nutriscore_grade),
       novaGroup: parseNovaGroup(p?.nova_group),
       dietaryLabels: extractDietaryLabels(p?.labels_tags),
+      quantity: parseQuantity(p?.quantity),
     } }
   } catch {
     return { kind: 'failed' } // 超时/网络/解析异常：瞬时故障，不长缓存，绝不编造商品名

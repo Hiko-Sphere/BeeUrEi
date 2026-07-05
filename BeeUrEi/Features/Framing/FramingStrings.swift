@@ -289,6 +289,13 @@ enum FramingStrings {
         SpokenStrings.nutrition(nutriScore: nutriScore, novaGroup: novaGroup, l)
     }
 
+    /// 净含量/规格播报后缀（拼在商品名后："这是蒙牛纯牛奶，500 ml"）——盲人看不到包装规格，据此判份量、选对大小
+    /// （330ml vs 1.5L、大小罐难靠手感分）。**原样读** OFF 文本（不换算单位，各国写法不一原样最不失真）；空→nil。
+    static func productQuantitySpeak(_ quantity: String?, _ l: Language) -> String? {
+        guard let q = quantity?.trimmingCharacters(in: .whitespacesAndNewlines), !q.isEmpty else { return nil }
+        return l == .zh ? "，\(q)" : ", \(q)"
+    }
+
     /// 膳食/宗教认证标注 canonical key（服务端 extractDietaryLabels 归并后的子集）→ 本地化名。
     private static let dietaryNames: [String: (zh: String, en: String)] = [
         "gluten-free": ("无麸质", "gluten-free"), "lactose-free": ("无乳糖", "lactose-free"),

@@ -911,6 +911,7 @@ struct APIClient {
         let nutriScore: String?
         let novaGroup: Int?
         let dietaryLabels: [String]? // 膳食/宗教认证标注（无麸质/纯素/清真…）——盲人看不到包装认证，刚需
+        let quantity: String?        // 净含量/规格（"500 ml"/"200 g"）——盲人看不到包装规格，判份量/选对大小
     }
 
     /// 商品条码 → 商品名+标注过敏原（服务端代理 Open Food Facts）。查不到/离线/任何错误一律 nil（上层回退"用户起名"，绝不编造）。

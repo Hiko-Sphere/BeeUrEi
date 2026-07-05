@@ -92,6 +92,22 @@ final class ProductMemoryStoreTests: XCTestCase {
         XCTAssertEqual(store.dietaryLabels(for: "unknown"), [])
     }
 
+    func testQuantityRoundTripAndRenamePreserves() {
+        let store = ProductMemoryStore(fileURL: fileURL)
+        // 净含量随名字存（供离线复扫也能报规格）。
+        store.save(barcode: "690", name: "牛奶", quantity: "500 ml")
+        XCTAssertEqual(store.quantity(for: "690"), "500 ml")
+        // 用户手动改名（默认空净含量）不得抹掉已存的规格。
+        store.save(barcode: "690", name: "我的牛奶")
+        XCTAssertEqual(store.quantity(for: "690"), "500 ml")
+        // 落盘重载后仍在；删除连带清。
+        let reloaded = ProductMemoryStore(fileURL: fileURL)
+        XCTAssertEqual(reloaded.quantity(for: "690"), "500 ml")
+        reloaded.delete(barcode: "690")
+        XCTAssertNil(reloaded.quantity(for: "690"))
+        XCTAssertNil(store.quantity(for: "unknown")) // 无数据=nil（不猜）
+    }
+
     func testLegacyNameOnlyFileStillLoads() {
         // 老版本只有名字 plist（无 allergens/traces/dietary 旁路文件）：名字照常、过敏原/微量/膳食标注为空——零迁移。
         let legacy = ["123": "酱油"]
@@ -103,6 +119,7 @@ final class ProductMemoryStoreTests: XCTestCase {
         XCTAssertNil(store.nutriScore(for: "123"))
         XCTAssertNil(store.novaGroup(for: "123"))
         XCTAssertEqual(store.dietaryLabels(for: "123"), [])
+        XCTAssertNil(store.quantity(for: "123"))
     }
 
     func testSaveAndLookup() {

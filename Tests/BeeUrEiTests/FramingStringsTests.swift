@@ -34,6 +34,18 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertTrue(FramingStrings.productDietaryLabelsSpeak(["some-new-cert"], .en)!.contains("some new cert"))
     }
 
+    func testProductQuantitySpeakVerbatimSuffix() {
+        // 净含量后缀拼在商品名后（"这是X，500 ml"）：原样读、不换算单位；空/纯空白→nil（缺数据不硬凑）。
+        XCTAssertEqual(FramingStrings.productQuantitySpeak("500 ml", .zh), "，500 ml")
+        XCTAssertEqual(FramingStrings.productQuantitySpeak("200 g", .en), ", 200 g")
+        XCTAssertEqual(FramingStrings.productQuantitySpeak("500毫升", .zh), "，500毫升") // 中文单位原样
+        XCTAssertNil(FramingStrings.productQuantitySpeak(nil, .zh))
+        XCTAssertNil(FramingStrings.productQuantitySpeak("", .zh))
+        XCTAssertNil(FramingStrings.productQuantitySpeak("   ", .zh))
+        // 端到端拼接：名字 + 净含量后缀读作"这是蒙牛纯牛奶，500 ml"。
+        XCTAssertEqual(FramingStrings.thisIs("蒙牛纯牛奶", .zh) + (FramingStrings.productQuantitySpeak("500 ml", .zh) ?? ""), "这是蒙牛纯牛奶，500 ml")
+    }
+
     func testTorchAutoOnTellsUserItWasSolved() {
         // 太暗自动点灯的播报：须点明已打开手电筒 + 提示重试（而非只说"太暗"卡住）。
         let zh = FramingStrings.torchAutoOn(.zh)

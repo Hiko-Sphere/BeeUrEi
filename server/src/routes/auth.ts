@@ -209,6 +209,11 @@ export function registerAuthRoutes(app: FastifyInstance, store: Store, codes: Co
     if (!user) {
       // 注册关闭时拒绝新建 Apple 账号（已有 appleSub/可并号的邮箱在上面分支已登录，不受影响）。
       if (!store.getAppConfig().registrationEnabled) return reply.code(403).send({ error: 'registration_disabled' })
+      // 昵称内容审核（与 register/profile 端点同口径，补 Apple 漏网）：Apple 首次授权的姓名由客户端透传，
+      // 改造客户端可塞违禁词——昵称会显示给所有联系人（聊天/来电/通知/亲友列表），须同样过审，否则是绕过审核的口子。
+      if (parsed.data.displayName && matchBannedTerm(store.getAppConfig(), parsed.data.displayName)) {
+        return reply.code(403).send({ error: 'content_blocked' })
+      }
       // 新 Apple 用户自动建号：生成不冲突的用户名（可日后在账号页修改）。
       let username = `apple_${identity.sub.slice(-8)}`
       while (store.findByUsername(username)) username = `apple_${randomUUID().slice(0, 8)}`

@@ -264,4 +264,20 @@ describe('注册昵称内容审核（与改昵称端点一致）', () => {
     expect(ok.statusCode).toBe(201)
     expect((ok.json() as any).token).toBeTruthy()
   })
+
+  it('开启违禁词后：Apple 建号昵称含违禁词被拒(403 content_blocked)——补 Apple 漏网，与注册/改名同口径', async () => {
+    const store = new MemoryStore()
+    store.setAppConfig({ contentFilter: { enabled: true, terms: ['脏词'] } })
+    const app = buildApp(store, { appleVerifier: fakeApple })
+    // 改造客户端可在 Apple 首次授权时透传违禁昵称；改前 Apple 建号不过审→绕过 register/profile 的内容审核。
+    const bad = await app.inject({ method: 'POST', url: '/api/auth/apple',
+      payload: { identityToken: 'good:SUBCF:cf@icloud.com', displayName: '我是脏词哈', role: 'blind' } })
+    expect(bad.statusCode).toBe(403)
+    expect((bad.json() as any).error).toBe('content_blocked')
+    // 干净昵称正常建号（201）。
+    const okA = await app.inject({ method: 'POST', url: '/api/auth/apple',
+      payload: { identityToken: 'good:SUBOK:ok@icloud.com', displayName: '正常昵称', role: 'blind' } })
+    expect(okA.statusCode).toBe(201)
+    expect((okA.json() as any).user.displayName).toBe('正常昵称')
+  })
 })

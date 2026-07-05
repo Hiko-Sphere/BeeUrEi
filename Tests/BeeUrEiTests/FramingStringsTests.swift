@@ -20,6 +20,16 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
 
+    func testGeoNavigationURLStartsWalkingDirectionsNotJustPin() {
+        // 位置码「导航」须真正开始**步行方向**（daddr+dirflg=w），而非 ?ll= 只落一个图钉——
+        // 盲人用 VoiceOver 再手动找"路线"极难，等于没导航（与聊天位置气泡 openInMaps 步行模式同取向）。
+        let url = FramingStrings.geoNavigationURL(31.2304, 121.4737)
+        XCTAssertTrue(url.hasPrefix("https://maps.apple.com/"), url)
+        XCTAssertTrue(url.contains("daddr=31.2304,121.4737"), url) // 目的地=精确坐标（不按地名重搜）
+        XCTAssertTrue(url.contains("dirflg=w"), url)               // 步行模式
+        XCTAssertFalse(url.contains("?ll="), url)                  // 不是"只显示图钉"的旧 center 参数
+    }
+
     func testProductDietaryLabelsSpeakLabeledNotJudged() {
         // 膳食/宗教认证标注（盲人看不到包装认证：乳糜泻/乳糖不耐/素食/宗教/糖尿病刚需）。canonical key → 本地化名。
         let zh = FramingStrings.productDietaryLabelsSpeak(["gluten-free", "vegan", "halal"], .zh)

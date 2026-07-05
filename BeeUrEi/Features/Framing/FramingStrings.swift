@@ -372,6 +372,12 @@ enum FramingStrings {
         return l == .zh ? "是一个位置" + (named.map { "：\($0)" } ?? "") + "，可点导航前往"
                         : "It's a location" + (named.map { ": \($0)" } ?? "") + "; tap Navigate to go there"
     }
+    /// 位置码「导航」动作的 Apple 地图深链：用 **daddr + dirflg=w** 直接开始**步行方向**（从当前位置导航过去），
+    /// 而非 `?ll=` 只落一个图钉、让盲人再用 VoiceOver 手动找"路线"（那对盲人极难，等于没导航）。与聊天位置气泡
+    /// openInMaps 的步行模式同取向。导航到精确坐标 WGS-84（境内 Apple 地图自动纠偏），不按地名重搜（免命中别处）。
+    static func geoNavigationURL(_ lat: Double, _ lng: Double) -> String {
+        "https://maps.apple.com/?daddr=\(lat),\(lng)&dirflg=w"
+    }
     static func contactResult(_ l: Language) -> String { l == .zh ? "名片码" : "Contact card" }
     static func contactSpeak(_ l: Language) -> String {
         l == .zh ? "是一张电子名片，内容已可复制" : "It's a contact card; you can copy it"

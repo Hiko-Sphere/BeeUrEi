@@ -37,9 +37,31 @@ final class WeatherPhraseTests: XCTestCase {
     func testFreezingAdvice() {
         let zh = WeatherPhrase.summary(temperature: 2, code: 0, todayMax: 5, todayMin: -3, language: .zh)
         XCTAssertTrue(zh.contains("结冰"))
-        // 雨雪建议优先于温度建议（湿滑比冷更危险）。
+        // 降雪建议优先于温度建议（雪天湿滑/结冰比单纯冷更危险）：走降雪专属分支（防滑），**不**退化成冰点通用提示。
         let snow = WeatherPhrase.summary(temperature: -1, code: 73, todayMin: -5, language: .zh)
-        XCTAssertTrue(snow.contains("带伞"))
+        XCTAssertTrue(snow.contains("防滑"))
+        XCTAssertFalse(snow.contains("带伞")) // 雪不该给"带伞"建议
+    }
+
+    /// 降雪（WMO 71/73/75/77/85/86）应给**防滑/结冰**建议，而非雨的"带伞"——雪天不打伞，真危险是积雪结冰+盲道被盖。
+    func testSnowAdviceSeparateFromRain() {
+        for code in [71, 73, 77, 85, 86] {
+            let zh = WeatherPhrase.advice(code: code, todayMax: 2, todayMin: -3, precipProbability: nil, language: .zh)!
+            XCTAssertTrue(zh.contains("防滑"), "code \(code) 应给防滑建议")
+            XCTAssertFalse(zh.contains("带伞"), "code \(code) 不该退化成带伞提示")
+            let en = WeatherPhrase.advice(code: code, todayMax: 2, todayMin: -3, precipProbability: nil, language: .en)!
+            XCTAssertTrue(en.lowercased().contains("snow"))
+            XCTAssertFalse(en.lowercased().contains("umbrella"))
+        }
+        // 大雪(75)加强：提盲道被盖 + 建议有人陪同。
+        let heavy = WeatherPhrase.advice(code: 75, todayMax: 0, todayMin: -6, precipProbability: nil, language: .zh)!
+        XCTAssertTrue(heavy.contains("盲道"))
+        XCTAssertTrue(heavy.contains("陪同"))
+        // 普通降雨仍是"带伞湿滑"（不受降雪分支影响）。
+        XCTAssertTrue(WeatherPhrase.advice(code: 63, todayMax: 18, todayMin: 12, precipProbability: nil, language: .zh)!.contains("带伞"))
+        // 降雪 + 强风：防滑建议 + 大风提示都在（withWind 生效）。
+        let windy = WeatherPhrase.advice(code: 73, todayMax: 1, todayMin: -4, precipProbability: nil, windSpeedKmh: 50, language: .zh)!
+        XCTAssertTrue(windy.contains("防滑")); XCTAssertTrue(windy.contains("盖过车流声"))
     }
 
     /// 冻雨（WMO 56/57/66/67）＝黑冰：必须给专门强警告（避免外出/找人陪同），不能混进通用"带伞湿滑"。

@@ -140,9 +140,21 @@ public enum WeatherPhrase {
             return withWind(language == .zh ? "有雾，来往车辆可能看不清你，过马路请走有信号灯的路口、格外小心。"
                                             : " Foggy — drivers may not see you clearly; cross at signalized crossings and take extra care.")
         }
-        let wet: Set<Int> = [51, 53, 55, 61, 63, 65, 71, 73, 75, 77, 80, 81, 82, 85, 86] // 雷暴 95/96/99 已在上方单独强警告
+        // 降雪（WMO 71/73/75/77/85/86）与降雨**分开**处理：对雪说"带伞"是错的建议（雪天不打伞），真正危险是
+        // **积雪/结冰**——路面湿滑难辨（盲杖探不出冰面），且积雪会盖住盲人赖以定向的**盲道**。故强调防滑慢行；
+        // 大雪(75)另提盲道被盖、建议有人陪同。排在通用降雨之前（雪绝不该落进"带伞湿滑"分支）。
+        let snow: Set<Int> = [71, 73, 75, 77, 85, 86]
+        if snow.contains(code) {
+            let heavy = code == 75
+            return withWind(language == .zh
+                ? (heavy ? "正在下大雪，地面积雪湿滑、可能结冰，盲道会被盖住，出行请格外防滑慢行、最好有人陪同。"
+                         : "正在下雪，地面湿滑、可能结冰，出行请小心防滑、慢行。")
+                : (heavy ? " Heavy snow — the snow-covered ground is slippery and may ice over, and the tactile paving you follow will be buried; walk very carefully, ideally with someone."
+                         : " Snowing — the ground is slippery and may ice over; walk carefully to avoid slipping."))
+        }
+        let wet: Set<Int> = [51, 53, 55, 61, 63, 65, 80, 81, 82] // 降雪已在上方单独处理；雷暴 95/96/99 亦已单独强警告
         if wet.contains(code) {
-            // 正在下雨/雪：地面确实湿滑（盲杖用户尤需防滑）。
+            // 正在下雨：地面确实湿滑（盲杖用户尤需防滑）。
             return withWind(language == .zh ? "出门请带伞，地面湿滑。" : " Bring an umbrella; the ground is slippery.")
         }
         // 现在没下但很可能下：优先用逐小时得到的**近期时点**（"约 N 小时后"，盲人看不到云层聚集、据此

@@ -39,8 +39,11 @@ export function isQuietedNow(q: QuietHours | undefined, nowMs: number): boolean 
 /// 当前经 notifyUser/聊天的都是软通知；紧急告警/来电/SOS/安全报到本就走独立扇出、不经勿扰门。此为防御性兜底。
 /// 含 checkin|safety：覆盖安全报到自身/过期自通知（safety_checkin_expired）——与本兜底"安全类不被静默"的初衷对齐
 /// （对抗复审 LOW#1；当前这些也走独立扇出，此为将来若改走 notifyUser 的保险）。
+/// 含 **security**：账号安全变更预警（改密/关 2FA/换邮箱/找回重置=潜在**接管信号**）——若非本人操作，用户须**即时**
+/// 察觉才能抢救账号，勿扰中压掉横幅会把接管拖到次日早晨。行业通例（Apple/Google/银行）一律把账号安全告警按
+/// time-sensitive 越过勿扰；本人自助改密时的横幅只是可关的轻扰，接管检测价值远大于此。
 export function isAlwaysThrough(kind: string): boolean {
-  return /emergency|sos|\bcall\b|incoming|escalat|alert|checkin|safety/i.test(kind)
+  return /emergency|sos|\bcall\b|incoming|escalat|alert|checkin|safety|security/i.test(kind)
 }
 
 /// 组合门：该通知此刻是否应**抑制推送横幅**（站内通知仍照常持久化）。

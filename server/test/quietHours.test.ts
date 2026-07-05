@@ -52,10 +52,19 @@ describe('quietHours 纯逻辑', () => {
     expect(isQuietedNow(qh({ startMinute: 540, endMinute: 1020, tz: undefined as unknown as string }), E)).toBe(false)
   })
 
-  it('isAlwaysThrough：紧急/来电/SOS/安全类恒推送；软通知可勿扰', () => {
+  it('isAlwaysThrough：紧急/来电/SOS/安全报到/账号安全告警恒推送；软通知可勿扰', () => {
     // 含安全报到类（safety_checkin_expired 等）：纵深防御，与"安全类不被静默"初衷对齐（复审 LOW#1）。
-    for (const k of ['emergency_alert', 'emergency_ack', 'incoming_call', 'sos', 'escalate', 'safety_checkin_expired', 'checkin_missed']) expect(isAlwaysThrough(k)).toBe(true)
-    for (const k of ['chat_message', 'friend_request', 'route_added', 'place_arrival', 'kyc_verified', 'recall']) expect(isAlwaysThrough(k)).toBe(false)
+    // 含账号安全告警（security_*）：改密/关 2FA/换邮箱=潜在接管信号，须即时察觉，越过勿扰（行业通例）。
+    for (const k of ['emergency_alert', 'emergency_ack', 'incoming_call', 'sos', 'escalate', 'safety_checkin_expired', 'checkin_missed',
+                     'security_password_changed', 'security_2fa_disabled', 'security_email_changed', 'security_password_reset']) expect(isAlwaysThrough(k)).toBe(true)
+    for (const k of ['chat_message', 'friend_request', 'route_added', 'place_arrival', 'kyc_verified', 'recall', 'medical_info_viewed']) expect(isAlwaysThrough(k)).toBe(false)
+  })
+
+  it('账号安全告警在勿扰时段内也照常推送横幅（接管信号须即时触达，不拖到次日）', () => {
+    const q = qh({ startMinute: 540, endMinute: 1020, tz: 'UTC' }) // E(930) 在勿扰内
+    expect(shouldSuppressPush(q, 'security_password_changed', E)).toBe(false) // 改密告警勿扰中也推
+    expect(shouldSuppressPush(q, 'security_2fa_disabled', E)).toBe(false)     // 关 2FA 告警勿扰中也推
+    expect(shouldSuppressPush(q, 'medical_info_viewed', E)).toBe(true)        // 医疗被查看（透明通知，非接管）仍可勿扰
   })
 
   it('shouldSuppressPush：始终推送类不被抑制；可勿扰类仅在时段内抑制', () => {

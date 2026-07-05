@@ -62,6 +62,22 @@ describe('紧急医疗信息 /api/account/medical + /api/family/:id/medical', ()
     await a.close()
   })
 
+  it('拉黑撤回医疗信息访问：本人拉黑旧紧急亲友后，其虽仍 isEmergency 也不能再读健康 PII', async () => {
+    const { a, store, owner, emerg, ownerId } = await seed()
+    await a.inject({ method: 'PUT', url: '/api/account/medical', headers: bearer(owner.token), payload: { text: '血型 O，青霉素过敏' } })
+    const emergId = store.findByUsername('medemerg')!.id
+    // 拉黑前：紧急亲友可读。
+    expect((await a.inject({ method: 'GET', url: `/api/family/${ownerId}/medical`, headers: bearer(emerg.token) })).statusCode).toBe(200)
+    // 本人拉黑该亲友（拉黑不删链、不清 isEmergency）。
+    await a.inject({ method: 'POST', url: '/api/blocks', headers: bearer(owner.token), payload: { userId: emergId } })
+    // 拉黑后：即便 link 仍 accepted+isEmergency，也不得再拉取健康 PII（回同一 403，不泄漏是拉黑还是非联系人）。
+    const after = await a.inject({ method: 'GET', url: `/api/family/${ownerId}/medical`, headers: bearer(emerg.token) })
+    expect(after.statusCode).toBe(403)
+    expect(after.json().error).toBe('not_emergency_contact')
+    // 反向也一样：被拉黑者拉黑本人时同样拦（isBlockedBetween 双向）。此处 owner→emerg 已建单向拉黑即足以拦。
+    await a.close()
+  })
+
   it('访问透明：紧急亲友查看 → 本人收 medical_info_viewed 通知（带查看者名）；10 分钟内去重；本人自看不通知', async () => {
     const { a, store, owner, emerg, ownerId } = await seed()
     await a.inject({ method: 'PUT', url: '/api/account/medical', headers: bearer(owner.token), payload: { text: '哮喘' } })

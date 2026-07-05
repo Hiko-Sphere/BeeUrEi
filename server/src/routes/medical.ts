@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { type Store } from '../db/store'
+import { type Store, isBlockedBetween } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { sealField, openField, type Sealed } from '../kyc/crypto'
 import { type PushSender, NoopPushSender } from '../push/apns'
@@ -62,7 +62,10 @@ export function registerMedicalRoutes(app: FastifyInstance, store: Store, push: 
     // 授权：me 必须是 target 的**已接受紧急亲友**（target 是 owner、me 是被标 isEmergency 的 member）。
     const isEmergencyContact = store.linksByOwner(targetId)
       .some((l) => (l.status ?? 'accepted') === 'accepted' && l.memberId === me && l.isEmergency)
-    if (!isEmergencyContact) return reply.code(403).send({ error: 'not_emergency_contact' })
+    // 拉黑即撤回访问：拉黑不删链、不清 isEmergency——若不额外查 isBlockedBetween，被本人拉黑的旧紧急联系人
+    // 仍能拉取其血型/过敏/用药等健康 PII（GDPR Art.9 特殊类别数据泄漏给已被明确切断关系的人）。与全站
+    // 可达性双查铁律（areLinked∧!isBlockedBetween）同口径；拉黑与非联系人回同一 403，不做存在性 oracle。
+    if (!isEmergencyContact || isBlockedBetween(store, me, targetId)) return reply.code(403).send({ error: 'not_emergency_contact' })
     const m = decrypt(targetId)
     if (!m) return reply.code(404).send({ error: 'no_medical_info' }) // 对方未填：诚实告知无信息（非泄漏存在性——已过授权）
     const target = store.findById(targetId)

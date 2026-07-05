@@ -39,8 +39,20 @@ public enum TransitPlanFormatter {
         // safeRoundedInt：巨大有限时长/距离(上游脏数据) Int() 会溢出陷阱崩溃，须夹取到 [0, 1e6]。
         let mins = max(1, SpokenStrings.safeRoundedInt(plan.durationSeconds / 60))
         let walkM = SpokenStrings.safeRoundedInt(plan.walkingDistanceMeters)
-        let header = zh ? "全程约\(mins)分钟，步行共\(walkM)米。"
-                        : "About \(mins) minutes total, \(walkM) meters of walking. "
+        // 换乘次数（乘车段数−1）：换乘是盲人出行里最费神、最易坐错/下错站的一环。开头先报总换乘数，让他对
+        // "这趟要换几次车"有心理准备（对标 Citymapper/Google 地图把换乘数放在最显眼处）。直达/纯步行不报（免"换乘0次"赘述）。
+        let rideLegs = plan.legs.filter { $0.kind != .walk }.count
+        let transfers = max(0, rideLegs - 1)
+        let header: String
+        if zh {
+            var h = "全程约\(mins)分钟，步行共\(walkM)米"
+            if transfers > 0 { h += "，需换乘\(transfers)次" }
+            header = h + "。"
+        } else {
+            var h = "About \(mins) minutes total, \(walkM) meters of walking"
+            if transfers > 0 { h += ", \(transfers) transfer\(transfers == 1 ? "" : "s")" }
+            header = h + ". "
+        }
 
         var parts: [String] = []
         var hasRidden = false // 第一段乘车用"乘坐"，其后用"换乘"

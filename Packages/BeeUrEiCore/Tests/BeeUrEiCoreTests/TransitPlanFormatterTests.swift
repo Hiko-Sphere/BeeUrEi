@@ -27,6 +27,24 @@ final class TransitPlanFormatterTests: XCTestCase {
         XCTAssertTrue(out.hasSuffix("步行50米到达。"))
     }
 
+    func testHeaderReportsTransferCount() {
+        // 换乘次数=乘车段数−1，开头先报（盲人换乘最费神，需心理准备）。
+        let twoRides = TransitPlan(durationSeconds: 2400, walkingDistanceMeters: 300,
+                                   legs: [walk(100), ride(.subway, "地铁1号线", "A站", "B站", 3),
+                                          ride(.bus, "300路", "B站", "C站", 5), walk(50)])
+        XCTAssertTrue(TransitPlanFormatter.summary(twoRides, language: .zh).hasPrefix("全程约40分钟，步行共300米，需换乘1次。"))
+        // 三段乘车=换乘2次；英文复数 transfers。
+        let threeRides = TransitPlan(durationSeconds: 3600, walkingDistanceMeters: 200,
+                                     legs: [ride(.subway, "1号线", "A", "B", 2), ride(.subway, "2号线", "B", "C", 3),
+                                            ride(.bus, "5路", "C", "D", 4)])
+        XCTAssertTrue(TransitPlanFormatter.summary(threeRides, language: .en).hasPrefix("About 60 minutes total, 200 meters of walking, 2 transfers. "))
+        // 直达（单段乘车）不报"换乘0次"，也不出现换乘措辞。
+        let direct = TransitPlan(durationSeconds: 600, walkingDistanceMeters: 100,
+                                 legs: [ride(.bus, "300路", "甲", "乙", 4), walk(100)])
+        XCTAssertFalse(TransitPlanFormatter.summary(direct, language: .zh).contains("换乘"))
+        XCTAssertFalse(TransitPlanFormatter.summary(direct, language: .en).lowercased().contains("transfer"))
+    }
+
     func testEnglish() {
         let plan = TransitPlan(durationSeconds: 600, walkingDistanceMeters: 100,
                                legs: [ride(.bus, "300路", "甲站", "乙站", 4), walk(100)])

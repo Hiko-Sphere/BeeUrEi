@@ -17,6 +17,7 @@ export type SecurityEvent =
   | '2fa_enabled' | '2fa_disabled'
   // 管理员/客服代为变更登录凭据（透明告知本人 + 侦测被盗管理员账号借后台接管受害者）：
   | 'admin_password_reset' | 'admin_passkey_cleared' | 'admin_apple_unlinked'
+  | 'admin_identifier_changed' // 管理员改了邮箱/手机号/用户名之一或多个（登录标识）
 
 /// 地点 label 展示名：home/work 是保留 label，本地化为"家/公司"；自定义 label（如"医院"）原样。
 function placeLabelName(label: string, l: PushLang): string {
@@ -202,6 +203,8 @@ export const pushStrings = {
         body: en ? 'An administrator removed all passkeys from your account; you’ll need to re-register them. If you didn’t request this, contact us immediately.' : '管理员清除了你账号上的全部通行密钥，需重新登记。若非你本人请求，请立即联系我们并检查账号安全。' }
       case 'admin_apple_unlinked': return { title: en ? 'Apple sign-in unlinked by an administrator' : '管理员解绑了你的 Apple 登录',
         body: en ? 'An administrator unlinked Apple sign-in from your account. If you didn’t request this, contact us immediately.' : '管理员解绑了你账号的 Apple 登录方式。若非你本人请求，请立即联系我们并检查账号安全。' }
+      case 'admin_identifier_changed': return { title: en ? 'Sign-in details changed by an administrator' : '管理员更改了你的登录信息',
+        body: en ? 'An administrator changed your account sign-in details (email, phone or username). If you didn’t request this, contact us immediately.' : '管理员更改了你的账号登录标识（邮箱 / 手机号 / 用户名）。若非你本人请求，请立即联系我们并检查账号安全。' }
       case 'password_reset': return { title: en ? 'Password was reset' : '账号密码已被重置',
         body: en ? 'Your password was just reset via account recovery. If this wasn’t you, secure your account now.' : '你的账号密码刚刚通过“找回密码”被重置。若非本人操作，请立即处理。' }
       case 'email_changed': return { title: en ? 'Account email changed' : '账号邮箱已更改',

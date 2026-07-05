@@ -778,6 +778,10 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     if (changed.length === 0) return reply.code(400).send({ error: 'invalid_input' })
     const updated = store.updateUser(id, patch)
     audit(req.user!.sub, 'user.edit', 'user', id, changed.join(', '))
+    // 管理员改了**登录标识**(邮箱/手机号/用户名，含清除)→ 预警本人（透明 + 侦测被盗管理员接管）。
+    // displayName/语言/头像非登录凭据，不报。多字段一次改也只发一条（避免刷屏）。
+    const identifierChanged = changed.some((c) => c.startsWith('email') || c.startsWith('phone') || c === 'username')
+    if (identifierChanged) notifyAccountSecurity(store, push, u, 'admin_identifier_changed')
     return { user: publicUser(updated!) }
   })
 

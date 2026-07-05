@@ -128,11 +128,12 @@ describe('Admin v4：全字段查看 + 编辑用户', () => {
     expect(b.user.sessions).toBeGreaterThanOrEqual(1) // 注册即建会话
   })
 
-  it('PATCH 改昵称/用户名/邮箱/手机/语言；唯一性冲突 409；改邮箱重置验证态', async () => {
-    const { app } = withAdmin()
+  it('PATCH 改昵称/用户名/邮箱/手机/语言；唯一性冲突 409；改邮箱重置验证态；改登录标识预警本人', async () => {
+    const { app, store } = withAdmin()
     const aa = await adminAuth(app)
     const u = await makeUser(app, 'edit1')
     await makeUser(app, 'taken')
+    const idAlerts = () => store.notificationsForUser(u.id).filter((n) => n.kind === 'security_admin_identifier_changed').length
 
     const ok = await app.inject({ method: 'PATCH', url: `/api/admin/users/${u.id}`, headers: aa,
       payload: { displayName: '新名字', email: 'New@Ex.com', phone: '13800138000', language: 'en' } })
@@ -142,6 +143,7 @@ describe('Admin v4：全字段查看 + 编辑用户', () => {
     expect(d.user.email).toBe('new@ex.com')
     expect(d.user.emailVerified).toBe(false)
     expect(d.user.language).toBe('en')
+    expect(idAlerts()).toBe(1) // 改了邮箱+手机(登录标识) → 一条告警（多字段一次改不刷屏）
 
     const dup = await app.inject({ method: 'PATCH', url: `/api/admin/users/${u.id}`, headers: aa, payload: { username: 'taken' } })
     expect(dup.statusCode).toBe(409)
@@ -149,12 +151,18 @@ describe('Admin v4：全字段查看 + 编辑用户', () => {
 
     const badUser = await app.inject({ method: 'PATCH', url: `/api/admin/users/${u.id}`, headers: aa, payload: { username: 'has space' } })
     expect(badUser.statusCode).toBe(400)
+    expect(idAlerts()).toBe(1) // 409/400 未改动 → 不新增告警
 
-    // 清除手机号
+    // 只改昵称（非登录标识）→ 不预警。
+    await app.inject({ method: 'PATCH', url: `/api/admin/users/${u.id}`, headers: aa, payload: { displayName: '又改名' } })
+    expect(idAlerts()).toBe(1)
+
+    // 清除手机号（登录标识变更）→ 再预警一条。
     const clr = await app.inject({ method: 'PATCH', url: `/api/admin/users/${u.id}`, headers: aa, payload: { phone: null } })
     expect(clr.statusCode).toBe(200)
     const d2 = (await app.inject({ method: 'GET', url: `/api/admin/users/${u.id}`, headers: aa })).json()
     expect(d2.user.phone).toBeNull()
+    expect(idAlerts()).toBe(2)
   })
 
   it('管理员代设密码：新密码可登录、旧 token 失效、会话撤销', async () => {

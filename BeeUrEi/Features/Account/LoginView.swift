@@ -95,6 +95,11 @@ struct LoginView: View {
                     } label: {
                         Label(QuietHoursStrings.navTitle(lang), systemImage: "moon.zzz")
                     }
+                    NavigationLink {
+                        MedicalInfoView(token: KeychainStore.read() ?? "")
+                    } label: {
+                        Label(MedicalInfoStrings.navTitle(lang), systemImage: "cross.case")
+                    }
                     Button(AccountStrings.changePassword(lang)) { showChangePassword = true }
                     NavigationLink {
                         TwoFactorSetupView(token: KeychainStore.read() ?? "", onChanged: { Task { await loadMe() } })

@@ -673,6 +673,16 @@ struct APIClient {
         return try JSONDecoder().decode(ContactMedical.self, from: data)
     }
 
+    /// 读本人医疗信息（供本人编辑）。复用 ContactMedical 形状（medicalInfo/updatedAt）。
+    func myMedicalInfo(token: String) async throws -> ContactMedical {
+        let data = try await authedGet("/api/account/medical", token: token)
+        return try JSONDecoder().decode(ContactMedical.self, from: data)
+    }
+    /// 存本人医疗信息（空串=清除）。服务端 AES-256-GCM 加密落库。
+    func setMyMedicalInfo(token: String, text: String) async throws {
+        _ = try await authedSend("PUT", "/api/account/medical", token: token, body: ["text": text])
+    }
+
     // MARK: 亲友 / 紧急
 
     func familyLinks(token: String) async throws -> [FamilyLinkInfo] {

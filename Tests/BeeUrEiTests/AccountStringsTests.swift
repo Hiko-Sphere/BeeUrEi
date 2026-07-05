@@ -68,6 +68,20 @@ final class AccountStringsTests: XCTestCase {
         XCTAssertTrue(EmergencyMedicalStrings.denied(.en).lowercased().contains("emergency contact"))
     }
 
+    func testMedicalInfoFillStringsBilingualAndPrivacyPromise() {
+        for s in [MedicalInfoStrings.navTitle(.en), MedicalInfoStrings.explain(.en), MedicalInfoStrings.placeholder(.en),
+                  MedicalInfoStrings.save(.en), MedicalInfoStrings.saved(.en), MedicalInfoStrings.cleared(.en), MedicalInfoStrings.saveFailed(.en)] {
+            XCTAssertFalse(s.isEmpty)
+            XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(s)")
+        }
+        // 说明须点明"加密"+"仅紧急联系人可见"（隐私承诺，用户据此才敢录入健康 PII，别被漏改）。
+        XCTAssertTrue(MedicalInfoStrings.explain(.zh).contains("加密"))
+        XCTAssertTrue(MedicalInfoStrings.explain(.zh).contains("紧急联系人"))
+        XCTAssertTrue(MedicalInfoStrings.explain(.en).lowercased().contains("encrypted"))
+        XCTAssertTrue(MedicalInfoStrings.explain(.en).lowercased().contains("emergency contact"))
+        XCTAssertEqual(MedicalInfoStrings.charCount(123, .zh), "123/4000") // 上限与服务端 putSchema.max(4000) 对齐
+    }
+
     func testQuietHoursStringsBilingual() {
         for s in [QuietHoursStrings.navTitle(.en), QuietHoursStrings.enableLabel(.en), QuietHoursStrings.explain(.en),
                   QuietHoursStrings.overnightHint(.en), QuietHoursStrings.saveFailed(.en)] {

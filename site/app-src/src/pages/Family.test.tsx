@@ -68,4 +68,40 @@ describe('FamilyPage 黑名单渲染（回归：b.user.displayName，非已废�
     fireEvent.click(btn)
     await waitFor(() => expect(api.setLinkEmergency).toHaveBeenCalledWith('l1', false))
   })
+
+  it('加联系人：手机号查到用户 → 按 userId 提交（常规路径不回退）', async () => {
+    mock(api.blocks).mockResolvedValue({ blocks: [] })
+    mock(api.lookupUser).mockResolvedValue({ user: { id: 'u7', displayName: '老李' } })
+    mock(api.addLink).mockResolvedValue({ link: {} })
+    render(<FamilyPage />)
+    fireEvent.click(await screen.findByText('添加'))
+    fireEvent.change(await screen.findByPlaceholderText(/alice/), { target: { value: '13800138000' } })
+    fireEvent.click(screen.getByText('发送请求'))
+    await waitFor(() => expect(api.lookupUser).toHaveBeenCalledWith('13800138000'))
+    await waitFor(() => expect(api.addLink).toHaveBeenCalledWith({ userId: 'u7' }, expect.anything(), false))
+  })
+
+  it('加联系人：纯数字（幸运号）用户名——手机号查无 → 回退按 username 提交', async () => {
+    mock(api.blocks).mockResolvedValue({ blocks: [] })
+    mock(api.lookupUser).mockResolvedValue({ user: null }) // 88888 当手机号查无
+    mock(api.addLink).mockResolvedValue({ link: {} })
+    render(<FamilyPage />)
+    fireEvent.click(await screen.findByText('添加'))
+    fireEvent.change(await screen.findByPlaceholderText(/alice/), { target: { value: '88888' } })
+    fireEvent.click(screen.getByText('发送请求'))
+    // 手机号 lookup 空 → 回退按 username 提交（幸运号用户名可加），而非直接"未找到"。
+    await waitFor(() => expect(api.addLink).toHaveBeenCalledWith({ username: '88888' }, expect.anything(), false))
+  })
+
+  it('加联系人：邮箱查无 → **不**回退用户名（邮箱格式不可能是用户名），不调 addLink', async () => {
+    mock(api.blocks).mockResolvedValue({ blocks: [] })
+    mock(api.lookupUser).mockResolvedValue({ user: null })
+    mock(api.addLink).mockResolvedValue({ link: {} })
+    render(<FamilyPage />)
+    fireEvent.click(await screen.findByText('添加'))
+    fireEvent.change(await screen.findByPlaceholderText(/alice/), { target: { value: 'nobody@example.com' } })
+    fireEvent.click(screen.getByText('发送请求'))
+    await waitFor(() => expect(api.lookupUser).toHaveBeenCalledWith('nobody@example.com'))
+    expect(api.addLink).not.toHaveBeenCalled() // 邮箱查无=确实没有，不回退
+  })
 })

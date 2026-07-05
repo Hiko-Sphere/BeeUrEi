@@ -29,6 +29,8 @@ final class FramingAssistViewModel {
     // 对应应用并预填**（拨号盘/浏览器/邮件/信息），iOS 要求用户再确认——绝不代拨/代发（OCR 或 QR 可能有误/恶意，
     // 由用户复核后再操作）。切到任何其它识别（stopContinuous）即清，不残留过期按钮。
     private(set) var resultAction: FramingAction?
+    private(set) var counting = false                         // 点钞模式：逐张扫纸币累加、报运行总额（Cash Reader 式）
+    @ObservationIgnored private var cash = CashCounter()      // 点钞累加器（核心，已测）；分为单位、可撤销
     var torchOn = false                                       // 手电筒开关（手动按钮 + 太暗自动点亮共用；视图绑定）
     @ObservationIgnored private var didAutoTorch = false       // 太暗自动点亮至多一次/会话，之后尊重手动开关不较劲
 
@@ -986,6 +988,38 @@ final class FramingAssistViewModel {
         speak(FramingStrings.rememberedSpeak(trimmed, lang))
     }
 
+    /// 开/关点钞模式：开=清零并进入逐张累加（此后每次识别纸币都计入并报运行总额）；关=报最终总额。
+    func toggleCounting() {
+        if counting {
+            counting = false
+            let msg = cash.isEmpty ? FramingStrings.cashEmpty(lang)
+                                   : FramingStrings.cashTotal(totalFen: cash.totalFen, count: cash.count, lang)
+            resultText = msg
+            speak(msg)
+        } else {
+            cash.reset()
+            counting = true
+            resultText = ""
+            speak(FramingStrings.cashCountingStarted(lang))
+        }
+    }
+
+    /// 撤销上一张（误扫/同一张扫了两次）。
+    func undoLastNote() {
+        guard !cash.isEmpty else { speak(FramingStrings.cashNothingToUndo(lang)); return }
+        cash.undoLast()
+        let msg = FramingStrings.cashUndone(totalFen: cash.totalFen, count: cash.count, lang)
+        resultText = cash.isEmpty ? "" : FramingStrings.cashTotal(totalFen: cash.totalFen, count: cash.count, lang)
+        speak(msg)
+    }
+
+    /// 清零重新数。
+    func resetCash() {
+        cash.reset()
+        resultText = ""
+        speak(FramingStrings.cashReset(lang))
+    }
+
     /// 识别人民币纸币面额（端侧 OCR 角号/大写 + 票面主色，核心 CurrencyClassifier，已测）。
     /// 低置信只说"可能"，并提醒换角度确认——识币错了是真金白银，宁可多让用户拍一次。
     func readCurrency() {
@@ -1004,6 +1038,21 @@ final class FramingAssistViewModel {
                 self.copyableResult = nil
                 if let result {
                     let name = FramingStrings.yuan(result.denomination, jiao: result.jiao, self.lang)
+                    // 点钞模式：**只累加确定识别**（不确定的不入账——钱数错是真金白银），报"加 X，共 …元"。
+                    if self.counting {
+                        if result.confident {
+                            self.cash.add(denomination: result.denomination, jiao: result.jiao)
+                            self.historyStore.add(kind: "banknote", content: name)
+                            let msg = FramingStrings.cashAdded(name, totalFen: self.cash.totalFen, count: self.cash.count, self.lang)
+                            self.resultText = msg
+                            self.speak(msg)
+                        } else {
+                            // 不确定不入账，提醒换角度再扫这张（避免把不确定的钱数进总额）。
+                            self.resultText = FramingStrings.banknoteUncertainResult(name, self.lang)
+                            self.speak(FramingStrings.banknoteUncertain(name, self.lang))
+                        }
+                        return
+                    }
                     // 屏显与语音一致地表达不确定性——别屏上"确定"、只语音含糊（见 P2 审计）。
                     self.resultText = result.confident ? FramingStrings.banknoteResult(name, self.lang)
                                                        : FramingStrings.banknoteUncertainResult(name, self.lang)
@@ -1389,9 +1438,24 @@ struct FramingAssistView: View {
                 HStack(spacing: BeeSpacing.sm) {
                     overlayAction(FramingStrings.uiTitle(.bus, model.lang), systemImage: "bus.fill",
                                   hint: FramingStrings.uiHint(.bus, model.lang)) { model.readBus() }
+                    // 点钞（Cash Reader 式）：开启后每次识别纸币都累加并报运行总额。
+                    overlayAction(model.counting ? FramingStrings.stopCountingLabel(model.lang) : FramingStrings.startCountingLabel(model.lang),
+                                  systemImage: model.counting ? "checkmark.circle.fill" : "dollarsign.circle",
+                                  hint: FramingStrings.uiHint(.banknote, model.lang)) { model.toggleCounting() }
                 }
                 .padding(.horizontal)
-                .padding(.bottom, 8)
+                .padding(.bottom, model.counting ? 0 : 8)
+                // 点钞进行中：撤销上一张（误扫/重复扫）/ 清零重数。
+                if model.counting {
+                    HStack(spacing: BeeSpacing.sm) {
+                        overlayAction(FramingStrings.undoNoteLabel(model.lang), systemImage: "arrow.uturn.backward",
+                                      hint: FramingStrings.undoNoteLabel(model.lang)) { model.undoLastNote() }
+                        overlayAction(FramingStrings.resetCashLabel(model.lang), systemImage: "arrow.counterclockwise",
+                                      hint: FramingStrings.resetCashLabel(model.lang)) { model.resetCash() }
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+                }
 
                 VStack(spacing: 8) {
                     // 仅把两段纯文本合并朗读；可交互的「复制内容」按钮放在合并元素之外，

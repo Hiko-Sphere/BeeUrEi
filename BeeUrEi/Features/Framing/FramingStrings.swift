@@ -460,6 +460,40 @@ enum FramingStrings {
         }
     }
 
+    // MARK: 点钞（CashCounter）——逐张累加报运行总额，对标 Cash Reader / Seeing AI。
+
+    /// 运行总额（"共 3 张，150 元"）：分→元/角（纸币最小 1 角，无"分"）。张数在前帮用户核对漏扫/多扫。
+    static func cashTotal(totalFen: Int, count: Int, _ l: Language) -> String {
+        let yuanPart = totalFen / 100, jiaoPart = (totalFen % 100) / 10
+        if l == .zh {
+            let money = jiaoPart > 0 ? "\(yuanPart) 元 \(jiaoPart) 角" : "\(yuanPart) 元"
+            return "共 \(count) 张，\(money)"
+        }
+        let money = jiaoPart > 0 ? "\(yuanPart) yuan \(jiaoPart) jiao" : "\(yuanPart) yuan"
+        return "\(count) note\(count == 1 ? "" : "s"), \(money)"
+    }
+    /// 逐张计入播报："加 五十元，共 3 张，150 元"（denom 用已本地化的 yuan() 名）。
+    static func cashAdded(_ denomName: String, totalFen: Int, count: Int, _ l: Language) -> String {
+        l == .zh ? "加 \(denomName)，\(cashTotal(totalFen: totalFen, count: count, l))"
+                 : "Added \(denomName). \(cashTotal(totalFen: totalFen, count: count, l))"
+    }
+    /// 撤销上一张后播报（新总额）；已空则用 cashReset 措辞。
+    static func cashUndone(totalFen: Int, count: Int, _ l: Language) -> String {
+        if count == 0 { return l == .zh ? "已撤销，清零" : "Undone — back to zero" }
+        return l == .zh ? "已撤销上一张，\(cashTotal(totalFen: totalFen, count: count, l))"
+                        : "Undid last note. \(cashTotal(totalFen: totalFen, count: count, l))"
+    }
+    static func cashCountingStarted(_ l: Language) -> String {
+        l == .zh ? "开始数钱，逐张对准纸币，我会报运行总额。" : "Counting cash — scan each note and I'll announce the running total."
+    }
+    static func cashEmpty(_ l: Language) -> String { l == .zh ? "还没数到钱" : "No cash counted yet" }
+    static func cashNothingToUndo(_ l: Language) -> String { l == .zh ? "还没数过纸币" : "Nothing to undo yet" }
+    static func cashReset(_ l: Language) -> String { l == .zh ? "已清零" : "Reset to zero" }
+    static func startCountingLabel(_ l: Language) -> String { l == .zh ? "开始数钱" : "Count cash" }
+    static func stopCountingLabel(_ l: Language) -> String { l == .zh ? "数完了" : "Done counting" }
+    static func undoNoteLabel(_ l: Language) -> String { l == .zh ? "撤销上一张" : "Undo last note" }
+    static func resetCashLabel(_ l: Language) -> String { l == .zh ? "清零" : "Reset" }
+
     // MARK: 周围的人 / 颜色 / 光线
 
     static func aimAhead(_ l: Language) -> String { l == .zh ? "请先把相机对准前方" : "Point the camera ahead first" }

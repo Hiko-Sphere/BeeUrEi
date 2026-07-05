@@ -44,6 +44,22 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertTrue(FramingStrings.productDietaryLabelsSpeak(["some-new-cert"], .en)!.contains("some new cert"))
     }
 
+    func testCashCountingFormatting() {
+        // 运行总额：分→元/角，张数在前（帮用户核对漏扫/多扫）。150 元 5 角。
+        XCTAssertEqual(FramingStrings.cashTotal(totalFen: 15050, count: 3, .zh), "共 3 张，150 元 5 角")
+        XCTAssertEqual(FramingStrings.cashTotal(totalFen: 15000, count: 3, .zh), "共 3 张，150 元") // 无角不赘述
+        let en = FramingStrings.cashTotal(totalFen: 15050, count: 1, .en)
+        XCTAssertEqual(en, "1 note, 150 yuan 5 jiao") // 单数 note 不带 s
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+        // 逐张播报：加 + 运行总额。
+        let added = FramingStrings.cashAdded("五十元", totalFen: 5000, count: 1, .zh)
+        XCTAssertTrue(added.contains("加 五十元"))
+        XCTAssertTrue(added.contains("共 1 张，50 元"))
+        // 撤销：非空报新总额、空则回清零措辞。
+        XCTAssertTrue(FramingStrings.cashUndone(totalFen: 5000, count: 1, .zh).contains("已撤销上一张"))
+        XCTAssertTrue(FramingStrings.cashUndone(totalFen: 0, count: 0, .zh).contains("清零"))
+    }
+
     func testProductNutrientLevelsSpeakWarnsHighOnlyNeverReassures() {
         // 逐营养素"偏高"警示（对标 Yuka 红标；糖尿病/高血压/控脂刚需）。只警示 high、固定顺序（糖→盐→饱和脂肪→脂肪）。
         let zh = FramingStrings.productNutrientLevelsSpeak(["sugars": "high", "salt": "high", "fat": "low"], .zh)

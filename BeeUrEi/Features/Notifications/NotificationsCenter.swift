@@ -30,6 +30,85 @@ final class NotificationsCenter {
     }
 }
 
+/// 遇险者医疗信息查看（施救关键）：紧急告警行内按需拉取遇险者的血型/过敏/用药。与网页端 ContactMedicalInfo 同链、
+/// 同服务端授权（仅其已接受紧急联系人可读）。此前 iOS 完全缺失——iOS 施救者收到 SOS 却看不到医疗信息、无法转告急救员。
+enum EmergencyMedicalStrings {
+    static func viewButton(_ l: Language) -> String { l == .zh ? "查看紧急医疗信息" : "View emergency medical info" }
+    static func viewButtonEmphasized(_ l: Language) -> String { l == .zh ? "此人有紧急医疗信息，点击查看" : "They have emergency medical info — tap to view" }
+    static func heading(_ l: Language) -> String { l == .zh ? "紧急医疗信息" : "Emergency medical info" }
+    static func loading(_ l: Language) -> String { l == .zh ? "加载中…" : "Loading…" }
+    static func noneProvided(_ l: Language) -> String { l == .zh ? "对方未填写医疗信息" : "No medical info provided" }
+    static func denied(_ l: Language) -> String { l == .zh ? "仅遇险者的紧急联系人可查看" : "Only their emergency contacts can view this" }
+    static func failed(_ l: Language) -> String { l == .zh ? "加载失败" : "Failed to load" }
+    static func updated(_ when: String, _ l: Language) -> String { l == .zh ? "更新于 \(when)" : "Updated \(when)" }
+}
+
+/// 紧急告警行内"查看医疗信息"按钮：按需拉取（敏感 PII，服务端会通知本人被查看，故不自动加载）。
+/// 拉到后对 VoiceOver 用户**朗读**（A11y.announce 仅 VoiceOver 可闻）——盲人施救者无需摸索即刻听到血型/过敏/用药。
+struct EmergencyMedicalButton: View {
+    let userId: String
+    let emphasize: Bool
+    private enum LoadState: Equatable { case idle, loading, ok(text: String, updatedAt: Double?), noneProvided, denied, error }
+    @State private var state: LoadState = .idle
+    private var lang: Language { FeatureSettings().language }
+
+    var body: some View {
+        switch state {
+        case .idle:
+            Button { Task { await load() } } label: {
+                Label(emphasize ? EmergencyMedicalStrings.viewButtonEmphasized(lang) : EmergencyMedicalStrings.viewButton(lang),
+                      systemImage: "cross.case.fill")
+                    .font(.footnote.weight(emphasize ? .semibold : .regular))
+                    .foregroundStyle(emphasize ? Color.beeDanger : Color.beeAccent)
+            }
+        case .loading:
+            Text(EmergencyMedicalStrings.loading(lang)).font(.footnote).foregroundStyle(.secondary)
+        case .ok(let text, let updatedAt):
+            VStack(alignment: .leading, spacing: 3) {
+                Label(EmergencyMedicalStrings.heading(lang), systemImage: "cross.case.fill")
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                Text(text).font(.footnote)
+                if let updatedAt {
+                    Text(EmergencyMedicalStrings.updated(RecordingStrings.timeText(updatedAt, lang), lang))
+                        .font(.caption2).foregroundStyle(.tertiary)
+                }
+            }
+            .padding(8).background(Color.beeHoney.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(EmergencyMedicalStrings.heading(lang))。\(text)")
+        case .noneProvided, .denied, .error:
+            Text(message).font(.footnote).foregroundStyle(.secondary)
+        }
+    }
+
+    private var message: String {
+        switch state {
+        case .noneProvided: return EmergencyMedicalStrings.noneProvided(lang)
+        case .denied: return EmergencyMedicalStrings.denied(lang)
+        default: return EmergencyMedicalStrings.failed(lang)
+        }
+    }
+
+    private func load() async {
+        guard let token = KeychainStore.read() else { state = .error; return }
+        state = .loading
+        do {
+            let info = try await APIClient().contactMedicalInfo(token: token, userId: userId)
+            // 家庭端点有记录才 200（无则 404）；空串仍防御性按"未填"处理。
+            if info.medicalInfo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                state = .noneProvided
+            } else {
+                state = .ok(text: info.medicalInfo, updatedAt: info.updatedAt)
+                A11y.announce("\(EmergencyMedicalStrings.heading(lang))。\(info.medicalInfo)")
+            }
+        } catch APIError.server(let code) {
+            state = code == "no_medical_info" ? .noneProvided : code == "not_emergency_contact" ? .denied : .error
+        } catch {
+            state = .error
+        }
+    }
+}
+
 /// 工具栏铃铛 + 未读角标，点开应用内通知列表。
 struct NotificationsBell: View {
     @State private var center = NotificationsCenter.shared
@@ -103,6 +182,12 @@ struct NotificationsView: View {
                                         Label(label, systemImage: loc.stale ? "exclamationmark.triangle" : "mappin.and.ellipse").font(.footnote)
                                     }
                                     .padding(.leading, n.isUnread ? 16 : 0)
+                                }
+                                // 紧急告警：按需查看遇险者医疗信息（血型/过敏/用药）——与网页通知列表一致，施救关键。
+                                // fromId 门天然排除关系事件（emergency_contact_set 无 fromId）。hasMedical=1 时醒目提示。
+                                if n.kind.contains("emergency"), let fromId = n.data?["fromId"], !fromId.isEmpty {
+                                    EmergencyMedicalButton(userId: fromId, emphasize: n.data?["hasMedical"] == "1")
+                                        .padding(.leading, n.isUnread ? 16 : 0)
                                 }
                             }
                             .padding(.vertical, 2)

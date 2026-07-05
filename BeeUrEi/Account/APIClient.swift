@@ -663,6 +663,16 @@ struct APIClient {
         return try JSONDecoder().decode(R.self, from: data).quietHours
     }
 
+    // MARK: 遇险者医疗信息（施救按需查看）——仅其已接受**紧急**联系人可读；服务端会通知本人"X 查看了你的医疗信息"（GDPR Art.9 透明）。
+
+    struct ContactMedical: Decodable, Sendable { let medicalInfo: String; let updatedAt: Double? }
+    /// 查看某遇险用户的医疗信息（血型/过敏/用药，自由文本）。抛 APIError.server：
+    /// "not_emergency_contact"(403，非紧急联系人/被拉黑)、"no_medical_info"(404，对方未填)。
+    func contactMedicalInfo(token: String, userId: String) async throws -> ContactMedical {
+        let data = try await authedGet("/api/family/\(userId)/medical", token: token)
+        return try JSONDecoder().decode(ContactMedical.self, from: data)
+    }
+
     // MARK: 亲友 / 紧急
 
     func familyLinks(token: String) async throws -> [FamilyLinkInfo] {

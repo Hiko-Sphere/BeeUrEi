@@ -46,6 +46,28 @@ final class AccountStringsTests: XCTestCase {
         XCTAssertEqual(q.tz, "Asia/Shanghai")
     }
 
+    func testContactMedicalDecodesServerShape() throws {
+        // 服务端 /api/family/:id/medical 形状（自由文本 + updatedAt）。iOS 施救者据此看遇险者血型/过敏/用药。
+        let json = #"{"medicalInfo":"O型血，青霉素过敏，服用华法林","updatedAt":1700000000000}"#
+        let m = try JSONDecoder().decode(APIClient.ContactMedical.self, from: Data(json.utf8))
+        XCTAssertEqual(m.medicalInfo, "O型血，青霉素过敏，服用华法林")
+        XCTAssertEqual(m.updatedAt, 1_700_000_000_000)
+        // updatedAt 可空（旧数据/未记时间戳）→ nil，不崩。
+        XCTAssertNil(try JSONDecoder().decode(APIClient.ContactMedical.self, from: Data(#"{"medicalInfo":"糖尿病","updatedAt":null}"#.utf8)).updatedAt)
+    }
+
+    func testEmergencyMedicalStringsBilingual() {
+        for s in [EmergencyMedicalStrings.viewButton(.en), EmergencyMedicalStrings.viewButtonEmphasized(.en),
+                  EmergencyMedicalStrings.heading(.en), EmergencyMedicalStrings.noneProvided(.en),
+                  EmergencyMedicalStrings.denied(.en), EmergencyMedicalStrings.updated("2h ago", .en), EmergencyMedicalStrings.failed(.en)] {
+            XCTAssertFalse(s.isEmpty)
+            XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(s)")
+        }
+        // denied 须点明授权边界"仅紧急联系人"（GDPR Art.9 健康数据，别被漏改成泛化措辞）。
+        XCTAssertTrue(EmergencyMedicalStrings.denied(.zh).contains("紧急联系人"))
+        XCTAssertTrue(EmergencyMedicalStrings.denied(.en).lowercased().contains("emergency contact"))
+    }
+
     func testQuietHoursStringsBilingual() {
         for s in [QuietHoursStrings.navTitle(.en), QuietHoursStrings.enableLabel(.en), QuietHoursStrings.explain(.en),
                   QuietHoursStrings.overnightHint(.en), QuietHoursStrings.saveFailed(.en)] {

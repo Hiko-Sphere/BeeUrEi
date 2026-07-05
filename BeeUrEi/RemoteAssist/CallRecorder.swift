@@ -67,10 +67,10 @@ final class CallRecorder {
         if assetWriter.canAdd(vIn) { assetWriter.add(vIn) }
         if assetWriter.canAdd(aIn) { assetWriter.add(aIn) }
 
-        lock.lock()
-        writer = assetWriter; videoInput = vIn; audioInput = aIn; outputURL = url; sessionStarted = false
-        videoFrames = 0; firstVideoPTS = nil; lastVideoPTS = .zero
-        lock.unlock()
+        lock.withLock {
+            writer = assetWriter; videoInput = vIn; audioInput = aIn; outputURL = url; sessionStarted = false
+            videoFrames = 0; firstVideoPTS = nil; lastVideoPTS = .zero
+        }
 
         do {
             try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
@@ -82,7 +82,7 @@ final class CallRecorder {
             }
         } catch {
             // 启动失败：清理 writer 状态后抛出。
-            lock.lock(); writer = nil; videoInput = nil; audioInput = nil; outputURL = nil; sessionStarted = false; lock.unlock()
+            lock.withLock { writer = nil; videoInput = nil; audioInput = nil; outputURL = nil; sessionStarted = false }
             throw error
         }
         isRecording = true
@@ -129,12 +129,13 @@ final class CallRecorder {
     }
 
     private func finalize() async throws -> URL {
-        lock.lock()
-        let w = writer; let url = outputURL; let vi = videoInput; let ai = audioInput; let ok = sessionStarted
-        let frames = videoFrames; let first = firstVideoPTS; let last = lastVideoPTS
-        writer = nil; videoInput = nil; audioInput = nil; outputURL = nil; sessionStarted = false
-        videoFrames = 0; firstVideoPTS = nil; lastVideoPTS = .zero
-        lock.unlock()
+        let (w, url, vi, ai, ok, frames, first, last) = lock.withLock {
+            let w = writer; let url = outputURL; let vi = videoInput; let ai = audioInput; let ok = sessionStarted
+            let frames = videoFrames; let first = firstVideoPTS; let last = lastVideoPTS
+            writer = nil; videoInput = nil; audioInput = nil; outputURL = nil; sessionStarted = false
+            videoFrames = 0; firstVideoPTS = nil; lastVideoPTS = .zero
+            return (w, url, vi, ai, ok, frames, first, last)
+        }
         guard let w, let url else { throw RecorderError.writerFailed }
         vi?.markAsFinished(); ai?.markAsFinished()
         guard ok, w.status == .writing else { w.cancelWriting(); discard(url); throw RecorderError.writerFailed }
@@ -161,7 +162,10 @@ final class CallRecorder {
             recorder.stopCapture { _ in cont.resume() }
         }
         isRecording = false
-        lock.lock(); let w = writer; let url = outputURL; writer = nil; videoInput = nil; audioInput = nil; outputURL = nil; sessionStarted = false; lock.unlock()
+        let (w, url) = lock.withLock { () -> (AVAssetWriter?, URL?) in
+            let w = writer; let url = outputURL; writer = nil; videoInput = nil; audioInput = nil; outputURL = nil; sessionStarted = false
+            return (w, url)
+        }
         w?.cancelWriting()
         if let url { try? FileManager.default.removeItem(at: url) }
     }

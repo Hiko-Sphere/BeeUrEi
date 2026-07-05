@@ -85,10 +85,11 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
         if weather != nil, let pm, let air = WeatherPhrase.airQualityAdvice(pm25: pm, language: l) {
             phrase += air
         }
+        let finalPhrase = phrase // 定格为不可变，供并发 MainActor 闭包安全捕获（消除 var 捕获数据竞争告警，Swift 6 下为错误）
         await MainActor.run {
             self.watchdog?.cancel(); self.watchdog = nil
             self.fetching = false
-            SpeechHub.shared.speak(phrase, channel: .query, voiceCode: l.voiceCode)
+            SpeechHub.shared.speak(finalPhrase, channel: .query, voiceCode: l.voiceCode)
         }
     }
 

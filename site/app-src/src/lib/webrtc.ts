@@ -389,6 +389,10 @@ export class CallEngine {
     } catch { /* ignore */ }
   }
   private addObserverCandidate(peerId: string, c: RTCIceCandidateInit) {
+    // 无对应旁观 PC（伪造/陌生 peer 的 obs-ice，或 remove 后的迟到候选）→ 丢弃，绝不缓冲。
+    // 旁观 PC 只对服务端核验过的管理员 addObserverPeer 建立；否则 observerPending 会被恶意参与者狂发
+    // obs-ice 无界撑爆（内存），且缓冲一个永不存在的 PC 的候选本身就是错的。合法握手里 PC 必先于候选建好。
+    if (!this.observerPCs.has(peerId)) return
     if (this.observerHasRemote.get(peerId)) void this.observerPCs.get(peerId)?.addIceCandidate(c).catch(() => {})
     else { const l = this.observerPending.get(peerId) ?? []; l.push(c); this.observerPending.set(peerId, l) }
   }

@@ -58,3 +58,26 @@ describe('CallEngine.start ended-guard', () => {
     expect(trackStops).toBe(0)        // 正常路径不停轨
   })
 })
+
+// 旁观(合规监看)ICE 候选缓冲：只对已建的旁观 PC 缓冲；伪造/陌生 peer 的 obs-ice 直接丢弃，
+// 防恶意参与者狂发 obs-ice 把 observerPending 无界撑爆（内存），也杜绝为不存在的 PC 缓冲候选。
+describe('CallEngine 旁观 ICE 缓冲边界', () => {
+  const makeEngine = () => new CallEngine({
+    callId: 'c1', token: 'T', iceServers: [],
+    recordPolicy: { enabled: false, requireConsent: false }, cb: {},
+  })
+
+  it('陌生/伪造 peer 的 obs-ice（无对应旁观 PC）不缓冲', () => {
+    const e = makeEngine() as unknown as { addObserverCandidate: (p: string, c: unknown) => void; observerPending: Map<string, unknown[]> }
+    e.addObserverCandidate('stranger', { candidate: 'x' })
+    e.addObserverCandidate('stranger', { candidate: 'y' })
+    expect(e.observerPending.size).toBe(0) // 无 PC → 丢弃，绝不堆积
+  })
+
+  it('已建旁观 PC 且远端未到时 obs-ice 正常缓冲（不误伤合法握手）', () => {
+    const e = makeEngine() as unknown as { addObserverCandidate: (p: string, c: unknown) => void; observerPCs: Map<string, unknown>; observerPending: Map<string, unknown[]> }
+    e.observerPCs.set('admin', {}) // 模拟已建旁观 PC（服务端核验过的管理员）
+    e.addObserverCandidate('admin', { candidate: 'x' })
+    expect(e.observerPending.get('admin')?.length).toBe(1) // 合法缓冲仍生效
+  })
+})

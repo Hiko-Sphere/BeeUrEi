@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { composeProductName, extractAllergens, extractDietaryLabels, lookupProduct, parseNutriScore, parseNovaGroup, parseQuantity } from '../src/product/openFoodFacts'
+import { composeProductName, extractAllergens, extractDietaryLabels, extractNutrientLevels, lookupProduct, parseNutriScore, parseNovaGroup, parseQuantity } from '../src/product/openFoodFacts'
 import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
 
@@ -42,17 +42,28 @@ describe('Open Food Facts 商品查询', () => {
   it('lookup 三态：found（含过敏原+微量标注）/notFound（未收录·无名）/failed（非200·异常）——区分瞬时故障与真未收录', async () => {
     const respond = (body: unknown) => async () => ({ ok: true, json: async () => body })
     // 声明含牛奶、可能含微量花生：allergens 与 traces **分开**提取，语义不同（确定含 vs 可能微量含）。
-    expect(await lookupProduct('6901234567890', respond({ status: 1, product: { brands: '蒙牛', product_name: '纯牛奶', allergens_tags: ['en:milk'], traces_tags: ['en:peanuts', 'en:nuts'], nutriscore_grade: 'c', nova_group: 4, labels_tags: ['en:organic', 'en:halal'], quantity: '  500 ml ' } })))
-      .toEqual({ kind: 'found', info: { name: '蒙牛 纯牛奶', allergens: ['milk'], traces: ['peanuts', 'nuts'], nutriScore: 'c', novaGroup: 4, dietaryLabels: ['organic', 'halal'], quantity: '500 ml' } })
-    // 无 allergens_tags/traces_tags/labels_tags/quantity → 各空（缺数据≠不含；客户端只在非空时播"标注含有/可能含微量/标注/净含量"）；无营养分级 → null（不猜）。
+    expect(await lookupProduct('6901234567890', respond({ status: 1, product: { brands: '蒙牛', product_name: '纯牛奶', allergens_tags: ['en:milk'], traces_tags: ['en:peanuts', 'en:nuts'], nutriscore_grade: 'c', nova_group: 4, labels_tags: ['en:organic', 'en:halal'], quantity: '  500 ml ', nutrient_levels: { sugars: 'high', salt: 'moderate', fat: 'low', energy: 'high' } } })))
+      .toEqual({ kind: 'found', info: { name: '蒙牛 纯牛奶', allergens: ['milk'], traces: ['peanuts', 'nuts'], nutriScore: 'c', novaGroup: 4, dietaryLabels: ['organic', 'halal'], quantity: '500 ml', nutrientLevels: { sugars: 'high', salt: 'moderate', fat: 'low' } } }) // energy 非白名单 4 素 → 丢弃
+    // 无 allergens_tags/traces_tags/labels_tags/quantity/nutrient_levels → 各空（缺数据≠不含；客户端只在非空时播"标注含有/可能含微量/标注/净含量/偏高"）；无营养分级 → null（不猜）。
     expect(await lookupProduct('6901234567890', respond({ status: 1, product: { brands: '蒙牛', product_name: '纯牛奶' } })))
-      .toEqual({ kind: 'found', info: { name: '蒙牛 纯牛奶', allergens: [], traces: [], nutriScore: null, novaGroup: null, dietaryLabels: [], quantity: '' } })
+      .toEqual({ kind: 'found', info: { name: '蒙牛 纯牛奶', allergens: [], traces: [], nutriScore: null, novaGroup: null, dietaryLabels: [], quantity: '', nutrientLevels: {} } })
     // status 0（明确未收录）与"有记录但无名"→ notFound（路由可长缓存）。
     expect(await lookupProduct('0000000000000', respond({ status: 0 }))).toEqual({ kind: 'notFound' })
     expect(await lookupProduct('6901234567890', respond({ status: 1, product: {} }))).toEqual({ kind: 'notFound' })
     // 非 200 与网络/超时异常 → failed（**瞬时故障，路由绝不长缓存**，复审#5/#10）。
     expect(await lookupProduct('6901234567890', async () => ({ ok: false, json: async () => ({}) }))).toEqual({ kind: 'failed' })
     expect(await lookupProduct('6901234567890', async () => { throw new Error('network') })).toEqual({ kind: 'failed' })
+  })
+
+  it('extractNutrientLevels：只收白名单 4 素×3 档、大小写归一、丢弃越界键值/非对象', () => {
+    expect(extractNutrientLevels({ fat: 'low', 'saturated-fat': 'high', sugars: 'high', salt: 'moderate' }))
+      .toEqual({ fat: 'low', 'saturated-fat': 'high', sugars: 'high', salt: 'moderate' })
+    expect(extractNutrientLevels({ SUGARS: 'HIGH', Salt: ' moderate ' })).toEqual({ sugars: 'high', salt: 'moderate' }) // 键值大小写/空白归一
+    expect(extractNutrientLevels({ energy: 'high', sugars: 'extreme', fat: 42, salt: 'high' })).toEqual({ salt: 'high' }) // 越界键(energy)/越界档(extreme)/非字符串(42)全丢
+    expect(extractNutrientLevels({})).toEqual({})
+    expect(extractNutrientLevels(['sugars'])).toEqual({}) // 数组→空
+    expect(extractNutrientLevels(null)).toEqual({})
+    expect(extractNutrientLevels('sugars:high')).toEqual({})
   })
 
   it('parseQuantity：去多余空白/截断/非字符串→空串；不解析单位（原样读）', () => {

@@ -289,6 +289,24 @@ enum FramingStrings {
         SpokenStrings.nutrition(nutriScore: nutriScore, novaGroup: novaGroup, l)
     }
 
+    /// 逐营养素含量档 canonical key（服务端 extractNutrientLevels：fat/saturated-fat/sugars/salt）→ 本地化名。
+    /// 固定顺序（糖→盐→饱和脂肪→脂肪，健康关切优先）保证确定可测。
+    private static let nutrientNames: [(key: String, zh: String, en: String)] = [
+        ("sugars", "糖", "sugar"), ("salt", "盐", "salt"),
+        ("saturated-fat", "饱和脂肪", "saturated fat"), ("fat", "脂肪", "fat"),
+    ]
+
+    /// 逐营养素"偏高"警示后缀（对标 Yuka / Open Food Facts 红标）——拼在营养后缀之后，一次 speak 播完。
+    /// 盲人读不到营养表，而"糖/盐/脂肪偏高"是可据以决策的健康提示（糖尿病/高血压/控脂）。**只警示 high**：
+    /// low/moderate 与缺数据一律不播——不播"不高"避免假安心（同过敏原"缺数据≠不含"口径），且免信息过载。无 high→nil。
+    static func productNutrientLevelsSpeak(_ levels: [String: String], _ l: Language) -> String? {
+        let highs = nutrientNames.filter { levels[$0.key]?.lowercased() == "high" }
+        guard !highs.isEmpty else { return nil }
+        let names = highs.map { l == .zh ? $0.zh : $0.en }
+        return l == .zh ? "。含量偏高：\(names.joined(separator: "、"))"
+                        : ". High in: \(names.joined(separator: ", "))"
+    }
+
     /// 净含量/规格播报后缀（拼在商品名后："这是蒙牛纯牛奶，500 ml"）——盲人看不到包装规格，据此判份量、选对大小
     /// （330ml vs 1.5L、大小罐难靠手感分）。**原样读** OFF 文本（不换算单位，各国写法不一原样最不失真）；空→nil。
     static func productQuantitySpeak(_ quantity: String?, _ l: Language) -> String? {

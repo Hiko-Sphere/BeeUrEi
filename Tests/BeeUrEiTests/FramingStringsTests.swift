@@ -44,6 +44,19 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertTrue(FramingStrings.productDietaryLabelsSpeak(["some-new-cert"], .en)!.contains("some new cert"))
     }
 
+    func testProductNutrientLevelsSpeakWarnsHighOnlyNeverReassures() {
+        // 逐营养素"偏高"警示（对标 Yuka 红标；糖尿病/高血压/控脂刚需）。只警示 high、固定顺序（糖→盐→饱和脂肪→脂肪）。
+        let zh = FramingStrings.productNutrientLevelsSpeak(["sugars": "high", "salt": "high", "fat": "low"], .zh)
+        XCTAssertEqual(zh, "。含量偏高：糖、盐") // fat=low 不播；顺序固定：糖在盐前
+        let en = FramingStrings.productNutrientLevelsSpeak(["saturated-fat": "high", "sugars": "high"], .en)!
+        XCTAssertEqual(en, ". High in: sugar, saturated fat") // 固定顺序：糖(sugars)先于饱和脂肪
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } })) // 英文不混中文
+        // **绝不**播 low/moderate（不说"不高/含量适中"——避免假安心，同过敏原"缺数据≠不含"口径）。
+        XCTAssertNil(FramingStrings.productNutrientLevelsSpeak(["sugars": "low", "salt": "moderate", "fat": "moderate"], .zh))
+        XCTAssertNil(FramingStrings.productNutrientLevelsSpeak([:], .zh)) // 无数据→nil
+        XCTAssertNil(FramingStrings.productNutrientLevelsSpeak(["energy": "high"], .en)) // 白名单外的素不认（不该出现，防御）
+    }
+
     func testProductQuantitySpeakVerbatimSuffix() {
         // 净含量后缀拼在商品名后（"这是X，500 ml"）：原样读、不换算单位；空/纯空白→nil（缺数据不硬凑）。
         XCTAssertEqual(FramingStrings.productQuantitySpeak("500 ml", .zh), "，500 ml")

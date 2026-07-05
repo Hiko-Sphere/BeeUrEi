@@ -25,6 +25,10 @@ export interface ProductInfo {
   /// （330ml vs 1.5L、大小罐/盒难靠手感区分）——对标 Seeing AI 产品频道读规格。**原样读**、不做单位换算/解析
   /// （自由文本、各国写法不一，原样最不失真）。空串=无数据。
   quantity: string
+  /// 逐营养素含量档（OFF nutrient_levels：fat/saturated-fat/sugars/salt → low|moderate|high）。盲人读不到
+  /// 营养表，而"糖/盐/脂肪偏高"是**可听的、可据以决策**的健康提示——对标 Yuka / Open Food Facts 的红黄绿标。
+  /// 只收白名单 4 素 × 3 档，其它一律丢弃。空对象=无数据（客户端只在有档时播，且只警示 high、不播"不高"避免假安心）。
+  nutrientLevels: Record<string, string>
 }
 
 type FetchLike = (url: string, init?: unknown) => Promise<{ ok: boolean; json: () => Promise<unknown> }>
@@ -112,6 +116,23 @@ export function parseNovaGroup(g: unknown): number | null {
   return Number.isInteger(n) && n >= 1 && n <= 4 ? n : null
 }
 
+const NUTRIENT_KEYS = new Set(['fat', 'saturated-fat', 'sugars', 'salt'])
+const NUTRIENT_LEVEL_VALUES = new Set(['low', 'moderate', 'high'])
+/// 逐营养素含量档（OFF nutrient_levels）：{fat/saturated-fat/sugars/salt → low|moderate|high}。
+/// 严格白名单——只收这 4 素 × 3 档，其它键/值（如 OFF 偶发的 energy、拼写变体、非字符串）一律丢弃；
+/// 非对象/数组→空对象。存全档（low/moderate/high）由客户端决定播报口径（只警示 high）。
+export function extractNutrientLevels(v: unknown): Record<string, string> {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {}
+  const out: Record<string, string> = {}
+  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+    const key = k.trim().toLowerCase()
+    if (!NUTRIENT_KEYS.has(key) || typeof val !== 'string') continue
+    const level = val.trim().toLowerCase()
+    if (NUTRIENT_LEVEL_VALUES.has(level)) out[key] = level
+  }
+  return out
+}
+
 /// 查询结果三态：found=命中；notFound=上游明确未收录/有记录但无名（可长缓存）；
 /// failed=超时/网络/非200/解析异常（**瞬时故障，路由层不可长缓存**——否则一次抖动使该条码对全体 404 一天，
 /// iOS 端用户随后自己起名后 name(for:) 本地命中永不再回源、过敏原标注永久缺失，见复审#5/#10）。
@@ -122,7 +143,7 @@ export type LookupOutcome =
 
 /// 查一个条码，区分"真未收录(notFound)"与"瞬时故障(failed)"（用于差异化缓存；两者对客户端都表现为拿不到名字）。
 export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeoutMs = 5000): Promise<LookupOutcome> {
-  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,allergens_tags,traces_tags,nutriscore_grade,nova_group,labels_tags,quantity`
+  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,allergens_tags,traces_tags,nutriscore_grade,nova_group,labels_tags,quantity,nutrient_levels`
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
@@ -144,6 +165,7 @@ export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeo
       novaGroup: parseNovaGroup(p?.nova_group),
       dietaryLabels: extractDietaryLabels(p?.labels_tags),
       quantity: parseQuantity(p?.quantity),
+      nutrientLevels: extractNutrientLevels(p?.nutrient_levels),
     } }
   } catch {
     return { kind: 'failed' } // 超时/网络/解析异常：瞬时故障，不长缓存，绝不编造商品名

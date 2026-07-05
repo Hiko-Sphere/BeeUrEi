@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { qualityFromRtt, qualityFromLoss, qualityFromJitter, qualityFromStats } from './webrtc'
+import { qualityFromRtt, qualityFromLoss, qualityFromJitter, qualityFromStats, CallQualityAnnouncer } from './webrtc'
 
 // 阈值直接决定盲人在通话里听到的"信号良好/一般/弱"（CallScreen QualityBars），锁死防回归。
 describe('qualityFromRtt 通话质量档（rtt 秒）', () => {
@@ -94,5 +94,38 @@ describe('qualityFromStats 综合档（取 RTT / 丢包 / 抖动最差者）', (
     expect(qualityFromStats(0.6, undefined)).toBe('weak')
     expect(qualityFromStats(undefined, 0.2)).toBe('weak')
     expect(qualityFromStats(undefined, undefined, 0.1)).toBe('weak') // 只有抖动
+  })
+})
+
+describe('CallQualityAnnouncer（读屏主动播报去抖，与 iOS 同款）', () => {
+  it('转弱须连续确认 confirmations 次才播；已播弱不重复', () => {
+    const a = new CallQualityAnnouncer(3)
+    expect(a.update('weak')).toBeNull()   // 1
+    expect(a.update('weak')).toBeNull()   // 2
+    expect(a.update('weak')).toBe('weak') // 3 → 播
+    expect(a.update('weak')).toBeNull()   // 已播弱：不重复
+  })
+  it('从弱恢复须连续确认后才播；起步 good/fair 不播（不表态）', () => {
+    const a = new CallQualityAnnouncer(2)
+    expect(a.update('good')).toBeNull()   // 起步正常不播
+    expect(a.update('fair')).toBeNull()   // fair↔good 不表态
+    a.update('weak'); a.update('weak')    // 进入弱（confirmations=2）
+    expect(a.update('good')).toBeNull()   // 恢复需确认
+    expect(a.update('fair')).toBe('recovered') // 第 2 次非弱 → 恢复
+    expect(a.update('good')).toBeNull()   // 已恢复不重复
+  })
+  it('unknown 中性：不表态、也不清正在累积的确认', () => {
+    const a = new CallQualityAnnouncer(3)
+    expect(a.update('weak')).toBeNull()    // 1
+    expect(a.update('unknown')).toBeNull() // 中性，不推进也不清零
+    expect(a.update('weak')).toBeNull()    // 2
+    expect(a.update('weak')).toBe('weak')  // 3 → 播（unknown 未打断累积）
+  })
+  it('抖动打断：转弱累积中途出现好信号 → 清零，须重新连续确认', () => {
+    const a = new CallQualityAnnouncer(3)
+    a.update('weak'); a.update('weak')     // 累积 2
+    expect(a.update('good')).toBeNull()    // 好信号打断 → 清零（且未播过弱，不触发恢复）
+    a.update('weak'); a.update('weak')     // 重新 1、2
+    expect(a.update('weak')).toBe('weak')  // 3 → 现在才播
   })
 })

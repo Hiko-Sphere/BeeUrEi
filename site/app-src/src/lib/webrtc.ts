@@ -45,6 +45,32 @@ export function qualityFromStats(rtt: number | undefined, lossFraction: number |
   return cands.reduce((worst, q) => (rank[q] >= rank[worst] ? q : worst), 'unknown' as Quality) // 取最差；unknown(-1) 天然让位
 }
 
+/// 通话信号"该不该向读屏播报"的判定（与 iOS 核心 CallQualityAnnouncer 同语义，跨端一致）：
+/// 协助端 web 的盲人用户（web 与 App 功能对齐）此前只有 QualityBars 的静态 aria-label——信号掉了不会被**主动**
+/// 播报，得手动导航到那组条形才知道。iOS 靠 CallQualityAnnouncer 语音说"信号弱、换个位置"，web 应对齐（读屏
+/// aria-live）。规则：只播**进入弱**与**从弱恢复**（fair↔good 之间不表态，不可行动、只会成噪音）；状态翻转需
+/// **连续确认** confirmations 次（默认 2，web 每 2s 一采样≈4s 才播，抵御 RTT 抖动的"弱/好/弱"刷屏）；
+/// unknown 中性不表态也不清累积；已播状态不重复。
+export class CallQualityAnnouncer {
+  private announcedWeak = false
+  private pendingWeak: boolean | null = null
+  private pendingCount = 0
+  private readonly confirmations: number
+  constructor(confirmations = 2) { this.confirmations = confirmations } // 不用参数属性：web 构建 erasableSyntaxOnly 禁用
+
+  /// 喂入最新信号档，返回需播报的语义（'weak' 转弱 / 'recovered' 恢复 / null 无需播）。
+  update(quality: Quality): 'weak' | 'recovered' | null {
+    if (quality === 'unknown') return null // 无数据：中性，保留正在累积的确认
+    const isWeak = quality === 'weak'
+    if (isWeak === this.announcedWeak) { this.pendingWeak = null; this.pendingCount = 0; return null } // 与已播一致：稳定，清累积
+    if (this.pendingWeak === isWeak) this.pendingCount++
+    else { this.pendingWeak = isWeak; this.pendingCount = 1 }
+    if (this.pendingCount < this.confirmations) return null
+    this.announcedWeak = isWeak; this.pendingWeak = null; this.pendingCount = 0
+    return isWeak ? 'weak' : 'recovered'
+  }
+}
+
 export interface CallPeer { userId?: string; name?: string; avatar?: string | null }
 
 export interface CallCallbacks {

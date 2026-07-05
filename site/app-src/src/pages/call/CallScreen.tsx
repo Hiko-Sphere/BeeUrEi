@@ -3,7 +3,7 @@ import { api, tokenStore } from '../../lib/api'
 import { useI18n } from '../../lib/i18n'
 import { useToast, Avatar, Button, Modal } from '../../components/ui'
 import { IconMic, IconMicOff, IconFlash, IconZoom, IconRecord, IconHangup, IconFlag, IconUser, IconShield, IconChat, IconSend } from '../../components/icons'
-import { CallEngine, type MediaState, type Quality, CALL_TEXT_MAX, validCallText, callTextRejectText } from '../../lib/webrtc'
+import { CallEngine, type MediaState, type Quality, CALL_TEXT_MAX, validCallText, callTextRejectText, CallQualityAnnouncer } from '../../lib/webrtc'
 import type { ActiveCall } from './CallController'
 
 export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?: 'peer' | 'admin' | 'signaling') => void }) {
@@ -38,6 +38,10 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
   const [draft, setDraft] = useState('')
   // 面板关着时的读屏播报：aria-live 区必须**常驻**（随 chatOpen 卸载的 live region 读屏收不到）。
   const [srNote, setSrNote] = useState('')
+  // 信号变差/恢复的读屏主动播报（与 iOS CallQualityAnnouncer 同款去抖：只播进入弱/从弱恢复，连续确认后才播）——
+  // web 盲人用户此前只有 QualityBars 的静态 aria-label，信号掉了不会被主动告知。用**独立** live 区，不与文字消息互相冲刷。
+  const [qualityNote, setQualityNote] = useState('')
+  const qualityAnnouncerRef = useRef(new CallQualityAnnouncer())
   // Safari 的 compositionend 在确认候选词的 keydown 之后才触发，e.nativeEvent.isComposing 在该次
   // keydown 上已是 false——须自持合成态并用 setTimeout(0) 延迟复位才能挡住"确认候选词即误发送"。
   const composingRef = useRef(false)
@@ -70,7 +74,12 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
           onMediaState: (s) => setMediaState(s),
           onRemoteStream: (stream) => { if (videoRef.current) videoRef.current.srcObject = stream },
           onPeerVideoGate: (on) => setPeerVideoOn(on),
-          onQuality: (q) => setQuality(q),
+          onQuality: (q) => {
+            setQuality(q)
+            const say = qualityAnnouncerRef.current.update(q)
+            if (say === 'weak') setQualityNote(t('通话信号弱，可能卡顿或听不清；换个位置或靠近路由器可能会好一些。', 'Call signal is weak — audio may stutter; moving or getting closer to your router may help.'))
+            else if (say === 'recovered') setQualityNote(t('通话信号恢复了。', 'Call signal is back to normal.'))
+          },
           onAdminObserving: (info) => setAdmin(info),
           onPeerRecording: (on) => setPeerRecording(on),
           onRecordRequest: () => setIncomingRecReq(true),
@@ -164,6 +173,8 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
     <div className="fixed inset-0 z-[110] flex flex-col bg-[#0b0d14] text-white">
       {/* 常驻读屏播报区：面板关闭时的来信通知。随 chatOpen 卸载的 live region 读屏收不到，必须恒渲染。 */}
       <div className="sr-only" role="status" aria-live="polite">{srNote}</div>
+      {/* 信号变差/恢复的主动播报（独立 live 区，不与来信互相冲刷）——盲人 web 用户与 iOS 语音提示对齐。 */}
+      <div className="sr-only" role="status" aria-live="polite">{qualityNote}</div>
       {/* 顶部信息 */}
       <div className="flex items-center gap-3 px-4 pt-[max(env(safe-area-inset-top),0.75rem)] pb-3">
         <Avatar name={peer.name || '?'} src={peer.avatar} size={40} />

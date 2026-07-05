@@ -41,6 +41,26 @@ final class LiveLocationStringsTests: XCTestCase {
         XCTAssertEqual(LiveLocationStrings.relativeMovement(headingDegrees: 180, bearingToContactDegrees: .infinity), .crossing)
     }
 
+    func testArrivedAtPlaceBilingualUsesLabel() {
+        // 到达围栏自播报用地点 label（家/公司/自定义），双语，英文不串中文。
+        XCTAssertEqual(LiveLocationStrings.arrivedAtPlace("家", .zh), "你到家了")
+        XCTAssertEqual(LiveLocationStrings.arrivedAtPlace("公司", .zh), "你到公司了")
+        let en = LiveLocationStrings.arrivedAtPlace("Work", .en)
+        XCTAssertTrue(en.contains("Work") && en.lowercased().contains("arrived"))
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
+
+    func testSavedPlaceDecodesLatLngForGeofence() throws {
+        // 服务端 /api/places 下发 lat/lng（保存时 geocode 缓存），iOS 须解码供到达围栏——此前丢弃这两字段。
+        let json = #"{"ownerId":"u1","label":"家","address":"XX路1号","lat":39.9,"lng":116.4,"updatedAt":1700000000000}"#
+        let p = try JSONDecoder().decode(APIClient.SavedPlace.self, from: Data(json.utf8))
+        XCTAssertEqual(p.lat, 39.9); XCTAssertEqual(p.lng, 116.4); XCTAssertEqual(p.label, "家")
+        // geocode 失败/境外：坐标缺失 → nil（围栏跳过该地点，不崩）。
+        let noCoord = #"{"ownerId":"u1","label":"公司","address":"海外","updatedAt":1700000000000}"#
+        let p2 = try JSONDecoder().decode(APIClient.SavedPlace.self, from: Data(noCoord.utf8))
+        XCTAssertNil(p2.lat); XCTAssertNil(p2.lng)
+    }
+
     func testMovementPhraseBilingualCrossingSilent() {
         XCTAssertEqual(LiveLocationStrings.movementPhrase(.approaching, .zh), "，正朝你靠近")
         XCTAssertEqual(LiveLocationStrings.movementPhrase(.movingAway, .zh), "，正在远离")

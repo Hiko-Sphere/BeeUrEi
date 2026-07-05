@@ -17,6 +17,8 @@ enum LiveLocationStrings {
 
     static func startedSpeak(_ l: Language) -> String { l == .zh ? "已开始共享你的实时位置" : "Started sharing your live location" }
     static func stoppedSpeak(_ l: Language) -> String { l == .zh ? "已停止共享位置" : "Stopped sharing your location" }
+    /// 到达常用地点（家/公司/自定义 label）自播报——盲人定向确认"我到了X"。
+    static func arrivedAtPlace(_ label: String, _ l: Language) -> String { l == .zh ? "你到\(label)了" : "You've arrived at \(label)" }
     static func permissionDenied(_ l: Language) -> String {
         l == .zh ? "定位权限被关闭，请在系统设置中允许 BeeUrEi 使用定位" : "Location permission is off. Allow BeeUrEi to use your location in Settings."
     }

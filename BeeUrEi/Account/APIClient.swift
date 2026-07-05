@@ -622,6 +622,8 @@ struct APIClient {
         let ownerId: String
         let label: String
         let address: String
+        let lat: Double?   // WGS-84（服务端保存时 geocode 缓存）——供到达围栏"你到家了"自播报；geocode 失败/境外为 nil
+        let lng: Double?
         let updatedAt: Double
         var id: String { label } // (ownerId 固定为本人) label 唯一
     }

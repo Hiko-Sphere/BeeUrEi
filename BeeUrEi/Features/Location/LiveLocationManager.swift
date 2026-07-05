@@ -33,6 +33,9 @@ final class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     // 否则已过 sharing 守卫、悬在 await updateLocation 的旧上报若晚于 stop 到达服务器，
     // 会把刚停止的共享"复活"（服务端 update 无条件 set、stop 只 delete）≤90s（见 flag task_86ec92b0）。
     @ObservationIgnored private var inflightPublish: Task<Void, Never>?
+    // 到达围栏自播报（"你到家了"）：共享期间本地判定盲人自己到达常用地点，做定向确认（服务端另通知家人）。
+    @ObservationIgnored private var geofencePlaces: [APIClient.SavedPlace] = []
+    @ObservationIgnored private var geofenceInside: Set<String>? = nil // nil=基线未建（首帧只建基线不报，免"开始共享时已在家"误报）
 
     private override init() {
         super.init()
@@ -105,6 +108,9 @@ final class LiveLocationManager: NSObject, CLLocationManagerDelegate {
             }
         }
         announce(LiveLocationStrings.startedSpeak(lang))
+        // 加载常用地点坐标供到达围栏（"你到家了"自播报）；重置滞回基线，首帧只建基线不报。
+        geofenceInside = nil
+        if let token { Task { [weak self] in self?.geofencePlaces = (try? await APIClient().savedPlaces(token: token)) ?? [] } }
     }
 
     func stopSharing() {
@@ -113,6 +119,7 @@ final class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         manager.stopUpdatingLocation()
         manager.allowsBackgroundLocationUpdates = false
         publishTask?.cancel(); publishTask = nil
+        geofencePlaces = []; geofenceInside = nil // 停止共享即清围栏状态（下次开始重载+重建基线）
         clearCachedFix() // 停止后清缓存定位：再次开始共享前不复用旧坐标上报（见复审）
         // 先等在途上报落地再发 stop：保证服务器按 update→stop 顺序处理，杜绝晚到的旧上报复活已停共享。
         // 在途请求受 30s 空闲超时约束，最坏也只延迟 stop 半分钟；本地 sharing 已置 false，UI/播报即时。
@@ -144,8 +151,25 @@ final class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         guard let loc = locations.last else { return }
         latest = loc
         lastCoordinate = loc.coordinate
+        checkGeofenceArrival(loc)
         // 移动达阈值即可立即上报（不必等定时器），让对端更跟手——但不超过每 ~6s 一次，省流量/限流。
         if Date().timeIntervalSince(lastPublish) >= 6 { Task { await trackedPublish() } }
+    }
+
+    /// 本地到达围栏判定并播报"你到家了"（核心 GeofenceEvaluator，已测；与服务端同滞回门槛）。只播**到达**（定向确认，
+    /// 离开对定向意义小、免噪声）。首帧只建基线不报（避免开始共享时已在某地点却误报"你到了"）。
+    private func checkGeofenceArrival(_ loc: CLLocation) {
+        guard !geofencePlaces.isEmpty else { return }
+        let places = geofencePlaces.compactMap { p -> GeofenceEvaluator.Place? in
+            guard let lat = p.lat, let lng = p.lng else { return nil }
+            return GeofenceEvaluator.Place(label: p.label, lat: lat, lng: lng)
+        }
+        let result = GeofenceEvaluator.evaluate(currentLat: loc.coordinate.latitude, currentLon: loc.coordinate.longitude,
+                                                places: places, prevInside: geofenceInside ?? [])
+        if geofenceInside != nil { // 已建基线：播本次新到达
+            for label in result.arrived { announce(LiveLocationStrings.arrivedAtPlace(label, lang)) }
+        }
+        geofenceInside = result.insideLabels
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) { /* 瞬时失败忽略，下次更新/定时器重试 */ }

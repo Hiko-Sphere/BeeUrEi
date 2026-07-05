@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, APIError, type NotificationInfo } from '../../lib/api'
-import { pickUnreadEmergencies, playEmergencyChime, clearedSenderIds, ackEventNotifIds, respondingEventIds } from '../../lib/emergencyAlerts'
+import { pickUnreadEmergencies, playEmergencyChime, clearedSenderLatest, isClearedByLaterAllClear, ackEventNotifIds, respondingEventIds } from '../../lib/emergencyAlerts'
 import { emergencyLocInfo } from '../../lib/emergencyLoc'
 import { useI18n } from '../../lib/i18n'
 import { Modal, fmtTime } from '../../components/ui'
@@ -135,9 +135,10 @@ export function EmergencyAlertHost() {
         if (!alive) return
         notifsRef.current = notifications // 存下完整列表：确认时按 eventId 收敛同事件兄弟告警
         // 发起人已报平安(emergency_clear)的告警就地消掉——对方已没事，让担心的亲友立刻安心，不再弹/响。
-        const cleared = clearedSenderIds(notifications)
+        // 按**时刻**比对：只消掉早于该发起人最近一次报平安的告警；其报平安**之后**再发的新告警(二次摔倒/求助)照弹。
+        const clearedAt = clearedSenderLatest(notifications)
         const urgent = pickUnreadEmergencies(notifications, dismissedRef.current)
-          .filter((n) => !(n.data?.fromId && cleared.has(n.data.fromId)))
+          .filter((n) => !isClearedByLaterAllClear(n, clearedAt))
         setAlerts(urgent)
         setRespondingEvents(respondingEventIds(notifications)) // 已有人在响应的事件（模态显示协调提示）
         // 只对首次见到的告警响铃（轮询重复到达不再响）。

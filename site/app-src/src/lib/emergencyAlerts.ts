@@ -43,13 +43,29 @@ export function ackEventNotifIds(list: NotificationInfo[], top: NotificationInfo
   return ids.includes(top.id) ? ids : [top.id, ...ids]
 }
 
-/// 已被发起人"报平安(emergency_clear)"解除的告警发起人 id 集合：其名下所有告警应就地消掉（对方已没事，
-/// 让担心的亲友立刻安心）。按 **fromId** 关联而非精确 id——告警通知带 eventId、报平安带 alertId（两套 id
-/// 空间不同），且"X 报平安"本就意味 X 的所有未决告警都可解除，按发起人聚合正是想要的语义。
-export function clearedSenderIds(list: NotificationInfo[]): Set<string> {
-  const s = new Set<string>()
-  for (const n of list) if (n.kind === 'emergency_clear' && n.data?.fromId) s.add(n.data.fromId)
-  return s
+/// 每个发起人**最近一次**"报平安(emergency_clear)"的时刻(ms)。调用方据此消掉该发起人**早于此刻**的告警
+/// （对方已没事，让担心的亲友立刻安心）；晚于此刻的新告警照常弹。按 **fromId** 关联而非精确 id——告警通知带
+/// eventId、报平安带 alertId（两套 id 空间不同），且"X 报平安"意味 X 截至此刻的未决告警都可解除。
+///
+/// ⚠️ 曾按 fromId 聚合成 Set（"X 报过平安就压掉 X 一切告警"）。但报平安是**持久**通知——X 报平安后**再次**
+/// 摔倒/求助的新告警会被那条旧报平安**永久压掉**，协助者漏看真实的二次紧急（安全攸关）。改记时刻、只压制早于它的。
+export function clearedSenderLatest(list: NotificationInfo[]): Map<string, number> {
+  const m = new Map<string, number>()
+  for (const n of list) {
+    if (n.kind === 'emergency_clear' && n.data?.fromId) {
+      const prev = m.get(n.data.fromId)
+      if (prev === undefined || n.createdAt > prev) m.set(n.data.fromId, n.createdAt)
+    }
+  }
+  return m
+}
+
+/// 某告警是否已被同发起人**更晚**的报平安解除（应就地消掉）。clearedAt 来自 clearedSenderLatest。
+export function isClearedByLaterAllClear(alert: NotificationInfo, clearedAt: ReadonlyMap<string, number>): boolean {
+  const fromId = alert.data?.fromId
+  if (!fromId) return false
+  const c = clearedAt.get(fromId)
+  return c !== undefined && c >= alert.createdAt // 报平安不早于该告警 → 解除；晚来的新告警(createdAt 更大)不受旧平安影响
 }
 
 /// **已有其他亲友在响应**（emergency_responding）的告警事件 id 集合：供告警模态显示"有人正在响应"，

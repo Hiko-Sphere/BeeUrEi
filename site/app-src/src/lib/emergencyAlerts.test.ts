@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pickUnreadEmergencies, clearedSenderIds, ackEventNotifIds, respondingEventIds } from './emergencyAlerts'
+import { pickUnreadEmergencies, clearedSenderLatest, isClearedByLaterAllClear, ackEventNotifIds, respondingEventIds } from './emergencyAlerts'
 import type { NotificationInfo } from './api'
 
 function notif(id: string, kind: string, createdAt: number, readAt?: number, data?: Record<string, string>): NotificationInfo {
@@ -51,18 +51,32 @@ describe('pickUnreadEmergencies（告警实时弹出的挑选规则）', () => {
     expect(pickUnreadEmergencies(list, none).map((n) => n.id)).toEqual(['a'])
   })
 
-  it('clearedSenderIds：发起人报平安后，其名下告警不再弹（按 fromId 聚合消掉）', () => {
+  it('报平安消掉其之前的告警、保留他人告警（按 fromId 关联，EmergencyAlertHost 同款过滤）', () => {
     const list = [
       notif('a1', 'emergency_alert', 100, undefined, { fromId: 'userX' }),
       notif('a2', 'emergency_alert', 200, undefined, { fromId: 'userY' }),
       notif('c1', 'emergency_clear', 300, undefined, { fromId: 'userX', alertId: 'z1' }), // X 报平安
     ]
-    const cleared = clearedSenderIds(list)
-    expect(cleared.has('userX')).toBe(true)
-    expect(cleared.has('userY')).toBe(false)
-    // 应用到告警选择：X 的告警消掉、Y 的保留（EmergencyAlertHost 同款过滤）
-    const shown = pickUnreadEmergencies(list, none).filter((n) => !(n.data?.fromId && cleared.has(n.data.fromId)))
-    expect(shown.map((n) => n.id)).toEqual(['a2'])
+    const clearedAt = clearedSenderLatest(list)
+    expect(clearedAt.get('userX')).toBe(300)
+    expect(clearedAt.has('userY')).toBe(false)
+    const shown = pickUnreadEmergencies(list, none).filter((n) => !isClearedByLaterAllClear(n, clearedAt))
+    expect(shown.map((n) => n.id)).toEqual(['a2']) // X 的(早于报平安)消掉、Y 的保留
+  })
+
+  it('回归：报平安**之后**再次摔倒/求助的新告警仍弹（旧报平安不永久压掉后续真实二次紧急，安全攸关）', () => {
+    const list = [
+      notif('a1', 'emergency_alert', 100, undefined, { fromId: 'userX' }),                 // 首次摔倒（早于报平安）
+      notif('a2', 'emergency_alert', 200, undefined, { fromId: 'userY' }),                 // 他人告警
+      notif('c1', 'emergency_clear', 300, undefined, { fromId: 'userX', alertId: 'z1' }),  // X 报平安
+      notif('a3', 'emergency_alert', 400, undefined, { fromId: 'userX', eventId: 'e2' }),  // X **再次**摔倒（晚于报平安）
+    ]
+    const clearedAt = clearedSenderLatest(list)
+    const shown = pickUnreadEmergencies(list, none).filter((n) => !isClearedByLaterAllClear(n, clearedAt))
+    // a1(100<300)被报平安消掉；a3(400>300)是新的二次紧急、必须保留；a2(userY)保留。时间倒序 → a3, a2。
+    expect(shown.map((n) => n.id)).toEqual(['a3', 'a2'])
+    expect(isClearedByLaterAllClear(list[3], clearedAt)).toBe(false) // 二次告警不被旧报平安解除
+    expect(isClearedByLaterAllClear(list[0], clearedAt)).toBe(true)  // 首次告警被解除
   })
 })
 

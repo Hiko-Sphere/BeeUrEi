@@ -15,6 +15,9 @@ export function notifDestination(kind: string): string | null {
   // 含子串 "link"，若 friend/link 先命中会被错误送到 /family——而绑/解绑 Apple 登录该去 /account 复核/撤销。
   // 安全变更预警/医疗被查看/实名结果都归账户页。
   if (kind.includes('security') || kind.includes('medical') || kind.includes('kyc') || kind.includes('verif')) return '/account'
+  // 被设为某人的紧急联系人：是**关系事件**（含子串 emergency 但不是 SOS 告警）——去亲友页看/管理谁把你设为紧急联系人。
+  // 须显式命中，否则落到末尾 return null，和真正的 emergency_alert（有专属"查看位置/回拨"按钮、故意不整行跳）混为一谈、点了没去处。
+  if (kind.includes('emergency_contact')) return '/family'
   if (kind.includes('friend') || kind.includes('link')) return '/family'
   if (kind.includes('group')) return '/chat'
   if (kind.includes('route')) return '/routes' // 路线通知 → 路线库页（查看/预览亲友新加的路线；执行仍在 iOS）
@@ -23,6 +26,9 @@ export function notifDestination(kind: string): string | null {
 }
 
 function iconFor(kind: string) {
+  // 被设为紧急联系人=关系事件，用人形图标；**须在 emergency→闪电 之前判**，否则 emergency_contact_set 含子串
+  // "emergency" 会误配成 SOS 告警闪电——把善意的"你被设为紧急联系人"渲染得像危险告警，并与真实告警视觉混淆。
+  if (kind.includes('emergency_contact')) return <IconUsers />
   if (kind.includes('emergency')) return <IconFlash />
   if (kind.includes('battery')) return <IconBattery /> // 共享者低电量提醒
   if (kind.includes('call')) return <IconPhone />

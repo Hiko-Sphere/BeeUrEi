@@ -19,6 +19,19 @@ const notif = (over: Record<string, unknown>) => ({
 describe('NotificationsPage 渲染（防字段漂移）', () => {
   beforeEach(() => vi.clearAllMocks())
 
+  it('被设为紧急联系人用人形图标、非 SOS 告警闪电（emergency_contact_set 含子串 emergency 曾误配闪电）', async () => {
+    ;(api.notifications as ReturnType<typeof vi.fn>).mockResolvedValue({
+      notifications: [notif({ id: 'ec1', kind: 'emergency_contact_set', title: '你被设为紧急联系人', body: '张三把你设为紧急联系人' })],
+      unread: 1,
+    })
+    const { container } = render(<NotificationsPage />)
+    expect(await screen.findByText('你被设为紧急联系人')).toBeInTheDocument()
+    // 不得出现 SOS 告警闪电（IconFlash 的独特闪电路径）——那是给真实紧急告警的，善意关系事件不该像危险告警。
+    expect(container.querySelector('path[d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"]')).toBeNull()
+    // 应为人形图标（IconUsers 的头部圆）。
+    expect(container.querySelector('circle[cx="9"]')).not.toBeNull()
+  })
+
   it('紧急告警带 lat/lon → 渲染"查看位置"链接，href 含坐标', async () => {
     ;(api.notifications as ReturnType<typeof vi.fn>).mockResolvedValue({
       notifications: [notif({ id: 'e1', kind: 'emergency_alert', title: '摔倒告警', body: '可能摔倒', data: { lat: '31.2', lon: '121.4', kind: 'fall' } })],

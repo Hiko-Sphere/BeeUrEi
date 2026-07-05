@@ -124,7 +124,10 @@ export function fireExpiredSafetyTimers(
         if (locAgeSec != null) notifData.locAgeSec = String(locAgeSec)
       }
       // 发起人有紧急医疗信息 → 提示紧急联系人查看（与 SOS 首呼同口径；读取仍走授权端点）。
-      if (store.getMedicalInfo(sender.id)) notifData.hasMedical = '1'
+      // 计一次，**notifData 与 APNs extra 都带**——iOS 侧靠 extra 渲染告警模态里的"查看医疗信息"，此前 extra 漏带
+      // 致 iOS 收到的报到告警不显示该提示（与 in-app/web 不一致，missed-sibling）。
+      const hasMedical = !!store.getMedicalInfo(sender.id)
+      if (hasMedical) notifData.hasMedical = '1'
       for (const m of members) {
         const l = pushLang(m.language)
         const title = pushStrings.safetyCheckinMissedTitle(sender.displayName, l)
@@ -138,6 +141,7 @@ export function fireExpiredSafetyTimers(
             extra.lat = String(lat); extra.lon = String(lon); extra.locSource = locSource
             if (locAgeSec != null) extra.locAgeSec = String(locAgeSec)
           }
+          if (hasMedical) extra.hasMedical = '1'
           void push.sendAlert(m.apnsToken, title, body, extra, undefined, safeBadge(m.id)).catch(() => { /* 单点失败不阻断 */ })
         }
       }

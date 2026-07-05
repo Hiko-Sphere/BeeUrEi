@@ -2,10 +2,18 @@ import { describe, it, expect } from 'vitest'
 import { buildApp } from '../src/app'
 import { MemoryStore, type SafetyTimer, type Store } from '../src/db/store'
 import { SqliteStore } from '../src/db/sqliteStore'
-import { NoopPushSender } from '../src/push/apns'
+import { NoopPushSender, type PushSender } from '../src/push/apns'
 import { NoopWebPushSender } from '../src/push/webPush'
 import { fireExpiredSafetyTimers, remindDueSoonSafetyTimers } from '../src/safety/checkin'
 import { cascadeDeleteUser } from '../src/db/cascade'
+
+// 捕获 APNs 告警的 extra，用于断言"未报到告警的推送载荷带 hasMedical"。
+class CapturingPush implements PushSender {
+  alerts: { token: string; extra?: Record<string, string> }[] = []
+  async send(): Promise<void> {}
+  async sendCallInvite(): Promise<void> {}
+  async sendAlert(token: string, _t: string, _b: string, extra?: Record<string, string>): Promise<void> { this.alerts.push({ token, extra }) }
+}
 
 async function setup(store: Store = new MemoryStore()) {
   const app = buildApp(store)
@@ -113,6 +121,31 @@ describe('安全报到到期自动告警（fireExpiredSafetyTimers）', () => {
     expect(ev).toHaveLength(1)
     expect(ev[0].kind).toBe('checkin')
     expect(store.unacknowledgedEmergencyEvents(now, now).some((e) => e.id === after.eventId)).toBe(true)
+  })
+
+  it('发起人有紧急医疗信息 → 未报到告警的**持久化通知 data 与 APNs extra 都带 hasMedical**（跨渠道一致）', async () => {
+    const { store, blind, family } = await setup()
+    const now = Date.now()
+    store.updateUser(family.id, { apnsToken: 'f'.repeat(64) }) // 亲友有 APNs token → 走 sendAlert
+    store.setMedicalInfo({ userId: blind.id, sealed: 'sealed-blob', updatedAt: 1 }) // 仅需存在
+    store.createSafetyTimer({ id: 'stMed', ownerId: blind.id, note: '走夜路', startedAt: now - 30 * 60_000, dueAt: now - 1000, status: 'active' })
+    const capPush = new CapturingPush()
+    expect(fireExpiredSafetyTimers(store, capPush, webPush, now, GRACE)).toBe(1)
+    // in-app / web push 的 notifData 带（此前已有）。
+    expect(missed(store, family.id)[0].data?.hasMedical).toBe('1')
+    // APNs extra 也带（本次修复：此前漏，iOS 收到的报到告警不显示"查看医疗信息"）。
+    expect(capPush.alerts.find((a) => a.token === 'f'.repeat(64))?.extra?.hasMedical).toBe('1')
+  })
+
+  it('发起人无医疗信息 → 未报到告警不带 hasMedical（两渠道都不误报）', async () => {
+    const { store, blind, family } = await setup()
+    const now = Date.now()
+    store.updateUser(family.id, { apnsToken: 'g'.repeat(64) })
+    store.createSafetyTimer({ id: 'stNoMed', ownerId: blind.id, startedAt: now - 30 * 60_000, dueAt: now - 1000, status: 'active' })
+    const capPush = new CapturingPush()
+    fireExpiredSafetyTimers(store, capPush, webPush, now, GRACE)
+    expect(missed(store, family.id)[0].data?.hasMedical).toBeUndefined()
+    expect(capPush.alerts[0]?.extra?.hasMedical).toBeUndefined()
   })
 
   // 最后已知位置来源 stub（形状同 LiveLocationRegistry.lastKnownForEmergency）。

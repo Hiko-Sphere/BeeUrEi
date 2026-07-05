@@ -50,21 +50,32 @@ final class SpokenStringsTests: XCTestCase {
     // MARK: 商品营养后缀（nutrition）——Nutri-Score + NOVA，可听营养质量。
 
     func testNutritionBothSignals() {
-        // 分级 + 超加工：以"。"/". "起（可链在过敏原后缀后一次 speak），中/英分隔一致。
-        XCTAssertEqual(SpokenStrings.nutrition(nutriScore: "a", novaGroup: 4, .zh), "。营养分级A，超加工食品")
-        XCTAssertEqual(SpokenStrings.nutrition(nutriScore: "a", novaGroup: 4, .en), ". Nutri-Score A, ultra-processed")
-        XCTAssertEqual(SpokenStrings.nutrition(nutriScore: "c", novaGroup: 1, .zh), "。营养分级C，未加工或轻加工")
+        // 分级（含方向性释义）+ 超加工：以"。"/". "起（可链在过敏原后缀后一次 speak），中/英分隔一致。
+        XCTAssertEqual(SpokenStrings.nutrition(nutriScore: "a", novaGroup: 4, .zh), "。营养分级A（最好），超加工食品")
+        XCTAssertEqual(SpokenStrings.nutrition(nutriScore: "a", novaGroup: 4, .en), ". Nutri-Score A (best), ultra-processed")
+        XCTAssertEqual(SpokenStrings.nutrition(nutriScore: "c", novaGroup: 1, .zh), "。营养分级C（中等），未加工或轻加工")
     }
 
     func testNutritionSingleSignal() {
-        XCTAssertEqual(SpokenStrings.nutrition(nutriScore: "b", novaGroup: nil, .zh), "。营养分级B") // 仅分级
+        XCTAssertEqual(SpokenStrings.nutrition(nutriScore: "b", novaGroup: nil, .zh), "。营养分级B（较好）") // 仅分级
         XCTAssertEqual(SpokenStrings.nutrition(nutriScore: nil, novaGroup: 4, .en), ". ultra-processed") // 仅 NOVA
         XCTAssertEqual(SpokenStrings.nutrition(nutriScore: nil, novaGroup: 3, .zh), "。加工食品")
     }
 
     func testNutritionUppercaseGradeNormalized() {
         // OFF 偶返回大写；大小写不敏感，输出统一大写字母。
-        XCTAssertEqual(SpokenStrings.nutrition(nutriScore: "E", novaGroup: nil, .en), ". Nutri-Score E")
+        XCTAssertEqual(SpokenStrings.nutrition(nutriScore: "E", novaGroup: nil, .en), ". Nutri-Score E (worst)")
+    }
+
+    func testNutriScoreQualityDirection() {
+        // 每个字母都带方向性释义（a 最好 → e 最差）——裸字母对盲人/不熟该分级者无意义。
+        XCTAssertEqual(SpokenStrings.nutriScoreQuality("a", .zh), "最好")
+        XCTAssertEqual(SpokenStrings.nutriScoreQuality("b", .zh), "较好")
+        XCTAssertEqual(SpokenStrings.nutriScoreQuality("c", .zh), "中等")
+        XCTAssertEqual(SpokenStrings.nutriScoreQuality("d", .zh), "较差")
+        XCTAssertEqual(SpokenStrings.nutriScoreQuality("e", .zh), "最差")
+        XCTAssertEqual(SpokenStrings.nutriScoreQuality("A", .en), "best")  // 大小写不敏感
+        XCTAssertEqual(SpokenStrings.nutriScoreQuality("e", .en), "worst")
     }
 
     func testNutritionRejectsBadDataAndReturnsNilWhenEmpty() {
@@ -75,7 +86,7 @@ final class SpokenStringsTests: XCTestCase {
         XCTAssertNil(SpokenStrings.nutrition(nutriScore: nil, novaGroup: 0, .zh))       // NOVA 越界（下）
         XCTAssertNil(SpokenStrings.nutrition(nutriScore: nil, novaGroup: 5, .zh))       // NOVA 越界（上）
         // 一好一坏：只保留可信的那个，不因坏数据整体丢弃。
-        XCTAssertEqual(SpokenStrings.nutrition(nutriScore: "a", novaGroup: 9, .zh), "。营养分级A") // 坏 NOVA 丢、保留分级
+        XCTAssertEqual(SpokenStrings.nutrition(nutriScore: "a", novaGroup: 9, .zh), "。营养分级A（最好）") // 坏 NOVA 丢、保留分级
         XCTAssertEqual(SpokenStrings.nutrition(nutriScore: "x", novaGroup: 2, .en), ". processed culinary ingredient") // 坏分级丢、保留 NOVA
     }
 }

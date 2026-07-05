@@ -383,13 +383,27 @@ public enum SpokenStrings {
     public static func nutrition(nutriScore: String?, novaGroup: Int?, _ lang: Language) -> String? {
         var parts: [String] = []
         if let g = nutriScore?.lowercased(), ["a", "b", "c", "d", "e"].contains(g) {
-            parts.append((lang == .zh ? "营养分级" : "Nutri-Score ") + g.uppercased())
+            // 附方向性释义：裸字母 A..E 对盲人（看不到绿→红配色）与不熟该欧洲分级者毫无意义——须点明"最好/最差"
+            // 才能据以决策（与 NOVA 已有"超加工食品"式可听描述对称，对标 Yuka / Open Food Facts 的良→差呈现）。
+            parts.append((lang == .zh ? "营养分级\(g.uppercased())（\(nutriScoreQuality(g, lang))）"
+                                      : "Nutri-Score \(g.uppercased()) (\(nutriScoreQuality(g, lang)))"))
         }
         if let n = novaGroup, (1...4).contains(n) {
             parts.append(novaDescriptor(n, lang))
         }
         guard !parts.isEmpty else { return nil }
         return (lang == .zh ? "。" : ". ") + parts.joined(separator: lang == .zh ? "，" : ", ")
+    }
+
+    /// Nutri-Score 字母 a..e 的方向性释义（a 最好 → e 最差）。仅 a..e 到达此（nutrition 已白名单过滤）。
+    static func nutriScoreQuality(_ grade: String, _ lang: Language) -> String {
+        switch grade.lowercased() {
+        case "a": return lang == .zh ? "最好" : "best"
+        case "b": return lang == .zh ? "较好" : "good"
+        case "c": return lang == .zh ? "中等" : "fair"
+        case "d": return lang == .zh ? "较差" : "poor"
+        default:  return lang == .zh ? "最差" : "worst" // e
+        }
     }
 
     /// NOVA 加工程度 1..4 的可听描述（超出范围由 nutrition(...) 过滤，绝不落此）。

@@ -46,6 +46,32 @@ final class AssistStringsTests: XCTestCase {
         XCTAssertFalse(AssistStrings.onlineSuffix(.en).contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
 
+    private func mkLink(emergency: Bool, status: String? = "accepted") -> FamilyLinkInfo {
+        let st = status.map { ",\"status\":\"\($0)\"" } ?? ""
+        let json = "{\"id\":\"l\",\"memberId\":\"m\",\"memberName\":\"X\",\"relation\":\"亲友\",\"isEmergency\":\(emergency)\(st)}"
+        return try! JSONDecoder().decode(FamilyLinkInfo.self, from: Data(json.utf8))
+    }
+
+    func testHasUsableEmergencyContact() {
+        // 已接受 ∧ 紧急 → 有可用紧急联系人（SOS/摔倒告警扇出只走这类）。
+        XCTAssertTrue(FamilyLinkInfo.hasUsableEmergencyContact(in: [mkLink(emergency: true)]))
+        // 已接受但**非紧急** → 无（非紧急联系人不进 SOS 扇出）。
+        XCTAssertFalse(FamilyLinkInfo.hasUsableEmergencyContact(in: [mkLink(emergency: false)]))
+        // 紧急但**未接受**(pending) → 无（服务端只对 accepted 扇出，pending 收不到）。
+        XCTAssertFalse(FamilyLinkInfo.hasUsableEmergencyContact(in: [mkLink(emergency: true, status: "pending")]))
+        XCTAssertFalse(FamilyLinkInfo.hasUsableEmergencyContact(in: [])) // 空 → 无
+        // 混合中有一个已接受+紧急 → 有。
+        XCTAssertTrue(FamilyLinkInfo.hasUsableEmergencyContact(in: [mkLink(emergency: false), mkLink(emergency: true, status: "pending"), mkLink(emergency: true)]))
+    }
+
+    func testNoEmergencyContactWarningBilingual() {
+        XCTAssertTrue(AssistStrings.noEmergencyContactWarning(.zh).contains("紧急联系人"))
+        XCTAssertTrue(AssistStrings.noEmergencyContactWarning(.zh).contains("无人可通知"))
+        let en = AssistStrings.noEmergencyContactWarning(.en)
+        XCTAssertTrue(en.lowercased().contains("no emergency contact") && en.lowercased().contains("no one"))
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
+
     func testFamilyLinkInfoDecodesOnlinePresence() throws {
         // 服务端 viewLink 下发 online（对方此刻在线/待命）；iOS 须解码——此前缺此字段，盲人在亲友屏看不到谁接得通。
         let json = #"{"id":"l1","memberId":"m1","memberName":"妈妈","relation":"母亲","isEmergency":true,"status":"accepted","online":true}"#

@@ -1,9 +1,18 @@
 import SwiftUI
 import UIKit
 
+extension FamilyLinkInfo {
+    /// 是否有"可用的紧急联系人"（已接受 ∧ 标为紧急）——SOS/紧急告警的扇出**只走这类**（服务端 linksByOwner∧isEmergency）。
+    /// 无则紧急求助/摔倒告警**无人可通知**，属静默的假安心，须提前提示本人设置。纯逻辑可单测。
+    static func hasUsableEmergencyContact(in links: [FamilyLinkInfo]) -> Bool {
+        links.contains { $0.isAccepted && $0.isEmergency }
+    }
+}
+
 /// 视障侧：亲友绑定（后端 /api/family）+ 紧急呼叫（/api/emergency/trigger 取优先级目标）+ 电话兜底。
 struct FamilyLinksView: View {
     @State private var links: [FamilyLinkInfo] = []
+    @State private var loaded = false            // 首次加载完成才判"无紧急联系人"，避免加载中闪现警告
     @State private var newUsername = ""
     @State private var newRelation = ""
     @State private var newPhone = ""
@@ -31,6 +40,13 @@ struct FamilyLinksView: View {
                 .accessibilityHint(AssistStrings.emergencyCallHint(lang))
                 if let emergencyInfo {
                     Text(emergencyInfo).font(.footnote).foregroundStyle(.secondary)
+                }
+                // 主动安全提示：还没有"已接受的紧急联系人"时，SOS/摔倒告警将无人可通知（静默假安心）——
+                // 提前在此醒目提示去设置，别等真出事触发 SOS 才发现"没有可通知的亲友"。
+                if loaded && !FamilyLinkInfo.hasUsableEmergencyContact(in: links) {
+                    Label(AssistStrings.noEmergencyContactWarning(lang), systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote).foregroundStyle(Color.beeDanger)
+                        .accessibilityLabel(AssistStrings.noEmergencyContactWarning(lang))
                 }
             }
 
@@ -101,7 +117,7 @@ struct FamilyLinksView: View {
 
     private func load() async {
         guard let token = KeychainStore.read() else { errorText = AssistStrings.loginFirst(lang); return }
-        do { links = try await api.familyLinks(token: token); errorText = nil }
+        do { links = try await api.familyLinks(token: token); errorText = nil; loaded = true }
         catch { errorText = AssistStrings.loadFailed(lang) }
     }
 

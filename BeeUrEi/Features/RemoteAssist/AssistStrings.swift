@@ -81,6 +81,11 @@ enum AssistStrings {
     static func emergencyCallHint(_ l: Language) -> String {
         l == .zh ? "按优先级依次呼叫标记为紧急联系人的亲友" : "Calls your emergency contacts in priority order"
     }
+    /// 无紧急联系人时的主动安全提示：SOS/摔倒告警将无人可通知，提示去设置。
+    static func noEmergencyContactWarning(_ l: Language) -> String {
+        l == .zh ? "你还没有紧急联系人。紧急求助或摔倒告警将无人可通知——请在下方添加亲友并设为紧急联系人。"
+                 : "You have no emergency contacts. SOS and fall alerts will reach no one — add a family member below and mark them as an emergency contact."
+    }
     static func noLinksYet(_ l: Language) -> String {
         l == .zh ? "还没有绑定。下面按对方用户名添加。" : "No links yet. Add someone by username below."
     }

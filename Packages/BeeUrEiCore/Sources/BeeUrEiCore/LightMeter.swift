@@ -14,6 +14,11 @@ public struct LightMeter: Sendable {
     }
 
     public func level(brightness: Double) -> Level {
+        // 坏亮度读数（NaN/∞——空像素缓冲/相机启停瞬间等算出的非有限值）：保守判「暗」，绝不落到 .ok 谎报
+        // "光线充足"。本模块的职责就是在光线不足时提醒——坏读数应促使用户"到亮处重试"（无害且有用），
+        // 而非放行去扫却失败。同 CompassRose(非有限→nil)/WeatherPhrase(→"未知")/brighterSide(→.even) 的坏数据守卫，
+        // 唯 level 曾漏。（.ok 时 warning 返回 nil＝不提醒，正是最不该给坏读数的结果。）
+        guard brightness.isFinite else { return .dark }
         if brightness < darkThreshold { return .dark }
         if brightness < dimThreshold { return .dim }
         return .ok

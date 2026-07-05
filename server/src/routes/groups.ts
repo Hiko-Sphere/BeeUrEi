@@ -69,7 +69,11 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store, push: Pu
   })
 
   // 加人（群主）：新成员须是群主好友。
-  app.post('/api/groups/:id/members', { preHandler: [requireAuth(), requireFeature(store, 'groups')] }, async (req, reply) => {
+  // 限流：加人会向被加者发 group_added 推送——与建群同源的"改记录+外发推送"面。建群已限 10/min，加人/踢人却漏了：
+  // 群主反复 加→踢→加 同一人即可刷 group_added/group_removed 推送骚扰，仅受 300/min 全局约束。补 20/min 端级限流
+  // 掐断该环路（与 family addLink 同口径；20/min 远高于正常建群后逐个拉人的频率）。
+  app.post('/api/groups/:id/members', { preHandler: [requireAuth(), requireFeature(store, 'groups')],
+                                        config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = z.object({ userId: z.string().min(1) }).safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const group = store.findGroup((req.params as { id: string }).id)
@@ -92,7 +96,10 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store, push: Pu
   })
 
   // 移出成员：群主可踢任何非群主成员；普通成员只能移出自己（退群）。群主退群=解散。
-  app.delete('/api/groups/:id/members/:userId', { preHandler: requireAuth() }, async (req, reply) => {
+  // 限流同加人：群主踢人会向被踢者发 group_removed 推送——加→踢环路的另一半，同补 20/min 端级限流防刷推送。
+  // 自愿退群不发推送、也远不到 20/min，正常使用无感。
+  app.delete('/api/groups/:id/members/:userId', { preHandler: requireAuth(),
+                                                  config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
     const { id, userId } = req.params as { id: string; userId: string }
     const group = store.findGroup(id)
     if (!group) return reply.code(404).send({ error: 'not_found' })

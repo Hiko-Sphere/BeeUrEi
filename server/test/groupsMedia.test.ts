@@ -159,6 +159,24 @@ describe('群聊', () => {
     expect(gone.statusCode).toBe(404)
   })
 
+  it('加人端点有端级限流（挡刷 group_added 推送骚扰；与建群同源、20/min）', async () => {
+    const app = buildApp(new MemoryStore())
+    const owner = await reg(app, 'rlgowner', 'blind')
+    const victim = await reg(app, 'rlgvictim', 'family')
+    await bind(app, owner.token, victim.token, 'rlgvictim')
+    const created = await app.inject({ method: 'POST', url: '/api/groups', headers: auth(owner.token),
+      payload: { name: '刷群', memberIds: [victim.user.id] } })
+    const gid = (created.json() as any).group.id as string
+    // 端级 20/min：连打 22 次加人（victim 已在群→400 already_member，但限流 onRequest 先计数、与响应无关）应第 21 起 429。
+    // 改前无端级限流：22 次全 400、无 429，测即失败（同 family 紧急切换 / email-verify 端级限流回归口径）。
+    let limited = false
+    for (let i = 0; i < 22; i++) {
+      const r = await app.inject({ method: 'POST', url: `/api/groups/${gid}/members`, headers: auth(owner.token), payload: { userId: victim.user.id } })
+      if (r.statusCode === 429) { limited = true; break }
+    }
+    expect(limited).toBe(true)
+  })
+
   it('群消息表情回应：成员可回应，旁人不可', async () => {
     const app = buildApp(new MemoryStore())
     const owner = await reg(app, 'rowner', 'blind')

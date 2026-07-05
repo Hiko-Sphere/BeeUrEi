@@ -74,4 +74,20 @@ final class ClockDirectionTests: XCTestCase {
         XCTAssertEqual(ClockDirection(angleDegrees: 390).hour, 1)
         XCTAssertEqual(ClockDirection(angleDegrees: -330).hour, 1)
     }
+
+    // 平滑方位(init(angleDegrees:))覆盖整圈——normalizedX 受 FOV 限制只到 ±45°(1/2/10/11 点)，
+    // 但平滑后的方位可指向正右/正后/正左。安全攸关：钟点方向说反=盲人朝相反方向去够物体/避障。
+    // 尤其 ±180°(正后)都须归 6 点、+90°=正右=3 点、-90°=正左=9 点，此前这几个基点没被直接断言过。
+    func testCardinalAnglesFullClock() {
+        XCTAssertEqual(ClockDirection(angleDegrees: 90).hour, 3)    // 正右
+        XCTAssertEqual(ClockDirection(angleDegrees: -90).hour, 9)   // 正左
+        XCTAssertEqual(ClockDirection(angleDegrees: 180).hour, 6)   // 正后
+        XCTAssertEqual(ClockDirection(angleDegrees: -180).hour, 6)  // 正后（负向对映也归 6）
+        XCTAssertEqual(ClockDirection(angleDegrees: 60).hour, 2)
+        XCTAssertEqual(ClockDirection(angleDegrees: -60).hour, 10)
+        XCTAssertEqual(ClockDirection(angleDegrees: 120).hour, 4)
+        XCTAssertEqual(ClockDirection(angleDegrees: -120).hour, 8)
+        XCTAssertEqual(ClockDirection(angleDegrees: 150).hour, 5)
+        XCTAssertEqual(ClockDirection(angleDegrees: -150).hour, 7)
+    }
 }

@@ -218,9 +218,12 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     return { messages: store.searchDirectMessages(me, peer, query, limit) }
   })
 
-  // 撤回自己发出的消息（WhatsApp 式：双方都看到"已撤回"占位）。限发出后 2 分钟内。
-  // 视频消息撤回同时删除服务器上的媒体文件。
-  app.post('/api/messages/:id/recall', { preHandler: [requireAuth(), requireFeature(store, 'messaging')] }, async (req, reply) => {
+  // recall/edit/reaction 三个写操作与发送(/api/messages 60/min)**同口径**加端级限流：它们同样每次写库、且
+  // 会经会话 last + 客户端轮询播报**触达对方**（盲人侧把编辑/表情/撤回都朗读出来）——只限了发送、放任这三个不限，
+  // 等于留了同一"向对方注入内容/刷播报"面的旁路(反复贴表情/连改一条消息可绕过 60/min 刷对方的播报与写库)。补齐三者。
+  // 撤回自己发出的消息（WhatsApp 式：双方都看到"已撤回"占位）。限发出后 2 分钟内。视频消息撤回同时删除服务器上的媒体文件。
+  app.post('/api/messages/:id/recall', { preHandler: [requireAuth(), requireFeature(store, 'messaging')],
+                                         config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
     const id = (req.params as { id: string }).id
     const msg = store.findMessage(id)
     if (!msg) return reply.code(404).send({ error: 'not_found' })
@@ -236,7 +239,8 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
 
   // 编辑自己发出的**文字**消息（WhatsApp 式：改内容 + 标"已编辑"）。限发出后 15 分钟内、仅 text 类。
   // 新内容同样过违禁词（防先发合规再编辑成违禁绕过审核）与长度限制。
-  app.post('/api/messages/:id/edit', { preHandler: [requireAuth(), requireFeature(store, 'messaging')] }, async (req, reply) => {
+  app.post('/api/messages/:id/edit', { preHandler: [requireAuth(), requireFeature(store, 'messaging')],
+                                       config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = z.object({ text: z.string().trim().min(1).max(4000) }).safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const id = (req.params as { id: string }).id
@@ -262,7 +266,8 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
   })
 
   // 表情回应（WhatsApp 式：单 emoji，最新覆盖；空字符串取消）。单聊双方或群成员可操作。
-  app.post('/api/messages/:id/reaction', { preHandler: [requireAuth(), requireFeature(store, 'messaging')] }, async (req, reply) => {
+  app.post('/api/messages/:id/reaction', { preHandler: [requireAuth(), requireFeature(store, 'messaging')],
+                                           config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = z.object({ emoji: z.string().max(16) }).safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const id = (req.params as { id: string }).id

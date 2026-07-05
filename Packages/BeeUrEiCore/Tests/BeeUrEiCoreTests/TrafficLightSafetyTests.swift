@@ -49,4 +49,15 @@ final class TrafficLightSafetyTests: XCTestCase {
         XCTAssertEqual(c.classify(r: 0.2, g: 0.2, b: 0.2), .unknown)
         XCTAssertEqual(c.classify(r: 0.0, g: 0.0, b: 0.0), .unknown)
     }
+
+    /// 生命攸关：任一通道非有限（曝光归一化除零/溢出→∞，空 bbox 取平均→NaN）一律 unknown，绝不误判绿灯放行。
+    /// 尤其 g=∞ 会让绿灯启发式成立 → 致命假绿叫盲人过马路。
+    func testNonFiniteChannelIsUnknownNeverGreen() {
+        for bad in [Double.infinity, -.infinity, .nan] {
+            XCTAssertEqual(c.classify(r: 0.3, g: bad, b: 0.1), .unknown, "g=\(bad) 绝不能判绿灯")
+            XCTAssertEqual(c.classify(r: bad, g: 0.3, b: 0.1), .unknown, "r=\(bad) 绝不能判红")
+            XCTAssertEqual(c.classify(r: 0.3, g: 0.5, b: bad), .unknown, "b=\(bad)")
+            XCTAssertEqual(c.classify(r: bad, g: bad, b: bad), .unknown)
+        }
+    }
 }

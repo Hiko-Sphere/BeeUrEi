@@ -11,6 +11,10 @@ public struct TrafficLightClassifier: Sendable {
     public init() {}
 
     public func classify(r: Double, g: Double, b: Double) -> TrafficLightState {
+        // 非有限通道（曝光归一化除零/溢出算出 ∞、空 bbox 取平均得 NaN）：**绝不**分类，一律 .unknown。
+        // 生命攸关：如 g=∞ 会让「g>0.42 且 g-r>0.10」成立 → 误判**绿灯**、叫盲人过马路（致命假绿）。全 NaN 靠
+        // max 语义恰好落到 .unknown，但 ∞ 会穿过"太暗"门后触发误判——显式守卫最稳，且不依赖 max 的 NaN 序。
+        guard r.isFinite, g.isFinite, b.isFinite else { return .unknown }
         guard max(r, max(g, b)) > 0.22 else { return .unknown } // 太暗
         // 黄：红绿都亮、蓝低。
         if r > 0.5 && g > 0.4 && b < 0.45 && abs(r - g) < 0.22 { return .yellow }

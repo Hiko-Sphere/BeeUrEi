@@ -263,8 +263,11 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
       if (!group?.memberIds.includes(me)) return reply.code(403).send({ error: 'not_participant' })
     } else {
       if (msg.fromId !== me && msg.toId !== me) return reply.code(403).send({ error: 'not_participant' })
-      // 与发送同口径：互相拉黑后不能再用表情回应旧消息骚扰对方（发送已查 isBlockedBetween，回应此前漏查）。
       const other = msg.fromId === me ? msg.toId : msg.fromId
+      // 与发送**完全同口径**：可达性 = areLinked ∧ !isBlockedBetween（block-bypass 复审确立的双查铁律）。
+      // 此前只补了拉黑、漏了**解绑**：已解除好友关系的人仍能给旧消息贴表情，且经会话列表 last.reaction 触达对方
+      // ——发送须 areLinked 却回应不须，是同一可达面上的绕过口子。补齐 areLinked（顺序同发送：先绑定后拉黑）。
+      if (!areLinked(store, me, other)) return reply.code(403).send({ error: 'not_linked' })
       if (isBlockedBetween(store, me, other)) return reply.code(403).send({ error: 'blocked' })
     }
     if (msg.kind === 'recalled') return reply.code(400).send({ error: 'message_recalled' })

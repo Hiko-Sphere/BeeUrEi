@@ -432,4 +432,27 @@ describe('聊天（绑定好友互发）', () => {
     expect((blocked.json() as { error: string }).error).toBe('blocked')
     await app.close()
   })
+
+  it('解绑（非拉黑）后不能再用表情回应旧消息（与发送同口径 areLinked，补齐可达性双查）', async () => {
+    const app = buildApp(new MemoryStore())
+    const a = await reg(app, 'ula', 'blind')
+    const b = await reg(app, 'ulb', 'helper')
+    // 建链并捕获 link id（供随后解绑）。
+    await app.inject({ method: 'POST', url: '/api/family/links', headers: auth(a.token), payload: { username: 'ulb', relation: '亲友' } })
+    const inc = await app.inject({ method: 'GET', url: '/api/family/incoming', headers: auth(b.token) })
+    const linkId = (inc.json() as any).links[0].id as string
+    await app.inject({ method: 'POST', url: `/api/family/links/${linkId}/accept`, headers: auth(b.token) })
+    const sent = (await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, kind: 'text', text: '你好' } })).json().message
+    // 绑定期间：b 能回应。
+    expect((await app.inject({ method: 'POST', url: `/api/messages/${sent.id}/reaction`, headers: auth(b.token), payload: { emoji: '👍' } })).statusCode).toBe(200)
+    // a 解绑 b（未拉黑）：b 不能再回应（403 not_linked）——否则解绑者仍能经会话列表 last.reaction 触达对方。
+    expect((await app.inject({ method: 'DELETE', url: `/api/family/links/${linkId}`, headers: auth(a.token) })).statusCode).toBe(204)
+    const afterUnlink = await app.inject({ method: 'POST', url: `/api/messages/${sent.id}/reaction`, headers: auth(b.token), payload: { emoji: '😡' } })
+    expect(afterUnlink.statusCode).toBe(403)
+    expect((afterUnlink.json() as { error: string }).error).toBe('not_linked')
+    // 反向也一样：a（消息发送方）解绑后也不能再回应自己发出的旧消息。
+    const aReact = await app.inject({ method: 'POST', url: `/api/messages/${sent.id}/reaction`, headers: auth(a.token), payload: { emoji: '🎉' } })
+    expect(aReact.statusCode).toBe(403)
+    await app.close()
+  })
 })

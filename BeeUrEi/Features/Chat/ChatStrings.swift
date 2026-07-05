@@ -36,6 +36,17 @@ enum ChatStrings {
             return l == .zh ? "对方已不是你的联系人，无法发送" : "This person is no longer your contact"
         case "not_member":
             return l == .zh ? "你已不在该群聊中" : "You're no longer in this group"
+        // 以下此前 iOS 漏映射、落到笼统"发送失败，请重试"，而 web chatErrorText 早已区分。前三档由发视频
+        // （sendVideo→uploadMedia）真实触达：太大/配额满/格式不支持都是**重试同一文件也没用**，须点明让盲人换文件；
+        // too_many_requests 同理，反复重试只会持续被限流（与 web 对齐、跨端一致）。
+        case "too_many_requests":
+            return l == .zh ? "发送太频繁，请稍候再试。" : "Sending too fast — please wait a moment and try again."
+        case "media_too_large":
+            return l == .zh ? "视频太大（上限 50MB），请选短一点的。" : "Video too large (50MB max) — pick a shorter one."
+        case "media_quota_exceeded":
+            return l == .zh ? "你的媒体存储空间已满，请删除一些旧的视频消息。" : "Your media storage is full — delete some old video messages."
+        case "unsupported_media_type":
+            return l == .zh ? "不支持的文件格式。" : "Unsupported file type."
         default:
             return sendFailed(l)
         }

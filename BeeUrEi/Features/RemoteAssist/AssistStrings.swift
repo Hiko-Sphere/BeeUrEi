@@ -192,6 +192,14 @@ enum AssistStrings {
         case "maintenance":
             return l == .zh ? "系统维护中，呼叫暂不可用，请改用电话联系亲友。"
                             : "Under maintenance — calling is unavailable. Please use a phone call instead."
+        // 以下三档此前 iOS 漏映射、落到笼统"呼叫/求助失败"，而 web callErrorText 早已区分——"重试也没用/
+        // 已结束"的状态若不点明，盲人会对着注定失败的操作反复重试（与 web 对齐、跨端一致）。
+        case "too_many_requests":
+            return l == .zh ? "呼叫太频繁，请稍候几秒再试。" : "Too many call attempts — please wait a few seconds and try again."
+        case "not_linked":
+            return l == .zh ? "你们尚未建立联系，无法呼叫。" : "You're not linked yet, so you can't call."
+        case "already_claimed_or_gone":
+            return l == .zh ? "这条求助已被其他人接手或已结束。" : "This help request was already taken by someone else or has ended."
         default:
             return fallback
         }

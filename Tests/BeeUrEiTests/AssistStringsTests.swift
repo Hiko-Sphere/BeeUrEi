@@ -20,6 +20,23 @@ final class AssistStringsTests: XCTestCase {
         XCTAssertFalse(AssistStrings.topics(.en).contains(where: { $0.isEmpty }))
     }
 
+    func testCallErrorTextMapsActionableCodesLikeWeb() {
+        // 跨端一致：与 web callErrorText 同集——这些"重试也没用/已结束"码须给专属文案，不落笼统 fallback，
+        // 否则盲人会对着注定失败的操作反复重试（本次补齐此前 iOS 仅 feature_disabled/maintenance 的缺口）。
+        let fb = "呼叫失败"
+        for code in ["too_many_requests", "not_linked", "already_claimed_or_gone"] {
+            let zh = AssistStrings.callErrorText(APIError.server(code), fallback: fb, .zh)
+            XCTAssertNotEqual(zh, fb, "码 \(code) 应有专属中文文案，而非落 fallback")
+            let en = AssistStrings.callErrorText(APIError.server(code), fallback: "call failed", .en)
+            XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(en)")
+        }
+        XCTAssertEqual(AssistStrings.callErrorText(APIError.server("already_claimed_or_gone"), fallback: fb, .zh),
+                       "这条求助已被其他人接手或已结束。")
+        // 未知码 / 非 APIError.server：仍落 fallback（不误报）。
+        XCTAssertEqual(AssistStrings.callErrorText(APIError.server("nope"), fallback: fb, .zh), fb)
+        XCTAssertEqual(AssistStrings.callErrorText(NSError(domain: "x", code: 1), fallback: fb, .zh), fb)
+    }
+
     func testEnglishHasNoChinese() {
         let samples = [
             AssistStrings.callVolunteerSubtitle(.en), AssistStrings.helpFailed(.en),

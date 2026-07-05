@@ -140,6 +140,10 @@ enum ChatStrings {
     static func messageEditedSpeak(_ name: String, _ text: String, _ l: Language) -> String {
         l == .zh ? "\(name)把消息改成：\(text)" : "\(name) edited a message: \(text)"
     }
+    /// 对方撤回了一条已见过的消息——盲人只听过原文，若据其行动（如去某处等）会扑空；靠此语音得知那条已作废。
+    static func messageRecalledSpeak(_ name: String, _ l: Language) -> String {
+        l == .zh ? "\(name)撤回了一条消息" : "\(name) unsent a message"
+    }
     static let reactionChoices = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
 
     // MARK: 视频消息

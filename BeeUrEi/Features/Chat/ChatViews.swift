@@ -282,6 +282,20 @@ enum ChatEditAnnouncer {
     }
 }
 
+/// 消息撤回播报差分（纯逻辑，可单测）：轮询刷新时，找出**对方已见过的消息**从非撤回变为撤回的——盲人只听过原文，
+/// 若据其行动（去某处等）会扑空。只报 fromId != myId（对方撤的；本人自己撤自己知道）、old 里非撤回而 new 里已撤回、
+/// old 里已存在（首见即已撤回的消息由新消息分支跳过、不在此报，避免"进来就念一堆撤回"）。
+enum ChatRecallAnnouncer {
+    static func peerRecalls(old: [ChatMessageInfo], new: [ChatMessageInfo], myId: String) -> [ChatMessageInfo] {
+        let oldKind = Dictionary(old.map { ($0.id, $0.kind) }, uniquingKeysWith: { a, _ in a })
+        return new.filter { m in
+            guard m.fromId != myId, m.kind == "recalled" else { return false }
+            guard let prevKind = oldKind[m.id] else { return false } // 首见不报
+            return prevKind != "recalled"                            // 非撤回→撤回 才报
+        }
+    }
+}
+
 // MARK: - 聊天页（iMessage 式气泡 + 已读回执 + 语音条 + 图片 + 视频 + 轮询刷新；单聊/群聊共用）
 
 struct ChatView: View {
@@ -716,6 +730,11 @@ struct ChatView: View {
             for m in ChatEditAnnouncer.peerEditsToAnnounce(old: messages, new: list, myId: myId) {
                 let name = isGroup ? senderName(m.fromId) : target.title
                 SpeechHub.shared.speak(ChatStrings.messageEditedSpeak(name, String(m.text.prefix(60)), lang), channel: .query, voiceCode: lang.voiceCode)
+            }
+            // 对方撤回了已发的消息：盲人只听过原文、看不到"[已撤回]"占位，据其行动会扑空——语音告知那条已作废。
+            for m in ChatRecallAnnouncer.peerRecalls(old: messages, new: list, myId: myId) {
+                let name = isGroup ? senderName(m.fromId) : target.title
+                SpeechHub.shared.speak(ChatStrings.messageRecalledSpeak(name, lang), channel: .query, voiceCode: lang.voiceCode)
             }
         }
         // 最新一批满页且未翻到开头 → 可能还有更早历史，显示"加载更早"。

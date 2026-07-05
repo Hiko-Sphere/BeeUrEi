@@ -182,4 +182,30 @@ final class ChatStringsTests: XCTestCase {
         XCTAssertTrue(en.contains("see you at 4") && en.lowercased().contains("edited"))
         XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
+
+    func testRecallAnnouncerReportsOnlyPeerRecallsOfSeenMessages() {
+        let me = "me"
+        // 对方把已见过的消息撤回（text→"" kind→recalled）→ 报（盲人得知那条作废）。
+        XCTAssertEqual(ChatRecallAnnouncer.peerRecalls(
+            old: [mkEdit("m1", from: "peer", text: "在星巴克等你")],
+            new: [mkEdit("m1", from: "peer", text: "", kind: "recalled")], myId: me).map(\.id), ["m1"])
+        // 一直是撤回（无变化）→ 不报。
+        XCTAssertTrue(ChatRecallAnnouncer.peerRecalls(
+            old: [mkEdit("m1", from: "peer", text: "", kind: "recalled")],
+            new: [mkEdit("m1", from: "peer", text: "", kind: "recalled")], myId: me).isEmpty)
+        // **我自己**撤回自己的消息 → 不报（本人自己知道）。
+        XCTAssertTrue(ChatRecallAnnouncer.peerRecalls(
+            old: [mkEdit("m1", from: me, text: "hi")],
+            new: [mkEdit("m1", from: me, text: "", kind: "recalled")], myId: me).isEmpty)
+        // 首见即已撤回（old 里没有）→ 不报（新消息分支已跳过撤回，避免进来念一堆）。
+        XCTAssertTrue(ChatRecallAnnouncer.peerRecalls(
+            old: [], new: [mkEdit("m1", from: "peer", text: "", kind: "recalled")], myId: me).isEmpty)
+    }
+
+    func testMessageRecalledSpeakBilingual() {
+        XCTAssertTrue(ChatStrings.messageRecalledSpeak("小明", .zh).contains("撤回"))
+        let en = ChatStrings.messageRecalledSpeak("Sam", .en)
+        XCTAssertTrue(en.contains("Sam") && en.lowercased().contains("unsent"))
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
 }

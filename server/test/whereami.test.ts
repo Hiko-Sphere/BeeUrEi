@@ -37,6 +37,45 @@ describe('AMap reverse-geocode「我在哪」proxy', () => {
     await app.close()
   })
 
+  it('最近路口（roadinters）：按最小距离挑有效项，随地标一并返回（Soundscape 式路口锚点）', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({
+      status: '1', infocode: '10000',
+      regeocode: {
+        formatted_address: '北京市朝阳区',
+        addressComponent: { township: '望京街道' },
+        pois: [{ name: '银泰', direction: '东', distance: '50' }],
+        roadinters: [
+          { first_name: '阜通东大街', second_name: '望京中环南路', direction: '东北', distance: '120' }, // 远
+          { first_name: '广顺北大街', second_name: '阜通西大街', direction: '西', distance: '40' },       // 最近 → 选中
+          { first_name: '无名交叉', second_name: [], direction: '南', distance: '10' },                   // 缺第二路名 → 剔（即便更近）
+          { first_name: '空距离口', second_name: '某路', direction: '北', distance: [] },                 // 空距离陷阱 → 剔
+        ],
+      },
+    }) })))
+    const app = buildApp(new MemoryStore())
+    const res = await get(app, await token(app))
+    expect(res.statusCode).toBe(200)
+    expect(res.json().intersection).toEqual({ firstRoad: '广顺北大街', secondRoad: '阜通西大街', direction: '西', distanceMeters: 40 })
+    await app.close()
+  })
+
+  it('无 roadinters / 全无效：intersection 字段省略（不外发空/坏路口）', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({
+      status: '1', infocode: '10000',
+      regeocode: {
+        formatted_address: '某地', addressComponent: { township: '某街道' }, pois: [],
+        roadinters: [{ first_name: '只有一条路', second_name: [], direction: '东', distance: '20' }], // 缺路名 → 无有效交叉口
+      },
+    }) })))
+    const app = buildApp(new MemoryStore())
+    const res = await get(app, await token(app))
+    expect(res.statusCode).toBe(200)
+    expect(res.json().intersection).toBeUndefined()
+    await app.close()
+  })
+
   it('高德坑：空字段返回空数组 [] 不崩、归一为空串；坏 POI（无名/负距离）剔除', async () => {
     process.env.AMAP_API_KEY = 'webkey'
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({

@@ -14,14 +14,27 @@ public struct ReverseGeocode: Decodable, Equatable, Sendable {
             self.name = name; self.direction = direction; self.distanceMeters = distanceMeters
         }
     }
+    /// 最近路口/交叉口（两条相交路名 + 绝对方位 + 距离）：盲人定位与向路人/司机说明"在哪个路口"的天然锚点。
+    public struct Intersection: Decodable, Equatable, Sendable {
+        public let firstRoad: String
+        public let secondRoad: String
+        /// 高德绝对方位词（中文"东"/"东北"…，与用户朝向无关）。空串=方位未知。
+        public let direction: String
+        public let distanceMeters: Double
+        public init(firstRoad: String, secondRoad: String, direction: String, distanceMeters: Double) {
+            self.firstRoad = firstRoad; self.secondRoad = secondRoad; self.direction = direction; self.distanceMeters = distanceMeters
+        }
+    }
     /// 高德格式化完整地址（如"北京市朝阳区呼家楼街道…"）；无则空串。
     public let address: String
     /// 街道/乡镇（addressComponent.township）。空则空串。
     public let township: String
     /// 最近显著地标；缺则 nil。
     public let landmark: Landmark?
-    public init(address: String, township: String, landmark: Landmark?) {
-        self.address = address; self.township = township; self.landmark = landmark
+    /// 最近路口；缺则 nil。
+    public let intersection: Intersection?
+    public init(address: String, township: String, landmark: Landmark?, intersection: Intersection? = nil) {
+        self.address = address; self.township = township; self.landmark = landmark; self.intersection = intersection
     }
 }
 
@@ -32,18 +45,37 @@ public enum WhereAmIComposer {
         let zh = language == .zh
         // 主体优先用完整地址，其次退到街道/乡镇。
         let body = !g.address.isEmpty ? g.address : g.township
-        // 地址与地标都没有 → 明确告知无法确定，绝不播空串（盲人会以为没响应）。
-        if body.isEmpty && g.landmark == nil {
+        // 地址、路口、地标都没有 → 明确告知无法确定，绝不播空串（盲人会以为没响应）。
+        if body.isEmpty && g.landmark == nil && g.intersection == nil {
             return zh ? "无法确定当前位置" : "Can't determine your location"
         }
         var out = ""
         if !body.isEmpty {
             out = (zh ? "你大概在：" : "You're near: ") + body
         }
-        if let clause = landmarkClause(g.landmark, zh: zh, hasBody: !body.isEmpty) {
+        // 路口在地标之前：路口是更强的定向锚点（对标 Soundscape 优先播路口）。hasPrev=前面是否已有内容（决定用"。"接续还是起句）。
+        if let clause = intersectionClause(g.intersection, zh: zh, hasPrev: !out.isEmpty) {
+            out += clause
+        }
+        if let clause = landmarkClause(g.landmark, zh: zh, hasBody: !out.isEmpty) {
             out += clause
         }
         return out
+    }
+
+    private static func intersectionClause(_ x: ReverseGeocode.Intersection?, zh: Bool, hasPrev: Bool) -> String? {
+        guard let x = x, !x.firstRoad.isEmpty, !x.secondRoad.isEmpty else { return nil }
+        let distStr = SpokenStrings.locationDistance(x.distanceMeters, zh ? .zh : .en) // 溢出安全 + ≥1km 用公里
+        let dir = directionWord(x.direction, zh: zh)
+        let lead = hasPrev ? (zh ? "。附近路口：" : ". Nearby intersection: ")
+                           : (zh ? "附近路口：" : "Nearby intersection: ")
+        if zh {
+            return dir.isEmpty ? "\(lead)\(x.firstRoad)与\(x.secondRoad)交叉口，约\(distStr)"
+                               : "\(lead)\(x.firstRoad)与\(x.secondRoad)交叉口，\(dir)约\(distStr)"
+        } else {
+            return dir.isEmpty ? "\(lead)\(x.firstRoad) and \(x.secondRoad), about \(distStr)"
+                               : "\(lead)\(x.firstRoad) and \(x.secondRoad), \(dir) about \(distStr)"
+        }
     }
 
     private static func landmarkClause(_ lm: ReverseGeocode.Landmark?, zh: Bool, hasBody: Bool) -> String? {

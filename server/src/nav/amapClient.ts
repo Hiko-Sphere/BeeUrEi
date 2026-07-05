@@ -235,6 +235,9 @@ export interface AmapReverseGeocode {
   township: string
   /// 最近的显著地标：POI 名 + **绝对方位词**（东/东北…，与用户朝向无关，便于向出租车/路人转述）+ 直线距离米。缺则 undefined。
   landmark?: { name: string; direction: string; distanceMeters: number }
+  /// 最近的**路口/交叉口**（两条相交路名 + 绝对方位 + 直线距离米）：盲人定位与向路人/司机说明"在哪个路口"
+  /// 的天然锚点（对标 Soundscape / BlindSquare 的路口播报，往往比 POI 地标更利于定向）。缺则 undefined。
+  intersection?: { firstRoad: string; secondRoad: string; direction: string; distanceMeters: number }
 }
 
 /// 逆地理编码（location="经度,纬度" GCJ-02）→ 可播报地址 + 最近地标。
@@ -252,6 +255,7 @@ export async function amapReverseGeocode(location: string): Promise<AmapReverseG
       formatted_address?: unknown
       addressComponent?: { township?: unknown }
       pois?: Array<{ name?: unknown; direction?: unknown; distance?: unknown }>
+      roadinters?: Array<{ first_name?: unknown; second_name?: unknown; direction?: unknown; distance?: unknown }>
     }
   }
   assertAmapOk(res, data)
@@ -274,8 +278,21 @@ export async function amapReverseGeocode(location: string): Promise<AmapReverseG
     if (!Number.isFinite(d) || d < 0) continue
     if (d < best) { best = d; landmark = { name, direction: amapStr(p.direction).trim(), distanceMeters: d } }
   }
-  if (!address && !township && !landmark) return undefined // 什么都没有 → 视作无结果（上层回退 Apple）
-  return { address, township, landmark }
+  // 最近路口（交叉口）：取 roadinters 里距离最小的**有效**项（两条路名都在）。高德同样未必按距离排序，自己挑。
+  let intersection: AmapReverseGeocode['intersection'] | undefined
+  let bestInter = Infinity
+  for (const ri of rc.roadinters ?? []) {
+    const first = amapStr(ri.first_name).trim()
+    const second = amapStr(ri.second_name).trim()
+    if (!first || !second) continue // 须两条相交路名齐全，否则不成"交叉口"
+    const ds = amapStr(ri.distance).trim()
+    if (!ds) continue // 空距离陷阱同 POI：高德空字段 []→''→Number('')===0，会伪装成"0米"抢最近名额，先剔
+    const d = Number(ds)
+    if (!Number.isFinite(d) || d < 0) continue
+    if (d < bestInter) { bestInter = d; intersection = { firstRoad: first, secondRoad: second, direction: amapStr(ri.direction).trim(), distanceMeters: d } }
+  }
+  if (!address && !township && !landmark && !intersection) return undefined // 什么都没有 → 视作无结果（上层回退 Apple）
+  return { address, township, landmark, intersection }
 }
 
 /// 逆地理编码取行政区 adcode（公交路径规划的 city 参数必填，用起点 adcode）。key/配额等错误抛 AmapError；无 key/无匹配→undefined。

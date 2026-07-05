@@ -72,19 +72,53 @@ final class WhereAmIComposerTests: XCTestCase {
         XCTAssertEqual(WhereAmIComposer.compose(g, language: .zh), "你大概在：某地。最近的地标：远处，东约1000公里")
     }
 
+    private func inter(_ a: String, _ b: String, _ dir: String, _ dist: Double) -> ReverseGeocode.Intersection {
+        ReverseGeocode.Intersection(firstRoad: a, secondRoad: b, direction: dir, distanceMeters: dist)
+    }
+
+    func testIntersectionWovenBetweenAddressAndLandmark() {
+        // 地址 + 路口 + 地标：路口在地标之前（更强定向锚点），三段以"。"接续。
+        let g = ReverseGeocode(address: "北京市朝阳区", township: "望京街道",
+                               landmark: lm("银泰", "东", 50),
+                               intersection: inter("广顺北大街", "阜通西大街", "西", 40))
+        XCTAssertEqual(WhereAmIComposer.compose(g, language: .zh),
+                       "你大概在：北京市朝阳区。附近路口：广顺北大街与阜通西大街交叉口，西约40米。最近的地标：银泰，东约50米")
+    }
+
+    func testIntersectionOnlyNoAddressNoLandmark() {
+        // 只有路口：直接起句、不带"。"前缀；不因无地址/地标落"无法确定"。
+        let g = ReverseGeocode(address: "", township: "", landmark: nil,
+                               intersection: inter("中山路", "解放路", "南", 25))
+        XCTAssertEqual(WhereAmIComposer.compose(g, language: .zh), "附近路口：中山路与解放路交叉口，南约25米")
+        XCTAssertEqual(WhereAmIComposer.compose(g, language: .en), "Nearby intersection: 中山路 and 解放路, south about 25 meters")
+    }
+
+    func testIntersectionDirectionNormalizedAndUnknownOmitted() {
+        // 方位"正东"归一为"东"；异常/空方位省略（英文侧不外泄中文原文）。
+        let gz = ReverseGeocode(address: "某地", township: "", landmark: nil, intersection: inter("A路", "B路", "正东", 15))
+        XCTAssertEqual(WhereAmIComposer.compose(gz, language: .zh), "你大概在：某地。附近路口：A路与B路交叉口，东约15米")
+        let gw = ReverseGeocode(address: "somewhere", township: "", landmark: nil, intersection: inter("A St", "B St", "偏北", 15))
+        XCTAssertEqual(WhereAmIComposer.compose(gw, language: .en), "You're near: somewhere. Nearby intersection: A St and B St, about 15 meters")
+    }
+
     func testDecodableMatchesServerContract() throws {
-        // 服务端 /api/nav/whereami 的 JSON（landmark 可缺省）能被 Decodable 正确解出。
+        // 服务端 /api/nav/whereami 的 JSON（landmark/intersection 可缺省）能被 Decodable 正确解出。
         let json = """
         {"address":"北京市朝阳区景华南街5号","township":"呼家楼街道",
-         "landmark":{"name":"银泰中心","direction":"东","distanceMeters":50}}
+         "landmark":{"name":"银泰中心","direction":"东","distanceMeters":50},
+         "intersection":{"firstRoad":"广顺北大街","secondRoad":"阜通西大街","direction":"西","distanceMeters":40}}
         """.data(using: .utf8)!
         let g = try JSONDecoder().decode(ReverseGeocode.self, from: json)
         XCTAssertEqual(g.address, "北京市朝阳区景华南街5号")
         XCTAssertEqual(g.landmark?.name, "银泰中心")
         XCTAssertEqual(g.landmark?.distanceMeters, 50)
-        // landmark 缺省也能解。
+        XCTAssertEqual(g.intersection?.firstRoad, "广顺北大街")
+        XCTAssertEqual(g.intersection?.secondRoad, "阜通西大街")
+        XCTAssertEqual(g.intersection?.distanceMeters, 40)
+        // landmark / intersection 缺省也能解（向后兼容旧服务端）。
         let json2 = #"{"address":"x","township":"y"}"#.data(using: .utf8)!
         let g2 = try JSONDecoder().decode(ReverseGeocode.self, from: json2)
         XCTAssertNil(g2.landmark)
+        XCTAssertNil(g2.intersection)
     }
 }

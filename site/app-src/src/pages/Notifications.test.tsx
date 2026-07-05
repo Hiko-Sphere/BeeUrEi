@@ -10,7 +10,7 @@ vi.mock('../lib/api', () => ({
   api: { notifications: vi.fn(), markAllNotifsRead: vi.fn(), markNotifRead: vi.fn() },
 }))
 import { api } from '../lib/api'
-import { NotificationsPage } from './Notifications'
+import { NotificationsPage, notifDestination } from './Notifications'
 
 const notif = (over: Record<string, unknown>) => ({
   id: 'n', userId: 'u1', kind: 'report_resolved', title: 't', body: 'b', createdAt: 1_700_000_000_000, ...over,
@@ -56,5 +56,24 @@ describe('NotificationsPage 渲染（防字段漂移）', () => {
     render(<NotificationsPage />)
     expect(await screen.findByText('处置完成')).toBeInTheDocument()
     expect(screen.queryByText(/查看位置/)).toBeNull()
+  })
+})
+
+describe('notifDestination 通知跳转（子串路由，防 link/security 撞车）', () => {
+  it('账号安全类先判：绑/解绑 Apple 登录（含子串 "link"）→ /account，绝不被 friend/link 抢到 /family', () => {
+    expect(notifDestination('security_apple_linked')).toBe('/account')
+    expect(notifDestination('security_apple_unlinked')).toBe('/account')
+    expect(notifDestination('security_password_changed')).toBe('/account')
+    expect(notifDestination('security_passkey_added')).toBe('/account')
+    expect(notifDestination('medical_info_viewed')).toBe('/account')
+    expect(notifDestination('kyc_verified')).toBe('/account')
+  })
+  it('好友/群/路线/位置各归其页；无明确去处→null', () => {
+    expect(notifDestination('friend_request')).toBe('/family')
+    expect(notifDestination('group_added')).toBe('/chat')
+    expect(notifDestination('route_added')).toBe('/routes')
+    expect(notifDestination('place_arrival')).toBe('/locations')
+    expect(notifDestination('contact_critical_battery')).toBe('/locations')
+    expect(notifDestination('chat_message')).toBeNull()
   })
 })

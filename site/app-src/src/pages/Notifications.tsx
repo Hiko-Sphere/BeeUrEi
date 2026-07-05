@@ -10,12 +10,14 @@ import { useCall } from './call/CallController'
 /// 点击通知跳到"可操作页"：好友请求→亲友页（去接受/拒绝）、群变更→聊天页；其余无明确去处返回 null（仅标已读）。
 /// 纯函数便于单测。
 export function notifDestination(kind: string): string | null {
+  // 账号/安全类**必须先判**（在 friend/link 之前）：安全告警 security_apple_linked/security_apple_unlinked
+  // 含子串 "link"，若 friend/link 先命中会被错误送到 /family——而绑/解绑 Apple 登录该去 /account 复核/撤销。
+  // 安全变更预警/医疗被查看/实名结果都归账户页。
+  if (kind.includes('security') || kind.includes('medical') || kind.includes('kyc') || kind.includes('verif')) return '/account'
   if (kind.includes('friend') || kind.includes('link')) return '/family'
   if (kind.includes('group')) return '/chat'
   if (kind.includes('route')) return '/routes' // 路线通知 → 路线库页（查看/预览亲友新加的路线；执行仍在 iOS）
   if (kind.includes('place') || kind.includes('arrival') || kind.includes('battery')) return '/locations' // 到达/离开围栏(place_arrival/place_departure)/低电量 → 位置页看对方在哪
-  if (kind.includes('kyc') || kind.includes('verif')) return '/account' // 实名结果 → 账户页实名认证区
-  if (kind.includes('security') || kind.includes('medical')) return '/account' // 安全变更预警/医疗信息被查看 → 账户页
   return null
 }
 
@@ -23,10 +25,11 @@ function iconFor(kind: string) {
   if (kind.includes('emergency')) return <IconFlash />
   if (kind.includes('battery')) return <IconBattery /> // 共享者低电量提醒
   if (kind.includes('call')) return <IconPhone />
+  // 账号/安全/实名/举报/医疗类用盾牌——**须在 friend/link/group 之前判**：security_apple_linked/unlinked 含子串
+  // "link"，若 friend/link 先命中会被错配成 IconUsers（人形），账号安全告警该用盾牌。
+  if (kind.includes('report') || kind.includes('moderation') || kind.includes('ban') || kind.includes('kyc') || kind.includes('verif') || kind.includes('security') || kind.includes('medical')) return <IconShield />
   if (kind.includes('route') || kind.includes('arrival') || kind.includes('place')) return <IconPin /> // 路线库/到达围栏（route_added/place_arrival）用定位图标
   if (kind.includes('friend') || kind.includes('link') || kind.includes('group')) return <IconUsers />
-  // 实名认证（kyc_verified/kyc_rejected）与举报处置同属"账号/安全"类——用盾牌，免落到通用铃铛。
-  if (kind.includes('report') || kind.includes('moderation') || kind.includes('ban') || kind.includes('kyc') || kind.includes('verif') || kind.includes('security') || kind.includes('medical')) return <IconShield />
   if (kind.includes('record')) return <IconFilm />
   return <IconBell />
 }

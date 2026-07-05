@@ -43,4 +43,13 @@ public enum Language: String, Sendable, CaseIterable {
         case .en: return "en_US"
         }
     }
+
+    /// 列表分隔符：把**已本地化**的片段连成一句时用（如无障碍标签"名字，预览，时间"、会话/设备描述）。
+    /// 避免各处硬编码中文「，」——否则英文界面/英文 VoiceOver 里冒出中文逗号（同 localeIdentifier 的动机）。
+    public var listSeparator: String {
+        switch self {
+        case .zh: return "，"
+        case .en: return ", "
+        }
+    }
 }

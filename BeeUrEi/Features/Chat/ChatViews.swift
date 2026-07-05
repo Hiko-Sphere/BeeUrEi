@@ -241,13 +241,13 @@ struct ConversationsView: View {
     private func rowA11y(_ c: ConversationInfo) -> String {
         var parts = [c.peer.displayName, preview(c.last), ChatStrings.timeFormat(c.last.createdAt)]
         if c.unread > 0 { parts.append(ChatStrings.unreadBadgeA11y(c.unread, lang)) }
-        return parts.joined(separator: "，")
+        return parts.joined(separator: lang.listSeparator)
     }
 
     private func groupRowA11y(_ g: GroupConversationInfo) -> String {
         var parts = [g.group.name, ChatStrings.members(g.group.memberIds.count, lang), groupPreview(g)]
         if g.unread > 0 { parts.append(ChatStrings.unreadBadgeA11y(g.unread, lang)) }
-        return parts.joined(separator: "，")
+        return parts.joined(separator: lang.listSeparator)
     }
 }
 

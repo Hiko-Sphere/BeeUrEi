@@ -28,6 +28,17 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(Language.en.voiceCode, "en-US")
     }
 
+    func testListSeparator() {
+        // 连接已本地化片段（a11y 标签等）的分隔符：中文全角逗号、英文半角逗号+空格——英文界面不该冒中文标点。
+        XCTAssertEqual(Language.zh.listSeparator, "，")
+        XCTAssertEqual(Language.en.listSeparator, ", ")
+        // 用于 joined：中文"甲，乙"、英文"a, b"。
+        XCTAssertEqual(["甲", "乙"].joined(separator: Language.zh.listSeparator), "甲，乙")
+        XCTAssertEqual(["a", "b"].joined(separator: Language.en.listSeparator), "a, b")
+        // 英文分隔符不含任何中日韩字符（防误用全角标点）。
+        XCTAssertFalse(Language.en.listSeparator.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x3000 && $0.value <= 0x9FFF } }))
+    }
+
     // MARK: ClockDirection
 
     func testClockDirectionBothLanguages() {

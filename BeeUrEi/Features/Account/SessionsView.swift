@@ -83,7 +83,7 @@ struct SessionsView: View {
         var parts = [s.deviceLabel ?? SessionStrings.unknownDevice(lang)]
         if s.current { parts.append(SessionStrings.current(lang)) }
         parts.append(SessionStrings.lastSeen(s.lastSeenAt, lang))
-        return parts.joined(separator: "，")
+        return parts.joined(separator: lang.listSeparator)
     }
 
     private func load() async {

@@ -53,4 +53,16 @@ final class PeopleSummarizerTests: XCTestCase {
         let bad = s.summary(people: [(0.5, -1.0), (0.9, Double.infinity)])
         XCTAssertFalse(bad.contains("米"), "全为坏距离 → 不应报出任何距离; 实际: \(bad)")
     }
+
+    /// 多人但**全无距离**（非 LiDAR 设备/读数缺失）：排序退化为横向序，绝不谎称某人"最近"——只报方位。
+    func testManyWithoutDistanceDoesNotClaimNearest() {
+        let zh = s.summary(people: [(0.1, nil), (0.5, nil), (0.9, nil)])
+        XCTAssertFalse(zh.contains("最近的"), "无任何距离时不得称'最近的'（假精度）；实际: \(zh)")
+        XCTAssertTrue(zh.hasPrefix("看到 3 个人。有人在"), "应改口'有人在<方位>'；实际: \(zh)")
+        let en = s.summary(people: [(0.1, nil), (0.9, nil)], language: .en)
+        XCTAssertFalse(en.contains("Nearest"), "no distance → never claim 'Nearest'; got: \(en)")
+        XCTAssertTrue(en.hasPrefix("2 people. One "), "got: \(en)")
+        // 有距离时仍如常称"最近的"（回归：修复不误伤正常路径）。
+        XCTAssertTrue(s.summary(people: [(0.5, 2.0), (0.9, nil)]).contains("最近的在正前方，大约2.0 米"))
+    }
 }

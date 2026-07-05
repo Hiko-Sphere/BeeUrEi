@@ -296,15 +296,17 @@ public enum SpokenStrings {
 
     public static func peopleMany(count: Int, nearestDirection: String, nearestDistance: String?,
                                   others: [String], _ lang: Language) -> String {
+        // **有距离才敢称"最近的"**：无 LiDAR/读数缺失时排序退化为横向序（非真实远近），此时称某人"最近"是
+        // 没有依据的假精度——只报方位、不谎称谁最近（同 WeatherPhrase/LightMeter 的"坏/缺数据不硬报"取向）。
         switch lang {
         case .zh:
-            var s = "看到 \(count) 个人。最近的在\(nearestDirection)"
-                + (nearestDistance.map { "，大约\($0)" } ?? "")
+            let lead = nearestDistance.map { "最近的在\(nearestDirection)，大约\($0)" } ?? "有人在\(nearestDirection)"
+            var s = "看到 \(count) 个人。" + lead
             if !others.isEmpty { s += "；其他在" + others.joined(separator: "、") }
             return s
         case .en:
-            var s = "\(count) people. Nearest \(nearestDirection)"
-                + (nearestDistance.map { ", about \($0)" } ?? "")
+            let lead = nearestDistance.map { "Nearest \(nearestDirection), about \($0)" } ?? "One \(nearestDirection)"
+            var s = "\(count) people. " + lead
             if !others.isEmpty { s += "; others " + others.joined(separator: ", ") }
             return s
         }

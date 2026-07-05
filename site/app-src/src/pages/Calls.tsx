@@ -7,6 +7,18 @@ import { Card, Avatar, Button, Pill, Spinner, EmptyState } from '../components/u
 import { CallHistoryRow } from '../components/CallHistoryRow'
 import { IconPhone, IconUsers, IconCheck } from '../components/icons'
 
+/// 求助等待时长（后端给的是 waitedSeconds）：<60s 报秒、<1h 报分钟、≥1h 报"H 小时 M 分钟"。
+/// 公开求助最长可在队列滞留到 4 小时 TTL，无人认领时旧实现会显示"已等待 240 分钟"这类难读数——
+/// 志愿者据此判断"这位盲人已等很久、该优先接"，小时读法更直观。非有限/负值兜底为 0（不显示 NaN）。
+export function formatWaited(seconds: number, t: (z: string, e: string) => string): string {
+  const s = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0
+  if (s < 60) return t(`已等待 ${s} 秒`, `waited ${s}s`)
+  if (s < 3600) return t(`已等待 ${Math.floor(s / 60)} 分钟`, `waited ${Math.floor(s / 60)}m`)
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60)
+  return m > 0 ? t(`已等待 ${h} 小时 ${m} 分钟`, `waited ${h}h ${m}m`)
+               : t(`已等待 ${h} 小时`, `waited ${h}h`)
+}
+
 export function CallsPage() {
   const { t, lang } = useI18n()
   const { answerIncoming, claimQueue, active } = useCall()
@@ -33,8 +45,7 @@ export function CallsPage() {
 
   const onAnswer = async (c: IncomingCall) => { setBusyId(c.callId); await answerIncoming(c.callId, c.fromName, c.fromAvatar); setBusyId(null) }
   const onClaim = async (r: HelpRequest) => { setBusyId(r.callId); await claimQueue(r.callId, r.fromName || t('求助者', 'Requester'), undefined); setBusyId(null) }
-  // 等待时长（后端给的是 waitedSeconds，非时间戳）：>60s 显示分钟，否则秒。
-  const waited = (s: number) => s >= 60 ? t(`已等待 ${Math.floor(s / 60)} 分钟`, `waited ${Math.floor(s / 60)}m`) : t(`已等待 ${s} 秒`, `waited ${s}s`)
+  const waited = (s: number) => formatWaited(s, t)
 
   return (
     <div className="flex flex-col gap-5">

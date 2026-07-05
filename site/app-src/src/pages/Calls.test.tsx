@@ -8,7 +8,7 @@ vi.mock('react-router-dom', () => ({ Link: (p: { to: string; children: unknown }
 vi.mock('../lib/api', () => ({ api: { incomingCalls: vi.fn(), helpQueue: vi.fn(), callHistory: vi.fn() } }))
 vi.mock('./call/CallController', () => ({ useCall: () => ({ answerIncoming: vi.fn(), claimQueue: vi.fn(), active: null }) }))
 import { api } from '../lib/api'
-import { CallsPage } from './Calls'
+import { CallsPage, formatWaited } from './Calls'
 
 const mock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
 
@@ -65,5 +65,22 @@ describe('CallsPage 公开求助队列渲染（防字段漂移复发）', () => 
     render(<CallsPage />)
     // 历史段应落到空态"暂无记录"，而不是卡在 Spinner
     expect(await screen.findByText('暂无记录')).toBeInTheDocument()
+  })
+})
+
+describe('formatWaited 等待时长格式（秒/分钟/小时）', () => {
+  const t = (_z: string, e: string) => e
+  it('<60s 报秒；<1h 报分钟；≥1h 报小时（长候不再显示难读的大分钟数）', () => {
+    expect(formatWaited(45, t)).toBe('waited 45s')
+    expect(formatWaited(90, t)).toBe('waited 1m')            // floor
+    expect(formatWaited(3599, t)).toBe('waited 59m')
+    expect(formatWaited(3600, t)).toBe('waited 1h')          // 整点小时无分钟后缀
+    expect(formatWaited(5400, t)).toBe('waited 1h 30m')
+    expect(formatWaited(4 * 3600, t)).toBe('waited 4h')      // 4 小时 TTL 满：不再是"240m"
+  })
+  it('非有限/负值兜底为 0（不显示 NaN）', () => {
+    expect(formatWaited(NaN, t)).toBe('waited 0s')
+    expect(formatWaited(-5, t)).toBe('waited 0s')
+    expect(formatWaited(Infinity, t)).toBe('waited 0s')
   })
 })

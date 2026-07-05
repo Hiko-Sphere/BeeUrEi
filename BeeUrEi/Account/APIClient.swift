@@ -640,6 +640,29 @@ struct APIClient {
         _ = try await authedSend("DELETE", placePath(label), token: token)
     }
 
+    // MARK: 勿扰时段（Do-Not-Disturb）——只抑制软通知的推送横幅；紧急告警/来电/SOS 不受影响。
+
+    /// 勿扰时段：分钟-of-day [0,1439] + IANA 时区。startMinute>endMinute 表跨午夜（22:00→07:00）。字段与服务端一致。
+    struct QuietHours: Codable, Equatable, Sendable {
+        var enabled: Bool
+        var startMinute: Int
+        var endMinute: Int
+        var tz: String
+    }
+    /// 读勿扰时段设置（未设过→nil）。
+    func quietHours(token: String) async throws -> QuietHours? {
+        struct R: Decodable { let quietHours: QuietHours? }
+        let data = try await authedGet("/api/notifications/quiet-hours", token: token)
+        return try JSONDecoder().decode(R.self, from: data).quietHours
+    }
+    /// 存勿扰时段设置；回带服务端规范化后的值。tz 由调用方用**设备当前时区**填（TimeZone.current.identifier）。
+    func setQuietHours(token: String, _ q: QuietHours) async throws -> QuietHours {
+        struct R: Decodable { let quietHours: QuietHours }
+        let body: [String: Any] = ["enabled": q.enabled, "startMinute": q.startMinute, "endMinute": q.endMinute, "tz": q.tz]
+        let data = try await authedSend("PUT", "/api/notifications/quiet-hours", token: token, body: body)
+        return try JSONDecoder().decode(R.self, from: data).quietHours
+    }
+
     // MARK: 亲友 / 紧急
 
     func familyLinks(token: String) async throws -> [FamilyLinkInfo] {

@@ -18,6 +18,45 @@ final class AccountStringsTests: XCTestCase {
         XCTAssertEqual(AccountStrings.roleName("admin", .zh), "admin") // 未知角色原样回显
     }
 
+    func testQuietHoursTimeRoundTripsMinuteOfDay() {
+        // DatePicker 绑 Date、服务端存分钟-of-day：两向转换必须无损往返，否则用户设 22:30、存下来变成别的时刻。
+        // 用无 DST 的 UTC 日历 + 固定参考日，round-trip 对任意分钟稳定成立（生产用 Calendar.current；中国无 DST）。
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC")!
+        let ref = Date(timeIntervalSince1970: 1_700_000_000)
+        for m in [0, 1, 59, 60, 7 * 60, 22 * 60 + 30, 1439] {
+            let d = QuietHoursTime.date(fromMinuteOfDay: m, calendar: cal, reference: ref)
+            XCTAssertEqual(QuietHoursTime.minuteOfDay(from: d, calendar: cal), m, "分钟 \(m) 往返丢失")
+        }
+        // 具体时分正确（22:30）。
+        let d = QuietHoursTime.date(fromMinuteOfDay: 22 * 60 + 30, calendar: cal, reference: ref)
+        let c = cal.dateComponents([.hour, .minute], from: d)
+        XCTAssertEqual(c.hour, 22); XCTAssertEqual(c.minute, 30)
+        // 越界脏值夹取到 [0,1439]（不炸 DatePicker）。
+        XCTAssertEqual(QuietHoursTime.minuteOfDay(from: QuietHoursTime.date(fromMinuteOfDay: 5000, calendar: cal, reference: ref), calendar: cal), 1439)
+        XCTAssertEqual(QuietHoursTime.minuteOfDay(from: QuietHoursTime.date(fromMinuteOfDay: -10, calendar: cal, reference: ref), calendar: cal), 0)
+    }
+
+    func testQuietHoursDecodesServerShape() throws {
+        // 服务端 /api/notifications/quiet-hours 形状（enabled + 分钟-of-day + IANA tz），iOS 须解码对齐 web/server。
+        let json = #"{"enabled":true,"startMinute":1320,"endMinute":420,"tz":"Asia/Shanghai"}"#
+        let q = try JSONDecoder().decode(APIClient.QuietHours.self, from: Data(json.utf8))
+        XCTAssertEqual(q.enabled, true)
+        XCTAssertEqual(q.startMinute, 1320) // 22:00
+        XCTAssertEqual(q.endMinute, 420)    // 07:00
+        XCTAssertEqual(q.tz, "Asia/Shanghai")
+    }
+
+    func testQuietHoursStringsBilingual() {
+        for s in [QuietHoursStrings.navTitle(.en), QuietHoursStrings.enableLabel(.en), QuietHoursStrings.explain(.en),
+                  QuietHoursStrings.overnightHint(.en), QuietHoursStrings.saveFailed(.en)] {
+            XCTAssertFalse(s.isEmpty)
+            XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(s)")
+        }
+        // 说明须点明紧急/来电不受影响（安全承诺，别被漏改）。
+        XCTAssertTrue(QuietHoursStrings.explain(.zh).contains("紧急"))
+        XCTAssertTrue(QuietHoursStrings.explain(.en).lowercased().contains("emergency"))
+    }
+
     func testOpenChatHintBilingual() {
         XCTAssertEqual(AccountStrings.openChatHint(.zh), "轻点打开聊天")
         XCTAssertEqual(AccountStrings.openChatHint(.en), "Tap to open chat")

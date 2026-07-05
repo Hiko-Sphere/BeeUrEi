@@ -90,6 +90,11 @@ struct LoginView: View {
                     NavigationLink(AccountStrings.callHistory(lang)) { CallHistoryView() }
                     NavigationLink(AccountStrings.myRecordings(lang)) { MyRecordingsView() }
                     NavigationLink(AccountStrings.blocklist(lang)) { BlocklistView() }
+                    NavigationLink {
+                        QuietHoursView(token: KeychainStore.read() ?? "")
+                    } label: {
+                        Label(QuietHoursStrings.navTitle(lang), systemImage: "moon.zzz")
+                    }
                     Button(AccountStrings.changePassword(lang)) { showChangePassword = true }
                     NavigationLink {
                         TwoFactorSetupView(token: KeychainStore.read() ?? "", onChanged: { Task { await loadMe() } })

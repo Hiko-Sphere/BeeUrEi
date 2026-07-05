@@ -21,33 +21,34 @@ export function escalateUnackedEmergencies(
       store.markEmergencyEscalated(e.id, now) // 先标记：即便下面推送部分失败也不重复升级
       const sender = store.findById(e.userId)
       if (!sender) continue // 发起人已删号：无从重呼（已 markEscalated，免反复扫）
-      const members = store.linksByOwner(e.userId)
-        .filter((l) => (l.status ?? 'accepted') === 'accepted')
-        .map((l) => store.findById(l.memberId))
-        .filter((m): m is NonNullable<typeof m> => !!m)
+      const acceptedLinks = store.linksByOwner(e.userId).filter((l) => (l.status ?? 'accepted') === 'accepted')
+      const emergencyMemberIds = new Set(acceptedLinks.filter((l) => l.isEmergency).map((l) => l.memberId))
+      const members = acceptedLinks.map((l) => store.findById(l.memberId)).filter((m): m is NonNullable<typeof m> => !!m)
       const hasLoc = e.lat != null && e.lon != null
       // 发起人是否填了紧急医疗信息：与首呼(emergency.ts)/未报到(checkin.ts)同口径带 hasMedical——升级重呼恰是要抓
       // **漏看首呼**的人，他们只见到这条，若不带 hasMedical 就不知有过敏/用药/病史可查（医疗急救刚需，见复审 missed-sibling）。
+      // **仅置给紧急联系人**（他们才可读医疗信息，与 medical 路由授权一致；三链同口径，见 emergency.ts）。
       const hasMedical = !!store.getMedicalInfo(sender.id)
       const minutes = Math.max(1, Math.round((now - e.at) / 60_000))
       const notifData: Record<string, string> = {
         kind: 'emergency_alert', type: 'emergency_alert', escalated: '1', fromId: sender.id, fromName: sender.displayName, eventId: e.id, alertKind: e.kind,
       }
       if (hasLoc) { notifData.lat = String(e.lat); notifData.lon = String(e.lon); if (e.locSource) notifData.locSource = e.locSource }
-      if (hasMedical) notifData.hasMedical = '1'
       for (const m of members) {
         const l = pushLang(m.language)
         const title = pushStrings.emergencyEscalateTitle(sender.displayName, l)
         const body = pushStrings.emergencyEscalateBody(minutes, hasLoc, l)
+        const mMedical = hasMedical && emergencyMemberIds.has(m.id) // hasMedical 仅给紧急联系人（见上）
+        const mNotif = mMedical ? { ...notifData, hasMedical: '1' } : notifData
         // 持久化通知发给每个 accepted 亲友（含无 token 者：通知中心兜底），与首呼同口径。
-        try { store.createNotification({ id: randomUUID(), userId: m.id, kind: 'emergency_alert', title, body, data: notifData, createdAt: now }) } catch { /* 通知失败不阻断推送 */ }
-        if (webPush.configured) for (const sub of safeSubs(m.id)) void webPush.send(sub, JSON.stringify({ title, body, data: notifData })).catch(() => { /* 单订阅失败不阻断 */ })
+        try { store.createNotification({ id: randomUUID(), userId: m.id, kind: 'emergency_alert', title, body, data: mNotif, createdAt: now }) } catch { /* 通知失败不阻断推送 */ }
+        if (webPush.configured) for (const sub of safeSubs(m.id)) void webPush.send(sub, JSON.stringify({ title, body, data: mNotif })).catch(() => { /* 单订阅失败不阻断 */ })
         if (m.apnsToken) {
           const extra: Record<string, string> = { type: 'emergency_alert', escalated: '1', kind: e.kind, fromId: sender.id, eventId: e.id }
           // locSource 与 notifData 同带（此前 extra 漏）：iOS 靠它诚实标注"最后已知·非实时"，缺了会把陈旧位置当实时
           // 渲染、把响应者指向错误地点。locAgeSec 两渠道都不带（升级时已过数分钟，存库的旧龄会误导，故一律省，见 notifData）。
           if (hasLoc) { extra.lat = String(e.lat); extra.lon = String(e.lon); if (e.locSource) extra.locSource = e.locSource }
-          if (hasMedical) extra.hasMedical = '1'
+          if (mMedical) extra.hasMedical = '1'
           void push.sendAlert(m.apnsToken, title, body, extra, undefined, safeBadge(m.id)).catch(() => { /* 单点失败不阻断 */ })
         }
       }

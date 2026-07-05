@@ -140,29 +140,36 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     }
     // 告警时刻电量（结构化随带，正文段见 emergencyAlertBody）：亲友据此判断联系窗口。
     if (parsed.data.battery != null) { extraBase.battery = String(parsed.data.battery); notifData.battery = String(parsed.data.battery) }
-    // 发起人是否填了紧急医疗信息：置 hasMedical 标志，让**紧急联系人**在告警模态里被显式提示"有医疗信息，请查看"
-    // （否则关键信息藏在一个可能 404 的按钮后、施救者可能不点。真正的读取仍走授权端点，仅紧急联系人可见）。
-    if (store.getMedicalInfo(me.id)) { extraBase.hasMedical = '1'; notifData.hasMedical = '1' }
+    // 发起人是否填了紧急医疗信息：hasMedical 标志**仅置给紧急联系人**——医疗信息读取端点本就仅紧急联系人可见
+    // （见 medical 路由授权），标志须与读权限一致：给普通联系人置此标志，只会让其点"查看医疗信息"却拿 403（假提示），
+    // 还多泄露"此人有医疗信息在案"（敏感）。故不再挂到共享 notifData/extraBase，改在下方按每个联系人是否紧急分别置。
+    // 注释本意即"让紧急联系人被提示"，此前实现却广播给全体——修正为与授权一致。**不影响告警本身送达全体**。
+    const senderHasMedical = !!store.getMedicalInfo(me.id)
+    const emergencyMemberIds = new Set(links.filter((l) => l.isEmergency).map((l) => l.memberId))
     await Promise.allSettled(members.map((member) => {
       const l = pushLang(member.language)
       const title = pushStrings.emergencyAlertTitle(me.displayName, l)
       const body = pushStrings.emergencyAlertBody(parsed.data.kind, hasLoc, l, parsed.data.battery)
+      // hasMedical 仅发给紧急联系人（他们才可读医疗信息）：普通联系人用不带该标志的 base 数据（见上）。
+      const wantMedical = senderHasMedical && emergencyMemberIds.has(member.id)
+      const mNotif = wantMedical ? { ...notifData, hasMedical: '1' } : notifData
+      const mExtra = wantMedical ? { ...extraBase, hasMedical: '1' } : extraBase
       // 持久化通知发给**每个** accepted 亲友（含无 APNs token 者：web-only 协助者 / 推送被拒 /
       // token 未注册）——否则这些人对摔倒/车祸告警完全无感。这正是"错过推送也能在通知中心回看"
       // 兜底要覆盖的对象，绝不能再按 token 过滤（旧实现把兜底也漏给了最需要它的人）。
       // best-effort：写入失败绝不能中断对其余亲友的告警推送。
       try {
-        store.createNotification({ id: randomUUID(), userId: member.id, kind: 'emergency_alert', title, body, data: notifData, createdAt: Date.now() })
+        store.createNotification({ id: randomUUID(), userId: member.id, kind: 'emergency_alert', title, body, data: mNotif, createdAt: Date.now() })
       } catch { /* 通知不可阻断安全攸关的告警推送 */ }
       // Web Push：该亲友的浏览器订阅（web-only 协助者关标签页也能收到系统通知）。
       // 与 APNs 并行、各自 best-effort；负载给 SW 渲染系统通知 + 点击跳通知页。
       const webJobs = webPush.configured
         ? safeWebPushSubs(member.id).map((sub) =>
-            webPush.send(sub, JSON.stringify({ title, body, data: notifData })).catch(() => { /* 单订阅失败不阻断 */ }))
+            webPush.send(sub, JSON.stringify({ title, body, data: mNotif })).catch(() => { /* 单订阅失败不阻断 */ }))
         : []
       // APNs 推送仅发给有 token 的；无 token 者靠持久化通知 + Web Push 兜底。
       const apnsJob = member.apnsToken
-        ? pushSender.sendAlert(member.apnsToken, title, body, extraBase, undefined, safeBadge(member.id))
+        ? pushSender.sendAlert(member.apnsToken, title, body, mExtra, undefined, safeBadge(member.id))
         : Promise.resolve()
       // badge=该亲友未读总数（含刚写入的本条告警），与图标角标主线一致。
       return Promise.allSettled([apnsJob, ...webJobs])

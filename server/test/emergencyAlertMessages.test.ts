@@ -113,25 +113,27 @@ describe('摔倒/车祸紧急警报', () => {
     expect(res.statusCode).toBe(400)
   })
 
-  it('发起人有紧急医疗信息 → 告警通知带 hasMedical 标志（供施救者提示查看）；无则不带', async () => {
+  it('发起人有紧急医疗信息 → hasMedical 标志**仅发给紧急联系人**（普通联系人不带，与医疗读取授权一致）', async () => {
     const app = buildApp(new MemoryStore())
     const blind = await reg(app, 'medblind', 'blind')
-    const fam = await reg(app, 'medfam', 'family')
+    const fam = await reg(app, 'medfam', 'family')   // 普通联系人
+    const emg = await reg(app, 'medemg', 'family')   // 将设为紧急联系人
     await bind(app, blind.token, fam.token, 'medfam')
-    const famId = fam.user.id
-    const feed = async () => {
-      const r = await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(fam.token) })
-      return (r.json() as any).notifications.filter((n: any) => n.kind === 'emergency_alert')
-    }
-    // 未填医疗信息 → 告警不带 hasMedical。
+    await bind(app, blind.token, emg.token, 'medemg')
+    // owner(blind) 把 emg 设为紧急联系人。
+    const links = (await app.inject({ method: 'GET', url: '/api/family/links', headers: auth(blind.token) })).json().links as any[]
+    const emgLinkId = links.find((l) => l.memberId === emg.user.id).id as string
+    await app.inject({ method: 'POST', url: `/api/family/links/${emgLinkId}/emergency`, headers: auth(blind.token), payload: { isEmergency: true } })
+    const alerts = async (token: string) => ((await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(token) })).json() as any).notifications.filter((n: any) => n.kind === 'emergency_alert')
+    // 未填医疗信息 → 紧急联系人也不带 hasMedical。
     await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token), payload: { kind: 'manual' } })
-    expect((await feed())[0].data.hasMedical).toBeUndefined()
-    void famId
-    // 填写医疗信息后再告警 → 带 hasMedical='1'。
+    expect((await alerts(emg.token))[0].data.hasMedical).toBeUndefined()
+    // 填写医疗信息后再告警 → 紧急联系人带 '1'，普通联系人**不带**（本次修复核心：标志须与医疗读取授权一致）。
     await app.inject({ method: 'PUT', url: '/api/account/medical', headers: auth(blind.token), payload: { text: '糖尿病，胰岛素' } })
     await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token), payload: { kind: 'fall' } })
-    const withMed = (await feed()).find((n: any) => n.data.kind === 'fall')
-    expect(withMed.data.hasMedical).toBe('1')
+    expect((await alerts(emg.token)).find((n: any) => n.data.kind === 'fall').data.hasMedical).toBe('1')
+    expect((await alerts(fam.token)).find((n: any) => n.data.kind === 'fall').data.hasMedical).toBeUndefined()
+    await app.close()
   })
 
   it('安全攸关：任何附注字段坏值都只丢弃该字段，绝不 400 掉告警/回执/报平安', async () => {

@@ -89,10 +89,9 @@ export function fireExpiredSafetyTimers(
       const sender = store.findById(t.ownerId)
       if (!sender) continue // 归属者已删号：无从告警（已 markFired，免反复扫）
 
-      const members = store.linksByOwner(t.ownerId)
-        .filter((l) => (l.status ?? 'accepted') === 'accepted')
-        .map((l) => store.findById(l.memberId))
-        .filter((m): m is NonNullable<typeof m> => !!m)
+      const acceptedLinks = store.linksByOwner(t.ownerId).filter((l) => (l.status ?? 'accepted') === 'accepted')
+      const emergencyMemberIds = new Set(acceptedLinks.filter((l) => l.isEmergency).map((l) => l.memberId))
+      const members = acceptedLinks.map((l) => store.findById(l.memberId)).filter((m): m is NonNullable<typeof m> => !!m)
 
       const hasRealtimePush = (uid: string, apnsToken?: string): boolean =>
         !!apnsToken || (webPush.configured && safeSubs(uid).length > 0)
@@ -123,25 +122,26 @@ export function fireExpiredSafetyTimers(
         notifData.lat = String(lat); notifData.lon = String(lon); notifData.locSource = locSource
         if (locAgeSec != null) notifData.locAgeSec = String(locAgeSec)
       }
-      // 发起人有紧急医疗信息 → 提示紧急联系人查看（与 SOS 首呼同口径；读取仍走授权端点）。
-      // 计一次，**notifData 与 APNs extra 都带**——iOS 侧靠 extra 渲染告警模态里的"查看医疗信息"，此前 extra 漏带
-      // 致 iOS 收到的报到告警不显示该提示（与 in-app/web 不一致，missed-sibling）。
+      // 发起人有紧急医疗信息 → **仅提示紧急联系人**查看（他们才可读医疗信息，与 medical 路由授权一致；三链同口径，
+      // 见 emergency.ts）。此前挂到共享 notifData/extra 广播给全体，普通联系人点"查看医疗信息"只会拿 403（假提示）
+      // 且多泄露"此人有医疗信息在案"——改为按联系人是否紧急分别置。**不影响告警本身送达全体**。
       const hasMedical = !!store.getMedicalInfo(sender.id)
-      if (hasMedical) notifData.hasMedical = '1'
       for (const m of members) {
         const l = pushLang(m.language)
         const title = pushStrings.safetyCheckinMissedTitle(sender.displayName, l)
         const body = pushStrings.safetyCheckinMissedBody(t.note, l)
+        const mMedical = hasMedical && emergencyMemberIds.has(m.id) // hasMedical 仅给紧急联系人（见上）
+        const mNotif = mMedical ? { ...notifData, hasMedical: '1' } : notifData
         // 持久化通知发给每个 accepted 亲友（含无 token 者：通知中心兜底），与紧急首呼同口径。
-        try { store.createNotification({ id: randomUUID(), userId: m.id, kind: 'emergency_alert', title, body, data: notifData, createdAt: now }) } catch { /* 通知失败不阻断推送 */ }
-        if (webPush.configured) for (const sub of safeSubs(m.id)) void webPush.send(sub, JSON.stringify({ title, body, data: notifData })).catch(() => { /* 单订阅失败不阻断 */ })
+        try { store.createNotification({ id: randomUUID(), userId: m.id, kind: 'emergency_alert', title, body, data: mNotif, createdAt: now }) } catch { /* 通知失败不阻断推送 */ }
+        if (webPush.configured) for (const sub of safeSubs(m.id)) void webPush.send(sub, JSON.stringify({ title, body, data: mNotif })).catch(() => { /* 单订阅失败不阻断 */ })
         if (m.apnsToken) {
           const extra: Record<string, string> = { type: 'emergency_alert', kind: 'checkin', fromId: sender.id, eventId }
           if (lat != null && lon != null) {
             extra.lat = String(lat); extra.lon = String(lon); extra.locSource = locSource
             if (locAgeSec != null) extra.locAgeSec = String(locAgeSec)
           }
-          if (hasMedical) extra.hasMedical = '1'
+          if (mMedical) extra.hasMedical = '1'
           void push.sendAlert(m.apnsToken, title, body, extra, undefined, safeBadge(m.id)).catch(() => { /* 单点失败不阻断 */ })
         }
       }

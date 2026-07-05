@@ -28,7 +28,7 @@ export function escalateUnackedEmergencies(
       const hasLoc = e.lat != null && e.lon != null
       const minutes = Math.max(1, Math.round((now - e.at) / 60_000))
       const notifData: Record<string, string> = {
-        kind: 'emergency_alert', escalated: '1', fromId: sender.id, fromName: sender.displayName, eventId: e.id, alertKind: e.kind,
+        kind: 'emergency_alert', type: 'emergency_alert', escalated: '1', fromId: sender.id, fromName: sender.displayName, eventId: e.id, alertKind: e.kind,
       }
       if (hasLoc) { notifData.lat = String(e.lat); notifData.lon = String(e.lon); if (e.locSource) notifData.locSource = e.locSource }
       for (const m of members) {

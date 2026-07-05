@@ -116,7 +116,9 @@ export function fireExpiredSafetyTimers(
 
       // 通知类别用 'emergency_alert'：亲友端已有的告警显著度/图标/"回拨"按钮/**位置地图链接**全部生效（零客户端改动）。
       // data.kind='checkin' + data.fromName 供渲染与回拨目标；正文点明是"未报到"并带备注；带 lat/lon 则 web/iOS 渲染地图链接。
-      const notifData: Record<string, string> = { kind: 'checkin', fromId: sender.id, fromName: sender.displayName, eventId }
+      // type='emergency_alert'：与 SOS 首呼/升级同口径的**统一紧急标记**，让 web SW 可靠判紧急（requireInteraction
+      // + 按 fromId 分条不折叠）——安全报到未到是 dead-man's switch 真紧急，绝不能在家人浏览器里静默或被折叠。
+      const notifData: Record<string, string> = { kind: 'checkin', type: 'emergency_alert', fromId: sender.id, fromName: sender.displayName, eventId }
       if (lat != null && lon != null) {
         notifData.lat = String(lat); notifData.lon = String(lon); notifData.locSource = locSource
         if (locAgeSec != null) notifData.locAgeSec = String(locAgeSec)

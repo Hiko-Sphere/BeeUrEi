@@ -59,8 +59,12 @@ self.addEventListener('push', (event) => {
   //   举报处置…经 notifyUser 双通道）自然消退。
   // - tag 去重：来电按 callId（同一通只留一条）、聊天按会话折叠（同 APNs threadId 口径）、
   //   告警按发起人、通用按类别折叠。
-  // 紧急告警负载的 kind 是具体事由（fall/crash/manual，见 emergency.ts notifData），不带 emergency 前缀。
-  const urgent = d.kind === 'incoming_call' || d.kind === 'fall' || d.kind === 'crash' || d.kind === 'manual'
+  // 紧急判定**首选** data.type==='emergency_alert'（服务端对所有紧急类 web push 统一带的可靠标记，与 APNs
+  // extra 同口径）——避免"按 kind 枚举"漏网：SOS 首呼 kind=fall/crash/manual、升级 kind=emergency_alert、
+  // 安全报到未到 kind=checkin，三者事由各异却都是紧急。曾因只枚举 kind 漏掉 checkin，令 dead-man's switch
+  // 告警在家人浏览器里不 requireInteraction、且按 kind 折叠致多人漏报（见回归测试）。kind 检查保留作兜底。
+  const urgent = d.type === 'emergency_alert'
+    || d.kind === 'incoming_call' || d.kind === 'fall' || d.kind === 'crash' || d.kind === 'manual'
     || (d.kind && String(d.kind).indexOf('emergency') === 0)
   var tag = 'beeurei'
   if (d.kind === 'incoming_call' && d.callId) tag = 'call-' + d.callId

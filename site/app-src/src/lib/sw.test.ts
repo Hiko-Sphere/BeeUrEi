@@ -93,6 +93,23 @@ describe('sw.js 通知分级（push 处理器）', () => {
     }
   })
 
+  it('安全报到未到（kind=checkin, type=emergency_alert）→ 紧急：requireInteraction + 按 fromId 分条不折叠', () => {
+    // dead-man's switch 告警：kind=checkin 不在旧枚举里，靠统一的 type=emergency_alert 判紧急。
+    const r = firePush({ title: 'T', body: 'B', data: { kind: 'checkin', type: 'emergency_alert', fromId: 'blindA', eventId: 'e1' } })
+    expect(r.opts.requireInteraction).toBe(true)
+    expect(r.opts.tag).toBe('emergency-blindA')
+    // 两位亲人各自的"未报到"告警按 fromId 分条，绝不折叠成一条（否则第二个人的告警覆盖第一个）。
+    const r2 = firePush({ data: { kind: 'checkin', type: 'emergency_alert', fromId: 'blindB', eventId: 'e2' } })
+    expect(r2.opts.tag).toBe('emergency-blindB')
+    expect(r2.opts.tag).not.toBe(r.opts.tag)
+  })
+
+  it('紧急标记优先于 kind 枚举：任何带 type=emergency_alert 的未知 kind 也判紧急', () => {
+    const r = firePush({ data: { kind: 'some_future_alert', type: 'emergency_alert', fromId: 'u9' } })
+    expect(r.opts.requireInteraction).toBe(true)
+    expect(r.opts.tag).toBe('emergency-u9')
+  })
+
   it('来电 → requireInteraction + call tag；聊天/通用 → 自然消退 + 各自折叠 tag', () => {
     expect(firePush({ data: { kind: 'incoming_call', callId: 'c1' } }).opts)
       .toMatchObject({ requireInteraction: true, tag: 'call-c1' })

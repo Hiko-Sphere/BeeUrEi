@@ -92,6 +92,12 @@ export function FamilyPage() {
                       </span>
                     )}
                     <span className="text-faint">{l.relation}{l.isEmergency ? ` · ${t('紧急联系人', 'Emergency')}` : ''}</span>
+                    {l.phone && /\d/.test(l.phone) && (
+                      // 联系电话（tap-to-dial）：服务端一直下发 phone 却从未在 web 呈现（死字段）。是 App 内通话失败时
+                      // 用普通电话兜底联系对方的安全退路（对齐 iOS EmergencyPhoneFallback 的 tel: 拨号）。
+                      <span className="text-faint"> · <a href={`tel:${l.phone.replace(/[^\d+]/g, '')}`} onClick={(e) => e.stopPropagation()}
+                        className="text-accent hover:underline" aria-label={t(`拨打电话 ${l.phone}`, `Call phone ${l.phone}`)}>{l.phone}</a></span>
+                    )}
                   </div>
                 </div>
                 {l.amOwner && (

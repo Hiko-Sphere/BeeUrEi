@@ -84,16 +84,29 @@ final class ChatStringsTests: XCTestCase {
         XCTAssertEqual(ChatStrings.forwardedEditedA11y(forwarded: true, edited: true, .zh), "，已转发，已编辑")
     }
 
-    func testChatMessageDecodesForwardedAndEditedAt() throws {
-        // 服务端下发 forwarded/editedAt，iOS 须解码——此前 ChatMessageInfo 缺这两字段，盲人听不到"已转发/已编辑"。
-        let json = #"{"id":"m1","fromId":"a","toId":"b","kind":"text","text":"hi","createdAt":1000,"forwarded":true,"editedAt":2000}"#
+    func testGroupReceiptStrings() {
+        // 视觉"已读 N/总"（WhatsApp 式）。
+        XCTAssertEqual(ChatStrings.groupReceipt(3, 5, .zh), "已读 3/5")
+        XCTAssertEqual(ChatStrings.groupReceipt(3, 5, .en), "Read 3/5")
+        // a11y 用可读措辞（避免 VoiceOver 念"斜杠"）——盲人靠此听到自己群消息被几人读了。
+        XCTAssertEqual(ChatStrings.groupReceiptA11y(3, 5, .zh), "已读 3 人，共 5 人")
+        XCTAssertEqual(ChatStrings.groupReceiptA11y(3, 5, .en), "read by 3 of 5")
+    }
+
+    func testChatMessageDecodesForwardedEditedAndGroupReceipt() throws {
+        // 服务端下发 forwarded/editedAt/readBy/readTotal，iOS 须解码——此前缺这些字段，盲人听不到"已转发/已编辑/群已读"。
+        let json = #"{"id":"m1","fromId":"a","toId":"b","kind":"text","text":"hi","createdAt":1000,"forwarded":true,"editedAt":2000,"readBy":3,"readTotal":5}"#
         let m = try JSONDecoder().decode(ChatMessageInfo.self, from: Data(json.utf8))
         XCTAssertEqual(m.forwarded, true)
         XCTAssertEqual(m.editedAt, 2000)
-        // 缺这两字段的普通消息（向后兼容 + 绝大多数消息）→ nil，不崩。
+        XCTAssertEqual(m.readBy, 3)
+        XCTAssertEqual(m.readTotal, 5)
+        // 缺这些字段的普通消息（向后兼容 + 绝大多数单聊消息）→ nil，不崩。
         let plain = #"{"id":"m2","fromId":"a","toId":"b","kind":"text","text":"hi","createdAt":1000}"#
         let m2 = try JSONDecoder().decode(ChatMessageInfo.self, from: Data(plain.utf8))
         XCTAssertNil(m2.forwarded)
         XCTAssertNil(m2.editedAt)
+        XCTAssertNil(m2.readBy)
+        XCTAssertNil(m2.readTotal)
     }
 }

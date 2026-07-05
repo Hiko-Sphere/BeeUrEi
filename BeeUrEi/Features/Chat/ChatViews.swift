@@ -397,10 +397,17 @@ struct ChatView: View {
                         Text(ChatStrings.editedTag(lang)).font(.caption2).foregroundStyle(.secondary).accessibilityHidden(true)
                     }
                     if mine && m.kind != "recalled" && !isGroup {
-                        // 已读回执（iMessage 式）：✓ 已送达 / ✓✓ 已读。群聊按人已读，不显示逐条回执。
+                        // 已读回执（iMessage 式）：✓ 已送达 / ✓✓ 已读。
                         Image(systemName: m.readAt != nil ? "checkmark.circle.fill" : "checkmark.circle")
                             .font(.caption2)
                             .foregroundStyle(m.readAt != nil ? Color.beeSuccess : Color.secondary)
+                            .accessibilityHidden(true)
+                    }
+                    // 群已读回执（WhatsApp 式「已读 N/总」，仅自己发、群里有其他成员）：此前群消息完全无已读反馈。
+                    // 视觉呈现；a11y 并入气泡整体标签(bubbleA11y)。全员已读时高亮。
+                    if mine, m.kind != "recalled", isGroup, let total = m.readTotal, total > 0 {
+                        Text(ChatStrings.groupReceipt(m.readBy ?? 0, total, lang)).font(.caption2)
+                            .foregroundStyle((m.readBy ?? 0) >= total ? Color.beeSuccess : .secondary)
                             .accessibilityHidden(true)
                     }
                 }
@@ -548,6 +555,10 @@ struct ChatView: View {
                                                  edited: m.editedAt != nil && m.kind != "recalled", lang)
         if m.fromId == myId, m.kind != "recalled", !isGroup {
             label += "，" + (m.readAt != nil ? ChatStrings.read(lang) : ChatStrings.delivered(lang))
+        }
+        // 群已读回执并入盲人所听标签（视觉"已读 N/总"accessibilityHidden）：否则盲人发群消息完全不知被几人读了。
+        if m.fromId == myId, m.kind != "recalled", isGroup, let total = m.readTotal, total > 0 {
+            label += "，" + ChatStrings.groupReceiptA11y(m.readBy ?? 0, total, lang)
         }
         if let r = m.reaction, !r.isEmpty { label += "，" + ChatStrings.reactionA11y(r, lang) }
         return label

@@ -178,6 +178,8 @@ struct ChatMessageInfo: Codable, Sendable, Identifiable, Equatable {
     var groupId: String?  // 群消息所属群（单聊为 nil）
     var forwarded: Bool?  // 转发标记：让收件人知道非发送者原创（含盲人——防误信转发的链式内容）
     var editedAt: Int?    // 编辑时刻（ms）；非 nil = 发出后被改过，标"已编辑"（与 web 对齐）
+    var readBy: Int?      // 群已读回执：已读到本条的其他成员数（仅自己发的群消息由服务端附）
+    var readTotal: Int?   // 群其他成员总数（配 readBy 显示"已读 N/总"；此前群消息无任何已读反馈）
 }
 
 /// 群组（WhatsApp 式：群主建群/加人/踢人/解散，成员可退群）。

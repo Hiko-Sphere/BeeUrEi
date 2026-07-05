@@ -117,6 +117,14 @@ enum ChatStrings {
     static func forwardedEditedA11y(forwarded: Bool, edited: Bool, _ l: Language) -> String {
         (forwarded ? "，" + forwardedTag(l) : "") + (edited ? "，" + editedTag(l) : "")
     }
+    /// 群已读回执视觉文案（WhatsApp 式，仅自己发的群消息）："已读 N/总"。此前群消息完全无已读反馈。
+    static func groupReceipt(_ readBy: Int, _ readTotal: Int, _ l: Language) -> String {
+        l == .zh ? "已读 \(readBy)/\(readTotal)" : "Read \(readBy)/\(readTotal)"
+    }
+    /// 群已读回执 a11y（并入气泡整体标签；"/"读音差，用可读措辞）：盲人靠此听到自己的群消息被几人读了。
+    static func groupReceiptA11y(_ readBy: Int, _ readTotal: Int, _ l: Language) -> String {
+        l == .zh ? "已读 \(readBy) 人，共 \(readTotal) 人" : "read by \(readBy) of \(readTotal)"
+    }
     /// 自己回应/取消/失败的**语音反馈**：盲人看不到表情角标是否加上，长按选表情后须有声确认操作是否生效
     /// （此前成功/失败都静默，盲人完全不知按下的回应有没有成）。added 带上 emoji 便于复核选对了没。
     static func reactionAdded(_ emoji: String, _ l: Language) -> String {

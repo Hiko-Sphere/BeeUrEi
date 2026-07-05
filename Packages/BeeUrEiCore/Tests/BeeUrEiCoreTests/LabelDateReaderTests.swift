@@ -111,6 +111,20 @@ final class LabelDateReaderTests: XCTestCase {
         XCTAssertNil(LabelDateReader.find(texts: ["Export lot 2026-01"], language: .en))     // export 非 exp 标签
     }
 
+    func testMonthTwoDigitYearCodes() {
+        // MM/YY 是药品/化妆品有效期的全球主流写法（此前只认 4 位年 → 2 位年全漏，药盒读不出有效期=安全红线）。
+        XCTAssertTrue(LabelDateReader.find(texts: ["EXP 07/26"], language: .en)!.contains("07/26"))       // 斜杠
+        XCTAssertTrue(LabelDateReader.find(texts: ["EXP 12-26"], language: .en)!.contains("12-26"))       // 连字符（药品喷码）
+        XCTAssertTrue(LabelDateReader.find(texts: ["有效期 09.27"], language: .zh)!.contains("09.27"))     // 点分隔 + 中文标签
+        // 月锁 01-12：比例/分数（非月）即便同行有日期标签也不误当日期。
+        XCTAssertNil(LabelDateReader.find(texts: ["exp mix 50/50 lot"], language: .en))   // 50 非月
+        XCTAssertNil(LabelDateReader.find(texts: ["exp 24/7 hotline"], language: .en))    // 24 非月（且 7 单位数）
+        XCTAssertNil(LabelDateReader.find(texts: ["exp ratio 16/9 panel"], language: .en)) // 16 非月
+        // 数字边界不吃 4 位年 MM/YYYY 的一段、也不吃三段式里的嵌套段（整行仍照常 surface，不受影响）。
+        XCTAssertTrue(LabelDateReader.find(texts: ["EXP 07/2026"], language: .en)!.contains("07/2026"))   // 仍是 4 位年整体
+        XCTAssertTrue(LabelDateReader.find(texts: ["EXP 15/07/26"], language: .en)!.contains("15/07/26")) // 三段式整体
+    }
+
     func testDedupAndCap() {
         // OCR 常重复同一行：去重。
         let r = LabelDateReader.find(texts: ["保质期 2026.07.15", "保质期 2026.07.15"], language: .zh)!

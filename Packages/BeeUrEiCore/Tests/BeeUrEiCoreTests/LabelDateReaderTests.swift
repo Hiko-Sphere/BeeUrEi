@@ -24,16 +24,39 @@ final class LabelDateReaderTests: XCTestCase {
         XCTAssertTrue(r.lowercased().contains("verify"))
         let r2 = LabelDateReader.find(texts: ["EXP 07/2026"], language: .en)!
         XCTAssertTrue(r2.contains("EXP 07/2026"))
+        // 新增标签：shelf life（=保质期）、expiration（美式常见有效期）——此前完全不识别。
+        XCTAssertTrue(LabelDateReader.find(texts: ["shelf life until 2026-12"], language: .en)!.contains("2026-12"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["expiration date 12/2026"], language: .en)!.contains("12/2026"))
     }
 
     func testNoLabelOrNoDateReturnsNil() {
         // 有日期但无标签（如单独一行日期/年份）→ 不猜（避免把随意数字当日期）。
         XCTAssertNil(LabelDateReader.find(texts: ["2026.07.15"], language: .zh))
-        // 有标签但无日期样式（如"保质期 12个月"）→ 不猜（12个月是时长不是日期）。
-        XCTAssertNil(LabelDateReader.find(texts: ["保质期 12个月"], language: .zh))
+        // 有**时长**但无标签（如单独一行"12个月"/运输时效）→ 不猜（时长须与保质/有效标签同行才 surface）。
+        XCTAssertNil(LabelDateReader.find(texts: ["12个月"], language: .zh))
+        XCTAssertNil(LabelDateReader.find(texts: ["运输时效 3天"], language: .zh))       // 非保质类标签
+        XCTAssertNil(LabelDateReader.find(texts: ["保修期 24个月"], language: .zh))      // 保修≠保质，非日期标签
+        // 有标签但既无日期样式也无时长（如"保质期见瓶身"）→ 不猜。
+        XCTAssertNil(LabelDateReader.find(texts: ["保质期见瓶身"], language: .zh))
         // 纯噪声/条码/流水号（无标签）→ nil。
         XCTAssertNil(LabelDateReader.find(texts: ["6901234567890", "1234.5678.9012"], language: .zh))
         XCTAssertNil(LabelDateReader.find(texts: [], language: .zh))
+    }
+
+    func testSurfacesShelfLifeDurationVerbatim() {
+        // 中文食品药品包装主流写法：保质期/有效期为**时长**（原样读出，仍不做任何日期运算、仍附"请核对"）。
+        let r = LabelDateReader.find(texts: ["生产日期 2026.07.31", "保质期 12个月"], language: .zh)!
+        XCTAssertTrue(r.contains("生产日期 2026.07.31"))  // 生产日期
+        XCTAssertTrue(r.contains("保质期 12个月"))          // 保质时长——此前被整支丢弃
+        XCTAssertTrue(r.contains("请核对"))
+        XCTAssertFalse(r.contains("过期"))                  // 绝不判是否过期
+        // 只印时长（生产日期不在扫到的行里）也读出，别让盲人一无所获。
+        XCTAssertTrue(LabelDateReader.find(texts: ["有效期 24个月"], language: .zh)!.contains("24个月"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["保质期 360天"], language: .zh)!.contains("360天"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["保质期 3年"], language: .zh)!.contains("3年"))
+        // 英文时长（须有 shelf life / best before 等标签）。
+        XCTAssertTrue(LabelDateReader.find(texts: ["shelf life 18 months"], language: .en)!.contains("18 months"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["best before 720 days from production"], language: .en)!.contains("720 days"))
     }
 
     func testYearMustBePlausible() {

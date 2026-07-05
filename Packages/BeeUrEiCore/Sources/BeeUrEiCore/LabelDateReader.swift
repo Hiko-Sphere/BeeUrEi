@@ -1,7 +1,8 @@
 import Foundation
 
 /// 包装日期识别（纯逻辑，可单测）：从 OCR 行里挑出带**日期标签**（保质期/生产日期/有效期/EXP/best before…）
-/// 且含**日期样式**的行，**原样surface**给盲人。盲人看不到食品/药品上的日期，这是高频刚需（对标 Seeing AI 产品频道）。
+/// 且含**日期样式或保质时长**（"12个月"/"18 months"）的行，**原样surface**给盲人。盲人看不到食品/药品上的
+/// 日期与保质期，这是高频刚需（对标 Seeing AI 产品频道）。
 ///
 /// 安全红线：**绝不做日期运算、绝不判"是否过期"、绝不区分生产/保质谁是谁**——把印在包装上的日期文本连同其标签
 /// 如实读出，判断交给用户（误判"没过期"会让盲人吃过期食品/药，代价太高）。始终附"请核对"。
@@ -10,7 +11,8 @@ public enum LabelDateReader {
     /// 日期标签关键字（中/英）。中文/多词/长英文词按子串匹配即可（够specific）。
     static let labels: [String] = [
         "保质期", "有效期", "到期", "保存期", "生产日期", "此日期前", "食用日期", "限期", "赏味期",
-        "best before", "best by", "use by", "expiry", "expires", "manufactured", "sell by", "production date",
+        "best before", "best by", "use by", "expiry", "expires", "expiration", "manufactured", "sell by",
+        "production date", "shelf life", "shelf-life", // shelf life=保质期、expiration(date)=美式常见有效期，此前完全不识
     ]
 
     /// 短英文缩写标签（exp/mfg）须**词边界**：它们是别的词的子串——exp ⊂ export/express/expo/expensive，
@@ -67,6 +69,24 @@ public enum LabelDateReader {
         return dateRegexes.contains { $0.firstMatch(in: line, range: r) != nil }
     }
 
+    /// 保质期/有效期在中文食品药品包装上**主流写成时长而非日期**（"保质期12个月"/"有效期24个月"/
+    /// "shelf life 18 months"），且常只印时长+另一处印生产日期，需两者合读才知新鲜度。此前这类行因"无日期样式"
+    /// 被整支丢弃——盲人拿到生产日期却听不到保质时长，无法判断能否食用/服用（安全攸关）。**原样surface**时长文本
+    /// 与本模块红线不冲突：不做任何日期运算、不推算到期、仍附"请核对"，只是把印着的字读出来。ASCII 数字 + 时间单位
+    /// （沿用本模块"避免 CJK 数字误配"原则）；门控同样要求同行有日期标签，故精度不降（无标签的"12个月"不会被读出）。
+    private static let durationRegexes: [NSRegularExpression] = {
+        let patterns = [
+            "[0-9]{1,4}\\s*(?:个月|个星期|周|天|年)",                 // 12个月 / 360天 / 3年 / 2周
+            "\\b[0-9]{1,4}\\s*(?:months?|days?|years?|weeks?)\\b",    // 18 months / 720 days / 2 years
+        ]
+        return patterns.compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
+    }()
+
+    static func lineHasDuration(_ line: String) -> Bool {
+        let r = NSRange(line.startIndex..., in: line)
+        return durationRegexes.contains { $0.firstMatch(in: line, range: r) != nil }
+    }
+
     /// 返回一句可播报的日期信息（原样文本 + "请核对"），无符合的行返回 nil（不猜）。
     public static func find(texts: [String], language: Language) -> String? {
         var seen = Set<String>()
@@ -75,7 +95,7 @@ public enum LabelDateReader {
             let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !line.isEmpty else { continue }
             let lower = line.lowercased()
-            guard hasDateLabel(lower), lineHasDate(line) else { continue }
+            guard hasDateLabel(lower), lineHasDate(line) || lineHasDuration(line) else { continue }
             guard seen.insert(line).inserted else { continue } // 去重（OCR 常重复同一行）
             hits.append(line)
             if hits.count >= 3 { break } // 至多 3 条，避免长包装刷屏

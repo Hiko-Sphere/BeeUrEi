@@ -13,7 +13,7 @@ final class TransitPlanFormatterTests: XCTestCase {
         let plan = TransitPlan(durationSeconds: 1980, walkingDistanceMeters: 350,
                                legs: [walk(200), ride(.subway, "地铁1号线", "西单站", "国贸站", 6), walk(150)])
         let out = TransitPlanFormatter.summary(plan, language: .zh)
-        XCTAssertEqual(out, "全程约33分钟，步行共350米。步行200米，乘坐地铁1号线，西单站上车，坐6站到国贸站下车，步行150米到达。")
+        XCTAssertEqual(out, "全程约33分钟，步行共350米。步行200米，乘坐地铁1号线，西单站上车，坐6站到国贸站下车，约15分钟，步行150米到达。")
     }
 
     func testTransferUsesHuanchengForSecondRide() {
@@ -74,20 +74,37 @@ final class TransitPlanFormatterTests: XCTestCase {
         let plan = TransitPlan(durationSeconds: 600, walkingDistanceMeters: 100,
                                legs: [ride(.bus, "300路", "甲站", "乙站", 4), walk(100)])
         let out = TransitPlanFormatter.summary(plan, language: .en)
-        XCTAssertEqual(out, "About 10 minutes total, 100 meters of walking. take 300路 from 甲站, ride 4 stops to 乙站, walk 100 meters to arrive.")
+        XCTAssertEqual(out, "About 10 minutes total, 100 meters of walking. take 300路 from 甲站, ride 4 stops to 乙站, about 15 min, walk 100 meters to arrive.")
     }
 
     func testMissingStopNamesDegradeGracefully() {
         // 缺站名/站数时不崩、不留悬空标点，仍给出线路。
         let leg = TransitLeg(kind: .subway, line: "地铁2号线", fromStop: nil, toStop: nil, stops: nil, distanceMeters: 3000, durationSeconds: 600)
         let out = TransitPlanFormatter.summary(TransitPlan(durationSeconds: 600, walkingDistanceMeters: 0, legs: [leg]), language: .zh)
-        XCTAssertEqual(out, "全程约10分钟，步行共0米。乘坐地铁2号线。")
+        XCTAssertEqual(out, "全程约10分钟，步行共0米。乘坐地铁2号线，约10分钟。")
     }
 
     func testEmptyLineFallsBackToGenericMode() {
         let leg = TransitLeg(kind: .bus, line: "  ", fromStop: "甲", toStop: "乙", stops: 2, distanceMeters: 1000, durationSeconds: 300)
         let out = TransitPlanFormatter.summary(TransitPlan(durationSeconds: 300, walkingDistanceMeters: 0, legs: [leg]), language: .zh)
-        XCTAssertEqual(out, "全程约5分钟，步行共0米。乘坐公交，甲上车，坐2站到乙下车。")
+        XCTAssertEqual(out, "全程约5分钟，步行共0米。乘坐公交，甲上车，坐2站到乙下车，约5分钟。")
+    }
+
+    func testPerLegRideDurationSpokenButNotForWalk() {
+        // 逐段乘车时长（比数站更直观感知这程要坐多久，同 Google 地图/Citymapper）；步行段不补（与其距离冗余）。
+        let plan = TransitPlan(durationSeconds: 2000, walkingDistanceMeters: 300,
+                               legs: [walk(200), // 步行 200s：**不**补时长
+                                      TransitLeg(kind: .subway, line: "1号线", fromStop: "A", toStop: "B", stops: 10,
+                                                 distanceMeters: 8000, durationSeconds: 1500)]) // 25 分钟
+        let out = TransitPlanFormatter.summary(plan, language: .zh)
+        XCTAssertTrue(out.contains("坐10站到B下车，约25分钟"))   // 乘车段补"约25分钟"
+        XCTAssertFalse(out.contains("步行200米，约"))            // 步行段不补时长
+        // 英文同理；且无时长数据(0)不硬凑"约0分钟"。
+        let noDur = TransitPlan(durationSeconds: 600, walkingDistanceMeters: 0,
+                                legs: [TransitLeg(kind: .bus, line: "5路", fromStop: "甲", toStop: "乙", stops: 3,
+                                                  distanceMeters: 2000, durationSeconds: 0)])
+        XCTAssertFalse(TransitPlanFormatter.summary(noDur, language: .zh).contains("约0分钟")) // 无数据不补
+        XCTAssertTrue(TransitPlanFormatter.summary(noDur, language: .zh).hasSuffix("坐3站到乙下车。")) // 乘车段末尾无时长后缀
     }
 
     func testDurationRoundsUpFromSeconds() {

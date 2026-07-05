@@ -74,13 +74,13 @@ public enum TransitPlanFormatter {
                     if let f = clean(leg.fromStop) { s += "，\(f)上车" }
                     if let stops = leg.stops, stops > 0 { s += "，坐\(stops)站" }
                     if let t = clean(leg.toStop) { s += (leg.stops ?? 0) > 0 ? "到\(t)下车" : "，\(t)下车" }
-                    parts.append(s)
+                    parts.append(s + rideDurationSuffix(leg.durationSeconds, zh: true))
                 } else {
                     var s = "\(verbEn) \(line)"
                     if let f = clean(leg.fromStop) { s += " from \(f)" }
                     if let stops = leg.stops, stops > 0 { s += ", ride \(stops) stop\(stops == 1 ? "" : "s")" }
                     if let t = clean(leg.toStop) { s += " to \(t)" }
-                    parts.append(s)
+                    parts.append(s + rideDurationSuffix(leg.durationSeconds, zh: false))
                 }
             case .railway:
                 let line = clean(leg.line) ?? (zh ? "火车" : "the train")
@@ -92,7 +92,7 @@ public enum TransitPlanFormatter {
                 var s = zh ? "\(verbZh)\(line)" : "\(verbEn) \(line)"
                 if let f = clean(leg.fromStop) { s += zh ? "，\(f)上车" : " from \(f)" }
                 if let t = clean(leg.toStop) { s += zh ? "到\(t)下车" : " to \(t)" }
-                parts.append(s)
+                parts.append(s + rideDurationSuffix(leg.durationSeconds, zh: zh))
             }
         }
         let sep = zh ? "，" : ", "
@@ -103,5 +103,14 @@ public enum TransitPlanFormatter {
     private static func clean(_ s: String?) -> String? {
         guard let t = s?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else { return nil }
         return t
+    }
+
+    /// 单段**乘车**时长后缀（"，约25分钟"/", about 25 min"）：盲人靠它感知这程要坐多久——比数站更直观（数不清 15 站、
+    /// 靠车内报站决定何时下车），逐段给时同 Google 地图/Citymapper。仅乘车段补（步行时长与其距离冗余）；
+    /// 无时长数据(0，服务端未取到)/非有限则不补（不硬凑"约0分钟"）。至少"约1分钟"（不把 <1 分钟的短程说成 0）。
+    private static func rideDurationSuffix(_ seconds: Double, zh: Bool) -> String {
+        guard seconds.isFinite, seconds > 0 else { return "" }
+        let mins = max(1, SpokenStrings.safeRoundedInt(seconds / 60))
+        return zh ? "，约\(mins)分钟" : ", about \(mins) min"
     }
 }

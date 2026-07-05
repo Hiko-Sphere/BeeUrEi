@@ -166,3 +166,45 @@ describe('引用回复 replyTo /api/messages', () => {
     await app.close()
   })
 })
+
+describe('消息表情回应 /api/messages/:id/reaction 内容审核', () => {
+  async function seed() {
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const a = await reg(app, 'rxa', 'blind')
+    const b = await reg(app, 'rxb', 'helper')
+    await bind(app, a.token, b.token, 'rxb')
+    const sent = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, kind: 'text', text: '在吗' } })
+    const mid = (sent.json() as any).message.id as string
+    return { app, store, a, b, mid }
+  }
+
+  it('正常 emoji 回应：200 并落库', async () => {
+    const { app, b, mid } = await seed()
+    const r = await app.inject({ method: 'POST', url: `/api/messages/${mid}/reaction`, headers: auth(b.token), payload: { emoji: '👍' } })
+    expect(r.statusCode).toBe(200)
+    expect(r.json().message.reaction).toBe('👍')
+    await app.close()
+  })
+
+  it('违禁词伪装成"表情"被拒（403 content_blocked）——emoji 字段允许 ≤16 字任意文本，须与正文/编辑同口径过审核', async () => {
+    const { app, store, b, mid } = await seed()
+    store.setAppConfig({ contentFilter: { enabled: true, terms: ['脏话'] } })
+    const r = await app.inject({ method: 'POST', url: `/api/messages/${mid}/reaction`, headers: auth(b.token), payload: { emoji: '你个脏话' } })
+    expect(r.statusCode).toBe(403)
+    expect(r.json()).toMatchObject({ error: 'content_blocked' })
+    expect(store.findMessage(mid)?.reaction).toBeUndefined() // 被拒不落库
+    // 干净 emoji 仍通过（审核不误伤单个表情）。
+    const ok = await app.inject({ method: 'POST', url: `/api/messages/${mid}/reaction`, headers: auth(b.token), payload: { emoji: '❤️' } })
+    expect(ok.statusCode).toBe(200)
+    await app.close()
+  })
+
+  it('清空回应(空串)不触发审核：仍可清除（200）', async () => {
+    const { app, store, b, mid } = await seed()
+    store.setAppConfig({ contentFilter: { enabled: true, terms: ['脏话'] } })
+    const r = await app.inject({ method: 'POST', url: `/api/messages/${mid}/reaction`, headers: auth(b.token), payload: { emoji: '' } })
+    expect(r.statusCode).toBe(200)
+    await app.close()
+  })
+})

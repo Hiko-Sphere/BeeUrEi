@@ -283,6 +283,10 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     }
     if (msg.kind === 'recalled') return reply.code(400).send({ error: 'message_recalled' })
     const emoji = parsed.data.emoji.trim()
+    // 内容审核：reaction 会经会话列表 last.reaction 触达对方，是与消息正文/编辑**同一条**"向对方注入内容"的面
+    // （见 edit 门控注"与表情回应同源"）。emoji 字段虽名为表情，schema 却允许 ≤16 字任意文本——不过滤就能塞
+    // 一句违禁短语当"表情"绕过发送/编辑侧的 matchBannedTerm 直达对方。补齐审核（正常单个 emoji 不含违禁词、不误伤）。
+    if (emoji.length > 0 && matchBannedTerm(store.getAppConfig(), emoji)) return reply.code(403).send({ error: 'content_blocked' })
     const updated = store.updateMessage(id, { reaction: emoji.length === 0 ? undefined : emoji })
     return { message: updated }
   })

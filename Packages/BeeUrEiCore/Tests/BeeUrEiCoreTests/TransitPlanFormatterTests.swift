@@ -45,6 +45,31 @@ final class TransitPlanFormatterTests: XCTestCase {
         XCTAssertFalse(TransitPlanFormatter.summary(direct, language: .en).lowercased().contains("transfer"))
     }
 
+    func testRailwayMidJourneyUsesTransferVerbConsistentWithHeader() {
+        // 跨城行程 公交→火车→地铁：开头报"换乘2次"，narration 的"换乘"次数必须与之一致（火车段此前恒用
+        // "乘坐"→只出现1次换乘、与开头矛盾）。修复后火车段作为非首段乘车也用"换乘火车"。
+        let plan = TransitPlan(durationSeconds: 3600, walkingDistanceMeters: 200,
+                               legs: [ride(.bus, "300路", "甲", "乙", 4), ride(.railway, "G101次", "乙站", "丙站", 0),
+                                      ride(.subway, "2号线", "丙", "丁", 3)])
+        let out = TransitPlanFormatter.summary(plan, language: .zh)
+        XCTAssertTrue(out.hasPrefix("全程约60分钟，步行共200米，需换乘2次。"))
+        XCTAssertTrue(out.contains("乘坐300路"))       // 首段乘车：乘坐
+        XCTAssertTrue(out.contains("换乘G101次"))       // 火车作为第二段乘车：换乘（修复前是"乘坐G101次"）
+        XCTAssertTrue(out.contains("换乘2号线"))         // 第三段：换乘
+        // narration 里"换乘"出现次数 == 开头报的换乘次数（2）。
+        XCTAssertEqual(out.components(separatedBy: "换乘").count - 1, 3) // 开头"需换乘"1 + 两段乘车"换乘"2 = 3 处
+    }
+
+    func testRailwayFirstRideStillUsesTakeVerb() {
+        // 火车作为**首段**乘车仍用"乘坐"（英文 take）；不误升"换乘"。
+        let plan = TransitPlan(durationSeconds: 1800, walkingDistanceMeters: 100,
+                               legs: [walk(100), ride(.railway, "D5次", "北京南", "天津", 0)])
+        XCTAssertTrue(TransitPlanFormatter.summary(plan, language: .zh).contains("乘坐D5次，北京南上车到天津下车"))
+        XCTAssertTrue(TransitPlanFormatter.summary(plan, language: .en).contains("take D5次 from 北京南 to 天津"))
+        // 单段火车直达不报换乘。
+        XCTAssertFalse(TransitPlanFormatter.summary(plan, language: .zh).contains("换乘"))
+    }
+
     func testEnglish() {
         let plan = TransitPlan(durationSeconds: 600, walkingDistanceMeters: 100,
                                legs: [ride(.bus, "300路", "甲站", "乙站", 4), walk(100)])

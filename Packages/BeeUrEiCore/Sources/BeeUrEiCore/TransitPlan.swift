@@ -84,10 +84,14 @@ public enum TransitPlanFormatter {
                 }
             case .railway:
                 let line = clean(leg.line) ?? (zh ? "火车" : "the train")
-                var s = zh ? "乘坐\(line)" : "take \(line)"
+                // 与 bus/subway 同口径：非首段乘车用"换乘"（此前火车段恒用"乘坐"，使 bus→火车→subway 这类
+                // 跨城行程里 narration 的"换乘"次数比开头报的换乘数少一次，两者自相矛盾、盲人易困惑）。
+                let verbZh = hasRidden ? "换乘" : "乘坐"
+                let verbEn = hasRidden ? "transfer to" : "take"
+                hasRidden = true
+                var s = zh ? "\(verbZh)\(line)" : "\(verbEn) \(line)"
                 if let f = clean(leg.fromStop) { s += zh ? "，\(f)上车" : " from \(f)" }
                 if let t = clean(leg.toStop) { s += zh ? "到\(t)下车" : " to \(t)" }
-                hasRidden = true
                 parts.append(s)
             }
         }

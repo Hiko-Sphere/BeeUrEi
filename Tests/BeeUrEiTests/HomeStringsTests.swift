@@ -128,9 +128,18 @@ final class HomeStringsTests: XCTestCase {
         // 充电中：报百分比 + 充电，不给"偏低"提示。
         XCTAssertTrue(HomeStrings.batterySpeak(percent: 15, charging: true, .zh).contains("正在充电"))
         XCTAssertFalse(HomeStrings.batterySpeak(percent: 15, charging: true, .zh).contains("偏低"))
-        // 未充电且 ≤20%：追加"偏低，建议充电"（手机没电=盲人丢失导航/求助工具）。
+        // 未充电且 ≤20%（>10%）：追加"偏低，建议充电"（手机没电=盲人丢失导航/求助工具）。
         XCTAssertTrue(HomeStrings.batterySpeak(percent: 15, charging: false, .zh).contains("偏低"))
         XCTAssertTrue(HomeStrings.batterySpeak(percent: 12, charging: false, .en).lowercased().contains("running low"))
+        // 未充电且 ≤10%：**危急**档，措辞比"偏低"更急（与主动告警 lowBatterySpeak 同 10% 阈值同调性），不混同。
+        let crit = HomeStrings.batterySpeak(percent: 8, charging: false, .zh)
+        XCTAssertTrue(crit.contains("很低") && crit.contains("立即充电"))
+        XCTAssertFalse(crit.contains("偏低")) // 危急档不用"偏低"的温和措辞
+        XCTAssertTrue(HomeStrings.batterySpeak(percent: 5, charging: false, .en).lowercased().contains("critically low"))
+        XCTAssertFalse(HomeStrings.batterySpeak(percent: 12, charging: false, .zh).contains("很低")) // 12%>10% 不误升危急
+        // 充电中即便 ≤10% 也不告警（正在解决）。
+        XCTAssertTrue(HomeStrings.batterySpeak(percent: 8, charging: true, .zh).contains("正在充电"))
+        XCTAssertFalse(HomeStrings.batterySpeak(percent: 8, charging: true, .zh).contains("很低"))
         // 未充电且 >20%：只报百分比，不误报偏低。
         XCTAssertFalse(HomeStrings.batterySpeak(percent: 80, charging: false, .zh).contains("偏低"))
         XCTAssertTrue(HomeStrings.batterySpeak(percent: 80, charging: false, .zh).contains("百分之80"))

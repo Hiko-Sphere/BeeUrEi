@@ -129,14 +129,18 @@ enum HomeStrings {
     /// 时间/日期播报：值用系统本地化格式（"下午3:25"/"3:25 PM"、"7月4日星期五"），TTS 读得自然。
     static func timeSpeak(_ time: String, _ l: Language) -> String { l == .zh ? "现在\(time)。" : "It's \(time)." }
     static func dateSpeak(_ date: String, _ l: Language) -> String { l == .zh ? "今天\(date)。" : "Today is \(date)." }
-    /// 电量播报：百分比 + 充电中；未充电且 ≤20% 追加"偏低，建议充电"（手机没电=盲人丢失导航/求助工具）。
+    /// 电量播报：百分比 + 充电中；未充电时按档追加建议——**≤10% 危急**("很低，请立即充电"）、≤20% 偏低（"建议充电"）。
+    /// 危急档与主动告警 lowBatterySpeak(critical) 同阈值(10%)同调性：盲人**查询**与系统**主动告警**两条路径对同一
+    /// 电量给一致的紧迫度——否则在 8% 时主动告警说"即将关机"、一查却只说"偏低"，自相矛盾、淡化真实危险。
     static func batterySpeak(percent: Int, charging: Bool, _ l: Language) -> String {
         let p = min(max(percent, 0), 100)
         if l == .zh {
             if charging { return "电量百分之\(p)，正在充电。" }
+            if p <= 10 { return "电量百分之\(p)，电量很低，即将关机，请立即充电——手机没电会同时失去导盲、导航和求助。" }
             return p <= 20 ? "电量百分之\(p)，电量偏低，建议尽快充电。" : "电量百分之\(p)。"
         }
         if charging { return "Battery \(p) percent, charging." }
+        if p <= 10 { return "Battery \(p) percent — critically low, about to shut down. Charge now: a dead phone loses obstacle guidance, navigation, and SOS." }
         return p <= 20 ? "Battery \(p) percent — running low, charge soon." : "Battery \(p) percent."
     }
     static func batteryUnknown(_ l: Language) -> String { l == .zh ? "暂时无法读取电量。" : "Battery level unavailable right now." }

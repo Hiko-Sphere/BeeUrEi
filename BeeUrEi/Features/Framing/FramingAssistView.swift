@@ -602,14 +602,13 @@ final class FramingAssistViewModel {
             return
         }
         let request = VNRecognizeTextRequest { [weak self] req, _ in
-            let obs = (req.results as? [VNRecognizedTextObservation]) ?? []
-            // 版面顺序：bbox 原点在左下 → midY 大者在上；同一行（纵向重叠）按 minX 从左到右。
-            let sorted = obs.sorted { a, b in
-                let ba = a.boundingBox, bb = b.boundingBox
-                if abs(ba.midY - bb.midY) > min(ba.height, bb.height) * 0.6 { return ba.midY > bb.midY }
-                return ba.minX < bb.minX
+            // 版面阅读顺序统一走核心 ReadingOrder（从上到下、行内左→右，正确的排序-分行两步法）——替换原先手写的
+            // 成对比较器（`abs(midY差)>阈值 ? 按midY : 按minX` 非严格弱序，边界版式可能排错）。同一视觉行的多块并成一行。
+            let items: [(text: String, box: CGRect)] = ((req.results as? [VNRecognizedTextObservation]) ?? []).compactMap { o in
+                guard let s = o.topCandidates(1).first?.string else { return nil }
+                return (s, o.boundingBox)
             }
-            let lines = sorted.compactMap { $0.topCandidates(1).first?.string }
+            let lines = FramingAssistViewModel.orderedOCRLines(from: items)
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.docCapturing = false
@@ -642,6 +641,19 @@ final class FramingAssistViewModel {
         }
     }
 
+    /// Vision 文本观测(文本 + 归一化 bbox，Vision 原点左下、y 向上) → 按**阅读顺序**分行：委托已测的核心
+    /// ReadingOrder（从上到下、行内从左到右）。翻 y 适配：ReadingOrder 要 y 向下 → `y = 1 - box.maxY`。
+    /// 读文字/读整页共用此单一实现——消除重复排序与**非传递比较器**隐患（Vision 不保证返回顺序，直接拼接
+    /// 会让盲人听到错乱文本；见 ReadingOrder 注释）。
+    static func orderedOCRLines(from items: [(text: String, box: CGRect)]) -> [String] {
+        ReadingOrder.lines(items.map {
+            ReadingOrder.Block(text: $0.text, x: Double($0.box.minX), y: Double(1 - $0.box.maxY), height: Double($0.box.height))
+        })
+    }
+    static func orderedOCRText(from items: [(text: String, box: CGRect)]) -> String {
+        orderedOCRLines(from: items).joined(separator: "\n")
+    }
+
     /// 朗读相机里看到的文字（端侧 Vision OCR，中英文）——盲人读标牌/标签/菜单。
     func readText() {
         stopContinuous() // 切到其它识别活动：停所有持续背景模式（光探测/连续颜色）
@@ -650,9 +662,12 @@ final class FramingAssistViewModel {
         guard let buffer = copyPixelBuffer(live) else { speak(FramingStrings.recognizeFailed(lang)); return } // 深拷贝供异步安全读
         resultText = FramingStrings.readingText(lang)
         let request = VNRecognizeTextRequest { [weak self] req, _ in
-            let texts = (req.results as? [VNRecognizedTextObservation])?
-                .compactMap { $0.topCandidates(1).first?.string } ?? []
-            let joined = texts.joined(separator: " ")
+            // Vision 不保证按阅读顺序返回观测 → 经核心 ReadingOrder 重排(从上到下、行内左→右)，否则盲人听到错乱文本。
+            let items: [(text: String, box: CGRect)] = ((req.results as? [VNRecognizedTextObservation]) ?? []).compactMap { o in
+                guard let s = o.topCandidates(1).first?.string else { return nil }
+                return (s, o.boundingBox)
+            }
+            let joined = FramingAssistViewModel.orderedOCRText(from: items)
             DispatchQueue.main.async {
                 guard let self else { return }
                 let out = joined.isEmpty ? FramingStrings.noTextFound(self.lang) : joined

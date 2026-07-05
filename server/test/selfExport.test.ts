@@ -136,4 +136,27 @@ describe('GET /api/account/export', () => {
     expect(res.json().kyc).toBeNull()
     await a.close()
   })
+
+  it('只导出"你拉黑了谁"(blocking)，不导出"谁拉黑了你"(blockedBy)——不向本人暴露谁在躲他（防报复）', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const reg = async (u: string) =>
+      (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role: 'blind' } })).json()
+    const me = await reg('blkme')
+    const iBlocked = await reg('blkvictim')   // 我主动拉黑的人（属我的数据 → 应导出）
+    const blockedMe = await reg('blkabuser')  // 拉黑了我的人（属他的数据 → 绝不在我的导出里暴露）
+    const auth = { authorization: `Bearer ${me.token}` }
+    await a.inject({ method: 'POST', url: '/api/blocks', headers: auth, payload: { userId: iBlocked.user.id } })
+    await a.inject({ method: 'POST', url: '/api/blocks', headers: { authorization: `Bearer ${blockedMe.token}` }, payload: { userId: me.user.id } })
+
+    const res = await a.inject({ method: 'GET', url: '/api/account/export', headers: auth })
+    const body = res.json()
+    // 我拉黑的人在导出里（我的决定＝我的数据）。
+    expect(body.blocks.blocking.some((b: { other: string }) => b.other === 'blkvictim')).toBe(true)
+    // "谁拉黑了我"整个字段不存在——绝不向本人（可能是被拉黑的骚扰方）披露谁在躲他。
+    expect(body.blocks.blockedBy).toBeUndefined()
+    expect(res.payload).not.toContain('blockedBy')
+    expect(res.payload).not.toContain('blkabuser') // 拉黑我的人名不出现在我的导出里
+    await a.close()
+  })
 })

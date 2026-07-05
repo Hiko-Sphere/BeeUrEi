@@ -364,10 +364,14 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     const id = req.user!.sub
     const base = buildUserExportBundle(store, id, Date.now())
     if (!base) return reply.code(404).send({ error: 'not_found' })
+    // 自助导出**只给"你拉黑了谁"(blocking)，不给"谁拉黑了你"(blockedBy)**：别人拉黑你＝那是别人的决定/数据
+    // （在其自己的导出里作 blocking 出现），且向本人（可能正是被拉黑的骚扰方）披露"谁在躲你"有报复风险——对本应用
+    // 的弱势用户（盲人/长者拉黑滥权照护者）尤甚。行业通例(IG/FB 的 GDPR 导出)亦只给前者。admin 版仍留 blockedBy（调查用）。
     const data = {
       ...base,
+      blocks: { blocking: base.blocks.blocking },
       ...buildSelfExportExtras(store, id),
-      note: 'Your own sent text messages are included; messages from others are not (their words are their data). Voice/image/video messages list metadata only. Password hashes and tokens are never exported.',
+      note: 'Your own sent text messages are included; messages from others are not (their words are their data). Users who blocked you are not disclosed (that is their data). Voice/image/video messages list metadata only. Password hashes and tokens are never exported.',
     }
     reply.header('content-disposition', `attachment; filename="beeurei-my-data.json"`)
     return data

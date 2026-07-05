@@ -48,19 +48,20 @@ public enum WhereAmIComposer {
 
     private static func landmarkClause(_ lm: ReverseGeocode.Landmark?, zh: Bool, hasBody: Bool) -> String? {
         guard let lm = lm, !lm.name.isEmpty else { return nil }
-        // 距离来自网络：巨值裸 Int(Double) 会陷阱崩溃，一律走 safeRoundedInt（[[benchmark-rtt]] 溢出镜头教训）。
-        let meters = SpokenStrings.safeRoundedInt(lm.distanceMeters)
+        // 距离来自网络：巨值裸 Int(Double) 会陷阱崩溃。locationDistance 内部走 safeRoundedInt（溢出安全），且
+        // ≥1km 用公里（"约1.5公里"远胜"约1500米"，rural 地标常上千米）——[[benchmark-rtt]] 溢出镜头 + 可听度。
+        let distStr = SpokenStrings.locationDistance(lm.distanceMeters, zh ? .zh : .en)
         let dir = directionWord(lm.direction, zh: zh)
         // 有主体地址时用"。"接续；无主体（只有地标）时直接起句。
         let lead = hasBody ? (zh ? "。最近的地标：" : ". Nearest landmark: ")
                            : (zh ? "最近的地标：" : "Nearest landmark: ")
         if zh {
             // "银泰中心，东约50米" / 方位未知则省方位："银泰中心，约50米"
-            return dir.isEmpty ? "\(lead)\(lm.name)，约\(meters)米"
-                               : "\(lead)\(lm.name)，\(dir)约\(meters)米"
+            return dir.isEmpty ? "\(lead)\(lm.name)，约\(distStr)"
+                               : "\(lead)\(lm.name)，\(dir)约\(distStr)"
         } else {
-            return dir.isEmpty ? "\(lead)\(lm.name), about \(meters) m"
-                               : "\(lead)\(lm.name), \(dir) about \(meters) m"
+            return dir.isEmpty ? "\(lead)\(lm.name), about \(distStr)"
+                               : "\(lead)\(lm.name), \(dir) about \(distStr)"
         }
     }
 

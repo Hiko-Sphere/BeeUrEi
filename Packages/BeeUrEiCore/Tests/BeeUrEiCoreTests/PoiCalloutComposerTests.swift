@@ -125,9 +125,9 @@ final class PoiCalloutComposerTests: XCTestCase {
         let out = PoiCalloutComposer.compose(
             pois: [poi("坏数据", 1e19, 0)],
             mode: .around, radiusMeters: 250, headingAvailable: true, language: .zh)
-        XCTAssertEqual(out, "周围：12点钟方向约1000000米，坏数据")
+        XCTAssertEqual(out, "周围：12点钟方向约1000公里，坏数据") // 夹到 1e6 米=1000 公里（locationDistance 换算）
         let n = PoiCalloutComposer.nearest(from: [poi("坏数据", 1e19, 0)], query: "药店", radiusMeters: 1000, language: .zh)
-        XCTAssertTrue(n.contains("1000000米"))
+        XCTAssertTrue(n.contains("1000公里"))
     }
 
     func testEnglishPhrasing() {
@@ -135,5 +135,16 @@ final class PoiCalloutComposerTests: XCTestCase {
             pois: [poi("Blue Bottle", 30, 0)],
             mode: .around, radiusMeters: 250, headingAvailable: true, language: .en)
         XCTAssertEqual(out, "Around you: Blue Bottle, about 30 meters, 12 o'clock")
+    }
+
+    func testFarPoiUsesKilometers() {
+        // 周边检索半径可达 3km：远处 POI 用公里，读屏更易听懂量级（"约2.1公里"胜过"约2100米"）。
+        let out = PoiCalloutComposer.compose(
+            pois: [poi("郊区商场", 2100, 0)],
+            mode: .around, radiusMeters: 3000, headingAvailable: true, language: .zh)
+        XCTAssertEqual(out, "周围：12点钟方向约2.1公里，郊区商场")
+        // 定向检索也用公里。
+        let n = PoiCalloutComposer.nearest(from: [poi("Mall", 1500, 90)], query: "mall", radiusMeters: 3000, language: .en)
+        XCTAssertEqual(n, "Nearest mall: Mall, about 1.5 kilometers, 3 o'clock")
     }
 }

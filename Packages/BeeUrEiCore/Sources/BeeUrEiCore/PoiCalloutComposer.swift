@@ -53,16 +53,17 @@ public enum PoiCalloutComposer {
             // 先算出这条**是否可播报**及其文案；去重登记留到**确定要 append 时**再做——
             // 否则一个被扇区/距离过滤掉的同名 POI（如正后方的"全家"）会先占掉去重名额，
             // 使一个真正在前方、该播的同名 POI 被当"已见"丢弃（盲人正走向它却听不到，安全攸关）。
-            let m = SpokenStrings.safeRoundedInt(dist) // 巨大有限距离(上游脏数据) Int() 会溢出陷阱崩溃，须夹取
+            // locationDistance：溢出安全 + ≥1km 用公里（周边检索半径可达 3km，远处 POI"约2.1公里"远胜"约2100米"）。
+            let dm = SpokenStrings.locationDistance(dist, zh ? .zh : .en)
             let phrase: String
             if let rel = poi.relativeBearingDegrees, rel.isFinite {
                 if mode == .ahead, abs(rel) > 50 { continue } // 前方模式只留朝向 ±50° 扇区
                 let hour = ClockDirection(angleDegrees: rel).hour
-                phrase = zh ? "\(hour)点钟方向约\(m)米，\(name)"
-                            : "\(name), about \(m) meters, \(hour) o'clock"
+                phrase = zh ? "\(hour)点钟方向约\(dm)，\(name)"
+                            : "\(name), about \(dm), \(hour) o'clock"
             } else {
                 if mode == .ahead { continue } // 没有可信朝向，"前方"无从判定——下面给校准提示
-                phrase = zh ? "约\(m)米，\(name)" : "\(name), about \(m) meters"
+                phrase = zh ? "约\(dm)，\(name)" : "\(name), about \(dm)"
             }
 
             guard seenNames.insert(name.lowercased()).inserted else { continue } // 同名只留首个**可播报**的（即最近的合格者）
@@ -105,12 +106,12 @@ public enum PoiCalloutComposer {
             return zh ? "附近\(radiusMeters)米内没找到\(q)" : "No \(q) found within \(radiusMeters) meters"
         }
         let name = best.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let m = SpokenStrings.safeRoundedInt(best.distanceMeters) // 溢出安全（见 compose）
+        let dm = SpokenStrings.locationDistance(best.distanceMeters, zh ? .zh : .en) // 溢出安全 + ≥1km 用公里
         if let rel = best.relativeBearingDegrees, rel.isFinite {
             let hour = ClockDirection(angleDegrees: rel).hour
-            return zh ? "最近的\(q)：\(name)，\(hour)点钟方向约\(m)米"
-                      : "Nearest \(q): \(name), about \(m) meters, \(hour) o'clock"
+            return zh ? "最近的\(q)：\(name)，\(hour)点钟方向约\(dm)"
+                      : "Nearest \(q): \(name), about \(dm), \(hour) o'clock"
         }
-        return zh ? "最近的\(q)：\(name)，约\(m)米" : "Nearest \(q): \(name), about \(m) meters"
+        return zh ? "最近的\(q)：\(name)，约\(dm)" : "Nearest \(q): \(name), about \(dm)"
     }
 }

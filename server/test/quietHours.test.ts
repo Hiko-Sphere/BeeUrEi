@@ -58,7 +58,8 @@ describe('quietHours 纯逻辑', () => {
     for (const k of ['emergency_alert', 'emergency_ack', 'incoming_call', 'sos', 'escalate', 'safety_checkin_expired', 'checkin_missed',
                      'security_password_changed', 'security_2fa_disabled', 'security_email_changed', 'security_password_reset', 'security_phone_changed',
                      'security_username_changed', 'security_apple_linked', 'security_apple_unlinked',
-                     'security_passkey_added', 'security_passkey_removed']) expect(isAlwaysThrough(k)).toBe(true)
+                     'security_passkey_added', 'security_passkey_removed',
+                     'security_admin_password_reset', 'security_admin_passkey_cleared', 'security_admin_apple_unlinked']) expect(isAlwaysThrough(k)).toBe(true)
     for (const k of ['chat_message', 'friend_request', 'route_added', 'place_arrival', 'kyc_verified', 'recall', 'medical_info_viewed']) expect(isAlwaysThrough(k)).toBe(false)
   })
 

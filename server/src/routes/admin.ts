@@ -17,7 +17,7 @@ import { type SignalingHub } from '../signaling/hub'
 import { type CallControlBridge } from '../signaling/callControl'
 import { type PushSender, NoopPushSender } from '../push/apns'
 import { pushLang, pushStrings } from '../push/pushStrings'
-import { notifyUser } from '../notifications/notify'
+import { notifyUser, notifyAccountSecurity } from '../notifications/notify'
 import { openField, open as openSealed } from '../kyc/crypto'
 import { readKycBlob, removeKycBlob, kycBlobExists } from '../kyc/storage'
 import type { KycDocKind } from '../db/store'
@@ -699,6 +699,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     if (!target.appleSub) return reply.code(400).send({ error: 'not_linked' })
     const updated = store.updateUser(id, { appleSub: undefined })
     audit(req.user!.sub, 'user.unlinkApple', 'user', id)
+    notifyAccountSecurity(store, push, target, 'admin_apple_unlinked') // 透明告知本人 + 侦测被盗管理员账号借此接管
     return { user: publicUser(updated!), appleLinked: !!updated!.appleSub }
   })
 
@@ -709,7 +710,10 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     if (!target) return reply.code(404).send({ error: 'not_found' })
     const keys = store.passkeysForUser(id)
     for (const k of keys) store.deletePasskey(k.id, id)
-    if (keys.length) audit(req.user!.sub, 'user.clearPasskeys', 'user', id, `count=${keys.length}`)
+    if (keys.length) {
+      audit(req.user!.sub, 'user.clearPasskeys', 'user', id, `count=${keys.length}`)
+      notifyAccountSecurity(store, push, target, 'admin_passkey_cleared') // 仅真的清了才告警；透明 + 侦测接管
+    }
     return { cleared: keys.length, passkeys: store.passkeysForUser(id).length }
   })
 
@@ -813,6 +817,9 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     if (pwErr) return reply.code(400).send({ error: pwErr })
     severSessions(id, target.tokenVersion ?? 0, { passwordHash: hashPassword(parsed.data.newPassword) }) // 改密即撤销所有会话
     audit(req.user!.sub, 'user.resetPassword', 'user', id)
+    // 透明告知本人（in-app + best-effort 推送；severSessions 不清推送订阅，故告警仍能触达被登出的设备）+ 侦测
+    // 被盗管理员账号借代设密码接管受害者。越勿扰（security_*，见 quietHours）。
+    notifyAccountSecurity(store, push, target, 'admin_password_reset')
     return { ok: true }
   })
 

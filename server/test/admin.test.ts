@@ -293,18 +293,26 @@ describe('admin + reports', () => {
     const noEmail = await app.inject({ method: 'POST', url: '/api/admin/users/u2/verify-email', headers: adminAuth, payload: { verified: true } })
     expect(noEmail.statusCode).toBe(400)
 
-    // 解绑 Apple，再次解绑 → 400 not_linked
+    const secKinds = (uid: string) => store.notificationsForUser(uid).filter((n) => n.kind.startsWith('security_')).map((n) => n.kind)
+
+    // 解绑 Apple，再次解绑 → 400 not_linked；本人收到"管理员解绑 Apple 登录"安全告警。
     const unlink = await app.inject({ method: 'POST', url: '/api/admin/users/u1/unlink-apple', headers: adminAuth })
     expect(unlink.statusCode).toBe(200)
     expect(store.findById('u1')!.appleSub).toBeUndefined()
+    expect(secKinds('u1')).toContain('security_admin_apple_unlinked')
     const unlink2 = await app.inject({ method: 'POST', url: '/api/admin/users/u1/unlink-apple', headers: adminAuth })
     expect(unlink2.statusCode).toBe(400)
+    expect(secKinds('u1').filter((k) => k === 'security_admin_apple_unlinked')).toHaveLength(1) // 400 不再重复告警
 
-    // 清除 Passkey
+    // 清除 Passkey → 本人收到"管理员清除通行密钥"告警。
     const clear = await app.inject({ method: 'POST', url: '/api/admin/users/u1/clear-passkeys', headers: adminAuth })
     expect(clear.statusCode).toBe(200)
     expect(clear.json().cleared).toBe(1)
     expect(store.passkeysForUser('u1').length).toBe(0)
+    expect(secKinds('u1')).toContain('security_admin_passkey_cleared')
+    // 再次清除（已无 passkey）→ cleared=0，不再告警。
+    await app.inject({ method: 'POST', url: '/api/admin/users/u1/clear-passkeys', headers: adminAuth })
+    expect(secKinds('u1').filter((k) => k === 'security_admin_passkey_cleared')).toHaveLength(1)
 
     // 强制下线：旧 access token 立即失效（tokenVersion 递增）
     const frankToken = await login(app, 'frank', 'secret123')
@@ -314,6 +322,22 @@ describe('admin + reports', () => {
     expect(fl.statusCode).toBe(200)
     const me2 = await app.inject({ method: 'GET', url: '/api/me', headers: { authorization: `Bearer ${frankToken}` } })
     expect(me2.statusCode).toBe(401) // 旧令牌被 tokenVersion 击穿
+    await app.close()
+  })
+
+  it('admin reset-password：改密生效 + 本人收到"管理员重置密码"安全告警（侦测被盗管理员接管）', async () => {
+    const { store, app } = withAdmin()
+    const adminAuth = { authorization: `Bearer ${await login(app, 'root', 'rootpass1')}` }
+    store.createUser({ id: 'h1', username: 'harry', passwordHash: hashPassword('secret123'), displayName: 'Harry',
+      role: 'blind', status: 'active', createdAt: Date.now(), tokenVersion: 0 })
+    const res = await app.inject({ method: 'POST', url: '/api/admin/users/h1/reset-password', headers: adminAuth, payload: { newPassword: 'brand-new-pass-9z' } })
+    expect(res.statusCode).toBe(200)
+    // 本人收到"管理员重置密码"安全告警（越勿扰的 security_* 类）。
+    expect(store.notificationsForUser('h1').map((n) => n.kind)).toContain('security_admin_password_reset')
+    // 新密码可登录、旧密码失效（改密确实生效）。
+    expect(await login(app, 'harry', 'brand-new-pass-9z')).toBeTruthy()
+    const oldLogin = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'harry', password: 'secret123' } })
+    expect(oldLogin.statusCode).toBe(401)
     await app.close()
   })
 })

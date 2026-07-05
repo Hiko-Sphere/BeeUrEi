@@ -36,6 +36,24 @@ describe('ContactMedicalInfo（施救时按需查看遇险者医疗信息）', (
     expect(await screen.findByTestId('medical-info-content')).toHaveTextContent('青霉素过敏')
   })
 
+  it('显示医疗信息的更新时间（施救者据此判断是否可能过时）；updatedAt 为 null 时不显示', async () => {
+    mock(api.contactMedicalInfo).mockResolvedValue({ medicalInfo: '哮喘，随身带沙丁胺醇', fromName: 'X', updatedAt: Date.now() - 3 * 86400_000 })
+    render(<ContactMedicalInfo userId="u1" />)
+    fireEvent.click(screen.getByTestId('view-medical-btn'))
+    const content = await screen.findByTestId('medical-info-content')
+    expect(content).toHaveTextContent('哮喘')
+    expect(content).toHaveTextContent(/更新于/) // 更新时间可见（死字段修复）
+  })
+
+  it('updatedAt 为 null（旧数据/未记录）→ 不显示更新时间，仍显示医疗信息', async () => {
+    mock(api.contactMedicalInfo).mockResolvedValue({ medicalInfo: '无已知过敏', fromName: 'X', updatedAt: null })
+    render(<ContactMedicalInfo userId="u1" />)
+    fireEvent.click(screen.getByTestId('view-medical-btn'))
+    const content = await screen.findByTestId('medical-info-content')
+    expect(content).toHaveTextContent('无已知过敏')
+    expect(content).not.toHaveTextContent('更新于')
+  })
+
   it('403（非紧急联系人）→ 提示仅紧急联系人可查看', async () => {
     mock(api.contactMedicalInfo).mockRejectedValue(new APIError('forbidden', 403))
     render(<ContactMedicalInfo userId="u1" />)

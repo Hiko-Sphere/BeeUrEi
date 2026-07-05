@@ -4,7 +4,7 @@ import { pickUnreadEmergencies, playEmergencyChime, clearedSenderLatest, isClear
 import { emergencyLocInfo } from '../../lib/emergencyLoc'
 import { appleMapsUrl } from '../../lib/location'
 import { useI18n } from '../../lib/i18n'
-import { Modal, fmtTime } from '../../components/ui'
+import { Modal, fmtTime, timeAgo } from '../../components/ui'
 import { IconPhone, IconFlash, IconCheck } from '../../components/icons'
 import { useCall } from './CallController'
 
@@ -14,13 +14,13 @@ const POLL_MS = 10_000
 /// 授权在服务端（仅其 accepted isEmergency 亲友可读）：403=非紧急联系人、404=对方未填。不自动拉取（敏感，
 /// 且并非每次都需要），点击才请求。
 export function ContactMedicalInfo({ userId, emphasize }: { userId: string; emphasize?: boolean }) {
-  const { t } = useI18n()
-  const [state, setState] = useState<{ kind: 'idle' | 'loading' | 'ok' | 'none' | 'denied' | 'error'; text?: string }>({ kind: 'idle' })
+  const { t, lang } = useI18n()
+  const [state, setState] = useState<{ kind: 'idle' | 'loading' | 'ok' | 'none' | 'denied' | 'error'; text?: string; updatedAt?: number | null }>({ kind: 'idle' })
   const load = async () => {
     setState({ kind: 'loading' })
     try {
-      const { medicalInfo } = await api.contactMedicalInfo(userId)
-      setState({ kind: 'ok', text: medicalInfo })
+      const { medicalInfo, updatedAt } = await api.contactMedicalInfo(userId)
+      setState({ kind: 'ok', text: medicalInfo, updatedAt })
     } catch (e) {
       const s = e instanceof APIError ? e.status : 0
       setState({ kind: s === 404 ? 'none' : s === 403 ? 'denied' : 'error' })
@@ -45,6 +45,11 @@ export function ContactMedicalInfo({ userId, emphasize }: { userId: string; emph
     <div data-testid="medical-info-content" className="rounded-xl border border-honey/40 bg-honey/5 p-3">
       <div className="mb-1 text-xs font-semibold text-soft">🩺 {t('紧急医疗信息', 'Emergency medical info')}</div>
       <p className="whitespace-pre-wrap break-words text-sm">{state.text}</p>
+      {/* 更新时间（施救参考）：服务端一直下发 updatedAt 却从未呈现（死字段）。医疗信息会随用药/病史变化——
+          施救者需据"多久前更新"判断是否可能过时（几天前=可信；数年前=谨慎核对）。相对时间对"是否当前"更直观。 */}
+      {state.updatedAt != null && (
+        <div className="mt-1.5 text-xs text-faint">{t('更新于 ', 'Updated ')}{timeAgo(state.updatedAt, lang)}</div>
+      )}
     </div>
   )
   const msg = state.kind === 'none' ? t('对方未填写医疗信息', 'No medical info provided')

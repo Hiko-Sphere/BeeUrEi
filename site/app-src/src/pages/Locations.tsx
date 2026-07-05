@@ -102,7 +102,8 @@ export function LocationsPage() {
       } else if (circle) { m.removeLayer(circle); accuracyCircles.current.delete(c.userId) } // 本次无精度：撤掉旧圈
       // danger 用 text-danger 类（项目无 --danger 变量；类还自带暗色主题对比度覆盖 .dark .text-danger）。
       const batt = batteryBadge(c.battery, lang)
-      const battHtml = batt ? ` · <span class="${batt.danger ? 'text-danger font-semibold' : ''}">${escapeHtml(batt.text)}</span>` : ''
+      // critical(≤10%即将关机)加 ⚠️ 前缀，协助者盯多个联系人时一眼分清最危急的（读屏也念"警告"）。
+      const battHtml = batt ? ` · <span class="${batt.danger ? 'text-danger font-semibold' : ''}">${batt.critical ? '⚠️ ' : ''}${escapeHtml(batt.text)}</span>` : ''
       // 精度文字（协助者读屏/看不清圈时也知道有多准）："精确到约 20 米"。
       const accLabel = accuracyText(c.accuracy, t)
       const accHtml = accLabel ? ` · ${escapeHtml(accLabel)}` : ''
@@ -225,7 +226,7 @@ export function LocationsPage() {
                         <div className="truncate font-medium">{c.displayName}</div>
                         <div className="text-xs text-faint">
                           {roleLabel(c.role, t)} · {t('更新于', 'updated')} {timeAgo(c.updatedAt, lang)}
-                          {(() => { const b = batteryBadge(c.battery, lang); return b ? <> · <span className={b.danger ? 'font-semibold text-danger' : ''}>{b.text}</span></> : null })()}
+                          {(() => { const b = batteryBadge(c.battery, lang); return b ? <> · <span className={b.danger ? 'font-semibold text-danger' : ''}>{b.critical ? '⚠️ ' : ''}{b.text}</span></> : null })()}
                         </div>
                       </div>
                       <span className="inline-block h-2 w-2 rounded-full bg-ok ring-live" />

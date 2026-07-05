@@ -89,6 +89,29 @@ final class OffRouteDetectorTests: XCTestCase {
         XCTAssertNil(detector.distanceToRoute(lat: 0, lon: .nan, route: multi))
         XCTAssertFalse(detector.isOffRoute(lat: 0, lon: .nan, route: multi))
     }
+
+    // 回归（姊妹缺口）：坏坐标在**路线点**（非当前点）上同样危险——当前点守卫了，路点却没守。
+    // 多点路线全为 NaN 路点时，每段 pointToSegment 返回 NaN，min(.greatestFiniteMagnitude, NaN)=1.8e308
+    // → isOffRoute 误判偏航、把在路上的盲人引离正确路线（"极危险"）。补路点 isFinite 守卫后一律"未知不动作"。
+    func testNonFiniteRoutePointNotOffRoute() {
+        // 当前点有效、路线含非有限路点：应返 nil / 不判偏航（而非被洗成 1.8e308>阈值=true）。
+        for bad in [Double.nan, .infinity, -.infinity] {
+            let allBad = [Coordinate(lat: bad, lon: bad), Coordinate(lat: bad, lon: 0.001)]
+            XCTAssertNil(detector.distanceToRoute(lat: 0, lon: 0.0005, route: allBad))
+            XCTAssertFalse(detector.isOffRoute(lat: 0, lon: 0.0005, route: allBad))
+            // 仅个别路点坏（其余有效）也一律"未知不动作"，不给出可能误导的距离。
+            let oneBad = [Coordinate(lat: 0, lon: 0), Coordinate(lat: bad, lon: 0.001), Coordinate(lat: 0, lon: 0.002)]
+            XCTAssertNil(detector.distanceToRoute(lat: 0, lon: 0.0015, route: oneBad))
+            XCTAssertFalse(detector.isOffRoute(lat: 0, lon: 0.0015, route: oneBad))
+            // 单点路线坏路点：此前走 Geo 返 NaN（isOffRoute false），现统一返 nil，多点/单点一致。
+            XCTAssertNil(detector.distanceToRoute(lat: 0, lon: 0.0005, route: [Coordinate(lat: bad, lon: 0)]))
+            XCTAssertFalse(detector.isOffRoute(lat: 0, lon: 0.0005, route: [Coordinate(lat: bad, lon: 0)]))
+        }
+        // 正常路线不受影响：有限路点照常算出距离、正确判定。
+        let good = [Coordinate(lat: 0, lon: 0), Coordinate(lat: 0, lon: 0.001)]
+        XCTAssertNotNil(detector.distanceToRoute(lat: 0, lon: 0.0005, route: good))
+        XCTAssertFalse(detector.isOffRoute(lat: 0, lon: 0.0005, route: good))
+    }
 }
 
 final class ProximityCueTests: XCTestCase {

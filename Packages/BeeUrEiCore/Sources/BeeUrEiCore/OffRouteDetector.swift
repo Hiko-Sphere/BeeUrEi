@@ -30,6 +30,11 @@ public struct OffRouteDetector: Sendable {
     public func distanceToRoute(lat: Double, lon: Double, route: [Coordinate]) -> Double? {
         guard lat.isFinite, lon.isFinite else { return nil }
         guard !route.isEmpty else { return nil }
+        // **路点亦须有限**（当前点守卫的姊妹缺口）：非有限路点会让 pointToSegmentMeters 返回 NaN，
+        // min(greatestFiniteMagnitude, NaN)=greatestFiniteMagnitude，全程如此则 best 停在 1.8e308 →
+        // isOffRoute「1.8e308 > 25」误判偏航（与坏当前点同款"极危险"误判——盲人被引离正确路线）；且单点路线走
+        // Geo(NaN→isOffRoute false) 与多点(→误判 true) 的同一不一致，对路点亦须补齐"非有限即未知不动作"。
+        guard route.allSatisfy({ $0.lat.isFinite && $0.lon.isFinite }) else { return nil }
         if route.count == 1 {
             return Geo.distanceMeters(fromLat: lat, fromLon: lon, toLat: route[0].lat, toLon: route[0].lon)
         }

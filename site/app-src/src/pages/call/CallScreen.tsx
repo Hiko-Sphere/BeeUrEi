@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { api, tokenStore } from '../../lib/api'
 import { useI18n } from '../../lib/i18n'
 import { useToast, Avatar, Button, Modal } from '../../components/ui'
@@ -185,18 +185,19 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
         <QualityBars quality={quality} />
       </div>
 
-      {/* 合规告知横幅 */}
+      {/* 合规告知横幅（role=alert：被监看/被录制中途出现时读屏**主动播报**——盲人有权即时知道自己正被录制/监看，
+          此前是纯视觉 div，读屏用户不导航过去就无从得知，隐私/知情同意攸关）。 */}
       {admin.observing && (
-        <div className="mx-4 mb-2 flex items-center gap-2 rounded-xl bg-honey/20 px-3 py-2 text-sm">
+        <ComplianceBanner tone="honey">
           <IconShield width={18} height={18} />
           <span>{t('管理员正在监看本次通话', 'An administrator is observing this call')}{admin.name ? ` · ${admin.name}` : ''}</span>
-        </div>
+        </ComplianceBanner>
       )}
       {peerRecording && (
-        <div className="mx-4 mb-2 flex items-center gap-2 rounded-xl bg-danger/20 px-3 py-2 text-sm">
+        <ComplianceBanner tone="danger">
           <span className="inline-block h-2.5 w-2.5 rounded-full bg-danger ring-live" />
           {t('对方正在录制本次通话', 'The other party is recording this call')}
-        </div>
+        </ComplianceBanner>
       )}
       {/* 协助守则提示（对方开画面=正在实地协助）：只描述、不替对方做安全决策（Aira 范式，常驻轻提示）。 */}
       {peerVideoOn && (
@@ -311,6 +312,16 @@ function CtrlButton({ icon, label, onClick, active, danger, disabled }: { icon: 
       className={`flex min-w-[64px] flex-col items-center gap-1 rounded-2xl px-3 py-2.5 text-[11px] transition disabled:opacity-30 ${danger ? 'bg-danger/30 text-white' : active ? 'bg-honey/30 text-white' : 'bg-white/10 text-white/80 hover:bg-white/15'}`}>
       {icon}{label}
     </button>
+  )
+}
+
+/// 合规告知横幅（被管理员监看 / 被对方录制）。**role="alert"**：条件挂载（状态转真）时读屏**主动**朗读——
+/// 隐私/知情同意攸关，盲人须即时知道自己正被录制/监看，而非等导航到该横幅才发现。tone 决定底色。
+export function ComplianceBanner({ tone, children }: { tone: 'honey' | 'danger'; children: ReactNode }) {
+  return (
+    <div role="alert" className={`mx-4 mb-2 flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${tone === 'danger' ? 'bg-danger/20' : 'bg-honey/20'}`}>
+      {children}
+    </div>
   )
 }
 

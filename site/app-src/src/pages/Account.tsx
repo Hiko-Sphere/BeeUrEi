@@ -273,10 +273,15 @@ export function VerificationDialog({ status, onClose, onChanged }: { status: Ver
             {st === 'verified' && <p className="rounded-xl bg-honey/10 p-3 text-sm text-accent">✓ {t('你已通过实名认证，账号已显示「已认证」徽章。', 'You are verified — the verified badge appears on your account.')}</p>}
             {st === 'pending' && <p className="rounded-xl surface-2 p-3 text-sm text-soft">{t('审核中，通常 1–2 个工作日。结果会通过通知告知你。', 'Under review, usually 1–2 business days. We will notify you of the result.')}</p>}
             {st === 'rejected' && (
-              <p className="rounded-xl border border-danger/30 p-3 text-sm text-soft">
+              <div className="rounded-xl border border-danger/30 p-3 text-sm text-soft">
                 {t('上次未通过：', 'Last attempt was not approved: ')}
                 {(REJECT_REASONS[status?.rejectReasonCode ?? 'other'] ?? REJECT_REASONS.other)[lang === 'en' ? 1 : 0]}
-              </p>
+                {/* 管理员的具体说明（死字段修复）：服务端仅在被拒时把 rejectReasonNote 下发给本人、web 类型也解了它，
+                    却从未呈现——用户只见标准理由、不知**具体**哪里不对，只能盲目重交。展示便于对症修正。React 默认转义无 XSS。 */}
+                {status?.rejectReasonNote && status.rejectReasonNote.trim() && (
+                  <span className="mt-1.5 block text-faint">{t('审核说明：', 'Reviewer note: ')}{status.rejectReasonNote}</span>
+                )}
+              </div>
             )}
             {st === 'none' && <p className="text-sm text-faint">{t('通过实名认证可获得「已认证」徽章，让联系人更信任你。', 'Verify your identity to earn a trusted badge your contacts can see.')}</p>}
             {err && <p className="text-sm text-danger">{err}</p>}

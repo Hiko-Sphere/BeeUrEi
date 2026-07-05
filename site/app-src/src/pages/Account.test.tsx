@@ -150,6 +150,22 @@ describe('VerificationDialog 提交部分失败自动回滚', () => {
   })
 })
 
+describe('VerificationDialog 被拒显示管理员说明（死字段 rejectReasonNote）', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('被拒时展示 reviewer note——服务端下发却从未呈现，用户此前不知具体哪里不对', () => {
+    render(<VerificationDialog status={{ status: 'rejected', rejectReasonCode: 'other', rejectReasonNote: '身份证背面照缺失，请补拍清晰的背面' }} onClose={vi.fn()} onChanged={vi.fn()} />)
+    expect(screen.getByText(/上次未通过/)).toBeInTheDocument()
+    expect(screen.getByText(/审核说明/)).toBeInTheDocument()
+    expect(screen.getByText(/身份证背面照缺失/)).toBeInTheDocument()
+  })
+  it('无 note 时不显示"审核说明"标签', () => {
+    render(<VerificationDialog status={{ status: 'rejected', rejectReasonCode: 'other' }} onClose={vi.fn()} onChanged={vi.fn()} />)
+    expect(screen.getByText(/上次未通过/)).toBeInTheDocument()
+    expect(screen.queryByText(/审核说明/)).toBeNull()
+  })
+})
+
 describe('SessionsDialog 首次登录时刻（死字段 createdAt，安全审查线索）', () => {
   beforeEach(() => vi.clearAllMocks())
 

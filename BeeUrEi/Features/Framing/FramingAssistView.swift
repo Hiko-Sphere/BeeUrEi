@@ -654,6 +654,23 @@ final class FramingAssistViewModel {
         orderedOCRLines(from: items).joined(separator: "\n")
     }
 
+    /// OCR 正文主体是否中文（决定朗读用**中文还是英文语音**，与 App 仅有的 zh/en 语音匹配）——OCR 同时识别中英文
+    /// (recognitionLanguages 双语)，但此前一律用 App 语言的语音朗读：中文语音念英文告示/菜单（或英文语音念中文）＝乱码。
+    /// 对标 Seeing AI 按文本语言选嗓音。判据=CJK 汉字占「汉字+拉丁字母」之比：中文文本 CJK 密集、英文≈0；阈值 0.12
+    /// 稳妥分开——少量 CJK 噪声（如英文里一个乱码汉字）不误判成中文；真中文即便夹英文词也判中文（**边界偏中文侧保守**：
+    /// 中文语音读夹杂英文尚可听，英文语音读中文=全乱码，代价不对称）。纯数字/符号(无汉字无字母)→false(按英文，数字两语音皆可)。
+    static func dominantTextIsChinese(_ text: String) -> Bool {
+        var cjk = 0, latin = 0
+        for u in text.unicodeScalars {
+            let v = u.value
+            if (0x4E00...0x9FFF).contains(v) || (0x3400...0x4DBF).contains(v) || (0xF900...0xFAFF).contains(v) { cjk += 1 }
+            else if (0x41...0x5A).contains(v) || (0x61...0x7A).contains(v) { latin += 1 }
+        }
+        let total = cjk + latin
+        guard total > 0 else { return false }
+        return Double(cjk) / Double(total) >= 0.12
+    }
+
     /// 朗读相机里看到的文字（端侧 Vision OCR，中英文）——盲人读标牌/标签/菜单。
     func readText() {
         stopContinuous() // 切到其它识别活动：停所有持续背景模式（光探测/连续颜色）
@@ -673,8 +690,12 @@ final class FramingAssistViewModel {
                 let out = joined.isEmpty ? FramingStrings.noTextFound(self.lang) : joined
                 self.resultText = out
                 self.copyableResult = joined.isEmpty ? nil : joined
-                if !joined.isEmpty { self.historyStore.add(kind: "text", content: joined) }
-                self.speak(out)
+                if joined.isEmpty {
+                    self.speak(out) // "没有识别到文字"：App 语言提示
+                } else {
+                    self.historyStore.add(kind: "text", content: joined)
+                    self.speakInTextLanguage(joined) // 正文语音随文本语言（中/英）切换，中文语音不再念乱英文（反之亦然）
+                }
             }
         }
         request.recognitionLanguages = ocrLanguages
@@ -1248,6 +1269,14 @@ final class FramingAssistViewModel {
     private func speak(_ text: String, hint: Bool = false) {
         guard !paused else { return } // 已暂停(关闭/来电)：异步识别回调到达也不再播报
         SpeechHub.shared.speak(text, channel: .query, voiceCode: lang.voiceCode, droppable: hint)
+    }
+
+    /// 朗读**纯 OCR 正文**，语音随文本主体语言（中/英）自动选择——否则中文语音念英文告示/菜单（或反之）＝乱码
+    /// （对标 Seeing AI 多语言朗读）。仅用于无 App 文案框架的纯正文（读文字）；带 App 语言前后缀的混合播报仍用 speak。
+    private func speakInTextLanguage(_ text: String) {
+        guard !paused else { return }
+        let voice = FramingAssistViewModel.dominantTextIsChinese(text) ? Language.zh.voiceCode : Language.en.voiceCode
+        SpeechHub.shared.speak(text, channel: .query, voiceCode: voice)
     }
 }
 

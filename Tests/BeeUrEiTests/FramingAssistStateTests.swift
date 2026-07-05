@@ -93,4 +93,21 @@ final class FramingAssistStateTests: XCTestCase {
         let bad = (text: "  ", box: CGRect(x: .nan, y: 0.5, width: 0.2, height: 0.08))
         XCTAssertEqual(FramingAssistViewModel.orderedOCRText(from: [bad, top]), "First")
     }
+
+    /// OCR 正文按**文本语言**选朗读语音（中文语音念英文告示＝乱码，反之亦然）：CJK 占比判据 + 边界偏中文侧保守。
+    func testDominantTextLanguageForVoiceSelection() {
+        // 纯英文告示/菜单 → 英文语音（否则中文语音念乱）。
+        XCTAssertFalse(FramingAssistViewModel.dominantTextIsChinese("Emergency Exit"))
+        XCTAssertFalse(FramingAssistViewModel.dominantTextIsChinese("Best before 2026"))
+        // 纯中文 → 中文语音。
+        XCTAssertTrue(FramingAssistViewModel.dominantTextIsChinese("紧急出口"))
+        XCTAssertTrue(FramingAssistViewModel.dominantTextIsChinese("配料表：小麦粉、白砂糖"))
+        // 中英混排以中文为主 → 中文（中文语音读夹杂英文尚可；英文语音读中文=全乱码，故偏中文侧）。
+        XCTAssertTrue(FramingAssistViewModel.dominantTextIsChinese("紧急出口 EXIT"))
+        // 英文为主、仅个别 CJK 噪声（如一个乱码汉字混进长英文）→ 仍判英文（阈值 0.12 挡噪声，不误切中文语音）。
+        XCTAssertFalse(FramingAssistViewModel.dominantTextIsChinese("The quick brown fox jumps over the lazy dog 字"))
+        // 纯数字/符号（无汉字无字母）→ 英文（数字两种语音都能念）。
+        XCTAssertFalse(FramingAssistViewModel.dominantTextIsChinese("123-456 $%^"))
+        XCTAssertFalse(FramingAssistViewModel.dominantTextIsChinese(""))
+    }
 }

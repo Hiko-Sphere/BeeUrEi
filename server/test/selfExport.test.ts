@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
+import { buildUserExportBundle } from '../src/account/exportBundle'
 
 // 自助数据导出（GDPR 可携权）：本人拿得到自己的一切、拿不到别人的话、永远拿不到密钥类。
 describe('GET /api/account/export', () => {
@@ -157,6 +158,24 @@ describe('GET /api/account/export', () => {
     expect(body.blocks.blockedBy).toBeUndefined()
     expect(res.payload).not.toContain('blockedBy')
     expect(res.payload).not.toContain('blkabuser') // 拉黑我的人名不出现在我的导出里
+    await a.close()
+  })
+
+  it('自助导出含本人头像原图（自己上传的照片=本人数据，GDPR 可携）；admin 底座只标 hasAvatar、不含原图（最小化）', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const me = (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'avexport', password: 'secret123', role: 'blind' } })).json()
+    const dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANS'
+    store.updateUser(me.user.id, { avatar: dataUrl })
+
+    const body = (await a.inject({ method: 'GET', url: '/api/account/export', headers: { authorization: `Bearer ${me.token}` } })).json()
+    expect(body.avatar).toBe(dataUrl)          // 自助版含头像原图
+    expect(body.profile.hasAvatar).toBe(true)
+
+    // admin 代办导出的底座（buildUserExportBundle）不含 avatar 字段（只 hasAvatar），与住址/健康数据同的最小化。
+    const adminBase = buildUserExportBundle(store, me.user.id, Date.now())!
+    expect('avatar' in adminBase).toBe(false)
+    expect(adminBase.profile.hasAvatar).toBe(true)
     await a.close()
   })
 })

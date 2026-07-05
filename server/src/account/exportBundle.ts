@@ -79,6 +79,9 @@ export function buildUserExportBundle(store: Store, id: string, now: number) {
 export function buildSelfExportExtras(store: Store, id: string) {
   const nameOf = (uid: string) => store.findById(uid)?.displayName ?? '—'
   return {
+    // 本人头像原图（data URL）：自己上传的照片=本人数据，GDPR 可携权覆盖（profile.hasAvatar 只标有无，这里给实际图供
+    // 完整可携）。**仅自助版**——admin 代办导出不含（与住址/健康数据同的最小化：管理员无需随手拿到用户头像原图）。无则 null。
+    avatar: store.findById(id)?.avatar ?? null,
     savedRoutes: store.savedRoutesForUser(id).map((r) => ({ name: r.name, waypoints: r.waypoints, createdAt: r.createdAt, updatedAt: r.updatedAt })),
     // 常用地点（家/公司/自定义）：本人独有 PII（含住址与坐标）——GDPR 访问/可携权覆盖。与路线同为
     // 位置敏感数据，**仅自助版**（admin 代办导出不含，免管理员随手看到用户家庭住址）。

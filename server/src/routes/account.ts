@@ -341,7 +341,10 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
   })
 
   // 校验邮箱验证码（D1）：成功则标记 emailVerified=true。
-  app.post('/api/account/email/verify', { preHandler: requireAuth() }, async (req, reply) => {
+  // 限流 10/min：本端点校验邮箱验证码，须与 auth/email/verify-code、2fa/enable 等**一切验证码端点同口径**加端点级限流
+  // ——纵深防御（CodeRegistry 已限每码 5 次尝试，但端点级速率上限防连环换码猜测 + 端点被打；此前独漏本条，补齐一致性）。
+  app.post('/api/account/email/verify', { preHandler: requireAuth(),
+                                          config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = verifyEmailSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const user = store.findById(req.user!.sub)

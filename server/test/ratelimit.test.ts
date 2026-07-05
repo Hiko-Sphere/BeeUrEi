@@ -27,4 +27,16 @@ describe('rate limiting', () => {
     expect((await meGet(b.token)).statusCode).toBe(200)  // B(u:B)独立分桶、不受 A 影响——按 sub 隔离的证据
     await app.close()
   })
+
+  it('验证码端点 /api/account/email/verify 有端点级限流（挡猜码；补齐与其它验证码端点的纵深一致性）', async () => {
+    const app = buildApp(new MemoryStore()) // 用端点自带的 10/min 限额（非全局），验证真挡住连续猜码
+    const me = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'emverify', password: 'secret123' } })).json()
+    const auth = { authorization: `Bearer ${me.token}` }
+    let limited = false
+    for (let i = 0; i < 12; i++) { // 端点限额 10/min：第 11 次起应 429（改前无端点限流、全局 300 内不会 429，测即失败）
+      if ((await app.inject({ method: 'POST', url: '/api/account/email/verify', headers: auth, payload: { code: '000000' } })).statusCode === 429) { limited = true; break }
+    }
+    expect(limited).toBe(true)
+    await app.close()
+  })
 })

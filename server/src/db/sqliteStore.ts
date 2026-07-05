@@ -791,12 +791,12 @@ export class SqliteStore implements Store {
   emergencyEventsForUser(userId: string): EmergencyEvent[] {
     return (this.db.prepare('SELECT * FROM emergency_events WHERE userId = ? ORDER BY at DESC').all(userId) as any[]).map(SqliteStore.mapEmergencyRow)
   }
-  resolveLatestEmergencyEvent(userId: string, now: number): boolean {
+  resolveOpenEmergencyEvents(userId: string, now: number): number {
+    // 报平安=本人已安全 → 该用户**全部**未解除事件一并解除（否则遗留的旧事件会被升级重呼误报，见 MemoryStore 注释）。
     const info = this.db.prepare(
-      `UPDATE emergency_events SET resolvedAt = ?
-       WHERE id = (SELECT id FROM emergency_events WHERE userId = ? AND resolvedAt IS NULL ORDER BY at DESC LIMIT 1)`,
+      'UPDATE emergency_events SET resolvedAt = ? WHERE userId = ? AND resolvedAt IS NULL',
     ).run(now, userId)
-    return Number(info.changes) > 0
+    return Number(info.changes)
   }
   markEmergencyAcked(eventId: string, at: number): void {
     // 只在首个确认时落 ackedAt（后续确认者不覆盖首次时刻）。

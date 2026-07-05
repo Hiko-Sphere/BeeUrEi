@@ -656,7 +656,7 @@ export interface Store {
   createEmergencyEvent(e: EmergencyEvent): void
   recentEmergencyEvents(limit?: number): EmergencyEvent[] // 时间倒序
   emergencyEventsForUser(userId: string): EmergencyEvent[] // 本人事故记录（自助导出用，时间倒序）
-  resolveLatestEmergencyEvent(userId: string, now: number): boolean // 报平安：标记该用户最近一条未解除的事件为已解除；有则 true
+  resolveOpenEmergencyEvents(userId: string, now: number): number // 报平安：标记该用户**全部**未解除事件为已解除，返回解除条数（报平安=本人已安全，其名下所有未决告警都该消，否则遗留的会被升级重呼误报）
   markEmergencyAcked(eventId: string, at: number): void   // 首个亲友确认：记 ackedAt（升级重呼据此跳过；后续确认不覆盖）
   markEmergencyEscalated(eventId: string, at: number): void // 升级重呼后标记，只升级一次
   unacknowledgedEmergencyEvents(olderThanAt: number, now: number): EmergencyEvent[] // 升级候选：未解除∧未确认∧未升级∧at≤olderThanAt
@@ -1296,16 +1296,16 @@ export class MemoryStore implements Store {
   emergencyEventsForUser(userId: string): EmergencyEvent[] {
     return [...this.emergencyEvents.values()].filter((e) => e.userId === userId).sort((a, b) => b.at - a.at)
   }
-  resolveLatestEmergencyEvent(userId: string, now: number): boolean {
-    // 报平安解除的是"当前那次"告警：取该用户最近一条尚未解除的事件标记 resolvedAt（客户端 alertId 与
-    // 事件 id 是两套 id 空间，不做精确关联；"最近未解除"正是 all-clear 的语义）。
-    const latest = [...this.emergencyEvents.values()]
-      .filter((e) => e.userId === userId && e.resolvedAt == null)
-      .sort((a, b) => b.at - a.at)[0]
-    if (!latest) return false
-    latest.resolvedAt = now
-    this.afterMutate()
-    return true
+  resolveOpenEmergencyEvents(userId: string, now: number): number {
+    // 报平安 = 本人已安全，其名下**全部**未解除告警都应解除。此前只解除"最近一条"：若同时有多条未决
+    // （如自动摔倒检测 + 手动 SOS 各建一条事件），报一次平安只消掉最新那条，遗留的旧事件几分钟后被升级重呼
+    // 二次误报"X 仍需帮助"——协助者在 X 已说安全后仍被惊动（与客户端 clearedSenderLatest 的按发起人语义对齐）。
+    let n = 0
+    for (const e of this.emergencyEvents.values()) {
+      if (e.userId === userId && e.resolvedAt == null) { e.resolvedAt = now; n++ }
+    }
+    if (n > 0) this.afterMutate()
+    return n
   }
   markEmergencyAcked(eventId: string, at: number): void {
     const e = this.emergencyEvents.get(eventId)

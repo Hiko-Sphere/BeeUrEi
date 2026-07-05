@@ -14,9 +14,10 @@ export function broadcastAllClear(
   store: Store, push: PushSender, webPush: WebPushSender, userId: string, now: number,
   extraData: Record<string, string> = {},
 ): { resolved: boolean; notified: number } {
-  // 治理可观测：标记最近一条未解除事件为已解除（admin 据此区分"已报平安/误报"与"可能仍在进行"）。best-effort。
+  // 治理可观测：标记该用户**全部**未解除事件为已解除（admin 据此区分"已报平安/误报"与"可能仍在进行"）。
+  // 解除全部而非仅最近一条——否则同时多条未决时，遗留的旧事件会被升级重呼在本人已报平安后二次误报。best-effort。
   let resolved = false
-  try { resolved = store.resolveLatestEmergencyEvent(userId, now) } catch { /* 解除标记失败不影响广播 */ }
+  try { resolved = store.resolveOpenEmergencyEvents(userId, now) > 0 } catch { /* 解除标记失败不影响广播 */ }
   const me = store.findById(userId)
   if (!me) return { resolved, notified: 0 }
   const safeSubs = (uid: string) => { try { return store.webPushSubscriptionsForUser(uid) } catch { return [] } }

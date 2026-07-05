@@ -17,6 +17,13 @@ describe('chatErrorText 错误码→用户文案映射', () => {
     expect(chatErrorText(new APIError('media_quota_exceeded', 413), t)).toContain('已满') // 配额满≠文件太大：引导清理而非换小文件
     expect(chatErrorText(new APIError('unsupported_media_type', 400), t)).toContain('格式')
     expect(chatErrorText(new APIError('too_many_requests', 429), t)).toContain('频繁') // 限流→"稍候"而非笼统"重试"
+    // 撤回/编辑时限与可编辑性：给**确定**文案（此前靠带"？"的兜底猜时限，且掩盖功能关停/维护等真因）。
+    expect(chatErrorText(new APIError('recall_window_passed', 400), t)).toContain('无法撤回')
+    expect(chatErrorText(new APIError('recall_window_passed', 400), t)).not.toContain('？') // 不再是猜测
+    expect(chatErrorText(new APIError('edit_window_passed', 400), t)).toContain('无法编辑')
+    expect(chatErrorText(new APIError('not_editable', 400), t)).toContain('不可编辑')
+    // 撤回时若是功能关停/维护（非时限），映射到真因而非误导的"超过 2 分钟"（recall 已改用本映射）。
+    expect(chatErrorText(new APIError('feature_disabled', 403), t)).not.toContain('撤回')
   })
 
   it('未知码/非 APIError 用兜底；显式 fallback 优先', () => {

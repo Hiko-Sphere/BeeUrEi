@@ -63,6 +63,11 @@ export function chatErrorText(err: unknown, t: (zh: string, en: string) => strin
     case 'blocked': return t('你们之间存在拉黑，无法发送', "Can't send — one of you blocked the other")
     case 'not_linked': return t('对方已不是你的联系人，无法发送', 'This person is no longer your contact')
     case 'not_member': return t('你已不在该群聊中', "You're no longer in this group")
+    // 撤回/编辑的时限与可编辑性：给**确定**文案（此前各调用点靠带"？"的兜底猜"超过N分钟？"，
+    // 且撤回失败恒显时限、掩盖了功能关停/维护等真因——见 recall 改用本映射）。
+    case 'recall_window_passed': return t('消息发出已超过 2 分钟，无法撤回', 'Messages can only be recalled within 2 minutes of sending')
+    case 'edit_window_passed': return t('消息发出已超过 15 分钟，无法编辑', 'Messages can only be edited within 15 minutes of sending')
+    case 'not_editable': return t('这条消息不可编辑（仅文字消息可编辑）', "This message can't be edited (text messages only)")
     case 'media_too_large': return t('视频太大（上限 50MB），请选短一点的', 'Video too large (50MB max) — pick a shorter one')
     case 'media_quota_exceeded': return t('你的媒体存储空间已满，请删除一些旧的视频消息', 'Your media storage is full — delete some old video messages')
     case 'unsupported_media_type': return t('不支持的文件格式', 'Unsupported file type')

@@ -303,14 +303,14 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
   }
 
   const recall = async (m: ChatMessage) => {
-    try { await api.recallMessage(m.id); await load() } catch { toast(t('撤回失败（超过 2 分钟？）', 'Recall failed'), 'error') }
+    try { await api.recallMessage(m.id); await load() } catch (e) { toast(chatErrorText(e, t, t('撤回失败', 'Recall failed')), 'error') }
   }
 
   // 编辑自己的文字消息（限 15 分钟内）：改内容并标"已编辑"。
   const edit = async (m: ChatMessage, newText: string) => {
     const body = newText.trim()
     if (!body || body === m.text) return
-    try { await api.editMessage(m.id, body); await load() } catch (e) { toast(chatErrorText(e, t, t('编辑失败（超过 15 分钟？）', 'Edit failed')), 'error') }
+    try { await api.editMessage(m.id, body); await load() } catch (e) { toast(chatErrorText(e, t, t('编辑失败', 'Edit failed')), 'error') }
   }
 
   // 表情回应（与 iOS 对齐）：再次点同一表情=取消（后端空串清除）。

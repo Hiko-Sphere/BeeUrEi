@@ -21,6 +21,19 @@ describe('JsonFileStore 持久化 + 原子写', () => {
     expect(s2.getMedicalInfo('u1')).toMatchObject({ userId: 'u1', sealed: 'sealed-ct-blob', updatedAt: 42 }) // 载盘后仍在
   })
 
+  it('群/单聊免打扰标记落盘并读回（groupMutes/dmMutes 是 Set，须显式序列化，漏一处即重启丢静音）', () => {
+    const s1 = new JsonFileStore(path)
+    s1.setGroupMuted('g1', 'u1', true)
+    s1.setDmMuted('u1', 'u2', true) // 有向：u1 静音了与 u2 的单聊
+    const s2 = new JsonFileStore(path)
+    expect(s2.isGroupMuted('g1', 'u1')).toBe(true)
+    expect(s2.isDmMuted('u1', 'u2')).toBe(true)
+    expect(s2.isDmMuted('u2', 'u1')).toBe(false) // 有向不对称，载盘也不能串
+    // 取消静音也须落盘（否则重启后"已取消"的又冒出来）。
+    s2.setGroupMuted('g1', 'u1', false)
+    expect(new JsonFileStore(path).isGroupMuted('g1', 'u1')).toBe(false)
+  })
+
   it('原子写：主文件始终是完整合法 JSON，rename 后不残留 .tmp', () => {
     const s = new JsonFileStore(path)
     s.createUser(user('u2', 'bob'))

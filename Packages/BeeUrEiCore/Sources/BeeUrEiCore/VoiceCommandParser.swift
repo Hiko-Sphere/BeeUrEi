@@ -100,7 +100,14 @@ public enum VoiceCommandParser {
         // （"坐公交去X"）走公交规划（过城刚需）；无目的地的"几路车/这是什么车"仍归 readBus（parseTransit 无 dest 返 nil）。
         if let dest = parseTransit(text) { return .transit(dest) }
         if has(["公交", "几路车", "哪路车", "什么车", "几路公交", "公交车", "bus", "which bus", "what bus"]) { return .readBus }
-        if has(["多亮", "光线", "亮不亮", "有没有光线", "有没有光亮", "开灯了吗", "灯开着吗", "灯亮着吗", "how bright", "light level", "brightness", "is the light on", "lights on"]) { return .readLight }
+        // 光线明暗：**双向都收**——不只"亮不亮/灯开着吗"，也收"暗不暗/灯关了吗/is it dark"。盲人查光线的另一半刚需
+        // 是"是不是黑了"(要不要开灯/小心)与"灯是不是忘了关"(省电/安全)，此前整支缺失、这些自然问法全落 unknown（无应答）。
+        // 暗向用"暗"（颜色深浅说"深/浅"、物体黑说"黑色"，不与之串味）；关灯向键一律锚"灯"避免误吃"空调还开着吗"等；
+        // 故意不收裸"亮吗"（"漂亮吗"含之会误判），"还"插字变体（灯还开/灯还亮）单列因其断了"灯开着吗"连续子串。
+        if has(["多亮", "光线", "亮不亮", "有没有光线", "有没有光亮", "开灯了吗", "灯开着吗", "灯亮着吗",
+                "暗不暗", "太暗", "很暗", "多暗", "灯关", "关灯", "灯还开", "灯还亮", "开着灯", "有开灯", "灯亮吗",
+                "how bright", "light level", "brightness", "is the light on", "lights on",
+                "is it dark", "how dark", "too dark", "is the light off", "light off", "lights off", "is it bright"]) { return .readLight }
         if has(["天气", "下雨", "气温", "weather", "temperature", "rain"]) { return .weather }
         // 日常信息（时间/电量/日期）：盲人看不到时钟/电量图标/日历，靠语音随时查——最高频的日常查询。
         // 置于具体命令之后、通用 look 之前：与现有触发词无子串冲突（"打电话"含"电话"非"电量"；readBus 的"几路"非"几点"）。

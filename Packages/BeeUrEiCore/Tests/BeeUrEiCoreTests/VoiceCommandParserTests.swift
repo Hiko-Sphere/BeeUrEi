@@ -336,10 +336,25 @@ final class VoiceCommandParserTests: XCTestCase {
         XCTAssertEqual(VoiceCommandParser.parse("有没有人"), .describePeople)
         XCTAssertEqual(VoiceCommandParser.parse("who's there"), .describePeople)
         XCTAssertEqual(VoiceCommandParser.parse("周围有什么"), .around) // 「周围」仍归 around，不被 people 抢
-        // 光线
+        // 光线（亮/开方向）
         XCTAssertEqual(VoiceCommandParser.parse("光线怎么样"), .readLight)
         XCTAssertEqual(VoiceCommandParser.parse("灯开着吗"), .readLight)
         XCTAssertEqual(VoiceCommandParser.parse("how bright is it"), .readLight)
+        // 光线（暗/关方向——盲人查"是不是黑了"/"灯是不是忘了关"同样刚需；此前整支缺失落 unknown）。
+        XCTAssertEqual(VoiceCommandParser.parse("这里暗不暗"), .readLight)
+        XCTAssertEqual(VoiceCommandParser.parse("屋里太暗了"), .readLight)
+        XCTAssertEqual(VoiceCommandParser.parse("灯关了吗"), .readLight)      // 忘没忘关灯（省电/安全）
+        XCTAssertEqual(VoiceCommandParser.parse("灯还开着吗"), .readLight)    // "还"插字断了"灯开着吗"连续子串
+        XCTAssertEqual(VoiceCommandParser.parse("开着灯吗"), .readLight)      // 语序变体
+        XCTAssertEqual(VoiceCommandParser.parse("有没有开灯"), .readLight)
+        XCTAssertEqual(VoiceCommandParser.parse("is it dark in here"), .readLight)
+        XCTAssertEqual(VoiceCommandParser.parse("how dark is it"), .readLight)
+        XCTAssertEqual(VoiceCommandParser.parse("is the light off"), .readLight)
+        XCTAssertEqual(VoiceCommandParser.parse("are the lights off"), .readLight)
+        XCTAssertEqual(VoiceCommandParser.parse("is it bright in here"), .readLight)
+        // 碰撞守卫：加"暗/关灯"方向后，真·颜色问句仍归 readColor（不被新键截走）。
+        XCTAssertEqual(VoiceCommandParser.parse("这是什么颜色"), .readColor)
+        XCTAssertEqual(VoiceCommandParser.parse("我这样穿漂亮吗"), .unknown)  // "漂亮吗"含"亮吗"——故意不收裸"亮吗"，避免误判
     }
 
     /// 找具体物品：提取物名；泛指"找东西"不作为具体 find（交 UI 菜单）。

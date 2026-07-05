@@ -20,6 +20,20 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
 
+    func testProductDietaryLabelsSpeakLabeledNotJudged() {
+        // 膳食/宗教认证标注（盲人看不到包装认证：乳糜泻/乳糖不耐/素食/宗教/糖尿病刚需）。canonical key → 本地化名。
+        let zh = FramingStrings.productDietaryLabelsSpeak(["gluten-free", "vegan", "halal"], .zh)
+        XCTAssertEqual(zh, "。包装标注：无麸质、纯素、清真")
+        // 措辞是"标注"（如实转述包装认证），**绝不**替用户断言"适合你/安全食用"。
+        XCTAssertFalse(zh!.contains("适合") && !zh!.contains("标注"))
+        XCTAssertNil(FramingStrings.productDietaryLabelsSpeak([], .zh)) // 空=无数据→nil（缺数据≠不符/不含）
+        let en = FramingStrings.productDietaryLabelsSpeak(["lactose-free", "kosher"], .en)!
+        XCTAssertTrue(en.contains("Labeled: lactose-free, kosher"))
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } })) // 英文不混中文
+        // 未知 key 不丢弃（连字符转空格原样读，避免"只这些"的假完整）。
+        XCTAssertTrue(FramingStrings.productDietaryLabelsSpeak(["some-new-cert"], .en)!.contains("some new cert"))
+    }
+
     func testTorchAutoOnTellsUserItWasSolved() {
         // 太暗自动点灯的播报：须点明已打开手电筒 + 提示重试（而非只说"太暗"卡住）。
         let zh = FramingStrings.torchAutoOn(.zh)

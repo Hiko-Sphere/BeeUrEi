@@ -9,11 +9,13 @@ final class ProductMemoryStore {
     private var tracesItems: [String: [String]] = [:] // 条码 → 微量/交叉污染标注（OFF traces_tags 规范词；"可能含微量"）
     private var nutriItems: [String: String] = [:] // 条码 → Nutri-Score（a..e，在线查到时随名字存，供离线复扫也能报营养质量）
     private var novaItems: [String: Int] = [:]     // 条码 → NOVA 加工程度（1..4）
+    private var dietaryItems: [String: [String]] = [:] // 条码 → 膳食/宗教认证标注（OFF labels_tags 子集：gluten-free/vegan/halal…）
     private let fileURL: URL
     private let allergensURL: URL // 独立旁路文件：老版本的名字 plist 原样不动（零迁移风险），缺文件=全空
     private let tracesURL: URL    // 同款独立旁路文件（缺文件=全空，零迁移风险）
     private let nutriURL: URL     // 同款独立旁路文件（缺文件=全空，零迁移风险）
     private let novaURL: URL      // 同款独立旁路文件（缺文件=全空，零迁移风险）
+    private let dietaryURL: URL   // 同款独立旁路文件（缺文件=全空，零迁移风险）
 
     /// fileURL 可注入（单测用临时目录）；默认存 Application Support。
     init(fileURL: URL? = nil) {
@@ -29,6 +31,7 @@ final class ProductMemoryStore {
         self.tracesURL = self.fileURL.deletingPathExtension().appendingPathExtension("traces.plist")
         self.nutriURL = self.fileURL.deletingPathExtension().appendingPathExtension("nutri.plist")
         self.novaURL = self.fileURL.deletingPathExtension().appendingPathExtension("nova.plist")
+        self.dietaryURL = self.fileURL.deletingPathExtension().appendingPathExtension("dietary.plist")
         load()
     }
 
@@ -46,9 +49,12 @@ final class ProductMemoryStore {
     func nutriScore(for barcode: String) -> String? { nutriItems[barcode] }
     func novaGroup(for barcode: String) -> Int? { novaItems[barcode] }
 
-    /// allergens/traces/营养 只在**有数据**时覆盖——用户手动改名（save(barcode:name:) 默认空）不得抹掉已存的标注。
+    /// 膳食/宗教认证标注（无麸质/纯素/清真…的 canonical key，在线查到时存下的）。空=无数据——**缺数据≠不符/不含**。
+    func dietaryLabels(for barcode: String) -> [String] { dietaryItems[barcode] ?? [] }
+
+    /// allergens/traces/营养/膳食标注 只在**有数据**时覆盖——用户手动改名（save(barcode:name:) 默认空）不得抹掉已存的标注。
     func save(barcode: String, name: String, allergens: [String] = [], traces: [String] = [],
-              nutriScore: String? = nil, novaGroup: Int? = nil) {
+              nutriScore: String? = nil, novaGroup: Int? = nil, dietaryLabels: [String] = []) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !barcode.isEmpty else { return }
         items[barcode] = trimmed
@@ -56,6 +62,7 @@ final class ProductMemoryStore {
         if !traces.isEmpty { tracesItems[barcode] = traces }
         if let nutriScore, !nutriScore.isEmpty { nutriItems[barcode] = nutriScore }
         if let novaGroup { novaItems[barcode] = novaGroup }
+        if !dietaryLabels.isEmpty { dietaryItems[barcode] = dietaryLabels }
         persist()
     }
 
@@ -65,6 +72,7 @@ final class ProductMemoryStore {
         tracesItems.removeValue(forKey: barcode)
         nutriItems.removeValue(forKey: barcode)
         novaItems.removeValue(forKey: barcode)
+        dietaryItems.removeValue(forKey: barcode)
         persist()
     }
 
@@ -84,6 +92,9 @@ final class ProductMemoryStore {
         }
         if let data = try? PropertyListEncoder().encode(novaItems) {
             try? data.write(to: novaURL, options: [.atomic, .completeFileProtection])
+        }
+        if let data = try? PropertyListEncoder().encode(dietaryItems) {
+            try? data.write(to: dietaryURL, options: [.atomic, .completeFileProtection])
         }
     }
 
@@ -107,6 +118,10 @@ final class ProductMemoryStore {
         if let data = try? Data(contentsOf: novaURL),
            let decoded = try? PropertyListDecoder().decode([String: Int].self, from: data) {
             novaItems = decoded
+        }
+        if let data = try? Data(contentsOf: dietaryURL),
+           let decoded = try? PropertyListDecoder().decode([String: [String]].self, from: data) {
+            dietaryItems = decoded
         }
     }
 }

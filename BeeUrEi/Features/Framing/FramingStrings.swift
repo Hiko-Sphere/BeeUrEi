@@ -288,6 +288,29 @@ enum FramingStrings {
     static func productNutritionSpeak(_ nutriScore: String?, _ novaGroup: Int?, _ l: Language) -> String? {
         SpokenStrings.nutrition(nutriScore: nutriScore, novaGroup: novaGroup, l)
     }
+
+    /// 膳食/宗教认证标注 canonical key（服务端 extractDietaryLabels 归并后的子集）→ 本地化名。
+    private static let dietaryNames: [String: (zh: String, en: String)] = [
+        "gluten-free": ("无麸质", "gluten-free"), "lactose-free": ("无乳糖", "lactose-free"),
+        "vegan": ("纯素", "vegan"), "vegetarian": ("素食", "vegetarian"),
+        "halal": ("清真", "halal"), "kosher": ("洁食", "kosher"),
+        "organic": ("有机", "organic"), "sugar-free": ("无糖", "sugar-free"),
+        "palm-oil-free": ("不含棕榈油", "palm oil free"),
+    ]
+
+    /// 膳食/宗教认证标注播报后缀（无麸质/纯素/清真/洁食/有机/无糖…）——拼在营养后缀之后，一次 speak 播完。
+    /// 盲人看不到包装上这些认证，而这是刚需：乳糜泻(无麸质)/乳糖不耐/素食纯素/清真洁食(宗教)/糖尿病(无糖)据此判断能否食用。
+    /// **是包装标注的认证**：措辞"标注"如实转述、不替用户判定"适合你"。空=无数据→nil（缺数据≠不符/不含）。
+    /// 未知 key 不丢弃（连字符转空格原样读，避免"只这些"的假完整，与 allergenDisplay 同口径）。
+    static func productDietaryLabelsSpeak(_ tags: [String], _ l: Language) -> String? {
+        guard !tags.isEmpty else { return nil }
+        let names = tags.map { tag -> String in
+            if let n = dietaryNames[tag.lowercased()] { return l == .zh ? n.zh : n.en }
+            return tag.replacingOccurrences(of: "-", with: " ")
+        }
+        return l == .zh ? "。包装标注：\(names.joined(separator: "、"))"
+                        : ". Labeled: \(names.joined(separator: ", "))"
+    }
     /// Wi-Fi 配置码：显示网络名 + **密码**——盲人看不到贴纸上的密码，密码正是扫这张码的目的（此前只报网络名，
     /// 拿不到密码根本连不上网）。开放网络明确标注无密码。cred 为 nil（畸形 WIFI: 码）退化为通用词。
     static func wifiResult(_ cred: WifiCredential?, _ l: Language) -> String {

@@ -75,8 +75,25 @@ final class ProductMemoryStoreTests: XCTestCase {
         XCTAssertNil(store.novaGroup(for: "unknown"))
     }
 
+    func testDietaryLabelsRoundTripAndRenamePreserves() {
+        let store = ProductMemoryStore(fileURL: fileURL)
+        // 膳食/宗教认证标注随名字存（供离线复扫也能报"无麸质/纯素/清真"）。
+        store.save(barcode: "690", name: "无麸质饼干", dietaryLabels: ["gluten-free", "vegan"])
+        XCTAssertEqual(store.dietaryLabels(for: "690"), ["gluten-free", "vegan"])
+        // 用户手动改名（默认空膳食标注）不得抹掉已存的标注。
+        store.save(barcode: "690", name: "我的饼干")
+        XCTAssertEqual(store.dietaryLabels(for: "690"), ["gluten-free", "vegan"])
+        // 落盘重载后仍在（独立旁路 plist）；删除连带清。
+        let reloaded = ProductMemoryStore(fileURL: fileURL)
+        XCTAssertEqual(reloaded.dietaryLabels(for: "690"), ["gluten-free", "vegan"])
+        reloaded.delete(barcode: "690")
+        XCTAssertEqual(reloaded.dietaryLabels(for: "690"), [])
+        // 无数据 = 空数组（缺数据≠不符/不含）。
+        XCTAssertEqual(store.dietaryLabels(for: "unknown"), [])
+    }
+
     func testLegacyNameOnlyFileStillLoads() {
-        // 老版本只有名字 plist（无 allergens/traces 旁路文件）：名字照常、过敏原与微量标注为空——零迁移。
+        // 老版本只有名字 plist（无 allergens/traces/dietary 旁路文件）：名字照常、过敏原/微量/膳食标注为空——零迁移。
         let legacy = ["123": "酱油"]
         try? PropertyListEncoder().encode(legacy).write(to: fileURL)
         let store = ProductMemoryStore(fileURL: fileURL)
@@ -85,6 +102,7 @@ final class ProductMemoryStoreTests: XCTestCase {
         XCTAssertEqual(store.traces(for: "123"), [])
         XCTAssertNil(store.nutriScore(for: "123"))
         XCTAssertNil(store.novaGroup(for: "123"))
+        XCTAssertEqual(store.dietaryLabels(for: "123"), [])
     }
 
     func testSaveAndLookup() {

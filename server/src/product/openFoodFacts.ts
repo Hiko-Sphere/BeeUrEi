@@ -16,6 +16,11 @@ export interface ProductInfo {
   nutriScore?: string | null
   /// 加工程度 NOVA 组（1=未/微加工 … 4=超加工）。"超加工食品"是可听的健康提示。无数据→ null。
   novaGroup?: number | null
+  /// 包装**标注**的膳食/宗教认证（OFF labels_tags 里与饮食合规相关的规范化子集：无麸质/无乳糖/纯素/素食/清真/
+  /// 洁食/有机/无糖/不含棕榈油）。盲人看不到包装上的这些认证，而这正是刚需——乳糜泻(无麸质)、乳糖不耐、素食/纯素、
+  /// 清真/洁食(宗教)、糖尿病(无糖)。**是厂商标注的认证**（多为法规监管），措辞用"标注"如实转述、不替用户判定。
+  /// 空数组=无该项标注数据（同过敏原：**缺数据≠不含/不符**）。
+  dietaryLabels: string[]
 }
 
 type FetchLike = (url: string, init?: unknown) => Promise<{ ok: boolean; json: () => Promise<unknown> }>
@@ -53,6 +58,37 @@ export function extractAllergens(tags: unknown): string[] {
   return out
 }
 
+/// OFF labels_tags → 膳食/宗教认证的**规范化子集**（同义词归并到一个 canonical key）。只收与盲人饮食合规
+/// 直接相关的项，噪声标签（如"绿色圆点""促销"）一律忽略——精度优先，避免把无关标签念成"认证"。
+const DIETARY_LABEL_MAP: Record<string, string> = {
+  'gluten-free': 'gluten-free', 'no-gluten': 'gluten-free',
+  'lactose-free': 'lactose-free', 'no-lactose': 'lactose-free',
+  'vegan': 'vegan',
+  'vegetarian': 'vegetarian',
+  'halal': 'halal',
+  'kosher': 'kosher',
+  'organic': 'organic', 'eu-organic': 'organic',
+  'sugar-free': 'sugar-free', 'no-sugar': 'sugar-free', 'no-added-sugar': 'sugar-free',
+  'palm-oil-free': 'palm-oil-free', 'no-palm-oil': 'palm-oil-free',
+}
+
+/// 从 OFF labels_tags 提取规范化膳食标签（["en:organic","en:gluten-free","fr:bio"] → ["organic","gluten-free"]）。
+/// 语言前缀不限；按 DIETARY_LABEL_MAP 归并同义词、去重（保 canonical 首现序）；表外标签一律跳过（精度优先）。
+export function extractDietaryLabels(tags: unknown): string[] {
+  if (!Array.isArray(tags)) return []
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const t of tags) {
+    if (typeof t !== 'string') continue
+    const word = (t.includes(':') ? t.slice(t.indexOf(':') + 1) : t).trim().toLowerCase()
+    const canon = DIETARY_LABEL_MAP[word]
+    if (!canon || seen.has(canon)) continue
+    seen.add(canon)
+    out.push(canon)
+  }
+  return out
+}
+
 /// Nutri-Score 分级：只接受可信的 a..e（OFF 用小写；'unknown'/'not-applicable'/空/其它 → null，绝不猜）。
 export function parseNutriScore(grade: unknown): string | null {
   if (typeof grade !== 'string') return null
@@ -76,7 +112,7 @@ export type LookupOutcome =
 
 /// 查一个条码，区分"真未收录(notFound)"与"瞬时故障(failed)"（用于差异化缓存；两者对客户端都表现为拿不到名字）。
 export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeoutMs = 5000): Promise<LookupOutcome> {
-  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,allergens_tags,traces_tags,nutriscore_grade,nova_group`
+  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,allergens_tags,traces_tags,nutriscore_grade,nova_group,labels_tags`
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
@@ -96,6 +132,7 @@ export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeo
       traces: extractAllergens(p?.traces_tags), // traces_tags 与 allergens_tags 同格式，复用同一规范化提取
       nutriScore: parseNutriScore(p?.nutriscore_grade),
       novaGroup: parseNovaGroup(p?.nova_group),
+      dietaryLabels: extractDietaryLabels(p?.labels_tags),
     } }
   } catch {
     return { kind: 'failed' } // 超时/网络/解析异常：瞬时故障，不长缓存，绝不编造商品名

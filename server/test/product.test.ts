@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { composeProductName, extractAllergens, lookupProduct, parseNutriScore, parseNovaGroup } from '../src/product/openFoodFacts'
+import { composeProductName, extractAllergens, extractDietaryLabels, lookupProduct, parseNutriScore, parseNovaGroup } from '../src/product/openFoodFacts'
 import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
 
@@ -29,14 +29,24 @@ describe('Open Food Facts 商品查询', () => {
     expect(extractAllergens(Array.from({ length: 30 }, (_, i) => `en:a${i}`)).length).toBe(16) // 上限防脏数据刷屏
   })
 
+  it('extractDietaryLabels：归并同义词到 canonical、只收膳食/宗教认证子集、剥前缀/去重/表外忽略', () => {
+    expect(extractDietaryLabels(['en:gluten-free', 'en:vegan', 'en:halal'])).toEqual(['gluten-free', 'vegan', 'halal'])
+    expect(extractDietaryLabels(['en:no-gluten', 'en:no-lactose', 'en:no-added-sugar'])).toEqual(['gluten-free', 'lactose-free', 'sugar-free']) // 同义词归并到 canonical
+    expect(extractDietaryLabels(['en:eu-organic', 'fr:organic'])).toEqual(['organic']) // 归并 + 去重（canonical 首现）
+    expect(extractDietaryLabels(['en:green-dot', 'en:nutriscore', 'en:made-in-france'])).toEqual([]) // 表外噪声标签一律忽略（精度优先）
+    expect(extractDietaryLabels(['en:VEGAN', '  ', 42, null, 'kosher'])).toEqual(['vegan', 'kosher']) // 大小写/坏项/无前缀
+    expect(extractDietaryLabels('en:vegan')).toEqual([]) // 非数组 → 空
+    expect(extractDietaryLabels(undefined)).toEqual([])
+  })
+
   it('lookup 三态：found（含过敏原+微量标注）/notFound（未收录·无名）/failed（非200·异常）——区分瞬时故障与真未收录', async () => {
     const respond = (body: unknown) => async () => ({ ok: true, json: async () => body })
     // 声明含牛奶、可能含微量花生：allergens 与 traces **分开**提取，语义不同（确定含 vs 可能微量含）。
-    expect(await lookupProduct('6901234567890', respond({ status: 1, product: { brands: '蒙牛', product_name: '纯牛奶', allergens_tags: ['en:milk'], traces_tags: ['en:peanuts', 'en:nuts'], nutriscore_grade: 'c', nova_group: 4 } })))
-      .toEqual({ kind: 'found', info: { name: '蒙牛 纯牛奶', allergens: ['milk'], traces: ['peanuts', 'nuts'], nutriScore: 'c', novaGroup: 4 } })
-    // 无 allergens_tags/traces_tags → 各空数组（缺数据≠不含；客户端只在非空时播"标注含有/可能含微量"）；无营养分级 → null（不猜）。
+    expect(await lookupProduct('6901234567890', respond({ status: 1, product: { brands: '蒙牛', product_name: '纯牛奶', allergens_tags: ['en:milk'], traces_tags: ['en:peanuts', 'en:nuts'], nutriscore_grade: 'c', nova_group: 4, labels_tags: ['en:organic', 'en:halal'] } })))
+      .toEqual({ kind: 'found', info: { name: '蒙牛 纯牛奶', allergens: ['milk'], traces: ['peanuts', 'nuts'], nutriScore: 'c', novaGroup: 4, dietaryLabels: ['organic', 'halal'] } })
+    // 无 allergens_tags/traces_tags/labels_tags → 各空数组（缺数据≠不含；客户端只在非空时播"标注含有/可能含微量/标注"）；无营养分级 → null（不猜）。
     expect(await lookupProduct('6901234567890', respond({ status: 1, product: { brands: '蒙牛', product_name: '纯牛奶' } })))
-      .toEqual({ kind: 'found', info: { name: '蒙牛 纯牛奶', allergens: [], traces: [], nutriScore: null, novaGroup: null } })
+      .toEqual({ kind: 'found', info: { name: '蒙牛 纯牛奶', allergens: [], traces: [], nutriScore: null, novaGroup: null, dietaryLabels: [] } })
     // status 0（明确未收录）与"有记录但无名"→ notFound（路由可长缓存）。
     expect(await lookupProduct('0000000000000', respond({ status: 0 }))).toEqual({ kind: 'notFound' })
     expect(await lookupProduct('6901234567890', respond({ status: 1, product: {} }))).toEqual({ kind: 'notFound' })
@@ -75,14 +85,15 @@ describe('/api/product/:barcode 端点', () => {
     const reg = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'produ', password: 'secret123', role: 'blind' } })).json()
     const auth = { authorization: `Bearer ${reg.token}` }
     let calls = 0
-    const body = { status: 1, product: { brands: '蒙牛', product_name: '纯牛奶', allergens_tags: ['en:milk'], traces_tags: ['en:nuts'], nutriscore_grade: 'c', nova_group: 4 } }
+    const body = { status: 1, product: { brands: '蒙牛', product_name: '纯牛奶', allergens_tags: ['en:milk'], traces_tags: ['en:nuts'], nutriscore_grade: 'c', nova_group: 4, labels_tags: ['en:no-lactose', 'en:halal'] } }
     vi.stubGlobal('fetch', vi.fn(async () => { calls++; return { ok: true, json: async () => body } }))
     const r1 = await app.inject({ method: 'GET', url: '/api/product/6901234567890', headers: auth })
     expect(r1.statusCode).toBe(200)
-    expect(r1.json()).toMatchObject({ name: '蒙牛 纯牛奶', allergens: ['milk'], traces: ['nuts'], nutriScore: 'c', novaGroup: 4 })
-    // 缓存命中：第二次不回源，过敏原/微量标注/营养分级仍在（缓存也存了新字段）。
+    expect(r1.json()).toMatchObject({ name: '蒙牛 纯牛奶', allergens: ['milk'], traces: ['nuts'], nutriScore: 'c', novaGroup: 4, dietaryLabels: ['lactose-free', 'halal'] })
+    // 缓存命中：第二次不回源，过敏原/微量标注/营养分级/膳食标注仍在（缓存也存了新字段）。
     const r2 = await app.inject({ method: 'GET', url: '/api/product/6901234567890', headers: auth })
     expect(r2.json().traces).toEqual(['nuts']); expect(r2.json().nutriScore).toBe('c'); expect(r2.json().novaGroup).toBe(4)
+    expect(r2.json().dietaryLabels).toEqual(['lactose-free', 'halal'])
     expect(calls).toBe(1) // 只回源一次
     await app.close()
   })

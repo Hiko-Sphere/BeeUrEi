@@ -222,16 +222,23 @@ enum HelperStrings {
 
     // MARK: 工具
 
+    /// 求助等待时长（与 web formatWaited 同口径）：<10s"刚刚"/<60s 秒/<1h 分钟/≥1h"H 小时 M 分钟"。
+    /// 公开求助最长滞留到 4 小时 TTL，此前只到分钟一档，长候会显示"240 分钟"这类难读数——志愿者据此判断
+    /// "这位盲人已等很久、该优先接"，小时读法更直观。负值兜底为 0（防御，虽 waitedSeconds 恒非负）。
     static func waitText(_ seconds: Int, _ l: Language) -> String {
+        let s = max(0, seconds)
+        let h = s / 3600, m = (s % 3600) / 60
         switch l {
         case .zh:
-            if seconds < 10 { return "刚刚" }
-            if seconds < 60 { return "\(seconds) 秒" }
-            return "\(seconds / 60) 分钟"
+            if s < 10 { return "刚刚" }
+            if s < 60 { return "\(s) 秒" }
+            if s < 3600 { return "\(s / 60) 分钟" }
+            return m > 0 ? "\(h) 小时 \(m) 分钟" : "\(h) 小时"
         case .en:
-            if seconds < 10 { return "just now" }
-            if seconds < 60 { return "\(seconds) s" }
-            return "\(seconds / 60) min"
+            if s < 10 { return "just now" }
+            if s < 60 { return "\(s) s" }
+            if s < 3600 { return "\(s / 60) min" }
+            return m > 0 ? "\(h) h \(m) min" : "\(h) h"
         }
     }
     static func languageName(_ code: String, _ l: Language) -> String {

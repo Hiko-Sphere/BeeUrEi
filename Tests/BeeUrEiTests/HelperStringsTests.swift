@@ -15,6 +15,17 @@ final class HelperStringsTests: XCTestCase {
         XCTAssertEqual(HelperStrings.waitText(180, .zh), "3 分钟")
     }
 
+    func testWaitTextLongWaitsReadInHours() {
+        // ≥1h 按"H 小时 M 分钟"读（公开求助最长滞留 4h TTL，原只到分钟一档→"240 分钟"难读）；与 web formatWaited 同口径。
+        XCTAssertEqual(HelperStrings.waitText(3599, .zh), "59 分钟")       // <1h 仍分钟
+        XCTAssertEqual(HelperStrings.waitText(3600, .zh), "1 小时")         // 整点小时无分钟后缀
+        XCTAssertEqual(HelperStrings.waitText(5400, .zh), "1 小时 30 分钟")
+        XCTAssertEqual(HelperStrings.waitText(4 * 3600, .zh), "4 小时")     // 4h TTL 满：不再"240 分钟"
+        XCTAssertEqual(HelperStrings.waitText(3600, .en), "1 h")
+        XCTAssertEqual(HelperStrings.waitText(5400, .en), "1 h 30 min")
+        XCTAssertEqual(HelperStrings.waitText(-5, .zh), "刚刚")             // 负值兜底为 0→"刚刚"
+    }
+
     func testMatchedLabelComposition() {
         let zh = HelperStrings.matchedLabel(name: "小李", topic: "读标签", locality: "北京", languageName: "中文", .zh)
         XCTAssertEqual(zh, "求助者 小李。事项 读标签。地点 北京。语言 中文。")

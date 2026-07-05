@@ -4,12 +4,12 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 vi.mock('../lib/session', () => ({ useSession: () => ({ user: { id: 'u1', username: 'amin', displayName: '阿明', role: 'helper' }, refreshMe: vi.fn(), signOut: vi.fn() }) }))
 vi.mock('../lib/api', () => ({
-  api: { me: vi.fn(), verificationStatus: vi.fn(), setProfile: vi.fn(), setRole: vi.fn(), setLanguage: vi.fn(), deleteAccount: vi.fn(), setEmail: vi.fn(), quietHours: vi.fn(), setQuietHours: vi.fn(), withdrawVerification: vi.fn(), submitVerification: vi.fn() },
+  api: { me: vi.fn(), verificationStatus: vi.fn(), setProfile: vi.fn(), setRole: vi.fn(), setLanguage: vi.fn(), deleteAccount: vi.fn(), setEmail: vi.fn(), quietHours: vi.fn(), setQuietHours: vi.fn(), withdrawVerification: vi.fn(), submitVerification: vi.fn(), sessions: vi.fn() },
   APIError: class extends Error { code = ''; status = 0 },
   reencodeToJpeg: vi.fn(), uploadVerificationDoc: vi.fn(),
 }))
 import { api, reencodeToJpeg, uploadVerificationDoc } from '../lib/api'
-import { AccountPage, VerificationDialog } from './Account'
+import { AccountPage, VerificationDialog, SessionsDialog } from './Account'
 
 const mock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
 
@@ -147,5 +147,23 @@ describe('VerificationDialog 提交部分失败自动回滚', () => {
     fireEvent.click(screen.getByText('提交审核'))
     await waitFor(() => expect(onClose).toHaveBeenCalled())
     expect(api.withdrawVerification).not.toHaveBeenCalled()
+  })
+})
+
+describe('SessionsDialog 首次登录时刻（死字段 createdAt，安全审查线索）', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('会话有 createdAt → 显示"首次登录 <绝对时刻>"；无 createdAt 不显示', async () => {
+    const created = new Date('2026-01-03T14:30:00').getTime()
+    mock(api.sessions).mockResolvedValue({ sessions: [
+      { sessionId: 's1', deviceLabel: 'iPhone 15', lastSeenAt: Date.now(), expiresAt: Date.now() + 1e9, current: true, createdAt: created },
+      { sessionId: 's2', deviceLabel: 'Chrome', lastSeenAt: Date.now(), expiresAt: Date.now() + 1e9, current: false }, // 无 createdAt
+    ] })
+    render(<SessionsDialog onClose={() => {}} />)
+    await screen.findByText('iPhone 15')
+    // s1 有 createdAt → 出现"首次登录"+绝对日期(fmtTime medium)；恰一个（s2 无 createdAt 不出，故不误显 Invalid Date）。
+    const rows = screen.getAllByText(/首次登录/)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].textContent).toMatch(/2026/) // 绝对年份可见（相对时间会随阅读漂移，安全时刻须绝对）
   })
 })

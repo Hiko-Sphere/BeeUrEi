@@ -5,7 +5,7 @@ import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { subscribeWebPush, unsubscribeWebPush, isWebPushSubscribed, webPushSupported, resyncWebPushSubscription } from '../lib/webPush'
 import { roleLabel } from '../components/Layout'
-import { Card, Avatar, Button, Field, Input, useToast, Modal } from '../components/ui'
+import { Card, Avatar, Button, Field, Input, useToast, Modal, fmtTime } from '../components/ui'
 
 export function AccountPage() {
   const { user, refreshMe, signOut } = useSession()
@@ -346,8 +346,8 @@ function DocPicker({ label, capture, file, onPick, t }: { label: string; capture
 }
 
 /// 登录设备 / 会话管理弹窗：列出各设备，可远程登出某台或「其它所有设备」。
-function SessionsDialog({ onClose }: { onClose: () => void }) {
-  const { t } = useI18n()
+export function SessionsDialog({ onClose }: { onClose: () => void }) {
+  const { t, lang } = useI18n()
   const toast = useToast()
   const [sessions, setSessions] = useState<SessionInfo[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -391,6 +391,10 @@ function SessionsDialog({ onClose }: { onClose: () => void }) {
                   {s.current && <span className="rounded bg-[var(--color-honey)]/15 px-1.5 py-0.5 text-[10px] font-bold text-accent">{t('本机', 'This device')}</span>}
                 </div>
                 <div className="text-xs text-faint">{lastSeen(s.lastSeenAt)}</div>
+                {/* 首次登录时刻（安全审查线索："这台设备我几时登录的？不记得=可疑"，对标 Google/GitHub 会话管理）。
+                    服务端一直下发 createdAt、SessionInfo 也解了它，却从未展示——死字段。用**绝对**时刻(fmtTime)非相对：
+                    登录事件是固定时点，且安全攸关的时刻本站一贯用绝对（见 RelativeTime 注、EmergencyLocationTag 铁律）。 */}
+                {s.createdAt && <div className="text-xs text-faint">{t('首次登录', 'Signed in')} {fmtTime(s.createdAt, lang)}</div>}
               </div>
               {!s.current && (
                 <button onClick={() => revoke(s.sessionId)} disabled={busy === s.sessionId} className="shrink-0 text-sm font-medium text-danger hover:underline disabled:opacity-50">{t('登出', 'Sign out')}</button>

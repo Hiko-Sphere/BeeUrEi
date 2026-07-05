@@ -60,14 +60,21 @@ export function NotificationsPage() {
         ) : (
           <ul className="divide-y divide-[var(--line)]">
             {items.map((n) => (
-              <li key={n.id} onClick={() => onClickNotif(n)} className={`flex cursor-pointer gap-3 px-4 py-3.5 transition hover:surface-2 ${n.readAt ? '' : 'bg-honey/5'}`}>
+              <li key={n.id} className={`flex gap-3 px-4 py-3.5 ${n.readAt ? '' : 'bg-honey/5'}`}>
                 <div className={`mt-0.5 shrink-0 ${n.readAt ? 'text-faint' : 'text-honey'}`}>{iconFor(n.kind)}</div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate font-medium">{n.title}</span>
-                    {!n.readAt && <span className="h-2 w-2 shrink-0 rounded-full bg-honey" />}
-                  </div>
-                  {n.body && <p className="mt-0.5 text-sm text-soft">{n.body}</p>}
+                  {/* 主操作(标已读+跳可操作页)做成 button：键盘/读屏可 Tab 聚焦 + Enter/Space 激活。
+                      此前 onClick 挂在 <li> 上，对键盘/读屏完全不可达（同聊天会话行早先修过的一类）。
+                      位置链接/回拨键是它的**兄弟**节点、不嵌套在按钮内——避免 nested-interactive 违规。 */}
+                  <button type="button" onClick={() => onClickNotif(n)}
+                    aria-label={notifDestination(n.kind) ? t(`${n.title}，打开`, `${n.title}, open`) : n.title}
+                    className="-mx-1 block w-full rounded px-1 text-left transition hover:surface-2">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-medium">{n.title}</span>
+                      {!n.readAt && <span className="h-2 w-2 shrink-0 rounded-full bg-honey" />}
+                    </div>
+                    {n.body && <p className="mt-0.5 text-sm text-soft">{n.body}</p>}
+                  </button>
                   {n.data?.lat && n.data?.lon && (() => {
                     // 紧急告警带坐标：协助者一键看地图定位（响应救助的关键信息）。
                     // 用 Apple Maps 而非 Google Maps：坐标为 WGS-84（iOS 只在导航时才转 GCJ-02），

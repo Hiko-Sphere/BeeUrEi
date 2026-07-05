@@ -41,9 +41,17 @@ struct FamilyLinksView: View {
                     ForEach(links) { l in
                         HStack {
                             VStack(alignment: .leading) {
-                                Text(l.memberName)
+                                HStack(spacing: 6) {
+                                    // 在线圆点（明眼/低视力用；语义由下方 caption 的"在线待命"承载，不靠颜色单独表意）。
+                                    if l.online == true {
+                                        Circle().fill(Color.beeSuccess).frame(width: 8, height: 8)
+                                            .accessibilityHidden(true)
+                                    }
+                                    Text(l.memberName)
+                                }
                                 Text(l.relation
                                      + (l.isEmergency ? AssistStrings.emergencySuffix(lang) : "")
+                                     + (l.online == true ? AssistStrings.onlineSuffix(lang) : "")
                                      + (l.isPending ? AssistStrings.pendingSuffix(lang) : ""))
                                     .font(.caption).foregroundStyle(l.isPending ? Color.beeWarn : .secondary)
                             }

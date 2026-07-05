@@ -86,6 +86,8 @@ enum AssistStrings {
     }
     static func pendingSuffix(_ l: Language) -> String { l == .zh ? " · 待对方接受" : " · awaiting their approval" }
     static func emergencySuffix(_ l: Language) -> String { l == .zh ? " · 紧急联系人" : " · emergency contact" }
+    /// 对方此刻在线/待命——盲人据此优先呼叫"接得通"的联系人（与 web Family 在线圆点同义，服务端仅 accepted 才为 true）。
+    static func onlineSuffix(_ l: Language) -> String { l == .zh ? " · 在线待命" : " · online" }
     static func dial(_ l: Language) -> String { l == .zh ? "拨打" : "Call" }
     static func dialA11y(_ name: String, _ l: Language) -> String {
         l == .zh ? "拨打 \(name) 的电话" : "Phone call \(name)"

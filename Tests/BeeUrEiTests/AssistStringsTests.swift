@@ -37,6 +37,27 @@ final class AssistStringsTests: XCTestCase {
         XCTAssertEqual(AssistStrings.callErrorText(NSError(domain: "x", code: 1), fallback: fb, .zh), fb)
     }
 
+    func testOnlineSuffixBilingualAndDistinct() {
+        // 在线待命后缀：双语、非空、英文不串中文，且与紧急/待确认后缀各不相同（同一 caption 里可能并列出现）。
+        XCTAssertEqual(AssistStrings.onlineSuffix(.zh), " · 在线待命")
+        XCTAssertEqual(AssistStrings.onlineSuffix(.en), " · online")
+        XCTAssertNotEqual(AssistStrings.onlineSuffix(.zh), AssistStrings.emergencySuffix(.zh))
+        XCTAssertNotEqual(AssistStrings.onlineSuffix(.zh), AssistStrings.pendingSuffix(.zh))
+        XCTAssertFalse(AssistStrings.onlineSuffix(.en).contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
+
+    func testFamilyLinkInfoDecodesOnlinePresence() throws {
+        // 服务端 viewLink 下发 online（对方此刻在线/待命）；iOS 须解码——此前缺此字段，盲人在亲友屏看不到谁接得通。
+        let json = #"{"id":"l1","memberId":"m1","memberName":"妈妈","relation":"母亲","isEmergency":true,"status":"accepted","online":true}"#
+        let link = try JSONDecoder().decode(FamilyLinkInfo.self, from: Data(json.utf8))
+        XCTAssertEqual(link.online, true)
+        XCTAssertEqual(link.memberName, "妈妈")
+        // 缺 online 的旧/兼容负载 → nil（视图按离线处理，不崩、不误显在线）。
+        let legacy = #"{"id":"l2","memberId":"m2","memberName":"Bob","relation":"friend","isEmergency":false}"#
+        let l2 = try JSONDecoder().decode(FamilyLinkInfo.self, from: Data(legacy.utf8))
+        XCTAssertNil(l2.online)
+    }
+
     func testEnglishHasNoChinese() {
         let samples = [
             AssistStrings.callVolunteerSubtitle(.en), AssistStrings.helpFailed(.en),

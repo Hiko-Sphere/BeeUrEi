@@ -230,6 +230,7 @@ struct FamilyLinkInfo: Codable, Sendable, Identifiable {
     let phone: String?
     let status: String?   // "pending"=待确认，"accepted"=已生效（旧数据无此字段按已接受）
     var outgoing: Bool?   // true=我发起、待对方确认；false/nil=对方发起或已生效
+    var online: Bool?     // 对方此刻在线/待命（服务端仅 accepted 关系才为 true；旧/缺省按离线）——盲人据此优先呼叫接得通的人
     var isPending: Bool { status == "pending" }
     var isAccepted: Bool { (status ?? "accepted") == "accepted" }
 }

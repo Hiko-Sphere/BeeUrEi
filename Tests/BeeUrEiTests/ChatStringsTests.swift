@@ -53,14 +53,18 @@ final class ChatStringsTests: XCTestCase {
     }
 
     func testReadPhotoTextStringsBilingual() {
-        // 读图中文字（盲人收图看不见内容→端侧 OCR）：三态（操作名/进行中/无文字）各非空、双语、英文不串中文。
+        // 读图/复制图中文字（盲人收图看不见内容→端侧 OCR）：各态非空、双语、英文不串中文；读与复制是**不同**操作名。
         for l in [Language.zh, .en] {
-            for s in [ChatStrings.readPhotoText(l), ChatStrings.readingPhoto(l), ChatStrings.noTextInPhoto(l)] {
+            for s in [ChatStrings.readPhotoText(l), ChatStrings.readingPhoto(l), ChatStrings.noTextInPhoto(l),
+                      ChatStrings.copyPhotoText(l), ChatStrings.photoTextCopied(l)] {
                 XCTAssertFalse(s.isEmpty)
             }
         }
         XCTAssertTrue(ChatStrings.readPhotoText(.zh).contains("文字")) // 操作名点明"文字"（区别于"全屏查看"）
-        for s in [ChatStrings.readPhotoText(.en), ChatStrings.readingPhoto(.en), ChatStrings.noTextInPhoto(.en)] {
+        XCTAssertNotEqual(ChatStrings.readPhotoText(.zh), ChatStrings.copyPhotoText(.zh)) // 读≠复制，两个独立转子操作
+        XCTAssertNotEqual(ChatStrings.readPhotoText(.en), ChatStrings.copyPhotoText(.en))
+        for s in [ChatStrings.readPhotoText(.en), ChatStrings.readingPhoto(.en), ChatStrings.noTextInPhoto(.en),
+                  ChatStrings.copyPhotoText(.en), ChatStrings.photoTextCopied(.en)] {
             XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(s)")
         }
     }

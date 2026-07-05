@@ -81,6 +81,9 @@ enum ChatStrings {
     static func readPhotoText(_ l: Language) -> String { l == .zh ? "读图中的文字" : "Read text in photo" }
     static func readingPhoto(_ l: Language) -> String { l == .zh ? "正在读取图中文字…" : "Reading text in photo…" }
     static func noTextInPhoto(_ l: Language) -> String { l == .zh ? "图中没有识别到文字" : "No text found in this photo" }
+    /// 复制图中文字（盲人存下处方/地址/时刻表，粘进备忘录/提醒/地图）：读=听、复制=留存转发，两个独立操作。
+    static func copyPhotoText(_ l: Language) -> String { l == .zh ? "复制图中文字" : "Copy text in photo" }
+    static func photoTextCopied(_ l: Language) -> String { l == .zh ? "图中文字已复制" : "Text copied" }
     static func recall(_ l: Language) -> String { l == .zh ? "撤回" : "Unsend" }
     static func recalled(_ l: Language) -> String { l == .zh ? "已撤回" : "Message unsent" }
     static func recallFailed(_ l: Language) -> String {

@@ -429,6 +429,8 @@ struct ChatView: View {
                         // 盲人收到图片看不见——端侧 OCR 读出图中文字（亲友常拍处方/时刻表/说明/纸条让盲人"看"）。
                         // VoiceOver 转子自定义操作；语音随文字语言（中/英）自动切换，复用识别屏同一朗读管线。
                         .accessibilityAction(named: Text(ChatStrings.readPhotoText(lang))) { readImageText(img) }
+                        // 复制图中文字：盲人可把处方/地址/时刻表存下，粘进备忘录/提醒/地图（读=听、复制=留存转发）。
+                        .accessibilityAction(named: Text(ChatStrings.copyPhotoText(lang))) { copyImageText(img) }
                 } else {
                     Label(ChatStrings.photo(lang), systemImage: "photo")
                 }
@@ -446,35 +448,52 @@ struct ChatView: View {
         }
     }
 
-    /// 端侧读出图片里的文字（盲人收图看不见内容——亲友常拍处方/时刻表/说明书/纸条让盲人"看"）。
-    /// Vision OCR（中英双语）→ 核心 ReadingOrder 按阅读序整理 → 语音**随文字语言**（中/英）朗读，与识别屏"读文字"
-    /// 同一管线（orderedOCRText + dominantTextIsChinese）。**纯端侧、不上传图片**（隐私优先，图片本就在本机）。
-    private func readImageText(_ img: UIImage) {
-        let lang = self.lang
-        SpeechHub.shared.speak(ChatStrings.readingPhoto(lang), channel: .query, voiceCode: lang.voiceCode) // 即时提示，计算期间不冷场
-        guard let cg = img.cgImage else {
-            SpeechHub.shared.speak(ChatStrings.noTextInPhoto(lang), channel: .query, voiceCode: lang.voiceCode); return
-        }
+    /// 端侧 OCR 一张图片（中英双语），主线程回调**按阅读序整理**的正文（空=无文字）。读图/复制图共用。
+    /// **纯端侧、不上传图片**（隐私优先，图片本就在本机）。cgImage 缺失（如 CIImage 后端）回调空串。
+    private func ocrImage(_ img: UIImage, then handle: @escaping (String) -> Void) {
+        guard let cg = img.cgImage else { handle(""); return }
         let request = VNRecognizeTextRequest { req, _ in
             let items: [(text: String, box: CGRect)] = ((req.results as? [VNRecognizedTextObservation]) ?? []).compactMap { o in
                 guard let s = o.topCandidates(1).first?.string else { return nil }
                 return (s, o.boundingBox)
             }
-            let text = FramingAssistViewModel.orderedOCRText(from: items)
-            DispatchQueue.main.async {
-                if text.isEmpty {
-                    SpeechHub.shared.speak(ChatStrings.noTextInPhoto(lang), channel: .query, voiceCode: lang.voiceCode)
-                } else {
-                    let voice = FramingAssistViewModel.dominantTextIsChinese(text) ? Language.zh.voiceCode : Language.en.voiceCode
-                    SpeechHub.shared.speak(text, channel: .query, voiceCode: voice)
-                }
-            }
+            let text = FramingAssistViewModel.orderedOCRText(from: items) // 核心 ReadingOrder 阅读序（已测）
+            DispatchQueue.main.async { handle(text) }
         }
         request.recognitionLanguages = lang == .en ? ["en-US", "zh-Hans"] : ["zh-Hans", "en-US"]
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = true
         DispatchQueue.global(qos: .userInitiated).async {
             try? VNImageRequestHandler(cgImage: cg, options: [:]).perform([request])
+        }
+    }
+
+    /// 读出图片里的文字（盲人收图看不见内容——亲友常拍处方/时刻表/说明书/纸条让盲人"看"）。
+    /// 语音**随文字语言**（中/英）朗读，与识别屏"读文字"同一管线（orderedOCRText + dominantTextIsChinese）。
+    private func readImageText(_ img: UIImage) {
+        let lang = self.lang
+        SpeechHub.shared.speak(ChatStrings.readingPhoto(lang), channel: .query, voiceCode: lang.voiceCode) // 即时提示，计算期间不冷场
+        ocrImage(img) { text in
+            if text.isEmpty {
+                SpeechHub.shared.speak(ChatStrings.noTextInPhoto(lang), channel: .query, voiceCode: lang.voiceCode)
+            } else {
+                let voice = FramingAssistViewModel.dominantTextIsChinese(text) ? Language.zh.voiceCode : Language.en.voiceCode
+                SpeechHub.shared.speak(text, channel: .query, voiceCode: voice)
+            }
+        }
+    }
+
+    /// 复制图片里的文字到剪贴板（盲人可把亲友拍来的处方/地址/时刻表存下，粘进备忘录/提醒/地图）。
+    /// 读出=当下听；复制=留存转发，两个独立操作。复制后语音回执"已复制"（否则盲人无从确认成功）。
+    private func copyImageText(_ img: UIImage) {
+        let lang = self.lang
+        ocrImage(img) { text in
+            if text.isEmpty {
+                SpeechHub.shared.speak(ChatStrings.noTextInPhoto(lang), channel: .query, voiceCode: lang.voiceCode)
+            } else {
+                UIPasteboard.general.string = text
+                SpeechHub.shared.speak(ChatStrings.photoTextCopied(lang), channel: .query, voiceCode: lang.voiceCode)
+            }
         }
     }
 

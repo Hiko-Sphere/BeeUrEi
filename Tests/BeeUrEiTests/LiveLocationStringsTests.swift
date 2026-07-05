@@ -25,4 +25,30 @@ final class LiveLocationStringsTests: XCTestCase {
                                                  battery: "battery 15%, low", .en)
         XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
+
+    func testRelativeMovementClassification() {
+        // 对端在正北（本人→对端 bearing=0）：对端朝南(180)走=朝本人来=靠近；朝北(0)走=越走越远；朝东(90)=横向。
+        XCTAssertEqual(LiveLocationStrings.relativeMovement(headingDegrees: 180, bearingToContactDegrees: 0), .approaching)
+        XCTAssertEqual(LiveLocationStrings.relativeMovement(headingDegrees: 0, bearingToContactDegrees: 0), .movingAway)
+        XCTAssertEqual(LiveLocationStrings.relativeMovement(headingDegrees: 90, bearingToContactDegrees: 0), .crossing)
+        // 环绕正确：对端在东南（bearing=135），朝西北(315)走=朝本人来=靠近。
+        XCTAssertEqual(LiveLocationStrings.relativeMovement(headingDegrees: 315, bearingToContactDegrees: 135), .approaching)
+        // 60°/120° 边界带：偏 45° 仍算靠近（<=60）；偏 90° 落横向带。
+        XCTAssertEqual(LiveLocationStrings.relativeMovement(headingDegrees: 180 + 45, bearingToContactDegrees: 0), .approaching)
+        XCTAssertEqual(LiveLocationStrings.relativeMovement(headingDegrees: 180 + 90, bearingToContactDegrees: 0), .crossing)
+        // 非有限（坏 heading/坏 bearing）→ crossing（不误报趋势，且不播）。
+        XCTAssertEqual(LiveLocationStrings.relativeMovement(headingDegrees: .nan, bearingToContactDegrees: 0), .crossing)
+        XCTAssertEqual(LiveLocationStrings.relativeMovement(headingDegrees: 180, bearingToContactDegrees: .infinity), .crossing)
+    }
+
+    func testMovementPhraseBilingualCrossingSilent() {
+        XCTAssertEqual(LiveLocationStrings.movementPhrase(.approaching, .zh), "，正朝你靠近")
+        XCTAssertEqual(LiveLocationStrings.movementPhrase(.movingAway, .zh), "，正在远离")
+        XCTAssertNil(LiveLocationStrings.movementPhrase(.crossing, .zh)) // 横向不播（信息量低、易误导）
+        // 英文不串中文。
+        for m in [LiveLocationStrings.RelativeMovement.approaching, .movingAway] {
+            let en = LiveLocationStrings.movementPhrase(m, .en)!
+            XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+        }
+    }
 }

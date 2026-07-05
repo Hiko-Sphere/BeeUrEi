@@ -43,6 +43,32 @@ enum LiveLocationStrings {
         CompassRose.cardinal(degrees: degrees, language: l) ?? (l == .zh ? "方向未知" : "unknown direction")
     }
 
+    /// 对端相对本人的移动趋势（据其行进方位 heading 与"本人→对端"方位比对）。盲人靠它判断被追踪的亲友
+    /// 是在**靠近还是走远**（等人来/对方离开），比裸方位更可行动——对标 Find My 的"正在靠近"。
+    enum RelativeMovement { case approaching, movingAway, crossing }
+
+    /// 分类：heading=对端行进方向（度，0=正北顺时针），bearingToContact="本人→对端"方位。对端朝"对端→本人"
+    /// (=bearingToContact+180) 方向走=靠近；朝 bearingToContact 方向走=远离；夹在中间=横向。阈值 60°/120° 留出
+    /// 横向"不确定带"，避免把侧向移动硬说成靠近/远离。**非有限输入→crossing**（不误报趋势，与全库非有限守卫一致）。
+    static func relativeMovement(headingDegrees heading: Double, bearingToContactDegrees bearing: Double) -> RelativeMovement {
+        guard heading.isFinite, bearing.isFinite else { return .crossing }
+        let toward = (bearing + 180).truncatingRemainder(dividingBy: 360) // 对端→本人 方向
+        var diff = abs(heading - toward).truncatingRemainder(dividingBy: 360)
+        if diff > 180 { diff = 360 - diff }
+        if diff <= 60 { return .approaching }
+        if diff >= 120 { return .movingAway }
+        return .crossing
+    }
+
+    /// 移动趋势文案后缀（拼在距离/方位后）。横向不播（信息量低、易误导），返回 nil。
+    static func movementPhrase(_ m: RelativeMovement, _ l: Language) -> String? {
+        switch m {
+        case .approaching: return l == .zh ? "，正朝你靠近" : ", approaching you"
+        case .movingAway: return l == .zh ? "，正在远离" : ", moving away"
+        case .crossing: return nil
+        }
+    }
+
     /// 对端电量文案（0–100 之外/未知返回 nil：老客户端不上报，不显示不猜）。≤20% 点明"偏低"——
     /// 尤其 VoiceOver 用户听不到"红色"，语义必须在文字里（趁对方手机没电失联前主动联系）。
     static func batteryText(_ pct: Int?, _ l: Language) -> String? {

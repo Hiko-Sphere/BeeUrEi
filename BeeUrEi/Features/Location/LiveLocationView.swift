@@ -157,7 +157,14 @@ struct LiveLocationView: View {
         guard let me = manager.lastCoordinate else { return LiveLocationStrings.distanceUnknown(lang) }
         let meters = Int(Geo.distanceMeters(fromLat: me.latitude, fromLon: me.longitude, toLat: c.lat, toLon: c.lng).rounded())
         let bearing = Geo.initialBearing(fromLat: me.latitude, fromLon: me.longitude, toLat: c.lat, toLon: c.lng)
-        return LiveLocationStrings.distanceBearing(meters: meters, bearing: LiveLocationStrings.compass(bearing, lang), lang)
+        var s = LiveLocationStrings.distanceBearing(meters: meters, bearing: LiveLocationStrings.compass(bearing, lang), lang)
+        // 移动趋势（对端在行进时才有 heading）：正朝你靠近/正在远离——盲人等人来或知对方离开的关键。之前 heading
+        // 字段一路传到端却从未播出（死字段）；此处兑现（横向移动不播，避免侧向被误说成靠近/远离）。
+        if let h = c.heading, h.isFinite,
+           let phrase = LiveLocationStrings.movementPhrase(LiveLocationStrings.relativeMovement(headingDegrees: h, bearingToContactDegrees: bearing), lang) {
+            s += phrase
+        }
+        return s
     }
 
     private func secondsSince(_ ms: Double) -> Int { max(0, Int((Date().timeIntervalSince1970 * 1000 - ms) / 1000)) }

@@ -367,7 +367,10 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
   })
 
   // 设置头像（小尺寸 data URL；客户端压缩后上传）。
-  app.post('/api/account/avatar', { preHandler: requireAuth() }, async (req, reply) => {
+  // 限流 20/min：头像每次落库最多 600KB（整行重写），无端点级上限时全局 300/min 可放大成 ~180MB/min 写盘（写放大）；
+  // 与相邻个人设置写端点（places/medical/family/quiet-hours 都有端点级限流）一致，且远超任何正常改头像频率。
+  app.post('/api/account/avatar', { preHandler: requireAuth(),
+                                    config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = avatarSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     if (!store.findById(req.user!.sub)) return reply.code(404).send({ error: 'not_found' })

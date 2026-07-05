@@ -39,4 +39,17 @@ describe('rate limiting', () => {
     expect(limited).toBe(true)
     await app.close()
   })
+
+  it('头像端点有端点级限流（20/min）——挡住每次 600KB 大写的写放大 DoS（改前无端点限流、全局 300 内不会 429）', async () => {
+    const app = buildApp(new MemoryStore())
+    const me = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'avataruser', password: 'secret123' } })).json()
+    const auth = { authorization: `Bearer ${me.token}` }
+    const avatar = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=='
+    let limited = false
+    for (let i = 0; i < 22; i++) { // 端点限额 20/min：第 21 次起应 429
+      if ((await app.inject({ method: 'POST', url: '/api/account/avatar', headers: auth, payload: { avatar } })).statusCode === 429) { limited = true; break }
+    }
+    expect(limited).toBe(true)
+    await app.close()
+  })
 })

@@ -71,6 +71,38 @@ describe('GET /api/account/export', () => {
     await a.close()
   })
 
+  it('含本人免打扰偏好（静音的群/单聊对端）——GDPR 完整性；群/对端以名称呈现、方向正确、admin 底座不含', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const reg = async (u: string, role: string) =>
+      (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const me = await reg('muteexport', 'blind')
+    const peer = await reg('mutepeer', 'helper')
+    const other = await reg('muteother', 'helper') // 方向性诱饵：一个静音了本人的**第三方**（不同于 peer，才能真正区分方向）
+    const auth = { authorization: `Bearer ${me.token}` }
+    const pAuth = { authorization: `Bearer ${peer.token}` }
+    // 先建立已接受的亲友关系（建群要求成员与创建者 areLinked）。
+    const l = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth, payload: { username: 'mutepeer', relation: '亲友' } })
+    await a.inject({ method: 'POST', url: `/api/family/links/${l.json().link.id}/accept`, headers: pAuth })
+    // 建群（本人为群主）+ 静音该群 + 静音与 peer 的单聊（直接经 store 置静音，与 KYC 测同法）。
+    const g = await a.inject({ method: 'POST', url: '/api/groups', headers: auth, payload: { name: '吵闹群', memberIds: [peer.user.id] } })
+    const gid = g.json().group.id
+    store.setGroupMuted(gid, me.user.id, true)
+    store.setDmMuted(me.user.id, peer.user.id, true)
+    // 方向性诱饵：第三方 other 静音了本人（other 作为 muter）——绝不进本人导出（导出的是"本人静音了谁"，非"谁静音了本人"）。
+    store.setDmMuted(other.user.id, me.user.id, true)
+
+    const body = (await a.inject({ method: 'GET', url: '/api/account/export', headers: auth })).json()
+    expect(body.mutedConversations.groups).toEqual(['吵闹群'])           // 群以名称呈现（非 UUID）
+    expect(body.mutedConversations.directContacts).toEqual(['mutepeer']) // 只含本人静音的对端、以显示名呈现
+    expect(body.mutedConversations.directContacts).not.toContain('muteother') // 方向：静音本人的第三方绝不泄漏进本人导出
+
+    // admin 代办导出底座不含 mutedConversations（静音谁属本人隐私，与住址/健康/头像同的最小化）。
+    const adminBase = buildUserExportBundle(store, me.user.id, Date.now())!
+    expect('mutedConversations' in adminBase).toBe(false)
+    await a.close()
+  })
+
   it('非文字消息只给元信息（data URL/mediaId 不内联）', async () => {
     const store = new MemoryStore()
     const a = buildApp(store)

@@ -992,6 +992,9 @@ export class SqliteStore implements Store {
   isGroupMuted(groupId: string, userId: string): boolean {
     return !!this.db.prepare('SELECT 1 FROM group_mutes WHERE groupId = ? AND userId = ?').get(groupId, userId)
   }
+  groupMutesForUser(userId: string): string[] {
+    return (this.db.prepare('SELECT groupId FROM group_mutes WHERE userId = ?').all(userId) as { groupId: string }[]).map((r) => r.groupId)
+  }
   deleteGroupMutesForUser(userId: string): void {
     this.db.prepare('DELETE FROM group_mutes WHERE userId = ?').run(userId)
   }
@@ -1001,6 +1004,9 @@ export class SqliteStore implements Store {
   }
   isDmMuted(muterId: string, peerId: string): boolean {
     return !!this.db.prepare('SELECT 1 FROM dm_mutes WHERE muterId = ? AND peerId = ?').get(muterId, peerId)
+  }
+  dmMutesForUser(userId: string): string[] {
+    return (this.db.prepare('SELECT peerId FROM dm_mutes WHERE muterId = ?').all(userId) as { peerId: string }[]).map((r) => r.peerId)
   }
   deleteDmMutesForUser(userId: string): void {
     this.db.prepare('DELETE FROM dm_mutes WHERE muterId = ? OR peerId = ?').run(userId, userId)

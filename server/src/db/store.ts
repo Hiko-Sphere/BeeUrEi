@@ -707,10 +707,12 @@ export interface Store {
   /// 群免打扰：某人是否静音某群的推送横幅（消息仍存库、未读照增，只压推送）。与已读游标同为「每人每群」软状态。
   setGroupMuted(groupId: string, userId: string, muted: boolean): void
   isGroupMuted(groupId: string, userId: string): boolean
+  groupMutesForUser(userId: string): string[] // 该用户静音的群 id 列表（GDPR 自助导出：免打扰偏好属本人主动配置的数据）
   deleteGroupMutesForUser(userId: string): void // 删号级联：清该用户在所有群的静音标记（同已读游标，非群主退群路径须显式清）
   /// 单聊免打扰：muter 是否静音了与 peer 的会话（只压推送横幅，消息/未读照常）。键为 (muter,peer) **有向**。
   setDmMuted(muterId: string, peerId: string, muted: boolean): void
   isDmMuted(muterId: string, peerId: string): boolean
+  dmMutesForUser(userId: string): string[] // 该用户(作为 muter)静音单聊的对端 id 列表（GDPR 自助导出）
   deleteDmMutesForUser(userId: string): void // 删号级联：清该用户作为 muter **或** peer 的所有单聊静音（有向键两侧都涉及）
 
   // 媒体（视频消息等：元数据在库，实体文件在磁盘 media/）
@@ -1495,6 +1497,10 @@ export class MemoryStore implements Store {
   isGroupMuted(groupId: string, userId: string): boolean {
     return this.groupMutes.has(`${groupId}:${userId}`)
   }
+  groupMutesForUser(userId: string): string[] {
+    // 键 `${groupId}:${userId}`：取后缀=本人的，还原前缀 groupId（UUID 无冒号，切分唯一；与 delete 的 endsWith 同口径）。
+    return [...this.groupMutes].filter((k) => k.endsWith(`:${userId}`)).map((k) => k.slice(0, k.length - userId.length - 1))
+  }
   deleteGroupMutesForUser(userId: string): void {
     let changed = false
     for (const k of [...this.groupMutes]) if (k.endsWith(`:${userId}`)) { this.groupMutes.delete(k); changed = true }
@@ -1506,6 +1512,10 @@ export class MemoryStore implements Store {
   }
   isDmMuted(muterId: string, peerId: string): boolean {
     return this.dmMutes.has(`${muterId}:${peerId}`)
+  }
+  dmMutesForUser(userId: string): string[] {
+    // 有向键 `${muter}:${peer}`：取前缀=本人(作为 muter)的，还原后缀 peerId（导出"本人静音了谁"，非"谁静音了本人"）。
+    return [...this.dmMutes].filter((k) => k.startsWith(`${userId}:`)).map((k) => k.slice(userId.length + 1))
   }
   deleteDmMutesForUser(userId: string): void {
     let changed = false

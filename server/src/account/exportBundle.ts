@@ -89,6 +89,14 @@ export function buildSelfExportExtras(store: Store, id: string) {
     // 安全报到历史（备注/时长/状态）：本人独有数据，含出行备注可能敏感，仅自助版。
     safetyTimers: store.safetyTimersForUser(id).map((t) => ({ note: t.note ?? null, startedAt: t.startedAt, dueAt: t.dueAt, status: t.status,
       firedAt: t.firedAt ?? null, completedAt: t.completedAt ?? null, canceledAt: t.canceledAt ?? null })),
+    // 免打扰偏好（本人主动配置的静音：静音了哪些群/单聊对端）——本人设置的偏好数据，GDPR 访问/可携权覆盖。
+    // 与 quietHours（profile 里）同为勿扰配置，此前导出仅含 quietHours、漏了逐会话静音，可携权不完整（同 groups/群成员
+    // 关系补全的口径）。**仅自助版**（admin 不含：静音谁属本人隐私）。群以名称、单聊对端以显示名呈现（与 blocks/
+    // familyLinks 同口径，不外泄 UUID）；已删除的群/对端回退 '—'。
+    mutedConversations: {
+      groups: store.groupMutesForUser(id).map((gid) => store.findGroup(gid)?.name ?? '—'),
+      directContacts: store.dmMutesForUser(id).map((pid) => nameOf(pid)),
+    },
     // 紧急医疗信息（特殊类别健康数据）：本人自填的明文，GDPR 访问/可携权覆盖。**仅自助版**（admin 代办导出绝不含
     // 用户健康数据）。落库是密文，导出前解密还给本人；解密失败则省略（不吐错误内容）。
     medicalInfo: (() => {

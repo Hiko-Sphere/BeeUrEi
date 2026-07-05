@@ -7,7 +7,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 const h = vi.hoisted(() => ({ nav: vi.fn() }))
 vi.mock('react-router-dom', () => ({ useNavigate: () => h.nav }))
 vi.mock('../lib/api', () => ({
-  api: { notifications: vi.fn(), markAllNotifsRead: vi.fn(), markNotifRead: vi.fn() },
+  api: { notifications: vi.fn(), markAllNotifsRead: vi.fn(), markNotifRead: vi.fn(), contactMedicalInfo: vi.fn() },
+  APIError: class extends Error { code = ''; status = 0 },
 }))
 import { api } from '../lib/api'
 import { NotificationsPage, notifDestination } from './Notifications'
@@ -69,6 +70,26 @@ describe('NotificationsPage 渲染（防字段漂移）', () => {
     render(<NotificationsPage />)
     expect(await screen.findByText('处置完成')).toBeInTheDocument()
     expect(screen.queryByText(/查看位置/)).toBeNull()
+  })
+
+  it('紧急告警（带 fromId）在通知列表也提供"查看医疗信息"——与告警模态一致，事后回看仍可查', async () => {
+    ;(api.notifications as ReturnType<typeof vi.fn>).mockResolvedValue({
+      notifications: [notif({ id: 'e1', kind: 'emergency_alert', title: '摔倒告警', body: '可能摔倒', data: { fromId: 'blind1', fromName: '小明', hasMedical: '1' } })],
+      unread: 1,
+    })
+    render(<NotificationsPage />)
+    expect(await screen.findByText('摔倒告警')).toBeInTheDocument()
+    expect(screen.getByTestId('view-medical-btn')).toBeInTheDocument() // 医疗查看按钮出现在列表里
+  })
+
+  it('非 SOS 通知（无 fromId，如被设为紧急联系人）不显示医疗查看按钮', async () => {
+    ;(api.notifications as ReturnType<typeof vi.fn>).mockResolvedValue({
+      notifications: [notif({ id: 'ec1', kind: 'emergency_contact_set', title: '你被设为紧急联系人', body: 'X', data: { linkId: 'l1' } })],
+      unread: 1,
+    })
+    render(<NotificationsPage />)
+    expect(await screen.findByText('你被设为紧急联系人')).toBeInTheDocument()
+    expect(screen.queryByTestId('view-medical-btn')).toBeNull() // 无 fromId → 不显示（fromId 门排除关系事件）
   })
 })
 

@@ -7,6 +7,7 @@ import { useI18n } from '../lib/i18n'
 import { Card, Button, Spinner, EmptyState, fmtTime, RelativeTime } from '../components/ui'
 import { IconBell, IconShield, IconPhone, IconUsers, IconFilm, IconFlash, IconPin, IconBattery } from '../components/icons'
 import { useCall } from './call/CallController'
+import { ContactMedicalInfo } from './call/EmergencyAlertHost'
 
 /// 点击通知跳到"可操作页"：好友请求→亲友页（去接受/拒绝）、群变更→聊天页；其余无明确去处返回 null（仅标已读）。
 /// 纯函数便于单测。
@@ -115,6 +116,12 @@ export function NotificationsPage() {
                       aria-label={t(`回拨 ${n.data.fromName ?? ''}`, `Call ${n.data.fromName ?? 'back'}`)}>
                       <IconPhone width={13} height={13} />{t('回拨', 'Call back')}
                     </button>
+                  )}
+                  {/* 施救医疗信息（与告警模态一致）：告警不止在弹窗现身，也持久留在通知列表——协助者事后回看这条
+                      SOS 时同样需要能查遇险者的血型/过敏/用药（授权在服务端，仅其紧急联系人可读）。fromId 门天然
+                      排除 emergency_contact_set（无 fromId），只对真 SOS 显示。 */}
+                  {n.kind.includes('emergency') && n.data?.fromId && (
+                    <div className="mt-1.5"><ContactMedicalInfo userId={n.data.fromId} emphasize={!!n.data.hasMedical} /></div>
                   )}
                   <RelativeTime ms={n.createdAt} lang={lang} className="mt-1 block text-xs text-faint" />
                 </div>

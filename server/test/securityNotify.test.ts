@@ -39,6 +39,23 @@ describe('账号安全变更预警本人', () => {
     await app.close()
   })
 
+  it('换绑手机号 → security_phone_changed（登录标识变更即时预警；重复提交同号不重复报）', async () => {
+    const { app, store } = capturingApp()
+    const r = await reg(app, 'secph')
+    // 首次绑定：undefined → 号，算变更 → 预警
+    const first = await app.inject({ method: 'POST', url: '/api/account/phone', headers: auth(r.token), payload: { phone: '+1 (555) 010-2020' } })
+    expect(first.statusCode).toBe(200)
+    expect(secKinds(store, r.user.id)).toEqual(['security_phone_changed'])
+    // 重复提交同一号码（含不同格式但归一化相同）：无变更 → 不再报
+    const again = await app.inject({ method: 'POST', url: '/api/account/phone', headers: auth(r.token), payload: { phone: '+15550102020' } })
+    expect(again.statusCode).toBe(200)
+    expect(secKinds(store, r.user.id)).toEqual(['security_phone_changed']) // 仍只有一条
+    // 换成新号：再次预警
+    await app.inject({ method: 'POST', url: '/api/account/phone', headers: auth(r.token), payload: { phone: '+15550103030' } })
+    expect(secKinds(store, r.user.id).filter((k) => k === 'security_phone_changed')).toHaveLength(2)
+    await app.close()
+  })
+
   it('开/关 2FA → security_2fa_enabled / security_2fa_disabled', async () => {
     const { app, store } = capturingApp()
     const r = await reg(app, 'sec2fa')

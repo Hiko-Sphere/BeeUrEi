@@ -33,7 +33,7 @@ const avatarSchema = z.object({
 
 export function registerAccountRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer, appleVerifier?: AppleTokenVerifier, codeSend: CodeSendLimiter = new CodeSendLimiter(), pushSender: PushSender = new NoopPushSender()): void {
   // 账号安全敏感变更 → 通知本人（in-app 持久化 + best-effort 推送到本人设备）：未授权变更即时预警。
-  const notifySecurity = (u: User, event: 'password_changed' | 'password_reset' | 'email_changed' | '2fa_enabled' | '2fa_disabled') => {
+  const notifySecurity = (u: User, event: 'password_changed' | 'password_reset' | 'email_changed' | 'phone_changed' | '2fa_enabled' | '2fa_disabled') => {
     const { title, body } = pushStrings.securityNotice(event, pushLang(u.language))
     notifyUser(store, pushSender, u.id, `security_${event}`, title, body)
   }
@@ -202,12 +202,18 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
   app.post('/api/account/phone', { preHandler: requireAuth() }, async (req, reply) => {
     const parsed = z.object({ phone: z.string().trim().min(6).max(20) }).safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const user = store.findById(req.user!.sub)
+    if (!user) return reply.code(404).send({ error: 'not_found' })
     const p = normalizePhone(parsed.data.phone)
     if (!p) return reply.code(400).send({ error: 'invalid_phone' })
     const existing = store.findByPhone(p)
-    if (existing && existing.id !== req.user!.sub) return reply.code(409).send({ error: 'phone_taken' })
-    const updated = store.updateUser(req.user!.sub, { phone: p })
+    if (existing && existing.id !== user.id) return reply.code(409).send({ error: 'phone_taken' })
+    const changed = user.phone !== p // 归一化后仍不同才算真的改动（重复提交同号不误报）
+    const updated = store.updateUser(user.id, { phone: p })
     if (!updated) return reply.code(404).send({ error: 'not_found' })
+    // 手机号是「手机号+密码」登录标识（findByLoginIdentifier 收），与改邮箱同属**接管账号常见第一步**——
+    // 未授权换绑即时预警本人（首次绑定 undefined→号 也算变更；勿扰中经 security_* 越过，见 quietHours）。
+    if (changed) notifySecurity(user, 'phone_changed')
     return { ok: true }
   })
 

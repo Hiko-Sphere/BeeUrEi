@@ -9,6 +9,34 @@ export function appleMapsUrl(lat: number | string, lng: number | string, label?:
   return `https://maps.apple.com/?ll=${lat},${lng}&q=${q}`
 }
 
+/// 两点间大圆（haversine）距离（米，WGS-84，与服务端 geofence 同算法）。任一坐标非有限→0（绝不抛/NaN 污染）。
+export function haversineMeters(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  if (![aLat, aLng, bLat, bLng].every((n) => Number.isFinite(n))) return 0
+  const R = 6371000, toRad = (d: number) => (d * Math.PI) / 180
+  const dLat = toRad(bLat - aLat), dLng = toRad(bLng - aLng)
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)))
+}
+
+/// 路线总步行距离（米）：相邻航点大圆距离之和。<2 点或坏点段计 0（haversineMeters 已守卫非有限）。
+export function routeDistanceMeters(waypoints: { lat: number; lng: number }[]): number {
+  let total = 0
+  for (let i = 1; i < waypoints.length; i++) {
+    total += haversineMeters(waypoints[i - 1].lat, waypoints[i - 1].lng, waypoints[i].lat, waypoints[i].lng)
+  }
+  return total
+}
+
+/// 路线距离可读文本：≥1km 用公里(0.1 精度去尾零)，否则整米——"约 1.2 公里"胜过"约 1200 米"（同 accuracyText 口径）。
+export function routeDistanceText(meters: number, t: (zh: string, en: string) => string): string {
+  const m = Number.isFinite(meters) && meters > 0 ? meters : 0
+  if (m >= 1000) {
+    const km = (Math.round(m / 100) / 10).toString() // 四舍五入到 0.1km、toString 去尾零（2.0→2）
+    return t(`约 ${km} 公里`, `~${km} km`)
+  }
+  return t(`约 ${Math.round(m)} 米`, `~${Math.round(m)} m`)
+}
+
 export function parseLocation(text: string): { lat: number; lng: number; name?: string } | null {
   // 防御：text 类型虽为 string，但消息字段可能因后端数据异常为 null/undefined——
   // 下方 text.indexOf 在 try/catch 之外，无此守卫会抛 TypeError、连累整条聊天列表/会话渲染崩。

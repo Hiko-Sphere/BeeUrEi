@@ -1,5 +1,42 @@
 import { describe, it, expect } from 'vitest'
-import { parseLocation, appleMapsUrl } from './location'
+import { parseLocation, appleMapsUrl, haversineMeters, routeDistanceMeters, routeDistanceText } from './location'
+
+const zh = (a: string) => a // t 桩：取中文
+
+describe('haversineMeters / routeDistanceMeters', () => {
+  it('两点距离与已知值吻合（~111km/纬度差 1°）', () => {
+    const d = haversineMeters(0, 0, 1, 0) // 沿经线 1° ≈ 111.19 km
+    expect(d).toBeGreaterThan(111_000)
+    expect(d).toBeLessThan(111_400)
+  })
+  it('同点=0；非有限坐标→0（不 NaN 污染总和）', () => {
+    expect(haversineMeters(31.2, 121.4, 31.2, 121.4)).toBe(0)
+    expect(haversineMeters(NaN, 0, 1, 0)).toBe(0)
+    expect(haversineMeters(0, 0, Infinity, 0)).toBe(0)
+  })
+  it('路线总长=相邻段之和；<2 点为 0', () => {
+    expect(routeDistanceMeters([])).toBe(0)
+    expect(routeDistanceMeters([{ lat: 0, lng: 0 }])).toBe(0)
+    const total = routeDistanceMeters([{ lat: 0, lng: 0 }, { lat: 0, lng: 1 }, { lat: 0, lng: 2 }])
+    const seg = haversineMeters(0, 0, 0, 1)
+    expect(total).toBeCloseTo(seg * 2, 0) // 两段等长
+  })
+})
+
+describe('routeDistanceText', () => {
+  it('<1km 用整米；≥1km 用公里(0.1 精度去尾零)', () => {
+    expect(routeDistanceText(0, zh)).toBe('约 0 米')
+    expect(routeDistanceText(850, zh)).toBe('约 850 米')
+    expect(routeDistanceText(999, zh)).toBe('约 999 米')
+    expect(routeDistanceText(1000, zh)).toBe('约 1 公里')
+    expect(routeDistanceText(1250, zh)).toBe('约 1.3 公里') // 1250→12.5→四舍五入 13→1.3
+    expect(routeDistanceText(2000, zh)).toBe('约 2 公里')   // 去尾零 2.0→2
+  })
+  it('非有限/负→约 0 米（不崩不 NaN）', () => {
+    expect(routeDistanceText(NaN, zh)).toBe('约 0 米')
+    expect(routeDistanceText(-5, zh)).toBe('约 0 米')
+  })
+})
 
 describe('appleMapsUrl', () => {
   it('有 label：编码作查询名；坐标为 WGS-84 原样', () => {

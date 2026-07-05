@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { api, APIError, contentBlockedText, type SavedRouteInfo, type RouteWaypoint, type FamilyLink } from '../lib/api'
+import { routeDistanceMeters, routeDistanceText } from '../lib/location'
 import { useI18n } from '../lib/i18n'
 import { useSession } from '../lib/session'
 import { Card, Button, EmptyState, useToast, Modal } from '../components/ui'
@@ -160,7 +161,10 @@ export function RoutesPage() {
                 {contacts.map((c) => <option key={c.memberId} value={c.memberId}>{t(`给 ${c.memberName}`, `For ${c.memberName}`)}</option>)}
               </select>
             )}
-            <span className="text-xs text-faint">{t(`${wp.length} 个点`, `${wp.length} points`)}</span>
+            <span className="text-xs text-faint">
+              {t(`${wp.length} 个点`, `${wp.length} points`)}
+              {wp.length >= 2 && ` · ${routeDistanceText(routeDistanceMeters(wp), t)}`}
+            </span>
             <div className="ml-auto flex gap-2">
               <Button variant="soft" onClick={() => { if (wp.length) { setEditing({ ...editing, waypoints: wp.slice(0, -1) }); setSelectedIdx(null) } }} disabled={!wp.length}>
                 {t('撤销最后一点', 'Undo last')}
@@ -232,6 +236,7 @@ export function RoutesPage() {
                     <div className="truncate font-semibold">{r.name}</div>
                     <div className="mt-0.5 text-xs text-faint">
                       {t(`给${ownerName(r)} · ${r.waypoints.length} 个点`, `For ${ownerName(r)} · ${r.waypoints.length} points`)}
+                      {r.waypoints.length >= 2 && ` · ${routeDistanceText(routeDistanceMeters(r.waypoints), t)}`}
                     </div>
                   </div>
                 </div>

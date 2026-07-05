@@ -895,6 +895,13 @@ export class SqliteStore implements Store {
       .get(userId, fromId) as any
     return Number(r?.n ?? 0)
   }
+  unreadGroupCount(groupId: string, userId: string): number {
+    // 无上限 COUNT：比"取最近 200 条消息体再 filter"既准（>200 未读不漏计）又省（只数不载列/不建对象）。
+    const readAt = this.groupReadAt(groupId, userId)
+    const r = this.db.prepare("SELECT COUNT(*) AS n FROM messages WHERE groupId = ? AND createdAt > ? AND fromId != ? AND kind != 'recalled'")
+      .get(groupId, readAt, userId) as any
+    return Number(r?.n ?? 0)
+  }
   deleteMessagesForUser(userId: string): void {
     this.db.prepare('DELETE FROM messages WHERE fromId = ? OR toId = ?').run(userId, userId)
   }

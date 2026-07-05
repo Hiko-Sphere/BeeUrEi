@@ -700,6 +700,9 @@ export interface Store {
   /// 群按人已读：记录/读取某人在某群"读到的时间戳"（群未读 = 晚于此且非本人发的消息数）。
   setGroupRead(groupId: string, userId: string, at: number): void
   groupReadAt(groupId: string, userId: string): number
+  /// 某人在某群的未读数（createdAt>已读时刻、非己发、非撤回）——**无上限**高效计数。
+  /// 与 unreadCount(单聊) 同为角标数据源；替代"取最近 N 条再 filter"的做法（后者 >N 条未读会漏计、且每次算角标都载 N 条消息体）。
+  unreadGroupCount(groupId: string, userId: string): number
   deleteGroupReadsForUser(userId: string): void // 删号级联：清该用户在所有群的已读游标（非群主退群路径不经 deleteGroup，否则残留孤儿）
   /// 群免打扰：某人是否静音某群的推送横幅（消息仍存库、未读照增，只压推送）。与已读游标同为「每人每群」软状态。
   setGroupMuted(groupId: string, userId: string, muted: boolean): void
@@ -1399,6 +1402,14 @@ export class MemoryStore implements Store {
     for (const m of this.messages.values()) {
       // 排除已撤回（kind=recalled）：撤回消息无内容可读，不应计未读（与群未读口径一致）。
       if (m.toId === userId && m.fromId === fromId && m.readAt == null && m.kind !== 'recalled') n++
+    }
+    return n
+  }
+  unreadGroupCount(groupId: string, userId: string): number {
+    const readAt = this.groupReadAt(groupId, userId)
+    let n = 0
+    for (const m of this.messages.values()) {
+      if (m.groupId === groupId && m.createdAt > readAt && m.fromId !== userId && m.kind !== 'recalled') n++
     }
     return n
   }

@@ -9,8 +9,7 @@ export function totalUnreadFor(store: Store, userId: string): { messages: number
     messages += store.unreadCount(userId, m.fromId === userId ? m.toId : m.fromId)
   }
   for (const g of store.groupsFor(userId)) {
-    const readAt = store.groupReadAt(g.id, userId)
-    messages += store.groupMessages(g.id, 200).filter((m) => m.createdAt > readAt && m.fromId !== userId && m.kind !== 'recalled').length
+    messages += store.unreadGroupCount(g.id, userId) // 无上限精确计数（旧法取最近 200 条 filter：>200 未读会封顶漏计、且每次载 200 条消息体）
   }
   const notifications = store.unreadNotificationCount(userId)
   return { messages, notifications, total: messages + notifications }

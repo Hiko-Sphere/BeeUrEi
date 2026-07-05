@@ -44,7 +44,9 @@ export function escalateUnackedEmergencies(
         if (webPush.configured) for (const sub of safeSubs(m.id)) void webPush.send(sub, JSON.stringify({ title, body, data: notifData })).catch(() => { /* 单订阅失败不阻断 */ })
         if (m.apnsToken) {
           const extra: Record<string, string> = { type: 'emergency_alert', escalated: '1', kind: e.kind, fromId: sender.id, eventId: e.id }
-          if (hasLoc) { extra.lat = String(e.lat); extra.lon = String(e.lon) }
+          // locSource 与 notifData 同带（此前 extra 漏）：iOS 靠它诚实标注"最后已知·非实时"，缺了会把陈旧位置当实时
+          // 渲染、把响应者指向错误地点。locAgeSec 两渠道都不带（升级时已过数分钟，存库的旧龄会误导，故一律省，见 notifData）。
+          if (hasLoc) { extra.lat = String(e.lat); extra.lon = String(e.lon); if (e.locSource) extra.locSource = e.locSource }
           if (hasMedical) extra.hasMedical = '1'
           void push.sendAlert(m.apnsToken, title, body, extra, undefined, safeBadge(m.id)).catch(() => { /* 单点失败不阻断 */ })
         }

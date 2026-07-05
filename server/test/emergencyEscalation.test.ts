@@ -38,8 +38,11 @@ describe('紧急升级重呼 escalateUnackedEmergencies', () => {
     expect(escalateUnackedEmergencies(store, push, web, now, 5 * MIN)).toBe(1)
     expect(push.alerts.map((a) => a.extra?.escalated)).toEqual(['1', '1']) // 两位亲友都收到升级告警
     expect(push.alerts[0].extra?.lat).toBe('39.9')                          // 带存库的位置
-    // 持久化 emergency_alert 通知含 escalated 标记（通知中心兜底）。
-    expect(store.notificationsForUser('famA').filter((x: any) => x.kind === 'emergency_alert' && x.data?.escalated === '1')).toHaveLength(1)
+    expect(push.alerts[0].extra?.locSource).toBe('live')                    // APNs extra 也带 locSource（诚实标注实时/最后已知）
+    // 持久化 emergency_alert 通知含 escalated 标记 + locSource（通知中心兜底，与 APNs 跨渠道一致）。
+    const escNotif = store.notificationsForUser('famA').filter((x: any) => x.kind === 'emergency_alert' && x.data?.escalated === '1')
+    expect(escNotif).toHaveLength(1)
+    expect(escNotif[0].data?.locSource).toBe('live')
     expect(store.emergencyEventsForUser('victim')[0].escalatedAt).toBe(now)
 
     // 再扫不重复升级（escalatedAt 已设）。

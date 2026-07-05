@@ -47,6 +47,27 @@ describe('紧急升级重呼 escalateUnackedEmergencies', () => {
     expect(push.alerts).toHaveLength(2)
   })
 
+  it('发起人有紧急医疗信息 → 升级告警带 hasMedical（漏看首呼者也知有过敏/用药可查）', () => {
+    const now = 100 * MIN
+    const { store, push, web } = setup()
+    store.setMedicalInfo({ userId: 'victim', sealed: 'sealed-blob', updatedAt: 1 }) // 仅需存在（escalation 只查 hasMedical 与否）
+    store.createEmergencyEvent(evt({ at: now - 6 * MIN }))
+    expect(escalateUnackedEmergencies(store, push, web, now, 5 * MIN)).toBe(1)
+    expect(push.alerts[0].extra?.hasMedical).toBe('1')            // APNs extra 带
+    const notif = store.notificationsForUser('famA').find((x: any) => x.kind === 'emergency_alert')
+    expect(notif?.data?.hasMedical).toBe('1')                     // 持久化通知 data 也带
+  })
+
+  it('发起人无医疗信息 → 升级告警不带 hasMedical（不误报有信息可查）', () => {
+    const now = 100 * MIN
+    const { store, push, web } = setup()
+    store.createEmergencyEvent(evt({ at: now - 6 * MIN }))
+    escalateUnackedEmergencies(store, push, web, now, 5 * MIN)
+    expect(push.alerts[0].extra?.hasMedical).toBeUndefined()
+    const notif = store.notificationsForUser('famA').find((x: any) => x.kind === 'emergency_alert')
+    expect(notif?.data?.hasMedical).toBeUndefined()
+  })
+
   it('已有亲友确认(ack) → 不升级（有人在响应）', () => {
     const now = 100 * MIN
     const { store, push, web } = setup()

@@ -26,11 +26,15 @@ export function escalateUnackedEmergencies(
         .map((l) => store.findById(l.memberId))
         .filter((m): m is NonNullable<typeof m> => !!m)
       const hasLoc = e.lat != null && e.lon != null
+      // 发起人是否填了紧急医疗信息：与首呼(emergency.ts)/未报到(checkin.ts)同口径带 hasMedical——升级重呼恰是要抓
+      // **漏看首呼**的人，他们只见到这条，若不带 hasMedical 就不知有过敏/用药/病史可查（医疗急救刚需，见复审 missed-sibling）。
+      const hasMedical = !!store.getMedicalInfo(sender.id)
       const minutes = Math.max(1, Math.round((now - e.at) / 60_000))
       const notifData: Record<string, string> = {
         kind: 'emergency_alert', type: 'emergency_alert', escalated: '1', fromId: sender.id, fromName: sender.displayName, eventId: e.id, alertKind: e.kind,
       }
       if (hasLoc) { notifData.lat = String(e.lat); notifData.lon = String(e.lon); if (e.locSource) notifData.locSource = e.locSource }
+      if (hasMedical) notifData.hasMedical = '1'
       for (const m of members) {
         const l = pushLang(m.language)
         const title = pushStrings.emergencyEscalateTitle(sender.displayName, l)
@@ -41,6 +45,7 @@ export function escalateUnackedEmergencies(
         if (m.apnsToken) {
           const extra: Record<string, string> = { type: 'emergency_alert', escalated: '1', kind: e.kind, fromId: sender.id, eventId: e.id }
           if (hasLoc) { extra.lat = String(e.lat); extra.lon = String(e.lon) }
+          if (hasMedical) extra.hasMedical = '1'
           void push.sendAlert(m.apnsToken, title, body, extra, undefined, safeBadge(m.id)).catch(() => { /* 单点失败不阻断 */ })
         }
       }

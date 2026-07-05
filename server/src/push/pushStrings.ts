@@ -14,7 +14,7 @@ export type SecurityEvent =
   | 'email_changed' | 'phone_changed' | 'username_changed'
   | 'apple_linked' | 'apple_unlinked'
   | 'passkey_added' | 'passkey_removed'
-  | '2fa_enabled' | '2fa_disabled'
+  | '2fa_enabled' | '2fa_disabled' | '2fa_recovery_regenerated'
   // 管理员/客服代为变更登录凭据（透明告知本人 + 侦测被盗管理员账号借后台接管受害者）：
   | 'admin_password_reset' | 'admin_passkey_cleared' | 'admin_apple_unlinked'
   | 'admin_identifier_changed' // 管理员改了邮箱/手机号/用户名之一或多个（登录标识）
@@ -226,6 +226,8 @@ export const pushStrings = {
         body: en ? 'Two-factor authentication was enabled on your account.' : '你的账号刚刚开启了两步验证。' }
       case '2fa_disabled': return { title: en ? 'Two-factor turned off' : '已关闭两步验证',
         body: en ? 'Two-factor authentication was disabled. If this wasn’t you, change your password and re-enable it now.' : '你的账号刚刚关闭了两步验证。若非本人操作，请立即修改密码并重新开启。' }
+      case '2fa_recovery_regenerated': return { title: en ? 'Recovery codes regenerated' : '两步验证恢复码已重新生成',
+        body: en ? 'New two-factor recovery codes were generated; your old codes no longer work. If this wasn’t you, secure your account now.' : '你的两步验证恢复码刚刚被重新生成，旧恢复码已全部失效。若非本人操作，请立即处理账号安全。' }
     }
   },
   newMessageTitle: (name: string, l: PushLang): string =>

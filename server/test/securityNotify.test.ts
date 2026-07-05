@@ -105,6 +105,21 @@ describe('账号安全变更预警本人', () => {
     await app.close()
   })
 
+  it('重新生成恢复码 → security_2fa_recovery_regenerated（换一种登录凭据须预警本人）', async () => {
+    const { app, store } = capturingApp()
+    const r = await reg(app, 'secrecov')
+    const setup = (await app.inject({ method: 'POST', url: '/api/account/2fa/setup', headers: auth(r.token) })).json()
+    const en = (await app.inject({ method: 'POST', url: '/api/account/2fa/enable', headers: auth(r.token), payload: { code: totpAt(setup.secret, Date.now()) } })).json()
+    // 用恢复码过二次验证来重生成（enable 已消费同窗 TOTP，防重放会拒之）。
+    const regen = await app.inject({ method: 'POST', url: '/api/account/2fa/recovery-codes', headers: auth(r.token), payload: { code: en.recoveryCodes[0] } })
+    expect(regen.statusCode).toBe(200)
+    expect(regen.json().recoveryCodes.length).toBeGreaterThan(0)
+    expect(secKinds(store, r.user.id)).toContain('security_2fa_recovery_regenerated') // 换恢复码亦预警本人
+    const n = store.notificationsForUser(r.user.id).find((x) => x.kind === 'security_2fa_recovery_regenerated')!
+    expect(n.body).toMatch(/若非本人操作|wasn/i) // 正文含"若非本人操作"提示
+    await app.close()
+  })
+
   it('找回密码重置 → security_password_reset', async () => {
     const { app, store, sent } = capturingApp()
     const r = await reg(app, 'secrst')

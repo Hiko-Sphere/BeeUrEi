@@ -137,6 +137,9 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     if (!verifySecondFactor(user, parsed.data.code, Date.now())) return reply.code(400).send({ error: 'invalid_code' })
     const codes = generateRecoveryCodes()
     store.replaceRecoveryCodes(user.id, codes.map(hashRecoveryCode))
+    // 重生成恢复码=替换一种登录凭据（旧码全作废、发新码）：与改密/2FA 开关/绑解 Apple 等一致预警本人——
+    // 接管者拿到会话+过一次二次验证后可借此换一套自己的恢复码锁定账号，本人须即时知情（补漏的姊妹缺口）。
+    notifySecurity(user, '2fa_recovery_regenerated')
     return { ok: true, recoveryCodes: codes }
   })
 

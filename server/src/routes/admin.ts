@@ -517,7 +517,9 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     const target = store.findById(id)
     if (!target) return reply.code(404).send({ error: 'not_found' })
     // 最后一名管理员保护：封禁唯一活跃管理员会使后台无人可管（见审查 #10/#11）。
-    if (target.role === 'admin' && parsed.data.status === 'disabled' && activeAdminCount() <= 1) {
+    // 仅当目标**当前就是活跃**管理员才计入——再次封禁一个已封禁的管理员不减少活跃数，不应误拦 last_admin_protected
+    // （与 /role 端点同一修复口径，见复审 #6；此前 status 端点漏了 target.status==='active' 这一环）。
+    if (target.role === 'admin' && target.status === 'active' && parsed.data.status === 'disabled' && activeAdminCount() <= 1) {
       return reply.code(400).send({ error: 'last_admin_protected' })
     }
     // 封禁即吊销会话（severSessions 与批量封禁/force-logout 同口径：删 refresh + 递增 tokenVersion，

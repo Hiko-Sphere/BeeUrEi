@@ -225,6 +225,11 @@ describe('admin + reports', () => {
     const banEve = await app.inject({ method: 'POST', url: `/api/admin/users/${eveId}/status`, headers: adminAuth, payload: { status: 'disabled' } })
     expect(banEve.statusCode).toBe(200)
 
+    // 回归：再次封禁**已封禁**的 eve（此刻只剩 root 一名活跃管理员）不应误报 last_admin_protected——
+    // 已封禁的 admin 不在活跃数里，重复封禁是无害 no-op，绝不能因"活跃数≤1"被拦（与 /role 端点同口径，复审 #6）。
+    const reBanEve = await app.inject({ method: 'POST', url: `/api/admin/users/${eveId}/status`, headers: adminAuth, payload: { status: 'disabled' } })
+    expect(reBanEve.statusCode).toBe(200)
+
     // eve 被封后只剩 root 一名活跃管理员：降级 root 角色 → 最后一名保护 400
     const demoteLast = await app.inject({ method: 'POST', url: `/api/admin/users/${adminId}/role`, headers: adminAuth, payload: { role: 'helper' } })
     // 注：root 改自己角色本就被 cannot_change_own_role 拦截（400），此处验证仍是 400

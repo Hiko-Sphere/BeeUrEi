@@ -15,6 +15,10 @@ export function playHelpChime(): void {
     const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
     if (!Ctor) return
     const ctx = new Ctor()
+    // 现代浏览器无近期用户手势时把 AudioContext 生于 **suspended** 态（不抛错、排了程却不发声）——必须显式
+    // resume 才能真正响起。与 playEmergencyChime 同一修复（那处已修、此处曾漏）：待命志愿者靠这声察觉新求助，
+    // suspended 静默会让盲人在队列里干等而志愿者毫无听觉提示。页面已有过手势→resume 成功；确无→仍有 toast 视觉兜底。
+    void ctx.resume().catch(() => {})
     const t0 = ctx.currentTime
     for (let i = 0; i < 2; i++) {
       const osc = ctx.createOscillator()

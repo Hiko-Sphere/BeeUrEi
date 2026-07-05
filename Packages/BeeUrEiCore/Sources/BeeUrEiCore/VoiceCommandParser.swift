@@ -119,7 +119,7 @@ public enum VoiceCommandParser {
         if has(["保质期", "有效期", "生产日期", "保存期", "赏味期", "读日期", "看日期", "包装日期", "过期", "expir", "best before", "use by", "shelf life"]) { return .readDates }
         if has(["几号", "今天几号", "日期", "星期几", "礼拜几", "周几", "今天星期", "today's date", "what's the date", "what day", "what date"]) { return .date }
         // 原路返回（面包屑折返）须在回家/去公司之前：使"带我沿原路回家"走折返而非回家（复审 F2）。
-        if has(["原路返回", "返回出发", "带我回去", "沿原路", "go back", "take me back", "backtrack"]) { return .goHome }
+        if has(["原路返回", "返回出发", "带我回去", "沿原路", "go back", "take me back", "backtrack", "retrace", "the way i came"]) { return .goHome }
         // 回家/去公司：导航到**已保存的**家/公司地址。用**整句匹配**（去礼貌前后缀后恰好是这些短语），而非子串——
         // 否则"带我去公司附近的药店"（含"去公司"）会被误当"去公司"快捷、导去错地方（复审 F1）。须在步行导航之前
         // （否则"去公司"被 parseDestination 当搜"公司"这个名字）；transit（"坐公交去公司"）在更前，故仍走公交。

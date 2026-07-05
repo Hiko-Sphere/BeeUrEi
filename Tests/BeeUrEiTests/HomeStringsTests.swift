@@ -116,6 +116,9 @@ final class HomeStringsTests: XCTestCase {
             ("光线怎么样", "how bright is it", .readLight),
             ("前方有什么", "what's ahead", .ahead),
             ("读整页", "read the whole page", .readFullPage),
+            // 原路返回（面包屑折返，对标 Soundscape/BlindSquare）：迷路/失去方向时沿来路退回，是关键安全能力，
+            // 却是 43 条命令里唯一没进自述的——盲人无从靠语音发现。注意区别于「回家」(navigateHome=导航到已存的家)。
+            ("原路返回", "retrace my steps", .goHome),
         ]
         for c in cases {
             XCTAssertTrue(zh.contains(c.zh), "中文自述缺『\(c.zh)』——盲人无从发现该能力")

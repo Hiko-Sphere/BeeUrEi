@@ -19,6 +19,7 @@ final class VoiceCommandParserTests: XCTestCase {
             ("光线怎么样", .readLight), ("灯开着吗", .readLight), ("how bright is it", .readLight),
             ("今天天气怎么样", .weather), ("会下雨吗", .weather), ("what's the weather", .weather),
             ("原路返回", .goHome), ("带我回去", .goHome), ("take me back", .goHome),
+            ("retrace my steps", .goHome), ("retrace my route", .goHome), ("go back the way i came", .goHome),
             ("读整页", .readFullPage), ("读一下整页文档", .readFullPage), ("read the whole page", .readFullPage),
             ("读一下这段文字", .readText), ("念一下", .readText), ("read this text", .readText),
             ("看看保质期", .readDates), ("这个生产日期是多少", .readDates), ("best before when", .readDates), ("has this expired", .readDates),

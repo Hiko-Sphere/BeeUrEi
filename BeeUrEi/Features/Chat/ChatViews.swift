@@ -367,6 +367,11 @@ struct ChatView: View {
                 if isGroup, !mine {
                     Text(senderName(m.fromId)).font(.caption.bold()).foregroundStyle(Color.beeHoney)
                 }
+                // 转发标记（WhatsApp 式，气泡上方）：让收件人知道非发送者原创。视觉呈现；a11y 并入气泡整体标签(bubbleA11y)。
+                if m.forwarded == true, m.kind != "recalled" {
+                    Text("↪ " + ChatStrings.forwardedTag(lang)).font(.caption2).italic()
+                        .foregroundStyle(.secondary).accessibilityHidden(true)
+                }
                 bubbleContent(m, mine: mine)
                     .padding(.horizontal, m.kind == "image" || LocationPayload.from(m) != nil ? 4 : 14)
                     .padding(.vertical, m.kind == "image" || LocationPayload.from(m) != nil ? 4 : 10)
@@ -387,6 +392,10 @@ struct ChatView: View {
                     .contextMenu { if m.kind != "recalled" { bubbleMenu(m, mine: mine) } }
                 HStack(spacing: 4) {
                     Text(ChatStrings.timeFormat(m.createdAt)).font(.caption2).foregroundStyle(.secondary)
+                    // 已编辑标记（与 web 对齐）：视觉呈现；a11y 并入气泡整体标签(bubbleA11y)。
+                    if m.editedAt != nil, m.kind != "recalled" {
+                        Text(ChatStrings.editedTag(lang)).font(.caption2).foregroundStyle(.secondary).accessibilityHidden(true)
+                    }
                     if mine && m.kind != "recalled" && !isGroup {
                         // 已读回执（iMessage 式）：✓ 已送达 / ✓✓ 已读。群聊按人已读，不显示逐条回执。
                         Image(systemName: m.readAt != nil ? "checkmark.circle.fill" : "checkmark.circle")
@@ -533,6 +542,10 @@ struct ChatView: View {
         let from = m.fromId == myId ? ChatStrings.me(lang) : (isGroup ? senderName(m.fromId) : target.title)
         var label = ChatStrings.bubbleA11y(from: from, content: content,
                                            time: ChatStrings.timeFormat(m.createdAt), lang)
+        // 转发/编辑并入盲人所听的整体标签：上方视觉标签 accessibilityHidden，故此处必须补——否则盲人完全听不到
+        // 这条是"已转发"（防误信链式内容）或"已编辑"。撤回消息不带（内容已是"已撤回"）。
+        label += ChatStrings.forwardedEditedA11y(forwarded: m.forwarded == true && m.kind != "recalled",
+                                                 edited: m.editedAt != nil && m.kind != "recalled", lang)
         if m.fromId == myId, m.kind != "recalled", !isGroup {
             label += "，" + (m.readAt != nil ? ChatStrings.read(lang) : ChatStrings.delivered(lang))
         }

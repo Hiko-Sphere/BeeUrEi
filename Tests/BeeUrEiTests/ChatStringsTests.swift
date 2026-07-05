@@ -68,4 +68,32 @@ final class ChatStringsTests: XCTestCase {
             XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(s)")
         }
     }
+
+    func testForwardedEditedTagsBilingual() {
+        XCTAssertEqual(ChatStrings.forwardedTag(.zh), "已转发")
+        XCTAssertEqual(ChatStrings.forwardedTag(.en), "Forwarded")
+        XCTAssertEqual(ChatStrings.editedTag(.zh), "已编辑")
+        XCTAssertEqual(ChatStrings.editedTag(.en), "Edited")
+    }
+
+    func testForwardedEditedA11ySuffixComposition() {
+        // 盲人靠此后缀听到"已转发/已编辑"（视觉标签 accessibilityHidden）。空/单/双组合都对。
+        XCTAssertEqual(ChatStrings.forwardedEditedA11y(forwarded: false, edited: false, .zh), "")
+        XCTAssertEqual(ChatStrings.forwardedEditedA11y(forwarded: true, edited: false, .zh), "，已转发")
+        XCTAssertEqual(ChatStrings.forwardedEditedA11y(forwarded: false, edited: true, .en), "，Edited")
+        XCTAssertEqual(ChatStrings.forwardedEditedA11y(forwarded: true, edited: true, .zh), "，已转发，已编辑")
+    }
+
+    func testChatMessageDecodesForwardedAndEditedAt() throws {
+        // 服务端下发 forwarded/editedAt，iOS 须解码——此前 ChatMessageInfo 缺这两字段，盲人听不到"已转发/已编辑"。
+        let json = #"{"id":"m1","fromId":"a","toId":"b","kind":"text","text":"hi","createdAt":1000,"forwarded":true,"editedAt":2000}"#
+        let m = try JSONDecoder().decode(ChatMessageInfo.self, from: Data(json.utf8))
+        XCTAssertEqual(m.forwarded, true)
+        XCTAssertEqual(m.editedAt, 2000)
+        // 缺这两字段的普通消息（向后兼容 + 绝大多数消息）→ nil，不崩。
+        let plain = #"{"id":"m2","fromId":"a","toId":"b","kind":"text","text":"hi","createdAt":1000}"#
+        let m2 = try JSONDecoder().decode(ChatMessageInfo.self, from: Data(plain.utf8))
+        XCTAssertNil(m2.forwarded)
+        XCTAssertNil(m2.editedAt)
+    }
 }

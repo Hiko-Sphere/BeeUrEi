@@ -176,6 +176,8 @@ struct ChatMessageInfo: Codable, Sendable, Identifiable, Equatable {
     var readAt: Int?
     var reaction: String? // 表情回应（单 emoji，最新覆盖）
     var groupId: String?  // 群消息所属群（单聊为 nil）
+    var forwarded: Bool?  // 转发标记：让收件人知道非发送者原创（含盲人——防误信转发的链式内容）
+    var editedAt: Int?    // 编辑时刻（ms）；非 nil = 发出后被改过，标"已编辑"（与 web 对齐）
 }
 
 /// 群组（WhatsApp 式：群主建群/加人/踢人/解散，成员可退群）。

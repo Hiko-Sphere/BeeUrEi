@@ -109,6 +109,14 @@ enum ChatStrings {
     static func reactionA11y(_ emoji: String, _ l: Language) -> String {
         l == .zh ? "对方回应了\(emoji)" : "Reacted with \(emoji)"
     }
+    /// 转发标记（视觉标签 + a11y 后缀）：让收件人知道这条**非发送者原创**——盲人靠 a11y 听到，防误信链式转发内容。
+    static func forwardedTag(_ l: Language) -> String { l == .zh ? "已转发" : "Forwarded" }
+    /// 编辑标记（视觉 + a11y）：消息发出后被改过（与 web "已编辑" 对齐；盲人此前完全听不到消息被改过）。
+    static func editedTag(_ l: Language) -> String { l == .zh ? "已编辑" : "Edited" }
+    /// 转发/编辑并入气泡整体 a11y 标签的后缀（视觉标签 accessibilityHidden，故盲人只经此听到）。可单测。
+    static func forwardedEditedA11y(forwarded: Bool, edited: Bool, _ l: Language) -> String {
+        (forwarded ? "，" + forwardedTag(l) : "") + (edited ? "，" + editedTag(l) : "")
+    }
     /// 自己回应/取消/失败的**语音反馈**：盲人看不到表情角标是否加上，长按选表情后须有声确认操作是否生效
     /// （此前成功/失败都静默，盲人完全不知按下的回应有没有成）。added 带上 emoji 便于复核选对了没。
     static func reactionAdded(_ emoji: String, _ l: Language) -> String {

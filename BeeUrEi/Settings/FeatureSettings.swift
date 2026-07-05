@@ -101,7 +101,10 @@ struct FeatureSettings {
     /// 恢复"播报/无障碍"相关设置为默认（不动避障/导航功能开关与开发者模式）。
     static func resetToDefaults(_ defaults: UserDefaults = .standard) {
         for key in ["feature.conciseAnnouncements", "feature.speechRate", "feature.verbosity",
-                    "feature.clearPathConfirm", "feature.highContrast", "feature.proximitySonar"] {
+                    "feature.clearPathConfirm", "feature.highContrast", "feature.proximitySonar",
+                    // 空间音方向提示：与接近声呐同属"音效播报"偏好、同在设置的同一区，此前漏在恢复默认之外——
+                    // 用户关掉它后点"恢复默认"却不复位，与相邻的接近声呐行为不一致。补齐。
+                    "feature.spatialObstacleCues"] {
             defaults.removeObject(forKey: key)
         }
     }

@@ -193,7 +193,7 @@ function ModerateDialog({ r, onClose, onModerate }: { r: AdminReport; onClose: (
   )
 }
 
-function UsersTab() {
+export function UsersTab() {
   const { t, lang } = useI18n()
   const toast = useToast()
   const [q, setQ] = useState('')
@@ -224,7 +224,13 @@ function UsersTab() {
                 <li key={u.id} className="flex items-center gap-3 px-4 py-3">
                   <Avatar name={u.displayName} src={u.avatar} size={38} />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5"><span className="truncate font-medium">{u.displayName}</span>{u.online && <span className="h-2 w-2 rounded-full bg-ok" />}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate font-medium">{u.displayName}</span>
+                      {u.online && <span className="h-2 w-2 shrink-0 rounded-full bg-ok" title={t('在线', 'Online')} />}
+                      {/* 实名认证徽标（moderation 上下文）：已实名=有真实证件在案、可追责；未实名=匿名可弃号——审核处置的重要参考。
+                          服务端 publicUser 一直下发 verified，此前 AdminUser 类型丢了、列表也没显示。 */}
+                      {u.verified && <span className="shrink-0 rounded bg-ok/15 px-1.5 py-0.5 text-[10px] font-medium text-ok" title={t('已通过实名认证', 'Identity verified')}>{t('已实名', 'Verified')}</span>}
+                    </div>
                     <div className="truncate text-xs text-faint">@{u.username} · {roleLabel(u.role, t)} · {fmtTime(u.createdAt, lang)}</div>
                   </div>
                   <Pill tone={u.status === 'active' ? 'ok' : 'danger'}>{u.status === 'active' ? t('活跃', 'Active') : t('停用', 'Disabled')}</Pill>

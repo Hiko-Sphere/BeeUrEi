@@ -370,7 +370,7 @@ export interface AdminOverview {
   uptimeSeconds: number
   nowMs: number
 }
-export interface AdminUser { id: string; username: string; displayName: string; role: string; status: string; avatar?: string | null; createdAt: number; online?: boolean; hasEmail?: boolean; hasPhone?: boolean; emailVerified?: boolean; appleLinked?: boolean }
+export interface AdminUser { id: string; username: string; displayName: string; role: string; status: string; avatar?: string | null; createdAt: number; online?: boolean; hasEmail?: boolean; hasPhone?: boolean; emailVerified?: boolean; appleLinked?: boolean; verified?: boolean }
 export interface AdminReport { id: string; reporterId: string; reporterName: string; targetUserId: string; targetName: string; reason: string; status: string; decision?: string | null; callId?: string | null; evidenceRecordingId?: string | null; createdAt: number; resolvedAt?: number | null; resolvedByName?: string | null }
 export interface AdminActiveCall { callId: string; startedAt: number; durationSec: number; hasAdminObserver: boolean; members: { userId: string; role: string; name: string; online: boolean }[] }
 

@@ -39,6 +39,13 @@ export const pushStrings = {
     l === 'en' ? 'Friend request accepted' : '好友请求已通过',
   friendAcceptedBody: (name: string, l: PushLang): string =>
     l === 'en' ? `${name} accepted your request` : `${name} 接受了你的请求`,
+  emergencyContactSetTitle: (l: PushLang): string =>
+    l === 'en' ? "You're now an emergency contact" : '你被设为紧急联系人',
+  // 让被设为紧急联系人者**知情**其责任：遇 SOS/摔倒/未报到会收到该用户的求助告警——否则首次告警到来时
+  // 一头雾水、可能忽略（误了应急响应）。与 friend_request/accepted 同为关系状态变更须通知当事方。
+  emergencyContactSetBody: (name: string, l: PushLang): string =>
+    l === 'en' ? `${name} set you as an emergency contact — you'll receive their emergency alerts`
+               : `${name} 把你设为紧急联系人，其遇到紧急情况时你会收到求助告警`,
   routeAddedTitle: (l: PushLang): string =>
     l === 'en' ? 'A route was added for you' : '有人为你添加了路线',
   routeAddedBody: (name: string, routeName: string, l: PushLang): string =>

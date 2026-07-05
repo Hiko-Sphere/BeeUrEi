@@ -254,4 +254,33 @@ describe('family + emergency', () => {
     expect((await a.inject({ method: 'POST', url: `/api/family/links/${id}/emergency`, headers: auth(owner.token), payload: {} })).statusCode).toBe(400)
     await a.close()
   })
+
+  it('被设为紧急联系人时通知对方（仅 false→true 一次；取消/重复设 true 不扰）', async () => {
+    const { a, reg } = setup()
+    const owner = await reg('ecowner', 'blind')
+    const contact = await reg('eccontact', 'family')
+    const auth = (t: string) => ({ authorization: `Bearer ${t}` })
+    const l = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(owner.token), payload: { username: 'eccontact', relation: '家人', isEmergency: false } })
+    const id = l.json().link.id as string
+    await a.inject({ method: 'POST', url: `/api/family/links/${id}/accept`, headers: auth(contact.token) })
+    const setCount = async () => ((await a.inject({ method: 'GET', url: '/api/notifications', headers: auth(contact.token) })).json().notifications as { kind: string; body: string; data?: { linkId?: string } }[]).filter((n) => n.kind === 'emergency_contact_set')
+    // 建链时 isEmergency:false → 尚无"紧急联系人"通知
+    expect(await setCount()).toHaveLength(0)
+    // false→true：通知对方一次，含 owner 名 + linkId
+    await a.inject({ method: 'POST', url: `/api/family/links/${id}/emergency`, headers: auth(owner.token), payload: { isEmergency: true } })
+    const set = await setCount()
+    expect(set).toHaveLength(1)
+    expect(set[0].body).toContain('ecowner')     // owner displayName（缺省=username）
+    expect(set[0].data?.linkId).toBe(id)
+    // 重复设 true（已是 true）：不再通知
+    await a.inject({ method: 'POST', url: `/api/family/links/${id}/emergency`, headers: auth(owner.token), payload: { isEmergency: true } })
+    expect(await setCount()).toHaveLength(1)
+    // 取消 true→false：不通知
+    await a.inject({ method: 'POST', url: `/api/family/links/${id}/emergency`, headers: auth(owner.token), payload: { isEmergency: false } })
+    expect(await setCount()).toHaveLength(1)
+    // 再次 false→true：又通知一次（第二次真正新设）
+    await a.inject({ method: 'POST', url: `/api/family/links/${id}/emergency`, headers: auth(owner.token), payload: { isEmergency: true } })
+    expect(await setCount()).toHaveLength(2)
+    await a.close()
+  })
 })

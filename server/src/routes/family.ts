@@ -113,6 +113,19 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: P
     if (!link) return reply.code(404).send({ error: 'not_found' })
     if (link.ownerId !== meId) return reply.code(403).send({ error: 'not_owner' }) // 仅 owner 可指定其紧急联系人
     store.createLink({ ...link, isEmergency: parsed.data.isEmergency }) // 读-合并-写（INSERT OR REPLACE，同 accept 改 status）
+    // 被设为紧急联系人须知情（会收到该用户的 SOS/摔倒/未报到告警）：仅在 false→true 真正"新设"时通知对方一次，
+    // 取消/重复设 true 不扰。与 friend_request/accepted 同口径（关系状态变更通知当事方）；notifyUser 双通道+勿扰兜底。
+    if (parsed.data.isEmergency && link.isEmergency !== true) {
+      const contactId = counterpartId(link, meId) // owner 之外的一方=被设者
+      const owner = store.findById(meId)
+      const contact = store.findById(contactId)
+      if (owner && contact) {
+        const l = pushLang(contact.language)
+        notifyUser(store, push, contactId, 'emergency_contact_set',
+                   pushStrings.emergencyContactSetTitle(l), pushStrings.emergencyContactSetBody(owner.displayName, l),
+                   { linkId: link.id })
+      }
+    }
     return { link: viewLink(store, { ...link, isEmergency: parsed.data.isEmergency }, meId, isOnline) }
   })
 

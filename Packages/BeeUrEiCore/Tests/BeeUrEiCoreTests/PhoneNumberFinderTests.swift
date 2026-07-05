@@ -70,4 +70,15 @@ final class PhoneNumberFinderTests: XCTestCase {
         XCTAssertTrue(PhoneNumberFinder.find(texts: ["定位 400.820.88.20"]).isEmpty) // 4 组点分=坐标/IP，拒
         XCTAssertEqual(PhoneNumberFinder.find(texts: ["客服 400-820-8820"]), ["400-820-8820"]) // 真 400 号仍识别
     }
+
+    /// 无印刷分隔的 400/800 裸号补 3-3-4 分组——否则 TTS 把十位数连读成"四十亿…"，盲人听不清也记不住。
+    /// 印刷已带分隔的原样保留（不夺走用户认得的 400-XXX-XXXX 形态）。
+    func testBareServiceNumberGroupedForTTS() {
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["客服热线4008208820"]), ["400 820 8820"]) // 裸 400→分组
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["8008201234"]), ["800 820 1234"])           // 裸 800→分组
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["客服 400-820-8820"]), ["400-820-8820"])   // 带分隔→原样
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["400 820 8820"]), ["400 820 8820"])         // 带空格→原样（不重复分组）
+        // 同号裸写与带分隔在同一段：按纯数字去重，只留先出现者（裸号在前→分组形）。
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["4008208820", "400-820-8820"]), ["400 820 8820"])
+    }
 }

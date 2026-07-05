@@ -40,6 +40,11 @@ public enum PhoneNumberFinder {
         "\(digits.prefix(3)) \(digits.dropFirst(3).prefix(4)) \(digits.dropFirst(7))"
     }
 
+    /// 400/800 客服号（10 位=3 前缀+3+4）分 3-3-4，TTS 逐组念清（同 groupedMobile 取向）。入参须为 10 位纯数字。
+    static func groupedService(_ digits: String) -> String {
+        "\(digits.prefix(3)) \(digits.dropFirst(3).prefix(3)) \(digits.dropFirst(6))"
+    }
+
     /// 校验并格式化：命中电话样式返回可读串，否则 nil。
     static func validateAndFormat(_ span: String) -> String? {
         let hasPlus = span.contains("+")
@@ -66,7 +71,9 @@ public enum PhoneNumberFinder {
         // 否则 "400.820.88.20"（坐标/IP-like，数字恰 4008208820）会被误当客服号读给盲人（对抗复审 MED）。
         if d.count == 10, (digits.hasPrefix("400") || digits.hasPrefix("800")),
            span.filter({ $0 == "." }).count < 3 {
-            return trimmed
+            // 印刷已带分隔（400-820-8820）→ 原样保留（读屏本就分组清晰、且是用户认得的形态）；无分隔的裸号
+            // （4008208820）→ 补 3-3-4 分组，否则 TTS 把十位数连读成"四十亿…"、盲人听不清也记不住（同手机取向）。
+            return trimmed.contains(where: { !$0.isNumber }) ? trimmed : groupedService(digits)
         }
         // 国际：带 + 且 8-15 位。
         if hasPlus, d.count >= 8, d.count <= 15 { return trimmed }

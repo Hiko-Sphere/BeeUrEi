@@ -19,6 +19,24 @@ export function qualityFromRtt(rtt: number | undefined): Quality {
   return rtt < 0.15 ? 'good' : rtt < 0.4 ? 'fair' : 'weak'
 }
 
+/// 区间丢包率(0..1)判定质量档：<3%→good；<8%→fair；否则 weak。无数据/非有限→unknown（不降级）。
+/// 丢包是通话可听度的**主导因素**：RTT 再低，8% 丢包也让语音断续、盲人听不清导航指引。
+export function qualityFromLoss(lossFraction: number | undefined): Quality {
+  if (lossFraction === undefined || !Number.isFinite(lossFraction)) return 'unknown'
+  const f = Math.max(0, lossFraction)
+  return f < 0.03 ? 'good' : f < 0.08 ? 'fair' : 'weak'
+}
+
+/// 综合通话质量：**取 RTT 档与丢包档中更差的一档**（行业通例——MOS 同时受时延与丢包拖累，
+/// 任一变差都直接影响可听度）。任一信号缺失(unknown)时以另一有信息的为准；两者皆缺才 unknown。
+/// 抽成纯函数便于单测；实采样的丢包区间率由 Call.pollStats 用累计计数器差分算出后喂入。
+export function qualityFromStats(rtt: number | undefined, lossFraction: number | undefined): Quality {
+  const rank: Record<Quality, number> = { unknown: -1, good: 0, fair: 1, weak: 2 }
+  const a = qualityFromRtt(rtt)
+  const b = qualityFromLoss(lossFraction)
+  return rank[a] >= rank[b] ? a : b // 取更差者；unknown(-1) 天然让位于任何已知档
+}
+
 export interface CallPeer { userId?: string; name?: string; avatar?: string | null }
 
 export interface CallCallbacks {
@@ -84,6 +102,7 @@ export class CallEngine {
   private hasRemoteDesc = false
   private pendingCandidates: RTCIceCandidateInit[] = []
   private statsTimer: ReturnType<typeof setInterval> | null = null
+  private prevPackets?: { received: number; lost: number } // 上一轮累计收/丢包数，用于算区间丢包率
   private iceWasReconnecting = false // ICE 曾进入 disconnected（喷过 'reconnecting'）→ 恢复时须主动喷回 'connected' 清横幅
   private ended = false
   private wsClosedByUs = false
@@ -516,10 +535,25 @@ export class CallEngine {
     try {
       const report = await this.pc.getStats()
       let rtt: number | undefined
+      let received: number | undefined, lost: number | undefined
       report.forEach((s) => {
         if (s.type === 'candidate-pair' && (s.nominated || s.state === 'succeeded') && typeof s.currentRoundTripTime === 'number') rtt = s.currentRoundTripTime
+        // 入站音频丢包（getStats 的 packetsReceived/packetsLost 是**累计**计数器，需相邻两轮差分才得区间率）。
+        if (s.type === 'inbound-rtp' && s.kind === 'audio') {
+          if (typeof s.packetsReceived === 'number') received = s.packetsReceived
+          if (typeof s.packetsLost === 'number') lost = s.packetsLost
+        }
       })
-      this.cb.onQuality?.(qualityFromRtt(rtt))
+      let lossFraction: number | undefined
+      if (received !== undefined && lost !== undefined && this.prevPackets) {
+        const dRecv = received - this.prevPackets.received
+        const dLost = lost - this.prevPackets.lost
+        const total = dRecv + dLost
+        // 仅在两个增量都非负（防 SSRC 重置/重连导致计数器回退→假丢包）且本轮确有收到包时才算率。
+        if (dRecv >= 0 && dLost >= 0 && total > 0) lossFraction = dLost / total
+      }
+      if (received !== undefined && lost !== undefined) this.prevPackets = { received, lost }
+      this.cb.onQuality?.(qualityFromStats(rtt, lossFraction))
     } catch { /* ignore */ }
   }
 

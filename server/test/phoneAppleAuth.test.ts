@@ -6,9 +6,11 @@ import { normalizePhone, type AppleTokenVerifier } from '../src/auth/apple'
 const auth = (t: string) => ({ authorization: `Bearer ${t}` })
 
 describe('手机号归一化', () => {
-  it('去空格横线括号、保留前导加号、长度校验', () => {
+  it('去空格横线括号点、保留前导加号、长度校验', () => {
     expect(normalizePhone('138 0013 8000')).toBe('13800138000')
     expect(normalizePhone('+86-138(0013)8000')).toBe('+8613800138000')
+    expect(normalizePhone('305.555.0199')).toBe('3055550199')          // 点分隔（美/欧常见）也归一
+    expect(normalizePhone('+1 (305) 555.0199')).toBe('+13055550199')   // 括号+点+空格混排
     expect(normalizePhone('12345')).toBeNull()        // 太短
     expect(normalizePhone('abc12345678')).toBeNull()  // 非数字
     expect(normalizePhone('1234567890123456')).toBeNull() // 太长

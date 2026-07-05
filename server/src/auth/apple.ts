@@ -62,9 +62,9 @@ export function createAppleVerifier(audience: string): AppleTokenVerifier {
   }
 }
 
-/// 手机号归一化：去空格/横线/括号，允许前导 +，6–15 位数字。非法返回 null。
+/// 手机号归一化：去空格/横线/括号/点分隔（"305.555.0199" 等国际常见写法），允许前导 +，6–15 位数字。非法返回 null。
 export function normalizePhone(raw: string): string | null {
-  const cleaned = raw.replace(/[\s\-()]/g, '')
+  const cleaned = raw.replace(/[\s().-]/g, '')
   if (!/^\+?\d{6,15}$/.test(cleaned)) return null
   return cleaned
 }

@@ -70,6 +70,14 @@ struct FeatureSettings {
         set { defaults.set(newValue, forKey: spatialCuesKey) }
     }
 
+    /// 震动反馈（默认开）：障碍/转向按危险等级给可区分的震动节奏（HapticFeedback）——嘈杂/不便听语音时的冗余
+    /// 安全通道。部分用户嫌震动打扰或想省电可关；与音频提示通道（proximitySonar/spatialObstacleCues）一样可控。
+    private let hapticsKey = "feature.hapticsEnabled"
+    var hapticsEnabled: Bool {
+        get { defaults.object(forKey: hapticsKey) == nil ? true : defaults.bool(forKey: hapticsKey) }
+        set { defaults.set(newValue, forKey: hapticsKey) }
+    }
+
     /// 主页避障屏幕常亮时长（秒）：0 = 永久不息屏（避障持续运行）；>0 = 常亮该秒数后允许系统自动息屏(省电)。
     /// 默认 0（永久不息屏）——避障是安全攸关功能，默认不让它在使用中息屏中断。
     private let keepAwakeKey = "feature.keepAwakeSeconds"
@@ -104,7 +112,7 @@ struct FeatureSettings {
                     "feature.clearPathConfirm", "feature.highContrast", "feature.proximitySonar",
                     // 空间音方向提示：与接近声呐同属"音效播报"偏好、同在设置的同一区，此前漏在恢复默认之外——
                     // 用户关掉它后点"恢复默认"却不复位，与相邻的接近声呐行为不一致。补齐。
-                    "feature.spatialObstacleCues"] {
+                    "feature.spatialObstacleCues", "feature.hapticsEnabled"] {
             defaults.removeObject(forKey: key)
         }
     }

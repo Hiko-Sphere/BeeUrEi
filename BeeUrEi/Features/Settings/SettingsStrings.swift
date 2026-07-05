@@ -131,6 +131,10 @@ enum SettingsStrings {
     // MARK: 无障碍
 
     static func highContrastToggle(_ l: Language) -> String { l == .zh ? "高对比大字状态条" : "High-contrast large status bar" }
+    static func hapticsToggle(_ l: Language) -> String { l == .zh ? "震动反馈" : "Vibration feedback" }
+    static func hapticsToggleHint(_ l: Language) -> String {
+        l == .zh ? "障碍与转向按危险等级震动；关闭后不再震动（省电或嫌打扰时）" : "Vibrates for obstacles and turns by danger level; turn off to stop all vibration (saves battery / avoids distraction)"
+    }
     static func previewHaptic(_ l: Language) -> String { l == .zh ? "试一下震动" : "Try the vibration" }
     static func previewHapticHint(_ l: Language) -> String {
         l == .zh ? "播放一次危险等级的震动" : "Plays one danger-level vibration"

@@ -9,21 +9,33 @@ final class FeatureSettingsTests: XCTestCase {
         return (UserDefaults(suiteName: suite)!, suite)
     }
 
-    func testResetToDefaultsRestoresBothAudioCuePreferences() {
+    func testResetToDefaultsRestoresAllFeedbackChannelPreferences() {
         let (d, suite) = freshDefaults()
         defer { UserDefaults().removePersistentDomain(forName: suite) }
         var f = FeatureSettings(defaults: d)
-        // 两个音效播报偏好都改离默认：spatial 默认开→关、sonar 默认关→开。
+        // 三个反馈通道偏好都改离默认：spatial 默认开→关、sonar 默认关→开、haptics 默认开→关。
         f.spatialObstacleCues = false
         f.proximitySonar = true
+        f.hapticsEnabled = false
         XCTAssertFalse(FeatureSettings(defaults: d).spatialObstacleCues) // 确已改
         XCTAssertTrue(FeatureSettings(defaults: d).proximitySonar)
+        XCTAssertFalse(FeatureSettings(defaults: d).hapticsEnabled)
 
         FeatureSettings.resetToDefaults(d)
 
-        // "恢复默认"须把**两个**音效播报偏好都归位（此前漏了 spatialObstacleCues，与相邻的接近声呐不一致）。
+        // "恢复默认"须把**全部**反馈通道偏好归位（震动是新加的通道，须与相邻音效偏好一致进 reset，别漏）。
         XCTAssertTrue(FeatureSettings(defaults: d).spatialObstacleCues, "空间音方向提示应恢复默认(开)")
         XCTAssertFalse(FeatureSettings(defaults: d).proximitySonar, "接近声呐应恢复默认(关)")
+        XCTAssertTrue(FeatureSettings(defaults: d).hapticsEnabled, "震动反馈应恢复默认(开)")
+    }
+
+    func testHapticsEnabledDefaultsTrueAndPersists() {
+        let (d, suite) = freshDefaults()
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        XCTAssertTrue(FeatureSettings(defaults: d).hapticsEnabled, "缺省(未设过)应为开——保持震动一直有的历史行为")
+        var f = FeatureSettings(defaults: d)
+        f.hapticsEnabled = false
+        XCTAssertFalse(FeatureSettings(defaults: d).hapticsEnabled, "关掉后须持久化(下次读仍关)")
     }
 
     func testResetDoesNotTouchFunctionToggles() {

@@ -22,6 +22,7 @@ struct SettingsView: View {
     // 外观与屏幕
     @State private var highContrastOn: Bool
     @State private var keepAwakeSeconds: Int
+    @State private var hapticsOn: Bool
 
     @State private var showTutorial = false
     @State private var showAvoidanceOffConfirm = false   // 关闭实时避障二次确认（安全攸关）
@@ -42,6 +43,7 @@ struct SettingsView: View {
         _briefReminderOn = State(initialValue: store.briefReminderSpeechEnabled)
         _highContrastOn = State(initialValue: f.highContrast)
         _keepAwakeSeconds = State(initialValue: f.keepAwakeSeconds)
+        _hapticsOn = State(initialValue: f.hapticsEnabled)
     }
 
     /// 设置页文案语言（E5）：每次渲染解析；切换「播报语言」后界面即时跟随。
@@ -228,10 +230,15 @@ struct SettingsView: View {
             .onChange(of: keepAwakeSeconds) { _, v in
                 var f = FeatureSettings(); f.keepAwakeSeconds = v
             }
-            Button(SettingsStrings.previewHaptic(lang)) {
-                previewHaptic.play(FeedbackEvent(priority: .obstacle, speech: nil))
+            Toggle(SettingsStrings.hapticsToggle(lang), isOn: $hapticsOn)
+                .onChange(of: hapticsOn) { _, v in var f = FeatureSettings(); f.hapticsEnabled = v }
+                .accessibilityHint(SettingsStrings.hapticsToggleHint(lang))
+            if hapticsOn {
+                Button(SettingsStrings.previewHaptic(lang)) {
+                    previewHaptic.play(FeedbackEvent(priority: .obstacle, speech: nil))
+                }
+                .accessibilityHint(SettingsStrings.previewHapticHint(lang))
             }
-            .accessibilityHint(SettingsStrings.previewHapticHint(lang))
         } header: {
             Text(SettingsStrings.displayScreenHeader(lang))
         } footer: {

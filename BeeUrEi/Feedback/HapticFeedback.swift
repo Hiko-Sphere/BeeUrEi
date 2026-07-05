@@ -20,6 +20,7 @@ final class HapticFeedback: FeedbackSink {
     }
 
     func play(_ event: FeedbackEvent) {
+        guard FeatureSettings().hapticsEnabled else { return } // 用户可关震动（省电/嫌打扰）；关了则障碍与转向震动都不播
         let pulses = HapticDesign.pattern(for: event.priority)
         guard let engine else {
             playFallback(event.priority)

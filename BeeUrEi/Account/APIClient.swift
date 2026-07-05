@@ -306,6 +306,7 @@ struct CallRecordInfo: Codable, Sendable, Identifiable {
     let callId: String
     let direction: String  // "outgoing" 呼出 / "incoming" 呼入
     let status: String     // "missed" 未接 / "answered" 已接 / "declined" 已拒绝
+    let peerId: String?    // 对端 userId：据此让通话记录可点进与其的聊天（跟进/回访）；已注销用户为 nil→不可点、无死链
     let peerName: String
     var peerAvatar: String?
     let createdAt: Double   // 毫秒时间戳

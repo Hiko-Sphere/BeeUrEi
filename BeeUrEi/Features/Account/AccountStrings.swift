@@ -89,6 +89,8 @@ enum AccountStrings {
                                           : (l == .zh ? "未接来电" : "Missed call")
         }
     }
+    /// 通话记录行可点进聊天时的读屏提示（与 web 整行链到 /chat 同义：跟进/回访）。
+    static func openChatHint(_ l: Language) -> String { l == .zh ? "轻点打开聊天" : "Tap to open chat" }
 
     // MARK: 找回密码
 

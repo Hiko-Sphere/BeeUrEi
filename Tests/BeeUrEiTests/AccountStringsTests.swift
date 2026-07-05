@@ -18,6 +18,26 @@ final class AccountStringsTests: XCTestCase {
         XCTAssertEqual(AccountStrings.roleName("admin", .zh), "admin") // 未知角色原样回显
     }
 
+    func testOpenChatHintBilingual() {
+        XCTAssertEqual(AccountStrings.openChatHint(.zh), "轻点打开聊天")
+        XCTAssertEqual(AccountStrings.openChatHint(.en), "Tap to open chat")
+        XCTAssertFalse(AccountStrings.openChatHint(.en).contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
+
+    func testCallRecordDecodesPeerIdForTapThrough() throws {
+        // 服务端 /api/calls 下发 peerId（对端 userId），iOS 据此让通话记录整行点进聊天——此前缺解码，
+        // 通话记录是死列表（未接来电无法一键回访）。对端仍在→有 peerId；已注销→字段缺失/为 null→nil→不可点。
+        let json = #"{"id":"r1","callId":"c1","direction":"incoming","status":"missed","peerId":"u9","peerName":"妈妈","createdAt":1700000000000}"#
+        let rec = try JSONDecoder().decode(CallRecordInfo.self, from: Data(json.utf8))
+        XCTAssertEqual(rec.peerId, "u9")
+        XCTAssertTrue(rec.isMissed)
+        // 已注销用户：服务端 peerId 为 null / 或旧负载缺该键 → nil（视图渲染成不可点行，无死链）。
+        let gone = #"{"id":"r2","callId":"c2","direction":"outgoing","status":"answered","peerId":null,"peerName":"已注销用户","createdAt":1700000000000}"#
+        XCTAssertNil(try JSONDecoder().decode(CallRecordInfo.self, from: Data(gone.utf8)).peerId)
+        let legacy = #"{"id":"r3","callId":"c3","direction":"outgoing","status":"answered","peerName":"Bob","createdAt":1700000000000}"#
+        XCTAssertNil(try JSONDecoder().decode(CallRecordInfo.self, from: Data(legacy.utf8)).peerId)
+    }
+
     func testEnglishHasNoChinese() {
         let samples = [
             AccountStrings.loginExplain(.en), AccountStrings.forgotFooter(.en),

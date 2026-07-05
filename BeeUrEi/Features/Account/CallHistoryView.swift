@@ -2,6 +2,7 @@ import SwiftUI
 
 /// 通话记录：呼出 / 呼入 / 未接 / 已拒绝。
 struct CallHistoryView: View {
+    @Environment(AuthSession.self) private var session
     @State private var calls: [CallRecordInfo] = []
     @State private var loaded = false
     @State private var loadFailed = false
@@ -25,20 +26,18 @@ struct CallHistoryView: View {
                 .listRowBackground(Color.clear)
             } else {
                 ForEach(calls) { c in
-                    HStack(spacing: BeeSpacing.md) {
-                        AvatarView(dataURL: c.peerAvatar, name: c.peerName, size: 40)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(c.peerName).foregroundStyle(c.isMissed ? Color.beeDanger : .primary)
-                            HStack(spacing: 6) {
-                                Image(systemName: icon(c)).font(.caption2).foregroundStyle(tint(c))
-                                Text(statusText(c)).font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer()
-                        Text(timeText(c.createdAt)).font(.caption2).foregroundStyle(.secondary)
+                    // 对端仍在（peerId 非空）→ 整行点进与其的聊天（跟进/回访，同 web CallHistoryRow）；
+                    // 已注销用户 peerId 为 nil → 普通不可点行，无死链。
+                    if let pid = c.peerId {
+                        NavigationLink {
+                            ChatView(session: session, target: .direct(peerId: pid, name: c.peerName, avatar: c.peerAvatar))
+                        } label: { row(c) }
+                        .accessibilityLabel("\(c.peerName)，\(statusText(c))，\(timeText(c.createdAt))，\(AccountStrings.openChatHint(lang))")
+                    } else {
+                        row(c)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("\(c.peerName)，\(statusText(c))，\(timeText(c.createdAt))")
                     }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("\(c.peerName)，\(statusText(c))，\(timeText(c.createdAt))")
                 }
             }
         }
@@ -56,6 +55,21 @@ struct CallHistoryView: View {
             loadFailed = true
         }
         loaded = true
+    }
+
+    @ViewBuilder private func row(_ c: CallRecordInfo) -> some View {
+        HStack(spacing: BeeSpacing.md) {
+            AvatarView(dataURL: c.peerAvatar, name: c.peerName, size: 40)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(c.peerName).foregroundStyle(c.isMissed ? Color.beeDanger : .primary)
+                HStack(spacing: 6) {
+                    Image(systemName: icon(c)).font(.caption2).foregroundStyle(tint(c))
+                    Text(statusText(c)).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Text(timeText(c.createdAt)).font(.caption2).foregroundStyle(.secondary)
+        }
     }
 
     private func icon(_ c: CallRecordInfo) -> String {

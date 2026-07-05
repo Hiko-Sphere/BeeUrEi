@@ -59,17 +59,19 @@ self.addEventListener('push', (event) => {
   //   举报处置…经 notifyUser 双通道）自然消退。
   // - tag 去重：来电按 callId（同一通只留一条）、聊天按会话折叠（同 APNs threadId 口径）、
   //   告警按发起人、通用按类别折叠。
-  // 紧急判定**首选** data.type==='emergency_alert'（服务端对所有紧急类 web push 统一带的可靠标记，与 APNs
-  // extra 同口径）——避免"按 kind 枚举"漏网：SOS 首呼 kind=fall/crash/manual、升级 kind=emergency_alert、
-  // 安全报到未到 kind=checkin，三者事由各异却都是紧急。曾因只枚举 kind 漏掉 checkin，令 dead-man's switch
-  // 告警在家人浏览器里不 requireInteraction、且按 kind 折叠致多人漏报（见回归测试）。kind 检查保留作兜底。
+  // 紧急判定**只认** data.type==='emergency_alert'（服务端对所有紧急**告警**统一带的可靠标记，与 APNs extra 同
+  // 口径：SOS 首呼/升级/安全报到未到皆带）+ 来电 + 首呼具体事由 kind(fall/crash/manual)。
+  // **绝不**再用 indexOf('emergency') 宽匹配——它会把紧急告警的**后续**（emergency_clear 报平安 /
+  // emergency_responding 有人响应 / emergency_ack 已确认，皆非告警本身、皆不带 type）也误判为紧急，变成不
+  // 自动消退的常驻横幅：报平安"我没事了"本该是安心通知，却被弄成催人处理的红色常驻，与其语义相反。
   const urgent = d.type === 'emergency_alert'
     || d.kind === 'incoming_call' || d.kind === 'fall' || d.kind === 'crash' || d.kind === 'manual'
-    || (d.kind && String(d.kind).indexOf('emergency') === 0)
   var tag = 'beeurei'
   if (d.kind === 'incoming_call' && d.callId) tag = 'call-' + d.callId
   else if (d.kind === 'chat_message') tag = d.groupId ? 'group-' + d.groupId : 'dm-' + (d.fromId || '')
-  else if (urgent && d.fromId) tag = 'emergency-' + d.fromId
+  // 报平安(emergency_clear)与其告警共用 fromId 线：**替换**掉家人屏上那条常驻 SOS 横幅（"我没事了"取代警报），
+  // 但它本身不 requireInteraction（上面 urgent 不含它）——替换＋自动消退，正是"解除"该有的样子。
+  else if ((urgent || d.kind === 'emergency_clear') && d.fromId) tag = 'emergency-' + d.fromId
   else if (d.kind) tag = 'n-' + d.kind
   event.waitUntil(self.registration.showNotification(title, {
     body,

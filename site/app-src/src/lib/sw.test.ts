@@ -110,6 +110,23 @@ describe('sw.js 通知分级（push 处理器）', () => {
     expect(r.opts.tag).toBe('emergency-u9')
   })
 
+  it('报平安 emergency_clear：**非** requireInteraction（安心通知，非告警），但共用 fromId 线替换掉常驻 SOS 横幅', () => {
+    // 告警本身：requireInteraction + emergency-blindA。
+    const alert = firePush({ data: { kind: 'fall', type: 'emergency_alert', fromId: 'blindA' } })
+    expect(alert.opts.requireInteraction).toBe(true)
+    expect(alert.opts.tag).toBe('emergency-blindA')
+    // 同一人报平安：不 requireInteraction（自动消退），但同 tag → 替换掉上面那条常驻告警横幅。
+    const clear = firePush({ data: { kind: 'emergency_clear', fromId: 'blindA' } })
+    expect(clear.opts.requireInteraction).toBe(false)
+    expect(clear.opts.tag).toBe('emergency-blindA') // 与告警同线 → 取代而非并排
+  })
+
+  it('紧急后续（响应中/已确认）不再被 indexOf 误判为紧急常驻横幅', () => {
+    // 曾因 kind.indexOf("emergency")===0 把这些也判紧急；现只认 type=emergency_alert，它们无 type → 普通通知。
+    expect(firePush({ data: { kind: 'emergency_responding', fromId: 'r1' } }).opts.requireInteraction).toBe(false)
+    expect(firePush({ data: { kind: 'emergency_ack', fromId: 'a1' } }).opts.requireInteraction).toBe(false)
+  })
+
   it('来电 → requireInteraction + call tag；聊天/通用 → 自然消退 + 各自折叠 tag', () => {
     expect(firePush({ data: { kind: 'incoming_call', callId: 'c1' } }).opts)
       .toMatchObject({ requireInteraction: true, tag: 'call-c1' })

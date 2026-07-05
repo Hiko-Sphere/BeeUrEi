@@ -146,10 +146,10 @@ describe('SqliteStore (node:sqlite)', () => {
     const stores = [new SqliteStore(':memory:'), new MemoryStore()] as const
     for (const store of stores) {
       const full: import('../src/db/store').ChatMessage =
-        { id: 'r1', fromId: 'u1', toId: 'u2', kind: 'text', text: '收到', createdAt: 1000, reaction: '👍', editedAt: 1500, replyTo: 'orig1' }
+        { id: 'r1', fromId: 'u1', toId: 'u2', kind: 'text', text: '收到', createdAt: 1000, reaction: '👍', editedAt: 1500, replyTo: 'orig1', forwarded: true }
       store.createMessage(full)
       // 全字段完整还原。
-      expect(store.findMessage('r1')).toMatchObject({ reaction: '👍', editedAt: 1500, replyTo: 'orig1' })
+      expect(store.findMessage('r1')).toMatchObject({ reaction: '👍', editedAt: 1500, replyTo: 'orig1', forwarded: true })
       // 经列表路径（messagesBetween）同样保留 replyTo（不只 findMessage）。
       expect(store.messagesBetween('u1', 'u2', 10).find((m) => m.id === 'r1')?.replyTo).toBe('orig1')
       // 不设可选字段 → 读回 undefined（不是 null/0），两库一致（映射须用 ?? undefined）。
@@ -158,6 +158,7 @@ describe('SqliteStore (node:sqlite)', () => {
       expect(bare.replyTo).toBeUndefined()
       expect(bare.editedAt).toBeUndefined()
       expect(bare.reaction).toBeUndefined()
+      expect(bare.forwarded).toBeUndefined() // 未转发 → undefined（不是 false/0）
       // 编辑更新后 editedAt 落库并读回（updateMessage 路径）。
       store.updateMessage('r2', { text: '改了', editedAt: 2500 })
       expect(store.findMessage('r2')).toMatchObject({ text: '改了', editedAt: 2500 })

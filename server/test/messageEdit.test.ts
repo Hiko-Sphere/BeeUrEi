@@ -103,6 +103,24 @@ describe('引用回复 replyTo /api/messages', () => {
     await app.close()
   })
 
+  it('转发标记 forwarded：发送时置 true → 存库并读回；缺省不带', async () => {
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const a = await reg(app, 'fwda', 'blind')
+    const b = await reg(app, 'fwdb', 'helper')
+    await bind(app, a.token, b.token, 'fwdb')
+    const fwd = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, kind: 'text', text: '转发的内容', forwarded: true } })
+    expect(fwd.statusCode).toBe(201)
+    expect((fwd.json() as any).message.forwarded).toBe(true)
+    // 普通消息不带 forwarded。
+    const plain = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, kind: 'text', text: '原创' } })
+    expect((plain.json() as any).message.forwarded).toBeUndefined()
+    // 列表读回也保留。
+    const list = await app.inject({ method: 'GET', url: `/api/messages?with=${b.user.id}`, headers: auth(a.token) })
+    expect((list.json() as any).messages.find((m: any) => m.text === '转发的内容').forwarded).toBe(true)
+    await app.close()
+  })
+
   it('跨会话引用被拒（丢弃）：单聊不能引用群消息、群不能引用别处消息', async () => {
     const store = new MemoryStore()
     const app = buildApp(store)

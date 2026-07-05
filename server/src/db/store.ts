@@ -473,6 +473,7 @@ export interface ChatMessage {
   groupId?: string // 群消息所属群
   editedAt?: number // 编辑时刻（WhatsApp 式，仅文字消息、限窗口内）；有值 → 客户端标"已编辑"
   replyTo?: string // 回复的消息 id（WhatsApp 式引用回复）；须为同一会话内的消息，否则发送时丢弃
+  forwarded?: boolean // 转发标记（WhatsApp 式「已转发」）；客户端据此标注，防误以为是对方原创
 }
 
 /// 消息稳定全序比较：先 createdAt，再 id。让同毫秒消息排序确定、与翻页复合游标口径一致。

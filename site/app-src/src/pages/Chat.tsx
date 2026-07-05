@@ -5,7 +5,7 @@ import { pollWhileVisible } from '../lib/poll'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { parseLocation } from '../lib/location'
-import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo, Modal } from '../components/ui'
+import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo, Modal, Button } from '../components/ui'
 import { IconChat, IconSend, IconPlus, IconX } from '../components/icons'
 
 type Selection = { kind: 'peer'; id: string; name: string; avatar?: string | null; muted?: boolean } | { kind: 'group'; id: string; name: string; members: User[]; ownerId: string; muted: boolean }
@@ -185,6 +185,7 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
   const [loadingEarlier, setLoadingEarlier] = useState(false)
   const [reachedStart, setReachedStart] = useState(false)
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null) // 正在引用回复的消息
+  const [forwarding, setForwarding] = useState<ChatMessage | null>(null) // 正在转发的消息（打开目标选择器）
   const [muted, setMuted] = useState(sel.muted ?? false) // 会话免打扰（群/单聊通用；乐观切换 + 回滚）
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -392,7 +393,7 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
           <div className="grid h-full place-items-center text-sm text-faint">{t('开始你们的对话', 'Say hello')}</div>
         ) : msgs.map((m) => (
           <Bubble key={m.id} m={m} mine={m.fromId === user?.id} lang={lang} t={t} onRecall={() => recall(m)} onReact={(e) => react(m, e)} onEdit={(nt) => edit(m, nt)}
-            onReply={() => setReplyingTo(m)}
+            onReply={() => setReplyingTo(m)} onForward={() => setForwarding(m)}
             repliedTo={m.replyTo ? msgs.find((x) => x.id === m.replyTo) : undefined}
             repliedName={(rid) => { const r = msgs.find((x) => x.id === rid); return r ? (r.fromId === user?.id ? t('你', 'You') : (sel.kind === 'group' ? (sel.members.find((mm) => mm.id === r.fromId)?.displayName ?? t('成员', 'Member')) : sel.name)) : '' }}
             isGroup={sel.kind === 'group'}
@@ -427,7 +428,69 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
           onChanged={() => { onSent(); void load() }}
           onLeft={() => { setShowInfo(false); onSent(); onBack() }} />
       )}
+      {forwarding && <ForwardDialog message={forwarding} onClose={() => setForwarding(null)} onSent={onSent} />}
     </div>
+  )
+}
+
+/// 转发目标选择器：列出我的单聊会话 + 群，选中后把消息内容以 forwarded 标记重发过去。
+/// 仅转发内容自包含的类型（文本/位置/图片）——视频是 mediaId，无权会话看不到，已在气泡处不给转发入口。
+function ForwardDialog({ message, onClose, onSent }: { message: ChatMessage; onClose: () => void; onSent: () => void }) {
+  const { t } = useI18n()
+  const toast = useToast()
+  const [convos, setConvos] = useState<Conversation[] | null>(null)
+  const [groups, setGroups] = useState<GroupSummary[]>([])
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    void Promise.all([api.conversations(), api.groups()])
+      .then(([c, g]) => { setConvos(c.conversations); setGroups(g.groups) })
+      .catch(() => setConvos([]))
+  }, [])
+
+  const forwardTo = async (target: { toId?: string; groupId?: string }, name: string) => {
+    if (busy) return
+    setBusy(true)
+    try {
+      await api.sendMessage(target, message.kind, message.text, undefined, true)
+      toast(t(`已转发给 ${name}`, `Forwarded to ${name}`), 'ok')
+      onSent(); onClose()
+    } catch (e) { toast(chatErrorText(e, t, t('转发失败', 'Forward failed')), 'error') }
+    finally { setBusy(false) }
+  }
+
+  return (
+    <Modal onClose={onClose} label={t('转发到', 'Forward to')} panelClassName="w-full max-w-sm">
+      <h3 className="text-lg font-semibold">{t('转发到', 'Forward to')}</h3>
+      <p className="mt-1 text-sm text-faint">{t('选择一个会话', 'Choose a conversation')}</p>
+      <div className="mt-3 max-h-[50vh] overflow-y-auto">
+        {convos === null ? <Spinner /> : (convos.length === 0 && groups.length === 0) ? (
+          <p className="py-6 text-center text-sm text-faint">{t('暂无可转发的会话', 'No conversations to forward to')}</p>
+        ) : (
+          <ul className="divide-y divide-[var(--line)]">
+            {convos.map((c) => (
+              <li key={`p:${c.peer.id}`}>
+                <button disabled={busy} onClick={() => void forwardTo({ toId: c.peer.id }, c.peer.displayName)} data-testid="forward-target"
+                  className="flex w-full items-center gap-3 px-1 py-2.5 text-left hover:surface-2 disabled:opacity-50">
+                  <Avatar name={c.peer.displayName} src={c.peer.avatar} size={36} />
+                  <span className="truncate text-sm font-medium">{c.peer.displayName}</span>
+                </button>
+              </li>
+            ))}
+            {groups.map((g) => (
+              <li key={`g:${g.group.id}`}>
+                <button disabled={busy} onClick={() => void forwardTo({ groupId: g.group.id }, g.group.name)} data-testid="forward-target"
+                  className="flex w-full items-center gap-3 px-1 py-2.5 text-left hover:surface-2 disabled:opacity-50">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-honey/15 text-honey"><IconChat width={18} height={18} /></span>
+                  <span className="truncate text-sm font-medium">{g.group.name}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <div className="mt-4"><Button variant="soft" className="w-full" onClick={onClose}>{t('取消', 'Cancel')}</Button></div>
+    </Modal>
   )
 }
 
@@ -520,11 +583,13 @@ function GroupInfoDialog({ groupId, groupName, ownerId, members, meId, onClose, 
 
 const REACTION_CHOICES = ['👍', '❤️', '😂', '😮', '😢', '🙏'] // 与 iOS ChatStrings.reactionChoices 对齐
 
-function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, repliedTo, repliedName, senderName, isGroup }: { m: ChatMessage; mine: boolean; lang: 'zh' | 'en'; t: (z: string, e: string) => string; onRecall: () => void; onReact: (emoji: string) => void; onEdit: (newText: string) => void; onReply: () => void; repliedTo?: ChatMessage; repliedName?: (id: string) => string; senderName?: string; isGroup?: boolean }) {
+function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForward, repliedTo, repliedName, senderName, isGroup }: { m: ChatMessage; mine: boolean; lang: 'zh' | 'en'; t: (z: string, e: string) => string; onRecall: () => void; onReact: (emoji: string) => void; onEdit: (newText: string) => void; onReply: () => void; onForward: () => void; repliedTo?: ChatMessage; repliedName?: (id: string) => string; senderName?: string; isGroup?: boolean }) {
   const recallable = mine && m.kind !== 'recalled' && Date.now() - m.createdAt < 2 * 60_000
   const editable = mine && m.kind === 'text' && Date.now() - m.createdAt < 15 * 60_000
   const reactable = m.kind !== 'recalled'
   const replyable = m.kind !== 'recalled'
+  // 可转发：文本/位置/图片（内容自包含）。视频是 mediaId，转发到无权会话看不到，故不转发；撤回的也不转发。
+  const forwardable = m.kind === 'text' || m.kind === 'location' || m.kind === 'image'
   const [picking, setPicking] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(m.text)
@@ -534,6 +599,8 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, repliedT
       <div className={`group relative max-w-[78%] rounded-2xl px-3.5 py-2 text-sm ${mine ? 'bg-honey text-ink' : 'surface-2 text-[var(--text)]'} ${m.kind === 'recalled' ? 'italic opacity-60' : ''}`}>
         {/* 群聊里别人的消息署名——否则多人群聊分不清谁说的。 */}
         {senderName && <div className="mb-0.5 text-xs font-semibold text-honey">{senderName}</div>}
+        {/* 「已转发」标注：防收件人误以为是发送者原创（WhatsApp 式）。 */}
+        {m.forwarded && m.kind !== 'recalled' && <div data-testid="forwarded-tag" className={`mb-0.5 text-[10px] italic ${mine ? 'text-ink/55' : 'text-faint'}`}>↪ {t('已转发', 'Forwarded')}</div>}
         {/* 引用回复的原消息预览（WhatsApp 式）：已加载则显示"名字：内容"，未加载则显示占位。 */}
         {m.replyTo && (
           <div data-testid="quoted" className={`mb-1 rounded-lg border-l-2 px-2 py-1 text-xs ${mine ? 'border-ink/40 bg-ink/5' : 'border-honey bg-honey/10'}`}>
@@ -558,6 +625,7 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, repliedT
           {m.editedAt && m.kind !== 'recalled' && <span data-testid="edited-tag">{t('已编辑', 'edited')}</span>}
           {editable && !editing && <button onClick={() => { setDraft(m.text); setEditing(true) }} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('编辑', 'Edit')}</button>}
           {replyable && !editing && <button onClick={onReply} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('回复', 'Reply')}</button>}
+          {forwardable && !editing && <button onClick={onForward} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('转发', 'Forward')}</button>}
           {m.reaction && <span className="text-sm">{m.reaction}</span>}
           {reactable && (
             <button onClick={() => setPicking((v) => !v)} aria-label={t('表情回应', 'React')}

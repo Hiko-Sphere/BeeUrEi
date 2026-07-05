@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
+import { ChallengeStore } from '../src/routes/passkey'
 
 const auth = (t: string) => ({ authorization: `Bearer ${t}` })
 
@@ -59,5 +60,28 @@ describe('Passkey（WebAuthn）端点', () => {
     expect((res.json() as any).passkeys).toEqual([])
     const me = await app.inject({ method: 'GET', url: '/api/me', headers: auth(token) })
     expect((me.json() as any).user.hasPasskey).toBe(false)
+  })
+})
+
+// 挑战表内存有界：未消费的挑战（请求 options 却不 verify，尤其未认证的 login/options 可被刷）超阈值时机会式清过期项，
+// 防内存无界增长（同 CodeRegistry 惯例）。
+describe('ChallengeStore 机会式清理', () => {
+  it('超阈值时清掉已过期挑战、保留未过期；take 一次性', () => {
+    const cs = new ChallengeStore(2) // 小阈值便于测
+    cs.set('a', 'ca', -1)            // 已过期（ttl 负）
+    cs.set('b', 'cb', -1)            // 已过期
+    expect(cs.size).toBe(2)          // 未超阈值(2) → 不清
+    cs.set('c', 'cc', 60_000)        // size=3 > 2 → 触发清理：a、b 过期删除，c 保留
+    expect(cs.size).toBe(1)
+    expect(cs.take('a')).toBeUndefined() // 已被清
+    expect(cs.take('c')).toBe('cc')      // 有效挑战仍可取
+    expect(cs.take('c')).toBeUndefined() // 一次性：取过即删
+  })
+
+  it('过期挑战即便未触发清理，take 也拒绝（一次性 + 时效双保险）', () => {
+    const cs = new ChallengeStore()
+    cs.set('x', 'cx', -1)            // 已过期
+    expect(cs.take('x')).toBeUndefined() // 过期不返回（且已删除）
+    expect(cs.size).toBe(0)
   })
 })

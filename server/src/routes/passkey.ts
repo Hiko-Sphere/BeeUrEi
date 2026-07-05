@@ -22,10 +22,17 @@ const expectedOrigins = (process.env.PASSKEY_RP_ORIGIN?.trim() || `https://${rpI
   .split(',').map((s) => s.trim()).filter(Boolean)
 
 /// 短时效挑战登记（内存，5 分钟）：注册按 userId，登录按随机 flowId。取出即焚（防重放）。
-class ChallengeStore {
+export class ChallengeStore {
   private map = new Map<string, { challenge: string; expiresAt: number }>()
+  // pruneThreshold：map 超此规模时机会式清过期项。防未消费挑战累积——尤其 login/options 未认证可被刷，
+  // 请求了 options 却从不 verify 的挑战否则永不删除（take 才删）、内存无界增长（同 CodeRegistry 惯例）。
+  constructor(private readonly pruneThreshold = 5000) {}
   set(key: string, challenge: string, ttlMs = 5 * 60_000): void {
-    this.map.set(key, { challenge, expiresAt: Date.now() + ttlMs })
+    const now = Date.now()
+    this.map.set(key, { challenge, expiresAt: now + ttlMs })
+    if (this.map.size > this.pruneThreshold) {
+      for (const [k, e] of this.map) if (e.expiresAt < now) this.map.delete(k)
+    }
   }
   take(key: string): string | undefined {
     const e = this.map.get(key)
@@ -33,6 +40,7 @@ class ChallengeStore {
     if (!e || e.expiresAt < Date.now()) return undefined
     return e.challenge
   }
+  get size(): number { return this.map.size }
 }
 
 /// Passkey（WebAuthn）注册与登录。用 @simplewebauthn/server 做权威验签。

@@ -33,7 +33,7 @@ const avatarSchema = z.object({
 
 export function registerAccountRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer, appleVerifier?: AppleTokenVerifier, codeSend: CodeSendLimiter = new CodeSendLimiter(), pushSender: PushSender = new NoopPushSender()): void {
   // 账号安全敏感变更 → 通知本人（in-app 持久化 + best-effort 推送到本人设备）：未授权变更即时预警。
-  const notifySecurity = (u: User, event: 'password_changed' | 'password_reset' | 'email_changed' | 'phone_changed' | '2fa_enabled' | '2fa_disabled') => {
+  const notifySecurity = (u: User, event: 'password_changed' | 'password_reset' | 'email_changed' | 'phone_changed' | 'username_changed' | 'apple_linked' | 'apple_unlinked' | '2fa_enabled' | '2fa_disabled') => {
     const { title, body } = pushStrings.securityNotice(event, pushLang(u.language))
     notifyUser(store, pushSender, u.id, `security_${event}`, title, body)
   }
@@ -242,10 +242,15 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     if (!/^[A-Za-z0-9_.-]+$/.test(username)) return reply.code(400).send({ error: 'invalid_username' }) // 仅字母数字 _.- ，禁空白/混淆字符
     // 内容审核：与昵称/注册同口径——用户名 everyone 可见，违禁词不得塞进用户名绕过昵称过滤。
     if (matchBannedTerm(store.getAppConfig(), username)) return reply.code(403).send({ error: 'content_blocked' })
+    const user = store.findById(req.user!.sub)
+    if (!user) return reply.code(404).send({ error: 'not_found' })
     const existing = store.findByUsername(username)
-    if (existing && existing.id !== req.user!.sub) return reply.code(409).send({ error: 'username_taken' })
-    const updated = store.updateUser(req.user!.sub, { username, usernameCustomized: true })
+    if (existing && existing.id !== user.id) return reply.code(409).send({ error: 'username_taken' })
+    const changed = user.username !== username // 仅真的改了才告警（重复提交同名不打扰）
+    const updated = store.updateUser(user.id, { username, usernameCustomized: true })
     if (!updated) return reply.code(404).send({ error: 'not_found' })
+    // 用户名是唯一登录标识（findByLoginIdentifier 收）——与改邮箱/手机号同属登录标识变更、潜在接管/锁定信号，即时预警本人。
+    if (changed) notifySecurity(user, 'username_changed')
     return { username: updated.username }
   })
 
@@ -270,7 +275,10 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
         patch.emailVerified = true
       }
     }
+    const wasLinkedSame = user.appleSub === identity.sub // 已绑同一 Apple ID 的重复调用：无新增登录方式，不重复告警
     store.updateUser(user.id, patch)
+    // 绑定 Apple 登录 = 给账号新增一条**免密登录方式**：若非本人操作，接管者据此可绕过改密持久登录——即时预警本人。
+    if (!wasLinkedSame) notifySecurity(user, 'apple_linked')
     return { ok: true, appleLinked: true }
   })
 
@@ -283,6 +291,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     const hasOtherLogin = !!user.phone || (!!user.email && user.emailVerified === true) || hasPasskey
     if (!hasOtherLogin) return reply.code(400).send({ error: 'last_login_method' })
     store.updateUser(user.id, { appleSub: undefined })
+    notifySecurity(user, 'apple_unlinked') // 移除一条登录方式亦属登录凭据变更，一致预警本人（接管者借解绑锁定原主）
     return { ok: true, appleLinked: false }
   })
 

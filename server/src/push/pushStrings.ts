@@ -161,7 +161,7 @@ export const pushStrings = {
       : '你的安全报到到期时服务暂时无法访问，我们未替你通知亲友。如果你仍需要帮助，请立即手动发起求助。',
   // 账号安全敏感变更通知本人（改密/改邮箱/开关 2FA…）：**未授权变更即时预警**——盗号者一旦改密/关 2FA，
   // 真实用户在自己设备上立刻收到（本人操作则是确认）。industry-standard（各家都"密码已修改"邮件/通知）。
-  securityNotice: (event: 'password_changed' | 'password_reset' | 'email_changed' | 'phone_changed' | '2fa_enabled' | '2fa_disabled',
+  securityNotice: (event: 'password_changed' | 'password_reset' | 'email_changed' | 'phone_changed' | 'username_changed' | 'apple_linked' | 'apple_unlinked' | '2fa_enabled' | '2fa_disabled',
                    l: PushLang): { title: string; body: string } => {
     const en = l === 'en'
     switch (event) {
@@ -169,6 +169,12 @@ export const pushStrings = {
         body: en ? 'Your account password was just changed. If this wasn’t you, reset your password immediately.' : '你的账号密码刚刚被修改。若非本人操作，请立即重置密码。' }
       case 'phone_changed': return { title: en ? 'Account phone changed' : '账号手机号已更改',
         body: en ? 'The phone number on your account was just changed. If this wasn’t you, secure your account now.' : '你的账号手机号刚刚被更改。若非本人操作，请立即处理。' }
+      case 'username_changed': return { title: en ? 'Username changed' : '账号用户名已更改',
+        body: en ? 'The username (a login ID) on your account was just changed. If this wasn’t you, secure your account now.' : '你的账号用户名（登录标识）刚刚被更改。若非本人操作，请立即处理。' }
+      case 'apple_linked': return { title: en ? 'Apple sign-in linked' : '已绑定 Apple 登录',
+        body: en ? 'An Apple ID sign-in method was just added to your account. If this wasn’t you, unlink it and secure your account now.' : '你的账号刚刚新增了 Apple 登录方式。若非本人操作，请立即解绑并处理账号安全。' }
+      case 'apple_unlinked': return { title: en ? 'Apple sign-in removed' : '已解绑 Apple 登录',
+        body: en ? 'An Apple ID sign-in method was just removed from your account. If this wasn’t you, secure your account now.' : '你的账号刚刚解绑了 Apple 登录方式。若非本人操作，请立即处理。' }
       case 'password_reset': return { title: en ? 'Password was reset' : '账号密码已被重置',
         body: en ? 'Your password was just reset via account recovery. If this wasn’t you, secure your account now.' : '你的账号密码刚刚通过“找回密码”被重置。若非本人操作，请立即处理。' }
       case 'email_changed': return { title: en ? 'Account email changed' : '账号邮箱已更改',

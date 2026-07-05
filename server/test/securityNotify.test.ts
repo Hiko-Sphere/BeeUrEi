@@ -3,6 +3,14 @@ import { buildApp } from '../src/app'
 import { MemoryStore, type Store } from '../src/db/store'
 import { totpAt } from '../src/auth/totp'
 import type { Mailer } from '../src/mail/mailer'
+import type { AppleTokenVerifier } from '../src/auth/apple'
+
+// 测试用 Apple 验签：'good:SUB:email' → { sub, email }（与 authOverhaul.test 同款）。
+const fakeApple: AppleTokenVerifier = async (t) => {
+  if (!t.startsWith('good:')) return null
+  const [, sub, email] = t.split(':')
+  return { sub, email: email || undefined }
+}
 
 // 账号安全敏感变更 → 通知本人（未授权变更即时预警；industry-standard "密码已修改"）。
 const auth = (t: string) => ({ authorization: `Bearer ${t}` })
@@ -13,7 +21,7 @@ function capturingApp() {
   const sent: { to: string; subject: string; text: string }[] = []
   const mailer: Mailer = { async send(to, subject, text) { sent.push({ to, subject, text }) } }
   const store = new MemoryStore()
-  return { app: buildApp(store, { mailer }), store, sent }
+  return { app: buildApp(store, { mailer, appleVerifier: fakeApple }), store, sent }
 }
 const reg = async (app: ReturnType<typeof buildApp>, username: string, email?: string) =>
   (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username, password: 'strong-pass-9x', ...(email ? { email } : {}) } })).json()
@@ -53,6 +61,35 @@ describe('账号安全变更预警本人', () => {
     // 换成新号：再次预警
     await app.inject({ method: 'POST', url: '/api/account/phone', headers: auth(r.token), payload: { phone: '+15550103030' } })
     expect(secKinds(store, r.user.id).filter((k) => k === 'security_phone_changed')).toHaveLength(2)
+    await app.close()
+  })
+
+  it('改用户名 → security_username_changed（登录标识变更；重复同名不重复报）', async () => {
+    const { app, store } = capturingApp()
+    const r = await reg(app, 'secun')
+    const first = await app.inject({ method: 'POST', url: '/api/account/username', headers: auth(r.token), payload: { username: 'newname_x' } })
+    expect(first.statusCode).toBe(200)
+    expect(secKinds(store, r.user.id)).toEqual(['security_username_changed'])
+    // 重复提交同一用户名：无变更 → 不再报
+    const again = await app.inject({ method: 'POST', url: '/api/account/username', headers: auth(r.token), payload: { username: 'newname_x' } })
+    expect(again.statusCode).toBe(200)
+    expect(secKinds(store, r.user.id)).toEqual(['security_username_changed'])
+    await app.close()
+  })
+
+  it('绑定/解绑 Apple 登录 → security_apple_linked / security_apple_unlinked（重复绑同一 ID 不重复报）', async () => {
+    const { app, store } = capturingApp()
+    const r = await reg(app, 'secap') // 用户名+密码账号
+    const link = await app.inject({ method: 'POST', url: '/api/account/apple', headers: auth(r.token), payload: { identityToken: 'good:SUBAP:ap@icloud.com' } })
+    expect(link.statusCode).toBe(200)
+    expect(secKinds(store, r.user.id)).toContain('security_apple_linked')
+    // 重复绑定同一 Apple ID：无新增登录方式 → 不重复告警
+    await app.inject({ method: 'POST', url: '/api/account/apple', headers: auth(r.token), payload: { identityToken: 'good:SUBAP:ap@icloud.com' } })
+    expect(secKinds(store, r.user.id).filter((k) => k === 'security_apple_linked')).toHaveLength(1)
+    // 解绑（绑定顺带写入了已验证 Apple 邮箱=另一登录方式，故可解绑）→ apple_unlinked
+    const unlink = await app.inject({ method: 'DELETE', url: '/api/account/apple', headers: auth(r.token) })
+    expect(unlink.statusCode).toBe(200)
+    expect(secKinds(store, r.user.id)).toContain('security_apple_unlinked')
     await app.close()
   })
 

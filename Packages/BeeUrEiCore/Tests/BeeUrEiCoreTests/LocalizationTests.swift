@@ -204,4 +204,18 @@ final class LocalizationTests: XCTestCase {
         let zh = HazardCatalog(language: .zh)
         XCTAssertTrue(zh.isHighRisk("车辆"))
     }
+
+    func testStreetFurnitureBenchAndMeterAreHighRisk() {
+        // 长椅/停车计时器是人行道齐腰高实体固定物，与已收录的 消火栓/路桩 同类危险——检出即须享高危加成。
+        // 走完整管线 LabelCatalog(命名)→HazardCatalog(加成)，确保 COCO 名→本地化名→高危 三段贯通。
+        let zhLabels = LabelCatalog(language: .zh), zhHaz = HazardCatalog(language: .zh)
+        let enLabels = LabelCatalog(language: .en), enHaz = HazardCatalog(language: .en)
+        for coco in ["bench", "parking meter"] {
+            XCTAssertTrue(zhHaz.isHighRisk(zhLabels.localizedName(coco)), "zh \(coco) 应高危")
+            XCTAssertTrue(enHaz.isHighRisk(enLabels.localizedName(coco)), "en \(coco) 应高危")
+        }
+        // 扩表不误伤非障碍类（食物/宠物仍非高危）。
+        XCTAssertFalse(zhHaz.isHighRisk("苹果"))
+        XCTAssertFalse(enHaz.isHighRisk("dog"))
+    }
 }

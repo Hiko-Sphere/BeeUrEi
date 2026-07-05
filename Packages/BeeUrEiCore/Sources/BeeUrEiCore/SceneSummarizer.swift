@@ -6,6 +6,10 @@ public struct SceneSummarizer: Sendable {
     public init() {}
 
     public func summary(objects: [(label: String, normalizedX: Double)], language: Language = .zh) -> String {
+        // 非有限横坐标（坏检测帧的 NaN/±inf）：位置未知，绝不塞进某分区谎报方位（NaN 会落进"中间"、+inf 落进
+        // "右边"，把位置不明的物体说成确定方位误导盲人）。与全库"非有限未知不动作"一致（同 PeopleSummarizer 净化坏距离、
+        // CompassRose 守卫坏方位角）。全被滤掉（整帧坏）则如实"没有识别到明显物体"。
+        let objects = objects.filter { $0.normalizedX.isFinite }
         guard !objects.isEmpty else { return SpokenStrings.sceneEmpty(language) }
         func zone(_ x: Double) -> Int { x < 0.4 ? 0 : (x > 0.6 ? 2 : 1) }
 

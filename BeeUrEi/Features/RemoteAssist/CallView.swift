@@ -137,11 +137,29 @@ struct CallView: View {
                 }
             }
             if controlsVisible { helperControlsOverlay.transition(.opacity) }
+            // 合规/安全披露常驻：FaceTime 式控件 4 秒后自动隐藏，但"被录制/管理员监看/麦克风被拒"是**法律知情
+            // 与安全**披露（各横幅注释均标"不可关闭"，web 侧亦为常驻 ComplianceBanner）——不能随普通控件一起隐去，
+            // 否则(明眼)协助者只在前 4 秒看到"正在被录制/管理员在看"，之后误以为已停止、麦克风白说。仅在控件隐藏
+            // 时补渲染（控件可见时它们已在 helperControlsOverlay 顶部，避免重复）。
+            else { persistentDisclosures }
         }
         .contentShape(Rectangle())
         .onTapGesture { toggleControls() }
         .onAppear { scheduleAutoHide() }
         .statusBarHidden(controlsVisible == false)
+    }
+
+    /// 控件自动隐藏后仍须常驻的合规/安全披露：管理员监看 / 被录制 / 麦克风被拒。三者皆为 @ViewBuilder 条件视图，
+    /// 无对应状态时不渲染——故无披露时此层天然为空、不遮画面。allowsHitTesting(false) 让轻点穿透去显隐控件。
+    private var persistentDisclosures: some View {
+        VStack(spacing: 6) {
+            adminBanner
+            micDeniedBanner
+            recordingBadge
+        }
+        .padding(.horizontal).padding(.top, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .allowsHitTesting(false)
     }
 
     private var helperControlsOverlay: some View {

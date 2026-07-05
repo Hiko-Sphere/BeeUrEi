@@ -245,6 +245,17 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     if (msg.fromId !== req.user!.sub) return reply.code(403).send({ error: 'not_yours' })
     if (msg.kind !== 'text') return reply.code(400).send({ error: 'not_editable' }) // 仅文字可编辑（媒体/位置/已撤回不可）
     if (Date.now() - msg.createdAt > 15 * 60_000) return reply.code(400).send({ error: 'edit_window_passed' })
+    // 可达性复查（与发送/表情回应**完全同口径**）：编辑把**新内容**经会话/群 last 触达对方，必须同样门控——
+    // 否则解绑/拉黑后仍能编辑旧消息向对方注入新内容，绕过发送侧 areLinked∧!isBlockedBetween。这是与表情回应
+    // block-bypass 修复同源的姊妹缺口（撤回只把内容变"[已撤回]"、不注入新内容，故不需此查）。作者身份上面已验。
+    const editor = req.user!.sub
+    if (msg.groupId) {
+      const group = store.findGroup(msg.groupId)
+      if (!group?.memberIds.includes(editor)) return reply.code(403).send({ error: 'not_member' }) // 已退群者不得再改旧消息触达在群成员
+    } else {
+      if (!areLinked(store, editor, msg.toId)) return reply.code(403).send({ error: 'not_linked' })
+      if (isBlockedBetween(store, editor, msg.toId)) return reply.code(403).send({ error: 'blocked' })
+    }
     if (matchBannedTerm(store.getAppConfig(), parsed.data.text)) return reply.code(403).send({ error: 'content_blocked' })
     const updated = store.updateMessage(id, { text: parsed.data.text, editedAt: Date.now() })
     return { message: updated }

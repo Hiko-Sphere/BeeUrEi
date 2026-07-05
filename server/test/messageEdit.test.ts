@@ -81,6 +81,25 @@ describe('消息编辑 /api/messages/:id/edit', () => {
     expect(r.json()).toMatchObject({ error: 'not_editable' })
     await app.close()
   })
+
+  it('可达性门控：解绑或拉黑后不得再编辑旧消息（防经会话向对方注入新内容，绕过发送侧门控；与表情回应同源）', async () => {
+    // 解绑：作者与对端已不再是好友 → not_linked（编辑把新内容经会话 last 触达对方，须与发送/表情回应同口径）。
+    const s1 = await seed()
+    const link = s1.store.linksByOwner(s1.a.user.id).find((l) => l.memberId === s1.b.user.id)!
+    s1.store.deleteLink(link.id)
+    const r1 = await s1.app.inject({ method: 'POST', url: `/api/messages/${s1.mid}/edit`, headers: auth(s1.a.token), payload: { text: '解绑后注入' } })
+    expect(r1.statusCode).toBe(403)
+    expect(r1.json()).toMatchObject({ error: 'not_linked' })
+    await s1.app.close()
+
+    // 拉黑：仍绑定但已拉黑 → blocked。
+    const s2 = await seed()
+    s2.store.createBlock({ id: 'blk-edit', blockerId: s2.a.user.id, blockedId: s2.b.user.id, createdAt: Date.now() })
+    const r2 = await s2.app.inject({ method: 'POST', url: `/api/messages/${s2.mid}/edit`, headers: auth(s2.a.token), payload: { text: '拉黑后注入' } })
+    expect(r2.statusCode).toBe(403)
+    expect(r2.json()).toMatchObject({ error: 'blocked' })
+    await s2.app.close()
+  })
 })
 
 describe('引用回复 replyTo /api/messages', () => {

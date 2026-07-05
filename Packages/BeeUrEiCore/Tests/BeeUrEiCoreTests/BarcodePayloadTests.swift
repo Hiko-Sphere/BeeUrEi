@@ -85,9 +85,17 @@ final class BarcodePayloadTests: XCTestCase {
     }
 
     func testSMS() {
-        XCTAssertEqual(BarcodePayload.classify("SMSTO:13800138000:你好"), .sms(number: "13800138000"))     // 到 : 为止
-        XCTAssertEqual(BarcodePayload.classify("sms:+8613912345678?body=hi"), .sms(number: "+8613912345678")) // 到 ? 为止
-        XCTAssertEqual(BarcodePayload.classify("SMSTO:"), .sms(number: nil))
+        // 号码 + **预填正文**都解出（正文此前被丢弃，盲人不知会发出什么内容）。
+        XCTAssertEqual(BarcodePayload.classify("SMSTO:13800138000:你好"), .sms(number: "13800138000", body: "你好"))     // 冒号后正文
+        XCTAssertEqual(BarcodePayload.classify("sms:+8613912345678?body=hi"), .sms(number: "+8613912345678", body: "hi")) // 查询参数正文
+        // 正文的 URL 编码 / '+' 当空格 正确解码。
+        XCTAssertEqual(BarcodePayload.classify("sms:10086?body=%E4%BD%A0%E5%A5%BD+world"), .sms(number: "10086", body: "你好 world"))
+        // SMSTO 正文含冒号：号码只到首个冒号，其余全是正文（含冒号）。
+        XCTAssertEqual(BarcodePayload.classify("SMSTO:10086:code:ABC"), .sms(number: "10086", body: "code:ABC"))
+        // 无正文 / 空：body 为 nil，不瞎报。
+        XCTAssertEqual(BarcodePayload.classify("SMSTO:13800138000"), .sms(number: "13800138000", body: nil))
+        XCTAssertEqual(BarcodePayload.classify("SMSTO:13800138000:"), .sms(number: "13800138000", body: nil)) // 空正文
+        XCTAssertEqual(BarcodePayload.classify("SMSTO:"), .sms(number: nil, body: nil))
     }
 
     func testPlainText() {

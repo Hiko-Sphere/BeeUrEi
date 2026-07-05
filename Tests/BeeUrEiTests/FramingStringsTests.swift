@@ -74,6 +74,21 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertTrue(FramingStrings.wifiResult(cred, .zh).contains("密码：pa;ss"))
     }
 
+    func testSmsSurfacesBody() {
+        // 扫短信码：号码 + **预填正文**都读出（不报正文=盲人不知会发出什么，订阅/付费短信可乘虚而入）。
+        XCTAssertEqual(FramingStrings.smsResult("10086", "余额查询", .zh), "短信：10086，内容：余额查询")
+        XCTAssertTrue(FramingStrings.smsSpeak("10086", "余额查询", .zh).contains("内容：余额查询"))
+        XCTAssertTrue(FramingStrings.smsSpeak("10086", "balance", .en).lowercased().contains("message: balance"))
+        // 无正文：只报号码，不拼空"内容"。
+        XCTAssertEqual(FramingStrings.smsResult("10086", nil, .zh), "短信：10086")
+        XCTAssertFalse(FramingStrings.smsSpeak("10086", nil, .zh).contains("内容"))
+        // 端到端：从 SMSTO: 原文解析到播报，正文贯通。
+        if case let .sms(number, body) = BarcodePayload.classify("SMSTO:10086:余额查询") {
+            XCTAssertEqual(number, "10086")
+            XCTAssertTrue(FramingStrings.smsSpeak(number, body, .zh).contains("内容：余额查询"))
+        } else { XCTFail("SMSTO 应分类为 .sms") }
+    }
+
     func testUIChromeLocalized() {
         XCTAssertEqual(FramingStrings.uiTitle(.banknote, .zh), "识别纸币")
         XCTAssertEqual(FramingStrings.uiTitle(.banknote, .en), "Banknote")

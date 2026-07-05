@@ -7,7 +7,7 @@ public enum BarcodePayloadKind: Equatable, Sendable {
     case url(host: String?)             // http(s) 链接
     case phone(number: String)          // tel: 电话
     case email(address: String?)        // mailto: 电子邮箱
-    case sms(number: String?)           // SMSTO:/sms: 发短信
+    case sms(number: String?, body: String?) // SMSTO:/sms: 发短信（number=收件号码，body=预填正文）
     case contact                        // vCard / MECARD 名片
     case text                           // 其余普通文本
 }
@@ -40,10 +40,20 @@ public enum BarcodePayload {
             let addr = rest.trimmingCharacters(in: .whitespaces)
             return .email(address: addr.isEmpty ? nil : addr)
         }
-        // 短信：`SMSTO:number:message` / `sms:number?body=...` → number（到 : 或 ? 为止）。
+        // 短信：`SMSTO:number:message`（冒号后正文，原样）/ `sms:number?body=...`（查询参数，URL 编码）。
+        // **正文一并解出**：盲人扫码只报号码、不报正文=不知会发出什么内容（订阅/付费短信可乘虚而入），须如实读全（与
+        // 读邮箱/WiFi 密码/名片"读全内容供核对"同取向）。number 到首个 : 或 ? 为止；其后按分隔符取正文。
         if let pfx = ["SMSTO:", "SMS:"].first(where: { upper.hasPrefix($0) }) {
-            let num = trimmed.dropFirst(pfx.count).prefix { $0 != ":" && $0 != "?" }.trimmingCharacters(in: .whitespaces)
-            return .sms(number: num.isEmpty ? nil : num)
+            let rest = String(trimmed.dropFirst(pfx.count))
+            let sep = rest.firstIndex { $0 == ":" || $0 == "?" }
+            let num = String(sep.map { rest[..<$0] } ?? Substring(rest)).trimmingCharacters(in: .whitespaces)
+            var body: String? = nil
+            if let e = sep {
+                let after = String(rest[rest.index(after: e)...])
+                if rest[e] == ":" { let b = after.trimmingCharacters(in: .whitespaces); body = b.isEmpty ? nil : b }
+                else { body = smsBodyParam(after) } // '?' → 查询串里取 body=
+            }
+            return .sms(number: num.isEmpty ? nil : num, body: body)
         }
         if upper.hasPrefix("BEGIN:VCARD") || upper.hasPrefix("MECARD:") { return .contact }
         if !trimmed.isEmpty, trimmed.allSatisfy({ $0.isASCII && $0.isNumber }),
@@ -84,6 +94,19 @@ public enum BarcodePayload {
 
     /// SSID 便捷取（分类用）：委托 parseWifi，与完整解析同口径（含转义处理）。
     static func wifiSSID(_ payload: String) -> String? { parseWifi(payload)?.ssid }
+
+    /// `sms:number?body=...` 的查询串里取 `body`（大小写不敏感键；URL 百分号解码；`+`→空格，同 form 编码惯例）。无则 nil。
+    static func smsBodyParam(_ query: String) -> String? {
+        for pair in query.split(separator: "&") {
+            let kv = pair.split(separator: "=", maxSplits: 1)
+            guard kv.count == 2, kv[0].lowercased() == "body" else { continue }
+            let raw = kv[1].replacingOccurrences(of: "+", with: " ")
+            let decoded = raw.removingPercentEncoding ?? raw
+            let t = decoded.trimmingCharacters(in: .whitespaces)
+            return t.isEmpty ? nil : t
+        }
+        return nil
+    }
 
     /// 按**未转义**的分隔符切分（`\<sep>` 不切）；反斜杠保留在片段里，交 unescapeWifi 展开。
     private static func splitUnescaped(_ s: String, on sep: Character) -> [String] {

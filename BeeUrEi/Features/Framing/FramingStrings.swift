@@ -318,9 +318,17 @@ enum FramingStrings {
         l == .zh ? "是电子邮箱地址" + (a.map { "：\($0)" } ?? "") + "，内容已可复制"
                  : "It's an email address" + (a.map { ": \($0)" } ?? "") + "; you can copy it"
     }
-    static func smsResult(_ n: String?, _ l: Language) -> String { l == .zh ? "短信：\(n ?? "")" : "SMS: \(n ?? "")" }
-    static func smsSpeak(_ n: String?, _ l: Language) -> String {
-        l == .zh ? "是发短信的码" + (n.map { "，号码\($0)" } ?? "") : "It's a text-message code" + (n.map { ", number \($0)" } ?? "")
+    static func smsResult(_ n: String?, _ body: String?, _ l: Language) -> String {
+        let base = l == .zh ? "短信：\(n ?? "")" : "SMS: \(n ?? "")"
+        guard let body, !body.isEmpty else { return base }
+        return base + (l == .zh ? "，内容：\(body)" : ", message: \(body)")
+    }
+    /// 读短信码：号码 + **预填正文**（读全内容供核对——不报正文=盲人不知会发出什么，订阅/付费短信可乘虚而入）。
+    static func smsSpeak(_ n: String?, _ body: String?, _ l: Language) -> String {
+        let base = l == .zh ? "是发短信的码" + (n.map { "，号码\($0)" } ?? "")
+                            : "It's a text-message code" + (n.map { ", number \($0)" } ?? "")
+        guard let body, !body.isEmpty else { return base }
+        return base + (l == .zh ? "，内容：\(body)" : "; message: \(body)")
     }
     static func contactResult(_ l: Language) -> String { l == .zh ? "名片码" : "Contact card" }
     static func contactSpeak(_ l: Language) -> String {

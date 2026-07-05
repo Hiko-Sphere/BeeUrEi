@@ -863,9 +863,9 @@ final class FramingAssistViewModel {
                     if let a = addr, let url = URL(string: "mailto:\(a)") {
                         self.resultAction = FramingAction(label: FramingStrings.uiSendEmail(self.lang), url: url) // 打开邮件撰写
                     }
-                case .sms(let number):
-                    self.resultText = FramingStrings.smsResult(number, self.lang)
-                    self.speak(FramingStrings.smsSpeak(number, self.lang))
+                case .sms(let number, let body):
+                    self.resultText = FramingStrings.smsResult(number, body, self.lang)
+                    self.speak(FramingStrings.smsSpeak(number, body, self.lang))
                     let digits = (number ?? "").filter { $0.isNumber || $0 == "+" }
                     if !digits.isEmpty, let url = URL(string: "sms:\(digits)") {
                         self.resultAction = FramingAction(label: FramingStrings.uiSendSms(self.lang), url: url) // 打开信息

@@ -823,9 +823,12 @@ final class FramingAssistViewModel {
                         self.resultText = FramingStrings.productCodeResult(first, self.lang)
                         self.lookUpProductOnline(barcode: first)
                     }
-                case .wifi(let ssid):
-                    self.resultText = FramingStrings.wifiResult(ssid, self.lang)
-                    self.speak(FramingStrings.wifiSpeak(ssid, self.lang))
+                case .wifi:
+                    // .wifi 分类只带 SSID；密码才是扫码接网的关键，须完整解析出凭据（含密码，含转义）。
+                    let cred = BarcodePayload.parseWifi(first)
+                    self.resultText = FramingStrings.wifiResult(cred, self.lang)
+                    self.speak(FramingStrings.wifiSpeak(cred, self.lang))
+                    if let pw = cred?.password { self.copyableResult = pw } // 密码单独可复制，直接粘贴进 Wi-Fi 设置，免逐字听记
                 case .url(let host):
                     self.resultText = FramingStrings.urlResult(first, self.lang)
                     self.speak(FramingStrings.urlSpeak(host, self.lang))

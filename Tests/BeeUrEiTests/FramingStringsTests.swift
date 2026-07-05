@@ -45,13 +45,33 @@ final class FramingStringsTests: XCTestCase {
             FramingStrings.teachIntro(.en), FramingStrings.docIntro(.en),
             FramingStrings.productUnknownSpeak(.en), FramingStrings.banknoteNone(.en),
             FramingStrings.exploreIntro(objects: 2, texts: 3, .en),
-            FramingStrings.findStartTaught("keys", .en), FramingStrings.wifiSpeak("Home", .en),
+            FramingStrings.findStartTaught("keys", .en),
+            FramingStrings.wifiSpeak(WifiCredential(ssid: "Home", password: "pw", security: "WPA", hidden: false), .en),
         ]
         for s in samples {
             XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }),
                            "英文文案混入中文：\(s)")
             XCTAssertFalse(s.isEmpty)
         }
+    }
+
+    func testWifiSurfacesPassword() {
+        // 扫 Wi-Fi 码的关键是密码（盲人看不到贴纸上的密码）：结果与播报都须含网络名 + 密码，且转义字符原样。
+        let wpa = WifiCredential(ssid: "Cafe5G", password: "s3cret;pw", security: "WPA", hidden: false)
+        XCTAssertEqual(FramingStrings.wifiResult(wpa, .zh), "无线网络码：Cafe5G，密码：s3cret;pw")
+        XCTAssertTrue(FramingStrings.wifiSpeak(wpa, .zh).contains("密码是 s3cret;pw"), FramingStrings.wifiSpeak(wpa, .zh))
+        XCTAssertTrue(FramingStrings.wifiResult(wpa, .en).contains("password: s3cret;pw"))
+        XCTAssertTrue(FramingStrings.wifiSpeak(wpa, .en).contains("password s3cret;pw"))
+        // 开放网络：明确"无密码"，不谎报有密码。
+        let open = WifiCredential(ssid: "FreeWiFi", password: nil, security: "nopass", hidden: false)
+        XCTAssertTrue(FramingStrings.wifiResult(open, .zh).contains("开放网络"))
+        XCTAssertFalse(FramingStrings.wifiResult(open, .zh).contains("密码："))
+        // 畸形（nil 凭据）退化为通用词，不崩。
+        XCTAssertEqual(FramingStrings.wifiResult(nil, .zh), "无线网络码")
+        // 端到端：从 WIFI: 原文解析到播报，密码贯通（parseWifi 已单测转义，这里验管线拼接）。
+        let cred = BarcodePayload.parseWifi("WIFI:T:WPA;S:MyNet;P:pa\\;ss;;")
+        XCTAssertEqual(cred?.password, "pa;ss")
+        XCTAssertTrue(FramingStrings.wifiResult(cred, .zh).contains("密码：pa;ss"))
     }
 
     func testUIChromeLocalized() {

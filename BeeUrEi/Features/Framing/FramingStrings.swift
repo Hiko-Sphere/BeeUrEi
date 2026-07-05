@@ -288,12 +288,23 @@ enum FramingStrings {
     static func productNutritionSpeak(_ nutriScore: String?, _ novaGroup: Int?, _ l: Language) -> String? {
         SpokenStrings.nutrition(nutriScore: nutriScore, novaGroup: novaGroup, l)
     }
-    static func wifiResult(_ ssid: String?, _ l: Language) -> String {
-        (l == .zh ? "无线网络码" : "Wi-Fi code") + (ssid.map { l == .zh ? "：\($0)" : ": \($0)" } ?? "")
+    /// Wi-Fi 配置码：显示网络名 + **密码**——盲人看不到贴纸上的密码，密码正是扫这张码的目的（此前只报网络名，
+    /// 拿不到密码根本连不上网）。开放网络明确标注无密码。cred 为 nil（畸形 WIFI: 码）退化为通用词。
+    static func wifiResult(_ cred: WifiCredential?, _ l: Language) -> String {
+        guard let cred else { return l == .zh ? "无线网络码" : "Wi-Fi code" }
+        let head = l == .zh ? "无线网络码：\(cred.ssid)" : "Wi-Fi code: \(cred.ssid)"
+        if let pw = cred.password { return head + (l == .zh ? "，密码：\(pw)" : ", password: \(pw)") }
+        return head + (l == .zh ? "（开放网络，无密码）" : " (open network, no password)")
     }
-    static func wifiSpeak(_ ssid: String?, _ l: Language) -> String {
-        l == .zh ? "是无线网络配置码" + (ssid.map { "，网络名称\($0)" } ?? "")
-                 : "It's a Wi-Fi setup code" + (ssid.map { ", network \($0)" } ?? "")
+    /// 播报：念网络名 + 密码，并提示密码已复制（可直接粘贴进 Wi-Fi 设置，免逐字听记长密码）。
+    static func wifiSpeak(_ cred: WifiCredential?, _ l: Language) -> String {
+        guard let cred else { return l == .zh ? "是无线网络配置码" : "It's a Wi-Fi setup code" }
+        if let pw = cred.password {
+            return l == .zh ? "是无线网络配置码，网络名称\(cred.ssid)，密码是 \(pw)，密码已复制，可直接粘贴"
+                            : "It's a Wi-Fi setup code, network \(cred.ssid), password \(pw); the password is copied, ready to paste"
+        }
+        return l == .zh ? "是无线网络配置码，网络名称\(cred.ssid)，开放网络，无需密码"
+                        : "It's a Wi-Fi setup code, network \(cred.ssid), open network, no password"
     }
     static func urlResult(_ payload: String, _ l: Language) -> String { l == .zh ? "网址：\(payload)" : "Link: \(payload)" }
     static func urlSpeak(_ host: String?, _ l: Language) -> String {

@@ -907,6 +907,18 @@ final class FramingAssistViewModel {
                         self.resultText = FramingStrings.contactResult(self.lang)
                         self.speak(FramingStrings.contactSpeak(self.lang)) // 解析不出字段：退化为"这是名片，可复制"
                     }
+                case .geo(let lat, let lng, let label):
+                    // 位置码：报"这是一个位置"+地名，并给"导航"动作打开 Apple 地图步行导航到该点。
+                    // 坐标 WGS-84；Apple 地图 ?ll= 境内自动纠偏（地图链接一律 Apple Maps，见坐标系约定 [[coordinate-system]]）。
+                    self.resultText = FramingStrings.geoResult(lat, lng, label, self.lang)
+                    self.speak(FramingStrings.geoSpeak(label, self.lang))
+                    var mapURL = "https://maps.apple.com/?ll=\(lat),\(lng)"
+                    if let label, !label.isEmpty, let enc = label.addingPercentEncoding(withAllowedCharacters: .alphanumerics) {
+                        mapURL += "&q=\(enc)"
+                    }
+                    if let url = URL(string: mapURL) {
+                        self.resultAction = FramingAction(label: FramingStrings.uiNavigate(self.lang), url: url)
+                    }
                 case .text:
                     self.resultText = FramingStrings.codeContent(first, self.lang)
                     self.speak(FramingStrings.recognizedResult(first, self.lang))

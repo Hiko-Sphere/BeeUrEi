@@ -104,4 +104,38 @@ final class BarcodePayloadTests: XCTestCase {
         // 纯 12 位数字仍是商品码，不被 sms/email 误吞（前缀不匹配）。
         XCTAssertEqual(BarcodePayload.classify("036000291452"), .productCode(chinaPrefix: false))
     }
+
+    /// 从 classify 结果里取 geo 三元组（Double 用 accuracy 比，避免字面量/解析细微差）。
+    private func geoOf(_ s: String) -> (lat: Double, lng: Double, label: String?)? {
+        if case let .geo(lat, lng, label) = BarcodePayload.classify(s) { return (lat, lng, label) }
+        return nil
+    }
+
+    func testGeoLocation() {
+        // 基础 geo:lat,lng（RFC 5870）——盲人扫位置码可听到并一键导航。
+        let a = geoOf("geo:39.9042,116.4074")
+        XCTAssertNotNil(a); XCTAssertEqual(a!.lat, 39.9042, accuracy: 1e-6); XCTAssertEqual(a!.lng, 116.4074, accuracy: 1e-6); XCTAssertNil(a!.label)
+        // 带地名 q（path 是真坐标，q 是地名）。
+        let b = geoOf("geo:31.2304,121.4737?q=外滩")
+        XCTAssertNotNil(b); XCTAssertEqual(b!.lat, 31.2304, accuracy: 1e-6); XCTAssertEqual(b!.label, "外滩")
+        // 地图分享形 geo:0,0?q=lat,lng(名)：q 里的真坐标覆盖 0,0 占位，括号里是地名（不导航到 Null Island）。
+        let c = geoOf("geo:0,0?q=22.5431,114.0579(深圳市民中心)")
+        XCTAssertNotNil(c); XCTAssertEqual(c!.lat, 22.5431, accuracy: 1e-6); XCTAssertEqual(c!.lng, 114.0579, accuracy: 1e-6); XCTAssertEqual(c!.label, "深圳市民中心")
+        // 海拔/参数忽略：geo:lat,lng,alt 与 ;u= 都不影响坐标。
+        XCTAssertEqual(geoOf("geo:30.5928,114.3055,25")!.lat, 30.5928, accuracy: 1e-6)
+        XCTAssertEqual(geoOf("geo:30.5928,114.3055;u=35")!.lng, 114.3055, accuracy: 1e-6)
+        // q 的地名 URL 编码可解（%2C 等不误当分隔）。
+        XCTAssertEqual(geoOf("geo:39.9,116.4?q=%E5%A4%A9%E5%AE%89%E9%97%A8")?.label, "天安门")
+    }
+
+    func testGeoInvalidFallsBackToText() {
+        // Null Island (0,0) 占位、q 非坐标：无真实目的地 → 回落文本，绝不导航到大西洋。
+        XCTAssertEqual(BarcodePayload.classify("geo:0,0"), .text)
+        XCTAssertEqual(BarcodePayload.classify("geo:0,0?q=某个只有名字的地方"), .text)
+        // 缺经度 / 非数字 / 越界：均非法 → 文本。
+        XCTAssertEqual(BarcodePayload.classify("geo:39.9"), .text)
+        XCTAssertEqual(BarcodePayload.classify("geo:abc,def"), .text)
+        XCTAssertEqual(BarcodePayload.classify("geo:100,200"), .text)   // 纬>90 经>180
+        XCTAssertEqual(BarcodePayload.classify("geo:"), .text)          // 空
+    }
 }

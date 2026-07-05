@@ -9,6 +9,7 @@ public enum BarcodePayloadKind: Equatable, Sendable {
     case email(address: String?)        // mailto: 电子邮箱
     case sms(number: String?, body: String?) // SMSTO:/sms: 发短信（number=收件号码，body=预填正文）
     case contact                        // vCard / MECARD 名片
+    case geo(latitude: Double, longitude: Double, label: String?) // geo: 地理坐标（RFC 5870/地图分享）——可导航前往
     case text                           // 其余普通文本
 }
 
@@ -56,6 +57,12 @@ public enum BarcodePayload {
             return .sms(number: num.isEmpty ? nil : num, body: body)
         }
         if upper.hasPrefix("BEGIN:VCARD") || upper.hasPrefix("MECARD:") { return .contact }
+        // 地理位置码（RFC 5870 `geo:lat,lng`，及地图分享变体 `geo:0,0?q=lat,lng(名)`/`geo:lat,lng?q=地名`）：
+        // 盲人看不到地图，扫到"位置码"该能听到这是位置/地名并**一键导航过去**（本 App 有全程导航）。解析失败/占位坐标
+        // 回落 .text（不谎报一个没法导航的"位置"）。
+        if upper.hasPrefix("GEO:"), let g = parseGeo(trimmed) {
+            return .geo(latitude: g.latitude, longitude: g.longitude, label: g.label)
+        }
         if !trimmed.isEmpty, trimmed.allSatisfy({ $0.isASCII && $0.isNumber }),
            [8, 12, 13, 14].contains(trimmed.count) { // EAN-8 / UPC-A / EAN-13 / ITF-14
             return .productCode(chinaPrefix: trimmed.count == 13 && trimmed.hasPrefix("69"))
@@ -94,6 +101,60 @@ public enum BarcodePayload {
 
     /// SSID 便捷取（分类用）：委托 parseWifi，与完整解析同口径（含转义处理）。
     static func wifiSSID(_ payload: String) -> String? { parseWifi(payload)?.ssid }
+
+    /// `geo:lat,lng[,alt][;u=...]`（RFC 5870）及地图分享常见变体 `geo:0,0?q=lat,lng(Label)` / `geo:lat,lng?q=地名`
+    /// → 结构化坐标 + 可选地名。坐标基准 WGS-84（geo: URI 默认；交 Apple 地图 ?ll= 境内会自动纠偏，见坐标系约定）。
+    /// 无有效坐标返回 nil——含 **Null Island (0,0)** 占位（`geo:0,0?q=纯地名` 这类 q 非坐标的分享，无坐标可导航），
+    /// 绝不把大西洋当目的地。alt/;参数 一律忽略。
+    public static func parseGeo(_ payload: String) -> (latitude: Double, longitude: Double, label: String?)? {
+        let trimmed = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.uppercased().hasPrefix("GEO:") else { return nil }
+        let body = trimmed.dropFirst("GEO:".count)
+        let qSplit = body.firstIndex(of: "?")
+        var coord = geoLatLng(String(qSplit.map { body[..<$0] } ?? Substring(body)))
+        var label: String?
+        if let qSplit {
+            let query = String(body[body.index(after: qSplit)...])
+            if let q = geoQueryValue(query, key: "q"), !q.isEmpty {
+                // q 可为 "lat,lng(Label)" / "lat,lng" / "地名"。先剥括号地名，其余能解析成坐标就覆盖 path 占位坐标，
+                // 否则整体当地名（path 坐标保留）。
+                if let open = q.firstIndex(of: "("), q.last == ")" {
+                    let inner = String(q[q.index(after: open)..<q.index(before: q.endIndex)]).trimmingCharacters(in: .whitespaces)
+                    if !inner.isEmpty { label = inner }
+                    if let c = geoLatLng(String(q[..<open])) { coord = c }
+                } else if let c = geoLatLng(q) {
+                    coord = c
+                } else {
+                    label = q
+                }
+            }
+        }
+        guard let (lat, lng) = coord else { return nil }
+        if lat == 0, lng == 0 { return nil } // Null Island 占位，非真实目的地（与服务端 nav 拒 0,0 同口径）
+        return (lat, lng, label)
+    }
+
+    /// "lat,lng[,alt][;params]" → (lat,lng)，校验有限且经纬度在界内；否则 nil。
+    private static func geoLatLng(_ s: String) -> (Double, Double)? {
+        let coordPart = s.prefix { $0 != ";" } // 去掉 ;u= ;crs= 等 RFC 5870 参数
+        let parts = coordPart.split(separator: ",")
+        guard parts.count >= 2,
+              let lat = Double(parts[0].trimmingCharacters(in: .whitespaces)),
+              let lng = Double(parts[1].trimmingCharacters(in: .whitespaces)),
+              lat.isFinite, lng.isFinite, (-90...90).contains(lat), (-180...180).contains(lng) else { return nil }
+        return (lat, lng)
+    }
+
+    /// 从 `key=value&...` 查询串取某键值（键大小写不敏感；URL 百分号解码；`+`→空格，同 form 编码）。无则 nil。
+    private static func geoQueryValue(_ query: String, key: String) -> String? {
+        for pair in query.split(separator: "&") {
+            let kv = pair.split(separator: "=", maxSplits: 1)
+            guard kv.count == 2, kv[0].lowercased() == key.lowercased() else { continue }
+            let raw = kv[1].replacingOccurrences(of: "+", with: " ")
+            return (raw.removingPercentEncoding ?? raw).trimmingCharacters(in: .whitespaces)
+        }
+        return nil
+    }
 
     /// `sms:number?body=...` 的查询串里取 `body`（大小写不敏感键；URL 百分号解码；`+`→空格，同 form 编码惯例）。无则 nil。
     static func smsBodyParam(_ query: String) -> String? {

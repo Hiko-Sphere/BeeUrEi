@@ -360,6 +360,18 @@ enum FramingStrings {
         guard let body, !body.isEmpty else { return base }
         return base + (l == .zh ? "，内容：\(body)" : "; message: \(body)")
     }
+    /// 位置码结果文本：地名（若有）+ 坐标（供核对/复制）。
+    static func geoResult(_ lat: Double, _ lng: Double, _ label: String?, _ l: Language) -> String {
+        let coord = String(format: "%.5f, %.5f", lat, lng)
+        if let label, !label.isEmpty { return l == .zh ? "位置：\(label)（\(coord)）" : "Location: \(label) (\(coord))" }
+        return l == .zh ? "位置：\(coord)" : "Location: \(coord)"
+    }
+    /// 读位置码：报"这是一个位置"+地名（坐标不逐位念，太长且难记；地名/导航才有用）。可点"导航"前往（本 App 全程导航）。
+    static func geoSpeak(_ label: String?, _ l: Language) -> String {
+        let named = label.flatMap { $0.isEmpty ? nil : $0 }
+        return l == .zh ? "是一个位置" + (named.map { "：\($0)" } ?? "") + "，可点导航前往"
+                        : "It's a location" + (named.map { ": \($0)" } ?? "") + "; tap Navigate to go there"
+    }
     static func contactResult(_ l: Language) -> String { l == .zh ? "名片码" : "Contact card" }
     static func contactSpeak(_ l: Language) -> String {
         l == .zh ? "是一张电子名片，内容已可复制" : "It's a contact card; you can copy it"
@@ -541,6 +553,7 @@ enum FramingStrings {
     }
     static func uiDial(_ l: Language) -> String { l == .zh ? "拨打" : "Call" }
     static func uiOpenLink(_ l: Language) -> String { l == .zh ? "打开链接" : "Open link" }
+    static func uiNavigate(_ l: Language) -> String { l == .zh ? "导航" : "Navigate" }
     static func uiSendEmail(_ l: Language) -> String { l == .zh ? "发邮件" : "Email" }
     static func uiSendSms(_ l: Language) -> String { l == .zh ? "发短信" : "Text" }
     /// 一键动作通用提示：打开系统应用并预填，绝不代执行——先核对内容。

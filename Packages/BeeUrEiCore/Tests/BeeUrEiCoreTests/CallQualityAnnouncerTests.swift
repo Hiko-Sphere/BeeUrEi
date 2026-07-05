@@ -55,3 +55,47 @@ final class CallQualityAnnouncerTests: XCTestCase {
         XCTAssertTrue(a.update(.good, language: .en)!.contains("normal"))
     }
 }
+
+/// 信号档的**RTT+丢包综合判定**（与协助端 web qualityFromStats 跨端一致）。
+/// 关键不变量：低时延但高丢包**绝不**虚报 good——盲人靠通话音频听导航指引，丢包=断续听不清。
+final class CallSignalLevelMetricsTests: XCTestCase {
+
+    func testFromRttThresholdsAndBadInput() {
+        XCTAssertEqual(CallSignalLevel.fromRtt(nil), .unknown)       // 无数据
+        XCTAssertEqual(CallSignalLevel.fromRtt(0), .good)
+        XCTAssertEqual(CallSignalLevel.fromRtt(0.149), .good)
+        XCTAssertEqual(CallSignalLevel.fromRtt(0.15), .fair)
+        XCTAssertEqual(CallSignalLevel.fromRtt(0.399), .fair)
+        XCTAssertEqual(CallSignalLevel.fromRtt(0.4), .weak)
+        XCTAssertEqual(CallSignalLevel.fromRtt(1.2), .weak)
+        // 非有限保守当弱（不虚报好信号）——与 web NaN→weak 一致。
+        XCTAssertEqual(CallSignalLevel.fromRtt(.nan), .weak)
+        XCTAssertEqual(CallSignalLevel.fromRtt(.infinity), .weak)
+    }
+
+    func testFromLossThresholdsAndBadInput() {
+        XCTAssertEqual(CallSignalLevel.fromLoss(nil), .unknown)      // 无数据不降级
+        XCTAssertEqual(CallSignalLevel.fromLoss(.nan), .unknown)
+        XCTAssertEqual(CallSignalLevel.fromLoss(0), .good)
+        XCTAssertEqual(CallSignalLevel.fromLoss(0.029), .good)
+        XCTAssertEqual(CallSignalLevel.fromLoss(0.03), .fair)
+        XCTAssertEqual(CallSignalLevel.fromLoss(0.079), .fair)
+        XCTAssertEqual(CallSignalLevel.fromLoss(0.08), .weak)
+        XCTAssertEqual(CallSignalLevel.fromLoss(0.5), .weak)
+        XCTAssertEqual(CallSignalLevel.fromLoss(-0.1), .good)        // 负值夹 0（计数器抖动不虚报差）
+    }
+
+    func testFromMetricsTakesWorseAndHandlesMissing() {
+        XCTAssertEqual(CallSignalLevel.fromMetrics(rttSeconds: nil, lossFraction: nil), .unknown)
+        // 关键：低时延(50ms)但 20% 丢包 → weak，不因 RTT 低虚报 good。
+        XCTAssertEqual(CallSignalLevel.fromMetrics(rttSeconds: 0.05, lossFraction: 0.2), .weak)
+        // 高时延零丢包 → weak（时延也拖累）。
+        XCTAssertEqual(CallSignalLevel.fromMetrics(rttSeconds: 0.6, lossFraction: 0), .weak)
+        // 皆好 → good；一好一 fair → 取更差 fair。
+        XCTAssertEqual(CallSignalLevel.fromMetrics(rttSeconds: 0.05, lossFraction: 0.01), .good)
+        XCTAssertEqual(CallSignalLevel.fromMetrics(rttSeconds: 0.05, lossFraction: 0.05), .fair)
+        // 单信号缺失以另一为准（unknown 让位）。
+        XCTAssertEqual(CallSignalLevel.fromMetrics(rttSeconds: 0.05, lossFraction: nil), .good)
+        XCTAssertEqual(CallSignalLevel.fromMetrics(rttSeconds: nil, lossFraction: 0.2), .weak)
+    }
+}

@@ -120,6 +120,7 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
     var onObserverLocalCandidate: ((String, String, String?, Int32) -> Void)?
     var onObserverRemoteVideoTrack: ((String) -> Void)?
     private var statsTimer: Timer?
+    private var prevPackets: (received: Int, lost: Int)? // 上一轮累计收/丢包数，用于算区间丢包率
 
     // 旁观（管理员）专用：与主 pc 隔离的额外 PC（按 peerId），共享同一本地音视频轨。主 1:1 路径完全不受影响。
     private var observerPCs: [String: RTCPeerConnection] = [:]
@@ -321,7 +322,7 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
     }
 
     func stop() {
-        statsTimer?.invalidate(); statsTimer = nil
+        statsTimer?.invalidate(); statsTimer = nil; prevPackets = nil
         if capturing { videoCapturer?.stopCapture(); capturing = false }
         pc?.close()
         pc = nil
@@ -423,17 +424,34 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
         pc?.statistics { [weak self] report in
             guard let self else { return }
             var rtt: Double?
-            for (_, s) in report.statistics where s.type == "candidate-pair" {
-                let nominated = (s.values["nominated"] as? NSNumber)?.boolValue ?? false
-                let state = s.values["state"] as? String
-                guard nominated || state == "succeeded" else { continue }
-                if let r = (s.values["currentRoundTripTime"] as? NSNumber)?.doubleValue { rtt = r }
+            var received: Int?, lost: Int?
+            for (_, s) in report.statistics {
+                if s.type == "candidate-pair" {
+                    let nominated = (s.values["nominated"] as? NSNumber)?.boolValue ?? false
+                    let state = s.values["state"] as? String
+                    guard nominated || state == "succeeded" else { continue }
+                    if let r = (s.values["currentRoundTripTime"] as? NSNumber)?.doubleValue { rtt = r }
+                } else if s.type == "inbound-rtp", (s.values["kind"] as? String) == "audio" {
+                    // 入站音频丢包：packetsReceived/packetsLost 是**累计**计数器，需相邻两轮差分才得区间率。
+                    if let rv = (s.values["packetsReceived"] as? NSNumber)?.intValue { received = rv }
+                    if let lv = (s.values["packetsLost"] as? NSNumber)?.intValue { lost = lv }
+                }
             }
+            var lossFraction: Double?
+            if let received, let lost, let prev = self.prevPackets {
+                let dRecv = received - prev.received, dLost = lost - prev.lost
+                let total = dRecv + dLost
+                // 仅在两增量都非负（防 SSRC 重置/重连计数器回退→假丢包）且本轮确有收包时才算率。
+                if dRecv >= 0, dLost >= 0, total > 0 { lossFraction = Double(dLost) / Double(total) }
+            }
+            if let received, let lost { self.prevPackets = (received, lost) }
+            // 综合 RTT+丢包判档（核心 CallSignalLevel.fromMetrics，与协助端 web 一致）；映射到 App 的 CallQuality。
             let quality: CallQuality
-            if let rtt {
-                quality = rtt < 0.15 ? .good : (rtt < 0.4 ? .fair : .weak)
-            } else {
-                quality = .unknown
+            switch CallSignalLevel.fromMetrics(rttSeconds: rtt, lossFraction: lossFraction) {
+            case .good: quality = .good
+            case .fair: quality = .fair
+            case .weak: quality = .weak
+            case .unknown: quality = .unknown
             }
             DispatchQueue.main.async { self.onCallQuality?(quality) }
         }
@@ -500,7 +518,7 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
         DispatchQueue.main.async {
             switch newState {
             case .connected, .completed: if self.statsTimer == nil { self.startStatsPolling() }
-            case .failed, .closed: self.statsTimer?.invalidate(); self.statsTimer = nil
+            case .failed, .closed: self.statsTimer?.invalidate(); self.statsTimer = nil; self.prevPackets = nil // 重连后计数器会重置，清基线防假丢包
             default: break
             }
         }

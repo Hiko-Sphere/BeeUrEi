@@ -6,6 +6,36 @@ public enum CallSignalLevel: Sendable, Equatable {
     case unknown, weak, fair, good
 }
 
+public extension CallSignalLevel {
+    /// 由实测**往返时延(秒)**判定信号档：<150ms good / <400ms fair / 否则 weak。nil=无数据→unknown；
+    /// 非有限(NaN/∞)保守当 weak（不虚报好信号）。与协助端 web `qualityFromRtt` 同阈值同语义。
+    static func fromRtt(_ rttSeconds: Double?) -> CallSignalLevel {
+        guard let r = rttSeconds else { return .unknown }
+        guard r.isFinite else { return .weak }
+        return r < 0.15 ? .good : (r < 0.4 ? .fair : .weak)
+    }
+
+    /// 由**区间丢包率(0..1)**判定信号档：<3% good / <8% fair / 否则 weak。nil/非有限→unknown（不降级）；
+    /// 负值夹 0（防累计计数器差分抖动虚报差信号）。与协助端 web `qualityFromLoss` 同阈值同语义。
+    static func fromLoss(_ lossFraction: Double?) -> CallSignalLevel {
+        guard let f = lossFraction, f.isFinite else { return .unknown }
+        let x = Swift.max(0, f)
+        return x < 0.03 ? .good : (x < 0.08 ? .fair : .weak)
+    }
+
+    /// 综合信号档：**取 RTT 档与丢包档中更差的一档**（行业通例——MOS 同时受时延与丢包拖累，任一变差
+    /// 都直接影响可听度）。任一信号缺失(unknown)时以另一有信息者为准；两者皆缺→unknown。与 web
+    /// `qualityFromStats` 同语义（跨端一致：盲人在 iOS 与在协助端 web 看到/听到的信号判定一致）。
+    static func fromMetrics(rttSeconds: Double?, lossFraction: Double?) -> CallSignalLevel {
+        let byRtt = fromRtt(rttSeconds)
+        let byLoss = fromLoss(lossFraction)
+        func rank(_ q: CallSignalLevel) -> Int {
+            switch q { case .unknown: return -1; case .good: return 0; case .fair: return 1; case .weak: return 2 }
+        }
+        return rank(byRtt) >= rank(byLoss) ? byRtt : byLoss // unknown(-1) 天然让位于任何已知档
+    }
+}
+
 /// 通话信号变化"该不该向盲人播报"的判定（纯逻辑，可单测）。
 ///
 /// 背景：协助者（web/iOS）看得到信号格（QualityBars / NetworkStatusBar），但盲人看不到——通话卡顿时

@@ -865,7 +865,11 @@ struct ChatView: View {
                 SpeechHub.shared.stopChannel(.query) // 播视频前让播报安静（同通道语义）
                 playingVideo = PlayableVideo(id: m.text, url: url)
             } catch {
-                errorText = ChatStrings.videoLoadFailed(lang)
+                // 盲人看不到红字横幅——点开的视频加载失败必须**朗读**（与发送/撤回失败同口径；此前只设 errorText、
+                // 盲人得不到任何反馈，点了视频却像没反应）。
+                let msg = ChatStrings.videoLoadFailed(lang)
+                errorText = msg
+                SpeechHub.shared.speak(msg, channel: .query, voiceCode: lang.voiceCode)
             }
         }
     }

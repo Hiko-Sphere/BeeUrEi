@@ -218,4 +218,21 @@ final class LocalizationTests: XCTestCase {
         XCTAssertFalse(zhHaz.isHighRisk("苹果"))
         XCTAssertFalse(enHaz.isHighRisk("dog"))
     }
+
+    func testHazardHighRiskConsistentAcrossLanguagesForEveryLabel() {
+        // 安全不变量（穷举，非点检）：LabelCatalog 能产出的**每一个**标签，其高危状态在中/英必须一致——
+        // 否则某语言的盲人对同一障碍拿不到高危加成（静默安全回退）。此前仅少数标签被点检；本测遍历全表 +
+        // 未知回退，锁死"已对齐英文高危集"承诺，防未来单侧增/漏高危。
+        let zhL = LabelCatalog(language: .zh), enL = LabelCatalog(language: .en)
+        let zhH = HazardCatalog(language: .zh), enH = HazardCatalog(language: .en)
+        for coco in LabelCatalog.cocoToEnglish.keys {
+            let zhRisk = zhH.isHighRisk(zhL.localizedName(coco))
+            let enRisk = enH.isHighRisk(enL.localizedName(coco))
+            XCTAssertEqual(zhRisk, enRisk,
+                "标签 \(coco) 高危状态中英不一致：zh=\(zhRisk)(\(zhL.localizedName(coco))) en=\(enRisk)(\(enL.localizedName(coco)))")
+        }
+        // 未识别标签（两端各回退 障碍物/obstacle）也须一致高危——"挡路但不认识"绝不能一语言漏警。
+        XCTAssertEqual(zhH.isHighRisk(zhL.localizedName("qwerty_unknown")),
+                       enH.isHighRisk(enL.localizedName("qwerty_unknown")))
+    }
 }

@@ -121,7 +121,7 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
             .init(name: "latitude", value: String(format: "%.3f", lat)),   // 坐标降精到 ~百米级，最小化外发
             .init(name: "longitude", value: String(format: "%.3f", lon)),
             .init(name: "current", value: "temperature_2m,apparent_temperature,weather_code,wind_speed_10m,uv_index"),
-            .init(name: "daily", value: "temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunset"),
+            .init(name: "daily", value: "temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunset,sunrise"),
             .init(name: "hourly", value: "precipitation_probability"), // 逐小时降水概率 → 近期"约N小时后可能下雨"
             .init(name: "forecast_days", value: "1"),
             .init(name: "timezone", value: "auto"),
@@ -140,6 +140,7 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
                 let temperature_2m_min: [Double]
                 let precipitation_probability_max: [Int?]?
                 let sunset: [String]?   // 当日日落时刻（ISO，本地时区）→ 黄昏行人安全提醒
+                let sunrise: [String]?  // 当日日出时刻（ISO，本地时区）→ 黎明行人安全提醒（与黄昏对称）
             }
             struct Hourly: Decodable {
                 let time: [String]
@@ -174,13 +175,15 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
                                          rainInHours: rainInHours,
                                          apparentTemp: r.current.apparent_temperature,
                                          language: l)
-        // 黄昏行人安全：盲人感知不到天色变暗，而日落前后是行人被撞高发时段（司机弱光看不清）。
-        // 现在时刻与今日日落时刻都来自同一响应（timezone=auto 本地时刻），交给核心判是否在窗口内。
-        if let nowMin = WeatherPhrase.minuteOfDay(fromISO: r.current.time),
-           let sunsetISO = r.daily?.sunset?.first ?? nil,
-           let sunsetMin = WeatherPhrase.minuteOfDay(fromISO: sunsetISO),
-           let dusk = WeatherPhrase.twilightSafety(nowMinuteOfDay: nowMin, sunsetMinuteOfDay: sunsetMin, language: l) {
-            return base + dusk
+        // 黄昏/黎明行人安全：盲人感知不到天色明暗，而日落前后**与日出前后**同为行人被撞高发时段（司机弱光/低阳晃眼看不清）。
+        // 现在时刻与今日日出/日落时刻都来自同一响应（timezone=auto 本地时刻），交给核心判是否落在任一窗口。
+        if let nowMin = WeatherPhrase.minuteOfDay(fromISO: r.current.time) {
+            let sunsetMin = (r.daily?.sunset?.first ?? nil).flatMap(WeatherPhrase.minuteOfDay(fromISO:))
+            let sunriseMin = (r.daily?.sunrise?.first ?? nil).flatMap(WeatherPhrase.minuteOfDay(fromISO:))
+            if let twilight = WeatherPhrase.twilightSafety(nowMinuteOfDay: nowMin, sunsetMinuteOfDay: sunsetMin,
+                                                           sunriseMinuteOfDay: sunriseMin, language: l) {
+                return base + twilight
+            }
         }
         return base
     }

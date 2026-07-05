@@ -205,12 +205,31 @@ public enum WeatherPhrase {
         return h * 60 + m
     }
 
-    /// 黄昏（日落前后）行人安全提醒：盲人无法感知天色转暗，而黄昏是行人被撞的高发时段——司机在弱光里
-    /// 看不清行人。当"现在"落在日落前 30 分钟到日落后 45 分钟窗口内，提醒过马路格外小心；白天/深夜不提
-    /// （深夜警告可行动性低、且免打扰）。入参为"当日第几分钟"；sunset 缺失或时刻非法则不提醒（不瞎报）。
+    /// 黄昏/黎明行人安全提醒：盲人无法感知天色明暗，而**日落前后与日出前后同为**行人被撞的高发时段——
+    /// 司机在弱光/低角度晃眼阳光里看不清行人（交通安全研究一致把 dawn 与 dusk 并列为高危窗口）。
+    /// 入参为"当日第几分钟"；传今日日出/日落时刻（任一可缺）——"现在"落在任一窗口即提醒。白天/深夜不提
+    /// （深夜警告可行动性低、且免打扰）。`sunrise` 省略则仅判黄昏（向后兼容旧调用）；时刻非法/缺失则不瞎报。
     public static func twilightSafety(nowMinuteOfDay now: Int, sunsetMinuteOfDay sunset: Int?,
+                                      sunriseMinuteOfDay sunrise: Int? = nil,
                                       language: Language) -> String? {
-        guard let sunset, (0...1439).contains(now), (0...1439).contains(sunset) else { return nil }
+        guard (0...1439).contains(now) else { return nil }
+        // 黎明（日出前后）：日出前天还黑最危险、日出后低角度阳光晃眼；窗口 [-45,+30]（与黄昏 [-30,+45] 镜像，偏更暗的日出前侧）。
+        if let sunrise, (0...1439).contains(sunrise) {
+            let d = now - sunrise  // 负=日出前（更暗），正=日出后（渐亮/低阳晃眼）
+            if d >= -45, d <= 30 {
+                if language == .zh {
+                    return d < 0
+                        ? "天还没亮，来往车辆不易看清你，过马路请走有信号灯的路口、格外小心。"
+                        : "天刚蒙蒙亮，光线还弱，来往车辆不易看清你，过马路请走有信号灯的路口、格外小心。"
+                } else {
+                    return d < 0
+                        ? " It's still dark before dawn; drivers may not see you clearly — cross at signalized crossings and take extra care."
+                        : " It's just after dawn and the light is still low; drivers may not see you clearly — cross at signalized crossings and take extra care."
+                }
+            }
+        }
+        // 黄昏（日落前后）。
+        guard let sunset, (0...1439).contains(sunset) else { return nil }
         let delta = now - sunset  // 负=日落前，正=日落后
         guard delta >= -30, delta <= 45 else { return nil }
         if language == .zh {

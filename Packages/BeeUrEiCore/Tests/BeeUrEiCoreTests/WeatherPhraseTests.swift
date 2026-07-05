@@ -285,6 +285,26 @@ extension WeatherPhraseTests {
         // 英文。
         XCTAssertTrue(WeatherPhrase.twilightSafety(nowMinuteOfDay: sunset - 10, sunsetMinuteOfDay: sunset, language: .en)!.contains("getting dark"))
         XCTAssertTrue(WeatherPhrase.twilightSafety(nowMinuteOfDay: sunset + 20, sunsetMinuteOfDay: sunset, language: .en)!.contains("just got dark"))
+
+        // 黎明（日出前后）——与黄昏对称的同等高危低光时段（此前整支缺失：清晨出门的盲人得不到过街低光预警）。
+        let sunrise = 6 * 60 + 10  // 06:10
+        // 日出前 20 分钟：天还没亮。
+        let dawnBefore = WeatherPhrase.twilightSafety(nowMinuteOfDay: sunrise - 20, sunsetMinuteOfDay: nil, sunriseMinuteOfDay: sunrise, language: .zh)
+        XCTAssertNotNil(dawnBefore); XCTAssertTrue(dawnBefore!.contains("天还没亮")); XCTAssertTrue(dawnBefore!.contains("信号灯"))
+        // 日出后 20 分钟：天刚蒙蒙亮（光线仍弱）。
+        let dawnAfter = WeatherPhrase.twilightSafety(nowMinuteOfDay: sunrise + 20, sunsetMinuteOfDay: nil, sunriseMinuteOfDay: sunrise, language: .zh)
+        XCTAssertNotNil(dawnAfter); XCTAssertTrue(dawnAfter!.contains("蒙蒙亮"))
+        // 黎明窗口外（日出前 46 分钟 / 日出后 31 分钟）：不提醒。
+        XCTAssertNil(WeatherPhrase.twilightSafety(nowMinuteOfDay: sunrise - 46, sunsetMinuteOfDay: nil, sunriseMinuteOfDay: sunrise, language: .zh))
+        XCTAssertNil(WeatherPhrase.twilightSafety(nowMinuteOfDay: sunrise + 31, sunsetMinuteOfDay: nil, sunriseMinuteOfDay: sunrise, language: .zh))
+        // 英文黎明。
+        XCTAssertTrue(WeatherPhrase.twilightSafety(nowMinuteOfDay: sunrise - 10, sunsetMinuteOfDay: nil, sunriseMinuteOfDay: sunrise, language: .en)!.contains("before dawn"))
+        XCTAssertTrue(WeatherPhrase.twilightSafety(nowMinuteOfDay: sunrise + 10, sunsetMinuteOfDay: nil, sunriseMinuteOfDay: sunrise, language: .en)!.contains("after dawn"))
+        // 同时给日出+日落：黄昏时刻仍报黄昏（不被黎明分支误吃），正午两者都不报。
+        XCTAssertTrue(WeatherPhrase.twilightSafety(nowMinuteOfDay: sunset + 15, sunsetMinuteOfDay: sunset, sunriseMinuteOfDay: sunrise, language: .zh)!.contains("天刚黑"))
+        XCTAssertNil(WeatherPhrase.twilightSafety(nowMinuteOfDay: 12 * 60, sunsetMinuteOfDay: sunset, sunriseMinuteOfDay: sunrise, language: .zh))
+        // 向后兼容：旧三参调用（无 sunrise）行为不变。
+        XCTAssertNotNil(WeatherPhrase.twilightSafety(nowMinuteOfDay: sunset - 5, sunsetMinuteOfDay: sunset, language: .zh))
     }
 
     func testAirQualityAdvice() {

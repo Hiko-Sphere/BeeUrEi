@@ -26,6 +26,8 @@ enum RecordingStrings {
     }
     static func userDeletedBadge(_ l: Language) -> String { l == .zh ? "用户已删除 · 留存中" : "User-deleted · retained" }
     static func locationPrefix(_ l: Language) -> String { l == .zh ? "地点：" : "Location: " }
+    /// 录制原因前缀（知情同意透明度：为何录这通话）。与 web "录制原因/Reason" 同口径；仅原因非空时展示。
+    static func reasonPrefix(_ l: Language) -> String { l == .zh ? "录制原因：" : "Reason: " }
 
     static func timeText(_ ms: Double, _ l: Language) -> String {
         let date = Date(timeIntervalSince1970: ms / 1000)

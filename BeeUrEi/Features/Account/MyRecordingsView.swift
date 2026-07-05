@@ -93,6 +93,11 @@ struct RecordingRow: View {
                 if let d = rec.durationSec { Text(RecordingStrings.durationLabel(d, lang)).font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
             }
             Text(RecordingStrings.participantsLabel(rec.participantNames, lang)).font(.footnote).foregroundStyle(.secondary)
+            // 录制原因（知情同意透明度）：服务端下发 reason 却从未在 iOS 列表呈现（死字段，与 web 2ef0c88 对齐）。
+            // 仅原因非空白时展示（默认 ''）。
+            if !rec.reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(RecordingStrings.reasonPrefix(lang) + rec.reason).font(.caption).foregroundStyle(.secondary)
+            }
             if let loc = rec.locationLabel, !loc.isEmpty {
                 Text(RecordingStrings.locationPrefix(lang) + loc).font(.caption).foregroundStyle(.secondary)
             }

@@ -92,6 +92,18 @@ final class CollisionCorridorTests: XCTestCase {
                              imageWidth: 640, imageHeight: 480)
         XCTAssertEqual(roi, .full)
     }
+
+    // 安全不变量（承审查 #3）：8 角点虽都投影**成功**、却整体落在画面**外**（走廊在相机左侧很远、都在前方）→
+    // 夹取到 [0,1] 后 ROI 退化为 0 宽。绝不能返回 0 宽 ROI（障碍检测扫描空区、漏判）→ 保守回退整帧 .full。
+    func testImageROIFallsBackToFullWhenCorridorFullyOffScreen() {
+        let c = CollisionCorridor()
+        // 走廊原点在相机左侧 10m、前方 5m：全部角点 z>0（投影成功）但 u<0（画面左外）。
+        let roi = c.imageROI(origin: SIMD3<Float>(-10, 0, 5), forward: SIMD3<Float>(0, 0, 1), up: SIMD3<Float>(0, 1, 0),
+                             cameraToWorld: matrix_identity_float4x4,
+                             intrinsics: CameraIntrinsics(fx: 500, fy: 500, cx: 320, cy: 240),
+                             imageWidth: 640, imageHeight: 480)
+        XCTAssertEqual(roi, .full)
+    }
 }
 
 final class AlphaBetaFilterTests: XCTestCase {

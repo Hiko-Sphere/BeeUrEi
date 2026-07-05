@@ -67,6 +67,10 @@ public struct CollisionCorridor: Sendable {
         guard allProjected, any, maxU > minU, maxV > minV else { return .full }
         let x0 = Double(max(0, minU / imageWidth)), x1 = Double(min(1, maxU / imageWidth))
         let y0 = Double(max(0, minV / imageHeight)), y1 = Double(min(1, maxV / imageHeight))
-        return NormalizedBox(x: x0, y: y0, width: max(0, x1 - x0), height: max(0, y1 - y0))
+        // 夹取到 [0,1] 后仍退化（走廊 8 角点虽都投影成功、却整体落在画面**外**——横持/侧偏时前向走廊离开 FOV）：
+        // ROI 宽或高会被夹成 0 = 障碍检测扫描空区、漏判前方障碍。与上面「角点在相机后方」同一安全原则（审查 #3
+        // 「过小/偏移 ROI 回退整帧」）——那条只挡了投影失败，夹取后退化这条此前漏了。保守回退整帧。
+        guard x1 > x0, y1 > y0 else { return .full }
+        return NormalizedBox(x: x0, y: y0, width: x1 - x0, height: y1 - y0)
     }
 }

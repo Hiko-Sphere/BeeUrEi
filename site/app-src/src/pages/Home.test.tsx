@@ -39,6 +39,19 @@ describe('HomePage 最近通话渲染（防字段漂移）', () => {
     expect(screen.getByText(/呼出/)).toBeInTheDocument()      // direction=outgoing
   })
 
+  it('对端仍在的通话记录整行可点进聊天；已注销(peerId 缺失)不可点', async () => {
+    mock(api.callHistory).mockResolvedValue({
+      calls: [
+        { id: 'c1', peerId: 'p1', peerName: '王医生', peerAvatar: null, direction: 'incoming', status: 'answered', createdAt: 1_700_000_000_000 },
+        { id: 'c2', peerId: null, peerName: '已注销用户', peerAvatar: null, direction: 'outgoing', status: 'missed', createdAt: 1_700_000_000_000 },
+      ],
+    })
+    render(<HomePage />)
+    const doctor = await screen.findByText('王医生')
+    expect(doctor.closest('a')?.getAttribute('href')).toBe('/chat/p1') // 可点进与其的聊天
+    expect(screen.getByText('已注销用户').closest('a')).toBeNull()       // 已注销 → 不可点
+  })
+
   it('无通话记录 → 空态文案', async () => {
     mock(api.callHistory).mockResolvedValue({ calls: [] })
     render(<HomePage />)

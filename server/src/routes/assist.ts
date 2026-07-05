@@ -229,6 +229,7 @@ export function registerAssistRoutes(
           callId: r.callId,
           direction: outgoing ? 'outgoing' : 'incoming',
           status: r.status, // missed/answered/declined
+          peerId: other?.id ?? null, // 对端 id：前端据此让通话记录可点进聊天/回拨（已注销用户为 null，不可点）
           peerName: other?.displayName ?? '已注销用户',
           peerAvatar: other?.avatar ?? null,
           createdAt: r.createdAt,

@@ -81,18 +81,28 @@ export function HomePage() {
           <EmptyState icon={<IconPhone />} title={t('暂无通话记录', 'No calls yet')} message={t('接听或发起通话后会显示在这里', 'Calls will appear here')} />
         ) : (
           <ul className="divide-y divide-[var(--line)]">
-            {calls.map((c) => (
-              <li key={c.id} className="flex items-center gap-3 px-5 py-3">
-                <Avatar name={c.peerName || '?'} src={c.peerAvatar} size={36} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">{c.peerName}</div>
-                  <div className="text-xs text-faint">{c.direction === 'outgoing' ? t('呼出', 'Outgoing') : t('呼入', 'Incoming')} · {timeAgo(c.createdAt, lang)}</div>
-                </div>
-                <Pill tone={c.status === 'answered' ? 'ok' : c.status === 'declined' ? 'danger' : 'soft'}>
-                  {c.status === 'answered' ? t('已接通', 'Answered') : c.status === 'declined' ? t('已拒绝', 'Declined') : t('未接', 'Missed')}
-                </Pill>
-              </li>
-            ))}
+            {calls.map((c) => {
+              // 通话记录行内容；对端仍在则整行可点进与其的聊天（跟进/回访，同手机最近通话），已注销则不可点。
+              const row = (
+                <>
+                  <Avatar name={c.peerName || '?'} src={c.peerAvatar} size={36} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium">{c.peerName}</div>
+                    <div className="text-xs text-faint">{c.direction === 'outgoing' ? t('呼出', 'Outgoing') : t('呼入', 'Incoming')} · {timeAgo(c.createdAt, lang)}</div>
+                  </div>
+                  <Pill tone={c.status === 'answered' ? 'ok' : c.status === 'declined' ? 'danger' : 'soft'}>
+                    {c.status === 'answered' ? t('已接通', 'Answered') : c.status === 'declined' ? t('已拒绝', 'Declined') : t('未接', 'Missed')}
+                  </Pill>
+                </>
+              )
+              return (
+                <li key={c.id}>
+                  {c.peerId
+                    ? <Link to={`/chat/${c.peerId}`} className="flex items-center gap-3 px-5 py-3 transition hover:surface-2" aria-label={t(`与 ${c.peerName} 的聊天`, `Chat with ${c.peerName}`)}>{row}</Link>
+                    : <div className="flex items-center gap-3 px-5 py-3">{row}</div>}
+                </li>
+              )
+            })}
           </ul>
         )}
       </Card>

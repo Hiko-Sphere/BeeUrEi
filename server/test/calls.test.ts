@@ -26,10 +26,12 @@ describe('通话记录 + 双向呼叫', () => {
     expect(mine.length).toBe(1)
     expect(mine[0].direction).toBe('outgoing')
     expect(mine[0].status).toBe('missed')
+    expect(mine[0].peerId).toBe(helper.user.id) // 对端 id：供前端通话记录可点进聊天/回拨
     // 被叫看到"呼入/未接"
     let theirs = (await a.inject({ method: 'GET', url: '/api/calls', headers: auth(helper.token) })).json().calls
     expect(theirs[0].direction).toBe('incoming')
     expect(theirs[0].status).toBe('missed')
+    expect(theirs[0].peerId).toBe(blind.user.id)
     // 被叫接听 → 已接听
     await a.inject({ method: 'POST', url: '/api/assist/call/answered', headers: auth(helper.token), payload: { callId: 'rec-1' } })
     theirs = (await a.inject({ method: 'GET', url: '/api/calls', headers: auth(helper.token) })).json().calls

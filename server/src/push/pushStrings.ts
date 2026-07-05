@@ -44,6 +44,12 @@ export const pushStrings = {
   routeAddedBody: (name: string, routeName: string, l: PushLang): string =>
     l === 'en' ? `${name} added the route "${routeName}" — open Navigation to walk it`
                : `${name} 为你添加了路线「${routeName}」，可在导航里沿信标行走`,
+  routeUpdatedTitle: (l: PushLang): string =>
+    l === 'en' ? 'A route was updated for you' : '你的一条路线被更新了',
+  // 盲人实地执行这条路线，被改动须知情并**先复核再走**（安全透明，与 routeAdded 同口径）。
+  routeUpdatedBody: (name: string, routeName: string, l: PushLang): string =>
+    l === 'en' ? `${name} updated the route "${routeName}" — please review it in Navigation before walking`
+               : `${name} 修改了路线「${routeName}」，请在导航里先查看再沿信标行走`,
   // 到达围栏（Life360/Find My "已到家"式）：家/公司 是保留 label，本地化；自定义 label 原样。
   placeArrivalTitle: (name: string, label: string, l: PushLang): string => {
     const place = placeLabelName(label, l)

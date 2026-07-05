@@ -62,6 +62,27 @@ describe('路线库（亲友远程路线编排 Phase 1：服务端）', () => {
     await app.close()
   })
 
+  it('亲友改盲人路线 → 盲人收到 route_updated 通知（含新名+改动者，附 routeId）；盲人改自己拥有的不通知自己', async () => {
+    const { app, blind, family } = await setup()
+    const routeId = (await app.inject({ method: 'POST', url: '/api/routes', headers: family.h,
+      payload: { forUserId: blind.id, name: '家到菜场', waypoints: WP } })).json().route.id
+    // 亲友改动这条盲人实地要走的路线 → 盲人须知情、先复核再走。
+    const upd = await app.inject({ method: 'PUT', url: `/api/routes/${routeId}`, headers: family.h,
+      payload: { name: '家到菜场（绕开工地）' } })
+    expect(upd.statusCode).toBe(200)
+    const notifs = (await app.inject({ method: 'GET', url: '/api/notifications', headers: blind.h })).json().notifications
+    const updated = notifs.find((n: { kind: string }) => n.kind === 'route_updated')
+    expect(updated).toBeTruthy()
+    expect(updated.body).toContain('家到菜场（绕开工地）') // 含新名
+    expect(updated.body).toContain('familyuser')           // 含改动者名
+    expect(updated.data.routeId).toBe(routeId)             // 附 routeId 供跳转
+    // 盲人改自己拥有的路线：不通知自己（editor===owner）。
+    await app.inject({ method: 'PUT', url: `/api/routes/${routeId}`, headers: blind.h, payload: { name: '我改回来了' } })
+    const notifs2 = (await app.inject({ method: 'GET', url: '/api/notifications', headers: blind.h })).json().notifications
+    expect(notifs2.filter((n: { kind: string }) => n.kind === 'route_updated')).toHaveLength(1) // 仍只有亲友那条
+    await app.close()
+  })
+
   it('盲人可给自己建路线（实走存路线通道）；own+created 列表去重', async () => {
     const { app, blind } = await setup()
     const res = await app.inject({ method: 'POST', url: '/api/routes', headers: blind.h,

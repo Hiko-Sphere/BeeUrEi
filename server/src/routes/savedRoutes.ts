@@ -124,7 +124,17 @@ export function registerSavedRouteRoutes(app: FastifyInstance, store: Store, pus
       ...(parsed.data.waypoints ? { waypoints: parsed.data.waypoints } : {}),
       updatedAt: Date.now(),
     })!
-    return { route: routeView(store, updated, req.user!.sub) }
+    // 绘制者(亲友)改了盲人实地要走的路线：通知盲人**先复核再走**——与"添加路线"通知同一安全透明口径。
+    // 此前只有 CREATE 通知、UPDATE 静默，盲人可能照旧走一条被改过（移点/加绕路）的路线而不知情（漏报的姊妹缺口）。
+    // 仅当改动者非归属者时通知（盲人自己改自己的不扰）；notifyUser 内部 best-effort，失败不影响主操作。
+    const editor = req.user!.sub
+    if (editor !== updated.ownerId) {
+      const l = pushLang(store.findById(updated.ownerId)?.language)
+      notifyUser(store, push, updated.ownerId, 'route_updated',
+                 pushStrings.routeUpdatedTitle(l), pushStrings.routeUpdatedBody(store.findById(editor)?.displayName ?? '', updated.name, l),
+                 { routeId: updated.id })
+    }
+    return { route: routeView(store, updated, editor) }
   })
 
   // 删路线：归属者或绘制者；幂等（gone→204）。无权（含已拉黑的绘制者）一律 204 no-op——

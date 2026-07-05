@@ -273,6 +273,15 @@ enum FramingStrings {
         return l == .zh ? "。包装标注含有：\(names.joined(separator: "、"))"
                         : ". Label lists allergens: \(names.joined(separator: ", "))"
     }
+
+    /// 微量/交叉污染标注播报后缀（"可能含微量"，与"标注含有"**分开措辞**——严重过敏者据此决定敢不敢吃）。
+    /// 空=无数据→nil（**绝不播"不含"**——缺数据≠不含）。复用 allergenDisplay 名称表（traces 与 allergens 同词表）。
+    static func productTracesSpeak(_ tags: [String], _ l: Language) -> String? {
+        guard !tags.isEmpty else { return nil }
+        let names = tags.map { allergenDisplay($0, l) }
+        return l == .zh ? "。可能含微量：\(names.joined(separator: "、"))"
+                        : ". May contain traces of: \(names.joined(separator: ", "))"
+    }
     static func wifiResult(_ ssid: String?, _ l: Language) -> String {
         (l == .zh ? "无线网络码" : "Wi-Fi code") + (ssid.map { l == .zh ? "：\($0)" : ": \($0)" } ?? "")
     }

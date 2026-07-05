@@ -7,6 +7,10 @@ export interface ProductInfo {
   /// 包装**标注**的过敏原（OFF allergens_tags 规范化标签去掉 "en:" 前缀，如 "peanuts"/"milk"）。
   /// 只在有标注时给出；空数组=无数据——**缺数据≠不含过敏原**，客户端只能播"标注含有X"、绝不能播"不含"。
   allergens: string[]
+  /// 包装标注的**微量/交叉污染**过敏原（OFF traces_tags，"may contain traces of X"）。与 allergens 语义**不同**：
+  /// 这是"可能含微量"而非"确定含有"，须分开措辞。对严重过敏（可致过敏性休克）的盲人是刚需——包装上读不到。
+  /// 空数组=无该项数据（同样**缺数据≠不含**）。
+  traces: string[]
   /// 营养分级 Nutri-Score（'a'..'e'，a 最优 e 最差）。盲人读不到营养标签，这是可听的整体营养质量。
   /// 无数据/不适用（如水/酒）→ null；只给可信的 a..e，绝不猜。
   nutriScore?: string | null
@@ -72,7 +76,7 @@ export type LookupOutcome =
 
 /// 查一个条码，区分"真未收录(notFound)"与"瞬时故障(failed)"（用于差异化缓存；两者对客户端都表现为拿不到名字）。
 export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeoutMs = 5000): Promise<LookupOutcome> {
-  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,allergens_tags,nutriscore_grade,nova_group`
+  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,allergens_tags,traces_tags,nutriscore_grade,nova_group`
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
@@ -89,6 +93,7 @@ export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeo
     return { kind: 'found', info: {
       name,
       allergens: extractAllergens(p?.allergens_tags),
+      traces: extractAllergens(p?.traces_tags), // traces_tags 与 allergens_tags 同格式，复用同一规范化提取
       nutriScore: parseNutriScore(p?.nutriscore_grade),
       novaGroup: parseNovaGroup(p?.nova_group),
     } }

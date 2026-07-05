@@ -152,7 +152,8 @@ describe('POST /api/vision/describe（路由）', () => {
     const res = await app.inject({ method: 'POST', url: '/api/vision/describe', headers: { authorization: `Bearer ${t}` },
       payload: { image: TINY_JPEG_B64, mime: 'image/jpeg', question: 'what is ahead', lang: 'en' } })
     expect(res.statusCode).toBe(200)
-    expect(res.json()).toEqual({ text: 'A door ahead, steps on the right.' })
+    // 回带剩余配额：默认 200/日，首次调用后剩 199（客户端据此提示"还剩 N 次"）。
+    expect(res.json()).toEqual({ text: 'A door ahead, steps on the right.', remaining: 199, dailyMax: 200 })
     await app.close()
   })
 
@@ -192,11 +193,11 @@ describe('POST /api/vision/describe（路由）', () => {
     const t = await token(app)
     const call = () => app.inject({ method: 'POST', url: '/api/vision/describe', headers: { authorization: `Bearer ${t}` },
       payload: { image: TINY_JPEG_B64, mime: 'image/jpeg' } })
-    expect((await call()).statusCode).toBe(200) // 1
-    expect((await call()).statusCode).toBe(200) // 2 → 达上限
+    const r1 = await call(); expect(r1.statusCode).toBe(200); expect(r1.json()).toMatchObject({ remaining: 1, dailyMax: 2 })   // 1 → 剩 1
+    const r2 = await call(); expect(r2.statusCode).toBe(200); expect(r2.json()).toMatchObject({ remaining: 0, dailyMax: 2 })   // 2 → 剩 0（达上限）
     const third = await call()                   // 3 → 超配额
     expect(third.statusCode).toBe(429)
-    expect(third.json()).toMatchObject({ error: 'ai_daily_quota_exceeded' })
+    expect(third.json()).toMatchObject({ error: 'ai_daily_quota_exceeded', remaining: 0, dailyMax: 2 }) // 429 也带 remaining=0，客户端明确"已用完"
     expect(upstream).toHaveBeenCalledTimes(2) // 超配额那次绝不打上游（省付费额度）
     await app.close()
   })
@@ -277,7 +278,7 @@ describe('POST /api/vision/describe（路由）', () => {
     const res = await app.inject({ method: 'POST', url: '/api/vision/describe', headers: { authorization: `Bearer ${t}` },
       payload: { image: `data:image/jpeg;base64,${TINY_JPEG_B64}`, mime: 'image/jpeg' } })
     expect(res.statusCode).toBe(200)
-    expect(res.json()).toEqual({ text: 'ok' })
+    expect(res.json()).toMatchObject({ text: 'ok', remaining: 199, dailyMax: 200 })
     await app.close()
   })
 })

@@ -53,9 +53,11 @@ export function registerVisionRoutes(app: FastifyInstance, store: Store, metrics
 
     // 每日配额（护外部付费额度；见 visionDailyMax）：当日已达上限即 429，绝不再打上游。
     const day = utcDay()
-    if (store.visionCallsOnDay(req.user!.sub, day) >= visionDailyMax()) {
+    const dailyMax = visionDailyMax()
+    if (store.visionCallsOnDay(req.user!.sub, day) >= dailyMax) {
       metrics?.inc('vision_quota_exceeded_total') // 值守：单账号撞每日上限的速率（异常飙升=滥用/配额过紧）
-      return reply.code(429).send({ error: 'ai_daily_quota_exceeded' })
+      // 回带 remaining/dailyMax：客户端可明确告知盲人"今日 AI 描述已用完（0/N），次日 UTC 0 点重置"，而非笼统报错。
+      return reply.code(429).send({ error: 'ai_daily_quota_exceeded', remaining: 0, dailyMax })
     }
 
     try {
@@ -66,7 +68,9 @@ export function registerVisionRoutes(app: FastifyInstance, store: Store, metrics
       })
       store.recordVisionCall(req.user!.sub, day) // 仅成功计入配额（失败不烧用户额度，失败速率已由 10/min 限流兜住）
       metrics?.inc('vision_describe_total') // 值守：成功描述数≈外部付费调用量（乘单价即成本，可对账/告警）
-      return { text }
+      // 回带剩余次数：付费额度有限，盲人靠它配给使用（"还剩 N 次"），临近上限时客户端可提前提醒，避免用到一半突然被拒。
+      const remaining = Math.max(0, dailyMax - store.visionCallsOnDay(req.user!.sub, day)) // 含刚记的这次
+      return { text, remaining, dailyMax }
     } catch (e) {
       // 不外泄上游细节/密钥；仅入服务端日志便于运维定位（如 VISION_* 配置错误、上游 4xx/5xx）。
       metrics?.inc('vision_errors_total') // 值守：上游失败率（飙升=provider 故障/配额耗尽/配置错，可告警）

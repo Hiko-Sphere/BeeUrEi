@@ -12,5 +12,10 @@
     { "src": "/app/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/app/icon-512.png", "sizes": "512x512", "type": "image/png" },
     { "src": "/app/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "来电与求助队列 / Calls", "short_name": "来电", "url": "/app/calls", "description": "查看来电与公开求助队列" },
+    { "name": "紧急告警 / Alerts", "short_name": "告警", "url": "/app/notifications", "description": "查看紧急告警与通知" },
+    { "name": "消息 / Chat", "short_name": "消息", "url": "/app/chat", "description": "与联系人聊天" }
   ]
 }

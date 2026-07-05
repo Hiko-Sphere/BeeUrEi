@@ -27,6 +27,19 @@ describe('RecordingsPage 列表渲染（防字段漂移）', () => {
     expect(screen.getByText(/上海市黄浦区/)).toBeInTheDocument()      // locationLabel
   })
 
+  it('录制原因(reason)非空时渲染、空时不显示（死字段修复：服务端下发 reason 但列表从不呈现；知情同意透明度）', async () => {
+    mock(api.myRecordings).mockResolvedValue({
+      recordings: [
+        { id: 'r1', recordedAt: 1_700_000_000_000, hasMedia: true, participantNames: ['张三'], reason: '与房东的纠纷取证' },
+        { id: 'r2', recordedAt: 1_700_000_000_001, hasMedia: true, participantNames: ['李四'], reason: '' }, // 空原因不出标签
+      ],
+    })
+    render(<RecordingsPage />)
+    expect(await screen.findByText(/与房东的纠纷取证/)).toBeInTheDocument()
+    // 恰一个"录制原因"标签（r1 有、r2 空原因不显示）。
+    expect(screen.getAllByText(/录制原因/)).toHaveLength(1)
+  })
+
   it('无媒体 → "无媒体" + 播放按钮禁用 + 参与者空显示"—"', async () => {
     mock(api.myRecordings).mockResolvedValue({
       recordings: [{ id: 'r2', recordedAt: 1_700_000_000_000, hasMedia: false, participantNames: [] }],

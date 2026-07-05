@@ -66,6 +66,9 @@ export function RecordingsPage() {
               </div>
               <div className="text-sm text-soft">
                 <div><span className="text-faint">{t('参与者', 'Participants')}：</span>{r.participantNames.join('、') || '—'}</div>
+                {/* 录制原因（知情同意透明度）：服务端一直下发 reason 却从未在列表呈现（死字段）。是"为何录这通话"
+                    的审计线索——录制功能以双方知情同意为本，把原因如实展示强化透明度。空原因不显示（默认 ''）。 */}
+                {r.reason && r.reason.trim() && <div><span className="text-faint">{t('录制原因', 'Reason')}：</span>{r.reason}</div>}
                 {r.locationLabel && <div><span className="text-faint">{t('地点', 'Location')}：</span>{r.locationLabel}</div>}
               </div>
               <Button loading={loadingId === r.id} disabled={!r.hasMedia} onClick={() => play(r)} className="w-full"><IconFilm width={16} height={16} />{t('播放', 'Play')}</Button>

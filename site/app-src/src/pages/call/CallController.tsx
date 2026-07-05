@@ -191,7 +191,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
 }
 
 // 简易来电铃：WebAudio 周期柔和双音，无需音频资源；可停止。
-class Ringtone {
+export class Ringtone {
   private ctx: AudioContext | null = null
   private timer: ReturnType<typeof setInterval> | null = null
   start() {
@@ -202,6 +202,10 @@ class Ringtone {
     } catch { return }
     const beep = () => {
       if (!this.ctx) return
+      // 无用户手势时 AudioContext 生于 suspended 态、静默不响——每次响铃都尝试 resume：既覆盖初次，也让
+      // 响铃期间发生的任何手势在下一拍立即让铃声响起（施救者可能没盯屏，务必让来电铃真能被听到）。
+      // 与 playEmergencyChime 的 resume 同因；已运行则为 no-op。
+      void this.ctx.resume().catch(() => {})
       for (const [i, freq] of [880, 1180].entries()) {
         const o = this.ctx.createOscillator(); const g = this.ctx.createGain()
         o.frequency.value = freq; o.type = 'sine'

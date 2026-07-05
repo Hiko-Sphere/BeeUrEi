@@ -10,6 +10,8 @@ import {
 import { type Store, type Passkey, selfView } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { issueTokens, deviceLabelFromReq } from '../auth/session'
+import { notifyAccountSecurity } from '../notifications/notify'
+import { NoopPushSender, type PushSender } from '../push/apns'
 
 // RP（依赖方）配置：必须与 iOS Associated Domains 的 webcredentials 域一致，且该域需托管
 // apple-app-site-association 文件。默认 beeurei-api.hikosphere.com——API 子域由本服务直接
@@ -45,7 +47,7 @@ export class ChallengeStore {
 
 /// Passkey（WebAuthn）注册与登录。用 @simplewebauthn/server 做权威验签。
 /// iOS 端用 ASAuthorizationPlatformPublicKeyCredentialProvider，把各字段 base64url 编码后回传。
-export function registerPasskeyRoutes(app: FastifyInstance, store: Store): void {
+export function registerPasskeyRoutes(app: FastifyInstance, store: Store, pushSender: PushSender = new NoopPushSender()): void {
   const challenges = new ChallengeStore()
 
   // 注册：生成 options（authed）。
@@ -105,6 +107,8 @@ export function registerPasskeyRoutes(app: FastifyInstance, store: Store): void 
       createdAt: Date.now(),
     }
     store.createPasskey(passkey)
+    // 新增 passkey = 给账号加一条**免密登录方式**：未授权添加是隐蔽后门，即时预警本人（越勿扰）。
+    notifyAccountSecurity(store, pushSender, user, 'passkey_added')
     return reply.code(201).send({ ok: true, id: passkey.id })
   })
 
@@ -165,7 +169,13 @@ export function registerPasskeyRoutes(app: FastifyInstance, store: Store): void 
   // 删除一把 passkey（仅本人）。
   app.delete('/api/auth/passkey/:id', { preHandler: requireAuth() }, async (req, reply) => {
     const id = (req.params as { id: string }).id
+    // 仅当确有归属本人的该 passkey 被删时才预警（错误/重复 id 不误报"删除了通行密钥"）。
+    const existed = store.passkeysForUser(req.user!.sub).some((p) => p.id === id)
     store.deletePasskey(id, req.user!.sub)
+    if (existed) {
+      const user = store.findById(req.user!.sub)
+      if (user) notifyAccountSecurity(store, pushSender, user, 'passkey_removed')
+    }
     return reply.code(204).send()
   })
 }

@@ -6,6 +6,16 @@ export function pushLang(language?: string): PushLang {
   return language?.toLowerCase().startsWith('en') ? 'en' : 'zh'
 }
 
+/// 账号安全敏感变更事件（**登录凭据/方式的任何增删改**都须预警本人=接管/锁定信号）。
+/// 单一真相：account/recovery/passkey 各路都经此类型 + notifyAccountSecurity 发，杜绝各写各的漂移。
+/// 新增登录方式（未来的第三方登录等）时**务必**在此补一项并接线（见 notifyAccountSecurity）。
+export type SecurityEvent =
+  | 'password_changed' | 'password_reset'
+  | 'email_changed' | 'phone_changed' | 'username_changed'
+  | 'apple_linked' | 'apple_unlinked'
+  | 'passkey_added' | 'passkey_removed'
+  | '2fa_enabled' | '2fa_disabled'
+
 /// 地点 label 展示名：home/work 是保留 label，本地化为"家/公司"；自定义 label（如"医院"）原样。
 function placeLabelName(label: string, l: PushLang): string {
   if (label === 'home') return l === 'en' ? 'home' : '家'
@@ -161,8 +171,7 @@ export const pushStrings = {
       : '你的安全报到到期时服务暂时无法访问，我们未替你通知亲友。如果你仍需要帮助，请立即手动发起求助。',
   // 账号安全敏感变更通知本人（改密/改邮箱/开关 2FA…）：**未授权变更即时预警**——盗号者一旦改密/关 2FA，
   // 真实用户在自己设备上立刻收到（本人操作则是确认）。industry-standard（各家都"密码已修改"邮件/通知）。
-  securityNotice: (event: 'password_changed' | 'password_reset' | 'email_changed' | 'phone_changed' | 'username_changed' | 'apple_linked' | 'apple_unlinked' | '2fa_enabled' | '2fa_disabled',
-                   l: PushLang): { title: string; body: string } => {
+  securityNotice: (event: SecurityEvent, l: PushLang): { title: string; body: string } => {
     const en = l === 'en'
     switch (event) {
       case 'password_changed': return { title: en ? 'Password changed' : '账号密码已修改',
@@ -175,6 +184,10 @@ export const pushStrings = {
         body: en ? 'An Apple ID sign-in method was just added to your account. If this wasn’t you, unlink it and secure your account now.' : '你的账号刚刚新增了 Apple 登录方式。若非本人操作，请立即解绑并处理账号安全。' }
       case 'apple_unlinked': return { title: en ? 'Apple sign-in removed' : '已解绑 Apple 登录',
         body: en ? 'An Apple ID sign-in method was just removed from your account. If this wasn’t you, secure your account now.' : '你的账号刚刚解绑了 Apple 登录方式。若非本人操作，请立即处理。' }
+      case 'passkey_added': return { title: en ? 'Passkey added' : '已新增通行密钥',
+        body: en ? 'A passkey (a passwordless sign-in method) was just added to your account. If this wasn’t you, remove it and secure your account now.' : '你的账号刚刚新增了一把通行密钥（免密登录方式）。若非本人操作，请立即删除并处理账号安全。' }
+      case 'passkey_removed': return { title: en ? 'Passkey removed' : '已删除通行密钥',
+        body: en ? 'A passkey sign-in method was just removed from your account. If this wasn’t you, secure your account now.' : '你的账号刚刚删除了一把通行密钥。若非本人操作，请立即处理。' }
       case 'password_reset': return { title: en ? 'Password was reset' : '账号密码已被重置',
         body: en ? 'Your password was just reset via account recovery. If this wasn’t you, secure your account now.' : '你的账号密码刚刚通过“找回密码”被重置。若非本人操作，请立即处理。' }
       case 'email_changed': return { title: en ? 'Account email changed' : '账号邮箱已更改',

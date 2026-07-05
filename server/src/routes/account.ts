@@ -12,8 +12,8 @@ import { emailVerificationMail } from '../mail/templates'
 import { CodeSendLimiter } from '../auth/sendLimiter'
 import { normalizePhone, type AppleTokenVerifier } from '../auth/apple'
 import { cascadeDeleteUser } from '../db/cascade'
-import { notifyUser } from '../notifications/notify'
-import { pushLang, pushStrings } from '../push/pushStrings'
+import { notifyAccountSecurity } from '../notifications/notify'
+import type { SecurityEvent } from '../push/pushStrings'
 import { NoopPushSender, type PushSender } from '../push/apns'
 
 const passwordSchema = z.object({
@@ -33,10 +33,8 @@ const avatarSchema = z.object({
 
 export function registerAccountRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer, appleVerifier?: AppleTokenVerifier, codeSend: CodeSendLimiter = new CodeSendLimiter(), pushSender: PushSender = new NoopPushSender()): void {
   // 账号安全敏感变更 → 通知本人（in-app 持久化 + best-effort 推送到本人设备）：未授权变更即时预警。
-  const notifySecurity = (u: User, event: 'password_changed' | 'password_reset' | 'email_changed' | 'phone_changed' | 'username_changed' | 'apple_linked' | 'apple_unlinked' | '2fa_enabled' | '2fa_disabled') => {
-    const { title, body } = pushStrings.securityNotice(event, pushLang(u.language))
-    notifyUser(store, pushSender, u.id, `security_${event}`, title, body)
-  }
+  // 委托共享的 notifyAccountSecurity（单一真相，与 recovery/passkey 各路同口径，防漂移）。
+  const notifySecurity = (u: User, event: SecurityEvent) => notifyAccountSecurity(store, pushSender, u, event)
   // 修改密码：验证旧密码 → 设新密码 → 递增 tokenVersion(令已签发的 access token 立即失效) → 撤销所有 refresh token。
   // 递增 tokenVersion 是关键：否则被盗号者手里的 access token 在改密后仍可用最长 1h，改密自救形同虚设（见审查 #2）。
   // 限流：校验 oldPassword 而无内置尝试上限（不同于走 CodeRegistry 5 次上限的验证码端点）。

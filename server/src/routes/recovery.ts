@@ -7,8 +7,7 @@ import { type CodeRegistry } from '../auth/codes'
 import { type Mailer } from '../mail/mailer'
 import { passwordResetMail } from '../mail/templates'
 import { CodeSendLimiter } from '../auth/sendLimiter'
-import { notifyUser } from '../notifications/notify'
-import { pushLang, pushStrings } from '../push/pushStrings'
+import { notifyAccountSecurity } from '../notifications/notify'
 import { NoopPushSender, type PushSender } from '../push/apns'
 
 const forgotSchema = z.object({ username: z.string().trim().min(1) })
@@ -66,8 +65,7 @@ export function registerRecoveryRoutes(app: FastifyInstance, store: Store, codes
     })
     store.deleteRefreshTokensForUser(user.id)
     // 安全预警本人：密码刚通过"找回"被重置——若非本人操作（他人拿到验证码/接管邮箱），即时告知。
-    const { title, body } = pushStrings.securityNotice('password_reset', pushLang(user.language))
-    notifyUser(store, pushSender, user.id, 'security_password_reset', title, body)
+    notifyAccountSecurity(store, pushSender, user, 'password_reset')
     return { ok: true }
   })
 }

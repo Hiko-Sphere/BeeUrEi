@@ -57,7 +57,8 @@ describe('quietHours 纯逻辑', () => {
     // 含账号安全告警（security_*）：改密/关 2FA/换邮箱=潜在接管信号，须即时察觉，越过勿扰（行业通例）。
     for (const k of ['emergency_alert', 'emergency_ack', 'incoming_call', 'sos', 'escalate', 'safety_checkin_expired', 'checkin_missed',
                      'security_password_changed', 'security_2fa_disabled', 'security_email_changed', 'security_password_reset', 'security_phone_changed',
-                     'security_username_changed', 'security_apple_linked', 'security_apple_unlinked']) expect(isAlwaysThrough(k)).toBe(true)
+                     'security_username_changed', 'security_apple_linked', 'security_apple_unlinked',
+                     'security_passkey_added', 'security_passkey_removed']) expect(isAlwaysThrough(k)).toBe(true)
     for (const k of ['chat_message', 'friend_request', 'route_added', 'place_arrival', 'kyc_verified', 'recall', 'medical_info_viewed']) expect(isAlwaysThrough(k)).toBe(false)
   })
 

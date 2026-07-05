@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto'
-import type { Store } from '../db/store'
+import type { Store, User } from '../db/store'
 import type { PushSender } from '../push/apns'
 import { NoopWebPushSender, type WebPushSender } from '../push/webPush'
 import { totalUnreadFor } from '../db/unread'
 import { shouldSuppressPush } from './quietHours'
+import { pushLang, pushStrings, type SecurityEvent } from '../push/pushStrings'
 
 // Web Push 发送器（模块单例，buildApp 注入——与 auth/rbac 的 setAuthStore 同一先例）：
 // notifyUser 有 11 个调用点分布 4 条注册链，穿参改动面大且易漏；统一投递本就该单点配置。
@@ -50,4 +51,12 @@ export function notifyUser(
       for (const sub of store.webPushSubscriptionsForUser(userId)) void webPushSender.send(sub, payload).catch(() => { /* best-effort */ })
     }
   } catch { /* 推送读失败绝不阻断/500 调用方已提交的主流程 */ }
+}
+
+/// 账号安全变更 → 预警本人（单一真相：account/recovery/passkey 各路都调此，杜绝各写各的 title/body/kind 漂移）。
+/// kind 统一 `security_<event>`，经上面的 notifyUser：站内持久化 + best-effort 推送，且 `security_*` 恒越勿扰
+/// （见 quietHours.isAlwaysThrough）——夜间接管当即触达。**任何登录凭据/方式的增删改都应经此**。
+export function notifyAccountSecurity(store: Store, push: PushSender, user: User, event: SecurityEvent): void {
+  const { title, body } = pushStrings.securityNotice(event, pushLang(user.language))
+  notifyUser(store, push, user.id, `security_${event}`, title, body)
 }

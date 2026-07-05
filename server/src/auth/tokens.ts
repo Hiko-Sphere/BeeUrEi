@@ -48,7 +48,8 @@ export function verifyAccessToken(token: string): TokenPayload | null {
 /// 严格作用域：绑定到单个 recordingId + 单个用户 + 其角色 + 其 tokenVersion，短时过期，
 /// 签名不可伪造/挪用到其它录制；tv 让"改密/封禁/强制下线"(递增 tokenVersion)即时使令牌失效。
 export const MEDIA_TOKEN_TTL_SEC = 60 // 唯一真源：jwt 过期与对客户端公布的 expiresInSec 都从此派生
-export interface MediaTokenPayload { sub: string; role: string; rec: string; tv: number }
+// sid：签发时所在的登录会话——供媒体流端点像 Bearer 路一样按设备远程登出即时失效（缺省=旧令牌，回退只查 tv）。
+export interface MediaTokenPayload { sub: string; role: string; rec: string; tv: number; sid?: string }
 export function signMediaToken(payload: MediaTokenPayload): string {
   return jwt.sign({ ...payload, scope: 'media' }, SECRET, { expiresIn: MEDIA_TOKEN_TTL_SEC })
 }
@@ -58,7 +59,8 @@ export function verifyMediaToken(token: string, recordingId: string): MediaToken
     if (d.scope !== 'media' || d.rec !== recordingId) return null
     if (typeof d.sub !== 'string' || typeof d.role !== 'string') return null
     const tv = typeof d.tv === 'number' ? d.tv : 0
-    return { sub: d.sub, role: d.role, rec: d.rec, tv }
+    const sid = typeof d.sid === 'string' ? d.sid : undefined
+    return { sub: d.sub, role: d.role, rec: d.rec, tv, sid }
   } catch {
     return null
   }

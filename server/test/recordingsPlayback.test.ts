@@ -249,6 +249,19 @@ describe('复审修复回归', () => {
     await app.close()
   })
 
+  it('MED-2 姊妹：按设备远程登出（撤销会话）后旧 play-token 立即失效——媒体令牌与 Bearer 同守会话', async () => {
+    const { app, store, owner, recording } = await makeRecording()
+    const tk = (await app.inject({ method: 'GET', url: `/api/recordings/${recording.id}/play-token`, headers: auth(owner.token) })).json().token
+    // 令牌即时可用（会话在、tv 未变）。
+    expect((await app.inject({ method: 'GET', url: `/api/recordings/${recording.id}/media?t=${encodeURIComponent(tk)}` })).statusCode).toBe(200)
+    // 远程登出该设备：撤销 owner 当前会话（play-token 正绑定此 sid 签发）。tokenVersion **不变**（登出某设备≠改密/封禁）。
+    const sid = store.sessionsForUser(owner.id, Date.now())[0].sessionId
+    store.revokeSession(owner.id, sid)
+    const after = await app.inject({ method: 'GET', url: `/api/recordings/${recording.id}/media?t=${encodeURIComponent(tk)}` })
+    expect(after.statusCode).toBe(401) // 会话撤销即媒体令牌失效（此前只查 tv、撤销会话后仍可播至 60s TTL 到期）
+    await app.close()
+  })
+
   it('MED-3：第二条不同证据不被去重吞掉——单独建一条带该证据的举报（不丢、受留存保护）', async () => {
     const { app, store, owner, peer, recording } = await makeRecording()
     // owner 名下第二条录制 R2。

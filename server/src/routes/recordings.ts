@@ -179,7 +179,7 @@ export function registerRecordingRoutes(app: FastifyInstance, store: Store, cons
     const isOwner = rec.ownerId === me.sub
     if (!(isAdmin || (isOwner && rec.deletedAt == null))) return reply.code(403).send({ error: 'forbidden' })
     // 绑定当前 tokenVersion：改密/封禁/强制下线后旧令牌即失效（与 Bearer 路一致，见复审 MED-2）。
-    return { token: signMediaToken({ sub: me.sub, role: me.role, rec: id, tv: me.tv ?? 0 }), expiresInSec: MEDIA_TOKEN_TTL_SEC }
+    return { token: signMediaToken({ sub: me.sub, role: me.role, rec: id, tv: me.tv ?? 0, sid: me.sid }), expiresInSec: MEDIA_TOKEN_TTL_SEC }
   })
 
   // 列出录制（管理员，含用户已软删除项）。先清过期项：删元数据 + 级联删媒体文件。
@@ -221,8 +221,11 @@ export function registerRecordingRoutes(app: FastifyInstance, store: Store, cons
       const mt = verifyMediaToken(t, recordingId)
       if (mt) {
         const u = store.findById(mt.sub)
-        // 同样校验 tokenVersion：令牌签发后被改密/封禁/强制下线则立即失效（见复审 MED-2）。
-        if (u && u.status === 'active' && (u.tokenVersion ?? 0) === (mt.tv ?? 0)) return { user: u }
+        // 校验 tokenVersion（改密/封禁/强制下线即失效，见复审 MED-2）+ **会话**（按设备远程登出即失效，与
+        // Bearer 路同口径——此前媒体令牌只查 tv、不查 session，登出某设备后其旧媒体令牌仍可播至 60s TTL 到期）。
+        // sid 缺省（旧令牌）回退只查 tv，向后兼容。
+        if (u && u.status === 'active' && (u.tokenVersion ?? 0) === (mt.tv ?? 0)
+            && (!mt.sid || store.hasActiveSession(mt.sub, mt.sid, Date.now()))) return { user: u }
       }
     }
     return null

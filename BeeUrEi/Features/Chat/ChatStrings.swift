@@ -132,6 +132,10 @@ enum ChatStrings {
     }
     static func reactionRemoved(_ l: Language) -> String { l == .zh ? "已取消回应" : "Reaction removed" }
     static func reactionFailed(_ l: Language) -> String { l == .zh ? "回应失败，请重试" : "Couldn't react. Try again." }
+    /// 对方给"我发的消息"贴了表情——盲人看不到角标，靠此语音得知被回应（WhatsApp 会通知表情回应）。
+    static func reactionReceivedSpeak(_ emoji: String, _ l: Language) -> String {
+        l == .zh ? "你的消息收到回应\(emoji)" : "Your message got a \(emoji) reaction"
+    }
     static let reactionChoices = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
 
     // MARK: 视频消息

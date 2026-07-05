@@ -251,6 +251,23 @@ struct ConversationsView: View {
     }
 }
 
+/// 表情回应播报差分（纯逻辑，可单测）：轮询刷新时，找出**我发的消息**上新贴/改变的表情——盲人看不到角标，
+/// 靠此语音得知被回应。只报"我的消息"(fromId==myId)、表情非空、且相对上一份快照**有变化**的。
+/// 自反应天然不重报：react() 会即时把我的表情写进本地 messages，故下次轮询 old 已含它、差分无变化。
+/// 首次见到的消息（old 里没有）不在此报——由新消息分支处理，避免首载把历史表情全轰炸一遍。
+enum ChatReactionAnnouncer {
+    static func newReactionsOnMyMessages(old: [ChatMessageInfo], new: [ChatMessageInfo], myId: String) -> [String] {
+        let oldReaction = Dictionary(old.map { ($0.id, $0.reaction ?? "") }, uniquingKeysWith: { a, _ in a })
+        var out: [String] = []
+        for m in new {
+            guard m.fromId == myId, let r = m.reaction, !r.isEmpty else { continue }
+            guard let prev = oldReaction[m.id] else { continue } // 首见消息不报
+            if prev != r { out.append(r) }                       // 变化才报（含首次贴/换表情；移除→空由上面 !r.isEmpty 排除）
+        }
+        return out
+    }
+}
+
 // MARK: - 聊天页（iMessage 式气泡 + 已读回执 + 语音条 + 图片 + 视频 + 轮询刷新；单聊/群聊共用）
 
 struct ChatView: View {
@@ -676,6 +693,11 @@ struct ChatView: View {
                 SpeechHub.shared.speak(speak, channel: .query, voiceCode: lang.voiceCode)
             }
             if !fresh.isEmpty { markRead() }
+            // 表情回应（我发的消息被对方贴表情）：盲人看不到角标，语音得知被回应。用**轮询前**的 messages 做差分基线
+            // （messages 在本函数末尾才 merge 更新，此处仍是旧快照）；自反应已即时写入 messages 故不重报（见 helper 注）。
+            for emoji in ChatReactionAnnouncer.newReactionsOnMyMessages(old: messages, new: list, myId: myId) {
+                SpeechHub.shared.speak(ChatStrings.reactionReceivedSpeak(emoji, lang), channel: .query, voiceCode: lang.voiceCode)
+            }
         }
         // 最新一批满页且未翻到开头 → 可能还有更早历史，显示"加载更早"。
         canLoadEarlier = list.count >= chatPageLimit && !reachedStart

@@ -109,4 +109,40 @@ final class ChatStringsTests: XCTestCase {
         XCTAssertNil(m2.readBy)
         XCTAssertNil(m2.readTotal)
     }
+
+    private func mkMsg(_ id: String, from: String, reaction: String? = nil) -> ChatMessageInfo {
+        let rx = reaction.map { ",\"reaction\":\"\($0)\"" } ?? ""
+        let json = "{\"id\":\"\(id)\",\"fromId\":\"\(from)\",\"toId\":\"x\",\"kind\":\"text\",\"text\":\"hi\",\"createdAt\":1000\(rx)}"
+        return try! JSONDecoder().decode(ChatMessageInfo.self, from: Data(json.utf8))
+    }
+
+    func testReactionAnnouncerReportsOnlyChangedReactionsOnMyMessages() {
+        let me = "me"
+        // 对方给"我发的消息"新贴表情 → 报（盲人靠此语音得知被回应）。
+        XCTAssertEqual(ChatReactionAnnouncer.newReactionsOnMyMessages(
+            old: [mkMsg("m1", from: me)], new: [mkMsg("m1", from: me, reaction: "👍")], myId: me), ["👍"])
+        // 换了表情（👍→❤️）→ 报新表情。
+        XCTAssertEqual(ChatReactionAnnouncer.newReactionsOnMyMessages(
+            old: [mkMsg("m1", from: me, reaction: "👍")], new: [mkMsg("m1", from: me, reaction: "❤️")], myId: me), ["❤️"])
+        // 无变化 → 不报（我自反应即时写入 messages，故轮询时 old 已含、天然不重报）。
+        XCTAssertEqual(ChatReactionAnnouncer.newReactionsOnMyMessages(
+            old: [mkMsg("m1", from: me, reaction: "👍")], new: [mkMsg("m1", from: me, reaction: "👍")], myId: me), [])
+        // 移除表情 → 不报。
+        XCTAssertEqual(ChatReactionAnnouncer.newReactionsOnMyMessages(
+            old: [mkMsg("m1", from: me, reaction: "👍")], new: [mkMsg("m1", from: me)], myId: me), [])
+        // 对方**自己**消息上的表情变化 → 不报（只关心我发的消息被回应）。
+        XCTAssertEqual(ChatReactionAnnouncer.newReactionsOnMyMessages(
+            old: [mkMsg("p1", from: "peer")], new: [mkMsg("p1", from: "peer", reaction: "👍")], myId: me), [])
+        // 首见的消息（old 里没有）→ 不报（避免首载把历史表情全轰炸；由新消息分支处理）。
+        XCTAssertEqual(ChatReactionAnnouncer.newReactionsOnMyMessages(
+            old: [], new: [mkMsg("m1", from: me, reaction: "👍")], myId: me), [])
+    }
+
+    func testReactionReceivedSpeakBilingual() {
+        XCTAssertTrue(ChatStrings.reactionReceivedSpeak("👍", .zh).contains("👍"))
+        XCTAssertTrue(ChatStrings.reactionReceivedSpeak("👍", .zh).contains("收到回应"))
+        let en = ChatStrings.reactionReceivedSpeak("❤️", .en)
+        XCTAssertTrue(en.contains("❤️"))
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
 }

@@ -20,6 +20,11 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [twoFA, setTwoFA] = useState(false)     // 登录遇两步验证挑战：显示验证码输入
   const [totpCode, setTotpCode] = useState('')
+  const [forgot, setForgot] = useState(false)   // 找回密码流程（此前 web 完全缺失——忘密码即锁死，见 iOS AuthGateView）
+  const [codeSent, setCodeSent] = useState(false) // 找回：验证码是否已发（进入"填码+新密码"步）
+  const [resetCode, setResetCode] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [notice, setNotice] = useState<string | null>(null) // 非错误提示（验证码已发 / 重置成功回登录）
 
   const errorText = (code: string): string => {
     switch (code) {
@@ -32,6 +37,7 @@ export function LoginPage() {
       case 'too_many_attempts': return t('尝试太频繁，请稍等片刻再试', 'Too many attempts — wait a moment and try again')
       case 'account_disabled': return t('该账号已被停用，请联系管理员', 'This account has been disabled — please contact the administrator')
       case 'too_many_requests': return t('尝试过于频繁，请稍候再试', 'Too many attempts — please wait a moment')
+      case 'invalid_code': return t('验证码不对或已过期，请重新获取', 'That code is wrong or expired — request a new one')
       case 'content_blocked': return t('该内容不被允许，请换一个', "That's not allowed — please choose another")
       case 'network': return t('网络连接失败，请重试', 'Network error, please retry')
       case 'invalid_input': return t('请检查输入内容', 'Please check your input')
@@ -67,6 +73,37 @@ export function LoginPage() {
     }
   }
 
+  // 找回密码 · 第一步：向账号绑定的**已验证**邮箱发验证码。服务端反枚举、恒 ok，故成功即进填码步、提示措辞不暴露账号是否存在。
+  const sendResetCode = async (e: React.FormEvent) => {
+    e.preventDefault(); setError(null); setNotice(null)
+    if (!identifier.trim()) { setError(t('请输入账号', 'Enter your account')); return }
+    setBusy(true)
+    try {
+      await api.forgotPassword(identifier.trim())
+      setCodeSent(true)
+      setNotice(t('如果该账号绑定了已验证邮箱，验证码已发送，请查收后填写下方。', 'If this account has a verified email, a code was sent — check your inbox and enter it below.'))
+    } catch (err) {
+      setError(errorText(err instanceof APIError ? err.code : 'unknown'))
+    } finally { setBusy(false) }
+  }
+
+  // 找回密码 · 第二步：凭码设新密码。成功后回登录页并提示用新密码登录。
+  const doReset = async (e: React.FormEvent) => {
+    e.preventDefault(); setError(null); setNotice(null)
+    if (newPassword.length < 8) { setError(t('密码至少 8 位', 'Password must be at least 8 characters')); return }
+    setBusy(true)
+    try {
+      await api.resetPassword(identifier.trim(), resetCode.trim(), newPassword)
+      leaveForgot()
+      setPassword('')
+      setNotice(t('密码已重置，请用新密码登录。', 'Password reset — sign in with your new password.'))
+    } catch (err) {
+      setError(errorText(err instanceof APIError ? err.code : 'unknown'))
+    } finally { setBusy(false) }
+  }
+
+  const leaveForgot = () => { setForgot(false); setCodeSent(false); setResetCode(''); setNewPassword(''); setError(null) }
+
   const cycleTheme = () => { const order: Theme[] = ['auto', 'light', 'dark']; setTheme(order[(order.indexOf(getTheme()) + 1) % 3]) }
 
   return (
@@ -86,12 +123,38 @@ export function LoginPage() {
         </div>
 
         <div className="surface rounded-2xl border border-[var(--line)] p-6 shadow-sm">
+          {!twoFA && !forgot && (
           <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl surface-2 p-1 text-sm">
-            <button aria-pressed={mode === 'login'} onClick={() => { setMode('login'); setError(null) }} className={`rounded-lg py-2 font-medium transition ${mode === 'login' ? 'surface shadow-sm' : 'text-faint'}`}>{t('登录', 'Sign in')}</button>
-            <button aria-pressed={mode === 'register'} onClick={() => { setMode('register'); setError(null) }} className={`rounded-lg py-2 font-medium transition ${mode === 'register' ? 'surface shadow-sm' : 'text-faint'}`}>{t('注册', 'Register')}</button>
+            <button aria-pressed={mode === 'login'} onClick={() => { setMode('login'); setError(null); setNotice(null) }} className={`rounded-lg py-2 font-medium transition ${mode === 'login' ? 'surface shadow-sm' : 'text-faint'}`}>{t('登录', 'Sign in')}</button>
+            <button aria-pressed={mode === 'register'} onClick={() => { setMode('register'); setError(null); setNotice(null) }} className={`rounded-lg py-2 font-medium transition ${mode === 'register' ? 'surface shadow-sm' : 'text-faint'}`}>{t('注册', 'Register')}</button>
           </div>
+          )}
 
-          {twoFA ? (
+          {forgot ? (
+            <form onSubmit={codeSent ? doReset : sendResetCode} className="flex flex-col gap-4">
+              <div>
+                <h2 className="text-base font-semibold">{t('找回密码', 'Reset password')}</h2>
+                <p className="mt-1 text-sm text-soft">{t('输入账号，我们会向你绑定的已验证邮箱发送验证码。', "Enter your account — we'll email a code to your verified address.")}</p>
+              </div>
+              <Field label={t('用户名 / 邮箱 / 手机号', 'Username / Email / Phone')}>
+                <Input value={identifier} onChange={(e) => setIdentifier(e.target.value)} autoComplete="username" autoCapitalize="none" required readOnly={codeSent} placeholder={t('请输入账号', 'Your account')} />
+              </Field>
+              {codeSent && (
+                <>
+                  <Field label={t('验证码', 'Code')}>
+                    <Input value={resetCode} onChange={(e) => setResetCode(e.target.value)} autoComplete="one-time-code" required placeholder="123456" />
+                  </Field>
+                  <Field label={t('新密码', 'New password')} hint={t('至少 8 位', 'At least 8 characters')}>
+                    <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" required minLength={8} placeholder={t('设置新密码', 'Set a new password')} />
+                  </Field>
+                </>
+              )}
+              {notice && <div className="rounded-xl bg-ok/10 px-3 py-2 text-sm text-ok" role="status">{notice}</div>}
+              {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">{error}</div>}
+              <Button type="submit" loading={busy} className="mt-1 w-full py-3 text-base">{codeSent ? t('重置密码', 'Reset password') : t('发送验证码', 'Send code')}</Button>
+              <button type="button" onClick={leaveForgot} className="text-sm text-faint hover:text-soft">{t('返回登录', 'Back to sign in')}</button>
+            </form>
+          ) : twoFA ? (
             <form onSubmit={submit} className="flex flex-col gap-4">
               <p className="text-sm text-soft">{t('打开你的身份验证器 App，输入 6 位验证码继续登录；也可输入一次性恢复码。', 'Open your authenticator app and enter the 6-digit code to finish signing in. You can also use a one-time recovery code.')}</p>
               <Field label={t('验证码 / 恢复码', 'Code / recovery code')}>
@@ -131,9 +194,13 @@ export function LoginPage() {
               <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required minLength={mode === 'login' ? 1 : 8} placeholder={t('请输入密码', 'Your password')} />
             </Field>
 
+            {notice && <div className="rounded-xl bg-ok/10 px-3 py-2 text-sm text-ok" role="status">{notice}</div>}
             {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">{error}</div>}
 
             <Button type="submit" loading={busy} className="mt-1 w-full py-3 text-base">{mode === 'login' ? t('登录', 'Sign in') : t('创建账户', 'Create account')}</Button>
+            {mode === 'login' && (
+              <button type="button" onClick={() => { setForgot(true); setError(null); setNotice(null) }} className="text-center text-sm text-accent hover:underline">{t('忘记密码？', 'Forgot password?')}</button>
+            )}
           </form>
           )}
         </div>

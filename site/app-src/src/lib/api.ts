@@ -203,6 +203,10 @@ export const api = {
   async register(username: string, password: string, role: string): Promise<{ token: string; refreshToken: string; user: User; created?: boolean }> {
     return rawFetch('POST', '/api/auth/register', { username, password, role }, false) as Promise<{ token: string; refreshToken: string; user: User; created?: boolean }>
   },
+  // 找回密码（未登录）：① 按标识发验证码到已验证邮箱（服务端反枚举，恒返回 ok）② 凭码设新密码。与 iOS 同链、同服务端端点。
+  forgotPassword: (username: string) => rawFetch('POST', '/api/auth/forgot-password', { username }, false) as Promise<{ ok: boolean }>,
+  resetPassword: (username: string, code: string, newPassword: string) =>
+    rawFetch('POST', '/api/auth/reset-password', { username, code, newPassword }, false) as Promise<{ ok: boolean }>,
   me: async () => ((await get('/api/me')) as { user: SelfView }).user,
   appConfig: () => get('/api/app-config') as Promise<AppConfig>,
   setRole: (role: string) => post('/api/account/role', { role }),

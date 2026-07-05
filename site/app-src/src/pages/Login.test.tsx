@@ -1,11 +1,47 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
-// LoginPage 只需 useSession(signIn) + useI18n(默认 ctx) + api(初始渲染不调用)；无 router 依赖。
+// LoginPage 只需 useSession(signIn) + useI18n(默认 ctx) + api（登录/注册初始渲染不调用；找回密码流程需 spy）。
+const h = vi.hoisted(() => ({ forgot: vi.fn(), reset: vi.fn() }))
 vi.mock('../lib/session', () => ({ useSession: () => ({ signIn: vi.fn() }) }))
-vi.mock('../lib/api', () => ({ api: {}, APIError: class extends Error {} }))
+vi.mock('../lib/api', () => ({ api: { forgotPassword: h.forgot, resetPassword: h.reset }, APIError: class extends Error { code = '' } }))
 import { LoginPage } from './Login'
+
+describe('LoginPage 找回密码流程（此前 web 完全缺失——忘密码即锁死）', () => {
+  beforeEach(() => { h.forgot.mockReset(); h.reset.mockReset(); h.forgot.mockResolvedValue({ ok: true }); h.reset.mockResolvedValue({ ok: true }) })
+
+  it('发验证码→填码+新密码→重置成功回登录（反枚举提示不暴露账号是否存在）', async () => {
+    render(<LoginPage />)
+    fireEvent.click(screen.getByRole('button', { name: '忘记密码？' }))
+    fireEvent.change(screen.getByPlaceholderText('请输入账号'), { target: { value: 'alice' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送验证码' }))
+    await waitFor(() => expect(h.forgot).toHaveBeenCalledWith('alice'))
+    // 进入填码步 + 反枚举措辞（"如果该账号…"，不确认账号存在）。
+    await screen.findByPlaceholderText('设置新密码')
+    expect(screen.getByRole('status').textContent).toContain('如果该账号')
+    fireEvent.change(screen.getByPlaceholderText('123456'), { target: { value: '654321' } })
+    fireEvent.change(screen.getByPlaceholderText('设置新密码'), { target: { value: 'newsecret8' } })
+    fireEvent.click(screen.getByRole('button', { name: '重置密码' }))
+    await waitFor(() => expect(h.reset).toHaveBeenCalledWith('alice', '654321', 'newsecret8'))
+    // 回登录页（登录/注册 tabs 复现）+ 成功提示。
+    await screen.findByRole('button', { name: '注册' })
+    expect(screen.getByRole('status').textContent).toContain('密码已重置')
+  })
+
+  it('重置新密码<8 位本地拦截、不打服务端（与注册同口径）', async () => {
+    render(<LoginPage />)
+    fireEvent.click(screen.getByRole('button', { name: '忘记密码？' }))
+    fireEvent.change(screen.getByPlaceholderText('请输入账号'), { target: { value: 'alice' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送验证码' }))
+    await screen.findByPlaceholderText('设置新密码')
+    fireEvent.change(screen.getByPlaceholderText('123456'), { target: { value: '654321' } })
+    fireEvent.change(screen.getByPlaceholderText('设置新密码'), { target: { value: '123' } })
+    fireEvent.click(screen.getByRole('button', { name: '重置密码' }))
+    expect(screen.getByRole('alert').textContent).toContain('密码至少 8 位')
+    expect(h.reset).not.toHaveBeenCalled()
+  })
+})
 
 describe('LoginPage 切换按钮的 aria-pressed 选中态（读屏可知当前模式/身份）', () => {
   it('模式切换与身份选择都暴露 aria-pressed，且互斥更新', () => {

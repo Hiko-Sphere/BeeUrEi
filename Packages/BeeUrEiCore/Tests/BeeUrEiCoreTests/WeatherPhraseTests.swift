@@ -149,6 +149,18 @@ extension WeatherPhraseTests {
         XCTAssertTrue(hotOnly.contains("防暑")); XCTAssertFalse(hotOnly.contains("防晒"))
     }
 
+    func testBelowFreezingIceBeatsUVSafetyPriority() {
+        // 冷晴天：todayMin≤0（结冰风险）+ 高 UV(≥6)。盲人看不到冰，滑倒是直接跌伤——
+        // 结冰警告必须压过防晒（安全>舒适），不能只提防晒而漏掉冰。
+        let icy = WeatherPhrase.advice(code: 0, todayMax: 8, todayMin: -2, precipProbability: 0, uvIndex: 7, language: .zh)!
+        XCTAssertTrue(icy.contains("结冰"))
+        XCTAssertFalse(icy.contains("防晒"))
+        let icyEn = WeatherPhrase.advice(code: 0, todayMax: 8, todayMin: -2, precipProbability: 0, uvIndex: 7, language: .en)!
+        XCTAssertTrue(icyEn.lowercased().contains("ice"))
+        // 极端热天(≥35)即便 min≤0（沙漠/高原罕见）仍以防暑为先（结冰排在高温之后）。
+        XCTAssertTrue(WeatherPhrase.advice(code: 0, todayMax: 36, todayMin: -1, precipProbability: 0, uvIndex: 2, language: .zh)!.contains("防暑"))
+    }
+
     func testUVYieldsToWetAndFogSafety() {
         // 阴雨/雾天：能见度/湿滑安全优先，先返回，绝不给 UV 提示（那些码本就 UV 低）。
         let rainy = WeatherPhrase.advice(code: 61, todayMax: 20, todayMin: 14, precipProbability: 80, uvIndex: 7, language: .zh)!

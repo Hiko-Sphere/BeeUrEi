@@ -162,11 +162,14 @@ public enum WeatherPhrase {
                 ? (language == .zh ? "今天高温且阳光强烈，注意防暑补水、做好防晒。" : " Very hot with strong sun; stay hydrated and use sun protection.")
                 : (language == .zh ? "今天高温，注意防暑补水。" : " Very hot today; stay hydrated."))
         }
-        if highUV {
-            return withWind(language == .zh ? "紫外线较强，外出请注意防晒（帽子、防晒霜）。" : " High UV; use sun protection (hat, sunscreen) outdoors.")
-        }
+        // 冰点以下（路面可能结冰）：**排在防晒之前**——滑倒对盲人是直接跌伤风险（黑冰看不见、盲杖也探不出滑），
+        // 安全高于舒适。冷晴天（todayMin≤0 且 uvIndex≥6，如初春/高原）绝不能让防晒提示压过结冰警告（见测）。
+        // 仍排在高温之后：≥35℃ 的极端热天以防暑为先（那种日子的 min≤0 极罕见）。
         if let mn = todayMin, mn <= 0 {
             return withWind(language == .zh ? "气温在冰点以下，路面可能结冰，出行小心。" : " Below freezing; watch for ice.")
+        }
+        if highUV {
+            return withWind(language == .zh ? "紫外线较强，外出请注意防晒（帽子、防晒霜）。" : " High UV; use sun protection (hat, sunscreen) outdoors.")
         }
         // 无其它条件但强风：单独给大风提示（晴天大风也危险——盲人过街照样听不清车）。
         if strongWind {

@@ -373,6 +373,45 @@ public enum SpokenStrings {
         }
     }
 
+    // MARK: 商品营养（Open Food Facts：Nutri-Score + NOVA 加工程度）
+
+    /// 商品营养信息播报后缀（拼在商品名/过敏原之后，一次 speak 播完；以"。"/". " 起，与过敏原后缀同款可链式拼接）。
+    /// - Nutri-Score（a..e，欧盟营养分级：a 最优、e 最差）——盲人读不到营养标签，这是可听的整体营养质量。
+    /// - NOVA 加工程度（1 未/轻加工…4 超加工）——"超加工食品"是有价值的可听健康提示（对标 Yuka / Open Food Facts）。
+    /// 只报**可信**数据：grade 仅认 a..e、nova 仅认 1..4（与服务端 parseNutriScore/parseNovaGroup 白名单对称，
+    /// 防脏数据把非法档播给盲人）；两者皆无 → nil（不硬凑，缺数据不猜，与过敏原"缺数据≠不含"同取向）。
+    public static func nutrition(nutriScore: String?, novaGroup: Int?, _ lang: Language) -> String? {
+        var parts: [String] = []
+        if let g = nutriScore?.lowercased(), ["a", "b", "c", "d", "e"].contains(g) {
+            parts.append((lang == .zh ? "营养分级" : "Nutri-Score ") + g.uppercased())
+        }
+        if let n = novaGroup, (1...4).contains(n) {
+            parts.append(novaDescriptor(n, lang))
+        }
+        guard !parts.isEmpty else { return nil }
+        return (lang == .zh ? "。" : ". ") + parts.joined(separator: lang == .zh ? "，" : ", ")
+    }
+
+    /// NOVA 加工程度 1..4 的可听描述（超出范围由 nutrition(...) 过滤，绝不落此）。
+    static func novaDescriptor(_ n: Int, _ lang: Language) -> String {
+        switch lang {
+        case .zh:
+            switch n {
+            case 1: return "未加工或轻加工"
+            case 2: return "加工烹饪原料"
+            case 3: return "加工食品"
+            default: return "超加工食品"
+            }
+        case .en:
+            switch n {
+            case 1: return "minimally processed"
+            case 2: return "processed culinary ingredient"
+            case 3: return "processed food"
+            default: return "ultra-processed"
+            }
+        }
+    }
+
     // MARK: 过街（CrossingAssistant / TrafficLightClassifier）
 
     public static func crossingHasLight(_ lang: Language) -> String {

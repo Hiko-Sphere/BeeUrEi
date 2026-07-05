@@ -901,9 +901,16 @@ struct APIClient {
         return try JSONDecoder().decode(R.self, from: data).conversations
     }
 
-    /// 商品条码在线查询结果：名字 + 包装标注过敏原（allergens=确定含有）+ 微量/交叉污染标注（traces=可能含微量）。
+    /// 商品条码在线查询结果：名字 + 包装标注过敏原（allergens=确定含有）+ 微量/交叉污染标注（traces=可能含微量）
+    /// + 营养质量（nutriScore=Nutri-Score a..e / novaGroup=NOVA 加工程度 1..4，服务端已白名单过滤，缺省=无数据）。
     /// 两者语义不同、分开播报；空/缺省=无数据（缺数据≠不含）。
-    struct ProductLookupInfo: Codable { let name: String; let allergens: [String]?; let traces: [String]? }
+    struct ProductLookupInfo: Codable {
+        let name: String
+        let allergens: [String]?
+        let traces: [String]?
+        let nutriScore: String?
+        let novaGroup: Int?
+    }
 
     /// 商品条码 → 商品名+标注过敏原（服务端代理 Open Food Facts）。查不到/离线/任何错误一律 nil（上层回退"用户起名"，绝不编造）。
     func lookupProduct(token: String, barcode: String) async -> ProductLookupInfo? {

@@ -13,8 +13,9 @@ final class ProductMemoryStoreTests: XCTestCase {
 
     override func tearDown() {
         try? FileManager.default.removeItem(at: fileURL)
-        try? FileManager.default.removeItem(at: fileURL.deletingPathExtension().appendingPathExtension("allergens.plist"))
-        try? FileManager.default.removeItem(at: fileURL.deletingPathExtension().appendingPathExtension("traces.plist"))
+        for ext in ["allergens.plist", "traces.plist", "nutri.plist", "nova.plist"] {
+            try? FileManager.default.removeItem(at: fileURL.deletingPathExtension().appendingPathExtension(ext))
+        }
         super.tearDown()
     }
 
@@ -52,6 +53,28 @@ final class ProductMemoryStoreTests: XCTestCase {
         XCTAssertEqual(store.traces(for: "unknown"), []) // 无数据=空（缺数据≠不含）
     }
 
+    func testNutritionRoundTripAndRenamePreserves() {
+        let store = ProductMemoryStore(fileURL: fileURL)
+        // Nutri-Score + NOVA 随名字存（供离线复扫也能报营养质量）。
+        store.save(barcode: "690", name: "薯片", allergens: [], traces: [], nutriScore: "d", novaGroup: 4)
+        XCTAssertEqual(store.nutriScore(for: "690"), "d")
+        XCTAssertEqual(store.novaGroup(for: "690"), 4)
+        // 用户手动改名（默认 nil 营养）不得抹掉已存的营养数据。
+        store.save(barcode: "690", name: "我的薯片")
+        XCTAssertEqual(store.nutriScore(for: "690"), "d")
+        XCTAssertEqual(store.novaGroup(for: "690"), 4)
+        // 落盘重载后仍在；删除连带清。
+        let reloaded = ProductMemoryStore(fileURL: fileURL)
+        XCTAssertEqual(reloaded.nutriScore(for: "690"), "d")
+        XCTAssertEqual(reloaded.novaGroup(for: "690"), 4)
+        reloaded.delete(barcode: "690")
+        XCTAssertNil(reloaded.nutriScore(for: "690"))
+        XCTAssertNil(reloaded.novaGroup(for: "690"))
+        // 无数据 = nil（不猜、不硬凑）。
+        XCTAssertNil(store.nutriScore(for: "unknown"))
+        XCTAssertNil(store.novaGroup(for: "unknown"))
+    }
+
     func testLegacyNameOnlyFileStillLoads() {
         // 老版本只有名字 plist（无 allergens/traces 旁路文件）：名字照常、过敏原与微量标注为空——零迁移。
         let legacy = ["123": "酱油"]
@@ -60,6 +83,8 @@ final class ProductMemoryStoreTests: XCTestCase {
         XCTAssertEqual(store.name(for: "123"), "酱油")
         XCTAssertEqual(store.allergens(for: "123"), [])
         XCTAssertEqual(store.traces(for: "123"), [])
+        XCTAssertNil(store.nutriScore(for: "123"))
+        XCTAssertNil(store.novaGroup(for: "123"))
     }
 
     func testSaveAndLookup() {

@@ -7,9 +7,13 @@ final class ProductMemoryStore {
     private var items: [String: String] = [:] // 条码 → 名字
     private var allergenItems: [String: [String]] = [:] // 条码 → 包装标注过敏原（OFF 规范词，在线查到时随名字一起存）
     private var tracesItems: [String: [String]] = [:] // 条码 → 微量/交叉污染标注（OFF traces_tags 规范词；"可能含微量"）
+    private var nutriItems: [String: String] = [:] // 条码 → Nutri-Score（a..e，在线查到时随名字存，供离线复扫也能报营养质量）
+    private var novaItems: [String: Int] = [:]     // 条码 → NOVA 加工程度（1..4）
     private let fileURL: URL
     private let allergensURL: URL // 独立旁路文件：老版本的名字 plist 原样不动（零迁移风险），缺文件=全空
     private let tracesURL: URL    // 同款独立旁路文件（缺文件=全空，零迁移风险）
+    private let nutriURL: URL     // 同款独立旁路文件（缺文件=全空，零迁移风险）
+    private let novaURL: URL      // 同款独立旁路文件（缺文件=全空，零迁移风险）
 
     /// fileURL 可注入（单测用临时目录）；默认存 Application Support。
     init(fileURL: URL? = nil) {
@@ -23,6 +27,8 @@ final class ProductMemoryStore {
         }
         self.allergensURL = self.fileURL.deletingPathExtension().appendingPathExtension("allergens.plist")
         self.tracesURL = self.fileURL.deletingPathExtension().appendingPathExtension("traces.plist")
+        self.nutriURL = self.fileURL.deletingPathExtension().appendingPathExtension("nutri.plist")
+        self.novaURL = self.fileURL.deletingPathExtension().appendingPathExtension("nova.plist")
         load()
     }
 
@@ -36,13 +42,20 @@ final class ProductMemoryStore {
     /// 微量/交叉污染标注（在线查到时存下的）。空=无数据——**缺数据≠不含**，上层只在非空时播"可能含微量"。
     func traces(for barcode: String) -> [String] { tracesItems[barcode] ?? [] }
 
-    /// allergens/traces 只在**非空**时覆盖——用户手动改名（save(barcode:name:) 默认空）不得抹掉已存的标注。
-    func save(barcode: String, name: String, allergens: [String] = [], traces: [String] = []) {
+    /// Nutri-Score（a..e）/ NOVA 加工程度（1..4）：在线查到时存下的营养质量。nil=无数据（不猜、不硬凑）。
+    func nutriScore(for barcode: String) -> String? { nutriItems[barcode] }
+    func novaGroup(for barcode: String) -> Int? { novaItems[barcode] }
+
+    /// allergens/traces/营养 只在**有数据**时覆盖——用户手动改名（save(barcode:name:) 默认空）不得抹掉已存的标注。
+    func save(barcode: String, name: String, allergens: [String] = [], traces: [String] = [],
+              nutriScore: String? = nil, novaGroup: Int? = nil) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !barcode.isEmpty else { return }
         items[barcode] = trimmed
         if !allergens.isEmpty { allergenItems[barcode] = allergens }
         if !traces.isEmpty { tracesItems[barcode] = traces }
+        if let nutriScore, !nutriScore.isEmpty { nutriItems[barcode] = nutriScore }
+        if let novaGroup { novaItems[barcode] = novaGroup }
         persist()
     }
 
@@ -50,6 +63,8 @@ final class ProductMemoryStore {
         items.removeValue(forKey: barcode)
         allergenItems.removeValue(forKey: barcode)
         tracesItems.removeValue(forKey: barcode)
+        nutriItems.removeValue(forKey: barcode)
+        novaItems.removeValue(forKey: barcode)
         persist()
     }
 
@@ -63,6 +78,12 @@ final class ProductMemoryStore {
         }
         if let data = try? PropertyListEncoder().encode(tracesItems) {
             try? data.write(to: tracesURL, options: [.atomic, .completeFileProtection])
+        }
+        if let data = try? PropertyListEncoder().encode(nutriItems) {
+            try? data.write(to: nutriURL, options: [.atomic, .completeFileProtection])
+        }
+        if let data = try? PropertyListEncoder().encode(novaItems) {
+            try? data.write(to: novaURL, options: [.atomic, .completeFileProtection])
         }
     }
 
@@ -78,6 +99,14 @@ final class ProductMemoryStore {
         if let data = try? Data(contentsOf: tracesURL),
            let decoded = try? PropertyListDecoder().decode([String: [String]].self, from: data) {
             tracesItems = decoded
+        }
+        if let data = try? Data(contentsOf: nutriURL),
+           let decoded = try? PropertyListDecoder().decode([String: String].self, from: data) {
+            nutriItems = decoded
+        }
+        if let data = try? Data(contentsOf: novaURL),
+           let decoded = try? PropertyListDecoder().decode([String: Int].self, from: data) {
+            novaItems = decoded
         }
     }
 }

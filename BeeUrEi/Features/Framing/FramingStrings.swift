@@ -282,6 +282,12 @@ enum FramingStrings {
         return l == .zh ? "。可能含微量：\(names.joined(separator: "、"))"
                         : ". May contain traces of: \(names.joined(separator: ", "))"
     }
+
+    /// 营养质量播报后缀（Nutri-Score a..e + NOVA 加工程度 1..4）——薄封装核心 `SpokenStrings.nutrition`（已单测）。
+    /// 拼在过敏原/微量后缀之后，一次 speak 播完（.query 替换语义，分多次会吞前半句）。无可信数据→nil（缺数据不猜）。
+    static func productNutritionSpeak(_ nutriScore: String?, _ novaGroup: Int?, _ l: Language) -> String? {
+        SpokenStrings.nutrition(nutriScore: nutriScore, novaGroup: novaGroup, l)
+    }
     static func wifiResult(_ ssid: String?, _ l: Language) -> String {
         (l == .zh ? "无线网络码" : "Wi-Fi code") + (ssid.map { l == .zh ? "：\($0)" : ": \($0)" } ?? "")
     }

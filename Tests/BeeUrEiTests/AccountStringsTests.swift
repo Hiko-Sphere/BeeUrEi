@@ -80,6 +80,11 @@ final class AccountStringsTests: XCTestCase {
         XCTAssertTrue(MedicalInfoStrings.explain(.en).lowercased().contains("encrypted"))
         XCTAssertTrue(MedicalInfoStrings.explain(.en).lowercased().contains("emergency contact"))
         XCTAssertEqual(MedicalInfoStrings.charCount(123, .zh), "123/4000") // 上限与服务端 putSchema.max(4000) 对齐
+        // 上次更新（本人提醒别让医疗信息过期）：双语、含传入的时刻串、英文不串中文。
+        XCTAssertEqual(MedicalInfoStrings.lastUpdated("1月3日", .zh), "上次更新：1月3日")
+        let lu = MedicalInfoStrings.lastUpdated("Jan 3", .en)
+        XCTAssertTrue(lu.contains("Jan 3") && lu.lowercased().contains("last updated"))
+        XCTAssertFalse(lu.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
 
     func testQuietHoursStringsBilingual() {

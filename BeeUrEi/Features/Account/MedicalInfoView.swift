@@ -21,6 +21,8 @@ enum MedicalInfoStrings {
     static func saveFailed(_ l: Language) -> String { l == .zh ? "保存失败，请重试" : "Couldn't save — try again" }
     static func loadFailed(_ l: Language) -> String { l == .zh ? "加载失败（需登录并连接后端）" : "Couldn't load (sign in and connect to the backend)" }
     static func charCount(_ n: Int, _ l: Language) -> String { "\(n)/4000" }
+    /// 上次更新时刻（提醒本人别让医疗信息过期）。
+    static func lastUpdated(_ when: String, _ l: Language) -> String { l == .zh ? "上次更新：\(when)" : "Last updated: \(when)" }
 }
 
 struct MedicalInfoView: View {
@@ -31,6 +33,7 @@ struct MedicalInfoView: View {
     @State private var loadFailed = false
     @State private var saving = false
     @State private var statusText: String?
+    @State private var updatedAt: Double? // 服务端记录的上次更新时刻——提示本人别让医疗信息过期（用药/病史会变）
     private let api = APIClient()
     private var lang: Language { FeatureSettings().language }
 
@@ -49,6 +52,12 @@ struct MedicalInfoView: View {
                         .onChange(of: text) { _, new in
                             if new.count > Self.maxChars { text = String(new.prefix(Self.maxChars)) } // 本地夹到上限，免服务端 400
                         }
+                    // 上次更新时刻（本人提醒）：医疗信息会随用药/病史变化，据此判断是否该复核更新（服务端下发
+                    // updatedAt 此前在填写页丢弃=死字段；与施救者查看侧显示"更新于X"对称）。仅有已保存内容时显示。
+                    if let updatedAt, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(MedicalInfoStrings.lastUpdated(RecordingStrings.timeText(updatedAt, lang), lang))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 } footer: {
                     Text(MedicalInfoStrings.explain(lang))
                 }
@@ -78,7 +87,9 @@ struct MedicalInfoView: View {
     private func load() async {
         loading = true; loadFailed = false
         do {
-            text = try await api.myMedicalInfo(token: token).medicalInfo
+            let info = try await api.myMedicalInfo(token: token)
+            text = info.medicalInfo
+            updatedAt = info.updatedAt
         } catch {
             loadFailed = true
         }
@@ -90,6 +101,7 @@ struct MedicalInfoView: View {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
             try await api.setMyMedicalInfo(token: token, text: text)
+            updatedAt = trimmed.isEmpty ? nil : Date().timeIntervalSince1970 * 1000 // 保存即"现在更新"；清空则无记录
             let msg = trimmed.isEmpty ? MedicalInfoStrings.cleared(lang) : MedicalInfoStrings.saved(lang)
             statusText = msg
             A11y.announce(msg) // 盲人：保存结果语音确认

@@ -101,6 +101,30 @@ final class HomeStringsTests: XCTestCase {
         XCTAssertFalse(HomeStrings.voiceCommandsHelp(.en).contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
 
+    func testVoiceHelpAdvertisesIdentifyCommandsAndTheyRoundTripParse() {
+        // 盲人只能靠这段自述发现语音能力：识别纸币/扫码/识别公交/描述人/光线/前方/读整页此前**能用却没被念出来**＝隐藏功能
+        // （识别纸币是旗舰能力，盲人却无从得知）。不变量：凡自述里"念给盲人听"的具体短语，说出来必须真能解析到对应命令
+        // ——否则自述在骗人（听到→照说→没反应）。故对每条同时断言：① 出现在中英自述里；② 解析回目标命令（防子串劫持/漏接线）。
+        let zh = HomeStrings.voiceCommandsHelp(.zh)
+        let en = HomeStrings.voiceCommandsHelp(.en).lowercased()
+        let cases: [(zh: String, en: String, cmd: VoiceCommand)] = [
+            ("认一下钱", "identify money", .banknote),
+            ("扫个码", "scan a code", .scanCode),
+            ("这是几路车", "which bus is this", .readBus),
+            ("有没有人", "who's there", .describePeople),
+            ("光线怎么样", "how bright is it", .readLight),
+            ("前方有什么", "what's ahead", .ahead),
+            ("读整页", "read the whole page", .readFullPage),
+        ]
+        for c in cases {
+            XCTAssertTrue(zh.contains(c.zh), "中文自述缺『\(c.zh)』——盲人无从发现该能力")
+            XCTAssertTrue(en.contains(c.en), "英文自述缺『\(c.en)』")
+            // 念出来能真用：中英短语都要解析回目标命令（不是被前面的命令抢走、也不是没接线）。
+            XCTAssertEqual(VoiceCommandParser.parse(c.zh), c.cmd, "自述里的『\(c.zh)』解析不到 \(c.cmd)")
+            XCTAssertEqual(VoiceCommandParser.parse(c.en), c.cmd, "self-help phrase『\(c.en)』did not parse to \(c.cmd)")
+        }
+    }
+
     func testFallCancelHintTeachesMagicTapUnderVoiceOver() {
         // VoiceOver 开：教 Magic Tap（双指双击全屏任意处）——摔倒/撞击后手机常够不到，"找我没事按钮"极不可靠。
         let voZh = HomeStrings.fallCancelHint(voiceOver: true, .zh)

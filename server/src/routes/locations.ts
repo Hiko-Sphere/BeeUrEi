@@ -35,11 +35,13 @@ const updateSchema = z.object({
 export function registerLocationRoutes(app: FastifyInstance, store: Store, live: LiveLocationRegistry,
                                        push: PushSender = new NoopPushSender()): void {
   const geofence = new GeofenceState()
-  // 低电量预警会话态：userId → 是否已就本次跌破提醒过（滞回复位见 decideLowBatteryWarn）。停止共享即清。
-  const lowBatteryWarned = new Map<string, boolean>()
-  // 阈值：跌到 warnAt(默认15%)提醒家人；回升到 clearAt(=warnAt+10)才复位（滞回防抖）。env 可调，夹 [5,50]。
+  // 低电量预警会话态：userId → 已提醒层级（0 无 / 1 低电 / 2 极低；滞回复位见 decideLowBatteryWarn）。停止共享即清。
+  const lowBatteryLevel = new Map<string, number>()
+  // 阈值：跌到 warnAt(默认15%)提醒家人"低电"；再跌到 criticalAt(默认5%)提醒"即将关机"；回升到 clearAt(=warnAt+10)才复位。
   const warnAtPct = (() => { const v = Number(process.env.SHARE_LOW_BATTERY_WARN_PCT); return Number.isFinite(v) && v >= 5 && v <= 50 ? Math.round(v) : 15 })()
   const clearAtPct = Math.min(100, warnAtPct + 10)
+  // 极低阈值：env 可调，但恒保证 1 ≤ criticalAt < warnAt（否则两级重叠/倒置）。
+  const criticalAtPct = (() => { const v = Number(process.env.SHARE_CRITICAL_BATTERY_PCT); const c = Number.isFinite(v) && v >= 1 ? Math.round(v) : 5; return Math.max(1, Math.min(c, warnAtPct - 1)) })()
   /// 我的"已接受"联系人（双向，排除黑名单双方）——位置可见性的授权集合。单点口径见 store.acceptedContactIds。
   const contactIds = (me: string): string[] => [...acceptedContactIds(store, me)]
 
@@ -47,18 +49,19 @@ export function registerLocationRoutes(app: FastifyInstance, store: Store, live:
   /// 只在跌破那一刻提醒一次（滞回 + 会话态去重）；缺电量读数不改变状态。best-effort，绝不阻断位置上报。
   function checkLowBattery(me: string, battery: number | undefined): void {
     try {
-      const decision = decideLowBatteryWarn(lowBatteryWarned.get(me) ?? false, battery, warnAtPct, clearAtPct)
-      lowBatteryWarned.set(me, decision.warned)
-      if (!decision.warn) return
+      const decision = decideLowBatteryWarn(lowBatteryLevel.get(me) ?? 0, battery, warnAtPct, clearAtPct, criticalAtPct)
+      lowBatteryLevel.set(me, decision.warnedLevel)
+      if (!decision.fired) return
       const sender = store.findById(me)
       if (!sender || battery == null) return
       const pct = Math.round(battery)
+      const critical = decision.fired === 'critical'
+      const kind = critical ? 'contact_critical_battery' : 'contact_low_battery'
       for (const contactId of acceptedContactIds(store, me)) {
         const l = pushLang(store.findById(contactId)?.language)
-        notifyUser(store, push, contactId, 'contact_low_battery',
-          pushStrings.contactLowBatteryTitle(sender.displayName, l),
-          pushStrings.contactLowBatteryBody(sender.displayName, pct, l),
-          { fromId: me, battery: String(pct) })
+        const title = critical ? pushStrings.contactCriticalBatteryTitle(sender.displayName, l) : pushStrings.contactLowBatteryTitle(sender.displayName, l)
+        const body = critical ? pushStrings.contactCriticalBatteryBody(sender.displayName, pct, l) : pushStrings.contactLowBatteryBody(sender.displayName, pct, l)
+        notifyUser(store, push, contactId, kind, title, body, { fromId: me, battery: String(pct) })
       }
     } catch { /* 低电量预警失败绝不阻断位置上报 */ }
   }
@@ -113,7 +116,7 @@ export function registerLocationRoutes(app: FastifyInstance, store: Store, live:
   app.post('/api/locations/stop', { preHandler: requireAuth() }, async (req) => {
     live.stop(req.user!.sub)
     geofence.clear(req.user!.sub) // 清围栏基线：下次共享的首更新重建，避免跨会话陈旧态漏报/误报（复审#1/#3）
-    lowBatteryWarned.delete(req.user!.sub) // 清低电量会话态：下次共享重新按跌破提醒（充电后重开共享不因陈旧已提醒态而漏报）
+    lowBatteryLevel.delete(req.user!.sub) // 清低电量会话态：下次共享重新按跌破提醒（充电后重开共享不因陈旧已提醒态而漏报）
     return { ok: true }
   })
 

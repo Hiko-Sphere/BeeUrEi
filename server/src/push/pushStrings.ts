@@ -67,6 +67,12 @@ export const pushStrings = {
   contactLowBatteryBody: (name: string, pct: number, l: PushLang): string =>
     l === 'en' ? `${name}'s phone is at ${pct}% while sharing location — they may go offline soon. Consider checking in.`
                : `${name}正在共享位置，手机电量仅剩 ${pct}%，可能很快失联。建议主动联系确认。`,
+  // 极低电量（第二级，更急）：手机很快关机=盲人彻底失去导航/SOS/求助，请**尽快**联系。
+  contactCriticalBatteryTitle: (name: string, l: PushLang): string =>
+    l === 'en' ? `${name}'s phone is about to die` : `${name}的手机即将关机`,
+  contactCriticalBatteryBody: (name: string, pct: number, l: PushLang): string =>
+    l === 'en' ? `${name}'s phone is critically low at ${pct}% while sharing location and may shut off very soon — please reach them now.`
+               : `${name}正在共享位置，手机电量仅剩 ${pct}%，很快就会关机、彻底失联。请尽快联系。`,
   groupAddedTitle: (l: PushLang): string =>
     l === 'en' ? 'Added to a group chat' : '你被加入了群聊',
   groupAddedBody: (name: string, groupName: string, l: PushLang): string =>

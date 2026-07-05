@@ -3,30 +3,42 @@ import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
 import { decideLowBatteryWarn } from '../src/location/lowBattery'
 
-describe('decideLowBatteryWarn 纯逻辑（滞回）', () => {
-  const WARN = 15, CLEAR = 25
-  it('跌到阈值及以下 → 提醒一次并置位', () => {
-    expect(decideLowBatteryWarn(false, 15, WARN, CLEAR)).toEqual({ warn: true, warned: true })
-    expect(decideLowBatteryWarn(false, 8, WARN, CLEAR)).toEqual({ warn: true, warned: true })
+describe('decideLowBatteryWarn 纯逻辑（两级滞回）', () => {
+  const WARN = 15, CLEAR = 25, CRIT = 5
+  it('跌到 warnAt 及以下（未到 critical）→ 发 low 一次并置位 1', () => {
+    expect(decideLowBatteryWarn(0, 15, WARN, CLEAR, CRIT)).toEqual({ fired: 'low', warnedLevel: 1 })
+    expect(decideLowBatteryWarn(0, 8, WARN, CLEAR, CRIT)).toEqual({ fired: 'low', warnedLevel: 1 })
   })
-  it('阈值以上 → 不提醒', () => {
-    expect(decideLowBatteryWarn(false, 16, WARN, CLEAR)).toEqual({ warn: false, warned: false })
+  it('warnAt 以上 → 不提醒', () => {
+    expect(decideLowBatteryWarn(0, 16, WARN, CLEAR, CRIT)).toEqual({ fired: null, warnedLevel: 0 })
   })
-  it('已提醒且仍低 → 不重复（去抖）', () => {
-    expect(decideLowBatteryWarn(true, 10, WARN, CLEAR)).toEqual({ warn: false, warned: true })
-    expect(decideLowBatteryWarn(true, 15, WARN, CLEAR)).toEqual({ warn: false, warned: true })
+  it('已发 low 且仍低（未到 critical）→ 不重复（去抖）', () => {
+    expect(decideLowBatteryWarn(1, 10, WARN, CLEAR, CRIT)).toEqual({ fired: null, warnedLevel: 1 })
+    expect(decideLowBatteryWarn(1, 15, WARN, CLEAR, CRIT)).toEqual({ fired: null, warnedLevel: 1 })
   })
-  it('已提醒但未回到 clearAt（滞回带内 15<b<25）→ 保持已提醒、不复位不重报', () => {
-    expect(decideLowBatteryWarn(true, 20, WARN, CLEAR)).toEqual({ warn: false, warned: true })
+  it('已发 low 后再跌破 criticalAt → 升级发 critical，置位 2', () => {
+    expect(decideLowBatteryWarn(1, 5, WARN, CLEAR, CRIT)).toEqual({ fired: 'critical', warnedLevel: 2 })
+    expect(decideLowBatteryWarn(1, 3, WARN, CLEAR, CRIT)).toEqual({ fired: 'critical', warnedLevel: 2 })
   })
-  it('已提醒且回升到 clearAt 及以上 → 复位（下次再跌破可再提醒）', () => {
-    expect(decideLowBatteryWarn(true, 25, WARN, CLEAR)).toEqual({ warn: false, warned: false })
-    expect(decideLowBatteryWarn(true, 80, WARN, CLEAR)).toEqual({ warn: false, warned: false })
+  it('从高电一次性直接掉到 critical → 只发 critical（不补发 low），置位 2', () => {
+    expect(decideLowBatteryWarn(0, 4, WARN, CLEAR, CRIT)).toEqual({ fired: 'critical', warnedLevel: 2 })
+  })
+  it('已发 critical 且仍极低 → 不重复', () => {
+    expect(decideLowBatteryWarn(2, 3, WARN, CLEAR, CRIT)).toEqual({ fired: null, warnedLevel: 2 })
+    expect(decideLowBatteryWarn(2, 12, WARN, CLEAR, CRIT)).toEqual({ fired: null, warnedLevel: 2 }) // 回到 low 区间也不再补发 low
+  })
+  it('滞回带内（warn<b<clear）→ 保持层级、不复位不重报', () => {
+    expect(decideLowBatteryWarn(1, 20, WARN, CLEAR, CRIT)).toEqual({ fired: null, warnedLevel: 1 })
+    expect(decideLowBatteryWarn(2, 20, WARN, CLEAR, CRIT)).toEqual({ fired: null, warnedLevel: 2 })
+  })
+  it('回升到 clearAt 及以上 → 整体复位（下次再跌破从 low 起重新提醒）', () => {
+    expect(decideLowBatteryWarn(1, 25, WARN, CLEAR, CRIT)).toEqual({ fired: null, warnedLevel: 0 })
+    expect(decideLowBatteryWarn(2, 80, WARN, CLEAR, CRIT)).toEqual({ fired: null, warnedLevel: 0 })
   })
   it('缺电量读数 / 非有限 → 状态不变（不猜、不误报也不误复位）', () => {
-    expect(decideLowBatteryWarn(false, undefined, WARN, CLEAR)).toEqual({ warn: false, warned: false })
-    expect(decideLowBatteryWarn(true, undefined, WARN, CLEAR)).toEqual({ warn: false, warned: true })
-    expect(decideLowBatteryWarn(false, NaN, WARN, CLEAR)).toEqual({ warn: false, warned: false })
+    expect(decideLowBatteryWarn(0, undefined, WARN, CLEAR, CRIT)).toEqual({ fired: null, warnedLevel: 0 })
+    expect(decideLowBatteryWarn(2, undefined, WARN, CLEAR, CRIT)).toEqual({ fired: null, warnedLevel: 2 })
+    expect(decideLowBatteryWarn(0, NaN, WARN, CLEAR, CRIT)).toEqual({ fired: null, warnedLevel: 0 })
   })
 })
 
@@ -47,6 +59,8 @@ async function setup() {
 }
 const lowBatt = (store: MemoryStore, uid: string) =>
   store.notificationsForUser(uid).filter((n) => n.kind === 'contact_low_battery')
+const critBatt = (store: MemoryStore, uid: string) =>
+  store.notificationsForUser(uid).filter((n) => n.kind === 'contact_critical_battery')
 const share = (app: Awaited<ReturnType<typeof setup>>['app'], h: Record<string, string>, battery: number) =>
   app.inject({ method: 'POST', url: '/api/locations/update', headers: h, payload: { lat: 31.2, lng: 121.4, battery } })
 
@@ -59,10 +73,27 @@ describe('共享位置低电量预警家人（/api/locations/update）', () => {
     expect(lowBatt(store, family.id)).toHaveLength(1)
     expect(lowBatt(store, family.id)[0].body).toContain('12%')
     expect(lowBatt(store, stranger.id)).toHaveLength(0) // 非授权联系人绝不收到
-    // 继续低电量上报 → 不重复提醒（去抖）
+    // 继续低电量上报（仍在 low 区间）→ 不重复 low
     await share(app, blind.h, 9)
+    expect(lowBatt(store, family.id)).toHaveLength(1)
+    // 跌破 critical(5%) → 升级发一条 contact_critical_battery（low 仍只有一条）
     await share(app, blind.h, 5)
     expect(lowBatt(store, family.id)).toHaveLength(1)
+    expect(critBatt(store, family.id)).toHaveLength(1)
+    expect(critBatt(store, family.id)[0].body).toContain('5%')
+    expect(critBatt(store, stranger.id)).toHaveLength(0) // 极低告警同样只给授权亲友
+    // 继续极低 → 不重复 critical
+    await share(app, blind.h, 3)
+    expect(critBatt(store, family.id)).toHaveLength(1)
+    await app.close()
+  })
+
+  it('从正常电量一次性直接掉到极低 → 只发 critical，不补发 low', async () => {
+    const { app, store, blind, family } = await setup()
+    await share(app, blind.h, 40) // 正常
+    await share(app, blind.h, 4)  // 直接掉到 critical
+    expect(critBatt(store, family.id)).toHaveLength(1)
+    expect(lowBatt(store, family.id)).toHaveLength(0) // 不补发 low（critical 已涵盖最急）
     await app.close()
   })
 

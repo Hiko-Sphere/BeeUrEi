@@ -466,6 +466,10 @@ export class CallEngine {
       const Ctx: typeof AudioContext = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
       const ctx = new Ctx()
       this.audioCtx = ctx
+      // suspended 态的 AudioContext 不跑音频图——MediaStreamSource→MediaStreamDestination 混音不流动、
+      // 录下来的**音频是静音**（与 chime/铃声同一 suspended 坑，那三处已 resume、此处曾漏）。录制是知情同意的
+      // 取证/无障碍留存，静音等于证据损毁。显式 resume（best-effort）。
+      void ctx.resume().catch(() => {})
       const dest = ctx.createMediaStreamDestination()
       if (this.remoteStream.getAudioTracks().length) ctx.createMediaStreamSource(new MediaStream(this.remoteStream.getAudioTracks())).connect(dest)
       if (this.localStream && this.localStream.getAudioTracks().length) ctx.createMediaStreamSource(new MediaStream(this.localStream.getAudioTracks())).connect(dest)

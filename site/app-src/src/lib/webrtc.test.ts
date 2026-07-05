@@ -110,3 +110,36 @@ describe('CallEngine ICE 重连横幅恢复', () => {
     e.stopStats()
   })
 })
+
+// 录制混音上下文也需 resume：suspended 态 AudioContext 不跑音频图，MediaStreamSource→Destination 混音不流动，
+// 录下来的音频静音（同 chime/铃声的 suspended 坑，那三处已 resume、此处曾漏）。录制是知情同意的取证留存，静音=证据损毁。
+describe('CallEngine 录制混音上下文 resume', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('buildRecordStream 对混音 AudioContext 显式 resume（防 suspended 静音录制）', () => {
+    const resume = vi.fn(() => Promise.resolve())
+    class MockAudioCtx {
+      resume = resume
+      createMediaStreamDestination() { return { stream: { getAudioTracks: () => [{ kind: 'audio' }] } } }
+      createMediaStreamSource() { return { connect: (n: unknown) => n } }
+      close() { return Promise.resolve() }
+    }
+    vi.stubGlobal('AudioContext', MockAudioCtx)
+    class FakeStream {
+      tracks: { kind: string }[]
+      constructor(tracks: { kind: string }[] = []) { this.tracks = tracks }
+      addTrack(t: { kind: string }) { this.tracks.push(t) }
+      getTracks() { return this.tracks }
+      getVideoTracks() { return this.tracks.filter((t) => t.kind === 'video') }
+      getAudioTracks() { return this.tracks.filter((t) => t.kind === 'audio') }
+    }
+    vi.stubGlobal('MediaStream', FakeStream)
+
+    const engine = new CallEngine({ callId: 'c1', token: 'T', iceServers: [], recordPolicy: { enabled: false, requireConsent: false }, cb: {} })
+    const e = engine as unknown as { remoteStream: FakeStream; localStream: FakeStream | null; buildRecordStream: () => unknown }
+    e.remoteStream = new FakeStream([{ kind: 'video' }, { kind: 'audio' }])
+    e.localStream = new FakeStream([{ kind: 'audio' }])
+    e.buildRecordStream()
+    expect(resume).toHaveBeenCalled() // 关键：混音上下文也 resume，否则 suspended 态录出静音
+  })
+})

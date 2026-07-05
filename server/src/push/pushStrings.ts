@@ -40,6 +40,16 @@ export const pushStrings = {
     const place = placeLabelName(label, l)
     return l === 'en' ? `${name} has safely arrived at ${place}.` : `${name}已经安全到达${place}。`
   },
+  // 离开围栏（Life360/Find My "离开家"式，与到达对等）：盲人/年长家人离开家/公司时提醒仍在看其共享位置的亲友，
+  // "意外离家"与"平安到家"同等有价值（皆不增加新暴露——收件者本就能看其位置）。
+  placeDepartureTitle: (name: string, label: string, l: PushLang): string => {
+    const place = placeLabelName(label, l)
+    return l === 'en' ? `${name} left ${place}` : `${name}已离开${place}`
+  },
+  placeDepartureBody: (name: string, label: string, l: PushLang): string => {
+    const place = placeLabelName(label, l)
+    return l === 'en' ? `${name} has left ${place}.` : `${name}已经离开${place}。`
+  },
   // 共享位置者电量低（Life360/Find My "X 的手机电量低"式）：手机是盲人导航+SOS 的唯一工具，
   // 家人在其失联前主动联系。只在跌破阈值那次提醒（滞回防抖）。
   contactLowBatteryTitle: (name: string, l: PushLang): string =>

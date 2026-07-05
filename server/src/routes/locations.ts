@@ -63,30 +63,34 @@ export function registerLocationRoutes(app: FastifyInstance, store: Store, live:
     } catch { /* 低电量预警失败绝不阻断位置上报 */ }
   }
 
-  /// 到达围栏判定 + 通知（best-effort，绝不阻断位置上报）：盲人到达已存坐标的"家/公司"时，
-  /// 通知**正在能看其共享位置的家人**（= accepted 联系人，本就能看，故到达提醒不增加新暴露、只是更省心）。
-  /// 只在"外→内"转换时提醒（滞回 + 去重）；无坐标地点跳过。
+  /// 到达/离开围栏判定 + 通知（best-effort，绝不阻断位置上报）：盲人到达或离开已存坐标的"家/公司"时，
+  /// 通知**正在能看其共享位置的家人**（= accepted 联系人，本就能看，故提醒不增加新暴露、只是更省心）。
+  /// 只在"外→内"（到达）/"内→外"（离开）转换时提醒（滞回 + 去重）；无坐标地点跳过。
   function checkGeofences(me: string, lat: number, lng: number): void {
     try {
       const places = store.savedPlacesForUser(me).filter((p) => p.lat != null && p.lng != null)
       if (places.length === 0) return
-      // **会话首个更新只建立基线、不触发**（含 /stop 清后重开）：首更新分不清"刚到达"与"早已在此"，
-      // 若在此触发会在每次重开共享（人已在家）时误报"已到家"（复审#3）。真到达=会话内"外→内"转换。
+      // **会话首个更新只建立基线、不触发**（含 /stop 清后重开）：首更新分不清"刚到达/刚离开"与"早已在此/在外"，
+      // 若在此触发会在每次重开共享（人已在家）时误报（复审#3）。真到达/离开=会话内"外↔内"转换。
       const firstOfSession = !geofence.has(me)
-      const { arrived, insideLabels } = evaluateGeofences({ lat, lon: lng }, places, geofence.get(me))
+      const { arrived, departed, insideLabels } = evaluateGeofences({ lat, lon: lng }, places, geofence.get(me))
       geofence.set(me, insideLabels)
-      if (firstOfSession || arrived.length === 0) return
+      if (firstOfSession || (arrived.length === 0 && departed.length === 0)) return
       const sender = store.findById(me)
       if (!sender) return
-      for (const place of arrived) {
+      // 到达 / 离开共用同一投递（对等）：kind + 对应文案，广播给每个已接受联系人（各自语言）。
+      const notify = (place: { label: string }, kind: 'place_arrival' | 'place_departure',
+                      titleFn: (n: string, lb: string, l: ReturnType<typeof pushLang>) => string,
+                      bodyFn: (n: string, lb: string, l: ReturnType<typeof pushLang>) => string) => {
         for (const contactId of acceptedContactIds(store, me)) {
           const l = pushLang(store.findById(contactId)?.language)
-          notifyUser(store, push, contactId, 'place_arrival',
-            pushStrings.placeArrivalTitle(sender.displayName, place.label, l),
-            pushStrings.placeArrivalBody(sender.displayName, place.label, l),
+          notifyUser(store, push, contactId, kind,
+            titleFn(sender.displayName, place.label, l), bodyFn(sender.displayName, place.label, l),
             { fromId: me, label: place.label })
         }
       }
+      for (const place of arrived) notify(place, 'place_arrival', pushStrings.placeArrivalTitle, pushStrings.placeArrivalBody)
+      for (const place of departed) notify(place, 'place_departure', pushStrings.placeDepartureTitle, pushStrings.placeDepartureBody)
     } catch { /* 围栏判定/通知失败绝不阻断位置上报 */ }
   }
 

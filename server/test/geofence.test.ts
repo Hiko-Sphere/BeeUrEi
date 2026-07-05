@@ -50,6 +50,35 @@ describe('geofence 到达围栏', () => {
     expect(evaluateGeofences(atHome, [noCoord], new Set()).arrived).toEqual([])
     const bad = evaluateGeofences({ lat: NaN, lon: NaN }, [home], new Set(['home']))
     expect(bad.arrived).toEqual([])
-    expect(bad.insideLabels).toEqual(['home']) // 坏定位保持原状，不误报离开
+    expect(bad.departed).toEqual([])           // 坏定位不误报离开
+    expect(bad.insideLabels).toEqual(['home']) // 坏定位保持原状
+  })
+})
+
+describe('geofence 离开围栏（与到达对等，Life360/Find My "离开家"式）', () => {
+  it('内→外：越出 exitRadius(200m) 触发"离开"，并从 insideLabels 移除', () => {
+    const r = evaluateGeofences(farAway, [home], new Set(['home'])) // 之前在内 → 走到 1km 外
+    expect(r.departed.map((p) => p.label)).toEqual(['home'])
+    expect(r.arrived).toEqual([])
+    expect(r.insideLabels).toEqual([]) // 不再在内 → 下次重新进入才再"到达"
+  })
+
+  it('滞回：之前在内、现处 enter 与 exit 之间(≈180m) → 仍在内、不算离开', () => {
+    const r = evaluateGeofences(between, [home], new Set(['home']))
+    expect(r.departed).toEqual([]) // <exit(200) → 尚未离开（防边界抖动误报离开）
+    expect(r.insideLabels).toEqual(['home'])
+  })
+
+  it('之前就在外：远处不重复报离开（去重，仅"内→外"转换才报）', () => {
+    const r = evaluateGeofences(farAway, [home], new Set()) // 之前不在内
+    expect(r.departed).toEqual([])
+    expect(r.arrived).toEqual([])
+  })
+
+  it('无坐标地点不产生离开（无法算距离，不能断言"离开"）', () => {
+    const noCoord: SavedPlace = { ownerId: 'u', label: 'work', address: '公司', updatedAt: 0 }
+    const r = evaluateGeofences(farAway, [noCoord], new Set(['work']))
+    expect(r.departed).toEqual([])       // 跳过、不报离开
+    expect(r.insideLabels).toEqual([])   // 坐标缺失，状态自然清（不再计入在内）
   })
 })

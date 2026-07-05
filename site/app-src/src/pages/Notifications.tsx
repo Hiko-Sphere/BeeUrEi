@@ -13,7 +13,7 @@ export function notifDestination(kind: string): string | null {
   if (kind.includes('friend') || kind.includes('link')) return '/family'
   if (kind.includes('group')) return '/chat'
   if (kind.includes('route')) return '/routes' // 路线通知 → 路线库页（查看/预览亲友新加的路线；执行仍在 iOS）
-  if (kind.includes('arrival') || kind.includes('battery')) return '/locations' // 到达围栏/低电量 → 位置页看对方在哪
+  if (kind.includes('place') || kind.includes('arrival') || kind.includes('battery')) return '/locations' // 到达/离开围栏(place_arrival/place_departure)/低电量 → 位置页看对方在哪
   if (kind.includes('kyc') || kind.includes('verif')) return '/account' // 实名结果 → 账户页实名认证区
   if (kind.includes('security') || kind.includes('medical')) return '/account' // 安全变更预警/医疗信息被查看 → 账户页
   return null

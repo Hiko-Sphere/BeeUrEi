@@ -19,6 +19,8 @@ async function setup() {
 }
 const arrivals = (store: MemoryStore, uid: string) =>
   store.notificationsForUser(uid).filter((n) => n.kind === 'place_arrival')
+const departures = (store: MemoryStore, uid: string) =>
+  store.notificationsForUser(uid).filter((n) => n.kind === 'place_departure')
 
 describe('到达围栏提醒（geofence：到家/公司通知家人）', () => {
   afterEach(() => { vi.unstubAllGlobals(); delete process.env.AMAP_API_KEY })
@@ -88,6 +90,28 @@ describe('到达围栏提醒（geofence：到家/公司通知家人）', () => {
     const res = await app.inject({ method: 'POST', url: '/api/locations/update', headers: blind.h, payload: { lat: 39.9042, lng: 116.4074 } })
     expect(res.statusCode).toBe(200)
     expect(arrivals(store, family.id)).toHaveLength(0)
+    await app.close()
+  })
+
+  it('会话内"内→外"转换报离开；首更新只建基线；在外去重；陌生人不收到（与到达对等）', async () => {
+    const { app, store, blind, family, stranger } = await setup()
+    store.upsertSavedPlace({ ownerId: blind.id, label: 'home', address: '家', lat: 39.9042, lng: 116.4074, updatedAt: Date.now() })
+    const update = (lat: number, lng: number) => app.inject({ method: 'POST', url: '/api/locations/update', headers: blind.h, payload: { lat, lng } })
+
+    await update(39.9042, 116.4074) // 会话首更新（在家）：只建基线，不报离开
+    expect(departures(store, family.id)).toHaveLength(0)
+
+    await update(39.9042, 116.42)   // 内→外（约 1km）：真离开 → 通知
+    expect(departures(store, family.id)).toHaveLength(1)
+    expect(departures(store, family.id)[0].data?.label).toBe('home')
+    expect(departures(store, stranger.id)).toHaveLength(0) // 陌生人绝不收到（授权=accepted 联系人）
+
+    await update(39.9042, 116.43)   // 继续在外：去重，不重复报离开
+    expect(departures(store, family.id)).toHaveLength(1)
+
+    await update(39.9042, 116.4074) // 回家：这是到达、不是离开
+    expect(departures(store, family.id)).toHaveLength(1)
+    expect(arrivals(store, family.id)).toHaveLength(1)
     await app.close()
   })
 })

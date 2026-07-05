@@ -3,7 +3,8 @@ import { api, type IncomingCall, type HelpRequest, type CallRecordInfo } from '.
 import { pollWhileVisible } from '../lib/poll'
 import { useI18n } from '../lib/i18n'
 import { useCall } from './call/CallController'
-import { Card, Avatar, Button, Pill, Spinner, EmptyState, timeAgo } from '../components/ui'
+import { Card, Avatar, Button, Pill, Spinner, EmptyState } from '../components/ui'
+import { CallHistoryRow } from '../components/CallHistoryRow'
 import { IconPhone, IconUsers, IconCheck } from '../components/icons'
 
 export function CallsPage() {
@@ -103,18 +104,7 @@ export function CallsPage() {
             <EmptyState icon={<IconPhone />} title={t('暂无记录', 'No history')} />
           ) : (
             <ul className="divide-y divide-[var(--line)]">
-              {history.map((c) => (
-                <li key={c.id} className="flex items-center gap-3 px-4 py-3">
-                  <Avatar name={c.peerName || '?'} src={c.peerAvatar} size={36} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{c.peerName}</div>
-                    <div className="text-xs text-faint">{c.direction === 'outgoing' ? t('呼出', 'Outgoing') : t('呼入', 'Incoming')} · {timeAgo(c.createdAt, lang)}</div>
-                  </div>
-                  <Pill tone={c.status === 'answered' ? 'ok' : c.status === 'declined' ? 'danger' : 'soft'}>
-                    {c.status === 'answered' ? t('已接通', 'Answered') : c.status === 'declined' ? t('已拒绝', 'Declined') : t('未接', 'Missed')}
-                  </Pill>
-                </li>
-              ))}
+              {history.map((c) => <CallHistoryRow key={c.id} call={c} />)}
             </ul>
           )}
         </Card>

@@ -4,14 +4,15 @@ import { api, type CallRecordInfo } from '../lib/api'
 import { pollWhileVisible } from '../lib/poll'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
-import { Card, Avatar, Pill, Spinner, EmptyState, timeAgo } from '../components/ui'
+import { Card, Spinner, EmptyState } from '../components/ui'
+import { CallHistoryRow } from '../components/CallHistoryRow'
 import { IconPhone, IconChat, IconUsers, IconBell } from '../components/icons'
 
 interface Stats { online: number; total: number; incoming: number; queue: number; unread: number; pendingLinks: number }
 
 export function HomePage() {
   const { user } = useSession()
-  const { t, lang } = useI18n()
+  const { t } = useI18n()
   const [stats, setStats] = useState<Stats | null>(null)
   const [calls, setCalls] = useState<CallRecordInfo[] | null>(null)
 
@@ -81,28 +82,7 @@ export function HomePage() {
           <EmptyState icon={<IconPhone />} title={t('暂无通话记录', 'No calls yet')} message={t('接听或发起通话后会显示在这里', 'Calls will appear here')} />
         ) : (
           <ul className="divide-y divide-[var(--line)]">
-            {calls.map((c) => {
-              // 通话记录行内容；对端仍在则整行可点进与其的聊天（跟进/回访，同手机最近通话），已注销则不可点。
-              const row = (
-                <>
-                  <Avatar name={c.peerName || '?'} src={c.peerAvatar} size={36} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{c.peerName}</div>
-                    <div className="text-xs text-faint">{c.direction === 'outgoing' ? t('呼出', 'Outgoing') : t('呼入', 'Incoming')} · {timeAgo(c.createdAt, lang)}</div>
-                  </div>
-                  <Pill tone={c.status === 'answered' ? 'ok' : c.status === 'declined' ? 'danger' : 'soft'}>
-                    {c.status === 'answered' ? t('已接通', 'Answered') : c.status === 'declined' ? t('已拒绝', 'Declined') : t('未接', 'Missed')}
-                  </Pill>
-                </>
-              )
-              return (
-                <li key={c.id}>
-                  {c.peerId
-                    ? <Link to={`/chat/${c.peerId}`} className="flex items-center gap-3 px-5 py-3 transition hover:surface-2" aria-label={t(`与 ${c.peerName} 的聊天`, `Chat with ${c.peerName}`)}>{row}</Link>
-                    : <div className="flex items-center gap-3 px-5 py-3">{row}</div>}
-                </li>
-              )
-            })}
+            {calls.map((c) => <CallHistoryRow key={c.id} call={c} className="px-5 py-3" />)}
           </ul>
         )}
       </Card>

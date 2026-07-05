@@ -3,6 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
 // mock api（数据源）+ useCall（避免引入 CallScreen→webrtc 的浏览器 API 链）；useI18n 默认 ctx(zh) 无需 Provider。
+// 通话记录行经 CallHistoryRow 用 Link，mock 成 <a> 以断言链接。
+vi.mock('react-router-dom', () => ({ Link: (p: { to: string; children: unknown }) => <a href={p.to}>{p.children as never}</a> }))
 vi.mock('../lib/api', () => ({ api: { incomingCalls: vi.fn(), helpQueue: vi.fn(), callHistory: vi.fn() } }))
 vi.mock('./call/CallController', () => ({ useCall: () => ({ answerIncoming: vi.fn(), claimQueue: vi.fn(), active: null }) }))
 import { api } from '../lib/api'
@@ -40,6 +42,20 @@ describe('CallsPage 公开求助队列渲染（防字段漂移复发）', () => 
     expect(screen.getByText('EN')).toBeInTheDocument()             // 语言标签仍显示
     expect(screen.queryByText(/你的语言/)).toBeNull()              // en ≠ zh → 不高亮
     expect(screen.getByText(/已等待 30 秒/)).toBeInTheDocument()
+  })
+
+  it('通话记录：对端仍在的整行链到聊天；已注销(peerId 缺失)不可点', async () => {
+    mock(api.helpQueue).mockResolvedValue({ requests: [], count: 0 })
+    mock(api.callHistory).mockResolvedValue({
+      calls: [
+        { id: 'h1', peerId: 'p1', peerName: '王医生', peerAvatar: null, direction: 'incoming', status: 'answered', createdAt: 1_700_000_000_000 },
+        { id: 'h2', peerId: null, peerName: '已注销用户', peerAvatar: null, direction: 'outgoing', status: 'missed', createdAt: 1_700_000_000_000 },
+      ],
+    })
+    render(<CallsPage />)
+    const doctor = await screen.findByText('王医生')
+    expect(doctor.closest('a')?.getAttribute('href')).toBe('/chat/p1') // 整行可点进聊天
+    expect(screen.getByText('已注销用户').closest('a')).toBeNull()       // 已注销不可点
   })
 
   it('某段端点持续失败也退出加载态（显示空态，而非永远转圈）', async () => {

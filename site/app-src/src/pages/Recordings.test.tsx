@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, act } from '@testing-library/react'
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 
 // RecordingsPage 仅用 useI18n(默认 ctx)+useToast(no-op 默认)+api；fetchRecordingObjectURL 仅播放时调用，渲染不触及。
 vi.mock('../lib/api', () => ({
@@ -35,6 +35,22 @@ describe('RecordingsPage 列表渲染（防字段漂移）', () => {
     expect(await screen.findByText('无媒体')).toBeInTheDocument()
     expect(screen.getByText('—')).toBeInTheDocument()                 // 空参与者兜底
     expect(screen.getByRole('button', { name: /播放/ })).toBeDisabled()
+  })
+
+  it('回放弹窗无障碍：role=dialog + aria-modal，Esc 关闭', async () => {
+    mock(api.myRecordings).mockResolvedValue({
+      recordings: [{ id: 'r1', recordedAt: 1_700_000_000_000, durationSec: 10, hasMedia: true, participantNames: ['张三'] }],
+    })
+    mock(fetchRecordingObjectURL).mockResolvedValue('blob:play');
+    (globalThis.URL as unknown as { revokeObjectURL: (u: string) => void }).revokeObjectURL = vi.fn()
+    render(<RecordingsPage />)
+    await screen.findByText('张三')                                       // 等录音列表渲染
+    fireEvent.click(screen.getByRole('button', { name: /播放/ }))
+    const dialog = await screen.findByRole('dialog')                      // 回放弹窗
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    // Esc 关闭弹窗。
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 
   it('空列表 → 空态文案', async () => {

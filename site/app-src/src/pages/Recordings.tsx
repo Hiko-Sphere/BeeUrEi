@@ -74,17 +74,44 @@ export function RecordingsPage() {
         </div>
       )}
 
-      {playing && (
-        <div className="fixed inset-0 z-[120] grid place-items-center bg-black/80 p-4" onClick={() => setPlaying(null)}>
-          <div className="w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-2 flex items-center justify-between text-white">
-              <span className="text-sm">{fmtTime(playing.rec.recordedAt, lang)}</span>
-              <button onClick={() => setPlaying(null)} aria-label={t('关闭', 'Close')}><IconX /></button>
-            </div>
-            <video src={playing.url} controls autoPlay playsInline className="max-h-[70vh] w-full rounded-xl bg-black" />
-          </div>
+      {playing && <RecordingPlayer url={playing.url} recordedAt={playing.rec.recordedAt} lang={lang} t={t} onClose={() => setPlaying(null)} />}
+    </div>
+  )
+}
+
+/// 录音回放弹窗（无障碍：role=dialog + aria-modal + Escape 关闭 + 焦点移入/陷阱/恢复，与来电铃同标准）——
+/// 此前是裸 div 覆盖层，键盘/读屏用户无法被告知这是弹窗、Esc 关不掉、焦点还留在弹窗背后的"播放"键上。
+function RecordingPlayer({ url, recordedAt, lang, t, onClose }: {
+  url: string; recordedAt: number; lang: 'zh' | 'en'; t: (z: string, e: string) => string; onClose: () => void
+}) {
+  const panelRef = useRef<HTMLDivElement>(null)
+  const closeRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null
+    closeRef.current?.focus() // 焦点移入弹窗（否则留在背后的"播放"键，读屏不知弹窗已开）
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); onClose(); return } // 视频弹窗可 Esc 关闭（区别于来电铃刻意不给 Esc）
+      if (e.key !== 'Tab') return
+      const panel = panelRef.current; if (!panel) return
+      const f = Array.from(panel.querySelectorAll<HTMLElement>('button:not([disabled]), video'))
+      if (f.length === 0) return
+      const first = f[0], last = f[f.length - 1], activeEl = document.activeElement
+      if (e.shiftKey && activeEl === first) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && activeEl === last) { e.preventDefault(); first.focus() }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('keydown', onKey); prev?.focus?.() } // 关闭恢复焦点
+  }, [onClose])
+  return (
+    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/80 p-4" onClick={onClose}>
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-label={t('录音回放', 'Recording playback')}
+        className="w-full max-w-2xl outline-none" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-2 flex items-center justify-between text-white">
+          <span className="text-sm">{fmtTime(recordedAt, lang)}</span>
+          <button ref={closeRef} onClick={onClose} aria-label={t('关闭', 'Close')}><IconX /></button>
         </div>
-      )}
+        <video src={url} controls autoPlay playsInline className="max-h-[70vh] w-full rounded-xl bg-black" />
+      </div>
     </div>
   )
 }

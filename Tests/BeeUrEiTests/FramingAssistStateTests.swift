@@ -25,6 +25,17 @@ final class FramingAssistStateTests: XCTestCase {
         XCTAssertNil(vm.copyableResult)
     }
 
+    func testReadTextIntentRoutesToTextChannel() async throws {
+        // "读文字"是端侧最高频 OCR 动作却一直没有 App Intent——补上后可绑**动作按钮**/快捷指令一键读字。
+        // 校验意图 perform 后打开识别屏(.lookAround)并直达读文字频道(.text)。
+        AppRoute.shared.pending = nil
+        AppRoute.shared.pendingChannel = nil
+        _ = try await ReadTextIntent().perform()
+        guard case .text = AppRoute.shared.pendingChannel else { return XCTFail("应路由到 .text 频道") }
+        guard case .lookAround = AppRoute.shared.pending else { return XCTFail("应打开识别屏 .lookAround") }
+        AppRoute.shared.pending = nil; AppRoute.shared.pendingChannel = nil // 清理单例，免影响其它用例
+    }
+
     func testTeachingFlowTransitions() {
         let vm = FramingAssistViewModel()
         vm.startTeaching()

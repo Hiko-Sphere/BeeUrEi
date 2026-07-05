@@ -91,6 +91,19 @@ private func routeToChannel(_ channel: AppRoute.FramingChannel) {
     AppRoute.shared.pending = .lookAround
 }
 
+/// 「读文字」——直达 OCR 朗读眼前文字（招牌/信件/菜单/标签，端侧识别最高频动作）。定义本体但**不占** AppShortcuts
+/// 的 10 短语位（已满、SOS 优先，同 ReadLightIntent）；仍可在快捷指令 App / **动作按钮**(iPhone 15 Pro+)/轻点背面
+/// 绑定——盲人一个物理键即时读字，无需碰屏，价值极高。
+struct ReadTextIntent: AppIntent {
+    static let title: LocalizedStringResource = "读文字"
+    static let description = IntentDescription("打开相机朗读眼前的文字（招牌、信件、菜单、标签）")
+    static let openAppWhenRun = true
+    @MainActor func perform() async throws -> some IntentResult {
+        routeToChannel(.text)
+        return .result()
+    }
+}
+
 /// 「嘿 Siri，用蜂有眼识别纸币」——直达识币。
 struct ReadBanknoteIntent: AppIntent {
     static let title: LocalizedStringResource = "识别纸币"

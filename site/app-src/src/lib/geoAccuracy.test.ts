@@ -32,6 +32,9 @@ describe('geoAccuracy', () => {
     expect(accuracyText(2000, t)).toBe('精确到约 2 公里')     // 去尾零：2.0→2
     expect(accuracyText(1050, t)).toBe('精确到约 1.1 公里')   // 四舍五入到 0.1km
     expect(accuracyText(100000, t)).toBe('精确到约 100 公里') // 服务端上限：不再是刺耳的「100000 米」
+    // 跨端一致基准（iOS SharedLocationAccuracy 对齐**这些值**；对原始值判档/舍入，而非先取整成米）：
+    expect(accuracyText(999.6, t)).toBe('精确到约 1000 米')   // <1km 仍归米档（不因 round→1000 跳到公里）
+    expect(accuracyText(1449.6, t)).toBe('精确到约 1.4 公里') // round(14.496)=14 → 1.4（非二次舍入的 1.5）
   })
 
   it('accuracyText 双语', () => {

@@ -77,6 +77,10 @@ enum ChatStrings {
     static func photo(_ l: Language) -> String { l == .zh ? "图片" : "Photo" }
     static func sendPhoto(_ l: Language) -> String { l == .zh ? "发送图片" : "Send a photo" }
     static func openPhotoHint(_ l: Language) -> String { l == .zh ? "双击全屏查看" : "Double-tap to view full screen" }
+    /// 盲人收到图片看不见内容——端侧 OCR 读出图中文字（亲友拍的处方/时刻表/说明/纸条等）。VoiceOver 自定义操作。
+    static func readPhotoText(_ l: Language) -> String { l == .zh ? "读图中的文字" : "Read text in photo" }
+    static func readingPhoto(_ l: Language) -> String { l == .zh ? "正在读取图中文字…" : "Reading text in photo…" }
+    static func noTextInPhoto(_ l: Language) -> String { l == .zh ? "图中没有识别到文字" : "No text found in this photo" }
     static func recall(_ l: Language) -> String { l == .zh ? "撤回" : "Unsend" }
     static func recalled(_ l: Language) -> String { l == .zh ? "已撤回" : "Message unsent" }
     static func recallFailed(_ l: Language) -> String {

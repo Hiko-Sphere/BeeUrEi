@@ -51,4 +51,17 @@ final class ChatStringsTests: XCTestCase {
             XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(s)")
         }
     }
+
+    func testReadPhotoTextStringsBilingual() {
+        // 读图中文字（盲人收图看不见内容→端侧 OCR）：三态（操作名/进行中/无文字）各非空、双语、英文不串中文。
+        for l in [Language.zh, .en] {
+            for s in [ChatStrings.readPhotoText(l), ChatStrings.readingPhoto(l), ChatStrings.noTextInPhoto(l)] {
+                XCTAssertFalse(s.isEmpty)
+            }
+        }
+        XCTAssertTrue(ChatStrings.readPhotoText(.zh).contains("文字")) // 操作名点明"文字"（区别于"全屏查看"）
+        for s in [ChatStrings.readPhotoText(.en), ChatStrings.readingPhoto(.en), ChatStrings.noTextInPhoto(.en)] {
+            XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(s)")
+        }
+    }
 }

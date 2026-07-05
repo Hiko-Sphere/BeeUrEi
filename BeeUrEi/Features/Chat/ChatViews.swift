@@ -3,6 +3,7 @@ import AVFoundation
 import AVKit
 import UIKit
 import PhotosUI
+import Vision
 
 // MARK: - 聊天目标（单聊 / 群聊）
 
@@ -425,6 +426,9 @@ struct ChatView: View {
                         .onTapGesture { zoomImage = ZoomableImage(image: img) }
                         .accessibilityAddTraits(.isButton)
                         .accessibilityHint(ChatStrings.openPhotoHint(lang))
+                        // 盲人收到图片看不见——端侧 OCR 读出图中文字（亲友常拍处方/时刻表/说明/纸条让盲人"看"）。
+                        // VoiceOver 转子自定义操作；语音随文字语言（中/英）自动切换，复用识别屏同一朗读管线。
+                        .accessibilityAction(named: Text(ChatStrings.readPhotoText(lang))) { readImageText(img) }
                 } else {
                     Label(ChatStrings.photo(lang), systemImage: "photo")
                 }
@@ -439,6 +443,38 @@ struct ChatView: View {
             default:
                 Text(m.text).font(.body)
             }
+        }
+    }
+
+    /// 端侧读出图片里的文字（盲人收图看不见内容——亲友常拍处方/时刻表/说明书/纸条让盲人"看"）。
+    /// Vision OCR（中英双语）→ 核心 ReadingOrder 按阅读序整理 → 语音**随文字语言**（中/英）朗读，与识别屏"读文字"
+    /// 同一管线（orderedOCRText + dominantTextIsChinese）。**纯端侧、不上传图片**（隐私优先，图片本就在本机）。
+    private func readImageText(_ img: UIImage) {
+        let lang = self.lang
+        SpeechHub.shared.speak(ChatStrings.readingPhoto(lang), channel: .query, voiceCode: lang.voiceCode) // 即时提示，计算期间不冷场
+        guard let cg = img.cgImage else {
+            SpeechHub.shared.speak(ChatStrings.noTextInPhoto(lang), channel: .query, voiceCode: lang.voiceCode); return
+        }
+        let request = VNRecognizeTextRequest { req, _ in
+            let items: [(text: String, box: CGRect)] = ((req.results as? [VNRecognizedTextObservation]) ?? []).compactMap { o in
+                guard let s = o.topCandidates(1).first?.string else { return nil }
+                return (s, o.boundingBox)
+            }
+            let text = FramingAssistViewModel.orderedOCRText(from: items)
+            DispatchQueue.main.async {
+                if text.isEmpty {
+                    SpeechHub.shared.speak(ChatStrings.noTextInPhoto(lang), channel: .query, voiceCode: lang.voiceCode)
+                } else {
+                    let voice = FramingAssistViewModel.dominantTextIsChinese(text) ? Language.zh.voiceCode : Language.en.voiceCode
+                    SpeechHub.shared.speak(text, channel: .query, voiceCode: voice)
+                }
+            }
+        }
+        request.recognitionLanguages = lang == .en ? ["en-US", "zh-Hans"] : ["zh-Hans", "en-US"]
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? VNImageRequestHandler(cgImage: cg, options: [:]).perform([request])
         }
     }
 

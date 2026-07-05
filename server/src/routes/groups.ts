@@ -49,7 +49,6 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store, push: Pu
     const me = req.user!.sub
     const groups = store.groupsFor(me).map((g) => {
       const recent = store.groupMessages(g.id, 200)
-      const readAt = store.groupReadAt(g.id, me)
       return {
         group: g,
         members: g.memberIds.map((id) => {
@@ -57,7 +56,10 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store, push: Pu
           return u ? publicUser(u) : { id, username: '', displayName: '已注销用户', role: '', status: '', avatar: null }
         }),
         last: recent.length > 0 ? recent[recent.length - 1] : null,
-        unread: recent.filter((m) => m.createdAt > readAt && m.fromId !== me && m.kind !== 'recalled').length,
+        // 无上限精确未读（与 App 图标总角标 totalUnreadFor 同口径）：此前用最近 200 条 filter，>200 未读会被封顶
+        // 漏计、与总角标不一致（活跃家庭群久未看即触发）。unreadGroupCount 走 COUNT 既准又省，口径完全一致
+        // （createdAt>已读时刻、非己发、非撤回）；db/unread 早已迁移，此端点是漏改的姊妹面。
+        unread: store.unreadGroupCount(g.id, me),
         muted: store.isGroupMuted(g.id, me), // 我是否静音此群（前端显示静音图标 + 免打扰不影响未读数）
       }
     })

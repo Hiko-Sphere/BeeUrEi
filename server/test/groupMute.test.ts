@@ -96,3 +96,25 @@ describe('群免打扰 mute', () => {
     }
   })
 })
+
+describe('GET /api/groups 未读数无上限', () => {
+  it('>200 未读不封顶（与 App 图标总角标 totalUnreadFor 同口径，此前取最近200条 filter 会漏计）', async () => {
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const owner = await reg(app, 'unreadown', 'blind')
+    const m1 = await reg(app, 'unreadm1', 'helper')
+    await bind(app, owner.token, m1.token, 'unreadm1')
+    const gid = (await app.inject({ method: 'POST', url: '/api/groups', headers: auth(owner.token),
+      payload: { name: '活跃大群', memberIds: [m1.user.id] } })).json().group.id as string
+    // m1 灌 205 条群消息（owner 一条没读）——直接走 store 快，免 205 次 HTTP。
+    // createdAt 取远晚于建群时群主已读时刻的值，确保全部计入未读。
+    const base = Date.now() + 10_000
+    for (let i = 1; i <= 205; i++) {
+      store.createMessage({ id: `${gid}-msg-${i}`, fromId: m1.user.id, toId: '', groupId: gid, kind: 'text', text: 'x', createdAt: base + i })
+    }
+    const groups = (await app.inject({ method: 'GET', url: '/api/groups', headers: auth(owner.token) })).json().groups
+    const g = groups.find((x: { group: { id: string } }) => x.group.id === gid)
+    expect(g.unread).toBe(205) // 精确 205，非旧实现封顶的 200
+    await app.close()
+  })
+})

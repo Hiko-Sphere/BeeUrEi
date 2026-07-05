@@ -28,6 +28,12 @@ export function registerReportRoutes(app: FastifyInstance, store: Store): void {
     if (parsed.data.evidenceRecordingId) {
       const rec = store.findRecording(parsed.data.evidenceRecordingId)
       if (!rec || rec.ownerId !== reporter.sub) return reply.code(400).send({ error: 'invalid_evidence' })
+      // 证据须**确实拍到被举报人**：录制参与者须含 targetUserId（新录制存 participants；老录制回退 ownerId+consentBy
+      // 推导，与 recordings.ts 同口径）。否则举报人可拿一段与被举报人无关的通话录制（含**第三方**的音视频/位置
+      // 元数据）当证据——把无关第三方的录制暴露给管理员取证留存、并误导处置。延续 EVIDENCE-OWNER 的隐私不变量
+      // （无关方录制绝不因举报被拖入留存）：既然录制是同意门控的，target 不在参与者里就意味着这段录制根本没拍到他。
+      const parts = rec.participants ?? [rec.ownerId, ...rec.consentBy]
+      if (!parts.includes(parsed.data.targetUserId)) return reply.code(400).send({ error: 'invalid_evidence' })
       evidenceRecordingId = rec.id
     }
     // 去重（防刷）：同一举报人对同一对象的**全部**未处理举报——不能只看首条。

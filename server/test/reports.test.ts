@@ -86,8 +86,8 @@ describe('reports', () => {
     const reporter = await reg(a, 'repev')
     const target = await reg(a, 'tgtev')
     const auth = { authorization: `Bearer ${reporter.token}` }
-    // 举报人拥有两段录制（证据须为本人拥有）。
-    const rec = (id: string) => store.createRecording({ id, callId: 'c', ownerId: reporter.id, consentBy: [], reason: 'r', recordedAt: Date.now() })
+    // 举报人拥有两段录制（证据须为本人拥有），且录制**确实拍到了被举报人**（target 是同意被录的参与方）。
+    const rec = (id: string) => store.createRecording({ id, callId: 'c', ownerId: reporter.id, consentBy: [target.id], reason: 'r', recordedAt: Date.now() })
     rec('ev1'); rec('ev2')
     const post = (evidenceRecordingId?: string) => a.inject({ method: 'POST', url: '/api/reports', headers: auth, payload: { targetUserId: target.id, reason: 'x', evidenceRecordingId } })
 
@@ -103,6 +103,26 @@ describe('reports', () => {
     expect(open).toHaveLength(2)
     // 首条同证据仍去重（原有行为不回退）。
     const r4 = await post('ev1'); expect(r4.statusCode).toBe(200); expect(r4.json().report.id).toBe(r1.json().report.id)
+    await a.close()
+  })
+
+  it('证据录制须确实拍到被举报人：录制参与者不含 target → 400（防拿无关第三方录制当证据暴露给管理员）', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const reporter = await reg(a, 'reprel')
+    const target = await reg(a, 'tgtrel')
+    const third = await reg(a, 'thirdrel')
+    const auth = { authorization: `Bearer ${reporter.token}` }
+    const post = (evidenceRecordingId: string) => a.inject({ method: 'POST', url: '/api/reports', headers: auth, payload: { targetUserId: target.id, reason: 'x', evidenceRecordingId } })
+    // 举报人拥有一段与**第三方**的通话录制（target 不在其中）——拿它举报 target 应被拒。
+    store.createRecording({ id: 'unrel', callId: 'c1', ownerId: reporter.id, consentBy: [third.id], reason: 'r', recordedAt: Date.now() })
+    expect((await post('unrel')).statusCode).toBe(400)
+    // 老录制无 participants 字段：回退 ownerId+consentBy 推导同样生效（含 target 才放行）。
+    store.createRecording({ id: 'legacyok', callId: 'c2', ownerId: reporter.id, consentBy: [target.id], reason: 'r', recordedAt: Date.now() })
+    expect((await post('legacyok')).statusCode).toBe(201)
+    // 显式 participants 含 target 也放行（新录制口径）——不同证据，各自留存 → 201（关键是没被 400 拒）。
+    store.createRecording({ id: 'newok', callId: 'c3', ownerId: reporter.id, consentBy: [], participants: [reporter.id, target.id], reason: 'r', recordedAt: Date.now() })
+    expect((await post('newok')).statusCode).toBe(201)
     await a.close()
   })
 })

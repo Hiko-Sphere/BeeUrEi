@@ -67,8 +67,11 @@ final class AuthSession {
         guard let rt = KeychainStore.readRefresh() else { logout(); return }
         do {
             let result = try await api.refresh(refreshToken: rt)
-            // 若刷新期间会话已被登出（token 置 nil），不要把新令牌写回，避免"死而复生"（见审查 #5）。
-            guard token != nil else { return }
+            // 若刷新期间会话已被登出（self.token 置 nil），不要把新令牌写回，避免"死而复生"（见审查 #5）。
+            // **必须查 self.token**：函数入口 `guard let token` 已把 self.token 解包成**非可选的局部** token（恒非 nil），
+            // 查它等于没查（编译器早警告"与 nil 比较恒为真"）——刷新期间登出仍会被此处写回新令牌复活。第 54 行 happy-path
+            // 分支用的正是 self.token，本分支此前漏了同款守卫、写成了局部 token。
+            guard self.token != nil else { return }
             self.token = result.token
             self.user = result.user
             KeychainStore.save(result.token)
@@ -217,9 +220,17 @@ final class AuthSession {
         if let token {
             let rt = KeychainStore.readRefresh()
             Task {
-                await api.unregisterVoipToken(token: token)
-                await api.unregisterApnsToken(token: token) // 解绑提醒推送，避免投到已登出设备
-                if let rt { await api.revokeRefresh(token: token, refreshToken: rt) }
+                // 三个登出清理**并发**跑、互不阻塞：安全关键的会话吊销(revokeRefresh)此前排在两个尽力而为的
+                // 解绑推送之后顺序 await——若解绑推送网络挂起(各 30s 超时)会把会话吊销拖到 60s 后，登出后 App
+                // 若被系统挂起就来不及吊销/解绑。async let 让三者一起发出、各自尽快完成（总耗时=最慢一个，非三者之和）。
+                async let voip: Void = api.unregisterVoipToken(token: token) // 避免来电误投到已登出设备
+                async let apns: Void = api.unregisterApnsToken(token: token) // 解绑提醒推送，避免投到已登出设备
+                if let rt {
+                    async let revoke: Void = api.revokeRefresh(token: token, refreshToken: rt) // 安全关键：吊销服务端会话
+                    await voip; await apns; await revoke
+                } else {
+                    await voip; await apns
+                }
             }
         }
         LiveLocationManager.shared.reset() // 停止位置共享/轮询，清联系人，防跨账号泄漏

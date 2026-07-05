@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, APIError, fetchRecordingObjectURL, type RecordingInfo } from '../lib/api'
 import { useI18n } from '../lib/i18n'
+import { joinNames } from '../lib/listFormat'
 import { Card, Button, Pill, Spinner, EmptyState, useToast, fmtTime, fmtDuration, RelativeTime } from '../components/ui'
 import { IconFilm, IconX } from '../components/icons'
 
@@ -65,7 +66,7 @@ export function RecordingsPage() {
                 <button onClick={() => del(r)} className="text-faint hover:text-danger" aria-label={t('删除', 'Delete')}><IconX width={18} height={18} /></button>
               </div>
               <div className="text-sm text-soft">
-                <div><span className="text-faint">{t('参与者', 'Participants')}：</span>{r.participantNames.join('、') || '—'}</div>
+                <div><span className="text-faint">{t('参与者', 'Participants')}：</span>{joinNames(r.participantNames, lang)}</div>
                 {/* 录制原因（知情同意透明度）：服务端一直下发 reason 却从未在列表呈现（死字段）。是"为何录这通话"
                     的审计线索——录制功能以双方知情同意为本，把原因如实展示强化透明度。空原因不显示（默认 ''）。 */}
                 {r.reason && r.reason.trim() && <div><span className="text-faint">{t('录制原因', 'Reason')}：</span>{r.reason}</div>}

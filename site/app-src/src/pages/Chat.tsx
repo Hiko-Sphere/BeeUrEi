@@ -4,6 +4,7 @@ import { api, chatErrorText, fetchMediaObjectURL, uploadMedia, type ChatMessage,
 import { pollWhileVisible } from '../lib/poll'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
+import { joinNames } from '../lib/listFormat'
 import { parseLocation, appleMapsUrl } from '../lib/location'
 import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo, Modal, Button } from '../components/ui'
 import { IconChat, IconSend, IconPlus, IconX } from '../components/icons'
@@ -328,7 +329,7 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
         {sel.kind === 'peer' ? <Avatar name={sel.name} src={sel.avatar} size={36} /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-honey/15 text-honey"><IconChat width={18} height={18} /></span>}
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold">{sel.name}</div>
-          {sel.kind === 'group' && <div className="text-xs text-faint">{sel.members.map((m) => m.displayName).join('、')}</div>}
+          {sel.kind === 'group' && <div className="text-xs text-faint">{joinNames(sel.members.map((m) => m.displayName), lang)}</div>}
         </div>
         <button onClick={() => { setSearchOpen((v) => !v); if (searchOpen) { setSearchQuery(''); setSearchResults(null) } }}
           className="rounded-full surface-2 px-3 py-1.5 text-xs font-medium text-soft" aria-label={t('搜索消息', 'Search messages')}>

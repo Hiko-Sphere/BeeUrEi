@@ -84,6 +84,7 @@ export class CallEngine {
   private hasRemoteDesc = false
   private pendingCandidates: RTCIceCandidateInit[] = []
   private statsTimer: ReturnType<typeof setInterval> | null = null
+  private iceWasReconnecting = false // ICE 曾进入 disconnected（喷过 'reconnecting'）→ 恢复时须主动喷回 'connected' 清横幅
   private ended = false
   private wsClosedByUs = false
 
@@ -183,11 +184,17 @@ export class CallEngine {
       case 'disconnected': mapped = 'disconnected'; break
       default: mapped = null
     }
-    if (state === 'connected' || state === 'completed') { if (!this.statsTimer) this.startStats() }
+    if (state === 'connected' || state === 'completed') {
+      if (!this.statsTimer) this.startStats()
+      // 从"重连中"恢复：主动喷回 'connected'，否则顶部横幅永久卡在"正在重连…"。
+      // （onStatus('connected') 仅在首次连上喷过一次；之后 disconnected 喷 'reconnecting' 却无人喷回，
+      //  ICE 自行恢复后 statusKey 停在 'reconnecting'——通话早已恢复、盲人却一直听到/看到"正在重连"。）
+      if (this.iceWasReconnecting) { this.iceWasReconnecting = false; this.cb.onStatus?.('connected') }
+    }
     if (state === 'failed' || state === 'closed') { this.stopStats() }
     if (mapped) this.cb.onMediaState?.(mapped)
     if (mapped === 'failed') this.cb.onStatus?.('mediaFailed')
-    if (mapped === 'disconnected') this.cb.onStatus?.('reconnecting')
+    if (mapped === 'disconnected') { this.iceWasReconnecting = true; this.cb.onStatus?.('reconnecting') }
   }
 
   // ---------- 信令处理 ----------

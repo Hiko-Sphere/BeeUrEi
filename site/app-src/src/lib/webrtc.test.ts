@@ -81,3 +81,32 @@ describe('CallEngine 旁观 ICE 缓冲边界', () => {
     expect(e.observerPending.get('admin')?.length).toBe(1) // 合法缓冲仍生效
   })
 })
+
+// ICE 重连状态恢复：disconnected 喷 'reconnecting'，ICE 自行恢复后须喷回 'connected'——
+// 否则顶部横幅永久卡"正在重连…"（onStatus('connected') 首连只喷一次、无人喷回），通话早已恢复盲人却一直被告知重连中。
+describe('CallEngine ICE 重连横幅恢复', () => {
+  const engineWithStatus = (statuses: string[]) => new CallEngine({
+    callId: 'c1', token: 'T', iceServers: [],
+    recordPolicy: { enabled: false, requireConsent: false },
+    cb: { onStatus: (k) => statuses.push(k) },
+  }) as unknown as { onIceState: (s: string) => void; stopStats: () => void }
+
+  it('disconnected→reconnecting，恢复 connected→喷回 connected 清横幅', () => {
+    const statuses: string[] = []
+    const e = engineWithStatus(statuses)
+    e.onIceState('disconnected')
+    expect(statuses).toContain('reconnecting')
+    statuses.length = 0
+    e.onIceState('connected')            // ICE 自愈
+    expect(statuses).toContain('connected') // 主动清"重连中"横幅
+    e.stopStats()                        // 清 startStats 起的定时器
+  })
+
+  it('未经历 disconnected 的 connected 不喷 onStatus(connected)（不覆盖首连/ peerVideoOn 等）', () => {
+    const statuses: string[] = []
+    const e = engineWithStatus(statuses)
+    e.onIceState('connected')            // 首次连上，从未 disconnected
+    expect(statuses).not.toContain('connected') // 无横幅可清，不多喷（首连的 connected 由数据面单独喷）
+    e.stopStats()
+  })
+})

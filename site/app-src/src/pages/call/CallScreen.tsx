@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, tokenStore } from '../../lib/api'
 import { useI18n } from '../../lib/i18n'
-import { useToast, Avatar, Button } from '../../components/ui'
+import { useToast, Avatar, Button, Modal } from '../../components/ui'
 import { IconMic, IconMicOff, IconFlash, IconZoom, IconRecord, IconHangup, IconFlag, IconUser, IconShield, IconChat, IconSend } from '../../components/icons'
 import { CallEngine, type MediaState, type Quality, CALL_TEXT_MAX, validCallText, callTextRejectText } from '../../lib/webrtc'
 import type { ActiveCall } from './CallController'
@@ -270,7 +270,7 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
 
       {/* 录制知情同意（对端请求录制本端） */}
       {incomingRecReq && (
-        <Modal>
+        <Modal onClose={() => respondConsent(false)} label={t('录制请求', 'Recording request')} dismissible={false} role="alertdialog" panelClassName="w-full max-w-sm">
           <h3 className="text-lg font-semibold">{t('对方请求录制本次通话', 'Recording request')}</h3>
           <p className="mt-2 text-sm text-soft">{t('对方希望录制包含你音视频的本次通话。是否同意？录制将作为合规留存并可用于举报取证。', 'They want to record this call including your audio/video. Allow? Recordings are retained for compliance and may be used as report evidence.')}</p>
           <div className="mt-5 flex gap-3">
@@ -319,15 +319,7 @@ function QualityBars({ quality }: { quality: Quality }) {
   )
 }
 
-function Modal({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-[130] grid place-items-center bg-black/60 p-4">
-      <div className="slide-up w-full max-w-sm rounded-2xl surface border border-[var(--line)] p-6 text-[var(--text)] shadow-2xl">{children}</div>
-    </div>
-  )
-}
-
-function ReportDialog({ targetUserId, callId, evidenceRecordingId, onClose, onAddFriend, onBlock }: {
+export function ReportDialog({ targetUserId, callId, evidenceRecordingId, onClose, onAddFriend, onBlock }: {
   targetUserId: string; callId: string; evidenceRecordingId: string | null; onClose: () => void; onAddFriend: () => void; onBlock: () => void
 }) {
   const { t } = useI18n()
@@ -345,7 +337,7 @@ function ReportDialog({ targetUserId, callId, evidenceRecordingId, onClose, onAd
     } catch { toast(t('提交失败', 'Failed to submit'), 'error') } finally { setBusy(false) }
   }
   return (
-    <Modal>
+    <Modal onClose={onClose} label={t('举报与安全', 'Report & Safety')} panelClassName="w-full max-w-sm">
       <h3 className="text-lg font-semibold">{t('举报与安全', 'Report & Safety')}</h3>
       <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} maxLength={1000}
         placeholder={t('请描述问题（必填）', 'Describe the issue (required)')}

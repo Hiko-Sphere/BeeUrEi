@@ -102,6 +102,7 @@ final class FramingAssistViewModel {
         if channel != .colorMatch { colorMatchFirst = nil }
         switch channel {
         case .banknote: readCurrency()
+        case .countCash: if !counting { toggleCounting() } // 语音"数钱"直达点钞模式（已开则不重复切；用户随后逐张扫）
         case .scan: readBarcode()
         case .fullPage: if !docMode { toggleDocumentMode() }
         case .bus: readBus()

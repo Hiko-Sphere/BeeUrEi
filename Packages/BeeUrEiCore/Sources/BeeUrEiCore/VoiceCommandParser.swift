@@ -25,6 +25,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case readEmail                  // 读邮箱地址（名片/信笺上的邮箱——盲人读不到也写不了；只读不代发）
     case readFullPage               // 读整页文档（多页拼读）
     case banknote                   // 识别纸币
+    case countCash                  // 点钞：逐张扫纸币累加、报运行总额（区别于 banknote 只认单张——数一叠钱刚需）
     case scanCode                   // 扫码
     case readBus                    // 识别公交（车号/路线）
     case describePeople             // 描述周围的人（人数/方位）
@@ -138,6 +139,10 @@ public enum VoiceCommandParser {
         if has(["读文字", "念文字", "朗读", "读一下", "念一下", "念念", "念一念", "念给我听", "读给我听", "read text", "read this", "read it", "read aloud"]) { return .readText }
         // 识币：**不用裸"钱"**——"钱"是"钱包/花钱/有钱"的子串，会把"找我的钱包"劫走误当识币（对抗复审 HIGH）。
         // 改用带面值语义的说法（多少钱/多少元/面额/认钱）；"钱包"不含这些，落到下面 parseFindTarget 正确解析为找物。
+        // 点钞（数一叠钱）须**先于** banknote 判：与识单张区分。用 cash 专属说法（数钱/点钞/数现金/count my cash），
+        // 均不含 banknote 的面值 token（多少钱/认钱/money…），也不用裸"数一数"（那是"数一数有几个人"的子串→劫 describePeople）。
+        if has(["数钱", "点钞", "数一数钱", "数数钱", "帮我数钱", "数现金", "一叠钱", "一共多少张",
+                "count my cash", "count cash", "count the cash", "count my notes", "tally my cash"]) { return .countCash }
         if has(["纸币", "钞票", "多少钱", "多少元", "面额", "认钱", "认一下钱", "banknote", "money", "currency", "bill"]) { return .banknote }
         if has(["扫码", "扫个码", "扫一下码", "扫描二维码", "二维码", "条形码", "条码", "scan", "barcode", "qr"]) { return .scanCode }
         // 打开消息：**去掉裸"聊天"/"信息"**——"聊天"是"聊聊天"子串（"陪我聊聊天"闲聊被误开消息）、"信息"吃掉

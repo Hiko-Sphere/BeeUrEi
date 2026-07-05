@@ -458,6 +458,7 @@ struct HubView: View {
         case .readEmail: route.pendingChannel = .email; showFraming = true // "读邮箱"：读名片/信笺邮箱
         case .readFullPage: route.pendingChannel = .fullPage; showFraming = true
         case .banknote: route.pendingChannel = .banknote; showFraming = true
+        case .countCash: route.pendingChannel = .countCash; showFraming = true // "数一叠钱"直达点钞模式
         case .scanCode: route.pendingChannel = .scan; showFraming = true
         case .readBus: route.pendingChannel = .bus; showFraming = true
         case .describePeople: route.pendingChannel = .people; showFraming = true

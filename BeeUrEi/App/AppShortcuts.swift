@@ -9,7 +9,7 @@ final class AppRoute {
     static let shared = AppRoute()
     enum Destination { case help, lookAround, whereAmI, obstacle, sos }
     /// 识别屏内的频道直达（Seeing AI"全频道快捷指令"惯例：一句话直达识币/扫码等具体动作）。
-    enum FramingChannel { case banknote, scan, fullPage, bus, people, light, text, color, colorMatch, dates, phone, email }
+    enum FramingChannel { case banknote, countCash, scan, fullPage, bus, people, light, text, color, colorMatch, dates, phone, email }
     var pending: Destination?
     var pendingChannel: FramingChannel?
     /// 语音指令："找我的钥匙"→ 打开识别屏并按物名找东西（已教物品或可找类别，由 FindTargetResolver 派发）。

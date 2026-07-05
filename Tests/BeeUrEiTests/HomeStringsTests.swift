@@ -109,6 +109,7 @@ final class HomeStringsTests: XCTestCase {
         let en = HomeStrings.voiceCommandsHelp(.en).lowercased()
         let cases: [(zh: String, en: String, cmd: VoiceCommand)] = [
             ("认一下钱", "identify money", .banknote),
+            ("数一叠钱", "count my cash", .countCash),
             ("扫个码", "scan a code", .scanCode),
             ("这是几路车", "which bus is this", .readBus),
             ("有没有人", "who's there", .describePeople),

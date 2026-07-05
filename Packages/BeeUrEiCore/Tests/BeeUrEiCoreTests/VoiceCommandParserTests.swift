@@ -56,6 +56,22 @@ final class VoiceCommandParserTests: XCTestCase {
         }
     }
 
+    func testCountCashDistinctFromBanknoteAndPeopleAndWallet() {
+        // 点钞（数一叠）用 cash 专属说法，均解析到 countCash。
+        for p in ["数钱", "点钞", "数一叠钱", "数现金", "帮我数钱", "一共多少张", "count my cash", "count cash", "tally my cash"] {
+            XCTAssertEqual(VoiceCommandParser.parse(p), .countCash, "『\(p)』应解析为 countCash")
+        }
+        // 识**单张**仍走 banknote（未被点钞劫持）——两者刻意区分。
+        XCTAssertEqual(VoiceCommandParser.parse("这是多少钱"), .banknote)
+        XCTAssertEqual(VoiceCommandParser.parse("认一下钱"), .banknote)
+        XCTAssertEqual(VoiceCommandParser.parse("识别纸币"), .banknote)
+        // "数一数有几个人"不被点钞劫持（未用裸"数一数"，且 describePeople 在前）。
+        XCTAssertEqual(VoiceCommandParser.parse("数一数前面有几个人"), .describePeople)
+        // "找我的钱包"仍是找物、绝不被 cash/识币劫持（"钱包"含"钱"但非面值/点钞 token）。
+        XCTAssertNotEqual(VoiceCommandParser.parse("找我的钱包"), .countCash)
+        XCTAssertNotEqual(VoiceCommandParser.parse("找我的钱包"), .banknote)
+    }
+
     func testFindNearestSpatialVariants() {
         // 各种空间说法都提取到地点类别。
         XCTAssertEqual(VoiceCommandParser.parse("最近的厕所在哪"), .findNearest("厕所"))

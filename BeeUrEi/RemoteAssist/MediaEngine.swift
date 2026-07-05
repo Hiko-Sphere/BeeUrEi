@@ -424,7 +424,7 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
         pc?.statistics { [weak self] report in
             guard let self else { return }
             var rtt: Double?
-            var received: Int?, lost: Int?
+            var received: Int?, lost: Int?, jitter: Double?
             for (_, s) in report.statistics {
                 if s.type == "candidate-pair" {
                     let nominated = (s.values["nominated"] as? NSNumber)?.boolValue ?? false
@@ -435,6 +435,7 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
                     // 入站音频丢包：packetsReceived/packetsLost 是**累计**计数器，需相邻两轮差分才得区间率。
                     if let rv = (s.values["packetsReceived"] as? NSNumber)?.intValue { received = rv }
                     if let lv = (s.values["packetsLost"] as? NSNumber)?.intValue { lost = lv }
+                    if let jv = (s.values["jitter"] as? NSNumber)?.doubleValue { jitter = jv } // 抖动（秒）：瞬时值直接用
                 }
             }
             var lossFraction: Double?
@@ -445,9 +446,9 @@ final class WebRTCMediaEngine: NSObject, MediaEngine, RTCPeerConnectionDelegate 
                 if dRecv >= 0, dLost >= 0, total > 0 { lossFraction = Double(dLost) / Double(total) }
             }
             if let received, let lost { self.prevPackets = (received, lost) }
-            // 综合 RTT+丢包判档（核心 CallSignalLevel.fromMetrics，与协助端 web 一致）；映射到 App 的 CallQuality。
+            // 综合 RTT+丢包+抖动判档（核心 CallSignalLevel.fromMetrics，与协助端 web 一致）；映射到 App 的 CallQuality。
             let quality: CallQuality
-            switch CallSignalLevel.fromMetrics(rttSeconds: rtt, lossFraction: lossFraction) {
+            switch CallSignalLevel.fromMetrics(rttSeconds: rtt, lossFraction: lossFraction, jitterSeconds: jitter) {
             case .good: quality = .good
             case .fair: quality = .fair
             case .weak: quality = .weak

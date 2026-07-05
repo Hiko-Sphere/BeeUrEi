@@ -23,16 +23,25 @@ public extension CallSignalLevel {
         return x < 0.03 ? .good : (x < 0.08 ? .fair : .weak)
     }
 
-    /// 综合信号档：**取 RTT 档与丢包档中更差的一档**（行业通例——MOS 同时受时延与丢包拖累，任一变差
-    /// 都直接影响可听度）。任一信号缺失(unknown)时以另一有信息者为准；两者皆缺→unknown。与 web
-    /// `qualityFromStats` 同语义（跨端一致：盲人在 iOS 与在协助端 web 看到/听到的信号判定一致）。
-    static func fromMetrics(rttSeconds: Double?, lossFraction: Double?) -> CallSignalLevel {
-        let byRtt = fromRtt(rttSeconds)
-        let byLoss = fromLoss(lossFraction)
+    /// 由**抖动(秒)**（RFC3550 到达间隔抖动）判定信号档：<30ms good/<60ms fair/否则 weak。nil/非有限→unknown
+    /// （不降级）；负值夹 0。与 web `qualityFromJitter` 同阈值同语义。抖动大=到达忽快忽慢、语音断续，
+    /// 即便丢包与 RTT 都不高也会卡（MOS 三要素独立一维）。
+    static func fromJitter(_ jitterSeconds: Double?) -> CallSignalLevel {
+        guard let j = jitterSeconds, j.isFinite else { return .unknown }
+        let x = Swift.max(0, j)
+        return x < 0.03 ? .good : (x < 0.06 ? .fair : .weak)
+    }
+
+    /// 综合信号档：**取 RTT / 丢包 / 抖动三档中最差的一档**（行业通例——MOS 同时受时延、丢包、抖动拖累，
+    /// 任一变差都直接影响可听度）。任一信号缺失(unknown)时以其余有信息者为准；全缺→unknown。与 web
+    /// `qualityFromStats` 同语义（跨端一致）。jitterSeconds 默认 nil，向后兼容既有仅传 RTT+丢包的调用。
+    static func fromMetrics(rttSeconds: Double?, lossFraction: Double?, jitterSeconds: Double? = nil) -> CallSignalLevel {
         func rank(_ q: CallSignalLevel) -> Int {
             switch q { case .unknown: return -1; case .good: return 0; case .fair: return 1; case .weak: return 2 }
         }
-        return rank(byRtt) >= rank(byLoss) ? byRtt : byLoss // unknown(-1) 天然让位于任何已知档
+        // 取最差；unknown(-1) 天然让位于任何已知档。
+        return [fromRtt(rttSeconds), fromLoss(lossFraction), fromJitter(jitterSeconds)]
+            .max(by: { rank($0) < rank($1) }) ?? .unknown
     }
 }
 

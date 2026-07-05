@@ -27,14 +27,22 @@ export function qualityFromLoss(lossFraction: number | undefined): Quality {
   return f < 0.03 ? 'good' : f < 0.08 ? 'fair' : 'weak'
 }
 
-/// 综合通话质量：**取 RTT 档与丢包档中更差的一档**（行业通例——MOS 同时受时延与丢包拖累，
-/// 任一变差都直接影响可听度）。任一信号缺失(unknown)时以另一有信息的为准；两者皆缺才 unknown。
-/// 抽成纯函数便于单测；实采样的丢包区间率由 Call.pollStats 用累计计数器差分算出后喂入。
-export function qualityFromStats(rtt: number | undefined, lossFraction: number | undefined): Quality {
+/// 抖动(秒，inbound-rtp.jitter=RFC3550 到达间隔抖动)判定质量档：<30ms→good；<60ms→fair；否则 weak。
+/// 无数据/非有限→unknown（不降级）。抖动大=到达时刻忽快忽慢，抖动缓冲要么加延迟要么放空=语音断续，
+/// 即便**丢包与 RTT 都不高**也会卡（MOS 三要素里独立的一维），故并入综合判定。
+export function qualityFromJitter(jitterSeconds: number | undefined): Quality {
+  if (jitterSeconds === undefined || !Number.isFinite(jitterSeconds)) return 'unknown'
+  const j = Math.max(0, jitterSeconds)
+  return j < 0.03 ? 'good' : j < 0.06 ? 'fair' : 'weak'
+}
+
+/// 综合通话质量：**取 RTT / 丢包 / 抖动三档中最差的一档**（行业通例——MOS 同时受时延、丢包、抖动
+/// 拖累，任一变差都直接影响可听度）。任一信号缺失(unknown)时以其余有信息者为准；全缺才 unknown。
+/// 抽成纯函数便于单测；丢包区间率与抖动由 Call.pollStats 从 inbound-rtp 采样后喂入（jitter 可选，向后兼容）。
+export function qualityFromStats(rtt: number | undefined, lossFraction: number | undefined, jitterSeconds?: number): Quality {
   const rank: Record<Quality, number> = { unknown: -1, good: 0, fair: 1, weak: 2 }
-  const a = qualityFromRtt(rtt)
-  const b = qualityFromLoss(lossFraction)
-  return rank[a] >= rank[b] ? a : b // 取更差者；unknown(-1) 天然让位于任何已知档
+  const cands = [qualityFromRtt(rtt), qualityFromLoss(lossFraction), qualityFromJitter(jitterSeconds)]
+  return cands.reduce((worst, q) => (rank[q] >= rank[worst] ? q : worst), 'unknown' as Quality) // 取最差；unknown(-1) 天然让位
 }
 
 export interface CallPeer { userId?: string; name?: string; avatar?: string | null }
@@ -535,13 +543,14 @@ export class CallEngine {
     try {
       const report = await this.pc.getStats()
       let rtt: number | undefined
-      let received: number | undefined, lost: number | undefined
+      let received: number | undefined, lost: number | undefined, jitter: number | undefined
       report.forEach((s) => {
         if (s.type === 'candidate-pair' && (s.nominated || s.state === 'succeeded') && typeof s.currentRoundTripTime === 'number') rtt = s.currentRoundTripTime
-        // 入站音频丢包（getStats 的 packetsReceived/packetsLost 是**累计**计数器，需相邻两轮差分才得区间率）。
+        // 入站音频丢包（getStats 的 packetsReceived/packetsLost 是**累计**计数器，需相邻两轮差分才得区间率）+ 抖动（jitter 秒，瞬时值直接用）。
         if (s.type === 'inbound-rtp' && s.kind === 'audio') {
           if (typeof s.packetsReceived === 'number') received = s.packetsReceived
           if (typeof s.packetsLost === 'number') lost = s.packetsLost
+          if (typeof s.jitter === 'number') jitter = s.jitter
         }
       })
       let lossFraction: number | undefined
@@ -553,7 +562,7 @@ export class CallEngine {
         if (dRecv >= 0 && dLost >= 0 && total > 0) lossFraction = dLost / total
       }
       if (received !== undefined && lost !== undefined) this.prevPackets = { received, lost }
-      this.cb.onQuality?.(qualityFromStats(rtt, lossFraction))
+      this.cb.onQuality?.(qualityFromStats(rtt, lossFraction, jitter))
     } catch { /* ignore */ }
   }
 

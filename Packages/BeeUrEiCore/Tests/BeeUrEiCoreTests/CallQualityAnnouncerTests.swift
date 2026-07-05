@@ -98,4 +98,30 @@ final class CallSignalLevelMetricsTests: XCTestCase {
         XCTAssertEqual(CallSignalLevel.fromMetrics(rttSeconds: 0.05, lossFraction: nil), .good)
         XCTAssertEqual(CallSignalLevel.fromMetrics(rttSeconds: nil, lossFraction: 0.2), .weak)
     }
+
+    func testFromJitterThresholdsAndBadInput() {
+        XCTAssertEqual(CallSignalLevel.fromJitter(nil), .unknown)
+        XCTAssertEqual(CallSignalLevel.fromJitter(.nan), .unknown)
+        XCTAssertEqual(CallSignalLevel.fromJitter(.infinity), .unknown)
+        XCTAssertEqual(CallSignalLevel.fromJitter(0), .good)
+        XCTAssertEqual(CallSignalLevel.fromJitter(0.029), .good)
+        XCTAssertEqual(CallSignalLevel.fromJitter(0.03), .fair)
+        XCTAssertEqual(CallSignalLevel.fromJitter(0.059), .fair)
+        XCTAssertEqual(CallSignalLevel.fromJitter(0.06), .weak)
+        XCTAssertEqual(CallSignalLevel.fromJitter(0.2), .weak)
+        XCTAssertEqual(CallSignalLevel.fromJitter(-0.01), .good) // 负值夹 0
+    }
+
+    func testFromMetricsIncludesJitter() {
+        // 关键：低时延低丢包但高抖动(100ms) → weak，不因前两者好虚报 good。
+        XCTAssertEqual(CallSignalLevel.fromMetrics(rttSeconds: 0.05, lossFraction: 0.01, jitterSeconds: 0.1), .weak)
+        // 三者皆好 → good。
+        XCTAssertEqual(CallSignalLevel.fromMetrics(rttSeconds: 0.05, lossFraction: 0.01, jitterSeconds: 0.01), .good)
+        // good+good+fair(jitter) → fair。
+        XCTAssertEqual(CallSignalLevel.fromMetrics(rttSeconds: 0.05, lossFraction: 0.01, jitterSeconds: 0.04), .fair)
+        // 只有抖动有数据（RTT/丢包缺）→ 以抖动为准。
+        XCTAssertEqual(CallSignalLevel.fromMetrics(rttSeconds: nil, lossFraction: nil, jitterSeconds: 0.1), .weak)
+        // 向后兼容：不传 jitterSeconds 时行为不变。
+        XCTAssertEqual(CallSignalLevel.fromMetrics(rttSeconds: 0.05, lossFraction: 0.2), .weak)
+    }
 }

@@ -34,8 +34,13 @@ public enum BusDisplayReader {
         for raw in texts {
             let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             let lower = t.lowercased()
-            // 即将到站类（无需数字）：中文"即将/进站"，英文 arriving/approaching/due。
-            if t.contains("即将") || t.contains("进站") || lower.contains("arriv") || lower.contains("approach") || lower.contains(" due") || lower == "due" {
+            // 即将到站类（无需数字）：中文"即将/进站"，英文 arriving/arrives/approaching/due（**动词**才算即将到站）。
+            // ⚠️ 用 `arriv(?!al)` 而非裸子串 "arriv"：名词 arrival/arrivals 是站牌标准词（"Arrivals"表头、
+            // "Next arrival 5 min"），裸子串会把它们误当"即将到站"，从而**压掉真实的"还有5分钟"读数**——
+            // 站台上的盲人被告知"车到了"而其实还有 5 分钟，可能提前迈向路缘（安全攸关）。同本文件 min⊂Mint、
+            // 站⊂站台 的整词门控口径。lower 已小写，正则大小写无碍。
+            let hasArriveVerb = lower.range(of: "arriv(?!al)", options: .regularExpression) != nil
+            if t.contains("即将") || t.contains("进站") || hasArriveVerb || lower.contains("approach") || lower.contains(" due") || lower == "due" {
                 imminent = true
             }
             if minutes == nil, let n = firstNumber(minutesRegexes, in: lower) { minutes = n }

@@ -105,4 +105,18 @@ final class BusDisplayReaderTests: XCTestCase {
         // 月台杂讯与真到站同现：跳过站台、命中真的"3站"。
         XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["2站台", "还有3站"], language: .zh), "还有3站")
     }
+
+    func testArrivalHintArriveVerbNotNoun() {
+        // 回归：英文即将到站信号须是**动词** arriving/arrives/arrive，而非**名词** arrival/arrivals。
+        // 站牌标准词 "Arrivals"（表头）、"Next arrival 5 min" 里的 arrival 若被当"即将到站"，会**压掉**
+        // 真实的"还有5分钟"读数——盲人被告知"车到了"而实际还有 5 分钟，可能提前迈向路缘（安全攸关）。
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["Next arrival", "5 min"], language: .en), "about 5 min")
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["Arrivals", "3 min"], language: .en), "about 3 min")
+        XCTAssertNil(BusDisplayReader.arrivalHint(texts: ["Arrival Hall"], language: .en)) // 纯名词、无数字 → 无到站信号
+        // 动词形式仍准确判"即将到站"（不因防名词而漏报真的到站）。
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["Arriving"], language: .en), "arriving now")
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["Bus arrives"], language: .en), "arriving now")
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["Will arrive"], language: .en), "arriving now")
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["Approaching"], language: .en), "arriving now")
+    }
 }

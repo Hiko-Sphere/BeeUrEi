@@ -283,4 +283,23 @@ describe('family + emergency', () => {
     expect(await setCount()).toHaveLength(2)
     await a.close()
   })
+
+  it('紧急标志切换端点有端级限流（挡刷 emergency_contact_set 推送骚扰；与 addLink 同 20/min）', async () => {
+    const { a, reg } = setup()
+    const owner = await reg('rlemgowner', 'blind')
+    const contact = await reg('rlemgcontact', 'family')
+    const auth = (t: string) => ({ authorization: `Bearer ${t}` })
+    const l = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(owner.token), payload: { username: 'rlemgcontact', relation: '家人', isEmergency: false } })
+    const id = l.json().link.id as string
+    await a.inject({ method: 'POST', url: `/api/family/links/${id}/accept`, headers: auth(contact.token) })
+    // 端级 20/min：连打 22 次（true/false 交替，模拟刷推送环路）应在第 21 次起 429。默认全局 300 远松于此，
+    // 改前无端级限流则 22 次全过、测即失败（同 email/verify 端级限流回归口径）。
+    let limited = false
+    for (let i = 0; i < 22; i++) {
+      const r = await a.inject({ method: 'POST', url: `/api/family/links/${id}/emergency`, headers: auth(owner.token), payload: { isEmergency: i % 2 === 0 } })
+      if (r.statusCode === 429) { limited = true; break }
+    }
+    expect(limited).toBe(true)
+    await a.close()
+  })
 })

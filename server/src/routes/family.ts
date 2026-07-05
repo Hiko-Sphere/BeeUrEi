@@ -105,7 +105,11 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: P
   // 切换某联系人是否为**紧急联系人**（isEmergency）。此前只能在建链时设、之后无法改——
   // 而紧急告警优先级/升级重呼/医疗信息可见都依赖它，用户必须能事后调整谁是自己的紧急联系人。
   // 授权：仅链的 **owner**（= 设置"谁是我的紧急联系人"的一方，与建链时 owner 设 isEmergency 同口径）可改。
-  app.post('/api/family/links/:id/emergency', { preHandler: requireAuth() }, async (req, reply) => {
+  // 限流：false→true 会向被设者发 emergency_contact_set 推送——这是"改记录+外发推送"端点，与 addLink 同源
+  // 的推送骚扰面（反复 true→false→true 每轮推一条）。补与 addLink 相同的 20/min 端级限流掐断刷推送环路，
+  // 别只靠 300/min 全局（远松于 addLink 的 20 且被本人其它请求分摊）。正常用户偶尔改一次，20/min 绰绰有余。
+  app.post('/api/family/links/:id/emergency', { preHandler: requireAuth(),
+                                                config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = z.object({ isEmergency: z.boolean() }).safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const meId = req.user!.sub

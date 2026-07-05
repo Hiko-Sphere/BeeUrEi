@@ -90,6 +90,17 @@ final class RouteRemainingTests: XCTestCase {
         XCTAssertEqual(a.update(remainingMeters: 190), 200)  // 只报真正跨过的 200
     }
 
+    func testAnnouncerLongRouteReportsKilometreMilestones() {
+        // 长路(>1km)兑现"周期播报"：公里级里程碑各报一次（此前里程碑封顶 1km，>1km 一路静默到剩 1km 才首报）。
+        var a = RemainingDistanceAnnouncer()
+        _ = a.update(remainingMeters: 3200)                    // 基线（>3km）
+        XCTAssertEqual(a.update(remainingMeters: 2900), 3000)  // 跨 3km
+        XCTAssertEqual(a.update(remainingMeters: 1800), 2000)  // 跨 2km
+        XCTAssertEqual(a.update(remainingMeters: 950), 1000)   // 跨 1km
+        XCTAssertEqual(a.update(remainingMeters: 480), 500)    // 继续细档不变
+        XCTAssertNil(a.update(remainingMeters: 470))           // 同档不重复
+    }
+
     func testAnnouncerBigJumpReportsSmallestCrossed() {
         // 一帧大跳（如汇入/GPS 跳）跨过 500 和 200：只报最贴近现实的 200，且 500 不再补报。
         var a = RemainingDistanceAnnouncer()

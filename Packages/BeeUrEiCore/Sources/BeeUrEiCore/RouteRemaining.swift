@@ -56,9 +56,12 @@ public struct RemainingDistanceAnnouncer: Sendable {
     private var announced: Set<Int> = []
     private var lastRemaining: Double?
 
+    // 长距段加公里级里程碑（3/2km）：本类目标是**周期**播报剩余里程（见类型注释"行业标配"），但里程碑封顶 1km
+    // 意味着 >1km 的长路会一路静默到"剩 1km"才首次播报——3km 步行的前 2km 毫无进度反馈，与"周期"承诺相悖。
+    // 补 2/3km 兑现周期播报，覆盖绝大多数步行路程；调用方按 ≥1km 自动念公里（NavStrings.distancePhrase），上层无需改。
     // 末段加 25 米里程碑：50 米之后到"到达"(<15m)之间原本空白，而这正是盲人最想听到"快到了"的一段
     // （放慢脚步、准备找门/确认门牌）。竞品导航同样在最后一程给"即将到达"提示。
-    public init(milestones: [Double] = [1000, 500, 200, 100, 50, 25]) {
+    public init(milestones: [Double] = [3000, 2000, 1000, 500, 200, 100, 50, 25]) {
         self.milestones = Array(Set(milestones.filter { $0 > 0 })).sorted(by: >)
     }
 

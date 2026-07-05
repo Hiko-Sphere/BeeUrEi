@@ -36,6 +36,9 @@ public struct BeaconDirection: Sendable, Equatable {
     /// 用「身体航向 + 头部偏航」作为朝向计算信标相对方位（AirPods 头追踪增强，见 PLAN §14 Q8）。
     /// 无头追踪时传 headYawDegrees=0 即退化为纯身体航向。
     public static func relative(headingDegrees: Double, headYawDegrees: Double, bearingDegrees: Double) -> BeaconDirection {
-        BeaconDirection(headingDegrees: headingDegrees + headYawDegrees, bearingDegrees: bearingDegrees)
+        // 头部偏航非有限（AirPods 追踪掉帧/未校准）绝不能污染整体朝向：`heading + NaN = NaN` 会被 init 兜成
+        // 「正前方/12 点」，把本来有效的身体航向方向丢掉、信标错指正前方。坏 yaw 退化为 0（纯身体航向）才对。
+        let yaw = headYawDegrees.isFinite ? headYawDegrees : 0
+        return BeaconDirection(headingDegrees: headingDegrees + yaw, bearingDegrees: bearingDegrees)
     }
 }

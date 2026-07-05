@@ -65,6 +65,16 @@ final class BeaconDirectionTests: XCTestCase {
         XCTAssertEqual(body.clockHour, 3)
     }
 
+    // 回归：头部偏航非有限（AirPods 追踪掉帧）绝不能把信标兜成"正前方/12 点"、丢掉有效身体航向——退化为纯身体航向。
+    func testNonFiniteHeadYawFallsBackToBodyHeading() {
+        // 身体朝北(0)、目标正东(90)：纯身体航向应为 3 点钟。坏 yaw 不该把它变成 12 点。
+        for badYaw in [Double.nan, .infinity, -.infinity] {
+            let b = BeaconDirection.relative(headingDegrees: 0, headYawDegrees: badYaw, bearingDegrees: 90)
+            XCTAssertEqual(b.clockHour, 3, "坏 headYaw 应退化为纯身体航向(3 点)，而非兜成正前方(12 点)；yaw=\(badYaw)")
+            XCTAssertEqual(b.relativeAzimuthDegrees, 90, accuracy: 0.0001)
+        }
+    }
+
     // 回归：非有限 heading/bearing 不得崩溃，退化为「正前方/12 点」。
     func testNonFiniteInputDoesNotCrash() {
         XCTAssertEqual(BeaconDirection(headingDegrees: .nan, bearingDegrees: 90).clockHour, 12)

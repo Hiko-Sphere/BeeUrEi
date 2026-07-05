@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type NotificationInfo } from '../lib/api'
 import { emergencyLocInfo } from '../lib/emergencyLoc'
+import { appleMapsUrl } from '../lib/location'
 import { useI18n } from '../lib/i18n'
 import { Card, Button, Spinner, EmptyState, fmtTime, RelativeTime } from '../components/ui'
 import { IconBell, IconShield, IconPhone, IconUsers, IconFilm, IconFlash, IconPin, IconBattery } from '../components/icons'
@@ -89,7 +90,7 @@ export function NotificationsPage() {
                     // 浅底小字对比度不达标（a11y 审计口径），诚实信号由文案而非颜色承载。
                     const loc = emergencyLocInfo(n.data, n.createdAt)
                     return (
-                      <a href={`https://maps.apple.com/?ll=${n.data.lat},${n.data.lon}&q=${n.data.lat},${n.data.lon}`} target="_blank" rel="noreferrer"
+                      <a href={appleMapsUrl(n.data.lat, n.data.lon)} target="_blank" rel="noreferrer"
                         onClick={(e) => e.stopPropagation()}
                         className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline">
                         {loc.stale ? '⚠️' : '📍'} {loc.stale

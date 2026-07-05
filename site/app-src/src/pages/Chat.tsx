@@ -4,7 +4,7 @@ import { api, chatErrorText, fetchMediaObjectURL, uploadMedia, type ChatMessage,
 import { pollWhileVisible } from '../lib/poll'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
-import { parseLocation } from '../lib/location'
+import { parseLocation, appleMapsUrl } from '../lib/location'
 import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo, Modal, Button } from '../components/ui'
 import { IconChat, IconSend, IconPlus, IconX } from '../components/icons'
 
@@ -695,8 +695,7 @@ function MessageBody({ m, t }: { m: ChatMessage; t: (z: string, e: string) => st
 /// 地图链接一律 Apple Maps（项目约定，与紧急告警/Notifications/iOS 一致）：境内可打开，
 /// 且在中国境内展示时自动做 WGS-84→GCJ 纠偏；OSM 境内时常不可达。
 function LocationLink({ loc, t }: { loc: { lat: number; lng: number; name?: string }; t: (z: string, e: string) => string }) {
-  const q = encodeURIComponent(loc.name || `${loc.lat},${loc.lng}`)
-  return <a href={`https://maps.apple.com/?ll=${loc.lat},${loc.lng}&q=${q}`}
+  return <a href={appleMapsUrl(loc.lat, loc.lng, loc.name)}
             target="_blank" rel="noreferrer" className="underline">📍 {loc.name || t('位置', 'Location')}</a>
 }
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, APIError, type NotificationInfo } from '../../lib/api'
 import { pickUnreadEmergencies, playEmergencyChime, clearedSenderLatest, isClearedByLaterAllClear, ackEventNotifIds, respondingEventIds } from '../../lib/emergencyAlerts'
 import { emergencyLocInfo } from '../../lib/emergencyLoc'
+import { appleMapsUrl } from '../../lib/location'
 import { useI18n } from '../../lib/i18n'
 import { Modal, fmtTime } from '../../components/ui'
 import { IconPhone, IconFlash, IconCheck } from '../../components/icons'
@@ -80,7 +81,7 @@ export function EmergencyAlertModal({ alert, othersCount, beingHandled, onAck, o
         )}
         <div className="text-xs text-faint">{fmtTime(alert.createdAt, lang)}</div>
         {hasCoord && (
-          <a href={`https://maps.apple.com/?ll=${alert.data!.lat},${alert.data!.lon}&q=${alert.data!.lat},${alert.data!.lon}`}
+          <a href={appleMapsUrl(alert.data!.lat, alert.data!.lon)}
             target="_blank" rel="noreferrer"
             className="inline-flex items-center gap-1 text-sm font-medium text-accent hover:underline">
             {loc.stale ? '⚠️' : '📍'} {loc.stale

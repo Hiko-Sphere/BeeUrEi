@@ -164,19 +164,16 @@ function AddContactDialog({ onClose, onAdded }: { onClose: () => void; onAdded: 
     if (!query) return
     setBusy(true)
     try {
-      // 邮箱/手机号先查 userId（与 iOS 一致：lookup → addLink by userId）；纯用户名可直接按 username 提交。
-      // 标识符判定与登录共用 classifyIdentifier，两处口径一致（手机号按实际数字位判定）。
-      const kind = classifyIdentifier(query)
+      // 邮箱/手机号/纯数字用户名都先查 userId：lookupUser 走服务端 findByLoginIdentifier，**先按用户名**再手机号/邮箱，
+      // 故连"幸运号 8888"这类纯数字用户名（≥5 位被 classifyIdentifier 判成 phone）也能在此按用户名查到，无需回退。
+      // 纯字母/短用户名（classify=username）直接按 username 提交，addLink 服务端解析。两处口径共用 classifyIdentifier。
       let target: { username?: string; userId?: string }
-      if (kind === 'username') {
-        target = { username: query }
-      } else {
+      if (classifyIdentifier(query) !== 'username') {
         const r = await api.lookupUser(query)
-        if (r.user) target = { userId: r.user.id }
-        // 手机号查无 → 该串**可能是纯数字用户名**（如幸运号 8888，用户名允许全数字、≥5 位会被判成 phone），
-        // 回退按用户名提交；若也无此用户，服务端 member_not_found 兜底到下方 catch。邮箱格式不可能是用户名，不回退。
-        else if (kind === 'phone') target = { username: query }
-        else { toast(t('未找到该用户', 'User not found'), 'error'); setBusy(false); return }
+        if (!r.user) { toast(t('未找到该用户', 'User not found'), 'error'); setBusy(false); return }
+        target = { userId: r.user.id }
+      } else {
+        target = { username: query }
       }
       await api.addLink(target, relation.trim() || t('协助者', 'Helper'), emergency)
       toast(t('请求已发送', 'Request sent'), 'ok')

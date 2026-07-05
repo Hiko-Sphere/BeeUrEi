@@ -56,7 +56,7 @@ struct KYCFlowView: View {
             switch st {
             case "verified": Label(KYCStrings.verifiedNote(lang), systemImage: "checkmark.seal.fill").foregroundStyle(Color.beeHoney)
             case "pending": Text(KYCStrings.pendingNote(lang))
-            case "rejected": Text(KYCStrings.rejectedNote(status?.rejectReasonCode, lang)).foregroundStyle(Color.beeDanger)
+            case "rejected": Text(KYCStrings.rejectedNote(status?.rejectReasonCode, note: status?.rejectReasonNote, lang)).foregroundStyle(Color.beeDanger)
             default: Text(KYCStrings.noneNote(lang))
             }
         }
@@ -129,7 +129,7 @@ struct KYCFlowView: View {
             switch s {
             case "verified": announce(KYCStrings.verifiedNote(lang))
             case "pending": announce(KYCStrings.pendingNote(lang))
-            case "rejected": announce(KYCStrings.rejectedNote(status?.rejectReasonCode, lang))
+            case "rejected": announce(KYCStrings.rejectedNote(status?.rejectReasonCode, note: status?.rejectReasonNote, lang))
             default: announce(KYCStrings.noneNote(lang))
             }
         }

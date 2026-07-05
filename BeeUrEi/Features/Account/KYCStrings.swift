@@ -23,9 +23,15 @@ enum KYCStrings {
     static func done(_ l: Language) -> String { l == .zh ? "完成" : "Done" }
     static func back(_ l: Language) -> String { l == .zh ? "返回" : "Back" }
 
-    static func rejectedNote(_ code: String?, _ l: Language) -> String {
+    static func rejectedNote(_ code: String?, note: String? = nil, _ l: Language) -> String {
         let prefix = l == .zh ? "上次未通过：" : "Last attempt was not approved: "
-        return prefix + rejectReason(code, l)
+        var s = prefix + rejectReason(code, l)
+        // 管理员的**具体说明**（与 web 77aea1a 对齐）：盲人看不到自己的证件/自拍哪里不对，标准理由码之外的这段
+        // 具体说明（如"身份证背面缺失，请补拍"）尤其关键——须一并读出/显示，否则只能盲目重交。空说明不加。
+        if let note = note?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty {
+            s += (l == .zh ? " 审核说明：" : " Reviewer note: ") + note
+        }
+        return s
     }
     static func rejectReason(_ code: String?, _ l: Language) -> String {
         let zh: [String: String] = [

@@ -95,6 +95,22 @@ final class LabelDateReaderTests: XCTestCase {
         XCTAssertTrue(LabelDateReader.find(texts: ["EXP20261130"], language: .en)!.contains("20261130"))
     }
 
+    func testHyphenSeparatedDates() {
+        // 回归：连字符分隔的日期是药品/进口食品包装的**主流写法**，此前只认空格/斜杠/点 → 全漏。
+        // 盲人扫药盒读不出有效期是安全红线。数字连字符（日-月-年）：
+        XCTAssertTrue(LabelDateReader.find(texts: ["有效期 31-07-2026"], language: .zh)!.contains("31-07-2026"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["EXP 15-07-26"], language: .en)!.contains("15-07-26"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["保质期 07-2026"], language: .zh)!.contains("07-2026")) // 月-年
+        // 月份名连字符（药品最常见 EXP 31-JUL-2026 / DEC-2025 / 蓝色喷码 JUL-2026）：
+        XCTAssertTrue(LabelDateReader.find(texts: ["EXP 31-JUL-2026"], language: .en)!.contains("31-JUL-2026"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["EXP: DEC-2025"], language: .en)!.contains("DEC-2025"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["best before JUL-2026"], language: .en)!.contains("JUL-2026"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["use by JUL-31-2026"], language: .en)!.contains("JUL-31-2026"))
+        // 门控/边界不因放宽分隔符而失守：非日期串仍不误读，普通含"exp"的词仍不命中。
+        XCTAssertNil(LabelDateReader.find(texts: ["exp JUL 20260731999"], language: .en))   // 超长数字串非年
+        XCTAssertNil(LabelDateReader.find(texts: ["Export lot 2026-01"], language: .en))     // export 非 exp 标签
+    }
+
     func testDedupAndCap() {
         // OCR 常重复同一行：去重。
         let r = LabelDateReader.find(texts: ["保质期 2026.07.15", "保质期 2026.07.15"], language: .zh)!

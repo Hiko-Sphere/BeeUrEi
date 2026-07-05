@@ -268,6 +268,20 @@ enum ChatReactionAnnouncer {
     }
 }
 
+/// 消息编辑播报差分（纯逻辑，可单测）：轮询刷新时，找出**对方已发出的消息**被改过的——盲人只听过原文，
+/// 若对方把时间/地点等关键信息改了会按旧的行动。只报 fromId != myId（对方发的；本人编辑自己知道）、
+/// editedAt 相对旧快照增大（真被改）、非撤回（撤回文本空、另论）、且 old 里已存在（首见由新消息分支处理，念现文）。
+enum ChatEditAnnouncer {
+    static func peerEditsToAnnounce(old: [ChatMessageInfo], new: [ChatMessageInfo], myId: String) -> [ChatMessageInfo] {
+        let oldEdited = Dictionary(old.map { ($0.id, $0.editedAt ?? 0) }, uniquingKeysWith: { a, _ in a })
+        return new.filter { m in
+            guard m.fromId != myId, m.kind != "recalled", let e = m.editedAt else { return false }
+            guard let prev = oldEdited[m.id] else { return false } // 首见不报
+            return e > prev
+        }
+    }
+}
+
 // MARK: - 聊天页（iMessage 式气泡 + 已读回执 + 语音条 + 图片 + 视频 + 轮询刷新；单聊/群聊共用）
 
 struct ChatView: View {
@@ -697,6 +711,11 @@ struct ChatView: View {
             // （messages 在本函数末尾才 merge 更新，此处仍是旧快照）；自反应已即时写入 messages 故不重报（见 helper 注）。
             for emoji in ChatReactionAnnouncer.newReactionsOnMyMessages(old: messages, new: list, myId: myId) {
                 SpeechHub.shared.speak(ChatStrings.reactionReceivedSpeak(emoji, lang), channel: .query, voiceCode: lang.voiceCode)
+            }
+            // 对方改了已发的消息（可能改了关键信息，如约定时间/地点）：念出修正后的内容，盲人才不会按旧的行动。
+            for m in ChatEditAnnouncer.peerEditsToAnnounce(old: messages, new: list, myId: myId) {
+                let name = isGroup ? senderName(m.fromId) : target.title
+                SpeechHub.shared.speak(ChatStrings.messageEditedSpeak(name, String(m.text.prefix(60)), lang), channel: .query, voiceCode: lang.voiceCode)
             }
         }
         // 最新一批满页且未翻到开头 → 可能还有更早历史，显示"加载更早"。

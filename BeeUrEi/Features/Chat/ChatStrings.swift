@@ -136,6 +136,10 @@ enum ChatStrings {
     static func reactionReceivedSpeak(_ emoji: String, _ l: Language) -> String {
         l == .zh ? "你的消息收到回应\(emoji)" : "Your message got a \(emoji) reaction"
     }
+    /// 对方把已发出的消息改了——盲人只听过原文，若改了时间/地点等关键信息会按旧的行动；靠此语音得知修正后的内容。
+    static func messageEditedSpeak(_ name: String, _ text: String, _ l: Language) -> String {
+        l == .zh ? "\(name)把消息改成：\(text)" : "\(name) edited a message: \(text)"
+    }
     static let reactionChoices = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
 
     // MARK: 视频消息

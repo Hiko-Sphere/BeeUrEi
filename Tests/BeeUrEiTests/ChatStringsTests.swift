@@ -145,4 +145,41 @@ final class ChatStringsTests: XCTestCase {
         XCTAssertTrue(en.contains("❤️"))
         XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
+
+    private func mkEdit(_ id: String, from: String, text: String = "hi", editedAt: Int? = nil, kind: String = "text") -> ChatMessageInfo {
+        let e = editedAt.map { ",\"editedAt\":\($0)" } ?? ""
+        let json = "{\"id\":\"\(id)\",\"fromId\":\"\(from)\",\"toId\":\"x\",\"kind\":\"\(kind)\",\"text\":\"\(text)\",\"createdAt\":1000\(e)}"
+        return try! JSONDecoder().decode(ChatMessageInfo.self, from: Data(json.utf8))
+    }
+
+    func testEditAnnouncerReportsOnlyPeerEditsOfSeenMessages() {
+        let me = "me"
+        // 对方把已见过的消息改了（editedAt 从无到有）→ 报（盲人得知修正后的内容）。
+        XCTAssertEqual(ChatEditAnnouncer.peerEditsToAnnounce(
+            old: [mkEdit("m1", from: "peer")],
+            new: [mkEdit("m1", from: "peer", text: "4点见", editedAt: 2000)], myId: me).map(\.id), ["m1"])
+        // editedAt 无变化 → 不报。
+        XCTAssertTrue(ChatEditAnnouncer.peerEditsToAnnounce(
+            old: [mkEdit("m1", from: "peer", editedAt: 2000)],
+            new: [mkEdit("m1", from: "peer", editedAt: 2000)], myId: me).isEmpty)
+        // **我自己**发的消息被编辑 → 不报（本人自己知道）。
+        XCTAssertTrue(ChatEditAnnouncer.peerEditsToAnnounce(
+            old: [mkEdit("m1", from: me)],
+            new: [mkEdit("m1", from: me, editedAt: 2000)], myId: me).isEmpty)
+        // 撤回（kind=recalled，文本空）→ 不报（撤回另论，不当"改成空"念）。
+        XCTAssertTrue(ChatEditAnnouncer.peerEditsToAnnounce(
+            old: [mkEdit("m1", from: "peer")],
+            new: [mkEdit("m1", from: "peer", text: "", editedAt: 2000, kind: "recalled")], myId: me).isEmpty)
+        // 首见的消息（old 里没有）→ 不报（由新消息分支念现文，避免重复/首载轰炸）。
+        XCTAssertTrue(ChatEditAnnouncer.peerEditsToAnnounce(
+            old: [], new: [mkEdit("m1", from: "peer", editedAt: 2000)], myId: me).isEmpty)
+    }
+
+    func testMessageEditedSpeakBilingual() {
+        XCTAssertTrue(ChatStrings.messageEditedSpeak("小明", "4点见", .zh).contains("4点见"))
+        XCTAssertTrue(ChatStrings.messageEditedSpeak("小明", "4点见", .zh).contains("改成"))
+        let en = ChatStrings.messageEditedSpeak("Sam", "see you at 4", .en)
+        XCTAssertTrue(en.contains("see you at 4") && en.lowercased().contains("edited"))
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
 }

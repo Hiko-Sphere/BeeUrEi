@@ -28,4 +28,13 @@ final class FramingGuideTests: XCTestCase {
             XCTAssertFalse(g.hint(gd).isEmpty)
         }
     }
+
+    // 回归：坏检测框（任一坐标 NaN/∞）绝不谎报 .centered（"对准了、可以拍"），视作没检到目标 → .searching。
+    func testNonFiniteBoxNotReportedCentered() {
+        for bad in [Double.nan, .infinity, -.infinity] {
+            XCTAssertEqual(g.guide(target: NormalizedBox(x: bad, y: 0.4, width: 0.4, height: 0.4)), .searching)
+            XCTAssertEqual(g.guide(target: NormalizedBox(x: 0.3, y: 0.3, width: bad, height: 0.4)), .searching)
+            XCTAssertEqual(g.guide(target: NormalizedBox(x: 0.3, y: bad, width: 0.4, height: 0.4)), .searching)
+        }
+    }
 }

@@ -24,6 +24,10 @@ public struct FramingGuide: Sendable {
     /// target：整帧归一化检测框（原点左上）。nil 表示未检测到目标。
     public func guide(target: NormalizedBox?) -> FramingGuidance {
         guard let t = target else { return .searching }
+        // 坏检测框（NaN/∞——退化帧/除零归一化）：绝不能落到 .centered 谎报"对准了、可以拍"。所有方向/大小判定
+        // 遇 NaN 都为 false → 会一路穿到 .centered，让盲人对着无效画面按下快门。视作没检到目标、继续引导（同
+        // CompassRose/LightMeter 等的坏数据守卫；此模块曾漏）。
+        guard t.midX.isFinite, t.midY.isFinite, t.width.isFinite, t.height.isFinite else { return .searching }
         let dx = t.midX - 0.5
         let dy = t.midY - 0.5
         // 先纠正偏移更大的一轴（一次只给一个方向，降低认知负荷）。

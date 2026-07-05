@@ -28,4 +28,11 @@ describe('emergencyLocInfo（紧急告警位置的诚实标注）', () => {
   it('ageSec=0（刚定位就丢了 GPS）：stale 且 fixAt=告警时刻', () => {
     expect(emergencyLocInfo({ locSource: 'lastKnown', locAgeSec: '0' }, createdAt)).toEqual({ stale: true, fixAt: createdAt })
   })
+
+  it('createdAt 非有限（坏通知记录）或 fixAt 溢出：只标 stale、不给坏时刻（与 iOS EmergencyLocationTag 同口径）', () => {
+    // 坏通知 createdAt=NaN：不给时刻（否则 fixAt=NaN 被下游渲染成 Invalid Date）。
+    expect(emergencyLocInfo({ locSource: 'lastKnown', locAgeSec: '300' }, NaN)).toEqual({ stale: true, fixAt: null })
+    // age 巨值致 createdAt − age*1000 溢出为 -Infinity：只标 stale、不给时刻。
+    expect(emergencyLocInfo({ locSource: 'lastKnown', locAgeSec: '1e306' }, createdAt)).toEqual({ stale: true, fixAt: null })
+  })
 })

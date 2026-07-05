@@ -16,6 +16,10 @@ export interface EmergencyLocInfo {
 export function emergencyLocInfo(data: Record<string, string | undefined> | undefined, createdAt: number): EmergencyLocInfo {
   if (!data || data.locSource !== 'lastKnown') return { stale: false, fixAt: null }
   const age = Number(data.locAgeSec)
-  // ageSec 缺失/坏值：仍如实标"最后已知"（stale 本身不依赖时效解析），只是不给定位时刻。
-  return { stale: true, fixAt: Number.isFinite(age) && age >= 0 ? createdAt - age * 1000 : null }
+  // ageSec 缺失/坏值/负值、或 createdAt 非有限（坏通知记录）：仍如实标"最后已知"（stale 不依赖时效解析），只是不给定位时刻。
+  if (!Number.isFinite(age) || age < 0 || !Number.isFinite(createdAt)) return { stale: true, fixAt: null }
+  // 输出也须有限：age 巨值时 age*1000 可能溢出 +inf → fixAt 变 -inf/NaN，被下游当坏绝对时刻渲染成 "Invalid Date"。
+  // 算不出就只标"最后已知"、不给时刻（与 iOS EmergencyLocationTag 的 fix.isFinite 守卫同口径，兑现注释"两端一致"）。
+  const fixAt = createdAt - age * 1000
+  return { stale: true, fixAt: Number.isFinite(fixAt) ? fixAt : null }
 }

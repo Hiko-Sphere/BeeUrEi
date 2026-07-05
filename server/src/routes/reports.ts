@@ -30,23 +30,26 @@ export function registerReportRoutes(app: FastifyInstance, store: Store): void {
       if (!rec || rec.ownerId !== reporter.sub) return reply.code(400).send({ error: 'invalid_evidence' })
       evidenceRecordingId = rec.id
     }
-    // 去重：同一举报人对同一对象已有未处理举报则不重复创建（防刷）。
-    const existing = store.allReports().find(
+    // 去重（防刷）：同一举报人对同一对象的**全部**未处理举报——不能只看首条。
+    // 否则「已有 E1 证据的举报」在前时，反复提交同一 E2 证据会因首条(E1)不等而每次新建重复举报
+    // （EVIDENCE-DEDUP 只挡了首条同证据；非首条同证据漏挡→同一录制被多次留存、刷爆管理员队列）。
+    const openReports = store.allReports().filter(
       (r) => r.reporterId === reporter.sub && r.targetUserId === parsed.data.targetUserId && r.status === 'open',
     )
-    if (existing) {
-      // 既有举报尚无证据 → 补挂本次证据。
-      if (evidenceRecordingId && !existing.evidenceRecordingId) {
-        const updated = store.updateReport(existing.id, { evidenceRecordingId })
-        return reply.code(200).send({ report: updated ?? existing, deduped: true })
+    if (evidenceRecordingId) {
+      // 同一证据已有开放举报 → 去重（同一录制不被反复举报刷量/重复取证留存）。
+      const sameEvidence = openReports.find((r) => r.evidenceRecordingId === evidenceRecordingId)
+      if (sameEvidence) return reply.code(200).send({ report: sameEvidence, deduped: true })
+      // 有一条尚无证据的开放举报 → 把首次纯文字举报升级为带证据。
+      const noEvidence = openReports.find((r) => !r.evidenceRecordingId)
+      if (noEvidence) {
+        const updated = store.updateReport(noEvidence.id, { evidenceRecordingId })
+        return reply.code(200).send({ report: updated ?? noEvidence, deduped: true })
       }
-      // 本次带了**不同的**新证据：不可被去重静默吞掉（否则该证据丢失且会被留存清理删除，见复审 EVIDENCE-DEDUP）——
-      // 单独建一条带该证据的举报（证据型举报不视为刷量），从而被引用保护、可被管理员看到。
-      if (evidenceRecordingId && existing.evidenceRecordingId && existing.evidenceRecordingId !== evidenceRecordingId) {
-        // 落入下方创建分支。
-      } else {
-        return reply.code(200).send({ report: existing, deduped: true })
-      }
+      // 否则：不同的新证据 → 落入下方创建（证据型举报不视为刷量，须各自留存、可被管理员看到）。
+    } else if (openReports.length) {
+      // 无证据：已有任意开放举报即去重。
+      return reply.code(200).send({ report: openReports[0], deduped: true })
     }
     const report: Report = {
       id: randomUUID(),

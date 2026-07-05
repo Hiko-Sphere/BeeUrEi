@@ -673,9 +673,10 @@ function MessageBody({ m, t }: { m: ChatMessage; t: (z: string, e: string) => st
 
   if (m.kind === 'recalled') return <span>{t('该消息已撤回', 'Message recalled')}</span>
   if (m.kind === 'image') return <img src={m.text} alt={t('图片消息', 'Photo')} className="max-h-64 rounded-lg" />
-  if (m.kind === 'audio') return <audio src={m.text} controls className="max-w-[240px]" />
+  // 无障碍：给音/视频加 aria-label（同 image 的 alt）——读屏否则只念"音频/视频播放器"，不知这是一条消息。
+  if (m.kind === 'audio') return <audio src={m.text} controls aria-label={t('语音消息', 'Voice message')} className="max-w-[240px]" />
   if (m.kind === 'video') {
-    if (videoUrl) return <video src={videoUrl} controls className="max-h-64 rounded-lg" />
+    if (videoUrl) return <video src={videoUrl} controls aria-label={t('视频消息', 'Video message')} className="max-h-64 rounded-lg" />
     if (videoFailed) return <button onClick={() => setAttempt((a) => a + 1)} className="underline opacity-80">{t('视频加载失败，点击重试', 'Video failed to load — tap to retry')}</button>
     return <span className="opacity-60">{t('[视频加载中]', '[Loading video]')}</span>
   }

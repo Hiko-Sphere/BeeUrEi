@@ -137,6 +137,13 @@ public enum WeatherPhrase {
         // 雾（WMO 45/48）：盲人自身不靠视觉，但**司机/协助者看不清行人**——过街/路边是被撞风险。
         // 建议走有信号灯的路口、穿浅色/反光衣物、必要时求助。排在带伞之前（可见性安全 > 湿滑舒适）。
         if code == 45 || code == 48 {
+            // 冻雾（雾且当日气温≤冰点）：不只是能见度低——雾凇/黑冰会让路面结冰，盲人既看不见冰、盲杖也难探出，
+            // 是"看不清+踩不稳"的双重危险。雨/雪分支早已含防滑提示，唯独雾此前只提能见度、漏了结冰这一层。
+            // 判据沿用下方通用结冰分支的 todayMin≤0（缺/坏数据 if-let 天然落空，宁可不提也不瞎报，见本文件一贯原则）。
+            if let mn = todayMin, mn <= 0 {
+                return withWind(language == .zh ? "有雾且气温接近冰点，来往车辆可能看不清你、地面可能结冰，过马路请走有信号灯的路口、格外小心、脚下防滑。"
+                                                : " Freezing fog — drivers may not see you clearly and surfaces may be icy; cross at signalized crossings, take extra care and watch your footing.")
+            }
             return withWind(language == .zh ? "有雾，来往车辆可能看不清你，过马路请走有信号灯的路口、格外小心。"
                                             : " Foggy — drivers may not see you clearly; cross at signalized crossings and take extra care.")
         }

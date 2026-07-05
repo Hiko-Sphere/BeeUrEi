@@ -145,6 +145,29 @@ extension WeatherPhraseTests {
         // 雾优先于带伞（可见性安全 > 湿滑舒适）：若同时湿路码……雾码 45/48 本身非 wet，故独立验证雾走雾路径。
     }
 
+    /// 冻雾（雾 45/48 且 todayMin≤0）：既提醒司机看不清你，也提醒地面可能结冰（盲人看不见冰、盲杖难探）。
+    /// 此前雾分支只提能见度、漏了结冰这一层——而雨/雪分支早已含防滑，唯独雾遗漏（低能见度+黑冰双重危险）。
+    func testFreezingFogWarnsBothIceAndVisibility() {
+        for code in [45, 48] {
+            let zh = WeatherPhrase.advice(code: code, todayMax: 1, todayMin: -3, precipProbability: 0, language: .zh)!
+            XCTAssertTrue(zh.contains("看不清你"), "code \(code) 冻雾仍须提示司机看不清")
+            XCTAssertTrue(zh.contains("结冰"), "code \(code) 冻雾须提示地面可能结冰（修复前遗漏）")
+            XCTAssertTrue(zh.contains("信号灯"))
+            let en = WeatherPhrase.advice(code: code, todayMax: 1, todayMin: -3, precipProbability: 0, language: .en)!
+            XCTAssertTrue(en.lowercased().contains("icy") || en.lowercased().contains("ice"), "code \(code) 英文冻雾须提冰")
+            XCTAssertTrue(en.contains("Freezing fog"))
+            XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文混中文：\(en)")
+        }
+        // 雾但气温在冰点以上（todayMin>0）：仍是普通雾提示，不谎报结冰。
+        let mild = WeatherPhrase.advice(code: 45, todayMax: 20, todayMin: 8, precipProbability: 0, language: .zh)!
+        XCTAssertTrue(mild.contains("看不清你")); XCTAssertFalse(mild.contains("结冰"))
+        // todayMin 缺失：不瞎报结冰（缺/坏数据宁可不说，与本文件一贯原则一致）。
+        XCTAssertFalse(WeatherPhrase.advice(code: 45, todayMax: nil, todayMin: nil, precipProbability: nil, language: .zh)!.contains("结冰"))
+        // 冻雾 + 强风：结冰提示 + 大风提示都在（withWind 生效）。
+        let windy = WeatherPhrase.advice(code: 48, todayMax: 0, todayMin: -4, precipProbability: 0, windSpeedKmh: 50, language: .zh)!
+        XCTAssertTrue(windy.contains("结冰")); XCTAssertTrue(windy.contains("盖过车流声"))
+    }
+
     func testStrongWindMasksTraffic() {
         // ≥40km/h：晴天也追加大风提示（盲人过街靠听车声）。
         let clear = WeatherPhrase.advice(code: 0, todayMax: 22, todayMin: 15, precipProbability: 0, windSpeedKmh: 45, language: .zh)

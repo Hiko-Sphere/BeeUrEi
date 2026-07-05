@@ -161,6 +161,15 @@ enum NavStrings {
     static func backtrackInstruction(_ l: Language) -> String { l == .zh ? "沿原路继续" : "Continue along the trail" }
     static func backtrackDestinationName(_ l: Language) -> String { l == .zh ? "回到出发点" : "Back to start" }
 
+    // 罗盘持续不可信时告知盲人（系统「图-8」校准 UI 是视觉的，盲人看不到）：说清方向提示为何停 + 怎么修。
+    static func compassUnreliable(_ l: Language) -> String {
+        l == .zh ? "指南针受干扰，方向提示暂停。请把手机拿离金属或磁铁，或握着手机在空中画几个 8 字来校准。"
+                 : "Compass interference — direction cues paused. Move your phone away from metal or magnets, or wave it in a figure-eight to recalibrate."
+    }
+    static func compassRestored(_ l: Language) -> String {
+        l == .zh ? "指南针已恢复，方向提示继续。" : "Compass restored — direction cues resumed."
+    }
+
     // MARK: 沿途 callout
 
     static func passingBy(_ name: String, _ l: Language) -> String { l == .zh ? "途经\(name)" : "Passing \(name)" }

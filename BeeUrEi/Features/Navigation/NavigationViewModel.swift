@@ -74,6 +74,7 @@ final class NavigationViewModel {
     @ObservationIgnored private var lastBeacon: TimeInterval = 0
     @ObservationIgnored private var lastOffRouteAnnounce: TimeInterval = 0
     @ObservationIgnored private var lastHeadingTime: TimeInterval = 0   // 最近一次可信航向的时刻(单调钟)；陈旧则抑制信标（见审查 #4）
+    @ObservationIgnored private var compassGate = CompassAnnounceGate()  // 罗盘持续不可信/恢复时**语音**告知（盲人看不到系统「图-8」校准 UI）
     @ObservationIgnored private var waypointAdvance = WaypointAdvance() // "越过波谷"几何推进判定（核心，已测；见回归 #1/#2）
     @ObservationIgnored private var remainingAnnouncer = RemainingDistanceAnnouncer() // 剩余里程碑播报（核心，已测）
     @ObservationIgnored private var offRouteStreak = 0                  // 连续判定偏航的帧数，需≥2 抗单帧抖动（见审查 #3）
@@ -142,18 +143,7 @@ final class NavigationViewModel {
         lastRoadGeocode = ProcessInfo.processInfo.systemUptime
 
         service.onLocation = { [weak self] loc in self?.handle(loc) }
-        service.onHeading = { [weak self] h in
-            guard let self else { return }
-            // 罗盘不可信(磁干扰/未校准, headingAccuracy<0 或过大)：不更新航向、标记不可信，抑制信标（见审查 #3）。
-            if self.headingFilter.isReliable(accuracyDegrees: h.headingAccuracy) {
-                let raw = h.trueHeading >= 0 ? h.trueHeading : h.magneticHeading
-                self.currentHeading = self.headingFilter.update(headingDegrees: raw, accuracyDegrees: h.headingAccuracy)
-                self.headingReliable = true
-                self.lastHeadingTime = ProcessInfo.processInfo.systemUptime // 记录可信航向时刻，供信标时效门控（见审查 #4）
-            } else {
-                self.headingReliable = false
-            }
-        }
+        service.onHeading = { [weak self] h in self?.applyHeading(h) }
         // AirPods 头追踪驱动空间音听者朝向，使信标保持世界固定（无耳机自动跳过）。
         headTracker.onYaw = { [weak self] yaw in self?.spatial.setListenerYaw(Float(yaw)) }
         // 耳机断连：把听者朝向复位为 0（手机朝向基线），避免信标方向被冻结的旧偏航偏置（见审查 #14）。
@@ -481,6 +471,26 @@ final class NavigationViewModel {
                               rate: FeatureSettings().speechRate)
     }
 
+    /// 罗盘航向回调的**唯一**处理入口（route/backtrack/custom 三处 onHeading 共用，避免三份漂移）。
+    /// 罗盘不可信(磁干扰/未校准, headingAccuracy<0 或过大)：不更新航向、标记不可信，抑制信标（见审查 #3）。
+    /// 且当**持续**不可信时**语音**告知盲人（系统「图-8」校准 UI 是视觉的、盲人用不了），并在恢复时告知——去抖防抖动刷屏。
+    private func applyHeading(_ h: CLHeading) {
+        let reliable = headingFilter.isReliable(accuracyDegrees: h.headingAccuracy)
+        if reliable {
+            let raw = h.trueHeading >= 0 ? h.trueHeading : h.magneticHeading
+            currentHeading = headingFilter.update(headingDegrees: raw, accuracyDegrees: h.headingAccuracy)
+            headingReliable = true
+            lastHeadingTime = ProcessInfo.processInfo.systemUptime // 记录可信航向时刻，供信标时效门控（见审查 #4）
+        } else {
+            headingReliable = false
+        }
+        switch compassGate.update(reliable: reliable, at: ProcessInfo.processInfo.systemUptime) {
+        case .calibrate: speak(NavStrings.compassUnreliable(lang)) // 方向信标已静默——告知为何停 + 如何修
+        case .restored:  speak(NavStrings.compassRestored(lang))
+        case .none:      break
+        }
+    }
+
     private func speak(_ text: String) {
         guard text != lastSpoken else { return }
         lastSpoken = text
@@ -694,17 +704,7 @@ final class NavigationViewModel {
         status = NavStrings.backtrackStatus(waypoints.count, lang)
         speak(NavStrings.backtrackStartSpeak(lang))
         service.onLocation = { [weak self] loc in self?.handle(loc) }
-        service.onHeading = { [weak self] h in
-            guard let self else { return }
-            if self.headingFilter.isReliable(accuracyDegrees: h.headingAccuracy) {
-                let raw = h.trueHeading >= 0 ? h.trueHeading : h.magneticHeading
-                self.currentHeading = self.headingFilter.update(headingDegrees: raw, accuracyDegrees: h.headingAccuracy)
-                self.headingReliable = true
-                self.lastHeadingTime = ProcessInfo.processInfo.systemUptime
-            } else {
-                self.headingReliable = false
-            }
-        }
+        service.onHeading = { [weak self] h in self?.applyHeading(h) }
         headTracker.onYaw = { [weak self] yaw in self?.spatial.setListenerYaw(Float(yaw)) }
         headTracker.onUnavailable = { [weak self] in self?.spatial.setListenerYaw(0) }
         headTracker.start()
@@ -769,17 +769,7 @@ final class NavigationViewModel {
         status = NavStrings.customRouteStatus(name, waypoints.count, lang)
         speak(NavStrings.customRouteStartSpeak(name, lang))
         service.onLocation = { [weak self] loc in self?.handle(loc) }
-        service.onHeading = { [weak self] h in
-            guard let self else { return }
-            if self.headingFilter.isReliable(accuracyDegrees: h.headingAccuracy) {
-                let raw = h.trueHeading >= 0 ? h.trueHeading : h.magneticHeading
-                self.currentHeading = self.headingFilter.update(headingDegrees: raw, accuracyDegrees: h.headingAccuracy)
-                self.headingReliable = true
-                self.lastHeadingTime = ProcessInfo.processInfo.systemUptime
-            } else {
-                self.headingReliable = false
-            }
-        }
+        service.onHeading = { [weak self] h in self?.applyHeading(h) }
         headTracker.onYaw = { [weak self] yaw in self?.spatial.setListenerYaw(Float(yaw)) }
         headTracker.onUnavailable = { [weak self] in self?.spatial.setListenerYaw(0) }
         headTracker.start()

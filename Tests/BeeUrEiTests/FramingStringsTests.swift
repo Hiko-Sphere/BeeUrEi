@@ -129,6 +129,21 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertEqual(FramingStrings.yuan(100, .en), "100 yuan")
     }
 
+    func testJiaoNamesNeverSpokenAsYuan() {
+        // 角面额渲染（识币防 10 倍钱数错的**最后一米**）：五角/两角/一角，且**绝不**含"元/yuan"——否则 5 角被念成
+        // 5 元，盲人多付 10 倍（CurrencyClassifier 已在分类侧防此，rendering 侧此前无测，补齐端到端守卫）。
+        XCTAssertEqual(FramingStrings.yuan(5, jiao: true, .zh), "五角")
+        XCTAssertEqual(FramingStrings.yuan(2, jiao: true, .zh), "两角")
+        XCTAssertEqual(FramingStrings.yuan(1, jiao: true, .zh), "一角")
+        for d in [1, 2, 5] { // 分类侧白名单（CurrencyClassifier.jiaoDenoms）1/2/5：逐一核对渲染
+            XCTAssertTrue(FramingStrings.yuan(d, jiao: true, .zh).hasSuffix("角"), "\(d) 角中文须以角结尾")
+            XCTAssertFalse(FramingStrings.yuan(d, jiao: true, .zh).contains("元"), "\(d) 角中文绝不含元（=10 倍钱数错）")
+            let en = FramingStrings.yuan(d, jiao: true, .en)
+            XCTAssertTrue(en.contains("jiao"), "\(d) 角英文须含 jiao：\(en)")
+            XCTAssertFalse(en.contains("yuan"), "\(d) 角英文绝不含 yuan（=10 倍钱数错）：\(en)")
+        }
+    }
+
     func testDirectionAndApprox() {
         XCTAssertEqual(FramingStrings.direction(hour: 12, .zh), "正前方")
         XCTAssertEqual(FramingStrings.direction(hour: 3, .zh), "3 点钟方向")

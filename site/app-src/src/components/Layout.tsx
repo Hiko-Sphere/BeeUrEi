@@ -49,7 +49,11 @@ export function Layout({ children }: { children: ReactNode }) {
     if (!available) { void api.heartbeat(false).catch(() => {}); return }
     void api.heartbeat(true).catch(() => {})
     const id = setInterval(() => { if (availRef.current) void api.heartbeat(true).catch(() => {}) }, HEARTBEAT_MS)
-    return () => clearInterval(id)
+    // 回到前台立即补一次心跳：后台标签的定时器会被浏览器节流（久置后降到约 1/min），25s 心跳追不上 45s
+    // 服务端 TTL → presence 过期、盲人侧看你离线呼不进来。切回标签页时立刻重报"待命"，不干等下一次心跳（≤25s）。
+    const onVisible = () => { if (document.visibilityState === 'visible' && availRef.current) void api.heartbeat(true).catch(() => {}) }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVisible) }
   }, [available])
 
   // 关闭页面前主动下线（best-effort）。

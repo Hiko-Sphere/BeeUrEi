@@ -20,6 +20,7 @@ vi.mock('../lib/api', () => ({
 vi.mock('../pages/call/CallController', () => ({ CallProvider: (p: { children: unknown }) => p.children as never }))
 
 import { activeNavLabel, Layout } from './Layout'
+import { api } from '../lib/api'
 
 describe('Layout 无障碍骨架（skip 链接 + main 跳转目标）', () => {
   it('渲染"跳到主要内容"skip 链接，指向 #main', () => {
@@ -35,6 +36,21 @@ describe('Layout 无障碍骨架（skip 链接 + main 跳转目标）', () => {
     const main = container.querySelector('main#main')
     expect(main).not.toBeNull()
     expect(main!.getAttribute('tabindex')).toBe('-1') // 使片段跳转能把键盘焦点落到正文
+  })
+})
+
+describe('待命心跳', () => {
+  const heartbeat = () => api.heartbeat as ReturnType<typeof vi.fn>
+  it('待命中回到前台(visibilitychange)立即补一次心跳——后台节流下 presence 不误过期离线', () => {
+    localStorage.setItem('beeurei.web.available', '1') // 开着待命
+    heartbeat().mockClear()
+    render(<Layout><div>x</div></Layout>)
+    expect(heartbeat()).toHaveBeenCalledWith(true) // 挂载即上报待命
+    heartbeat().mockClear()
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(heartbeat()).toHaveBeenCalledWith(true) // 回前台立即补，不干等下一次心跳
+    localStorage.removeItem('beeurei.web.available')
   })
 })
 

@@ -68,6 +68,11 @@ export function playEmergencyChime(): void {
     const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
     if (!Ctor) return
     const ctx = new Ctor()
+    // 现代浏览器在无用户手势时把 AudioContext 生于 **suspended** 态（不抛错，只是排了程却不发声）——
+    // 必须显式 resume 才能让紧急提示音真正响起。此前只 try/catch 了"抛错"路径（自动播放被硬拒），
+    // suspended 这条静默失败漏了：施救者可能没盯屏、全靠这声提示音注意到求助，务必尽力让它响。
+    // 页面此前已有任何用户手势(登录/点击)→ resume 成功即发声；确无手势 → resume 被拒，仍有视觉大模态兜底。
+    void ctx.resume().catch(() => {})
     const t0 = ctx.currentTime
     for (let i = 0; i < 3; i++) {
       const osc = ctx.createOscillator()

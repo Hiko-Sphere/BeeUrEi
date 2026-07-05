@@ -95,6 +95,21 @@ final class WeatherPhraseTests: XCTestCase {
         XCTAssertEqual(WeatherPhrase.safeTemp(-7), -7)
         XCTAssertEqual(WeatherPhrase.safeTemp(.nan), 0) // 非有限退化为 0，不崩溃
     }
+
+    // 回归：主温度非有限时如实说"气温未知"，绝不把 safeTemp(NaN)=0 报成真温"气温0度"（会误导盲人穿衣/出行）。
+    func testNonFiniteTemperatureReportedAsUnknownNotZero() {
+        let zh = WeatherPhrase.summary(temperature: .nan, code: 2, language: .zh)
+        XCTAssertTrue(zh.contains("气温未知"), zh)
+        XCTAssertFalse(zh.contains("气温0度"), zh) // 绝不谎报 0 度
+        let en = WeatherPhrase.summary(temperature: .infinity, code: 2, language: .en)
+        XCTAssertTrue(en.contains("temperature unknown"), en)
+        XCTAssertFalse(en.contains("0 degrees"), en)
+        // 非有限的日最高/最低不报假的"0度"（整段省略）。
+        let hilo = WeatherPhrase.summary(temperature: 22, code: 2, todayMax: .nan, todayMin: .nan, language: .zh)
+        XCTAssertTrue(hilo.contains("气温22度"), hilo)   // 有效主温仍如常
+        XCTAssertFalse(hilo.contains("最高0度"), hilo)   // 坏的高低温整段省略
+        XCTAssertFalse(hilo.contains("最低0度"), hilo)
+    }
 }
 
 // 盲人步行特有的天气安全建议：雾（司机看不清行人）+ 大风（盖过车流声）——2026-07 补。

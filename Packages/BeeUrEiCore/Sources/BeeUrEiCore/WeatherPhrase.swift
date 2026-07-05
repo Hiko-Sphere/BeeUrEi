@@ -72,19 +72,22 @@ public enum WeatherPhrase {
             guard let ap = apparentTemp, ap.isFinite, abs(ap - temperature) >= 3 else { return nil }
             return safeTemp(ap)
         }()
+        // 主温度非有限（异常 API 响应）：如实说"气温未知"，绝不把 safeTemp(NaN)=0 当真温报"气温0度"
+        // ——那是本文件对体感/空气/黄昏一以贯之的"坏数据宁可不说"原则（feels 已如此），最显眼的主温度不能例外。
+        let tempOK = temperature.isFinite
         var parts: [String] = []
         if language == .zh {
-            parts.append("现在\(cond)，气温\(t)度")
+            parts.append(tempOK ? "现在\(cond)，气温\(t)度" : "现在\(cond)，气温未知")
             if let f = feels { parts.append("体感\(f)度") }
-            if let mx = todayMax, let mn = todayMin {
+            if let mx = todayMax, let mn = todayMin, mx.isFinite, mn.isFinite {
                 parts.append("今天最高\(safeTemp(mx))度，最低\(safeTemp(mn))度")
             }
             if let p = precipProbability, p >= 20 { parts.append("降水概率百分之\(p)") }
             if let w = windSpeedKmh, w >= 29 { parts.append("风较大") } // ≥5级（29km/h）才提醒
         } else {
-            parts.append("It's \(cond), \(t) degrees")
+            parts.append(tempOK ? "It's \(cond), \(t) degrees" : "It's \(cond), temperature unknown")
             if let f = feels { parts.append("feels like \(f)") }
-            if let mx = todayMax, let mn = todayMin {
+            if let mx = todayMax, let mn = todayMin, mx.isFinite, mn.isFinite {
                 parts.append("today's high \(safeTemp(mx)), low \(safeTemp(mn))")
             }
             if let p = precipProbability, p >= 20 { parts.append("\(p) percent chance of rain") }

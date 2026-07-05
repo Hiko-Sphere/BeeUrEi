@@ -150,7 +150,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   )
 }
 
+// 坏时间戳兜底：非有限 ms（NaN/undefined/null——某条服务端记录缺 createdAt/序列化异常）不谎报"刚刚"，
+// 如实说"未知时间"（同 emergencyLocInfo 的诚实取向），且绝不把坏值喂给 Date（见 fmtTime/RelativeTime）。
+function unknownTime(lang: 'zh' | 'en'): string { return lang === 'zh' ? '未知时间' : 'unknown time' }
 export function timeAgo(ms: number, lang: 'zh' | 'en'): string {
+  if (!Number.isFinite(ms)) return unknownTime(lang) // 否则落到 toLocaleDateString 渲染 "Invalid Date"
   const d = Date.now() - ms
   const m = Math.floor(d / 60000), h = Math.floor(d / 3600000), day = Math.floor(d / 86400000)
   if (m < 1) return lang === 'zh' ? '刚刚' : 'just now'
@@ -160,6 +164,7 @@ export function timeAgo(ms: number, lang: 'zh' | 'en'): string {
   return new Date(ms).toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US')
 }
 export function fmtTime(ms: number, lang: 'zh' | 'en'): string {
+  if (!Number.isFinite(ms)) return unknownTime(lang) // 否则渲染 "Invalid Date"
   return new Date(ms).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' })
 }
 /// 相对时间展示（复用既有 timeAgo 措辞，全站一致）：可见文本相对（"刚刚"/"5 分钟前"），
@@ -167,6 +172,9 @@ export function fmtTime(ms: number, lang: 'zh' | 'en'): string {
 /// ⚠️ 相对措辞仅宜用于"何时发生"的列表；**紧急"最后已知位置"等安全攸关时刻绝不可用**（相对会随阅读时刻
 /// 漂移成谎言，把协助者指向错误的时间/地点，见 iOS EmergencyLocationTag 同一铁律）——那些保持 fmtTime 绝对。
 export function RelativeTime({ ms, lang, className }: { ms: number; lang: 'zh' | 'en'; className?: string }) {
+  // 非有限 ms 绝不喂给 Date：`new Date(NaN).toISOString()` 抛 RangeError，无错误边界会白屏整页
+  // （尤以通知页——盲人发出的 SOS 就在这里，崩了协助者看不到）。此时降级为纯 <span> 兜底文案。
+  if (!Number.isFinite(ms)) return <span className={className}>{timeAgo(ms, lang)}</span>
   return <time dateTime={new Date(ms).toISOString()} title={fmtTime(ms, lang)} className={className}>{timeAgo(ms, lang)}</time>
 }
 /// 时长 m:ss；≥1 小时用 h:mm:ss（否则服务器 uptime 等长时长会溢出成 "1666:40" 这类分钟数，管理台不可读）。

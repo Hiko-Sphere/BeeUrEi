@@ -21,4 +21,13 @@ describe('RelativeTime', () => {
     const { container } = render(<RelativeTime ms={Date.now()} lang="zh" className="text-xs text-faint" />)
     expect(container.querySelector('time')!.className).toContain('text-faint')
   })
+  it('非有限 ms 不崩溃：不构造 Date（toISOString 会抛 RangeError 白屏整页），降级为 <span> 兜底', () => {
+    // 通知页 RelativeTime ms={n.createdAt}——若某条记录 createdAt 坏成 NaN，此前整页白屏，
+    // 盲人发出的 SOS 协助者就看不到了。降级须无 <time>/datetime，纯文本"未知时间"。
+    expect(() => render(<RelativeTime ms={NaN} lang="zh" />)).not.toThrow()
+    const { container } = render(<RelativeTime ms={NaN} lang="zh" className="text-faint" />)
+    expect(container.querySelector('time')).toBeNull()          // 不构造 <time>（否则要 toISOString → 抛）
+    expect(container.querySelector('span')!.textContent).toBe('未知时间')
+    expect(container.querySelector('span')!.className).toContain('text-faint') // className 仍透传
+  })
 })

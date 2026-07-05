@@ -82,6 +82,21 @@ enum ChatStrings {
     static func recallFailed(_ l: Language) -> String {
         l == .zh ? "撤回失败（仅发出 2 分钟内可撤回）" : "Couldn't unsend (only within 2 minutes)"
     }
+    /// 撤回失败文案：时限过是常态(recallFailed)，但功能关停/维护/限流须点明真因——否则盲人以为"是不是超时了"
+    /// 反复重试注定失败的撤回（与 sendErrorText / web chatErrorText 同取向：不可重试的真因要说清）。
+    static func recallErrorText(_ error: Error, _ l: Language) -> String {
+        guard case let APIError.server(code) = error else { return recallFailed(l) }
+        switch code {
+        case "feature_disabled":
+            return l == .zh ? "聊天功能已被管理员暂时关闭，无法撤回" : "Messaging is turned off by the administrator, so you can't unsend."
+        case "maintenance":
+            return l == .zh ? "系统维护中，暂时无法撤回" : "Under maintenance — can't unsend right now."
+        case "too_many_requests":
+            return l == .zh ? "操作太频繁，请稍候再试" : "Too many attempts — please wait a moment."
+        default:
+            return recallFailed(l) // recall_window_passed / 未知 → "撤回失败（仅发出 2 分钟内可撤回）"
+        }
+    }
     static func react(_ l: Language) -> String { l == .zh ? "表情回应" : "React" }
     static func removeReaction(_ l: Language) -> String { l == .zh ? "取消回应" : "Remove reaction" }
     static func reactionA11y(_ emoji: String, _ l: Language) -> String {

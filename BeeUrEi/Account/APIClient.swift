@@ -923,10 +923,12 @@ struct APIClient {
     }
 
     /// 撤回自己的消息（2 分钟内）。返回更新后的消息（recalled 占位），失败 nil。
-    func recallMessage(token: String, id: String) async -> ChatMessageInfo? {
-        guard let data = try? await authedSend("POST", "/api/messages/\(id)/recall", token: token, body: [:]) else { return nil }
+    /// 撤回：**抛错**而非吞成 nil——撤回失败的真因（时限过/功能关停/维护/限流）须上抛给调用方区分并**朗读**给盲人
+    /// （盲人看不到红字横幅；恒显"是不是超时了"会诱使其对注定失败的撤回反复重试，见 ChatStrings.recallErrorText）。
+    func recallMessage(token: String, id: String) async throws -> ChatMessageInfo {
+        let data = try await authedSend("POST", "/api/messages/\(id)/recall", token: token, body: [:])
         struct R: Codable { let message: ChatMessageInfo }
-        return try? JSONDecoder().decode(R.self, from: data).message
+        return try JSONDecoder().decode(R.self, from: data).message
     }
 
     /// 表情回应（空字符串=取消）。返回更新后的消息，失败 nil。

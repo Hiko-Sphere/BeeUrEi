@@ -783,10 +783,16 @@ struct ChatView: View {
     private func recall(_ m: ChatMessageInfo) {
         guard let token = session.token else { return }
         Task {
-            if let updated = await APIClient().recallMessage(token: token, id: m.id) {
+            do {
+                let updated = try await APIClient().recallMessage(token: token, id: m.id)
                 if let i = messages.firstIndex(where: { $0.id == m.id }) { messages[i] = updated }
-            } else {
-                errorText = ChatStrings.recallFailed(lang)
+                errorText = nil
+            } catch {
+                // 盲人看不到红字横幅——撤回失败必须**朗读**（此前只设 errorText，盲人得不到任何反馈、误以为已撤回）；
+                // 且区分真因（时限过/功能关停/维护/限流），不恒显"是不是超时"。
+                let msg = ChatStrings.recallErrorText(error, lang)
+                errorText = msg
+                SpeechHub.shared.speak(msg, channel: .query, voiceCode: lang.voiceCode)
             }
         }
     }

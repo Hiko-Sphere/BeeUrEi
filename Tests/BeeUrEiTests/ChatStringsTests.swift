@@ -22,4 +22,21 @@ final class ChatStringsTests: XCTestCase {
         XCTAssertEqual(ChatStrings.sendErrorText(APIError.server("nope"), .zh), generic)
         XCTAssertEqual(ChatStrings.sendErrorText(NSError(domain: "x", code: 1), .zh), generic)
     }
+
+    func testRecallErrorTextDistinguishesReason() {
+        let windowMsg = ChatStrings.recallFailed(.zh) // "撤回失败（仅发出 2 分钟内可撤回）"
+        // 时限过 / 未知 / 非 APIError → 常态时限文案。
+        XCTAssertEqual(ChatStrings.recallErrorText(APIError.server("recall_window_passed"), .zh), windowMsg)
+        XCTAssertEqual(ChatStrings.recallErrorText(APIError.server("nope"), .zh), windowMsg)
+        XCTAssertEqual(ChatStrings.recallErrorText(NSError(domain: "x", code: 1), .zh), windowMsg)
+        // 功能关停/维护/限流 → 点明真因，**不**误显时限（否则盲人以为"是不是超时"反复重试）。
+        for code in ["feature_disabled", "maintenance", "too_many_requests"] {
+            let zh = ChatStrings.recallErrorText(APIError.server(code), .zh)
+            XCTAssertNotEqual(zh, windowMsg, "码 \(code) 应点明真因而非落时限文案")
+            XCTAssertFalse(zh.contains("2 分钟"), "码 \(code) 不该误显时限：\(zh)")
+            let en = ChatStrings.recallErrorText(APIError.server(code), .en)
+            XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(en)")
+        }
+        XCTAssertTrue(ChatStrings.recallErrorText(APIError.server("feature_disabled"), .zh).contains("关闭"))
+    }
 }

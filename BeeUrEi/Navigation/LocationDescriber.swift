@@ -257,7 +257,8 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
                 let obs = resp.pois.map { p in
                     PoiObservation(name: p.name, distanceMeters: p.distanceMeters,
                                    relativeBearingDegrees: self.relativeBearing(fromLat: g.lat, fromLon: g.lon,
-                                                                                toLat: p.lat, toLon: p.lon, heading: heading))
+                                                                                toLat: p.lat, toLon: p.lon, heading: heading),
+                                   category: p.category) // 类别（"快餐厅"等）随 POI 一起喂给 composer，识别品牌店类型
                 }
                 let text = PoiCalloutComposer.compose(pois: obs, mode: mode, radiusMeters: resp.radius,
                                                       headingAvailable: heading != nil, language: lang)

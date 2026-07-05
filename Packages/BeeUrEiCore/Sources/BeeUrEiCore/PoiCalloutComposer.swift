@@ -16,10 +16,14 @@ public struct PoiObservation: Sendable, Equatable {
     public let distanceMeters: Double
     /// 相对用户朝向的方位角（度，规范化到 (-180,180]，0=正前、正=右手/顺时针）；nil=朝向不可用（罗盘未校准）。
     public let relativeBearingDegrees: Double?
-    public init(name: String, distanceMeters: Double, relativeBearingDegrees: Double?) {
+    /// 地点类别中文（高德 type 末段，如"快餐厅""药店"）；nil/空=无（MapKit 境外源不提供）。帮盲人识别**品牌店**的
+    /// 类型——名字是品牌（"肯德基"/"星巴克"）时听不出是什么，类别补齐"快餐厅"/"咖啡厅"。
+    public let category: String?
+    public init(name: String, distanceMeters: Double, relativeBearingDegrees: Double?, category: String? = nil) {
         self.name = name
         self.distanceMeters = distanceMeters
         self.relativeBearingDegrees = relativeBearingDegrees
+        self.category = category
     }
 }
 
@@ -55,7 +59,7 @@ public enum PoiCalloutComposer {
             // 使一个真正在前方、该播的同名 POI 被当"已见"丢弃（盲人正走向它却听不到，安全攸关）。
             // locationDistance：溢出安全 + ≥1km 用公里（周边检索半径可达 3km，远处 POI"约2.1公里"远胜"约2100米"）。
             let dm = SpokenStrings.locationDistance(dist, zh ? .zh : .en)
-            let phrase: String
+            var phrase: String
             if let rel = poi.relativeBearingDegrees, rel.isFinite {
                 if mode == .ahead, abs(rel) > 50 { continue } // 前方模式只留朝向 ±50° 扇区
                 let hour = ClockDirection(angleDegrees: rel).hour
@@ -64,6 +68,12 @@ public enum PoiCalloutComposer {
             } else {
                 if mode == .ahead { continue } // 没有可信朝向，"前方"无从判定——下面给校准提示
                 phrase = zh ? "约\(dm)，\(name)" : "\(name), about \(dm)"
+            }
+            // 类别补在名字后（帮盲人识别品牌店类型："肯德基，快餐厅"）：**仅中文**补——高德类别是中文，英文无对应，
+            // 且英文嗓念中文类别=乱码。名字已含该类型词（"全家便利店"含"便利店"）则不重复。定向找某类走 nearest()，
+            // 用户已知类型故那里不补。
+            if zh, let cat = poi.category?.trimmingCharacters(in: .whitespacesAndNewlines), !cat.isEmpty, !name.contains(cat) {
+                phrase += "，\(cat)"
             }
 
             guard seenNames.insert(name.lowercased()).inserted else { continue } // 同名只留首个**可播报**的（即最近的合格者）

@@ -5,6 +5,33 @@ final class PoiCalloutComposerTests: XCTestCase {
     private func poi(_ name: String, _ dist: Double, _ rel: Double?) -> PoiObservation {
         PoiObservation(name: name, distanceMeters: dist, relativeBearingDegrees: rel)
     }
+    private func poi(_ name: String, _ dist: Double, _ rel: Double?, cat: String?) -> PoiObservation {
+        PoiObservation(name: name, distanceMeters: dist, relativeBearingDegrees: rel, category: cat)
+    }
+
+    func testCategoryAppendedForBrandNamesZhOnlyNotWhenRedundant() {
+        // 品牌店（名字听不出类型）→ 补类别帮识别；名字已含类型词则不重复；只中文补（高德类别是中文）。
+        let brand = PoiCalloutComposer.compose(
+            pois: [poi("肯德基", 30, 0, cat: "快餐厅")],
+            mode: .around, radiusMeters: 250, headingAvailable: true, language: .zh)
+        XCTAssertEqual(brand, "周围：12点钟方向约30米，肯德基，快餐厅")
+        // 名字已含类型（"全家便利店"含"便利店"）→ 不重复补。
+        let redundant = PoiCalloutComposer.compose(
+            pois: [poi("全家便利店", 30, 0, cat: "便利店")],
+            mode: .around, radiusMeters: 250, headingAvailable: true, language: .zh)
+        XCTAssertEqual(redundant, "周围：12点钟方向约30米，全家便利店")
+        // 英文不补（高德类别是中文，英文嗓念中文=乱码）。
+        let en = PoiCalloutComposer.compose(
+            pois: [poi("KFC", 30, 0, cat: "快餐厅")],
+            mode: .around, radiusMeters: 250, headingAvailable: true, language: .en)
+        XCTAssertFalse(en.contains("快餐厅"))
+        // 空类别（MapKit 源无类别）→ 不补、不崩。
+        let none = PoiCalloutComposer.compose(
+            pois: [poi("星巴克", 30, 0, cat: nil), poi("瑞幸", 40, 0, cat: "  ")],
+            mode: .around, radiusMeters: 250, headingAvailable: true, language: .zh)
+        XCTAssertTrue(none.contains("星巴克") && none.contains("瑞幸"))
+        XCTAssertFalse(none.contains("，，")) // 空类别绝不拼出空段
+    }
 
     func testAroundSortsByDistanceAndPicksClockDirections() {
         let out = PoiCalloutComposer.compose(

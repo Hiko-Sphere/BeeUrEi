@@ -102,6 +102,13 @@ enum ChatStrings {
     static func reactionA11y(_ emoji: String, _ l: Language) -> String {
         l == .zh ? "对方回应了\(emoji)" : "Reacted with \(emoji)"
     }
+    /// 自己回应/取消/失败的**语音反馈**：盲人看不到表情角标是否加上，长按选表情后须有声确认操作是否生效
+    /// （此前成功/失败都静默，盲人完全不知按下的回应有没有成）。added 带上 emoji 便于复核选对了没。
+    static func reactionAdded(_ emoji: String, _ l: Language) -> String {
+        l == .zh ? "已回应\(emoji)" : "Reacted \(emoji)"
+    }
+    static func reactionRemoved(_ l: Language) -> String { l == .zh ? "已取消回应" : "Reaction removed" }
+    static func reactionFailed(_ l: Language) -> String { l == .zh ? "回应失败，请重试" : "Couldn't react. Try again." }
     static let reactionChoices = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
 
     // MARK: 视频消息

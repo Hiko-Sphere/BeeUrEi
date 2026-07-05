@@ -39,4 +39,16 @@ final class ChatStringsTests: XCTestCase {
         }
         XCTAssertTrue(ChatStrings.recallErrorText(APIError.server("feature_disabled"), .zh).contains("关闭"))
     }
+
+    func testReactionFeedbackStringsBilingualAndDistinct() {
+        // 盲人回应表情的语音反馈：加上/取消/失败三态各不相同、双语，且"加上"带 emoji 便于复核。
+        XCTAssertTrue(ChatStrings.reactionAdded("👍", .zh).contains("👍"))
+        XCTAssertTrue(ChatStrings.reactionAdded("👍", .zh).contains("已回应"))
+        XCTAssertNotEqual(ChatStrings.reactionAdded("👍", .zh), ChatStrings.reactionRemoved(.zh))
+        XCTAssertNotEqual(ChatStrings.reactionRemoved(.zh), ChatStrings.reactionFailed(.zh))
+        // 英文三态不串中文。
+        for s in [ChatStrings.reactionAdded("❤️", .en), ChatStrings.reactionRemoved(.en), ChatStrings.reactionFailed(.en)] {
+            XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(s)")
+        }
+    }
 }

@@ -801,9 +801,15 @@ struct ChatView: View {
     private func react(_ m: ChatMessageInfo, emoji: String) {
         guard let token = session.token else { return }
         Task {
-            if let updated = await APIClient().reactMessage(token: token, id: m.id, emoji: emoji),
-               let i = messages.firstIndex(where: { $0.id == m.id }) {
-                messages[i] = updated
+            if let updated = await APIClient().reactMessage(token: token, id: m.id, emoji: emoji) {
+                if let i = messages.firstIndex(where: { $0.id == m.id }) { messages[i] = updated }
+                // 盲人看不到表情角标——长按选完表情必须**有声确认**是否加上/取消（此前成功也静默，
+                // 用户完全不知回应有没有成）。据服务器回传的最终 reaction 判"加上"还是"取消"。
+                let applied = updated.reaction ?? ""
+                let msg = applied.isEmpty ? ChatStrings.reactionRemoved(lang) : ChatStrings.reactionAdded(applied, lang)
+                SpeechHub.shared.speak(msg, channel: .query, voiceCode: lang.voiceCode)
+            } else {
+                SpeechHub.shared.speak(ChatStrings.reactionFailed(lang), channel: .query, voiceCode: lang.voiceCode)
             }
         }
     }

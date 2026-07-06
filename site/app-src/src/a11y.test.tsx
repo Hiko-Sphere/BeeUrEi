@@ -11,15 +11,25 @@ async function expectNoAxeViolations(container: Element) {
   expect(await axeViolations(container)).toEqual([])
 }
 
-vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }))
-vi.mock('./lib/session', () => ({ useSession: () => ({ signIn: vi.fn() }) }))
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => vi.fn(),
+  Link: (p: { to: string; children: unknown; className?: string; 'aria-label'?: string }) => <a href={p.to} className={p.className} aria-label={p['aria-label']}>{p.children as never}</a>,
+}))
+vi.mock('./lib/session', () => ({ useSession: () => ({ signIn: vi.fn(), user: { id: 'me', displayName: '阿明', role: 'helper' } }) }))
 vi.mock('./lib/api', () => ({
-  api: { notifications: vi.fn(), markAllNotifsRead: vi.fn(), markNotifRead: vi.fn() },
+  api: {
+    notifications: vi.fn(), markAllNotifsRead: vi.fn(), markNotifRead: vi.fn(),
+    onlineCount: vi.fn(), incomingCalls: vi.fn(), helpQueue: vi.fn(), unreadSummary: vi.fn(), incomingLinks: vi.fn(), callHistory: vi.fn(),
+    myRecordings: vi.fn(),
+  },
   APIError: class extends Error {},
 }))
 import { api } from './lib/api'
 import { LoginPage } from './pages/Login'
 import { NotificationsPage } from './pages/Notifications'
+import { HomePage } from './pages/Home'
+import { CallsPage } from './pages/Calls'
+import { RecordingsPage } from './pages/Recordings'
 
 describe('axe 无障碍回归门禁（代表性页面 0 violations）', () => {
   it('登录页（含注册模式的身份选择）', async () => {
@@ -42,6 +52,46 @@ describe('axe 无障碍回归门禁（代表性页面 0 violations）', () => {
     })
     const { container, findByText } = render(<NotificationsPage />)
     await findByText('摔倒告警') // 等数据渲染完再审（空壳通过没有意义）
+    await expectNoAxeViolations(container)
+  })
+
+  it('首页仪表盘（统计卡 + 最近通话含 🆘 与一键回拨）', async () => {
+    ;(api.onlineCount as ReturnType<typeof vi.fn>).mockResolvedValue({ total: 3, online: 1 })
+    ;(api.incomingCalls as ReturnType<typeof vi.fn>).mockResolvedValue({ calls: [] })
+    ;(api.helpQueue as ReturnType<typeof vi.fn>).mockResolvedValue({ requests: [] })
+    ;(api.unreadSummary as ReturnType<typeof vi.fn>).mockResolvedValue({ notifications: 2, messages: 1, missedCalls: 1, total: 4 })
+    ;(api.incomingLinks as ReturnType<typeof vi.fn>).mockResolvedValue({ links: [] })
+    ;(api.callHistory as ReturnType<typeof vi.fn>).mockResolvedValue({ calls: [
+      { id: 'c1', callId: 'k1', direction: 'incoming', status: 'missed', peerId: 'p1', peerName: '小明', peerAvatar: null, emergency: true, createdAt: 1_700_000_000_000 },
+    ] })
+    const { container, findByText } = render(<HomePage />)
+    await findByText('小明') // 等最近通话渲染完（含紧急徽标 + 回拨按钮）再审
+    await expectNoAxeViolations(container)
+  })
+
+  it('通话页（待接来电 + 求助队列 + 历史记录含回拨按钮）', async () => {
+    ;(api.incomingCalls as ReturnType<typeof vi.fn>).mockResolvedValue({ calls: [
+      { callId: 'in1', fromName: '老王', fromUserId: 'u9', fromAvatar: null, emergency: true },
+    ] })
+    ;(api.helpQueue as ReturnType<typeof vi.fn>).mockResolvedValue({ requests: [
+      { callId: 'q1', fromName: '小红', fromAvatar: null, language: 'zh', locality: '上海', topic: '看快递单', waitedSeconds: 45 },
+    ] })
+    ;(api.callHistory as ReturnType<typeof vi.fn>).mockResolvedValue({ calls: [
+      { id: 'c2', callId: 'k2', direction: 'outgoing', status: 'answered', peerId: 'p2', peerName: '阿华', peerAvatar: null, emergency: false, createdAt: 1_700_000_000_000 },
+    ] })
+    const { container, findByText } = render(<CallsPage />)
+    await findByText('老王')
+    await findByText('阿华')
+    await expectNoAxeViolations(container)
+  })
+
+  it('录音页（列表含原因/参与者/播放删除操作）', async () => {
+    ;(api.myRecordings as ReturnType<typeof vi.fn>).mockResolvedValue({ recordings: [
+      { id: 'r1', callId: 'k3', ownerId: 'me', ownerName: '阿明', reason: '证据留存', recordedAt: 1_700_000_000_000,
+        durationSec: 65, participantIds: ['me', 'p1'], participantNames: ['阿明', '小明'], hasMedia: true, deletedAt: null },
+    ] })
+    const { container, findByText } = render(<RecordingsPage />)
+    await findByText(/证据留存/)
     await expectNoAxeViolations(container)
   })
 

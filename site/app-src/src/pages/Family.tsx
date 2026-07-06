@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, APIError, contentBlockedText, type FamilyLink, type IncomingLink } from '../lib/api'
+import { hasUsableEmergencyContact } from '../lib/emergencyContacts'
 import { classifyIdentifier } from '../lib/identifier'
 import { useI18n } from '../lib/i18n'
 import { useCall } from './call/CallController'
@@ -28,13 +29,28 @@ export function FamilyPage() {
   useEffect(() => { void reload() }, [reload])
 
   const accept = async (id: string) => { try { await api.acceptLink(id); toast(t('已接受', 'Accepted'), 'ok'); void reload() } catch { toast(t('操作失败', 'Failed'), 'error') } }
-  const remove = async (id: string) => { try { await api.deleteLink(id); void reload() } catch { toast(t('操作失败', 'Failed'), 'error') } }
+  // 底层「按 id 删链」：拒绝来请求 / 撤销去请求都复用它。okMsg 让各调用点给到贴切的成功确认（此前三处删链均静默成功）。
+  const remove = async (id: string, okMsg?: string) => { try { await api.deleteLink(id); if (okMsg) toast(okMsg, 'ok'); void reload() } catch { toast(t('操作失败', 'Failed'), 'error') } }
+  // 删除已绑定联系人：成功确认点名删了谁；删的是紧急联系人且删后已无可用紧急联系人时，追加安全提醒
+  // （否则遇险无人可自动通知——静默假安心）。对齐 iOS FamilyLinksView.remove。从当前 links 同步扣掉本条来判定，
+  // 不依赖 reload() 的异步 state（React setState 不即时可读）。警示用 error 语气（role=alert，读屏会即时朗读）。
+  const removeContact = async (l: FamilyLink) => {
+    try {
+      await api.deleteLink(l.id)
+      const noEmergencyLeft = l.isEmergency && !hasUsableEmergencyContact((links ?? []).filter((x) => x.id !== l.id))
+      toast(noEmergencyLeft
+        ? t(`已删除「${l.memberName}」。你现在没有紧急联系人了，遇险时将无人可自动通知。`, `Removed ${l.memberName}. You have no emergency contact now — no one will be alerted automatically in an emergency.`)
+        : t(`已删除「${l.memberName}」`, `Removed ${l.memberName}`),
+        noEmergencyLeft ? 'error' : 'ok')
+      void reload()
+    } catch { toast(t('操作失败', 'Failed'), 'error') }
+  }
   // 切换某联系人是否为我的紧急联系人（紧急告警优先/升级/医疗信息可见都依赖此标志）。仅我作为 owner 的链可改。
   const toggleEmergency = async (l: FamilyLink) => {
     try { await api.setLinkEmergency(l.id, !l.isEmergency); toast(l.isEmergency ? t('已取消紧急联系人', 'Removed from emergency contacts') : t('已设为紧急联系人', 'Set as emergency contact'), 'ok'); void reload() }
     catch { toast(t('操作失败', 'Failed'), 'error') }
   }
-  const unblock = async (id: string) => { try { await api.unblock(id); void reload() } catch { toast(t('操作失败', 'Failed'), 'error') } }
+  const unblock = async (id: string) => { try { await api.unblock(id); toast(t('已解除拉黑', 'Unblocked'), 'ok'); void reload() } catch { toast(t('操作失败', 'Failed'), 'error') } }
   // 拉黑联系人（不必正在通话也能拉黑：经聊天骚扰也可在此处理）：拉黑 + 解除绑定，之后互不可呼叫/发消息。
   const blockContact = async (link: FamilyLink) => {
     if (!confirm(t(`确定拉黑「${link.memberName}」？将解除绑定，对方无法再呼叫或给你发消息。`,
@@ -66,7 +82,7 @@ export function FamilyPage() {
                   <div className="text-xs text-faint">{l.relation}{l.isEmergency ? ` · ${t('紧急联系人', 'Emergency')}` : ''}</div>
                 </div>
                 <button onClick={() => accept(l.id)} className="flex h-9 w-9 items-center justify-center rounded-full bg-ok text-white" aria-label={t('接受', 'Accept')}><IconCheck width={18} height={18} /></button>
-                <button onClick={() => remove(l.id)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-danger" aria-label={t('拒绝', 'Reject')}><IconX width={18} height={18} /></button>
+                <button onClick={() => remove(l.id, t('已拒绝', 'Rejected'))} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-danger" aria-label={t('拒绝', 'Reject')}><IconX width={18} height={18} /></button>
               </li>
             ))}
           </ul>
@@ -112,7 +128,7 @@ export function FamilyPage() {
                   className="flex h-9 w-9 items-center justify-center rounded-full bg-honey/15 text-honey disabled:opacity-40" aria-label={t('呼叫', 'Call')}><IconPhone width={18} height={18} /></button>
                 <button onClick={() => nav(`/chat/${l.memberId}`)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-soft" aria-label={t('消息', 'Message')}><IconChat width={18} height={18} /></button>
                 <button onClick={() => blockContact(l)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-faint hover:text-danger" aria-label={t('拉黑', 'Block')}><IconShield width={16} height={16} /></button>
-                <button onClick={() => remove(l.id)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-faint" aria-label={t('删除', 'Remove')}><IconX width={16} height={16} /></button>
+                <button onClick={() => removeContact(l)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-faint" aria-label={t('删除', 'Remove')}><IconX width={16} height={16} /></button>
               </li>
             ))}
           </ul>
@@ -129,7 +145,7 @@ export function FamilyPage() {
                 <Avatar name={l.memberName} src={l.memberAvatar} size={36} />
                 <div className="min-w-0 flex-1"><div className="truncate text-sm font-medium">{l.memberName}</div><div className="text-xs text-faint">{t('等待对方确认', 'Awaiting confirmation')}</div></div>
                 <Pill>{t('待确认', 'Pending')}</Pill>
-                <button onClick={() => remove(l.id)} className="text-faint hover:text-danger" aria-label={t('撤销', 'Cancel')}><IconX width={16} height={16} /></button>
+                <button onClick={() => remove(l.id, t('已撤销请求', 'Request canceled'))} className="text-faint hover:text-danger" aria-label={t('撤销', 'Cancel')}><IconX width={16} height={16} /></button>
               </li>
             ))}
           </ul>

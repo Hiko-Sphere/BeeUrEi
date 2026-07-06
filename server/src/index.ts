@@ -72,6 +72,14 @@ async function main(): Promise<void> {
       const ee = store.deleteEmergencyEventsOlderThan(Date.now() - days * 86_400_000)
       if (ee) console.log(`[emergency] 清理过期紧急事件日志 ${ee} 条`)
     } catch (e) { console.warn('[emergency] 清理失败:', (e as Error).message) }
+    // 通话记录保留 365 天（PII 数据最小化——通话历史此前无上限、永久累积；一年符合手机通话记录惯例，
+    // CALL_RECORD_RETENTION_DAYS 可调，≥1）。删的是历史记录，不影响任何进行中的通话或未接来电角标（早已看过）。
+    try {
+      const d = Number(process.env.CALL_RECORD_RETENTION_DAYS)
+      const days = Number.isFinite(d) && d >= 1 ? d : 365
+      const cr = store.deleteCallRecordsOlderThan(Date.now() - days * 86_400_000)
+      if (cr) console.log(`[calls] 清理过期通话记录 ${cr} 条`)
+    } catch (e) { console.warn('[calls] 清理失败:', (e as Error).message) }
   }
   sweep() // 启动即清一次
   const sweepTimer = setInterval(sweep, 60 * 60 * 1000)

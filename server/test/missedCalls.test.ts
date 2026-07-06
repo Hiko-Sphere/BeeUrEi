@@ -74,3 +74,23 @@ describe('未接来电并入总角标 + 打开通话记录即清（端到端）'
     await app.close()
   })
 })
+
+describe('通话记录留存清扫 deleteCallRecordsOlderThan（PII 数据最小化，Memory↔Sqlite parity）', () => {
+  for (const makeStore of [() => new MemoryStore(), () => new SqliteStore(':memory:')]) {
+    const name = makeStore().constructor.name
+    it(`${name}: 删早于 cutoff 的记录、保留 cutoff 当刻及更新的；返回删除条数`, () => {
+      const store = makeStore()
+      const rec = (id: string, createdAt: number) =>
+        store.createCallRecord({ id, callId: 'c-' + id, callerId: 'a', calleeId: 'b', status: 'answered', createdAt })
+      rec('old1', 1000)
+      rec('old2', 1999)
+      rec('edge', 2000)   // 恰在 cutoff：createdAt < cutoff 为假 → 保留
+      rec('new', 3000)
+      const removed = store.deleteCallRecordsOlderThan(2000)
+      expect(removed).toBe(2) // old1 + old2
+      const remaining = store.callRecordsForUser('b', 100).map((r) => r.id).sort()
+      expect(remaining).toEqual(['edge', 'new']) // 边界（=cutoff）与更新的都留
+      expect(store.deleteCallRecordsOlderThan(2000)).toBe(0) // 幂等：再扫无更早的
+    })
+  }
+})

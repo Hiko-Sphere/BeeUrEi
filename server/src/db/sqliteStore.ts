@@ -456,6 +456,9 @@ export class SqliteStore implements Store {
     const row = this.db.prepare("SELECT COUNT(*) AS n FROM call_records WHERE calleeId = ? AND status = 'missed' AND createdAt > ?").get(userId, sinceMs) as { n: number }
     return Number(row.n)
   }
+  deleteCallRecordsOlderThan(cutoffMs: number): number {
+    return Number(this.db.prepare('DELETE FROM call_records WHERE createdAt < ?').run(cutoffMs).changes)
+  }
   deleteCallRecordsForUser(userId: string): void {
     this.db.prepare('DELETE FROM call_records WHERE callerId = ? OR calleeId = ?').run(userId, userId)
   }

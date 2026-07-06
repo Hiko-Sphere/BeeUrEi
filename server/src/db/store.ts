@@ -554,6 +554,7 @@ export interface Store {
   // 未看的未接来电数（我作为被叫、status='missed'、createdAt > sinceMs）——供未接来电角标（打开通话记录即清）。
   missedCallCountForUser(userId: string, sinceMs: number): number
   deleteCallRecordsForUser(userId: string): void // 删号级联：清该用户参与的全部通话记录（PII，非证据）
+  deleteCallRecordsOlderThan(cutoffMs: number): number // 留存清扫：删除早于 cutoff 的通话记录（PII 数据最小化），返回条数
   allCallRecords(limit?: number): CallRecord[] // 管理后台：全站通话，按时间倒序
 
   createReport(report: Report): void
@@ -1012,6 +1013,12 @@ export class MemoryStore implements Store {
       if (r.callerId === userId || r.calleeId === userId) { this.callRecords.delete(k); changed = true }
     }
     if (changed) this.afterMutate()
+  }
+  deleteCallRecordsOlderThan(cutoffMs: number): number {
+    let count = 0
+    for (const [k, r] of this.callRecords) if (r.createdAt < cutoffMs) { this.callRecords.delete(k); count++ }
+    if (count > 0) this.afterMutate()
+    return count
   }
   allCallRecords(limit = 200): CallRecord[] {
     return [...this.callRecords.values()]

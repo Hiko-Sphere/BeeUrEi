@@ -21,6 +21,7 @@ struct FamilyLinksView: View {
     @State private var emergencyInfo: String?
     @State private var successText: String?   // 添加成功等正向确认——盲人看不到列表更新，须主动播报
     @State private var emergencyCall: CallSession?
+    @State private var reportTarget: FamilyLinkInfo?   // 举报某联系人（信任与安全）；长按行触发
     @State private var api = APIClient()
     /// 亲友屏文案语言（E5）。
     private var lang: Language { FeatureSettings().language }
@@ -84,6 +85,13 @@ struct FamilyLinksView: View {
                                 .accessibilityLabel(AssistStrings.dialA11y(l.memberName, lang))
                             }
                         }
+                        // 举报该联系人（信任与安全）：长按=VoiceOver「操作」转子里也可达。骚扰通常经聊天/通话就地举报，
+                        // 此处补齐"从联系人举报"（对齐 web 亲友页；监护人发现不良协助者时可直接举报）。复用通话侧 ReportSheet。
+                        .contextMenu {
+                            Button(role: .destructive) { reportTarget = l } label: {
+                                Label(CallStrings.reportShort(lang), systemImage: "flag")
+                            }
+                        }
                     }
                     .onDelete { idx in
                         idx.map { links[$0] }.forEach { l in Task { await remove(l) } }
@@ -115,6 +123,23 @@ struct FamilyLinksView: View {
                 if let token = KeychainStore.read() { Task { await api.cancelCall(token: token, callId: s.id) } }
                 emergencyCall = nil
             }
+        }
+        .sheet(item: $reportTarget) { target in
+            // 联系人举报无通话录制可附，canAttach=false；提交只带 targetUserId+理由（服务端 callId 可选）。复用通话侧 ReportSheet。
+            ReportSheet(lang: lang, canAttach: false,
+                        onSubmit: { reason, _ in reportTarget = nil; Task { await submitReport(target: target, reason: reason) } },
+                        onCancel: { reportTarget = nil })
+        }
+    }
+
+    /// 举报某联系人（无通话录制，callId=nil）。结果双路语音回执（盲人看不到 sheet 关闭之外的确认）。复用 CallStrings.reported/reportFailed。
+    private func submitReport(target: FamilyLinkInfo, reason: String) async {
+        guard let token = KeychainStore.read() else { return }
+        do {
+            try await api.submitReport(token: token, targetUserId: target.memberId, callId: nil, reason: reason)
+            announce(CallStrings.reported(lang))
+        } catch {
+            announce(CallStrings.reportFailed(lang))
         }
     }
 

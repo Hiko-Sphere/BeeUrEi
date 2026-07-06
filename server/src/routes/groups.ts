@@ -18,7 +18,8 @@ const MAX_MEMBERS = 50
 
 /// 群聊（WhatsApp 式）：群主建群/加人/踢人/解散；成员可退群。
 /// 建群与加人都要求新成员是**群主**的 accepted 绑定好友——沿用"只有互相确认过的人才能进入对话"的原则。
-export function registerGroupRoutes(app: FastifyInstance, store: Store, push: PushSender = new NoopPushSender()): void {
+export function registerGroupRoutes(app: FastifyInstance, store: Store, push: PushSender = new NoopPushSender(),
+                                    isOnline: (userId: string) => boolean = () => false): void {
   // 建群：发起人为群主，初始成员必须都是群主的好友。
   app.post('/api/groups', { preHandler: [requireAuth(), requireFeature(store, 'groups')],
                             config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
@@ -51,9 +52,11 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store, push: Pu
       const recent = store.groupMessages(g.id, 200)
       return {
         group: g,
+        // 成员附在线/待命状态（与亲友列表 online 同口径：presence 待命 ∨ 在通话中）——盲人在群里一眼看出
+        // 此刻谁（尤其协助者）能即时接应求助。已注销成员恒 false。
         members: g.memberIds.map((id) => {
           const u = store.findById(id)
-          return u ? publicUser(u) : { id, username: '', displayName: '已注销用户', role: '', status: '', avatar: null }
+          return u ? { ...publicUser(u), online: isOnline(id) } : { id, username: '', displayName: '已注销用户', role: '', status: '', avatar: null, online: false }
         }),
         last: recent.length > 0 ? recent[recent.length - 1] : null,
         // 无上限精确未读（与 App 图标总角标 totalUnreadFor 同口径）：此前用最近 200 条 filter，>200 未读会被封顶

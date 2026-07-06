@@ -581,7 +581,12 @@ function GroupInfoDialog({ groupId, groupName, ownerId, members, meId, onClose, 
             {list.map((m) => (
               <li key={m.id} className="flex items-center gap-3 px-3 py-2.5">
                 <Avatar name={m.displayName} src={m.avatar} size={32} />
-                <span className="flex-1 truncate text-sm">{m.displayName}{m.id === ownerId && <span className="ml-2 rounded-full bg-honey/20 px-2 py-0.5 text-[10px] text-accent">{t('群主', 'Owner')}</span>}</span>
+                <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm">
+                  {/* 在线/待命圆点（读屏念"在线"）：盲人一眼看出群里此刻谁能即时接应求助。 */}
+                  {m.online && <span role="img" aria-label={t('在线', 'Online')} title={t('在线', 'Online')} className="h-2 w-2 shrink-0 rounded-full bg-ok" />}
+                  <span className="truncate">{m.displayName}</span>
+                  {m.id === ownerId && <span className="shrink-0 rounded-full bg-honey/20 px-2 py-0.5 text-[10px] text-accent">{t('群主', 'Owner')}</span>}
+                </span>
                 {isOwner && m.id !== ownerId && (
                   <button onClick={() => kick(m.id)} disabled={busy} className="text-xs text-danger hover:underline disabled:opacity-40">{t('移出', 'Remove')}</button>
                 )}

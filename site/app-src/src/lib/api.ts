@@ -1,7 +1,7 @@
 import { apiURL } from './config'
 
 // ---------- 模型（与服务端对齐） ----------
-export interface User { id: string; username: string; displayName: string; role: string; status: string; avatar?: string | null; verified?: boolean }
+export interface User { id: string; username: string; displayName: string; role: string; status: string; avatar?: string | null; verified?: boolean; online?: boolean }
 export interface SelfView extends User { language?: string | null; email?: string | null; emailVerified?: boolean; phone?: string | null; usernameCustomized?: boolean; appleLinked?: boolean; twoFactorEnabled?: boolean; helperGuidelineAckAt?: number | null }
 export interface VerificationStatusInfo {
   status: 'none' | 'pending' | 'verified' | 'rejected'

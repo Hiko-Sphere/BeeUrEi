@@ -146,4 +146,35 @@ export function registerLocationRoutes(app: FastifyInstance, store: Store, live:
       .filter((c): c is NonNullable<typeof c> => c != null)
     return { sharing: live.isSharing(me, now), sharingUntil: live.sharingUntil(me, now), contacts }
   })
+
+  // 请求对方共享位置（Google Maps 式 nudge）：家人打电话没人接、开始担心 → 一键请求；对方收到可操作
+  // 通知后**自行决定**是否开启共享——绝不远程强开（共享永远由本人主动开启，这只是一声请求）。
+  // 授权=已接受联系人（acceptedContactIds 双向且排除拉黑双方）；对方已在共享 → 不再打扰（alreadySharing）；
+  // 同一对(请求者→目标) 5 分钟内只发一次（内存 TTL 去重，防 nudge 轰炸）；再叠端级限流 6/min。
+  const requestDedup = new Map<string, number>() // `${me}:${target}` → 上次请求时刻 ms（重启即清，可接受）
+  const REQUEST_TTL_MS = 5 * 60_000
+  app.post('/api/locations/request', { preHandler: [requireAuth(), requireFeature(store, 'locationSharing')],
+                                       config: { rateLimit: { max: 6, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const parsed = z.object({ userId: z.string().min(1).max(64) }).safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const me = req.user!.sub
+    if (parsed.data.userId === me) return reply.code(400).send({ error: 'invalid_input' }) // 不能请求自己
+    const target = store.findById(parsed.data.userId)
+    if (!target || target.status !== 'active') return reply.code(404).send({ error: 'not_found' })
+    if (!acceptedContactIds(store, me).has(target.id)) return reply.code(403).send({ error: 'not_linked' }) // 防陌生人骚扰
+    const now = Date.now()
+    if (live.isSharing(target.id, now)) return { ok: true, alreadySharing: true } // 已在共享（本就可见），不打扰
+    const key = `${me}:${target.id}`
+    const last = requestDedup.get(key)
+    if (last != null && now - last < REQUEST_TTL_MS) return { ok: true, deduped: true } // 5 分钟内不重复打扰
+    requestDedup.set(key, now)
+    const meUser = store.findById(me)
+    const l = pushLang(target.language)
+    // notifyUser 双通道（in-app 持久 + APNs + Web Push），data.fromId/fromName 供客户端渲染"是谁在请求"。
+    notifyUser(store, push, target.id, 'location_request',
+               pushStrings.locationRequestTitle(meUser?.displayName ?? (l === 'en' ? 'A contact' : '联系人'), l),
+               pushStrings.locationRequestBody(l),
+               { fromId: me, fromName: meUser?.displayName ?? '' })
+    return { ok: true }
+  })
 }

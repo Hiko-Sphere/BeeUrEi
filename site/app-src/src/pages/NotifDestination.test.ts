@@ -19,6 +19,9 @@ describe('notifDestination 通知点击跳转目的地', () => {
     expect(notifDestination('place_departure')).toBe('/locations') // 离开围栏与到达对等
     expect(notifDestination('contact_low_battery')).toBe('/locations')
   })
+  it('有人请求你共享位置 → 位置页（开始共享的开关在那里）', () => {
+    expect(notifDestination('location_request')).toBe('/locations')
+  })
   it('实名结果 → 账户页（实名认证区就在 /account）', () => {
     expect(notifDestination('kyc_verified')).toBe('/account')
     expect(notifDestination('kyc_rejected')).toBe('/account')

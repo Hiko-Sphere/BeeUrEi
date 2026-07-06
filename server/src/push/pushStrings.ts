@@ -85,6 +85,13 @@ export const pushStrings = {
     const place = placeLabelName(label, l)
     return l === 'en' ? `${name} has left ${place}.` : `${name}已经离开${place}。`
   },
+  // 请求共享位置（Google Maps 式 nudge）：家人担心时一键请求，对方**自行决定**是否开启共享——
+  // 绝非远程强开（共享永远由本人主动开启，这只是一声请求）。
+  locationRequestTitle: (name: string, l: PushLang): string =>
+    l === 'en' ? `${name} asks you to share your location` : `${name} 请求你共享位置`,
+  locationRequestBody: (l: PushLang): string =>
+    l === 'en' ? 'They may be worried about you. Open the app and start sharing if you want to.'
+               : '对方可能在担心你。若愿意，请打开 App 开启位置共享。',
   // 共享位置者电量低（Life360/Find My "X 的手机电量低"式）：手机是盲人导航+SOS 的唯一工具，
   // 家人在其失联前主动联系。只在跌破阈值那次提醒（滞回防抖）。
   contactLowBatteryTitle: (name: string, l: PushLang): string =>

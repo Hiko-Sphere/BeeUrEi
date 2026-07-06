@@ -106,3 +106,53 @@ describe('实时位置共享 /api/locations', () => {
     await app.close()
   })
 })
+
+describe('请求共享位置 /api/locations/request（nudge，绝非远程强开）', () => {
+  async function seed() {
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const A = await register(app, 'req_a', 'family')
+    const B = await register(app, 'req_b', 'blind')
+    const C = await register(app, 'req_c', 'helper') // 陌生人（未绑定）
+    await link(app, A, B.id, B.token)
+    const notifs = (uid: string) => store.notificationsForUser(uid).filter((n) => n.kind === 'location_request')
+    return { store, app, A, B, C, notifs }
+  }
+
+  it('已绑定联系人请求 → 对方收到 location_request 通知（含请求者名，供对方决定）', async () => {
+    const { app, A, B, notifs } = await seed()
+    const r = await app.inject({ method: 'POST', url: '/api/locations/request', headers: auth(A.token), payload: { userId: B.id } })
+    expect(r.statusCode).toBe(200)
+    expect(r.json()).toMatchObject({ ok: true })
+    const n = notifs(B.id)
+    expect(n).toHaveLength(1)
+    expect(n[0].title).toContain('req_a')                      // 是谁在请求
+    expect(n[0].data).toMatchObject({ fromId: A.id })
+    await app.close()
+  })
+
+  it('陌生人请求 → 403（防骚扰）；请求自己 → 400', async () => {
+    const { app, B, C } = await seed()
+    expect((await app.inject({ method: 'POST', url: '/api/locations/request', headers: auth(C.token), payload: { userId: B.id } })).statusCode).toBe(403)
+    expect((await app.inject({ method: 'POST', url: '/api/locations/request', headers: auth(B.token), payload: { userId: B.id } })).statusCode).toBe(400)
+    await app.close()
+  })
+
+  it('对方已在共享 → alreadySharing:true 且不发通知（本就可见，不打扰）', async () => {
+    const { app, A, B, notifs } = await seed()
+    await app.inject({ method: 'POST', url: '/api/locations/update', headers: auth(B.token), payload: { lat: 31.2, lng: 121.5 } })
+    const r = await app.inject({ method: 'POST', url: '/api/locations/request', headers: auth(A.token), payload: { userId: B.id } })
+    expect(r.json()).toMatchObject({ ok: true, alreadySharing: true })
+    expect(notifs(B.id)).toHaveLength(0)
+    await app.close()
+  })
+
+  it('同一对 5 分钟内重复请求 → deduped:true，通知只有一条（防 nudge 轰炸）', async () => {
+    const { app, A, B, notifs } = await seed()
+    expect((await app.inject({ method: 'POST', url: '/api/locations/request', headers: auth(A.token), payload: { userId: B.id } })).json()).toMatchObject({ ok: true })
+    const again = await app.inject({ method: 'POST', url: '/api/locations/request', headers: auth(A.token), payload: { userId: B.id } })
+    expect(again.json()).toMatchObject({ ok: true, deduped: true })
+    expect(notifs(B.id)).toHaveLength(1)
+    await app.close()
+  })
+})

@@ -297,6 +297,8 @@ export const api = {
     post('/api/locations/update', body) as Promise<{ ok: boolean; sharingUntil: number }>,
   stopSharingLocation: () => post('/api/locations/stop'),
   contactLocations: () => get('/api/locations/contacts') as Promise<{ sharing: boolean; sharingUntil: number; contacts: ContactLocation[] }>,
+  // 请求对方共享位置（nudge，对方自行决定）：alreadySharing=对方已在共享；deduped=5 分钟内已请求过。
+  requestLocation: (userId: string) => post('/api/locations/request', { userId }) as Promise<{ ok: boolean; alreadySharing?: boolean; deduped?: boolean }>,
 
   // 录制（知情同意握手 + 创建元数据；策略经 app-config 下发）
   recordingConsent: (callId: string, granted: boolean) => post('/api/recordings/consent', { callId, granted }),

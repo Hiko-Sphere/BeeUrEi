@@ -12,6 +12,7 @@ import { useI18n } from '../lib/i18n'
 import { useSession } from '../lib/session'
 import { roleLabel } from '../components/Layout'
 import { Card, Avatar, Button, Pill, EmptyState, useToast, timeAgo } from '../components/ui'
+import { RequestShareList } from '../components/RequestShareList'
 import { IconPin } from '../components/icons'
 
 const POLL_MS = 8000      // 拉取联系人位置的间隔
@@ -279,6 +280,9 @@ export function LocationsPage() {
               </ul>
             )}
           </Card>
+
+          {/* 未在共享的联系人：一键"请求共享"（nudge，对方自行决定；独立组件不碰 Leaflet 便于单测）。 */}
+          <RequestShareList sharingIds={new Set(contacts.map((c) => c.userId))} />
         </>
       )}
     </div>

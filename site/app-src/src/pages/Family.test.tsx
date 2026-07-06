@@ -220,3 +220,37 @@ describe('FamilyPage 紧急联系人责任提醒（我是几人的紧急联系�
     expect(screen.queryByText(/位联系人的紧急联系人/)).toBeNull()
   })
 })
+
+describe('FamilyPage 联系人按名字搜索过滤', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mock(api.incomingLinks).mockResolvedValue({ links: [] })
+    mock(api.blocks).mockResolvedValue({ blocks: [] })
+    mock(api.safetyCheckin).mockResolvedValue({ timer: null, hasEmergencyContact: true })
+    mock(api.familyLinks).mockResolvedValue({ links: [
+      { id: 'l1', memberId: 'm1', memberName: '阿明', relation: '家人', isEmergency: false, amOwner: true, status: 'accepted' },
+      { id: 'l2', memberId: 'm2', memberName: '小红', relation: '朋友', isEmergency: false, amOwner: true, status: 'accepted' },
+    ] })
+  })
+
+  it('键入即缩到匹配联系人；清空恢复全部', async () => {
+    render(<FamilyPage />)
+    expect(await screen.findByText('阿明')).toBeInTheDocument()
+    expect(screen.getByText('小红')).toBeInTheDocument()
+    const box = screen.getByLabelText('搜索联系人')
+    fireEvent.change(box, { target: { value: '红' } })
+    await waitFor(() => expect(screen.queryByText('阿明')).not.toBeInTheDocument())
+    expect(screen.getByText('小红')).toBeInTheDocument()
+    fireEvent.change(box, { target: { value: '' } }) // 清空恢复全部
+    await waitFor(() => expect(screen.getByText('阿明')).toBeInTheDocument())
+    expect(screen.getByText('小红')).toBeInTheDocument()
+  })
+
+  it('无匹配 → "没有匹配的联系人"（而非空白误导为无联系人）', async () => {
+    render(<FamilyPage />)
+    await screen.findByText('阿明')
+    fireEvent.change(screen.getByLabelText('搜索联系人'), { target: { value: '查无此人zzz' } })
+    await waitFor(() => expect(screen.getByText('没有匹配的联系人')).toBeInTheDocument())
+    expect(screen.queryByText('阿明')).not.toBeInTheDocument()
+  })
+})

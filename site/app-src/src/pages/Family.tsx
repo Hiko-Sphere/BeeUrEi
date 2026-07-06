@@ -20,6 +20,7 @@ export function FamilyPage() {
   const [incoming, setIncoming] = useState<IncomingLink[] | null>(null)
   const [blocks, setBlocks] = useState<{ id: string; user: { id: string; displayName: string; avatar?: string | null } }[] | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  const [contactQuery, setContactQuery] = useState('') // 已绑定联系人按名字过滤（多时免逐条滚/Tab 找人；读屏尤甚）
   const [reportTarget, setReportTarget] = useState<FamilyLink | null>(null) // 举报对象（从联系人直接举报，无需通话中）
 
   const reload = useCallback(async () => {
@@ -73,6 +74,9 @@ export function FamilyPage() {
   }
 
   const accepted = (links ?? []).filter((l) => (l.status ?? 'accepted') === 'accepted')
+  // 已绑定联系人按名字（不区分大小写）过滤：联系人一多，免逐条滚/Tab 找人（键入即缩到匹配项，对读屏用户尤其省事）。
+  const contactQ = contactQuery.trim().toLowerCase()
+  const shownAccepted = contactQ ? accepted.filter((l) => l.memberName.toLowerCase().includes(contactQ)) : accepted
   const pendingOut = (links ?? []).filter((l) => l.status === 'pending' && l.outgoing)
   // 我是几个人的紧急联系人（amOwner=false ∧ isEmergency ∧ 已接受）——TA 遇险/摔倒/未报到时会呼叫/告警我。
   // 责任提醒：协助者常不自知肩负多少人的安全网，须保持可联系（设备开着、App 能收推送）。
@@ -121,11 +125,21 @@ export function FamilyPage() {
       {/* 已绑定联系人 */}
       <Card className="overflow-hidden">
         <div className="border-b border-[var(--line)] px-4 py-3 text-sm font-semibold">{t('我的联系人', 'My contacts')}</div>
+        {/* 联系人多时的搜索过滤（仅在有联系人时出现，避免对空列表显示无意义的搜索框）。 */}
+        {accepted.length > 0 && (
+          <div className="border-b border-[var(--line)] px-4 py-2.5">
+            <input type="search" value={contactQuery} onChange={(e) => setContactQuery(e.target.value)}
+              placeholder={t('搜索联系人', 'Search contacts')} aria-label={t('搜索联系人', 'Search contacts')}
+              className="w-full rounded-xl surface-2 px-3 py-2 text-sm outline-none placeholder:text-faint focus:ring-2 focus:ring-[var(--color-honey)]/40" />
+          </div>
+        )}
         {links === null ? <Spinner /> : accepted.length === 0 ? (
           <EmptyState icon={<IconUsers />} title={t('暂无联系人', 'No contacts yet')} message={t('添加视障用户后即可为其提供协助', 'Add blind users to start helping them')} />
+        ) : shownAccepted.length === 0 ? (
+          <p className="px-4 py-6 text-center text-sm text-faint" role="status">{t('没有匹配的联系人', 'No matching contacts')}</p>
         ) : (
           <ul className="divide-y divide-[var(--line)]">
-            {accepted.map((l) => (
+            {shownAccepted.map((l) => (
               <li key={l.id} className="flex items-center gap-3 px-4 py-3">
                 <Avatar name={l.memberName} src={l.memberAvatar} size={40} />
                 <div className="min-w-0 flex-1">

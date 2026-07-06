@@ -127,6 +127,42 @@ describe('NotificationsPage 渲染（防字段漂移）', () => {
     await screen.findByText('小红已看到你的求助')
     expect(screen.queryByRole('button', { name: /回执/ })).toBeNull() // kind !== emergency_alert（精确门）→ 无回执
   })
+
+  it('筛选 全部/未读/紧急 切换过滤列表', async () => {
+    ;(api.notifications as ReturnType<typeof vi.fn>).mockResolvedValue({
+      notifications: [
+        notif({ id: 'e1', kind: 'emergency_alert', title: '摔倒告警', readAt: null, data: { fromId: 'b1', fromName: 'x' } }), // 未读 + 紧急
+        notif({ id: 'r1', kind: 'report_resolved', title: '举报已处理', readAt: 1_700_000_000_500 }),                        // 已读 + 非紧急
+      ],
+      unread: 1,
+    })
+    render(<NotificationsPage />)
+    expect(await screen.findByText('摔倒告警')).toBeInTheDocument()
+    expect(screen.getByText('举报已处理')).toBeInTheDocument()
+    // 未读 → 只剩未读的摔倒告警。
+    fireEvent.click(screen.getByRole('button', { name: /未读/ }))
+    await waitFor(() => expect(screen.queryByText('举报已处理')).not.toBeInTheDocument())
+    expect(screen.getByText('摔倒告警')).toBeInTheDocument()
+    // 紧急 → 只剩 emergency_alert。
+    fireEvent.click(screen.getByRole('button', { name: '紧急' }))
+    await waitFor(() => expect(screen.getByText('摔倒告警')).toBeInTheDocument())
+    expect(screen.queryByText('举报已处理')).not.toBeInTheDocument()
+    // 全部 → 恢复两条（用精确名，避免撞上"全部标为已读"按钮）。
+    fireEvent.click(screen.getByRole('button', { name: '全部' }))
+    await waitFor(() => expect(screen.getByText('举报已处理')).toBeInTheDocument())
+  })
+
+  it('筛选无匹配 → 明确提示（而非空白误导为无通知）', async () => {
+    ;(api.notifications as ReturnType<typeof vi.fn>).mockResolvedValue({
+      notifications: [notif({ id: 'r1', kind: 'report_resolved', title: '举报已处理', readAt: 1_700_000_000_500 })], // 全已读、非紧急
+      unread: 0,
+    })
+    render(<NotificationsPage />)
+    await screen.findByText('举报已处理')
+    fireEvent.click(screen.getByRole('button', { name: '紧急' }))
+    await waitFor(() => expect(screen.getByText('没有紧急通知')).toBeInTheDocument())
+    expect(screen.queryByText('举报已处理')).not.toBeInTheDocument()
+  })
 })
 
 describe('notifDestination 通知跳转（子串路由，防 link/security 撞车）', () => {

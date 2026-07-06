@@ -49,6 +49,7 @@ export function NotificationsPage() {
   const toast = useToast()
   const [items, setItems] = useState<NotificationInfo[] | null>(null)
   const [ackedIds, setAckedIds] = useState<Set<string>>(new Set()) // 本会话内已从列表回执的告警（立即显示"已回执"）
+  const [filter, setFilter] = useState<'all' | 'unread' | 'emergency'>('all') // 筛选：全部/未读/紧急——多人多事件时快速聚焦安全攸关或未处理的
 
   const load = async () => { try { const r = await api.notifications(); setItems(r.notifications) } catch { setItems([]) } }
   useEffect(() => { void load() }, [])
@@ -76,6 +77,8 @@ export function NotificationsPage() {
 
   const unread = (items ?? []).filter((n) => !n.readAt).length
   const hasRead = (items ?? []).some((n) => n.readAt)
+  // 紧急=kind 含 'emergency'（SOS 告警/回执/协调/报平安/被设为紧急联系人一类）——安全攸关，值得单独一屏聚焦。
+  const shown = (items ?? []).filter((n) => filter === 'unread' ? !n.readAt : filter === 'emergency' ? n.kind.includes('emergency') : true)
 
   return (
     <div className="flex flex-col gap-5">
@@ -87,12 +90,28 @@ export function NotificationsPage() {
         </div>
       </div>
 
+      {/* 筛选：多人多事件时快速聚焦未读或安全攸关的紧急项。仅在有通知时出现。aria-pressed 供读屏播报当前所选。 */}
+      {items && items.length > 0 && (
+        <div className="flex gap-1.5" role="group" aria-label={t('筛选通知', 'Filter notifications')}>
+          {([['all', t('全部', 'All')], ['unread', t('未读', 'Unread')], ['emergency', t('紧急', 'Emergency')]] as const).map(([key, label]) => (
+            <button key={key} type="button" aria-pressed={filter === key} onClick={() => setFilter(key)}
+              className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${filter === key ? 'bg-honey text-ink' : 'surface-2 text-soft hover:brightness-105'}`}>
+              {label}{key === 'unread' && unread > 0 ? ` (${unread})` : ''}
+            </button>
+          ))}
+        </div>
+      )}
+
       <Card className="overflow-hidden">
         {items === null ? <Spinner /> : items.length === 0 ? (
           <EmptyState icon={<IconBell />} title={t('暂无通知', 'No notifications')} message={t('举报处置、好友请求等会显示在这里', 'Reports, friend requests and more appear here')} />
+        ) : shown.length === 0 ? (
+          <p className="px-4 py-6 text-center text-sm text-faint" role="status">
+            {filter === 'unread' ? t('没有未读通知', 'No unread notifications') : filter === 'emergency' ? t('没有紧急通知', 'No emergency notifications') : t('暂无通知', 'No notifications')}
+          </p>
         ) : (
           <ul className="divide-y divide-[var(--line)]">
-            {items.map((n) => (
+            {shown.map((n) => (
               <li key={n.id} className={`flex gap-3 px-4 py-3.5 ${n.readAt ? '' : 'bg-honey/5'}`}>
                 <div className={`mt-0.5 shrink-0 ${n.readAt ? 'text-faint' : 'text-honey'}`}>{iconFor(n.kind)}</div>
                 <div className="min-w-0 flex-1">

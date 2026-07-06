@@ -33,8 +33,10 @@ export function broadcastAllClear(
     const title = pushStrings.emergencyClearTitle(me.displayName, l)
     const body = pushStrings.emergencyClearBody(me.displayName, l)
     try { store.createNotification({ id: randomUUID(), userId: m.id, kind: 'emergency_clear', title, body, data, createdAt: now }) } catch { /* 通知失败不阻断广播 */ }
-    if (webPush.configured) for (const sub of safeSubs(m.id)) void webPush.send(sub, JSON.stringify({ title, body, data })).catch(() => { /* 单订阅失败不阻断 */ })
-    if (m.apnsToken) void push.sendAlert(m.apnsToken, title, body, { type: 'emergency_clear', fromId: me.id }, undefined, safeBadge(m.id)).catch(() => { /* 单点失败不阻断 */ })
+    // badge=该亲友未读总数（含刚写入的报平安本条），APNs+Web Push 同带（后者供 SW 置 PWA 图标角标）；一次算、两渠道复用。
+    const badge = safeBadge(m.id)
+    if (webPush.configured) for (const sub of safeSubs(m.id)) void webPush.send(sub, JSON.stringify({ title, body, badge, data })).catch(() => { /* 单订阅失败不阻断 */ })
+    if (m.apnsToken) void push.sendAlert(m.apnsToken, title, body, { type: 'emergency_clear', fromId: me.id }, undefined, badge).catch(() => { /* 单点失败不阻断 */ })
   }
   return { resolved, notified: members.length }
 }

@@ -42,14 +42,16 @@ export function escalateUnackedEmergencies(
         const mNotif = mMedical ? { ...notifData, hasMedical: '1' } : notifData
         // 持久化通知发给每个 accepted 亲友（含无 token 者：通知中心兜底），与首呼同口径。
         try { store.createNotification({ id: randomUUID(), userId: m.id, kind: 'emergency_alert', title, body, data: mNotif, createdAt: now }) } catch { /* 通知失败不阻断推送 */ }
-        if (webPush.configured) for (const sub of safeSubs(m.id)) void webPush.send(sub, JSON.stringify({ title, body, data: mNotif })).catch(() => { /* 单订阅失败不阻断 */ })
+        // badge=该亲友未读总数（含刚写入的升级重呼本条），APNs+Web Push 同带（后者供 SW 置 PWA 图标角标）；一次算、两渠道复用。
+        const badge = safeBadge(m.id)
+        if (webPush.configured) for (const sub of safeSubs(m.id)) void webPush.send(sub, JSON.stringify({ title, body, badge, data: mNotif })).catch(() => { /* 单订阅失败不阻断 */ })
         if (m.apnsToken) {
           const extra: Record<string, string> = { type: 'emergency_alert', escalated: '1', kind: e.kind, fromId: sender.id, eventId: e.id }
           // locSource 与 notifData 同带（此前 extra 漏）：iOS 靠它诚实标注"最后已知·非实时"，缺了会把陈旧位置当实时
           // 渲染、把响应者指向错误地点。locAgeSec 两渠道都不带（升级时已过数分钟，存库的旧龄会误导，故一律省，见 notifData）。
           if (hasLoc) { extra.lat = String(e.lat); extra.lon = String(e.lon); if (e.locSource) extra.locSource = e.locSource }
           if (mMedical) extra.hasMedical = '1'
-          void push.sendAlert(m.apnsToken, title, body, extra, undefined, safeBadge(m.id)).catch(() => { /* 单点失败不阻断 */ })
+          void push.sendAlert(m.apnsToken, title, body, extra, undefined, badge).catch(() => { /* 单点失败不阻断 */ })
         }
       }
       escalated++

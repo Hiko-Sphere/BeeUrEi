@@ -246,11 +246,13 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     try {
       store.createNotification({ id: randomUUID(), userId: sender.id, kind: 'emergency_ack', title, body, data, createdAt: Date.now() })
     } catch { /* 通知失败不阻断回告推送 */ }
+    // badge=发起人未读总数（含刚写入的回告本条），APNs+Web Push 同带（后者供 SW 置 PWA 图标角标）；一次算、两渠道复用。
+    const badge = safeBadge(sender.id)
     const webJobs = webPush.configured
-      ? store.webPushSubscriptionsForUser(sender.id).map((sub) => webPush.send(sub, JSON.stringify({ title, body, data })).catch(() => { /* 单订阅失败不阻断 */ }))
+      ? store.webPushSubscriptionsForUser(sender.id).map((sub) => webPush.send(sub, JSON.stringify({ title, body, badge, data })).catch(() => { /* 单订阅失败不阻断 */ }))
       : []
     const apnsJob = sender.apnsToken
-      ? pushSender.sendAlert(sender.apnsToken, title, body, { type: 'emergency_ack', fromId: acker.id }, undefined, totalUnreadFor(store, sender.id).total)
+      ? pushSender.sendAlert(sender.apnsToken, title, body, { type: 'emergency_ack', fromId: acker.id }, undefined, badge)
       : Promise.resolve()
     await Promise.allSettled([apnsJob, ...webJobs])
     metrics?.inc('emergency_acks_total') // 人响应漏斗：确认数 vs 告警数（ack 率低=告警没被看见/没人管，值得告警）
@@ -271,8 +273,10 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
         const rTitle = pushStrings.emergencyRespondingTitle(sender.displayName, ml)
         const rBody = pushStrings.emergencyRespondingBody(sender.displayName, ml)
         try { store.createNotification({ id: randomUUID(), userId: m.id, kind: 'emergency_responding', title: rTitle, body: rBody, data: rData, createdAt: Date.now() }) } catch { /* 单条通知失败不阻断其余 */ }
-        if (webPush.configured) for (const sub of safeWebPushSubs(m.id)) jobs.push(webPush.send(sub, JSON.stringify({ title: rTitle, body: rBody, data: rData })).catch(() => { /* 单订阅失败不阻断 */ }))
-        if (m.apnsToken) jobs.push(pushSender.sendAlert(m.apnsToken, rTitle, rBody, { type: 'emergency_responding', fromId: sender.id }, undefined, safeBadge(m.id)).catch(() => { /* 单点失败不阻断 */ }))
+        // badge=该亲友未读总数（含刚写入的"已有人响应"本条），APNs+Web Push 同带（后者供 SW 置 PWA 图标角标）；一次算、两渠道复用。
+        const rBadge = safeBadge(m.id)
+        if (webPush.configured) for (const sub of safeWebPushSubs(m.id)) jobs.push(webPush.send(sub, JSON.stringify({ title: rTitle, body: rBody, badge: rBadge, data: rData })).catch(() => { /* 单订阅失败不阻断 */ }))
+        if (m.apnsToken) jobs.push(pushSender.sendAlert(m.apnsToken, rTitle, rBody, { type: 'emergency_responding', fromId: sender.id }, undefined, rBadge).catch(() => { /* 单点失败不阻断 */ }))
       }
       await Promise.allSettled(jobs)
       metrics?.inc('emergency_responding_total') // 协调触发数（有人开始响应、通知了其余亲友）

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { MemoryStore } from '../src/db/store'
-import { NoopWebPushSender } from '../src/push/webPush'
+import { NoopWebPushSender, type WebPushSender, type WebPushSubscriptionKeys } from '../src/push/webPush'
 import { escalateUnackedEmergencies } from '../src/emergency/escalation'
 import type { PushSender } from '../src/push/apns'
 
@@ -11,6 +11,13 @@ class FakePush implements PushSender {
   async sendAlert(token: string, _t: string, _b: string, extra?: Record<string, string>): Promise<void> {
     this.alerts.push({ token, extra })
   }
+}
+
+/// 记录式 web 推送替身：记下每次 send 的负载，用于断言升级重呼的 web push 顶层带 badge。
+class RecordingWebPush implements WebPushSender {
+  readonly configured = true
+  sent: string[] = []
+  async send(_sub: WebPushSubscriptionKeys, payload: string): Promise<void> { this.sent.push(payload) }
 }
 
 const MIN = 60_000
@@ -48,6 +55,20 @@ describe('紧急升级重呼 escalateUnackedEmergencies', () => {
     // 再扫不重复升级（escalatedAt 已设）。
     expect(escalateUnackedEmergencies(store, push, web, now + MIN, 5 * MIN)).toBe(0)
     expect(push.alerts).toHaveLength(2)
+  })
+
+  it('升级重呼 → 亲友 web push 顶层带 badge（含刚写入的升级通知）→ SW 可置 PWA 图标角标', () => {
+    const now = 100 * MIN
+    const { store, push } = setup()
+    const web = new RecordingWebPush()
+    store.upsertWebPushSubscription({ endpoint: 'https://push.example/famA', userId: 'famA', p256dh: 'k', auth: 'a', createdAt: 1 })
+    store.createEmergencyEvent(evt({ at: now - 6 * MIN }))
+    expect(escalateUnackedEmergencies(store, push, web, now, 5 * MIN)).toBe(1)
+    expect(web.sent.length).toBeGreaterThanOrEqual(1)
+    const payload = JSON.parse(web.sent[0])
+    expect(typeof payload.badge).toBe('number')       // APNs 一直带 badge，此前 web 漏——顶层带上供 SW 置角标
+    expect(payload.badge).toBeGreaterThanOrEqual(1)    // 升级重呼给 famA 写了一条 emergency_alert 通知（未读≥1）
+    expect(payload.data.escalated).toBe('1')
   })
 
   it('发起人有紧急医疗信息 → 升级告警带 hasMedical（漏看首呼者也知有过敏/用药可查）', () => {

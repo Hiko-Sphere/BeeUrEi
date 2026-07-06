@@ -132,6 +132,20 @@ describe('Web Push（浏览器推送紧急告警）', () => {
     const sosP = JSON.parse(wp.sent[0].payload)
     expect(typeof sosP.badge).toBe('number')
     expect(sosP.badge).toBeGreaterThanOrEqual(1)
+    // 报平安（all-clear）→ 亲友 web push 也带 badge（emergency_clear 亦是一条通知，角标须跟随，不止告警才带）。
+    wp.sent.length = 0
+    await a.inject({ method: 'POST', url: '/api/emergency/all-clear', headers: auth, payload: {} })
+    const clearP = JSON.parse(wp.sent[0].payload)
+    expect(clearP.data.kind).toBe('emergency_clear')
+    expect(typeof clearP.badge).toBe('number')
+    // 亲友回告（ack）→ 发起人 web push 也带 badge。先给发起人本人也订阅一个浏览器。
+    await a.inject({ method: 'POST', url: '/api/push/web-subscribe', headers: auth, payload: { endpoint: 'https://push.example/owner-ep', keys: SUB.keys } })
+    wp.sent.length = 0
+    const ownerId = (await a.inject({ method: 'GET', url: '/api/me', headers: auth })).json().user.id
+    await a.inject({ method: 'POST', url: '/api/emergency/ack', headers: hAuth, payload: { fromId: ownerId } })
+    const ackP = JSON.parse(wp.sent[0].payload)
+    expect(ackP.data.kind).toBe('emergency_ack')
+    expect(typeof ackP.badge).toBe('number')
     await a.close()
   })
 

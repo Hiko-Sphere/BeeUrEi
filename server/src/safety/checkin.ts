@@ -48,8 +48,10 @@ export function remindDueSoonSafetyTimers(
       const body = pushStrings.safetyCheckinReminderBody(remainMin, t.note, l)
       const data: Record<string, string> = { kind: 'checkin_reminder', timerId: t.id }
       try { store.createNotification({ id: randomUUID(), userId: owner.id, kind: 'safety_checkin_reminder', title, body, data, createdAt: now }) } catch { /* 通知失败不阻断推送 */ }
-      if (webPush.configured) for (const sub of safeSubs(owner.id)) void webPush.send(sub, JSON.stringify({ title, body, data })).catch(() => { /* 单订阅失败不阻断 */ })
-      if (owner.apnsToken) void push.sendAlert(owner.apnsToken, title, body, { type: 'safety_checkin_reminder', timerId: t.id }, undefined, safeBadge(owner.id)).catch(() => { /* 单点失败不阻断 */ })
+      // badge=本人未读总数（含刚写入的报到提醒本条），APNs+Web Push 同带（后者供 SW 置 PWA 图标角标）；一次算、两渠道复用。
+      const badge = safeBadge(owner.id)
+      if (webPush.configured) for (const sub of safeSubs(owner.id)) void webPush.send(sub, JSON.stringify({ title, body, badge, data })).catch(() => { /* 单订阅失败不阻断 */ })
+      if (owner.apnsToken) void push.sendAlert(owner.apnsToken, title, body, { type: 'safety_checkin_reminder', timerId: t.id }, undefined, badge).catch(() => { /* 单点失败不阻断 */ })
       reminded++
     } catch { /* 单条提醒失败不阻断其余（已置 remindedAt 则不再重试同一条） */ }
   }
@@ -78,8 +80,10 @@ export function fireExpiredSafetyTimers(
           const body = pushStrings.safetyCheckinExpiredSelfBody(l)
           const data: Record<string, string> = { kind: 'checkin_expired', timerId: t.id }
           try { store.createNotification({ id: randomUUID(), userId: owner.id, kind: 'safety_checkin_expired', title, body, data, createdAt: now }) } catch { /* 通知失败不阻断 */ }
-          if (webPush.configured) for (const sub of safeSubs(owner.id)) void webPush.send(sub, JSON.stringify({ title, body, data })).catch(() => { /* 单订阅失败不阻断 */ })
-          if (owner.apnsToken) void push.sendAlert(owner.apnsToken, title, body, { type: 'safety_checkin_expired', timerId: t.id }, undefined, safeBadge(owner.id)).catch(() => { /* 单点失败不阻断 */ })
+          // badge=本人未读总数（含刚写入的报到超时本条），APNs+Web Push 同带（后者供 SW 置 PWA 图标角标）；一次算、两渠道复用。
+          const badge = safeBadge(owner.id)
+          if (webPush.configured) for (const sub of safeSubs(owner.id)) void webPush.send(sub, JSON.stringify({ title, body, badge, data })).catch(() => { /* 单订阅失败不阻断 */ })
+          if (owner.apnsToken) void push.sendAlert(owner.apnsToken, title, body, { type: 'safety_checkin_expired', timerId: t.id }, undefined, badge).catch(() => { /* 单点失败不阻断 */ })
         }
         continue
       }
@@ -134,7 +138,9 @@ export function fireExpiredSafetyTimers(
         const mNotif = mMedical ? { ...notifData, hasMedical: '1' } : notifData
         // 持久化通知发给每个 accepted 亲友（含无 token 者：通知中心兜底），与紧急首呼同口径。
         try { store.createNotification({ id: randomUUID(), userId: m.id, kind: 'emergency_alert', title, body, data: mNotif, createdAt: now }) } catch { /* 通知失败不阻断推送 */ }
-        if (webPush.configured) for (const sub of safeSubs(m.id)) void webPush.send(sub, JSON.stringify({ title, body, data: mNotif })).catch(() => { /* 单订阅失败不阻断 */ })
+        // badge=该亲友未读总数（含刚写入的未报到告警本条），APNs+Web Push 同带（后者供 SW 置 PWA 图标角标）；一次算、两渠道复用。
+        const badge = safeBadge(m.id)
+        if (webPush.configured) for (const sub of safeSubs(m.id)) void webPush.send(sub, JSON.stringify({ title, body, badge, data: mNotif })).catch(() => { /* 单订阅失败不阻断 */ })
         if (m.apnsToken) {
           const extra: Record<string, string> = { type: 'emergency_alert', kind: 'checkin', fromId: sender.id, eventId }
           if (lat != null && lon != null) {
@@ -142,7 +148,7 @@ export function fireExpiredSafetyTimers(
             if (locAgeSec != null) extra.locAgeSec = String(locAgeSec)
           }
           if (mMedical) extra.hasMedical = '1'
-          void push.sendAlert(m.apnsToken, title, body, extra, undefined, safeBadge(m.id)).catch(() => { /* 单点失败不阻断 */ })
+          void push.sendAlert(m.apnsToken, title, body, extra, undefined, badge).catch(() => { /* 单点失败不阻断 */ })
         }
       }
       fired++

@@ -3,7 +3,7 @@ import { buildApp } from '../src/app'
 import { MemoryStore, type SafetyTimer, type Store } from '../src/db/store'
 import { SqliteStore } from '../src/db/sqliteStore'
 import { NoopPushSender, type PushSender } from '../src/push/apns'
-import { NoopWebPushSender } from '../src/push/webPush'
+import { NoopWebPushSender, type WebPushSender, type WebPushSubscriptionKeys } from '../src/push/webPush'
 import { fireExpiredSafetyTimers, remindDueSoonSafetyTimers } from '../src/safety/checkin'
 import { cascadeDeleteUser } from '../src/db/cascade'
 
@@ -13,6 +13,13 @@ class CapturingPush implements PushSender {
   async send(): Promise<void> {}
   async sendCallInvite(): Promise<void> {}
   async sendAlert(token: string, _t: string, _b: string, extra?: Record<string, string>): Promise<void> { this.alerts.push({ token, extra }) }
+}
+
+// 记录式 web 推送替身：记下负载，用于断言未报到告警的 web push 顶层带 badge（供 SW 置 PWA 图标角标）。
+class RecordingWebPush implements WebPushSender {
+  readonly configured = true
+  sent: string[] = []
+  async send(_sub: WebPushSubscriptionKeys, payload: string): Promise<void> { this.sent.push(payload) }
 }
 
 async function setup(store: Store = new MemoryStore()) {
@@ -156,6 +163,20 @@ describe('安全报到到期自动告警（fireExpiredSafetyTimers）', () => {
     expect(ev).toHaveLength(1)
     expect(ev[0].kind).toBe('checkin')
     expect(store.unacknowledgedEmergencyEvents(now, now).some((e) => e.id === after.eventId)).toBe(true)
+  })
+
+  it('未报到告警 → 亲友 web push 顶层带 badge（含刚写入的告警通知）→ SW 可置 PWA 图标角标', async () => {
+    const { store, blind, family } = await setup()
+    const now = Date.now()
+    store.upsertWebPushSubscription({ endpoint: 'https://push.example/stfamily', userId: family.id, p256dh: 'k', auth: 'a', createdAt: 1 })
+    store.createSafetyTimer({ id: 'stBadge', ownerId: blind.id, note: '走夜路', startedAt: now - 30 * 60_000, dueAt: now - 1000, status: 'active' })
+    const web = new RecordingWebPush()
+    expect(fireExpiredSafetyTimers(store, push, web, now, GRACE)).toBe(1)
+    expect(web.sent.length).toBeGreaterThanOrEqual(1)
+    const payload = JSON.parse(web.sent[0])
+    expect(typeof payload.badge).toBe('number')     // APNs 一直带 badge，此前 web 漏——顶层带上供 SW 置角标
+    expect(payload.badge).toBeGreaterThanOrEqual(1)  // 未报到告警给 family 写了一条 emergency_alert 通知（未读≥1）
+    expect(payload.data.kind).toBe('checkin')
   })
 
   it('发起人有紧急医疗信息 → 未报到告警的**持久化通知 data 与 APNs extra 都带 hasMedical**（跨渠道一致）', async () => {

@@ -41,7 +41,7 @@ final class AssistStringsTests: XCTestCase {
         // 在线待命后缀：双语、非空、英文不串中文，且与紧急/待确认后缀各不相同（同一 caption 里可能并列出现）。
         XCTAssertEqual(AssistStrings.onlineSuffix(.zh), " · 在线待命")
         XCTAssertEqual(AssistStrings.onlineSuffix(.en), " · online")
-        XCTAssertNotEqual(AssistStrings.onlineSuffix(.zh), AssistStrings.emergencySuffix(.zh))
+        XCTAssertNotEqual(AssistStrings.onlineSuffix(.zh), AssistStrings.emergencySuffix(.zh, isEmergency: true, amOwner: true))
         XCTAssertNotEqual(AssistStrings.onlineSuffix(.zh), AssistStrings.pendingSuffix(.zh))
         XCTAssertFalse(AssistStrings.onlineSuffix(.en).contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
@@ -82,6 +82,40 @@ final class AssistStringsTests: XCTestCase {
         let legacy = #"{"id":"l2","memberId":"m2","memberName":"Bob","relation":"friend","isEmergency":false}"#
         let l2 = try JSONDecoder().decode(FamilyLinkInfo.self, from: Data(legacy.utf8))
         XCTAssertNil(l2.online)
+    }
+
+    func testFamilyLinkInfoDecodesAmOwner() throws {
+        // 服务端 viewLink 下发 amOwner（我是否为链 owner）；iOS 须解码——此前缺此字段=死字段，
+        // 导致紧急联系人徽标无法区分方向（谁遇险时叫谁）。
+        let owned = #"{"id":"l1","memberId":"m1","memberName":"妈妈","relation":"母亲","isEmergency":true,"status":"accepted","amOwner":true}"#
+        XCTAssertEqual(try JSONDecoder().decode(FamilyLinkInfo.self, from: Data(owned.utf8)).amOwner, true)
+        let notOwned = #"{"id":"l2","memberId":"m2","memberName":"小明","relation":"邻居","isEmergency":true,"status":"accepted","amOwner":false}"#
+        XCTAssertEqual(try JSONDecoder().decode(FamilyLinkInfo.self, from: Data(notOwned.utf8)).amOwner, false)
+        // 缺 amOwner 的旧负载 → nil（徽标回退到"紧急联系人"通用向，不做方向断言、不崩）。
+        let legacy = #"{"id":"l3","memberId":"m3","memberName":"Bob","relation":"friend","isEmergency":true}"#
+        XCTAssertNil(try JSONDecoder().decode(FamilyLinkInfo.self, from: Data(legacy.utf8)).amOwner)
+    }
+
+    func testEmergencySuffixDirection() {
+        // 安全责任方向：amOwner==false（对方是 owner）=我是 TA 的紧急联系人（TA 遇险叫我）；否则=对方是我的。
+        // 此前两向都显示"紧急联系人"，让人误读方向。isEmergency=false → 空串。
+        XCTAssertEqual(AssistStrings.emergencySuffix(.zh, isEmergency: false, amOwner: true), "")
+        XCTAssertEqual(AssistStrings.emergencySuffix(.zh, isEmergency: false, amOwner: false), "")
+        // 我是 owner → 对方是我的紧急联系人（通用向）
+        XCTAssertEqual(AssistStrings.emergencySuffix(.zh, isEmergency: true, amOwner: true), " · 紧急联系人")
+        XCTAssertEqual(AssistStrings.emergencySuffix(.zh, isEmergency: true, amOwner: nil), " · 紧急联系人") // 缺字段回退通用向
+        // 对方是 owner → 我是 TA 的紧急联系人（我对 TA 负责），文案须区别于通用向
+        let mine = AssistStrings.emergencySuffix(.zh, isEmergency: true, amOwner: false)
+        XCTAssertTrue(mine.contains("你是") && mine.contains("紧急联系人"), "反向须点明我是对方的：\(mine)")
+        XCTAssertNotEqual(mine, AssistStrings.emergencySuffix(.zh, isEmergency: true, amOwner: true))
+        // 英文双向：非空、不串中文、两向不同
+        let enTheirs = AssistStrings.emergencySuffix(.en, isEmergency: true, amOwner: false)
+        let enMine = AssistStrings.emergencySuffix(.en, isEmergency: true, amOwner: true)
+        XCTAssertNotEqual(enTheirs, enMine)
+        XCTAssertFalse(enTheirs.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+        // HelperStrings 同口径（两个角色 UI 都用同款方向逻辑）
+        XCTAssertEqual(HelperStrings.emergencySuffix(.zh, isEmergency: true, amOwner: true), " · 紧急联系人")
+        XCTAssertTrue(HelperStrings.emergencySuffix(.zh, isEmergency: true, amOwner: false).contains("你是"))
     }
 
     func testContactAddedConfirmsRelationAndEmergency() {

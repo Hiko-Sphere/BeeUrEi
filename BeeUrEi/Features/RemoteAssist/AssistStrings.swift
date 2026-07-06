@@ -90,7 +90,13 @@ enum AssistStrings {
         l == .zh ? "还没有绑定。下面按对方用户名添加。" : "No links yet. Add someone by username below."
     }
     static func pendingSuffix(_ l: Language) -> String { l == .zh ? " · 待对方接受" : " · awaiting their approval" }
-    static func emergencySuffix(_ l: Language) -> String { l == .zh ? " · 紧急联系人" : " · emergency contact" }
+    /// 紧急联系人徽标后缀，按**方向**区分：amOwner==false（对方是链 owner）=我是 TA 的紧急联系人（TA 遇险叫我，我对 TA 负责）；
+    /// 否则=对方是我的紧急联系人。此前两向都笼统显示"紧急联系人"，让人误读安全责任方向。isEmergency=false → 空串。
+    static func emergencySuffix(_ l: Language, isEmergency: Bool, amOwner: Bool?) -> String {
+        guard isEmergency else { return "" }
+        if amOwner == false { return l == .zh ? " · 你是 TA 的紧急联系人" : " · you're their emergency contact" }
+        return l == .zh ? " · 紧急联系人" : " · emergency contact"
+    }
     /// 对方此刻在线/待命——盲人据此优先呼叫"接得通"的联系人（与 web Family 在线圆点同义，服务端仅 accepted 才为 true）。
     static func onlineSuffix(_ l: Language) -> String { l == .zh ? " · 在线待命" : " · online" }
     static func dial(_ l: Language) -> String { l == .zh ? "拨打" : "Call" }

@@ -113,7 +113,13 @@ enum HelperStrings {
         l == .zh ? "还没有建立关系。点右上角「＋」按对方用户名发起，或让对方添加你后在上方确认。"
                  : "No links yet. Tap \"+\" to send a request by username, or approve theirs above."
     }
-    static func emergencySuffix(_ l: Language) -> String { l == .zh ? " · 紧急联系人" : " · emergency contact" }
+    /// 紧急联系人徽标后缀，按**方向**区分：amOwner==false（对方是链 owner）=我是 TA 的紧急联系人（TA 遇险叫我，我对 TA 负责）；
+    /// 否则=对方是我的紧急联系人。此前两向都笼统显示"紧急联系人"，让协助者误读安全责任方向。isEmergency=false → 空串。
+    static func emergencySuffix(_ l: Language, isEmergency: Bool, amOwner: Bool?) -> String {
+        guard isEmergency else { return "" }
+        if amOwner == false { return l == .zh ? " · 你是 TA 的紧急联系人" : " · you're their emergency contact" }
+        return l == .zh ? " · 紧急联系人" : " · emergency contact"
+    }
     static func callA11y(_ name: String, _ l: Language) -> String { l == .zh ? "呼叫 \(name)" : "Call \(name)" }
     static func familyNavTitle(_ l: Language) -> String { l == .zh ? "我的亲人" : "My Family" }
     static func addFamilyA11y(_ l: Language) -> String { l == .zh ? "添加亲人或求助者" : "Add family or requester" }

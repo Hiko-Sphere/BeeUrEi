@@ -245,6 +245,7 @@ struct FamilyLinkInfo: Codable, Sendable, Identifiable {
     let status: String?   // "pending"=待确认，"accepted"=已生效（旧数据无此字段按已接受）
     var outgoing: Bool?   // true=我发起、待对方确认；false/nil=对方发起或已生效
     var online: Bool?     // 对方此刻在线/待命（服务端仅 accepted 关系才为 true；旧/缺省按离线）——盲人据此优先呼叫接得通的人
+    var amOwner: Bool?    // 我是否为该链 owner（服务端 viewLink 提供）：定紧急联系人徽标方向——true/nil=对方是我的紧急联系人；false=我是对方的（我对 TA 负责）。此前 iOS 未解码=死字段。
     var isPending: Bool { status == "pending" }
     var isAccepted: Bool { (status ?? "accepted") == "accepted" }
 }

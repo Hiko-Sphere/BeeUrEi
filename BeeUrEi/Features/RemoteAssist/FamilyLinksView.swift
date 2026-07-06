@@ -77,7 +77,7 @@ struct FamilyLinksView: View {
                                     Text(l.memberName)
                                 }
                                 Text(l.relation
-                                     + (l.isEmergency ? AssistStrings.emergencySuffix(lang) : "")
+                                     + AssistStrings.emergencySuffix(lang, isEmergency: l.isEmergency, amOwner: l.amOwner)
                                      + (l.online == true ? AssistStrings.onlineSuffix(lang) : "")
                                      + (l.isPending ? AssistStrings.pendingSuffix(lang) : ""))
                                     .font(.caption).foregroundStyle(l.isPending ? Color.beeWarn : .secondary)

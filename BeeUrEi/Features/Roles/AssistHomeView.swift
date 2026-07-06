@@ -329,7 +329,7 @@ struct AssistHomeView: View {
                                 AvatarView(dataURL: l.memberAvatar, name: l.memberName, size: 36)
                                 VStack(alignment: .leading) {
                                     Text(l.memberName)
-                                    Text(l.relation + (l.isEmergency ? HelperStrings.emergencySuffix(lang) : ""))
+                                    Text(l.relation + HelperStrings.emergencySuffix(lang, isEmergency: l.isEmergency, amOwner: l.amOwner))
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
                                 Spacer()

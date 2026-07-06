@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, APIError, contentBlockedText, type FamilyLink, type IncomingLink, type SafetyTimer } from '../lib/api'
 import { hasUsableEmergencyContact } from '../lib/emergencyContacts'
+import { emergencyDirection } from '../lib/emergencyRelation'
 import { remainingText, durationName } from '../lib/safetyCheckin'
 import { classifyIdentifier } from '../lib/identifier'
 import { useI18n } from '../lib/i18n'
@@ -53,6 +54,15 @@ export function FamilyPage() {
     try { await api.setLinkEmergency(l.id, !l.isEmergency); toast(l.isEmergency ? t('已取消紧急联系人', 'Removed from emergency contacts') : t('已设为紧急联系人', 'Set as emergency contact'), 'ok'); void reload() }
     catch { toast(t('操作失败', 'Failed'), 'error') }
   }
+  // 紧急联系人徽标：按**方向**显示——「紧急联系人」=对方是我的；「你是 TA 的紧急联系人」=我对 TA 负责（TA 遇险叫我）。
+  // 此前两向都笼统显示「紧急联系人」，让协助者误读安全责任方向（谁遇险时叫谁）。
+  const emergencyBadge = (isEmergency: boolean | undefined, amOwner: boolean | undefined): string => {
+    const dir = emergencyDirection(isEmergency, amOwner)
+    if (dir === 'none') return ''
+    return dir === 'iAmTheirs'
+      ? ` · ${t('你是 TA 的紧急联系人', "You're their emergency contact")}`
+      : ` · ${t('紧急联系人', 'Emergency contact')}`
+  }
   const unblock = async (id: string) => { try { await api.unblock(id); toast(t('已解除拉黑', 'Unblocked'), 'ok'); void reload() } catch { toast(t('操作失败', 'Failed'), 'error') } }
   // 拉黑联系人（不必正在通话也能拉黑：经聊天骚扰也可在此处理）：拉黑 + 解除绑定，之后互不可呼叫/发消息。
   const blockContact = async (link: FamilyLink) => {
@@ -85,7 +95,8 @@ export function FamilyPage() {
                 <Avatar name={l.ownerName} src={l.ownerAvatar} size={40} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{l.ownerName}</div>
-                  <div className="text-xs text-faint">{l.relation}{l.isEmergency ? ` · ${t('紧急联系人', 'Emergency')}` : ''}</div>
+                  {/* 待确认请求：发起者恒为链 owner，故 amOwner=false → 若设了紧急即「你是 TA 的紧急联系人」（接受前就讲清责任方向）。 */}
+                  <div className="text-xs text-faint">{l.relation}{emergencyBadge(l.isEmergency, false)}</div>
                 </div>
                 <button onClick={() => accept(l.id)} className="flex h-9 w-9 items-center justify-center rounded-full bg-ok text-white" aria-label={t('接受', 'Accept')}><IconCheck width={18} height={18} /></button>
                 <button onClick={() => remove(l.id, t('已拒绝', 'Rejected'))} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-danger" aria-label={t('拒绝', 'Reject')}><IconX width={18} height={18} /></button>
@@ -113,7 +124,7 @@ export function FamilyPage() {
                         <span className="h-1.5 w-1.5 rounded-full bg-ok" aria-hidden="true" />{t('在线', 'Online')} ·{' '}
                       </span>
                     )}
-                    <span className="text-faint">{l.relation}{l.isEmergency ? ` · ${t('紧急联系人', 'Emergency')}` : ''}</span>
+                    <span className="text-faint">{l.relation}{emergencyBadge(l.isEmergency, l.amOwner)}</span>
                     {l.phone && /\d/.test(l.phone) && (
                       // 联系电话（tap-to-dial）：服务端一直下发 phone 却从未在 web 呈现（死字段）。是 App 内通话失败时
                       // 用普通电话兜底联系对方的安全退路（对齐 iOS EmergencyPhoneFallback 的 tel: 拨号）。

@@ -43,6 +43,30 @@ final class WeatherPhraseTests: XCTestCase {
         XCTAssertFalse(snow.contains("带伞")) // 雪不该给"带伞"建议
     }
 
+    /// 严寒（todayMin ≤ -10℃）：升级为**健康**提示（保暖 + 减少在外逗留），与 ≥35℃ 高温提示对称；仍保留结冰警告。
+    /// 冰点以下但未到严寒（-10 < min ≤ 0）：维持原"冰点以下、结冰、小心"通用提示，不误升级。
+    func testBitterColdHealthAdvice() {
+        // 严寒（clear/cloudy 无降水，走温度分支）：中英均含保暖/exposure 语义 + 仍含结冰警告。
+        let zh = WeatherPhrase.advice(code: 0, todayMax: -8, todayMin: -15, precipProbability: 0, language: .zh)!
+        XCTAssertTrue(zh.contains("严寒") && zh.contains("保暖"), "严寒须给保暖健康提示：\(zh)")
+        XCTAssertTrue(zh.contains("结冰"), "严寒仍须保留结冰警告：\(zh)")
+        let en = WeatherPhrase.advice(code: 0, todayMax: -8, todayMin: -15, precipProbability: 0, language: .en)!
+        XCTAssertTrue(en.lowercased().contains("bitterly cold") && en.lowercased().contains("dress warmly"), "en 严寒文案：\(en)")
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(en)")
+        // 边界：min = -10 恰好触发严寒（≤ -10）。
+        XCTAssertTrue(WeatherPhrase.advice(code: 2, todayMax: -5, todayMin: -10, precipProbability: 0, language: .zh)!.contains("严寒"))
+        // 冰点以下但 > -10（如 -5）：仍是通用"冰点以下"提示，不误升级为严寒。
+        let mild = WeatherPhrase.advice(code: 0, todayMax: 3, todayMin: -5, precipProbability: 0, language: .zh)!
+        XCTAssertTrue(mild.contains("冰点以下") && !mild.contains("严寒"), "轻度冰冻不该升级为严寒：\(mild)")
+        // 严寒 + 强风：健康提示 + 大风盖车声提示都在（withWind 生效）。
+        let windy = WeatherPhrase.advice(code: 0, todayMax: -8, todayMin: -15, precipProbability: 0, windSpeedKmh: 50, language: .zh)!
+        XCTAssertTrue(windy.contains("保暖") && windy.contains("盖过车流声"))
+        // 严寒即便高 UV（冷晴天）也以严寒/结冰为先，不被防晒压过（安全>舒适，排在防晒之前）。
+        let coldSunny = WeatherPhrase.advice(code: 0, todayMax: -8, todayMin: -15, precipProbability: 0, uvIndex: 8, language: .zh)!
+        XCTAssertTrue(coldSunny.contains("严寒"))
+        XCTAssertFalse(coldSunny.contains("防晒"), "冷晴天不该让防晒盖过严寒：\(coldSunny)")
+    }
+
     /// 降雪（WMO 71/73/75/77/85/86）应给**防滑/结冰**建议，而非雨的"带伞"——雪天不打伞，真危险是积雪结冰+盲道被盖。
     func testSnowAdviceSeparateFromRain() {
         for code in [71, 73, 77, 85, 86] {

@@ -188,6 +188,12 @@ public enum WeatherPhrase {
         // 安全高于舒适。冷晴天（todayMin≤0 且 uvIndex≥6，如初春/高原）绝不能让防晒提示压过结冰警告（见测）。
         // 仍排在高温之后：≥35℃ 的极端热天以防暑为先（那种日子的 min≤0 极罕见）。
         if let mn = todayMin, mn <= 0 {
+            // 严寒（≤ -10℃）：与 ≥35℃ 的高温**健康**提示对称——此前冷侧只警示"结冰"(滑倒)，漏了长时间暴露的
+            // 冻伤/失温风险。盲人导航更慢=在外时间更长，且看不到温度计，须主动提醒保暖、减少在外逗留。仍含结冰警告。
+            if mn <= -10 {
+                return withWind(language == .zh ? "严寒，路面可能结冰，注意保暖、减少在外逗留时间。"
+                                                : " Bitterly cold — surfaces may be icy; dress warmly and limit time outside.")
+            }
             return withWind(language == .zh ? "气温在冰点以下，路面可能结冰，出行小心。" : " Below freezing; watch for ice.")
         }
         if highUV {

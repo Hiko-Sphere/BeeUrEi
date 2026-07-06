@@ -42,6 +42,9 @@ export interface User {
   // 勿扰时段（Do-Not-Disturb）：在此时段内**抑制软通知的推送横幅**（好友请求/聊天/到家提醒等），
   // 但站内通知照常持久化（醒来可回看）。**紧急告警/来电/SOS 走独立扇出、绝不受此影响**（见 quietHours.ts）。
   quietHours?: QuietHours
+  // 按类别静音的推送横幅（'social'|'route'|'location'）：与勿扰时段正交——**时段**是何时静，**类别**是哪类静。
+  // 仅抑制该类**推送横幅**，站内通知照常持久化（可回看）。紧急/安全/来电/报到经 notifCategory→null 天然豁免、永不可被静音。
+  mutedPushCategories?: string[]
 }
 
 /// 勿扰时段配置（服务端据收件人本地时刻判定，正确处理跨午夜与时区/DST）。

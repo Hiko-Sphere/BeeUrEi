@@ -30,6 +30,8 @@ export interface RecordingInfo { id: string; callId: string; ownerId: string; ow
 export interface NotificationInfo { id: string; userId: string; kind: string; title: string; body: string; data?: Record<string, string> | null; createdAt: number; readAt?: number | null }
 /// 勿扰时段：分钟-of-day [0,1439] + IANA 时区。start>end 表跨午夜（22:00→07:00）。
 export interface QuietHoursInfo { enabled: boolean; startMinute: number; endMinute: number; tz: string }
+// 可按类静音的推送横幅类别（与服务端 MUTABLE_CATEGORIES 一致）。危急类不在此列、永不可静音。
+export type PushCategory = 'social' | 'route' | 'location'
 export interface RouteWaypoint { lat: number; lng: number; note?: string }
 /// 路线库条目（坐标全程 WGS-84——编辑器必须用 OSM 瓦片，绝不可换 amap GCJ-02 瓦片，会系统性偏移百米级）。
 export interface SavedRouteInfo { id: string; ownerId: string; createdBy: string; name: string; waypoints: RouteWaypoint[]; createdAt: number; updatedAt: number; role: 'owner' | 'creator' }
@@ -332,6 +334,9 @@ export const api = {
   // 勿扰时段：软通知在此时段只抑制推送横幅、站内通知照常；紧急/来电不受影响。
   quietHours: () => get('/api/notifications/quiet-hours') as Promise<{ quietHours: QuietHoursInfo | null }>,
   setQuietHours: (q: QuietHoursInfo) => put('/api/notifications/quiet-hours', q) as Promise<{ quietHours: QuietHoursInfo }>,
+  // 按类别静音推送横幅（与勿扰时段正交）：muted 为已静音类别；available 为可选类别。危急类不可静音。
+  pushCategories: () => get('/api/notifications/push-categories') as Promise<{ muted: PushCategory[]; available: PushCategory[] }>,
+  setPushCategories: (muted: PushCategory[]) => put('/api/notifications/push-categories', { muted }) as Promise<{ muted: PushCategory[] }>,
   // 紧急医疗信息：本人查看/填写自己的；作为紧急亲友查看某遇险者的（施救辅助）。
   medicalInfo: () => get('/api/account/medical') as Promise<{ medicalInfo: string; updatedAt: number | null }>,
   setMedicalInfo: (text: string) => put('/api/account/medical', { text }) as Promise<{ ok: boolean; cleared?: boolean }>,

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiURL } from '../lib/config'
-import { api, tokenStore, APIError, contentBlockedText, reencodeToJpeg, blobToDataUrl, uploadVerificationDoc, type SelfView, type SessionInfo, type VerificationStatusInfo, type QuietHoursInfo } from '../lib/api'
+import { api, tokenStore, APIError, contentBlockedText, reencodeToJpeg, blobToDataUrl, uploadVerificationDoc, type SelfView, type SessionInfo, type VerificationStatusInfo, type QuietHoursInfo, type PushCategory } from '../lib/api'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { subscribeWebPush, unsubscribeWebPush, isWebPushSubscribed, webPushSupported, resyncWebPushSubscription } from '../lib/webPush'
@@ -157,6 +157,9 @@ export function AccountPage() {
 
       {/* 勿扰时段：软通知在此时段只抑制推送横幅，紧急告警/来电不受影响 */}
       <QuietHoursCard />
+
+      {/* 按类别静音推送横幅（与勿扰时段正交）：可关掉某几类的推送，紧急/安全/来电永不可静音 */}
+      <PushCategoriesCard />
 
       {/* 紧急医疗信息：仅紧急联系人遇险时可见，辅助施救 */}
       <MedicalInfoCard />
@@ -763,6 +766,66 @@ function QuietHoursCard() {
           <p className="w-full text-xs text-faint">{t(`时区：${tz}（跨午夜如 22:00–07:00 自动识别）`, `Time zone: ${tz} (overnight windows like 22:00–07:00 are handled)`)}</p>
         </div>
       )}
+    </Card>
+  )
+}
+
+/// 按类别静音推送横幅（与勿扰时段正交：时段决定"何时静"，类别决定"哪类静"）。
+/// 关掉某类只抑制该类**推送横幅**，站内通知照常持久化、可回看。紧急告警/来电/安全告警/安全报到
+/// 永不可静音（服务端 notifCategory→null 保证，非仅前端不展示）。
+const PUSH_CAT_META: { key: PushCategory; zh: string; en: string; descZh: string; descEn: string }[] = [
+  { key: 'social', zh: '社交', en: 'Social', descZh: '好友请求、群成员变更', descEn: 'Friend requests, group changes' },
+  { key: 'route', zh: '路线', en: 'Routes', descZh: '亲友为你添加/修改/删除路线', descEn: 'Routes added/changed/removed for you' },
+  { key: 'location', zh: '位置', en: 'Location', descZh: '到达/离开常用地点、共享者低电量', descEn: 'Place arrivals/departures, low battery' },
+]
+
+function PushCategoriesCard() {
+  const { t } = useI18n()
+  const toast = useToast()
+  const [loading, setLoading] = useState(true)
+  const [muted, setMuted] = useState<PushCategory[]>([])
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      try { const r = await api.pushCategories(); if (alive) setMuted(r.muted) }
+      catch { /* 读取失败：留空（未静音） */ } finally { if (alive) setLoading(false) }
+    })()
+    return () => { alive = false }
+  }, [])
+
+  // 静音=在集合内。开关 on 表示"接收推送"（即未静音），故 checked = !isMuted，符合直觉。
+  const toggle = async (key: PushCategory) => {
+    const next = muted.includes(key) ? muted.filter((k) => k !== key) : [...muted, key]
+    const prev = muted
+    setMuted(next); setSaving(true)
+    try { const r = await api.setPushCategories(next); setMuted(r.muted) }
+    catch { setMuted(prev); toast(t('保存失败', 'Failed to save'), 'error') } finally { setSaving(false) }
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="text-sm font-semibold">{t('推送类别', 'Push categories')}</div>
+      <p className="mt-1 text-xs text-faint">{t('关掉某类后不再弹出该类的推送横幅（仍会记入通知列表）。紧急告警、来电、安全与账号提醒永不受影响。', "Turn a category off to stop its push banners (still saved to your notifications). Emergency alerts, calls, and security notices are never affected.")}</p>
+      <div className="mt-4 divide-y divide-[var(--line)]">
+        {PUSH_CAT_META.map((c) => {
+          const on = !muted.includes(c.key) // on = 接收推送
+          return (
+            <div key={c.key} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+              <div>
+                <div className="text-sm font-medium">{t(c.zh, c.en)}</div>
+                <p className="mt-0.5 text-xs text-faint">{t(c.descZh, c.descEn)}</p>
+              </div>
+              <button role="switch" aria-checked={on} disabled={loading || saving} onClick={() => void toggle(c.key)}
+                className={`relative h-7 w-12 shrink-0 rounded-full transition ${on ? 'bg-honey' : 'bg-[var(--line)]'} disabled:opacity-50`}
+                aria-label={t(`${c.zh}推送`, `${c.en} push`)}>
+                <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${on ? 'left-[22px]' : 'left-0.5'}`} />
+              </button>
+            </div>
+          )
+        })}
+      </div>
     </Card>
   )
 }

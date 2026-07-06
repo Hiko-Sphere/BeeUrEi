@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import type { Store, User } from '../db/store'
 import type { PushSender } from '../push/apns'
 import { NoopWebPushSender, type WebPushSender } from '../push/webPush'
+import { NoopMailer, type Mailer } from '../mail/mailer'
+import { securityEventMail } from '../mail/templates'
 import { totalUnreadFor } from '../db/unread'
 import { shouldSuppressPush } from './quietHours'
 import { isCategoryMuted } from './notifCategories'
@@ -11,6 +13,11 @@ import { pushLang, pushStrings, type SecurityEvent } from '../push/pushStrings'
 // notifyUser 有 11 个调用点分布 4 条注册链，穿参改动面大且易漏；统一投递本就该单点配置。
 let webPushSender: WebPushSender = new NoopWebPushSender()
 export function setNotifyWebPush(sender: WebPushSender): void { webPushSender = sender }
+
+// 安全事件邮件器（模块单例，同上）：账号安全变更除 App 内+推送外，再发一封**带外**邮件到本人已验证邮箱——
+// 邮箱是持会话令牌的攻击者通常不掌握的独立通道（Apple/Google 惯例）。默认 Noop（未配邮件器则不额外发）。
+let securityMailer: Mailer = new NoopMailer()
+export function setNotifySecurityMailer(m: Mailer): void { securityMailer = m }
 
 /// 站内通知 + 离线推送的统一投递：
 /// 先**持久化**到 notifications 表（权威、可回看、登录后必能看到），
@@ -63,6 +70,16 @@ export function notifyUser(
 export function notifyAccountSecurity(store: Store, push: PushSender, user: User, event: SecurityEvent): void {
   const { title, body } = pushStrings.securityNotice(event, pushLang(user.language))
   notifyUser(store, push, user.id, `security_${event}`, title, body)
+  // 带外邮件告警：安全变更除 App 内+推送外，再发一封到本人**已验证**邮箱——攻击者持会话令牌通常不掌握邮箱。
+  // 取**最新**用户态（email/emailVerified 可能刚被本次操作改动）：故意的——email_changed 后新邮箱未验证→此处跳过，
+  // 不会把"邮箱已改"发到攻击者刚设的新地址（改邮箱另有专发旧地址的 emailChangedAlertMail 兜底）。best-effort 绝不阻断。
+  try {
+    const fresh = store.findById(user.id)
+    if (fresh?.email && fresh.emailVerified) {
+      const mail = securityEventMail(pushStrings.securityNotice(event, 'zh'), pushStrings.securityNotice(event, 'en'))
+      void securityMailer.send(fresh.email, mail.subject, mail.text, mail.html).catch(() => { /* best-effort */ })
+    }
+  } catch { /* 邮件告警失败绝不阻断已完成的安全变更或站内/推送通知 */ }
 }
 
 /// 新设备登录本人账号 → 即时预警本人（Apple/Google 式"新登录提醒"，接管早期信号）。

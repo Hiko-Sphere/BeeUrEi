@@ -160,6 +160,17 @@ export function emailChangedAlertMail(newEmail: string): Mail {
   })
 }
 
+/// 账号安全事件邮件（改密/关 2FA/加解绑登录方式等 → 发给本人已验证邮箱的带外告警）。
+/// zh/en 为 pushStrings.securityNotice 两语的 {title, body}（正文已含"若非本人操作请立即…"指引，直接复用）。
+export function securityEventMail(zh: { title: string; body: string }, en: { title: string; body: string }): Mail {
+  return renderNotice({
+    subjectZh: zh.title, subjectEn: en.title,
+    titleZh: zh.title, titleEn: en.title,
+    bodyZh: zh.body, bodyEn: en.body,
+    preheaderZh: zh.title, preheaderEn: en.title,
+  })
+}
+
 /// 登录验证码（邮箱验证码登录 / 首次登录即注册）。
 export function loginCodeMail(code: string): Mail {
   return render({

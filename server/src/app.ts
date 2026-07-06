@@ -53,7 +53,7 @@ import { LoginThrottle } from './auth/loginThrottle'
 import { ConsoleMailer, type Mailer } from './mail/mailer'
 import { NoopPushSender, type PushSender } from './push/apns'
 import { CountingWebPushSender, NoopWebPushSender, type WebPushSender } from './push/webPush'
-import { setNotifyWebPush } from './notifications/notify'
+import { setNotifyWebPush, setNotifySecurityMailer } from './notifications/notify'
 import { setAmapMetrics } from './nav/amapClient'
 import { createAppleVerifier, type AppleTokenVerifier } from './auth/apple'
 
@@ -167,6 +167,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   pushSender.onOutcome = (ok) => metrics.inc(ok ? 'apns_sent_total' : 'apns_failed_total')
   const webPushSender: WebPushSender = new CountingWebPushSender(rawWebPushSender, (n) => metrics.inc(n))
   setNotifyWebPush(webPushSender) // notifyUser 统一投递的 Web Push 通道（模块单例，见 notify.ts）——包裹后注入，计数覆盖该路
+  setNotifySecurityMailer(mailer) // 账号安全变更的带外邮件告警通道（模块单例，见 notifyAccountSecurity）
 
   // 监控（D3）：记录每次响应的状态码族，供 /metrics 暴露给 Prometheus。
   // 跳过 /metrics 自身——否则每次抓取都会把自己计入 2xx，污染请求量指标（见复审 #4）。

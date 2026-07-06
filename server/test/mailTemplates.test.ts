@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { loginCodeMail, emailVerificationMail, passwordResetMail, emailChangedAlertMail } from '../src/mail/templates'
+import { loginCodeMail, emailVerificationMail, passwordResetMail, emailChangedAlertMail, securityEventMail } from '../src/mail/templates'
 
 describe('交易邮件模板（登录码 / 邮箱验证 / 重置密码）', () => {
   const cases = [
@@ -72,5 +72,21 @@ describe('邮箱变更告警邮件（发给旧邮箱）', () => {
 
   it('与验证码邮件主题不同（收件人一眼分清"是告警不是验证码"）', () => {
     expect(emailChangedAlertMail('x@y.com').subject).not.toBe(emailVerificationMail('1').subject)
+  })
+})
+
+describe('账号安全事件邮件（改密/关 2FA 等 → 已验证邮箱带外告警）', () => {
+  it('双语标题与正文取自 securityNotice · 无验证码 · 品牌 · 合法 HTML', () => {
+    const zh = { title: '账号密码已修改', body: '你的账号密码刚刚被修改。若非本人操作，请立即重置密码。' }
+    const en = { title: 'Password changed', body: 'Your account password was just changed. If this was not you, reset your password immediately.' }
+    const m = securityEventMail(zh, en)
+    expect(m.subject).toContain('账号密码已修改')
+    expect(m.subject).toContain('Password changed')
+    expect(m.text).toContain(zh.body)   // 正文双语
+    expect(m.text).toContain(en.body)
+    expect(m.html).toContain('蜂之眼')
+    expect(m.html.startsWith('<!doctype html>')).toBe(true)
+    expect(m.html).toMatch(/do not reply/i)
+    expect((m.html.match(/<table/g) || []).length).toBe((m.html.match(/<\/table>/g) || []).length)
   })
 })

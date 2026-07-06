@@ -6,6 +6,11 @@ export interface Mailer {
   send(to: string, subject: string, text: string, html?: string): Promise<void>
 }
 
+/// 空邮件器：什么都不做。notify 模块的安全邮件单例默认——未注入真实邮件器时，安全事件仅走 App 内+推送、不额外发信。
+export class NoopMailer implements Mailer {
+  async send(): Promise<void> { /* no-op */ }
+}
+
 /// 控制台邮件器：打印到日志。零依赖、零外部服务（管理员可从日志读验证码）。
 export class ConsoleMailer implements Mailer {
   // 允许注入 sink 以便单测捕获（默认 console.log）。

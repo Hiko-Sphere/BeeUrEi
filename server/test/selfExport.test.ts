@@ -61,6 +61,7 @@ describe('GET /api/account/export', () => {
     await a.inject({ method: 'PUT', url: '/api/places/home', headers: auth, payload: { address: '幸福路1号' } })          // 常用地点
     await a.inject({ method: 'POST', url: '/api/safety/checkin/start', headers: auth, payload: { durationMinutes: 30, note: '走夜路' } }) // 安全报到
     await a.inject({ method: 'PUT', url: '/api/notifications/quiet-hours', headers: auth, payload: { enabled: true, startMinute: 1320, endMinute: 420, tz: 'Asia/Shanghai' } }) // 勿扰
+    await a.inject({ method: 'PUT', url: '/api/notifications/push-categories', headers: auth, payload: { muted: ['route', 'social'] } }) // 按类别静音偏好
 
     const body = (await a.inject({ method: 'GET', url: '/api/account/export', headers: auth })).json()
     expect(body.savedPlaces.length).toBe(1)
@@ -68,6 +69,8 @@ describe('GET /api/account/export', () => {
     expect(body.safetyTimers.length).toBe(1)
     expect(body.safetyTimers[0]).toMatchObject({ note: '走夜路', status: 'active' })
     expect(body.profile.quietHours).toMatchObject({ enabled: true, startMinute: 1320, endMinute: 420, tz: 'Asia/Shanghai' })
+    // 按类别静音偏好也在 profile（与 quietHours 同为粗粒度勿扰配置，GDPR 访问完整性）；规整为稳定序。
+    expect(body.profile.mutedPushCategories).toEqual(['social', 'route'])
     await a.close()
   })
 

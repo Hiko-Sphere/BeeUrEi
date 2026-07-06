@@ -18,6 +18,7 @@ final class VoiceCommandParserTests: XCTestCase {
             ("几路车", .readBus), ("这是什么车", .readBus), ("which bus is this", .readBus),
             ("光线怎么样", .readLight), ("灯开着吗", .readLight), ("how bright is it", .readLight),
             ("今天天气怎么样", .weather), ("会下雨吗", .weather), ("what's the weather", .weather),
+            ("要带伞吗", .weather), ("今天冷不冷", .weather), ("外面热不热", .weather), ("do i need an umbrella", .weather),
             ("原路返回", .goHome), ("带我回去", .goHome), ("take me back", .goHome),
             ("retrace my steps", .goHome), ("retrace my route", .goHome), ("go back the way i came", .goHome),
             ("读整页", .readFullPage), ("读一下整页文档", .readFullPage), ("read the whole page", .readFullPage),
@@ -200,6 +201,9 @@ final class VoiceCommandParserTests: XCTestCase {
         XCTAssertEqual(VoiceCommandParser.parse("呼叫家人"), .help)
         // 发消息给具体人仍是 sendMessage（parseSendMessage 先行），不被 callContact 抢。
         XCTAssertEqual(VoiceCommandParser.parse("给妈妈发消息说我到了"), .sendMessage(to: "妈妈", text: "我到了"))
+        // 消息内容含天气触发词（"带伞"）仍是 sendMessage：parseSendMessage 先行于 weather，内容不泄漏成天气查询
+        // （补 weather 收"带伞/冷不冷/热不热"自然问法后的回归守卫）。
+        XCTAssertEqual(VoiceCommandParser.parse("给妈妈发消息说记得带伞"), .sendMessage(to: "妈妈", text: "记得带伞"))
         // 救命最高优先：即便含"呼叫"也走 sos。
         XCTAssertEqual(VoiceCommandParser.parse("救命"), .sos)
     }

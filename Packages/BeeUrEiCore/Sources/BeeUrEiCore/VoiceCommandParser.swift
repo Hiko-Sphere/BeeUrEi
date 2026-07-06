@@ -109,7 +109,9 @@ public enum VoiceCommandParser {
                 "暗不暗", "太暗", "很暗", "多暗", "灯关", "关灯", "灯还开", "灯还亮", "开着灯", "有开灯", "灯亮吗",
                 "how bright", "light level", "brightness", "is the light on", "lights on",
                 "is it dark", "how dark", "too dark", "is the light off", "light off", "lights off", "is it bright"]) { return .readLight }
-        if has(["天气", "下雨", "气温", "weather", "temperature", "rain"]) { return .weather }
+        // 也收自然问法："要带伞吗/带伞"(降水)、"冷不冷/热不热"(气温)——天气播报正好答这些（带伞建议+气温+冷/热提示），
+        // 此前这些自然口语全落 unknown（无应答），与上方 readLight 收"暗不暗/灯关了吗"同因补齐。问句形式极少撞地名。
+        if has(["天气", "下雨", "气温", "带伞", "打伞", "冷不冷", "热不热", "weather", "temperature", "rain", "umbrella"]) { return .weather }
         // 日常信息（时间/电量/日期）：盲人看不到时钟/电量图标/日历，靠语音随时查——最高频的日常查询。
         // 置于具体命令之后、通用 look 之前：与现有触发词无子串冲突（"打电话"含"电话"非"电量"；readBus 的"几路"非"几点"）。
         if has(["几点", "报时", "报个时", "报一下时间", "报下时间", "告诉我时间", "现在时间", "什么时间", "时间是", "what time", "the time", "tell me the time"]) { return .time }

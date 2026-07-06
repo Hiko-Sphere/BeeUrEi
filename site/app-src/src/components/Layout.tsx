@@ -34,6 +34,10 @@ export function Layout({ children }: { children: ReactNode }) {
   const [missedCalls, setMissedCalls] = useState(0) // 未看未接来电（打开通话记录即清）
   const [available, setAvailable] = useState<boolean>(() => { try { return localStorage.getItem(LS_AVAIL) === '1' } catch { return false } })
   const [menuOpen, setMenuOpen] = useState(false)
+  // 离线/失联可见化（假安心防护）：轮询失败或浏览器断网时，协助者其实已收不到新的求助/告警，
+  // 但界面仍显示旧数据、看着一切正常——必须显式告知"你已离线"。恢复由**下一次成功轮询**清除
+  // （而非 online 事件直接清：网络接口恢复≠服务器可达，见 tick 内 setOffline(false)）。
+  const [offline, setOffline] = useState(false)
   const loc = useLocation()
 
   // 全站配置（公告/维护横幅、录制策略） + 通知未读数轮询。
@@ -42,10 +46,17 @@ export function Layout({ children }: { children: ReactNode }) {
   useEffect(() => {
     let alive = true
     void api.appConfig().then((c) => alive && setConfig(c)).catch(() => {})
-    const tick = () => void api.unreadSummary().then((s) => { if (alive) { setUnread(s.notifications); setChatUnread(s.messages); setMissedCalls(s.missedCalls ?? 0) } }).catch(() => {})
+    const tick = () => void api.unreadSummary()
+      .then((s) => { if (alive) { setOffline(false); setUnread(s.notifications); setChatUnread(s.messages); setMissedCalls(s.missedCalls ?? 0) } })
+      .catch(() => { if (alive) setOffline(true) }) // 轮询失败=当前收不到新告警——显式亮"已离线"，绝不静默装正常
     tick()
     const id = setInterval(tick, 30_000)
-    return () => { alive = false; clearInterval(id) }
+    // 浏览器断网事件：立即亮横幅（不等下一次 30s 轮询）；恢复事件立即重试一次轮询（成功才清横幅）。
+    const onOffline = () => { if (alive) setOffline(true) }
+    const onOnline = () => tick()
+    window.addEventListener('offline', onOffline)
+    window.addEventListener('online', onOnline)
+    return () => { alive = false; clearInterval(id); window.removeEventListener('offline', onOffline); window.removeEventListener('online', onOnline) }
   }, [loc.pathname])
 
   // 浏览器标签标题带未读总数前缀 "(N) BeeUrEi 协助者"（聊天+通知）：后台标签也能在标签条看到有未读。
@@ -109,6 +120,12 @@ export function Layout({ children }: { children: ReactNode }) {
         <a href="#main" className="skip-link">{t('跳到主要内容', 'Skip to main content')}</a>
         {/* 路由切换朗读：持久隐藏 aria-live 区，路由变化时播报当前页名，读屏用户跳转后知道身处何页。 */}
         <div aria-live="polite" aria-atomic="true" className="sr-only">{activeLabel}</div>
+        {/* 离线横幅（假安心防护）：轮询失败/断网时协助者已收不到新求助与告警——必须显式可见。role=alert 读屏即时可闻。 */}
+        {offline && (
+          <div role="alert" className="bg-danger px-4 py-2 text-center text-sm font-medium text-white">
+            {t('网络已断开——你暂时收不到新的消息与紧急告警', "You're offline — new messages and emergency alerts can't reach you right now")}
+          </div>
+        )}
         {/* 全站公告 / 维护横幅 */}
         {config?.maintenance?.enabled && (
           <div className="bg-danger px-4 py-2 text-center text-sm font-medium text-white">{config.maintenance.message || t('系统维护中', 'Under maintenance')}</div>

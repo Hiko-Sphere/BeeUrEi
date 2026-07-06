@@ -12,12 +12,16 @@ public struct TransitLeg: Decodable, Sendable, Equatable {
     public let fromStop: String?   // 上车站
     public let toStop: String?     // 下车站
     public let stops: Int?         // 乘坐站数（含到站）
+    public let entrance: String?   // 地铁进站口名（如"A口"）——盲人从哪个口进站；站口相距远、走错极难折返
+    public let exit: String?       // 地铁出站口名（如"D口"）——从哪个口出站；同上，过城落地的关键指令
     public let distanceMeters: Double
     public let durationSeconds: Double
     public init(kind: TransitLegKind, line: String?, fromStop: String?, toStop: String?,
-                stops: Int?, distanceMeters: Double, durationSeconds: Double) {
+                stops: Int?, entrance: String? = nil, exit: String? = nil,
+                distanceMeters: Double, durationSeconds: Double) {
         self.kind = kind; self.line = line; self.fromStop = fromStop; self.toStop = toStop
-        self.stops = stops; self.distanceMeters = distanceMeters; self.durationSeconds = durationSeconds
+        self.stops = stops; self.entrance = entrance; self.exit = exit
+        self.distanceMeters = distanceMeters; self.durationSeconds = durationSeconds
     }
 }
 
@@ -69,17 +73,23 @@ public enum TransitPlanFormatter {
                 let verbZh = hasRidden ? "换乘" : "乘坐"
                 let verbEn = hasRidden ? "transfer to" : "take"
                 hasRidden = true
+                // 进/出站口按乘客动作顺序：进站(entrance)→上车→坐N站→下车→出站(exit)。仅地铁段有（服务端只对 subway 置），
+                // 公交段 entrance/exit 恒 nil→自然跳过。站口相距甚远、盲人走错口极难折返，是过城落地的关键指令。
                 if zh {
                     var s = "\(verbZh)\(line)"
+                    if let e = clean(leg.entrance) { s += "，从\(e)进站" }
                     if let f = clean(leg.fromStop) { s += "，\(f)上车" }
                     if let stops = leg.stops, stops > 0 { s += "，坐\(stops)站" }
                     if let t = clean(leg.toStop) { s += (leg.stops ?? 0) > 0 ? "到\(t)下车" : "，\(t)下车" }
+                    if let x = clean(leg.exit) { s += "，从\(x)出站" }
                     parts.append(s + rideDurationSuffix(leg.durationSeconds, zh: true))
                 } else {
                     var s = "\(verbEn) \(line)"
+                    if let e = clean(leg.entrance) { s += ", enter at \(e)" }
                     if let f = clean(leg.fromStop) { s += " from \(f)" }
                     if let stops = leg.stops, stops > 0 { s += ", ride \(stops) stop\(stops == 1 ? "" : "s")" }
                     if let t = clean(leg.toStop) { s += " to \(t)" }
+                    if let x = clean(leg.exit) { s += ", exit at \(x)" }
                     parts.append(s + rideDurationSuffix(leg.durationSeconds, zh: false))
                 }
             case .railway:

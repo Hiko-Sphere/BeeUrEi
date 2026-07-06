@@ -319,6 +319,8 @@ export interface TransitLeg {
   fromStop?: string       // 上车站
   toStop?: string         // 下车站
   stops?: number          // 乘坐站数（含到站）
+  entrance?: string       // 地铁进站口名（如"A口"）——盲人从哪个口进站，站口相距远、走错极难折返
+  exit?: string           // 地铁出站口名（如"D口"）——从哪个口出站，同上，是盲人过城的关键落地指令
   distanceMeters: number  // 步行距离 或 乘车区间距离
   durationSeconds: number
 }
@@ -353,6 +355,9 @@ export async function amapTransit(origin: string, destination: string, city: str
   interface Segment {
     walking?: { distance?: string; duration?: string }
     bus?: { buslines?: Busline[] }
+    // 地铁进/出站口（高德按 segment 返回；空的用空对象占位）——盲人从哪个口进/出站是过城落地的关键指令，此前被整段丢弃。
+    entrance?: { name?: string }
+    exit?: { name?: string }
     railway?: { name?: string; trip?: string; distance?: string; time?: string; departure_stop?: Stop; arrival_stop?: Stop }
   }
   const data = (await res.json()) as {
@@ -382,6 +387,9 @@ export async function amapTransit(origin: string, destination: string, city: str
         fromStop: (line.departure_stop?.name ?? '').trim() || undefined,
         toStop: (line.arrival_stop?.name ?? '').trim() || undefined,
         stops,
+        // 进/出站口仅地铁有意义（公交无"站口"）；空对象/空名 → undefined，绝不报"从口进站"半句。
+        entrance: isSubway ? (seg.entrance?.name ?? '').trim() || undefined : undefined,
+        exit: isSubway ? (seg.exit?.name ?? '').trim() || undefined : undefined,
         distanceMeters: numOrZero(line.distance),
         durationSeconds: numOrZero(line.duration),
       })

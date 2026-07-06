@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { amapWalking, amapGeocode, amapConfigured, AmapError } from '../src/nav/amapClient'
+import { amapWalking, amapGeocode, amapConfigured, AmapError, amapTransit } from '../src/nav/amapClient'
 
 /// 高德客户端单测：折线解析（跳过非法点、distance 非数字兜底为 0，绝不外发 NaN）、未配置兜底，
 /// 以及**响应状态校验**（key 平台不符等错误抛 AmapError，不静默退化成"目的地未找到"）。
@@ -67,6 +67,38 @@ describe('amapClient（国内步行导航）', () => {
     await expect(amapGeocode('天安门')).rejects.toBeInstanceOf(AmapError)
     await expect(amapGeocode('天安门')).rejects.toMatchObject({ infocode: '10009', info: 'USERKEY_PLAT_NOMATCH' })
     await expect(amapWalking('116.4,39.9', '116.5,39.9')).rejects.toBeInstanceOf(AmapError)
+  })
+
+  it('公交方案：地铁段解出进/出站口（entrance/exit），公交段不携带站口', async () => {
+    process.env.AMAP_API_KEY = 'testkey'
+    // 高德 transit/integrated 响应：一段地铁（带 entrance/exit）+ 一段公交（无站口）。空对象/空名的兜底一并覆盖。
+    vi.stubGlobal('fetch', vi.fn(async () => ok({
+      status: '1', infocode: '10000',
+      route: { transits: [{ duration: '1800', walking_distance: '200', segments: [
+        {
+          entrance: { name: 'A口' }, exit: { name: 'D口' },
+          bus: { buslines: [{ name: '地铁1号线(苹果园-四惠东)', type: '地铁', via_num: '3',
+                              distance: '5000', duration: '600',
+                              departure_stop: { name: '人民广场' }, arrival_stop: { name: '徐家汇' } }] },
+        },
+        {
+          // 公交段：即便高德给了 entrance 空对象，也不该落到 bus 腿上（公交无"站口"概念）。
+          entrance: {}, exit: {},
+          bus: { buslines: [{ name: '300路', type: '普通公交', via_num: '4',
+                              distance: '3000', duration: '500',
+                              departure_stop: { name: '甲站' }, arrival_stop: { name: '乙站' } }] },
+        },
+      ] }] },
+    })))
+    const plan = await amapTransit('116.4,39.9', '116.5,39.9', '021')
+    expect(plan).not.toBeNull()
+    const subway = plan!.legs.find((l) => l.kind === 'subway')!
+    expect(subway.entrance).toBe('A口')
+    expect(subway.exit).toBe('D口')
+    expect(subway.line).toBe('地铁1号线') // 括注已去
+    const bus = plan!.legs.find((l) => l.kind === 'bus')!
+    expect(bus.entrance).toBeUndefined() // 公交段不携带站口（空对象/非地铁 → undefined）
+    expect(bus.exit).toBeUndefined()
   })
 
   it('HTTP 非 2xx → 抛 AmapError（http_<status>）', async () => {

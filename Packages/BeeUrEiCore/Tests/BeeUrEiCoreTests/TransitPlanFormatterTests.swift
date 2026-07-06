@@ -84,6 +84,31 @@ final class TransitPlanFormatterTests: XCTestCase {
         XCTAssertEqual(out, "全程约10分钟，步行共0米。乘坐地铁2号线，约10分钟。")
     }
 
+    func testSubwayEntranceExitNarratedInActionOrder() {
+        // 地铁进/出站口（盲人从哪个口进/出站——站口相距远、走错极难折返，是过城落地关键指令，此前整段被服务端丢弃）。
+        // 按乘客动作顺序：进站→上车→坐N站→下车→出站。
+        let leg = TransitLeg(kind: .subway, line: "地铁1号线", fromStop: "人民广场", toStop: "徐家汇",
+                             stops: 3, entrance: "A口", exit: "D口", distanceMeters: 5000, durationSeconds: 600)
+        let plan = TransitPlan(durationSeconds: 900, walkingDistanceMeters: 200, legs: [leg])
+        let zh = TransitPlanFormatter.summary(plan, language: .zh)
+        XCTAssertTrue(zh.contains("从A口进站") && zh.contains("从D口出站"), "须报进/出站口：\(zh)")
+        // 顺序：进站在上车之前、出站在下车之后。
+        let ent = zh.range(of: "从A口进站")!.lowerBound
+        let board = zh.range(of: "人民广场上车")!.lowerBound
+        let alight = zh.range(of: "徐家汇下车")!.lowerBound
+        let ext = zh.range(of: "从D口出站")!.lowerBound
+        XCTAssertTrue(ent < board, "进站应在上车之前：\(zh)")
+        XCTAssertTrue(alight < ext, "出站应在下车之后：\(zh)")
+        // 英文同样含进/出站口。
+        let en = TransitPlanFormatter.summary(plan, language: .en)
+        XCTAssertTrue(en.contains("enter at A口") && en.contains("exit at D口"), "en：\(en)")
+        // 缺站口（旧数据/公交段 entrance/exit 恒 nil）→ 不硬凑"进站/出站"半句。
+        let noExits = TransitLeg(kind: .subway, line: "2号线", fromStop: "X", toStop: "Y", stops: 2,
+                                 entrance: nil, exit: nil, distanceMeters: 3000, durationSeconds: 300)
+        let zh2 = TransitPlanFormatter.summary(TransitPlan(durationSeconds: 300, walkingDistanceMeters: 0, legs: [noExits]), language: .zh)
+        XCTAssertFalse(zh2.contains("进站") || zh2.contains("出站"), "无站口不该出现进/出站字样：\(zh2)")
+    }
+
     func testEmptyLineFallsBackToGenericMode() {
         let leg = TransitLeg(kind: .bus, line: "  ", fromStop: "甲", toStop: "乙", stops: 2, distanceMeters: 1000, durationSeconds: 300)
         let out = TransitPlanFormatter.summary(TransitPlan(durationSeconds: 300, walkingDistanceMeters: 0, legs: [leg]), language: .zh)

@@ -231,6 +231,9 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     // 哪一次告警（缺省则按发起人维度去重）。坏 id → 丢弃照回告：否则整个 ack 400——遇险者收不到
     // "有人已看到"的救命反馈，且 markEmergencyAcked 不落、升级重呼会在已有人响应时仍轰炸全体。
     eventId: z.string().min(1).max(64).optional().catch(undefined),
+    // true=响应者**正在赶去**（比"已看到"更进一步）：遇险者据此知救援真在路上、可安心等待；其余亲友据此知有人已动身。
+    // 可选，缺省=普通"已看到"回执（向后兼容：旧客户端不带此字段，行为不变）。
+    onMyWay: z.boolean().optional().catch(undefined),
   })
   app.post('/api/emergency/ack', { preHandler: requireAuth(),
                                    config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
@@ -260,11 +263,13 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     if (eventId) { try { store.markEmergencyAcked(eventId, now) } catch { /* 标记失败不阻断回告 */ } }
 
     const l = pushLang(sender.language)
-    const title = pushStrings.emergencyAckTitle(acker.displayName, l)
-    const body = pushStrings.emergencyAckBody(acker.displayName, l)
+    const onMyWay = parsed.data.onMyWay === true // 响应者正在赶去 → 更进一步的安心信号
+    const title = onMyWay ? pushStrings.emergencyOnMyWayTitle(acker.displayName, l) : pushStrings.emergencyAckTitle(acker.displayName, l)
+    const body = onMyWay ? pushStrings.emergencyOnMyWayBody(acker.displayName, l) : pushStrings.emergencyAckBody(acker.displayName, l)
     // kind='emergency_ack'：客户端据此区别于 'emergency_alert'——**绝不**触发遇险告警的响铃/大模态，
     // 只作普通通知（web pickUnreadEmergencies 已排除本 kind；iOS 告警模态仅由本机跌倒检测驱动，不受推送触发）。
     const data: Record<string, string> = { kind: 'emergency_ack', fromId: acker.id, fromName: acker.displayName }
+    if (onMyWay) data.onMyWay = '1' // 客户端据此把"X 正在赶来"渲染得比"已看到"更醒目
     if (eventId) data.eventId = eventId
     try {
       store.createNotification({ id: randomUUID(), userId: sender.id, kind: 'emergency_ack', title, body, data, createdAt: Date.now() })
@@ -289,12 +294,13 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
         .map((l) => store.findById(l.memberId))
         .filter((m): m is NonNullable<typeof m> => !!m)
       const rData: Record<string, string> = { kind: 'emergency_responding', fromId: sender.id, fromName: sender.displayName }
+      if (onMyWay) rData.onMyWay = '1' // 其余亲友据此知有人**已动身**（非仅"在响应"），更可安心待命
       if (eventId) rData.eventId = eventId
       const jobs: Promise<unknown>[] = []
       for (const m of coResponders) {
         const ml = pushLang(m.language)
-        const rTitle = pushStrings.emergencyRespondingTitle(sender.displayName, ml)
-        const rBody = pushStrings.emergencyRespondingBody(sender.displayName, ml)
+        const rTitle = onMyWay ? pushStrings.emergencyRespondingOnMyWayTitle(sender.displayName, ml) : pushStrings.emergencyRespondingTitle(sender.displayName, ml)
+        const rBody = onMyWay ? pushStrings.emergencyRespondingOnMyWayBody(sender.displayName, ml) : pushStrings.emergencyRespondingBody(sender.displayName, ml)
         try { store.createNotification({ id: randomUUID(), userId: m.id, kind: 'emergency_responding', title: rTitle, body: rBody, data: rData, createdAt: Date.now() }) } catch { /* 单条通知失败不阻断其余 */ }
         // badge=该亲友未读总数（含刚写入的"已有人响应"本条），APNs+Web Push 同带（后者供 SW 置 PWA 图标角标）；一次算、两渠道复用。
         const rBadge = safeBadge(m.id)

@@ -56,11 +56,13 @@ export function NotificationsPage() {
   // 从通知列表直接回执 SOS 告警："我已看到"——遇险者最需要的反馈是"有人在响应"，且服务端据此停止升级重呼、
   // 匿名协调其余亲友（与告警弹窗 onAck 同一后端流程）。此前列表只有"回拨"、没有"回执"，与弹窗不对等（尤其读屏
   // 用户逐条浏览列表时够不着回执）。best-effort + 幂等：乐观显示"已回执"，失败回滚并提示。
-  const acknowledge = async (n: NotificationInfo) => {
+  const acknowledge = async (n: NotificationInfo, onMyWay = false) => {
     if (!n.data?.fromId) return
     setAckedIds((prev) => new Set(prev).add(n.id))
-    try { await api.emergencyAck(n.data.fromId, n.data.eventId); toast(t('已回执，对方会看到你在响应', "Acknowledged — they'll see you're responding"), 'ok') }
-    catch { setAckedIds((prev) => { const s = new Set(prev); s.delete(n.id); return s }); toast(t('回执失败，请重试', 'Failed, please try again'), 'error') }
+    try {
+      await api.emergencyAck(n.data.fromId, n.data.eventId, onMyWay)
+      toast(onMyWay ? t('已告知对方你正在赶来', "They'll see you're on the way") : t('已回执，对方会看到你在响应', "Acknowledged — they'll see you're responding"), 'ok')
+    } catch { setAckedIds((prev) => { const s = new Set(prev); s.delete(n.id); return s }); toast(t('回执失败，请重试', 'Failed, please try again'), 'error') }
   }
 
   const markAll = async () => { try { await api.markAllNotifsRead(); void load() } catch { /* ignore */ } }
@@ -135,13 +137,19 @@ export function NotificationsPage() {
                       <span className="ml-3 mt-1 inline-flex items-center gap-1 text-xs font-medium text-ok" role="status">
                         <IconCheck width={13} height={13} />{t('已回执', 'Acknowledged')}
                       </span>
-                    ) : (
+                    ) : (<>
+                      {/* "我在赶来"（更进一步、更醒目）：遇险者据此知救援真在路上、可安心等待——比"已看到"更关键的安心信号。 */}
+                      <button onClick={(e) => { e.stopPropagation(); void acknowledge(n, true) }}
+                        className="ml-3 mt-1 inline-flex items-center gap-1 text-xs font-medium text-ok hover:underline"
+                        aria-label={t(`我正赶去帮 ${n.data.fromName ?? ''}`, `Tell ${n.data.fromName ?? 'them'} you're on the way`)}>
+                        <IconPhone width={13} height={13} />{t('我在赶来', "I'm on my way")}
+                      </button>
                       <button onClick={(e) => { e.stopPropagation(); void acknowledge(n) }}
-                        className="ml-3 mt-1 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+                        className="ml-2 mt-1 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
                         aria-label={t(`回执：告诉 ${n.data.fromName ?? ''} 我已看到求助`, `Let ${n.data.fromName ?? 'them'} know you've seen the alert`)}>
                         <IconCheck width={13} height={13} />{t('我已看到', "I've seen it")}
                       </button>
-                    )
+                    </>)
                   )}
                   {/* 紧急告警：一键回拨发出告警的盲人——协助者响应摔倒/求助最直接的动作，免去手动翻联系人。 */}
                   {n.kind.includes('emergency') && n.data?.fromId && (

@@ -57,6 +57,28 @@ describe('紧急告警回执 /api/emergency/ack', () => {
     expect(acks.length).toBe(1) // 只一条回告
     await a.close()
   })
+
+  it('onMyWay=true → 发起人收到"X 正在赶来"（比"已看到"更进一步）+ data.onMyWay 供客户端醒目渲染', async () => {
+    const { a, store, helper, ownerId } = await seed()
+    const way = await a.inject({ method: 'POST', url: '/api/emergency/ack', headers: bearer(helper.token),
+      payload: { fromId: ownerId, eventId: 'evway', onMyWay: true } })
+    expect(way.statusCode).toBe(200)
+    const ack = store.notificationsForUser(ownerId).find((n) => n.kind === 'emergency_ack')!
+    expect(ack.data).toMatchObject({ onMyWay: '1' }) // 语言无关的核心信号
+    expect(ack.title).toContain('正在赶来')           // 遇险者收到"X 正在赶来"（默认中文）
+    await a.close()
+  })
+
+  it('缺省 onMyWay → 仍是普通"已看到"回执（向后兼容：旧客户端不带此字段行为不变）', async () => {
+    const { a, store, helper, ownerId } = await seed()
+    const seen = await a.inject({ method: 'POST', url: '/api/emergency/ack', headers: bearer(helper.token),
+      payload: { fromId: ownerId, eventId: 'evseen' } })
+    expect(seen.statusCode).toBe(200)
+    const ack = store.notificationsForUser(ownerId).find((n) => n.kind === 'emergency_ack')!
+    expect(ack.data?.onMyWay).toBeUndefined() // 不带 onMyWay
+    expect(ack.title).toContain('已看到')       // "X 已看到你的求助"
+    await a.close()
+  })
 })
 
 // 响应者协调：第一位亲友响应 → **安静**通知其余亲友"已有人在处理"（避免全体同时赶去/都以为别人在管）。
@@ -118,6 +140,16 @@ describe('紧急响应者协调 /api/emergency/ack → emergency_responding', ()
     const { a, store, h1, ownerId, h2Id } = await seed()
     await a.inject({ method: 'POST', url: '/api/emergency/ack', headers: bearer(h1.token), payload: { fromId: ownerId, eventId: 'totally-fake-id' } })
     expect(responding(store, h2Id)).toHaveLength(0) // 无真实事件 → 不广播
+    await a.close()
+  })
+
+  it('首个响应者带 onMyWay → 其余亲友收到"有人正赶去"变体 + rData.onMyWay（更可安心待命）', async () => {
+    const { a, store, h1, ownerId, h2Id, eventId } = await seed()
+    await a.inject({ method: 'POST', url: '/api/emergency/ack', headers: bearer(h1.token), payload: { fromId: ownerId, eventId, onMyWay: true } })
+    const r = responding(store, h2Id)
+    expect(r).toHaveLength(1)
+    expect(r[0].data).toMatchObject({ onMyWay: '1' })
+    expect(r[0].title).toContain('正赶去')        // "已有人正赶去 X 那里"（区别于普通"已有人在响应"）
     await a.close()
   })
 })

@@ -60,11 +60,12 @@ export function ContactMedicalInfo({ userId, emphasize }: { userId: string; emph
 
 /// 紧急告警的模态展示（纯展示，可组件测试）：谁、发生了什么、位置（诚实标注实时/最后已知）、
 /// 一键回拨、确认。role=alertdialog 由 Modal 的 aria 承担；文案 zh/en。
-export function EmergencyAlertModal({ alert, othersCount, beingHandled, onAck, onCallBack }: {
+export function EmergencyAlertModal({ alert, othersCount, beingHandled, onAck, onOnMyWay, onCallBack }: {
   alert: NotificationInfo
   othersCount: number          // 除当前外还有几条未读告警（提示"还有 N 条"）
   beingHandled?: boolean       // 已有其他亲友在响应此事件（提示协调，不消模态——本人仍可继续帮忙）
   onAck: () => void            // 知道了：标已读，永不再弹
+  onOnMyWay?: () => void       // 我在赶来：回告"X 正在赶来"（比"知道了"更进一步——遇险者知救援真在路上）+ 标已读
   onCallBack: () => void       // 回拨发出告警的盲人
 }) {
   const { t, lang } = useI18n()
@@ -102,15 +103,24 @@ export function EmergencyAlertModal({ alert, othersCount, beingHandled, onAck, o
         {/* 施救辅助：按需查看遇险者的紧急医疗信息（授权在服务端，仅其紧急联系人可读）。
             hasMedical=1（发起人确有医疗信息）→ 醒目提示，避免施救者忽略。 */}
         {alert.data?.fromId && <ContactMedicalInfo userId={alert.data.fromId} emphasize={!!alert.data.hasMedical} />}
-        <div className="mt-1 flex gap-2">
-          {alert.data?.fromId && (
-            <button onClick={onCallBack}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-danger px-4 py-2.5 font-semibold text-white hover:opacity-90">
-              <IconPhone width={16} height={16} />{t(`回拨 ${alert.data.fromName ?? ''}`, `Call ${alert.data.fromName ?? 'back'}`)}
-            </button>
-          )}
+        <div className="mt-1 flex flex-col gap-2">
+          <div className="flex gap-2">
+            {alert.data?.fromId && (
+              <button onClick={onCallBack}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-danger px-4 py-2.5 font-semibold text-white hover:opacity-90">
+                <IconPhone width={16} height={16} />{t(`回拨 ${alert.data.fromName ?? ''}`, `Call ${alert.data.fromName ?? 'back'}`)}
+              </button>
+            )}
+            {/* "我在赶来"：比"知道了"更进一步——遇险者据此知救援真在路上、可安心等待；其余亲友也收到"有人已动身"。 */}
+            {alert.data?.fromId && onOnMyWay && (
+              <button onClick={onOnMyWay}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-[var(--line)] px-4 py-2.5 font-semibold text-ok hover:surface-2">
+                {t('我在赶来', "I'm on my way")}
+              </button>
+            )}
+          </div>
           <button onClick={onAck}
-            className="flex-1 rounded-xl border border-[var(--line)] px-4 py-2.5 font-medium hover:surface-2">
+            className="w-full rounded-xl border border-[var(--line)] px-4 py-2.5 font-medium hover:surface-2">
             {t('知道了', 'Acknowledge')}
           </button>
         </div>
@@ -162,15 +172,16 @@ export function EmergencyAlertHost() {
 
   const top = activeRef.current ? null : alerts[0] ?? null
 
-  const ack = useCallback(() => {
+  const ack = useCallback((onMyWay = false) => {
     if (!top) return
     // 收敛同一事件的**全部**告警通知（首呼 + 升级重呼）：只标 top 一条会让另一条下轮重新弹（详见 ackEventNotifIds）。
     const ids = ackEventNotifIds(notifsRef.current, top)
     ids.forEach((id) => dismissedRef.current.add(id))
     setAlerts((cur) => cur.filter((n) => !ids.includes(n.id)))
     ids.forEach((id) => void api.markNotifRead(id).catch(() => {})) // 失败也已会话内静默；下次刷新以服务端为准
-    // 回告发起人"我已看到你的求助"（遇险者最需要的反馈）。best-effort：失败不影响本端"知道了"。
-    if (top.data?.fromId) void api.emergencyAck(top.data.fromId, top.data.eventId ?? undefined).catch(() => {})
+    // 回告发起人。onMyWay=true → "X 正在赶来"（更进一步的安心信号）；否则"我已看到你的求助"。best-effort：失败不影响本端关闭弹窗。
+    // === true 显式判：防调用方误把 onClick 的事件对象当 onMyWay 传入（真值污染）。
+    if (top.data?.fromId) void api.emergencyAck(top.data.fromId, top.data.eventId ?? undefined, onMyWay === true).catch(() => {})
   }, [top])
 
   const callBack = useCallback(() => {
@@ -183,5 +194,5 @@ export function EmergencyAlertHost() {
 
   if (!top) return null
   const beingHandled = !!(top.data?.eventId && respondingEvents.has(top.data.eventId))
-  return <EmergencyAlertModal alert={top} othersCount={alerts.length - 1} beingHandled={beingHandled} onAck={ack} onCallBack={callBack} />
+  return <EmergencyAlertModal alert={top} othersCount={alerts.length - 1} beingHandled={beingHandled} onAck={() => ack(false)} onOnMyWay={() => ack(true)} onCallBack={callBack} />
 }

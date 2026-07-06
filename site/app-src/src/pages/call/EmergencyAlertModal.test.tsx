@@ -58,4 +58,16 @@ describe('EmergencyAlertModal（告警模态展示）', () => {
     render(<EmergencyAlertModal alert={alert({ fromId: 'u1', fromName: 'x' })} othersCount={0} onAck={() => {}} onCallBack={() => {}} />)
     expect(screen.queryByTestId('emergency-being-handled')).toBeNull()
   })
+
+  it('传入 onOnMyWay → 渲染"我在赶来"并点击调用它（遇险者据此知救援在途）；不传则不渲染', () => {
+    const onWay = vi.fn()
+    const { rerender } = render(<EmergencyAlertModal alert={alert({ fromId: 'u1', fromName: 'faller' })} othersCount={0}
+      onAck={() => {}} onOnMyWay={onWay} onCallBack={() => {}} />)
+    fireEvent.click(screen.getByText('我在赶来'))
+    expect(onWay).toHaveBeenCalledOnce()
+    // 不传 onOnMyWay → 该按钮不渲染（仅回拨/知道了），向后兼容。
+    rerender(<EmergencyAlertModal alert={alert({ fromId: 'u1', fromName: 'faller' })} othersCount={0}
+      onAck={() => {}} onCallBack={() => {}} />)
+    expect(screen.queryByText('我在赶来')).toBeNull()
+  })
 })

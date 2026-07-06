@@ -147,6 +147,20 @@ export const pushStrings = {
   emergencyRespondingBody: (senderName: string, l: PushLang): string =>
     l === 'en' ? `Another of ${senderName}'s contacts has acknowledged the emergency and is responding. Coordinate if you can help too.`
                : `${senderName} 的另一位亲友已确认这次紧急求助并开始响应。若你也能帮忙，请与其协调。`,
+  // "我在赶来"（比"已看到"更进一步）：遇险者最需要知道**救援是否真在路上**（医疗警报/Life360 的"响应者在途"状态）。
+  // 发给遇险者本人：明确"X 正在赶来"，让其安心在安全处等待，而非以为只是有人看到了却没人动身。
+  emergencyOnMyWayTitle: (name: string, l: PushLang): string =>
+    l === 'en' ? `${name} is on the way` : `${name} 正在赶来`,
+  emergencyOnMyWayBody: (name: string, l: PushLang): string =>
+    l === 'en' ? `${name} saw your alert and is on their way to help. If it's safe, stay where you are.`
+               : `${name} 已看到你的求助，正赶去帮你。若安全，请待在原地等待。`,
+  // "我在赶来"版的响应者协调（发给其余亲友）：不只"有人在响应"，而是**有人已动身赶去**——其余人据此更可安心待命，
+  // 避免全体同时赶去。匿名口径同 emergencyResponding。
+  emergencyRespondingOnMyWayTitle: (senderName: string, l: PushLang): string =>
+    l === 'en' ? `Someone is on the way to ${senderName}` : `已有人正赶去 ${senderName} 那里`,
+  emergencyRespondingOnMyWayBody: (senderName: string, l: PushLang): string =>
+    l === 'en' ? `One of ${senderName}'s contacts is on their way to help. You can stand by unless further help is needed.`
+               : `${senderName} 的一位亲友已动身赶去帮忙。除非仍需更多支援，你可先待命。`,
   // 升级重呼：告警发出后达阈值时长仍无任何亲友确认 → 再推一次、措辞更急，争取抓住第一次漏看的人（医疗警报的 escalation）。
   emergencyEscalateTitle: (name: string, l: PushLang): string =>
     l === 'en' ? `Still unanswered: ${name} needs help` : `仍无人回应：${name} 需要帮助`,

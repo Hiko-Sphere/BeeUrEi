@@ -352,7 +352,8 @@ export const api = {
   extendSafetyCheckin: (addMinutes: number) => post('/api/safety/checkin/extend', { addMinutes }) as Promise<{ timer: SafetyTimer }>,
   cancelSafetyCheckin: () => post('/api/safety/checkin/cancel', undefined),
   // 紧急告警"知道了"回执：回告发起人"有人已看到你的求助"（fromId=发起人，eventId=哪一次告警）。
-  emergencyAck: (fromId: string, eventId?: string) => post('/api/emergency/ack', { fromId, eventId }),
+  // onMyWay=true：不只"我已看到"，而是"我正在赶来"——遇险者据此知救援真在路上、可安心等待。缺省=普通回执。
+  emergencyAck: (fromId: string, eventId?: string, onMyWay?: boolean) => post('/api/emergency/ack', { fromId, eventId, onMyWay }),
   // Web Push（浏览器推送紧急告警）
   webVapidKey: () => get('/api/push/web-vapid-key') as Promise<{ key: string }>,
   webPushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) => post('/api/push/web-subscribe', sub),

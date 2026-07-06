@@ -229,7 +229,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     setAuthStore(store) // 让 requireAuth 能实时校验账号状态/tokenVersion（见审查 #1/#2）
     const bundleId = process.env.APPLE_BUNDLE_ID?.trim()
     const appleVerifier = options.appleVerifier ?? (bundleId ? createAppleVerifier(bundleId) : undefined)
-    registerAuthRoutes(instance, store, codes, mailer, appleVerifier, codeSend, options.loginThrottle)
+    registerAuthRoutes(instance, store, codes, mailer, appleVerifier, codeSend, options.loginThrottle, pushSender) // 新设备登录预警本人
     registerRecoveryRoutes(instance, store, codes, mailer, codeSend, pushSender) // 找回密码（D1）；改密安全预警本人
     registerAccountRoutes(instance, store, codes, mailer, appleVerifier, codeSend, pushSender) // 账号安全变更预警本人
     registerKycRoutes(instance, store) // 实名认证（KYC）：提交/查询（admin 审核端点在 admin 路由）

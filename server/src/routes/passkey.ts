@@ -9,7 +9,7 @@ import {
 } from '@simplewebauthn/server'
 import { type Store, type Passkey, selfView } from '../db/store'
 import { requireAuth } from '../auth/rbac'
-import { issueTokens, deviceLabelFromReq } from '../auth/session'
+import { issueLoginTokens, deviceLabelFromReq } from '../auth/session'
 import { notifyAccountSecurity } from '../notifications/notify'
 import { NoopPushSender, type PushSender } from '../push/apns'
 
@@ -158,7 +158,7 @@ export function registerPasskeyRoutes(app: FastifyInstance, store: Store, pushSe
     }
     if (!verification.verified) return reply.code(401).send({ error: 'verification_failed' })
     store.updatePasskeyCounter(passkey.id, verification.authenticationInfo.newCounter)
-    const tokens = issueTokens(store, user, { deviceLabel: deviceLabelFromReq(req.headers, (req.body as { deviceName?: string } | undefined)?.deviceName) })
+    const tokens = issueLoginTokens(store, pushSender, user, deviceLabelFromReq(req.headers, (req.body as { deviceName?: string } | undefined)?.deviceName))
     return reply.send({ ...tokens, user: selfView(user) })
   })
 

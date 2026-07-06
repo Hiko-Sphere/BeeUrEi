@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Store, User } from '../db/store'
+import type { PushSender } from '../push/apns'
+import { notifyNewDeviceLogin } from '../notifications/notify'
 import { signAccessToken, generateRefreshToken, hashToken, refreshTtlMs } from './tokens'
 
 /// 签发会话（access + refresh 一对）的共享逻辑：auth.ts 与 passkey.ts 都用它，确保每条登录路径
@@ -25,6 +27,19 @@ export function issueTokens(store: Store, user: User, ctx: SessionContext = {}):
     lastSeenAt: now,
   })
   return { token, refreshToken }
+}
+
+/// 登录（**非**续期）签发：建新会话前先看本人是否已有其它活跃会话。若这次登录来自一台此前没登录过的设备
+/// （既有活跃会话里没有相同 deviceLabel），即时预警本人「账号有新设备登录」——Apple/Google/银行式接管早期信号。
+/// 与 issueTokens 分开：续期(refresh)走 issueTokens（带 sid、绝不预警）；本函数只给「新登录」（含注册后首登）。
+/// 首登/全登出后重登（无其它活跃会话）→ 不报（prior 为空）；同设备重登（既有会话 deviceLabel 相同）→ 不报，只报「另一台设备」。
+export function issueLoginTokens(store: Store, push: PushSender, user: User, deviceLabel?: string): { token: string; refreshToken: string } {
+  const prior = store.sessionsForUser(user.id, Date.now()) // 建会话**前**的既有活跃会话（本次的还没写入）
+  const tokens = issueTokens(store, user, { deviceLabel })
+  if (prior.length > 0 && !prior.some((s) => s.deviceLabel === deviceLabel)) {
+    notifyNewDeviceLogin(store, push, user, deviceLabel)
+  }
+  return tokens
 }
 
 /// 从请求头/客户端字段推断设备友好标签（仅展示，绝不用于鉴权）。优先客户端显式名（如 iOS 设备名），否则解析 UA。

@@ -230,6 +230,19 @@ export const pushStrings = {
         body: en ? 'New two-factor recovery codes were generated; your old codes no longer work. If this wasn’t you, secure your account now.' : '你的两步验证恢复码刚刚被重新生成，旧恢复码已全部失效。若非本人操作，请立即处理账号安全。' }
     }
   },
+  // 新设备登录本人账号 → 即时告知本人（industry-standard：Apple/Google/银行均有"新设备登录"提醒）。
+  // 账号已在别处活跃、又从**另一台设备**登录 = 潜在接管早期信号；本人操作则是确认。deviceLabel 仅供辨识、非鉴权。
+  newDeviceNotice: (deviceLabel: string | undefined, l: PushLang): { title: string; body: string } => {
+    const en = l === 'en'
+    const dev = (deviceLabel ?? '').trim()
+    const where = dev ? (en ? ` from ${dev}` : `：${dev}`) : ''
+    return {
+      title: en ? 'New sign-in to your account' : '账号有新设备登录',
+      body: en
+        ? `Your account was just signed in${where}. If this wasn’t you, change your password and sign out other devices now.`
+        : `你的账号刚刚有新设备登录${where}。若非本人操作，请立即修改密码并登出其他设备。`,
+    }
+  },
   newMessageTitle: (name: string, l: PushLang): string =>
     l === 'en' ? `Message from ${name}` : `${name} 发来消息`,
   groupMessageTitle: (name: string, group: string, l: PushLang): string =>

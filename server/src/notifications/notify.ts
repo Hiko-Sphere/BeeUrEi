@@ -60,3 +60,11 @@ export function notifyAccountSecurity(store: Store, push: PushSender, user: User
   const { title, body } = pushStrings.securityNotice(event, pushLang(user.language))
   notifyUser(store, push, user.id, `security_${event}`, title, body)
 }
+
+/// 新设备登录本人账号 → 即时预警本人（Apple/Google 式"新登录提醒"，接管早期信号）。
+/// 与 notifyAccountSecurity 同走 `security_*` 前缀（quietHours 恒越勿扰、客户端按 security_ 家族统一渲染/路由到账户页），
+/// 但文案带**动态**设备标签，故单列。deviceLabel 仅供本人辨识哪台设备，绝不用于鉴权。
+export function notifyNewDeviceLogin(store: Store, push: PushSender, user: User, deviceLabel: string | undefined): void {
+  const { title, body } = pushStrings.newDeviceNotice(deviceLabel, pushLang(user.language))
+  notifyUser(store, push, user.id, 'security_new_device', title, body, deviceLabel ? { deviceLabel } : undefined)
+}

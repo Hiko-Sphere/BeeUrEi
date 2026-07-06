@@ -530,7 +530,9 @@ struct ChatView: View {
             let text = FramingAssistViewModel.orderedOCRText(from: items) // 核心 ReadingOrder 阅读序（已测）
             DispatchQueue.main.async { handle(text) }
         }
-        request.recognitionLanguages = lang == .en ? ["en-US", "zh-Hans"] : ["zh-Hans", "en-US"]
+        // 简体 + **繁体** + 英文（与识别屏同用核心 OCRLanguagePolicy）：读亲友拍来的**繁体**处方/时刻表/纸条
+        // 此前会乱码（台湾/港澳），单点补齐。
+        request.recognitionLanguages = OCRLanguagePolicy.recognitionLanguages(interfaceLanguage: lang)
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = true
         DispatchQueue.global(qos: .userInitiated).async {

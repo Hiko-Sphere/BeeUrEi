@@ -55,7 +55,9 @@ export function buildUserExportBundle(store: Store, id: string, now: number) {
     },
     warnings: store.warningsForUser(id).map((w) => ({ reason: w.reason, byAdmin: nameOf(w.byAdminId), at: w.at })),
     recordings: store.allRecordings().filter((r) => r.ownerId === id).map((r) => ({ callId: r.callId, reason: r.reason, recordedAt: r.recordedAt })),
-    callRecords: store.callRecordsForUser(id, 1000).map((c) => ({ direction: c.callerId === id ? 'outgoing' : 'incoming', peer: nameOf(c.callerId === id ? c.calleeId : c.callerId), status: c.status, createdAt: c.createdAt })),
+    // emergency：本次是否为紧急求助(SOS)呼叫——存在库、也经 /api/calls 回给客户端渲染"未接紧急求助"，却此前漏出导出。
+    // 是本人通话记录的真实属性、且用户复盘安全历史时刚需（哪几通是求助电话），补齐以对齐存储与可携权。
+    callRecords: store.callRecordsForUser(id, 1000).map((c) => ({ direction: c.callerId === id ? 'outgoing' : 'incoming', peer: nameOf(c.callerId === id ? c.calleeId : c.callerId), status: c.status, emergency: !!c.emergency, createdAt: c.createdAt })),
     passkeys: store.passkeysForUser(id).map((p) => ({ deviceName: p.deviceName ?? null, createdAt: p.createdAt })),
     activeSessions: store.countSessionsForUser(id, now),
     // 实名认证（KYC）元数据：本人提交的身份数据属本人 PII，GDPR 访问/可携权覆盖，此前导出漏了。
@@ -110,8 +112,12 @@ export function buildSelfExportExtras(store: Store, id: string) {
       catch { return null }
     })(),
     // 本人的紧急事故记录（摔倒/车祸/SOS）：坐标是本人的、通知计数是本人事件的——完整可携。
+    // ackedAt/escalatedAt 一并带（此前漏）：**响应结果**是本人事件的真实属性、也是用户复盘安全历史最关切的一环
+    //（"我这次求助有没有被亲友看到？无人应答升级重呼过没有？"），缺了导出只剩"发过一次告警"却无从知晓下文。
+    // locAgeSec 同补（lastKnown 定位距告警的秒数）：与 locSource 同为位置诚实度信息，一并齐全。
     emergencyEvents: store.emergencyEventsForUser(id).map((e) => ({ kind: e.kind, lat: e.lat ?? null, lon: e.lon ?? null,
-      locSource: e.locSource ?? null, notified: e.notified, contacts: e.contacts, at: e.at, resolvedAt: e.resolvedAt ?? null })),
+      locSource: e.locSource ?? null, locAgeSec: e.locAgeSec ?? null, notified: e.notified, contacts: e.contacts, at: e.at,
+      ackedAt: e.ackedAt ?? null, escalatedAt: e.escalatedAt ?? null, resolvedAt: e.resolvedAt ?? null })),
     messagesSent: store.messagesSentBy(id, 5000).map((m) => ({
       to: m.groupId ? `group:${m.groupId}` : nameOf(m.toId),
       kind: m.kind,

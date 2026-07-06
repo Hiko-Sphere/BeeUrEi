@@ -189,6 +189,16 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     return { ok: true }
   })
 
+  // 读回执开关（WhatsApp 语义，仅单聊）：关了→我发的消息不向对方回"已读"，互惠地我也看不到别人的已读。
+  // 只影响"已读"显示；markRead 照常写库，未读计数/角标不受影响。群回执（匿名计数）不受此开关约束（WhatsApp 同例外）。
+  app.post('/api/account/read-receipts', { preHandler: requireAuth() }, async (req, reply) => {
+    const parsed = z.object({ enabled: z.boolean() }).safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const updated = store.updateUser(req.user!.sub, { readReceiptsEnabled: parsed.data.enabled })
+    if (!updated) return reply.code(404).send({ error: 'not_found' })
+    return { ok: true, readReceiptsEnabled: updated.readReceiptsEnabled ?? true }
+  })
+
   // 记录对《隐私政策》《使用条款》的同意（注册门控 + GDPR 可证明同意）。客户端在完成注册前调用；
   // 文档版本随重大更新递增，客户端据此可在版本变化时要求重新同意。
   app.post('/api/account/legal-consent', { preHandler: requireAuth() }, async (req, reply) => {

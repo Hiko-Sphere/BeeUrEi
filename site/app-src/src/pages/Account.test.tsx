@@ -4,7 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 vi.mock('../lib/session', () => ({ useSession: () => ({ user: { id: 'u1', username: 'amin', displayName: '阿明', role: 'helper' }, refreshMe: vi.fn(), signOut: vi.fn() }) }))
 vi.mock('../lib/api', () => ({
-  api: { me: vi.fn(), verificationStatus: vi.fn(), setProfile: vi.fn(), setAvatar: vi.fn(), setRole: vi.fn(), setLanguage: vi.fn(), deleteAccount: vi.fn(), setEmail: vi.fn(), quietHours: vi.fn(), setQuietHours: vi.fn(), withdrawVerification: vi.fn(), submitVerification: vi.fn(), sessions: vi.fn() },
+  api: { me: vi.fn(), verificationStatus: vi.fn(), setProfile: vi.fn(), setAvatar: vi.fn(), setRole: vi.fn(), setLanguage: vi.fn(), deleteAccount: vi.fn(), setEmail: vi.fn(), quietHours: vi.fn(), setQuietHours: vi.fn(), withdrawVerification: vi.fn(), submitVerification: vi.fn(), sessions: vi.fn(), setReadReceipts: vi.fn() },
   APIError: class extends Error { code = ''; status = 0 },
   reencodeToJpeg: vi.fn(), blobToDataUrl: vi.fn(), uploadVerificationDoc: vi.fn(),
 }))
@@ -30,6 +30,17 @@ describe('AccountPage 资料渲染（防字段漂移）', () => {
     expect(screen.getByText(/a@b\.com/)).toBeInTheDocument()       // email
     expect(screen.getByText('已验证')).toBeInTheDocument()         // emailVerified=true → 邮箱"已验证"
     expect(screen.getByText('已开启')).toBeInTheDocument()         // twoFactorEnabled=true → "已开启"
+  })
+
+  it('已读回执开关：me.readReceiptsEnabled=false → 开关呈关；点击 → setReadReceipts(true)（互惠隐私）', async () => {
+    mock(api.me).mockResolvedValue({ id: 'u1', username: 'amin', displayName: '阿明', role: 'helper', usernameCustomized: true, verified: false, readReceiptsEnabled: false })
+    mock(api.setReadReceipts).mockResolvedValue({ ok: true, readReceiptsEnabled: true })
+    render(<AccountPage />)
+    await screen.findByText(/@amin/)
+    const sw = await screen.findByRole('switch', { name: '已读回执' })
+    await waitFor(() => expect(sw).toHaveAttribute('aria-checked', 'false')) // self 到达后校正为服务器值
+    fireEvent.click(sw)
+    await waitFor(() => expect(api.setReadReceipts).toHaveBeenCalledWith(true)) // 关→开
   })
 
   it('注销账户须重新输入密码，并以密码调用 deleteAccount（防被盗会话一键毁号）', async () => {

@@ -2,7 +2,7 @@ import { apiURL } from './config'
 
 // ---------- 模型（与服务端对齐） ----------
 export interface User { id: string; username: string; displayName: string; role: string; status: string; avatar?: string | null; verified?: boolean; online?: boolean }
-export interface SelfView extends User { language?: string | null; email?: string | null; emailVerified?: boolean; phone?: string | null; usernameCustomized?: boolean; appleLinked?: boolean; twoFactorEnabled?: boolean; helperGuidelineAckAt?: number | null; legalConsentVersion?: string | null; legalConsentAt?: number | null }
+export interface SelfView extends User { language?: string | null; email?: string | null; emailVerified?: boolean; phone?: string | null; usernameCustomized?: boolean; appleLinked?: boolean; twoFactorEnabled?: boolean; helperGuidelineAckAt?: number | null; legalConsentVersion?: string | null; legalConsentAt?: number | null; readReceiptsEnabled?: boolean }
 export interface VerificationStatusInfo {
   status: 'none' | 'pending' | 'verified' | 'rejected'
   idType?: string
@@ -219,6 +219,8 @@ export const api = {
   setLanguage: (language: string) => post('/api/account/language', { language }),
   // 记录用户同意的条款版本（GDPR 可证明同意）：与 app-config.legalVersion 一致后不再提示重新同意。
   legalConsent: (version: string) => post('/api/account/legal-consent', { version }) as Promise<{ ok: boolean; legalConsentVersion: string; legalConsentAt: number }>,
+  // 读回执开关（WhatsApp 语义，仅单聊）：关了→不发也不看（互惠）。未读计数不受影响。
+  setReadReceipts: (enabled: boolean) => post('/api/account/read-receipts', { enabled }) as Promise<{ ok: boolean; readReceiptsEnabled: boolean }>,
   setPassword: (oldPassword: string, newPassword: string) => post('/api/account/password', { oldPassword, newPassword }),
   setPhone: (phone: string) => post('/api/account/phone', { phone }),
   setUsername: (username: string) => post('/api/account/username', { username }),

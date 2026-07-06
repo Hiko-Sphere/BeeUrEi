@@ -2,6 +2,14 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import { type Store, type ChatMessage, isBlockedBetween, publicUser, matchBannedTerm, areLinked } from '../db/store'
+
+/// 读回执隐私（WhatsApp 语义）：单聊两端任一方显式关闭读回执（readReceiptsEnabled === false）即抑制
+/// "已读"暴露（互惠——关了的人也看不到别人的）。缺省(undefined)=开。同步 store 读兜底：查不到人按"开"处理。
+export function receiptsOffBetween(store: Store, a: string, b: string): boolean {
+  try {
+    return store.findById(a)?.readReceiptsEnabled === false || store.findById(b)?.readReceiptsEnabled === false
+  } catch { return false }
+}
 import { totalUnreadFor } from '../db/unread'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
@@ -198,7 +206,14 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     const peer = q.with
     if (!peer) return reply.code(400).send({ error: 'invalid_input' })
     if (!areLinked(store, me, peer)) return reply.code(403).send({ error: 'not_linked' })
-    return { messages: store.messagesBetween(me, peer, limit, before, beforeId) }
+    // 读回执隐私（WhatsApp 语义，仅单聊）：任一方关闭读回执 → **我发出的**消息不向我暴露 readAt（互惠：自己关了
+    // 也看不到别人的已读）。只影响"已读/已送达"显示；markRead 照常写库，未读计数/角标完全不受影响。群回执只暴露
+    // 匿名计数（readBy/readTotal，不点名谁读了），照 WhatsApp 群例外保持不变。
+    const msgs = store.messagesBetween(me, peer, limit, before, beforeId)
+    if (receiptsOffBetween(store, me, peer)) {
+      return { messages: msgs.map((m) => (m.fromId === me && m.readAt != null) ? { ...m, readAt: undefined } : m) }
+    }
+    return { messages: msgs }
   })
 
   // 搜索文本消息：?q=关键词 + (?with=对端 或 ?group=群 id)；**两者都不带=跨会话全局搜索**（WhatsApp 式，
@@ -328,9 +343,12 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     const conversations = store.latestMessagesPerPeer(me).map((m) => {
       const peerId = m.fromId === me ? m.toId : m.fromId
       const peer = store.findById(peerId)
+      // 读回执隐私：与消息列表同口径——任一方关了回执，我发的 last 不带 readAt（会话列表也不泄露已读）。
+      const last = (m.fromId === me && m.readAt != null && receiptsOffBetween(store, me, peerId))
+        ? { ...m, readAt: undefined } : m
       return {
         peer: peer ? publicUser(peer) : { id: peerId, username: '', displayName: '已注销用户', role: '', status: '', avatar: null },
-        last: m,
+        last,
         unread: store.unreadCount(me, peerId),
         muted: store.isDmMuted(me, peerId), // 我是否静音了与该对端的单聊（前端显示🔕，免打扰不影响未读）
         // 对端此刻在线/待命（与亲友列表 online 同口径的 presence∨在通话中）：聊天列表也让盲人一眼分清

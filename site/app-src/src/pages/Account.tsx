@@ -157,6 +157,9 @@ export function AccountPage() {
       {/* 按类别静音推送横幅（与勿扰时段正交）：可关掉某几类的推送，紧急/安全/来电永不可静音 */}
       <PushCategoriesCard />
 
+      {/* 读回执隐私（WhatsApp 语义）：关了→不发也不看（互惠）；未读计数不受影响 */}
+      <ReadReceiptsCard enabled={self?.readReceiptsEnabled ?? true} onChanged={async () => { try { setSelf(await api.me()) } catch { /* ignore */ } }} />
+
       {/* 紧急医疗信息：仅紧急联系人遇险时可见，辅助施救 */}
       <MedicalInfoCard />
 
@@ -735,6 +738,39 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
 const minToHHMM = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
 const hhmmToMin = (s: string) => { const [h, m] = s.split(':').map(Number); return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0) }
 function browserTz(): string { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai' } catch { return 'Asia/Shanghai' } }
+
+/// 读回执开关（WhatsApp 语义，仅单聊）：关了→我发的消息不向对方回"已读"，互惠地我也看不到别人的已读。
+/// 未读计数/角标不受影响；群回执是匿名计数、不受此开关约束。乐观切换 + 失败回滚。
+function ReadReceiptsCard({ enabled, onChanged }: { enabled: boolean; onChanged: () => Promise<void> }) {
+  const { t } = useI18n()
+  const toast = useToast()
+  const [on, setOn] = useState(enabled)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => setOn(enabled), [enabled]) // self 刷新后同步（初次加载 self 为 null → 默认 true → 到达后校正）
+  const toggle = async () => {
+    const next = !on
+    setOn(next); setBusy(true)
+    try { await api.setReadReceipts(next); await onChanged() }
+    catch { setOn(!next); toast(t('设置失败，请重试', 'Failed — try again'), 'error') }
+    finally { setBusy(false) }
+  }
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold">{t('已读回执', 'Read receipts')}</div>
+          <p className="mt-1 text-xs text-faint">{t('关闭后，对方看不到你是否已读，你也看不到对方的（互惠）。未读数不受影响；群聊的匿名已读计数不受此开关约束。',
+            "When off, others can't see you've read their messages — and you won't see theirs either. Unread counts are unaffected; anonymous group read counts are exempt.")}</p>
+        </div>
+        <button type="button" role="switch" aria-checked={on} disabled={busy} onClick={toggle}
+          aria-label={t('已读回执', 'Read receipts')}
+          className={`relative h-6 w-11 shrink-0 rounded-full transition ${on ? 'bg-honey' : 'bg-[var(--line)]'} disabled:opacity-50`}>
+          <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${on ? 'left-[22px]' : 'left-0.5'}`} />
+        </button>
+      </div>
+    </Card>
+  )
+}
 
 /// 勿扰时段设置：软通知（好友请求/聊天/到家提醒等）在此时段只抑制推送横幅，站内通知照常持久化；
 /// 紧急告警/来电/SOS 绝不受影响（服务端保证）。时区自动取浏览器 IANA 时区。

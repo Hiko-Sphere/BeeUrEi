@@ -47,6 +47,9 @@ export interface User {
   mutedPushCategories?: string[]
   // 上次查看通话记录的时刻（ms）：晚于此的未接来电计入"未看未接来电"角标；打开通话记录即刷新此值清角标。
   callHistorySeenAt?: number
+  // 读回执开关（WhatsApp 语义，仅单聊）：false=我发的消息不再向对方回"已读"，互惠地我也看不到别人的已读。
+  // 缺省=开（undefined 视为 true，免存量回填）。只影响"已读"显示；markRead 照常写库，未读计数/角标不受影响。
+  readReceiptsEnabled?: boolean
 }
 
 /// 勿扰时段配置（服务端据收件人本地时刻判定，正确处理跨午夜与时区/DST）。
@@ -1801,5 +1804,6 @@ export function selfView(u: User) {
     legalConsentVersion: u.legalConsentVersion ?? null, // 已同意的隐私/条款版本（客户端据此门控注册/重新同意）
     legalConsentAt: u.legalConsentAt ?? null,
     helperGuidelineAckAt: u.helperGuidelineAckAt ?? null, // 协助者守则确认时间（null=客户端首次协助前展示守则卡）
+    readReceiptsEnabled: u.readReceiptsEnabled ?? true, // 读回执开关（缺省开；账号页展示/切换）
   }
 }

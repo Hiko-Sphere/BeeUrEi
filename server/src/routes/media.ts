@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { randomUUID } from 'node:crypto'
-import { writeFileSync, createReadStream, statSync } from 'node:fs'
+import { createReadStream, statSync } from 'node:fs'
+import { writeFile } from 'node:fs/promises'
 import { type Store, type MediaMeta, areLinked, isBlockedBetween } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
@@ -63,7 +64,10 @@ export function registerMediaRoutes(app: FastifyInstance, store: Store): void {
 
     const meta: MediaMeta = { id: randomUUID(), ownerId: req.user!.sub, mime, size: body.length, createdAt: Date.now() }
     ensureMediaDir()
-    writeFileSync(mediaPath(meta.id), body)
+    // 异步落盘（非 writeFileSync）：单文件最大 50MB，同步写会**阻塞事件循环**——写盘期间整个服务不处理任何
+    // 其它请求（含紧急呼叫/求助），并发上传更会串行叠加成秒级停顿。async writeFile 交给 libuv 线程池，事件循环
+    // 期间照常服务。await 保证写完再 createMedia（顺序不变）；写失败(磁盘满等)照旧抛出→500，不落半条 media 记录。
+    await writeFile(mediaPath(meta.id), body)
     store.createMedia(meta)
     return reply.code(201).send({ media: meta })
   })

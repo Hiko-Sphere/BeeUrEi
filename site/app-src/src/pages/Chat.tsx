@@ -183,7 +183,11 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
   const { t, lang } = useI18n()
   const toast = useToast()
   const [msgs, setMsgs] = useState<ChatMessage[] | null>(null)
-  const [text, setText] = useState('')
+  // 会话草稿本地键：按**当前用户 + 会话**命名空间，避免同一浏览器换账号后串读到别人的草稿（隐私）。
+  const draftKey = `beeurei:draft:${user?.id ?? 'anon'}:${sel.kind}:${sel.id}`
+  // 草稿持久化：未发送的输入按会话存 localStorage，切会话(Thread 重挂载)/刷新/误触返回都不丢。
+  // 读屏/键盘输入比触屏慢、丢草稿代价更高——各主流 IM 皆有此能力。惰性初始化：进会话即回填上次草稿。
+  const [text, setText] = useState(() => { try { return localStorage.getItem(draftKey) ?? '' } catch { return '' } })
   const [sending, setSending] = useState(false)
   const [showInfo, setShowInfo] = useState(false)
   const [reportOpen, setReportOpen] = useState(false) // 单聊举报对方（骚扰常发生在聊天里，就地可举报，不必进联系人页/通话中）
@@ -198,6 +202,11 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const PAGE = 50 // 与后端单次返回条数一致
+
+  // 输入变化即写草稿；清空(发送成功→setText('')/手动清空)即删键。隐私模式/配额满仅丢失持久化，绝不影响发送本身。
+  useEffect(() => {
+    try { if (text) localStorage.setItem(draftKey, text); else localStorage.removeItem(draftKey) } catch { /* best-effort */ }
+  }, [text, draftKey])
 
   // 会话免打扰切换（群/单聊通用）：乐观更新即时反馈，失败回滚 + 提示；成功后刷新列表让行内🔕标记同步。
   const toggleMute = async () => {

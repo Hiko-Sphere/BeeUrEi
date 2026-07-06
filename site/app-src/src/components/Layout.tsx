@@ -19,6 +19,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<AppConfig | null>(null)
   const [unread, setUnread] = useState(0)       // 铃铛通知未读（好友请求/紧急/举报等）
   const [chatUnread, setChatUnread] = useState(0) // 聊天未读（单聊+群聊）
+  const [missedCalls, setMissedCalls] = useState(0) // 未看未接来电（打开通话记录即清）
   const [available, setAvailable] = useState<boolean>(() => { try { return localStorage.getItem(LS_AVAIL) === '1' } catch { return false } })
   const [menuOpen, setMenuOpen] = useState(false)
   const loc = useLocation()
@@ -29,7 +30,7 @@ export function Layout({ children }: { children: ReactNode }) {
   useEffect(() => {
     let alive = true
     void api.appConfig().then((c) => alive && setConfig(c)).catch(() => {})
-    const tick = () => void api.unreadSummary().then((s) => { if (alive) { setUnread(s.notifications); setChatUnread(s.messages) } }).catch(() => {})
+    const tick = () => void api.unreadSummary().then((s) => { if (alive) { setUnread(s.notifications); setChatUnread(s.messages); setMissedCalls(s.missedCalls ?? 0) } }).catch(() => {})
     tick()
     const id = setInterval(tick, 30_000)
     return () => { alive = false; clearInterval(id) }
@@ -37,9 +38,9 @@ export function Layout({ children }: { children: ReactNode }) {
 
   // 浏览器标签标题带未读总数前缀 "(N) BeeUrEi 协助者"（聊天+通知）：后台标签也能在标签条看到有未读。
   useEffect(() => {
-    const total = unread + chatUnread
+    const total = unread + chatUnread + missedCalls
     document.title = (total > 0 ? `(${total > 99 ? '99+' : total}) ` : '') + appTitle(lang)
-  }, [unread, chatUnread, lang])
+  }, [unread, chatUnread, missedCalls, lang])
 
   // 待命心跳：开启后周期上报 available=true，让绑定的视障侧看到「在线」并能呼入；关闭立即下线。
   const availRef = useRef(available)
@@ -67,7 +68,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const nav: NavItem[] = [
     { to: '/', label: t('主页', 'Home'), icon: <IconHome /> },
-    { to: '/calls', label: t('通话', 'Calls'), icon: <IconPhone /> },
+    { to: '/calls', label: t('通话', 'Calls'), icon: <IconPhone />, badge: missedCalls },
     { to: '/chat', label: t('消息', 'Chat'), icon: <IconChat />, badge: chatUnread },
     { to: '/family', label: t('亲友', 'Contacts'), icon: <IconUsers /> },
     { to: '/locations', label: t('位置', 'Location'), icon: <IconPin /> },

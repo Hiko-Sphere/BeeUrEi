@@ -45,6 +45,8 @@ export interface User {
   // 按类别静音的推送横幅（'social'|'route'|'location'）：与勿扰时段正交——**时段**是何时静，**类别**是哪类静。
   // 仅抑制该类**推送横幅**，站内通知照常持久化（可回看）。紧急/安全/来电/报到经 notifCategory→null 天然豁免、永不可被静音。
   mutedPushCategories?: string[]
+  // 上次查看通话记录的时刻（ms）：晚于此的未接来电计入"未看未接来电"角标；打开通话记录即刷新此值清角标。
+  callHistorySeenAt?: number
 }
 
 /// 勿扰时段配置（服务端据收件人本地时刻判定，正确处理跨午夜与时区/DST）。
@@ -549,6 +551,8 @@ export interface Store {
   createCallRecord(rec: CallRecord): void
   updateCallStatus(callId: string, calleeId: string, status: CallRecordStatus): void
   callRecordsForUser(userId: string, limit?: number): CallRecord[] // 我作为主叫或被叫，按时间倒序
+  // 未看的未接来电数（我作为被叫、status='missed'、createdAt > sinceMs）——供未接来电角标（打开通话记录即清）。
+  missedCallCountForUser(userId: string, sinceMs: number): number
   deleteCallRecordsForUser(userId: string): void // 删号级联：清该用户参与的全部通话记录（PII，非证据）
   allCallRecords(limit?: number): CallRecord[] // 管理后台：全站通话，按时间倒序
 
@@ -992,6 +996,13 @@ export class MemoryStore implements Store {
       .filter((r) => r.callerId === userId || r.calleeId === userId)
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, limit)
+  }
+  missedCallCountForUser(userId: string, sinceMs: number): number {
+    let n = 0
+    for (const r of this.callRecords.values()) {
+      if (r.calleeId === userId && r.status === 'missed' && r.createdAt > sinceMs) n++
+    }
+    return n
   }
   deleteCallRecordsForUser(userId: string): void {
     let changed = false

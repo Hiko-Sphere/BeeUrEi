@@ -220,6 +220,9 @@ export function registerAssistRoutes(
   app.get('/api/calls', { preHandler: requireAuth() }, async (req) => {
     const me = req.user!.sub
     const recs = store.callRecordsForUser(me, 100)
+    // 打开通话记录即"看过"：刷新基线，未看未接来电角标随之清零（与手机通话 App 一致）。
+    // 在读取 recs 之后再刷新——返回列表仍照常带 missed 状态（供客户端把未接来电标红），只是角标不再计它们。
+    store.updateUser(me, { callHistorySeenAt: Date.now() })
     return {
       calls: recs.map((r) => {
         const outgoing = r.callerId === me

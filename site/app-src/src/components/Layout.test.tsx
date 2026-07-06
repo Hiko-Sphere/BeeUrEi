@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 
 // Layout 依赖 router/session/api/通话上下文——逐个 mock，只验骨架结构（skip 链接 + main 目标）。
 vi.mock('react-router-dom', () => ({
@@ -36,6 +36,26 @@ describe('Layout 无障碍骨架（skip 链接 + main 跳转目标）', () => {
     const main = container.querySelector('main#main')
     expect(main).not.toBeNull()
     expect(main!.getAttribute('tabindex')).toBe('-1') // 使片段跳转能把键盘焦点落到正文
+  })
+})
+
+describe('未接来电角标（unreadSummary.missedCalls → 通话导航项）', () => {
+  it('missedCalls>0 → /calls 导航项显示角标数字', async () => {
+    ;(api.unreadSummary as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ notifications: 0, messages: 0, missedCalls: 2, total: 2 })
+    const { container } = render(<Layout><div>x</div></Layout>)
+    await waitFor(() => {
+      const callsLinks = [...container.querySelectorAll('a[href="/calls"]')]
+      expect(callsLinks.length).toBeGreaterThan(0)                        // 通话导航项存在
+      expect(callsLinks.some((a) => a.textContent?.includes('2'))).toBe(true) // 其上显示未接角标 2
+    })
+  })
+
+  it('missedCalls=0 → /calls 导航项无角标数字', async () => {
+    ;(api.unreadSummary as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ notifications: 0, messages: 0, missedCalls: 0, total: 0 })
+    const { container } = render(<Layout><div>x</div></Layout>)
+    await screen.findAllByText('通话')  // 等渲染完成
+    const callsLinks = [...container.querySelectorAll('a[href="/calls"]')]
+    expect(callsLinks.every((a) => !/\d/.test(a.textContent ?? ''))) .toBe(true) // 无数字角标
   })
 })
 

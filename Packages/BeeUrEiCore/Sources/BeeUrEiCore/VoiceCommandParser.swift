@@ -155,7 +155,9 @@ public enum VoiceCommandParser {
         // 导盲/避障须在通用「看一看」之前匹配（"识别障碍/避障"含"识别"会被 look 抢走）。
         if has(["导盲", "避障", "开始导盲", "实时避障", "obstacle", "guide me", "start guide", "avoidance"]) { return .guideMe }
         // 配色比对须在 readColor 之前（"颜色搭不搭"含"颜色"会被 readColor 抢）：明确的"搭/配"意图先走比对。
-        if has(["搭配", "搭不搭", "配不配", "配色", "两件搭", "衣服搭", "颜色搭", "does this match", "do these match", "do these two match", "do they match", "colors match", "colours match", "color match", "go together"]) { return .matchColors }
+        // "搭吗/配吗"(搭紧跟吗，如"这俩搭吗/这个配吗")也收——扫两件衣物后最自然的一问，此前落 unknown 无应答；
+        // "搭"/"配"须紧跟"吗"才命中（"搭车吗/配合吗"中间隔字不构成子串），且极少撞地名/他意，安全。
+        if has(["搭配", "搭不搭", "配不配", "配色", "两件搭", "衣服搭", "颜色搭", "搭吗", "配吗", "does this match", "do these match", "do these two match", "do they match", "colors match", "colours match", "color match", "go together"]) { return .matchColors }
         // 颜色须在通用「看一看」之前：否则「这是什么颜色」(含"这是什么")、「识别颜色」(含"识别") 会被 look 抢走。
         if has(["颜色", "什么色", "识别颜色", "报颜色", "what color", "which color", "what colour", "which colour", "read color", "color of", "identify color"]) { return .readColor }
         if has(["看一看", "识别", "这是什么", "拍一下", "look", "what is this", "identify", "recognize"]) { return .look }

@@ -32,6 +32,7 @@ final class VoiceCommandParserTests: XCTestCase {
             ("开始导盲", .guideMe), ("帮我避障", .guideMe), ("start obstacle avoidance", .guideMe),
             ("这是什么颜色", .readColor), ("什么色", .readColor), ("what color is this", .readColor),
             ("这两件搭配吗", .matchColors), ("颜色搭不搭", .matchColors), ("does this match", .matchColors), ("do these two match", .matchColors),
+            ("这俩搭吗", .matchColors), ("这个配吗", .matchColors),
             ("看一看这是什么", .look), ("识别一下", .look), ("what is this", .look),
             ("再说一遍", .repeatLast), ("刚才说什么", .repeatLast), ("repeat that", .repeatLast),
             ("你会什么", .commands), ("你能做什么", .commands), ("what can you do", .commands),

@@ -143,6 +143,17 @@ enum AssistStrings {
     static func blockedRelation(_ l: Language) -> String { l == .zh ? "无法添加：存在拉黑关系" : "Can't add: one of you blocked the other" }
     static func tooManyLinks(_ l: Language) -> String { l == .zh ? "联系人数量已达上限" : "Contact limit reached" }
     static func cannotLinkSelf(_ l: Language) -> String { l == .zh ? "不能添加自己" : "Cannot add yourself" }
+    /// 添加联系人成功的语音确认（盲人看不到列表里冒出新条目）：点明加了谁、什么关系；**尤其**确认是否设为紧急联系人
+    /// ——设紧急联系人是安全攸关操作，静默成功会让盲人不确定"到底设上没有"，真出事时才发现没配。
+    static func contactAdded(name: String, relation: String, isEmergency: Bool, _ l: Language) -> String {
+        let rel = relation.trimmingCharacters(in: .whitespaces)
+        if l == .zh {
+            let base = rel.isEmpty ? "已把\(name)添加为联系人" : "已把\(name)添加为\(rel)"
+            return isEmergency ? base + "，并设为紧急联系人" : base
+        }
+        let base = rel.isEmpty ? "Added \(name) as a contact" : "Added \(name) as \(rel)"
+        return isEmergency ? base + ", set as an emergency contact" : base
+    }
     static func sendingHelp(_ l: Language) -> String {
         l == .zh ? "正在发起求助，请稍候…" : "Sending your request, please wait…"
     }

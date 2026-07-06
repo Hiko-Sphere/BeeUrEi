@@ -19,6 +19,7 @@ struct FamilyLinksView: View {
     @State private var isEmergency = false
     @State private var errorText: String?
     @State private var emergencyInfo: String?
+    @State private var successText: String?   // 添加成功等正向确认——盲人看不到列表更新，须主动播报
     @State private var emergencyCall: CallSession?
     @State private var api = APIClient()
     /// 亲友屏文案语言（E5）。
@@ -102,9 +103,11 @@ struct FamilyLinksView: View {
             }
         }
         .navigationTitle(AssistStrings.familyNavTitle(lang))
-        // 错误与紧急呼叫状态主动朗读——盲人看不到屏幕上的提示（见 P2 审计）。
-        .onChange(of: errorText) { _, e in if let e, !e.isEmpty { A11y.announce(e) } }
-        .onChange(of: emergencyInfo) { _, m in if let m, !m.isEmpty { A11y.announce(m) } }
+        // 错误/紧急状态/成功确认都主动朗读——盲人看不到屏幕上的提示（见 P2 审计）。
+        // 用 announce()（非裸 A11y.announce）：本视图是视障侧，未开 VoiceOver 的盲人用户也须用 App 语音听到。
+        .onChange(of: errorText) { _, e in if let e, !e.isEmpty { announce(e) } }
+        .onChange(of: emergencyInfo) { _, m in if let m, !m.isEmpty { announce(m) } }
+        .onChange(of: successText) { _, s in if let s, !s.isEmpty { announce(s) } }
         .task { await load() }
         .fullScreenCover(item: $emergencyCall) { s in
             CallView(role: .blind, callId: s.id) {
@@ -121,6 +124,15 @@ struct FamilyLinksView: View {
         catch { errorText = AssistStrings.loadFailed(lang) }
     }
 
+    /// 视障侧统一播报：VoiceOver 开→系统公告即可；未开→用 App 语音（SpeechHub .query）念出来，
+    /// 让**不用 VoiceOver 的盲人用户**也不漏听错误/紧急状态/成功确认（与 LiveLocationManager.announce 同口径）。
+    private func announce(_ text: String) {
+        A11y.announce(text)
+        if !UIAccessibility.isVoiceOverRunning {
+            SpeechHub.shared.speak(text, channel: .query, voiceCode: lang.voiceCode)
+        }
+    }
+
     private func add() async {
         guard let token = KeychainStore.read() else { errorText = AssistStrings.loginShort(lang); return }
         do {
@@ -129,6 +141,9 @@ struct FamilyLinksView: View {
             try await api.addFamilyLink(token: token, userId: target.id,
                                         relation: newRelation, isEmergency: isEmergency,
                                         phone: newPhone.trimmingCharacters(in: .whitespaces))
+            // 成功确认须在清空字段**之前**取值——尤其点明是否设为紧急联系人（安全攸关，静默成功会让盲人不确定设上没）。
+            errorText = nil
+            successText = AssistStrings.contactAdded(name: target.displayName, relation: newRelation, isEmergency: isEmergency, lang)
             newUsername = ""; newRelation = ""; newPhone = ""; isEmergency = false
             await load()
         } catch let APIError.server(msg) {

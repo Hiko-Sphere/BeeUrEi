@@ -84,6 +84,23 @@ final class AssistStringsTests: XCTestCase {
         XCTAssertNil(l2.online)
     }
 
+    func testContactAddedConfirmsRelationAndEmergency() {
+        // 加联系人成功确认：点明名字+关系；紧急联系人**必须**额外确认（安全攸关，静默成功会让盲人不确定设上没）。
+        let emerg = AssistStrings.contactAdded(name: "小红", relation: "女儿", isEmergency: true, .zh)
+        XCTAssertTrue(emerg.contains("小红") && emerg.contains("女儿"))
+        XCTAssertTrue(emerg.contains("紧急联系人"), "设紧急联系人须在确认里点明：\(emerg)")
+        // 非紧急：不谎称设了紧急联系人。
+        let plain = AssistStrings.contactAdded(name: "小红", relation: "女儿", isEmergency: false, .zh)
+        XCTAssertFalse(plain.contains("紧急联系人"))
+        XCTAssertNotEqual(emerg, plain)
+        // 关系留空：仍给出通顺确认（"添加为联系人"），不落半句。
+        XCTAssertTrue(AssistStrings.contactAdded(name: "Bob", relation: "  ", isEmergency: false, .zh).contains("联系人"))
+        // 英文不串中文，紧急/非紧急分明。
+        let en = AssistStrings.contactAdded(name: "Amy", relation: "daughter", isEmergency: true, .en)
+        XCTAssertTrue(en.lowercased().contains("emergency") && en.contains("Amy"))
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(en)")
+    }
+
     func testEnglishHasNoChinese() {
         let samples = [
             AssistStrings.callVolunteerSubtitle(.en), AssistStrings.helpFailed(.en),

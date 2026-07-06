@@ -319,6 +319,7 @@ struct ChatView: View {
     @State private var groupDetail: GroupConversationInfo? // 群聊：成员表（发言人名字/管理）
     @State private var showGroupInfo = false
     @State private var showSearch = false
+    @State private var showReport = false          // 单聊举报对方弹层
     @State private var contacts: [FamilyLinkInfo] = []
     @Environment(\.dismiss) private var dismiss
     @FocusState private var inputFocused: Bool
@@ -368,11 +369,23 @@ struct ChatView: View {
                     Button { showGroupInfo = true } label: { Image(systemName: "person.3") }
                         .accessibilityLabel(ChatStrings.groupInfo(lang))
                 }
+            } else {
+                // 单聊举报对方（信任与安全）：骚扰就发生在聊天里，就地可举报，不必进通话/联系人页。复用通话侧 ReportSheet。
+                ToolbarItem(placement: .primaryAction) {
+                    Button { showReport = true } label: { Image(systemName: "flag") }
+                        .accessibilityLabel(CallStrings.reportShort(lang))
+                }
             }
         }
         .sheet(isPresented: $showSearch) {
             MessageSearchSheet(session: session, peerId: peerId, groupId: groupId,
                                memberName: isGroup ? { senderName($0) } : nil, selfId: myId, lang: lang)
+        }
+        .sheet(isPresented: $showReport) {
+            // 聊天举报无通话录制可附，canAttach=false；提交只带 targetUserId+理由（服务端 callId 可选）。
+            ReportSheet(lang: lang, canAttach: false,
+                        onSubmit: { reason, _ in showReport = false; Task { await submitChatReport(reason: reason) } },
+                        onCancel: { showReport = false })
         }
         .sheet(isPresented: $showGroupInfo) {
             if let detail = groupDetail {
@@ -799,6 +812,20 @@ struct ChatView: View {
         if let links = try? await APIClient().familyLinks(token: token) {
             contacts = links.filter { $0.isAccepted }
         }
+    }
+
+    /// 单聊举报对方（无通话录制，callId=nil）。结果经 SpeechHub 语音回执（盲人看不到 sheet 关闭之外的确认；
+    /// 与本视图发送类确认同口径）。仅单聊有 peerId；群聊无此入口。复用通话侧 CallStrings.reported/reportFailed。
+    private func submitChatReport(reason: String) async {
+        guard let token = session.token, let target = peerId else { return }
+        let msg: String
+        do {
+            try await APIClient().submitReport(token: token, targetUserId: target, callId: nil, reason: reason)
+            msg = CallStrings.reported(lang)
+        } catch {
+            msg = CallStrings.reportFailed(lang)
+        }
+        SpeechHub.shared.speak(msg, channel: .query, voiceCode: lang.voiceCode)
     }
 
     private func markRead() {

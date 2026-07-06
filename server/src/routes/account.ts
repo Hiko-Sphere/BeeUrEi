@@ -200,7 +200,9 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
   })
 
   // 绑定/换绑手机号（手机号+密码登录的标识）：归一化 + 全局唯一（不能占用他人手机号）。
-  app.post('/api/account/phone', { preHandler: requireAuth() }, async (req, reply) => {
+  // 端级限流(与改密/2FA 同 10/min)：改手机/用户名都是**登录标识变更 + 每次真改都 notifySecurity 推送本人**——
+  // 无限流则被盗令牌可循环改不同值(changed 恒真)刷爆本人安全推送(淹没真信号)、并放大写库。正常一次即可，10/min 极宽松。
+  app.post('/api/account/phone', { preHandler: requireAuth(), config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = z.object({ phone: z.string().trim().min(6).max(20) }).safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const user = store.findById(req.user!.sub)
@@ -236,7 +238,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
 
   // 修改/设置用户名（唯一登录标识）：校验格式 + 唯一性（大小写不敏感）；成功后标记 usernameCustomized=true。
   // access token 以 user id 为 sub，改用户名不影响现有令牌。用于 Apple/邮箱登录后自定义唯一 userid。
-  app.post('/api/account/username', { preHandler: requireAuth() }, async (req, reply) => {
+  app.post('/api/account/username', { preHandler: requireAuth(), config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = z.object({ username: z.string().trim().min(3).max(32) }).safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const username = parsed.data.username

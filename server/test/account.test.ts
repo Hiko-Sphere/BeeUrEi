@@ -84,4 +84,25 @@ describe('account management', () => {
     expect(noauth.statusCode).toBe(401)
     await a.close()
   })
+
+  it('改用户名/手机端级限流：循环改**不同值**连打超 10/min 被 429（防被盗令牌刷本人安全推送+写库放大；全局 300 远松，改前不 429）', async () => {
+    const a = app()
+    const t = (await reg(a, 'ratelimituser')).token
+    // 循环改不同用户名（changed 恒真 → 每次都 notifySecurity）：端级 10/min，第 11 次起应 429。
+    let userLimited = false
+    for (let i = 0; i < 13; i++) {
+      const res = await a.inject({ method: 'POST', url: '/api/account/username', headers: auth(t), payload: { username: `newname${i}` } })
+      if (res.statusCode === 429) { userLimited = true; break }
+    }
+    expect(userLimited).toBe(true)
+    // 手机同样限流（独立端点独立桶）：循环改不同号连打亦被 429。
+    const t2 = (await reg(a, 'ratelimitphone')).token
+    let phoneLimited = false
+    for (let i = 0; i < 13; i++) {
+      const res = await a.inject({ method: 'POST', url: '/api/account/phone', headers: auth(t2), payload: { phone: `1380000${String(1000 + i)}` } })
+      if (res.statusCode === 429) { phoneLimited = true; break }
+    }
+    expect(phoneLimited).toBe(true)
+    await a.close()
+  })
 })

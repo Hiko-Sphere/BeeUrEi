@@ -6,6 +6,7 @@ import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { joinNames } from '../lib/listFormat'
 import { parseLocation, appleMapsUrl } from '../lib/location'
+import { isForwardableKind } from '../lib/chatMessage'
 import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo, Modal, Button } from '../components/ui'
 import { IconChat, IconSend, IconPlus, IconX } from '../components/icons'
 
@@ -589,8 +590,9 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForwar
   const editable = mine && m.kind === 'text' && Date.now() - m.createdAt < 15 * 60_000
   const reactable = m.kind !== 'recalled'
   const replyable = m.kind !== 'recalled'
-  // 可转发：文本/位置/图片（内容自包含）。视频是 mediaId，转发到无权会话看不到，故不转发；撤回的也不转发。
-  const forwardable = m.kind === 'text' || m.kind === 'location' || m.kind === 'image'
+  // 可转发：仅**内容自包含**的类型（文本/位置/图片/语音都是内联内容）。视频是 mediaId、转发到无权会话看不到，
+  // 撤回/未知亦不转发。判定抽到 isForwardableKind（含语音——它与图片同为 data: URL，此前被漏，见其单测）。
+  const forwardable = isForwardableKind(m.kind)
   const [picking, setPicking] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(m.text)

@@ -80,7 +80,8 @@ export function ChatPage() {
 
       {/* 对话窗格 */}
       <section className={`min-w-0 flex-1 ${sel ? 'flex' : 'hidden md:flex'}`}>
-        {sel ? <Thread key={`${sel.kind}:${sel.id}`} sel={sel} onBack={back} onSent={loadLists} />
+        {sel ? <Thread key={`${sel.kind}:${sel.id}`} sel={sel} onBack={back} onSent={loadLists}
+            peerOnline={sel.kind === 'peer' ? ((convos ?? []).find((c) => c.peer.id === sel.id)?.online ?? false) : false} />
           : <div className="flex w-full items-center justify-center rounded-2xl surface border border-[var(--line)] text-faint">{t('选择一个会话开始聊天', 'Select a conversation')}</div>}
       </section>
 
@@ -177,7 +178,7 @@ export function mergeMessagesStable(fresh: ChatMessage[], existing: ChatMessage[
   return extra.length ? [...fresh, ...extra].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)) : fresh
 }
 
-function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; onSent: () => void }) {
+function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: () => void; onSent: () => void; peerOnline?: boolean }) {
   const { user } = useSession()
   const { t, lang } = useI18n()
   const toast = useToast()
@@ -335,6 +336,8 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
         {sel.kind === 'peer' ? <Avatar name={sel.name} src={sel.avatar} size={36} /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-honey/15 text-honey"><IconChat width={18} height={18} /></span>}
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold">{sel.name}</div>
+          {/* 对端在线（WhatsApp 式会话头在线态）：正要说话的一刻分清"在线可期待秒回/该打电话"vs"离线只能留言"。读屏可闻。 */}
+          {sel.kind === 'peer' && peerOnline && <div className="text-xs font-medium text-ok" role="status">{t('在线', 'Online')}</div>}
           {sel.kind === 'group' && <div className="text-xs text-faint">{joinNames(sel.members.map((m) => m.displayName), lang)}</div>}
         </div>
         <button onClick={() => { setSearchOpen((v) => !v); if (searchOpen) { setSearchQuery(''); setSearchResults(null) } }}

@@ -3,7 +3,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { api, APIError, type ContactLocation } from '../lib/api'
 import { pollWhileVisible } from '../lib/poll'
-import { batteryBadge } from '../lib/battery'
+import { batteryBadge, batteryPercent } from '../lib/battery'
 import { validAccuracyMeters, accuracyText } from '../lib/geoAccuracy'
 import { headingPhrase } from '../lib/heading'
 import { appleMapsUrl } from '../lib/location'
@@ -42,6 +42,9 @@ export function LocationsPage() {
   const publishTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const fitted = useRef(false)
   const activeRef = useRef(false) // 同步标记"正在共享"：停止后绝不让滞后的 publish 复活共享（见复审）
+  // 浏览器 Battery Status API 的 BatteryManager（Chromium 支持；Firefox/Safari 已移除→保持 null 不上报电量）。
+  // getBattery() 只需取一次：返回的对象 .level 会随电量实时更新，每次 publish 直接读当前值。
+  const batteryMgr = useRef<{ level: number } | null>(null)
 
   const [contacts, setContacts] = useState<ContactLocation[]>([])
   const [sharing, setSharing] = useState(false)
@@ -134,7 +137,11 @@ export function LocationsPage() {
     const p = lastPos.current
     if (!p) return
     try {
-      const r = await api.updateLocation({ lat: p.latitude, lng: p.longitude, accuracy: p.accuracy ?? undefined, heading: (p.heading != null && !Number.isNaN(p.heading)) ? p.heading : undefined })
+      const r = await api.updateLocation({ lat: p.latitude, lng: p.longitude, accuracy: p.accuracy ?? undefined,
+        heading: (p.heading != null && !Number.isNaN(p.heading)) ? p.heading : undefined,
+        // 上报本机电量（Find My/Life360 惯例）：亲友看到"快没电"可在失联前主动联系；也让服务端低电量预警对 web 共享者生效。
+        // 此前 web 从不上报电量（只上报了 accuracy/heading），web 共享者的联系人永远看到"无电量"、低电量预警也不触发。
+        battery: batteryPercent(batteryMgr.current?.level) })
       if (!activeRef.current) return // await 期间用户已停止：不要把状态改回"共享中"
       setSharing(true); setSharingUntil(r.sharingUntil)
     } catch { /* 单次失败忽略，下个周期重试 */ }
@@ -156,6 +163,9 @@ export function LocationsPage() {
   const startSharing = useCallback(() => {
     if (!('geolocation' in navigator)) { toast(t('当前浏览器不支持定位', 'Geolocation not supported'), 'error'); return }
     activeRef.current = true
+    // 取一次 BatteryManager（Chromium 有；其它浏览器无 getBattery→保持 null，publish 时 batteryPercent(undefined) 不上报）。
+    const nav = navigator as Navigator & { getBattery?: () => Promise<{ level: number }> }
+    if (nav.getBattery && !batteryMgr.current) { void nav.getBattery().then((b) => { batteryMgr.current = b }).catch(() => { /* 取不到就不报电量 */ }) }
     watchId.current = navigator.geolocation.watchPosition(
       (pos) => {
         lastPos.current = pos.coords

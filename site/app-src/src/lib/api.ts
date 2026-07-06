@@ -285,7 +285,7 @@ export const api = {
     post('/api/assist/help/match', opts ?? {}) as Promise<{ request: { callId: string; fromName: string; fromAvatar?: string | null; language?: string | null; locality?: string | null; topic?: string | null } | null }>,
 
   // 实时位置共享（与亲友/协助者互相可见；纯内存、按已接受绑定授权）
-  updateLocation: (body: { lat: number; lng: number; accuracy?: number; heading?: number; ttlSec?: number }) =>
+  updateLocation: (body: { lat: number; lng: number; accuracy?: number; heading?: number; battery?: number; ttlSec?: number }) =>
     post('/api/locations/update', body) as Promise<{ ok: boolean; sharingUntil: number }>,
   stopSharingLocation: () => post('/api/locations/stop'),
   contactLocations: () => get('/api/locations/contacts') as Promise<{ sharing: boolean; sharingUntil: number; contacts: ContactLocation[] }>,

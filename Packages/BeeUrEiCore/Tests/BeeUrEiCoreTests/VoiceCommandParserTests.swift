@@ -34,6 +34,9 @@ final class VoiceCommandParserTests: XCTestCase {
             ("这两件搭配吗", .matchColors), ("颜色搭不搭", .matchColors), ("does this match", .matchColors), ("do these two match", .matchColors),
             ("这俩搭吗", .matchColors), ("这个配吗", .matchColors),
             ("看一看这是什么", .look), ("识别一下", .look), ("what is this", .look),
+            ("帮我看看", .look), ("看看这个", .look),
+            // "看看X" 兜底守卫：具体意图仍走各自命令，不被 look 的"看看"抢。
+            ("看看几点了", .time), ("看看周围有什么", .around), ("看看天气", .weather),
             ("再说一遍", .repeatLast), ("刚才说什么", .repeatLast), ("repeat that", .repeatLast),
             ("没听清", .repeatLast), ("没听清楚", .repeatLast), ("刚才说啥", .repeatLast), ("didn't catch that", .repeatLast), ("come again", .repeatLast),
             ("你会什么", .commands), ("你能做什么", .commands), ("what can you do", .commands),

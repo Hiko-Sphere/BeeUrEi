@@ -101,6 +101,23 @@ final class AssistStringsTests: XCTestCase {
         XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(en)")
     }
 
+    func testContactRemovedWarnsWhenLastEmergencyContactGone() {
+        // 删联系人成功确认：点明删了谁；删的是紧急联系人且删后已无可用紧急联系人时，**追加安全提醒**（否则遇险无人可通知）。
+        let base = AssistStrings.contactRemoved(name: "小红", noEmergencyLeft: false, .zh)
+        XCTAssertTrue(base.contains("小红") && base.contains("已删除"))
+        XCTAssertFalse(base.contains("紧急联系人"), "非最后紧急联系人不该追加提醒：\(base)")
+        let warn = AssistStrings.contactRemoved(name: "小红", noEmergencyLeft: true, .zh)
+        XCTAssertTrue(warn.contains("没有紧急联系人"), "删掉最后一位紧急联系人须提醒：\(warn)")
+        XCTAssertNotEqual(base, warn)
+        // 英文两态不串中文。
+        for s in [AssistStrings.contactRemoved(name: "Amy", noEmergencyLeft: false, .en),
+                  AssistStrings.contactRemoved(name: "Amy", noEmergencyLeft: true, .en)] {
+            XCTAssertTrue(s.contains("Amy"))
+            XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(s)")
+        }
+        XCTAssertTrue(AssistStrings.contactRemoved(name: "Amy", noEmergencyLeft: true, .en).lowercased().contains("emergency"))
+    }
+
     func testEnglishHasNoChinese() {
         let samples = [
             AssistStrings.callVolunteerSubtitle(.en), AssistStrings.helpFailed(.en),

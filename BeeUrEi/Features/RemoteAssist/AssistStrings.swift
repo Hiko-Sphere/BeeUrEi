@@ -154,6 +154,14 @@ enum AssistStrings {
         let base = rel.isEmpty ? "Added \(name) as a contact" : "Added \(name) as \(rel)"
         return isEmergency ? base + ", set as an emergency contact" : base
     }
+    /// 删除联系人成功的语音确认（盲人看不到那行从列表消失）。若删的是紧急联系人且删后已**无可用紧急联系人**，追加
+    /// 安全提醒——SOS/摔倒扇出只走 accepted∧isEmergency，没了就无人可通知，别让盲人在最坏时刻才发现（同 add 侧的前置提示）。
+    static func contactRemoved(name: String, noEmergencyLeft: Bool, _ l: Language) -> String {
+        let base = l == .zh ? "已删除联系人\(name)" : "Removed contact \(name)"
+        guard noEmergencyLeft else { return base }
+        return base + (l == .zh ? "。你现在没有紧急联系人了，请尽快添加一位，否则遇险时无人可通知。"
+                                : ". You now have no emergency contacts — add one soon, or no one can be alerted in an emergency.")
+    }
     static func sendingHelp(_ l: Language) -> String {
         l == .zh ? "正在发起求助，请稍候…" : "Sending your request, please wait…"
     }

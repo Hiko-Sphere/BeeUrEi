@@ -165,7 +165,13 @@ struct FamilyLinksView: View {
 
     private func remove(_ link: FamilyLinkInfo) async {
         guard let token = KeychainStore.read() else { return }
-        do { try await api.deleteFamilyLink(token: token, id: link.id); await load() }
+        do {
+            try await api.deleteFamilyLink(token: token, id: link.id)
+            await load()
+            // 删成功确认（盲人看不到那行消失）；删的是紧急联系人且删后已无可用紧急联系人时追加安全提醒。
+            let noEmergencyLeft = link.isEmergency && !FamilyLinkInfo.hasUsableEmergencyContact(in: links)
+            successText = AssistStrings.contactRemoved(name: link.memberName, noEmergencyLeft: noEmergencyLeft, lang)
+        }
         catch { errorText = AssistStrings.deleteFailed(lang) }
     }
 

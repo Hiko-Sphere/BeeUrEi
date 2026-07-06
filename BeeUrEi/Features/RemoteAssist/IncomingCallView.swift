@@ -75,8 +75,9 @@ struct IncomingCallView: View {
         }
         .task {
             ScreenWake.acquire("ring")   // 响铃期间屏不灭，盲人有充足时间接听
-            // 来电即报**谁**来电（双路，未开 VoiceOver 的盲人也须听到是谁——否则只闻铃声不知该不该接、是不是家人急事）。
-            announce(CallStrings.incomingRingAnnounce(ring.callerName, lang))
+            // 来电报**谁**来电：此处**只**发 VoiceOver 公告（裸 A11y.announce）——未开 VoiceOver 的盲人由
+            // RemoteAssistService.ring() 已用 SpeechHub 报过(incomingAnnounce)，两处互补、**避免双报**（勿改回双路）。
+            A11y.announce(CallStrings.incomingRingAnnounce(ring.callerName, lang))
             startCancelWatch()
         }
         // VoiceOver 魔法轻点（双指双击）= 接听（系统来电惯例）。

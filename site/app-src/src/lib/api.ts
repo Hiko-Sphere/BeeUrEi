@@ -221,7 +221,8 @@ export const api = {
   setUsername: (username: string) => post('/api/account/username', { username }),
   setEmail: (email: string) => post('/api/account/email', { email }),       // 设置/换绑邮箱 → 服务端发验证码
   verifyEmail: (code: string) => post('/api/account/email/verify', { code }), // 校验验证码 → 标记已验证
-  deleteAccount: () => del('/api/account'),
+  // 删号须重新验证身份（服务端要求，不可逆+级联清空）：带当前密码。Apple 账号在 iOS 走 Apple 重验，web 端用密码。
+  deleteAccount: (password: string) => del('/api/account', { password }),
 
   // 登录设备 / 会话管理
   sessions: () => get('/api/account/sessions') as Promise<{ sessions: SessionInfo[] }>,

@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
+import type { AppleTokenVerifier } from '../src/auth/apple'
+
+// fake Apple 验证器：token 形如 good:<sub>（与 authOverhaul 同口径）。
+const fakeApple: AppleTokenVerifier = async (t) => (t.startsWith('good:') ? { sub: t.split(':')[1] } : null)
 
 function app() {
   return buildApp(new MemoryStore())
@@ -43,13 +47,50 @@ describe('account management', () => {
     await a.close()
   })
 
-  it('deletes account; user can no longer log in', async () => {
+  it('deletes account（重输密码验证身份）; user can no longer log in', async () => {
     const a = app()
     const { token } = await reg(a, 'acc3')
-    const del = await a.inject({ method: 'DELETE', url: '/api/account', headers: auth(token) })
+    // 删号须重新验证身份（不可逆+级联清空）：带正确当前密码 → 204。
+    const del = await a.inject({ method: 'DELETE', url: '/api/account', headers: auth(token), payload: { password: 'secret123' } })
     expect(del.statusCode).toBe(204)
     const login = await a.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'acc3', password: 'secret123' } })
     expect(login.statusCode).toBe(401)
+    await a.close()
+  })
+
+  it('删号须重新验证身份：不带凭据→401 reauth_required，且账号仍在', async () => {
+    const a = app()
+    const { token } = await reg(a, 'acc3b')
+    const del = await a.inject({ method: 'DELETE', url: '/api/account', headers: auth(token) }) // 无 body
+    expect(del.statusCode).toBe(401)
+    expect(del.json()).toMatchObject({ error: 'reauth_required' })
+    // 账号未被删除：仍可正常登录。
+    expect((await a.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'acc3b', password: 'secret123' } })).statusCode).toBe(200)
+    await a.close()
+  })
+
+  it('删号密码错误→401 invalid_credentials，账号仍在（被盗会话不能仅凭 token 毁号）', async () => {
+    const a = app()
+    const { token } = await reg(a, 'acc3c')
+    const del = await a.inject({ method: 'DELETE', url: '/api/account', headers: auth(token), payload: { password: 'wrong-pass' } })
+    expect(del.statusCode).toBe(401)
+    expect(del.json()).toMatchObject({ error: 'invalid_credentials' })
+    expect((await a.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'acc3c', password: 'secret123' } })).statusCode).toBe(200)
+    await a.close()
+  })
+
+  it('Apple 账号删号：重走 Apple 登录且 sub 匹配→204；密码/错 sub→401（Apple 账号无用户已知密码，须走 Apple 重验）', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store, { appleVerifier: fakeApple })
+    const signIn = await a.inject({ method: 'POST', url: '/api/auth/apple', payload: { identityToken: 'good:apple-del-sub' } })
+    expect([200, 201]).toContain(signIn.statusCode) // 新建 Apple 账号返回 201
+    const token = signIn.json().token as string
+    // 密码删不了：Apple 建号的 passwordHash 是随机值、用户不知情 → verifyPassword 失败。
+    expect((await a.inject({ method: 'DELETE', url: '/api/account', headers: auth(token), payload: { password: 'anything' } })).statusCode).toBe(401)
+    // 重走 Apple 但 sub 不匹配（换了个 Apple 账号）→ 401。
+    expect((await a.inject({ method: 'DELETE', url: '/api/account', headers: auth(token), payload: { appleIdentityToken: 'good:someone-else' } })).statusCode).toBe(401)
+    // sub 匹配 → 204，账号删除。
+    expect((await a.inject({ method: 'DELETE', url: '/api/account', headers: auth(token), payload: { appleIdentityToken: 'good:apple-del-sub' } })).statusCode).toBe(204)
     await a.close()
   })
 

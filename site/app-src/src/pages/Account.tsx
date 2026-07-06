@@ -31,6 +31,7 @@ export function AccountPage() {
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const [emailOpen, setEmailOpen] = useState(false)
   const [idOpen, setIdOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const [verifOpen, setVerifOpen] = useState(false)
   const [verif, setVerif] = useState<VerificationStatusInfo | null>(null)
 
@@ -81,11 +82,6 @@ export function AccountPage() {
   const changeLang = async (l: 'zh' | 'en') => {
     setLang(l)
     try { await api.setLanguage(l === 'zh' ? 'zh-Hans' : 'en') } catch { /* 本地已切换即可 */ }
-  }
-
-  const removeAccount = async () => {
-    if (!confirm(t('确定永久注销账户？此操作不可撤销，将删除你的资料与关系。', 'Permanently delete your account? This cannot be undone.'))) return
-    try { await api.deleteAccount(); toast(t('账户已注销', 'Account deleted')); signOut() } catch { toast(t('注销失败', 'Failed'), 'error') }
   }
 
   if (!user) return null
@@ -202,10 +198,11 @@ export function AccountPage() {
         <p className="mb-3 text-xs text-faint">{t('退出登录或永久注销账户。', 'Sign out or permanently delete your account.')}</p>
         <div className="flex gap-2">
           <Button variant="soft" onClick={() => { if (confirm(t('确定退出登录？', 'Sign out?'))) signOut() }}>{t('退出登录', 'Sign out')}</Button>
-          <Button variant="danger" onClick={removeAccount}>{t('注销账户', 'Delete account')}</Button>
+          <Button variant="danger" onClick={() => setDeleteOpen(true)}>{t('注销账户', 'Delete account')}</Button>
         </div>
       </Card>
 
+      {deleteOpen && <DeleteAccountDialog onClose={() => setDeleteOpen(false)} />}
       {pwOpen && <PasswordDialog onClose={() => setPwOpen(false)} />}
       {tfaOpen && <TwoFactorDialog onClose={() => setTfaOpen(false)} onChanged={async () => { await refreshMe(); try { setSelf(await api.me()) } catch { /* ignore */ } }} />}
       {sessionsOpen && <SessionsDialog onClose={() => setSessionsOpen(false)} />}
@@ -652,6 +649,43 @@ function IdentityDialog({ currentUsername, currentPhone, onClose, onChanged }: {
           </Field>
         </div>
         <div className="mt-5"><Button variant="soft" className="w-full" onClick={onClose}>{t('关闭', 'Close')}</Button></div>
+    </Modal>
+  )
+}
+
+/// 注销账户弹窗：删号不可逆 + 级联清空**全部**数据，服务端要求重新验证身份——收当前密码再删。
+/// 空密码不可提交；密码错/未验证给出明确文案。（纯 Apple 账号无用户已知密码，须在 iOS 走 Apple 重验，见服务端注释。）
+function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n()
+  const toast = useToast()
+  const { signOut } = useSession()
+  const [pw, setPw] = useState('')
+  const [busy, setBusy] = useState(false)
+  const submit = async () => {
+    setBusy(true)
+    try {
+      await api.deleteAccount(pw)
+      toast(t('账户已注销', 'Account deleted'), 'ok')
+      onClose(); signOut()
+    } catch (e) {
+      const msg = e instanceof APIError && e.code === 'invalid_credentials' ? t('密码不正确', 'Wrong password')
+        : e instanceof APIError && e.code === 'reauth_required' ? t('请输入当前密码以确认身份', 'Enter your current password to confirm')
+        : t('注销失败', 'Failed')
+      toast(msg, 'error')
+    } finally { setBusy(false) }
+  }
+  return (
+    <Modal onClose={onClose} label={t('注销账户', 'Delete account')} panelClassName="w-full max-w-sm">
+        <h3 className="text-lg font-semibold text-danger">{t('永久注销账户', 'Delete account')}</h3>
+        <p className="mt-2 text-sm text-soft">{t('此操作不可撤销，将永久删除你的资料、联系人、消息、录音等全部数据。为确认是你本人操作，请输入当前密码。',
+          "This is permanent and erases all your data — profile, contacts, messages, recordings. Enter your current password to confirm it's you.")}</p>
+        <div className="mt-4">
+          <Field label={t('当前密码', 'Current password')}><Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" /></Field>
+        </div>
+        <div className="mt-5 flex gap-3">
+          <Button variant="soft" className="flex-1" onClick={onClose}>{t('取消', 'Cancel')}</Button>
+          <Button variant="danger" className="flex-1" loading={busy} onClick={submit} disabled={!pw}>{t('永久注销', 'Delete forever')}</Button>
+        </div>
     </Modal>
   )
 }

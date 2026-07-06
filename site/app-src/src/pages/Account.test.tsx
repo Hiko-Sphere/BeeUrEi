@@ -32,6 +32,24 @@ describe('AccountPage 资料渲染（防字段漂移）', () => {
     expect(screen.getByText('已开启')).toBeInTheDocument()         // twoFactorEnabled=true → "已开启"
   })
 
+  it('注销账户须重新输入密码，并以密码调用 deleteAccount（防被盗会话一键毁号）', async () => {
+    mock(api.me).mockResolvedValue({ id: 'u1', username: 'amin', displayName: '阿明', role: 'helper', usernameCustomized: true, verified: false })
+    mock(api.deleteAccount).mockResolvedValue(undefined)
+    render(<AccountPage />)
+    await screen.findByText(/@amin/)
+    // 打开注销弹窗。
+    fireEvent.click(screen.getByRole('button', { name: '注销账户' }))
+    // 空密码时「永久注销」禁用（防误触/空提交）。
+    const confirmBtn = await screen.findByRole('button', { name: '永久注销' })
+    expect(confirmBtn).toBeDisabled()
+    // 输入当前密码 → 按钮可用 → 确认以密码调用 deleteAccount。
+    const pwInput = document.querySelector('input[type="password"]') as HTMLInputElement
+    fireEvent.change(pwInput, { target: { value: 'my-current-pw' } })
+    expect(confirmBtn).not.toBeDisabled()
+    fireEvent.click(confirmBtn)
+    await waitFor(() => expect(api.deleteAccount).toHaveBeenCalledWith('my-current-pw'))
+  })
+
   it('更换头像：选图→重编码为 256px→data URL→setAvatar 上传（对齐 iOS，web 此前只显示不可改）', async () => {
     mock(api.me).mockResolvedValue({ id: 'u1', username: 'amin', displayName: '阿明', role: 'helper', usernameCustomized: true, verified: false })
     mock(reencodeToJpeg).mockResolvedValue(new Blob(['x'], { type: 'image/jpeg' }))

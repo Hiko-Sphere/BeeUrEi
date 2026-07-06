@@ -289,7 +289,7 @@ describe('Web Push（浏览器推送紧急告警）', () => {
     const wp = new RecordingWebPush()
     const { a, store, helper, hAuth } = await seed(wp)
     await a.inject({ method: 'POST', url: '/api/push/web-subscribe', headers: hAuth, payload: SUB })
-    await a.inject({ method: 'DELETE', url: '/api/account', headers: hAuth })
+    await a.inject({ method: 'DELETE', url: '/api/account', headers: hAuth, payload: { password: 'secret123' } }) // 删号须重输密码
     expect(store.webPushSubscriptionsForUser(helper.user.id).length).toBe(0)
     await a.close()
     // Sqlite 存储层等价行为

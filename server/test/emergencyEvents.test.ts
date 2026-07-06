@@ -58,7 +58,7 @@ describe('紧急事件日志', () => {
     const { a, auth, store } = await seed()
     await a.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth, payload: { kind: 'fall', lat: 1, lon: 2 } })
     expect(store.recentEmergencyEvents().length).toBe(1)
-    await a.inject({ method: 'DELETE', url: '/api/account', headers: auth })
+    await a.inject({ method: 'DELETE', url: '/api/account', headers: auth, payload: { password: 'secret123' } }) // 删号须重输密码
     expect(store.recentEmergencyEvents().length).toBe(0)
     await a.close()
   })

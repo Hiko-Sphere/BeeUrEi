@@ -410,10 +410,30 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     return data
   })
 
-  // 删除账号（App Store 要求）：删除用户 + 其亲友绑定(双向) + refresh token。
-  app.delete('/api/account', { preHandler: requireAuth() }, async (req, reply) => {
-    // 自助删号（GDPR 删除权）：级联清群/消息/绑定/Passkey/会话，不留孤儿数据。
-    cascadeDeleteUser(store, req.user!.sub)
+  // 删除账号（App Store 要求 / GDPR 删除权）：删除用户 + 其亲友绑定(双向) + refresh token + 群/消息/Passkey/会话，不留孤儿数据。
+  // **不可逆 + 级联清空一切**，故要求**重新验证身份**——仅凭活动会话不足以删号（被借用/劫持/未锁屏的会话即可
+  // 一键永久毁号）。与改密/删邮箱等敏感操作同口径：密码账号须重输当前密码；纯 Apple 账号（无用户已知密码，
+  // passwordHash 是随机值）须重走一次 Sign in with Apple 且 sub 匹配本账号。二者都不成立 → 401。限流 10/min，
+  // 防持有被盗 access token 者暴力猜密码（与 /account/password 同口径）。
+  const deleteSchema = z.object({
+    password: z.string().min(1).max(256).optional(),
+    appleIdentityToken: z.string().min(1).optional(),
+  })
+  app.delete('/api/account', { preHandler: requireAuth(), config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const parsed = deleteSchema.safeParse(req.body ?? {})
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const user = store.findById(req.user!.sub)
+    if (!user) return reply.code(404).send({ error: 'not_found' })
+    // 重新验证身份：提供了密码 → 校验；提供了 Apple 令牌且本账号为 Apple 账号 → 验签且 sub 匹配。
+    if (parsed.data.password !== undefined) {
+      if (!verifyPassword(parsed.data.password, user.passwordHash)) return reply.code(401).send({ error: 'invalid_credentials' })
+    } else if (parsed.data.appleIdentityToken !== undefined) {
+      const identity = user.appleSub && appleVerifier ? await appleVerifier(parsed.data.appleIdentityToken) : null
+      if (!identity || identity.sub !== user.appleSub) return reply.code(401).send({ error: 'invalid_credentials' })
+    } else {
+      return reply.code(401).send({ error: 'reauth_required' }) // 未带任何凭据：明确要求客户端先重新验证身份
+    }
+    cascadeDeleteUser(store, user.id)
     return reply.code(204).send()
   })
 }

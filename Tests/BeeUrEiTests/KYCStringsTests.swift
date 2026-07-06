@@ -19,4 +19,15 @@ final class KYCStringsTests: XCTestCase {
         XCTAssertTrue(en.contains("Reviewer note: Back of ID missing"), en)
         XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文混中文：\(en)")
     }
+
+    func testSubmittingSpeakSetsExpectationForUpload() {
+        // 提交开场语音：须点明"正在上传"+"请稍候"（证件各 ~8MB、弱网慢，盲人看不到进度须知道在上传、要等），
+        // 且与终态"已提交"不同（否则听不出是刚开始还是已完成）。双语、英不串中。
+        let zh = KYCStrings.submittingSpeak(.zh)
+        XCTAssertTrue(zh.contains("上传") && zh.contains("请稍候"), "开场语音须点明正在上传+请稍候：\(zh)")
+        XCTAssertNotEqual(zh, KYCStrings.submitted(.zh))
+        let en = KYCStrings.submittingSpeak(.en)
+        XCTAssertTrue(en.lowercased().contains("uploading") && en.lowercased().contains("wait"), en)
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文混中文：\(en)")
+    }
 }

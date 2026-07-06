@@ -91,6 +91,11 @@ enum KYCStrings {
     static func retake(_ l: Language) -> String { l == .zh ? "重拍" : "Retake" }
     static func submit(_ l: Language) -> String { l == .zh ? "提交审核" : "Submit for review" }
     static func submitting(_ l: Language) -> String { l == .zh ? "提交中…" : "Submitting…" }
+    /// 盲人按下提交后的**开场语音**：证件+自拍两张各约 8MB、弱网下上传要好几秒。此前提交后只把按钮变成"提交中…"
+    /// （视觉、不自动朗读），盲人按完毫无反馈、长静默会以为卡死。开场即朗读"正在提交上传，请稍候"，让其知道已在进行。
+    static func submittingSpeak(_ l: Language) -> String {
+        l == .zh ? "正在提交，正在上传证件照片，请稍候…" : "Submitting — uploading your ID photos, please wait…"
+    }
     static func submitted(_ l: Language) -> String { l == .zh ? "已提交，等待人工审核" : "Submitted — pending review" }
 
     static func errNameRequired(_ l: Language) -> String { l == .zh ? "请填写证件上的法定姓名" : "Enter your legal name as on the document" }

@@ -142,6 +142,7 @@ struct KYCFlowView: View {
         guard let front = frontJPEG, let selfie = selfieJPEG else { err = KYCStrings.errDocsRequired(lang); announce(err!); return }
         busy = true
         defer { busy = false }
+        announce(KYCStrings.submittingSpeak(lang)) // 开场语音：盲人按完提交即知已在上传（按钮变"提交中…"不会自动朗读）
         do {
             let id = try await api.submitVerification(token: token, legalName: legalName.trimmingCharacters(in: .whitespaces), idType: idType, idNumberLast4: last4, idNumber: nil, consentVersion: "kyc-1")
             try await api.uploadVerificationDoc(token: token, id: id, kind: "front", jpeg: front)

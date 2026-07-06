@@ -4,6 +4,7 @@ import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { api, type AppConfig } from '../lib/api'
 import { getTheme, setTheme, appTitle, type Theme } from '../lib/theme'
+import { updateAppBadge } from '../lib/appBadge'
 import { Avatar, Pill } from './ui'
 import { CallProvider } from '../pages/call/CallController'
 import { IconHome, IconPhone, IconChat, IconUsers, IconFilm, IconBell, IconUser, IconShield, IconLogo, IconPin, IconFlag } from './icons'
@@ -40,6 +41,8 @@ export function Layout({ children }: { children: ReactNode }) {
   useEffect(() => {
     const total = unread + chatUnread + missedCalls
     document.title = (total > 0 ? `(${total > 99 ? '99+' : total}) ` : '') + appTitle(lang)
+    // 已安装 PWA 的图标角标（Badging API）：standalone 模式下看不到标签标题，图标角标才是"有 N 条待处理"的可见提示。
+    updateAppBadge(total)
   }, [unread, chatUnread, missedCalls, lang])
 
   // 待命心跳：开启后周期上报 available=true，让绑定的视障侧看到「在线」并能呼入；关闭立即下线。

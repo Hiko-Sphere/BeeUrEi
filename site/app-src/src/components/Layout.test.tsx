@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 
 // Layout 依赖 router/session/api/通话上下文——逐个 mock，只验骨架结构（skip 链接 + main 目标）。
@@ -56,6 +56,27 @@ describe('未接来电角标（unreadSummary.missedCalls → 通话导航项）'
     await screen.findAllByText('通话')  // 等渲染完成
     const callsLinks = [...container.querySelectorAll('a[href="/calls"]')]
     expect(callsLinks.every((a) => !/\d/.test(a.textContent ?? ''))) .toBe(true) // 无数字角标
+  })
+})
+
+describe('PWA 应用图标角标（Badging API）随未读总数更新', () => {
+  const navAny = navigator as unknown as { setAppBadge?: unknown; clearAppBadge?: unknown }
+  afterEach(() => { delete navAny.setAppBadge; delete navAny.clearAppBadge })
+
+  it('未读总数>0 → navigator.setAppBadge(total)（消息+通知+未接来电之和）', async () => {
+    const set = vi.fn().mockResolvedValue(undefined)
+    navAny.setAppBadge = set; navAny.clearAppBadge = vi.fn().mockResolvedValue(undefined)
+    ;(api.unreadSummary as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ notifications: 2, messages: 1, missedCalls: 3, total: 6 })
+    render(<Layout><div>x</div></Layout>)
+    await waitFor(() => expect(set).toHaveBeenCalledWith(6)) // 2+1+3
+  })
+
+  it('未读总数=0 → clearAppBadge', async () => {
+    const clear = vi.fn().mockResolvedValue(undefined)
+    navAny.setAppBadge = vi.fn().mockResolvedValue(undefined); navAny.clearAppBadge = clear
+    ;(api.unreadSummary as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ notifications: 0, messages: 0, missedCalls: 0, total: 0 })
+    render(<Layout><div>x</div></Layout>)
+    await waitFor(() => expect(clear).toHaveBeenCalled())
   })
 })
 

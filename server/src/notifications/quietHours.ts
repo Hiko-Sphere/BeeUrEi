@@ -23,6 +23,18 @@ export function localMinuteOfDay(nowMs: number, tz: string): number | null {
   }
 }
 
+/// 某时刻在指定时区的本地日期（YYYY-MM-DD）。坏/缺 tz → null（与 localMinuteOfDay 同 fail-open 口径）。
+/// 用于"每日一次"类幂等标记（每日定时安全报到）：跨午夜/DST 由 Intl 正确处理，绝不手算偏移。
+export function localDayIn(nowMs: number, tz: string): string | null {
+  if (typeof tz !== 'string' || tz.trim() === '') return null
+  try {
+    // en-CA 的日期格式恰为 YYYY-MM-DD（稳定、可比较、可存储）。
+    return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(nowMs))
+  } catch {
+    return null
+  }
+}
+
 /// 现在是否处于该用户的勿扰时段。未启用/配置非法/时区非法一律返回 false（fail-open）。
 export function isQuietedNow(q: QuietHours | undefined, nowMs: number): boolean {
   if (!q || !q.enabled) return false

@@ -198,6 +198,12 @@ export const pushStrings = {
   // 通知：诚实告知"断网期间到期、未替你通知亲友"，若仍需帮助可手动求助。非静默兜底（对抗复审 CONFIRMED#2）。
   // 到期前提醒**本人**（防遗忘误报）：dead-man's switch 的头号失败模式是用户忘了确认→亲友被无谓惊动→告警疲劳。
   // 提前 leadMs 给本人一条"快到期了，请报平安或延长"的提示（industry-standard：Kitestring/bSafe/Life360 皆有）。
+  // 每日定时报到自动开启（Snug Safety 式）：提醒本人在时限内报平安，超时会自动告警亲友。
+  dailyCheckinStartedTitle: (l: PushLang): string =>
+    l === 'en' ? 'Daily safety check-in started' : '每日安全报到已开始',
+  dailyCheckinStartedBody: (durationMinutes: number, l: PushLang): string =>
+    l === 'en' ? `Confirm you're safe within ${durationMinutes} min, or your emergency contacts will be alerted automatically.`
+               : `请在 ${durationMinutes} 分钟内报平安，超时将自动通知你的紧急联系人。`,
   safetyCheckinReminderTitle: (l: PushLang): string =>
     l === 'en' ? 'Safety check-in due soon' : '安全报到即将到期',
   safetyCheckinReminderBody: (remainMinutes: number, note: string | undefined, l: PushLang): string => {

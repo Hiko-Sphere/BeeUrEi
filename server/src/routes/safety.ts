@@ -46,6 +46,38 @@ export function registerSafetyRoutes(app: FastifyInstance, store: Store,
     return { timer: t ? view(t, Date.now()) : null, hasEmergencyContact: hasEmergencyContact(me) }
   })
 
+  // 每日定时安全报到（Snug Safety 式）：每天固定本地时刻自动开启一次报到，超时未报平安自动告警紧急联系人。
+  // 配置存 User.dailyCheckin（偏好数据，随删号级联/进导出）；实际开启由后台 startDueDailyCheckins 每分钟扫。
+  const scheduleSchema = z.object({
+    enabled: z.boolean(),
+    startMinute: z.number().int().min(0).max(1439),
+    durationMinutes: z.number().int().min(MIN_MINUTES).max(MAX_MINUTES),
+    tz: z.string().trim().min(1).max(64),
+    note: z.string().trim().max(200).optional(),
+  })
+  app.get('/api/safety/checkin/schedule', { preHandler: requireAuth() }, async (req) => {
+    const u = store.findById(req.user!.sub)
+    return { schedule: u?.dailyCheckin ?? null }
+  })
+  app.put('/api/safety/checkin/schedule', { preHandler: requireAuth(),
+                                            config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const parsed = scheduleSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    // tz 必须是 Intl 认识的 IANA 时区——坏 tz 会让后台扫描静默跳过（fail-open），等于"开了却永不开启"的假安心，
+    // 收下前就拒掉。校验用真实 Intl 探测（与运行时同一判定，绝不自造时区表）。
+    try { new Intl.DateTimeFormat('en-US', { timeZone: parsed.data.tz }) } catch { return reply.code(400).send({ error: 'invalid_timezone' }) }
+    const note = parsed.data.note
+    // 备注会念给亲友（到期告警正文）——与手动 start 同口径过违禁词。
+    if (note) { const cfg = store.getAppConfig(); if (matchBannedTerm(cfg, note)) return reply.code(403).send({ error: 'content_blocked' }) }
+    // 重置 lastDay：改配置（尤其把时刻改到今天晚些时候）后当天即按新配置生效，不被旧标记挡住。
+    const updated = store.updateUser(req.user!.sub, {
+      dailyCheckin: { enabled: parsed.data.enabled, startMinute: parsed.data.startMinute, durationMinutes: parsed.data.durationMinutes, tz: parsed.data.tz, note },
+      dailyCheckinLastDay: undefined,
+    })
+    if (!updated) return reply.code(404).send({ error: 'not_found' })
+    return { ok: true, schedule: updated.dailyCheckin, hasEmergencyContact: hasEmergencyContact(req.user!.sub) }
+  })
+
   // 开始一次安全报到。同一人至多一个 active——重开即重置：取消旧的、起新的。
   app.post('/api/safety/checkin/start', { preHandler: requireAuth(),
                                           config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req, reply) => {

@@ -298,7 +298,77 @@ function SafetyCheckInCard() {
           <Button variant="danger" onClick={start} disabled={busy}>{t('开始报到', 'Start check-in')}</Button>
         </div>
       )}
+      {/* 每日定时报到（Snug Safety 式）：独居者每天固定时刻自动开启一次报到——忘了设也有安全网。 */}
+      <DailyScheduleSection />
     </Card>
+  )
+}
+
+/// 每日定时报到配置区（SafetyCheckInCard 内）：每天固定本地时刻自动开启一次报到，超时未报平安自动告警
+/// 紧急联系人。时区自动取浏览器 IANA 时区；HH:MM ↔ startMinute 换算在此层。
+function DailyScheduleSection() {
+  const { t, lang } = useI18n()
+  const toast = useToast()
+  const [enabled, setEnabled] = useState(false)
+  const [time, setTime] = useState('09:00')
+  const [dur, setDur] = useState(60)
+  const [dnote, setDnote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const durations = [30, 60, 120, 240]
+  useEffect(() => { void (async () => {
+    try {
+      const { schedule } = await api.checkinSchedule()
+      if (schedule) {
+        setEnabled(schedule.enabled)
+        setTime(`${String(Math.floor(schedule.startMinute / 60)).padStart(2, '0')}:${String(schedule.startMinute % 60).padStart(2, '0')}`)
+        setDur(schedule.durationMinutes); setDnote(schedule.note ?? '')
+      }
+    } catch { /* 网络失败留默认 */ }
+    finally { setLoaded(true) }
+  })() }, [])
+  const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai' } catch { return 'Asia/Shanghai' } })()
+  const save = async (nextEnabled: boolean) => {
+    const [h, m] = time.split(':').map(Number)
+    const startMinute = (Number.isFinite(h) ? h : 9) * 60 + (Number.isFinite(m) ? m : 0)
+    setBusy(true)
+    try {
+      const r = await api.setCheckinSchedule({ enabled: nextEnabled, startMinute, durationMinutes: dur, tz, note: dnote.trim() || undefined })
+      setEnabled(r.schedule.enabled)
+      toast(nextEnabled
+        ? (r.hasEmergencyContact
+          ? t('每日报到已开启，每天到点会自动开始', 'Daily check-in on — starts automatically each day')
+          : t('已开启，但你还没有紧急联系人——超时也无人会被通知，请先设置紧急联系人。', 'On, but you have no emergency contact — no one will be alerted. Set one first.'))
+        : t('每日报到已关闭', 'Daily check-in off'), nextEnabled && !r.hasEmergencyContact ? 'error' : 'ok')
+    } catch { toast(t('保存失败，请重试', 'Failed — try again'), 'error') }
+    finally { setBusy(false) }
+  }
+  if (!loaded) return null
+  return (
+    <div className="mt-4 border-t border-[var(--line)] pt-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold">{t('每日定时报到', 'Daily check-in')}</div>
+          <p className="mt-0.5 text-xs text-faint">{t('每天到点自动开始一次报到，超时未报平安会自动通知紧急联系人（适合独居）。', 'Starts a check-in automatically each day; missing it alerts your emergency contacts (great for living alone).')}</p>
+        </div>
+        <button type="button" role="switch" aria-checked={enabled} disabled={busy} onClick={() => void save(!enabled)}
+          aria-label={t('每日定时报到', 'Daily check-in')}
+          className={`relative h-6 w-11 shrink-0 rounded-full transition ${enabled ? 'bg-honey' : 'bg-[var(--line)]'} disabled:opacity-50`}>
+          <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${enabled ? 'left-[22px]' : 'left-0.5'}`} />
+        </button>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <label className="text-sm text-soft" htmlFor="daily-time">{t('每天', 'Every day at')}</label>
+        <input id="daily-time" type="time" value={time} onChange={(e) => setTime(e.target.value)}
+          className="rounded-lg border border-[var(--line)] surface-2 px-2 py-1.5 text-sm" />
+        <label className="text-sm text-soft">{t('时限', 'Window')}</label>
+        <select value={dur} onChange={(e) => setDur(Number(e.target.value))} aria-label={t('每日报到时长', 'Daily check-in duration')}
+          className="rounded-lg border border-[var(--line)] surface-2 px-2 py-1.5 text-sm">
+          {durations.map((m) => <option key={m} value={m}>{durationName(m, lang)}</option>)}
+        </select>
+        {enabled && <Button variant="soft" onClick={() => void save(true)} disabled={busy}>{t('保存修改', 'Save')}</Button>}
+      </div>
+    </div>
   )
 }
 

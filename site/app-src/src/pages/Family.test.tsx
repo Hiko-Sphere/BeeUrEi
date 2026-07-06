@@ -6,7 +6,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }))
 vi.mock('./call/CallController', () => ({ useCall: () => ({ startOutgoing: vi.fn(), active: null }) }))
 vi.mock('../lib/api', () => ({
-  api: { familyLinks: vi.fn(), incomingLinks: vi.fn(), blocks: vi.fn(), unblock: vi.fn(), block: vi.fn(), deleteLink: vi.fn(), acceptLink: vi.fn(), addLink: vi.fn(), lookupUser: vi.fn(), setLinkEmergency: vi.fn(), safetyCheckin: vi.fn() },
+  api: { familyLinks: vi.fn(), incomingLinks: vi.fn(), blocks: vi.fn(), unblock: vi.fn(), block: vi.fn(), deleteLink: vi.fn(), acceptLink: vi.fn(), addLink: vi.fn(), lookupUser: vi.fn(), setLinkEmergency: vi.fn(), safetyCheckin: vi.fn(), checkinSchedule: vi.fn(), setCheckinSchedule: vi.fn() },
   APIError: class extends Error { code = ''; status = 0 },
 }))
 import { api } from '../lib/api'
@@ -252,5 +252,37 @@ describe('FamilyPage 联系人按名字搜索过滤', () => {
     fireEvent.change(screen.getByLabelText('搜索联系人'), { target: { value: '查无此人zzz' } })
     await waitFor(() => expect(screen.getByText('没有匹配的联系人')).toBeInTheDocument())
     expect(screen.queryByText('阿明')).not.toBeInTheDocument()
+  })
+})
+
+describe('每日定时报到配置（Snug Safety 式）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mock(api.familyLinks).mockResolvedValue({ links: [] })
+    mock(api.incomingLinks).mockResolvedValue({ links: [] })
+    mock(api.blocks).mockResolvedValue({ blocks: [] })
+    mock(api.safetyCheckin).mockResolvedValue({ timer: null, hasEmergencyContact: true })
+    mock(api.checkinSchedule).mockResolvedValue({ schedule: { enabled: true, startMinute: 540, durationMinutes: 60, tz: 'Asia/Shanghai' } })
+    mock(api.setCheckinSchedule).mockResolvedValue({ ok: true, schedule: { enabled: false, startMinute: 540, durationMinutes: 60, tz: 'Asia/Shanghai' }, hasEmergencyContact: true })
+  })
+
+  it('从服务端回填：enabled 开关呈开、startMinute 540 → 时间框 09:00', async () => {
+    render(<FamilyPage />)
+    const sw = await screen.findByRole('switch', { name: '每日定时报到' })
+    await waitFor(() => expect(sw).toHaveAttribute('aria-checked', 'true'))
+    expect((document.getElementById('daily-time') as HTMLInputElement).value).toBe('09:00')
+  })
+
+  it('点开关 → setCheckinSchedule(enabled 取反 + HH:MM 换算回 startMinute + 浏览器时区)', async () => {
+    render(<FamilyPage />)
+    const sw = await screen.findByRole('switch', { name: '每日定时报到' })
+    await waitFor(() => expect(sw).toHaveAttribute('aria-checked', 'true'))
+    fireEvent.click(sw)
+    await waitFor(() => expect(api.setCheckinSchedule).toHaveBeenCalled())
+    const arg = mock(api.setCheckinSchedule).mock.calls[0][0]
+    expect(arg.enabled).toBe(false)        // 开→关
+    expect(arg.startMinute).toBe(540)      // "09:00" → 540
+    expect(typeof arg.tz).toBe('string')
+    expect(arg.tz.length).toBeGreaterThan(0) // 浏览器 IANA 时区
   })
 })

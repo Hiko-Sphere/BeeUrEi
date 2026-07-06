@@ -37,6 +37,8 @@ export interface RouteWaypoint { lat: number; lng: number; note?: string }
 export interface SavedRouteInfo { id: string; ownerId: string; createdBy: string; name: string; waypoints: RouteWaypoint[]; createdAt: number; updatedAt: number; role: 'owner' | 'creator' }
 export interface ContactLocation { userId: string; displayName: string; avatar?: string | null; role: string; lat: number; lng: number; accuracy?: number | null; heading?: number | null; battery?: number | null; updatedAt: number }
 export interface SafetyTimer { id: string; note?: string | null; status: string; startedAt: number; dueAt: number; remainingSec: number }
+/// 每日定时报到配置：startMinute=本地时区一天中的第几分钟（0..1439）；tz 为 IANA 时区。
+export interface DailyCheckinSchedule { enabled: boolean; startMinute: number; durationMinutes: number; tz: string; note?: string }
 export interface AppConfig {
   features: Record<string, boolean>
   registrationEnabled: boolean
@@ -357,6 +359,9 @@ export const api = {
     post('/api/safety/checkin/start', { durationMinutes, ...(note ? { note } : {}) }) as Promise<{ timer: SafetyTimer; hasEmergencyContact: boolean }>,
   completeSafetyCheckin: () => post('/api/safety/checkin/complete', undefined) as Promise<{ ok: boolean; completed: boolean }>,
   extendSafetyCheckin: (addMinutes: number) => post('/api/safety/checkin/extend', { addMinutes }) as Promise<{ timer: SafetyTimer }>,
+  // 每日定时报到（Snug Safety 式）：每天固定本地时刻自动开启一次报到，超时未报平安自动告警紧急联系人。
+  checkinSchedule: () => get('/api/safety/checkin/schedule') as Promise<{ schedule: DailyCheckinSchedule | null }>,
+  setCheckinSchedule: (s: DailyCheckinSchedule) => put('/api/safety/checkin/schedule', s) as Promise<{ ok: boolean; schedule: DailyCheckinSchedule; hasEmergencyContact: boolean }>,
   cancelSafetyCheckin: () => post('/api/safety/checkin/cancel', undefined),
   // 紧急告警"知道了"回执：回告发起人"有人已看到你的求助"（fromId=发起人，eventId=哪一次告警）。
   // onMyWay=true：不只"我已看到"，而是"我正在赶来"——遇险者据此知救援真在路上、可安心等待。缺省=普通回执。

@@ -50,6 +50,20 @@ export interface User {
   // 读回执开关（WhatsApp 语义，仅单聊）：false=我发的消息不再向对方回"已读"，互惠地我也看不到别人的已读。
   // 缺省=开（undefined 视为 true，免存量回填）。只影响"已读"显示；markRead 照常写库，未读计数/角标不受影响。
   readReceiptsEnabled?: boolean
+  // 每日定时安全报到（Snug Safety 式：独居盲人/长者每天固定时刻自动开启 dead-man's switch，超时未报平安
+  // 自动告警紧急联系人）。至多一份；tz 为 IANA 时区（同 quietHours）。lastDay=当天已自动开启的本地日期
+  // （YYYY-MM-DD，幂等标记：一天至多自动开一次）。
+  dailyCheckin?: DailyCheckin
+  dailyCheckinLastDay?: string
+}
+
+/// 每日定时安全报到配置（用户偏好，随 User 存取/级联/导出）。
+export interface DailyCheckin {
+  enabled: boolean
+  startMinute: number      // 本地时区一天中的第几分钟开启（0..1439，同 quietHours 的分钟表示）
+  durationMinutes: number  // 每次报到时长（分钟，5..1440，同手动 start 校验）
+  tz: string               // IANA 时区（如 'Asia/Shanghai'；DST 由 Intl 正确处理）
+  note?: string            // 可选备注（告警时读给亲友）
 }
 
 /// 勿扰时段配置（服务端据收件人本地时刻判定，正确处理跨午夜与时区/DST）。

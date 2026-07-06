@@ -37,6 +37,8 @@ export function buildUserExportBundle(store: Store, id: string, now: number) {
       // （不暴露"静音了谁"，故与 quietHours 一样进 profile、admin 版也含；具体静音了哪些群/对端仍在 extras 的
       // mutedConversations、仅自助）。此前漏导致这项偏好在数据导出里缺失、可携权不完整。
       mutedPushCategories: u.mutedPushCategories ?? [],
+      // 每日定时安全报到配置：与 quietHours 同为本人的粗粒度偏好（时刻/时长/时区/备注），GDPR 访问覆盖。
+      dailyCheckin: u.dailyCheckin ?? null,
     },
     familyLinks: [
       ...store.linksByOwner(id).map((l) => ({ direction: 'owner', other: nameOf(l.memberId), relation: l.relation, isEmergency: l.isEmergency, status: l.status ?? 'accepted', createdAt: l.createdAt })),

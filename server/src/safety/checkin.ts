@@ -4,6 +4,50 @@ import type { PushSender } from '../push/apns'
 import type { WebPushSender } from '../push/webPush'
 import { pushLang, pushStrings } from '../push/pushStrings'
 import { totalUnreadFor } from '../db/unread'
+import { localMinuteOfDay, localDayIn } from '../notifications/quietHours'
+
+/// 每日定时安全报到（Snug Safety 式）：到点自动为用户开启一次报到计时器（dead-man's switch），
+/// 超时未报平安走既有 fireExpiredSafetyTimers 告警亲友。由后台每分钟 tick 调用。
+/// - **先落 lastDay 再扇出**（幂等：一天至多自动开一次，即便通知/推送失败也不重复）；
+/// - 开启窗口 = [startMinute, startMinute+graceMinutes)：服务端宕机恢复超宽限则当天跳过（几小时后才开启的
+///   "每日报到"已失去当天意义，且会在错误时刻到期告警——与 fireExpired 的陈旧宽限同哲学，诚实跳过不迟发）；
+/// - 已有进行中的报到（手动开的）→ 标记当天已处理但不叠开（一人至多一个 active，与手动 start 语义一致）；
+/// - 坏/缺 tz → 跳过（fail-open 口径同 quietHours：绝不回退服务器时区在错误时刻开启）；
+/// - best-effort 故障隔离：单用户失败绝不中断其余。返回实际自动开启数。
+export function startDueDailyCheckins(store: Store, push: PushSender, webPush: WebPushSender, now: number, graceMinutes = 60): number {
+  const safeSubs = (uid: string) => { try { return store.webPushSubscriptionsForUser(uid) } catch { return [] } }
+  const safeBadge = (uid: string): number | undefined => { try { return totalUnreadFor(store, uid).total } catch { return undefined } }
+  let started = 0
+  for (const u of store.allUsers()) {
+    try {
+      const cfg = u.dailyCheckin
+      if (!cfg?.enabled || u.status !== 'active') continue
+      const cur = localMinuteOfDay(now, cfg.tz)
+      const day = localDayIn(now, cfg.tz)
+      if (cur == null || day == null) continue // 坏 tz：诚实跳过，绝不用服务器时区误开
+      if (u.dailyCheckinLastDay === day) continue // 今天已自动开过（幂等）
+      if (cur < cfg.startMinute || cur >= cfg.startMinute + graceMinutes) continue // 不在开启窗口（含宕机恢复过晚）
+      // 已有进行中的报到（手动开的）：标记当天已处理、不叠开（一人至多一个 active）。
+      if (store.activeSafetyTimerForOwner(u.id)) { store.updateUser(u.id, { dailyCheckinLastDay: day }); continue }
+      store.updateUser(u.id, { dailyCheckinLastDay: day }) // 先落幂等标记，再建计时器/扇出
+      store.createSafetyTimer({
+        id: randomUUID(), ownerId: u.id, note: cfg.note?.trim() || undefined,
+        startedAt: now, dueAt: now + cfg.durationMinutes * 60_000, status: 'active',
+      })
+      // 通知本人"已开始，请在 N 分钟内报平安"（in-app + APNs + Web Push；kind 含 checkin → 恒越勿扰、web 点击直达亲友页）。
+      const l = pushLang(u.language)
+      const title = pushStrings.dailyCheckinStartedTitle(l)
+      const body = pushStrings.dailyCheckinStartedBody(cfg.durationMinutes, l)
+      const data: Record<string, string> = { kind: 'checkin_started' }
+      try { store.createNotification({ id: randomUUID(), userId: u.id, kind: 'safety_checkin_started', title, body, data, createdAt: now }) } catch { /* 通知失败不阻断 */ }
+      const badge = safeBadge(u.id)
+      if (webPush.configured) for (const sub of safeSubs(u.id)) void webPush.send(sub, JSON.stringify({ title, body, badge, data })).catch(() => { /* 单订阅失败不阻断 */ })
+      if (u.apnsToken) void push.sendAlert(u.apnsToken, title, body, { type: 'safety_checkin_started' }, undefined, badge).catch(() => { /* 单点失败不阻断 */ })
+      started++
+    } catch { /* 单用户失败不阻断其余（已落 lastDay 则不重试当日） */ }
+  }
+  return started
+}
 
 /// 最后已知位置来源（结构化，便于单测注入）。生产传 LiveLocationRegistry（其 lastKnownForEmergency 恰匹配此形状）。
 /// 只消费**用户主动开启、且收件人正是这批亲友的共享数据**（该方法内已做窗口/时效约束），不越权。

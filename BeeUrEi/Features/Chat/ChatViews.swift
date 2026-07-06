@@ -480,18 +480,27 @@ struct ChatView: View {
                 .accessibilityLabel(ChatStrings.playVoice(lang))
             case "image":
                 if let img = Self.decodeImage(m.text) {
-                    Image(uiImage: img)
-                        .resizable().scaledToFit()
-                        .frame(maxWidth: 220, maxHeight: 280)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .onTapGesture { zoomImage = ZoomableImage(image: img) }
-                        .accessibilityAddTraits(.isButton)
-                        .accessibilityHint(ChatStrings.openPhotoHint(lang))
-                        // 盲人收到图片看不见——端侧 OCR 读出图中文字（亲友常拍处方/时刻表/说明/纸条让盲人"看"）。
-                        // VoiceOver 转子自定义操作；语音随文字语言（中/英）自动切换，复用识别屏同一朗读管线。
-                        .accessibilityAction(named: Text(ChatStrings.readPhotoText(lang))) { readImageText(img) }
-                        // 复制图中文字：盲人可把处方/地址/时刻表存下，粘进备忘录/提醒/地图（读=听、复制=留存转发）。
-                        .accessibilityAction(named: Text(ChatStrings.copyPhotoText(lang))) { copyImageText(img) }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Image(uiImage: img)
+                            .resizable().scaledToFit()
+                            .frame(maxWidth: 220, maxHeight: 280)
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .onTapGesture { zoomImage = ZoomableImage(image: img) }
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityHint(ChatStrings.openPhotoHint(lang))
+                            // 盲人收到图片看不见——端侧 OCR 读出图中文字（亲友常拍处方/时刻表/说明/纸条让盲人"看"）。
+                            // VoiceOver 转子自定义操作；语音随文字语言（中/英）自动切换，复用识别屏同一朗读管线。
+                            .accessibilityAction(named: Text(ChatStrings.readPhotoText(lang))) { readImageText(img) }
+                            // 复制图中文字：盲人可把处方/地址/时刻表存下，粘进备忘录/提醒/地图（读=听、复制=留存转发）。
+                            .accessibilityAction(named: Text(ChatStrings.copyPhotoText(lang))) { copyImageText(img) }
+                        // 可见"读文字"按钮：上面的 OCR 读文字此前**只在 VoiceOver 转子**（最难发现的层）——转子操作连很多
+                        // VoiceOver 用户都不知道、不用 VoiceOver 的盲人更无从触发。读亲友拍来的处方/时刻表/纸条是核心场景，
+                        // 须有可见可点入口（同音频气泡的可见播放按钮）。转子操作保留，作为熟练用户的快捷。
+                        Button { readImageText(img) } label: {
+                            Label(ChatStrings.readPhotoText(lang), systemImage: "text.viewfinder").font(.footnote)
+                        }
+                        .buttonStyle(.borderless)
+                    }
                 } else {
                     Label(ChatStrings.photo(lang), systemImage: "photo")
                 }

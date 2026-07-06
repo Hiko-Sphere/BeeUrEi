@@ -1,22 +1,14 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
 import { render } from '@testing-library/react'
-import axe from 'axe-core'
+import axe from 'axe-core' // 直接用于下方"axe 自检"（证明 axe 在 jsdom 里确实生效）
+import { axeViolations } from './lib/axeCheck'
 
 /// 无障碍回归门禁（把 2026-07-03 的一次性 axe 人工审计固化进 CI）：渲染代表性页面跑 axe-core，
 /// 0 violations 才绿——协助端服务视障用户的亲友，无障碍回归（丢 label/按钮无名/aria 误用）必须被挡在合并前。
-/// jsdom 限制：color-contrast 需要真实排版计算（对比度已人工审计过且由主题 token 锁定，见 index.css 注释）；
-/// region/landmark 规则针对整页（这里渲染的是 Layout 之内的页面片段，地标由 Layout 提供）——两者禁用，
-/// 其余规则（label/button-name/image-alt/aria-*/list 结构等）在 jsdom 下完全有效。
+/// axe 配置见 lib/axeCheck.ts（color-contrast/region 因 jsdom 限制禁用，其余全效）。
 async function expectNoAxeViolations(container: Element) {
-  const results = await axe.run(container, {
-    rules: {
-      'color-contrast': { enabled: false }, // 需真实排版；对比度已审计并由主题 token 固定
-      region: { enabled: false },           // 地标由 Layout 承担，页面片段单渲不适用
-    },
-  })
-  // 失败时输出"规则 + 命中节点"而非笼统 diff，便于直接定位。
-  expect(results.violations.map((v) => ({ rule: v.id, help: v.help, nodes: v.nodes.map((n) => n.target.join(' ')) }))).toEqual([])
+  expect(await axeViolations(container)).toEqual([])
 }
 
 vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }))

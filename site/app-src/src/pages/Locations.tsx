@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css'
 import { api, APIError, type ContactLocation } from '../lib/api'
 import { pollWhileVisible } from '../lib/poll'
 import { batteryBadge, batteryPercent } from '../lib/battery'
+import { shareTtlSec, SHARE_DURATIONS } from '../lib/locationShare'
 import { validAccuracyMeters, accuracyText } from '../lib/geoAccuracy'
 import { headingPhrase } from '../lib/heading'
 import { appleMapsUrl } from '../lib/location'
@@ -45,10 +46,14 @@ export function LocationsPage() {
   // 浏览器 Battery Status API 的 BatteryManager（Chromium 支持；Firefox/Safari 已移除→保持 null 不上报电量）。
   // getBattery() 只需取一次：返回的对象 .level 会随电量实时更新，每次 publish 直接读当前值。
   const batteryMgr = useRef<{ level: number } | null>(null)
+  // 定时共享：deadlineRef=本次共享自动停止的时刻（0=直到手动停止）；stopTimer=到点自动停的本地定时器。
+  const deadlineRef = useRef(0)
+  const stopTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [contacts, setContacts] = useState<ContactLocation[]>([])
   const [sharing, setSharing] = useState(false)
-  const [sharingUntil, setSharingUntil] = useState(0)
+  const [duration, setDuration] = useState(0)  // 开始前选的时长（秒）；0=直到我停止（默认，安全优先：家人一直看得到直到本人关）
+  const [deadline, setDeadline] = useState(0)  // 本次共享的自动停止时刻（0=无限）；供"将持续到"显示与倒计时
   const [featureOff, setFeatureOff] = useState(false)
 
   // 初始化地图（一次）。
@@ -71,7 +76,6 @@ export function LocationsPage() {
       const r = await api.contactLocations()
       setContacts(r.contacts)
       setSharing(r.sharing)
-      setSharingUntil(r.sharingUntil)
       setFeatureOff(false)
     } catch (e) {
       if (e instanceof APIError && e.status === 403) setFeatureOff(true)
@@ -137,32 +141,41 @@ export function LocationsPage() {
     const p = lastPos.current
     if (!p) return
     try {
-      const r = await api.updateLocation({ lat: p.latitude, lng: p.longitude, accuracy: p.accuracy ?? undefined,
+      await api.updateLocation({ lat: p.latitude, lng: p.longitude, accuracy: p.accuracy ?? undefined,
         heading: (p.heading != null && !Number.isNaN(p.heading)) ? p.heading : undefined,
         // 上报本机电量（Find My/Life360 惯例）：亲友看到"快没电"可在失联前主动联系；也让服务端低电量预警对 web 共享者生效。
         // 此前 web 从不上报电量（只上报了 accuracy/heading），web 共享者的联系人永远看到"无电量"、低电量预警也不触发。
-        battery: batteryPercent(batteryMgr.current?.level) })
+        battery: batteryPercent(batteryMgr.current?.level),
+        // 定时共享：ttlSec 贴近真实剩余，客户端崩溃/关页后服务端很快过期（本地定时器负责准点自动停）。无截止→不传，用服务端默认。
+        ttlSec: shareTtlSec(deadlineRef.current, Date.now()) })
       if (!activeRef.current) return // await 期间用户已停止：不要把状态改回"共享中"
-      setSharing(true); setSharingUntil(r.sharingUntil)
+      setSharing(true)
     } catch { /* 单次失败忽略，下个周期重试 */ }
   }, [])
 
   const stopSharing = useCallback(() => {
     activeRef.current = false // 同步置否：任何在途/后续 publish 立即变为 no-op
     lastPos.current = null // 清陈旧坐标：否则**再次**共享时的即时 publish() 会把上一段行程的旧位置当"当前实时"广播给亲友（隐私，复审 HIGH）——清空后靠 `if(!p)return` 兜到新定位到达
+    deadlineRef.current = 0
+    if (stopTimer.current) { clearTimeout(stopTimer.current); stopTimer.current = null } // 清定时停止器（手动停/切页时避免延后误触发）
     if (watchId.current != null) { navigator.geolocation.clearWatch(watchId.current); watchId.current = null }
     if (publishTimer.current) { clearInterval(publishTimer.current); publishTimer.current = null }
     void api.stopSharingLocation().catch(() => {})
-    setSharing(false); setSharingUntil(0)
+    setSharing(false); setDeadline(0)
     if (selfMarker.current && map.current) { map.current.removeLayer(selfMarker.current); selfMarker.current = null }
   }, [])
 
   // 功能被管理员中途停用（/contacts 返回 403）：立即拆除采集与上报，避免持续 403 刷请求。
   useEffect(() => { if (featureOff) stopSharing() }, [featureOff, stopSharing])
 
-  const startSharing = useCallback(() => {
+  const startSharing = useCallback((durationSec: number) => {
     if (!('geolocation' in navigator)) { toast(t('当前浏览器不支持定位', 'Geolocation not supported'), 'error'); return }
     activeRef.current = true
+    // 定时共享：>0 则记录截止时刻并挂本地定时器到点自动停（用户不必记得关）；0=直到手动停止（保持旧行为）。
+    const dl = durationSec > 0 ? Date.now() + durationSec * 1000 : 0
+    deadlineRef.current = dl; setDeadline(dl)
+    if (stopTimer.current) { clearTimeout(stopTimer.current); stopTimer.current = null }
+    if (dl > 0) stopTimer.current = setTimeout(() => stopSharing(), durationSec * 1000)
     // 取一次 BatteryManager（Chromium 有；其它浏览器无 getBattery→保持 null，publish 时 batteryPercent(undefined) 不上报）。
     const nav = navigator as Navigator & { getBattery?: () => Promise<{ level: number }> }
     if (nav.getBattery && !batteryMgr.current) { void nav.getBattery().then((b) => { batteryMgr.current = b }).catch(() => { /* 取不到就不报电量 */ }) }
@@ -192,6 +205,7 @@ export function LocationsPage() {
     lastPos.current = null // 同 stopSharing：卸载清陈旧坐标，防重挂后即时 publish 广播旧位置
     if (watchId.current != null) navigator.geolocation.clearWatch(watchId.current)
     if (publishTimer.current) clearInterval(publishTimer.current)
+    if (stopTimer.current) clearTimeout(stopTimer.current) // 清定时停止器，避免卸载后延迟触发
   }, [])
 
   return (
@@ -211,12 +225,26 @@ export function LocationsPage() {
               <span className={`flex h-10 w-10 items-center justify-center rounded-full ${sharing ? 'bg-ok/15 text-ok' : 'bg-honey/15 text-honey'}`}><IconPin /></span>
               <div>
                 <div className="font-semibold">{sharing ? t('正在共享你的位置', 'Sharing your location') : t('未共享', 'Not sharing')}</div>
-                <div className="text-xs text-faint">{sharing && sharingUntil > Date.now() ? t(`将持续到 ${new Date(sharingUntil).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`, `Until ${new Date(sharingUntil).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`) : t('开启后联系人可看到你的实时位置', 'Contacts will see your live position')}</div>
+                <div className="text-xs text-faint">{
+                  !sharing ? t('开启后联系人可看到你的实时位置', 'Contacts will see your live position')
+                    : deadline > Date.now()
+                      ? t(`将于 ${new Date(deadline).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} 自动停止`, `Auto-stops at ${new Date(deadline).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`)
+                      : t('直到你手动停止', 'Until you stop')
+                }</div>
               </div>
             </div>
             {sharing
               ? <Button variant="danger" onClick={stopSharing}>{t('停止共享', 'Stop sharing')}</Button>
-              : <Button onClick={startSharing}><IconPin width={16} height={16} />{t('开始共享', 'Share my location')}</Button>}
+              : (
+                <div className="flex items-center gap-2">
+                  {/* 定时共享时长（Google Maps/Life360 式）：选有界时长则到点自动停，不必记得关。默认"直到我停止"。 */}
+                  <select value={duration} onChange={(e) => setDuration(Number(e.target.value))} aria-label={t('共享时长', 'Share duration')}
+                    className="rounded-lg border border-[var(--line)] surface-2 px-2 py-2 text-sm outline-none">
+                    {SHARE_DURATIONS.map((o) => <option key={o.sec} value={o.sec}>{t(o.zh, o.en)}</option>)}
+                  </select>
+                  <Button onClick={() => startSharing(duration)}><IconPin width={16} height={16} />{t('开始共享', 'Share my location')}</Button>
+                </div>
+              )}
           </Card>
 
           {/* 地图 */}

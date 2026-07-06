@@ -657,6 +657,8 @@ export interface Store {
   markNotificationRead(id: string, userId: string): void // 仅本人可标记
   markAllNotificationsRead(userId: string): number
   unreadNotificationCount(userId: string): number
+  deleteNotification(id: string, userId: string): boolean // 用户清理：删自己的单条通知（仅本人；不存在/非本人→false）
+  deleteReadNotificationsForUser(userId: string): number // 用户清理：一键清空已读通知（保留未读），返回删除条数
   deleteNotificationsForUser(userId: string): void // 删号级联：清除该用户全部站内通知（GDPR 抹除）
   deleteNotificationsOlderThan(cutoffMs: number): number // 留存清扫：删除早于 cutoff 的通知，返回条数（数据最小化）
   // 紧急事件日志（治理）：
@@ -1288,6 +1290,21 @@ export class MemoryStore implements Store {
     let n = 0
     for (const x of this.notifications.values()) if (x.userId === userId && x.readAt == null) n++
     return n
+  }
+  deleteNotification(id: string, userId: string): boolean {
+    const n = this.notifications.get(id)
+    if (!n || n.userId !== userId) return false // 仅本人；不存在/非本人一律 false（不泄露他人通知存在性）
+    this.notifications.delete(id)
+    this.afterMutate()
+    return true
+  }
+  deleteReadNotificationsForUser(userId: string): number {
+    let count = 0
+    for (const [id, n] of this.notifications) {
+      if (n.userId === userId && n.readAt != null) { this.notifications.delete(id); count++ }
+    }
+    if (count > 0) this.afterMutate()
+    return count
   }
   deleteNotificationsForUser(userId: string): void {
     let changed = false

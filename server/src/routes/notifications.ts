@@ -40,6 +40,19 @@ export function registerNotificationRoutes(app: FastifyInstance, store: Store): 
     return { marked: n }
   })
 
+  // 删除单条通知（清理收件箱；仅本人）。不存在/非本人均静默 204（幂等 + 不泄露他人通知存在性，与标已读同口径）。
+  // 删的是收件箱副本，不影响紧急事件/审计等独立记录。
+  app.delete('/api/notifications/:id', { preHandler: requireAuth() }, async (req, reply) => {
+    store.deleteNotification((req.params as { id: string }).id, req.user!.sub)
+    return reply.code(204).send()
+  })
+
+  // 一键清空**已读**通知（保留未读，避免误清尚未看的紧急/求助提醒）。返回清除条数。
+  app.post('/api/notifications/clear-read', { preHandler: requireAuth() }, async (req) => {
+    const cleared = store.deleteReadNotificationsForUser(req.user!.sub)
+    return { cleared }
+  })
+
   // 勿扰时段（Do-Not-Disturb）：读取/设置。仅抑制**软通知**的推送横幅（站内通知照常持久化）；
   // 紧急告警/来电/SOS 走独立扇出、绝不受影响。仅作用于本人。
   app.get('/api/notifications/quiet-hours', { preHandler: requireAuth() }, async (req) => {

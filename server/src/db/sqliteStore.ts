@@ -772,6 +772,13 @@ export class SqliteStore implements Store {
     const row = this.db.prepare('SELECT COUNT(*) AS n FROM notifications WHERE userId = ? AND readAt IS NULL').get(userId) as { n: number }
     return Number(row?.n ?? 0)
   }
+  deleteNotification(id: string, userId: string): boolean {
+    // 仅本人：WHERE 同时限 id + userId，非本人的删除影响 0 行 → false（不泄露他人通知存在性）。
+    return Number(this.db.prepare('DELETE FROM notifications WHERE id = ? AND userId = ?').run(id, userId).changes) > 0
+  }
+  deleteReadNotificationsForUser(userId: string): number {
+    return Number(this.db.prepare('DELETE FROM notifications WHERE userId = ? AND readAt IS NOT NULL').run(userId).changes)
+  }
   deleteNotificationsForUser(userId: string): void {
     this.db.prepare('DELETE FROM notifications WHERE userId = ?').run(userId)
   }

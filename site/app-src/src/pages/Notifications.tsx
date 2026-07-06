@@ -5,7 +5,7 @@ import { emergencyLocInfo } from '../lib/emergencyLoc'
 import { appleMapsUrl } from '../lib/location'
 import { useI18n } from '../lib/i18n'
 import { Card, Button, Spinner, EmptyState, fmtTime, RelativeTime } from '../components/ui'
-import { IconBell, IconShield, IconPhone, IconUsers, IconFilm, IconFlash, IconPin, IconBattery } from '../components/icons'
+import { IconBell, IconShield, IconPhone, IconUsers, IconFilm, IconFlash, IconPin, IconBattery, IconX } from '../components/icons'
 import { useCall } from './call/CallController'
 import { ContactMedicalInfo } from './call/EmergencyAlertHost'
 
@@ -55,14 +55,22 @@ export function NotificationsPage() {
   const markOne = async (n: NotificationInfo) => { if (n.readAt) return; try { await api.markNotifRead(n.id); setItems((cur) => cur?.map((x) => x.id === n.id ? { ...x, readAt: Date.now() } : x) ?? cur) } catch { /* ignore */ } }
   // 点击通知：标已读 + 跳到可操作页（好友请求→亲友页接受、群变更→聊天页）。
   const onClickNotif = (n: NotificationInfo) => { void markOne(n); const dest = notifDestination(n.kind); if (dest) navigate(dest) }
+  // 删除单条：乐观从列表移除（收件箱清理，仅本人；服务端幂等）。
+  const deleteOne = async (n: NotificationInfo) => { setItems((cur) => cur?.filter((x) => x.id !== n.id) ?? cur); try { await api.deleteNotif(n.id) } catch { void load() } }
+  // 清空已读：只清已看过的，保留未读（避免误清尚未看的紧急/求助提醒）。
+  const clearRead = async () => { try { await api.clearReadNotifs(); void load() } catch { /* ignore */ } }
 
   const unread = (items ?? []).filter((n) => !n.readAt).length
+  const hasRead = (items ?? []).some((n) => n.readAt)
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h1 className="text-2xl font-bold tracking-tight">{t('通知', 'Notifications')}</h1>
-        {unread > 0 && <Button variant="soft" onClick={markAll}>{t('全部标为已读', 'Mark all read')}</Button>}
+        <div className="flex gap-2">
+          {unread > 0 && <Button variant="soft" onClick={markAll}>{t('全部标为已读', 'Mark all read')}</Button>}
+          {hasRead && <Button variant="ghost" onClick={clearRead}>{t('清空已读', 'Clear read')}</Button>}
+        </div>
       </div>
 
       <Card className="overflow-hidden">
@@ -125,6 +133,12 @@ export function NotificationsPage() {
                   )}
                   <RelativeTime ms={n.createdAt} lang={lang} className="mt-1 block text-xs text-faint" />
                 </div>
+                {/* 删除本条（收件箱清理）：独立按钮、非嵌套在主操作按钮内（避免 nested-interactive）。读屏可闻"删除通知"。 */}
+                <button type="button" onClick={() => void deleteOne(n)}
+                  className="mt-0.5 shrink-0 self-start rounded p-1 text-faint transition hover:text-danger hover:surface-2"
+                  aria-label={t(`删除通知：${n.title}`, `Delete notification: ${n.title}`)}>
+                  <IconX width={16} height={16} />
+                </button>
               </li>
             ))}
           </ul>

@@ -331,6 +331,8 @@ export const api = {
   unreadSummary: () => get('/api/unread') as Promise<{ messages: number; notifications: number; missedCalls: number; total: number }>,
   markNotifRead: (id: string) => post(`/api/notifications/${id}/read`),
   markAllNotifsRead: () => post('/api/notifications/read-all'),
+  deleteNotif: (id: string) => del(`/api/notifications/${encodeURIComponent(id)}`),
+  clearReadNotifs: () => post('/api/notifications/clear-read') as Promise<{ cleared: number }>,
   // 勿扰时段：软通知在此时段只抑制推送横幅、站内通知照常；紧急/来电不受影响。
   quietHours: () => get('/api/notifications/quiet-hours') as Promise<{ quietHours: QuietHoursInfo | null }>,
   setQuietHours: (q: QuietHoursInfo) => put('/api/notifications/quiet-hours', q) as Promise<{ quietHours: QuietHoursInfo }>,

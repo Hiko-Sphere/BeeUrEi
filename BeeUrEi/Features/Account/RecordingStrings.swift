@@ -12,6 +12,8 @@ enum RecordingStrings {
     static func deleteConfirmTitle(_ l: Language) -> String { l == .zh ? "删除这条录制？" : "Delete this recording?" }
     static func deleteConfirmMessage(_ l: Language) -> String { l == .zh ? "将从你的列表移除。为合规与安全，管理员在保留期内仍可查看。" : "It will be removed from your list. For safety and compliance, moderators can still review it during the retention window." }
     static func deleteFailed(_ l: Language) -> String { l == .zh ? "删除失败，请重试" : "Couldn't delete — please try again" }
+    /// 删除成功语音确认：盲人看不到那行录制从列表消失，须听到"已删除"（否则不确定删没删、可能重删/以为失败）。
+    static func deleted(_ l: Language) -> String { l == .zh ? "已从列表删除" : "Removed from your list" }
     static func playFailed(_ l: Language) -> String { l == .zh ? "无法播放该录制" : "Couldn't play this recording" }
     static func mediaGone(_ l: Language) -> String { l == .zh ? "媒体已不可用（可能已过保留期）" : "Media unavailable (may be past retention)" }
     static func loadFailed(_ l: Language) -> String { l == .zh ? "加载失败（需登录并连接网络）" : "Load failed (needs sign-in and a connection)" }

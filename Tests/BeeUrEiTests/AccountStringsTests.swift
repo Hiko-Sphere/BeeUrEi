@@ -170,4 +170,13 @@ final class ServerErrorMappingTests: XCTestCase {
                        ChatStrings.createGroupFailed(.zh))
         XCTAssertEqual(ChatStrings.createGroupErrorText(APIError.network, .en), ChatStrings.createGroupFailed(.en))
     }
+
+    func testRecordingDeletedConfirmationDistinctAndBilingual() {
+        // 删录音成功语音确认：盲人看不到那行从列表消失，须听到"已删除"；与失败文案明确不同（不能把成功念成像失败）。
+        XCTAssertTrue(RecordingStrings.deleted(.zh).contains("删除"))
+        XCTAssertNotEqual(RecordingStrings.deleted(.zh), RecordingStrings.deleteFailed(.zh))
+        let en = RecordingStrings.deleted(.en)
+        XCTAssertFalse(en.isEmpty)
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(en)")
+    }
 }

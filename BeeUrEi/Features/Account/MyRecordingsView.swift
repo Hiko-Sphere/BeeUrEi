@@ -37,6 +37,8 @@ struct MyRecordingsView: View {
         .overlay { if loading && recordings.isEmpty { ProgressView() } }
         .refreshable { await load() }
         .task { await load() }
+        // 加载/删除失败主动朗读——盲人看不到那行红字，此前只显示不朗读（与 BlocklistView/SavedPlacesView 同口径）。
+        .onChange(of: errorText) { _, e in if let e, !e.isEmpty { A11y.announce(e) } }
         .fullScreenCover(item: $playing) { v in VideoPlayerSheet(url: v.url, lang: lang) }
         .alert(RecordingStrings.deleteConfirmTitle(lang), isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } })) {
             Button(RecordingStrings.delete(lang), role: .destructive) { if let t = deleteTarget { Task { await deleteRec(t) } }; deleteTarget = nil }
@@ -73,6 +75,7 @@ struct MyRecordingsView: View {
             try await APIClient().deleteMyRecording(token: token, id: rec.id)
             APIClient().evictCachedRecording(id: rec.id) // 兑现"删除"：清掉本机已下载的副本
             recordings.removeAll { $0.id == rec.id }
+            A11y.announce(RecordingStrings.deleted(lang)) // 盲人看不到那行消失，须听到"已删除"
         } catch { errorText = RecordingStrings.deleteFailed(lang) }
     }
 }

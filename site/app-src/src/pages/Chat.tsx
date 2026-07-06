@@ -7,6 +7,7 @@ import { useI18n } from '../lib/i18n'
 import { joinNames } from '../lib/listFormat'
 import { parseLocation, appleMapsUrl } from '../lib/location'
 import { isForwardableKind } from '../lib/chatMessage'
+import { ReportDialog } from '../components/ReportDialog'
 import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo, Modal, Button } from '../components/ui'
 import { IconChat, IconSend, IconPlus, IconX } from '../components/icons'
 
@@ -181,6 +182,7 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [showInfo, setShowInfo] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false) // 单聊举报对方（骚扰常发生在聊天里，就地可举报，不必进联系人页/通话中）
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<ChatMessage[] | null>(null)
@@ -341,6 +343,9 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
           aria-label={muted ? t('取消静音该会话', 'Unmute conversation') : t('静音该会话', 'Mute conversation')}>
           {muted ? t('🔕 已静音', '🔕 Muted') : t('静音', 'Mute')}
         </button>
+        {sel.kind === 'peer' && (
+          <button onClick={() => setReportOpen(true)} data-testid="report-open" className="rounded-full surface-2 px-3 py-1.5 text-xs font-medium text-faint hover:text-danger" aria-label={t('举报对方', 'Report')}>{t('举报', 'Report')}</button>
+        )}
         {sel.kind === 'group' && (
           <button onClick={() => setShowInfo(true)} className="rounded-full surface-2 px-3 py-1.5 text-xs font-medium text-soft" aria-label={t('群信息', 'Group info')}>{t('群信息', 'Group info')}</button>
         )}
@@ -424,6 +429,9 @@ function Thread({ sel, onBack, onSent }: { sel: Selection; onBack: () => void; o
         <button onClick={send} disabled={!text.trim() || sending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-honey text-ink disabled:opacity-40" aria-label={t('发送', 'Send')}><IconSend width={18} height={18} /></button>
       </div>
 
+      {reportOpen && sel.kind === 'peer' && (
+        <ReportDialog targetUserId={sel.id} onClose={() => setReportOpen(false)} />
+      )}
       {showInfo && sel.kind === 'group' && (
         <GroupInfoDialog groupId={sel.id} groupName={sel.name} ownerId={sel.ownerId} members={sel.members} meId={user?.id ?? ''}
           onClose={() => setShowInfo(false)}

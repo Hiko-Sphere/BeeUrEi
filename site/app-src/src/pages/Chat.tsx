@@ -50,6 +50,14 @@ export function ChatPage() {
     return [...a, ...b].sort((x, y) => y.ts - x.ts)
   }, [convos, groups])
 
+  // 会话列表按名字过滤：联系人/群一多，免逐条 Tab/滚动找人（对读屏用户尤其省事——键入即缩到匹配项）。各主流 IM 标配。
+  const [convoQuery, setConvoQuery] = useState('')
+  const shown = useMemo(() => {
+    const q = convoQuery.trim().toLowerCase()
+    if (!q) return items
+    return items.filter((it) => (it.kind === 'peer' ? it.c.peer.displayName : it.g.group.name).toLowerCase().includes(q))
+  }, [items, convoQuery])
+
   const back = () => { setSel(null); if (peerId) nav('/chat') }
 
   return (
@@ -60,13 +68,22 @@ export function ChatPage() {
           <h1 className="text-xl font-bold tracking-tight">{t('消息', 'Messages')}</h1>
           <button onClick={() => setCreateOpen(true)} className="flex items-center gap-1 rounded-lg surface-2 px-2.5 py-1.5 text-xs font-medium text-soft hover:brightness-105"><IconPlus width={14} height={14} />{t('建群', 'New group')}</button>
         </div>
+        {items.length > 0 && (
+          <div className="mb-2">
+            <input type="search" value={convoQuery} onChange={(e) => setConvoQuery(e.target.value)}
+              placeholder={t('搜索会话', 'Search conversations')} aria-label={t('搜索会话', 'Search conversations')}
+              className="w-full rounded-xl surface-2 px-3 py-2 text-sm outline-none placeholder:text-faint focus:ring-2 focus:ring-[var(--color-honey)]/40" />
+          </div>
+        )}
         <div tabIndex={0} aria-label={t('会话列表', 'Conversation list')}
           className="surface flex-1 overflow-y-auto rounded-2xl border border-[var(--line)]">
           {convos === null && groups === null ? <Spinner /> : items.length === 0 ? (
             <EmptyState icon={<IconChat />} title={t('暂无会话', 'No conversations')} message={t('从联系人页发起聊天', 'Start from Contacts')} />
+          ) : shown.length === 0 ? (
+            <p className="px-4 py-6 text-center text-sm text-faint" role="status">{t('没有匹配的会话', 'No matching conversations')}</p>
           ) : (
             <ul className="divide-y divide-[var(--line)]">
-              {items.map((it) => it.kind === 'peer' ? (
+              {shown.map((it) => it.kind === 'peer' ? (
                 <ConvoRow key={it.key} active={sel?.kind === 'peer' && sel.id === it.c.peer.id} convo={it.c} lang={lang} t={t}
                   onClick={() => setSel({ kind: 'peer', id: it.c.peer.id, name: it.c.peer.displayName, avatar: it.c.peer.avatar, muted: it.c.muted ?? false })} />
               ) : (

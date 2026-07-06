@@ -211,6 +211,7 @@ export const api = {
   appConfig: () => get('/api/app-config') as Promise<AppConfig>,
   setRole: (role: string) => post('/api/account/role', { role }),
   setProfile: (displayName: string) => post('/api/account/profile', { displayName }),
+  setAvatar: (avatar: string) => post('/api/account/avatar', { avatar }), // avatar=data:image/...;base64,（前端已 reencode 剥 EXIF+压到 ≤600KB）
   setLanguage: (language: string) => post('/api/account/language', { language }),
   setPassword: (oldPassword: string, newPassword: string) => post('/api/account/password', { oldPassword, newPassword }),
   setPhone: (phone: string) => post('/api/account/phone', { phone }),
@@ -434,6 +435,16 @@ export async function reencodeToJpeg(file: File, maxEdge = 2048): Promise<Blob> 
   } finally {
     URL.revokeObjectURL(url)
   }
+}
+
+// Blob → data URL（base64）。头像端点收 data URL 的 JSON（区别于证件图的二进制上传）。
+export function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(r.result as string)
+    r.onerror = () => reject(new APIError('image_read_failed', 0))
+    r.readAsDataURL(blob)
+  })
 }
 
 // 上传一张实名证件图（原始二进制；服务端会再次嗅探/剥离/加密）。kind: front|back|selfie。

@@ -4,11 +4,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 vi.mock('../lib/session', () => ({ useSession: () => ({ user: { id: 'u1', username: 'amin', displayName: '阿明', role: 'helper' }, refreshMe: vi.fn(), signOut: vi.fn() }) }))
 vi.mock('../lib/api', () => ({
-  api: { me: vi.fn(), verificationStatus: vi.fn(), setProfile: vi.fn(), setRole: vi.fn(), setLanguage: vi.fn(), deleteAccount: vi.fn(), setEmail: vi.fn(), quietHours: vi.fn(), setQuietHours: vi.fn(), withdrawVerification: vi.fn(), submitVerification: vi.fn(), sessions: vi.fn() },
+  api: { me: vi.fn(), verificationStatus: vi.fn(), setProfile: vi.fn(), setAvatar: vi.fn(), setRole: vi.fn(), setLanguage: vi.fn(), deleteAccount: vi.fn(), setEmail: vi.fn(), quietHours: vi.fn(), setQuietHours: vi.fn(), withdrawVerification: vi.fn(), submitVerification: vi.fn(), sessions: vi.fn() },
   APIError: class extends Error { code = ''; status = 0 },
-  reencodeToJpeg: vi.fn(), uploadVerificationDoc: vi.fn(),
+  reencodeToJpeg: vi.fn(), blobToDataUrl: vi.fn(), uploadVerificationDoc: vi.fn(),
 }))
-import { api, reencodeToJpeg, uploadVerificationDoc } from '../lib/api'
+import { api, reencodeToJpeg, blobToDataUrl, uploadVerificationDoc } from '../lib/api'
 import { AccountPage, VerificationDialog, SessionsDialog } from './Account'
 
 const mock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
@@ -30,6 +30,19 @@ describe('AccountPage 资料渲染（防字段漂移）', () => {
     expect(screen.getByText(/a@b\.com/)).toBeInTheDocument()       // email
     expect(screen.getByText('已验证')).toBeInTheDocument()         // emailVerified=true → 邮箱"已验证"
     expect(screen.getByText('已开启')).toBeInTheDocument()         // twoFactorEnabled=true → "已开启"
+  })
+
+  it('更换头像：选图→重编码为 256px→data URL→setAvatar 上传（对齐 iOS，web 此前只显示不可改）', async () => {
+    mock(api.me).mockResolvedValue({ id: 'u1', username: 'amin', displayName: '阿明', role: 'helper', usernameCustomized: true, verified: false })
+    mock(reencodeToJpeg).mockResolvedValue(new Blob(['x'], { type: 'image/jpeg' }))
+    mock(blobToDataUrl).mockResolvedValue('data:image/jpeg;base64,AAAA')
+    mock(api.setAvatar).mockResolvedValue({ ok: true })
+    render(<AccountPage />)
+    await screen.findByText(/@amin/)
+    const file = new File(['x'], 'me.png', { type: 'image/png' })
+    fireEvent.change(screen.getByTestId('avatar-input'), { target: { files: [file] } })
+    await waitFor(() => expect(reencodeToJpeg).toHaveBeenCalledWith(file, 256)) // 头像压到 256px 长边，远在 600KB 内
+    await waitFor(() => expect(api.setAvatar).toHaveBeenCalledWith('data:image/jpeg;base64,AAAA')) // 上传 data URL
   })
 
   it('未绑邮箱/未开 2FA → 显示"未绑定"/"未开启"', async () => {

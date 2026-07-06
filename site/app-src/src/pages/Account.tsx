@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { apiURL } from '../lib/config'
-import { api, tokenStore, APIError, contentBlockedText, reencodeToJpeg, uploadVerificationDoc, type SelfView, type SessionInfo, type VerificationStatusInfo, type QuietHoursInfo } from '../lib/api'
+import { api, tokenStore, APIError, contentBlockedText, reencodeToJpeg, blobToDataUrl, uploadVerificationDoc, type SelfView, type SessionInfo, type VerificationStatusInfo, type QuietHoursInfo } from '../lib/api'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { subscribeWebPush, unsubscribeWebPush, isWebPushSubscribed, webPushSupported, resyncWebPushSubscription } from '../lib/webPush'
@@ -50,6 +50,28 @@ export function AccountPage() {
     catch (e) { toast(contentBlockedText(e, t, t('保存失败', 'Failed')), 'error') } finally { setSavingName(false) }
   }
 
+  // 更换头像（对齐 iOS：iOS 早有 setAvatar，web 此前只显示不可改）。选图→canvas 重编码为 256px JPEG
+  // （天然剥 EXIF/GPS + 远在服务端 600KB 限制内）→ data URL → 上传 → refreshMe 使联系人/通话/家人视图处处更新。
+  const [avatarBusy, setAvatarBusy] = useState(false)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+  const onPickAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // 允许连续选同一文件（onChange 才会再触发）
+    if (!file) return
+    setAvatarBusy(true)
+    try {
+      const dataUrl = await blobToDataUrl(await reencodeToJpeg(file, 256))
+      await api.setAvatar(dataUrl)
+      await refreshMe()
+      setSelf((s) => s ? { ...s, avatar: dataUrl } : s)
+      toast(t('头像已更新', 'Photo updated'), 'ok')
+    } catch (err) {
+      toast(err instanceof APIError && err.code === 'image_decode_failed'
+        ? t('无法读取这张图片，请换一张', "Couldn't read that image — try another")
+        : t('头像更新失败，请稍后再试', 'Failed to update photo — try again later'), 'error')
+    } finally { setAvatarBusy(false) }
+  }
+
   const changeRole = async (role: 'helper' | 'family') => {
     if (role === self?.role) return
     try { await api.setRole(role); await refreshMe(); setSelf((s) => s ? { ...s, role } : s); toast(t('身份已更新', 'Role updated'), 'ok') }
@@ -76,7 +98,7 @@ export function AccountPage() {
       <Card className="p-5">
         <div className="flex items-center gap-4">
           <Avatar name={user.displayName} src={user.avatar} size={64} />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <span className="truncate text-lg font-semibold">{user.displayName}</span>
               {(self?.verified || verif?.status === 'verified') && (
@@ -86,6 +108,11 @@ export function AccountPage() {
             <div className="truncate text-sm text-faint">@{user.username} · {roleLabel(user.role, t)}</div>
             {self?.email && <div className="truncate text-xs text-faint">{self.email}</div>}
           </div>
+          {/* 更换头像：隐藏 file input + 触发按钮（头像显示在联系人/通话/家人视图，供已明眼一方识别协助者）。 */}
+          <input ref={avatarInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
+            data-testid="avatar-input" onChange={onPickAvatar} />
+          <Button variant="soft" loading={avatarBusy} onClick={() => avatarInputRef.current?.click()}
+            aria-label={t('更换头像', 'Change profile photo')}>{t('更换头像', 'Change photo')}</Button>
         </div>
         <div className="mt-5">
           <Field label={t('显示名称', 'Display name')}>

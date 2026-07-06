@@ -19,6 +19,9 @@ export function notifDestination(kind: string): string | null {
   // 被设为某人的紧急联系人：是**关系事件**（含子串 emergency 但不是 SOS 告警）——去亲友页看/管理谁把你设为紧急联系人。
   // 须显式命中，否则落到末尾 return null，和真正的 emergency_alert（有专属"查看位置/回拨"按钮、故意不整行跳）混为一谈、点了没去处。
   if (kind.includes('emergency_contact')) return '/family'
+  // 安全报到提醒/超时（本人收到"快到期，请报平安"/"已超时"）→ 亲友页：SafetyCheckInCard（报平安/延长/重开）就在那里。
+  // 此前落到 null——点了没去处，而这条通知的全部意义就是"去操作报到"。
+  if (kind.includes('checkin')) return '/family'
   if (kind.includes('friend') || kind.includes('link')) return '/family'
   if (kind.includes('group')) return '/chat'
   if (kind.includes('route')) return '/routes' // 路线通知 → 路线库页（查看/预览亲友新加的路线；执行仍在 iOS）

@@ -34,6 +34,10 @@ describe('notifDestination 通知点击跳转目的地', () => {
   it('被设为紧急联系人 → 亲友页（关系事件，非 SOS；含子串 emergency 却不得落到 null 与 emergency_alert 混淆）', () => {
     expect(notifDestination('emergency_contact_set')).toBe('/family')
   })
+  it('安全报到提醒/超时 → 亲友页（SafetyCheckInCard 就在那里：报平安/延长/重开；此前落 null 点了没去处）', () => {
+    expect(notifDestination('safety_checkin_reminder')).toBe('/family')
+    expect(notifDestination('safety_checkin_expired')).toBe('/family')
+  })
   it('无明确去处 → null（仅标已读，不跳转）', () => {
     expect(notifDestination('emergency_alert')).toBeNull() // 紧急有专属"查看位置/回拨"按钮，不整行跳转
     expect(notifDestination('report_resolved')).toBeNull()

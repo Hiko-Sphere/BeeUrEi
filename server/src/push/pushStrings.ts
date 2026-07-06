@@ -57,6 +57,13 @@ export const pushStrings = {
   routeUpdatedBody: (name: string, routeName: string, l: PushLang): string =>
     l === 'en' ? `${name} updated the route "${routeName}" — please review it in Navigation before walking`
                : `${name} 修改了路线「${routeName}」，请在导航里先查看再沿信标行走`,
+  routeDeletedTitle: (l: PushLang): string =>
+    l === 'en' ? 'A route was removed' : '你的一条路线被删除了',
+  // 盲人可能已把这条路线记为常走路线（"家到菜场"），亲友删掉后**须知情别再依赖**它——
+  // 与 routeAdded/routeUpdated 同为"亲友改动了盲人实地要走的路线须知情"，是删除侧的姊妹缺口（此前静默）。
+  routeDeletedBody: (name: string, routeName: string, l: PushLang): string =>
+    l === 'en' ? `${name} removed the route "${routeName}" — it's no longer available to walk`
+               : `${name} 删除了路线「${routeName}」，它已不能再沿信标行走`,
   // 到达围栏（Life360/Find My "已到家"式）：家/公司 是保留 label，本地化；自定义 label 原样。
   placeArrivalTitle: (name: string, label: string, l: PushLang): string => {
     const place = placeLabelName(label, l)

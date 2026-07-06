@@ -83,6 +83,28 @@ describe('路线库（亲友远程路线编排 Phase 1：服务端）', () => {
     await app.close()
   })
 
+  it('亲友删盲人路线 → 盲人收到 route_deleted 通知（含路线名+删除者，不附 routeId）；盲人删自己拥有的不通知自己', async () => {
+    const { app, blind, family } = await setup()
+    const routeId = (await app.inject({ method: 'POST', url: '/api/routes', headers: family.h,
+      payload: { forUserId: blind.id, name: '家到菜场', waypoints: WP } })).json().route.id
+    // 亲友删掉盲人实地依赖的这条路线 → 盲人须知情、别再依赖它（补 CREATE/UPDATE 已通知、DELETE 静默的姊妹缺口）。
+    const del = await app.inject({ method: 'DELETE', url: `/api/routes/${routeId}`, headers: family.h })
+    expect(del.statusCode).toBe(204)
+    const notifs = (await app.inject({ method: 'GET', url: '/api/notifications', headers: blind.h })).json().notifications
+    const deleted = notifs.find((n: { kind: string }) => n.kind === 'route_deleted')
+    expect(deleted).toBeTruthy()
+    expect(deleted.body).toContain('家到菜场')   // 含路线名（盲人据此知哪条没了）
+    expect(deleted.body).toContain('familyuser') // 含删除者名
+    expect(deleted.data?.routeId).toBeUndefined() // 路线已删，不附可跳 routeId
+    // 盲人删自己拥有的路线：不通知自己（deleter===owner）。
+    const own = (await app.inject({ method: 'POST', url: '/api/routes', headers: blind.h,
+      payload: { name: '自存', waypoints: WP } })).json().route.id
+    await app.inject({ method: 'DELETE', url: `/api/routes/${own}`, headers: blind.h })
+    const notifs2 = (await app.inject({ method: 'GET', url: '/api/notifications', headers: blind.h })).json().notifications
+    expect(notifs2.filter((n: { kind: string }) => n.kind === 'route_deleted')).toHaveLength(1) // 仍只有亲友那条
+    await app.close()
+  })
+
   it('盲人可给自己建路线（实走存路线通道）；own+created 列表去重', async () => {
     const { app, blind } = await setup()
     const res = await app.inject({ method: 'POST', url: '/api/routes', headers: blind.h,

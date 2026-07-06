@@ -141,10 +141,19 @@ export function registerSavedRouteRoutes(app: FastifyInstance, store: Store, pus
   // 既保幂等又不泄露存在性（204/404 分叉本会成为存在性 oracle，违背"404 不泄露"设计）。
   app.delete('/api/routes/:id', { preHandler: requireAuth(), config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
     const id = (req.params as { id: string }).id
+    const me = req.user!.sub
     const route = store.findSavedRoute(id)
-    const blockedCreator = route && req.user!.sub !== route.ownerId && isBlockedBetween(store, req.user!.sub, route.ownerId)
-    if (!route || !canEdit(route, req.user!.sub) || blockedCreator) return reply.code(204).send()
+    const blockedCreator = route && me !== route.ownerId && isBlockedBetween(store, me, route.ownerId)
+    if (!route || !canEdit(route, me) || blockedCreator) return reply.code(204).send()
     store.deleteSavedRoute(id)
+    // 绘制者(亲友)删掉盲人实地依赖的路线：通知盲人**别再依赖**这条已消失的路线——补齐 CREATE/UPDATE 已通知、
+    // DELETE 却静默的姊妹缺口（盲人否则可能站在门口找一条已不存在的"家到菜场"）。route 是删除前快照。
+    // 仅当删除者非归属者时通知（盲人删自己拥有的不扰）；不附 routeId（已删，无处可跳）；notifyUser 内部 best-effort。
+    if (me !== route.ownerId) {
+      const l = pushLang(store.findById(route.ownerId)?.language)
+      notifyUser(store, push, route.ownerId, 'route_deleted',
+                 pushStrings.routeDeletedTitle(l), pushStrings.routeDeletedBody(store.findById(me)?.displayName ?? '', route.name, l))
+    }
     return reply.code(204).send()
   })
 }

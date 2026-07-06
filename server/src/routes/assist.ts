@@ -120,7 +120,13 @@ export function registerAssistRoutes(
   })
 
   // 视障侧发起呼叫：登记 callId 与目标用户，供在线协助者/亲友轮询发现并加入（免推送前台会合）。
-  app.post('/api/assist/call', { preHandler: [requireAuth(), requireFeature(store, 'calls')] }, async (req, reply) => {
+  // 端级限流 30/min：每次呼叫都向各目标扇出 VoIP+APNs+Web 三路来电推送（同 emergency/alert 的扇出兄弟，
+  // 后者已 6/min）。此前仅有并发上限(activeCountFor≥10)——只挡"同时"、挡不住 register→cancel→register 的
+  // 快速轮替刷推送（受害者按全局 300/min 仍可被 ~150 次/min 来电轰炸）。30/min 把每受害者上限压到 1/10：
+  // 一次呼叫可一并 targetUserIds 至多 20 人（群呼是单请求非多请求），加急重拨也远达不到 30 次/min（≈每 2s 一次
+  // 不合任何真人呼叫节奏），故绝不误伤真实 SOS 重拨；恶意骚扰则被硬顶。与消息发送 60/min 同为写扇出端级限流。
+  app.post('/api/assist/call', { preHandler: [requireAuth(), requireFeature(store, 'calls')],
+                                 config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = callSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const from = req.user!

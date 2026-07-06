@@ -1324,8 +1324,9 @@ final class FramingAssistViewModel {
     }
 
     /// OCR 识别语言优先级跟随 App 语言（英文用户优先英文模型，识别更准）。
+    // 简体 + **繁体** + 英文（繁中 zh-Hant 此前缺失，台湾/港澳盲人扫繁体乱码）；策略抽到核心可单测。
     private var ocrLanguages: [String] {
-        lang == .en ? ["en-US", "zh-Hans"] : ["zh-Hans", "en-US"]
+        OCRLanguagePolicy.recognitionLanguages(interfaceLanguage: lang)
     }
 
     /// 经全局语音总线 .query 通道：hint=true 为取景/搜索提示（可丢弃，永不打断结果/导航/避障播报），

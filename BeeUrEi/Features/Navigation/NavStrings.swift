@@ -18,9 +18,14 @@ enum NavStrings {
     /// Magic Tap 状态回述：走路时一手势重播"下一步转向 + 还有多远/ETA"（盲人随时想确认，此前只能自动里程碑播报
     /// 或去屏上找那行文字）。转向/剩余都空(刚起步/定位中)时回落状态行或"正在定位…"——手势必须永远有语音反馈，
     /// 静默会让盲人以为没生效。
-    static func statusRecap(instruction: String, remaining: String, status: String, _ l: Language) -> String {
+    /// arrivalClock：预计到达的本地化时钟时刻（"下午3:25"/"3:25 PM"）；有 core 内容且有到达时刻时附「预计X到达」。
+    /// 途中"重听"报到达时间尤有用（比"还有4分钟"更省心算、更能判断能否赶上约定）。刚起步/定位中(core 空)不附。
+    static func statusRecap(instruction: String, remaining: String, status: String, arrivalClock: String? = nil, _ l: Language) -> String {
         let core = [instruction, remaining].filter { !$0.isEmpty }.joined(separator: "。")
-        if !core.isEmpty { return core }
+        if !core.isEmpty {
+            guard let clock = arrivalClock else { return core }
+            return core + (l == .zh ? "。预计\(clock)到达" : ". Arriving around \(clock)")
+        }
         return status.isEmpty ? locating(l) : status
     }
     /// 可见"重听"按钮标题：Magic Tap 只是 VoiceOver 手势、很多人不知道，不用 VoiceOver 的盲人更无从触发；

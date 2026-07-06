@@ -164,7 +164,7 @@ struct WalkNavigationView: View {
                 if model.running {
                     Section {
                         Button {
-                            NavVoice.shared.speakCallout(NavStrings.statusRecap(instruction: model.instruction, remaining: model.remaining, status: model.status, lang))
+                            NavVoice.shared.speakCallout(NavStrings.statusRecap(instruction: model.instruction, remaining: model.remaining, status: model.status, arrivalClock: model.remainingArrivalClock, lang))
                         } label: {
                             Label(NavStrings.repeatStatus(lang), systemImage: "speaker.wave.2.fill")
                         }
@@ -196,7 +196,7 @@ struct WalkNavigationView: View {
             // Magic Tap（双指双击屏幕任意处，VoiceOver 全局手势）：随时重播"下一步转向 + 还有多远/ETA"。
             // 此前剩余距离只在跨里程碑时自动播；走路的盲人想随时确认，只能去屏上找那行文字（不现实）。
             .accessibilityAction(.magicTap) {
-                NavVoice.shared.speakCallout(NavStrings.statusRecap(instruction: model.instruction, remaining: model.remaining, status: model.status, lang))
+                NavVoice.shared.speakCallout(NavStrings.statusRecap(instruction: model.instruction, remaining: model.remaining, status: model.status, arrivalClock: model.remainingArrivalClock, lang))
             }
             // 语音指令直达："带我去X"→ 预填并直接开始导航；"原路返回"→ 一键回程。
             .task {

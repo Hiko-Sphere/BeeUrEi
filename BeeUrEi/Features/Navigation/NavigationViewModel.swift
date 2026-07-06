@@ -27,6 +27,7 @@ final class NavigationViewModel {
     /// 实时剩余路程 + 预计到达文案（"还有约 300 米，预计 4 分钟"）；空串=暂无（未开始/无有效路线/坏定位）。
     /// 逐帧更新供屏幕显示（VoiceOver 可读）；语音只在跨里程碑时播一次（见 handle 内 remainingAnnouncer）。
     private(set) var remaining = ""
+    private(set) var remainingArrivalClock: String? = nil // 剩余里程对应的预计到达时钟时刻；供"重听"回述报「预计几点到达」
     @ObservationIgnored private var lang: Language = FeatureSettings().language // 播报语言（E5，进导航/预览/记路时解析）
     private(set) var steps: [String] = []     // 国内：路线步骤列表（VoiceOver 可读）
     private(set) var running = false
@@ -132,7 +133,7 @@ final class NavigationViewModel {
         headingReliable = false
         headingFilter = HeadingFilter()
         waypointAdvance.reset()
-        remainingAnnouncer.reset(); remaining = "" // 新目的地：清空剩余里程碑基线与屏显
+        remainingAnnouncer.reset(); remaining = ""; remainingArrivalClock = nil // 新目的地：清空剩余里程碑基线与屏显
         offRouteStreak = 0
         lastHeadingTime = 0
         running = true
@@ -163,7 +164,7 @@ final class NavigationViewModel {
         headTracker.stop()
         spatial.stop()   // 释放空间音引擎（见审查 #11）
         NavVoice.shared.stop() // 停掉仍在念的导航指令
-        remaining = "" // 清屏显剩余里程
+        remaining = ""; remainingArrivalClock = nil // 清屏显剩余里程
         status = NavStrings.navStopped(lang)
     }
 
@@ -263,6 +264,7 @@ final class NavigationViewModel {
                 let speed = RouteRemaining.effectiveWalkingSpeed(rawMps: loc.speed)
                 let eta = RouteRemaining.etaSeconds(remainingMeters: rem, speedMps: speed)
                 remaining = NavStrings.remainingDistance(meters: Int(rem.rounded()), etaSeconds: eta, lang)
+                remainingArrivalClock = arrivalClockString(etaSeconds: eta) // 与 remaining 同步更新，供"重听"报到达时刻
                 if remainingAnnouncer.update(remainingMeters: rem) != nil {
                     NavVoice.shared.speakCallout(remaining)
                 }
@@ -466,17 +468,19 @@ final class NavigationViewModel {
                                                         destination: Coordinate(lat: dest.latitude, lon: dest.longitude)) else { return }
         let eta = RouteRemaining.etaSeconds(remainingMeters: total,
                                             speedMps: RouteRemaining.effectiveWalkingSpeed(rawMps: nil))
-        // 预计到达时刻（现在 + ETA）：按用户 locale 格式化成时钟时间（"下午3:25"/"3:25 PM"）。盲人据此判断能否赶上约定。
-        let arrivalClock: String? = eta.flatMap { e -> String? in
-            guard e.isFinite, e >= 0 else { return nil }
-            let f = DateFormatter()
-            f.locale = Locale(identifier: lang.localeIdentifier)
-            f.setLocalizedDateFormatFromTemplate("jmm") // 本地化时:分（12/24 制随 locale）
-            return f.string(from: Date().addingTimeInterval(e))
-        }
         // 直接经 NavVoice 排队（不走 VM 的去重 speak，避免占用 lastSpoken 干扰下个转向指令去重）。
-        NavVoice.shared.speak(NavStrings.journeyOverview(meters: Int(total.rounded()), etaSeconds: eta, arrivalClock: arrivalClock, lang),
+        NavVoice.shared.speak(NavStrings.journeyOverview(meters: Int(total.rounded()), etaSeconds: eta, arrivalClock: arrivalClockString(etaSeconds: eta), lang),
                               rate: FeatureSettings().speechRate)
+    }
+
+    /// 现在 + ETA → 本地化时钟时刻（"下午3:25"/"3:25 PM"，12/24 制随 locale）。用于出发前总览与途中"重听"回述报
+    /// 「预计几点到达」——盲人据此判断能否赶上约定，省"现在几点+还有几分钟"的心算。无有效 ETA 返回 nil（不凭空报）。
+    func arrivalClockString(etaSeconds: Double?) -> String? {
+        guard let e = etaSeconds, e.isFinite, e >= 0 else { return nil }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: lang.localeIdentifier)
+        f.setLocalizedDateFormatFromTemplate("jmm")
+        return f.string(from: Date().addingTimeInterval(e))
     }
 
     /// 罗盘航向回调的**唯一**处理入口（route/backtrack/custom 三处 onHeading 共用，避免三份漂移）。
@@ -696,7 +700,7 @@ final class NavigationViewModel {
         routeCoords = waypoints
         stepIndex = 0
         waypointAdvance.reset()
-        remainingAnnouncer.reset(); remaining = "" // 新回程目的地：清空剩余里程碑基线与屏显
+        remainingAnnouncer.reset(); remaining = ""; remainingArrivalClock = nil // 新回程目的地：清空剩余里程碑基线与屏显
         offRouteStreak = 0
         steps = []
         instruction = ""
@@ -745,7 +749,7 @@ final class NavigationViewModel {
         routeCoords = waypoints.map { Coordinate(lat: $0.lat, lon: $0.lon) }
         stepIndex = 0
         waypointAdvance.reset()
-        remainingAnnouncer.reset(); remaining = "" // 新自定义路线：清空剩余里程碑基线与屏显
+        remainingAnnouncer.reset(); remaining = ""; remainingArrivalClock = nil // 新自定义路线：清空剩余里程碑基线与屏显
         offRouteStreak = 0
         steps = []
         instruction = ""

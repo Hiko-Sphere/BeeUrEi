@@ -42,6 +42,13 @@ final class NavStringsTests: XCTestCase {
         XCTAssertEqual(NavStrings.statusRecap(instruction: "", remaining: "", status: "导航中", .zh), "导航中")
         XCTAssertEqual(NavStrings.statusRecap(instruction: "", remaining: "", status: "", .zh), NavStrings.locating(.zh))
         XCTAssertEqual(NavStrings.statusRecap(instruction: "", remaining: "", status: "", .en), "Locating…")
+        // 带到达时刻（途中"重听"）：有 core 内容时附「预计X到达」；比"还有4分钟"更省心算。
+        XCTAssertEqual(NavStrings.statusRecap(instruction: "前方右转", remaining: "还有约200米，约3分钟", status: "导航中", arrivalClock: "下午3:25", .zh),
+                       "前方右转。还有约200米，约3分钟。预计下午3:25到达")
+        XCTAssertTrue(NavStrings.statusRecap(instruction: "Turn right", remaining: "", status: "Navigating", arrivalClock: "3:25 PM", .en).contains("Arriving around 3:25 PM"))
+        // core 空（刚起步/定位中）：即便传了到达时刻也不附（不凭空报到达）。向后兼容：无 arrivalClock 参数时行为不变。
+        XCTAssertEqual(NavStrings.statusRecap(instruction: "", remaining: "", status: "导航中", arrivalClock: "下午3:25", .zh), "导航中")
+        XCTAssertFalse(NavStrings.statusRecap(instruction: "前方右转", remaining: "", status: "", .zh).contains("到达"))
     }
 
     func testJourneyOverviewIncludesArrivalTime() {

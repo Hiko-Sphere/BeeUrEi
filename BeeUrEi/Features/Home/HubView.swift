@@ -26,7 +26,7 @@ struct HubView: View {
     @State private var incoming = IncomingCallCenter.shared
     @State private var route = AppRoute.shared
     @State private var unreadTotal = 0
-    @State private var batteryWarner = LowBatteryWarner() // 主动低电量告警去抖（跌破 20%/10% 各出声一次）
+    @State private var batteryWarner = LowBatteryWarner() // 主动低电量告警去抖（跌破 20%/10%/5% 各出声一次；5%=濒断电再紧急一次）
     @State private var unreadPollTask: Task<Void, Never>?
     @State private var didSpeakGreeting = false
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency

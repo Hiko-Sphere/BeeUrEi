@@ -37,26 +37,36 @@ public struct PowerPolicy: Sendable {
 }
 
 /// 低电量**主动语音告警**的去抖状态机（纯逻辑，可单测）。盲人看不到电量图标，而手机没电=同时失去导盲、
-/// 导航与紧急求助——必须在跌破关键档时**主动出声**（而非等用户开口查）。20% 提醒、10% 紧急；每档只播一次，
-/// 充电或电量回升到档位之上才重新武装（防 1% 抖动连播刷屏）。未知电量（负值/模拟器）不猜不播。
+/// 导航与紧急求助——必须在跌破关键档时**主动出声**（而非等用户开口查）。三档：20% 提醒、10% 紧急、5% 濒临关机
+/// **再紧急一次**（即便 10% 那次被安全播报打断/用户在通话中错过，濒断电前仍再提醒——生命线设备多一次值得）。
+/// 每档只播一次，充电或电量回升到该档之上才重新武装（防 1% 抖动连播刷屏）。未知电量（负值/模拟器）不猜不播。
 public struct LowBatteryWarner: Sendable {
-    public enum Alert: Equatable, Sendable { case low, critical }   // 20% 档 / 10% 档
+    public enum Alert: Equatable, Sendable { case low, critical }   // 20% 档→.low；10% 与 5% 档→.critical（后者百分数更小、文案自然更急）
     public let lowPercent: Int
     public let criticalPercent: Int
+    public let emptyPercent: Int
     private var armedLow = true
     private var armedCritical = true
+    private var armedEmpty = true
 
-    public init(lowPercent: Int = 20, criticalPercent: Int = 10) {
+    public init(lowPercent: Int = 20, criticalPercent: Int = 10, emptyPercent: Int = 5) {
         self.lowPercent = lowPercent
         self.criticalPercent = criticalPercent
+        self.emptyPercent = emptyPercent
     }
 
     /// 喂入一次电量读数（0–100 整数百分比；<0 视为未知）。返回本次应播的告警档，nil = 不播。
     public mutating func update(percent: Int, charging: Bool) -> Alert? {
-        if charging { armedLow = true; armedCritical = true; return nil } // 充电中：全部重新武装、不打扰
+        if charging { armedLow = true; armedCritical = true; armedEmpty = true; return nil } // 充电中：全部重新武装、不打扰
         guard percent >= 0 else { return nil }                            // 未知电量不猜不播
         if percent > lowPercent { armedLow = true }                       // 回升到 20% 之上 → 重新武装 low
         if percent > criticalPercent { armedCritical = true }             // 回升到 10% 之上 → 重新武装 critical
+        if percent > emptyPercent { armedEmpty = true }                   // 回升到 5% 之上 → 重新武装 empty
+        // 濒临关机（≤emptyPercent，默认5%）：**须先于** critical 档判（5≤10 也满足下条）。复用 .critical 文案，"只剩5%"自然更急。
+        if percent <= emptyPercent, armedEmpty {                          // 抑制同次下探的低两档，濒断电只报这一句最急的
+            armedEmpty = false; armedCritical = false; armedLow = false
+            return .critical
+        }
         if percent <= criticalPercent, armedCritical {                    // 危险档优先，且抑制同次下探的 low
             armedCritical = false; armedLow = false
             return .critical

@@ -2,8 +2,9 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { api, tokenStore } from '../../lib/api'
 import { useI18n } from '../../lib/i18n'
 import { useToast, Avatar, Button, Modal } from '../../components/ui'
-import { IconMic, IconMicOff, IconFlash, IconZoom, IconRecord, IconHangup, IconFlag, IconUser, IconShield, IconChat, IconSend } from '../../components/icons'
+import { IconMic, IconMicOff, IconFlash, IconZoom, IconRecord, IconHangup, IconFlag, IconShield, IconChat, IconSend } from '../../components/icons'
 import { CallEngine, type MediaState, type Quality, CALL_TEXT_MAX, validCallText, callTextRejectText, CallQualityAnnouncer } from '../../lib/webrtc'
+import { ReportDialog } from '../../components/ReportDialog'
 import type { ActiveCall } from './CallController'
 
 export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?: 'peer' | 'admin' | 'signaling') => void }) {
@@ -338,45 +339,6 @@ function QualityBars({ quality }: { quality: Quality }) {
     <div className="flex items-end gap-0.5" role="img" aria-label={desc}>
       {[1, 2, 3].map((i) => <span key={i} className={`w-1 rounded-sm ${i <= bars ? 'bg-ok' : 'bg-white/25'}`} style={{ height: 4 + i * 4 }} />)}
     </div>
-  )
-}
-
-export function ReportDialog({ targetUserId, callId, evidenceRecordingId, onClose, onAddFriend, onBlock }: {
-  targetUserId: string; callId: string; evidenceRecordingId: string | null; onClose: () => void; onAddFriend: () => void; onBlock: () => void
-}) {
-  const { t } = useI18n()
-  const toast = useToast()
-  const [reason, setReason] = useState('')
-  const [attach, setAttach] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const submit = async () => {
-    if (!reason.trim()) return
-    setBusy(true)
-    try {
-      await api.report(targetUserId, reason.trim(), callId, attach && evidenceRecordingId ? evidenceRecordingId : undefined)
-      toast(t('举报已提交', 'Report submitted'), 'ok')
-      onClose()
-    } catch { toast(t('提交失败', 'Failed to submit'), 'error') } finally { setBusy(false) }
-  }
-  return (
-    <Modal onClose={onClose} label={t('举报与安全', 'Report & Safety')} panelClassName="w-full max-w-sm">
-      <h3 className="text-lg font-semibold">{t('举报与安全', 'Report & Safety')}</h3>
-      <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} maxLength={1000}
-        placeholder={t('请描述问题（必填）', 'Describe the issue (required)')}
-        className="mt-3 w-full resize-none rounded-xl border border-[var(--line)] surface-2 px-3 py-2.5 text-sm outline-none focus:border-honey" />
-      {evidenceRecordingId && (
-        <label className="mt-3 flex items-center gap-2 text-sm text-soft">
-          <input type="checkbox" checked={attach} onChange={(e) => setAttach(e.target.checked)} className="accent-[var(--color-honey)]" />
-          {t('附上本次通话录制作为证据', 'Attach this call recording as evidence')}
-        </label>
-      )}
-      <Button variant="danger" className="mt-4 w-full" loading={busy} onClick={submit} disabled={!reason.trim()}>{t('提交举报', 'Submit report')}</Button>
-      <div className="mt-3 flex gap-2">
-        <Button variant="soft" className="flex-1" onClick={onAddFriend}><IconUser width={16} height={16} />{t('加为联系人', 'Add contact')}</Button>
-        <Button variant="ghost" className="flex-1" onClick={onBlock}>{t('拉黑', 'Block')}</Button>
-      </div>
-      <button onClick={onClose} className="mt-3 w-full text-center text-sm text-faint hover:underline">{t('取消', 'Cancel')}</button>
-    </Modal>
   )
 }
 

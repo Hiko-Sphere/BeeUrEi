@@ -6,7 +6,8 @@ import { classifyIdentifier } from '../lib/identifier'
 import { useI18n } from '../lib/i18n'
 import { useCall } from './call/CallController'
 import { Card, Avatar, Button, Pill, Spinner, EmptyState, Field, Input, useToast, Modal } from '../components/ui'
-import { IconUsers, IconPhone, IconChat, IconPlus, IconCheck, IconX, IconShield, IconFlash } from '../components/icons'
+import { IconUsers, IconPhone, IconChat, IconPlus, IconCheck, IconX, IconShield, IconFlash, IconFlag } from '../components/icons'
+import { ReportDialog } from '../components/ReportDialog'
 
 export function FamilyPage() {
   const { t } = useI18n()
@@ -17,6 +18,7 @@ export function FamilyPage() {
   const [incoming, setIncoming] = useState<IncomingLink[] | null>(null)
   const [blocks, setBlocks] = useState<{ id: string; user: { id: string; displayName: string; avatar?: string | null } }[] | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  const [reportTarget, setReportTarget] = useState<FamilyLink | null>(null) // 举报对象（从联系人直接举报，无需通话中）
 
   const reload = useCallback(async () => {
     const [l, i, b] = await Promise.allSettled([api.familyLinks(), api.incomingLinks(), api.blocks()])
@@ -128,6 +130,8 @@ export function FamilyPage() {
                   className="flex h-9 w-9 items-center justify-center rounded-full bg-honey/15 text-honey disabled:opacity-40" aria-label={t('呼叫', 'Call')}><IconPhone width={18} height={18} /></button>
                 <button onClick={() => nav(`/chat/${l.memberId}`)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-soft" aria-label={t('消息', 'Message')}><IconChat width={18} height={18} /></button>
                 <button onClick={() => blockContact(l)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-faint hover:text-danger" aria-label={t('拉黑', 'Block')}><IconShield width={16} height={16} /></button>
+                {/* 举报（信任与安全）：被骚扰不必非得在通话中才能举报——从联系人直接举报，服务端 /api/reports 无需 callId。 */}
+                <button onClick={() => setReportTarget(l)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-faint hover:text-danger" aria-label={t('举报', 'Report')}><IconFlag width={16} height={16} /></button>
                 <button onClick={() => removeContact(l)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-faint" aria-label={t('删除', 'Remove')}><IconX width={16} height={16} /></button>
               </li>
             ))}
@@ -169,6 +173,10 @@ export function FamilyPage() {
       )}
 
       {addOpen && <AddContactDialog onClose={() => setAddOpen(false)} onAdded={() => { setAddOpen(false); void reload() }} />}
+      {reportTarget && (
+        // 从联系人举报：仅需 targetUserId + 理由（无 callId/录制证据）；举报后可从行内「拉黑」按钮另行拉黑。
+        <ReportDialog targetUserId={reportTarget.memberId} onClose={() => setReportTarget(null)} />
+      )}
     </div>
   )
 }

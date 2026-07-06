@@ -57,7 +57,11 @@ export function registerSafetyRoutes(app: FastifyInstance, store: Store,
       startedAt: now, dueAt: now + parsed.data.durationMinutes * 60_000, status: 'active',
     }
     store.createSafetyTimer(timer)
-    return { timer: view(timer, now) }
+    // 无紧急联系人预警（防假安心）：dead-man's switch 到期只对"我拥有的、已接受且标为紧急"的联系人扇出
+    // （与 checkin.ts fireExpiredSafetyTimers 同口径）——一个都没有则到期告警**无人可通知**，报到形同虚设。
+    // 不阻断开始（用户可能正要去加联系人），但据此让客户端提示"先设紧急联系人，否则到点没人会被通知"。
+    const hasEmergencyContact = store.linksByOwner(me).some((l) => (l.status ?? 'accepted') === 'accepted' && l.isEmergency)
+    return { timer: view(timer, now), hasEmergencyContact }
   })
 
   // 报平安（我平安到了）：结束当前进行中的报到。

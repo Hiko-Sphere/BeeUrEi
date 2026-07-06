@@ -54,6 +54,33 @@ describe('安全报到端点', () => {
     await app.close()
   })
 
+  it('start 返回 hasEmergencyContact（防假安心）：有紧急联系人→true；没有→false，与 fire 扇出同口径', async () => {
+    const { app, blind, family, stranger } = await setup()
+    // blind 把 family 设为紧急联系人（已接受）→ true。
+    expect((await app.inject({ method: 'POST', url: '/api/safety/checkin/start', headers: blind.h, payload: { durationMinutes: 30 } })).json().hasEmergencyContact).toBe(true)
+    // stranger 无任何联系人 → false（到期告警无人可通知）。
+    expect((await app.inject({ method: 'POST', url: '/api/safety/checkin/start', headers: stranger.h, payload: { durationMinutes: 30 } })).json().hasEmergencyContact).toBe(false)
+    // family 是 blind 的紧急联系人，但 family 自己没把谁设为**自己的**紧急联系人（linksByOwner(family) 空）→ false（方向不对称）。
+    expect((await app.inject({ method: 'POST', url: '/api/safety/checkin/start', headers: family.h, payload: { durationMinutes: 30 } })).json().hasEmergencyContact).toBe(false)
+    await app.close()
+  })
+
+  it('start hasEmergencyContact：待接受 / 非紧急的联系人都不算（须 accepted∧isEmergency，与 fire 一致）', async () => {
+    const { app } = await setup()
+    const reg = async (u: string, role: string) => (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const a = await reg('hecA', 'blind'); const ah = { authorization: `Bearer ${a.token}` }
+    await reg('hecB', 'family')
+    const c = await reg('hecC', 'family'); const ch = { authorization: `Bearer ${c.token}` }
+    // A 把 B 设为紧急联系人但 B **未接受**（pending）→ false。
+    await app.inject({ method: 'POST', url: '/api/family/links', headers: ah, payload: { username: 'hecB', relation: '家人', isEmergency: true } })
+    expect((await app.inject({ method: 'POST', url: '/api/safety/checkin/start', headers: ah, payload: { durationMinutes: 30 } })).json().hasEmergencyContact).toBe(false)
+    // A 再把 C 设为**非紧急**联系人并接受 → 仍 false（非紧急不进 SOS 扇出）。
+    const lc = await app.inject({ method: 'POST', url: '/api/family/links', headers: ah, payload: { username: 'hecC', relation: '同事', isEmergency: false } })
+    await app.inject({ method: 'POST', url: `/api/family/links/${lc.json().link.id}/accept`, headers: ch })
+    expect((await app.inject({ method: 'POST', url: '/api/safety/checkin/start', headers: ah, payload: { durationMinutes: 30 } })).json().hasEmergencyContact).toBe(false)
+    await app.close()
+  })
+
   it('complete 报平安结束 active；无 active → completed:false（幂等友好）', async () => {
     const { app, blind } = await setup()
     expect((await app.inject({ method: 'POST', url: '/api/safety/checkin/complete', headers: blind.h })).json()).toEqual({ ok: true, completed: false })

@@ -346,7 +346,7 @@ export const api = {
   // 安全报到（dead-man's switch）：设时限，到点未报平安则服务端自动告警紧急联系人+发实时位置。与 iOS 同端点。
   safetyCheckin: () => get('/api/safety/checkin') as Promise<{ timer: SafetyTimer | null }>,
   startSafetyCheckin: (durationMinutes: number, note?: string) =>
-    post('/api/safety/checkin/start', { durationMinutes, ...(note ? { note } : {}) }) as Promise<{ timer: SafetyTimer }>,
+    post('/api/safety/checkin/start', { durationMinutes, ...(note ? { note } : {}) }) as Promise<{ timer: SafetyTimer; hasEmergencyContact: boolean }>,
   completeSafetyCheckin: () => post('/api/safety/checkin/complete', undefined) as Promise<{ ok: boolean; completed: boolean }>,
   extendSafetyCheckin: (addMinutes: number) => post('/api/safety/checkin/extend', { addMinutes }) as Promise<{ timer: SafetyTimer }>,
   cancelSafetyCheckin: () => post('/api/safety/checkin/cancel', undefined),

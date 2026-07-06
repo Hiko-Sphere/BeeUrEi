@@ -214,7 +214,23 @@ function SafetyCheckInCard() {
     catch { toast(t('操作失败，请重试', 'Something went wrong — try again'), 'error') }
     finally { setBusy(false) }
   }
-  const start = () => run(async () => (await api.startSafetyCheckin(duration, note.trim() || undefined)).timer, t('安全报到已开始，到点前记得报平安', 'Check-in started — remember to mark yourself safe'))
+  // start 不走通用 run：需据服务端 hasEmergencyContact 决定是"成功"还是"防假安心"警告。
+  const start = async () => {
+    setBusy(true)
+    try {
+      const res = await api.startSafetyCheckin(duration, note.trim() || undefined)
+      setTimer(res.timer)
+      if (res.hasEmergencyContact) {
+        toast(t('安全报到已开始，到点前记得报平安', 'Check-in started — remember to mark yourself safe'), 'ok')
+      } else {
+        // 防假安心：dead-man's switch 到期只通知紧急联系人，一个都没有则到点没报平安也无人会被通知。
+        // 用 error 语气（toast 组件对 error 挂 role=alert，读屏即时朗读），明确告诉盲人这道安全网当前是空的。
+        toast(t('已开始，但你还没有紧急联系人——到点没报平安也无人会被通知。请先在下方联系人里把某人设为紧急联系人。',
+                'Started, but you have no emergency contact — no one will be alerted if you miss it. Set someone as an emergency contact below first.'), 'error')
+      }
+    } catch { toast(t('操作失败，请重试', 'Something went wrong — try again'), 'error') }
+    finally { setBusy(false) }
+  }
   const complete = () => run(async () => { await api.completeSafetyCheckin(); return null }, t('已报平安，报到结束', "You're marked safe — check-in ended"))
   const extend = () => run(async () => (await api.extendSafetyCheckin(60)).timer, t('已延长 1 小时', 'Extended by 1 hour'))
   const cancel = () => run(async () => { await api.cancelSafetyCheckin(); return null }, t('已取消安全报到', 'Safety check-in canceled'))

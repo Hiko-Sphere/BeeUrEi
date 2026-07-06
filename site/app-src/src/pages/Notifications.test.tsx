@@ -7,7 +7,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 const h = vi.hoisted(() => ({ nav: vi.fn() }))
 vi.mock('react-router-dom', () => ({ useNavigate: () => h.nav }))
 vi.mock('../lib/api', () => ({
-  api: { notifications: vi.fn(), markAllNotifsRead: vi.fn(), markNotifRead: vi.fn(), contactMedicalInfo: vi.fn(), deleteNotif: vi.fn(), clearReadNotifs: vi.fn() },
+  api: { notifications: vi.fn(), markAllNotifsRead: vi.fn(), markNotifRead: vi.fn(), contactMedicalInfo: vi.fn(), deleteNotif: vi.fn(), clearReadNotifs: vi.fn(), emergencyAck: vi.fn() },
   APIError: class extends Error { code = ''; status = 0 },
 }))
 import { api } from '../lib/api'
@@ -91,6 +91,29 @@ describe('NotificationsPage 渲染（防字段漂移）', () => {
     render(<NotificationsPage />)
     expect(await screen.findByText('你被设为紧急联系人')).toBeInTheDocument()
     expect(screen.queryByTestId('view-medical-btn')).toBeNull() // 无 fromId → 不显示（fromId 门排除关系事件）
+  })
+
+  it('收到的 SOS 告警(emergency_alert)提供"我已看到"回执：点击调 emergencyAck(fromId,eventId) 并显示"已回执"', async () => {
+    ;(api.emergencyAck as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true })
+    ;(api.notifications as ReturnType<typeof vi.fn>).mockResolvedValue({
+      notifications: [notif({ id: 'e1', kind: 'emergency_alert', title: '摔倒告警', body: '可能摔倒', data: { fromId: 'blind1', fromName: '小明', eventId: 'ev1' } })],
+      unread: 1,
+    })
+    render(<NotificationsPage />)
+    const btn = await screen.findByRole('button', { name: /回执/ })
+    fireEvent.click(btn)
+    await waitFor(() => expect(api.emergencyAck).toHaveBeenCalledWith('blind1', 'ev1')) // 带 eventId 供停止升级重呼+协调
+    expect(await screen.findByText('已回执')).toBeInTheDocument()                        // 乐观反馈
+  })
+
+  it('回执只对**收到的** SOS 告警：emergency_ack(发起人侧回声，虽有 fromId)不显示回执按钮', async () => {
+    ;(api.notifications as ReturnType<typeof vi.fn>).mockResolvedValue({
+      notifications: [notif({ id: 'ea1', kind: 'emergency_ack', title: '小红已看到你的求助', body: '', data: { fromId: 'helper1', fromName: '小红' } })],
+      unread: 1,
+    })
+    render(<NotificationsPage />)
+    await screen.findByText('小红已看到你的求助')
+    expect(screen.queryByRole('button', { name: /回执/ })).toBeNull() // kind !== emergency_alert（精确门）→ 无回执
   })
 })
 

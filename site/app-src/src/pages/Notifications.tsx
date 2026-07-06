@@ -4,8 +4,8 @@ import { api, type NotificationInfo } from '../lib/api'
 import { emergencyLocInfo } from '../lib/emergencyLoc'
 import { appleMapsUrl } from '../lib/location'
 import { useI18n } from '../lib/i18n'
-import { Card, Button, Spinner, EmptyState, fmtTime, RelativeTime } from '../components/ui'
-import { IconBell, IconShield, IconPhone, IconUsers, IconFilm, IconFlash, IconPin, IconBattery, IconX } from '../components/icons'
+import { Card, Button, Spinner, EmptyState, fmtTime, RelativeTime, useToast } from '../components/ui'
+import { IconBell, IconShield, IconPhone, IconUsers, IconFilm, IconFlash, IconPin, IconBattery, IconX, IconCheck } from '../components/icons'
 import { useCall } from './call/CallController'
 import { ContactMedicalInfo } from './call/EmergencyAlertHost'
 
@@ -46,10 +46,22 @@ export function NotificationsPage() {
   const { t, lang } = useI18n()
   const { active, startOutgoing } = useCall()
   const navigate = useNavigate()
+  const toast = useToast()
   const [items, setItems] = useState<NotificationInfo[] | null>(null)
+  const [ackedIds, setAckedIds] = useState<Set<string>>(new Set()) // 本会话内已从列表回执的告警（立即显示"已回执"）
 
   const load = async () => { try { const r = await api.notifications(); setItems(r.notifications) } catch { setItems([]) } }
   useEffect(() => { void load() }, [])
+
+  // 从通知列表直接回执 SOS 告警："我已看到"——遇险者最需要的反馈是"有人在响应"，且服务端据此停止升级重呼、
+  // 匿名协调其余亲友（与告警弹窗 onAck 同一后端流程）。此前列表只有"回拨"、没有"回执"，与弹窗不对等（尤其读屏
+  // 用户逐条浏览列表时够不着回执）。best-effort + 幂等：乐观显示"已回执"，失败回滚并提示。
+  const acknowledge = async (n: NotificationInfo) => {
+    if (!n.data?.fromId) return
+    setAckedIds((prev) => new Set(prev).add(n.id))
+    try { await api.emergencyAck(n.data.fromId, n.data.eventId); toast(t('已回执，对方会看到你在响应', "Acknowledged — they'll see you're responding"), 'ok') }
+    catch { setAckedIds((prev) => { const s = new Set(prev); s.delete(n.id); return s }); toast(t('回执失败，请重试', 'Failed, please try again'), 'error') }
+  }
 
   const markAll = async () => { try { await api.markAllNotifsRead(); void load() } catch { /* ignore */ } }
   const markOne = async (n: NotificationInfo) => { if (n.readAt) return; try { await api.markNotifRead(n.id); setItems((cur) => cur?.map((x) => x.id === n.id ? { ...x, readAt: Date.now() } : x) ?? cur) } catch { /* ignore */ } }
@@ -116,6 +128,21 @@ export function NotificationsPage() {
                       </a>
                     )
                   })()}
+                  {/* 回执"我已看到"：只对**收到的** SOS 告警(emergency_alert)显示——回告遇险者有人在响应 + 停止升级重呼。
+                      与告警弹窗的"知道了"同一后端流程，补齐列表侧对等（弹窗错过/读屏逐条浏览时也能回执）。幂等，乐观反馈。 */}
+                  {n.kind === 'emergency_alert' && n.data?.fromId && (
+                    ackedIds.has(n.id) ? (
+                      <span className="ml-3 mt-1 inline-flex items-center gap-1 text-xs font-medium text-ok" role="status">
+                        <IconCheck width={13} height={13} />{t('已回执', 'Acknowledged')}
+                      </span>
+                    ) : (
+                      <button onClick={(e) => { e.stopPropagation(); void acknowledge(n) }}
+                        className="ml-3 mt-1 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+                        aria-label={t(`回执：告诉 ${n.data.fromName ?? ''} 我已看到求助`, `Let ${n.data.fromName ?? 'them'} know you've seen the alert`)}>
+                        <IconCheck width={13} height={13} />{t('我已看到', "I've seen it")}
+                      </button>
+                    )
+                  )}
                   {/* 紧急告警：一键回拨发出告警的盲人——协助者响应摔倒/求助最直接的动作，免去手动翻联系人。 */}
                   {n.kind.includes('emergency') && n.data?.fromId && (
                     <button onClick={(e) => { e.stopPropagation(); void startOutgoing(n.data!.fromId!, n.data!.fromName ?? t('对方', 'Them'), null) }}

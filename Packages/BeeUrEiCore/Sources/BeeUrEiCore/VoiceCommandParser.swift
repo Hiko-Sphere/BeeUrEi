@@ -170,7 +170,10 @@ public enum VoiceCommandParser {
         if has(["简短点", "说简短", "说简单点", "别啰嗦", "太啰嗦", "长话短说", "少说点", "concise", "less detail", "be brief", "keep it short"]) { return .adjustVerbosity(.terser) }
         if has(["详细点", "说详细", "详细一点", "多说点", "说清楚点", "说仔细点", "more detail", "be verbose", "tell me more", "more details"]) { return .adjustVerbosity(.moreDetail) }
         if has(["你会什么", "能做什么", "你能做什么", "有什么功能", "都能干什么", "what can you do", "what can i say", "voice commands", "list commands"]) { return .commands }
-        if has(["再说一遍", "重复", "刚才说什么", "repeat", "say again", "say that again"]) { return .repeatLast }
+        // 也收"没听清"(最自然的复述请求：漏听了播报，"没听清楚"含之)、口语"刚才说啥"、英文 didn't catch/come again/
+        // what was that——此前这些自然问法全落 unknown，盲人漏听一句只能干等。均是明确的"再说一遍"意图、无歧义不撞他意。
+        if has(["再说一遍", "重复", "刚才说什么", "刚才说啥", "没听清", "repeat", "say again", "say that again",
+                "didn't catch", "come again", "what was that"]) { return .repeatLast }
         // 找具体物品：置于具体命令**之后**作兜底——否则"find my location"(含"find my")会抢掉 whereAmI、
         // "找一下路"等也会误当找物。到这里说明不是任何具体命令，"找X"/"find X" 才解析为找物（泛指"找东西"除外）。
         if let obj = parseFindTarget(text) { return .find(obj) }

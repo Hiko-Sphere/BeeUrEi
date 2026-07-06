@@ -795,7 +795,8 @@ struct APIClient {
 
     /// 视障侧发起呼叫：登记 callId + 目标用户，供对端轮询发现并加入。
     func startEmergencyCall(token: String, callId: String, targetUserIds: [String]) async throws {
-        _ = try await authedSend("POST", "/api/assist/call", token: token, body: ["callId": callId, "targetUserIds": targetUserIds])
+        // emergency:true → 被叫端（亲友/协助者）识别为紧急求助、突出显示+优先应答（服务端经此透传到 /api/assist/incoming）。
+        _ = try await authedSend("POST", "/api/assist/call", token: token, body: ["callId": callId, "targetUserIds": targetUserIds, "emergency": true])
     }
 
     /// 取消/结束待接来电（尽力而为）。

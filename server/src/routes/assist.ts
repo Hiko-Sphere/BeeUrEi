@@ -21,7 +21,9 @@ import { type Metrics } from '../metrics/metrics'
 const heartbeatSchema = z.object({ available: z.boolean(), at: z.number().optional().catch(undefined) })
 // emergency/preferredLanguage 是匹配偏好：坏值退化为默认匹配，远好过"一键求助"在匹配一步就 400。
 const matchSchema = z.object({ emergency: z.boolean().optional().catch(undefined), preferredLanguage: z.string().max(16).optional().catch(undefined) })
-const callSchema = z.object({ callId: z.string().min(1).max(128), targetUserIds: z.array(z.string().min(1)).min(1).max(20) })
+// emergency：本次呼叫是否为**紧急求助**（盲人一键 SOS 呼叫亲友，区别于日常"帮我看一下"）——供被叫端
+// 突出显示/更急促响铃、优先应答。坏值退化为 false（绝不让"一键求助"因该可选标志 400，与 match 同范式）。
+const callSchema = z.object({ callId: z.string().min(1).max(128), targetUserIds: z.array(z.string().min(1)).min(1).max(20), emergency: z.boolean().optional().catch(undefined) })
 // 公开求助（面向陌生志愿者）：language/locality/topic 只是路由/展示提示——locality 来自反向地理编码，
 // 编码器给出超长地名时绝不能 400 掉整个求助（盲人听到"求助失败"且重试还是同一地名，死路）。
 const helpRequestSchema = z.object({
@@ -138,6 +140,7 @@ export function registerAssistRoutes(
       fromName: store.findById(from.sub)?.displayName ?? '求助者',
       toUserIds: targets,
       createdAt: Date.now(),
+      emergency: parsed.data.emergency ?? false, // 紧急求助 → 被叫端突出显示/优先应答
     })
     if (!ok) return reply.code(409).send({ error: 'call_id_conflict' }) // 该 callId 被他人占用，防覆盖/劫持(见审查 #2)
     // 通话记录：每个目标一条（默认 missed，被叫接听/拒绝后更新）。
@@ -181,7 +184,7 @@ export function registerAssistRoutes(
   // 协助者/亲友轮询：取针对自己的待接来电（callId + 发起人）。
   app.get('/api/assist/incoming', { preHandler: requireAuth() }, async (req) => {
     const calls = pendingCalls.incomingFor(req.user!.sub, Date.now())
-    return { calls: calls.map((c) => ({ callId: c.callId, fromName: c.fromName, fromUserId: c.fromUserId, fromAvatar: store.findById(c.fromUserId)?.avatar ?? null })) }
+    return { calls: calls.map((c) => ({ callId: c.callId, fromName: c.fromName, fromUserId: c.fromUserId, fromAvatar: store.findById(c.fromUserId)?.avatar ?? null, emergency: c.emergency ?? false })) }
   })
 
   // 取消/结束待接来电（接通或挂断后清理）。仅发起人或目标可取消（归属校验，防越权压制，见审查 #3）。

@@ -9,6 +9,7 @@ export interface PendingCall {
   fromName: string
   toUserIds: string[]
   createdAt: number
+  emergency?: boolean   // 紧急求助（盲人一键 SOS 呼叫亲友）——供被叫端突出显示/优先应答，区别于日常呼叫
   declinedBy?: string[] // 已明确"拒绝"的目标（供发起方看到"对方已拒绝"）
   answeredBy?: string   // 首位接听者（群呼首接抢占：其余目标停止振铃、后接者得到明确反馈）
   answeredAt?: number   // 首接时刻——用于"已认领却接不通"的死锁自愈（见 reopenStaleAnswer）

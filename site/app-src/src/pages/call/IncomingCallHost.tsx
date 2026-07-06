@@ -22,8 +22,9 @@ export function IncomingCallHost() {
         dismissRingIfGone(ids)
         // 通话中不弹新来电铃（避免打断）。
         if (!activeRef.current && calls.length > 0) {
-          const c = calls[0]
-          presentRing({ callId: c.callId, fromName: c.fromName, fromAvatar: c.fromAvatar })
+          // 优先弹**紧急**来电（若多路并发，紧急求助先响）；紧急标志透传给来电铃突出显示。
+          const c = calls.find((x) => x.emergency) ?? calls[0]
+          presentRing({ callId: c.callId, fromName: c.fromName, fromAvatar: c.fromAvatar, emergency: c.emergency ?? false })
         }
       } catch { /* 网络抖动忽略 */ }
     }

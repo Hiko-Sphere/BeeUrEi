@@ -56,3 +56,22 @@ describe('CallController 单通闩：并发启动只注册一通', () => {
     expect(answeredCall).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('来电铃：紧急求助突出显示（施救者优先应答）', () => {
+  beforeEach(() => { ctx = null })
+
+  it('emergency:true → alertdialog aria-label 含"紧急求助来电" + 🆘 文案', () => {
+    const r = render(<CallProvider><Grab /></CallProvider>)
+    act(() => { ctx!.presentRing({ callId: 'sos-1', fromName: '小明', emergency: true }) })
+    const dialog = r.getByRole('alertdialog')
+    expect(dialog.getAttribute('aria-label')).toContain('紧急求助来电')
+    expect(r.container.textContent).toContain('🆘 紧急求助')
+  })
+
+  it('普通来电（emergency:false）→ 无紧急样式/文案', () => {
+    const r = render(<CallProvider><Grab /></CallProvider>)
+    act(() => { ctx!.presentRing({ callId: 'reg-1', fromName: '阿姨', emergency: false }) })
+    expect(r.getByRole('alertdialog').getAttribute('aria-label')).not.toContain('紧急')
+    expect(r.container.textContent).not.toContain('🆘')
+  })
+})

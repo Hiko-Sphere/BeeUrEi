@@ -19,7 +19,7 @@ export interface IncomingLink { id: string; ownerId: string; ownerName: string; 
 export interface FamilyLink { id: string; memberId: string; memberName: string; memberAvatar?: string | null; relation: string; isEmergency: boolean; amOwner?: boolean; phone?: string | null; status?: string; outgoing?: boolean; online?: boolean }
 export interface CallRecordInfo { id: string; callId: string; direction?: string; status: string; peerId?: string | null; peerName?: string; peerAvatar?: string | null; createdAt: number }
 export interface IceServer { urls: string[] | string; username?: string; credential?: string }
-export interface IncomingCall { callId: string; fromName: string; fromUserId: string; fromAvatar?: string | null }
+export interface IncomingCall { callId: string; fromName: string; fromUserId: string; fromAvatar?: string | null; emergency?: boolean }
 // 与后端 HelpSummary 对齐：队列对外的安全摘要（不暴露 fromUserId）。
 export interface HelpRequest { callId: string; fromName: string; fromAvatar?: string | null; language?: string; locality?: string; topic?: string; waitedSeconds: number }
 export interface ChatMessage { id: string; fromId: string; toId: string; kind: string; text: string; createdAt: number; readAt?: number; reaction?: string; groupId?: string; editedAt?: number; replyTo?: string; readBy?: number; readTotal?: number; forwarded?: boolean }

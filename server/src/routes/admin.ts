@@ -627,6 +627,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
         calleeId: c.calleeId,
         calleeName: nameOf(c.calleeId),
         status: c.status,
+        emergency: c.emergency ?? false, // 紧急求助(SOS)呼叫——治理视图须能区分"未接的紧急求助"与日常协助（此前漏，死字段）
         createdAt: c.createdAt,
       })),
     }

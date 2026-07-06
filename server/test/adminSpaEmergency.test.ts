@@ -5,15 +5,27 @@ import vm from 'node:vm'
 
 /// 管理面板是无构建的 vanilla JS（public/admin/app.js），此前无任何可执行测试。用 node:vm 加载：
 /// 顶层 const（state/I18N）不会挂到 vm 全局，故在 bootstrap render() 之前注入同脚本导出（replace 锚点
-/// 不命中则显式抛错，绝不静默空测）；render() 需要真实 DOM，用最小 stub + try/catch 兜底（导出已先执行）。
-function loadSpa(): { state: { lang: string; emergencies: unknown[] }; t: (k: string) => string; emergencySection: () => string } {
+/// 不命中则显式抛错，绝不静默空测）；DOM 用**宽容自引用 stub 元素**（getElementById/querySelector 都回它，
+/// innerHTML 可读写）——渲染函数写完 innerHTML 后测试读回断言，事件绑定全 noop。
+interface SpaTest {
+  state: { lang: string; emergencies: unknown[]; calls: unknown[]; callsQuery: string }
+  t: (k: string) => string
+  emergencySection: () => string
+  renderCalls: () => void
+  view: { innerHTML: string } // 渲染函数写入的共享 stub 元素（viewEl()/$ 都解析到它）
+}
+function loadSpa(): SpaTest {
   const path = fileURLToPath(new URL('../public/admin/app.js', import.meta.url))
   let src = readFileSync(path, 'utf8')
   const anchor = '\nrender();'
   if (!src.includes(anchor)) throw new Error('app.js bootstrap anchor "render();" not found — update test')
-  src = src.replace(anchor, '\nglobalThis.__test = { state, t, emergencySection };\nrender();')
+  src = src.replace(anchor, '\nglobalThis.__test = { state, t, emergencySection, renderCalls };\nrender();')
   const noop = (): void => {}
   const classList = { add: noop, remove: noop, toggle: noop, contains: () => false }
+  // 自引用宽容元素：querySelector 返回自身（事件绑定链不断）、querySelectorAll 空数组、其余 noop。
+  const stubEl: Record<string, unknown> = { innerHTML: '', value: '', dataset: {}, style: {}, classList, addEventListener: noop, focus: noop }
+  stubEl.querySelector = () => stubEl
+  stubEl.querySelectorAll = () => []
   const ctx: Record<string, unknown> = {
     localStorage: { getItem: () => null, setItem: noop, removeItem: noop },
     navigator: { language: 'zh-CN' },
@@ -21,7 +33,7 @@ function loadSpa(): { state: { lang: string; emergencies: unknown[] }; t: (k: st
     document: {
       documentElement: { lang: '', dataset: {}, classList },
       body: { classList, dataset: {} },
-      getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
+      getElementById: () => stubEl, querySelector: () => stubEl, querySelectorAll: () => [],
       addEventListener: noop, createElement: () => ({ style: {}, classList, dataset: {} }),
     },
     location: { hash: '' }, history: { replaceState: noop },
@@ -29,10 +41,10 @@ function loadSpa(): { state: { lang: string; emergencies: unknown[] }; t: (k: st
   }
   ctx.globalThis = ctx
   vm.createContext(ctx as vm.Context)
-  try { vm.runInContext(src, ctx as vm.Context) } catch { /* bootstrap render() 需真实 DOM；导出行在其前已执行 */ }
-  const test = (ctx as { __test?: ReturnType<typeof loadSpa> }).__test
+  try { vm.runInContext(src, ctx as vm.Context) } catch { /* bootstrap render() 若仍缺环境；导出行在其前已执行 */ }
+  const test = (ctx as { __test?: Omit<SpaTest, 'view'> }).__test
   if (!test) throw new Error('__test export missing — app.js failed before export line')
-  return test
+  return { ...test, view: stubEl as { innerHTML: string } }
 }
 
 const ev = (over: Record<string, unknown>) => ({
@@ -75,5 +87,25 @@ describe('管理面板 紧急事件区（响应结果分诊信号）', () => {
     const html = spa.emergencySection()
     expect(html).toContain('已报平安')
     expect(html).not.toContain('升级后仍无人响应')
+  })
+})
+
+describe('管理面板 通话记录区（紧急求助可辨识）', () => {
+  const call = (over: Record<string, unknown>) => ({
+    id: 'c1', callId: 'k1', callerId: 'u1', callerName: '小明', calleeId: 'u2', calleeName: '阿华',
+    status: 'missed', createdAt: 1_700_000_000_000, ...over,
+  })
+
+  it('emergency:true 的记录带 🆘 紧急求助标；false/缺省不带（旧数据兼容）', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    spa.state.callsQuery = ''
+    spa.state.calls = [call({ id: 'c1', emergency: true }), call({ id: 'c2', callerName: '普通甲', emergency: false }), call({ id: 'c3', callerName: '普通乙' })]
+    spa.renderCalls()
+    const html = spa.view.innerHTML
+    expect(html).toContain('紧急求助')                       // SOS 行有标
+    expect(html.split('紧急求助').length - 1).toBe(1)        // 恰 1 次=仅 c1 行（CSV 表头只在导出、不在 DOM）——false/缺省行都不带
+    expect(html).toContain('小明')
+    expect(html).toContain('普通甲')                          // 非紧急行照常渲染、不带标（次数断言已保证）
   })
 })

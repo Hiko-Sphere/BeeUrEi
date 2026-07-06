@@ -184,6 +184,7 @@ describe('admin + reports', () => {
 
     store.createLink({ id: 'lk1', ownerId: blindId, memberId: helperId, relation: '女儿', isEmergency: true, createdAt: Date.now(), status: 'accepted' })
     store.createCallRecord({ id: 'cr1', callId: 'call-abc', callerId: blindId, calleeId: helperId, status: 'answered', createdAt: Date.now() })
+    store.createCallRecord({ id: 'cr2', callId: 'call-sos', callerId: blindId, calleeId: helperId, status: 'missed', createdAt: Date.now() + 1, emergency: true }) // SOS 呼叫
 
     const links = await app.inject({ method: 'GET', url: '/api/admin/links', headers: adminAuth })
     expect(links.statusCode).toBe(200)
@@ -194,10 +195,14 @@ describe('admin + reports', () => {
 
     const calls = await app.inject({ method: 'GET', url: '/api/admin/calls', headers: adminAuth })
     expect(calls.statusCode).toBe(200)
-    expect(calls.json().calls.length).toBe(1)
-    expect(calls.json().calls[0].callerName).toBe('blindy')
-    expect(calls.json().calls[0].calleeName).toBe('helpy')
-    expect(calls.json().calls[0].status).toBe('answered')
+    expect(calls.json().calls.length).toBe(2)
+    const byId = Object.fromEntries((calls.json().calls as { callId: string; emergency: boolean }[]).map((c) => [c.callId, c]))
+    expect((byId['call-abc'] as any).callerName).toBe('blindy')
+    expect((byId['call-abc'] as any).calleeName).toBe('helpy')
+    expect((byId['call-abc'] as any).status).toBe('answered')
+    // 紧急求助标记如实下发（治理视图须能区分"未接的紧急求助"与日常协助；此前漏=死字段）。
+    expect(byId['call-sos'].emergency).toBe(true)
+    expect(byId['call-abc'].emergency).toBe(false)
 
     // 非管理员被拒
     const helperToken = helper.json().token

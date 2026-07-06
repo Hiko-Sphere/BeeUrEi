@@ -6,7 +6,7 @@ import { render, screen } from '@testing-library/react'
 vi.mock('react-router-dom', () => ({ Link: (p: { to: string; children: unknown }) => <a href={p.to}>{p.children as never}</a> }))
 vi.mock('../lib/session', () => ({ useSession: () => ({ user: { id: 'u1', displayName: '阿明', role: 'helper' } }) }))
 vi.mock('../lib/api', () => ({
-  api: { onlineCount: vi.fn(), incomingCalls: vi.fn(), helpQueue: vi.fn(), notifications: vi.fn(), incomingLinks: vi.fn(), callHistory: vi.fn() },
+  api: { onlineCount: vi.fn(), incomingCalls: vi.fn(), helpQueue: vi.fn(), unreadSummary: vi.fn(), incomingLinks: vi.fn(), callHistory: vi.fn() },
 }))
 import { api } from '../lib/api'
 import { HomePage } from './Home'
@@ -19,7 +19,7 @@ describe('HomePage 最近通话渲染（防字段漂移）', () => {
     mock(api.onlineCount).mockResolvedValue({ online: 3, total: 10 })
     mock(api.incomingCalls).mockResolvedValue({ calls: [] })
     mock(api.helpQueue).mockResolvedValue({ requests: [], count: 0 })
-    mock(api.notifications).mockResolvedValue({ notifications: [], unread: 0 })
+    mock(api.unreadSummary).mockResolvedValue({ messages: 0, notifications: 0, missedCalls: 0, total: 0 })
     mock(api.incomingLinks).mockResolvedValue({ links: [] })
   })
 
@@ -58,5 +58,20 @@ describe('HomePage 最近通话渲染（防字段漂移）', () => {
     // 空态出现（标题/统计先渲染，故等列表区空态）
     expect(await screen.findByText('阿明', { exact: false })).toBeInTheDocument() // 问候带用户名，确认页已渲染
     expect(screen.queryByText('王医生')).toBeNull()
+  })
+
+  it('统计卡含未接来电/未读消息（取自 unreadSummary）+ 链到对应页', async () => {
+    mock(api.callHistory).mockResolvedValue({ calls: [] })
+    mock(api.unreadSummary).mockResolvedValue({ messages: 4, notifications: 2, missedCalls: 3, total: 9 })
+    render(<HomePage />)
+    // 未接来电卡（值 3，链到 /calls）与未读消息卡（值 4，链到 /chat）。
+    const missed = await screen.findByText('未接来电')
+    expect(missed.closest('a')?.getAttribute('href')).toBe('/calls')
+    expect(missed.closest('a')).toHaveTextContent('3')
+    const msgs = screen.getByText('未读消息')
+    expect(msgs.closest('a')?.getAttribute('href')).toBe('/chat')
+    expect(msgs.closest('a')).toHaveTextContent('4')
+    // 未读通知取 summary.notifications（非整份列表长度）。
+    expect(screen.getByText('未读通知').closest('a')).toHaveTextContent('2')
   })
 })

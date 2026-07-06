@@ -8,7 +8,7 @@ import { Card, Spinner, EmptyState } from '../components/ui'
 import { CallHistoryRow } from '../components/CallHistoryRow'
 import { IconPhone, IconChat, IconUsers, IconBell } from '../components/icons'
 
-interface Stats { online: number; total: number; incoming: number; queue: number; unread: number; pendingLinks: number }
+interface Stats { online: number; total: number; incoming: number; queue: number; unread: number; unreadMessages: number; missedCalls: number; pendingLinks: number }
 
 export function HomePage() {
   const { user } = useSession()
@@ -19,8 +19,10 @@ export function HomePage() {
   useEffect(() => {
     let alive = true
     const load = async () => {
-      const [oc, inc, q, notif, links, hist] = await Promise.allSettled([
-        api.onlineCount(), api.incomingCalls(), api.helpQueue(), api.notifications(), api.incomingLinks(), api.callHistory(),
+      // 未读汇总用轻量计数端点 unreadSummary（含 messages/notifications/missedCalls），
+      // 替代此前为拿一个 unread 计数却拉整份通知列表（≤100 条）的浪费。
+      const [oc, inc, q, sum, links, hist] = await Promise.allSettled([
+        api.onlineCount(), api.incomingCalls(), api.helpQueue(), api.unreadSummary(), api.incomingLinks(), api.callHistory(),
       ])
       if (!alive) return
       setStats({
@@ -28,7 +30,9 @@ export function HomePage() {
         total: oc.status === 'fulfilled' ? oc.value.total : 0,
         incoming: inc.status === 'fulfilled' ? inc.value.calls.length : 0,
         queue: q.status === 'fulfilled' ? q.value.count : 0,
-        unread: notif.status === 'fulfilled' ? notif.value.unread : 0,
+        unread: sum.status === 'fulfilled' ? sum.value.notifications : 0,
+        unreadMessages: sum.status === 'fulfilled' ? sum.value.messages : 0,
+        missedCalls: sum.status === 'fulfilled' ? (sum.value.missedCalls ?? 0) : 0,
         pendingLinks: links.status === 'fulfilled' ? links.value.links.length : 0,
       })
       if (hist.status === 'fulfilled') setCalls(hist.value.calls.slice(0, 6)); else setCalls((c) => c ?? []) // 失败也退出加载态（stats 已带默认值，calls 此前会永远转圈）
@@ -48,10 +52,12 @@ export function HomePage() {
         <p className="mt-1 text-sm text-faint">{t('在「待命中」时，绑定的视障用户即可呼叫你协助。', 'Turn on “Available” so linked users can call you for help.')}</p>
       </div>
 
-      {/* 统计卡片 */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* 统计卡片：按"谁需要我"的紧急度排序——待接/求助/未接来电/未读消息在前，未读通知/待确认在后。 */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard to="/calls" icon={<IconPhone />} value={stats?.incoming ?? 0} label={t('待接来电', 'Incoming')} tone={stats?.incoming ? 'honey' : 'soft'} />
         <StatCard to="/calls" icon={<IconUsers />} value={stats?.queue ?? 0} label={t('求助队列', 'Help queue')} tone={stats?.queue ? 'honey' : 'soft'} />
+        <StatCard to="/calls" icon={<IconPhone />} value={stats?.missedCalls ?? 0} label={t('未接来电', 'Missed calls')} tone={stats?.missedCalls ? 'danger' : 'soft'} />
+        <StatCard to="/chat" icon={<IconChat />} value={stats?.unreadMessages ?? 0} label={t('未读消息', 'Unread chats')} tone={stats?.unreadMessages ? 'honey' : 'soft'} />
         <StatCard to="/notifications" icon={<IconBell />} value={stats?.unread ?? 0} label={t('未读通知', 'Unread')} tone={stats?.unread ? 'danger' : 'soft'} />
         <StatCard to="/family" icon={<IconUsers />} value={stats?.pendingLinks ?? 0} label={t('待确认联系人', 'Pending links')} tone={stats?.pendingLinks ? 'honey' : 'soft'} />
       </div>

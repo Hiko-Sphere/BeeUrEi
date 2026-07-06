@@ -16,6 +16,15 @@ struct IncomingCallView: View {
     /// 来电屏文案语言（E5）。
     private var lang: Language { FeatureSettings().language }
 
+    /// 双路播报：VoiceOver 走系统公告；盲人未开 VoiceOver 时用 App TTS（A11y.announce 未开 VO 会被静默丢弃，见无障碍审计）。
+    /// 仅盲人角色发声——协助者（收到盲人求助来电）看屏即可，不受 TTS 打扰。
+    private func announce(_ text: String) {
+        A11y.announce(text)
+        if role == .blind, !UIAccessibility.isVoiceOverRunning {
+            SpeechHub.shared.speak(text, channel: .call, voiceCode: lang.voiceCode)
+        }
+    }
+
     var body: some View {
         if accepted {
             // 已接听 → 进入通话；通话结束做收尾（取消会合登记 + 结束 CallKit + 清来电态）。
@@ -66,7 +75,8 @@ struct IncomingCallView: View {
         }
         .task {
             ScreenWake.acquire("ring")   // 响铃期间屏不灭，盲人有充足时间接听
-            A11y.announce(CallStrings.incomingRingAnnounce(ring.callerName, lang))
+            // 来电即报**谁**来电（双路，未开 VoiceOver 的盲人也须听到是谁——否则只闻铃声不知该不该接、是不是家人急事）。
+            announce(CallStrings.incomingRingAnnounce(ring.callerName, lang))
             startCancelWatch()
         }
         // VoiceOver 魔法轻点（双指双击）= 接听（系统来电惯例）。
@@ -96,12 +106,9 @@ struct IncomingCallView: View {
                 let outcome = await APIClient().markAnswered(token: token, callId: ring.callId)
                 guard outcome == .won else {
                     // gone=呼叫已结束/过期（无人接）；否则=被别人接走。措辞如实。
+                    // gone=呼叫已结束/过期；否则被别人接走。双路播报（未开 VoiceOver 的盲人也须听到解释，否则来电屏骤然收起无缘由）。
                     let msg = outcome == .gone ? CallStrings.callEnded(lang) : CallStrings.answeredElsewhere(lang)
-                    A11y.announce(msg)
-                    // 盲人未开 VoiceOver 时 A11y.announce 被静默丢弃：来电屏骤然收起却无解释。补端侧 TTS（见无障碍审计）。
-                    if role == .blind, !UIAccessibility.isVoiceOverRunning {
-                        SpeechHub.shared.speak(msg, channel: .call, voiceCode: lang.voiceCode)
-                    }
+                    announce(msg)
                     dismiss()
                     return
                 }

@@ -215,12 +215,16 @@ enum NavStrings {
 
     /// 出发时的全程概览（导航开始先报整条路线长度与预计时长，给盲人整体预期）："全程约 1.2 公里，预计 15 分钟"。
     /// 竞品(Apple/Google/Soundscape)均在开始导航时先报路线总览；ETA 为初始估计（尚未起步、用默认步速）。
-    static func journeyOverview(meters: Int, etaSeconds: Double?, _ l: Language) -> String {
+    /// arrivalClock：预计到达的**本地化时钟时刻**（如"下午3:25"/"3:25 PM"，由调用方按用户 locale 格式化）。
+    /// 出发前给"预计几点到达"——对标 Google/Apple 地图；盲人据此判断能否赶上约定，省去"现在几点+还有几分钟"的心算。
+    /// 仅在有有效 ETA 时附（无 ETA 连时长都没有，更谈不上到达时刻）。
+    static func journeyOverview(meters: Int, etaSeconds: Double?, arrivalClock: String? = nil, _ l: Language) -> String {
         let dist = distancePhrase(meters: meters, l)
         guard let eta = etaPhrase(etaSeconds, l) else {
             return l == .zh ? "全程约\(dist)" : "Route is about \(dist)"
         }
-        return l == .zh ? "全程约\(dist)，\(eta)" : "Route is about \(dist), \(eta)"
+        let arrival = arrivalClock.map { l == .zh ? "，预计\($0)到达" : ", arriving around \($0)" } ?? ""
+        return l == .zh ? "全程约\(dist)，\(eta)\(arrival)" : "Route is about \(dist), \(eta)\(arrival)"
     }
 
     /// 步骤列表行："右转（30 米）" / "Turn right (30 m)"。

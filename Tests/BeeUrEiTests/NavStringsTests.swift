@@ -44,6 +44,20 @@ final class NavStringsTests: XCTestCase {
         XCTAssertEqual(NavStrings.statusRecap(instruction: "", remaining: "", status: "", .en), "Locating…")
     }
 
+    func testJourneyOverviewIncludesArrivalTime() {
+        // 出发前总览带"预计几点到达"（对标 Google/Apple 地图，盲人省心算）。有 arrivalClock 才附、且需有有效 ETA。
+        let zh = NavStrings.journeyOverview(meters: 2000, etaSeconds: 1500, arrivalClock: "下午3:25", .zh)
+        XCTAssertTrue(zh.contains("预计下午3:25到达"), "应附到达时刻：\(zh)")
+        XCTAssertTrue(zh.contains("全程约") && zh.contains("公里"))
+        let en = NavStrings.journeyOverview(meters: 2000, etaSeconds: 1500, arrivalClock: "3:25 PM", .en)
+        XCTAssertTrue(en.contains("arriving around 3:25 PM"), "\(en)")
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+        // 无 arrivalClock：不附到达时刻（向后兼容，旧调用不变）。
+        XCTAssertFalse(NavStrings.journeyOverview(meters: 2000, etaSeconds: 1500, .zh).contains("到达"))
+        // 无 ETA：连时长都没有，即便传了 arrivalClock 也不附（不能凭空报到达时刻）。
+        XCTAssertFalse(NavStrings.journeyOverview(meters: 2000, etaSeconds: nil, arrivalClock: "下午3:25", .zh).contains("到达"))
+    }
+
     func testRepeatStatusButtonLabelBilingual() {
         // 可见"重听"按钮（导航中显示）：Magic Tap 是 VoiceOver 手势、不用 VoiceOver 的盲人无从触发，故须有可见可点按钮。
         // 双语、非空、中文点明"重听"、英文含 repeat（不误当别的操作）。

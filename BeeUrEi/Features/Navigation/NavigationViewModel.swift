@@ -466,8 +466,16 @@ final class NavigationViewModel {
                                                         destination: Coordinate(lat: dest.latitude, lon: dest.longitude)) else { return }
         let eta = RouteRemaining.etaSeconds(remainingMeters: total,
                                             speedMps: RouteRemaining.effectiveWalkingSpeed(rawMps: nil))
+        // 预计到达时刻（现在 + ETA）：按用户 locale 格式化成时钟时间（"下午3:25"/"3:25 PM"）。盲人据此判断能否赶上约定。
+        let arrivalClock: String? = eta.flatMap { e -> String? in
+            guard e.isFinite, e >= 0 else { return nil }
+            let f = DateFormatter()
+            f.locale = Locale(identifier: lang.localeIdentifier)
+            f.setLocalizedDateFormatFromTemplate("jmm") // 本地化时:分（12/24 制随 locale）
+            return f.string(from: Date().addingTimeInterval(e))
+        }
         // 直接经 NavVoice 排队（不走 VM 的去重 speak，避免占用 lastSpoken 干扰下个转向指令去重）。
-        NavVoice.shared.speak(NavStrings.journeyOverview(meters: Int(total.rounded()), etaSeconds: eta, lang),
+        NavVoice.shared.speak(NavStrings.journeyOverview(meters: Int(total.rounded()), etaSeconds: eta, arrivalClock: arrivalClock, lang),
                               rate: FeatureSettings().speechRate)
     }
 

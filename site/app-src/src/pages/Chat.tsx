@@ -7,6 +7,7 @@ import { useI18n } from '../lib/i18n'
 import { joinNames } from '../lib/listFormat'
 import { parseLocation, appleMapsUrl, locationMessageText } from '../lib/location'
 import { linkifyParts } from '../lib/linkify'
+import { imageFileFromClipboard } from '../lib/clipboardImage'
 import { isForwardableKind } from '../lib/chatMessage'
 import { ReportDialog } from '../components/ReportDialog'
 import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo, Modal, Button } from '../components/ui'
@@ -521,6 +522,15 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
         <button onClick={() => fileRef.current?.click()} disabled={sending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full surface-2 text-soft disabled:opacity-40" aria-label={t('发送图片或视频', 'Send image or video')}><IconPlus /></button>
         <button onClick={sendLocation} disabled={sending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full surface-2 text-soft disabled:opacity-40" aria-label={t('发送我的位置', 'Send my location')}><IconPin width={18} height={18} /></button>
         <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }}
+          // 粘贴发图（WhatsApp Web/Slack 式）：剪贴板里是图片（截图/复制的图）→ 确认后直接发进会话，免存盘再点附件。
+          // 只拦图片文件（imageFileFromClipboard 只认 image/* 文件项）：粘贴纯文本走默认输入，绝不受影响。
+          // confirm 防误发（可能复制过图却想贴的是文字）；确认后走既有 sendImage（canvas 压缩 + EXIF 剥离同一条路）。
+          onPaste={(e) => {
+            const f = imageFileFromClipboard(e.clipboardData?.items)
+            if (!f) return
+            e.preventDefault()
+            if (confirm(t('发送剪贴板中的图片？', 'Send the image from your clipboard?'))) void sendImage(f)
+          }}
           maxLength={4000} /* 与后端 text≤4000 一致：超长在输入端即截，避免发出后才被服务端拒(message_too_long) */
           // aria-label 显式命名输入框：placeholder 在输入后消失、且并非所有读屏都稳定把它当可及名。
           aria-label={t('输入消息', 'Message')}

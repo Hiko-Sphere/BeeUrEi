@@ -157,6 +157,31 @@ final class ChatStringsTests: XCTestCase {
         }
     }
 
+    func testChatMessageEditPolicy() {
+        // 编辑门控与服务端/web 一致：仅本人文字、15 分钟内。
+        let now = 10_000_000.0
+        func msg(from: String, kind: String, createdMs: Int) -> ChatMessageInfo {
+            let json = "{\"id\":\"m\",\"fromId\":\"\(from)\",\"toId\":\"x\",\"kind\":\"\(kind)\",\"text\":\"hi\",\"createdAt\":\(createdMs)}"
+            return try! JSONDecoder().decode(ChatMessageInfo.self, from: Data(json.utf8))
+        }
+        let recent = Int(now) - 5 * 60_000    // 5 分钟前
+        let old = Int(now) - 20 * 60_000      // 20 分钟前（超窗）
+        XCTAssertTrue(ChatMessageEditPolicy.isEditable(msg(from: "me", kind: "text", createdMs: recent), myId: "me", nowMs: now))
+        XCTAssertFalse(ChatMessageEditPolicy.isEditable(msg(from: "other", kind: "text", createdMs: recent), myId: "me", nowMs: now)) // 别人发的
+        for k in ["image", "location", "audio", "recalled"] {
+            XCTAssertFalse(ChatMessageEditPolicy.isEditable(msg(from: "me", kind: k, createdMs: recent), myId: "me", nowMs: now), "kind \(k) 不该可编辑")
+        }
+        XCTAssertFalse(ChatMessageEditPolicy.isEditable(msg(from: "me", kind: "text", createdMs: old), myId: "me", nowMs: now)) // 超 15 分钟
+    }
+
+    func testEditStringsBilingual() {
+        XCTAssertNotEqual(ChatStrings.editSaved(.zh), ChatStrings.editFailed(.zh))
+        for s in [ChatStrings.editAction(.en), ChatStrings.editTitle(.en), ChatStrings.editSave(.en), ChatStrings.editSaved(.en), ChatStrings.editFailed(.en)] {
+            XCTAssertFalse(s.isEmpty)
+            XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(s)")
+        }
+    }
+
     private func mkMsg(_ id: String, from: String, reaction: String? = nil) -> ChatMessageInfo {
         let rx = reaction.map { ",\"reaction\":\"\($0)\"" } ?? ""
         let json = "{\"id\":\"\(id)\",\"fromId\":\"\(from)\",\"toId\":\"x\",\"kind\":\"text\",\"text\":\"hi\",\"createdAt\":1000\(rx)}"

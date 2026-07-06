@@ -987,6 +987,13 @@ struct APIClient {
         return try JSONDecoder().decode(R.self, from: data).message
     }
 
+    /// 编辑已发文字消息（仅本人、仅文字、15 分钟内；服务端同门控）。返回更新后的消息（带 editedAt）。同 web /messages/:id/edit。
+    func editMessage(token: String, id: String, text: String) async throws -> ChatMessageInfo {
+        let data = try await authedSend("POST", "/api/messages/\(id)/edit", token: token, body: ["text": text])
+        struct R: Codable { let message: ChatMessageInfo }
+        return try JSONDecoder().decode(R.self, from: data).message
+    }
+
     /// 表情回应（空字符串=取消）。返回更新后的消息，失败 nil。
     func reactMessage(token: String, id: String, emoji: String) async -> ChatMessageInfo? {
         guard let data = try? await authedSend("POST", "/api/messages/\(id)/reaction", token: token, body: ["emoji": emoji]) else { return nil }

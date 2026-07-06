@@ -76,6 +76,12 @@ enum ChatStrings {
     static func mutedConfirm(_ l: Language) -> String { l == .zh ? "已静音，不再推送该会话通知" : "Muted — notifications silenced" }
     static func unmutedConfirm(_ l: Language) -> String { l == .zh ? "已取消静音" : "Unmuted" }
     static func muteFailed(_ l: Language) -> String { l == .zh ? "操作失败，请重试" : "Couldn't update — try again" }
+    // 编辑已发消息（仅本人文字、15 分钟内；与 web/服务端同门控）。
+    static func editAction(_ l: Language) -> String { l == .zh ? "编辑" : "Edit" }
+    static func editTitle(_ l: Language) -> String { l == .zh ? "编辑消息" : "Edit message" }
+    static func editSave(_ l: Language) -> String { l == .zh ? "保存" : "Save" }
+    static func editSaved(_ l: Language) -> String { l == .zh ? "已保存修改" : "Saved" }
+    static func editFailed(_ l: Language) -> String { l == .zh ? "编辑失败，可能已超过 15 分钟或网络异常" : "Couldn't edit — the 15-minute window may have passed" }
     static func pickContact(_ l: Language) -> String { l == .zh ? "选择联系人" : "Choose a contact" }
     static func noContacts(_ l: Language) -> String {
         l == .zh ? "还没有绑定的亲友/协助者。先到亲友页发送绑定请求，对方接受后即可聊天。"

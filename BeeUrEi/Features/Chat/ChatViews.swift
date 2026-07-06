@@ -341,6 +341,15 @@ enum ChatRecallAnnouncer {
     }
 }
 
+/// 消息是否可编辑（纯逻辑，可单测）：仅**本人**发的、**文字**类、**15 分钟内**——与服务端 /messages/:id/edit
+/// 门控同口径（kind!=text→not_editable、超 15 分钟→edit_window_passed），也与 web editable 一致。
+enum ChatMessageEditPolicy {
+    static let editWindowMs: Double = 15 * 60_000
+    static func isEditable(_ m: ChatMessageInfo, myId: String, nowMs: Double) -> Bool {
+        m.fromId == myId && m.kind == "text" && nowMs - Double(m.createdAt) < editWindowMs
+    }
+}
+
 // MARK: - 聊天页（iMessage 式气泡 + 已读回执 + 语音条 + 图片 + 视频 + 轮询刷新；单聊/群聊共用）
 
 struct ChatView: View {
@@ -351,6 +360,8 @@ struct ChatView: View {
     @State private var draft = ""
     @State private var sending = false
     @State private var errorText: String?
+    @State private var editingMessage: ChatMessageInfo?   // 正在编辑的消息（弹出编辑框）
+    @State private var editDraft = ""                     // 编辑框文本
     @State private var canLoadEarlier = false   // 顶部"加载更早消息"是否可见
     @State private var loadingEarlier = false    // 正在加载更早历史
     @State private var reachedStart = false      // 已翻到对话最开头（再无更早）
@@ -438,6 +449,11 @@ struct ChatView: View {
                                onChanged: { await refreshGroupDetail() },
                                onClosed: { showGroupInfo = false; dismiss() })
             }
+        }
+        .alert(ChatStrings.editTitle(lang), isPresented: Binding(get: { editingMessage != nil }, set: { if !$0 { editingMessage = nil } })) {
+            TextField(ChatStrings.editTitle(lang), text: $editDraft)
+            Button(ChatStrings.editSave(lang)) { if let m = editingMessage { submitEdit(m) }; editingMessage = nil }
+            Button(CallStrings.cancel(lang), role: .cancel) { editingMessage = nil }
         }
         .fullScreenCover(item: $playingVideo) { v in
             VideoPlayerSheet(url: v.url, lang: lang)
@@ -635,6 +651,10 @@ struct ChatView: View {
         }
         if let r = m.reaction, !r.isEmpty {
             Button(ChatStrings.removeReaction(lang)) { react(m, emoji: "") }
+        }
+        // 编辑（仅本人文字、15 分钟内；纯逻辑门控与服务端一致）：预填现文，弹编辑框改后保存。
+        if ChatMessageEditPolicy.isEditable(m, myId: myId, nowMs: Date().timeIntervalSince1970 * 1000) {
+            Button { editDraft = m.text; editingMessage = m } label: { Label(ChatStrings.editAction(lang), systemImage: "pencil") }
         }
         if mine, Date().timeIntervalSince1970 * 1000 - Double(m.createdAt) < 120_000 {
             Button(ChatStrings.recall(lang), role: .destructive) { recall(m) }
@@ -1025,6 +1045,24 @@ struct ChatView: View {
                 // 盲人看不到红字横幅——撤回失败必须**朗读**（此前只设 errorText，盲人得不到任何反馈、误以为已撤回）；
                 // 且区分真因（时限过/功能关停/维护/限流），不恒显"是不是超时"。
                 let msg = ChatStrings.recallErrorText(error, lang)
+                errorText = msg
+                SpeechHub.shared.speak(msg, channel: .query, voiceCode: lang.voiceCode)
+            }
+        }
+    }
+
+    /// 编辑已发文字消息：调服务端（同门控）→ 乐观替换本地 → 语音回执（盲人看不到气泡文字变化，须听到"已保存/编辑失败"）。
+    private func submitEdit(_ m: ChatMessageInfo) {
+        let text = editDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, let token = session.token else { return }
+        Task {
+            do {
+                let updated = try await APIClient().editMessage(token: token, id: m.id, text: text)
+                if let i = messages.firstIndex(where: { $0.id == updated.id }) { messages[i] = updated }
+                errorText = nil
+                SpeechHub.shared.speak(ChatStrings.editSaved(lang), channel: .query, voiceCode: lang.voiceCode)
+            } catch {
+                let msg = ChatStrings.editFailed(lang)
                 errorText = msg
                 SpeechHub.shared.speak(msg, channel: .query, voiceCode: lang.voiceCode)
             }

@@ -69,6 +69,13 @@ enum ChatStrings {
     static func me(_ l: Language) -> String { l == .zh ? "我" : "Me" }
     static func messagesButton(_ l: Language) -> String { l == .zh ? "消息" : "Messages" }
     static func newChat(_ l: Language) -> String { l == .zh ? "发起新对话" : "New chat" }
+    // 会话免打扰（静音只压推送横幅，不影响未读/站内；与 web 单聊/群聊静音同口径）。
+    static func mutedBadge(_ l: Language) -> String { l == .zh ? "已静音" : "Muted" }
+    static func muteAction(_ l: Language) -> String { l == .zh ? "静音该会话" : "Mute" }
+    static func unmuteAction(_ l: Language) -> String { l == .zh ? "取消静音" : "Unmute" }
+    static func mutedConfirm(_ l: Language) -> String { l == .zh ? "已静音，不再推送该会话通知" : "Muted — notifications silenced" }
+    static func unmutedConfirm(_ l: Language) -> String { l == .zh ? "已取消静音" : "Unmuted" }
+    static func muteFailed(_ l: Language) -> String { l == .zh ? "操作失败，请重试" : "Couldn't update — try again" }
     static func pickContact(_ l: Language) -> String { l == .zh ? "选择联系人" : "Choose a contact" }
     static func noContacts(_ l: Language) -> String {
         l == .zh ? "还没有绑定的亲友/协助者。先到亲友页发送绑定请求，对方接受后即可聊天。"

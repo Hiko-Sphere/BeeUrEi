@@ -83,12 +83,23 @@ struct ConversationsView: View {
                                 .accessibilityElement(children: .combine)
                                 .accessibilityLabel(rowA11y(conv))
                                 .accessibilityAddTraits(.isButton)
+                                // 静音/取消静音（长按=VoiceOver「操作」转子里也可达；免打扰只压推送、不影响未读）。
+                                .contextMenu {
+                                    Button { toggleMuteDM(conv) } label: {
+                                        Label(conv.muted == true ? ChatStrings.unmuteAction(lang) : ChatStrings.muteAction(lang), systemImage: conv.muted == true ? "bell" : "bell.slash")
+                                    }
+                                }
                         case .group(let g):
                             Button { opened = .group(id: g.group.id, name: g.group.name) } label: { groupRow(g) }
                                 .buttonStyle(.plain)
                                 .accessibilityElement(children: .combine)
                                 .accessibilityLabel(groupRowA11y(g))
                                 .accessibilityAddTraits(.isButton)
+                                .contextMenu {
+                                    Button { toggleMuteGroup(g) } label: {
+                                        Label(g.muted == true ? ChatStrings.unmuteAction(lang) : ChatStrings.muteAction(lang), systemImage: g.muted == true ? "bell" : "bell.slash")
+                                    }
+                                }
                         }
                     }
                     .listStyle(.plain)
@@ -181,7 +192,10 @@ struct ConversationsView: View {
         HStack(spacing: BeeSpacing.md) {
             AvatarView(dataURL: c.peer.avatar, name: c.peer.displayName, size: 48)
             VStack(alignment: .leading, spacing: 3) {
-                Text(c.peer.displayName).font(.headline)
+                HStack(spacing: 4) {
+                    Text(c.peer.displayName).font(.headline)
+                    if c.muted == true { Image(systemName: "bell.slash.fill").font(.caption2).foregroundStyle(.secondary).accessibilityHidden(true) }
+                }
                 Text(preview(c.last)).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
@@ -198,7 +212,10 @@ struct ConversationsView: View {
                 Image(systemName: "person.3.fill").font(.system(size: 18)).foregroundStyle(Color.beeHoney)
             }
             VStack(alignment: .leading, spacing: 3) {
-                Text(g.group.name).font(.headline)
+                HStack(spacing: 4) {
+                    Text(g.group.name).font(.headline)
+                    if g.muted == true { Image(systemName: "bell.slash.fill").font(.caption2).foregroundStyle(.secondary).accessibilityHidden(true) }
+                }
                 Text(groupPreview(g)).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
@@ -241,13 +258,41 @@ struct ConversationsView: View {
     private func rowA11y(_ c: ConversationInfo) -> String {
         var parts = [c.peer.displayName, preview(c.last), ChatStrings.timeFormat(c.last.createdAt)]
         if c.unread > 0 { parts.append(ChatStrings.unreadBadgeA11y(c.unread, lang)) }
+        if c.muted == true { parts.append(ChatStrings.mutedBadge(lang)) } // 盲人看不到🔕，须并入 a11y 标签
         return parts.joined(separator: lang.listSeparator)
     }
 
     private func groupRowA11y(_ g: GroupConversationInfo) -> String {
         var parts = [g.group.name, ChatStrings.members(g.group.memberIds.count, lang), groupPreview(g)]
         if g.unread > 0 { parts.append(ChatStrings.unreadBadgeA11y(g.unread, lang)) }
+        if g.muted == true { parts.append(ChatStrings.mutedBadge(lang)) }
         return parts.joined(separator: lang.listSeparator)
+    }
+
+    /// 单聊静音切换：调服务端 + 刷新列表 + 语音回执（列表由 VoiceOver 导航，A11y.announce 即可闻）。
+    private func toggleMuteDM(_ c: ConversationInfo) {
+        guard let token = session.token else { return }
+        let next = !(c.muted ?? false)
+        Task {
+            do {
+                try await APIClient().muteConversation(token: token, peerId: c.peer.id, muted: next)
+                await refresh()
+                A11y.announce(next ? ChatStrings.mutedConfirm(lang) : ChatStrings.unmutedConfirm(lang))
+            } catch { A11y.announce(ChatStrings.muteFailed(lang)) }
+        }
+    }
+
+    /// 群聊静音切换（同上）。
+    private func toggleMuteGroup(_ g: GroupConversationInfo) {
+        guard let token = session.token else { return }
+        let next = !(g.muted ?? false)
+        Task {
+            do {
+                try await APIClient().muteGroup(token: token, groupId: g.group.id, muted: next)
+                await refresh()
+                A11y.announce(next ? ChatStrings.mutedConfirm(lang) : ChatStrings.unmutedConfirm(lang))
+            } catch { A11y.announce(ChatStrings.muteFailed(lang)) }
+        }
     }
 }
 

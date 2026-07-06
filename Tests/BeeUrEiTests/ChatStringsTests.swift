@@ -136,6 +136,27 @@ final class ChatStringsTests: XCTestCase {
         XCTAssertNil(m2.readTotal)
     }
 
+    func testConversationDecodesMutedField() throws {
+        // 服务端会话/群列表下发 muted（我是否静音），iOS 须解码——此前缺该字段，静音状态与静音入口都无从谈起（死字段）。
+        let dm = #"{"peer":{"id":"p1","username":"amy","displayName":"阿明","avatar":null},"last":{"id":"m","fromId":"p1","toId":"me","kind":"text","text":"hi","createdAt":1000},"unread":0,"muted":true}"#
+        XCTAssertEqual(try JSONDecoder().decode(ConversationInfo.self, from: Data(dm.utf8)).muted, true)
+        let grp = #"{"group":{"id":"g1","name":"家人群","ownerId":"me","memberIds":["me","p1"],"createdAt":1000},"members":[],"last":null,"unread":0,"muted":true}"#
+        XCTAssertEqual(try JSONDecoder().decode(GroupConversationInfo.self, from: Data(grp.utf8)).muted, true)
+        // 缺 muted 的旧/兼容负载 → nil（视图按未静音处理，不崩、不误显🔕）。
+        let legacy = #"{"peer":{"id":"p2","username":"bob","displayName":"Bob","avatar":null},"last":{"id":"m","fromId":"p2","toId":"me","kind":"text","text":"hi","createdAt":1000},"unread":0}"#
+        XCTAssertNil(try JSONDecoder().decode(ConversationInfo.self, from: Data(legacy.utf8)).muted)
+    }
+
+    func testMuteStringsBilingualAndDistinct() {
+        XCTAssertNotEqual(ChatStrings.muteAction(.zh), ChatStrings.unmuteAction(.zh))
+        XCTAssertNotEqual(ChatStrings.mutedConfirm(.zh), ChatStrings.unmutedConfirm(.zh))
+        for s in [ChatStrings.mutedBadge(.en), ChatStrings.muteAction(.en), ChatStrings.unmuteAction(.en),
+                  ChatStrings.mutedConfirm(.en), ChatStrings.unmutedConfirm(.en), ChatStrings.muteFailed(.en)] {
+            XCTAssertFalse(s.isEmpty)
+            XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(s)")
+        }
+    }
+
     private func mkMsg(_ id: String, from: String, reaction: String? = nil) -> ChatMessageInfo {
         let rx = reaction.map { ",\"reaction\":\"\($0)\"" } ?? ""
         let json = "{\"id\":\"\(id)\",\"fromId\":\"\(from)\",\"toId\":\"x\",\"kind\":\"text\",\"text\":\"hi\",\"createdAt\":1000\(rx)}"

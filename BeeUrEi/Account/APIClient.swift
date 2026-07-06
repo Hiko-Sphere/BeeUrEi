@@ -203,6 +203,7 @@ struct GroupConversationInfo: Codable, Sendable, Identifiable {
     let members: [Member]
     let last: ChatMessageInfo?
     let unread: Int
+    let muted: Bool?   // 我是否静音此群（服务端下发；静音只压推送横幅，不影响未读/站内）
     var id: String { group.id }
 }
 
@@ -217,6 +218,7 @@ struct ConversationInfo: Codable, Sendable, Identifiable {
     let peer: Peer
     let last: ChatMessageInfo
     let unread: Int
+    let muted: Bool?   // 我是否静音了与该对端的单聊（服务端下发；静音只压推送横幅，不影响未读/站内）
     var id: String { peer.id }
 }
 
@@ -990,6 +992,13 @@ struct APIClient {
         guard let data = try? await authedSend("POST", "/api/messages/\(id)/reaction", token: token, body: ["emoji": emoji]) else { return nil }
         struct R: Codable { let message: ChatMessageInfo }
         return try? JSONDecoder().decode(R.self, from: data).message
+    }
+    /// 单聊/群聊免打扰（静音只压推送横幅，站内通知与未读数照旧；与 web muteConversation/muteGroup 同端点）。
+    func muteConversation(token: String, peerId: String, muted: Bool) async throws {
+        _ = try await authedSend("POST", "/api/conversations/\(peerId)/mute", token: token, body: ["muted": muted])
+    }
+    func muteGroup(token: String, groupId: String, muted: Bool) async throws {
+        _ = try await authedSend("POST", "/api/groups/\(groupId)/mute", token: token, body: ["muted": muted])
     }
     func unregisterApnsToken(token: String) async {
         _ = try? await authedSend("DELETE", "/api/push/apns-register", token: token)

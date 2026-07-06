@@ -72,16 +72,18 @@ final class ChatStringsTests: XCTestCase {
     func testSendConfirmationStringsBilingualAndDistinct() {
         // 盲人看不到"已送达"的气泡出现，媒体/位置又是异步操作——成功须**朗读**确认（此前只报进度/失败、成功静默）。
         // 三态各不相同、双语、英文不串中文，且都点明"已发送/sent"。
-        let zhs = [ChatStrings.photoSent(.zh), ChatStrings.videoSent(.zh), ChatStrings.locationSent(.zh)]
+        // 图片/视频/位置/**语音**四类异步发送成功确认（语音是盲人最自然的输入，尤须确认）。
+        let zhs = [ChatStrings.photoSent(.zh), ChatStrings.videoSent(.zh), ChatStrings.locationSent(.zh), ChatStrings.voiceSent(.zh)]
         for s in zhs { XCTAssertTrue(s.contains("已发送"), "中文确认应点明已发送：\(s)") }
-        XCTAssertEqual(Set(zhs).count, 3, "照片/视频/位置三态文案须各不相同")
-        for s in [ChatStrings.photoSent(.en), ChatStrings.videoSent(.en), ChatStrings.locationSent(.en)] {
+        XCTAssertEqual(Set(zhs).count, 4, "照片/视频/位置/语音四态文案须各不相同")
+        for s in [ChatStrings.photoSent(.en), ChatStrings.videoSent(.en), ChatStrings.locationSent(.en), ChatStrings.voiceSent(.en)] {
             XCTAssertTrue(s.lowercased().contains("sent"), "英文确认应含 sent：\(s)")
             XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(s)")
         }
         // 与失败文案明确不同（不能把成功念成像失败）。
         XCTAssertNotEqual(ChatStrings.photoSent(.zh), ChatStrings.sendFailed(.zh))
         XCTAssertNotEqual(ChatStrings.videoSent(.zh), ChatStrings.sendFailed(.zh))
+        XCTAssertNotEqual(ChatStrings.voiceSent(.zh), ChatStrings.sendFailed(.zh))
     }
 
     func testForwardedEditedTagsBilingual() {

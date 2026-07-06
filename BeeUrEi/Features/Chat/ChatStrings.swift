@@ -161,6 +161,8 @@ enum ChatStrings {
     static func photoSent(_ l: Language) -> String { l == .zh ? "照片已发送" : "Photo sent" }
     static func videoSent(_ l: Language) -> String { l == .zh ? "视频已发送" : "Video sent" }
     static func locationSent(_ l: Language) -> String { l == .zh ? "位置已发送" : "Location sent" }
+    // 语音是盲人**最自然的输入**（说话代替打字）：录完点发若静默，盲人看不到语音气泡冒出、最不确定发出没有。
+    static func voiceSent(_ l: Language) -> String { l == .zh ? "语音已发送" : "Voice message sent" }
     static func newVideoSpeak(_ name: String, _ l: Language) -> String {
         l == .zh ? "\(name) 发来视频" : "Video from \(name)"
     }

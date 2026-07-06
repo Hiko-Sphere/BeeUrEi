@@ -968,6 +968,7 @@ struct ChatView: View {
                         let m = try await send(kind: "audio", text: b64)
                         appendSent(m)
                         errorText = nil
+                        SpeechHub.shared.speak(ChatStrings.voiceSent(lang), channel: .query, voiceCode: lang.voiceCode) // 盲人看不到语音气泡，须确认已发出
                     } catch {
                         // 盲人看不到红字横幅——发送失败要朗读，且区分"功能关闭/维护"等不可重试原因。
                         let msg = ChatStrings.sendErrorText(error, lang)

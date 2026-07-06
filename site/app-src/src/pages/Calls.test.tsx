@@ -5,8 +5,9 @@ import { render, screen } from '@testing-library/react'
 // mock api（数据源）+ useCall（避免引入 CallScreen→webrtc 的浏览器 API 链）；useI18n 默认 ctx(zh) 无需 Provider。
 // 通话记录行经 CallHistoryRow 用 Link，mock 成 <a> 以断言链接。
 vi.mock('react-router-dom', () => ({ Link: (p: { to: string; children: unknown }) => <a href={p.to}>{p.children as never}</a> }))
-vi.mock('../lib/api', () => ({ api: { incomingCalls: vi.fn(), helpQueue: vi.fn(), callHistory: vi.fn() } }))
-vi.mock('./call/CallController', () => ({ useCall: () => ({ answerIncoming: vi.fn(), claimQueue: vi.fn(), active: null }) }))
+vi.mock('../lib/api', () => ({ api: { incomingCalls: vi.fn(), helpQueue: vi.fn(), callHistory: vi.fn(), helpMatch: vi.fn() } }))
+const claimQueueMock = vi.fn()
+vi.mock('./call/CallController', () => ({ useCall: () => ({ answerIncoming: vi.fn(), claimQueue: claimQueueMock, active: null }) }))
 // 只 spy 提示音；pickNewHelpRequests 保持真实（新到判定的真逻辑要跑到）。
 vi.mock('../lib/helpQueueAlert', async (orig) => ({ ...(await orig() as object), playHelpChime: vi.fn() }))
 import { api } from '../lib/api'
@@ -81,6 +82,31 @@ describe('CallsPage 公开求助队列渲染（防字段漂移复发）', () => 
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('「帮我匹配」：匹配到求助者即用其详情入会（复用 claimQueue，对齐 iOS 协助端自动匹配）', async () => {
+    const { fireEvent } = await import('@testing-library/react')
+    mock(api.incomingCalls).mockResolvedValue({ calls: [] })
+    mock(api.callHistory).mockResolvedValue({ calls: [] })
+    mock(api.helpQueue).mockResolvedValue({ requests: [{ callId: 'q1', fromName: '排队者', waitedSeconds: 30 }], count: 1 })
+    mock(api.helpMatch).mockResolvedValue({ request: { callId: 'm1', fromName: '小刚', fromAvatar: null, language: 'zh', locality: null, topic: null } })
+    render(<CallsPage />)
+    const btn = await screen.findByLabelText(/帮我匹配一位等待中的求助者/)
+    fireEvent.click(btn)
+    await vi.waitFor(() => expect(claimQueueMock).toHaveBeenCalledWith('m1', '小刚', undefined))
+  })
+
+  it('「帮我匹配」：无人等待时不入会（request 为 null 时不调用 claimQueue）', async () => {
+    const { fireEvent } = await import('@testing-library/react')
+    mock(api.incomingCalls).mockResolvedValue({ calls: [] })
+    mock(api.callHistory).mockResolvedValue({ calls: [] })
+    mock(api.helpQueue).mockResolvedValue({ requests: [{ callId: 'q1', fromName: '排队者', waitedSeconds: 30 }], count: 1 })
+    mock(api.helpMatch).mockResolvedValue({ request: null })
+    render(<CallsPage />)
+    const btn = await screen.findByLabelText(/帮我匹配一位等待中的求助者/)
+    fireEvent.click(btn)
+    await vi.waitFor(() => expect(api.helpMatch).toHaveBeenCalled())
+    expect(claimQueueMock).not.toHaveBeenCalled() // 无人等待 → 绝不进空房间
   })
 
   it('某段端点持续失败也退出加载态（显示空态，而非永远转圈）', async () => {

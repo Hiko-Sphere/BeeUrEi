@@ -274,6 +274,11 @@ export const api = {
   deleteRoute: (id: string) => del(`/api/routes/${encodeURIComponent(id)}`),
   helpQueue: () => get('/api/assist/help/queue') as Promise<{ requests: HelpRequest[]; count: number }>,
   claimHelp: (callId: string) => post('/api/assist/help/claim', { callId }) as Promise<{ request: { callId: string; fromName: string; fromAvatar?: string | null; language?: string | null; locality?: string | null; topic?: string | null } }>,
+  // 随机/偏好匹配一条等待中的公开求助并**原子认领**（对齐 iOS 协助端「帮我匹配」）：一键接入等最久的求助者，
+  // 无需手动扫队列。无可匹配则 request 为 null（非错误）。返回的 request 已被本人认领，直接 claimQueue 入会即可
+  // （claimHelp 对同一认领者幂等，见服务端 openHelp.claim）。
+  helpMatch: (opts?: { preferredLanguage?: string; requireLanguageMatch?: boolean }) =>
+    post('/api/assist/help/match', opts ?? {}) as Promise<{ request: { callId: string; fromName: string; fromAvatar?: string | null; language?: string | null; locality?: string | null; topic?: string | null } | null }>,
 
   // 实时位置共享（与亲友/协助者互相可见；纯内存、按已接受绑定授权）
   updateLocation: (body: { lat: number; lng: number; accuracy?: number; heading?: number; ttlSec?: number }) =>

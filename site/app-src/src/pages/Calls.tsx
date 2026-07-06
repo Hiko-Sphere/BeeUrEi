@@ -28,6 +28,7 @@ export function CallsPage() {
   const [queue, setQueue] = useState<HelpRequest[] | null>(null)
   const [history, setHistory] = useState<CallRecordInfo[] | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [matching, setMatching] = useState(false)
   // 求助队列"新到"提示：与 iOS 协助端多感知提示对齐（此前 web 端 helpQueueAlert 已建+已测却**从未接线**——
   // 待命志愿者切到别的标签页时，盲人的新求助进队毫无声响，只能干等）。alertedRef 记已提示 id（跨轮询存活、不触发重渲染）。
   const alertedRef = useRef<Set<string>>(new Set())
@@ -68,6 +69,21 @@ export function CallsPage() {
 
   const onAnswer = async (c: IncomingCall) => { setBusyId(c.callId); await answerIncoming(c.callId, c.fromName, c.fromAvatar); setBusyId(null) }
   const onClaim = async (r: HelpRequest) => { setBusyId(r.callId); await claimQueue(r.callId, r.fromName || t('求助者', 'Requester'), undefined); setBusyId(null) }
+  // 一键匹配（对齐 iOS「帮我匹配」）：服务端原子挑一位等最久的待助者并认领，直接复用 claimQueue 入会
+  // （claimHelp 对同一认领者幂等，故匹配后再 claimQueue 不会二次占用/失败）。无人等待则提示、不进空房间。
+  const onMatch = async () => {
+    if (active || matching) return
+    setMatching(true)
+    try {
+      const { request } = await api.helpMatch()
+      if (request) await claimQueue(request.callId, request.fromName || t('求助者', 'Requester'), request.fromAvatar ?? undefined)
+      else toast(t('暂时没有等待中的求助', 'No one is waiting right now'), 'info')
+    } catch {
+      toast(t('匹配失败，请重试', 'Match failed — try again'), 'error')
+    } finally {
+      setMatching(false)
+    }
+  }
   const waited = (s: number) => formatWaited(s, t)
 
   return (
@@ -105,7 +121,13 @@ export function CallsPage() {
           {queue === null ? <Spinner /> : queue.length === 0 ? (
             <EmptyState icon={<IconUsers />} title={t('队列为空', 'Queue is empty')} message={t('有视障用户发起公开求助时会出现在这里', 'Open requests from blind users appear here')} />
           ) : (
-            <ul className="divide-y divide-[var(--line)]">
+            <>
+              {/* 一键匹配：接入等最久的待助者，无需手动扫队列（想挑特定语言/主题者仍可下面手动认领）。 */}
+              <div className="border-b border-[var(--line)] px-4 py-3">
+                <Button variant="ok" loading={matching} disabled={!!active} onClick={onMatch}
+                  aria-label={t('帮我匹配一位等待中的求助者', 'Match me with a waiting requester')}><IconCheck width={16} height={16} />{t('帮我匹配', 'Match me')}</Button>
+              </div>
+              <ul className="divide-y divide-[var(--line)]">
               {queue.map((r) => (
                 <li key={r.callId} className="flex items-center gap-3 px-4 py-3">
                   <Avatar name={r.fromName} src={r.fromAvatar} size={42} />
@@ -125,7 +147,8 @@ export function CallsPage() {
                     aria-label={t(`认领 ${r.fromName} 的求助${r.topic ? `（${r.topic}）` : ''}`, `Claim help from ${r.fromName}${r.topic ? ` (${r.topic})` : ''}`)}><IconCheck width={16} height={16} />{t('认领接入', 'Claim')}</Button>
                 </li>
               ))}
-            </ul>
+              </ul>
+            </>
           )}
         </Card>
       </section>

@@ -70,6 +70,13 @@ final class EmergencyAlertCenter: NSObject, CLLocationManagerDelegate {
         beginCountdown(kind: "manual")
     }
 
+    /// 倒计时途中该在哪几秒**语音重报**「还有 N 秒将通知亲友+如何取消」（纯策略，可单测）。
+    /// 起点(30 秒)由 beginCountdown 首播，此处覆盖途中提醒：15 秒与 **5 秒**（末段最后取消窗口）。
+    /// 盲人看不到倒计时数字，只靠这几次语音知道还剩多久、以及是否还在倒数——故末段必须再提醒一次，别静默到触发。
+    nonisolated static func shouldAnnounceReminder(secondsLeft: Int) -> Bool {
+        secondsLeft == 15 || secondsLeft == 5
+    }
+
     private func beginCountdown(kind: String) {
         phase = .countdown(kind: kind, secondsLeft: 30)
         // 清掉上一轮紧急的缓存 fix：本中心是常驻单例，lastFix 从不复位。若不清，重复 SOS/摔倒会命中
@@ -84,7 +91,12 @@ final class EmergencyAlertCenter: NSObject, CLLocationManagerDelegate {
                 guard let self, !Task.isCancelled else { return }
                 guard case .countdown(let k, _) = self.phase else { return }
                 self.phase = .countdown(kind: k, secondsLeft: remaining)
-                if remaining == 15 { self.speak(HomeStrings.fallAlertReminder(remaining, voiceOver: self.voiceOverOn, self.lang)) }
+                // 升级式提醒 30(起)/15/5 秒：盲人看不到倒计时数字，此前 15 秒后**静默 15 秒**才触发——摔倒后
+                // 慌乱、摸不到「我没事」按钮/念不出取消的假阳性用户，末段无提示会以为已取消。补 5 秒最后一次提醒
+                // （含取消方法），给最后的取消窗口、也减少误报打扰家人。见 shouldAnnounceReminder（可测策略）。
+                if Self.shouldAnnounceReminder(secondsLeft: remaining) {
+                    self.speak(HomeStrings.fallAlertReminder(remaining, voiceOver: self.voiceOverOn, self.lang))
+                }
             }
             guard let self, !Task.isCancelled, case .countdown = self.phase else { return }
             await self.send()

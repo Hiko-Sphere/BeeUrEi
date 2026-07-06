@@ -129,6 +129,18 @@ final class HomeStringsTests: XCTestCase {
         }
     }
 
+    func testCountdownRemindsAt15And5NotSilentTillFire() {
+        // 盲人看不到倒计时数字：起点(30)首播后，途中须在 15 秒**与 5 秒**各再提醒一次——否则 15 秒后静默 15 秒
+        // 才触发，摔倒后慌乱、够不到「我没事」的假阳性用户会以为已取消，家人被误报打扰。5 秒是末段最后取消窗口。
+        XCTAssertTrue(EmergencyAlertCenter.shouldAnnounceReminder(secondsLeft: 15))
+        XCTAssertTrue(EmergencyAlertCenter.shouldAnnounceReminder(secondsLeft: 5), "末段须再提醒一次（最后取消窗口）")
+        // 其余秒不重报（免每秒刷屏）；30 由 beginCountdown 首播不在此、0 是触发不再提醒。
+        for s in [30, 20, 10, 6, 4, 1, 0] { XCTAssertFalse(EmergencyAlertCenter.shouldAnnounceReminder(secondsLeft: s), "第 \(s) 秒不该重报") }
+        // 5 秒提醒文案仍点明取消方法（与 15 秒同串，参数化）。
+        XCTAssertTrue(HomeStrings.fallAlertReminder(5, voiceOver: true, .zh).contains("双指双击屏幕可取消"))
+        XCTAssertTrue(HomeStrings.fallAlertReminder(5, voiceOver: false, .zh).contains("我没事"))
+    }
+
     func testFallCancelHintTeachesMagicTapUnderVoiceOver() {
         // VoiceOver 开：教 Magic Tap（双指双击全屏任意处）——摔倒/撞击后手机常够不到，"找我没事按钮"极不可靠。
         let voZh = HomeStrings.fallCancelHint(voiceOver: true, .zh)

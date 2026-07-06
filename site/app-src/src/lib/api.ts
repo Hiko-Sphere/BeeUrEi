@@ -23,7 +23,7 @@ export interface IncomingCall { callId: string; fromName: string; fromUserId: st
 // 与后端 HelpSummary 对齐：队列对外的安全摘要（不暴露 fromUserId）。
 export interface HelpRequest { callId: string; fromName: string; fromAvatar?: string | null; language?: string; locality?: string; topic?: string; waitedSeconds: number }
 export interface ChatMessage { id: string; fromId: string; toId: string; kind: string; text: string; createdAt: number; readAt?: number; reaction?: string; groupId?: string; editedAt?: number; replyTo?: string; readBy?: number; readTotal?: number; forwarded?: boolean }
-export interface Conversation { peer: User; last: ChatMessage; unread: number; muted?: boolean }
+export interface Conversation { peer: User; last: ChatMessage; unread: number; muted?: boolean; online?: boolean }
 export interface ChatGroup { id: string; name: string; ownerId: string; memberIds: string[]; createdAt: number }
 export interface GroupSummary { group: ChatGroup; members: User[]; last: ChatMessage | null; unread: number; muted?: boolean }
 export interface RecordingInfo { id: string; callId: string; ownerId: string; ownerName: string; reason: string; recordedAt: number; durationSec?: number | null; lat?: number | null; lon?: number | null; locationLabel?: string | null; participantIds: string[]; participantNames: string[]; hasMedia: boolean; deletedAt?: number | null }

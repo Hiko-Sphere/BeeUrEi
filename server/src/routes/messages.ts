@@ -42,7 +42,8 @@ function locationName(text: string): string {
 /// 单聊互发资格 = 双方存在 **accepted** 绑定且无任一方向拉黑；群消息资格 = 群成员。
 export function registerMessageRoutes(app: FastifyInstance, store: Store,
                                       pushSender: PushSender = new NoopPushSender(),
-                                      webPush: WebPushSender = new NoopWebPushSender()): void {
+                                      webPush: WebPushSender = new NoopWebPushSender(),
+                                      isOnline: (userId: string) => boolean = () => false): void {
 
   /// 推送预览文案（语音/图片/视频/位置用占位，文本截 80 字）。
   function previewOf(kind: ChatMessage['kind'], text: string, l: PushLang): string {
@@ -325,6 +326,9 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
         last: m,
         unread: store.unreadCount(me, peerId),
         muted: store.isDmMuted(me, peerId), // 我是否静音了与该对端的单聊（前端显示🔕，免打扰不影响未读）
+        // 对端此刻在线/待命（与亲友列表 online 同口径的 presence∨在通话中）：聊天列表也让盲人一眼分清
+        // "在线可即时呼叫"与"离线只能留言"，免得进了会话干等——已注销对端恒 false（peer 为 null）。
+        online: peer ? isOnline(peerId) : false,
       }
     })
     return { conversations }

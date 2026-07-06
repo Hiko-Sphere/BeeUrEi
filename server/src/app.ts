@@ -240,7 +240,8 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
       (id) => presence.isAvailable(id, Date.now()) || hub.isOnline(id)) // 亲友列表显示对方在线/待命（与紧急路由同口径）
     registerBlockRoutes(instance, store)
     registerEmergencyRoutes(instance, store, presence, liveLocations, pushSender, webPushSender, metrics)
-    registerMessageRoutes(instance, store, pushSender, webPushSender)
+    registerMessageRoutes(instance, store, pushSender, webPushSender,
+      (id) => presence.isAvailable(id, Date.now()) || hub.isOnline(id)) // 会话列表显示对端在线/待命（与亲友列表同口径）
     registerGroupRoutes(instance, store, pushSender)
     registerMediaRoutes(instance, store) // 视频等大文件（磁盘存储）
     registerReportRoutes(instance, store)

@@ -97,7 +97,10 @@ function ConvoRow({ convo, active, onClick, lang, t }: { convo: Conversation; ac
       <button type="button" onClick={onClick} className="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:surface-2">
         <Avatar name={convo.peer.displayName} src={convo.peer.avatar} size={44} />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5"><span className="truncate font-medium">{convo.peer.displayName}</span>
+          <div className="flex items-center gap-1.5">
+            {/* 在线圆点（读屏念"在线"）：与亲友列表同口径，聊天列表一眼分清可即时呼叫 vs 只能留言。 */}
+            {convo.online && <span role="img" aria-label={t('在线', 'Online')} title={t('在线', 'Online')} className="h-2 w-2 shrink-0 rounded-full bg-ok" />}
+            <span className="truncate font-medium">{convo.peer.displayName}</span>
             {convo.muted && <span role="img" aria-label={t('已静音', 'Muted')} title={t('已静音', 'Muted')} className="shrink-0 text-xs text-faint">🔕</span>}</div>
           <div className="truncate text-xs text-faint">{preview(convo.last, t)}</div>
         </div>

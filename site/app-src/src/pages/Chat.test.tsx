@@ -51,6 +51,21 @@ describe('ChatPage 会话列表渲染（防字段漂移 + 合并排序）', () =
     for (const row of rows) expect(within(row).getByRole('button')).toBeInTheDocument()
   })
 
+  it('在线对端显示"在线"圆点（读屏可闻）；离线对端不显示', async () => {
+    mock(api.conversations).mockResolvedValue({
+      conversations: [
+        { peer: { id: 'p1', displayName: '在线阿姨', avatar: null }, last: msg({ id: 'm1', text: 'hi', createdAt: 2000 }), unread: 0, online: true },
+        { peer: { id: 'p2', displayName: '离线老王', avatar: null }, last: msg({ id: 'm2', text: 'hi', createdAt: 1000 }), unread: 0, online: false },
+      ],
+    })
+    mock(api.groups).mockResolvedValue({ groups: [] })
+    render(<ChatPage />)
+    const rows = await screen.findAllByRole('listitem')
+    // 在线行含"在线"可及名（role=img aria-label=在线）；离线行不含。
+    expect(within(rows[0]).getByLabelText('在线')).toBeInTheDocument()
+    expect(within(rows[1]).queryByLabelText('在线')).toBeNull()
+  })
+
   it('无任何会话 → 空状态，不渲染列表项', async () => {
     mock(api.conversations).mockResolvedValue({ conversations: [] })
     mock(api.groups).mockResolvedValue({ groups: [] })

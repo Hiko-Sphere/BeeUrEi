@@ -79,6 +79,22 @@ describe('紧急告警回执 /api/emergency/ack', () => {
     expect(ack.title).toContain('已看到')       // "X 已看到你的求助"
     await a.close()
   })
+
+  it('状态升级放行、同状态去重：seen→"我在赶来"两条都到（遇险者知救援在途），但同状态重复只一条（不轰炸）', async () => {
+    const { a, store, helper, ownerId } = await seed()
+    const ack = (onMyWay?: boolean) => a.inject({ method: 'POST', url: '/api/emergency/ack', headers: bearer(helper.token),
+      payload: { fromId: ownerId, eventId: 'evUp', ...(onMyWay != null ? { onMyWay } : {}) } })
+    const acks = () => store.notificationsForUser(ownerId).filter((n) => n.kind === 'emergency_ack')
+    await ack(false)                                   // 先"已看到"
+    await ack(true)                                    // 再"我在赶来"——升级，不与 seen 撞去重键
+    expect(acks().length).toBe(2)                      // 两条都送达遇险者
+    expect(acks().some((n) => n.data?.onMyWay === '1')).toBe(true)      // 有"在赶来"
+    expect(acks().some((n) => n.data?.onMyWay == null)).toBe(true)      // 也有"已看到"
+    // 但同一状态重复点 → 去重，不新增（防重复轰炸遇险者）。
+    expect((await ack(true)).json()).toMatchObject({ deduped: true })
+    expect(acks().length).toBe(2)
+    await a.close()
+  })
 })
 
 // 响应者协调：第一位亲友响应 → **安静**通知其余亲友"已有人在处理"（避免全体同时赶去/都以为别人在管）。

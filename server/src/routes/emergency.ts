@@ -251,8 +251,11 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     if (!sender) return reply.code(404).send({ error: 'not_found' })
 
     const now = Date.now()
-    const key = `${fromId}:${eventId ?? 'noid'}:${acker.id}`
-    if (ackDedup.check(key, now) !== undefined) return { ok: true, deduped: true } // 已回告过，不再重复打扰遇险者
+    const onMyWay = parsed.data.onMyWay === true // 响应者正在赶去（比"已看到"更进一步的安心信号）
+    // 去重键含状态(seen/way)：同一响应者对同一事件重复**同状态**回执不再打扰遇险者；但 seen→"我在赶来"是有意义的
+    // **升级**（遇险者最需要知道救援是否真在路上），须放行——故 seen 与 way 各占一键、各可发一次、均不可重复(防轰炸)。
+    const key = `${fromId}:${eventId ?? 'noid'}:${acker.id}:${onMyWay ? 'way' : 'seen'}`
+    if (ackDedup.check(key, now) !== undefined) return { ok: true, deduped: true } // 已回告过（同状态），不再重复打扰遇险者
 
     // 是否**首个**确认（据此只在第一位响应者出现时向其余亲友广播"已有人在响应"，一次事件一条协调通知）。
     // 须在 markEmergencyAcked **之前**读；须是**真实存在且未确认**的事件——防伪造 eventId 触发虚假协调广播
@@ -263,7 +266,6 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     if (eventId) { try { store.markEmergencyAcked(eventId, now) } catch { /* 标记失败不阻断回告 */ } }
 
     const l = pushLang(sender.language)
-    const onMyWay = parsed.data.onMyWay === true // 响应者正在赶去 → 更进一步的安心信号
     const title = onMyWay ? pushStrings.emergencyOnMyWayTitle(acker.displayName, l) : pushStrings.emergencyAckTitle(acker.displayName, l)
     const body = onMyWay ? pushStrings.emergencyOnMyWayBody(acker.displayName, l) : pushStrings.emergencyAckBody(acker.displayName, l)
     // kind='emergency_ack'：客户端据此区别于 'emergency_alert'——**绝不**触发遇险告警的响铃/大模态，

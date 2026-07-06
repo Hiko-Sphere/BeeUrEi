@@ -837,6 +837,7 @@ struct ChatView: View {
                 let m = try await send(kind: "text", text: payload.asText())
                 appendSent(m)
                 errorText = nil
+                SpeechHub.shared.speak(ChatStrings.locationSent(lang), channel: .query, voiceCode: lang.voiceCode) // "正在获取位置…"之后确认已发出
             } catch {
                 let msg = ChatStrings.sendErrorText(error, lang)
                 errorText = msg
@@ -866,6 +867,7 @@ struct ChatView: View {
             let m = try await send(kind: "image", text: b64)
             appendSent(m)
             errorText = nil // 成功清掉上一条失败横幅，避免误导
+            SpeechHub.shared.speak(ChatStrings.photoSent(lang), channel: .query, voiceCode: lang.voiceCode) // 盲人看不到气泡，须听到"已发送"
         } catch {
             let msg = ChatStrings.sendErrorText(error, lang)
             errorText = msg
@@ -894,6 +896,7 @@ struct ChatView: View {
             let m = try await send(kind: "video", text: mediaId)
             appendSent(m)
             errorText = nil
+            SpeechHub.shared.speak(ChatStrings.videoSent(lang), channel: .query, voiceCode: lang.voiceCode) // 上传后须确认送达（"上传中…"之后不能静默）
         } catch {
             // mediaUpload 功能被关 / 维护 / 聊天被关 都会到这里——给具体原因，不让盲人徒劳重试。
             let msg = ChatStrings.sendErrorText(error, lang)

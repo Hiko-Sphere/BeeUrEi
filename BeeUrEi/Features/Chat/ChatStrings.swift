@@ -156,6 +156,11 @@ enum ChatStrings {
     }
     static func uploadingVideo(_ l: Language) -> String { l == .zh ? "正在上传视频…" : "Uploading video…" }
     static func videoLoadFailed(_ l: Language) -> String { l == .zh ? "视频加载失败" : "Couldn't load video" }
+    // 发送成功语音确认：盲人看不到"已送达"的气泡出现，媒体/位置又是异步操作（图片压缩、视频上传、定位反查），
+    // 只报进度/失败、成功却静默＝盲人不知到底发出去没有。文字发送即时且高频、用户刚亲手输入，故不在此列（免刷屏）。
+    static func photoSent(_ l: Language) -> String { l == .zh ? "照片已发送" : "Photo sent" }
+    static func videoSent(_ l: Language) -> String { l == .zh ? "视频已发送" : "Video sent" }
+    static func locationSent(_ l: Language) -> String { l == .zh ? "位置已发送" : "Location sent" }
     static func newVideoSpeak(_ name: String, _ l: Language) -> String {
         l == .zh ? "\(name) 发来视频" : "Video from \(name)"
     }

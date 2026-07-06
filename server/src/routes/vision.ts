@@ -82,4 +82,21 @@ export function registerVisionRoutes(app: FastifyInstance, store: Store, metrics
       return reply.code(502).send({ error: 'ai_unavailable' })
     }
   })
+
+  // 只读配额查询：让盲人在**动用一次付费调用之前**就知道"今日 AI 描述还剩几次"（付费/每日封顶功能的行业标配——
+  // describe 仅在**成功调用后**才回带 remaining，逼近上限的用户无法提前配给、只能靠撞 429 才知道用完了）。
+  // 纯读当日计数：**不打上游、不烧配额**（GET 语义幂等）。与 describe 同口径 fail-closed：未配置 VISION_* → 503
+  //（绝不对一个每次调用都会 503 的功能谎报"还剩 N 次"）；同受 aiDescribe 特性开关约束（管理员关停则一并 403）。
+  app.get('/api/vision/quota', {
+    preHandler: [requireAuth(), requireFeature(store, 'aiDescribe')],
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    if (!visionConfigured()) return reply.code(503).send({ error: 'ai_not_configured' })
+    const day = utcDay()
+    const dailyMax = visionDailyMax()
+    const calls = store.visionCallsOnDay(req.user!.sub, day)
+    // used 夹到 dailyMax：运维把配额调小后旧计数仍在，避免显示成越界的"用了 N/更小上限"（remaining 已 Math.max(0) 兜住不为负）。
+    // day 一并回带：客户端可据 UTC 日算出本地"次日 0 点(UTC)重置"的确切时刻，而非笼统说"明天重置"。
+    return { used: Math.min(dailyMax, calls), remaining: Math.max(0, dailyMax - calls), dailyMax, day }
+  })
 }

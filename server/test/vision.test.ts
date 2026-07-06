@@ -282,3 +282,68 @@ describe('POST /api/vision/describe（路由）', () => {
     await app.close()
   })
 })
+
+describe('GET /api/vision/quota（下单前只读查配额）', () => {
+  afterEach(() => { vi.unstubAllGlobals(); clearConfig() })
+
+  it('未配置 VISION_* → 503 ai_not_configured（与 describe 同口径 fail-closed）', async () => {
+    clearConfig()
+    const app = buildApp(new MemoryStore())
+    const t = await token(app)
+    const res = await app.inject({ method: 'GET', url: '/api/vision/quota', headers: { authorization: `Bearer ${t}` } })
+    expect(res.statusCode).toBe(503)
+    expect(res.json()).toMatchObject({ error: 'ai_not_configured' })
+    await app.close()
+  })
+
+  it('无鉴权 → 401', async () => {
+    setConfig()
+    const app = buildApp(new MemoryStore())
+    const res = await app.inject({ method: 'GET', url: '/api/vision/quota' })
+    expect(res.statusCode).toBe(401)
+    await app.close()
+  })
+
+  it('管理员关停 aiDescribe → 403 feature_disabled（查配额也一并禁，客户端绕不过）', async () => {
+    setConfig()
+    const store = new MemoryStore()
+    store.setAppConfig({ features: { aiDescribe: false } })
+    const app = buildApp(store)
+    const t = await token(app)
+    const res = await app.inject({ method: 'GET', url: '/api/vision/quota', headers: { authorization: `Bearer ${t}` } })
+    expect(res.statusCode).toBe(403)
+    expect(res.json()).toMatchObject({ error: 'feature_disabled', feature: 'aiDescribe' })
+    await app.close()
+  })
+
+  it('全新用户：used=0/remaining=dailyMax/day 为 UTC 日期；重复查**不烧配额**（GET 幂等）', async () => {
+    setConfig()
+    const app = buildApp(new MemoryStore())
+    const t = await token(app)
+    const q = () => app.inject({ method: 'GET', url: '/api/vision/quota', headers: { authorization: `Bearer ${t}` } })
+    const r1 = await q()
+    expect(r1.statusCode).toBe(200)
+    expect(r1.json()).toMatchObject({ used: 0, remaining: 200, dailyMax: 200 })
+    expect(r1.json().day).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    // 再查一次：仍 used=0（只读，绝不因查询而消耗额度）。
+    expect((await q()).json()).toMatchObject({ used: 0, remaining: 200 })
+    await app.close()
+  })
+
+  it('消耗后配额如实反映：describe 用掉 1 次 → quota used=1/remaining=dailyMax-1（describe 才计入，quota 只读）', async () => {
+    setConfig()
+    process.env.VISION_DAILY_MAX = '3'
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) })))
+    const app = buildApp(new MemoryStore())
+    const t = await token(app)
+    const auth = { authorization: `Bearer ${t}` }
+    // 消耗前：满额。
+    expect((await app.inject({ method: 'GET', url: '/api/vision/quota', headers: auth })).json()).toMatchObject({ used: 0, remaining: 3, dailyMax: 3 })
+    // 用掉 1 次 describe。
+    expect((await app.inject({ method: 'POST', url: '/api/vision/describe', headers: auth, payload: { image: TINY_JPEG_B64, mime: 'image/jpeg' } })).statusCode).toBe(200)
+    // 查配额：如实 used=1/remaining=2，且这次查询本身不再消耗（再查仍 used=1）。
+    expect((await app.inject({ method: 'GET', url: '/api/vision/quota', headers: auth })).json()).toMatchObject({ used: 1, remaining: 2, dailyMax: 3 })
+    expect((await app.inject({ method: 'GET', url: '/api/vision/quota', headers: auth })).json()).toMatchObject({ used: 1, remaining: 2 })
+    await app.close()
+  })
+})

@@ -7,7 +7,10 @@ import { render, screen } from '@testing-library/react'
 vi.mock('react-router-dom', () => ({ Link: (p: { to: string; children: unknown }) => <a href={p.to}>{p.children as never}</a> }))
 vi.mock('../lib/api', () => ({ api: { incomingCalls: vi.fn(), helpQueue: vi.fn(), callHistory: vi.fn() } }))
 vi.mock('./call/CallController', () => ({ useCall: () => ({ answerIncoming: vi.fn(), claimQueue: vi.fn(), active: null }) }))
+// 只 spy 提示音；pickNewHelpRequests 保持真实（新到判定的真逻辑要跑到）。
+vi.mock('../lib/helpQueueAlert', async (orig) => ({ ...(await orig() as object), playHelpChime: vi.fn() }))
 import { api } from '../lib/api'
+import { playHelpChime } from '../lib/helpQueueAlert'
 import { CallsPage, formatWaited } from './Calls'
 
 const mock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
@@ -56,6 +59,28 @@ describe('CallsPage 公开求助队列渲染（防字段漂移复发）', () => 
     const doctor = await screen.findByText('王医生')
     expect(doctor.closest('a')?.getAttribute('href')).toBe('/chat/p1') // 整行可点进聊天
     expect(screen.getByText('已注销用户').closest('a')).toBeNull()       // 已注销不可点
+  })
+
+  it('新求助进队时响提示音——首帧建基线不响、之后新到才响（此前 helpQueueAlert 已建却未接线）', async () => {
+    vi.useFakeTimers()
+    try {
+      mock(api.incomingCalls).mockResolvedValue({ calls: [] })
+      mock(api.callHistory).mockResolvedValue({ calls: [] })
+      // 首帧：队列已有 c1（打开页面时你正看着它，不该突然响）。
+      mock(api.helpQueue).mockResolvedValue({ requests: [{ callId: 'c1', fromName: 'A', waitedSeconds: 5 }], count: 1 })
+      render(<CallsPage />)
+      await vi.advanceTimersByTimeAsync(0) // 冲刷首帧 load 的微任务
+      expect(playHelpChime).not.toHaveBeenCalled() // 首帧只建基线，不响
+      // 新求助 c2 进队 → 下一轮轮询应响一次。
+      mock(api.helpQueue).mockResolvedValue({ requests: [{ callId: 'c1', fromName: 'A', waitedSeconds: 9 }, { callId: 'c2', fromName: 'B', waitedSeconds: 2 }], count: 2 })
+      await vi.advanceTimersByTimeAsync(4000)
+      expect(playHelpChime).toHaveBeenCalledTimes(1) // 只 c2 是新到
+      // 无新变化（仍是 c1+c2）→ 不重复响。
+      await vi.advanceTimersByTimeAsync(4000)
+      expect(playHelpChime).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('某段端点持续失败也退出加载态（显示空态，而非永远转圈）', async () => {

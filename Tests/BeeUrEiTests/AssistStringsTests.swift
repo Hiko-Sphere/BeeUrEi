@@ -129,4 +129,36 @@ final class AssistStringsTests: XCTestCase {
                            "英文文案混入中文：\(s)")
         }
     }
+
+    func testSafetyTimerDecodesServerShape() throws {
+        // 服务端 /api/safety/checkin 形状（id/note/status/startedAt/dueAt/remainingSec）。iOS 须解码以显剩余+态。
+        let json = #"{"id":"t1","note":"去菜市场","status":"active","startedAt":1700000000000,"dueAt":1700003600000,"remainingSec":1800}"#
+        let t = try JSONDecoder().decode(SafetyTimer.self, from: Data(json.utf8))
+        XCTAssertEqual(t.status, "active"); XCTAssertTrue(t.isActive)
+        XCTAssertEqual(t.remainingSec, 1800); XCTAssertEqual(t.note, "去菜市场")
+        // 无 note（可选）+ 非 active → nil / isActive=false，不崩。
+        let t2 = try JSONDecoder().decode(SafetyTimer.self, from: Data(#"{"id":"t2","status":"completed","startedAt":1,"dueAt":2,"remainingSec":0}"#.utf8))
+        XCTAssertNil(t2.note); XCTAssertFalse(t2.isActive)
+    }
+
+    func testSafetyRemainingTextAndDurationName() {
+        XCTAssertEqual(SafetyTimerFormat.remainingText(sec: 1800, .zh), "还有约 30 分钟")
+        XCTAssertEqual(SafetyTimerFormat.remainingText(sec: 5400, .zh), "还有约 1 小时 30 分钟")
+        XCTAssertTrue(SafetyTimerFormat.remainingText(sec: 3660, .en).contains("1h"))
+        XCTAssertEqual(SafetyTimerFormat.remainingText(sec: -50, .zh), "还有约 0 分钟") // 负值夹到 0，不崩
+        XCTAssertEqual(SafetyTimerFormat.durationName(30, .zh), "30 分钟")
+        XCTAssertEqual(SafetyTimerFormat.durationName(120, .zh), "2 小时")
+        XCTAssertEqual(SafetyTimerFormat.durationName(120, .en), "2h")
+    }
+
+    func testSafetyStringsBilingualAndValuePromise() {
+        for s in [SafetyStrings.navTitle(.en), SafetyStrings.explain(.en), SafetyStrings.start(.en), SafetyStrings.imSafe(.en),
+                  SafetyStrings.safeConfirm(.en), SafetyStrings.extend1h(.en), SafetyStrings.canceled(.en), SafetyStrings.failed(.en), SafetyStrings.entry(.en)] {
+            XCTAssertFalse(s.isEmpty)
+            XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(s)")
+        }
+        // 说明须点明"自动告警亲友/紧急联系人"（用户据此理解 dead-man's switch 的价值，别被漏改成泛化措辞）。
+        XCTAssertTrue(SafetyStrings.explain(.zh).contains("紧急联系人"))
+        XCTAssertTrue(SafetyStrings.explain(.en).lowercased().contains("emergency contact"))
+    }
 }

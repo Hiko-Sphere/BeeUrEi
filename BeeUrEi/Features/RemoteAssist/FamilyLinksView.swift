@@ -52,6 +52,15 @@ struct FamilyLinksView: View {
                 }
             }
 
+            // 安全报到（dead-man's switch）：独自出行前设时限，到点未报平安则自动告警亲友。放在紧急功能区。
+            if let token = KeychainStore.read() {
+                Section {
+                    NavigationLink { SafetyCheckInView(token: token) } label: {
+                        Label(SafetyStrings.entry(lang), systemImage: "timer")
+                    }
+                }
+            }
+
             Section(AssistStrings.familySection(lang)) {
                 if links.isEmpty {
                     Text(AssistStrings.noLinksYet(lang)).foregroundStyle(.secondary)
@@ -218,5 +227,112 @@ struct FamilyLinksView: View {
             try await api.startEmergencyCall(token: token, callId: session.id, targetUserIds: targets.map(\.memberId))
             emergencyCall = session
         } catch { errorText = AssistStrings.emergencyFailed(lang) }
+    }
+}
+
+/// 安全报到剩余时间格式化（纯逻辑，可单测）。
+enum SafetyTimerFormat {
+    static func remainingText(sec: Int, _ l: Language) -> String {
+        let s = max(0, sec)
+        let h = s / 3600, m = (s % 3600) / 60
+        if l == .zh { return h > 0 ? "还有约 \(h) 小时 \(m) 分钟" : "还有约 \(m) 分钟" }
+        return h > 0 ? "About \(h)h \(m)m left" : "About \(m) min left"
+    }
+    /// 时长选项显示名（30 分钟 / 2 小时…）。
+    static func durationName(_ m: Int, _ l: Language) -> String {
+        if m >= 60, m % 60 == 0 { let h = m / 60; return l == .zh ? "\(h) 小时" : "\(h)h" }
+        return l == .zh ? "\(m) 分钟" : "\(m) min"
+    }
+}
+
+/// 安全报到文案（双语）。
+enum SafetyStrings {
+    static func navTitle(_ l: Language) -> String { l == .zh ? "安全报到" : "Safety check-in" }
+    static func entry(_ l: Language) -> String { l == .zh ? "安全报到（独自出行）" : "Safety check-in" }
+    static func explain(_ l: Language) -> String {
+        l == .zh ? "独自出门前设一个时间。到点前点「我平安了」即可；若忘了或出意外没点，我们会自动把你的实时位置发给你的紧急联系人。"
+                 : "Before heading out alone, set a timer. Tap “I'm safe” before it ends. If you forget or something happens and you don't, we automatically send your live location to your emergency contacts."
+    }
+    static func durationLabel(_ l: Language) -> String { l == .zh ? "多久内报平安" : "Check in within" }
+    static func noteLabel(_ l: Language) -> String { l == .zh ? "备注（可选，会念给亲友）" : "Note (optional, read to your family)" }
+    static func notePlaceholder(_ l: Language) -> String { l == .zh ? "例：我去菜市场，2 小时没回就是出事了" : "e.g. Going to the market; if not back in 2h, something's wrong" }
+    static func start(_ l: Language) -> String { l == .zh ? "开始报到" : "Start check-in" }
+    static func started(_ l: Language) -> String { l == .zh ? "安全报到已开始，到点前记得报平安。" : "Safety check-in started — remember to mark yourself safe." }
+    static func active(_ l: Language) -> String { l == .zh ? "报到进行中" : "Check-in active" }
+    static func imSafe(_ l: Language) -> String { l == .zh ? "我平安了（结束报到）" : "I'm safe (end check-in)" }
+    static func safeConfirm(_ l: Language) -> String { l == .zh ? "已报平安，报到结束。" : "You're marked safe — check-in ended." }
+    static func extend1h(_ l: Language) -> String { l == .zh ? "延长 1 小时" : "Extend 1 hour" }
+    static func extended(_ l: Language) -> String { l == .zh ? "已延长 1 小时。" : "Extended by 1 hour." }
+    static func cancelCheckin(_ l: Language) -> String { l == .zh ? "取消报到" : "Cancel check-in" }
+    static func canceled(_ l: Language) -> String { l == .zh ? "已取消安全报到。" : "Safety check-in canceled." }
+    static func failed(_ l: Language) -> String { l == .zh ? "操作失败，请重试。" : "Something went wrong — try again." }
+}
+
+/// 视障侧：安全报到（dead-man's switch）。空闲态设时长+备注开始；进行中显剩余时间 + 报平安/延长/取消。
+struct SafetyCheckInView: View {
+    let token: String
+    @State private var timer: SafetyTimer?
+    @State private var busy = false
+    @State private var note = ""
+    @State private var duration = 60
+    private let durations = [30, 60, 120, 240]
+    private let api = APIClient()
+    private var lang: Language { FeatureSettings().language }
+
+    var body: some View {
+        Form {
+            if let t = timer, t.isActive {
+                Section {
+                    Text(SafetyTimerFormat.remainingText(sec: t.remainingSec, lang)).font(.headline)
+                    if let n = t.note, !n.isEmpty { Text(n).font(.footnote).foregroundStyle(.secondary) }
+                } header: { Text(SafetyStrings.active(lang)) }
+                Section {
+                    Button(SafetyStrings.imSafe(lang)) { Task { await complete() } }.disabled(busy)
+                    Button(SafetyStrings.extend1h(lang)) { Task { await extend() } }.disabled(busy)
+                    Button(SafetyStrings.cancelCheckin(lang), role: .destructive) { Task { await cancelTimer() } }.disabled(busy)
+                }
+            } else {
+                Section { Text(SafetyStrings.explain(lang)).font(.footnote).foregroundStyle(.secondary) }
+                Section {
+                    Picker(SafetyStrings.durationLabel(lang), selection: $duration) {
+                        ForEach(durations, id: \.self) { m in Text(SafetyTimerFormat.durationName(m, lang)).tag(m) }
+                    }
+                }
+                Section {
+                    TextField(SafetyStrings.notePlaceholder(lang), text: $note, axis: .vertical).lineLimit(1...3)
+                } header: { Text(SafetyStrings.noteLabel(lang)) }
+                Section {
+                    Button(SafetyStrings.start(lang)) { Task { await start() } }.disabled(busy)
+                }
+            }
+        }
+        .navigationTitle(SafetyStrings.navTitle(lang))
+        .task { timer = try? await api.safetyCheckin(token: token) }
+    }
+
+    /// 双路播报（安全攸关，未开 VoiceOver 的盲人也须听到确认）。
+    private func announce(_ text: String) {
+        A11y.announce(text)
+        if !UIAccessibility.isVoiceOverRunning { SpeechHub.shared.speak(text, channel: .query, voiceCode: lang.voiceCode) }
+    }
+    private func start() async {
+        busy = true; defer { busy = false }
+        do { timer = try await api.startSafetyCheckin(token: token, durationMinutes: duration, note: note.trimmingCharacters(in: .whitespacesAndNewlines)); announce(SafetyStrings.started(lang)) }
+        catch { announce(SafetyStrings.failed(lang)) }
+    }
+    private func complete() async {
+        busy = true; defer { busy = false }
+        do { try await api.completeSafetyCheckin(token: token); timer = nil; announce(SafetyStrings.safeConfirm(lang)) }
+        catch { announce(SafetyStrings.failed(lang)) }
+    }
+    private func extend() async {
+        busy = true; defer { busy = false }
+        do { timer = try await api.extendSafetyCheckin(token: token, addMinutes: 60); announce(SafetyStrings.extended(lang)) }
+        catch { announce(SafetyStrings.failed(lang)) }
+    }
+    private func cancelTimer() async {
+        busy = true; defer { busy = false }
+        do { try await api.cancelSafetyCheckin(token: token); timer = nil; announce(SafetyStrings.canceled(lang)) }
+        catch { announce(SafetyStrings.failed(lang)) }
     }
 }

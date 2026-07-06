@@ -223,6 +223,17 @@ struct ConversationInfo: Codable, Sendable, Identifiable {
     var id: String { peer.id }
 }
 
+/// 安全报到（dead-man's switch）：出行前设一到期时刻，到期前未"报平安"则后台自动告警亲友。与服务端 /api/safety/checkin 契约一致。
+struct SafetyTimer: Codable, Sendable {
+    let id: String
+    let note: String?
+    let status: String       // active / fired（已到期告警）/ completed / canceled
+    let startedAt: Double
+    let dueAt: Double
+    let remainingSec: Int     // 服务端按 now 算好的剩余秒（≥0）
+    var isActive: Bool { status == "active" }
+}
+
 struct FamilyLinkInfo: Codable, Sendable, Identifiable {
     let id: String
     let memberId: String   // 对方 userId（无论我是 owner 还是 member）
@@ -1009,6 +1020,37 @@ struct APIClient {
     func muteGroup(token: String, groupId: String, muted: Bool) async throws {
         _ = try await authedSend("POST", "/api/groups/\(groupId)/mute", token: token, body: ["muted": muted])
     }
+
+    // MARK: 安全报到（dead-man's switch）——与服务端 /api/safety/checkin 契约一致。
+    /// 当前进行中的报到（无则 nil）。
+    func safetyCheckin(token: String) async throws -> SafetyTimer? {
+        let data = try await authedGet("/api/safety/checkin", token: token)
+        struct R: Codable { let timer: SafetyTimer? }
+        return try JSONDecoder().decode(R.self, from: data).timer
+    }
+    /// 开始报到：durationMinutes(5–1440) + 可选备注（到期告警正文念给亲友）。
+    func startSafetyCheckin(token: String, durationMinutes: Int, note: String?) async throws -> SafetyTimer {
+        var body: [String: Any] = ["durationMinutes": durationMinutes]
+        if let note, !note.isEmpty { body["note"] = note }
+        let data = try await authedSend("POST", "/api/safety/checkin/start", token: token, body: body)
+        struct R: Codable { let timer: SafetyTimer }
+        return try JSONDecoder().decode(R.self, from: data).timer
+    }
+    /// 报平安（我平安到了）：结束进行中的报到；若已到期告警则等价 all-clear（服务端解除+广播）。
+    func completeSafetyCheckin(token: String) async throws {
+        _ = try await authedSend("POST", "/api/safety/checkin/complete", token: token, body: [:])
+    }
+    /// 延长报到（addMinutes，5–1440）。
+    func extendSafetyCheckin(token: String, addMinutes: Int) async throws -> SafetyTimer {
+        let data = try await authedSend("POST", "/api/safety/checkin/extend", token: token, body: ["addMinutes": addMinutes])
+        struct R: Codable { let timer: SafetyTimer }
+        return try JSONDecoder().decode(R.self, from: data).timer
+    }
+    /// 取消报到（不再计时、不告警）。
+    func cancelSafetyCheckin(token: String) async throws {
+        _ = try await authedSend("POST", "/api/safety/checkin/cancel", token: token, body: [:])
+    }
+
     func unregisterApnsToken(token: String) async {
         _ = try? await authedSend("DELETE", "/api/push/apns-register", token: token)
     }

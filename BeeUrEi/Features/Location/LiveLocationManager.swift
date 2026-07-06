@@ -33,6 +33,9 @@ final class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     // 否则已过 sharing 守卫、悬在 await updateLocation 的旧上报若晚于 stop 到达服务器，
     // 会把刚停止的共享"复活"（服务端 update 无条件 set、stop 只 delete）≤90s（见 flag task_86ec92b0）。
     @ObservationIgnored private var inflightPublish: Task<Void, Never>?
+    // 是否已至少成功上报过一次（服务端确认过我在共享）——供 pollContacts 判"服务端已停"时排除启动竞态
+    // （刚点开始、首帧还没上报成功时服务端 isSharing=false，不能误报"已到期"）。见 [[LiveShareReconciler]]。
+    @ObservationIgnored private var shareEstablished = false
     // 到达围栏自播报（"你到家了"）：共享期间本地判定盲人自己到达常用地点，做定向确认（服务端另通知家人）。
     @ObservationIgnored private var geofencePlaces: [APIClient.SavedPlace] = []
     @ObservationIgnored private var geofenceInside: Set<String>? = nil // nil=基线未建（首帧只建基线不报，免"开始共享时已在家"误报）
@@ -60,6 +63,7 @@ final class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         lastCoordinate = nil
         lastPublish = .distantPast
         sharingUntil = 0
+        shareEstablished = false
     }
 
     // MARK: 查看（进入界面即轮询联系人位置；与是否共享自身无关）
@@ -90,6 +94,7 @@ final class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         let status = manager.authorizationStatus
         guard status != .denied, status != .restricted else { authorizationDenied = true; announce(LiveLocationStrings.permissionDenied(lang)); return }
         sharing = true
+        shareEstablished = false // 本次尚未上报成功；首帧上报落地后置 true
         authorizationDenied = false
         // 后台续传：开启后台定位更新（需 Info.plist UIBackgroundModes 含 location），口袋里熄屏仍可共享。
         manager.allowsBackgroundLocationUpdates = true
@@ -199,6 +204,7 @@ final class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         let battery = lvl >= 0 ? Int((lvl * 100).rounded()) : nil
         if let until = try? await APIClient().updateLocation(token: token, lat: loc.coordinate.latitude, lng: loc.coordinate.longitude, accuracy: acc, heading: course, battery: battery) {
             sharingUntil = until
+            shareEstablished = true // 服务端已确认此次共享——之后它说"没在共享"才是真到期/被下线（非启动竞态）
         }
     }
 
@@ -207,9 +213,27 @@ final class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         do {
             let r = try await APIClient().contactLocations(token: token)
             contacts = r.contacts
-            // 与服务端真相对齐（如本机被管理员/TTL 下线，UI 同步）。
-            if !sharing { sharingUntil = r.sharingUntil }
+            // 与服务端真相对齐（本机被管理员/TTL 下线时，UI 同步）。
+            if LiveShareReconciler.serverStoppedShare(localSharing: sharing, established: shareEstablished, serverSharing: r.sharing) {
+                // 服务端已停共享（有效期到期/管理员下线），但本地仍自认为在共享：降下本地状态并**语音告知**盲人
+                // ——否则界面停在"共享至 X"（已过去）、盲人以为家人还看得到自己（假安心，紧急时尤险）。
+                handleServerStoppedShare()
+            } else if !sharing {
+                sharingUntil = r.sharingUntil
+            }
         } catch { /* 网络抖动忽略 */ }
+    }
+
+    /// 服务端已自行停掉共享（TTL 到期/管理员下线）时的本地收尾：与 stopSharing 同样清理本地采集/发布/围栏，
+    /// 但**不**再向服务端发 stop（记录已不存在），并告知盲人共享已结束。
+    private func handleServerStoppedShare() {
+        sharing = false
+        manager.stopUpdatingLocation()
+        manager.allowsBackgroundLocationUpdates = false
+        publishTask?.cancel(); publishTask = nil
+        geofencePlaces = []; geofenceInside = nil
+        clearCachedFix() // 清缓存定位 + sharingUntil=0 + shareEstablished=false
+        announce(LiveLocationStrings.expiredSpeak(lang))
     }
 
     // MARK: 语音

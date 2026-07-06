@@ -17,6 +17,11 @@ enum LiveLocationStrings {
 
     static func startedSpeak(_ l: Language) -> String { l == .zh ? "已开始共享你的实时位置" : "Started sharing your live location" }
     static func stoppedSpeak(_ l: Language) -> String { l == .zh ? "已停止共享位置" : "Stopped sharing your location" }
+    /// 服务端因有效期到期/管理员下线而停掉共享时告知盲人——否则以为家人还看得到自己（假安心，紧急时尤险）。
+    static func expiredSpeak(_ l: Language) -> String {
+        l == .zh ? "位置共享已结束，家人暂时看不到你的位置。需要的话可以重新开启共享。"
+                 : "Location sharing has ended — your family can't see you right now. Turn it back on if you still need it."
+    }
     /// 到达常用地点（家/公司/自定义 label）自播报——盲人定向确认"我到了X"。
     static func arrivedAtPlace(_ label: String, _ l: Language) -> String { l == .zh ? "你到\(label)了" : "You've arrived at \(label)" }
     static func permissionDenied(_ l: Language) -> String {

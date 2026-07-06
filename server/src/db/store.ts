@@ -113,6 +113,7 @@ export interface CallRecord {
   calleeId: string
   status: CallRecordStatus
   createdAt: number
+  emergency?: boolean // 紧急求助呼叫（盲人一键 SOS）——供通话记录突出"未接紧急求助"，提示优先回拨
 }
 
 /// 举报（通话后一键举报 → 管理员审核）。

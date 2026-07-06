@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
+import { SqliteStore } from '../src/db/sqliteStore'
 
 const auth = (t: string) => ({ authorization: `Bearer ${t}` })
 
@@ -42,5 +43,32 @@ describe('/api/assist/call emergency 标志 → /api/assist/incoming', () => {
     const bad = await app.inject({ method: 'POST', url: '/api/assist/call', headers: auth(blind.token), payload: { callId: 'reg-3', targetUserIds: [helper.user.id], emergency: 'yes' } })
     expect(bad.statusCode).toBe(200)
     await app.close()
+  })
+})
+
+describe('紧急标志落入通话记录 /api/calls（未接紧急求助可优先回拨）', () => {
+  it('紧急呼叫 → 被叫通话记录 emergency:true；普通呼叫 → false', async () => {
+    const app = buildApp(new MemoryStore())
+    const reg = async (u: string, role: string) => (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const blind = await reg('echBlind', 'blind')
+    const helper = await reg('echHelper', 'helper')
+    const l = await app.inject({ method: 'POST', url: '/api/family/links', headers: auth(blind.token), payload: { username: 'echHelper', relation: '志愿者' } })
+    await app.inject({ method: 'POST', url: `/api/family/links/${l.json().link.id}/accept`, headers: auth(helper.token) })
+    await app.inject({ method: 'POST', url: '/api/assist/call', headers: auth(blind.token), payload: { callId: 'sos-h', targetUserIds: [helper.user.id], emergency: true } })
+    await app.inject({ method: 'POST', url: '/api/assist/call', headers: auth(blind.token), payload: { callId: 'reg-h', targetUserIds: [helper.user.id] } })
+    const calls = (await app.inject({ method: 'GET', url: '/api/calls', headers: auth(helper.token) })).json().calls
+    expect(calls.find((c: { callId: string }) => c.callId === 'sos-h')?.emergency).toBe(true)
+    expect(calls.find((c: { callId: string }) => c.callId === 'reg-h')?.emergency).toBe(false)
+    await app.close()
+  })
+
+  it('CallRecord.emergency 存储 parity（Memory ↔ Sqlite 往返一致）', () => {
+    for (const store of [new MemoryStore(), new SqliteStore(':memory:')]) {
+      store.createCallRecord({ id: 'r1', callId: 'c1', callerId: 'a', calleeId: 'b', status: 'missed', createdAt: 1, emergency: true })
+      store.createCallRecord({ id: 'r2', callId: 'c2', callerId: 'a', calleeId: 'b', status: 'missed', createdAt: 2 }) // 缺省 → false
+      const recs = store.callRecordsForUser('b', 10)
+      expect(recs.find((r) => r.id === 'r1')?.emergency).toBe(true)
+      expect(recs.find((r) => r.id === 'r2')?.emergency).toBeFalsy() // Memory:undefined / Sqlite:false，都是 falsy
+    }
   })
 })

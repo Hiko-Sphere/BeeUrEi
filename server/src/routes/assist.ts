@@ -145,7 +145,7 @@ export function registerAssistRoutes(
     if (!ok) return reply.code(409).send({ error: 'call_id_conflict' }) // 该 callId 被他人占用，防覆盖/劫持(见审查 #2)
     // 通话记录：每个目标一条（默认 missed，被叫接听/拒绝后更新）。
     const recAt = Date.now()
-    for (const id of targets) store.createCallRecord({ id: randomUUID(), callId: parsed.data.callId, callerId: from.sub, calleeId: id, status: 'missed', createdAt: recAt })
+    for (const id of targets) store.createCallRecord({ id: randomUUID(), callId: parsed.data.callId, callerId: from.sub, calleeId: id, status: 'missed', createdAt: recAt, emergency: parsed.data.emergency ?? false })
     // A1：向各目标设备推 VoIP 来电（后台/锁屏唤起 CallKit）。fire-and-forget，失败不阻断呼叫。
     const callerName = store.findById(from.sub)?.displayName ?? '求助者'
     console.log('[call] dispatch from=%s callId=%s targets=%j voip=%j apns=%j',
@@ -238,6 +238,7 @@ export function registerAssistRoutes(
           peerId: other?.id ?? null, // 对端 id：前端据此让通话记录可点进聊天/回拨（已注销用户为 null，不可点）
           peerName: other?.displayName ?? '已注销用户',
           peerAvatar: other?.avatar ?? null,
+          emergency: r.emergency ?? false, // 紧急求助呼叫：前端突出"未接紧急求助"，提示优先回拨
           createdAt: r.createdAt,
         }
       }),

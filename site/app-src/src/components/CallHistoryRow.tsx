@@ -13,7 +13,11 @@ export function CallHistoryRow({ call: c, className = 'px-4 py-3' }: { call: Cal
     <>
       <Avatar name={c.peerName || '?'} src={c.peerAvatar} size={36} />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium">{c.peerName}</div>
+        <div className="flex items-center gap-1.5">
+          <span className="truncate text-sm font-medium">{c.peerName}</span>
+          {/* 紧急求助呼叫（盲人一键 SOS）：通话记录里突出——尤其"未接紧急求助"须让协助者一眼看到、优先回拨。读屏可闻。 */}
+          {c.emergency && <span className="shrink-0 rounded-full bg-danger/15 px-1.5 py-0.5 text-[10px] font-bold text-danger">{t('🆘 紧急求助', '🆘 SOS')}</span>}
+        </div>
         <div className="text-xs text-faint">{c.direction === 'outgoing' ? t('呼出', 'Outgoing') : t('呼入', 'Incoming')} · {timeAgo(c.createdAt, lang)}</div>
       </div>
       <Pill tone={c.status === 'answered' ? 'ok' : c.status === 'declined' ? 'danger' : 'soft'}>

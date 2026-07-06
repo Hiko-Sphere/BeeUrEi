@@ -91,6 +91,75 @@ function render(c: Copy, code: string): Mail {
   return { subject, text, html }
 }
 
+/// 安全通知类邮件（无验证码，正文为一段告警/说明）：与验证码邮件同品牌视觉，但用告警配色、无验证码框。
+interface NoticeCopy {
+  subjectZh: string; subjectEn: string
+  titleZh: string; titleEn: string
+  bodyZh: string; bodyEn: string
+  preheaderZh: string; preheaderEn: string
+}
+const ALERT_BG = '#fff2f0'
+const ALERT_LINE = '#ffc4bd'
+function renderNotice(c: NoticeCopy): Mail {
+  const subject = `${c.subjectZh} / ${c.subjectEn}`
+  const text = [
+    `${c.titleZh} — BeeUrEi 蜂之眼`, ``, c.bodyZh, ``,
+    `----------------------------------------`, ``,
+    `${c.titleEn} — BeeUrEi`, ``, c.bodyEn, ``,
+    `BeeUrEi 蜂之眼 · Hiko Sphere 彦穹科技 · ${SITE}`,
+    `此为系统自动发送的邮件，请勿回复。This is an automated message — please do not reply.`,
+  ].join('\n')
+  // c.bodyZh/En 可能内插用户可控值（如新邮箱地址）——HTML 侧一律 esc()，杜绝邮件 HTML 注入。
+  const html = `<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>${esc(subject)}</title>
+</head>
+<body style="margin:0;padding:0;background:${PAGE};">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${esc(c.preheaderZh)} · ${esc(c.preheaderEn)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${PAGE};">
+<tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;width:100%;background:#ffffff;border:1px solid ${LINE};border-radius:16px;overflow:hidden;font-family:${FONT};">
+<tr><td style="background:${INK};padding:18px 28px;">
+<span style="font-size:18px;font-weight:700;color:#ffffff;letter-spacing:-.2px;">BeeUrEi <span style="color:${HONEY_ON_DARK};">蜂之眼</span></span>
+</td></tr>
+<tr><td style="padding:28px 28px 22px;">
+<h1 lang="zh" style="margin:0 0 8px;font-size:20px;line-height:1.3;color:${INK};font-weight:700;">${esc(c.titleZh)}</h1>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="padding:16px 18px;background:${ALERT_BG};border:1px solid ${ALERT_LINE};border-radius:12px;">
+<p lang="zh" style="margin:0;font-size:15px;line-height:1.65;color:${INK};">${esc(c.bodyZh)}</p>
+</td></tr></table>
+<hr style="border:none;border-top:1px solid ${LINE};margin:22px 0;">
+<h2 lang="en" style="margin:0 0 8px;font-size:18px;line-height:1.3;color:${INK};font-weight:700;">${esc(c.titleEn)}</h2>
+<p lang="en" style="margin:0;font-size:15px;line-height:1.65;color:${SOFT};">${esc(c.bodyEn)}</p>
+</td></tr>
+<tr><td style="padding:18px 28px;background:${PAGE};border-top:1px solid ${LINE};">
+<p style="margin:0;font-size:12px;line-height:1.6;color:${FAINT};">BeeUrEi 蜂之眼 · Hiko Sphere 彦穹科技 · <a href="${SITE}" style="color:${LINK};text-decoration:none;">beeurei.hikosphere.com</a></p>
+<p style="margin:6px 0 0;font-size:12px;line-height:1.6;color:${FAINT};">此为系统自动发送的邮件，请勿回复。This is an automated message — please do not reply.</p>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`
+  return { subject, text, html }
+}
+
+/// 邮箱变更告警（发给**旧邮箱**）：账号登录邮箱被改走时，让本人即便未登录/无 App 也能从旧地址收到警告并抢救账号
+/// （未授权改邮箱是接管账号第一步，行业通例 Google/GitHub 均告警旧地址）。newEmail 为用户可控值，HTML 侧已 esc。
+export function emailChangedAlertMail(newEmail: string): Mail {
+  return renderNotice({
+    subjectZh: 'BeeUrEi 账号邮箱已更改', subjectEn: 'Your BeeUrEi email was changed',
+    titleZh: '你的账号邮箱已更改', titleEn: 'Your account email was changed',
+    bodyZh: `你 BeeUrEi 账号的登录邮箱刚被改为 ${newEmail}。若是你本人操作，可忽略本邮件；若不是你本人，你的账号可能被盗用——请立即打开 BeeUrEi 重置密码并检查账号安全。`,
+    bodyEn: `The sign-in email on your BeeUrEi account was just changed to ${newEmail}. If this was you, you can ignore this message. If this wasn't you, your account may be compromised — open BeeUrEi to reset your password and review your account security right away.`,
+    preheaderZh: '你的 BeeUrEi 账号邮箱被更改——若非本人请立即处理',
+    preheaderEn: "Your BeeUrEi account email was changed — act now if this wasn't you",
+  })
+}
+
 /// 登录验证码（邮箱验证码登录 / 首次登录即注册）。
 export function loginCodeMail(code: string): Mail {
   return render({

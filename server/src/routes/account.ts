@@ -8,7 +8,7 @@ import { hashPassword, verifyPassword } from '../auth/passwords'
 import { generateTotpSecret, totpMatchedCounter, otpauthURI, generateRecoveryCodes, hashRecoveryCode } from '../auth/totp'
 import { type CodeRegistry } from '../auth/codes'
 import { type Mailer } from '../mail/mailer'
-import { emailVerificationMail } from '../mail/templates'
+import { emailVerificationMail, emailChangedAlertMail } from '../mail/templates'
 import { CodeSendLimiter } from '../auth/sendLimiter'
 import { normalizePhone, type AppleTokenVerifier } from '../auth/apple'
 import { cascadeDeleteUser } from '../db/cascade'
@@ -339,7 +339,15 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
       console.warn('[mail] 验证码发送失败:', (e as Error).message)
       return reply.code(503).send({ error: 'mail_unavailable' })
     }
-    notifySecurity(user, 'email_changed') // 邮箱已改（待验证）——未授权改邮箱是接管账号常见第一步，即时预警本人
+    notifySecurity(user, 'email_changed') // 邮箱已改（待验证）——未授权改邮箱是接管账号常见第一步，即时预警本人（App 内+推送）
+    // 额外告警**旧邮箱**：本人即便未登录/无 App，也能从旧地址收到"邮箱被改走"警告并抢救账号（行业通例 Google/GitHub）。
+    // 仅旧邮箱**已验证**且确实换了地址才发（确属本人、非噪声）。best-effort——告警失败绝不回滚已成功的变更或 500。
+    if (prev.email && prev.emailVerified && prev.email !== email) {
+      try {
+        const alert = emailChangedAlertMail(email)
+        await mailer.send(prev.email, alert.subject, alert.text, alert.html)
+      } catch (e) { console.warn('[mail] 旧邮箱变更告警发送失败:', (e as Error).message) }
+    }
     return { ok: true }
   })
 

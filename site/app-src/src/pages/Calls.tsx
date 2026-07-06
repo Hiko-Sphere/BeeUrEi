@@ -23,7 +23,9 @@ export function formatWaited(seconds: number, t: (z: string, e: string) => strin
 export function CallsPage() {
   const { t, lang } = useI18n()
   const toast = useToast()
-  const { answerIncoming, claimQueue, active } = useCall()
+  const { answerIncoming, claimQueue, active, startOutgoing } = useCall()
+  // 通话记录一键回拨：尤其未接的紧急求助只在记录里出现、不进通知列表——直接呼叫，免点进聊天绕一圈。
+  const callBack = (c: CallRecordInfo) => { if (c.peerId) void startOutgoing(c.peerId, c.peerName || t('对方', 'Them'), c.peerAvatar ?? null) }
   const [incoming, setIncoming] = useState<IncomingCall[] | null>(null)
   const [queue, setQueue] = useState<HelpRequest[] | null>(null)
   const [history, setHistory] = useState<CallRecordInfo[] | null>(null)
@@ -161,7 +163,7 @@ export function CallsPage() {
             <EmptyState icon={<IconPhone />} title={t('暂无记录', 'No history')} />
           ) : (
             <ul className="divide-y divide-[var(--line)]">
-              {history.map((c) => <CallHistoryRow key={c.id} call={c} />)}
+              {history.map((c) => <CallHistoryRow key={c.id} call={c} onCall={callBack} callDisabled={!!active} />)}
             </ul>
           )}
         </Card>

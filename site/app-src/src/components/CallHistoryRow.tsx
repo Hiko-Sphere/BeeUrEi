@@ -2,14 +2,20 @@ import { Link } from 'react-router-dom'
 import { type CallRecordInfo } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { Avatar, Pill, timeAgo } from './ui'
+import { IconPhone } from './icons'
 
-/// 通话记录行（首页/通话页共用，防两处漂移）：对端仍在则整行链到与其的聊天（跟进/回访求助者，
-/// 同手机最近通话点一下进对话）；已注销(peerId 为 null)则渲染成不可点的普通行，无死链。
+/// 通话记录行（首页/通话页共用，防两处漂移）：对端仍在则姓名区链到与其的聊天（跟进/回访求助者）；
+/// 已注销(peerId 为 null)则渲染成不可点的普通行，无死链。父组件传 onCall 时额外显示"呼叫"按钮——
+/// 尤其**未接的紧急求助**(assist/call emergency)只出现在通话记录、不进通知列表，此前只能点进聊天绕一圈才能回拨。
 /// className 传各处自有的行内边距（首页 px-5 对齐其 px-5 卡头；通话页 px-4）。
-export function CallHistoryRow({ call: c, className = 'px-4 py-3' }: { call: CallRecordInfo; className?: string }) {
+export function CallHistoryRow({ call: c, className = 'px-4 py-3', onCall, callDisabled }: {
+  call: CallRecordInfo
+  className?: string
+  onCall?: (c: CallRecordInfo) => void // 提供则显示"呼叫"按钮（一键回拨对端）；父组件用 useCall.startOutgoing 接线
+  callDisabled?: boolean               // 通话进行中禁用（不能同时发起第二通）
+}) {
   const { t, lang } = useI18n()
-  const inner = `flex items-center gap-3 ${className}`
-  const row = (
+  const content = (
     <>
       <Avatar name={c.peerName || '?'} src={c.peerAvatar} size={36} />
       <div className="min-w-0 flex-1">
@@ -26,10 +32,19 @@ export function CallHistoryRow({ call: c, className = 'px-4 py-3' }: { call: Cal
     </>
   )
   return (
-    <li>
+    <li className={`flex items-center ${className}`}>
       {c.peerId
-        ? <Link to={`/chat/${c.peerId}`} className={`${inner} transition hover:surface-2`} aria-label={t(`与 ${c.peerName} 的聊天`, `Chat with ${c.peerName}`)}>{row}</Link>
-        : <div className={inner}>{row}</div>}
+        ? <Link to={`/chat/${c.peerId}`} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg transition hover:surface-2" aria-label={t(`与 ${c.peerName} 的聊天`, `Chat with ${c.peerName}`)}>{content}</Link>
+        : <div className="flex min-w-0 flex-1 items-center gap-3">{content}</div>}
+      {/* 一键呼叫对端（回拨）：对端仍在(peerId)且父组件接了 onCall 才显示；通话中禁用（不能同时两通）。
+          按钮是 Link 的**兄弟**节点、不嵌套（避免 nested-interactive a11y 违规，同通知页回拨/删除的排布）。 */}
+      {c.peerId && onCall && (
+        <button onClick={() => onCall(c)} disabled={callDisabled}
+          className="ml-2 shrink-0 inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-ok hover:surface-2 disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label={t(`呼叫 ${c.peerName}`, `Call ${c.peerName}`)}>
+          <IconPhone width={14} height={14} />{t('呼叫', 'Call')}
+        </button>
+      )}
     </li>
   )
 }

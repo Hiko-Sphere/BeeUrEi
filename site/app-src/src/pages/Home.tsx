@@ -6,6 +6,7 @@ import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { Card, Spinner, EmptyState } from '../components/ui'
 import { CallHistoryRow } from '../components/CallHistoryRow'
+import { useCall } from './call/CallController'
 import { IconPhone, IconChat, IconUsers, IconBell } from '../components/icons'
 
 interface Stats { online: number; total: number; incoming: number; queue: number; unread: number; unreadMessages: number; missedCalls: number; pendingLinks: number }
@@ -13,6 +14,9 @@ interface Stats { online: number; total: number; incoming: number; queue: number
 export function HomePage() {
   const { user } = useSession()
   const { t } = useI18n()
+  const { active, startOutgoing } = useCall()
+  // 首页最近通话也支持一键回拨（与通话页同款）：未接的紧急求助尤其需要快速回拨。
+  const callBack = (c: CallRecordInfo) => { if (c.peerId) void startOutgoing(c.peerId, c.peerName || t('对方', 'Them'), c.peerAvatar ?? null) }
   const [stats, setStats] = useState<Stats | null>(null)
   const [calls, setCalls] = useState<CallRecordInfo[] | null>(null)
 
@@ -88,7 +92,7 @@ export function HomePage() {
           <EmptyState icon={<IconPhone />} title={t('暂无通话记录', 'No calls yet')} message={t('接听或发起通话后会显示在这里', 'Calls will appear here')} />
         ) : (
           <ul className="divide-y divide-[var(--line)]">
-            {calls.map((c) => <CallHistoryRow key={c.id} call={c} className="px-5 py-3" />)}
+            {calls.map((c) => <CallHistoryRow key={c.id} call={c} className="px-5 py-3" onCall={callBack} callDisabled={!!active} />)}
           </ul>
         )}
       </Card>

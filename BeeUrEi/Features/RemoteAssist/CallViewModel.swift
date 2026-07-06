@@ -26,6 +26,31 @@ final class CallViewModel {
         }
     }
 
+    /// 真实媒体连通状态迁移（由 start() 接到 media.onMediaStateChange；抽为方法以可单测）。
+    /// **关键补齐**：ICE 掉线(.disconnected)时告知盲人"正在重连"——盲人听到声音中断却看不到重连横幅（协助者侧
+    /// helperVideoHint 有，盲人侧此前只 break、无任何提示），会误以为对方挂断/沉默而困惑或提前挂断。恢复时声音
+    /// 自然回来即是恢复信号，无需再播"已恢复"。wasReconnecting 防 ICE 抖动连播（对齐 web webrtc iceWasReconnecting）。
+    func handleMediaState(_ state: MediaConnState) {
+        mediaState = state
+        switch state {
+        case .failed:
+            statusText = CallStrings.mediaFailedStatus(lang)
+        case .connected:
+            if connected {
+                statusText = connectedStatus()
+                wasReconnecting = false // ICE 恢复：清重连态，下次再掉线可再提示
+            }
+        case .disconnected:
+            if connected, !wasReconnecting {
+                wasReconnecting = true
+                statusText = CallStrings.reconnecting(lang)
+                announce(CallStrings.reconnecting(lang)) // 仅盲人角色发声（announce 内已门控），协助者只看横幅
+            }
+        default:
+            break
+        }
+    }
+
     let role: Role
     let callId: String
     private let waitingText: String   // 等待对端接入时的提示（求助志愿者/呼叫亲友文案不同）
@@ -139,6 +164,7 @@ final class CallViewModel {
     @ObservationIgnored private let signaling: Signaling
     @ObservationIgnored let media: MediaEngine
     @ObservationIgnored private var hasOffered = false // 视障侧是否已发过 offer，防对端重连/重复 peer-joined 在已建立 pc 上重发 offer 造成 glare（见审查 #2）
+    @ObservationIgnored private var wasReconnecting = false // ICE 曾掉线（已播过"正在重连"）→ 防抖动连播 + 恢复时清态（对齐 web webrtc iceWasReconnecting）
     @ObservationIgnored private var ended = false // hangUp 幂等：任意路径（按钮/界面消失/CallKit 系统挂断）都能安全调用，确保媒体/信令确定性释放（见复审 #1）
 
     init(role: Role, callId: String, waitingText: String = CallStrings.defaultWaiting(FeatureSettings().language),
@@ -168,18 +194,7 @@ final class CallViewModel {
             self?.signaling.send(msg)
         }
         // 真实媒体连通状态：把"信令已连接但媒体没通"暴露出来，让无画面可定位（见无画面深审）。
-        media.onMediaStateChange = { [weak self] state in
-            guard let self else { return }
-            self.mediaState = state
-            switch state {
-            case .failed:
-                self.statusText = CallStrings.mediaFailedStatus(self.lang)
-            case .connected:
-                if self.connected { self.statusText = self.connectedStatus() }
-            default:
-                break
-            }
-        }
+        media.onMediaStateChange = { [weak self] state in self?.handleMediaState(state) }
         media.onRemoteVideoTrack = { [weak self] in self?.remoteVideoAvailable = true }
         media.onCallQuality = { [weak self] q in
             guard let self else { return }

@@ -82,6 +82,29 @@ final class CallViewModelTests: XCTestCase {
         XCTAssertEqual(vm.peerName, "小明")
     }
 
+    func testBlindHearsReconnectingOnIceDropAndRecovers() {
+        // 盲人看不到"正在重连"横幅（协助者视频区有、盲人侧此前只 break）：ICE 掉线须告知盲人正在重连，
+        // 否则声音中断会被误当对方挂断/沉默。恢复后声音自然回来即恢复信号。
+        let lang = FeatureSettings().language
+        let vm = makeVM(role: .blind)
+        vm.handle(["type": "peer-joined", "userId": "u2", "userName": "妈妈"])
+        XCTAssertTrue(vm.connected)
+        vm.handleMediaState(.disconnected)
+        XCTAssertEqual(vm.statusText, CallStrings.reconnecting(lang))
+        vm.handleMediaState(.connected)                                   // ICE 恢复
+        XCTAssertNotEqual(vm.statusText, CallStrings.reconnecting(lang))  // 不再停在"正在重连"
+        vm.handleMediaState(.disconnected)                               // 再次掉线仍能再提示（非一次性）
+        XCTAssertEqual(vm.statusText, CallStrings.reconnecting(lang))
+    }
+
+    func testMediaDropBeforeConnectDoesNotFalselyReportReconnecting() {
+        // 未接通就收到 .disconnected（建立期抖动）→ guard(connected) 拦住，不误报"正在重连"。
+        let lang = FeatureSettings().language
+        let vm = makeVM(role: .blind)
+        vm.handleMediaState(.disconnected)
+        XCTAssertNotEqual(vm.statusText, CallStrings.reconnecting(lang))
+    }
+
     func testBlindOffersExactlyOnceAcrossDuplicateJoins() {
         let vm = makeVM(role: .blind)
         vm.handle(["type": "joined", "peers": [["userId": "u2", "userName": "A"]]])

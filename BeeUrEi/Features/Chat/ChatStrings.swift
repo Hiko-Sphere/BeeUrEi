@@ -155,6 +155,9 @@ enum ChatStrings {
         l == .zh ? "视频太大（上限 50MB），请选短一点的视频" : "Video too large (50MB max). Pick a shorter one."
     }
     static func uploadingVideo(_ l: Language) -> String { l == .zh ? "正在上传视频…" : "Uploading video…" }
+    /// 上传耗时>8秒时的周期性安慰：大视频/弱网下"正在上传"后若长时间静默，盲人会以为卡死/已失败。每 8 秒再报一次
+    /// "还在上传"（droppable，不打断结果），让其知道仍在进行、别误以为要重发。快速上传（<8秒）此提示永不触发。
+    static func uploadingVideoStill(_ l: Language) -> String { l == .zh ? "还在上传，请稍候…" : "Still uploading, please wait…" }
     static func videoLoadFailed(_ l: Language) -> String { l == .zh ? "视频加载失败" : "Couldn't load video" }
     // 发送成功语音确认：盲人看不到"已送达"的气泡出现，媒体/位置又是异步操作（图片压缩、视频上传、定位反查），
     // 只报进度/失败、成功却静默＝盲人不知到底发出去没有。文字发送即时且高频、用户刚亲手输入，故不在此列（免刷屏）。

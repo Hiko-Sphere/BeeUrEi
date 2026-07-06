@@ -86,6 +86,15 @@ final class ChatStringsTests: XCTestCase {
         XCTAssertNotEqual(ChatStrings.voiceSent(.zh), ChatStrings.sendFailed(.zh))
     }
 
+    func testUploadingVideoStillReassuranceBilingualAndDistinct() {
+        // 大视频/弱网上传>8秒的周期安慰："还在上传"须与初始"正在上传"不同（否则听不出是"仍在进行"还是卡在原地）、双语、英不串中。
+        XCTAssertNotEqual(ChatStrings.uploadingVideoStill(.zh), ChatStrings.uploadingVideo(.zh))
+        XCTAssertTrue(ChatStrings.uploadingVideoStill(.zh).contains("还在上传"))
+        let en = ChatStrings.uploadingVideoStill(.en)
+        XCTAssertTrue(en.lowercased().contains("still") && en.lowercased().contains("upload"))
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(en)")
+    }
+
     func testForwardedEditedTagsBilingual() {
         XCTAssertEqual(ChatStrings.forwardedTag(.zh), "已转发")
         XCTAssertEqual(ChatStrings.forwardedTag(.en), "Forwarded")

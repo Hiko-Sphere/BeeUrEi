@@ -902,6 +902,15 @@ struct ChatView: View {
         SpeechHub.shared.speak(ChatStrings.uploadingVideo(lang), channel: .query, voiceCode: lang.voiceCode)
         sending = true
         defer { sending = false }
+        // 大视频/弱网上传耗时可达数十秒——盲人看不到进度条，"正在上传"后长时间静默会以为卡死。每 8 秒安慰一次
+        // "还在上传"（droppable，不打断结果播报），上传结束即取消。快速上传（<8 秒）首次 sleep 未满就被取消，永不出声。
+        let lang = self.lang
+        let reassure = Task { while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(8))
+            guard !Task.isCancelled else { break }
+            SpeechHub.shared.speak(ChatStrings.uploadingVideoStill(lang), channel: .query, voiceCode: lang.voiceCode, droppable: true)
+        } }
+        defer { reassure.cancel() }
         do {
             let mediaId = try await APIClient().uploadMedia(token: token, data: raw, mime: Self.videoMime(raw))
             let m = try await send(kind: "video", text: mediaId)

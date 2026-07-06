@@ -6,9 +6,10 @@ import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 vi.mock('../lib/api', () => ({
   api: { myRecordings: vi.fn(), deleteMyRecording: vi.fn() },
   fetchRecordingObjectURL: vi.fn(),
+  fetchRecordingBlob: vi.fn(),
   APIError: class extends Error { code = ''; status = 0 },
 }))
-import { api, fetchRecordingObjectURL } from '../lib/api'
+import { api, fetchRecordingObjectURL, fetchRecordingBlob } from '../lib/api'
 import { RecordingsPage } from './Recordings'
 
 const mock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
@@ -85,5 +86,39 @@ describe('RecordingsPage 列表渲染（防字段漂移）', () => {
     unmount()                                                            // 在途卸载
     await act(async () => { resolveFetch('blob:leak'); await Promise.resolve(); await Promise.resolve() })
     expect(revoke).toHaveBeenCalledWith('blob:leak')                     // 未挂载→就地 revoke，不泄漏
+  })
+})
+
+describe('RecordingsPage 下载录音（数据可携权的媒体通道）', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('点"下载"→ 取 Blob、按 MIME 推扩展名(.webm)、文件名带录制时刻、objectURL 用后即 revoke', async () => {
+    mock(api.myRecordings).mockResolvedValue({
+      recordings: [{ id: 'r1', recordedAt: Date.UTC(2026, 0, 5, 9, 30), durationSec: 10, hasMedia: true, participantNames: ['张三'], reason: '' }],
+    })
+    mock(fetchRecordingBlob).mockResolvedValue(new Blob(['x'], { type: 'video/webm' }))
+    const createURL = vi.fn(() => 'blob:dl')
+    const revokeURL = vi.fn()
+    vi.stubGlobal('URL', Object.assign(Object.create(URL), { createObjectURL: createURL, revokeObjectURL: revokeURL }))
+    const names: string[] = []
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { names.push(this.download) })
+    try {
+      render(<RecordingsPage />)
+      fireEvent.click(await screen.findByRole('button', { name: '下载录音' }))
+      await waitFor(() => expect(fetchRecordingBlob).toHaveBeenCalledWith('r1'))
+      await waitFor(() => expect(names.length).toBe(1))
+      expect(names[0]).toMatch(/^beeurei-recording-2026\d{4}-\d{4}\.webm$/) // MIME→.webm，文件名带日期时刻
+      expect(createURL).toHaveBeenCalled()
+      expect(revokeURL).toHaveBeenCalledWith('blob:dl') // 用后即 revoke，不泄漏
+    } finally { clickSpy.mockRestore(); vi.unstubAllGlobals() }
+  })
+
+  it('无媒体的录制：下载按钮禁用（不发无意义请求）', async () => {
+    mock(api.myRecordings).mockResolvedValue({
+      recordings: [{ id: 'r2', recordedAt: 1_700_000_000_000, hasMedia: false, participantNames: ['张三'], reason: '' }],
+    })
+    render(<RecordingsPage />)
+    expect(await screen.findByRole('button', { name: '下载录音' })).toBeDisabled()
+    expect(fetchRecordingBlob).not.toHaveBeenCalled()
   })
 })

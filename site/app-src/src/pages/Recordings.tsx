@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, APIError, fetchRecordingObjectURL, type RecordingInfo } from '../lib/api'
+import { api, APIError, fetchRecordingObjectURL, fetchRecordingBlob, type RecordingInfo } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { joinNames } from '../lib/listFormat'
 import { Card, Button, Pill, Spinner, EmptyState, useToast, fmtTime, fmtDuration, RelativeTime } from '../components/ui'
@@ -34,6 +34,30 @@ export function RecordingsPage() {
         : t('无法播放，请重试', 'Cannot play, retry')
       toast(msg, 'error')
     } finally { setLoadingId(null) }
+  }
+
+  // 下载本人录音（数据可携权）：自助导出刻意不内联媒体、注明"媒体文件另有下载通道"——这里就是那条通道。
+  // 扩展名按响应 MIME 推导（iOS 端 quicktime→.mov、web 端→.webm、纯音频→.m4a、其余 mp4 兜底），文件名带录制时刻。
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const download = async (rec: RecordingInfo) => {
+    if (!rec.hasMedia) { toast(t('该录制暂无可下载媒体', 'No downloadable media'), 'error'); return }
+    setDownloadingId(rec.id)
+    try {
+      const blob = await fetchRecordingBlob(rec.id)
+      const ext = blob.type.includes('quicktime') ? 'mov' : blob.type.includes('webm') ? 'webm' : blob.type.startsWith('audio/') ? 'm4a' : 'mp4'
+      const d = new Date(rec.recordedAt)
+      const pad = (n: number) => String(n).padStart(2, '0')
+      const name = `beeurei-recording-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.${ext}`
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = name
+      document.body.appendChild(a); a.click(); a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      const msg = e instanceof APIError && e.status === 403 ? t('该录制已删除或无权查看', 'Recording deleted or no access')
+        : t('下载失败，请重试', 'Download failed — try again')
+      toast(msg, 'error')
+    } finally { setDownloadingId(null) }
   }
 
   const del = async (rec: RecordingInfo) => {
@@ -72,7 +96,12 @@ export function RecordingsPage() {
                 {r.reason && r.reason.trim() && <div><span className="text-faint">{t('录制原因', 'Reason')}：</span>{r.reason}</div>}
                 {r.locationLabel && <div><span className="text-faint">{t('地点', 'Location')}：</span>{r.locationLabel}</div>}
               </div>
-              <Button loading={loadingId === r.id} disabled={!r.hasMedia} onClick={() => play(r)} className="w-full"><IconFilm width={16} height={16} />{t('播放', 'Play')}</Button>
+              <div className="flex gap-2">
+                <Button loading={loadingId === r.id} disabled={!r.hasMedia} onClick={() => play(r)} className="flex-1"><IconFilm width={16} height={16} />{t('播放', 'Play')}</Button>
+                {/* 下载（数据可携权的媒体通道）：与播放同鉴权同媒体路径，仅存盘而非播放。 */}
+                <Button variant="soft" loading={downloadingId === r.id} disabled={!r.hasMedia} onClick={() => download(r)}
+                  aria-label={t('下载录音', 'Download recording')}>{t('下载', 'Download')}</Button>
+              </div>
             </Card>
           ))}
         </div>

@@ -433,10 +433,14 @@ export async function fetchMediaObjectURL(id: string): Promise<string> {
 // 那个 ?t= 媒体令牌仅 60s——而 <video> 的每个 Range 请求都带它，故 >60s 的回放或拖动会 401 致播放中断；
 // 改走 1h access token 一次性下载(媒体≤50MB)，blob 本地播放后拖动/重播都不再请求服务端，且 URL 里不再带令牌
 // (无 URL 令牌泄漏面)。与 iOS「下载到本地再播」一致。错误状态码透传，供调用方区分 403/404。
-export async function fetchRecordingObjectURL(id: string): Promise<string> {
+/// 拉取本人录音媒体（Bearer 鉴权）为 Blob：播放（objectURL）与下载（存盘，数据可携权）共用同一取媒体路径。
+export async function fetchRecordingBlob(id: string): Promise<Blob> {
   const res = await fetch(apiURL(`/api/recordings/${id}/media`), { headers: tokenStore.token ? { authorization: 'Bearer ' + tokenStore.token } : {} })
   if (!res.ok) throw new APIError('media_failed', res.status)
-  return URL.createObjectURL(await res.blob())
+  return await res.blob()
+}
+export async function fetchRecordingObjectURL(id: string): Promise<string> {
+  return URL.createObjectURL(await fetchRecordingBlob(id))
 }
 
 // 把用户选的图片经 canvas 重编码为 JPEG（≤2048px 长边）——天然剥离 EXIF/GPS，并控制体积；

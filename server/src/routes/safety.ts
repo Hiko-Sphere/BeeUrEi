@@ -34,10 +34,16 @@ function view(t: SafetyTimer, now: number) {
 export function registerSafetyRoutes(app: FastifyInstance, store: Store,
                                      pushSender: PushSender = new NoopPushSender(),
                                      webPush: WebPushSender = new NoopWebPushSender()): void {
-  // 当前进行中的报到（客户端展示剩余时间；无则 null）。
+  // 用户是否有"可用的紧急联系人"（我拥有、已接受、标为紧急）——dead-man's switch 到期只对这类扇出
+  // （见 checkin.ts fireExpiredSafetyTimers）。一个都没有=到点没报平安也无人会被通知（假安心），客户端据此持续预警。
+  const hasEmergencyContact = (userId: string): boolean =>
+    store.linksByOwner(userId).some((l) => (l.status ?? 'accepted') === 'accepted' && l.isEmergency)
+
+  // 当前进行中的报到（客户端展示剩余时间；无则 null）+ 是否有紧急联系人（供进行中持续预警"到点无人可通知"）。
   app.get('/api/safety/checkin', { preHandler: requireAuth() }, async (req) => {
-    const t = store.activeSafetyTimerForOwner(req.user!.sub)
-    return { timer: t ? view(t, Date.now()) : null }
+    const me = req.user!.sub
+    const t = store.activeSafetyTimerForOwner(me)
+    return { timer: t ? view(t, Date.now()) : null, hasEmergencyContact: hasEmergencyContact(me) }
   })
 
   // 开始一次安全报到。同一人至多一个 active——重开即重置：取消旧的、起新的。
@@ -57,11 +63,9 @@ export function registerSafetyRoutes(app: FastifyInstance, store: Store,
       startedAt: now, dueAt: now + parsed.data.durationMinutes * 60_000, status: 'active',
     }
     store.createSafetyTimer(timer)
-    // 无紧急联系人预警（防假安心）：dead-man's switch 到期只对"我拥有的、已接受且标为紧急"的联系人扇出
-    // （与 checkin.ts fireExpiredSafetyTimers 同口径）——一个都没有则到期告警**无人可通知**，报到形同虚设。
-    // 不阻断开始（用户可能正要去加联系人），但据此让客户端提示"先设紧急联系人，否则到点没人会被通知"。
-    const hasEmergencyContact = store.linksByOwner(me).some((l) => (l.status ?? 'accepted') === 'accepted' && l.isEmergency)
-    return { timer: view(timer, now), hasEmergencyContact }
+    // 无紧急联系人预警（防假安心）：一个都没有则到期告警**无人可通知**、报到形同虚设。不阻断开始
+    // （用户可能正要去加联系人），但据此让客户端提示"先设紧急联系人"。判定与 GET/fire 路径共用同一 helper。
+    return { timer: view(timer, now), hasEmergencyContact: hasEmergencyContact(me) }
   })
 
   // 报平安（我平安到了）：结束当前进行中的报到。

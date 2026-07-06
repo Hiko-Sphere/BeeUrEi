@@ -65,6 +65,14 @@ describe('安全报到端点', () => {
     await app.close()
   })
 
+  it('GET /api/safety/checkin 也带 hasEmergencyContact（供进行中持续预警，非只 start 一刻的 toast）', async () => {
+    const { app, blind, stranger } = await setup()
+    // blind 有紧急联系人 → true；stranger 无 → false（即便无 active timer 也返回，供持续/空闲态预警）。
+    expect((await app.inject({ method: 'GET', url: '/api/safety/checkin', headers: blind.h })).json().hasEmergencyContact).toBe(true)
+    expect((await app.inject({ method: 'GET', url: '/api/safety/checkin', headers: stranger.h })).json().hasEmergencyContact).toBe(false)
+    await app.close()
+  })
+
   it('start hasEmergencyContact：待接受 / 非紧急的联系人都不算（须 accepted∧isEmergency，与 fire 一致）', async () => {
     const { app } = await setup()
     const reg = async (u: string, role: string) => (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()

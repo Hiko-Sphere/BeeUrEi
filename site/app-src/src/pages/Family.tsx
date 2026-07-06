@@ -204,9 +204,10 @@ function SafetyCheckInCard() {
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const [duration, setDuration] = useState(60)
+  const [hasEmergencyContact, setHasEmergencyContact] = useState(true) // 乐观默认 true，避免加载中闪现假警告
   const durations = [30, 60, 120, 240]
 
-  useEffect(() => { void (async () => { try { setTimer((await api.safetyCheckin()).timer) } catch { /* 未登录/网络：留空闲态 */ } })() }, [])
+  useEffect(() => { void (async () => { try { const r = await api.safetyCheckin(); setTimer(r.timer); setHasEmergencyContact(r.hasEmergencyContact) } catch { /* 未登录/网络：留空闲态 */ } })() }, [])
 
   const run = async (fn: () => Promise<SafetyTimer | null>, okMsg: string) => {
     setBusy(true)
@@ -219,7 +220,7 @@ function SafetyCheckInCard() {
     setBusy(true)
     try {
       const res = await api.startSafetyCheckin(duration, note.trim() || undefined)
-      setTimer(res.timer)
+      setTimer(res.timer); setHasEmergencyContact(res.hasEmergencyContact)
       if (res.hasEmergencyContact) {
         toast(t('安全报到已开始，到点前记得报平安', 'Check-in started — remember to mark yourself safe'), 'ok')
       } else {
@@ -241,6 +242,13 @@ function SafetyCheckInCard() {
       <h2 className="text-sm font-semibold">{t('安全报到', 'Safety check-in')}</h2>
       {active && timer ? (
         <div className="mt-2 space-y-3">
+          {/* 进行中的持续预警（非只 start 一刻的 toast）：无紧急联系人=到点没报平安也无人会被通知，重载/状态变化后仍在。 */}
+          {!hasEmergencyContact && (
+            <p role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-sm font-medium text-danger">
+              {t('⚠️ 你还没有紧急联系人——到点没报平安也无人会被通知。请在下方把某人设为紧急联系人。',
+                 '⚠️ You have no emergency contact — no one will be alerted if you miss it. Set someone as an emergency contact below.')}
+            </p>
+          )}
           <p className="text-lg font-semibold text-honey" aria-live="polite">{remainingText(timer.remainingSec, lang)}</p>
           {timer.note && <p className="text-sm text-faint">{timer.note}</p>}
           <div className="flex flex-wrap gap-2">

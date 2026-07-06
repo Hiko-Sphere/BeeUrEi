@@ -344,7 +344,7 @@ export const api = {
   setMedicalInfo: (text: string) => put('/api/account/medical', { text }) as Promise<{ ok: boolean; cleared?: boolean }>,
   contactMedicalInfo: (userId: string) => get(`/api/family/${userId}/medical`) as Promise<{ medicalInfo: string; fromName?: string; updatedAt: number | null }>,
   // 安全报到（dead-man's switch）：设时限，到点未报平安则服务端自动告警紧急联系人+发实时位置。与 iOS 同端点。
-  safetyCheckin: () => get('/api/safety/checkin') as Promise<{ timer: SafetyTimer | null }>,
+  safetyCheckin: () => get('/api/safety/checkin') as Promise<{ timer: SafetyTimer | null; hasEmergencyContact: boolean }>,
   startSafetyCheckin: (durationMinutes: number, note?: string) =>
     post('/api/safety/checkin/start', { durationMinutes, ...(note ? { note } : {}) }) as Promise<{ timer: SafetyTimer; hasEmergencyContact: boolean }>,
   completeSafetyCheckin: () => post('/api/safety/checkin/complete', undefined) as Promise<{ ok: boolean; completed: boolean }>,

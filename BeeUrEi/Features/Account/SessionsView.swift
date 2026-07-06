@@ -55,6 +55,11 @@ struct SessionsView: View {
                     }
                 }
                 Text(SessionStrings.lastSeen(s.lastSeenAt, lang)).font(.caption).foregroundStyle(.secondary)
+                // 首次登录时刻（安全审查线索："这台设备我几时登录的？不记得=可疑"，对齐 web SessionsModal 与 Google/GitHub 会话管理）。
+                // 服务端一直下发 createdAt、SessionInfo 也解了它，iOS 却从未展示——死字段（web 已修，iOS 补齐跨端一致）。
+                if let signedIn = SessionStrings.signedIn(s.createdAt, lang) {
+                    Text(signedIn).font(.caption).foregroundStyle(.secondary)
+                }
             }
             Spacer()
             if !s.current {
@@ -83,6 +88,7 @@ struct SessionsView: View {
         var parts = [s.deviceLabel ?? SessionStrings.unknownDevice(lang)]
         if s.current { parts.append(SessionStrings.current(lang)) }
         parts.append(SessionStrings.lastSeen(s.lastSeenAt, lang))
+        if let signedIn = SessionStrings.signedIn(s.createdAt, lang) { parts.append(signedIn) }
         return parts.joined(separator: lang.listSeparator)
     }
 
@@ -119,6 +125,19 @@ enum SessionStrings {
     static func revokeOthersMessage(_ l: Language) -> String {
         l == .zh ? "除这台外，其它所有设备都会被立即登出。" : "All devices except this one will be signed out immediately."
     }
+    /// 首次登录时刻（**绝对**时间，非相对）：登录是固定时点、且安全攸关的时刻本站一贯用绝对（见坐标/时间约定、
+    /// EmergencyLocationTag 铁律），便于本人核对"这台设备我到底几时登录的"。createdAt 缺省 → nil（不展示空行/不误报）。
+    /// 与 web SessionsModal 的"首次登录 fmtTime(createdAt)"跨端一致；格式同 RecordingStrings.timeText（medium 日期 + short 时刻）。
+    static func signedIn(_ ms: Double?, _ l: Language) -> String? {
+        guard let ms else { return nil }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: l.localeIdentifier)
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        let t = f.string(from: Date(timeIntervalSince1970: ms / 1000))
+        return l == .zh ? "首次登录：\(t)" : "Signed in \(t)"
+    }
+
     /// 最近活动相对时间。
     static func lastSeen(_ ms: Double?, _ l: Language) -> String {
         guard let ms else { return l == .zh ? "活动时间未知" : "Last active: unknown" }

@@ -118,6 +118,21 @@ final class AccountStringsTests: XCTestCase {
         XCTAssertNil(try JSONDecoder().decode(CallRecordInfo.self, from: Data(legacy.utf8)).peerId)
     }
 
+    func testSessionSignedInAbsoluteAndBilingual() {
+        // 登录设备「首次登录时刻」死字段修复（服务端一直下发 createdAt、iOS 解了却从未展示；web 已展示）：
+        // createdAt 缺省 → nil（不展示空行/不误报）；有值 → 绝对时刻串（安全审查线索"这台设备我几时登录的"）。
+        XCTAssertNil(SessionStrings.signedIn(nil, .zh))
+        let ms = 1_700_000_000_000.0
+        let zh = SessionStrings.signedIn(ms, .zh)
+        XCTAssertNotNil(zh)
+        XCTAssertTrue(zh!.hasPrefix("首次登录："), "中文须前缀『首次登录：』：\(zh ?? "nil")")
+        XCTAssertTrue(zh!.count > "首次登录：".count, "须含格式化后的时刻、非空前缀：\(zh ?? "nil")")
+        let en = SessionStrings.signedIn(ms, .en)
+        XCTAssertNotNil(en)
+        XCTAssertTrue(en!.hasPrefix("Signed in "), "英文须前缀『Signed in』：\(en ?? "nil")")
+        XCTAssertFalse(en!.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(en ?? "nil")")
+    }
+
     func testEnglishHasNoChinese() {
         let samples = [
             AccountStrings.loginExplain(.en), AccountStrings.forgotFooter(.en),

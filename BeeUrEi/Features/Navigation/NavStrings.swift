@@ -23,6 +23,9 @@ enum NavStrings {
         if !core.isEmpty { return core }
         return status.isEmpty ? locating(l) : status
     }
+    /// 可见"重听"按钮标题：Magic Tap 只是 VoiceOver 手势、很多人不知道，不用 VoiceOver 的盲人更无从触发；
+    /// 提供可达按钮走路时随时重播状态（与 Magic Tap 同调 statusRecap）。
+    static func repeatStatus(_ l: Language) -> String { l == .zh ? "重听下一步和还有多远" : "Repeat next step and distance" }
     static func navStopped(_ l: Language) -> String { l == .zh ? "导航已停止" : "Navigation stopped" }
     static func locationDenied(_ l: Language) -> String {
         l == .zh ? "需要定位权限才能导航，请在系统设置开启定位。"

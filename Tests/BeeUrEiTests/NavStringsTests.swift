@@ -44,6 +44,15 @@ final class NavStringsTests: XCTestCase {
         XCTAssertEqual(NavStrings.statusRecap(instruction: "", remaining: "", status: "", .en), "Locating…")
     }
 
+    func testRepeatStatusButtonLabelBilingual() {
+        // 可见"重听"按钮（导航中显示）：Magic Tap 是 VoiceOver 手势、不用 VoiceOver 的盲人无从触发，故须有可见可点按钮。
+        // 双语、非空、中文点明"重听"、英文含 repeat（不误当别的操作）。
+        XCTAssertTrue(NavStrings.repeatStatus(.zh).contains("重听"), "中文按钮须点明重听：\(NavStrings.repeatStatus(.zh))")
+        let en = NavStrings.repeatStatus(.en)
+        XCTAssertTrue(en.lowercased().contains("repeat"), "英文按钮须含 repeat：\(en)")
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(en)")
+    }
+
     func testEnglishHasNoChinese() {
         let samples = [
             NavStrings.offRoute(.en), NavStrings.navStartedSpeak(5, "Head east", .en),

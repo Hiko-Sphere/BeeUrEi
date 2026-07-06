@@ -159,6 +159,18 @@ struct WalkNavigationView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel([model.status, model.instruction, model.remaining].filter { !$0.isEmpty }.joined(separator: "。"))
 
+                // 可见"重听"按钮（导航中才显示）：Magic Tap 只是 VoiceOver 手势、不用 VoiceOver 的盲人无从触发；
+                // 走路时随时点它重播"下一步 + 还有多远/ETA"（同 Magic Tap 调 statusRecap）。独立可点元素，不并入上面的状态标签。
+                if model.running {
+                    Section {
+                        Button {
+                            NavVoice.shared.speakCallout(NavStrings.statusRecap(instruction: model.instruction, remaining: model.remaining, status: model.status, lang))
+                        } label: {
+                            Label(NavStrings.repeatStatus(lang), systemImage: "speaker.wave.2.fill")
+                        }
+                    }
+                }
+
                 if !model.steps.isEmpty {
                     Section(NavStrings.stepsHeader(lang)) {
                         ForEach(Array(model.steps.enumerated()), id: \.offset) { idx, step in

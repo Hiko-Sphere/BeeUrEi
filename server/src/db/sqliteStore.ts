@@ -990,6 +990,22 @@ export class SqliteStore implements Store {
     ).all(groupId, like, limit)
     return rows.map((r) => this.toMessage(r))
   }
+  searchAllMessagesFor(userId: string, query: string, limit: number): ChatMessage[] {
+    const q = query.trim().toLowerCase()
+    if (q === '') return []
+    const like = '%' + q.replace(/[\\%_]/g, '\\$&') + '%' // 转义 LIKE 通配符，按字面量匹配（与上两者一致）
+    // 授权边界=参与：单聊须本人为收/发方；群消息须本人此刻在群成员表里（groupsFor 已做精确成员过滤）。
+    // 群 id 动态占位符：群数量级小（人均几个），IN 列表远在 SQLite 999 参数上限内。
+    const myGroupIds = this.groupsFor(userId).map((g) => g.id)
+    const groupClause = myGroupIds.length > 0 ? ` OR groupId IN (${myGroupIds.map(() => '?').join(',')})` : ''
+    const rows = this.db.prepare(
+      `SELECT * FROM messages
+       WHERE kind = 'text' AND ulower(text) LIKE ? ESCAPE '\\'
+         AND ((groupId IS NULL AND (fromId = ? OR toId = ?))${groupClause})
+       ORDER BY createdAt DESC, id DESC LIMIT ?`,
+    ).all(like, userId, userId, ...myGroupIds, limit)
+    return rows.map((r) => this.toMessage(r))
+  }
   setGroupRead(groupId: string, userId: string, at: number): void {
     this.db.prepare('INSERT OR REPLACE INTO group_reads (groupId, userId, lastReadAt) VALUES (?, ?, ?)')
       .run(groupId, userId, at)

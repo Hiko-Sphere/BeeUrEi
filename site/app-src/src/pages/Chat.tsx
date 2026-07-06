@@ -59,6 +59,30 @@ export function ChatPage() {
     return items.filter((it) => (it.kind === 'peer' ? it.c.peer.displayName : it.g.group.name).toLowerCase().includes(q))
   }, [items, convoQuery])
 
+  // 跨会话全局消息搜索（WhatsApp 式）：同一个搜索框在按名字过滤会话之外，同时搜**全部**会话的消息正文——
+  // "那个地址在哪个对话里"不必逐个打开找。≥2 字才查 + 0.35s 防抖（与线程内搜索同款）；点击命中直接打开对应会话。
+  const { user: meUser } = useSession()
+  const [msgHits, setMsgHits] = useState<ChatMessage[] | null>(null)
+  useEffect(() => {
+    const q = convoQuery.trim()
+    if (q.length < 2) { setMsgHits(null); return }
+    let stale = false
+    const timer = setTimeout(() => {
+      void api.searchAllMessages(q).then((r) => { if (!stale) setMsgHits(r.messages) }).catch(() => { if (!stale) setMsgHits([]) })
+    }, 350)
+    return () => { stale = true; clearTimeout(timer) }
+  }, [convoQuery])
+  // 命中 → 可打开的会话目标（群按 groupId、单聊按对端 id 在已加载列表里解析名字；解析不到的不渲染，避免死行）。
+  const hitTarget = (m: ChatMessage): { key: string; name: string; open: () => void } | null => {
+    if (m.groupId) {
+      const g = (groups ?? []).find((x) => x.group.id === m.groupId)
+      return g ? { key: `g:${m.id}`, name: g.group.name, open: () => setSel({ kind: 'group', id: g.group.id, name: g.group.name, members: g.members, ownerId: g.group.ownerId, muted: g.muted ?? false }) } : null
+    }
+    const pid = m.fromId === meUser?.id ? m.toId : m.fromId
+    const c = (convos ?? []).find((x) => x.peer.id === pid)
+    return c ? { key: `p:${m.id}`, name: c.peer.displayName, open: () => setSel({ kind: 'peer', id: pid, name: c.peer.displayName, avatar: c.peer.avatar, muted: c.muted ?? false }) } : null
+  }
+
   const back = () => { setSel(null); if (peerId) nav('/chat') }
 
   return (
@@ -93,6 +117,30 @@ export function ChatPage() {
               ))}
             </ul>
           )}
+          {/* 全局消息命中（与上方"按名字过滤的会话"并列）：点击直达对应会话。解析不到会话的命中不渲染。 */}
+          {msgHits && msgHits.length > 0 && (() => {
+            const rows = msgHits.map((m) => ({ m, tgt: hitTarget(m) })).filter((x): x is { m: ChatMessage; tgt: NonNullable<ReturnType<typeof hitTarget>> } => x.tgt !== null)
+            if (rows.length === 0) return null
+            return (
+              <div className="border-t border-[var(--line)]">
+                <h2 className="px-3 pb-1 pt-3 text-xs font-semibold text-faint">{t('消息', 'Messages')}</h2>
+                <ul className="divide-y divide-[var(--line)]">
+                  {rows.map(({ m, tgt }) => (
+                    <li key={tgt.key}>
+                      <button type="button" onClick={tgt.open} className="w-full px-3 py-2.5 text-left transition hover:surface-2"
+                        aria-label={t(`打开与 ${tgt.name} 的会话`, `Open conversation with ${tgt.name}`)}>
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="truncate text-sm font-medium">{tgt.name}</span>
+                          <span className="shrink-0 text-[10px] text-faint">{timeAgo(m.createdAt, lang)}</span>
+                        </div>
+                        <div className="truncate text-xs text-faint">{m.text}</div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
+          })()}
         </div>
       </aside>
 

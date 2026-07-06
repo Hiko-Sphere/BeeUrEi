@@ -311,6 +311,8 @@ export const api = {
     const s = scope.groupId ? `group=${encodeURIComponent(scope.groupId)}` : `with=${encodeURIComponent(scope.peerId ?? '')}`
     return get(`/api/messages/search?${s}&q=${encodeURIComponent(query)}`) as Promise<{ messages: ChatMessage[] }>
   },
+  // 跨会话全局搜索（WhatsApp 式"那个地址在哪个对话里"）：本人参与的全部单聊+所在群，时间倒序。
+  searchAllMessages: (query: string, limit = 20) => get(`/api/messages/search?q=${encodeURIComponent(query)}&limit=${limit}`) as Promise<{ messages: ChatMessage[] }>,
   markRead: (fromId: string) => post('/api/messages/read', { fromId }),
   markGroupRead: (groupId: string) => post('/api/messages/read', { groupId }),
   recallMessage: (id: string) => post(`/api/messages/${id}/recall`) as Promise<{ message: ChatMessage }>,

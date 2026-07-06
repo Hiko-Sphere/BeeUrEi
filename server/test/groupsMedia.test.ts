@@ -380,6 +380,32 @@ describe('会话内消息搜索', () => {
     const forbidden = await app.inject({ method: 'GET', url: `/api/messages/search?group=${gid}&q=${encodeURIComponent('聚餐')}`, headers: auth(out.token) })
     expect(forbidden.statusCode).toBe(403)
   })
+
+  it('全局搜索（不带 with/group）：本人参与的单聊+所在群一并命中；他人会话绝不出现；未登录 401', async () => {
+    const app = buildApp(new MemoryStore())
+    const me = await reg(app, 'glsme', 'blind')
+    const friend = await reg(app, 'glsfr', 'helper')
+    const other = await reg(app, 'glsot', 'helper')
+    await bind(app, me.token, friend.token, 'glsfr')
+    await bind(app, other.token, friend.token, 'glsfr') // friend 与 other 也绑定——他们的会话与我无关
+    // 我的单聊 + 我的群。
+    await app.inject({ method: 'POST', url: '/api/messages', headers: auth(me.token), payload: { toId: friend.user.id, text: '医院地址是幸福路1号' } })
+    const g = await app.inject({ method: 'POST', url: '/api/groups', headers: auth(me.token), payload: { name: '全搜群', memberIds: [friend.user.id] } })
+    const gid = (g.json() as any).group.id as string
+    await app.inject({ method: 'POST', url: '/api/messages', headers: auth(friend.token), payload: { groupId: gid, text: '群里说地址改了' } })
+    // 他人单聊含同一关键词——绝不该进我的全局结果。
+    await app.inject({ method: 'POST', url: '/api/messages', headers: auth(other.token), payload: { toId: friend.user.id, text: '他们的地址别泄漏' } })
+
+    const r = await app.inject({ method: 'GET', url: `/api/messages/search?q=${encodeURIComponent('地址')}`, headers: auth(me.token) })
+    expect(r.statusCode).toBe(200)
+    const msgs = (r.json() as any).messages as { text: string; groupId?: string }[]
+    expect(msgs).toHaveLength(2) // 我的单聊 + 我的群，各一条
+    expect(msgs.some((m) => m.text.includes('幸福路'))).toBe(true)
+    expect(msgs.some((m) => m.groupId === gid)).toBe(true)
+    expect(msgs.some((m) => m.text.includes('泄漏'))).toBe(false) // 他人会话绝不出现
+    // 未登录 401（requireAuth 兜底）。
+    expect((await app.inject({ method: 'GET', url: '/api/messages/search?q=x' })).statusCode).toBe(401)
+  })
 })
 
 describe('未读汇总 /api/unread', () => {

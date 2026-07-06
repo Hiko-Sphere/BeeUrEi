@@ -207,6 +207,30 @@ describe('SqliteStore (node:sqlite)', () => {
     expect(mem2.searchGroupMessages('G', 'meeting', 10).map((m) => m.id)).toEqual(['g3', 'g2', 'g1'])
   })
 
+  it('跨会话全局搜索 searchAllMessagesFor：只含本人参与的单聊+所在群、稳定序，Sqlite 与 Memory 一致', () => {
+    const seed = (s: SqliteStore | MemoryStore) => {
+      s.createGroup({ id: 'gm', name: '我的群', ownerId: 'u1', memberIds: ['u1', 'u9'], createdAt: 1000 })
+      s.createGroup({ id: 'gx', name: '别人的群', ownerId: 'u8', memberIds: ['u8', 'u9'], createdAt: 1000 })
+      s.createMessage({ id: 'a1', fromId: 'u1', toId: 'u2', kind: 'text', text: '医院地址发你', createdAt: 5000 })  // 我发的单聊 ✓
+      s.createMessage({ id: 'a2', fromId: 'u3', toId: 'u1', kind: 'text', text: '地址收到了', createdAt: 6000 })   // 发给我的单聊 ✓
+      s.createMessage({ id: 'a3', fromId: 'u1', toId: '', groupId: 'gm', kind: 'text', text: '群里发个地址', createdAt: 7000 }) // 我在的群 ✓
+      s.createMessage({ id: 'x1', fromId: 'u8', toId: 'u9', kind: 'text', text: '他们的地址', createdAt: 8000 })   // 他人单聊 ✗
+      s.createMessage({ id: 'x2', fromId: 'u8', toId: '', groupId: 'gx', kind: 'text', text: '外群的地址', createdAt: 9000 }) // 非成员群 ✗
+      s.createMessage({ id: 'x3', fromId: 'u1', toId: 'u2', kind: 'image', text: '地址截图data', createdAt: 9500 }) // 非文本 ✗
+    }
+    const sq = new SqliteStore(':memory:'); seed(sq)
+    const mem = new MemoryStore(); seed(mem)
+    const expected = ['a3', 'a2', 'a1'] // 时间倒序；绝不含他人单聊/外群/非文本
+    expect(sq.searchAllMessagesFor('u1', '地址', 10).map((m) => m.id)).toEqual(expected)
+    expect(mem.searchAllMessagesFor('u1', '地址', 10).map((m) => m.id)).toEqual(expected)
+    // 空查询与无命中。
+    expect(sq.searchAllMessagesFor('u1', '', 10)).toEqual([])
+    expect(sq.searchAllMessagesFor('u1', '查无此词zzz', 10)).toEqual([])
+    // 无任何群成员身份的用户（SQL groupClause 空分支）也正常：u2 只有单聊命中。
+    expect(sq.searchAllMessagesFor('u2', '地址', 10).map((m) => m.id)).toEqual(['a1'])
+    expect(mem.searchAllMessagesFor('u2', '地址', 10).map((m) => m.id)).toEqual(['a1'])
+  })
+
   it('搜索大小写不敏感覆盖非 ASCII（重音拉丁/西里尔/全大写拼音）：Sqlite 与 Memory 一致', () => {
     // SQLite 内置 LOWER() 只折叠 ASCII，会漏掉大写非 ASCII 文本（CAFÉ/MÜLLER/ПРИВЕТ）；已改用 ulower
     // 镜像 JS toLowerCase。此测确保生产 SqliteStore 与 MemoryStore 对这些查询给出相同（非空）结果，

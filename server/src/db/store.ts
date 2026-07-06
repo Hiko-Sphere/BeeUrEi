@@ -708,6 +708,9 @@ export interface Store {
   /// 会话内按关键词搜索**文本**消息（不区分大小写，时间倒序，最多 limit 条）。仅 kind=text 可搜。
   searchDirectMessages(a: string, b: string, query: string, limit: number): ChatMessage[]
   searchGroupMessages(groupId: string, query: string, limit: number): ChatMessage[]
+  /// 跨会话全局搜索（WhatsApp 式）：该用户参与的**全部**单聊（本人为收/发方）+ 所在群的文本消息，
+  /// 语义与上两者一致（不区分大小写、时间倒序、limit）。授权边界即"参与"本身——绝不含他人会话。
+  searchAllMessagesFor(userId: string, query: string, limit: number): ChatMessage[]
   /// 群按人已读：记录/读取某人在某群"读到的时间戳"（群未读 = 晚于此且非本人发的消息数）。
   setGroupRead(groupId: string, userId: string, at: number): void
   groupReadAt(groupId: string, userId: string): number
@@ -1512,6 +1515,18 @@ export class MemoryStore implements Store {
     if (q === '') return []
     return [...this.messages.values()]
       .filter((m) => m.groupId === groupId && m.kind === 'text')
+      .filter((m) => m.text.toLowerCase().includes(q))
+      .sort((x, y) => y.createdAt - x.createdAt || y.id.localeCompare(x.id)) // (createdAt,id) 稳定序，与 SqliteStore 一致
+      .slice(0, limit)
+  }
+  searchAllMessagesFor(userId: string, query: string, limit: number): ChatMessage[] {
+    const q = query.trim().toLowerCase()
+    if (q === '') return []
+    // 授权边界=参与：单聊须本人为收/发方；群消息须本人此刻在群成员表里（退群/被移出后不再可搜其历史，与群消息读取一致）。
+    const myGroups = new Set([...this.groups.values()].filter((g) => g.memberIds.includes(userId)).map((g) => g.id))
+    return [...this.messages.values()]
+      .filter((m) => m.kind === 'text')
+      .filter((m) => (m.groupId ? myGroups.has(m.groupId) : m.fromId === userId || m.toId === userId))
       .filter((m) => m.text.toLowerCase().includes(q))
       .sort((x, y) => y.createdAt - x.createdAt || y.id.localeCompare(x.id)) // (createdAt,id) 稳定序，与 SqliteStore 一致
       .slice(0, limit)

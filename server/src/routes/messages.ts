@@ -201,9 +201,12 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     return { messages: store.messagesBetween(me, peer, limit, before, beforeId) }
   })
 
-  // 会话内搜索文本消息：?q=关键词 + (?with=对端 或 ?group=群 id)。时间倒序，最多 50 条。
-  // 鉴权同消息列表（单聊须 accepted 绑定、群须成员），不泄漏无权会话的内容。
-  app.get('/api/messages/search', { preHandler: requireAuth() }, async (req, reply) => {
+  // 搜索文本消息：?q=关键词 + (?with=对端 或 ?group=群 id)；**两者都不带=跨会话全局搜索**（WhatsApp 式，
+  // "那个地址在哪个对话里"）。鉴权同消息列表（单聊须 accepted 绑定、群须成员；全局的授权边界=本人参与），
+  // 不泄漏无权会话的内容。端级限流 60/min（此前无——全局搜索扫全部参与会话更重；与发送同口径，
+  // 边输边查有 0.35s 防抖，正常使用远达不到）。
+  app.get('/api/messages/search', { preHandler: requireAuth(),
+                                    config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
     const q = req.query as { q?: string; with?: string; group?: string; limit?: string }
     const me = req.user!.sub
     const query = (q.q ?? '').trim()
@@ -216,7 +219,9 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
       return { messages: store.searchGroupMessages(q.group, query, limit) }
     }
     const peer = q.with
-    if (!peer) return reply.code(400).send({ error: 'invalid_input' })
+    // 不带 with/group → 全局：本人参与的全部单聊 + 所在群（向后兼容：老客户端总带其一，行为不变；
+    // 此前该形状是 400 invalid_input，无人依赖一个报错形状）。
+    if (!peer) return { messages: store.searchAllMessagesFor(me, query, limit) }
     if (!areLinked(store, me, peer)) return reply.code(403).send({ error: 'not_linked' })
     return { messages: store.searchDirectMessages(me, peer, query, limit) }
   })

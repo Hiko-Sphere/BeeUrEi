@@ -84,6 +84,29 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     return { targets, count: targets.length }
   })
 
+  // 应急就绪自检：在真正遇险**之前**告诉本人「我的紧急联系人此刻能不能收到即时告警」。SOS 一定会写进对方
+  // 收件箱（打开 App 就看得到），但**即时推送**需对方装了 App 且开了通知（有 APNs token 或 Web 推送订阅）——
+  // 若指定的紧急联系人全都没有推送通道，SOS 只会静静躺在对方收件箱、错过黄金时间，而本人此前**无从知晓**这条
+  // 安全网已悄然失效。医疗警报设备的「按键自检」同理。仅报本人自己的紧急联系人（本就是本人数据，不泄露他人）。
+  // reachable 语义=能收到**即时推送**（非"能否收到告警"——无推送者仍会进收件箱），客户端据此提示"请对方开通知"。
+  app.get('/api/emergency/readiness', { preHandler: requireAuth() }, async (req) => {
+    const emergencyLinks = store.linksByOwner(req.user!.sub)
+      .filter((l) => (l.status ?? 'accepted') === 'accepted' && l.isEmergency)
+    // 与告警扇出时的 hasRealtimePush 同口径（emergency/alert 内）：有 APNs token 或（Web 推送已配置且有订阅）即可即时触达。
+    const isReachable = (uid: string, apnsToken?: string): boolean =>
+      !!apnsToken || (webPush.configured && safeWebPushSubs(uid).length > 0)
+    const contacts = emergencyLinks.map((l) => {
+      const u = store.findById(l.memberId)
+      return { name: u?.displayName ?? '—', relation: l.relation, reachable: !!u && isReachable(u.id, u.apnsToken) }
+    })
+    return {
+      hasEmergencyContact: emergencyLinks.length > 0,
+      total: emergencyLinks.length,
+      reachable: contacts.filter((c) => c.reachable).length,
+      contacts,
+    }
+  })
+
   // 摔倒/车祸自动警报：检测端确认（倒计时无人取消）后调用——给所有 accepted 绑定的亲友/协助者
   // 发提醒推送（按收件人语言选文案，带可选坐标）。pending 绑定不通知（未经对方同意，同审查 #6 原则）。
   app.post('/api/emergency/alert', { preHandler: requireAuth(),

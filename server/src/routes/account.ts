@@ -407,6 +407,10 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
       note: 'Your own sent text messages are included; messages from others are not (their words are their data). Users who blocked you are not disclosed (that is their data). Voice/image/video messages list metadata only. Password hashes and tokens are never exported.',
     }
     reply.header('content-disposition', `attachment; filename="beeurei-my-data.json"`)
+    // 安全预警本人：全量数据（含解密医疗信息/住址/消息正文）刚被导出——被盗会话可借此静默外带全部隐私，
+    // 本人须即时知情（GitHub/Google 导出同款通知；security_* 恒越勿扰 + 带外邮件）。best-effort 不阻断下载。
+    const exporter = store.findById(id)
+    if (exporter) notifySecurity(exporter, 'data_exported')
     return data
   })
 

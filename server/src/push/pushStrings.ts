@@ -18,6 +18,8 @@ export type SecurityEvent =
   // 管理员/客服代为变更登录凭据（透明告知本人 + 侦测被盗管理员账号借后台接管受害者）：
   | 'admin_password_reset' | 'admin_passkey_cleared' | 'admin_apple_unlinked'
   | 'admin_identifier_changed' // 管理员改了邮箱/手机号/用户名之一或多个（登录标识）
+  // 全量数据导出（含解密后的医疗信息/住址/消息正文）：被盗会话可静默外带全部隐私——本人须即时知情（GitHub/Google 同款）。
+  | 'data_exported'
 
 /// 地点 label 展示名：home/work 是保留 label，本地化为"家/公司"；自定义 label（如"医院"）原样。
 function placeLabelName(label: string, l: PushLang): string {
@@ -219,6 +221,9 @@ export const pushStrings = {
     switch (event) {
       case 'password_changed': return { title: en ? 'Password changed' : '账号密码已修改',
         body: en ? 'Your account password was just changed. If this wasn’t you, reset your password immediately.' : '你的账号密码刚刚被修改。若非本人操作，请立即重置密码。' }
+      case 'data_exported': return { title: en ? 'Your data was exported' : '你的数据已被导出',
+        body: en ? 'A full export of your account data (incl. medical info, saved places and sent messages) was just downloaded. If this wasn’t you, change your password and sign out other devices now.'
+                 : '你的账号全量数据（含医疗信息、常用地点、发出的消息）刚刚被导出下载。若非本人操作，请立即修改密码并登出其它设备。' }
       case 'phone_changed': return { title: en ? 'Account phone changed' : '账号手机号已更改',
         body: en ? 'The phone number on your account was just changed. If this wasn’t you, secure your account now.' : '你的账号手机号刚刚被更改。若非本人操作，请立即处理。' }
       case 'username_changed': return { title: en ? 'Username changed' : '账号用户名已更改',

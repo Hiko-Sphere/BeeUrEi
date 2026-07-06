@@ -27,6 +27,18 @@ const reg = async (app: ReturnType<typeof buildApp>, username: string, email?: s
   (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username, password: 'strong-pass-9x', ...(email ? { email } : {}) } })).json()
 
 describe('账号安全变更预警本人', () => {
+  it('全量数据导出 → security_data_exported（被盗会话静默外带全部隐私须本人即时知情）；导出响应本身不受影响', async () => {
+    const { app, store } = capturingApp()
+    const r = await reg(app, 'secexp')
+    const res = await app.inject({ method: 'GET', url: '/api/account/export', headers: auth(r.token) })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().profile.username).toBe('secexp') // 下载不受通知影响
+    expect(secKinds(store, r.user.id)).toEqual(['security_data_exported'])
+    const n = store.notificationsForUser(r.user.id).find((x) => x.kind === 'security_data_exported')!
+    expect(n.body).toContain('若非本人操作') // 与全家族同口径的处置指引
+    await app.close()
+  })
+
   it('改密 → security_password_changed（且正文提示"若非本人操作"）', async () => {
     const { app, store } = capturingApp()
     const r = await reg(app, 'secpw')

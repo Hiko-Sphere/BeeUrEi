@@ -51,6 +51,13 @@ self.addEventListener('pushsubscriptionchange', (event) => {
 self.addEventListener('push', (event) => {
   let data = {}
   try { data = event.data ? event.data.json() : {} } catch { /* 非 JSON 负载忽略详情 */ }
+  // PWA 图标角标（Badging API）：App 完全关闭时也能从图标看到未读总数——服务端在推送负载顶层带上
+  // 收件人当前未读总数 badge（与 APNs 图标角标同口径）。>0 置数、<=0 清；不支持/抛错静默跳过。
+  if (typeof data.badge === 'number' && 'setAppBadge' in navigator) {
+    event.waitUntil((async () => {
+      try { data.badge > 0 ? await navigator.setAppBadge(data.badge) : await navigator.clearAppBadge() } catch (_) { /* best-effort */ }
+    })())
+  }
   const title = data.title || 'BeeUrEi'
   const body = data.body || ''
   const d = data.data || {}

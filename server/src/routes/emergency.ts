@@ -161,17 +161,18 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
       try {
         store.createNotification({ id: randomUUID(), userId: member.id, kind: 'emergency_alert', title, body, data: mNotif, createdAt: Date.now() })
       } catch { /* 通知不可阻断安全攸关的告警推送 */ }
+      // badge=该亲友未读总数（含刚写入的本条告警），与图标角标主线一致；APNs+Web Push 同带（后者供 SW 置 PWA 图标角标）。
+      const badge = safeBadge(member.id)
       // Web Push：该亲友的浏览器订阅（web-only 协助者关标签页也能收到系统通知）。
-      // 与 APNs 并行、各自 best-effort；负载给 SW 渲染系统通知 + 点击跳通知页。
+      // 与 APNs 并行、各自 best-effort；负载给 SW 渲染系统通知 + 点击跳通知页 + 置图标角标（badge 顶层）。
       const webJobs = webPush.configured
         ? safeWebPushSubs(member.id).map((sub) =>
-            webPush.send(sub, JSON.stringify({ title, body, data: mNotif })).catch(() => { /* 单订阅失败不阻断 */ }))
+            webPush.send(sub, JSON.stringify({ title, body, badge, data: mNotif })).catch(() => { /* 单订阅失败不阻断 */ }))
         : []
       // APNs 推送仅发给有 token 的；无 token 者靠持久化通知 + Web Push 兜底。
       const apnsJob = member.apnsToken
-        ? pushSender.sendAlert(member.apnsToken, title, body, mExtra, undefined, safeBadge(member.id))
+        ? pushSender.sendAlert(member.apnsToken, title, body, mExtra, undefined, badge)
         : Promise.resolve()
-      // badge=该亲友未读总数（含刚写入的本条告警），与图标角标主线一致。
       return Promise.allSettled([apnsJob, ...webJobs])
     }))
     // notified=有**实时推送通道**的亲友数（APNs token 或 Web Push 订阅）；contacts=accepted 亲友总数。

@@ -117,6 +117,24 @@ describe('Web Push（浏览器推送紧急告警）', () => {
     await a.close()
   })
 
+  it('Web Push 负载顶层带 badge（收件人未读总数）→ 供 SW 置 PWA 图标角标（App 关闭时也更新）', async () => {
+    const wp = new RecordingWebPush()
+    const { a, helper, hAuth, auth } = await seed(wp)
+    await a.inject({ method: 'POST', url: '/api/push/web-subscribe', headers: hAuth, payload: SUB })
+    // 单聊消息 → 收件人 web push 顶层带 badge（含刚发这条未读）。
+    await a.inject({ method: 'POST', url: '/api/messages', headers: auth, payload: { toId: helper.user.id, kind: 'text', text: '在吗' } })
+    const msgP = JSON.parse(wp.sent.at(-1)!.payload)
+    expect(typeof msgP.badge).toBe('number')
+    expect(msgP.badge).toBeGreaterThanOrEqual(1)
+    // 紧急告警 → 亲友 web push 顶层带 badge（含刚写入的告警）。
+    wp.sent.length = 0
+    await a.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth, payload: { kind: 'fall' } })
+    const sosP = JSON.parse(wp.sent[0].payload)
+    expect(typeof sosP.badge).toBe('number')
+    expect(sosP.badge).toBeGreaterThanOrEqual(1)
+    await a.close()
+  })
+
   it('notifyUser 双通道：好友请求等通用通知也推到浏览器订阅（web-only 不漏任何一类）', async () => {
     const wp = new RecordingWebPush()
     const { a, hAuth, auth } = await seed(wp)

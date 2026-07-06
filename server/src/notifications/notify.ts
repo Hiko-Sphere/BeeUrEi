@@ -51,14 +51,15 @@ export function notifyUser(
   // （封禁/举报处置/加好友/路线添加等早已生效）。写入(createNotification)上面已单独 try/catch，读这里补齐同款隔离
   // （见 SOS 扇出复审：写有兜底、读却漏了的同类不对称守卫缺口）。
   try {
+    // badge=该用户未读总数（含刚写入的本条通知）：APNs 图标角标 + Web Push 负载都带上，
+    // 后台/App 关闭时图标角标同样递增（否则图标会漏计未读通知，见 App 图标角标主线）。
+    const badge = totalUnreadFor(store, userId).total
     if (user.apnsToken) {
-      // badge=该用户未读总数（含刚写入的本条通知）：后台收到通知类推送时图标角标同样递增，
-      // 与聊天推送一致（否则图标会漏计未读通知，见 App 图标角标主线）。
-      const badge = totalUnreadFor(store, userId).total
       void push.sendAlert(user.apnsToken, title, body, { kind, ...(data ?? {}) }, undefined, badge).catch(() => { /* best-effort */ })
     }
     if (webPushSender.configured) {
-      const payload = JSON.stringify({ title, body, data: { kind, ...(data ?? {}) } })
+      // badge 置于负载**顶层**（非 data 内）：SW push 处理器读 data.badge → navigator.setAppBadge（PWA 图标角标）。
+      const payload = JSON.stringify({ title, body, badge, data: { kind, ...(data ?? {}) } })
       for (const sub of store.webPushSubscriptionsForUser(userId)) void webPushSender.send(sub, payload).catch(() => { /* best-effort */ })
     }
   } catch { /* 推送读失败绝不阻断/500 调用方已提交的主流程 */ }

@@ -6,6 +6,7 @@ import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { joinNames } from '../lib/listFormat'
 import { parseLocation, appleMapsUrl, locationMessageText } from '../lib/location'
+import { linkifyParts } from '../lib/linkify'
 import { isForwardableKind } from '../lib/chatMessage'
 import { ReportDialog } from '../components/ReportDialog'
 import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo, Modal, Button } from '../components/ui'
@@ -754,7 +755,15 @@ function MessageBody({ m, t }: { m: ChatMessage; t: (z: string, e: string) => st
   // location kind 的服务器）。识别出来渲染成位置，否则会显示成一串裸 URL。
   const loc = parseLocation(m.text)
   if (loc) return <LocationLink loc={loc} t={t} />
-  return <span className="whitespace-pre-wrap break-words">{m.text}</span>
+  // 纯文本：把其中的 http(s) 链接渲染成可点（对端发来的网址免复制粘贴）。只认 http/https、rel=noopener——
+  // 其余仍是 React 转义的纯文本，无 XSS。见 linkify（已单测：危险 scheme/裸域名不当链接、引号处截断）。
+  return (
+    <span className="whitespace-pre-wrap break-words">
+      {linkifyParts(m.text).map((p, i) => 'url' in p
+        ? <a key={i} href={p.url} target="_blank" rel="noopener noreferrer" className="underline break-all">{p.url}</a>
+        : <span key={i}>{p.text}</span>)}
+    </span>
+  )
 }
 
 /// 解析位置：兼容 JSON 形式（kind=location）与文本内嵌 Apple Maps 链接形式（iOS 默认）。

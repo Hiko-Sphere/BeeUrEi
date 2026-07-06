@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseLocation, appleMapsUrl, haversineMeters, routeDistanceMeters, routeDistanceText } from './location'
+import { parseLocation, appleMapsUrl, haversineMeters, routeDistanceMeters, routeDistanceText, locationMessageText } from './location'
 
 const zh = (a: string) => a // t 桩：取中文
 
@@ -86,5 +86,26 @@ describe('parseLocation', () => {
     expect(() => parseLocation(null as unknown as string)).not.toThrow()
     expect(parseLocation(undefined as unknown as string)).toBeNull()
     expect(parseLocation(null as unknown as string)).toBeNull()
+  })
+})
+
+describe('locationMessageText（发送我的位置：与 iOS asText 同口径，可被 parseLocation 还原）', () => {
+  it('生成 📍 + 6 位小数 Apple 地图链接；能被自家 parseLocation 往返还原', () => {
+    const txt = locationMessageText(31.230416, 121.473701)
+    expect(txt).toBe('📍\nhttps://maps.apple.com/?ll=31.230416,121.473701')
+    // 往返：发出去的文本，两端 parseLocation 都能还原成同一坐标（跨端渲染一致的保证）。
+    const parsed = parseLocation(txt!)
+    expect(parsed?.lat).toBeCloseTo(31.230416, 6)
+    expect(parsed?.lng).toBeCloseTo(121.473701, 6)
+  })
+  it('6 位小数补零（与 iOS %.6f 对齐）；整数坐标也带 6 位', () => {
+    expect(locationMessageText(0, 0)).toBe('📍\nhttps://maps.apple.com/?ll=0.000000,0.000000')
+    expect(locationMessageText(-1.5, 100)).toBe('📍\nhttps://maps.apple.com/?ll=-1.500000,100.000000')
+  })
+  it('非有限/越界坐标 → null（不发假位置）', () => {
+    expect(locationMessageText(Number.NaN, 0)).toBeNull()
+    expect(locationMessageText(0, Infinity)).toBeNull()
+    expect(locationMessageText(91, 0)).toBeNull()
+    expect(locationMessageText(0, 181)).toBeNull()
   })
 })

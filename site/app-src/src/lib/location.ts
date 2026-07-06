@@ -9,6 +9,14 @@ export function appleMapsUrl(lat: number | string, lng: number | string, label?:
   return `https://maps.apple.com/?ll=${lat},${lng}&q=${q}`
 }
 
+/// 聊天"发送我的位置"的消息正文（与 iOS LocationPayload.asText() 无名形式同口径：📍\n + Apple 地图链接）。
+/// kind 用 'text'（内嵌链接），故 web/iOS 两端 parseLocation 都能把它还原成同一个位置气泡。
+/// 坐标 6 位小数（≈0.1m，与 iOS %.6f 对齐）；WGS-84（浏览器定位原系，勿转）。非有限/越界坐标 → null（不发假位置）。
+export function locationMessageText(lat: number, lng: number): string | null {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return null
+  return `📍\nhttps://maps.apple.com/?ll=${lat.toFixed(6)},${lng.toFixed(6)}`
+}
+
 /// 两点间大圆（haversine）距离（米，WGS-84，与服务端 geofence 同算法）。任一坐标非有限→0（绝不抛/NaN 污染）。
 export function haversineMeters(aLat: number, aLng: number, bLat: number, bLng: number): number {
   if (![aLat, aLng, bLat, bLng].every((n) => Number.isFinite(n))) return 0

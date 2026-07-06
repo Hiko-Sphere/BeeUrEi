@@ -5,11 +5,11 @@ import { pollWhileVisible } from '../lib/poll'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { joinNames } from '../lib/listFormat'
-import { parseLocation, appleMapsUrl } from '../lib/location'
+import { parseLocation, appleMapsUrl, locationMessageText } from '../lib/location'
 import { isForwardableKind } from '../lib/chatMessage'
 import { ReportDialog } from '../components/ReportDialog'
 import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo, Modal, Button } from '../components/ui'
-import { IconChat, IconSend, IconPlus, IconX } from '../components/icons'
+import { IconChat, IconSend, IconPlus, IconX, IconPin } from '../components/icons'
 
 type Selection = { kind: 'peer'; id: string; name: string; avatar?: string | null; muted?: boolean } | { kind: 'group'; id: string; name: string; members: User[]; ownerId: string; muted: boolean }
 
@@ -310,6 +310,23 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
     } catch (e) { toast(chatErrorText(e, t, t('视频发送失败', 'Failed to send video')), 'error') } finally { setSending(false) }
   }
 
+  // 发送我的当前位置（补齐 iOS 早有的 sendLocation）：取浏览器定位 → 发与 iOS 同口径的位置文本，
+  // 两端都渲染成位置气泡。协助者/家人在聊天里一句"我在这"即分享落点，免口述经纬度。
+  const sendLocation = () => {
+    if (!('geolocation' in navigator)) { toast(t('当前浏览器不支持定位', 'Geolocation not supported'), 'error'); return }
+    setSending(true)
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const body = locationMessageText(pos.coords.latitude, pos.coords.longitude)
+        if (!body) { setSending(false); toast(t('定位无效，请重试', 'Invalid location — try again'), 'error'); return }
+        try { await api.sendMessage(target, 'text', body); await load(); onSent() }
+        catch (e) { toast(chatErrorText(e, t, t('位置发送失败', 'Failed to send location')), 'error') } finally { setSending(false) }
+      },
+      () => { setSending(false); toast(t('无法获取位置，请检查定位权限', 'Could not get location — check location permission'), 'error') },
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 30_000 },
+    )
+  }
+
   const recall = async (m: ChatMessage) => {
     try { await api.recallMessage(m.id); await load() } catch (e) { toast(chatErrorText(e, t, t('撤回失败', 'Recall failed')), 'error') }
   }
@@ -427,6 +444,7 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
       <div className="flex items-center gap-2 border-t border-[var(--line)] p-3">
         <input ref={fileRef} type="file" accept="image/*,video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) { void (f.type.startsWith('video/') ? sendVideo(f) : sendImage(f)) } e.target.value = '' }} />
         <button onClick={() => fileRef.current?.click()} disabled={sending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full surface-2 text-soft disabled:opacity-40" aria-label={t('发送图片或视频', 'Send image or video')}><IconPlus /></button>
+        <button onClick={sendLocation} disabled={sending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full surface-2 text-soft disabled:opacity-40" aria-label={t('发送我的位置', 'Send my location')}><IconPin width={18} height={18} /></button>
         <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }}
           maxLength={4000} /* 与后端 text≤4000 一致：超长在输入端即截，避免发出后才被服务端拒(message_too_long) */
           // aria-label 显式命名输入框：placeholder 在输入后消失、且并非所有读屏都稳定把它当可及名。

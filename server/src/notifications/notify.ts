@@ -64,28 +64,35 @@ export function notifyUser(
   } catch { /* 推送读失败绝不阻断/500 调用方已提交的主流程 */ }
 }
 
+/// 带外安全邮件：给本人**已验证**邮箱发一封安全告警（notifyAccountSecurity 与 notifyNewDeviceLogin 共用）。
+/// 邮箱=攻击者持会话令牌通常不掌握的独立通道。取**最新**用户态（email/emailVerified 可能刚被本次操作改动）：
+/// 故意的——email_changed 后新邮箱未验证→跳过，绝不把"邮箱已改"发到攻击者刚设的新地址（改邮箱另有专发旧地址兜底）。
+/// zh/en 为双语 {title, body}（正文已含"若非本人请立即…"指引）。best-effort，失败绝不阻断已完成的变更或站内/推送。
+function sendOutOfBandSecurityEmail(store: Store, userId: string, zh: { title: string; body: string }, en: { title: string; body: string }): void {
+  try {
+    const fresh = store.findById(userId)
+    if (fresh?.email && fresh.emailVerified) {
+      const mail = securityEventMail(zh, en)
+      void securityMailer.send(fresh.email, mail.subject, mail.text, mail.html).catch(() => { /* best-effort */ })
+    }
+  } catch { /* 邮件告警失败绝不阻断已完成的安全变更或站内/推送通知 */ }
+}
+
 /// 账号安全变更 → 预警本人（单一真相：account/recovery/passkey 各路都调此，杜绝各写各的 title/body/kind 漂移）。
 /// kind 统一 `security_<event>`，经上面的 notifyUser：站内持久化 + best-effort 推送，且 `security_*` 恒越勿扰
 /// （见 quietHours.isAlwaysThrough）——夜间接管当即触达。**任何登录凭据/方式的增删改都应经此**。
 export function notifyAccountSecurity(store: Store, push: PushSender, user: User, event: SecurityEvent): void {
   const { title, body } = pushStrings.securityNotice(event, pushLang(user.language))
   notifyUser(store, push, user.id, `security_${event}`, title, body)
-  // 带外邮件告警：安全变更除 App 内+推送外，再发一封到本人**已验证**邮箱——攻击者持会话令牌通常不掌握邮箱。
-  // 取**最新**用户态（email/emailVerified 可能刚被本次操作改动）：故意的——email_changed 后新邮箱未验证→此处跳过，
-  // 不会把"邮箱已改"发到攻击者刚设的新地址（改邮箱另有专发旧地址的 emailChangedAlertMail 兜底）。best-effort 绝不阻断。
-  try {
-    const fresh = store.findById(user.id)
-    if (fresh?.email && fresh.emailVerified) {
-      const mail = securityEventMail(pushStrings.securityNotice(event, 'zh'), pushStrings.securityNotice(event, 'en'))
-      void securityMailer.send(fresh.email, mail.subject, mail.text, mail.html).catch(() => { /* best-effort */ })
-    }
-  } catch { /* 邮件告警失败绝不阻断已完成的安全变更或站内/推送通知 */ }
+  sendOutOfBandSecurityEmail(store, user.id, pushStrings.securityNotice(event, 'zh'), pushStrings.securityNotice(event, 'en'))
 }
 
 /// 新设备登录本人账号 → 即时预警本人（Apple/Google 式"新登录提醒"，接管早期信号）。
 /// 与 notifyAccountSecurity 同走 `security_*` 前缀（quietHours 恒越勿扰、客户端按 security_ 家族统一渲染/路由到账户页），
 /// 但文案带**动态**设备标签，故单列。deviceLabel 仅供本人辨识哪台设备，绝不用于鉴权。
+/// 新设备登录=最强接管信号，故同样发带外邮件（deviceLabel 经 securityEventMail→renderNotice 的 esc 转义，防邮件注入）。
 export function notifyNewDeviceLogin(store: Store, push: PushSender, user: User, deviceLabel: string | undefined): void {
   const { title, body } = pushStrings.newDeviceNotice(deviceLabel, pushLang(user.language))
   notifyUser(store, push, user.id, 'security_new_device', title, body, deviceLabel ? { deviceLabel } : undefined)
+  sendOutOfBandSecurityEmail(store, user.id, pushStrings.newDeviceNotice(deviceLabel, 'zh'), pushStrings.newDeviceNotice(deviceLabel, 'en'))
 }

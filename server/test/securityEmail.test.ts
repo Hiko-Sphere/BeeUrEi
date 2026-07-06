@@ -9,8 +9,8 @@ const noThrottle = () => new CodeSendLimiter(0, 60_000, 1000)
 const auth = (t: string) => ({ authorization: `Bearer ${t}` })
 
 class CollectMailer implements Mailer {
-  sent: { to: string; subject: string; text: string }[] = []
-  async send(to: string, subject: string, text: string): Promise<void> { this.sent.push({ to, subject, text }) }
+  sent: { to: string; subject: string; text: string; html?: string }[] = []
+  async send(to: string, subject: string, text: string, html?: string): Promise<void> { this.sent.push({ to, subject, text, html }) }
   codeFor(to: string): string { return [...this.sent].reverse().find((m) => m.to === to)?.text.match(/\d{6}/)?.[0] ?? '' }
 }
 
@@ -59,6 +59,33 @@ describe('账号安全变更 → 带外邮件告警本人已验证邮箱', () =>
     const mail = mailer.sent.find((m) => m.to === 'bob@example.com')
     expect(mail).toBeTruthy()
     expect(mail!.subject).toMatch(/用户名|username/i)
+    await app.close()
+  })
+
+  it('新设备登录 → 已验证邮箱收到"新设备登录"安全邮件(含设备名，供本人辨识)', async () => {
+    const { app, mailer, h } = await setup()
+    await setVerifiedEmail(app, mailer, h, 'carol@example.com')
+    mailer.sent.length = 0
+    // 从"另一台设备"登录（deviceName 不同于注册会话的空标签）→ 触发新设备预警。
+    const res = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'alice', password: 'strong-pass-9x', deviceName: 'New Laptop' } })
+    expect(res.statusCode).toBe(200)
+    const mail = mailer.sent.find((m) => m.to === 'carol@example.com')
+    expect(mail).toBeTruthy()
+    expect(mail!.subject).toMatch(/新设备登录|New sign-in/i)
+    expect(mail!.text).toContain('New Laptop') // 含设备名
+    await app.close()
+  })
+
+  it('新设备名含 HTML → 邮件 HTML 转义(deviceName 用户可控，防邮件注入)', async () => {
+    const { app, mailer, h } = await setup()
+    await setVerifiedEmail(app, mailer, h, 'dave@example.com')
+    mailer.sent.length = 0
+    await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'alice', password: 'strong-pass-9x', deviceName: '<script>evil()</script>' } })
+    const mail = mailer.sent.find((m) => m.to === 'dave@example.com')
+    expect(mail).toBeTruthy()
+    expect(mail!.html).toBeTruthy()
+    expect(mail!.html).not.toContain('<script>evil')   // 原样标签绝不进 HTML
+    expect(mail!.html).toContain('&lt;script&gt;')      // 已转义
     await app.close()
   })
 

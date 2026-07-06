@@ -362,6 +362,7 @@ struct ChatView: View {
     @State private var errorText: String?
     @State private var editingMessage: ChatMessageInfo?   // 正在编辑的消息（弹出编辑框）
     @State private var editDraft = ""                     // 编辑框文本
+    @State private var replyingTo: ChatMessageInfo?       // 正在引用回复的消息（输入栏上方显引用条）
     @State private var canLoadEarlier = false   // 顶部"加载更早消息"是否可见
     @State private var loadingEarlier = false    // 正在加载更早历史
     @State private var reachedStart = false      // 已翻到对话最开头（再无更早）
@@ -490,6 +491,17 @@ struct ChatView: View {
                 if m.forwarded == true, m.kind != "recalled" {
                     Text("↪ " + ChatStrings.forwardedTag(lang)).font(.caption2).italic()
                         .foregroundStyle(.secondary).accessibilityHidden(true)
+                }
+                // 引用回复预览（WhatsApp 式，气泡上方）：显被回复者名 + 内容，让人看到在回哪条。视觉呈现；a11y 并入 bubbleA11y。
+                if m.replyTo != nil, m.kind != "recalled" {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(repliedName(m)).font(.caption2.bold()).foregroundStyle(Color.beeHoney)
+                        Text(repliedPreview(m)).font(.caption).lineLimit(1).foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .frame(maxWidth: 220, alignment: .leading)
+                    .background(Color.beeHoney.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                    .accessibilityHidden(true)
                 }
                 bubbleContent(m, mine: mine)
                     .padding(.horizontal, m.kind == "image" || LocationPayload.from(m) != nil ? 4 : 14)
@@ -652,6 +664,8 @@ struct ChatView: View {
         if let r = m.reaction, !r.isEmpty {
             Button(ChatStrings.removeReaction(lang)) { react(m, emoji: "") }
         }
+        // 回复（引用某条消息，群聊尤其需要——不然分不清在回谁哪句）：置引用条，下条文字带 replyTo 发出。
+        Button { replyingTo = m } label: { Label(ChatStrings.replyAction(lang), systemImage: "arrowshape.turn.up.left") }
         // 编辑（仅本人文字、15 分钟内；纯逻辑门控与服务端一致）：预填现文，弹编辑框改后保存。
         if ChatMessageEditPolicy.isEditable(m, myId: myId, nowMs: Date().timeIntervalSince1970 * 1000) {
             Button { editDraft = m.text; editingMessage = m } label: { Label(ChatStrings.editAction(lang), systemImage: "pencil") }
@@ -683,6 +697,10 @@ struct ChatView: View {
         let from = m.fromId == myId ? ChatStrings.me(lang) : (isGroup ? senderName(m.fromId) : target.title)
         var label = ChatStrings.bubbleA11y(from: from, content: content,
                                            time: ChatStrings.timeFormat(m.createdAt), lang)
+        // 引用回复并入盲人所听标签（视觉引用条 accessibilityHidden）：先说"回复X：被引内容"再说本条，明确在回哪句。
+        if m.replyTo != nil, m.kind != "recalled" {
+            label = ChatStrings.replyContextA11y(repliedName(m), repliedPreview(m), lang) + label
+        }
         // 转发/编辑并入盲人所听的整体标签：上方视觉标签 accessibilityHidden，故此处必须补——否则盲人完全听不到
         // 这条是"已转发"（防误信链式内容）或"已编辑"。撤回消息不带（内容已是"已撤回"）。
         label += ChatStrings.forwardedEditedA11y(forwarded: m.forwarded == true && m.kind != "recalled",
@@ -707,6 +725,24 @@ struct ChatView: View {
     // MARK: 输入栏（文本 + 语音条 + 照片/视频）
 
     private var inputBar: some View {
+        VStack(spacing: 6) {
+            if let r = replyingTo {
+                // 引用回复条：被回复者名 + 内容预览 + 取消。盲人经 a11y 标签听到"回复X：…"，明确在回哪条。
+                HStack(spacing: 8) {
+                    Image(systemName: "arrowshape.turn.up.left").font(.caption).foregroundStyle(Color.beeHoney).accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(ChatStrings.replyingToLabel(replyName(r), lang)).font(.caption2).foregroundStyle(Color.beeHoney)
+                        Text(messagePreview(r)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    Spacer()
+                    Button { replyingTo = nil } label: { Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.secondary) }
+                        .accessibilityLabel(ChatStrings.cancelReply(lang))
+                }
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .background(Color.beeHoney.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(ChatStrings.replyingToA11y(replyName(r), messagePreview(r), lang))
+            }
         HStack(spacing: BeeSpacing.sm) {
             // 语音条：点击开始录音，再点结束并发送（盲人友好：点击切换而非长按）。
             Button {
@@ -760,19 +796,50 @@ struct ChatView: View {
             .disabled(sending || draft.trimmingCharacters(in: .whitespaces).isEmpty)
             .accessibilityLabel(ChatStrings.send(lang))
         }
+        }
         .padding(.horizontal).padding(.vertical, 8)
         .background(.bar)
+    }
+
+    /// 消息一行预览（引用条 / 被引气泡 / a11y 用）：媒体/位置给占位词，文字取原文截断。
+    private func messagePreview(_ m: ChatMessageInfo) -> String {
+        if LocationPayload.from(m) != nil { return ChatStrings.locationMessage(lang) }
+        switch m.kind {
+        case "audio": return ChatStrings.voiceMessage(lang)
+        case "image": return ChatStrings.photo(lang)
+        case "video": return ChatStrings.videoMessage(lang)
+        case "recalled": return ChatStrings.recalled(lang)
+        default: return String(m.text.prefix(60))
+        }
+    }
+
+    /// 被回复消息的显示名（"你"/群内发言人名/单聊对端名）——引用条与 a11y 用。
+    private func replyName(_ m: ChatMessageInfo) -> String {
+        if m.fromId == myId { return ChatStrings.me(lang) }
+        return isGroup ? senderName(m.fromId) : target.title
+    }
+
+    /// 气泡里被引用消息（m.replyTo 指向本会话某条）——找得到就用其名/内容预览，找不到（更早未加载）给兜底名。
+    private func repliedMessage(_ m: ChatMessageInfo) -> ChatMessageInfo? {
+        guard let rid = m.replyTo else { return nil }
+        return messages.first { $0.id == rid }
+    }
+    private func repliedName(_ m: ChatMessageInfo) -> String {
+        repliedMessage(m).map { replyName($0) } ?? ChatStrings.repliedUnknown(lang)
+    }
+    private func repliedPreview(_ m: ChatMessageInfo) -> String {
+        repliedMessage(m).map { messagePreview($0) } ?? ""
     }
 
     // MARK: 行为
 
     /// 发消息（按目标路由单聊/群聊）。
-    private func send(kind: String, text: String) async throws -> ChatMessageInfo {
+    private func send(kind: String, text: String, replyTo: String? = nil) async throws -> ChatMessageInfo {
         guard let token = session.token else { throw APIError.unauthorized }
         if let groupId {
-            return try await APIClient().sendGroupMessage(token: token, groupId: groupId, kind: kind, text: text)
+            return try await APIClient().sendGroupMessage(token: token, groupId: groupId, kind: kind, text: text, replyTo: replyTo)
         }
-        return try await APIClient().sendMessage(token: token, toId: peerId ?? "", kind: kind, text: text)
+        return try await APIClient().sendMessage(token: token, toId: peerId ?? "", kind: kind, text: text, replyTo: replyTo)
     }
 
     private func refresh(announceNew: Bool) async {
@@ -907,12 +974,14 @@ struct ChatView: View {
     private func sendText() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        let reply = replyingTo?.id   // 引用回复的消息 id（发送前定格；成功后清引用）
         draft = ""
+        replyingTo = nil
         sending = true
         Task {
             defer { sending = false }
             do {
-                let m = try await send(kind: "text", text: text)
+                let m = try await send(kind: "text", text: text, replyTo: reply)
                 appendSent(m)
                 errorText = nil
             } catch {

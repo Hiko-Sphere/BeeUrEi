@@ -182,6 +182,26 @@ final class ChatStringsTests: XCTestCase {
         }
     }
 
+    func testChatMessageDecodesReplyTo() throws {
+        // 服务端下发 replyTo（引用回复的消息 id），iOS 须解码——此前缺该字段（死字段），引用条与"回复X：…"a11y 都无从渲染。
+        let json = #"{"id":"m1","fromId":"a","toId":"b","kind":"text","text":"hi","createdAt":1000,"replyTo":"m0"}"#
+        XCTAssertEqual(try JSONDecoder().decode(ChatMessageInfo.self, from: Data(json.utf8)).replyTo, "m0")
+        // 非回复消息（绝大多数）缺 replyTo → nil，向后兼容不崩。
+        let plain = #"{"id":"m2","fromId":"a","toId":"b","kind":"text","text":"hi","createdAt":1000}"#
+        XCTAssertNil(try JSONDecoder().decode(ChatMessageInfo.self, from: Data(plain.utf8)).replyTo)
+    }
+
+    func testReplyStringsBilingual() {
+        XCTAssertTrue(ChatStrings.replyingToLabel("妈妈", .zh).contains("妈妈"))
+        let ctx = ChatStrings.replyContextA11y("Mom", "hi", .en)
+        XCTAssertTrue(ctx.contains("Mom") && ctx.contains("hi"))
+        for s in [ChatStrings.replyAction(.en), ChatStrings.cancelReply(.en), ChatStrings.repliedUnknown(.en),
+                  ChatStrings.replyingToLabel("Mom", .en), ChatStrings.replyingToA11y("Mom", "hi", .en), ctx] {
+            XCTAssertFalse(s.isEmpty)
+            XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(s)")
+        }
+    }
+
     private func mkMsg(_ id: String, from: String, reaction: String? = nil) -> ChatMessageInfo {
         let rx = reaction.map { ",\"reaction\":\"\($0)\"" } ?? ""
         let json = "{\"id\":\"\(id)\",\"fromId\":\"\(from)\",\"toId\":\"x\",\"kind\":\"text\",\"text\":\"hi\",\"createdAt\":1000\(rx)}"

@@ -82,6 +82,17 @@ enum ChatStrings {
     static func editSave(_ l: Language) -> String { l == .zh ? "保存" : "Save" }
     static func editSaved(_ l: Language) -> String { l == .zh ? "已保存修改" : "Saved" }
     static func editFailed(_ l: Language) -> String { l == .zh ? "编辑失败，可能已超过 15 分钟或网络异常" : "Couldn't edit — the 15-minute window may have passed" }
+    // 引用回复（引用某条消息回复；群聊尤其需要分清在回谁哪句；与 web 对齐）。
+    static func replyAction(_ l: Language) -> String { l == .zh ? "回复" : "Reply" }
+    static func replyingToLabel(_ name: String, _ l: Language) -> String { l == .zh ? "回复 \(name)" : "Replying to \(name)" }
+    static func cancelReply(_ l: Language) -> String { l == .zh ? "取消回复" : "Cancel reply" }
+    static func repliedUnknown(_ l: Language) -> String { l == .zh ? "一条消息" : "a message" }
+    static func replyingToA11y(_ name: String, _ preview: String, _ l: Language) -> String {
+        l == .zh ? "正在回复 \(name)：\(preview)" : "Replying to \(name): \(preview)"
+    }
+    static func replyContextA11y(_ name: String, _ preview: String, _ l: Language) -> String {
+        l == .zh ? "回复 \(name)：\(preview)。" : "Reply to \(name): \(preview). "
+    }
     static func pickContact(_ l: Language) -> String { l == .zh ? "选择联系人" : "Choose a contact" }
     static func noContacts(_ l: Language) -> String {
         l == .zh ? "还没有绑定的亲友/协助者。先到亲友页发送绑定请求，对方接受后即可聊天。"

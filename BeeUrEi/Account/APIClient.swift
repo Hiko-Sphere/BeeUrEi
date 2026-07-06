@@ -180,6 +180,7 @@ struct ChatMessageInfo: Codable, Sendable, Identifiable, Equatable {
     var editedAt: Int?    // 编辑时刻（ms）；非 nil = 发出后被改过，标"已编辑"（与 web 对齐）
     var readBy: Int?      // 群已读回执：已读到本条的其他成员数（仅自己发的群消息由服务端附）
     var readTotal: Int?   // 群其他成员总数（配 readBy 显示"已读 N/总"；此前群消息无任何已读反馈）
+    var replyTo: String?  // 引用回复的消息 id（同会话内）；渲染被引消息预览 + 盲人听到"回复X：…"（与 web 对齐）
 }
 
 /// 群组（WhatsApp 式：群主建群/加人/踢人/解散，成员可退群）。
@@ -932,9 +933,10 @@ struct APIClient {
 
     // MARK: 聊天（绑定亲友/协助者互发）
 
-    func sendMessage(token: String, toId: String, kind: String, text: String) async throws -> ChatMessageInfo {
-        let data = try await authedSend("POST", "/api/messages", token: token,
-                                        body: ["toId": toId, "kind": kind, "text": text])
+    func sendMessage(token: String, toId: String, kind: String, text: String, replyTo: String? = nil) async throws -> ChatMessageInfo {
+        var body: [String: Any] = ["toId": toId, "kind": kind, "text": text]
+        if let replyTo { body["replyTo"] = replyTo }
+        let data = try await authedSend("POST", "/api/messages", token: token, body: body)
         struct R: Codable { let message: ChatMessageInfo }
         return try JSONDecoder().decode(R.self, from: data).message
     }
@@ -1066,9 +1068,10 @@ struct APIClient {
     }
 
     /// 发群消息。
-    func sendGroupMessage(token: String, groupId: String, kind: String, text: String) async throws -> ChatMessageInfo {
-        let data = try await authedSend("POST", "/api/messages", token: token,
-                                        body: ["groupId": groupId, "kind": kind, "text": text])
+    func sendGroupMessage(token: String, groupId: String, kind: String, text: String, replyTo: String? = nil) async throws -> ChatMessageInfo {
+        var body: [String: Any] = ["groupId": groupId, "kind": kind, "text": text]
+        if let replyTo { body["replyTo"] = replyTo }
+        let data = try await authedSend("POST", "/api/messages", token: token, body: body)
         struct R: Codable { let message: ChatMessageInfo }
         return try JSONDecoder().decode(R.self, from: data).message
     }

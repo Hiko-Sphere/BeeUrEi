@@ -73,7 +73,10 @@ export function registerPasskeyRoutes(app: FastifyInstance, store: Store, pushSe
   })
 
   // 注册：校验并存储凭据（authed）。
-  app.post('/api/auth/passkey/register/verify', { preHandler: requireAuth() }, async (req, reply) => {
+  // 端级限流(与改密/2FA/改手机-用户名同 10/min)：注册/删除 passkey 每次都 notifyAccountSecurity 推送本人
+  // （新增/移除登录凭据=接管信号）。攻击者拿被盗令牌可用自己设备生成大量有效凭据狂加(或删本人 passkey)刷爆
+  // 安全推送、淹没真正的接管告警。正常一辈子加几个 passkey，10/min 极宽松。限流在 onRequest 早于验签，无害正常流。
+  app.post('/api/auth/passkey/register/verify', { preHandler: requireAuth(), config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = z.object({ response: z.any(), deviceName: z.string().max(64).optional() }).safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const user = store.findById(req.user!.sub)
@@ -167,7 +170,7 @@ export function registerPasskeyRoutes(app: FastifyInstance, store: Store, pushSe
   })
 
   // 删除一把 passkey（仅本人）。
-  app.delete('/api/auth/passkey/:id', { preHandler: requireAuth() }, async (req, reply) => {
+  app.delete('/api/auth/passkey/:id', { preHandler: requireAuth(), config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const id = (req.params as { id: string }).id
     // 仅当确有归属本人的该 passkey 被删时才预警（错误/重复 id 不误报"删除了通行密钥"）。
     const existed = store.passkeysForUser(req.user!.sub).some((p) => p.id === id)

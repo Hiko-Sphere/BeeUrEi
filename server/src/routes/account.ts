@@ -259,7 +259,8 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
 
   // 绑定/换绑 Apple ID 到当前账号：验签 identityToken → 确保该 appleSub 未被他人占用 → 写入。
   // “Apple ID 登录则邮箱就是 Apple ID 的邮箱”：本账号无邮箱时顺带绑定 Apple 已验证邮箱。
-  app.post('/api/account/apple', { preHandler: requireAuth() }, async (req, reply) => {
+  // 端级限流(同其它登录凭据变更 10/min)：绑/解 Apple 都 notifySecurity 推送本人（增删登录方式=接管信号），限流防刷推送放大。
+  app.post('/api/account/apple', { preHandler: requireAuth(), config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     if (!appleVerifier) return reply.code(503).send({ error: 'apple_login_not_configured' })
     const parsed = z.object({ identityToken: z.string().min(1) }).safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
@@ -286,7 +287,7 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
   })
 
   // 解绑 Apple ID：仅在仍保留其它登录方式（手机号/已验证邮箱/passkey）时允许，避免锁死账号。
-  app.delete('/api/account/apple', { preHandler: requireAuth() }, async (req, reply) => {
+  app.delete('/api/account/apple', { preHandler: requireAuth(), config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const user = store.findById(req.user!.sub)
     if (!user) return reply.code(404).send({ error: 'not_found' })
     if (!user.appleSub) return { ok: true, appleLinked: false }

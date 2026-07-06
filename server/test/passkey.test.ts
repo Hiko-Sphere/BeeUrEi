@@ -110,6 +110,18 @@ describe('Passkey（WebAuthn）端点', () => {
     const me = await app.inject({ method: 'GET', url: '/api/me', headers: auth(token) })
     expect((me.json() as any).user.hasPasskey).toBe(false)
   })
+
+  it('register/verify 端级限流：连打超 10/min 被 429（防被盗令牌狂加 passkey 刷本人安全推送）', async () => {
+    const app = buildApp(new MemoryStore())
+    const token = await reg(app, 'pkrate')
+    // 无挑战/dummy body：前 10 次走到处理器被拒(4xx)，第 11 次起 onRequest 限流 429（早于验签）。全局 300 远松，改前不 429。
+    let limited = false
+    for (let i = 0; i < 13; i++) {
+      const res = await app.inject({ method: 'POST', url: '/api/auth/passkey/register/verify', headers: auth(token), payload: { response: {} } })
+      if (res.statusCode === 429) { limited = true; break }
+    }
+    expect(limited).toBe(true)
+  })
 })
 
 // 挑战表内存有界：未消费的挑战（请求 options 却不 verify，尤其未认证的 login/options 可被刷）超阈值时机会式清过期项，

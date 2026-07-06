@@ -27,6 +27,9 @@ struct SavedPlacesView: View {
         .navigationTitle(SettingsStrings.savedPlacesTitle(lang))
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
+        // 保存/清除结果主动朗读——盲人在设"家/公司"（喂"回家/去公司"导航），此前只把结果放进静态 Text、
+        // 不朗读：**保存悄悄失败**时盲人以为设好了，日后"回家"却失败（导航攸关）。与 BlocklistView 同口径。
+        .onChange(of: status) { _, s in if !s.isEmpty { A11y.announce(s) } }
     }
 
     @ViewBuilder private func placeSection(header: String, placeholder: String, text: Binding<String>,

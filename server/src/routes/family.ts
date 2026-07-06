@@ -137,7 +137,9 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: P
   app.get('/api/family/links', { preHandler: requireAuth() }, async (req) => {
     const meId = req.user!.sub
     const mine = [...store.linksByOwner(meId), ...store.linksByMember(meId)]
-    return { links: mine.map((l) => viewLink(store, l, meId, isOnline)) }
+    // 稳定、安全优先排序（见 compareContactLinks）：已接受在前、我的紧急联系人置顶、同层按名——
+    // 替代此前 owner/member 拆分的无意义插入序，便于盲人 VoiceOver 按固定顺序定位。
+    return { links: mine.map((l) => viewLink(store, l, meId, isOnline)).sort(compareContactLinks) }
   })
 
   // 待我确认的请求（对方发起、我还没接受；双向通用）。
@@ -165,6 +167,19 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: P
 /// 对方 id（相对查看者）。
 function counterpartId(link: FamilyLink, meId: string): string {
   return link.ownerId === meId ? link.memberId : link.ownerId
+}
+
+/// 联系人列表排序（稳定、安全优先，便于盲人 VoiceOver 记忆位置定位）：
+/// ① 已接受在待确认之前；② **我的紧急联系人**（amOwner∧isEmergency，遇险时我会呼叫的人）置顶；
+/// ③ 同层按显示名本地化排序。**不按在线状态排**——在线是动态的，会让列表位置跳动、破坏盲人对顺序的记忆；
+/// 在线状态改由每项的在线圆点/文字呈现（见 web/iOS 亲友列表）。此前列表按 owner/member 拆分的插入序，无意义、不稳定。
+type SortableContactLink = { memberName: string; isEmergency?: boolean; amOwner?: boolean; status?: string }
+export function compareContactLinks(a: SortableContactLink, b: SortableContactLink): number {
+  const accepted = (l: SortableContactLink) => ((l.status ?? 'accepted') === 'accepted' ? 0 : 1)
+  if (accepted(a) !== accepted(b)) return accepted(a) - accepted(b)
+  const myEmergency = (l: SortableContactLink) => (l.amOwner && l.isEmergency ? 0 : 1)
+  if (myEmergency(a) !== myEmergency(b)) return myEmergency(a) - myEmergency(b)
+  return a.memberName.localeCompare(b.memberName, 'zh-Hans-CN')
 }
 
 /// 关系视图（memberId/memberName 表示"对方"，沿用 iOS FamilyLinkInfo 字段名）。

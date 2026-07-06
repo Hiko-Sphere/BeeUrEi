@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, APIError, contentBlockedText, type FamilyLink, type IncomingLink } from '../lib/api'
+import { api, APIError, contentBlockedText, type FamilyLink, type IncomingLink, type SafetyTimer } from '../lib/api'
 import { hasUsableEmergencyContact } from '../lib/emergencyContacts'
+import { remainingText, durationName } from '../lib/safetyCheckin'
 import { classifyIdentifier } from '../lib/identifier'
 import { useI18n } from '../lib/i18n'
 import { useCall } from './call/CallController'
@@ -70,6 +71,9 @@ export function FamilyPage() {
         <h1 className="text-2xl font-bold tracking-tight">{t('联系人', 'Contacts')}</h1>
         <Button onClick={() => setAddOpen(true)}><IconPlus width={16} height={16} />{t('添加', 'Add')}</Button>
       </div>
+
+      {/* 安全报到（dead-man's switch）：出行前设时限，到点未报平安则自动告警紧急联系人。 */}
+      <SafetyCheckInCard />
 
       {/* 待我确认的请求 */}
       {incoming && incoming.length > 0 && (
@@ -178,6 +182,62 @@ export function FamilyPage() {
         <ReportDialog targetUserId={reportTarget.memberId} onClose={() => setReportTarget(null)} />
       )}
     </div>
+  )
+}
+
+/// 安全报到卡（dead-man's switch）：空闲态选时长+备注开始；进行中显剩余 + 我平安了/延长/取消。与 iOS SafetyCheckInView 对齐。
+function SafetyCheckInCard() {
+  const { t, lang } = useI18n()
+  const toast = useToast()
+  const [timer, setTimer] = useState<SafetyTimer | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+  const [duration, setDuration] = useState(60)
+  const durations = [30, 60, 120, 240]
+
+  useEffect(() => { void (async () => { try { setTimer((await api.safetyCheckin()).timer) } catch { /* 未登录/网络：留空闲态 */ } })() }, [])
+
+  const run = async (fn: () => Promise<SafetyTimer | null>, okMsg: string) => {
+    setBusy(true)
+    try { setTimer(await fn()); toast(okMsg, 'ok') }
+    catch { toast(t('操作失败，请重试', 'Something went wrong — try again'), 'error') }
+    finally { setBusy(false) }
+  }
+  const start = () => run(async () => (await api.startSafetyCheckin(duration, note.trim() || undefined)).timer, t('安全报到已开始，到点前记得报平安', 'Check-in started — remember to mark yourself safe'))
+  const complete = () => run(async () => { await api.completeSafetyCheckin(); return null }, t('已报平安，报到结束', "You're marked safe — check-in ended"))
+  const extend = () => run(async () => (await api.extendSafetyCheckin(60)).timer, t('已延长 1 小时', 'Extended by 1 hour'))
+  const cancel = () => run(async () => { await api.cancelSafetyCheckin(); return null }, t('已取消安全报到', 'Safety check-in canceled'))
+
+  const active = timer?.status === 'active'
+  return (
+    <Card className="p-4">
+      <h2 className="text-sm font-semibold">{t('安全报到', 'Safety check-in')}</h2>
+      {active && timer ? (
+        <div className="mt-2 space-y-3">
+          <p className="text-lg font-semibold text-honey" aria-live="polite">{remainingText(timer.remainingSec, lang)}</p>
+          {timer.note && <p className="text-sm text-faint">{timer.note}</p>}
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={complete} disabled={busy}>{t("我平安了", "I'm safe")}</Button>
+            <Button variant="soft" onClick={extend} disabled={busy}>{t('延长 1 小时', 'Extend 1h')}</Button>
+            <Button variant="ghost" onClick={cancel} disabled={busy}>{t('取消报到', 'Cancel')}</Button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-2 space-y-3">
+          <p className="text-sm text-faint">{t('独自出门前设一个时间。到点前点「我平安了」即可；若忘了或出意外没点，我们会自动把你的实时位置发给你的紧急联系人。', "Before heading out alone, set a timer. Tap “I'm safe” before it ends. If you forget or something happens and you don't, we automatically send your live location to your emergency contacts.")}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-sm text-soft">{t('多久内报平安', 'Check in within')}</label>
+            <select value={duration} onChange={(e) => setDuration(Number(e.target.value))} aria-label={t('报到时长', 'Check-in duration')}
+              className="rounded-lg border border-[var(--line)] surface-2 px-2 py-1.5 text-sm">
+              {durations.map((m) => <option key={m} value={m}>{durationName(m, lang)}</option>)}
+            </select>
+          </div>
+          <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} aria-label={t('备注', 'Note')}
+            placeholder={t('备注（可选，会念给亲友）：我去菜市场，2 小时没回就是出事了', 'Note (optional, read to your family): going to the market; if not back in 2h, something is wrong')} />
+          <Button variant="danger" onClick={start} disabled={busy}>{t('开始报到', 'Start check-in')}</Button>
+        </div>
+      )}
+    </Card>
   )
 }
 

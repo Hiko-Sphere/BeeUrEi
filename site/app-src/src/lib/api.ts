@@ -34,6 +34,7 @@ export interface RouteWaypoint { lat: number; lng: number; note?: string }
 /// 路线库条目（坐标全程 WGS-84——编辑器必须用 OSM 瓦片，绝不可换 amap GCJ-02 瓦片，会系统性偏移百米级）。
 export interface SavedRouteInfo { id: string; ownerId: string; createdBy: string; name: string; waypoints: RouteWaypoint[]; createdAt: number; updatedAt: number; role: 'owner' | 'creator' }
 export interface ContactLocation { userId: string; displayName: string; avatar?: string | null; role: string; lat: number; lng: number; accuracy?: number | null; heading?: number | null; battery?: number | null; updatedAt: number }
+export interface SafetyTimer { id: string; note?: string | null; status: string; startedAt: number; dueAt: number; remainingSec: number }
 export interface AppConfig {
   features: Record<string, boolean>
   registrationEnabled: boolean
@@ -335,6 +336,13 @@ export const api = {
   medicalInfo: () => get('/api/account/medical') as Promise<{ medicalInfo: string; updatedAt: number | null }>,
   setMedicalInfo: (text: string) => put('/api/account/medical', { text }) as Promise<{ ok: boolean; cleared?: boolean }>,
   contactMedicalInfo: (userId: string) => get(`/api/family/${userId}/medical`) as Promise<{ medicalInfo: string; fromName?: string; updatedAt: number | null }>,
+  // 安全报到（dead-man's switch）：设时限，到点未报平安则服务端自动告警紧急联系人+发实时位置。与 iOS 同端点。
+  safetyCheckin: () => get('/api/safety/checkin') as Promise<{ timer: SafetyTimer | null }>,
+  startSafetyCheckin: (durationMinutes: number, note?: string) =>
+    post('/api/safety/checkin/start', { durationMinutes, ...(note ? { note } : {}) }) as Promise<{ timer: SafetyTimer }>,
+  completeSafetyCheckin: () => post('/api/safety/checkin/complete', undefined) as Promise<{ ok: boolean; completed: boolean }>,
+  extendSafetyCheckin: (addMinutes: number) => post('/api/safety/checkin/extend', { addMinutes }) as Promise<{ timer: SafetyTimer }>,
+  cancelSafetyCheckin: () => post('/api/safety/checkin/cancel', undefined),
   // 紧急告警"知道了"回执：回告发起人"有人已看到你的求助"（fromId=发起人，eventId=哪一次告警）。
   emergencyAck: (fromId: string, eventId?: string) => post('/api/emergency/ack', { fromId, eventId }),
   // Web Push（浏览器推送紧急告警）

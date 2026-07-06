@@ -15,9 +15,20 @@ const LS_AVAIL = 'beeurei.web.available'
 interface NavItem { to: string; label: string; icon: ReactNode; badge?: number }
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { user, signOut } = useSession()
+  const { user, self, signOut, refreshMe } = useSession()
   const { t, lang, setLang } = useI18n()
   const [config, setConfig] = useState<AppConfig | null>(null)
+  const [consenting, setConsenting] = useState(false)
+  // 条款重新同意：当前版本(app-config.legalVersion)与用户已同意版本(me.legalConsentVersion)不一致 → 请其重新同意。
+  // 覆盖两种情形：新用户(未记录，null)首次显式同意；老用户在条款实质变更(版本递增)后重新同意（GDPR 可更新同意）。
+  const needsConsent = !!(config?.legalVersion && self && self.legalConsentVersion !== config.legalVersion)
+  const acceptLegal = async () => {
+    if (!config?.legalVersion) return
+    setConsenting(true)
+    try { await api.legalConsent(config.legalVersion); await refreshMe() } // 成功后 self.legalConsentVersion 追平 → 横幅消失
+    catch { /* 失败：保留横幅，用户可重试；不阻断其余功能 */ }
+    finally { setConsenting(false) }
+  }
   const [unread, setUnread] = useState(0)       // 铃铛通知未读（好友请求/紧急/举报等）
   const [chatUnread, setChatUnread] = useState(0) // 聊天未读（单聊+群聊）
   const [missedCalls, setMissedCalls] = useState(0) // 未看未接来电（打开通话记录即清）
@@ -104,6 +115,22 @@ export function Layout({ children }: { children: ReactNode }) {
         )}
         {config?.announcement?.enabled && config.announcement.text && (
           <div className="bg-honey/20 px-4 py-2 text-center text-sm text-[var(--text)]">{config.announcement.text}</div>
+        )}
+        {/* 条款重新同意横幅：醒目但**非阻断**（绝不挡住协助者响应紧急求助）；持续显示直到同意。role=alert 读屏可闻。 */}
+        {needsConsent && (
+          <div role="alert" className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 border-b border-[var(--line)] bg-honey/25 px-4 py-2.5 text-center text-sm text-[var(--text)]">
+            <span>
+              {self?.legalConsentVersion
+                ? t('我们的隐私政策与使用条款已更新，请查看并同意后继续使用。', 'Our Privacy Policy & Terms have been updated — please review and accept to continue.')
+                : t('请查看并同意我们的隐私政策与使用条款。', 'Please review and accept our Privacy Policy & Terms.')}
+              {' '}
+              <a href="https://beeurei.hikosphere.com/legal/" target="_blank" rel="noreferrer" className="font-medium text-accent hover:underline">{t('查看条款', 'Review')}</a>
+            </span>
+            <button type="button" onClick={acceptLegal} disabled={consenting}
+              className="shrink-0 rounded-full bg-honey px-3 py-1.5 text-xs font-semibold text-ink disabled:opacity-50">
+              {t('我已阅读并同意', 'I agree')}
+            </button>
+          </div>
         )}
 
         {/* 顶栏 */}

@@ -2,7 +2,7 @@ import { apiURL } from './config'
 
 // ---------- 模型（与服务端对齐） ----------
 export interface User { id: string; username: string; displayName: string; role: string; status: string; avatar?: string | null; verified?: boolean; online?: boolean }
-export interface SelfView extends User { language?: string | null; email?: string | null; emailVerified?: boolean; phone?: string | null; usernameCustomized?: boolean; appleLinked?: boolean; twoFactorEnabled?: boolean; helperGuidelineAckAt?: number | null }
+export interface SelfView extends User { language?: string | null; email?: string | null; emailVerified?: boolean; phone?: string | null; usernameCustomized?: boolean; appleLinked?: boolean; twoFactorEnabled?: boolean; helperGuidelineAckAt?: number | null; legalConsentVersion?: string | null; legalConsentAt?: number | null }
 export interface VerificationStatusInfo {
   status: 'none' | 'pending' | 'verified' | 'rejected'
   idType?: string
@@ -44,6 +44,7 @@ export interface AppConfig {
   announcement?: { enabled: boolean; text?: string; level?: string } | null
   maintenance?: { enabled: boolean; message?: string } | null
   requireVerification?: boolean
+  legalVersion?: string // 当前条款版本；与 me.legalConsentVersion 不一致则请用户重新同意
 }
 
 export class APIError extends Error {
@@ -216,6 +217,8 @@ export const api = {
   setProfile: (displayName: string) => post('/api/account/profile', { displayName }),
   setAvatar: (avatar: string) => post('/api/account/avatar', { avatar }), // avatar=data:image/...;base64,（前端已 reencode 剥 EXIF+压到 ≤600KB）
   setLanguage: (language: string) => post('/api/account/language', { language }),
+  // 记录用户同意的条款版本（GDPR 可证明同意）：与 app-config.legalVersion 一致后不再提示重新同意。
+  legalConsent: (version: string) => post('/api/account/legal-consent', { version }) as Promise<{ ok: boolean; legalConsentVersion: string; legalConsentAt: number }>,
   setPassword: (oldPassword: string, newPassword: string) => post('/api/account/password', { oldPassword, newPassword }),
   setPhone: (phone: string) => post('/api/account/phone', { phone }),
   setUsername: (username: string) => post('/api/account/username', { username }),

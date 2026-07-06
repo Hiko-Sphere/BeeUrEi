@@ -191,3 +191,32 @@ describe('SafetyCheckInCard 进行中无紧急联系人 → 持续警告横幅',
     expect(screen.queryByRole('alert')).toBeNull()
   })
 })
+
+describe('FamilyPage 紧急联系人责任提醒（我是几人的紧急联系人）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mock(api.blocks).mockResolvedValue({ blocks: [] })
+    mock(api.incomingLinks).mockResolvedValue({ links: [] })
+    mock(api.safetyCheckin).mockResolvedValue({ timer: null, hasEmergencyContact: true })
+  })
+
+  it('有 amOwner=false∧isEmergency 的已接受联系人 → 显示"你是 N 位联系人的紧急联系人"（只数我是对方的）', async () => {
+    mock(api.familyLinks).mockResolvedValue({ links: [
+      { id: 'l1', memberId: 'u1', memberName: 'A', relation: '家人', isEmergency: true, amOwner: false, status: 'accepted' }, // 我是 A 的紧急联系人
+      { id: 'l2', memberId: 'u2', memberName: 'B', relation: '家人', isEmergency: true, amOwner: false, status: 'accepted' }, // 我是 B 的紧急联系人
+      { id: 'l3', memberId: 'u3', memberName: 'C', relation: '家人', isEmergency: true, amOwner: true, status: 'accepted' },  // C 是我的紧急联系人（不计）
+      { id: 'l4', memberId: 'u4', memberName: 'D', relation: '家人', isEmergency: true, amOwner: false, status: 'pending' },  // 未接受（不计）
+    ] })
+    render(<FamilyPage />)
+    expect(await screen.findByText(/你是 2 位联系人的紧急联系人/)).toBeInTheDocument()
+  })
+
+  it('无"我是对方紧急联系人"的关系 → 不显示提醒', async () => {
+    mock(api.familyLinks).mockResolvedValue({ links: [
+      { id: 'l1', memberId: 'u1', memberName: '阿明', relation: '邻居', isEmergency: true, amOwner: true, status: 'accepted' }, // 只是阿明是我的紧急联系人
+    ] })
+    render(<FamilyPage />)
+    await screen.findByText('阿明') // 联系人已渲染（名字唯一，不与头像首字母冲突）
+    expect(screen.queryByText(/位联系人的紧急联系人/)).toBeNull()
+  })
+})

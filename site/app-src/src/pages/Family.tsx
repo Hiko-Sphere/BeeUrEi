@@ -74,6 +74,9 @@ export function FamilyPage() {
 
   const accepted = (links ?? []).filter((l) => (l.status ?? 'accepted') === 'accepted')
   const pendingOut = (links ?? []).filter((l) => l.status === 'pending' && l.outgoing)
+  // 我是几个人的紧急联系人（amOwner=false ∧ isEmergency ∧ 已接受）——TA 遇险/摔倒/未报到时会呼叫/告警我。
+  // 责任提醒：协助者常不自知肩负多少人的安全网，须保持可联系（设备开着、App 能收推送）。
+  const iAmEmergencyFor = accepted.filter((l) => l.amOwner === false && l.isEmergency).length
 
   return (
     <div className="flex flex-col gap-5">
@@ -81,6 +84,15 @@ export function FamilyPage() {
         <h1 className="text-2xl font-bold tracking-tight">{t('联系人', 'Contacts')}</h1>
         <Button onClick={() => setAddOpen(true)}><IconPlus width={16} height={16} />{t('添加', 'Add')}</Button>
       </div>
+
+      {/* 责任提醒：我是几个人的紧急联系人——TA 遇险时会呼叫/告警我，须保持可联系。role=status 读屏可闻。 */}
+      {iAmEmergencyFor > 0 && (
+        <div role="status" className="flex items-start gap-2 rounded-xl bg-honey/10 px-3 py-2.5 text-sm text-soft">
+          <IconShield width={18} height={18} className="mt-0.5 shrink-0 text-accent" />
+          <span>{t(`你是 ${iAmEmergencyFor} 位联系人的紧急联系人——TA 遇险时会呼叫你。请保持手机可联系、App 能收到通知。`,
+                   `You're the emergency contact for ${iAmEmergencyFor} ${iAmEmergencyFor > 1 ? 'people' : 'person'} — they'll call you if they need help. Keep your phone reachable and notifications on.`)}</span>
+        </div>
+      )}
 
       {/* 安全报到（dead-man's switch）：出行前设时限，到点未报平安则自动告警紧急联系人。 */}
       <SafetyCheckInCard />

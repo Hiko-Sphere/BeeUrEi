@@ -227,7 +227,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     if (!ref || !kycBlobExists(ref.blobId)) return reply.code(404).send({ error: 'not_found' }) // 已按留存清除
     let plain: Buffer
     try {
-      plain = openSealed(ref.sealed, readKycBlob(ref.blobId), { submissionId: v.id, kind: kind as KycDocKind })
+      plain = openSealed(ref.sealed, await readKycBlob(ref.blobId), { submissionId: v.id, kind: kind as KycDocKind })
     } catch {
       return reply.code(404).send({ error: 'not_found' })
     }

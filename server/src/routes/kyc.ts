@@ -119,7 +119,7 @@ export function registerKycRoutes(app: FastifyInstance, store: Store): void {
     const blobId = randomUUID()
     ensureKycDir()
     const { sealed, ciphertext } = seal(normalized.buf, { submissionId: id, kind })
-    writeKycBlob(blobId, ciphertext)
+    await writeKycBlob(blobId, ciphertext)
     const ref: KycBlobRef = { kind: kind as KycDocKind, blobId, sealed, mime: normalized.mime }
 
     // 覆盖同 kind 的旧图（删旧密文文件）。

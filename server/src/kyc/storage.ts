@@ -1,4 +1,5 @@
-import { mkdirSync, rmSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { mkdirSync, rmSync, existsSync } from 'node:fs'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 /// KYC 证件密文磁盘存储——与通用 media/storage.ts 刻意隔离：
@@ -19,12 +20,14 @@ export function ensureKycDir(): void {
   mkdirSync(kycDir(), { recursive: true, mode: 0o700 })
 }
 
-export function writeKycBlob(id: string, ciphertext: Buffer): void {
-  writeFileSync(kycBlobPath(id), ciphertext, { mode: 0o600 })
+// 异步读写（非 *Sync）：证件密文单文件最大 8MB、每次提交 2~3 张，同步写会阻塞事件循环卡住全服务
+// （含紧急呼叫）——与 media 落盘同治。await 由调用方保证顺序（写完再登记 ref / 读到再解密）。
+export async function writeKycBlob(id: string, ciphertext: Buffer): Promise<void> {
+  await writeFile(kycBlobPath(id), ciphertext, { mode: 0o600 })
 }
 
-export function readKycBlob(id: string): Buffer {
-  return readFileSync(kycBlobPath(id))
+export async function readKycBlob(id: string): Promise<Buffer> {
+  return readFile(kycBlobPath(id))
 }
 
 export function kycBlobExists(id: string): boolean {

@@ -277,6 +277,23 @@ describe('摔倒/车祸紧急警报', () => {
     await app.close()
   })
 
+  it('值守可观测：SOS 触达 0 位（有联系人但都无实时推送通道）→ emergency_unreachable_total 递增；有可达者不增', async () => {
+    const app = buildApp(new MemoryStore())
+    const blind = await reg(app, 'unrblind', 'blind')
+    const fam = await reg(app, 'unrfam', 'helper') // accepted 但不注册任何 push token → 不可达
+    await bind(app, blind.token, fam.token, 'unrfam')
+    // 预置基线：counter 已由 app.ts 预置为 0。发一条触达 0 的告警 → 应递增到 1。
+    const res = await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token), payload: { kind: 'fall' } })
+    expect((res.json() as any).notified).toBe(0)  // 无人有实时推送通道
+    expect((res.json() as any).contacts).toBe(1)  // 但确有 1 位联系人（区别于"没设联系人"的配置问题）
+    expect((await app.inject({ method: 'GET', url: '/metrics' })).body).toContain('beeurei_emergency_unreachable_total 1')
+    // 给 fam 注册 APNs token → 下一条可达 → counter 不再增（仍为 1，非 2）。
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(fam.token), payload: { token: 'a'.repeat(64) } })
+    await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token), payload: { kind: 'crash' } })
+    expect((await app.inject({ method: 'GET', url: '/metrics' })).body).toContain('beeurei_emergency_unreachable_total 1')
+    await app.close()
+  })
+
   it('幂等：同一 alertId 重试不重复通知亲友（客户端可安全重试提高送达率）', async () => {
     const push = new FakePush()
     const app = buildApp(new MemoryStore(), { pushSender: push })

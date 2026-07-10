@@ -307,6 +307,11 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
       location: { source: locSource ?? 'none', ...(locAgeSec != null ? { ageSec: locAgeSec } : {}) },
     }
     metrics?.inc('emergency_alerts_total') // 值守可观测：Prometheus 对告警速率设阈值（风暴/异常静默都值得看）
+    // 触达=0 但有联系人：SOS 发出却**无人能实时收到**（联系人都没装 App/没开推送）——安全网静默失效，
+    // 是运维最该 page 的信号（求助仅进对方收件箱、大概率错过黄金时间）。与 admin 每事件「未触达任何人」红标
+    // 同口径的**聚合**：per-event 红标要人盯着看板，此计数可直接设 Prometheus 告警。contacts===0 不计（那是
+    // 用户没设紧急联系人的**配置**问题，就绪卡已在客户端预警，非运维侧异常）。
+    if (result.notified === 0 && result.contacts > 0) metrics?.inc('emergency_unreachable_total')
     // 紧急事件日志（治理/值守，admin 可见）：best-effort——日志失败绝不影响告警响应。
     // alertId 重试在上方 dedup 已短路返回，不会重复落账。
     try {

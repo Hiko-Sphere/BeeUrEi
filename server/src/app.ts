@@ -153,6 +153,9 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
                       // 报平安(allclears)；无人响应升级重呼(escalations)；安全报到到期告警(checkin_fires)/到期前提醒(checkin_reminders)。
                       // 送达健康看 apns/web_push_*；这几条看**人的响应侧**：ack 率低/升级率高=告警没被看见或没人管，值得告警。
                       'emergency_acks_total', 'emergency_responding_total', 'emergency_allclears_total',
+                      // 触达=0 的告警（SOS/dead-man's-switch 发出却无人能实时收到）：安全网静默失效的**运维告警**信号，
+                      // 首呼(emergency.ts)与报到到期(checkin.ts)两处都 inc；预置 0 使 rate() 从启动即可用（否则零事件时 series 缺失）。
+                      'emergency_unreachable_total',
                       'emergency_escalations_total', 'safety_checkin_fires_total', 'safety_checkin_reminders_total',
                       'web_push_sent_total', 'web_push_failed_total',
                       'apns_sent_total', 'apns_failed_total',

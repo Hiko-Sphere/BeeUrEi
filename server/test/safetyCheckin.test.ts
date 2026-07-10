@@ -227,6 +227,23 @@ describe('安全报到到期自动告警（fireExpiredSafetyTimers）', () => {
     expect(capPush.alerts.find((a) => a.token === 'h'.repeat(64))).toBeTruthy() // APNs 也确实扇出到了
   })
 
+  it('值守可观测：报到到期告警触达 0 位（有联系人但都无推送）→ emergency_unreachable_total 递增；可达则不增', async () => {
+    const { store, blind, family } = await setup()
+    const now = Date.now()
+    const incs: string[] = []
+    const metrics = { inc: (name: string) => { incs.push(name) } }
+    // family（accepted∧isEmergency）无 apnsToken、webPush 为 Noop（未配）→ 不可达 → 触达 0。
+    store.createSafetyTimer({ id: 'stUnr', ownerId: blind.id, startedAt: now - 30 * 60_000, dueAt: now - 1000, status: 'active' })
+    expect(fireExpiredSafetyTimers(store, new CapturingPush(), webPush, now, GRACE, undefined, metrics)).toBe(1)
+    expect(incs.filter((n) => n === 'emergency_unreachable_total')).toHaveLength(1) // 触达 0 且有联系人 → 计数
+    // 可达场景：family 有 APNs token → notified≥1 → 不计。
+    incs.length = 0
+    store.updateUser(family.id, { apnsToken: 'k'.repeat(64) })
+    store.createSafetyTimer({ id: 'stReach', ownerId: blind.id, startedAt: now - 30 * 60_000, dueAt: now - 1000, status: 'active' })
+    fireExpiredSafetyTimers(store, new CapturingPush(), webPush, now, GRACE, undefined, metrics)
+    expect(incs.filter((n) => n === 'emergency_unreachable_total')).toHaveLength(0) // 可达 → 不计
+  })
+
   // 最后已知位置来源 stub（形状同 LiveLocationRegistry.lastKnownForEmergency）。
   const liveStub = (loc?: { lat: number; lng: number; updatedAt: number }) => ({ lastKnownForEmergency: () => loc })
 

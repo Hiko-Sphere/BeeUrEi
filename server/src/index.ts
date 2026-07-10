@@ -101,7 +101,7 @@ async function main(): Promise<void> {
     catch (e) { console.warn('[safety] 报到提醒失败:', (e as Error).message) }
     // 安全报到到期未确认平安 → 自动告警亲友（与升级重呼同 60s tick，共用 push 通道）。
     // 传 app.liveLocations：若本人在共享位置，取最后已知位置兜底附给亲友（家人才知去哪找人，与 SOS 同款）。
-    try { const f = fireExpiredSafetyTimers(store, pushSender, webPushSender, Date.now(), safetyStaleGraceMs, app.liveLocations); if (f) { app.metrics.inc('safety_checkin_fires_total', f); console.log(`[safety] 到期未报到自动告警 ${f} 条`) } }
+    try { const f = fireExpiredSafetyTimers(store, pushSender, webPushSender, Date.now(), safetyStaleGraceMs, app.liveLocations, app.metrics); if (f) { app.metrics.inc('safety_checkin_fires_total', f); console.log(`[safety] 到期未报到自动告警 ${f} 条`) } }
     catch (e) { console.warn('[safety] 报到告警失败:', (e as Error).message) }
     // 每日定时报到（Snug Safety 式）：到点自动为配置了的用户开启一次报到（超时未报平安走上面的告警链）。
     try { const s = startDueDailyCheckins(store, pushSender, webPushSender, Date.now()); if (s) { app.metrics.inc('safety_daily_checkin_starts_total', s); console.log(`[safety] 每日定时报到自动开启 ${s} 条`) } }

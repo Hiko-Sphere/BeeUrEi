@@ -105,6 +105,7 @@ export function remindDueSoonSafetyTimers(
 export function fireExpiredSafetyTimers(
   store: Store, push: PushSender, webPush: WebPushSender, now: number, staleGraceMs: number,
   live?: LastKnownLocationSource,
+  metrics?: { inc(name: string, by?: number): void }, // 可选：触达=0 的报到告警计数（dead-man's-switch 无人能实时收到）
 ): number {
   const due = store.expiredActiveSafetyTimers(now)
   const safeSubs = (uid: string) => { try { return store.webPushSubscriptionsForUser(uid) } catch { return [] } }
@@ -200,6 +201,9 @@ export function fireExpiredSafetyTimers(
           void push.sendAlert(m.apnsToken, title, body, extra, undefined, badge).catch(() => { /* 单点失败不阻断 */ })
         }
       }
+      // 触达=0 但有联系人：dead-man's-switch 到点告警却无人能实时收到——比 SOS 首呼未触达更凶险（本人可能已
+      // 失能、这正是最后一道防线），运维最该 page。与 emergency.ts 首呼同口径的聚合信号；members===0 不计（无联系人是配置问题）。
+      if (notified === 0 && members.length > 0) metrics?.inc('emergency_unreachable_total')
       fired++
     } catch { /* 单条报到告警失败不阻断其余（已 markFired/expired 则不再重试同一条） */ }
   }

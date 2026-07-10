@@ -169,6 +169,19 @@ describe('安全报到到期自动告警（fireExpiredSafetyTimers）', () => {
     expect(store.unacknowledgedEmergencyEvents(now, now).some((e) => e.id === after.eventId)).toBe(true)
   })
 
+  it('陈旧超宽限（到期时宕机、恢复已晚 >staleGraceMs）→ 不惊动亲友、标 expired、不建 event、只通知本人（防误报风暴）', async () => {
+    const { store, blind, family } = await setup()
+    const now = Date.now()
+    // dueAt 在 now 之前**超过 GRACE**（模拟到期那刻服务端宕机、恢复时已过宽限）。
+    store.createSafetyTimer({ id: 'stStale', ownerId: blind.id, note: '走夜路', startedAt: now - 3 * 60 * 60_000, dueAt: now - GRACE - 60_000, status: 'active' })
+    expect(fireExpiredSafetyTimers(store, push, webPush, now, GRACE)).toBe(0) // 不计入"已告警"——陈旧不迟发亲友告警
+    expect(missed(store, family.id)).toHaveLength(0)                          // 亲友**不**收 checkin 告警（防恢复后陈旧计时器轰炸）
+    expect(store.getSafetyTimer('stStale')!.status).toBe('expired')          // 标 expired（非 fired；admin 可见"曾有一次未能守护"）
+    expect(store.emergencyEventsForUser(blind.id)).toHaveLength(0)            // 不建 emergency_event → 不触发升级重呼
+    // 但不静默丢弃：本人收到"报到已过期"诚实通知，可自查/重开/手动求助。
+    expect(store.notificationsForUser(blind.id).filter((n) => n.kind === 'safety_checkin_expired')).toHaveLength(1)
+  })
+
   it('未报到告警 → 亲友 web push 顶层带 badge（含刚写入的告警通知）→ SW 可置 PWA 图标角标', async () => {
     const { store, blind, family } = await setup()
     const now = Date.now()

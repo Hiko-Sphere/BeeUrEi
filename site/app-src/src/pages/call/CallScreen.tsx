@@ -158,6 +158,8 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
       case 'peerVideoOn': return t('对方已开启画面', 'Sharing their camera')
       case 'signalingClosed': return t('连接已断开', 'Connection lost')
       case 'mediaFailed': return t('媒体连接失败', 'Media connection failed')
+      // 中继不可达：无脑"稍后重试"帮不上（是系统性的），给可行动的指引——换网络最可能奏效。
+      case 'relayUnreachable': return t('无法建立媒体连接——网络受限，换个网络（Wi‑Fi/蜂窝）再试可能有效', 'Couldn’t connect media — network is restricted; switching networks (Wi‑Fi/cellular) may help')
       case 'reconnecting': return t('正在重连…', 'Reconnecting…')
       default: return connected ? t('通话中', 'Connected') : call.waitingText
     }

@@ -1,6 +1,30 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "CFBundleDisplayName" : {
+      "comment" : "Bundle display name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "BeeUrEi"
+          }
+        }
+      }
+    },
+    "CFBundleName" : {
+      "comment" : "Bundle name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "BeeUrEi"
+          }
+        }
+      }
+    },
     "NSCameraUsageDescription" : {
       "comment" : "相机权限弹窗（与 project.yml 中文一致）",
       "localizations" : {
@@ -31,6 +55,18 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "用于「应用锁」：开启后用 Face ID 验证本人才能打开 App，保护你的账号、实时位置、录音与亲友信息。"
+          }
+        }
+      }
+    },
+    "NSHumanReadableCopyright" : {
+      "comment" : "Copyright (human-readable)",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "© 2026 Hiko Sphere 彦穹科技 · 软件制作人 Li Yanpei Hiko"
           }
         }
       }

@@ -4,7 +4,29 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 vi.mock('./config', () => ({ wsURL: (p: string) => 'ws://test' + p }))
 vi.mock('./api', () => ({ api: {}, uploadMedia: vi.fn(), APIError: class extends Error {} }))
 
-import { CallEngine } from './webrtc'
+import { CallEngine, isRelayCandidate, hasTurnServer, iceFailureDiagnostic } from './webrtc'
+
+/// ICE 失败诊断的纯函数（把 TURN 静默失效变成可感知信号）：候选串解析 / TURN 配置探测 / 失败归因。
+describe('ICE 失败诊断纯函数', () => {
+  it('isRelayCandidate：仅 typ relay 判 true；host/srflx/relayed-substring 不误判', () => {
+    expect(isRelayCandidate('candidate:4 1 UDP 92 10.0.0.1 55000 typ relay raddr 1.2.3.4 rport 3478')).toBe(true)
+    expect(isRelayCandidate('candidate:1 1 UDP 21 192.168.1.2 5000 typ host')).toBe(false)
+    expect(isRelayCandidate('candidate:2 1 UDP 16 1.2.3.4 5000 typ srflx raddr 192.168.1.2 rport 5000')).toBe(false)
+    expect(isRelayCandidate('candidate:9 1 UDP 5 5.6.7.8 5000 typ relayed')).toBe(false) // "relayed"≠"relay"，须词边界
+    expect(isRelayCandidate('candidate:9 1 UDP 5 5.6.7.8 5000 typ relay')).toBe(true)     // 行尾也算
+  })
+  it('hasTurnServer：turn:/turns: 判 true（含 urls 数组、大小写、STUN-only 判 false）', () => {
+    expect(hasTurnServer([{ urls: 'stun:stun.l.google.com:19302' }])).toBe(false)
+    expect(hasTurnServer([{ urls: 'turn:1.2.3.4:3478' }])).toBe(true)
+    expect(hasTurnServer([{ urls: ['stun:s:3478', 'TURNS:1.2.3.4:5349'] }])).toBe(true) // 大小写不敏感、数组
+    expect(hasTurnServer([])).toBe(false)
+  })
+  it('iceFailureDiagnostic：配了 TURN 却无 relay 候选 → relayUnreachable；其余 → generic', () => {
+    expect(iceFailureDiagnostic({ turnConfigured: true, relaySeen: false })).toBe('relayUnreachable')
+    expect(iceFailureDiagnostic({ turnConfigured: true, relaySeen: true })).toBe('generic')  // 有 relay 候选=TURN 可达，失败另有因
+    expect(iceFailureDiagnostic({ turnConfigured: false, relaySeen: false })).toBe('generic') // 只配 STUN：失败属预期，不诬指 TURN
+  })
+})
 
 /// CallEngine 的 start()「越过 getUserMedia 后被挂断」守卫（复审 HIGH）：
 /// 若在 getUserMedia 在途期间 hangUp/卸载（此时 pc/ws 尚为 null，hangUp 关不掉任何东西、只置 ended），
@@ -108,6 +130,44 @@ describe('CallEngine ICE 重连横幅恢复', () => {
     e.onIceState('connected')            // 首次连上，从未 disconnected
     expect(statuses).not.toContain('connected') // 无横幅可清，不多喷（首连的 connected 由数据面单独喷）
     e.stopStats()
+  })
+})
+
+// ICE 失败时区分「TURN 不可达」与普通失败并喷不同状态（onIceState 端到端接线，非仅纯函数）。
+describe('CallEngine ICE 失败诊断喷 relayUnreachable', () => {
+  const engineWith = (iceServers: RTCIceServer[]) => {
+    const statuses: string[] = []
+    const e = new CallEngine({
+      callId: 'c1', token: 'T', iceServers,
+      recordPolicy: { enabled: false, requireConsent: false },
+      cb: { onStatus: (k) => statuses.push(k) },
+    }) as unknown as { onIceState: (s: string) => void; relayCandidateSeen: boolean }
+    return { e, statuses }
+  }
+  beforeEach(() => vi.spyOn(console, 'warn').mockImplementation(() => {})) // 静音诊断 warn
+  afterEach(() => vi.restoreAllMocks())
+
+  it('配了 TURN 但全程无 relay 候选 → 喷 relayUnreachable（且 warn），不喷 mediaFailed', () => {
+    const { e, statuses } = engineWith([{ urls: 'turn:1.2.3.4:3478' }])
+    e.onIceState('failed')
+    expect(statuses).toContain('relayUnreachable')
+    expect(statuses).not.toContain('mediaFailed')
+    expect(console.warn).toHaveBeenCalled()
+  })
+
+  it('配了 TURN 且见过 relay 候选 → 普通 mediaFailed（TURN 可达，失败另有因）', () => {
+    const { e, statuses } = engineWith([{ urls: 'turn:1.2.3.4:3478' }])
+    ;(e as unknown as { relayCandidateSeen: boolean }).relayCandidateSeen = true
+    e.onIceState('failed')
+    expect(statuses).toContain('mediaFailed')
+    expect(statuses).not.toContain('relayUnreachable')
+  })
+
+  it('仅 STUN（未配 TURN）失败 → 普通 mediaFailed（不诬指 TURN 故障）', () => {
+    const { e, statuses } = engineWith([{ urls: 'stun:stun.l.google.com:19302' }])
+    e.onIceState('failed')
+    expect(statuses).toContain('mediaFailed')
+    expect(statuses).not.toContain('relayUnreachable')
   })
 })
 

@@ -1,28 +1,6 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
-    "开始导盲" : {
-      "comment" : "Siri shortcut: start obstacle guide / intent title + shortTitle",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Start Guide"
-          }
-        }
-      }
-    },
-    "进入实时避障模式，用相机识别前方障碍并语音提示" : {
-      "comment" : "Siri shortcut: start obstacle guide / intent description",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enter live obstacle mode — the camera detects obstacles ahead and announces them"
-          }
-        }
-      }
-    },
     "· %@" : {
 
     },
@@ -52,6 +30,16 @@
         }
       }
     },
+    "%@ · %@%@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@%3$@"
+          }
+        }
+      }
+    },
     "%@ %@ %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -68,6 +56,16 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@ %2$@ %3$@ · %4$@"
+          }
+        }
+      }
+    },
+    "%@：%@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@：%2$@"
           }
         }
       }
@@ -161,6 +159,18 @@
     },
     "开发者模式" : {
 
+    },
+    "开始导盲" : {
+      "comment" : "Siri shortcut: start obstacle guide / intent title + shortTitle",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start Guide"
+          }
+        }
+      }
     },
     "引导对准整页纸张，自动拍摄并按顺序朗读全文，可连续多页" : {
       "extractionState" : "stale",
@@ -327,6 +337,18 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Read a full page"
+          }
+        }
+      }
+    },
+    "进入实时避障模式，用相机识别前方障碍并语音提示" : {
+      "comment" : "Siri shortcut: start obstacle guide / intent description",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter live obstacle mode — the camera detects obstacles ahead and announces them"
           }
         }
       }

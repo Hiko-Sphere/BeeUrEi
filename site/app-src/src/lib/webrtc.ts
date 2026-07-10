@@ -11,6 +11,27 @@ import { api, uploadMedia, APIError } from './api'
 export type MediaState = 'connecting' | 'connected' | 'failed' | 'disconnected'
 export type Quality = 'unknown' | 'weak' | 'fair' | 'good'
 
+/// ICE 候选是否为 relay（TURN 中继）候选：候选串形如 "candidate:... typ relay ..."。
+/// 判定 TURN 可达性的依据——TURN 不可达时浏览器分配不到 relay 候选，整通连接在双方对称 NAT 下会失败。
+export function isRelayCandidate(candidate: string): boolean {
+  return / typ relay(\s|$)/.test(candidate)
+}
+
+/// iceServers 里是否配了 TURN（turn:/turns:）。仅有 STUN 时无中继兜底，失败即失败，属预期而非 TURN 故障。
+export function hasTurnServer(iceServers: RTCIceServer[]): boolean {
+  return iceServers.some((s) => {
+    const urls = Array.isArray(s.urls) ? s.urls : [s.urls]
+    return urls.some((u) => typeof u === 'string' && /^turns?:/i.test(u.trim()))
+  })
+}
+
+/// ICE 失败时的诊断：配了 TURN 却整通从未收集到任何 relay 候选 → 'relayUnreachable'（强指向 TURN
+/// 服务器不可达/被防火墙挡，如安全组未放行 3478）——把静默 degrade 变成可感知、可行动的信号（假安心防护）。
+/// 否则 'generic'（直连/STUN 路径都没打通，多为对端网络问题，重试或换网可能有效）。
+export function iceFailureDiagnostic(o: { turnConfigured: boolean; relaySeen: boolean }): 'relayUnreachable' | 'generic' {
+  return o.turnConfigured && !o.relaySeen ? 'relayUnreachable' : 'generic'
+}
+
 /// 由候选对往返时延(秒)判定通话质量档：无 rtt→unknown；<150ms→good；<400ms→fair；否则 weak
 /// （含 NaN——保守归为 weak，不虚报好信号）。抽成纯函数便于单测：阈值直接决定盲人听到的
 /// "信号良好/一般/弱"（见 CallScreen QualityBars），回归须挡住。
@@ -74,7 +95,7 @@ export class CallQualityAnnouncer {
 export interface CallPeer { userId?: string; name?: string; avatar?: string | null }
 
 export interface CallCallbacks {
-  onStatus?(text: 'connecting' | 'connected' | 'peerVideoOn' | 'signalingClosed' | 'mediaFailed' | 'reconnecting'): void
+  onStatus?(text: 'connecting' | 'connected' | 'peerVideoOn' | 'signalingClosed' | 'mediaFailed' | 'reconnecting' | 'relayUnreachable'): void
   onConnected?(connected: boolean): void
   onPeer?(peer: CallPeer): void
   onMediaState?(s: MediaState): void
@@ -138,6 +159,7 @@ export class CallEngine {
   private statsTimer: ReturnType<typeof setInterval> | null = null
   private prevPackets?: { received: number; lost: number } // 上一轮累计收/丢包数，用于算区间丢包率
   private iceWasReconnecting = false // ICE 曾进入 disconnected（喷过 'reconnecting'）→ 恢复时须主动喷回 'connected' 清横幅
+  private relayCandidateSeen = false // 本通是否收集到过任何 TURN relay 候选（判 TURN 可达性，见 onIceState 失败诊断）
   private ended = false
   private wsClosedByUs = false
 
@@ -201,7 +223,10 @@ export class CallEngine {
       this.cb.onRemoteStream?.(this.remoteStream)
     }
     this.pc.onicecandidate = (e) => {
-      if (e.candidate) this.send({ type: 'ice', candidate: e.candidate.candidate, sdpMid: e.candidate.sdpMid, sdpMLineIndex: e.candidate.sdpMLineIndex ?? 0 })
+      if (e.candidate) {
+        if (isRelayCandidate(e.candidate.candidate)) this.relayCandidateSeen = true // 收集到 relay 候选=TURN 可达
+        this.send({ type: 'ice', candidate: e.candidate.candidate, sdpMid: e.candidate.sdpMid, sdpMLineIndex: e.candidate.sdpMLineIndex ?? 0 })
+      }
     }
     this.pc.oniceconnectionstatechange = () => this.onIceState(this.pc!.iceConnectionState)
 
@@ -246,7 +271,17 @@ export class CallEngine {
     }
     if (state === 'failed' || state === 'closed') { this.stopStats() }
     if (mapped) this.cb.onMediaState?.(mapped)
-    if (mapped === 'failed') this.cb.onStatus?.('mediaFailed')
+    if (mapped === 'failed') {
+      // 失败诊断：配了 TURN 却全程没收集到 relay 候选 → TURN 不可达（如安全组未放行 3478）。喷更明确的
+      // 'relayUnreachable'（UI 提示换网络而非无脑"稍后重试"），并 console.warn 供运维看见这道静默 degrade。
+      const diag = iceFailureDiagnostic({ turnConfigured: hasTurnServer(this.iceServers), relaySeen: this.relayCandidateSeen })
+      if (diag === 'relayUnreachable') {
+        console.warn('[webrtc] ICE failed with no relay candidate gathered — TURN unreachable? Check coturn / AWS security-group inbound 3478.')
+        this.cb.onStatus?.('relayUnreachable')
+      } else {
+        this.cb.onStatus?.('mediaFailed')
+      }
+    }
     if (mapped === 'disconnected') { this.iceWasReconnecting = true; this.cb.onStatus?.('reconnecting') }
   }
 

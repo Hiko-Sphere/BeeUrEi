@@ -51,6 +51,18 @@ describe('ChatPage 会话列表渲染（防字段漂移 + 合并排序）', () =
     for (const row of rows) expect(within(row).getByRole('button')).toBeInTheDocument()
   })
 
+  it('已注销对端（服务端发空 displayName）→ 会话行本地化「已注销用户」，不渲染空白（i18n 收口）', async () => {
+    mock(api.conversations).mockResolvedValue({
+      conversations: [{ peer: { id: 'gone', displayName: '', avatar: null }, last: msg({ id: 'm9', text: '最后一条', createdAt: 5000 }), unread: 0 }],
+    })
+    mock(api.groups).mockResolvedValue({ groups: [] })
+    render(<ChatPage />)
+    const row = (await screen.findAllByRole('listitem'))[0]
+    // displayName 为空 → items 单点本地化兜底（zh 默认即「已注销用户」）；绝不空白。
+    expect(row).toHaveTextContent('已注销用户')
+    expect(row).toHaveTextContent('最后一条') // 会话本身照常渲染
+  })
+
   it('在线对端显示"在线"圆点（读屏可闻）；离线对端不显示', async () => {
     mock(api.conversations).mockResolvedValue({
       conversations: [

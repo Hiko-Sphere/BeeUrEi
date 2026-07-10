@@ -356,7 +356,8 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
       // 读回执隐私：与消息列表同口径（stripReadAtForViewer 单点）——任一方关了回执，我发的 last 不带 readAt。
       const last = stripReadAtForViewer(store, me, m)
       return {
-        peer: peer ? publicUser(peer) : { id: peerId, username: '', displayName: '已注销用户', role: '', status: '', avatar: null },
+        // 已注销对端：displayName 留**空串**（语言中立），客户端本地化——不在服务端硬编码中文（同 blocks/call-history）。
+        peer: peer ? publicUser(peer) : { id: peerId, username: '', displayName: '', role: '', status: 'disabled', avatar: null },
         last,
         unread: store.unreadCount(me, peerId),
         muted: store.isDmMuted(me, peerId), // 我是否静音了与该对端的单聊（前端显示🔕，免打扰不影响未读）

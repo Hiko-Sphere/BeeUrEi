@@ -40,17 +40,22 @@ export function ChatPage() {
     if (!peerId) { appliedPeer.current = null; return } // 离开单聊路由：允许下次深链同一 peer 再预选
     if (appliedPeer.current === peerId) return           // 本 peerId 已预选过：后续 convos 轮询刷新不再抢回选择
     const c = convos?.find((x) => x.peer.id === peerId)
-    if (c) { appliedPeer.current = peerId; setSel({ kind: 'peer', id: peerId, name: c.peer.displayName, avatar: c.peer.avatar, muted: c.muted ?? false }) }
+    if (c) { appliedPeer.current = peerId; setSel({ kind: 'peer', id: peerId, name: c.peer.displayName || t('已注销用户', 'Deactivated user'), avatar: c.peer.avatar, muted: c.muted ?? false }) }
     else void api.lookupUser(peerId).then((r) => { if (r.user) { appliedPeer.current = peerId; setSel({ kind: 'peer', id: peerId, name: r.user.displayName, avatar: r.user.avatar }) } }).catch(() => {
       void api.familyLinks().then(({ links }) => { const l = links.find((x) => x.memberId === peerId); if (l) { appliedPeer.current = peerId; setSel({ kind: 'peer', id: peerId, name: l.memberName, avatar: l.memberAvatar }) } })
     })
   }, [peerId, convos])
 
   const items = useMemo(() => {
-    const a = (convos ?? []).map((c) => ({ key: `p:${c.peer.id}`, ts: c.last?.createdAt ?? 0, render: () => c, kind: 'peer' as const, c }))
+    // 已注销对端：服务端发空 displayName（语言中立）→ 在此单点本地化，下游列表/过滤/点开(sel.name)全继承，
+    // 免在多处 c.peer.displayName 各自兜底（i18n 收口）。
+    const a = (convos ?? []).map((raw) => {
+      const c = raw.peer.displayName ? raw : { ...raw, peer: { ...raw.peer, displayName: t('已注销用户', 'Deactivated user') } }
+      return { key: `p:${c.peer.id}`, ts: c.last?.createdAt ?? 0, render: () => c, kind: 'peer' as const, c }
+    })
     const b = (groups ?? []).map((g) => ({ key: `g:${g.group.id}`, ts: g.last?.createdAt ?? g.group.createdAt, kind: 'group' as const, g }))
     return [...a, ...b].sort((x, y) => y.ts - x.ts)
-  }, [convos, groups])
+  }, [convos, groups, t])
 
   // 会话列表按名字过滤：联系人/群一多，免逐条 Tab/滚动找人（对读屏用户尤其省事——键入即缩到匹配项）。各主流 IM 标配。
   const [convoQuery, setConvoQuery] = useState('')
@@ -587,15 +592,18 @@ function ForwardDialog({ message, onClose, onSent }: { message: ChatMessage; onC
           <p className="py-6 text-center text-sm text-faint">{t('暂无可转发的会话', 'No conversations to forward to')}</p>
         ) : (
           <ul className="divide-y divide-[var(--line)]">
-            {convos.map((c) => (
+            {convos.map((c) => {
+              const pname = c.peer.displayName || t('已注销用户', 'Deactivated user') // 已注销对端本地化（同会话列表）
+              return (
               <li key={`p:${c.peer.id}`}>
-                <button disabled={busy} onClick={() => void forwardTo({ toId: c.peer.id }, c.peer.displayName)} data-testid="forward-target"
+                <button disabled={busy} onClick={() => void forwardTo({ toId: c.peer.id }, pname)} data-testid="forward-target"
                   className="flex w-full items-center gap-3 px-1 py-2.5 text-left hover:surface-2 disabled:opacity-50">
-                  <Avatar name={c.peer.displayName} src={c.peer.avatar} size={36} />
-                  <span className="truncate text-sm font-medium">{c.peer.displayName}</span>
+                  <Avatar name={pname} src={c.peer.avatar} size={36} />
+                  <span className="truncate text-sm font-medium">{pname}</span>
                 </button>
               </li>
-            ))}
+              )
+            })}
             {groups.map((g) => (
               <li key={`g:${g.group.id}`}>
                 <button disabled={busy} onClick={() => void forwardTo({ groupId: g.group.id }, g.group.name)} data-testid="forward-target"

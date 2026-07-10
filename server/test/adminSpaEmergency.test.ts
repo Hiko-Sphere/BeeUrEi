@@ -90,6 +90,24 @@ describe('管理面板 紧急事件区（响应结果分诊信号）', () => {
     expect(html).not.toContain('升级后仍无人响应')
   })
 
+  it('触达=0（notified===0 且未解除）→ danger 红标"未触达任何人"（求助连一人都没送出，最危急）', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    spa.state.emergencies = [ev({ notified: 0, contacts: 2 })] // 有 2 位亲友但一个都没即时推送到
+    const html = spa.emergencySection()
+    expect(html).toContain('未触达任何人')
+    expect(html).toMatch(/pill danger">⚠️ 未触达任何人/)
+  })
+
+  it('触达>0 → 不标"未触达"；已报平安即使当时触达0也不再红标（已解除，非待介入）', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    spa.state.emergencies = [ev({ notified: 1, contacts: 2 })]
+    expect(spa.emergencySection()).not.toContain('未触达任何人')
+    spa.state.emergencies = [ev({ notified: 0, contacts: 2, resolvedAt: 1_700_000_200_000 })]
+    expect(spa.emergencySection()).not.toContain('未触达任何人') // 已报平安，不再列为待介入
+  })
+
   it('渲染全部取到的事件（标题称"近 100 条"就真给 100 条）：第 21+ 位的"无人响应"红标不被截掉（复审 CONFIRMED）', () => {
     const spa = loadSpa()
     spa.state.lang = 'zh'

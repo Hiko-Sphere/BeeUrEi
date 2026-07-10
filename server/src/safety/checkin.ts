@@ -173,7 +173,12 @@ export function fireExpiredSafetyTimers(
       // 发起人有紧急医疗信息 → **仅提示紧急联系人**查看（他们才可读医疗信息，与 medical 路由授权一致；三链同口径，
       // 见 emergency.ts）。此前挂到共享 notifData/extra 广播给全体，普通联系人点"查看医疗信息"只会拿 403（假提示）
       // 且多泄露"此人有医疗信息在案"——改为按联系人是否紧急分别置。**不影响告警本身送达全体**。
-      const hasMedical = !!store.getMedicalInfo(sender.id)
+      // getMedicalInfo 是**非必需**增强读（仅决定 hasMedical 标志）：better-sqlite3 会在 SQLITE_BUSY/IOERR **同步抛**。
+      // 此处 timer 已在上方 markFired（免反复扫），且是后台 tick 无客户端重试——这句若抛，外层 try 吞掉后整条
+      // 未报到告警扇出被跳过、亲友**永远收不到**这次 dead-man's-switch 告警，且 timer 已 fired 不再重扫。故必须隔离：
+      // 读失败退化为不标医疗信息，告警照送全体（与 emergency.ts SOS 首呼同款修复）。
+      let hasMedical = false
+      try { hasMedical = !!store.getMedicalInfo(sender.id) } catch { /* 非必需读失败不阻断未报到告警扇出 */ }
       for (const m of members) {
         const l = pushLang(m.language)
         const title = pushStrings.safetyCheckinMissedTitle(sender.displayName, l)

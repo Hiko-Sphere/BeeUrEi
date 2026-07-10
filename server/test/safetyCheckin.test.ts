@@ -208,6 +208,25 @@ describe('安全报到到期自动告警（fireExpiredSafetyTimers）', () => {
     expect(capPush.alerts[0]?.extra?.hasMedical).toBeUndefined()
   })
 
+  it('安全攸关：医疗信息读抛错（SQLITE_BUSY 等）不吞掉未报到告警——非必需读绝不阻断 dead-man\'s-switch 扇出', async () => {
+    // timer 在扇出前已 markFired（免反复扫）+ 后台 tick 无客户端重试：若 getMedicalInfo 同步抛未被隔离，
+    // 外层 try 吞掉后整条未报到告警被跳过、亲友**永远收不到**，且 timer 已 fired 不再重扫——告警永久丢失。
+    class ThrowingMedicalStore extends MemoryStore {
+      getMedicalInfo(_userId: string): undefined { throw new Error('SQLITE_BUSY: database is locked') }
+    }
+    const { store, blind, family } = await setup(new ThrowingMedicalStore())
+    const now = Date.now()
+    store.updateUser(family.id, { apnsToken: 'h'.repeat(64) })
+    store.createSafetyTimer({ id: 'stThrow', ownerId: blind.id, note: '走夜路', startedAt: now - 30 * 60_000, dueAt: now - 1000, status: 'active' })
+    const capPush = new CapturingPush()
+    expect(fireExpiredSafetyTimers(store, capPush, webPush, now, GRACE)).toBe(1) // timer 照 fire，未因医疗读抛错被吞
+    // 关键：亲友仍收到未报到告警（扇出完整），只是退化为不带 hasMedical。
+    const alerts = missed(store, family.id)
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0].data?.hasMedical).toBeUndefined()
+    expect(capPush.alerts.find((a) => a.token === 'h'.repeat(64))).toBeTruthy() // APNs 也确实扇出到了
+  })
+
   // 最后已知位置来源 stub（形状同 LiveLocationRegistry.lastKnownForEmergency）。
   const liveStub = (loc?: { lat: number; lng: number; updatedAt: number }) => ({ lastKnownForEmergency: () => loc })
 

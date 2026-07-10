@@ -11,6 +11,7 @@ import { Card, Avatar, Button, Pill, Spinner, EmptyState, Field, Input, useToast
 import { IconUsers, IconPhone, IconChat, IconPlus, IconCheck, IconX, IconShield, IconFlash, IconFlag } from '../components/icons'
 import { ReportDialog } from '../components/ReportDialog'
 import { EmergencyReadinessCard } from '../components/EmergencyReadinessCard'
+import { CheckinHistorySection } from '../components/CheckinHistorySection'
 
 export function FamilyPage() {
   const { t } = useI18n()
@@ -308,6 +309,8 @@ function SafetyCheckInCard() {
       )}
       {/* 每日定时报到（Snug Safety 式）：独居者每天固定时刻自动开启一次报到——忘了设也有安全网。 */}
       <DailyScheduleSection />
+      {/* 报到历史（本人回看，含已告警的那几次）：折叠式，独立组件。 */}
+      <CheckinHistorySection />
     </Card>
   )
 }

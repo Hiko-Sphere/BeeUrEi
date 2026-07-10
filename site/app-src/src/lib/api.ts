@@ -41,6 +41,8 @@ export interface SafetyTimer { id: string; note?: string | null; status: string;
 export interface EmergencyReadiness { hasEmergencyContact: boolean; total: number; reachable: number; contacts: { name: string; relation: string; reachable: boolean }[] }
 /// 每日定时报到配置：startMinute=本地时区一天中的第几分钟（0..1439）；tz 为 IANA 时区。
 export interface DailyCheckinSchedule { enabled: boolean; startMinute: number; durationMinutes: number; tz: string; note?: string }
+/// 报到历史条目：status=active/completed/canceled/fired/expired；endedAt=完成/取消/告警时刻（active 为 null）。
+export interface CheckinHistoryItem { id: string; status: string; startedAt: number; dueAt: number; note: string | null; endedAt: number | null }
 export interface AppConfig {
   features: Record<string, boolean>
   registrationEnabled: boolean
@@ -372,6 +374,8 @@ export const api = {
   checkinSchedule: () => get('/api/safety/checkin/schedule') as Promise<{ schedule: DailyCheckinSchedule | null }>,
   setCheckinSchedule: (s: DailyCheckinSchedule) => put('/api/safety/checkin/schedule', s) as Promise<{ ok: boolean; schedule: DailyCheckinSchedule; hasEmergencyContact: boolean }>,
   cancelSafetyCheckin: () => post('/api/safety/checkin/cancel', undefined),
+  // 报到历史（本人回看，近 30 条，含已告警的那几次）。
+  checkinHistory: () => get('/api/safety/checkin/history') as Promise<{ history: CheckinHistoryItem[] }>,
   // 紧急告警"知道了"回执：回告发起人"有人已看到你的求助"（fromId=发起人，eventId=哪一次告警）。
   // onMyWay=true：不只"我已看到"，而是"我正在赶来"——遇险者据此知救援真在路上、可安心等待。缺省=普通回执。
   emergencyAck: (fromId: string, eventId?: string, onMyWay?: boolean) => post('/api/emergency/ack', { fromId, eventId, onMyWay }),

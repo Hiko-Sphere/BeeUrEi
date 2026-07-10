@@ -59,6 +59,22 @@ export function registerSafetyRoutes(app: FastifyInstance, store: Store,
     const u = store.findById(req.user!.sub)
     return { schedule: u?.dailyCheckin ?? null }
   })
+
+  // 报到历史（本人回看）：近 30 条自己的报到记录（startedAt 倒序）——含**已告警(fired)**的那几次
+  // （错过报到、告警已发给亲友），供本人复盘/安心。仅暴露展示字段，endedAt 归一为 完成/取消/告警 时刻。
+  app.get('/api/safety/checkin/history', { preHandler: requireAuth() }, async (req) => {
+    const timers = store.safetyTimersForUser(req.user!.sub).slice(0, 30)
+    return {
+      history: timers.map((tm) => ({
+        id: tm.id,
+        status: tm.status, // active/completed/canceled/fired/expired
+        startedAt: tm.startedAt,
+        dueAt: tm.dueAt,
+        note: tm.note ?? null,
+        endedAt: tm.completedAt ?? tm.canceledAt ?? tm.firedAt ?? null,
+      })),
+    }
+  })
   app.put('/api/safety/checkin/schedule', { preHandler: requireAuth(),
                                             config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = scheduleSchema.safeParse(req.body)

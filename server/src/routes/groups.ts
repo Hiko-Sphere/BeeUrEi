@@ -138,6 +138,27 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store, push: Pu
 
   // 群免打扰开关（仅成员，作用于本人）：静音只压该群的推送横幅——消息照常存库、未读数照增，
   // 打开群即见。区别于全局勿扰时段（quietHours）：这是"某个吵闹的群单独静音"，家庭大群刚需。
+  // 群改名（群主）：WhatsApp/Signal 标配。此前只能建群/加人/踢人，群名一旦定了改不了。
+  // 限流同建群 10/min（改名会向其余成员发 group_renamed 推送——同"改记录+外发推送"面，防反复改名刷推送）。
+  app.post('/api/groups/:id/rename', { preHandler: [requireAuth(), requireFeature(store, 'groups')],
+                                       config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const parsed = z.object({ name: z.string().trim().min(1).max(50) }).safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const group = store.findGroup((req.params as { id: string }).id)
+    if (!group) return reply.code(404).send({ error: 'not_found' })
+    const me = req.user!.sub
+    if (group.ownerId !== me) return reply.code(403).send({ error: 'not_owner' })
+    // 内容审核（同建群）：群名经群列表触达全体成员，是"向他人注入内容"面，须过违禁词——否则可先起干净群名
+    // 再改成违禁名绕过建群侧 matchBannedTerm（与消息编辑同源的"改既有"姊妹缺口）。
+    if (matchBannedTerm(store.getAppConfig(), parsed.data.name)) return reply.code(403).send({ error: 'content_blocked' })
+    const updated = store.updateGroup(group.id, { name: parsed.data.name })
+    // 通知其余成员群名已改（群主自己不通知）——否则盲人只见群名突变、不知何事（与建群 notifyGroupAdded 同源姊妹面）。
+    if (parsed.data.name !== group.name) {
+      notifyGroupRenamed(store, push, group.memberIds.filter((id) => id !== me), me, parsed.data.name, group.id)
+    }
+    return { group: updated }
+  })
+
   app.post('/api/groups/:id/mute', { preHandler: requireAuth() }, async (req, reply) => {
     const parsed = z.object({ muted: z.boolean() }).safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
@@ -157,5 +178,15 @@ function notifyGroupAdded(store: Store, push: PushSender, userIds: string[], act
     const l = pushLang(store.findById(uid)?.language)
     notifyUser(store, push, uid, 'group_added',
                pushStrings.groupAddedTitle(l), pushStrings.groupAddedBody(actorName, groupName, l), { groupId })
+  }
+}
+
+/// 通知其余成员群名已更改（群主改名后）。按各自语言本地化；best-effort 隔离，绝不因某个成员推送失败中断。
+function notifyGroupRenamed(store: Store, push: PushSender, userIds: string[], actorId: string, newName: string, groupId: string): void {
+  const actorName = store.findById(actorId)?.displayName ?? ''
+  for (const uid of userIds) {
+    const l = pushLang(store.findById(uid)?.language)
+    notifyUser(store, push, uid, 'group_renamed',
+               pushStrings.groupRenamedTitle(l), pushStrings.groupRenamedBody(actorName, newName, l), { groupId })
   }
 }

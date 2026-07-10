@@ -109,6 +109,11 @@ export const pushStrings = {
     l === 'en' ? 'Added to a group chat' : '你被加入了群聊',
   groupAddedBody: (name: string, groupName: string, l: PushLang): string =>
     l === 'en' ? `${name} added you to the group "${groupName}"` : `${name} 把你加入了群聊「${groupName}」`,
+  // 群改名（群主改群名 → 通知其余成员，否则盲人只见群名突然变了、不知发生何事）。
+  groupRenamedTitle: (l: PushLang): string =>
+    l === 'en' ? 'Group renamed' : '群名已更改',
+  groupRenamedBody: (name: string, groupName: string, l: PushLang): string =>
+    l === 'en' ? `${name} renamed the group to "${groupName}"` : `${name} 把群名改为「${groupName}」`,
   groupRemovedTitle: (l: PushLang): string =>
     l === 'en' ? 'Removed from a group chat' : '你已被移出群聊',
   groupRemovedBody: (groupName: string, l: PushLang): string =>

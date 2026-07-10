@@ -333,6 +333,8 @@ export const api = {
   // 后端期望单个 { userId }（非 memberIds 数组）——此前形状不匹配会 400。逐个加。
   addGroupMember: (id: string, userId: string) => post(`/api/groups/${id}/members`, { userId }),
   leaveGroup: (id: string, userId: string) => del(`/api/groups/${id}/members/${userId}`),
+  // 群改名（群主）：其余成员会收到 group_renamed 通知。
+  renameGroup: (id: string, name: string) => post(`/api/groups/${id}/rename`, { name }) as Promise<{ group: GroupSummary['group'] }>,
   deleteGroup: (id: string) => del(`/api/groups/${id}`),
 
   // 录制

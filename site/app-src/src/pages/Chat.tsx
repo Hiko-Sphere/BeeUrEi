@@ -624,6 +624,7 @@ function GroupInfoDialog({ groupId, groupName, ownerId, members, meId, onClose, 
   const [list, setList] = useState<User[]>(members)
   const [contacts, setContacts] = useState<{ id: string; name: string }[]>([])
   const [busy, setBusy] = useState(false)
+  const [name, setName] = useState(groupName) // 群主改名的编辑态
 
   // 拉最新成员（避免沿用进群时的旧快照）+ 可加联系人（我的 accepted 绑定中不在群里的）。
   const refresh = useCallback(async () => {
@@ -656,10 +657,26 @@ function GroupInfoDialog({ groupId, groupName, ownerId, members, meId, onClose, 
     try { await api.deleteGroup(groupId); onLeft() }
     catch (e) { toast(chatErrorText(e, t, t('操作失败', 'Failed')), 'error'); setBusy(false) }
   }
+  // 群改名（群主）：新名非空且与原名不同才提交；成功后刷新父列表（标题下次选中即更新）。
+  const rename = async () => {
+    const n = name.trim()
+    if (!n || n === groupName) return
+    setBusy(true)
+    try { await api.renameGroup(groupId, n); toast(t('群名已更改', 'Group renamed'), 'ok'); onChanged() }
+    catch (e) { toast(chatErrorText(e, t, t('改名失败', 'Rename failed')), 'error') } finally { setBusy(false) }
+  }
 
   return (
     <Modal onClose={onClose} label={groupName} panelClassName="flex max-h-[80vh] w-full max-w-sm flex-col">
         <h3 className="text-lg font-semibold">{groupName}</h3>
+        {/* 群主改名（WhatsApp/Signal 标配）：内联编辑 + 保存；其余成员会收到 group_renamed 通知。 */}
+        {isOwner && (
+          <div className="mt-2 flex gap-2">
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={50} aria-label={t('群名', 'Group name')}
+              className="min-w-0 flex-1 rounded-lg border border-[var(--line)] surface-2 px-3 py-1.5 text-sm outline-none focus:border-honey" />
+            <Button variant="soft" onClick={rename} disabled={busy || !name.trim() || name.trim() === groupName}>{t('改名', 'Rename')}</Button>
+          </div>
+        )}
         <div className="mt-1 text-xs text-faint">{t('成员', 'Members')}（{list.length}）</div>
         <div className="mt-2 flex-1 overflow-y-auto rounded-xl border border-[var(--line)]">
           <ul className="divide-y divide-[var(--line)]">

@@ -339,6 +339,12 @@ export class SqliteStore implements Store {
 
   // MARK: users
   createUser(u: User): void {
+    // 防"同名夺舍"：createUser 用 INSERT OR REPLACE（updateUser 复用它按 id 覆盖所需），但它会把 username UNIQUE
+    // 冲突"解决"成**删掉既有他人账号**——与 UNIQUE(username) 的本意（拒绝重名）截然相反、是静默删号/接管的地雷。
+    // 现有入口(注册/改名)都先 findByUsername 校验且同步原子，触不到；此处从严兜底：username 若属**另一个 id** 即抛
+    // （等同真 UNIQUE 约束、且与 MemoryStore 同口径），宁可响亮 500 也绝不静默抹掉一个账号。同 id（updateUser）放行。
+    const clash = this.db.prepare('SELECT id FROM users WHERE username = ? COLLATE NOCASE').get(u.username) as { id: string } | undefined
+    if (clash && clash.id !== u.id) throw new Error('username_taken')
     this.db.prepare(
       `INSERT OR REPLACE INTO users (id, username, passwordHash, displayName, role, status, createdAt, language, tokenVersion, email, emailVerified, voipToken, avatar, apnsToken, phone, appleSub, usernameCustomized, legalConsentVersion, legalConsentAt, helperGuidelineAckAt, featureOverrides, totpSecret, totpEnabled, totpLastCounter, identityVerified, quietHours, mutedPushCategories, callHistorySeenAt, readReceiptsEnabled, dailyCheckin, dailyCheckinLastDay)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

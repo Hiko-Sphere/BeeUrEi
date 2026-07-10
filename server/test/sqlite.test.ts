@@ -339,4 +339,25 @@ describe('SqliteStore (node:sqlite)', () => {
     check(new SqliteStore(':memory:'))
     check(new MemoryStore())
   })
+
+  it('createUser 同名夺舍防护两存储一致：重名(异 id)抛错、绝不删既有账号；同 id(updateUser) 覆盖放行', () => {
+    // 严重地雷类：SqliteStore createUser 用 INSERT OR REPLACE，username UNIQUE 冲突会**删掉他人账号**（静默接管/丢号）；
+    // MemoryStore 裸 set 则留两个同名账号。两存储都错、方向相反。锁死：重名(异 id) 一律抛、既有账号保住、同 id 覆盖仍可。
+    const check = (s: SqliteStore | MemoryStore) => {
+      s.createUser(user('idA', 'alice'))
+      // 另一个 id 用同名（大小写不敏感）→ 抛 username_taken，且**绝不**删掉 idA。
+      expect(() => s.createUser(user('idB', 'ALICE'))).toThrow()
+      expect(s.findByUsername('alice')?.id).toBe('idA') // idA 仍在（未被 INSERT OR REPLACE 删掉）
+      expect(s.findById('idB')).toBeUndefined()         // idB 未建（MemoryStore 也不再留两条同名）
+      // 同 id 覆盖（updateUser 复用 createUser）：不抛，改昵称保住用户名。
+      expect(() => s.updateUser('idA', { displayName: 'Alice A.' })).not.toThrow()
+      expect(s.findById('idA')?.displayName).toBe('Alice A.')
+      expect(s.findByUsername('alice')?.id).toBe('idA')
+      // 改用户名到一个空闲名：放行。
+      s.updateUser('idA', { username: 'alice2' })
+      expect(s.findByUsername('alice2')?.id).toBe('idA')
+    }
+    check(new SqliteStore(':memory:'))
+    check(new MemoryStore())
+  })
 })

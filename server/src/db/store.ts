@@ -909,6 +909,13 @@ export class MemoryStore implements Store {
   }
 
   createUser(user: User): void {
+    // 与 SqliteStore 同口径的"同名夺舍"防护：username 若已属**另一个 id** 即抛（等同 UNIQUE(username)）。
+    // 此前裸 set 会留下两个同名账号（findByUsername 只返其一），而 SqliteStore 的 INSERT OR REPLACE 会删掉他人账号——
+    // 两存储都错、且方向不同。改为都抛（同 id 的 updateUser 覆盖放行）。case-insensitive，与 findByUsername 同。
+    const key = user.username.trim().toLowerCase()
+    for (const u of this.users.values()) {
+      if (u.id !== user.id && u.username.toLowerCase() === key) throw new Error('username_taken')
+    }
     this.users.set(user.id, user)
     this.afterMutate()
   }

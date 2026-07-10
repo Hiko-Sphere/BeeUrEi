@@ -284,6 +284,33 @@ describe('family + emergency', () => {
     await a.close()
   })
 
+  it('姊妹缺口：链建时即紧急（isEmergency:true）→ member 接受那刻收到 emergency_contact_set（不再默默担责）；非紧急链不发', async () => {
+    const { a, reg } = setup()
+    const owner = await reg('bootemgowner', 'blind')
+    const contact = await reg('bootemgcontact', 'family')
+    const plain = await reg('bootplaincontact', 'helper')
+    const auth = (t: string) => ({ authorization: `Bearer ${t}` })
+    const setCount = async (t: string) => ((await a.inject({ method: 'GET', url: '/api/notifications', headers: auth(t) })).json().notifications as { kind: string; body: string; data?: { linkId?: string } }[]).filter((n) => n.kind === 'emergency_contact_set')
+    // ① 建链时就 isEmergency:true —— 接受前不发（pending 链不参与紧急路由，紧急身份未生效）。
+    const l = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(owner.token), payload: { username: 'bootemgcontact', relation: '家人', isEmergency: true } })
+    const id = l.json().link.id as string
+    expect(await setCount(contact.token)).toHaveLength(0) // 仅 pending，尚未通知
+    // 接受那刻生效 → member 收到一条 emergency_contact_set（含 owner 名 + linkId）。
+    await a.inject({ method: 'POST', url: `/api/family/links/${id}/accept`, headers: auth(contact.token) })
+    const set = await setCount(contact.token)
+    expect(set).toHaveLength(1)
+    expect(set[0].body).toContain('bootemgowner')
+    expect(set[0].data?.linkId).toBe(id)
+    // 已是紧急，再 owner 切 true 不重复（既有 toggle 端点仅 false→true 才发）。
+    await a.inject({ method: 'POST', url: `/api/family/links/${id}/emergency`, headers: auth(owner.token), payload: { isEmergency: true } })
+    expect(await setCount(contact.token)).toHaveLength(1)
+    // ② 对照：**非**紧急链被接受 → member 不收 emergency_contact_set。
+    const l2 = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(owner.token), payload: { username: 'bootplaincontact', relation: '朋友', isEmergency: false } })
+    await a.inject({ method: 'POST', url: `/api/family/links/${l2.json().link.id}/accept`, headers: auth(plain.token) })
+    expect(await setCount(plain.token)).toHaveLength(0)
+    await a.close()
+  })
+
   it('紧急标志切换端点有端级限流（挡刷 emergency_contact_set 推送骚扰；与 addLink 同 20/min）', async () => {
     const { a, reg } = setup()
     const owner = await reg('rlemgowner', 'blind')

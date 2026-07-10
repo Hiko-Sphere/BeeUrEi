@@ -99,6 +99,20 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: P
       notifyUser(store, push, requester.id, 'friend_accepted',
                  pushStrings.friendAcceptedTitle(lang), pushStrings.friendAcceptedBody(me.displayName, lang))
     }
+    // 姊妹缺口补齐（与 /emergency 切换端点同口径）：链**一开始就**被设为紧急（isEmergency=true）时，member 此前
+    // 只收到一条不点明紧急身份的 friend_request、接受后就默默担起「收 TA 的 SOS/摔倒/未报到告警」的安全责任却无从知情。
+    // pending 链不参与紧急路由，故此紧急身份到**接受**这一刻才真正生效——正是通知 member「你现在是 X 的紧急联系人」的时点。
+    // member 恒为紧急联系人一方（isEmergency 语义）；owner=link.ownerId。accept 已在上方对 already-accepted 短路，故只发一次。
+    if (link.isEmergency === true) {
+      const owner = store.findById(link.ownerId)
+      const member = store.findById(link.memberId)
+      if (owner && member) {
+        const l = pushLang(member.language)
+        notifyUser(store, push, member.id, 'emergency_contact_set',
+                   pushStrings.emergencyContactSetTitle(l), pushStrings.emergencyContactSetBody(owner.displayName, l),
+                   { linkId: link.id })
+      }
+    }
     return { ok: true }
   })
 

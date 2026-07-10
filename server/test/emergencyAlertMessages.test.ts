@@ -250,6 +250,33 @@ describe('摔倒/车祸紧急警报', () => {
     await app.close()
   })
 
+  it('安全攸关：发起人医疗信息读抛错（SQLITE_BUSY 等）不 500 掉 SOS——非必需增强读绝不阻断告警', async () => {
+    // getMedicalInfo 仅决定 hasMedical 提示标志（非必需）。此前它在扇出前无 try/catch——同步抛就把整个
+    // 告警 500 掉、全体亲友一个都收不到；而 per-member 读已有 safeBadge/safeWebPushSubs 隔离，这句漏了。
+    class ThrowingMedicalStore extends MemoryStore {
+      getMedicalInfo(_userId: string): undefined { throw new Error('SQLITE_BUSY: database is locked') }
+    }
+    const push = new FakePush()
+    const app = buildApp(new ThrowingMedicalStore(), { pushSender: push })
+    const blind = await reg(app, 'medbusyblind', 'blind')
+    const emg = await reg(app, 'medbusyfam', 'family')
+    await bind(app, blind.token, emg.token, 'medbusyfam')
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(emg.token), payload: { token: 'a'.repeat(64) } })
+    // 把 emg 设为紧急联系人（本会是拿 hasMedical='1' 的对象——但医疗读抛错时应退化为不带，而非整个 500）。
+    const links = (await app.inject({ method: 'GET', url: '/api/family/links', headers: auth(blind.token) })).json().links as any[]
+    const emgLinkId = links.find((l) => l.memberId === emg.user.id).id as string
+    await app.inject({ method: 'POST', url: `/api/family/links/${emgLinkId}/emergency`, headers: auth(blind.token), payload: { isEmergency: true } })
+
+    const res = await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token), payload: { kind: 'fall' } })
+    expect(res.statusCode).toBe(200)               // 非必需的医疗读抛错不 500 掉 SOS
+    expect((res.json() as any).notified).toBe(1)   // 告警照送
+    const feed = await app.inject({ method: 'GET', url: '/api/notifications', headers: auth(emg.token) })
+    const alert = (feed.json() as any).notifications.find((n: any) => n.kind === 'emergency_alert')
+    expect(alert).toBeTruthy()                     // 紧急联系人确实收到持久化告警
+    expect(alert.data.hasMedical).toBeUndefined()  // 医疗读失败 → 退化为不标 hasMedical，告警本身完好
+    await app.close()
+  })
+
   it('幂等：同一 alertId 重试不重复通知亲友（客户端可安全重试提高送达率）', async () => {
     const push = new FakePush()
     const app = buildApp(new MemoryStore(), { pushSender: push })

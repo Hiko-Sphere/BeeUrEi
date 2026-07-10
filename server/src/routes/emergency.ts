@@ -253,7 +253,11 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     // （见 medical 路由授权），标志须与读权限一致：给普通联系人置此标志，只会让其点"查看医疗信息"却拿 403（假提示），
     // 还多泄露"此人有医疗信息在案"（敏感）。故不再挂到共享 notifData/extraBase，改在下方按每个联系人是否紧急分别置。
     // 注释本意即"让紧急联系人被提示"，此前实现却广播给全体——修正为与授权一致。**不影响告警本身送达全体**。
-    const senderHasMedical = !!store.getMedicalInfo(me.id)
+    // getMedicalInfo 是**非必需**的增强读（只决定 hasMedical 提示标志）：better-sqlite3 在 SQLITE_BUSY/IOERR 时
+    // 会**同步抛**，绝不能让这一句把攸关生命的告警扇出整个 500 掉（客户端虽可凭 alertId 幂等重试，但遇险时
+    // 每一秒都珍贵）。读失败则退化为"不标医疗信息"，告警照送全体（与 safeBadge/safeWebPushSubs 同款隔离）。
+    let senderHasMedical = false
+    try { senderHasMedical = !!store.getMedicalInfo(me.id) } catch { /* 非必需读失败不阻断告警 */ }
     const emergencyMemberIds = new Set(links.filter((l) => l.isEmergency).map((l) => l.memberId))
     await Promise.allSettled(members.map((member) => {
       const l = pushLang(member.language)

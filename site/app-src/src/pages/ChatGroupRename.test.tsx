@@ -34,6 +34,21 @@ describe('ChatPage 群改名（群主可改；非群主无入口）', () => {
     mock(api.renameGroup).mockResolvedValue({ group: { id: 'g1', name: '看病陪同群', ownerId: 'me', createdAt: 1000 } })
   })
 
+  it('已注销成员（username 空）→ 成员列表本地化「已注销用户」，不显示服务端硬编码名（i18n 收口）', async () => {
+    // 服务端占位：deleted 成员 username='' + 硬编码中文 displayName。客户端据 username==='' 覆盖本地化。
+    mock(api.groups).mockResolvedValue({
+      groups: [{ group: { id: 'g1', name: '家庭群', ownerId: 'me', createdAt: 1000 },
+        members: [{ id: 'me', displayName: '我', username: 'me' }, { id: 'gone', displayName: 'SERVER_HARDCODED', username: '' }],
+        last: null, unread: 0 }],
+    })
+    mock(api.groupMessages).mockResolvedValue({ messages: [] })
+    render(<ChatPage />)
+    fireEvent.click(await screen.findByText('家庭群'))
+    fireEvent.click(await screen.findByRole('button', { name: '群信息' }))
+    expect(await screen.findByText('已注销用户')).toBeInTheDocument()   // 本地化占位（zh 默认）
+    expect(screen.queryByText('SERVER_HARDCODED')).toBeNull()          // 绝不显示服务端原始串
+  })
+
   it('群主：改名输入框可编辑 → 点「改名」调 renameGroup(g1, 新名)', async () => {
     await openGroupInfo('me') // 我是群主
     const input = await screen.findByLabelText('群名')

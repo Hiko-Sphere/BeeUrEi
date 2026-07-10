@@ -688,20 +688,25 @@ function GroupInfoDialog({ groupId, groupName, ownerId, members, meId, onClose, 
         <div className="mt-1 text-xs text-faint">{t('成员', 'Members')}（{list.length}）</div>
         <div className="mt-2 flex-1 overflow-y-auto rounded-xl border border-[var(--line)]">
           <ul className="divide-y divide-[var(--line)]">
-            {list.map((m) => (
+            {list.map((m) => {
+              // 已注销成员：服务端占位 username 为空（真实成员经 publicUser 恒有 username）→ 据此本地化，
+              // 不漏服务端硬编码中文给英文用户（i18n 收口；仅群成员列表这一直观面，其余面见 chip）。
+              const mname = m.username === '' ? t('已注销用户', 'Deactivated user') : m.displayName
+              return (
               <li key={m.id} className="flex items-center gap-3 px-3 py-2.5">
-                <Avatar name={m.displayName} src={m.avatar} size={32} />
+                <Avatar name={mname} src={m.avatar} size={32} />
                 <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm">
                   {/* 在线/待命圆点（读屏念"在线"）：盲人一眼看出群里此刻谁能即时接应求助。 */}
                   {m.online && <span role="img" aria-label={t('在线', 'Online')} title={t('在线', 'Online')} className="h-2 w-2 shrink-0 rounded-full bg-ok" />}
-                  <span className="truncate">{m.displayName}</span>
+                  <span className="truncate">{mname}</span>
                   {m.id === ownerId && <span className="shrink-0 rounded-full bg-honey/20 px-2 py-0.5 text-[10px] text-accent">{t('群主', 'Owner')}</span>}
                 </span>
                 {isOwner && m.id !== ownerId && (
                   <button onClick={() => kick(m.id)} disabled={busy} className="text-xs text-danger hover:underline disabled:opacity-40">{t('移出', 'Remove')}</button>
                 )}
               </li>
-            ))}
+              )
+            })}
           </ul>
         </div>
         {isOwner && addable.length > 0 && (

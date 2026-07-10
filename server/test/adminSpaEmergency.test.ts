@@ -8,10 +8,11 @@ import vm from 'node:vm'
 /// 不命中则显式抛错，绝不静默空测）；DOM 用**宽容自引用 stub 元素**（getElementById/querySelector 都回它，
 /// innerHTML 可读写）——渲染函数写完 innerHTML 后测试读回断言，事件绑定全 noop。
 interface SpaTest {
-  state: { lang: string; emergencies: unknown[]; calls: unknown[]; callsQuery: string }
+  state: { lang: string; emergencies: unknown[]; calls: unknown[]; callsQuery: string; overview: unknown }
   t: (k: string) => string
   emergencySection: () => string
   renderCalls: () => void
+  renderDashboard: () => void
   view: { innerHTML: string } // 渲染函数写入的共享 stub 元素（viewEl()/$ 都解析到它）
 }
 function loadSpa(): SpaTest {
@@ -19,7 +20,7 @@ function loadSpa(): SpaTest {
   let src = readFileSync(path, 'utf8')
   const anchor = '\nrender();'
   if (!src.includes(anchor)) throw new Error('app.js bootstrap anchor "render();" not found — update test')
-  src = src.replace(anchor, '\nglobalThis.__test = { state, t, emergencySection, renderCalls };\nrender();')
+  src = src.replace(anchor, '\nglobalThis.__test = { state, t, emergencySection, renderCalls, renderDashboard };\nrender();')
   const noop = (): void => {}
   const classList = { add: noop, remove: noop, toggle: noop, contains: () => false }
   // 自引用宽容元素：querySelector 返回自身（事件绑定链不断）、querySelectorAll 空数组、其余 noop。
@@ -101,6 +102,45 @@ describe('管理面板 紧急事件区（响应结果分诊信号）', () => {
     expect(html.split('bar-row').length - 1).toBe(25)   // 25 条全渲染（此前 slice(0,20) 只剩 20）
     expect(html).toContain('被截者')                     // 第 25 位仍可见
     expect(html).toContain('升级后仍无人响应')            // 待介入红标不被静默截掉
+  })
+})
+
+describe('管理面板 总览「通话中继失败」卡（运维可见 TURN 故障）', () => {
+  const overview = (over: Record<string, unknown> = {}) => ({
+    users: { total: 1, active: 1, disabled: 0, byRole: { blind: 1, helper: 0, family: 0, admin: 0, developer: 0 } },
+    online: { total: 0, helpers: 0 }, reports: { open: 0, total: 0 },
+    recordings: { total: 0, config: {} }, verifications: { pending: 0, total: 0 },
+    growth: { newUsers7d: 0, newUsers30d: 0, trend: [] }, version: '0.1.0', commit: 'unknown', ...over,
+  })
+
+  it('relayUnreachable>0 → 渲染卡片、danger 色、附 TURN/3478 提示', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    spa.state.overview = overview({ callConnect: { relayUnreachable: 3, generic: 1, signaling: 2 } })
+    spa.renderDashboard()
+    const html = spa.view.innerHTML
+    expect(html).toContain('通话中继失败')
+    expect(html).toContain('>3<')                 // relayUnreachable 主数
+    expect(html).toContain('TURN')                // 提示指向根因
+    expect(html).toMatch(/class="v danger"[^>]*>\s*3/) // danger 色（有失败）
+  })
+
+  it('relayUnreachable=0 → 卡片仍渲染但不加 danger、不附提示（不误报）', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    spa.state.overview = overview({ callConnect: { relayUnreachable: 0, generic: 0, signaling: 0 } })
+    spa.renderDashboard()
+    const html = spa.view.innerHTML
+    expect(html).toContain('通话中继失败')
+    expect(html).not.toContain('TURN')            // 无失败不吓唬运维
+  })
+
+  it('旧后端无 callConnect 字段 → 不渲染该卡（向后兼容，不崩）', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    spa.state.overview = overview() // 无 callConnect
+    spa.renderDashboard()
+    expect(spa.view.innerHTML).not.toContain('通话中继失败')
   })
 })
 

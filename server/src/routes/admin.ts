@@ -16,6 +16,7 @@ import type { PresenceRegistry } from '../assist/presence'
 import { type SignalingHub } from '../signaling/hub'
 import { type CallControlBridge } from '../signaling/callControl'
 import { type PushSender, NoopPushSender } from '../push/apns'
+import { type Metrics } from '../metrics/metrics'
 import { pushLang, pushStrings } from '../push/pushStrings'
 import { notifyUser, notifyAccountSecurity } from '../notifications/notify'
 import { openField, open as openSealed } from '../kyc/crypto'
@@ -52,7 +53,7 @@ const kycRejectSchema = z.object({
 
 const START_MS = Date.now()
 
-export function registerAdminRoutes(app: FastifyInstance, store: Store, presence: PresenceRegistry, hub?: SignalingHub, callControl?: CallControlBridge, push: PushSender = new NoopPushSender()): void {
+export function registerAdminRoutes(app: FastifyInstance, store: Store, presence: PresenceRegistry, metrics: Metrics, hub?: SignalingHub, callControl?: CallControlBridge, push: PushSender = new NoopPushSender()): void {
   const adminOnly = { preHandler: requireAuth(['admin']) }
   // 当前活跃管理员数（用于"最后一名管理员"保护，防把后台锁死）。
   const activeAdminCount = () => store.allUsers().filter((u) => u.role === 'admin' && u.status === 'active').length
@@ -171,6 +172,13 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       recordings: { total: store.allRecordings().length, config: store.getRecordingConfig() },
       verifications: { pending: store.countPendingVerifications(), total: store.allVerifications().length },
       growth: { newUsers7d, newUsers30d, trend },
+      // 通话连接失败（自本次进程启动以来累计，与 uptime/online 同为"当前健康"信号）：把客户端 ICE 失败上报
+      // （见 /api/assist/call-failure）呈现在运维实际看的面板里——relay 不可达尤其指向 TURN/安全组故障。
+      callConnect: {
+        relayUnreachable: metrics.get('call_ice_failure_relay_unreachable_total'),
+        generic: metrics.get('call_ice_failure_generic_total'),
+        signaling: metrics.get('call_ice_failure_signaling_total'),
+      },
       version: PKG_VERSION,
       commit: gitCommit(), // 部署验证：后台一眼确认线上提交
       uptimeSeconds: Math.floor((now - START_MS) / 1000),

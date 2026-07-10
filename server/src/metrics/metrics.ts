@@ -21,6 +21,11 @@ export class Metrics {
   }
 
   /// 业务计数自增（在对应路由里调用，如 inc('help_requests_total')）。
+  /// 读取单个业务计数当前值（未出现过=0）。供 admin 总览在运维实际看的面板里呈现（无需 Prometheus）。
+  get(name: string): number {
+    return this.counters.get(name) ?? 0
+  }
+
   inc(name: string, by = 1): void {
     this.counters.set(name, (this.counters.get(name) ?? 0) + by)
   }

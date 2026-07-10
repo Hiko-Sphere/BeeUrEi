@@ -42,6 +42,7 @@ const I18N = {
     dashboard: '总览', users: '用户', reports: '举报', recordings: '录制', logout: '退出登录',
     totalUsers: '用户总数', active: '正常', disabled: '已封禁', online: '在线', onlineHelpers: '在线协助者',
     openReports: '待处理举报', recordingsCount: '录制记录', byRole: '按角色分布', version: '版本', uptime: '运行时长',
+    relayFails: '通话中继失败', callFailSub: '本次启动以来 · 普通/信令', relayFailHint: '中继不可达多半是 TURN/安全组未放行 3478',
     refresh: '刷新', search: '搜索用户名 / 昵称…', allRoles: '全部角色', allStatus: '全部状态',
     role: '角色', status: '状态', created: '注册时间', actions: '操作', lastActive: '在线',
     ban: '封禁', unban: '解封', changeRole: '角色', confirmBan: '确认封禁该用户？封禁后其令牌立即失效、无法登录。',
@@ -162,6 +163,7 @@ const I18N = {
     dashboard: 'Overview', users: 'Users', reports: 'Reports', recordings: 'Recordings', logout: 'Sign out',
     totalUsers: 'Total users', active: 'Active', disabled: 'Banned', online: 'Online', onlineHelpers: 'Online helpers',
     openReports: 'Open reports', recordingsCount: 'Recordings', byRole: 'By role', version: 'Version', uptime: 'Uptime',
+    relayFails: 'Call relay failures', callFailSub: 'since start · generic/signaling', relayFailHint: 'Relay unreachable usually means TURN / security-group 3478 blocked',
     refresh: 'Refresh', search: 'Search username / name…', allRoles: 'All roles', allStatus: 'All status',
     role: 'Role', status: 'Status', created: 'Joined', actions: 'Actions', lastActive: 'Online',
     ban: 'Ban', unban: 'Unban', changeRole: 'Role', confirmBan: 'Ban this user? Their tokens expire immediately and they cannot sign in.',
@@ -573,6 +575,9 @@ function renderDashboard() {
       ${statCard(t('newUsers7d'), g.newUsers7d, t('newUsers30d') + ': ' + g.newUsers30d, g.newUsers7d ? 'success' : '')}
       ${statCard(t('openReports'), o.reports.open, (state.lang === 'en' ? 'of ' : '共 ') + o.reports.total, o.reports.open ? 'danger' : '')}
       ${statCard(t('recordingsCount'), o.recordings.total)}
+      ${o.callConnect ? statCard(t('relayFails'), o.callConnect.relayUnreachable,
+        t('callFailSub') + ': ' + (o.callConnect.generic + o.callConnect.signaling) + (o.callConnect.relayUnreachable ? ' · ' + t('relayFailHint') : ''),
+        o.callConnect.relayUnreachable ? 'danger' : '') : ''}
     </div>
     ${trendCard}
     <div class="section">

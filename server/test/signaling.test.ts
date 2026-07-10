@@ -310,6 +310,50 @@ describe('WebRTC signaling relay', () => {
     await app.close()
   })
 
+  it('跨通话隔离：定向帧(msg.to)绝不逃逸到别的通话——A 房间成员无法把 offer 投给 B 房间的人', async () => {
+    // 安全不变量：relay 恒以 hub.peersInCall(joined.callId) 为域，msg.to 只在**本房间**内定向。若日后误改成全局
+    // 按 userId 查投递，恶意/漏洞客户端就能把 SDP/媒体信令投进不相干的通话（跨通话窃听/注入）。此测锁死。
+    const app = buildApp(new MemoryStore())
+    await app.listen({ port: 0, host: '127.0.0.1' })
+    const port = (app.server.address() as { port: number }).port
+    const reg = async (u: string, role: string) => {
+      const r = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+      return { token: r.token as string, id: r.user.id as string }
+    }
+    const bind = async (ownerTok: string, memberUser: string, memberTok: string) => {
+      const l = await app.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${ownerTok}` }, payload: { username: memberUser, relation: '志愿者', isEmergency: true } })
+      await app.inject({ method: 'POST', url: `/api/family/links/${l.json().link.id}/accept`, headers: { authorization: `Bearer ${memberTok}` } })
+    }
+    const a1 = await reg('xa1', 'blind'), a2 = await reg('xa2', 'helper')
+    const b1 = await reg('xb1', 'blind'), b2 = await reg('xb2', 'helper')
+    await bind(a1.token, 'xa2', a2.token); await bind(b1.token, 'xb2', b2.token)
+    await app.inject({ method: 'POST', url: '/api/assist/call', headers: { authorization: `Bearer ${a1.token}` }, payload: { callId: 'cA', targetUserIds: [a2.id] } })
+    await app.inject({ method: 'POST', url: '/api/assist/call', headers: { authorization: `Bearer ${b1.token}` }, payload: { callId: 'cB', targetUserIds: [b2.id] } })
+
+    const base = `ws://127.0.0.1:${port}/ws`
+    const wsA1 = new WebSocket(`${base}?token=${a1.token}`), wsA2 = new WebSocket(`${base}?token=${a2.token}`), wsB1 = new WebSocket(`${base}?token=${b1.token}`)
+    await Promise.all([open(wsA1), open(wsA2), open(wsB1)])
+    const jA1 = nextMessage(wsA1, (m) => m.type === 'joined'), jA2 = nextMessage(wsA2, (m) => m.type === 'joined'), jB1 = nextMessage(wsB1, (m) => m.type === 'joined')
+    wsA1.send(JSON.stringify({ type: 'join', callId: 'cA', role: 'blind' }))
+    wsA2.send(JSON.stringify({ type: 'join', callId: 'cA', role: 'helper' }))
+    wsB1.send(JSON.stringify({ type: 'join', callId: 'cB', role: 'blind' }))
+    await Promise.all([jA1, jA2, jB1])
+
+    // b1 监听是否收到任何 offer（跨通话泄漏 = 收到）。
+    let b1Leaked = false
+    wsB1.on('message', (d) => { if (JSON.parse(d.toString()).type === 'offer') b1Leaked = true })
+    // a1 先发一条定向 b1 的 offer（跨通话，必须被拦），紧接一条同房间 offer（到 a2，作同步点确认 relay 已处理两帧）。
+    const a2Gets = nextMessage(wsA2, (m) => m.type === 'offer')
+    wsA1.send(JSON.stringify({ type: 'offer', to: b1.id, sdp: 'LEAK' }))
+    wsA1.send(JSON.stringify({ type: 'offer', sdp: 'LEGIT' }))
+    expect((await a2Gets).sdp).toBe('LEGIT')                 // a2 只收到同房间那条（跨通话的被过滤掉、连 a2 都没投）
+    await new Promise((r) => setTimeout(r, 40))
+    expect(b1Leaked).toBe(false)                             // b1（另一通话）绝无收到 A 房间的 offer
+
+    wsA1.close(); wsA2.close(); wsB1.close()
+    await app.close()
+  })
+
   it('超大信令帧(>256KiB)按 maxPayload 关闭连接(1009)——不放大内存', async () => {
     const app = buildApp(new MemoryStore())
     await app.listen({ port: 0, host: '127.0.0.1' })

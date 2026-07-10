@@ -92,6 +92,26 @@ describe('紧急升级重呼 escalateUnackedEmergencies', () => {
     expect(notif?.data?.hasMedical).toBeUndefined()
   })
 
+  it('安全攸关：医疗信息读抛错（SQLITE_BUSY 等）不吞掉升级重呼——非必需读绝不阻断最后一层兜底扇出', () => {
+    // 事件已 markEscalated（免反复扫）+ 后台 tick 无重试：若 getMedicalInfo 同步抛未被隔离，外层 try 吞掉后
+    // 整条升级重呼被跳过、漏看首呼的亲友**永远收不到**，且已 escalated 不再重扫——最后一层兜底永久丢失。
+    class ThrowingMedicalStore extends MemoryStore {
+      getMedicalInfo(_userId: string): undefined { throw new Error('SQLITE_BUSY: database is locked') }
+    }
+    const now = 100 * MIN
+    const store = new ThrowingMedicalStore()
+    store.createUser(user('victim'))
+    store.createUser(user('famA', 'a'.repeat(64)))
+    store.createLink({ id: 'l1', ownerId: 'victim', memberId: 'famA', relation: '亲友', isEmergency: true, status: 'accepted', createdAt: 1 } as any)
+    const push = new FakePush(); const web = new NoopWebPushSender()
+    store.createEmergencyEvent(evt({ at: now - 6 * MIN }))
+    expect(escalateUnackedEmergencies(store, push, web, now, 5 * MIN)).toBe(1) // 升级照发，未因医疗读抛错被吞
+    expect(push.alerts.find((a) => a.token === 'a'.repeat(64))).toBeTruthy()    // 亲友确实收到升级 APNs
+    const notif = store.notificationsForUser('famA').find((x: any) => x.kind === 'emergency_alert')
+    expect(notif).toBeTruthy()                       // 持久化升级通知也写了（扇出完整）
+    expect(notif?.data?.hasMedical).toBeUndefined()  // 医疗读失败退化为不标，升级本身完好
+  })
+
   it('已有亲友确认(ack) → 不升级（有人在响应）', () => {
     const now = 100 * MIN
     const { store, push, web } = setup()

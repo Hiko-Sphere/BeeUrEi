@@ -28,7 +28,11 @@ export function escalateUnackedEmergencies(
       // 发起人是否填了紧急医疗信息：与首呼(emergency.ts)/未报到(checkin.ts)同口径带 hasMedical——升级重呼恰是要抓
       // **漏看首呼**的人，他们只见到这条，若不带 hasMedical 就不知有过敏/用药/病史可查（医疗急救刚需，见复审 missed-sibling）。
       // **仅置给紧急联系人**（他们才可读医疗信息，与 medical 路由授权一致；三链同口径，见 emergency.ts）。
-      const hasMedical = !!store.getMedicalInfo(sender.id)
+      // getMedicalInfo 是**非必需**增强读：better-sqlite3 会在 SQLITE_BUSY/IOERR **同步抛**，而此处事件已 markEscalated
+      // （免反复扫）+ 后台 tick 无重试——这句若抛，外层 try 吞掉后整条升级重呼被跳过、漏看首呼的人**永远收不到**
+      // 这最后一层兜底。故必须隔离（与 emergency.ts/checkin.ts 同款）：读失败退化为不标医疗信息，重呼照送全体。
+      let hasMedical = false
+      try { hasMedical = !!store.getMedicalInfo(sender.id) } catch { /* 非必需读失败不阻断升级重呼扇出 */ }
       const minutes = Math.max(1, Math.round((now - e.at) / 60_000))
       const notifData: Record<string, string> = {
         kind: 'emergency_alert', type: 'emergency_alert', escalated: '1', fromId: sender.id, fromName: sender.displayName, eventId: e.id, alertKind: e.kind,

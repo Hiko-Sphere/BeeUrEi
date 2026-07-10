@@ -90,4 +90,24 @@ describe('GET /api/emergency/watching', () => {
     expect((await app.inject({ method: 'GET', url: '/api/emergency/watching' })).statusCode).toBe(401)
     await app.close()
   })
+
+  it('安全攸关：某 owner 医疗读抛错（SQLITE_BUSY 等）不使整个看板 500——非必需子读绝不让协助者对其余紧急失明', async () => {
+    // getMedicalInfo 只决定 hasMedical 附加标志（非看板核心「谁在紧急」）：同步抛不能把整个 GET 500 掉。
+    class ThrowingMedicalStore extends MemoryStore {
+      getMedicalInfo(_userId: string): undefined { throw new Error('SQLITE_BUSY: database is locked') }
+    }
+    const store = new ThrowingMedicalStore()
+    const app = buildApp(store)
+    const reg = async (u: string, role: string) => (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const helper = await reg('twHelper', 'helper')
+    const mom = await reg('twMom', 'blind')
+    store.createLink({ id: 'l1', ownerId: mom.user.id, memberId: helper.user.id, relation: '家人', isEmergency: true, createdAt: 1, status: 'accepted' })
+    store.createEmergencyEvent({ id: 'e1', userId: mom.user.id, kind: 'fall', notified: 1, contacts: 1, at: now - 60_000 })
+    const r = await app.inject({ method: 'GET', url: '/api/emergency/watching', headers: auth(helper.token) })
+    expect(r.statusCode).toBe(200)                 // 医疗读抛错不 500 掉看板
+    const active = r.json().active
+    expect(active.map((a: { eventId: string }) => a.eventId)).toEqual(['e1']) // 紧急仍照常列出（协助者不失明）
+    expect(active[0].hasMedical).toBe(false)       // 读失败 → 退化为不标（隐私侧也安全）
+    await app.close()
+  })
 })

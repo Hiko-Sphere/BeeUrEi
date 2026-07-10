@@ -133,12 +133,16 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
       if (!owner || owner.status !== 'active') continue
       for (const e of store.emergencyEventsForUser(ownerId)) {
         if (e.resolvedAt != null || e.at <= now - windowMs) continue // 仅未解除、近 24h
+        // 该人是否有紧急医疗信息（我是其紧急联系人、有权读）——响应者据此一键查看过敏/用药/病史（施救刚需）。
+        // **拉黑即撤回**（与 medical.ts 授权同口径）：拉黑不删链/不清 isEmergency，若不额外查 isBlockedBetween，
+        // 被拉黑的旧紧急联系人会看到 hasMedical=true（泄露"有医疗信息在案"存在位）却点查拿 403（假提示）。
+        // getMedicalInfo/isBlockedBetween 是**非必需**子读（医疗标志是看板核心「谁在紧急」之外的附加信息）：
+        // better-sqlite3 会 SQLITE_BUSY/IOERR 同步抛，绝不能让某个 owner 的医疗读抛错把整个看板 500 掉、
+        // 让协助者看不到**其余** owner 正在进行的紧急。读失败退化为不标医疗（隐私侧也安全：宁可不标不误标）。
+        let hasMedical = false
+        try { hasMedical = !!store.getMedicalInfo(ownerId) && !isBlockedBetween(store, me, ownerId) } catch { /* 非必需子读失败不使看板失明 */ }
         active.push({ ownerId, ownerName: owner.displayName, eventId: e.id, kind: e.kind, at: e.at,
-          acked: e.ackedAt != null, escalated: e.escalatedAt != null, lat: e.lat ?? null, lon: e.lon ?? null,
-          // 该人是否有紧急医疗信息（我是其紧急联系人、有权读）——响应者据此一键查看过敏/用药/病史（施救刚需）。
-          // **拉黑即撤回**（与 medical.ts 授权同口径）：拉黑不删链/不清 isEmergency，若不额外查 isBlockedBetween，
-          // 被拉黑的旧紧急联系人会看到 hasMedical=true（泄露"有医疗信息在案"存在位）却点查拿 403（假提示）。
-          hasMedical: !!store.getMedicalInfo(ownerId) && !isBlockedBetween(store, me, ownerId) })
+          acked: e.ackedAt != null, escalated: e.escalatedAt != null, lat: e.lat ?? null, lon: e.lon ?? null, hasMedical })
       }
     }
     // 分诊排序（最需要行动者置顶，非只按时间）：升级后仍无人响应 > 尚无人响应 > 已有人响应；同档内新的在前。

@@ -548,7 +548,9 @@ async function loadDashboard() {
   } catch (err) { viewEl().innerHTML = `<div class="err-banner">${esc(errText(err.code))}</div>`; }
 }
 function statCard(k, v, sub, cls) {
-  return `<div class="card stat"><div class="k">${esc(k)}</div><div class="v ${cls || ''}">${v}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ''}</div>`;
+  // v 也过 esc（输出编码在汇聚点，不靠"调用方都只传数字"的约束）：esc(数字) 为无损（String() 后无元字符），
+  // 但若某天有调用方把用户串当统计值传进来也不会破出。至此面板属性+文本两类插值全部汇聚点编码。
+  return `<div class="card stat"><div class="k">${esc(k)}</div><div class="v ${cls || ''}">${esc(v)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ''}</div>`;
 }
 function renderDashboard() {
   const o = state.overview; if (!o) return;

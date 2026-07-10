@@ -11,6 +11,7 @@ interface SpaTest {
   state: { lang: string; emergencies: unknown[]; calls: unknown[]; callsQuery: string; overview: unknown }
   t: (k: string) => string
   emergencySection: () => string
+  statCard: (k: string, v: unknown, sub?: string, cls?: string) => string
   renderCalls: () => void
   renderDashboard: () => void
   view: { innerHTML: string } // 渲染函数写入的共享 stub 元素（viewEl()/$ 都解析到它）
@@ -20,7 +21,7 @@ function loadSpa(): SpaTest {
   let src = readFileSync(path, 'utf8')
   const anchor = '\nrender();'
   if (!src.includes(anchor)) throw new Error('app.js bootstrap anchor "render();" not found — update test')
-  src = src.replace(anchor, '\nglobalThis.__test = { state, t, emergencySection, renderCalls, renderDashboard };\nrender();')
+  src = src.replace(anchor, '\nglobalThis.__test = { state, t, emergencySection, statCard, renderCalls, renderDashboard };\nrender();')
   const noop = (): void => {}
   const classList = { add: noop, remove: noop, toggle: noop, contains: () => false }
   // 自引用宽容元素：querySelector 返回自身（事件绑定链不断）、querySelectorAll 空数组、其余 noop。
@@ -194,6 +195,14 @@ describe('管理面板 总览「通话中继失败」卡（运维可见 TURN 故
     spa.state.overview = overview() // 无 callConnect
     spa.renderDashboard()
     expect(spa.view.innerHTML).not.toContain('通话中继失败')
+  })
+
+  it('statCard 值做输出编码（汇聚点从严）：数字无损、恶意串被中和——面板文本插值不靠调用方只传数字的约束', () => {
+    const spa = loadSpa()
+    expect(spa.statCard('用户', 42, '', '')).toContain('>42<')         // 数字经 esc 无损
+    const html = spa.statCard('x', '<img src=x onerror=alert(1)>', '', 'danger')
+    expect(html).not.toContain('<img src=x onerror=alert(1)>')          // 未成真实标签
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;')        // 被 HTML 实体编码中和
   })
 })
 

@@ -77,7 +77,7 @@ const I18N = {
     err_forbidden: '无权操作', err_unauthorized: '登录已过期，请重新登录', err_network: '网络错误，请重试', err_cannot_review_self: '不能审核自己的实名提交',
     sessionExpired: '登录已过期，请重新登录', loading: '加载中…',
     relationships: '关系', calls: '通话', owner: '视障用户', member: '协助者 / 亲友', relationCol: '关系',
-    emergency: '紧急', sosCall: '紧急求助', exportCsv: '导出 CSV', noLinks: '暂无绑定关系', caller: '主叫', callee: '被叫', time: '时间',
+    emergency: '紧急', sosCall: '紧急求助', exportCsv: '导出 CSV', noLinks: '暂无绑定关系', caller: '主叫', callee: '被叫', time: '时间', duration: '时长',
     callCount: '通话记录', searchLinks: '搜索姓名…', searchCalls: '搜索姓名…',
     linkAccepted: '已绑定', linkPending: '待确认', linkDeclined: '已拒绝',
     newUsers7d: '近 7 天新增', newUsers30d: '近 30 天新增', regTrend: '注册趋势（近 30 天）',
@@ -198,7 +198,7 @@ const I18N = {
     err_forbidden: 'Forbidden', err_unauthorized: 'Session expired — sign in again', err_network: 'Network error, try again', err_cannot_review_self: 'You cannot review your own ID submission',
     sessionExpired: 'Session expired — sign in again', loading: 'Loading…',
     relationships: 'Relations', calls: 'Calls', owner: 'Blind user', member: 'Helper / family', relationCol: 'Relation',
-    emergency: 'Emergency', sosCall: 'SOS', exportCsv: 'Export CSV', noLinks: 'No relationships yet', caller: 'Caller', callee: 'Callee', time: 'Time',
+    emergency: 'Emergency', sosCall: 'SOS', exportCsv: 'Export CSV', noLinks: 'No relationships yet', caller: 'Caller', callee: 'Callee', time: 'Time', duration: 'Duration',
     callCount: 'Call records', searchLinks: 'Search name…', searchCalls: 'Search name…',
     linkAccepted: 'Linked', linkPending: 'Pending', linkDeclined: 'Declined',
     newUsers7d: 'New · 7d', newUsers30d: 'New · 30d', regTrend: 'Registrations (last 30 days)',
@@ -304,6 +304,13 @@ function fmtDate(ms) {
   if (!ms) return '—';
   try { return new Date(ms).toLocaleString(localeCode(), { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
   catch { return new Date(ms).toISOString(); }
+}
+// 通话时长 mm:ss（≥1h 显示 h:mm:ss）；无/0 显示 —。
+function fmtDur(sec) {
+  if (sec == null || sec <= 0) return '—';
+  const s = Math.floor(sec % 60), m = Math.floor((sec / 60) % 60), h = Math.floor(sec / 3600);
+  const pad = (n) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 function fmtUptime(sec) {
   if (!sec && sec !== 0) return '—';
@@ -1122,6 +1129,7 @@ function renderCalls() {
       <td><span class="arrow">→</span></td>
       <td><div class="nm">${esc(c.calleeName)}</div></td>
       <td>${c.emergency ? `<span class="pill danger">🆘 ${esc(t('sosCall'))}</span> ` : ''}${esc(callStatusName(c.status))}</td>
+      <td class="n">${esc(fmtDur(c.durationSec))}</td>
       <td class="cell-date">${esc(fmtDate(c.createdAt))}</td>
     </tr>`).join('');
   viewEl().innerHTML = `
@@ -1132,7 +1140,7 @@ function renderCalls() {
     </div>
     <div class="table-wrap">
       ${list.length ? `<table><thead><tr>
-        <th>${esc(t('caller'))}</th><th></th><th>${esc(t('callee'))}</th><th>${esc(t('status'))}</th><th>${esc(t('time'))}</th>
+        <th>${esc(t('caller'))}</th><th></th><th>${esc(t('callee'))}</th><th>${esc(t('status'))}</th><th>${esc(t('duration'))}</th><th>${esc(t('time'))}</th>
       </tr></thead><tbody>${rows}</tbody></table>`
       : `<div class="empty"><div class="ico">📞</div><p>${esc(t('noCalls'))}</p></div>`}
     </div>`;
@@ -1140,8 +1148,8 @@ function renderCalls() {
   viewEl().querySelector('[data-action="reloadCalls"]').addEventListener('click', loadCalls);
   viewEl().querySelector('[data-action="exportCalls"]').addEventListener('click', () => {
     downloadCSV('beeurei-calls.csv', [
-      [t('caller'), t('callee'), t('status'), t('sosCall'), t('time')],
-      ...filteredCalls().map((c) => [c.callerName, c.calleeName, callStatusName(c.status), c.emergency ? '1' : '', fmtDate(c.createdAt)]),
+      [t('caller'), t('callee'), t('status'), t('sosCall'), t('duration'), t('time')],
+      ...filteredCalls().map((c) => [c.callerName, c.calleeName, callStatusName(c.status), c.emergency ? '1' : '', fmtDur(c.durationSec), fmtDate(c.createdAt)]),
     ]);
   });
 }

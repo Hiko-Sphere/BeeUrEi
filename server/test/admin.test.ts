@@ -183,7 +183,7 @@ describe('admin + reports', () => {
     const helperId = helper.json().user.id
 
     store.createLink({ id: 'lk1', ownerId: blindId, memberId: helperId, relation: '女儿', isEmergency: true, createdAt: Date.now(), status: 'accepted' })
-    store.createCallRecord({ id: 'cr1', callId: 'call-abc', callerId: blindId, calleeId: helperId, status: 'answered', createdAt: Date.now() })
+    store.createCallRecord({ id: 'cr1', callId: 'call-abc', callerId: blindId, calleeId: helperId, status: 'answered', createdAt: Date.now(), durationSec: 204 })
     store.createCallRecord({ id: 'cr2', callId: 'call-sos', callerId: blindId, calleeId: helperId, status: 'missed', createdAt: Date.now() + 1, emergency: true }) // SOS 呼叫
 
     const links = await app.inject({ method: 'GET', url: '/api/admin/links', headers: adminAuth })
@@ -200,6 +200,8 @@ describe('admin + reports', () => {
     expect((byId['call-abc'] as any).callerName).toBe('blindy')
     expect((byId['call-abc'] as any).calleeName).toBe('helpy')
     expect((byId['call-abc'] as any).status).toBe('answered')
+    expect((byId['call-abc'] as any).durationSec).toBe(204) // 通话时长如实下发（治理视图显示 3:24）
+    expect((byId['call-sos'] as any).durationSec).toBeNull() // 未接=无时长 → null
     // 紧急求助标记如实下发（治理视图须能区分"未接的紧急求助"与日常协助；此前漏=死字段）。
     expect(byId['call-sos'].emergency).toBe(true)
     expect(byId['call-abc'].emergency).toBe(false)

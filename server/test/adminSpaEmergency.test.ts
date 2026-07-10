@@ -180,4 +180,16 @@ describe('管理面板 通话记录区（紧急求助可辨识）', () => {
     expect(html).toContain('小明')
     expect(html).toContain('普通甲')                          // 非紧急行照常渲染、不带标（次数断言已保证）
   })
+
+  it('通话时长 durationSec 显示为 mm:ss（无/0 显示 —）', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    spa.state.callsQuery = ''
+    spa.state.calls = [call({ id: 'c1', durationSec: 204 }), call({ id: 'c2', callerName: '甲', durationSec: 0 }), call({ id: 'c3', callerName: '乙' })]
+    spa.renderCalls()
+    const html = spa.view.innerHTML
+    expect(html).toContain('3:24')                           // 204s → 3:24
+    // 0 / 缺省时长显示 —（除表头"时长"外，— 恰两处：c2 与 c3）。
+    expect(html.split('—').length - 1).toBe(2)
+  })
 })

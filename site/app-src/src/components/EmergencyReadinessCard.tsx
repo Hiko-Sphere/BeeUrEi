@@ -1,14 +1,31 @@
 import { useEffect, useState } from 'react'
 import { api, type EmergencyReadiness } from '../lib/api'
 import { useI18n } from '../lib/i18n'
-import { Card } from './ui'
+import { Card, Button, useToast } from './ui'
 
 /// 应急就绪自检卡（Family 页）：出事**之前**先确认紧急联系人能否即时收到告警——防"安全网其实是空的/
 /// 联系人没装 App 或没开通知"的假安心（这正是本项目核心安全价值）。三态：无紧急联系人(danger) /
 /// 部分或全部不可达(danger，逐个点出谁不可达) / 全部可达(ok)。加载失败静默不渲染（不制造假警报）。
 export function EmergencyReadinessCard({ refreshKey }: { refreshKey?: unknown }) {
   const { t } = useI18n()
+  const toast = useToast()
   const [r, setR] = useState<EmergencyReadiness | null>(null)
+  const [testing, setTesting] = useState(false)
+  // 发测试告警：真正给联系人发一条**标注为测试**的通知，验证告警链路确实送达（就绪自检只查"有推送通道"）。
+  // confirm 防误发骚扰联系人；成功后按实际触达数给回执。
+  const sendTest = async () => {
+    if (!confirm(t('将给你的联系人发送一条「测试告警」通知，用于确认告警能送达。确定发送？',
+      'This sends your contacts a clearly-labeled TEST alert to confirm alerts reach them. Send it?'))) return
+    setTesting(true)
+    try {
+      const res = await api.sendTestAlert()
+      toast(res.notified >= res.contacts && res.contacts > 0
+        ? t(`测试告警已发出，${res.contacts} 位联系人都能即时收到。`, `Test sent — all ${res.contacts} contacts can receive it instantly.`)
+        : t(`测试告警已发给 ${res.contacts} 位联系人，其中 ${res.notified} 位有即时推送通道。`, `Test sent to ${res.contacts} contacts; ${res.notified} have an instant push channel.`),
+        res.notified >= res.contacts ? 'ok' : 'info')
+    } catch { toast(t('发送失败，请稍后再试', 'Failed — try again later'), 'error') }
+    finally { setTesting(false) }
+  }
   // 加载失败保持 r=null → 不渲染，绝不显示可能过时/错误的就绪状态（假安心防护）。
   // refreshKey 变化时重拉（父页在增删联系人/设/撤紧急联系人后传新值）——否则刚设了紧急联系人、
   // 就绪状态却仍显示旧的"无紧急联系人"，是安全信息陈旧的假安心/假警报。
@@ -43,6 +60,12 @@ export function EmergencyReadinessCard({ refreshKey }: { refreshKey?: unknown })
                 ))}
               </ul>
             </>
+          )}
+          {/* 有联系人才给「发测试告警」——真正验证送达（不只理论可达）。无联系人时先去设置，无从测起。 */}
+          {r.hasEmergencyContact && (
+            <Button variant="soft" onClick={sendTest} disabled={testing} className="mt-3">
+              {t('发送测试告警', 'Send test alert')}
+            </Button>
           )}
         </div>
       </div>

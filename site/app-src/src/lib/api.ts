@@ -377,6 +377,8 @@ export const api = {
   emergencyAck: (fromId: string, eventId?: string, onMyWay?: boolean) => post('/api/emergency/ack', { fromId, eventId, onMyWay }),
   // 应急就绪自检：出事前先确认紧急联系人能否即时收到告警（防"安全网其实是空的/不通"的假安心）。
   emergencyReadiness: () => get('/api/emergency/readiness') as Promise<EmergencyReadiness>,
+  // 测试告警投递：给自己的联系人发一条明确标注为测试的通知，真正验证告警链路能送达。返回实际触达数。
+  sendTestAlert: () => post('/api/emergency/test', {}) as Promise<{ ok: boolean; notified: number; contacts: number }>,
   // Web Push（浏览器推送紧急告警）
   webVapidKey: () => get('/api/push/web-vapid-key') as Promise<{ key: string }>,
   webPushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) => post('/api/push/web-subscribe', sub),

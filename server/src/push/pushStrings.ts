@@ -124,6 +124,12 @@ export const pushStrings = {
     l === 'en' ? `The group "${groupName}" has been dissolved` : `群聊「${groupName}」已被群主解散`,
   emergencyAlertTitle: (name: string, l: PushLang): string =>
     l === 'en' ? `Emergency: ${name} may need help` : `紧急：${name} 可能需要帮助`,
+  // 测试告警（用户主动验证安全网确实送达；**明确标注是测试、请勿惊慌/无需行动**）——非危急，受勿扰约束。
+  emergencyTestTitle: (name: string, l: PushLang): string =>
+    l === 'en' ? `Test alert from ${name} (no action needed)` : `${name} 的测试告警（无需处理）`,
+  emergencyTestBody: (name: string, l: PushLang): string =>
+    l === 'en' ? `This is only a test — ${name} is checking their emergency alerts reach you. Please ignore.`
+               : `这只是一条测试——${name} 在确认紧急告警能送达你。请忽略，无需任何行动。`,
   /// 告警正文的电量段（battery=告警**发出时刻**的手机电量%）：≤20% 点明"可能很快关机"——亲友知道联系窗口
   /// 有限、要立刻行动。未知(undefined)不提。只在首呼即时消息里用，**不**随升级重呼重播（几分钟后早已陈旧、会误导）。
   emergencyBatterySegment: (battery: number | undefined, l: PushLang): string => {

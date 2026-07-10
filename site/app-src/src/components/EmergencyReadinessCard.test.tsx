@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 
-vi.mock('../lib/api', () => ({ api: { emergencyReadiness: vi.fn() }, APIError: class extends Error {} }))
+vi.mock('../lib/api', () => ({ api: { emergencyReadiness: vi.fn(), sendTestAlert: vi.fn() }, APIError: class extends Error {} }))
 import { api } from '../lib/api'
 import { EmergencyReadinessCard } from './EmergencyReadinessCard'
 
@@ -40,6 +40,33 @@ describe('EmergencyReadinessCard 应急就绪自检（假安心防护）', () =>
     const { container } = render(<EmergencyReadinessCard />)
     await waitFor(() => expect(api.emergencyReadiness).toHaveBeenCalled())
     expect(container.textContent).not.toContain('应急就绪')
+  })
+
+  it('有联系人 → 显示「发送测试告警」，确认后调 sendTestAlert；无联系人不显示该按钮', async () => {
+    mock(api.emergencyReadiness).mockResolvedValueOnce({ hasEmergencyContact: false, total: 0, reachable: 0, contacts: [] })
+    const { rerender, container } = render(<EmergencyReadinessCard refreshKey={1} />)
+    await screen.findByText(/不会有人收到告警/)
+    expect(screen.queryByRole('button', { name: '发送测试告警' })).toBeNull() // 无联系人：无从测起
+    // 有联系人 → 按钮出现；确认后调 api。
+    mock(api.emergencyReadiness).mockResolvedValueOnce({ hasEmergencyContact: true, total: 1, reachable: 1, contacts: [{ name: '妈妈', relation: '家人', reachable: true }] })
+    mock(api.sendTestAlert).mockResolvedValue({ ok: true, notified: 1, contacts: 1 })
+    rerender(<EmergencyReadinessCard refreshKey={2} />)
+    const btn = await screen.findByRole('button', { name: '发送测试告警' })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    fireEvent.click(btn)
+    await waitFor(() => expect(api.sendTestAlert).toHaveBeenCalled())
+    confirmSpy.mockRestore()
+    expect(container).toBeTruthy()
+  })
+
+  it('测试告警确认取消 → 不调 sendTestAlert（防误发骚扰联系人）', async () => {
+    mock(api.emergencyReadiness).mockResolvedValue({ hasEmergencyContact: true, total: 1, reachable: 1, contacts: [{ name: '妈妈', relation: '家人', reachable: true }] })
+    render(<EmergencyReadinessCard />)
+    const btn = await screen.findByRole('button', { name: '发送测试告警' })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false) // 用户取消
+    fireEvent.click(btn)
+    expect(api.sendTestAlert).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
   })
 
   it('refreshKey 变化 → 重新拉取（增删/设紧急联系人后就绪状态即时更新，不陈旧）', async () => {

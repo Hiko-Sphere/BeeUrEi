@@ -10,6 +10,7 @@ import { broadcastAllClear } from '../emergency/allClear'
 import { NoopPushSender, type PushSender } from '../push/apns'
 import { NoopWebPushSender, type WebPushSender } from '../push/webPush'
 import { pushLang, pushStrings } from '../push/pushStrings'
+import { notifyUser } from '../notifications/notify'
 import { totalUnreadFor } from '../db/unread'
 import type { Metrics } from '../metrics/metrics'
 
@@ -105,6 +106,30 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
       reachable: contacts.filter((c) => c.reachable).length,
       contacts,
     }
+  })
+
+  // 测试告警投递（医疗警报行业标配"test your alert"）：用户主动发一条**明确标注为测试**的通知给自己的
+  // 联系人，真正验证告警链路能送达（就绪自检只查"有推送通道"，测试则真发一条）。与真实告警口径一致地
+  // 扇给全体 accepted 联系人；但**不**建紧急事件、不升级、不带位置、kind=delivery_check（非危急词、受勿扰
+  // 约束——不会半夜为一条测试惊动联系人）。限流 3/时防骚扰联系人。notifyUser 走 in-app+APNs+WebPush 同款通道。
+  app.post('/api/emergency/test', { preHandler: requireAuth(),
+                                    config: { rateLimit: { max: 3, timeWindow: '1 hour' } } }, async (req, reply) => {
+    const me = store.findById(req.user!.sub)
+    if (!me) return reply.code(404).send({ error: 'not_found' })
+    const links = store.linksByOwner(me.id).filter((l) => (l.status ?? 'accepted') === 'accepted')
+    const members = links.map((l) => store.findById(l.memberId)).filter((m): m is NonNullable<typeof m> => !!m)
+    const isReachable = (m: NonNullable<ReturnType<typeof store.findById>>): boolean =>
+      !!m.apnsToken || (webPush.configured && safeWebPushSubs(m.id).length > 0)
+    for (const member of members) {
+      const l = pushLang(member.language)
+      // best-effort：单个联系人通知失败绝不中断其余（notifyUser 内部已 try/catch，此处再兜一层）。
+      try {
+        notifyUser(store, pushSender, member.id, 'delivery_check',
+          pushStrings.emergencyTestTitle(me.displayName, l), pushStrings.emergencyTestBody(me.displayName, l),
+          { fromId: me.id, fromName: me.displayName })
+      } catch { /* 测试通知不可因单点失败中断 */ }
+    }
+    return { ok: true, notified: members.filter(isReachable).length, contacts: links.length }
   })
 
   // 摔倒/车祸自动警报：检测端确认（倒计时无人取消）后调用——给所有 accepted 绑定的亲友/协助者

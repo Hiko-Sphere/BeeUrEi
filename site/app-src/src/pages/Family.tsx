@@ -12,6 +12,7 @@ import { IconUsers, IconPhone, IconChat, IconPlus, IconCheck, IconX, IconShield,
 import { ReportDialog } from '../components/ReportDialog'
 import { EmergencyReadinessCard } from '../components/EmergencyReadinessCard'
 import { CheckinHistorySection } from '../components/CheckinHistorySection'
+import { EmergencyContactPushWarning } from '../components/EmergencyContactPushWarning'
 import { EmergencyHistorySection } from '../components/EmergencyHistorySection'
 
 export function FamilyPage() {
@@ -100,6 +101,9 @@ export function FamilyPage() {
                    `You're the emergency contact for ${iAmEmergencyFor} ${iAmEmergencyFor > 1 ? 'people' : 'person'} — they'll call you if they need help. Keep your phone reachable and notifications on.`)}</span>
         </div>
       )}
+
+      {/* 真实核查（非只静态提醒）：我是紧急联系人却没开浏览器通知 → 主动警告并一键开启（自我版假安心防护）。 */}
+      <EmergencyContactPushWarning emergencyFor={iAmEmergencyFor} />
 
       {/* 应急就绪自检：出事**前**先确认紧急联系人能否即时收到告警（防安全网其实不通的假安心）。 */}
       <EmergencyReadinessCard refreshKey={links} />

@@ -1080,6 +1080,10 @@ export class SqliteStore implements Store {
        ON CONFLICT(userId) DO UPDATE SET count = CASE WHEN day = excluded.day THEN count + 1 ELSE 1 END, day = excluded.day`,
     ).run(userId, day)
   }
+  refundVisionCall(userId: string, day: string): void {
+    // 回退一次预留：仅当当前行仍是该 day 且 count>0（跨日已重置则不误减；WHERE count>0 保证不为负）。
+    this.db.prepare('UPDATE vision_usage SET count = count - 1 WHERE userId = ? AND day = ? AND count > 0').run(userId, day)
+  }
   deleteVisionUsageForUser(userId: string): void {
     this.db.prepare('DELETE FROM vision_usage WHERE userId = ?').run(userId)
   }

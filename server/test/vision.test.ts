@@ -157,6 +157,27 @@ describe('POST /api/vision/describe（路由）', () => {
     await app.close()
   })
 
+  it('并发防护：占额在打上游**之前**（reserve）——上游进行中，当日配额计数已含本次（防边界并发越额）', async () => {
+    setConfig()
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const t = await token(app)
+    const sub = store.findByUsername('visionuser')!.id
+    const day = new Date().toISOString().slice(0, 10)
+    let countDuringUpstream = -1
+    // stub 的 fetch = 上游调用本身：在其执行（即 await 进行中）读当日配额计数——占额若在 await 之前，此刻应为 1。
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      countDuringUpstream = store.visionCallsOnDay(sub, day)
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) }
+    }))
+    const res = await app.inject({ method: 'POST', url: '/api/vision/describe', headers: { authorization: `Bearer ${t}` },
+      payload: { image: TINY_JPEG_B64, mime: 'image/jpeg' } })
+    expect(res.statusCode).toBe(200)
+    expect(countDuringUpstream).toBe(1) // 上游进行中本次已占额；旧实现在 await **之后**才自增 → 此刻会是 0（边界并发可越额）
+    expect(store.visionCallsOnDay(sub, day)).toBe(1) // 成功后仍是 1（占额未与成功后再计重复）
+    await app.close()
+  })
+
   it('上游失败 → 502 ai_error（不外泄上游细节）', async () => {
     setConfig()
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, json: async () => ({ error: { message: 'boom' } }) })))

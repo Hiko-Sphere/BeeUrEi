@@ -54,11 +54,17 @@ export function registerVisionRoutes(app: FastifyInstance, store: Store, metrics
     // 每日配额（护外部付费额度；见 visionDailyMax）：当日已达上限即 429，绝不再打上游。
     const day = utcDay()
     const dailyMax = visionDailyMax()
-    if (store.visionCallsOnDay(req.user!.sub, day) >= dailyMax) {
+    const sub = req.user!.sub
+    // 检查 + **预留**须原子：两次同步 store 调用间无 await，故并发请求不会都在自增前通过检查（此前 record 在 await
+    // **之后**才自增——边界处 N 个并发全过检查、齐打上游、齐自增，可越配额多打 ~限流并发数(10) 次付费调用，
+    // 部分抵消配额护预算的目的）。改为"先占额(reserve)、上游失败再退还(refund)"：check+record 相邻同步 → 原子占额；
+    // 语义仍"仅成功计入"（失败 refund 归还，见 catch）。
+    if (store.visionCallsOnDay(sub, day) >= dailyMax) {
       metrics?.inc('vision_quota_exceeded_total') // 值守：单账号撞每日上限的速率（异常飙升=滥用/配额过紧）
       // 回带 remaining/dailyMax：客户端可明确告知盲人"今日 AI 描述已用完（0/N），次日 UTC 0 点重置"，而非笼统报错。
       return reply.code(429).send({ error: 'ai_daily_quota_exceeded', remaining: 0, dailyMax })
     }
+    store.recordVisionCall(sub, day) // 原子占额（与上面的检查相邻、其间无 await）：并发的下一个请求必看到本次占用而被挡
 
     try {
       const text = await visionDescribe({
@@ -66,12 +72,12 @@ export function registerVisionRoutes(app: FastifyInstance, store: Store, metrics
         question,
         lang: lang ?? 'zh',
       })
-      store.recordVisionCall(req.user!.sub, day) // 仅成功计入配额（失败不烧用户额度，失败速率已由 10/min 限流兜住）
       metrics?.inc('vision_describe_total') // 值守：成功描述数≈外部付费调用量（乘单价即成本，可对账/告警）
       // 回带剩余次数：付费额度有限，盲人靠它配给使用（"还剩 N 次"），临近上限时客户端可提前提醒，避免用到一半突然被拒。
-      const remaining = Math.max(0, dailyMax - store.visionCallsOnDay(req.user!.sub, day)) // 含刚记的这次
+      const remaining = Math.max(0, dailyMax - store.visionCallsOnDay(sub, day)) // 含刚占的这次
       return { text, remaining, dailyMax }
     } catch (e) {
+      store.refundVisionCall(sub, day) // 上游失败退还预留（保持"失败不烧用户额度"；失败速率已由 10/min 限流兜住）
       // 不外泄上游细节/密钥；仅入服务端日志便于运维定位（如 VISION_* 配置错误、上游 4xx/5xx）。
       metrics?.inc('vision_errors_total') // 值守：上游失败率（飙升=provider 故障/配额耗尽/配置错，可告警）
       if (e instanceof VisionError) {

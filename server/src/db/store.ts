@@ -757,7 +757,8 @@ export interface Store {
   mediaBytesForOwner(userId: string): number // 某用户媒体总字节数（配额检查，防单账号撑爆磁盘）
   // AI 视觉每日配额：护外部付费视觉模型额度（10/min 限流只限速率、不限当日总量）。单行/用户，跨 UTC 日自动重置。
   visionCallsOnDay(userId: string, day: string): number // 该用户在 day(UTC yyyy-mm-dd)当日已成功的视觉调用次数
-  recordVisionCall(userId: string, day: string): void   // 记一次成功调用（同日累加，跨日重置为 1）
+  recordVisionCall(userId: string, day: string): void   // 记一次调用（同日累加，跨日重置为 1）——配额"预留"用（reserve）
+  refundVisionCall(userId: string, day: string): void   // 回退一次预留（上游失败时；仅当当前行仍是该 day 且 count>0，下限 0）
   deleteVisionUsageForUser(userId: string): void        // 删号级联清计数
   allMedia(): MediaMeta[] // 全部媒体元数据（孤儿清扫遍历用）
   referencedMediaIds(): Set<string> // 被视频消息(kind=video,text=mediaId)或录制(mediaId)引用的全部 mediaId（孤儿清扫判定用）
@@ -1634,6 +1635,10 @@ export class MemoryStore implements Store {
     if (e && e.day === day) e.count += 1
     else this.visionUsage.set(userId, { day, count: 1 }) // 新用户或跨日：重置为 1
     this.afterMutate()
+  }
+  refundVisionCall(userId: string, day: string): void {
+    const e = this.visionUsage.get(userId)
+    if (e && e.day === day && e.count > 0) { e.count -= 1; this.afterMutate() } // 仅同日、下限 0（跨日则 bucket 已重置，不误减）
   }
   deleteVisionUsageForUser(userId: string): void {
     if (this.visionUsage.delete(userId)) this.afterMutate()

@@ -100,7 +100,7 @@ export function FamilyPage() {
       )}
 
       {/* 应急就绪自检：出事**前**先确认紧急联系人能否即时收到告警（防安全网其实不通的假安心）。 */}
-      <EmergencyReadinessCard />
+      <EmergencyReadinessCard refreshKey={links} />
 
       {/* 安全报到（dead-man's switch）：出行前设时限，到点未报平安则自动告警紧急联系人。 */}
       <SafetyCheckInCard />

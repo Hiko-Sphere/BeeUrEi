@@ -6,11 +6,13 @@ import { Card } from './ui'
 /// 应急就绪自检卡（Family 页）：出事**之前**先确认紧急联系人能否即时收到告警——防"安全网其实是空的/
 /// 联系人没装 App 或没开通知"的假安心（这正是本项目核心安全价值）。三态：无紧急联系人(danger) /
 /// 部分或全部不可达(danger，逐个点出谁不可达) / 全部可达(ok)。加载失败静默不渲染（不制造假警报）。
-export function EmergencyReadinessCard() {
+export function EmergencyReadinessCard({ refreshKey }: { refreshKey?: unknown }) {
   const { t } = useI18n()
   const [r, setR] = useState<EmergencyReadiness | null>(null)
   // 加载失败保持 r=null → 不渲染，绝不显示可能过时/错误的就绪状态（假安心防护）。
-  useEffect(() => { void api.emergencyReadiness().then(setR).catch(() => { /* 保持未加载态，不渲染 */ }) }, [])
+  // refreshKey 变化时重拉（父页在增删联系人/设/撤紧急联系人后传新值）——否则刚设了紧急联系人、
+  // 就绪状态却仍显示旧的"无紧急联系人"，是安全信息陈旧的假安心/假警报。
+  useEffect(() => { void api.emergencyReadiness().then(setR).catch(() => { /* 保持未加载态，不渲染 */ }) }, [refreshKey])
   if (!r) return null
 
   const allReachable = r.hasEmergencyContact && r.reachable === r.total

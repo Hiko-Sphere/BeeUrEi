@@ -41,4 +41,16 @@ describe('EmergencyReadinessCard 应急就绪自检（假安心防护）', () =>
     await waitFor(() => expect(api.emergencyReadiness).toHaveBeenCalled())
     expect(container.textContent).not.toContain('应急就绪')
   })
+
+  it('refreshKey 变化 → 重新拉取（增删/设紧急联系人后就绪状态即时更新，不陈旧）', async () => {
+    // 先无紧急联系人，后（父页设了紧急联系人 → refreshKey 变）返回全部可达。
+    mock(api.emergencyReadiness)
+      .mockResolvedValueOnce({ hasEmergencyContact: false, total: 0, reachable: 0, contacts: [] })
+      .mockResolvedValueOnce({ hasEmergencyContact: true, total: 1, reachable: 1, contacts: [{ name: '妈妈', relation: '家人', reachable: true }] })
+    const { rerender } = render(<EmergencyReadinessCard refreshKey={['a']} />)
+    expect(await screen.findByText(/不会有人收到告警/)).toBeInTheDocument()
+    rerender(<EmergencyReadinessCard refreshKey={['a', 'b']} />) // 新的联系人数组引用 → 重拉
+    expect(await screen.findByText(/都能即时收到告警/)).toBeInTheDocument()
+    expect(api.emergencyReadiness).toHaveBeenCalledTimes(2)
+  })
 })

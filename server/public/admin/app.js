@@ -138,6 +138,7 @@ const I18N = {
     auditSearch: '搜索（管理员/对象/详情）', auditAllActions: '全部动作', auditNoMatch: '无匹配记录（共 {n} 条）',
     emergTitle: '紧急事件（近 100 条）', emergEmpty: '暂无紧急事件', emergKind_fall: '疑似摔倒', emergKind_crash: '疑似撞击', emergKind_manual: '手动 SOS', emergKind_checkin: '安全报到未报平安', emergNotified: '推送', emergContacts: '亲友', emergLive: '实时位置', emergLastKnown: '最后已知', emergNoLoc: '无位置', emergResolved: '已报平安', emergAcked: '有人响应', emergUnanswered: '升级后仍无人响应', emergNoReach: '未触达任何人',
     backupTitle: '数据库备份（灾难恢复）', backupDesc: '下载整个数据库的一致性快照（.db 文件，含全部账号/亲友/通知等数据）。请离线加密保存到安全处；此操作会记入审计。媒体文件另存于磁盘目录，不含在此备份内。', backupBtn: '下载数据库备份', backingUp: '正在生成备份…', backupDone: '备份已下载', backupFail: '备份失败',
+    mailTestTitle: 'SMTP 自检（发送测试邮件）', mailTestDesc: '配好/改好 SMTP 凭据后，当场验证发信链路——不必等真实用户撞发码失败。发到下面的地址（留空=你本人已验证邮箱）。失败会显示上游报错（如 163 授权码过期的 535）。', mailTestBtn: '发送测试邮件', mailTestTo: '收件邮箱（可留空）', mailTesting: '正在发送…', mailTestOk: '测试邮件已发送，请查收', mailTestFail: '发送失败',
     contentFilterTitle: '内容过滤（防违规违法）', cfEnabled: '启用内容过滤', cfDesc: '命中违禁词的消息/群名/昵称会被拒收。每行一个词，大小写不敏感，子串匹配。默认空=不生效。',
     cfTerms: '违禁词（每行一个）', saveBtn: '保存', err_content_blocked: '内容含违禁词，已拦截', err_maintenance: '系统维护中',
     // v6：单用户功能覆盖
@@ -262,6 +263,7 @@ const I18N = {
     auditSearch: 'Search (admin / target / detail)', auditAllActions: 'All actions', auditNoMatch: 'No matches (of {n} entries)',
     emergTitle: 'Emergency events (last 100)', emergEmpty: 'No emergency events', emergKind_fall: 'Suspected fall', emergKind_crash: 'Suspected crash', emergKind_manual: 'Manual SOS', emergKind_checkin: 'Missed safety check-in', emergNotified: 'pushed', emergContacts: 'contacts', emergLive: 'live location', emergLastKnown: 'last known', emergNoLoc: 'no location', emergResolved: 'resolved', emergAcked: 'responded', emergUnanswered: 'unanswered after escalation', emergNoReach: 'reached no one',
     backupTitle: 'Database backup (disaster recovery)', backupDesc: 'Download a consistent snapshot of the entire database (.db file, incl. all accounts / family links / notifications). Store it encrypted and offline; this action is audited. Media files live in a separate disk directory and are not part of this backup.', backupBtn: 'Download database backup', backingUp: 'Generating backup…', backupDone: 'Backup downloaded', backupFail: 'Backup failed',
+    mailTestTitle: 'SMTP self-test (send test email)', mailTestDesc: 'After setting/fixing SMTP credentials, verify delivery right away — no need to wait for a real user to hit a code-send failure. Sends to the address below (blank = your verified email). Failures show the upstream error (e.g. 535 for an expired credential).', mailTestBtn: 'Send test email', mailTestTo: 'Recipient email (optional)', mailTesting: 'Sending…', mailTestOk: 'Test email sent — check your inbox', mailTestFail: 'Send failed',
     contentFilterTitle: 'Content filter (block violations)', cfEnabled: 'Enable content filter', cfDesc: 'Messages/group names/display names containing a banned term are rejected. One term per line, case-insensitive, substring match. Empty = no effect.',
     cfTerms: 'Banned terms (one per line)', saveBtn: 'Save', err_content_blocked: 'Content contains a banned term', err_maintenance: 'Under maintenance',
     // v6: per-user feature overrides
@@ -355,7 +357,7 @@ async function api(path, { method = 'GET', body, auth = true } = {}) {
   if (res.status === 401 && auth) { logout(true); throw { code: 'unauthorized' }; }
   let data = null;
   try { data = await res.json(); } catch { /* empty body (204) */ }
-  if (!res.ok) throw { code: (data && data.error) || 'network', status: res.status };
+  if (!res.ok) throw { code: (data && data.error) || 'network', status: res.status, detail: data && data.detail };
   return data;
 }
 
@@ -1670,6 +1672,13 @@ function renderControls() {
       <div class="card">
         <div class="save-row"><button class="btn primary" id="dbBackup">⬇︎ ${esc(t('backupBtn'))}</button></div>
       </div>
+    </div>
+    <div class="section"><h3>${esc(t('mailTestTitle'))}</h3>
+      <p class="section-sub">${esc(t('mailTestDesc'))}</p>
+      <div class="card">
+        <div class="field"><input id="mailTestTo" type="email" placeholder="${esc(t('mailTestTo'))}" autocapitalize="none" spellcheck="false"/></div>
+        <div class="save-row"><button class="btn primary" id="mailTestBtn">✉︎ ${esc(t('mailTestBtn'))}</button></div>
+      </div>
     </div>`;
   $('#cReg').addEventListener('change', (e) => saveConfig({ registrationEnabled: e.target.checked }, e.target));
   $('#cReqVerif').addEventListener('change', (e) => saveConfig({ requireVerification: e.target.checked }, e.target));
@@ -1682,6 +1691,22 @@ function renderControls() {
     saveConfig({ contentFilter: { enabled: $('#cfEnabled').checked, terms } });
   });
   $('#dbBackup').addEventListener('click', downloadDbBackup);
+  $('#mailTestBtn').addEventListener('click', sendMailTest);
+}
+
+// SMTP 自检：发一封测试邮件，成功 toast，失败把上游报错（如 535）显给管理员诊断。
+async function sendMailTest(ev) {
+  const btn = ev.currentTarget; btn.disabled = true;
+  toast(t('mailTesting'), 'info');
+  const to = ($('#mailTestTo')?.value || '').trim();
+  try {
+    await api('/api/admin/mail-test', { method: 'POST', body: to ? { to } : {} });
+    toast(t('mailTestOk'), 'success');
+  } catch (err) {
+    // api() 把非 2xx 抛为 {code, status, detail?}；detail 含上游报错（如 163 授权码过期的 535），如实显给管理员诊断。
+    const detail = err && err.detail ? ' (' + err.detail + ')' : (err && err.code ? ' (' + err.code + ')' : '');
+    toast(t('mailTestFail') + detail, 'error');
+  } finally { btn.disabled = false; }
 }
 
 // 数据库备份下载：带鉴权 fetch → blob → 触发下载。用 api() 不行（它 res.json() 会毁二进制），故直接 fetch。

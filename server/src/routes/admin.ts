@@ -16,6 +16,7 @@ import type { PresenceRegistry } from '../assist/presence'
 import { type SignalingHub } from '../signaling/hub'
 import { type CallControlBridge } from '../signaling/callControl'
 import { type PushSender, NoopPushSender } from '../push/apns'
+import { type Mailer, NoopMailer } from '../mail/mailer'
 import { type Metrics } from '../metrics/metrics'
 import { pushLang, pushStrings } from '../push/pushStrings'
 import { notifyUser, notifyAccountSecurity } from '../notifications/notify'
@@ -53,7 +54,7 @@ const kycRejectSchema = z.object({
 
 const START_MS = Date.now()
 
-export function registerAdminRoutes(app: FastifyInstance, store: Store, presence: PresenceRegistry, metrics: Metrics, hub?: SignalingHub, callControl?: CallControlBridge, push: PushSender = new NoopPushSender()): void {
+export function registerAdminRoutes(app: FastifyInstance, store: Store, presence: PresenceRegistry, metrics: Metrics, hub?: SignalingHub, callControl?: CallControlBridge, push: PushSender = new NoopPushSender(), mailer: Mailer = new NoopMailer()): void {
   const adminOnly = { preHandler: requireAuth(['admin']) }
   // 当前活跃管理员数（用于"最后一名管理员"保护，防把后台锁死）。
   const activeAdminCount = () => store.allUsers().filter((u) => u.role === 'admin' && u.status === 'active').length
@@ -124,6 +125,30 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       return reply.send(buf)
     } finally {
       try { unlinkSync(tmp) } catch { /* 临时文件已清或未生成 */ }
+    }
+  })
+
+  // SMTP 自检：管理员主动发一封测试邮件，**当场**验证发信链路（尤其配好/改好 SMTP 凭据后，不必等真实用户
+  // 撞发码失败才知道好没好——与"应急就绪自检"发测试告警同思路）。发到管理员指定地址（默认本人已验证邮箱）。
+  // 成功=SMTP 通；失败把上游报错(如 535 授权失败)如实回给管理员诊断（admin-only，不外泄）。3/min 限流防滥发。
+  const mailTestSchema = z.object({ to: z.string().trim().email().max(254).optional() })
+  app.post('/api/admin/mail-test', { preHandler: requireAuth(['admin']), config: { rateLimit: { max: 3, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const parsed = mailTestSchema.safeParse(req.body ?? {})
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_email' })
+    const me = store.findById(req.user!.sub)
+    // 收件人：显式指定优先；否则回落本人**已验证**邮箱（未验证不发，免发到打错的地址）。
+    const to = parsed.data.to ?? (me?.email && me.emailVerified ? me.email : undefined)
+    if (!to) return reply.code(400).send({ error: 'no_recipient' }) // 既没指定、本人也无已验证邮箱
+    const stamp = new Date().toISOString()
+    try {
+      await mailer.send(to, 'BeeUrEi SMTP 测试 / SMTP test',
+        `这是一封来自 BeeUrEi 管理后台的 SMTP 自检邮件。收到即表示发信链路正常。\nThis is an SMTP self-test from the BeeUrEi admin panel. Receiving it means email delivery works.\n\n${stamp}`)
+      audit(req.user!.sub, 'mail.test', 'config', 'smtp', `→ ${to.replace(/(.{2}).*(@.*)/, '$1***$2')}`)
+      return { ok: true }
+    } catch (e) {
+      // 上游报错如实回管理员（诊断 SMTP，如 163 授权码过期的 535）——admin-only 语境，不外泄给普通用户。
+      audit(req.user!.sub, 'mail.test', 'config', 'smtp', `FAILED: ${(e as Error).message}`)
+      return reply.code(502).send({ ok: false, error: 'mail_failed', detail: (e as Error).message.slice(0, 300) })
     }
   })
 

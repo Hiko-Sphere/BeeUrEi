@@ -340,6 +340,24 @@ describe('SqliteStore (node:sqlite)', () => {
     check(new MemoryStore())
   })
 
+  it('createPasskey credentialId 冲突防护两存储一致：夺他人凭据(异 id 同 credentialId)抛、绝不删/覆盖既有 passkey', () => {
+    // 同 createUser 夺舍类：SqliteStore 曾用 INSERT OR REPLACE→credentialId UNIQUE 冲突会删掉他人免密凭据；
+    // MemoryStore 裸 set→留两条同 credentialId。锁死：异 id 同 credentialId 一律抛、既有 passkey 保住。
+    const check = (s: SqliteStore | MemoryStore) => {
+      s.createPasskey({ id: 'pkA', userId: 'uA', credentialId: 'credX', publicKey: 'pub', counter: 0, createdAt: 1000 })
+      expect(() => s.createPasskey({ id: 'pkB', userId: 'uB', credentialId: 'credX', publicKey: 'pub2', counter: 0, createdAt: 2000 })).toThrow()
+      const found = s.findPasskeyByCredentialId('credX')
+      expect(found?.id).toBe('pkA')       // 原凭据仍在（未被删/覆盖）
+      expect(found?.userId).toBe('uA')     // 仍属原主，非被 uB 夺取
+      expect(s.passkeysForUser('uB')).toHaveLength(0) // uB 未获得该凭据
+      // 不同 credentialId 正常并存。
+      s.createPasskey({ id: 'pkC', userId: 'uA', credentialId: 'credY', publicKey: 'pub3', counter: 0, createdAt: 3000 })
+      expect(s.passkeysForUser('uA')).toHaveLength(2)
+    }
+    check(new SqliteStore(':memory:'))
+    check(new MemoryStore())
+  })
+
   it('createUser 同名夺舍防护两存储一致：重名(异 id)抛错、绝不删既有账号；同 id(updateUser) 覆盖放行', () => {
     // 严重地雷类：SqliteStore createUser 用 INSERT OR REPLACE，username UNIQUE 冲突会**删掉他人账号**（静默接管/丢号）；
     // MemoryStore 裸 set 则留两个同名账号。两存储都错、方向相反。锁死：重名(异 id) 一律抛、既有账号保住、同 id 覆盖仍可。

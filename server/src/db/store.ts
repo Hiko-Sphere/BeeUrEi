@@ -888,6 +888,9 @@ export class MemoryStore implements Store {
   }
 
   createPasskey(p: Passkey): void {
+    // 与 SqliteStore 的 credentialId UNIQUE 同口径：插入型方法（updatePasskeyCounter 走独立 UPDATE），
+    // credentialId 若已存在即抛——绝不覆盖/夺取他人的免密登录凭据（此前裸 set 会留两条同 credentialId）。
+    for (const e of this.passkeys.values()) if (e.credentialId === p.credentialId) throw new Error('credential_exists')
     this.passkeys.set(p.id, p)
     this.afterMutate()
   }

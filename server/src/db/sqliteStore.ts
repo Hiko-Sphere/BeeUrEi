@@ -317,7 +317,10 @@ export class SqliteStore implements Store {
 
   // MARK: passkeys（WebAuthn）
   createPasskey(p: Passkey): void {
-    this.db.prepare('INSERT OR REPLACE INTO passkeys (id, userId, credentialId, publicKey, counter, deviceName, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    // 插入型（updatePasskeyCounter 走独立 UPDATE，不复用本方法）：用**普通 INSERT** 而非 INSERT OR REPLACE——
+    // 后者会把 credentialId UNIQUE 冲突"解决"成删掉他人已有 passkey（静默删除免密凭据的地雷）。普通 INSERT 遇冲突
+    // 直接抛（等同 UNIQUE 本意，与 MemoryStore 同口径）；注册入口已先 findPasskeyByCredentialId→409 且同步原子，触不到，此为从严兜底。
+    this.db.prepare('INSERT INTO passkeys (id, userId, credentialId, publicKey, counter, deviceName, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(p.id, p.userId, p.credentialId, p.publicKey, p.counter, p.deviceName ?? null, p.createdAt)
   }
   findPasskeyByCredentialId(credentialId: string): Passkey | undefined {

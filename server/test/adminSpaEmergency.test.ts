@@ -108,6 +108,26 @@ describe('管理面板 紧急事件区（响应结果分诊信号）', () => {
     expect(spa.emergencySection()).not.toContain('未触达任何人') // 已报平安，不再列为待介入
   })
 
+  it('位置链接：合法数值坐标正常出 Apple Maps href（无回归）', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    spa.state.emergencies = [ev({ lat: 35.68, lon: 139.76, locSource: 'live' })]
+    const html = spa.emergencySection()
+    expect(html).toContain('https://maps.apple.com/?ll=35.68,139.76&q=35.68,139.76') // 数值坐标 encodeURIComponent 不变
+    expect(html).toContain('实时位置')
+  })
+
+  it('位置链接：坐标做输出编码（汇聚点从严）——即便非数值坐标流到渲染层也无法破出 href 属性注入脚本', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    // 上游 z.number 校验本使这不可达，但汇聚点仍从严编码（防 DB 导入/迁移/历史行）：若某天有恶意坐标到此，须被中和。
+    spa.state.emergencies = [ev({ lat: '"><img src=x onerror=alert(1)>', lon: 0, locSource: 'live' })]
+    const html = spa.emergencySection()
+    expect(html).not.toContain('<img src=x onerror=alert(1)>') // 未破出属性成为真实标签
+    expect(html).not.toContain('"><img')                        // 引号未闭合属性提前
+    expect(html).toContain('%22%3E%3Cimg')                      // 已被 encodeURIComponent 中和为百分号编码
+  })
+
   it('渲染全部取到的事件（标题称"近 100 条"就真给 100 条）：第 21+ 位的"无人响应"红标不被截掉（复审 CONFIRMED）', () => {
     const spa = loadSpa()
     spa.state.lang = 'zh'

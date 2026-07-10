@@ -615,7 +615,10 @@ function emergencySection() {
           const label = e.locSource === 'lastKnown'
             ? `⚠️ ${t('emergLastKnown')}${e.locAgeSec != null ? ' · ' + Math.round(e.locAgeSec / 60) + 'min' : ''}`
             : `📍 ${t('emergLive')}`;
-          loc = `<a href="https://maps.apple.com/?ll=${e.lat},${e.lon}&q=${e.lat},${e.lon}" target="_blank" rel="noreferrer">${esc(label)}</a>`;
+          // 坐标在 href 里做 URL 编码（输出编码在汇聚点，不只靠上游 z.number 校验）：即便某天有非数值坐标
+          // 流到这（DB 导入/迁移/历史行），也无法破出属性注入脚本——管理面板唯一的属性插值点，从严。
+          const la = encodeURIComponent(e.lat), lo = encodeURIComponent(e.lon);
+          loc = `<a href="https://maps.apple.com/?ll=${la},${lo}&q=${la},${lo}" target="_blank" rel="noreferrer">${esc(label)}</a>`;
         }
         const resolved = e.resolvedAt != null ? `<span class="pill ok">✓ ${esc(t('emergResolved'))}</span>` : '';
         // 响应结果（值守分诊的关键信号）：有人响应(ackedAt) vs **升级重呼后仍无人响应**（未 ack + 已 escalate + 未解除）

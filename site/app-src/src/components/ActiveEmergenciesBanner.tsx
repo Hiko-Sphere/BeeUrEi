@@ -4,6 +4,7 @@ import { pollWhileVisible } from '../lib/poll'
 import { useI18n } from '../lib/i18n'
 import { appleMapsUrl } from '../lib/location'
 import { Card, Button, timeAgo, useToast } from './ui'
+import { ContactMedicalInfo } from './ContactMedicalInfo'
 import { IconPhone } from './icons'
 
 /// 我负责的人当前未解除的紧急情况看板（helper 首页顶部）：漏看推送时的兜底——把"我是 accepted 紧急联系人"
@@ -55,6 +56,8 @@ export function ActiveEmergenciesBanner({ onCall }: { onCall?: (userId: string, 
                 <Button variant="danger" onClick={() => onCall(e.ownerId, e.ownerName)}><IconPhone width={15} height={15} />{t('呼叫', 'Call')}</Button>
               )}
             </div>
+            {/* 该人有紧急医疗信息 → 醒目按钮供施救者一键查看过敏/用药/病史（我是其紧急联系人、有权读）。 */}
+            {e.hasMedical && <div className="w-full"><ContactMedicalInfo userId={e.ownerId} emphasize /></div>}
           </li>
         ))}
       </ul>

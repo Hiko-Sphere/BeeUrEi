@@ -2,12 +2,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
-vi.mock('../lib/api', () => ({ api: { watchingEmergencies: vi.fn(), emergencyAck: vi.fn() }, APIError: class extends Error {} }))
+vi.mock('../lib/api', () => ({ api: { watchingEmergencies: vi.fn(), emergencyAck: vi.fn(), contactMedicalInfo: vi.fn() }, APIError: class extends Error { status = 0 } }))
 import { api } from '../lib/api'
 import { ActiveEmergenciesBanner } from './ActiveEmergenciesBanner'
 
 const mock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
-const ev = (over: Record<string, unknown> = {}) => ({ ownerId: 'mom', ownerName: '妈妈', eventId: 'e1', kind: 'fall', at: Date.now() - 60000, acked: false, escalated: false, lat: 31.2, lon: 121.4, ...over })
+const ev = (over: Record<string, unknown> = {}) => ({ ownerId: 'mom', ownerName: '妈妈', eventId: 'e1', kind: 'fall', at: Date.now() - 60000, acked: false, escalated: false, lat: 31.2, lon: 121.4, hasMedical: false, ...over })
 
 describe('ActiveEmergenciesBanner 我负责的人活跃紧急（漏看推送兜底）', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -31,6 +31,25 @@ describe('ActiveEmergenciesBanner 我负责的人活跃紧急（漏看推送兜�
     fireEvent.click(await screen.findByRole('button', { name: '我在赶来' }))
     await waitFor(() => expect(api.emergencyAck).toHaveBeenCalledWith('mom', 'e1', true))
     expect(await screen.findByRole('button', { name: '已回应' })).toBeDisabled()
+  })
+
+  it('该人有医疗信息(hasMedical) → 显示醒目"点击查看医疗信息"按钮；无则不显示（施救刚需）', async () => {
+    mock(api.watchingEmergencies).mockResolvedValue({ active: [ev({ hasMedical: true })] })
+    mock(api.contactMedicalInfo).mockResolvedValue({ medicalInfo: 'O型血 · 青霉素过敏', updatedAt: Date.now() })
+    render(<ActiveEmergenciesBanner />)
+    const medBtn = await screen.findByTestId('view-medical-btn')
+    expect(medBtn).toHaveTextContent(/此人有紧急医疗信息/)         // emphasize 醒目态
+    fireEvent.click(medBtn)
+    await waitFor(() => expect(api.contactMedicalInfo).toHaveBeenCalledWith('mom'))
+    expect(await screen.findByText(/青霉素过敏/)).toBeInTheDocument() // 拉取到并展示
+  })
+
+  it('该人无医疗信息(hasMedical=false) → 不显示医疗信息按钮（不越权拉取/不清扰）', async () => {
+    mock(api.watchingEmergencies).mockResolvedValue({ active: [ev({ hasMedical: false })] })
+    render(<ActiveEmergenciesBanner />)
+    await screen.findByText('妈妈')
+    expect(screen.queryByTestId('view-medical-btn')).toBeNull()
+    expect(api.contactMedicalInfo).not.toHaveBeenCalled()
   })
 
   it('无活跃紧急 → 整块不渲染（只在需要行动时出现）', async () => {

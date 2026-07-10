@@ -32,7 +32,11 @@ describe('GET /api/emergency/watching', () => {
     expect(r.statusCode).toBe(200)
     const active = r.json().active
     expect(active.map((a: { eventId: string }) => a.eventId)).toEqual(['e-mom']) // 恰只有 mom 的未解除、近 24h 的
-    expect(active[0]).toMatchObject({ ownerName: 'ewMom', kind: 'fall', acked: false, escalated: false })
+    expect(active[0]).toMatchObject({ ownerName: 'ewMom', kind: 'fall', acked: false, escalated: false, hasMedical: false })
+    // mom 填了医疗信息 → hasMedical 变 true（响应者据此一键查看）。
+    store.setMedicalInfo({ userId: mom.user.id, sealed: '{"enc":"x"}', updatedAt: Date.now() }) // 存在即 hasMedical（内容加密，服务端不解）
+    const withMed = (await app.inject({ method: 'GET', url: '/api/emergency/watching', headers: auth(helper.token) })).json().active
+    expect(withMed[0].hasMedical).toBe(true)
     await app.close()
   })
 

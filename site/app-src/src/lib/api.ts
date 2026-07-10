@@ -44,7 +44,7 @@ export interface EmergencyReadiness { hasEmergencyContact: boolean; total: numbe
 /// 本人紧急事件历史条目：kind=fall/crash/manual；acked=有亲友响应；escalated=升级重呼；resolved=已报平安。
 export interface EmergencyHistoryItem { id: string; kind: string; at: number; notified: number; contacts: number; acked: boolean; escalated: boolean; resolved: boolean; lat: number | null; lon: number | null }
 /// 我负责的人当前未解除的紧急：kind=fall/crash/manual；acked=已有人响应；escalated=升级重呼过。
-export interface ActiveEmergency { ownerId: string; ownerName: string; eventId: string; kind: string; at: number; acked: boolean; escalated: boolean; lat: number | null; lon: number | null }
+export interface ActiveEmergency { ownerId: string; ownerName: string; eventId: string; kind: string; at: number; acked: boolean; escalated: boolean; lat: number | null; lon: number | null; hasMedical: boolean }
 /// 每日定时报到配置：startMinute=本地时区一天中的第几分钟（0..1439）；tz 为 IANA 时区。
 export interface DailyCheckinSchedule { enabled: boolean; startMinute: number; durationMinutes: number; tz: string; note?: string }
 /// 报到历史条目：status=active/completed/canceled/fired/expired；endedAt=完成/取消/告警时刻（active 为 null）。

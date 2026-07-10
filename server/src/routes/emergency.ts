@@ -127,14 +127,16 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     const ownerIds = new Set(store.linksByMember(me)
       .filter((l) => (l.status ?? 'accepted') === 'accepted' && l.isEmergency)
       .map((l) => l.ownerId))
-    const active: { ownerId: string; ownerName: string; eventId: string; kind: string; at: number; acked: boolean; escalated: boolean; lat: number | null; lon: number | null }[] = []
+    const active: { ownerId: string; ownerName: string; eventId: string; kind: string; at: number; acked: boolean; escalated: boolean; lat: number | null; lon: number | null; hasMedical: boolean }[] = []
     for (const ownerId of ownerIds) {
       const owner = store.findById(ownerId)
       if (!owner || owner.status !== 'active') continue
       for (const e of store.emergencyEventsForUser(ownerId)) {
         if (e.resolvedAt != null || e.at <= now - windowMs) continue // 仅未解除、近 24h
         active.push({ ownerId, ownerName: owner.displayName, eventId: e.id, kind: e.kind, at: e.at,
-          acked: e.ackedAt != null, escalated: e.escalatedAt != null, lat: e.lat ?? null, lon: e.lon ?? null })
+          acked: e.ackedAt != null, escalated: e.escalatedAt != null, lat: e.lat ?? null, lon: e.lon ?? null,
+          // 该人是否有紧急医疗信息（我是其紧急联系人、有权读）——响应者据此一键查看过敏/用药/病史（施救刚需）。
+          hasMedical: !!store.getMedicalInfo(ownerId) })
       }
     }
     active.sort((a, b) => b.at - a.at)

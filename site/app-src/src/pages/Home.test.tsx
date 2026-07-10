@@ -26,8 +26,8 @@ describe('HomePage 最近通话渲染（防字段漂移）', () => {
   it('锁定 peerName/direction/status 渲染键', async () => {
     mock(api.callHistory).mockResolvedValue({
       calls: [
-        { id: 'c1', peerName: '王医生', peerAvatar: null, direction: 'incoming', status: 'answered', createdAt: 1_700_000_000_000 },
-        { id: 'c2', peerName: '李阿姨', peerAvatar: null, direction: 'outgoing', status: 'missed', createdAt: 1_700_000_000_000 },
+        { id: 'c1', peerId: 'p1', peerName: '王医生', peerAvatar: null, direction: 'incoming', status: 'answered', createdAt: 1_700_000_000_000 },
+        { id: 'c2', peerId: 'p2', peerName: '李阿姨', peerAvatar: null, direction: 'outgoing', status: 'missed', createdAt: 1_700_000_000_000 },
       ],
     })
     render(<HomePage />)

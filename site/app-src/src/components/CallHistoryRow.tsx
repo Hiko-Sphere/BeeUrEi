@@ -15,12 +15,15 @@ export function CallHistoryRow({ call: c, className = 'px-4 py-3', onCall, callD
   callDisabled?: boolean               // 通话进行中禁用（不能同时发起第二通）
 }) {
   const { t, lang } = useI18n()
+  // 已注销对端(peerId 为 null)：服务端 peerName 回落成硬编码中文「已注销用户」，会漏给英文用户。
+  // 客户端据 peerId===null 本地化，杜绝语言泄漏（服务端硬编码另有 chip 系统性收口）。peerId 在则为真实姓名。
+  const peerName = c.peerId ? c.peerName : t('已注销用户', 'Deactivated user')
   const content = (
     <>
-      <Avatar name={c.peerName || '?'} src={c.peerAvatar} size={36} />
+      <Avatar name={peerName || '?'} src={c.peerAvatar} size={36} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="truncate text-sm font-medium">{c.peerName}</span>
+          <span className="truncate text-sm font-medium">{peerName}</span>
           {/* 紧急求助呼叫（盲人一键 SOS）：通话记录里突出——尤其"未接紧急求助"须让协助者一眼看到、优先回拨。读屏可闻。 */}
           {c.emergency && <span className="shrink-0 rounded-full bg-danger/15 px-1.5 py-0.5 text-[10px] font-bold text-danger">{t('🆘 紧急求助', '🆘 SOS')}</span>}
         </div>

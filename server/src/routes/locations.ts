@@ -5,6 +5,7 @@ import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
 import { type LiveLocationRegistry } from '../location/liveLocations'
 import { evaluateGeofences } from '../location/geofence'
+import { TtlDedup } from '../location/ttlDedup'
 import { decideLowBatteryWarn } from '../location/lowBattery'
 import { type PushSender, NoopPushSender } from '../push/apns'
 import { pushLang, pushStrings } from '../push/pushStrings'
@@ -151,8 +152,8 @@ export function registerLocationRoutes(app: FastifyInstance, store: Store, live:
   // 通知后**自行决定**是否开启共享——绝不远程强开（共享永远由本人主动开启，这只是一声请求）。
   // 授权=已接受联系人（acceptedContactIds 双向且排除拉黑双方）；对方已在共享 → 不再打扰（alreadySharing）；
   // 同一对(请求者→目标) 5 分钟内只发一次（内存 TTL 去重，防 nudge 轰炸）；再叠端级限流 6/min。
-  const requestDedup = new Map<string, number>() // `${me}:${target}` → 上次请求时刻 ms（重启即清，可接受）
   const REQUEST_TTL_MS = 5 * 60_000
+  const requestDedup = new TtlDedup(REQUEST_TTL_MS) // 有界：陈旧"用户对"条目会被机会式清理，不随累积无限膨胀
   app.post('/api/locations/request', { preHandler: [requireAuth(), requireFeature(store, 'locationSharing')],
                                        config: { rateLimit: { max: 6, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = z.object({ userId: z.string().min(1).max(64) }).safeParse(req.body)
@@ -165,9 +166,7 @@ export function registerLocationRoutes(app: FastifyInstance, store: Store, live:
     const now = Date.now()
     if (live.isSharing(target.id, now)) return { ok: true, alreadySharing: true } // 已在共享（本就可见），不打扰
     const key = `${me}:${target.id}`
-    const last = requestDedup.get(key)
-    if (last != null && now - last < REQUEST_TTL_MS) return { ok: true, deduped: true } // 5 分钟内不重复打扰
-    requestDedup.set(key, now)
+    if (!requestDedup.tryPass(key, now)) return { ok: true, deduped: true } // 5 分钟内不重复打扰（放行即记录，去重则不记）
     const meUser = store.findById(me)
     const l = pushLang(target.language)
     // notifyUser 双通道（in-app 持久 + APNs + Web Push），data.fromId/fromName 供客户端渲染"是谁在请求"。

@@ -82,7 +82,7 @@ describe('GET /api/account/export', () => {
     const uid = me.user.id as string
     // 一通紧急求助(SOS)呼叫 + 一通普通呼叫。
     store.createCallRecord({ id: 'cr1', callId: 'call-sos', callerId: uid, calleeId: 'peerx', status: 'missed', createdAt: 1000, emergency: true })
-    store.createCallRecord({ id: 'cr2', callId: 'call-plain', callerId: uid, calleeId: 'peerx', status: 'answered', createdAt: 2000, emergency: false })
+    store.createCallRecord({ id: 'cr2', callId: 'call-plain', callerId: uid, calleeId: 'peerx', status: 'answered', createdAt: 2000, emergency: false, durationSec: 204 })
     // 一次紧急事件：被亲友"知道了"(ack) + 无人先应答后升级重呼(escalate) 过。
     store.createEmergencyEvent({ id: 'ev1', userId: uid, kind: 'fall', notified: 1, contacts: 1, at: 3000 })
     store.markEmergencyAcked('ev1', 3500)
@@ -92,6 +92,9 @@ describe('GET /api/account/export', () => {
     // 通话记录 emergency 标记如实导出（此前只出 direction/peer/status/createdAt，漏了 emergency）。
     expect(body.callRecords.some((c: { emergency: boolean }) => c.emergency === true)).toBe(true)
     expect(body.callRecords.some((c: { emergency: boolean }) => c.emergency === false)).toBe(true)
+    // 通话时长也如实导出（可携权完整；此前漏 durationSec）。
+    expect(body.callRecords.find((c: { status: string }) => c.status === 'answered').durationSec).toBe(204)
+    expect(body.callRecords.find((c: { status: string }) => c.status === 'missed').durationSec).toBeNull()
     // 紧急事件的**响应结果**如实导出（此前漏 ackedAt/escalatedAt——用户无从知晓求助有没有被看到/升级过）。
     expect(body.emergencyEvents.length).toBe(1)
     expect(body.emergencyEvents[0]).toMatchObject({ kind: 'fall', ackedAt: 3500, escalatedAt: 3800 })

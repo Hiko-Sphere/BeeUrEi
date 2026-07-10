@@ -59,7 +59,7 @@ export function buildUserExportBundle(store: Store, id: string, now: number) {
     recordings: store.allRecordings().filter((r) => r.ownerId === id).map((r) => ({ callId: r.callId, reason: r.reason, recordedAt: r.recordedAt })),
     // emergency：本次是否为紧急求助(SOS)呼叫——存在库、也经 /api/calls 回给客户端渲染"未接紧急求助"，却此前漏出导出。
     // 是本人通话记录的真实属性、且用户复盘安全历史时刚需（哪几通是求助电话），补齐以对齐存储与可携权。
-    callRecords: store.callRecordsForUser(id, 1000).map((c) => ({ direction: c.callerId === id ? 'outgoing' : 'incoming', peer: nameOf(c.callerId === id ? c.calleeId : c.callerId), status: c.status, emergency: !!c.emergency, createdAt: c.createdAt })),
+    callRecords: store.callRecordsForUser(id, 1000).map((c) => ({ direction: c.callerId === id ? 'outgoing' : 'incoming', peer: nameOf(c.callerId === id ? c.calleeId : c.callerId), status: c.status, emergency: !!c.emergency, durationSec: c.durationSec ?? null, createdAt: c.createdAt })),
     passkeys: store.passkeysForUser(id).map((p) => ({ deviceName: p.deviceName ?? null, createdAt: p.createdAt })),
     activeSessions: store.countSessionsForUser(id, now),
     // 实名认证（KYC）元数据：本人提交的身份数据属本人 PII，GDPR 访问/可携权覆盖，此前导出漏了。

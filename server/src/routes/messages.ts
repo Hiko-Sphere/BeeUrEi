@@ -10,6 +10,15 @@ export function receiptsOffBetween(store: Store, a: string, b: string): boolean 
     return store.findById(a)?.readReceiptsEnabled === false || store.findById(b)?.readReceiptsEnabled === false
   } catch { return false }
 }
+
+/// 读回执剥离（单点，覆盖**所有**把消息回给"发送方本人"的出口：消息列表/会话 last/搜索/recall·edit·reaction 回显）。
+/// 只处理"viewer 发出的单聊消息"：群消息不用 readAt（匿名计数另路）；对端发来的消息其 readAt 是 viewer 自己的
+/// 已读时刻（本人数据，非隐私暴露）。最终批次复审抓到：仅在消息列表剥离，搜索与写操作回显两条旁路仍原样返回
+/// readAt，读回执开关可被发送方绕过——收拢为单一助手，杜绝再新增出口时漏。
+export function stripReadAtForViewer(store: Store, viewerId: string, m: ChatMessage): ChatMessage {
+  if (m.groupId || m.fromId !== viewerId || m.readAt == null) return m
+  return receiptsOffBetween(store, viewerId, m.toId) ? { ...m, readAt: undefined } : m
+}
 import { totalUnreadFor } from '../db/unread'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
@@ -210,10 +219,7 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     // 也看不到别人的已读）。只影响"已读/已送达"显示；markRead 照常写库，未读计数/角标完全不受影响。群回执只暴露
     // 匿名计数（readBy/readTotal，不点名谁读了），照 WhatsApp 群例外保持不变。
     const msgs = store.messagesBetween(me, peer, limit, before, beforeId)
-    if (receiptsOffBetween(store, me, peer)) {
-      return { messages: msgs.map((m) => (m.fromId === me && m.readAt != null) ? { ...m, readAt: undefined } : m) }
-    }
-    return { messages: msgs }
+    return { messages: msgs.map((m) => stripReadAtForViewer(store, me, m)) }
   })
 
   // 搜索文本消息：?q=关键词 + (?with=对端 或 ?group=群 id)；**两者都不带=跨会话全局搜索**（WhatsApp 式，
@@ -236,9 +242,10 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     const peer = q.with
     // 不带 with/group → 全局：本人参与的全部单聊 + 所在群（向后兼容：老客户端总带其一，行为不变；
     // 此前该形状是 400 invalid_input，无人依赖一个报错形状）。
-    if (!peer) return { messages: store.searchAllMessagesFor(me, query, limit) }
+    // 读回执剥离与消息列表同口径（复审补漏：搜索是曾被遗漏的 readAt 旁路出口）。
+    if (!peer) return { messages: store.searchAllMessagesFor(me, query, limit).map((m) => stripReadAtForViewer(store, me, m)) }
     if (!areLinked(store, me, peer)) return reply.code(403).send({ error: 'not_linked' })
-    return { messages: store.searchDirectMessages(me, peer, query, limit) }
+    return { messages: store.searchDirectMessages(me, peer, query, limit).map((m) => stripReadAtForViewer(store, me, m)) }
   })
 
   // recall/edit/reaction 三个写操作与发送(/api/messages 60/min)**同口径**加端级限流：它们同样每次写库、且
@@ -257,7 +264,8 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
       removeMediaFile(msg.text)
     }
     const updated = store.updateMessage(id, { kind: 'recalled', text: '', reaction: undefined })
-    return { message: updated }
+    // 读回执剥离与消息列表同口径（复审补漏：写操作回显是曾被遗漏的 readAt 旁路出口）。
+    return { message: updated && stripReadAtForViewer(store, req.user!.sub, updated) }
   })
 
   // 编辑自己发出的**文字**消息（WhatsApp 式：改内容 + 标"已编辑"）。限发出后 15 分钟内、仅 text 类。
@@ -285,7 +293,8 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     }
     if (matchBannedTerm(store.getAppConfig(), parsed.data.text)) return reply.code(403).send({ error: 'content_blocked' })
     const updated = store.updateMessage(id, { text: parsed.data.text, editedAt: Date.now() })
-    return { message: updated }
+    // 读回执剥离与消息列表同口径（复审补漏：写操作回显是曾被遗漏的 readAt 旁路出口）。
+    return { message: updated && stripReadAtForViewer(store, editor, updated) }
   })
 
   // 表情回应（WhatsApp 式：单 emoji，最新覆盖；空字符串取消）。单聊双方或群成员可操作。
@@ -316,7 +325,8 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     // 一句违禁短语当"表情"绕过发送/编辑侧的 matchBannedTerm 直达对方。补齐审核（正常单个 emoji 不含违禁词、不误伤）。
     if (emoji.length > 0 && matchBannedTerm(store.getAppConfig(), emoji)) return reply.code(403).send({ error: 'content_blocked' })
     const updated = store.updateMessage(id, { reaction: emoji.length === 0 ? undefined : emoji })
-    return { message: updated }
+    // 读回执剥离与消息列表同口径（对"我发出的"那条才生效；给对端消息贴表情时 readAt 是我自己的已读时刻，非隐私面）。
+    return { message: updated && stripReadAtForViewer(store, me, updated) }
   })
 
   // 标记已读：单聊传 fromId（已读回执），群聊传 groupId（按人记"读到的时间戳"）。
@@ -343,9 +353,8 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     const conversations = store.latestMessagesPerPeer(me).map((m) => {
       const peerId = m.fromId === me ? m.toId : m.fromId
       const peer = store.findById(peerId)
-      // 读回执隐私：与消息列表同口径——任一方关了回执，我发的 last 不带 readAt（会话列表也不泄露已读）。
-      const last = (m.fromId === me && m.readAt != null && receiptsOffBetween(store, me, peerId))
-        ? { ...m, readAt: undefined } : m
+      // 读回执隐私：与消息列表同口径（stripReadAtForViewer 单点）——任一方关了回执，我发的 last 不带 readAt。
+      const last = stripReadAtForViewer(store, me, m)
       return {
         peer: peer ? publicUser(peer) : { id: peerId, username: '', displayName: '已注销用户', role: '', status: '', avatar: null },
         last,

@@ -590,9 +590,11 @@ function renderDashboard() {
 // （最后已知位置绝不伪装成实时；地图链接一律 Apple Maps，坐标为 WGS-84，与全栈口径一致）。
 function emergencySection() {
   const list = state.emergencies || [];
+  // 渲染**全部**取到的事件（端点上限 100）：标题写着"近 100 条"，此前却只渲染 20 条——一旦累积 20 条更新事件，
+  // "升级后仍无人响应"的待介入红标会被静默截掉，管理员误信"当前无无人响应事件"（最终批次复审 CONFIRMED）。
   const rows = list.length === 0
     ? `<div class="empty-line">${esc(t('emergEmpty'))}</div>`
-    : list.slice(0, 20).map((e) => {
+    : list.map((e) => {
         const kind = t('emergKind_' + e.kind) || esc(e.kind);
         const who = e.userName ? `${esc(e.userName)}${e.username ? ' @' + esc(e.username) : ''}` : esc(e.userId);
         let loc = `<span class="pill">${esc(t('emergNoLoc'))}</span>`;

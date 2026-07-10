@@ -62,6 +62,24 @@ describe('读回执开关 /api/account/read-receipts', () => {
     await app.close()
   })
 
+  it('旁路出口一并剥离（最终批次复审补漏）：会话内搜索/全局搜索/编辑回显都不再泄 readAt；开关全开时搜索仍带（不过度剥离）', async () => {
+    const { app, a, b } = await seed()
+    const searchWith = async () => ((await app.inject({ method: 'GET', url: `/api/messages/search?with=${b.user.id}&q=${encodeURIComponent('在吗')}`, headers: auth(a.token) })).json() as any).messages[0]
+    const searchGlobal = async () => ((await app.inject({ method: 'GET', url: `/api/messages/search?q=${encodeURIComponent('在吗')}`, headers: auth(a.token) })).json() as any).messages[0]
+    // 两端都开（默认）：搜索结果带 readAt（证明修复不是无脑全剥）。
+    expect((await searchWith()).readAt).toBeTruthy()
+    expect((await searchGlobal()).readAt).toBeTruthy()
+    // 接收方关闭 → 三条旁路全部不再暴露 readAt。
+    await app.inject({ method: 'POST', url: '/api/account/read-receipts', headers: auth(b.token), payload: { enabled: false } })
+    expect((await searchWith()).readAt).toBeUndefined()   // 会话内搜索
+    expect((await searchGlobal()).readAt).toBeUndefined() // 全局搜索
+    const mid = (await searchGlobal()).id as string
+    const edited = await app.inject({ method: 'POST', url: `/api/messages/${mid}/edit`, headers: auth(a.token), payload: { text: '在吗（改）' } })
+    expect(edited.statusCode).toBe(200)
+    expect((edited.json() as any).message.readAt).toBeUndefined() // 编辑回显（recall/reaction 与其共用同一 strip 助手）
+    await app.close()
+  })
+
   it('群回执（匿名计数 readBy/readTotal）不受本开关约束（WhatsApp 群例外）', async () => {
     const { app, a, b } = await seed()
     await app.inject({ method: 'POST', url: '/api/account/read-receipts', headers: auth(b.token), payload: { enabled: false } })

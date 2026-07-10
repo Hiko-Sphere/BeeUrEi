@@ -88,6 +88,20 @@ describe('管理面板 紧急事件区（响应结果分诊信号）', () => {
     expect(html).toContain('已报平安')
     expect(html).not.toContain('升级后仍无人响应')
   })
+
+  it('渲染全部取到的事件（标题称"近 100 条"就真给 100 条）：第 21+ 位的"无人响应"红标不被截掉（复审 CONFIRMED）', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    // 20 条较新的普通事件在前 + 第 25 位是升级后仍无人响应的待介入事件（时间更早=列表更后）。
+    spa.state.emergencies = [
+      ...Array.from({ length: 24 }, (_, i) => ev({ id: `e${i}`, userName: `路人${i}`, resolvedAt: 1_700_000_300_000 })),
+      ev({ id: 'stuck', userName: '被截者', escalatedAt: 1_700_000_050_000 }), // 未 ack、未解除
+    ]
+    const html = spa.emergencySection()
+    expect(html.split('bar-row').length - 1).toBe(25)   // 25 条全渲染（此前 slice(0,20) 只剩 20）
+    expect(html).toContain('被截者')                     // 第 25 位仍可见
+    expect(html).toContain('升级后仍无人响应')            // 待介入红标不被静默截掉
+  })
 })
 
 describe('管理面板 通话记录区（紧急求助可辨识）', () => {

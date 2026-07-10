@@ -6,6 +6,7 @@ import { useI18n } from '../lib/i18n'
 import { subscribeWebPush, unsubscribeWebPush, isWebPushSubscribed, webPushSupported, resyncWebPushSubscription } from '../lib/webPush'
 import { roleLabel } from '../components/Layout'
 import { Card, Avatar, Button, Field, Input, useToast, Modal, fmtTime } from '../components/ui'
+import { DataExportCard } from '../components/DataExportCard'
 
 export function AccountPage() {
   const { user, refreshMe, signOut } = useSession()
@@ -159,6 +160,9 @@ export function AccountPage() {
 
       {/* 读回执隐私（WhatsApp 语义）：关了→不发也不看（互惠）；未读计数不受影响 */}
       <ReadReceiptsCard enabled={self?.readReceiptsEnabled ?? true} onChanged={async () => { try { setSelf(await api.me()) } catch { /* ignore */ } }} />
+
+      {/* GDPR 数据可携权：一键下载本人全量数据 JSON（此前服务端有端点、web 无入口） */}
+      <DataExportCard />
 
       {/* 紧急医疗信息：仅紧急联系人遇险时可见，辅助施救 */}
       <MedicalInfoCard />

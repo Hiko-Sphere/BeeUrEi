@@ -460,6 +460,13 @@ export async function fetchRecordingBlob(id: string): Promise<Blob> {
   if (!res.ok) throw new APIError('media_failed', res.status)
   return await res.blob()
 }
+
+/// GDPR 自助数据导出（Bearer 拉取 JSON 全量档为 Blob 供存盘）：兑现"数据可携权"。429=触发限流（3/时）。
+export async function fetchAccountExportBlob(): Promise<Blob> {
+  const res = await fetch(apiURL('/api/account/export'), { headers: tokenStore.token ? { authorization: 'Bearer ' + tokenStore.token } : {} })
+  if (!res.ok) throw new APIError(res.status === 429 ? 'rate_limited' : 'export_failed', res.status)
+  return await res.blob()
+}
 export async function fetchRecordingObjectURL(id: string): Promise<string> {
   return URL.createObjectURL(await fetchRecordingBlob(id))
 }

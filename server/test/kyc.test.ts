@@ -163,6 +163,20 @@ describe.each(stores)('KYC end-to-end (%s)', (_name, make) => {
     expect(dup2.json().error).toBe('already_verified')
     await app.close()
   })
+
+  it('并发双提交（两次都过了活跃检查）→ 只留一条 active（两存储同口径：SqliteStore uniq_verif_active / MemoryStore 补齐）', () => {
+    // 端点的活跃检查(getActiveVerificationForUser)与 createVerification 在真并发下都可能先各自看到"无活跃"再各自写入。
+    // prod 的 SqliteStore 靠 uniq_verif_active(INSERT OR REPLACE) 兜底只留后者；MemoryStore 此前会存两条（parity 缺口）。
+    const store = make()
+    const now = Date.now()
+    store.createVerification({ id: 'vA', userId: 'racer', status: 'pending', idType: 'national_id', submittedVia: 'self', submittedById: 'racer', submittedAt: now, attempt: 1 })
+    store.createVerification({ id: 'vB', userId: 'racer', status: 'pending', idType: 'national_id', submittedVia: 'self', submittedById: 'racer', submittedAt: now + 1, attempt: 2 })
+    const active = store.listVerifications('pending').filter((x) => x.userId === 'racer')
+    expect(active).toHaveLength(1)                                  // 恰一条 active（非两条）——"一人一活跃"不变量
+    expect(active[0].id).toBe('vB')                                 // 后者取代前者（REPLACE 语义）
+    expect(store.getActiveVerificationForUser('racer')?.id).toBe('vB')
+    expect(store.findVerification('vA')).toBeUndefined()            // 前者已被替换删除
+  })
 })
 
 describe('KYC security invariants (MemoryStore)', () => {

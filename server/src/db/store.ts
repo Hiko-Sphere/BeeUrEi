@@ -1243,6 +1243,14 @@ export class MemoryStore implements Store {
     return [...this.reports.values()].filter((r) => r.evidenceRecordingId === recordingId)
   }
   createVerification(v: Verification): void {
+    // 与 SqliteStore 的 uniq_verif_active(INSERT OR REPLACE) 同口径：一人至多一条 active(pending|verified)。
+    // 插入一条 active 记录时，先删掉该用户**其它 id** 的 active 记录（REPLACE 语义），维持"一人一活跃"不变量——
+    // 否则并发双提交会在此存留两条 pending（prod 的 SqliteStore 靠唯一索引只留一条），两存储行为不一致。
+    if (v.status === 'pending' || v.status === 'verified') {
+      for (const [k, e] of this.verifications) {
+        if (k !== v.id && e.userId === v.userId && (e.status === 'pending' || e.status === 'verified')) this.verifications.delete(k)
+      }
+    }
     this.verifications.set(v.id, v)
     this.afterMutate()
   }

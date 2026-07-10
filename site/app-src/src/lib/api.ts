@@ -39,6 +39,8 @@ export interface ContactLocation { userId: string; displayName: string; avatar?:
 export interface SafetyTimer { id: string; note?: string | null; status: string; startedAt: number; dueAt: number; remainingSec: number }
 /// 应急就绪自检：每位紧急联系人能否即时收到告警（reachable=有 APNs token 或已配 Web Push 订阅）。
 export interface EmergencyReadiness { hasEmergencyContact: boolean; total: number; reachable: number; contacts: { name: string; relation: string; reachable: boolean }[] }
+/// 本人紧急事件历史条目：kind=fall/crash/manual；acked=有亲友响应；escalated=升级重呼；resolved=已报平安。
+export interface EmergencyHistoryItem { id: string; kind: string; at: number; notified: number; contacts: number; acked: boolean; escalated: boolean; resolved: boolean; lat: number | null; lon: number | null }
 /// 每日定时报到配置：startMinute=本地时区一天中的第几分钟（0..1439）；tz 为 IANA 时区。
 export interface DailyCheckinSchedule { enabled: boolean; startMinute: number; durationMinutes: number; tz: string; note?: string }
 /// 报到历史条目：status=active/completed/canceled/fired/expired；endedAt=完成/取消/告警时刻（active 为 null）。
@@ -381,6 +383,8 @@ export const api = {
   emergencyAck: (fromId: string, eventId?: string, onMyWay?: boolean) => post('/api/emergency/ack', { fromId, eventId, onMyWay }),
   // 应急就绪自检：出事前先确认紧急联系人能否即时收到告警（防"安全网其实是空的/不通"的假安心）。
   emergencyReadiness: () => get('/api/emergency/readiness') as Promise<EmergencyReadiness>,
+  // 本人紧急事件历史（过往 SOS/摔倒告警回看，近 30 条）。
+  emergencyHistory: () => get('/api/emergency/history') as Promise<{ history: EmergencyHistoryItem[] }>,
   // 测试告警投递：给自己的联系人发一条明确标注为测试的通知，真正验证告警链路能送达。返回实际触达数。
   sendTestAlert: () => post('/api/emergency/test', {}) as Promise<{ ok: boolean; notified: number; contacts: number }>,
   // Web Push（浏览器推送紧急告警）

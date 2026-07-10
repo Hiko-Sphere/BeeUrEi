@@ -108,6 +108,27 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     }
   })
 
+  // 本人紧急事件历史回看（医疗警报标配"alert history"）：过往 SOS/摔倒/撞击告警——何时、触达几人、
+  // 是否有人响应(ack)、是否已升级、是否已报平安(resolved)。此前 emergencyEventsForUser 仅供自助导出，
+  // 无端点、web 无从看（死功能）。近 30 条，倒序，仅展示字段 + 可选坐标供"在地图查看"。
+  app.get('/api/emergency/history', { preHandler: requireAuth() }, async (req) => {
+    const events = store.emergencyEventsForUser(req.user!.sub).slice(0, 30)
+    return {
+      history: events.map((e) => ({
+        id: e.id,
+        kind: e.kind, // fall | crash | manual
+        at: e.at,
+        notified: e.notified,
+        contacts: e.contacts,
+        acked: e.ackedAt != null,       // 是否有亲友"知道了"
+        escalated: e.escalatedAt != null, // 是否因无人响应升级重呼
+        resolved: e.resolvedAt != null, // 是否已报平安解除
+        lat: e.lat ?? null,
+        lon: e.lon ?? null,
+      })),
+    }
+  })
+
   // 测试告警投递（医疗警报行业标配"test your alert"）：用户主动发一条**明确标注为测试**的通知给自己的
   // 联系人，真正验证告警链路能送达（就绪自检只查"有推送通道"，测试则真发一条）。与真实告警口径一致地
   // 扇给全体 accepted 联系人；但**不**建紧急事件、不升级、不带位置、kind=delivery_check（非危急词、受勿扰

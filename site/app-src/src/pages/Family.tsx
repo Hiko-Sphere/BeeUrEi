@@ -12,6 +12,7 @@ import { IconUsers, IconPhone, IconChat, IconPlus, IconCheck, IconX, IconShield,
 import { ReportDialog } from '../components/ReportDialog'
 import { EmergencyReadinessCard } from '../components/EmergencyReadinessCard'
 import { CheckinHistorySection } from '../components/CheckinHistorySection'
+import { EmergencyHistorySection } from '../components/EmergencyHistorySection'
 
 export function FamilyPage() {
   const { t } = useI18n()
@@ -105,6 +106,9 @@ export function FamilyPage() {
 
       {/* 安全报到（dead-man's switch）：出行前设时限，到点未报平安则自动告警紧急联系人。 */}
       <SafetyCheckInCard />
+
+      {/* 本人紧急事件历史（过往 SOS/摔倒回看，折叠懒加载） */}
+      <EmergencyHistorySection />
 
       {/* 待我确认的请求 */}
       {incoming && incoming.length > 0 && (

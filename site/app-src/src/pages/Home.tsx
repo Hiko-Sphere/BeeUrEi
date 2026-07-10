@@ -7,6 +7,7 @@ import { useI18n } from '../lib/i18n'
 import { Card, Spinner, EmptyState } from '../components/ui'
 import { CallHistoryRow } from '../components/CallHistoryRow'
 import { useCall } from './call/CallController'
+import { ActiveEmergenciesBanner } from '../components/ActiveEmergenciesBanner'
 import { IconPhone, IconChat, IconUsers, IconBell } from '../components/icons'
 
 interface Stats { online: number; total: number; incoming: number; queue: number; unread: number; unreadMessages: number; missedCalls: number; pendingLinks: number }
@@ -55,6 +56,9 @@ export function HomePage() {
         <h1 className="text-2xl font-bold tracking-tight">{greet}{user ? `，${user.displayName}` : ''}</h1>
         <p className="mt-1 text-sm text-faint">{t('在「待命中」时，绑定的视障用户即可呼叫你协助。', 'Turn on “Available” so linked users can call you for help.')}</p>
       </div>
+
+      {/* 我负责的人当前未解除的紧急（漏看推送兜底）：置顶醒目；无则不渲染。onCall 接 startOutgoing。 */}
+      <ActiveEmergenciesBanner onCall={(uid, name) => { if (!active) void startOutgoing(uid, name, null) }} />
 
       {/* 统计卡片：按"谁需要我"的紧急度排序——待接/求助/未接来电/未读消息在前，未读通知/待确认在后。 */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">

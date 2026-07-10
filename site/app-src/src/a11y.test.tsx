@@ -19,7 +19,7 @@ vi.mock('./lib/session', () => ({ useSession: () => ({ signIn: vi.fn(), user: { 
 vi.mock('./lib/api', () => ({
   api: {
     notifications: vi.fn(), markAllNotifsRead: vi.fn(), markNotifRead: vi.fn(),
-    onlineCount: vi.fn(), incomingCalls: vi.fn(), helpQueue: vi.fn(), unreadSummary: vi.fn(), incomingLinks: vi.fn(), callHistory: vi.fn(),
+    onlineCount: vi.fn(), incomingCalls: vi.fn(), helpQueue: vi.fn(), unreadSummary: vi.fn(), incomingLinks: vi.fn(), callHistory: vi.fn(), watchingEmergencies: vi.fn(() => Promise.resolve({ active: [] })),
     myRecordings: vi.fn(),
   },
   APIError: class extends Error {},

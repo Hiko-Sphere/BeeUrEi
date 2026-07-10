@@ -116,6 +116,31 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     }
   })
 
+  // 我作为紧急联系人「负责的人」此刻有没有未处理的紧急情况（helper 一眼看板）：漏看推送时的兜底——
+  // 把"我是紧急联系人的那些人"当前**未解除**的告警聚合出来。隐私一致：我本就是其 accepted 紧急联系人、
+  // 会收到其告警+位置，故此处呈现不越权（仅未解除、近 24h、且我确为其 accepted∧isEmergency 联系人）。
+  app.get('/api/emergency/watching', { preHandler: requireAuth() }, async (req) => {
+    const me = req.user!.sub
+    const now = Date.now()
+    const windowMs = 24 * 60 * 60 * 1000
+    // 谁把我设为了 accepted 紧急联系人 → 我对其负责（linksByMember=我作为 member 的链）。
+    const ownerIds = new Set(store.linksByMember(me)
+      .filter((l) => (l.status ?? 'accepted') === 'accepted' && l.isEmergency)
+      .map((l) => l.ownerId))
+    const active: { ownerId: string; ownerName: string; eventId: string; kind: string; at: number; acked: boolean; escalated: boolean; lat: number | null; lon: number | null }[] = []
+    for (const ownerId of ownerIds) {
+      const owner = store.findById(ownerId)
+      if (!owner || owner.status !== 'active') continue
+      for (const e of store.emergencyEventsForUser(ownerId)) {
+        if (e.resolvedAt != null || e.at <= now - windowMs) continue // 仅未解除、近 24h
+        active.push({ ownerId, ownerName: owner.displayName, eventId: e.id, kind: e.kind, at: e.at,
+          acked: e.ackedAt != null, escalated: e.escalatedAt != null, lat: e.lat ?? null, lon: e.lon ?? null })
+      }
+    }
+    active.sort((a, b) => b.at - a.at)
+    return { active }
+  })
+
   // 本人紧急事件历史回看（医疗警报标配"alert history"）：过往 SOS/摔倒/撞击告警——何时、触达几人、
   // 是否有人响应(ack)、是否已升级、是否已报平安(resolved)。此前 emergencyEventsForUser 仅供自助导出，
   // 无端点、web 无从看（死功能）。近 30 条，倒序，仅展示字段 + 可选坐标供"在地图查看"。

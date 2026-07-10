@@ -6,7 +6,7 @@ import { render, screen } from '@testing-library/react'
 vi.mock('react-router-dom', () => ({ Link: (p: { to: string; children: unknown }) => <a href={p.to}>{p.children as never}</a> }))
 vi.mock('../lib/session', () => ({ useSession: () => ({ user: { id: 'u1', displayName: '阿明', role: 'helper' } }) }))
 vi.mock('../lib/api', () => ({
-  api: { onlineCount: vi.fn(), incomingCalls: vi.fn(), helpQueue: vi.fn(), unreadSummary: vi.fn(), incomingLinks: vi.fn(), callHistory: vi.fn() },
+  api: { onlineCount: vi.fn(), incomingCalls: vi.fn(), helpQueue: vi.fn(), unreadSummary: vi.fn(), incomingLinks: vi.fn(), callHistory: vi.fn(), watchingEmergencies: vi.fn(() => Promise.resolve({ active: [] })) },
 }))
 import { api } from '../lib/api'
 import { HomePage } from './Home'

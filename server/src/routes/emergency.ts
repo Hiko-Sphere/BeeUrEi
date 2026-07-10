@@ -139,7 +139,10 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
           hasMedical: !!store.getMedicalInfo(ownerId) })
       }
     }
-    active.sort((a, b) => b.at - a.at)
+    // 分诊排序（最需要行动者置顶，非只按时间）：升级后仍无人响应 > 尚无人响应 > 已有人响应；同档内新的在前。
+    // 让协助者一眼先看到"没人管的、升级过的"那条，而非被一条刚发但已有人响应的挤到上面。
+    const urgency = (e: { acked: boolean; escalated: boolean }): number => (e.escalated && !e.acked ? 2 : !e.acked ? 1 : 0)
+    active.sort((a, b) => urgency(b) - urgency(a) || b.at - a.at)
     return { active }
   })
 

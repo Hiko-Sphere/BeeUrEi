@@ -56,6 +56,31 @@ describe('GET /api/emergency/watching', () => {
     await app.close()
   })
 
+  it('分诊排序：升级后仍无人响应 > 尚无人响应 > 已有人响应（最需行动者置顶，非只按时间）', async () => {
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const reg = async (u: string, role: string) => (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const helper = await reg('ew3Helper', 'helper')
+    const mkOwner = async (name: string, id: string) => {
+      const o = await reg(name, 'blind')
+      store.createLink({ id: `l-${id}`, ownerId: o.user.id, memberId: helper.user.id, relation: '家人', isEmergency: true, createdAt: 1, status: 'accepted' })
+      return o
+    }
+    const acked = await mkOwner('ewAcked', 'a')
+    const unacked = await mkOwner('ewUnacked', 'u')
+    const escal = await mkOwner('ewEscal', 'e')
+    // acked 的最新（at 最大），escalated-unanswered 的最旧（at 最小）——若只按时间会把最紧急的排最后。
+    store.createEmergencyEvent({ id: 'e-acked', userId: acked.user.id, kind: 'fall', notified: 1, contacts: 1, at: now - 10_000 })
+    store.markEmergencyAcked('e-acked', now - 5_000)
+    store.createEmergencyEvent({ id: 'e-unacked', userId: unacked.user.id, kind: 'fall', notified: 1, contacts: 1, at: now - 30_000 })
+    store.createEmergencyEvent({ id: 'e-escal', userId: escal.user.id, kind: 'fall', notified: 1, contacts: 1, at: now - 60_000 })
+    store.markEmergencyEscalated('e-escal', now - 50_000)
+
+    const active = (await app.inject({ method: 'GET', url: '/api/emergency/watching', headers: auth(helper.token) })).json().active
+    expect(active.map((a: { eventId: string }) => a.eventId)).toEqual(['e-escal', 'e-unacked', 'e-acked']) // 分诊优先于时间
+    await app.close()
+  })
+
   it('未登录 → 401', async () => {
     const app = buildApp(new MemoryStore())
     expect((await app.inject({ method: 'GET', url: '/api/emergency/watching' })).statusCode).toBe(401)

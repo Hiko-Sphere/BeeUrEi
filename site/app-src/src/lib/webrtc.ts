@@ -160,6 +160,7 @@ export class CallEngine {
   private prevPackets?: { received: number; lost: number } // 上一轮累计收/丢包数，用于算区间丢包率
   private iceWasReconnecting = false // ICE 曾进入 disconnected（喷过 'reconnecting'）→ 恢复时须主动喷回 'connected' 清横幅
   private relayCandidateSeen = false // 本通是否收集到过任何 TURN relay 候选（判 TURN 可达性，见 onIceState 失败诊断）
+  private failureReported = false // 连接失败上报去重：一通只上报一次，防 failed 状态反复喷时刷爆端点
   private ended = false
   private wsClosedByUs = false
 
@@ -242,6 +243,7 @@ export class CallEngine {
       this.connected = false
       this.cb.onConnected?.(false)
       this.cb.onStatus?.('signalingClosed')
+      this.reportFailure('signaling') // 意外信令断开也计入连接失败可观测（wsClosedByUs/ended 已上面早退，正常挂断不报）
       this.cb.onEnded?.('signaling')
     }
   }
@@ -278,11 +280,20 @@ export class CallEngine {
       if (diag === 'relayUnreachable') {
         console.warn('[webrtc] ICE failed with no relay candidate gathered — TURN unreachable? Check coturn / AWS security-group inbound 3478.')
         this.cb.onStatus?.('relayUnreachable')
+        this.reportFailure('relay_unreachable')
       } else {
         this.cb.onStatus?.('mediaFailed')
+        this.reportFailure('generic')
       }
     }
     if (mapped === 'disconnected') { this.iceWasReconnecting = true; this.cb.onStatus?.('reconnecting') }
+  }
+
+  /// 连接失败 best-effort 上报（去重：一通只报一次）——把静默故障变成服务端可观测计数。绝不 throw/阻断通话。
+  private reportFailure(reason: 'relay_unreachable' | 'generic' | 'signaling'): void {
+    if (this.failureReported) return
+    this.failureReported = true
+    void api.reportCallFailure(reason, this.callId).catch(() => { /* 上报失败无所谓，绝不影响通话 */ })
   }
 
   // ---------- 信令处理 ----------

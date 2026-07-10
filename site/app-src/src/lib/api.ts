@@ -267,6 +267,9 @@ export const api = {
   // 通话 / 求助
   callHistory: () => get('/api/calls') as Promise<{ calls: CallRecordInfo[] }>,
   iceServers: () => get('/api/assist/turn') as Promise<{ iceServers: IceServer[] }>,
+  // 通话连接失败上报（best-effort，把 ICE relay 不可达等静默故障变成服务端可观测计数）。reason 白名单。
+  reportCallFailure: (reason: 'relay_unreachable' | 'generic' | 'signaling', callId?: string) =>
+    post('/api/assist/call-failure', { reason, ...(callId ? { callId } : {}) }) as Promise<{ ok: boolean }>,
   incomingCalls: () => get('/api/assist/incoming') as Promise<{ calls: IncomingCall[] }>,
   registerCall: (callId: string, targetUserIds: string[]) => post('/api/assist/call', { callId, targetUserIds }),
   cancelCall: (callId: string) => post('/api/assist/call/cancel', { callId }),

@@ -33,6 +33,12 @@ const helpRequestSchema = z.object({
   topic: z.string().max(200).optional().catch(undefined),
 })
 const helpClaimSchema = z.object({ callId: z.string().min(1).max(128) })
+// 通话连接失败上报（客户端 ICE 失败诊断 → 服务端可观测）：reason 是**白名单枚举**——绝不能拿客户端
+// 任意串拼进 metric 名（否则可注入/无界撑爆 counters map）。callId 仅用于日志关联、不入库。
+const callFailureSchema = z.object({
+  reason: z.enum(['relay_unreachable', 'generic', 'signaling']),
+  callId: z.string().min(1).max(128).optional().catch(undefined),
+})
 const helpMatchSchema = z.object({
   preferredLanguage: z.string().max(8).optional().catch(undefined),
   requireLanguageMatch: z.boolean().optional().catch(undefined),
@@ -80,6 +86,22 @@ export function registerAssistRoutes(
       nowMs: Date.now(),
     })
     return { iceServers }
+  })
+
+  // 通话连接失败上报（把 ICE relay 不可达等**静默 degrade** 变成运维可见的计数）。客户端在 ICE failed /
+  // 信令断开时 best-effort 调本端点；服务端据白名单 reason 自增 metric（/metrics 可抓）+ warn 日志。
+  // reason 白名单 → metric 名固定安全；rate-limit 防单端刷爆计数。best-effort：坏输入 400 但不影响通话。
+  app.post('/api/assist/call-failure', { preHandler: requireAuth(),
+                                        config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const parsed = callFailureSchema.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const { reason, callId } = parsed.data
+    metrics.inc(`call_ice_failure_${reason}_total`)
+    // relay_unreachable 尤其指向 TURN 不可达（如安全组未放行 3478）——warn 级，运维一眼看见这道生命线故障。
+    if (reason === 'relay_unreachable') {
+      console.warn(`[assist] 通话中继不可达上报（TURN/安全组？）callId=${callId ?? '-'}`)
+    }
+    return { ok: true }
   })
 
   // 视障侧请求匹配：在"我绑定的亲友/协助者"里挑在线可用者，按优先级排序。

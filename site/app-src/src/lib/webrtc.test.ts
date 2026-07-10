@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('./config', () => ({ wsURL: (p: string) => 'ws://test' + p }))
-vi.mock('./api', () => ({ api: {}, uploadMedia: vi.fn(), APIError: class extends Error {} }))
+vi.mock('./api', () => ({ api: { reportCallFailure: vi.fn(() => Promise.resolve({ ok: true })) }, uploadMedia: vi.fn(), APIError: class extends Error {} }))
 
 import { CallEngine, isRelayCandidate, hasTurnServer, iceFailureDiagnostic } from './webrtc'
 
@@ -147,12 +147,17 @@ describe('CallEngine ICE 失败诊断喷 relayUnreachable', () => {
   beforeEach(() => vi.spyOn(console, 'warn').mockImplementation(() => {})) // 静音诊断 warn
   afterEach(() => vi.restoreAllMocks())
 
-  it('配了 TURN 但全程无 relay 候选 → 喷 relayUnreachable（且 warn），不喷 mediaFailed', () => {
+  it('配了 TURN 但全程无 relay 候选 → 喷 relayUnreachable（且 warn），不喷 mediaFailed', async () => {
+    const { api } = await import('./api')
+    ;(api.reportCallFailure as ReturnType<typeof vi.fn>).mockClear()
     const { e, statuses } = engineWith([{ urls: 'turn:1.2.3.4:3478' }])
     e.onIceState('failed')
     expect(statuses).toContain('relayUnreachable')
     expect(statuses).not.toContain('mediaFailed')
     expect(console.warn).toHaveBeenCalled()
+    expect(api.reportCallFailure).toHaveBeenCalledWith('relay_unreachable', 'c1') // 上报可观测
+    e.onIceState('failed') // 再次 failed → 上报去重，仍只一次
+    expect((api.reportCallFailure as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1)
   })
 
   it('配了 TURN 且见过 relay 候选 → 普通 mediaFailed（TURN 可达，失败另有因）', () => {

@@ -38,7 +38,9 @@ export interface SavedRouteInfo { id: string; ownerId: string; createdBy: string
 export interface ContactLocation { userId: string; displayName: string; avatar?: string | null; role: string; lat: number; lng: number; accuracy?: number | null; heading?: number | null; battery?: number | null; updatedAt: number }
 export interface SafetyTimer { id: string; note?: string | null; status: string; startedAt: number; dueAt: number; remainingSec: number }
 /// 应急就绪自检：每位紧急联系人能否即时收到告警（reachable=有 APNs token 或已配 Web Push 订阅）。
-export interface EmergencyReadiness { hasEmergencyContact: boolean; total: number; reachable: number; contacts: { name: string; relation: string; reachable: boolean }[] }
+/// 应急就绪：total/reachable=isEmergency 联系人；acceptedTotal/acceptedReachable=**全体 accepted 联系人**
+/// （SOS/摔倒告警实际扇给全体 accepted，故"会不会有人被通知"须以此为准）。contacts=isEmergency 逐个可达性。
+export interface EmergencyReadiness { hasEmergencyContact: boolean; total: number; reachable: number; acceptedTotal: number; acceptedReachable: number; contacts: { name: string; relation: string; reachable: boolean }[] }
 /// 本人紧急事件历史条目：kind=fall/crash/manual；acked=有亲友响应；escalated=升级重呼；resolved=已报平安。
 export interface EmergencyHistoryItem { id: string; kind: string; at: number; notified: number; contacts: number; acked: boolean; escalated: boolean; resolved: boolean; lat: number | null; lon: number | null }
 /// 每日定时报到配置：startMinute=本地时区一天中的第几分钟（0..1439）；tz 为 IANA 时区。

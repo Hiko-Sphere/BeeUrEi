@@ -32,19 +32,35 @@ export function EmergencyReadinessCard({ refreshKey }: { refreshKey?: unknown })
   useEffect(() => { void api.emergencyReadiness().then(setR).catch(() => { /* 保持未加载态，不渲染 */ }) }, [refreshKey])
   if (!r) return null
 
-  const allReachable = r.hasEmergencyContact && r.reachable === r.total
-  const border = allReachable ? 'border-ok/40' : 'border-danger/50'
+  // 关键修正：SOS/摔倒告警实际扇给**全体 accepted 联系人**（isEmergency 仅额外授医疗信息）。故"会不会有人
+  // 被通知"须以 acceptedReachable 为准——否则"有联系人却没标紧急"会误报"无人会被通知"（安全 UI 的假警报）。
+  const anyReachable = r.acceptedReachable > 0                              // 出事时至少一人会即时收到告警
+  const emergencyAllReachable = r.hasEmergencyContact && r.reachable === r.total
+  const tone: 'ok' | 'danger' | 'info' =
+    !anyReachable ? 'danger'                // 无联系人 / 有联系人但都收不到即时告警
+      : !r.hasEmergencyContact ? 'info'     // 会被通知，但没指定紧急联系人（建议指定→可享医疗信息共享）
+        : !emergencyAllReachable ? 'danger' // 指定的紧急联系人有的不可达
+          : 'ok'
+  const border = tone === 'ok' ? 'border-ok/40' : tone === 'info' ? 'border-honey/40' : 'border-danger/50'
+  const icon = tone === 'ok' ? '✓' : tone === 'info' ? 'ℹ️' : '⚠️'
+  const iconColor = tone === 'ok' ? 'text-ok' : tone === 'info' ? 'text-honey' : 'text-danger'
   return (
     <Card className={`border ${border} p-4`}>
       <div role="status" className="flex items-start gap-3">
-        <span aria-hidden className={`mt-0.5 text-lg ${allReachable ? 'text-ok' : 'text-danger'}`}>{allReachable ? '✓' : '⚠️'}</span>
+        <span aria-hidden className={`mt-0.5 text-lg ${iconColor}`}>{icon}</span>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold">{t('应急就绪', 'Emergency readiness')}</div>
-          {!r.hasEmergencyContact ? (
-            // 最危险：一个紧急联系人都没有——出事时告警无人可收。
-            <p className="mt-0.5 text-sm text-danger">{t('你还没有设置紧急联系人——出事时不会有人收到告警。请在下方把某位联系人设为紧急联系人。',
-              'You have no emergency contact — no one will be alerted in an emergency. Set one as an emergency contact below.')}</p>
-          ) : allReachable ? (
+          {r.acceptedTotal === 0 ? (
+            <p className="mt-0.5 text-sm text-danger">{t('你还没有任何联系人——出事时不会有人收到告警。请先添加联系人。',
+              'You have no contacts yet — no one will be alerted in an emergency. Add a contact first.')}</p>
+          ) : !anyReachable ? (
+            <p className="mt-0.5 text-sm text-danger">{t(`你有 ${r.acceptedTotal} 位联系人，但都收不到即时告警——需在其设备上安装 App 并开启通知。`,
+              `You have ${r.acceptedTotal} contacts, but none can receive instant alerts — they need to install the app and enable notifications.`)}</p>
+          ) : !r.hasEmergencyContact ? (
+            // 修复要点：会被通知，别再谎称"无人会被通知"；只是建议指定紧急联系人以享医疗信息共享。
+            <p className="mt-0.5 text-sm text-soft">{t(`出事时你的 ${r.acceptedTotal} 位联系人都会收到告警。建议把最信任的人设为紧急联系人——紧急时他们还能看到你的医疗信息。`,
+              `Your ${r.acceptedTotal} contacts will all be alerted in an emergency. Consider setting your most trusted person as an emergency contact — they can also see your medical info in an emergency.`)}</p>
+          ) : emergencyAllReachable ? (
             <p className="mt-0.5 text-sm text-soft">{t(`你的 ${r.total} 位紧急联系人都能即时收到告警。`, `All ${r.total} of your emergency contacts can receive instant alerts.`)}</p>
           ) : (
             <>
@@ -61,8 +77,8 @@ export function EmergencyReadinessCard({ refreshKey }: { refreshKey?: unknown })
               </ul>
             </>
           )}
-          {/* 有联系人才给「发测试告警」——真正验证送达（不只理论可达）。无联系人时先去设置，无从测起。 */}
-          {r.hasEmergencyContact && (
+          {/* 有任何联系人即可「发测试告警」——测试扇给全体 accepted，验证实际送达（不只理论可达）。 */}
+          {r.acceptedTotal > 0 && (
             <Button variant="soft" onClick={sendTest} disabled={testing} className="mt-3">
               {t('发送测试告警', 'Send test alert')}
             </Button>

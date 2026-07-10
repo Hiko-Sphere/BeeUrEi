@@ -91,11 +91,15 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
   // 安全网已悄然失效。医疗警报设备的「按键自检」同理。仅报本人自己的紧急联系人（本就是本人数据，不泄露他人）。
   // reachable 语义=能收到**即时推送**（非"能否收到告警"——无推送者仍会进收件箱），客户端据此提示"请对方开通知"。
   app.get('/api/emergency/readiness', { preHandler: requireAuth() }, async (req) => {
-    const emergencyLinks = store.linksByOwner(req.user!.sub)
-      .filter((l) => (l.status ?? 'accepted') === 'accepted' && l.isEmergency)
+    const allAccepted = store.linksByOwner(req.user!.sub).filter((l) => (l.status ?? 'accepted') === 'accepted')
+    const emergencyLinks = allAccepted.filter((l) => l.isEmergency)
     // 与告警扇出时的 hasRealtimePush 同口径（emergency/alert 内）：有 APNs token 或（Web 推送已配置且有订阅）即可即时触达。
     const isReachable = (uid: string, apnsToken?: string): boolean =>
       !!apnsToken || (webPush.configured && safeWebPushSubs(uid).length > 0)
+    const linkReachable = (l: { memberId: string }): boolean => {
+      const u = store.findById(l.memberId)
+      return !!u && isReachable(u.id, u.apnsToken)
+    }
     const contacts = emergencyLinks.map((l) => {
       const u = store.findById(l.memberId)
       return { name: u?.displayName ?? '—', relation: l.relation, reachable: !!u && isReachable(u.id, u.apnsToken) }
@@ -105,6 +109,10 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
       total: emergencyLinks.length,
       reachable: contacts.filter((c) => c.reachable).length,
       contacts,
+      // **实际告警面**：SOS(trigger)/摔倒(alert) 都扇给**全体 accepted 联系人**（非仅 isEmergency——后者仅额外
+      // 授予医疗信息可见）。故就绪判定须以全体 accepted 为准，否则"有联系人却没标紧急"会误报"无人会被通知"（假警报）。
+      acceptedTotal: allAccepted.length,
+      acceptedReachable: allAccepted.filter(linkReachable).length,
     }
   })
 

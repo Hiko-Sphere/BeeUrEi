@@ -19,7 +19,26 @@ describe('GET /api/emergency/readiness（应急就绪自检）', () => {
     const me = await reg(a, 'rdyme', 'blind')
     const res = await a.inject({ method: 'GET', url: '/api/emergency/readiness', headers: { authorization: `Bearer ${me.token}` } })
     expect(res.statusCode).toBe(200)
-    expect(res.json()).toMatchObject({ hasEmergencyContact: false, total: 0, reachable: 0, contacts: [] })
+    expect(res.json()).toMatchObject({ hasEmergencyContact: false, total: 0, reachable: 0, acceptedTotal: 0, acceptedReachable: 0, contacts: [] })
+    await a.close()
+  })
+
+  it('有 accepted 联系人但都非紧急 → hasEmergencyContact=false 但 acceptedTotal/acceptedReachable 反映全体（修真警报根因）', async () => {
+    // 关键：SOS/摔倒告警扇给全体 accepted，故就绪须暴露 acceptedTotal/acceptedReachable——否则 web 会
+    // 据 hasEmergencyContact=false 误报"无人会被通知"，而其实这些非紧急联系人都会收到告警。
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const me = await reg(a, 'rdyacc', 'blind')
+    const helper1 = await reg(a, 'helperone')
+    const helper2 = await reg(a, 'helpertwo')
+    store.updateUser(helper1.user.id, { apnsToken: 'a'.repeat(64) }) // 可即时触达
+    store.createLink({ id: 'la1', ownerId: me.user.id, memberId: helper1.user.id, relation: '协助者', isEmergency: false, createdAt: 1, status: 'accepted' })
+    store.createLink({ id: 'la2', ownerId: me.user.id, memberId: helper2.user.id, relation: '协助者', isEmergency: false, createdAt: 2, status: 'accepted' })
+    const body = (await a.inject({ method: 'GET', url: '/api/emergency/readiness', headers: { authorization: `Bearer ${me.token}` } })).json()
+    expect(body.hasEmergencyContact).toBe(false) // 没指定紧急联系人
+    expect(body.total).toBe(0)
+    expect(body.acceptedTotal).toBe(2)           // 但有 2 位 accepted 联系人会被告警
+    expect(body.acceptedReachable).toBe(1)       // 其中 1 位可即时触达
     await a.close()
   })
 
@@ -41,6 +60,8 @@ describe('GET /api/emergency/readiness（应急就绪自检）', () => {
     expect(body.total).toBe(2)                 // 仅 accepted ∧ isEmergency
     expect(body.reachable).toBe(1)             // 仅 withPush
     expect(body.hasEmergencyContact).toBe(true)
+    expect(body.acceptedTotal).toBe(3)         // 全体 accepted（withPush+noPush+nonEmerg，pending 不计）
+    expect(body.acceptedReachable).toBe(1)     // 全体 accepted 中仅 withPush 可即时触达
     const byName = Object.fromEntries((body.contacts as { name: string; reachable: boolean }[]).map((c) => [c.name, c.reachable]))
     expect(byName['haspush']).toBe(true)
     expect(byName['nopush']).toBe(false)

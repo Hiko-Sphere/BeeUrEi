@@ -91,6 +91,10 @@ self.addEventListener('push', (event) => {
     // 置 true 强制每条紧急告警都重新惊动协助者（renotify 依赖 tag，而 urgent 恒有 tag，安全）。报平安
     // emergency_clear 不 urgent → renotify=false → 悄悄替换掉常驻 SOS 横幅（"我没事了"不该再拉响警报，语义正确）。
     renotify: urgent,
+    // 紧急告警加**振动**（医疗/急救 App 标配"让告警被感知到而非仅看到"）：协助者多在手机上、可能没盯屏，
+    // 一段醒目的三段振动比静默横幅更可能被注意到。仅 Android Chrome 等支持者生效，其余浏览器忽略（无害）。
+    // 非紧急（聊天/好友请求等）不覆盖振动，交由系统默认，免频繁震动打扰。
+    vibrate: urgent ? [300, 120, 300, 120, 300] : undefined,
     data: d,
   }))
 })

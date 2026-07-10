@@ -66,7 +66,7 @@ describe('sw.js 离线兜底（fetch 处理器）', () => {
 describe('sw.js 通知分级（push 处理器）', () => {
   function firePush(data: Record<string, unknown>) {
     const h = handlers.get('push')!
-    let shown: { title: string; opts: { tag: string; requireInteraction: boolean; renotify: boolean } } | null = null
+    let shown: { title: string; opts: { tag: string; requireInteraction: boolean; renotify: boolean; vibrate?: number[] } } | null = null
     const event = {
       data: { json: () => data },
       waitUntil: () => {},
@@ -131,6 +131,16 @@ describe('sw.js 通知分级（push 处理器）', () => {
     // 非紧急：不重复惊动（同会话消息静默更新、报平安悄悄替换）。
     expect(firePush({ data: { kind: 'chat_message', fromId: 'u2' } }).opts.renotify).toBe(false)
     expect(firePush({ data: { kind: 'friend_request', fromId: 'u3' } }).opts.renotify).toBe(false)
+  })
+
+  it('紧急告警加振动（让告警被感知，非仅看到）；非紧急不覆盖系统默认振动', () => {
+    // 紧急：三段振动模式（Android Chrome 等生效，余者忽略无害）。
+    expect(firePush({ data: { kind: 'fall', type: 'emergency_alert', fromId: 'blindA' } }).opts.vibrate).toEqual([300, 120, 300, 120, 300])
+    expect(firePush({ data: { kind: 'checkin', type: 'emergency_alert', fromId: 'blindA' } }).opts.vibrate).toEqual([300, 120, 300, 120, 300])
+    expect(firePush({ data: { kind: 'incoming_call', callId: 'c1' } }).opts.vibrate).toEqual([300, 120, 300, 120, 300])
+    // 非紧急：vibrate 未覆盖（undefined → 交由系统默认，免频繁震动打扰）。
+    expect(firePush({ data: { kind: 'chat_message', fromId: 'u2' } }).opts.vibrate).toBeUndefined()
+    expect(firePush({ data: { kind: 'emergency_clear', fromId: 'blindA' } }).opts.vibrate).toBeUndefined() // 报平安不震
   })
 
   it('紧急后续（响应中/已确认）不再被 indexOf 误判为紧急常驻横幅', () => {

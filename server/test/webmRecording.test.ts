@@ -58,6 +58,32 @@ describe('网页端 webm 通话录制（修复 415 上传被拒）', () => {
     await app.close()
   })
 
+  it('一份媒体只归一个引用方：mediaId 已被另一录制或视频消息引用 → 建录制 409（防复用弄坏/隐藏原引用）', async () => {
+    const store = new MemoryStore()
+    store.createUser(admin())
+    const app = buildApp(store)
+    const at = (await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'root', password: 'rootpass1' } })).json().token as string
+    await app.inject({ method: 'PUT', url: '/api/recordings/config', headers: auth(at), payload: { enabled: true, requireConsent: false, retentionDays: 7 } })
+    const owner = await reg(app, 'rechelper')
+    const peer = await reg(app, 'recblind')
+    store.createLink({ id: randomUUID(), ownerId: peer.id, memberId: owner.id, relation: 'helper', isEmergency: false, status: 'accepted', createdAt: Date.now() })
+    await app.inject({ method: 'POST', url: '/api/assist/call', headers: auth(owner.token), payload: { callId: 'callR', targetUserIds: [peer.id] } })
+
+    const up = await app.inject({ method: 'POST', url: '/api/media', headers: { ...auth(owner.token), 'content-type': 'video/mp4' }, payload: Buffer.from('FAKE-MP4-BYTES-0123456789') })
+    const mediaId = up.json().media.id as string
+    // 首次建录制用这份新媒体 → 201（新媒体绝不已被引用）。
+    expect((await app.inject({ method: 'POST', url: '/api/recordings', headers: auth(owner.token), payload: { callId: 'callR', reason: 'call', mediaId } })).statusCode).toBe(201)
+    // 再拿同一 mediaId 建第二条录制 → 409 media_already_referenced（一份媒体只归一个引用方）。
+    const dup = await app.inject({ method: 'POST', url: '/api/recordings', headers: auth(owner.token), payload: { callId: 'callR', reason: 'call', mediaId } })
+    expect(dup.statusCode).toBe(409)
+    expect(dup.json().error).toBe('media_already_referenced')
+
+    // 另一份**全新**媒体照常可建（不误伤正常流：上传新媒体→立即建录制）。
+    const up2 = await app.inject({ method: 'POST', url: '/api/media', headers: { ...auth(owner.token), 'content-type': 'video/mp4' }, payload: Buffer.from('FAKE-MP4-BYTES-2-abcdefghij') })
+    expect((await app.inject({ method: 'POST', url: '/api/recordings', headers: auth(owner.token), payload: { callId: 'callR', reason: 'call', mediaId: up2.json().media.id } })).statusCode).toBe(201)
+    await app.close()
+  })
+
   it('纯音频 webm（audio/webm）也被接受', async () => {
     const store = new MemoryStore()
     const app = buildApp(store)

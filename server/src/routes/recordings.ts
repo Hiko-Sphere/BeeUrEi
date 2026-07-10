@@ -102,6 +102,13 @@ export function registerRecordingRoutes(app: FastifyInstance, store: Store, cons
     if (parsed.data.mediaId) {
       const media = store.findMedia(parsed.data.mediaId)
       if (!media || media.ownerId !== owner.sub) return reply.code(400).send({ error: 'invalid_media' })
+      // 一份媒体只归**一个**引用方（视频消息 xor 录制）：防把已发出的视频消息媒体（或另一条录制的媒体）挂成录制。
+      // 否则通用 /api/media/:id 会因 recordingByMediaId 命中而 404 掉收件人对该视频的访问，且 admin 硬删这条录制会
+      // 连带 removeMediaFile 删掉这份**共享**文件、弄坏原视频消息。正常流是"上传新媒体→立即建录制"，新媒体绝不已被引用，
+      // 故此校验只拦复用（见录制生命周期复审的数据一致性缺口）。
+      if (store.findVideoMessageByMediaId(parsed.data.mediaId) || store.recordingByMediaId(parsed.data.mediaId)) {
+        return reply.code(409).send({ error: 'media_already_referenced' })
+      }
     }
     // 参与者（"人"）= 发起者 + 服务端核验的同意者，去重持久化（同意登记表是易失内存，这里落库）。
     const participants = Array.from(new Set([owner.sub, ...consenters]))

@@ -50,7 +50,7 @@ import { captureException } from './monitoring/errorReporting'
 import { CodeRegistry } from './auth/codes'
 import { CodeSendLimiter } from './auth/sendLimiter'
 import { LoginThrottle } from './auth/loginThrottle'
-import { ConsoleMailer, type Mailer } from './mail/mailer'
+import { ConsoleMailer, CountingMailer, type Mailer } from './mail/mailer'
 import { NoopPushSender, type PushSender } from './push/apns'
 import { CountingWebPushSender, NoopWebPushSender, type WebPushSender } from './push/webPush'
 import { setNotifyWebPush, setNotifySecurityMailer } from './notifications/notify'
@@ -142,7 +142,8 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   const codes = new CodeRegistry()
   const recordingConsent = new RecordingConsentRegistry() // 录制知情同意（服务端权威）
   const codeSend = options.codeSend ?? new CodeSendLimiter() // 发送侧节流：同一收件人 60s 冷却 + 窗口上限（防连点/邮件轰炸）
-  const mailer = options.mailer ?? new ConsoleMailer()
+  // 邮件送达健康度进 /metrics（mail_sent/failed）：SMTP 凭据失效（163 授权码过期撞 535）运维一眼可见，不必翻日志。
+  const mailer = new CountingMailer(options.mailer ?? new ConsoleMailer(), (ok) => metrics.inc(ok ? 'mail_sent_total' : 'mail_failed_total'))
   const pushSender = options.pushSender ?? new NoopPushSender()
   // 计数包裹须在 metrics 构造之后——见下方 webPushSender 最终定型处。
   const rawWebPushSender = options.webPushSender ?? new NoopWebPushSender()
@@ -159,6 +160,8 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
                       'emergency_escalations_total', 'safety_checkin_fires_total', 'safety_checkin_reminders_total',
                       'web_push_sent_total', 'web_push_failed_total',
                       'apns_sent_total', 'apns_failed_total',
+                      // 邮件送达健康：mail_failed 攀升=SMTP 凭据/连接故障（发码/找回密码/安全告警邮件走不出去），运维须尽快修。
+                      'mail_sent_total', 'mail_failed_total',
                       'vision_describe_total', 'vision_quota_exceeded_total', 'vision_errors_total',
                       'amap_calls_total', 'amap_timeouts_total', 'amap_errors_total', 'amap_upstream_errors_total',
                       'amap_breaker_open_total', 'amap_breaker_rejected_total']) metrics.inc(name, 0)

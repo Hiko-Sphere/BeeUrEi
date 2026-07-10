@@ -276,6 +276,8 @@ describe('admin + reports', () => {
     expect(growth.newUsers30d).toBeGreaterThanOrEqual(3) // root + frank + gina
     expect(ov.json().activeEmergencies).toBe(2) // 未解除近 24h：ae1(触达1) + ae4(触达0)；已解除/陈旧不计
     expect(ov.json().activeUnreachable).toBe(1) // 仅 ae4：活跃∧notified===0；ae1 有触达不计、ae5 已解除不计
+    expect(ov.json().mail).toMatchObject({ sent: expect.any(Number), failed: expect.any(Number) }) // 邮件送达健康（SMTP 故障可见）
+    expect(ov.json().mail.failed).toBe(0) // ConsoleMailer 从不失败 → 测试态无邮件失败
     expect(ov.json().version).toBe('0.1.0') // 与 package.json 单一真相（原 admin 自己硬编码一份）
     expect(ov.json().commit).toBe('unknown') // 测试未注入 GIT_SHA → 诚实 unknown；部署后=构建时 SHA
     expect(ov.json().version).toBe('0.1.0') // 与 package.json 单一真相（原 admin 自己硬编码一份）

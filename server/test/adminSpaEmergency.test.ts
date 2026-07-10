@@ -205,6 +205,22 @@ describe('管理面板 总览「通话中继失败」卡（运维可见 TURN 故
     expect(html).not.toContain('TURN')            // 无失败不吓唬运维
   })
 
+  it('mail.failed>0 → 置顶 danger 卡「邮件发送失败」+ SMTP 提示；=0/缺省不渲染（运维看得见 SMTP 故障如 163 授权码过期）', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    spa.state.overview = overview({ mail: { sent: 10, failed: 4 } })
+    spa.renderDashboard()
+    expect(spa.view.innerHTML).toContain('邮件发送失败')
+    expect(spa.view.innerHTML).toContain('SMTP')                 // 指向根因的提示
+    expect(spa.view.innerHTML).toMatch(/class="v danger"[^>]*>\s*4/)
+    spa.state.overview = overview({ mail: { sent: 10, failed: 0 } })
+    spa.renderDashboard()
+    expect(spa.view.innerHTML).not.toContain('邮件发送失败')     // 无失败不吓唬
+    spa.state.overview = overview() // 旧后端无 mail 字段
+    spa.renderDashboard()
+    expect(spa.view.innerHTML).not.toContain('邮件发送失败')     // 向后兼容
+  })
+
   it('旧后端无 callConnect 字段 → 不渲染该卡（向后兼容，不崩）', () => {
     const spa = loadSpa()
     spa.state.lang = 'zh'

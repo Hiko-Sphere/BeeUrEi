@@ -44,6 +44,7 @@ const I18N = {
     openReports: '待处理举报', recordingsCount: '录制记录', byRole: '按角色分布', version: '版本', uptime: '运行时长', activeEmergencies: '正在进行的紧急',
     activeUnreachable: '紧急·无人可即时触达', activeUnreachSub: '安全网正静默失效，速联系本人/亲友',
     relayFails: '通话中继失败', callFailSub: '本次启动以来 · 普通/信令', relayFailHint: '中继不可达多半是 TURN/安全组未放行 3478',
+    mailFail: '邮件发送失败', mailFailHint: 'SMTP 凭据/连接故障（如 163 授权码过期）——发码/找回密码/安全邮件发不出，请检查 SMTP_*',
     refresh: '刷新', search: '搜索用户名 / 昵称…', allRoles: '全部角色', allStatus: '全部状态',
     role: '角色', status: '状态', created: '注册时间', actions: '操作', lastActive: '在线',
     ban: '封禁', unban: '解封', changeRole: '角色', confirmBan: '确认封禁该用户？封禁后其令牌立即失效、无法登录。',
@@ -166,6 +167,7 @@ const I18N = {
     openReports: 'Open reports', recordingsCount: 'Recordings', byRole: 'By role', version: 'Version', uptime: 'Uptime', activeEmergencies: 'Active emergencies',
     activeUnreachable: 'Emergency · reached no one', activeUnreachSub: 'Safety net silently failing — contact them/family',
     relayFails: 'Call relay failures', callFailSub: 'since start · generic/signaling', relayFailHint: 'Relay unreachable usually means TURN / security-group 3478 blocked',
+    mailFail: 'Email delivery failures', mailFailHint: 'SMTP auth/connection error (e.g. expired credential) — codes/reset/security emails not sending, check SMTP_*',
     refresh: 'Refresh', search: 'Search username / name…', allRoles: 'All roles', allStatus: 'All status',
     role: 'Role', status: 'Status', created: 'Joined', actions: 'Actions', lastActive: 'Online',
     ban: 'Ban', unban: 'Unban', changeRole: 'Role', confirmBan: 'Ban this user? Their tokens expire immediately and they cannot sign in.',
@@ -591,6 +593,7 @@ function renderDashboard() {
       ${o.callConnect ? statCard(t('relayFails'), o.callConnect.relayUnreachable,
         t('callFailSub') + ': ' + (o.callConnect.generic + o.callConnect.signaling) + (o.callConnect.relayUnreachable ? ' · ' + t('relayFailHint') : ''),
         o.callConnect.relayUnreachable ? 'danger' : '') : ''}
+      ${o.mail != null && o.mail.failed > 0 ? statCard(t('mailFail'), o.mail.failed, t('mailFailHint'), 'danger') : ''}
     </div>
     ${trendCard}
     <div class="section">

@@ -187,6 +187,12 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
         generic: metrics.get('call_ice_failure_generic_total'),
         signaling: metrics.get('call_ice_failure_signaling_total'),
       },
+      // 邮件送达健康（自启动累计）：failed>0 = SMTP 凭据/连接故障（如 163 授权码过期），发码/找回密码/安全告警
+      // 邮件发不出去——运维一眼可见并去修 SMTP_*，不必翻日志等用户报障。
+      mail: {
+        sent: metrics.get('mail_sent_total'),
+        failed: metrics.get('mail_failed_total'),
+      },
       version: PKG_VERSION,
       commit: gitCommit(), // 部署验证：后台一眼确认线上提交
       uptimeSeconds: Math.floor((now - START_MS) / 1000),

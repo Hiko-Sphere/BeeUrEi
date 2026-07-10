@@ -11,6 +11,22 @@ export class NoopMailer implements Mailer {
   async send(): Promise<void> { /* no-op */ }
 }
 
+/// 计数装饰器：包裹任意 Mailer，把每次 send 的成/败喂给 onOutcome（进 /metrics 与 admin 面板）——让运维**看得见**
+/// SMTP 故障（如 163 授权码失效撞 535），而非等第一个用户发码失败才从日志翻出来。失败照旧向上抛，保持
+/// "发信失败 → 路由回 503 mail_unavailable" 契约不变（与 CountingWebPushSender 同款单点包裹）。
+export class CountingMailer implements Mailer {
+  constructor(private readonly inner: Mailer, private readonly onOutcome: (ok: boolean) => void) {}
+  async send(to: string, subject: string, text: string, html?: string): Promise<void> {
+    try {
+      await this.inner.send(to, subject, text, html)
+      this.onOutcome(true)
+    } catch (e) {
+      this.onOutcome(false)
+      throw e
+    }
+  }
+}
+
 /// 控制台邮件器：打印到日志。零依赖、零外部服务（管理员可从日志读验证码）。
 export class ConsoleMailer implements Mailer {
   // 允许注入 sink 以便单测捕获（默认 console.log）。

@@ -165,6 +165,8 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       const i = trendIdx.get(dayKey(u.createdAt))
       if (i !== undefined) trend[i].count++
     }
+    // 当前正在进行的紧急（未解除 ∧ 近 24h）：一次取出，既数活跃总数、又数其中"未触达任何人"的。
+    const activeEmerg = store.recentEmergencyEvents(200).filter((e) => e.resolvedAt == null && e.at > now - DAY)
     return {
       users: { total: users.length, active, disabled, byRole },
       online: { total: online.size, helpers: onlineHelpers },
@@ -172,9 +174,12 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       recordings: { total: store.allRecordings().length, config: store.getRecordingConfig() },
       verifications: { pending: store.countPendingVerifications(), total: store.allVerifications().length },
       growth: { newUsers7d, newUsers30d, trend },
-      // 当前正在进行的紧急（未解除 ∧ 近 24h）：运维在仪表盘一眼看出此刻有没有正在发生的危机，
-      // 无需先点进紧急事件区逐条看（危机感知置顶）。用近 200 条事件够覆盖任何未解除的活跃告警。
-      activeEmergencies: store.recentEmergencyEvents(200).filter((e) => e.resolvedAt == null && e.at > now - DAY).length,
+      // 运维在仪表盘一眼看出此刻有没有正在发生的危机，无需先点进紧急事件区逐条看（危机感知置顶）。
+      activeEmergencies: activeEmerg.length,
+      // 其中"未触达任何人"（notified===0）的活跃紧急：安全网**当下正在静默失效**——最该运维立刻人工介入
+      // （联系本人/其亲友）的信号。自托管者未必跑 Prometheus（emergency_unreachable_total 累计计数看不到），
+      // per-event「未触达任何人」红标又要滚列表才见——故把这个点时计数直接摆到概览、逼近置顶。
+      activeUnreachable: activeEmerg.filter((e) => e.notified === 0).length,
       // 通话连接失败（自本次进程启动以来累计，与 uptime/online 同为"当前健康"信号）：把客户端 ICE 失败上报
       // （见 /api/assist/call-failure）呈现在运维实际看的面板里——relay 不可达尤其指向 TURN/安全组故障。
       callConnect: {

@@ -265,13 +265,17 @@ describe('admin + reports', () => {
     store.createEmergencyEvent({ id: 'ae1', userId: 'u1', kind: 'fall', notified: 1, contacts: 1, at: Date.now() - 60_000 })
     store.createEmergencyEvent({ id: 'ae2', userId: 'u1', kind: 'manual', notified: 1, contacts: 1, at: Date.now() - 60_000, resolvedAt: Date.now() })
     store.createEmergencyEvent({ id: 'ae3', userId: 'u1', kind: 'fall', notified: 1, contacts: 1, at: Date.now() - 25 * 3600_000 }) // 25h 前未解除：窗口须为 24h 才排除（防 24 天窗口的假警报）
+    // 未触达任何人（notified=0）：一条**活跃**的（该计入 activeUnreachable）+ 一条**已解除**的（不该计——已闭环）。
+    store.createEmergencyEvent({ id: 'ae4', userId: 'u1', kind: 'fall', notified: 0, contacts: 2, at: Date.now() - 60_000 })
+    store.createEmergencyEvent({ id: 'ae5', userId: 'u1', kind: 'fall', notified: 0, contacts: 2, at: Date.now() - 60_000, resolvedAt: Date.now() })
 
     const ov = await app.inject({ method: 'GET', url: '/api/admin/overview', headers: adminAuth })
     const growth = ov.json().growth
     expect(growth).toBeDefined()
     expect(growth.trend.length).toBe(30) // 最近 30 个自然日
     expect(growth.newUsers30d).toBeGreaterThanOrEqual(3) // root + frank + gina
-    expect(ov.json().activeEmergencies).toBe(1) // 仅未解除的那条计入（已解除不计）
+    expect(ov.json().activeEmergencies).toBe(2) // 未解除近 24h：ae1(触达1) + ae4(触达0)；已解除/陈旧不计
+    expect(ov.json().activeUnreachable).toBe(1) // 仅 ae4：活跃∧notified===0；ae1 有触达不计、ae5 已解除不计
     expect(ov.json().version).toBe('0.1.0') // 与 package.json 单一真相（原 admin 自己硬编码一份）
     expect(ov.json().commit).toBe('unknown') // 测试未注入 GIT_SHA → 诚实 unknown；部署后=构建时 SHA
     expect(ov.json().version).toBe('0.1.0') // 与 package.json 单一真相（原 admin 自己硬编码一份）

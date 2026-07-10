@@ -42,6 +42,7 @@ const I18N = {
     dashboard: '总览', users: '用户', reports: '举报', recordings: '录制', logout: '退出登录',
     totalUsers: '用户总数', active: '正常', disabled: '已封禁', online: '在线', onlineHelpers: '在线协助者',
     openReports: '待处理举报', recordingsCount: '录制记录', byRole: '按角色分布', version: '版本', uptime: '运行时长', activeEmergencies: '正在进行的紧急',
+    activeUnreachable: '紧急·无人可即时触达', activeUnreachSub: '安全网正静默失效，速联系本人/亲友',
     relayFails: '通话中继失败', callFailSub: '本次启动以来 · 普通/信令', relayFailHint: '中继不可达多半是 TURN/安全组未放行 3478',
     refresh: '刷新', search: '搜索用户名 / 昵称…', allRoles: '全部角色', allStatus: '全部状态',
     role: '角色', status: '状态', created: '注册时间', actions: '操作', lastActive: '在线',
@@ -163,6 +164,7 @@ const I18N = {
     dashboard: 'Overview', users: 'Users', reports: 'Reports', recordings: 'Recordings', logout: 'Sign out',
     totalUsers: 'Total users', active: 'Active', disabled: 'Banned', online: 'Online', onlineHelpers: 'Online helpers',
     openReports: 'Open reports', recordingsCount: 'Recordings', byRole: 'By role', version: 'Version', uptime: 'Uptime', activeEmergencies: 'Active emergencies',
+    activeUnreachable: 'Emergency · reached no one', activeUnreachSub: 'Safety net silently failing — contact them/family',
     relayFails: 'Call relay failures', callFailSub: 'since start · generic/signaling', relayFailHint: 'Relay unreachable usually means TURN / security-group 3478 blocked',
     refresh: 'Refresh', search: 'Search username / name…', allRoles: 'All roles', allStatus: 'All status',
     role: 'Role', status: 'Status', created: 'Joined', actions: 'Actions', lastActive: 'Online',
@@ -578,6 +580,7 @@ function renderDashboard() {
   viewEl().innerHTML = `
     <div class="cards">
       ${o.activeEmergencies != null && o.activeEmergencies > 0 ? statCard(t('activeEmergencies'), o.activeEmergencies, '', 'danger') : ''}
+      ${o.activeUnreachable != null && o.activeUnreachable > 0 ? statCard(t('activeUnreachable'), o.activeUnreachable, t('activeUnreachSub'), 'danger') : ''}
       ${statCard(t('totalUsers'), o.users.total)}
       ${statCard(t('active'), o.users.active, '', 'success')}
       ${statCard(t('disabled'), o.users.disabled, '', o.users.disabled ? 'danger' : '')}

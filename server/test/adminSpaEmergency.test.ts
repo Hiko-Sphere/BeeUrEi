@@ -167,6 +167,22 @@ describe('管理面板 总览「通话中继失败」卡（运维可见 TURN 故
     expect(spa.view.innerHTML).not.toContain('正在进行的紧急')
   })
 
+  it('activeUnreachable>0 → 置顶 danger 卡「紧急·无人可即时触达」+ 行动提示；=0/缺省不渲染', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    spa.state.overview = overview({ activeEmergencies: 3, activeUnreachable: 1 })
+    spa.renderDashboard()
+    expect(spa.view.innerHTML).toContain('无人可即时触达')
+    expect(spa.view.innerHTML).toContain('速联系本人') // 行动提示 sub
+    expect(spa.view.innerHTML).toMatch(/class="v danger"[^>]*>\s*1/)
+    spa.state.overview = overview({ activeEmergencies: 3, activeUnreachable: 0 })
+    spa.renderDashboard()
+    expect(spa.view.innerHTML).not.toContain('无人可即时触达') // 全部触达到人 → 不渲染此卡
+    spa.state.overview = overview() // 旧后端无字段 → 不渲染（向后兼容）
+    spa.renderDashboard()
+    expect(spa.view.innerHTML).not.toContain('无人可即时触达')
+  })
+
   it('relayUnreachable>0 → 渲染卡片、danger 色、附 TURN/3478 提示', () => {
     const spa = loadSpa()
     spa.state.lang = 'zh'

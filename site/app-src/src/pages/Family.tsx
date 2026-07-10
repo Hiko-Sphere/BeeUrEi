@@ -10,6 +10,7 @@ import { useCall } from './call/CallController'
 import { Card, Avatar, Button, Pill, Spinner, EmptyState, Field, Input, useToast, Modal } from '../components/ui'
 import { IconUsers, IconPhone, IconChat, IconPlus, IconCheck, IconX, IconShield, IconFlash, IconFlag } from '../components/icons'
 import { ReportDialog } from '../components/ReportDialog'
+import { EmergencyReadinessCard } from '../components/EmergencyReadinessCard'
 
 export function FamilyPage() {
   const { t } = useI18n()
@@ -97,6 +98,9 @@ export function FamilyPage() {
                    `You're the emergency contact for ${iAmEmergencyFor} ${iAmEmergencyFor > 1 ? 'people' : 'person'} — they'll call you if they need help. Keep your phone reachable and notifications on.`)}</span>
         </div>
       )}
+
+      {/* 应急就绪自检：出事**前**先确认紧急联系人能否即时收到告警（防安全网其实不通的假安心）。 */}
+      <EmergencyReadinessCard />
 
       {/* 安全报到（dead-man's switch）：出行前设时限，到点未报平安则自动告警紧急联系人。 */}
       <SafetyCheckInCard />

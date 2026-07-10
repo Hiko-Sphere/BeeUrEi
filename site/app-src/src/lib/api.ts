@@ -37,6 +37,8 @@ export interface RouteWaypoint { lat: number; lng: number; note?: string }
 export interface SavedRouteInfo { id: string; ownerId: string; createdBy: string; name: string; waypoints: RouteWaypoint[]; createdAt: number; updatedAt: number; role: 'owner' | 'creator' }
 export interface ContactLocation { userId: string; displayName: string; avatar?: string | null; role: string; lat: number; lng: number; accuracy?: number | null; heading?: number | null; battery?: number | null; updatedAt: number }
 export interface SafetyTimer { id: string; note?: string | null; status: string; startedAt: number; dueAt: number; remainingSec: number }
+/// 应急就绪自检：每位紧急联系人能否即时收到告警（reachable=有 APNs token 或已配 Web Push 订阅）。
+export interface EmergencyReadiness { hasEmergencyContact: boolean; total: number; reachable: number; contacts: { name: string; relation: string; reachable: boolean }[] }
 /// 每日定时报到配置：startMinute=本地时区一天中的第几分钟（0..1439）；tz 为 IANA 时区。
 export interface DailyCheckinSchedule { enabled: boolean; startMinute: number; durationMinutes: number; tz: string; note?: string }
 export interface AppConfig {
@@ -373,6 +375,8 @@ export const api = {
   // 紧急告警"知道了"回执：回告发起人"有人已看到你的求助"（fromId=发起人，eventId=哪一次告警）。
   // onMyWay=true：不只"我已看到"，而是"我正在赶来"——遇险者据此知救援真在路上、可安心等待。缺省=普通回执。
   emergencyAck: (fromId: string, eventId?: string, onMyWay?: boolean) => post('/api/emergency/ack', { fromId, eventId, onMyWay }),
+  // 应急就绪自检：出事前先确认紧急联系人能否即时收到告警（防"安全网其实是空的/不通"的假安心）。
+  emergencyReadiness: () => get('/api/emergency/readiness') as Promise<EmergencyReadiness>,
   // Web Push（浏览器推送紧急告警）
   webVapidKey: () => get('/api/push/web-vapid-key') as Promise<{ key: string }>,
   webPushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) => post('/api/push/web-subscribe', sub),

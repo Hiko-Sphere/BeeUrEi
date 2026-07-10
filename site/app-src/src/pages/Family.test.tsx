@@ -6,7 +6,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }))
 vi.mock('./call/CallController', () => ({ useCall: () => ({ startOutgoing: vi.fn(), active: null }) }))
 vi.mock('../lib/api', () => ({
-  api: { familyLinks: vi.fn(), incomingLinks: vi.fn(), blocks: vi.fn(), unblock: vi.fn(), block: vi.fn(), deleteLink: vi.fn(), acceptLink: vi.fn(), addLink: vi.fn(), lookupUser: vi.fn(), setLinkEmergency: vi.fn(), safetyCheckin: vi.fn(), checkinSchedule: vi.fn(), setCheckinSchedule: vi.fn() },
+  api: { familyLinks: vi.fn(), incomingLinks: vi.fn(), blocks: vi.fn(), unblock: vi.fn(), block: vi.fn(), deleteLink: vi.fn(), acceptLink: vi.fn(), addLink: vi.fn(), lookupUser: vi.fn(), setLinkEmergency: vi.fn(), safetyCheckin: vi.fn(), checkinSchedule: vi.fn(), setCheckinSchedule: vi.fn(), emergencyReadiness: vi.fn(() => Promise.reject(new Error('n/a'))) },
   APIError: class extends Error { code = ''; status = 0 },
 }))
 import { api } from '../lib/api'

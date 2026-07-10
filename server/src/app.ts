@@ -158,6 +158,8 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
                       // 首呼(emergency.ts)与报到到期(checkin.ts)两处都 inc；预置 0 使 rate() 从启动即可用（否则零事件时 series 缺失）。
                       'emergency_unreachable_total',
                       'emergency_escalations_total', 'safety_checkin_fires_total', 'safety_checkin_reminders_total',
+                      // 安全引擎 tick 报错数：>0 且持续攀升=后台升级/报到告警在异常（DB 锁/bug），dead-man's-switch 可能悄悄失灵，须尽快查。
+                      'safety_tick_errors_total',
                       'web_push_sent_total', 'web_push_failed_total',
                       'apns_sent_total', 'apns_failed_total',
                       // 邮件送达健康：mail_failed 攀升=SMTP 凭据/连接故障（发码/找回密码/安全告警邮件走不出去），运维须尽快修。

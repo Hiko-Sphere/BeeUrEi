@@ -261,9 +261,10 @@ describe('admin + reports', () => {
     expect(blocks.json().blocks[0].blockerName).toBe('Frank')
     expect(blocks.json().blocks[0].blockedName).toBe('Gina')
 
-    // 正在进行的紧急（未解除∧近24h）计数：一条未解除 + 一条已解除 → 恰计 1。
+    // 正在进行的紧急（未解除∧近24h）计数：一条未解除近期 + 一条已解除 + 一条**未解除但 25h 前**（陈旧，不该计）→ 恰计 1。
     store.createEmergencyEvent({ id: 'ae1', userId: 'u1', kind: 'fall', notified: 1, contacts: 1, at: Date.now() - 60_000 })
     store.createEmergencyEvent({ id: 'ae2', userId: 'u1', kind: 'manual', notified: 1, contacts: 1, at: Date.now() - 60_000, resolvedAt: Date.now() })
+    store.createEmergencyEvent({ id: 'ae3', userId: 'u1', kind: 'fall', notified: 1, contacts: 1, at: Date.now() - 25 * 3600_000 }) // 25h 前未解除：窗口须为 24h 才排除（防 24 天窗口的假警报）
 
     const ov = await app.inject({ method: 'GET', url: '/api/admin/overview', headers: adminAuth })
     const growth = ov.json().growth

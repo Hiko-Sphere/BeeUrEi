@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import { type Store } from '../db/store'
+import { type Store, isBlockedBetween } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { type PresenceRegistry } from '../assist/presence'
 import { type LiveLocationRegistry } from '../location/liveLocations'
@@ -136,7 +136,9 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
         active.push({ ownerId, ownerName: owner.displayName, eventId: e.id, kind: e.kind, at: e.at,
           acked: e.ackedAt != null, escalated: e.escalatedAt != null, lat: e.lat ?? null, lon: e.lon ?? null,
           // 该人是否有紧急医疗信息（我是其紧急联系人、有权读）——响应者据此一键查看过敏/用药/病史（施救刚需）。
-          hasMedical: !!store.getMedicalInfo(ownerId) })
+          // **拉黑即撤回**（与 medical.ts 授权同口径）：拉黑不删链/不清 isEmergency，若不额外查 isBlockedBetween，
+          // 被拉黑的旧紧急联系人会看到 hasMedical=true（泄露"有医疗信息在案"存在位）却点查拿 403（假提示）。
+          hasMedical: !!store.getMedicalInfo(ownerId) && !isBlockedBetween(store, me, ownerId) })
       }
     }
     // 分诊排序（最需要行动者置顶，非只按时间）：升级后仍无人响应 > 尚无人响应 > 已有人响应；同档内新的在前。

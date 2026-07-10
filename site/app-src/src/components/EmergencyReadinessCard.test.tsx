@@ -2,9 +2,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 
-vi.mock('../lib/api', () => ({ api: { emergencyReadiness: vi.fn(), sendTestAlert: vi.fn() }, APIError: class extends Error {} }))
-import { api } from '../lib/api'
+vi.mock('../lib/api', () => ({ api: { emergencyReadiness: vi.fn(), sendTestAlert: vi.fn() }, APIError: class extends Error { status = 0 } }))
+import { api, APIError } from '../lib/api'
 import { EmergencyReadinessCard } from './EmergencyReadinessCard'
+import { ToastProvider } from './ui'
 
 const mock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
 
@@ -72,6 +73,19 @@ describe('EmergencyReadinessCard 应急就绪自检（假安心防护）', () =>
     await waitFor(() => expect(api.sendTestAlert).toHaveBeenCalled())
     confirmSpy.mockRestore()
     expect(container).toBeTruthy()
+  })
+
+  it('测试告警限流 429 → 明确提示"太频繁（每小时最多 3 次）"而非泛泛失败', async () => {
+    mock(api.emergencyReadiness).mockResolvedValue({ hasEmergencyContact: true, total: 1, reachable: 1, acceptedTotal: 1, acceptedReachable: 1, contacts: [{ name: '妈妈', relation: '家人', reachable: true }] })
+    const err = new APIError('too_many_requests', 429); (err as { status: number }).status = 429
+    mock(api.sendTestAlert).mockRejectedValue(err)
+    render(<ToastProvider><EmergencyReadinessCard /></ToastProvider>) // 包 ToastProvider 才能断言 toast 文案
+    const btn = await screen.findByRole('button', { name: '发送测试告警' })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    fireEvent.click(btn)
+    await waitFor(() => expect(api.sendTestAlert).toHaveBeenCalled())
+    expect(await screen.findByText(/测试太频繁/)).toBeInTheDocument()
+    confirmSpy.mockRestore()
   })
 
   it('测试告警确认取消 → 不调 sendTestAlert（防误发骚扰联系人）', async () => {

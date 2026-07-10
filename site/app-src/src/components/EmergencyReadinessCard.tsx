@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type EmergencyReadiness } from '../lib/api'
+import { api, APIError, type EmergencyReadiness } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { Card, Button, useToast } from './ui'
 
@@ -23,7 +23,12 @@ export function EmergencyReadinessCard({ refreshKey }: { refreshKey?: unknown })
         ? t(`测试告警已发出，${res.contacts} 位联系人都能即时收到。`, `Test sent — all ${res.contacts} contacts can receive it instantly.`)
         : t(`测试告警已发给 ${res.contacts} 位联系人，其中 ${res.notified} 位有即时推送通道。`, `Test sent to ${res.contacts} contacts; ${res.notified} have an instant push channel.`),
         res.notified >= res.contacts ? 'ok' : 'info')
-    } catch { toast(t('发送失败，请稍后再试', 'Failed — try again later'), 'error') }
+    } catch (e) {
+      // 3/时限流：测试反复点会触发——明确告知"太频繁"而非泛泛"发送失败"，避免用户误以为链路坏了。
+      toast(e instanceof APIError && e.status === 429
+        ? t('测试太频繁，请稍后再试（每小时最多 3 次）', 'Too many tests — try again later (max 3/hour)')
+        : t('发送失败，请稍后再试', 'Failed — try again later'), 'error')
+    }
     finally { setTesting(false) }
   }
   // 加载失败保持 r=null → 不渲染，绝不显示可能过时/错误的就绪状态（假安心防护）。

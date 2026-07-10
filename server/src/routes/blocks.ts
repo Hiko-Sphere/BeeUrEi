@@ -33,7 +33,9 @@ export function registerBlockRoutes(app: FastifyInstance, store: Store): void {
     return {
       blocks: mine.map((b) => {
         const u = store.findById(b.blockedId)
-        return { id: b.id, user: u ? publicUser(u) : { id: b.blockedId, username: '?', displayName: '已注销用户', role: 'blind', status: 'disabled' } }
+        // 已注销对端：displayName 留**空串**（语言中立），由客户端本地化「已注销用户/Deactivated user」——
+        // 绝不在服务端硬编码中文发给所有语言客户端（同 call-history i18n 收口，系统性根治见 chip）。
+        return { id: b.id, user: u ? publicUser(u) : { id: b.blockedId, username: '', displayName: '', role: 'blind', status: 'disabled' } }
       }),
     }
   })

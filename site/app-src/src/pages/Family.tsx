@@ -206,13 +206,17 @@ export function FamilyPage() {
         <Card className="overflow-hidden">
           <div className="border-b border-[var(--line)] px-4 py-3 text-sm font-semibold">{t('已拉黑', 'Blocked')}</div>
           <ul className="divide-y divide-[var(--line)]">
-            {blocks.map((b) => (
+            {blocks.map((b) => {
+              // 已注销对端：服务端发空 displayName（语言中立）→ 客户端本地化，不漏中文给英文用户。
+              const blockedName = b.user.displayName || t('已注销用户', 'Deactivated user')
+              return (
               <li key={b.id} className="flex items-center gap-3 px-4 py-3">
-                <Avatar name={b.user.displayName} src={b.user.avatar} size={36} />
-                <div className="min-w-0 flex-1 truncate text-sm">{b.user.displayName}</div>
+                <Avatar name={blockedName} src={b.user.avatar} size={36} />
+                <div className="min-w-0 flex-1 truncate text-sm">{blockedName}</div>
                 <Button variant="soft" onClick={() => unblock(b.id)}>{t('解除', 'Unblock')}</Button>
               </li>
-            ))}
+              )
+            })}
           </ul>
         </Card>
       )}

@@ -106,3 +106,20 @@ describe('双向加好友（任一方发起，另一方确认）', () => {
     await a.close()
   })
 })
+
+describe('黑名单 已注销对端占位（i18n：服务端不硬编码中文，发语言中立空 displayName）', () => {
+  it('拉黑对象注销后 → GET /blocks 该项 displayName/username 皆空串（客户端据此本地化）', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const me = await reg(a, 'blkOwner', 'blind')
+    const bad = await reg(a, 'goneUser', 'helper')
+    await a.inject({ method: 'POST', url: '/api/blocks', headers: auth(me.token), payload: { username: 'goneUser' } })
+    store.deleteUser(bad.user.id) // 该用户注销
+    const list = (await a.inject({ method: 'GET', url: '/api/blocks', headers: auth(me.token) })).json()
+    expect(list.blocks).toHaveLength(1)
+    expect(list.blocks[0].user.displayName).toBe('') // 语言中立空串，绝不硬编码「已注销用户」
+    expect(list.blocks[0].user.username).toBe('')
+    expect(list.blocks[0].user.status).toBe('disabled')
+    await a.close()
+  })
+})

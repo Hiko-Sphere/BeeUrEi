@@ -261,11 +261,18 @@ describe('admin + reports', () => {
     expect(blocks.json().blocks[0].blockerName).toBe('Frank')
     expect(blocks.json().blocks[0].blockedName).toBe('Gina')
 
+    // 正在进行的紧急（未解除∧近24h）计数：一条未解除 + 一条已解除 → 恰计 1。
+    store.createEmergencyEvent({ id: 'ae1', userId: 'u1', kind: 'fall', notified: 1, contacts: 1, at: Date.now() - 60_000 })
+    store.createEmergencyEvent({ id: 'ae2', userId: 'u1', kind: 'manual', notified: 1, contacts: 1, at: Date.now() - 60_000, resolvedAt: Date.now() })
+
     const ov = await app.inject({ method: 'GET', url: '/api/admin/overview', headers: adminAuth })
     const growth = ov.json().growth
     expect(growth).toBeDefined()
     expect(growth.trend.length).toBe(30) // 最近 30 个自然日
     expect(growth.newUsers30d).toBeGreaterThanOrEqual(3) // root + frank + gina
+    expect(ov.json().activeEmergencies).toBe(1) // 仅未解除的那条计入（已解除不计）
+    expect(ov.json().version).toBe('0.1.0') // 与 package.json 单一真相（原 admin 自己硬编码一份）
+    expect(ov.json().commit).toBe('unknown') // 测试未注入 GIT_SHA → 诚实 unknown；部署后=构建时 SHA
     expect(ov.json().version).toBe('0.1.0') // 与 package.json 单一真相（原 admin 自己硬编码一份）
     expect(ov.json().commit).toBe('unknown') // 测试未注入 GIT_SHA → 诚实 unknown；部署后=构建时 SHA
 

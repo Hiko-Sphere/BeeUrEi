@@ -172,6 +172,9 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       recordings: { total: store.allRecordings().length, config: store.getRecordingConfig() },
       verifications: { pending: store.countPendingVerifications(), total: store.allVerifications().length },
       growth: { newUsers7d, newUsers30d, trend },
+      // 当前正在进行的紧急（未解除 ∧ 近 24h）：运维在仪表盘一眼看出此刻有没有正在发生的危机，
+      // 无需先点进紧急事件区逐条看（危机感知置顶）。用近 200 条事件够覆盖任何未解除的活跃告警。
+      activeEmergencies: store.recentEmergencyEvents(200).filter((e) => e.resolvedAt == null && e.at > now - 24 * DAY).length,
       // 通话连接失败（自本次进程启动以来累计，与 uptime/online 同为"当前健康"信号）：把客户端 ICE 失败上报
       // （见 /api/assist/call-failure）呈现在运维实际看的面板里——relay 不可达尤其指向 TURN/安全组故障。
       callConnect: {

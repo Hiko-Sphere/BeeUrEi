@@ -131,6 +131,21 @@ describe('管理面板 总览「通话中继失败」卡（运维可见 TURN 故
     growth: { newUsers7d: 0, newUsers30d: 0, trend: [] }, version: '0.1.0', commit: 'unknown', ...over,
   })
 
+  it('activeEmergencies>0 → 置顶 danger 卡「正在进行的紧急」；=0/缺省不渲染该卡', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    spa.state.overview = overview({ activeEmergencies: 2 })
+    spa.renderDashboard()
+    expect(spa.view.innerHTML).toContain('正在进行的紧急')
+    expect(spa.view.innerHTML).toMatch(/class="v danger"[^>]*>\s*2/)
+    spa.state.overview = overview({ activeEmergencies: 0 })
+    spa.renderDashboard()
+    expect(spa.view.innerHTML).not.toContain('正在进行的紧急') // 无危机不占位
+    spa.state.overview = overview() // 旧后端无字段
+    spa.renderDashboard()
+    expect(spa.view.innerHTML).not.toContain('正在进行的紧急')
+  })
+
   it('relayUnreachable>0 → 渲染卡片、danger 色、附 TURN/3478 提示', () => {
     const spa = loadSpa()
     spa.state.lang = 'zh'

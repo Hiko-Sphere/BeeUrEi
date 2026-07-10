@@ -41,7 +41,7 @@ const I18N = {
     tfaSub: '该账号已开启两步验证', tfaCode: '验证码（6 位）或恢复码', verify: '验证', tfaBack: '返回', tfaInvalid: '验证码不正确，请重试',
     dashboard: '总览', users: '用户', reports: '举报', recordings: '录制', logout: '退出登录',
     totalUsers: '用户总数', active: '正常', disabled: '已封禁', online: '在线', onlineHelpers: '在线协助者',
-    openReports: '待处理举报', recordingsCount: '录制记录', byRole: '按角色分布', version: '版本', uptime: '运行时长',
+    openReports: '待处理举报', recordingsCount: '录制记录', byRole: '按角色分布', version: '版本', uptime: '运行时长', activeEmergencies: '正在进行的紧急',
     relayFails: '通话中继失败', callFailSub: '本次启动以来 · 普通/信令', relayFailHint: '中继不可达多半是 TURN/安全组未放行 3478',
     refresh: '刷新', search: '搜索用户名 / 昵称…', allRoles: '全部角色', allStatus: '全部状态',
     role: '角色', status: '状态', created: '注册时间', actions: '操作', lastActive: '在线',
@@ -162,7 +162,7 @@ const I18N = {
     tfaSub: 'This account has two-factor authentication enabled', tfaCode: 'Code (6 digits) or recovery code', verify: 'Verify', tfaBack: 'Back', tfaInvalid: 'Incorrect code — try again',
     dashboard: 'Overview', users: 'Users', reports: 'Reports', recordings: 'Recordings', logout: 'Sign out',
     totalUsers: 'Total users', active: 'Active', disabled: 'Banned', online: 'Online', onlineHelpers: 'Online helpers',
-    openReports: 'Open reports', recordingsCount: 'Recordings', byRole: 'By role', version: 'Version', uptime: 'Uptime',
+    openReports: 'Open reports', recordingsCount: 'Recordings', byRole: 'By role', version: 'Version', uptime: 'Uptime', activeEmergencies: 'Active emergencies',
     relayFails: 'Call relay failures', callFailSub: 'since start · generic/signaling', relayFailHint: 'Relay unreachable usually means TURN / security-group 3478 blocked',
     refresh: 'Refresh', search: 'Search username / name…', allRoles: 'All roles', allStatus: 'All status',
     role: 'Role', status: 'Status', created: 'Joined', actions: 'Actions', lastActive: 'Online',
@@ -575,6 +575,7 @@ function renderDashboard() {
     </div>` : '';
   viewEl().innerHTML = `
     <div class="cards">
+      ${o.activeEmergencies != null && o.activeEmergencies > 0 ? statCard(t('activeEmergencies'), o.activeEmergencies, '', 'danger') : ''}
       ${statCard(t('totalUsers'), o.users.total)}
       ${statCard(t('active'), o.users.active, '', 'success')}
       ${statCard(t('disabled'), o.users.disabled, '', o.users.disabled ? 'danger' : '')}

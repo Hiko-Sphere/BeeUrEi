@@ -86,6 +86,11 @@ self.addEventListener('push', (event) => {
     // （那里有诚实标注 + 回拨）。
     tag,
     requireInteraction: urgent,
+    // renotify 只给紧急告警：**升级重呼**与告警首呼共用同一 tag(emergency-<fromId>)，默认 renotify=false 时
+    // 同 tag 的后续会**静默替换**横幅（不再响铃/振动/重新弹出）——恰好抹掉了升级"抓住漏看首呼的人"的全部意义。
+    // 置 true 强制每条紧急告警都重新惊动协助者（renotify 依赖 tag，而 urgent 恒有 tag，安全）。报平安
+    // emergency_clear 不 urgent → renotify=false → 悄悄替换掉常驻 SOS 横幅（"我没事了"不该再拉响警报，语义正确）。
+    renotify: urgent,
     data: d,
   }))
 })

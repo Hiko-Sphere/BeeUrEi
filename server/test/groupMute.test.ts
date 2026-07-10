@@ -62,6 +62,26 @@ describe('群免打扰 mute', () => {
     await app.close()
   })
 
+  it('退群/被踢清该成员本群 mute → 重进不再神秘静音（不留孤儿；与已读重置对称）', async () => {
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const owner = await reg(app, 'lvown', 'blind')
+    const m1 = await reg(app, 'lvm1', 'helper')
+    await bind(app, owner.token, m1.token, 'lvm1')
+    const gid = (await app.inject({ method: 'POST', url: '/api/groups', headers: auth(owner.token), payload: { name: '群', memberIds: [m1.user.id] } })).json().group.id as string
+    // m1 静音本群。
+    await app.inject({ method: 'POST', url: `/api/groups/${gid}/mute`, headers: auth(m1.token), payload: { muted: true } })
+    expect(store.isGroupMuted(gid, m1.user.id)).toBe(true)
+    // m1 退群 → 其本群 mute 应被清（不留孤儿；此前只改 memberIds、留下静音孤儿）。
+    const leave = await app.inject({ method: 'DELETE', url: `/api/groups/${gid}/members/${m1.user.id}`, headers: auth(m1.token) })
+    expect(leave.statusCode).toBe(200)
+    expect(store.isGroupMuted(gid, m1.user.id)).toBe(false) // 静音孤儿已清
+    // owner 重新拉 m1 进群 → 不应仍静音（此前残留会让重进者神秘收不到横幅，与已读被 setGroupRead 重置不对称）。
+    await app.inject({ method: 'POST', url: `/api/groups/${gid}/members`, headers: auth(owner.token), payload: { userId: m1.user.id } })
+    expect((await app.inject({ method: 'GET', url: '/api/groups', headers: auth(m1.token) })).json().groups[0].muted).toBe(false)
+    await app.close()
+  })
+
   it('mute 端点鉴权：非成员 403、坏 body 400', async () => {
     const store = new MemoryStore()
     const app = buildApp(store)

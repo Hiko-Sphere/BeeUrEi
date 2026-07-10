@@ -111,6 +111,10 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store, push: Pu
     if (userId === group.ownerId) return reply.code(400).send({ error: 'owner_must_dissolve' })
     if (me !== group.ownerId && me !== userId) return reply.code(403).send({ error: 'forbidden' })
     const updated = store.updateGroup(group.id, { memberIds: group.memberIds.filter((m) => m !== userId) })
+    // 退群/被踢即清该成员对本群的免打扰标记：① 兑现"不留孤儿"（解散走 deleteGroup 已连清群内 mute/read，单成员退群
+    // 此前只改 memberIds、留下 (group,user) 静音孤儿）；② 修**重进群仍静音**——加人端点会 setGroupRead 重置已读，
+    // 却不重置 mute，导致"退群本想重置状态、重进却神秘地收不到横幅"（与已读重置不对称，几近确定是遗漏）。idempotent。
+    store.setGroupMuted(group.id, userId, false)
     // 群主踢人才通知被踢者（自愿退群不通知自己）——否则被移出的盲人只见群悄然消失、不知缘由。
     if (me === group.ownerId && userId !== me) {
       const l = pushLang(store.findById(userId)?.language)

@@ -243,10 +243,12 @@ function SafetyCheckInCard() {
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const [duration, setDuration] = useState(60)
-  const [hasEmergencyContact, setHasEmergencyContact] = useState(true) // 乐观默认 true，避免加载中闪现假警告
+  // 到期告警实际发给**全体 accepted 联系人**（fireExpiredSafetyTimers），故"到点没报平安会不会有人被通知"
+  // 须以 hasAnyContact 为准——只看紧急联系人会在"有联系人却没标紧急"时误报"无人会被通知"（与应急就绪同源修复）。
+  const [hasAnyContact, setHasAnyContact] = useState(true) // 乐观默认 true，避免加载中闪现假警告
   const durations = [30, 60, 120, 240]
 
-  useEffect(() => { void (async () => { try { const r = await api.safetyCheckin(); setTimer(r.timer); setHasEmergencyContact(r.hasEmergencyContact) } catch { /* 未登录/网络：留空闲态 */ } })() }, [])
+  useEffect(() => { void (async () => { try { const r = await api.safetyCheckin(); setTimer(r.timer); setHasAnyContact(r.hasAnyContact) } catch { /* 未登录/网络：留空闲态 */ } })() }, [])
 
   const run = async (fn: () => Promise<SafetyTimer | null>, okMsg: string) => {
     setBusy(true)
@@ -259,14 +261,14 @@ function SafetyCheckInCard() {
     setBusy(true)
     try {
       const res = await api.startSafetyCheckin(duration, note.trim() || undefined)
-      setTimer(res.timer); setHasEmergencyContact(res.hasEmergencyContact)
-      if (res.hasEmergencyContact) {
+      setTimer(res.timer); setHasAnyContact(res.hasAnyContact)
+      if (res.hasAnyContact) {
         toast(t('安全报到已开始，到点前记得报平安', 'Check-in started — remember to mark yourself safe'), 'ok')
       } else {
-        // 防假安心：dead-man's switch 到期只通知紧急联系人，一个都没有则到点没报平安也无人会被通知。
+        // 防假安心：到期告警扇给全体 accepted 联系人，一个联系人都没有才是真的"无人会被通知"。
         // 用 error 语气（toast 组件对 error 挂 role=alert，读屏即时朗读），明确告诉盲人这道安全网当前是空的。
-        toast(t('已开始，但你还没有紧急联系人——到点没报平安也无人会被通知。请先在下方联系人里把某人设为紧急联系人。',
-                'Started, but you have no emergency contact — no one will be alerted if you miss it. Set someone as an emergency contact below first.'), 'error')
+        toast(t('已开始，但你还没有任何联系人——到点没报平安也无人会被通知。请先在下方添加联系人。',
+                'Started, but you have no contacts yet — no one will be alerted if you miss it. Add a contact below first.'), 'error')
       }
     } catch { toast(t('操作失败，请重试', 'Something went wrong — try again'), 'error') }
     finally { setBusy(false) }
@@ -281,11 +283,11 @@ function SafetyCheckInCard() {
       <h2 className="text-sm font-semibold">{t('安全报到', 'Safety check-in')}</h2>
       {active && timer ? (
         <div className="mt-2 space-y-3">
-          {/* 进行中的持续预警（非只 start 一刻的 toast）：无紧急联系人=到点没报平安也无人会被通知，重载/状态变化后仍在。 */}
-          {!hasEmergencyContact && (
+          {/* 进行中的持续预警（非只 start 一刻的 toast）：无任何联系人=到点没报平安也无人会被通知，重载/状态变化后仍在。 */}
+          {!hasAnyContact && (
             <p role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-sm font-medium text-danger">
-              {t('⚠️ 你还没有紧急联系人——到点没报平安也无人会被通知。请在下方把某人设为紧急联系人。',
-                 '⚠️ You have no emergency contact — no one will be alerted if you miss it. Set someone as an emergency contact below.')}
+              {t('⚠️ 你还没有任何联系人——到点没报平安也无人会被通知。请在下方添加联系人。',
+                 '⚠️ You have no contacts yet — no one will be alerted if you miss it. Add a contact below.')}
             </p>
           )}
           <p className="text-lg font-semibold text-honey" aria-live="polite">{remainingText(timer.remainingSec, lang)}</p>
@@ -351,10 +353,10 @@ function DailyScheduleSection() {
       const r = await api.setCheckinSchedule({ enabled: nextEnabled, startMinute, durationMinutes: dur, tz, note: dnote.trim() || undefined })
       setEnabled(r.schedule.enabled)
       toast(nextEnabled
-        ? (r.hasEmergencyContact
+        ? (r.hasAnyContact
           ? t('每日报到已开启，每天到点会自动开始', 'Daily check-in on — starts automatically each day')
-          : t('已开启，但你还没有紧急联系人——超时也无人会被通知，请先设置紧急联系人。', 'On, but you have no emergency contact — no one will be alerted. Set one first.'))
-        : t('每日报到已关闭', 'Daily check-in off'), nextEnabled && !r.hasEmergencyContact ? 'error' : 'ok')
+          : t('已开启，但你还没有任何联系人——超时也无人会被通知，请先添加联系人。', 'On, but you have no contacts yet — no one will be alerted. Add a contact first.'))
+        : t('每日报到已关闭', 'Daily check-in off'), nextEnabled && !r.hasAnyContact ? 'error' : 'ok')
     } catch { toast(t('保存失败，请重试', 'Failed — try again'), 'error') }
     finally { setBusy(false) }
   }

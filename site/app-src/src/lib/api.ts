@@ -369,14 +369,14 @@ export const api = {
   setMedicalInfo: (text: string) => put('/api/account/medical', { text }) as Promise<{ ok: boolean; cleared?: boolean }>,
   contactMedicalInfo: (userId: string) => get(`/api/family/${userId}/medical`) as Promise<{ medicalInfo: string; fromName?: string; updatedAt: number | null }>,
   // 安全报到（dead-man's switch）：设时限，到点未报平安则服务端自动告警紧急联系人+发实时位置。与 iOS 同端点。
-  safetyCheckin: () => get('/api/safety/checkin') as Promise<{ timer: SafetyTimer | null; hasEmergencyContact: boolean }>,
+  safetyCheckin: () => get('/api/safety/checkin') as Promise<{ timer: SafetyTimer | null; hasEmergencyContact: boolean; hasAnyContact: boolean }>,
   startSafetyCheckin: (durationMinutes: number, note?: string) =>
-    post('/api/safety/checkin/start', { durationMinutes, ...(note ? { note } : {}) }) as Promise<{ timer: SafetyTimer; hasEmergencyContact: boolean }>,
+    post('/api/safety/checkin/start', { durationMinutes, ...(note ? { note } : {}) }) as Promise<{ timer: SafetyTimer; hasEmergencyContact: boolean; hasAnyContact: boolean }>,
   completeSafetyCheckin: () => post('/api/safety/checkin/complete', undefined) as Promise<{ ok: boolean; completed: boolean }>,
   extendSafetyCheckin: (addMinutes: number) => post('/api/safety/checkin/extend', { addMinutes }) as Promise<{ timer: SafetyTimer }>,
   // 每日定时报到（Snug Safety 式）：每天固定本地时刻自动开启一次报到，超时未报平安自动告警紧急联系人。
   checkinSchedule: () => get('/api/safety/checkin/schedule') as Promise<{ schedule: DailyCheckinSchedule | null }>,
-  setCheckinSchedule: (s: DailyCheckinSchedule) => put('/api/safety/checkin/schedule', s) as Promise<{ ok: boolean; schedule: DailyCheckinSchedule; hasEmergencyContact: boolean }>,
+  setCheckinSchedule: (s: DailyCheckinSchedule) => put('/api/safety/checkin/schedule', s) as Promise<{ ok: boolean; schedule: DailyCheckinSchedule; hasEmergencyContact: boolean; hasAnyContact: boolean }>,
   cancelSafetyCheckin: () => post('/api/safety/checkin/cancel', undefined),
   // 报到历史（本人回看，近 30 条，含已告警的那几次）。
   checkinHistory: () => get('/api/safety/checkin/history') as Promise<{ history: CheckinHistoryItem[] }>,

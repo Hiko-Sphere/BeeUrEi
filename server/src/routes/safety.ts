@@ -38,12 +38,17 @@ export function registerSafetyRoutes(app: FastifyInstance, store: Store,
   // （见 checkin.ts fireExpiredSafetyTimers）。一个都没有=到点没报平安也无人会被通知（假安心），客户端据此持续预警。
   const hasEmergencyContact = (userId: string): boolean =>
     store.linksByOwner(userId).some((l) => (l.status ?? 'accepted') === 'accepted' && l.isEmergency)
+  // 到期告警**实际发给全体 accepted 联系人**（fireExpiredSafetyTimers，isEmergency 仅额外授医疗信息）——故
+  // "到点没报平安会不会有人被通知"须以全体 accepted 为准。只看 isEmergency 会在"有联系人却没标紧急"时误报
+  // "无人会被通知"（与应急就绪同源的真警报，见 emergency readiness 修复）。
+  const hasAnyContact = (userId: string): boolean =>
+    store.linksByOwner(userId).some((l) => (l.status ?? 'accepted') === 'accepted')
 
   // 当前进行中的报到（客户端展示剩余时间；无则 null）+ 是否有紧急联系人（供进行中持续预警"到点无人可通知"）。
   app.get('/api/safety/checkin', { preHandler: requireAuth() }, async (req) => {
     const me = req.user!.sub
     const t = store.activeSafetyTimerForOwner(me)
-    return { timer: t ? view(t, Date.now()) : null, hasEmergencyContact: hasEmergencyContact(me) }
+    return { timer: t ? view(t, Date.now()) : null, hasEmergencyContact: hasEmergencyContact(me), hasAnyContact: hasAnyContact(me) }
   })
 
   // 每日定时安全报到（Snug Safety 式）：每天固定本地时刻自动开启一次报到，超时未报平安自动告警紧急联系人。
@@ -91,7 +96,7 @@ export function registerSafetyRoutes(app: FastifyInstance, store: Store,
       dailyCheckinLastDay: undefined,
     })
     if (!updated) return reply.code(404).send({ error: 'not_found' })
-    return { ok: true, schedule: updated.dailyCheckin, hasEmergencyContact: hasEmergencyContact(req.user!.sub) }
+    return { ok: true, schedule: updated.dailyCheckin, hasEmergencyContact: hasEmergencyContact(req.user!.sub), hasAnyContact: hasAnyContact(req.user!.sub) }
   })
 
   // 开始一次安全报到。同一人至多一个 active——重开即重置：取消旧的、起新的。
@@ -113,7 +118,7 @@ export function registerSafetyRoutes(app: FastifyInstance, store: Store,
     store.createSafetyTimer(timer)
     // 无紧急联系人预警（防假安心）：一个都没有则到期告警**无人可通知**、报到形同虚设。不阻断开始
     // （用户可能正要去加联系人），但据此让客户端提示"先设紧急联系人"。判定与 GET/fire 路径共用同一 helper。
-    return { timer: view(timer, now), hasEmergencyContact: hasEmergencyContact(me) }
+    return { timer: view(timer, now), hasEmergencyContact: hasEmergencyContact(me), hasAnyContact: hasAnyContact(me) }
   })
 
   // 报平安（我平安到了）：结束当前进行中的报到。

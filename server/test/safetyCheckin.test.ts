@@ -89,10 +89,14 @@ describe('安全报到端点', () => {
     // A 把 B 设为紧急联系人但 B **未接受**（pending）→ false。
     await app.inject({ method: 'POST', url: '/api/family/links', headers: ah, payload: { username: 'hecB', relation: '家人', isEmergency: true } })
     expect((await app.inject({ method: 'POST', url: '/api/safety/checkin/start', headers: ah, payload: { durationMinutes: 30 } })).json().hasEmergencyContact).toBe(false)
-    // A 再把 C 设为**非紧急**联系人并接受 → 仍 false（非紧急不进 SOS 扇出）。
+    // A 再把 C 设为**非紧急**联系人并接受：hasEmergencyContact 仍 false（isEmergency 仅额外授医疗信息），
+    // 但 hasAnyContact 现在=true——到期告警**会**发给 C（fireExpiredSafetyTimers 扇给全体 accepted）。
+    // 故客户端据 hasAnyContact 才不会误报"无人会被通知"（应急就绪同源真警报修复）。
     const lc = await app.inject({ method: 'POST', url: '/api/family/links', headers: ah, payload: { username: 'hecC', relation: '同事', isEmergency: false } })
     await app.inject({ method: 'POST', url: `/api/family/links/${lc.json().link.id}/accept`, headers: ch })
-    expect((await app.inject({ method: 'POST', url: '/api/safety/checkin/start', headers: ah, payload: { durationMinutes: 30 } })).json().hasEmergencyContact).toBe(false)
+    const afterC = (await app.inject({ method: 'POST', url: '/api/safety/checkin/start', headers: ah, payload: { durationMinutes: 30 } })).json()
+    expect(afterC.hasEmergencyContact).toBe(false) // 仍无 isEmergency 联系人
+    expect(afterC.hasAnyContact).toBe(true)         // 但有 accepted 联系人会被告警——不再误报"无人会被通知"
     await app.close()
   })
 

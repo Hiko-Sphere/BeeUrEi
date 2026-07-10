@@ -95,6 +95,29 @@ describe('PendingCallRegistry', () => {
     expect(r.participants('c1', 200_000)).toBeNull()
   })
 
+  it('已接听通话活过响铃 TTL：接通后网络抖动断线，超 180s 仍能凭 participants/roomParticipants 重连（不被踢出）', () => {
+    // 已接听条目按 answeredAt + answeredTtlMs(默认 4h) 计过期，而非响铃 180s——否则通话 3 分钟后一次 WiFi↔蜂窝
+    // 切换重连即 not_a_participant 永久失联（复审揪出的真 bug）。
+    const r = new PendingCallRegistry(180_000)
+    r.register(base({ createdAt: 0, toUserIds: ['dad', 'mom'] }))
+    expect(r.claimAnswer('c1', 'dad', 10_000)).toBe('dad') // 爸爸首接，answeredAt=10s
+    // 通话进行 10 分钟后盲人网络抖动重连（远超 180s 响铃窗口）——参与权仍在。
+    expect(r.roomParticipants('c1', 600_000)).toEqual(['blind1', 'dad']) // 首接后房间收紧为[发起者,赢家]，且未被 TTL 清
+    expect(r.participants('c1', 600_000)).toEqual(['blind1', 'dad', 'mom'])
+    // 未接听的呼叫仍守 180s 响铃窗口（本修复不放宽未接听）。
+    const r2 = new PendingCallRegistry(180_000)
+    r2.register(base({ callId: 'c2', createdAt: 0, toUserIds: ['helper1'] }))
+    expect(r2.roomParticipants('c2', 200_000)).toBeNull() // 未接听→超 180s 仍清
+  })
+
+  it('已接听通话终究会过期（answeredTtlMs 之后清），不无界驻留', () => {
+    const r = new PendingCallRegistry(180_000, 1000, 60_000) // answeredTtlMs=60s 便于测
+    r.register(base({ createdAt: 0, toUserIds: ['dad'] }))
+    r.claimAnswer('c1', 'dad', 1_000) // answeredAt=1s
+    expect(r.roomParticipants('c1', 50_000)).toEqual(['blind1', 'dad']) // 距 answeredAt 49s < 60s → 在
+    expect(r.roomParticipants('c1', 70_000)).toBeNull()                 // 距 answeredAt 69s > 60s → 清
+  })
+
   it('hasActive 反映未过期登记（跨注册表去重用）', () => {
     const r = new PendingCallRegistry(180_000)
     r.register(base({ createdAt: 0 }))

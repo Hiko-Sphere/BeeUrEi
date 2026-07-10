@@ -24,6 +24,10 @@ export class PendingCallRegistry {
     // 响铃/待接听窗口：亲友可能不在手机旁，60s 太短会把晚接听的合法亲友锁在自己该接的紧急来电外（见复审 #4）。
     private readonly ttlMs = 180_000,
     private readonly maxEntries = 1000,
+    // **已接听**条目的存活窗口（远长于响铃 ttlMs）：接通后的通话可持续数分钟至数十分钟（导航协助尤甚），
+    // 期间盲人网络抖动（WiFi↔蜂窝切换/切后台）断线重连须仍能凭 participants 回到原房间。与 OpenHelp.claimedTtlMs
+    // 同口径（默认 4 小时）——此前 prune 对已接听条目也用 180s ttl，导致接通 3 分钟后一次网络抖动即永久失联（见复审）。
+    private readonly answeredTtlMs = 4 * 60 * 60 * 1000,
   ) {}
 
   setConflictCheck(fn: (callId: string, now: number) => boolean): void {
@@ -159,7 +163,13 @@ export class PendingCallRegistry {
 
   private prune(now: number): void {
     for (const [id, c] of this.calls) {
-      if (now - c.createdAt > this.ttlMs) this.calls.delete(id)
+      // 已接听条目按 answeredAt + answeredTtlMs 计（供通话期间断线重连的参与权校验）；未接听才用 createdAt + ttlMs（响铃窗口）。
+      // 否则一通已接听的通话 180s 后即被清，盲人一次网络抖动重连就被 not_a_participant 踢出、通话中途永久失联——
+      // 与 cap() 已保护"已接听条目不被挤掉"的不变量对齐，也与 OpenHelp.prune 的 claimed 分支同口径。
+      const expired = c.answeredBy !== undefined
+        ? c.answeredAt !== undefined && now - c.answeredAt > this.answeredTtlMs
+        : now - c.createdAt > this.ttlMs
+      if (expired) this.calls.delete(id)
     }
   }
 

@@ -193,6 +193,9 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
         sent: metrics.get('mail_sent_total'),
         failed: metrics.get('mail_failed_total'),
       },
+      // 安全引擎 tick 报错累计：>0 = 后台升级/报到告警在异常（DB 锁/bug），dead-man's-switch 可能悄悄失灵。
+      // 与 mail 同理摆到概览，让不跑 Prometheus 的自托管运维也看得见（引擎失灵是生命攸关，绝不能只躺日志）。
+      safetyTickErrors: metrics.get('safety_tick_errors_total'),
       version: PKG_VERSION,
       commit: gitCommit(), // 部署验证：后台一眼确认线上提交
       uptimeSeconds: Math.floor((now - START_MS) / 1000),

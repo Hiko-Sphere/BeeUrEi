@@ -221,6 +221,22 @@ describe('管理面板 总览「通话中继失败」卡（运维可见 TURN 故
     expect(spa.view.innerHTML).not.toContain('邮件发送失败')     // 向后兼容
   })
 
+  it('safetyTickErrors>0 → 置顶 danger 卡「安全引擎报错」+ 提示；=0/缺省不渲染（dead-man\'s-switch 失灵运维可见）', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    spa.state.overview = overview({ safetyTickErrors: 3 })
+    spa.renderDashboard()
+    expect(spa.view.innerHTML).toContain('安全引擎报错')
+    expect(spa.view.innerHTML).toContain('自动告警亲友') // 提示点明后果
+    expect(spa.view.innerHTML).toMatch(/class="v danger"[^>]*>\s*3/)
+    spa.state.overview = overview({ safetyTickErrors: 0 })
+    spa.renderDashboard()
+    expect(spa.view.innerHTML).not.toContain('安全引擎报错')
+    spa.state.overview = overview() // 旧后端无字段
+    spa.renderDashboard()
+    expect(spa.view.innerHTML).not.toContain('安全引擎报错')
+  })
+
   it('旧后端无 callConnect 字段 → 不渲染该卡（向后兼容，不崩）', () => {
     const spa = loadSpa()
     spa.state.lang = 'zh'

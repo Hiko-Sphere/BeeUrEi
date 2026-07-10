@@ -278,6 +278,7 @@ describe('admin + reports', () => {
     expect(ov.json().activeUnreachable).toBe(1) // 仅 ae4：活跃∧notified===0；ae1 有触达不计、ae5 已解除不计
     expect(ov.json().mail).toMatchObject({ sent: expect.any(Number), failed: expect.any(Number) }) // 邮件送达健康（SMTP 故障可见）
     expect(ov.json().mail.failed).toBe(0) // ConsoleMailer 从不失败 → 测试态无邮件失败
+    expect(ov.json().safetyTickErrors).toBe(0) // 安全引擎 tick 报错累计（测试态无后台 tick 运行 → 0）
     expect(ov.json().version).toBe('0.1.0') // 与 package.json 单一真相（原 admin 自己硬编码一份）
     expect(ov.json().commit).toBe('unknown') // 测试未注入 GIT_SHA → 诚实 unknown；部署后=构建时 SHA
     expect(ov.json().version).toBe('0.1.0') // 与 package.json 单一真相（原 admin 自己硬编码一份）

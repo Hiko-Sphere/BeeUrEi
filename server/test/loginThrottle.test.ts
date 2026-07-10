@@ -29,6 +29,36 @@ describe('LoginThrottle（纯逻辑）', () => {
     expect(t.check(K, now).allowed).toBe(true)
   })
 
+  it('随时间衰减：空闲超 decayMs → 计数清零（正常用户不被上周的失败罚今天）；空闲不足则不清（活跃攻击者无从占便宜）', () => {
+    const decayMs = 60 * 60_000
+    const t = new LoginThrottle(3, 30_000, 6, 900_000, 10_000, decayMs) // 软阈值3、decay=1h
+    const K = 'stale1'
+    const now = 1_000_000
+    for (let i = 0; i < 3; i++) t.recordFailure(K, now) // 达软阈值 → 节流
+    expect(t.check(K, now + 1000).allowed).toBe(false)  // 立即再试被节流
+
+    // ① 空闲**不足** decayMs（59min）→ 仍视为连续、计数不清：check 放行（隔够 30s）但失败叠加到第 4 次。
+    const near = now + decayMs - 60_000
+    expect(t.check(K, near).allowed).toBe(true)     // 距上次久于 30s 延迟窗 → 放行
+    t.recordFailure(K, near)                         // 第 4 次失败（未衰减，fails=4）
+    expect(t.check(K, near + 1000).allowed).toBe(false) // fails=4≥软阈值 → 立即再试仍被节流（证明没清零）
+
+    // ② 空闲**超过** decayMs → 计数从头算：随后连失 2 次仍在软阈值(3)内、不被节流。
+    const later = near + decayMs + 1
+    expect(t.check(K, later).allowed).toBe(true)     // 陈旧 → 清零放行
+    t.recordFailure(K, later); t.recordFailure(K, later) // 只从 1 算起 → fails=2
+    expect(t.check(K, later + 1).allowed).toBe(true) // fails=2 < 软阈值3 → 放行（若未衰减则是 4+2≥3 被节流）
+  })
+
+  it('recordFailure 直用于陈旧条目（无 check 先行清理）：距上次超 decayMs → 计数从 1 重算，不叠加', () => {
+    const decayMs = 60_000
+    const t = new LoginThrottle(3, 30_000, 6, 900_000, 10_000, decayMs)
+    const K = 'k'
+    for (let i = 0; i < 3; i++) t.recordFailure(K, 1_000_000) // fails=3（达软阈值）
+    t.recordFailure(K, 1_000_000 + decayMs + 1)               // 超 decayMs → 重置为 1（而非 4）
+    expect(t.check(K, 1_000_000 + decayMs + 2).allowed).toBe(true) // fails=1<3 → 放行（若叠加成 4 则被节流）
+  })
+
   it('LRU 有界：超上限驱逐最老（海量账号名不放大内存）', () => {
     const t = new LoginThrottle(1, 30_000, 50, 900_000, 3)
     for (const k of ['a', 'b', 'c', 'd']) t.recordFailure(k, 1000)

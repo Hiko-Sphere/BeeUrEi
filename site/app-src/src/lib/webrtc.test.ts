@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('./config', () => ({ wsURL: (p: string) => 'ws://test' + p }))
-vi.mock('./api', () => ({ api: { reportCallFailure: vi.fn(() => Promise.resolve({ ok: true })) }, uploadMedia: vi.fn(), APIError: class extends Error {} }))
+vi.mock('./api', () => ({ api: { reportCallFailure: vi.fn(() => Promise.resolve({ ok: true })), reportCallDuration: vi.fn(() => Promise.resolve({ ok: true })) }, uploadMedia: vi.fn(), APIError: class extends Error {} }))
 
 import { CallEngine, isRelayCandidate, hasTurnServer, iceFailureDiagnostic } from './webrtc'
 
@@ -206,5 +206,36 @@ describe('CallEngine 录制混音上下文 resume', () => {
     e.localStream = new FakeStream([{ kind: 'audio' }])
     e.buildRecordStream()
     expect(resume).toHaveBeenCalled() // 关键：混音上下文也 resume，否则 suspended 态录出静音
+  })
+})
+
+describe('CallEngine 挂断上报通话时长（connectedAt→duration）', () => {
+  const engineFor = () => new CallEngine({
+    callId: 'c1', token: 'T', iceServers: [],
+    recordPolicy: { enabled: false, requireConsent: false }, cb: {},
+  }) as unknown as { onIceState: (s: string) => void; hangUp: () => void }
+  beforeEach(async () => { const { api } = await import('./api'); (api.reportCallDuration as ReturnType<typeof vi.fn>).mockClear() })
+
+  it('真连通过(onIceState connected)后 hangUp → 上报 reportCallDuration(callId, 秒数)', async () => {
+    const { api } = await import('./api')
+    const e = engineFor()
+    e.onIceState('connected')  // 设 connectedAt
+    e.hangUp()
+    expect(api.reportCallDuration).toHaveBeenCalledWith('c1', expect.any(Number))
+  })
+
+  it('从未连通 → hangUp 不上报（0 时长无意义，避免污染未接/失败通话记录）', async () => {
+    const { api } = await import('./api')
+    const e = engineFor()
+    e.hangUp()  // 未经历 onIceState('connected')
+    expect(api.reportCallDuration).not.toHaveBeenCalled()
+  })
+
+  it('重复 hangUp → 只上报一次（ended 守卫）', async () => {
+    const { api } = await import('./api')
+    const e = engineFor()
+    e.onIceState('connected')
+    e.hangUp(); e.hangUp()
+    expect((api.reportCallDuration as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1)
   })
 })

@@ -17,7 +17,7 @@ export interface VerificationStatusInfo {
 export interface SessionInfo { sessionId: string; deviceLabel?: string; createdAt?: number; lastSeenAt?: number; expiresAt: number; current: boolean }
 export interface IncomingLink { id: string; ownerId: string; ownerName: string; ownerAvatar?: string | null; relation: string; isEmergency?: boolean; status?: string }
 export interface FamilyLink { id: string; memberId: string; memberName: string; memberAvatar?: string | null; relation: string; isEmergency: boolean; amOwner?: boolean; phone?: string | null; status?: string; outgoing?: boolean; online?: boolean }
-export interface CallRecordInfo { id: string; callId: string; direction?: string; status: string; peerId?: string | null; peerName?: string; peerAvatar?: string | null; emergency?: boolean; createdAt: number }
+export interface CallRecordInfo { id: string; callId: string; direction?: string; status: string; peerId?: string | null; peerName?: string; peerAvatar?: string | null; emergency?: boolean; durationSec?: number | null; createdAt: number }
 export interface IceServer { urls: string[] | string; username?: string; credential?: string }
 export interface IncomingCall { callId: string; fromName: string; fromUserId: string; fromAvatar?: string | null; emergency?: boolean }
 // 与后端 HelpSummary 对齐：队列对外的安全摘要（不暴露 fromUserId）。
@@ -278,6 +278,9 @@ export const api = {
   // 通话连接失败上报（best-effort，把 ICE relay 不可达等静默故障变成服务端可观测计数）。reason 白名单。
   reportCallFailure: (reason: 'relay_unreachable' | 'generic' | 'signaling', callId?: string) =>
     post('/api/assist/call-failure', { reason, ...(callId ? { callId } : {}) }) as Promise<{ ok: boolean }>,
+  // 通话时长上报（挂断时）：把连接时长写入通话记录，供两端显示"3:24"。best-effort。
+  reportCallDuration: (callId: string, seconds: number) =>
+    post('/api/assist/call/duration', { callId, seconds }) as Promise<{ ok: boolean }>,
   incomingCalls: () => get('/api/assist/incoming') as Promise<{ calls: IncomingCall[] }>,
   registerCall: (callId: string, targetUserIds: string[]) => post('/api/assist/call', { callId, targetUserIds }),
   cancelCall: (callId: string) => post('/api/assist/call/cancel', { callId }),

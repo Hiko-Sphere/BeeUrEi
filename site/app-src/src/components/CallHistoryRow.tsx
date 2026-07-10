@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { type CallRecordInfo } from '../lib/api'
 import { useI18n } from '../lib/i18n'
-import { Avatar, Pill, timeAgo } from './ui'
+import { Avatar, Pill, timeAgo, fmtDuration } from './ui'
 import { IconPhone } from './icons'
 
 /// 通话记录行（首页/通话页共用，防两处漂移）：对端仍在则姓名区链到与其的聊天（跟进/回访求助者）；
@@ -27,7 +27,11 @@ export function CallHistoryRow({ call: c, className = 'px-4 py-3', onCall, callD
           {/* 紧急求助呼叫（盲人一键 SOS）：通话记录里突出——尤其"未接紧急求助"须让协助者一眼看到、优先回拨。读屏可闻。 */}
           {c.emergency && <span className="shrink-0 rounded-full bg-danger/15 px-1.5 py-0.5 text-[10px] font-bold text-danger">{t('🆘 紧急求助', '🆘 SOS')}</span>}
         </div>
-        <div className="text-xs text-faint">{c.direction === 'outgoing' ? t('呼出', 'Outgoing') : t('呼入', 'Incoming')} · {timeAgo(c.createdAt, lang)}</div>
+        <div className="text-xs text-faint">
+          {c.direction === 'outgoing' ? t('呼出', 'Outgoing') : t('呼入', 'Incoming')} · {timeAgo(c.createdAt, lang)}
+          {/* 通话时长（接通并上报后才有）：与手机通话记录一致显示"3:24"。 */}
+          {typeof c.durationSec === 'number' && c.durationSec > 0 && <> · {fmtDuration(c.durationSec)}</>}
+        </div>
       </div>
       <Pill tone={c.status === 'answered' ? 'ok' : c.status === 'declined' ? 'danger' : 'soft'}>
         {c.status === 'answered' ? t('已接通', 'Answered') : c.status === 'declined' ? t('已拒绝', 'Declined') : t('未接', 'Missed')}

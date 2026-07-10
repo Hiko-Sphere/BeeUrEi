@@ -122,6 +122,7 @@ export class SqliteStore implements Store {
     try { this.db.exec('ALTER TABLE users ADD COLUMN dailyCheckin TEXT') } catch { /* 列已存在 */ } // 每日定时安全报到配置（JSON）
     try { this.db.exec('ALTER TABLE users ADD COLUMN dailyCheckinLastDay TEXT') } catch { /* 列已存在 */ } // 当天已自动开启标记（本地 YYYY-MM-DD）
     try { this.db.exec('ALTER TABLE call_records ADD COLUMN emergency INTEGER') } catch { /* 列已存在 */ } // 紧急求助呼叫标志（通话记录突出未接紧急）
+    try { this.db.exec('ALTER TABLE call_records ADD COLUMN durationSec INTEGER') } catch { /* 列已存在 */ } // 通话时长（秒）：接通后由参与方挂断时上报
     try { this.db.exec('ALTER TABLE users ADD COLUMN totpSecret TEXT') } catch { /* 列已存在 */ } // 2FA TOTP base32 密钥（仅服务端校验）
     try { this.db.exec('ALTER TABLE users ADD COLUMN totpEnabled INTEGER') } catch { /* 列已存在 */ } // 2FA 是否已启用
     try { this.db.exec('ALTER TABLE users ADD COLUMN totpLastCounter INTEGER') } catch { /* 列已存在 */ } // TOTP 单次使用防重放
@@ -445,16 +446,20 @@ export class SqliteStore implements Store {
 
   // MARK: call records
   createCallRecord(rec: CallRecord): void {
-    this.db.prepare('INSERT OR REPLACE INTO call_records (id, callId, callerId, calleeId, status, createdAt, emergency) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(rec.id, rec.callId, rec.callerId, rec.calleeId, rec.status, rec.createdAt, rec.emergency ? 1 : 0)
+    this.db.prepare('INSERT OR REPLACE INTO call_records (id, callId, callerId, calleeId, status, createdAt, emergency, durationSec) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(rec.id, rec.callId, rec.callerId, rec.calleeId, rec.status, rec.createdAt, rec.emergency ? 1 : 0, rec.durationSec ?? null)
   }
   updateCallStatus(callId: string, calleeId: string, status: CallRecordStatus): void {
     this.db.prepare('UPDATE call_records SET status = ? WHERE callId = ? AND calleeId = ?').run(status, callId, calleeId)
   }
+  setCallDuration(callId: string, participantId: string, seconds: number): void {
+    // 只更新该 callId 下 participant 参与（主叫或被叫）的记录——两侧一致。
+    this.db.prepare('UPDATE call_records SET durationSec = ? WHERE callId = ? AND (callerId = ? OR calleeId = ?)').run(seconds, callId, participantId, participantId)
+  }
   callRecordsForUser(userId: string, limit = 100): CallRecord[] {
     return this.db.prepare('SELECT * FROM call_records WHERE callerId = ? OR calleeId = ? ORDER BY createdAt DESC LIMIT ?')
       .all(userId, userId, limit)
-      .map((r: any) => ({ id: r.id, callId: r.callId, callerId: r.callerId, calleeId: r.calleeId, status: r.status as CallRecordStatus, createdAt: Number(r.createdAt), emergency: r.emergency === 1 }))
+      .map((r: any) => ({ id: r.id, callId: r.callId, callerId: r.callerId, calleeId: r.calleeId, status: r.status as CallRecordStatus, createdAt: Number(r.createdAt), emergency: r.emergency === 1, durationSec: r.durationSec != null ? Number(r.durationSec) : undefined }))
   }
   missedCallCountForUser(userId: string, sinceMs: number): number {
     const row = this.db.prepare("SELECT COUNT(*) AS n FROM call_records WHERE calleeId = ? AND status = 'missed' AND createdAt > ?").get(userId, sinceMs) as { n: number }

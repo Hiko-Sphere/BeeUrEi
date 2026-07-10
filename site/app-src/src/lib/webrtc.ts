@@ -166,6 +166,7 @@ export class CallEngine {
 
   // 通话态
   private connected = false
+  private connectedAt = 0 // 首次媒体连通的时刻（ms）：挂断时据此算通话时长上报（0=从未连通，不上报）
   private peerUserId: string | null = null
   private micMuted = false
   remoteTorchOn = false
@@ -265,6 +266,7 @@ export class CallEngine {
       default: mapped = null
     }
     if (state === 'connected' || state === 'completed') {
+      if (!this.connectedAt) this.connectedAt = Date.now() // 首次真媒体连通：作通话时长起点（失败媒体不计）
       if (!this.statsTimer) this.startStats()
       // 从"重连中"恢复：主动喷回 'connected'，否则顶部横幅永久卡在"正在重连…"。
       // （onStatus('connected') 仅在首次连上喷过一次；之后 disconnected 喷 'reconnecting' 却无人喷回，
@@ -646,6 +648,12 @@ export class CallEngine {
   hangUp() {
     if (this.ended) return
     this.ended = true
+    // 通话时长上报（best-effort，一通只在首次 hangUp 走到这里）：仅在真连通过（connectedAt>0）才报，
+    // 供通话记录两端显示"3:24"。绝不 throw/阻断挂断清理。
+    if (this.connectedAt > 0) {
+      const seconds = Math.max(0, Math.round((Date.now() - this.connectedAt) / 1000))
+      void api.reportCallDuration(this.callId, seconds).catch(() => { /* 上报失败无所谓，不影响通话结束 */ })
+    }
     if (this.recording) { this.recording = false; try { this.recorder?.stop() } catch { /* ignore */ } } // 尽力上传
     this.send({ type: 'end' })
     this.stopStats()

@@ -131,6 +131,7 @@ export interface CallRecord {
   status: CallRecordStatus
   createdAt: number
   emergency?: boolean // 紧急求助呼叫（盲人一键 SOS）——供通话记录突出"未接紧急求助"，提示优先回拨
+  durationSec?: number // 通话时长（秒）：接通后由参与方在挂断时上报（客户端知连接时长）；供通话记录显示"3:24"
 }
 
 /// 举报（通话后一键举报 → 管理员审核）。
@@ -568,6 +569,8 @@ export interface Store {
 
   createCallRecord(rec: CallRecord): void
   updateCallStatus(callId: string, calleeId: string, status: CallRecordStatus): void
+  // 通话时长上报：把 durationSec 写入该 callId 下 participantId 参与（主叫或被叫）的记录（授权在调用侧已核参与方）
+  setCallDuration(callId: string, participantId: string, seconds: number): void
   callRecordsForUser(userId: string, limit?: number): CallRecord[] // 我作为主叫或被叫，按时间倒序
   // 未看的未接来电数（我作为被叫、status='missed'、createdAt > sinceMs）——供未接来电角标（打开通话记录即清）。
   missedCallCountForUser(userId: string, sinceMs: number): number
@@ -1012,6 +1015,14 @@ export class MemoryStore implements Store {
     let changed = false
     for (const r of this.callRecords.values()) {
       if (r.callId === callId && r.calleeId === calleeId) { r.status = status; changed = true }
+    }
+    if (changed) this.afterMutate()
+  }
+  setCallDuration(callId: string, participantId: string, seconds: number): void {
+    let changed = false
+    // 只更新该 callId 下 participant 确实参与的记录（主叫或被叫）——两侧记录都写，通话记录两端显示一致的时长。
+    for (const r of this.callRecords.values()) {
+      if (r.callId === callId && (r.callerId === participantId || r.calleeId === participantId)) { r.durationSec = seconds; changed = true }
     }
     if (changed) this.afterMutate()
   }

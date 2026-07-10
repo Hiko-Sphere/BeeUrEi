@@ -247,6 +247,19 @@ export function registerAssistRoutes(
     return { ok: true, answeredBy: winner, youWon, gone: winner === null }
   })
 
+  // 通话时长上报（挂断时客户端上报连接时长）：通话记录显示"3:24"。客户端知连接到挂断的时长，服务端信令有多个
+  // 结束出口、不便可靠计时，故由参与方上报（低风险：仅影响本人参与的通话记录的展示时长）。60/min 限流。
+  app.post('/api/assist/call/duration', { preHandler: requireAuth(),
+                                          config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const parsed = z.object({ callId: z.string().min(1).max(128), seconds: z.number().int().min(0).max(86_400) }).safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const me = req.user!.sub
+    // 授权：上报者须是该 callId 的参与方（主叫或被叫）——否则不能给他人通话记录塞时长。
+    if (!store.callRecordsForUser(me).some((r) => r.callId === parsed.data.callId)) return reply.code(403).send({ error: 'not_participant' })
+    store.setCallDuration(parsed.data.callId, me, parsed.data.seconds)
+    return { ok: true }
+  })
+
   // 通话记录（呼出/呼入/未接）：我作为主叫或被叫的记录，按时间倒序。
   app.get('/api/calls', { preHandler: requireAuth() }, async (req) => {
     const me = req.user!.sub
@@ -267,6 +280,7 @@ export function registerAssistRoutes(
           peerName: other?.displayName ?? '已注销用户',
           peerAvatar: other?.avatar ?? null,
           emergency: r.emergency ?? false, // 紧急求助呼叫：前端突出"未接紧急求助"，提示优先回拨
+          durationSec: r.durationSec ?? null, // 通话时长（秒）：接通并有上报才有；供通话记录显示"3:24"
           createdAt: r.createdAt,
         }
       }),

@@ -107,6 +107,14 @@ export function registerLocationRoutes(app: FastifyInstance, store: Store, live:
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const now = Date.now()
     const me = req.user!.sub
+    // 本次更新**之前**是否仍在共享：false=本次是首开、或**TTL 自然过期后重开**（App 切后台/被杀/断网是最常见的
+    // 会话结束方式，远多于显式 /stop）。此时清掉可能残留的跨会话围栏/低电量态，让本次首更新只重建基线——否则
+    // 隔几小时在别处重开共享会误报一条"离开家"给家人（假恐慌），且未充电就重开会漏报低电量（假安心）。/stop 已清
+    // 显式停止这条路径，此处补齐 TTL 过期这条（复审：跨会话陈旧态 #1/#3）。须在 live.update（其会置 isSharing=true）之前判。
+    if (!live.isSharing(me, now)) {
+      geofence.clear(me)
+      lowBatteryLevel.delete(me)
+    }
     const sharingUntil = live.update(me, parsed.data, now, parsed.data.ttlSec ? parsed.data.ttlSec * 1000 : undefined)
     checkGeofences(me, parsed.data.lat, parsed.data.lng) // 到达"家/公司"→ 通知家人（内部 best-effort）
     checkLowBattery(me, parsed.data.battery)             // 电量跌破阈值 → 提醒家人主动联系（内部 best-effort）

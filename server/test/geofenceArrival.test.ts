@@ -84,6 +84,25 @@ describe('到达围栏提醒（geofence：到家/公司通知家人）', () => {
     await app.close()
   })
 
+  it('TTL 自然过期后重开共享（未显式 /stop，切后台/被杀最常见）：跨会话陈旧围栏态被清，首更新不误报"离开家"', async () => {
+    const { app, store, blind, family } = await setup()
+    store.upsertSavedPlace({ ownerId: blind.id, label: 'home', address: '家', lat: 39.9042, lng: 116.4074, updatedAt: 1 })
+    const spy = vi.spyOn(Date, 'now')
+    const update = (lat: number, lng: number, at: number) => { spy.mockReturnValue(at); return app.inject({ method: 'POST', url: '/api/locations/update', headers: blind.h, payload: { lat, lng, ttlSec: 60 } }) }
+    // 会话1：在家共享（外→内→报到达）。ttlSec=60 → sharingUntil = at+60000。
+    await update(39.9042, 116.42, 0)         // T=0 基线（在外）
+    await update(39.9042, 116.4074, 10_000)  // 到家 → 1 次到达
+    expect(arrivals(store, family.id)).toHaveLength(1)
+    // 用户没按停止，只是切后台/被杀 → 共享 TTL(60s) 后自然失效（**不**调 /stop）。1 小时后在**别处**重开共享。
+    await update(40.0, 116.5, 3_600_000)     // T=1h，远离家，TTL 早过 = 新会话首更新
+    expect(departures(store, family.id)).toHaveLength(0) // 关键：绝无误报"离开家"（修前会误发一条假恐慌）
+    // 且新会话内真到家仍正常报（证明基线正确重建，非永久静音）。
+    await update(39.9042, 116.4074, 3_610_000)
+    expect(arrivals(store, family.id)).toHaveLength(2)
+    spy.mockRestore()
+    await app.close()
+  })
+
   it('无坐标的地点不触发；位置更新照常返回', async () => {
     const { app, store, blind, family } = await setup()
     store.upsertSavedPlace({ ownerId: blind.id, label: 'work', address: '公司', updatedAt: Date.now() }) // 无坐标

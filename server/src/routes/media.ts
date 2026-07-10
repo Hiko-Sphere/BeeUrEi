@@ -27,6 +27,11 @@ const mediaContentTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'audio/
 /// 上传：POST /api/media，请求体为原始二进制（Content-Type: video/mp4 或 video/quicktime）。
 /// 下载：GET /api/media/:id，仅本人 / 好友 / 同群成员可取（消息可达性 = 文件可达性）。
 export function registerMediaRoutes(app: FastifyInstance, store: Store): void {
+  // 在途（写盘中）字节的每用户预留：mediaBytesForOwner 只反映**已落库**媒体，而配额检查(同步)与 createMedia
+  // (在 await writeFile **之后**) 被写盘隔开——并发上传会各自在提交前通过检查、合计越 2GB 配额（同 vision 配额的
+  // TOCTOU，见 314597e）。把并发中的上传也计入检查：检查+预留相邻同步→原子占额；写完/写失败都在 finally 释放
+  // （成功已转入已落库计数、失败不占）。map 仅在有在途上传时驻留、归零即删，无泄漏。
+  const pendingBytes = new Map<string, number>()
   // 媒体二进制按 Buffer 接收（仅这些 content-type 走此解析器，不影响 JSON 路由）。
   // 字符串匹配按前缀生效，故 'video/webm;codecs=vp9,opus' 等带 codecs 参数的也会命中。
   app.addContentTypeParser(mediaContentTypes,
@@ -58,18 +63,29 @@ export function registerMediaRoutes(app: FastifyInstance, store: Store): void {
     if (!body || !Buffer.isBuffer(body) || body.length === 0) return reply.code(400).send({ error: 'invalid_input' })
     if (body.length > MAX_MEDIA_BYTES) return reply.code(413).send({ error: 'media_too_large' })
     // 总量配额：与"单文件过大"区分错误码，客户端可提示"清理旧视频消息"而非"换小文件"。
-    if (store.mediaBytesForOwner(req.user!.sub) + body.length > mediaQuotaBytes()) {
+    // 检查须计入**在途**上传（pendingBytes）：检查 + 预留相邻、其间无 await → 原子占额，并发的下一个上传必看到本次
+    // 占用而被挡（此前 createMedia 在 await 之后才计数，边界并发可越额）。
+    const sub = req.user!.sub
+    const reserved = pendingBytes.get(sub) ?? 0
+    if (store.mediaBytesForOwner(sub) + reserved + body.length > mediaQuotaBytes()) {
       return reply.code(413).send({ error: 'media_quota_exceeded' })
     }
+    pendingBytes.set(sub, reserved + body.length) // 原子预留（与上面的检查相邻、其间无 await）
 
-    const meta: MediaMeta = { id: randomUUID(), ownerId: req.user!.sub, mime, size: body.length, createdAt: Date.now() }
-    ensureMediaDir()
-    // 异步落盘（非 writeFileSync）：单文件最大 50MB，同步写会**阻塞事件循环**——写盘期间整个服务不处理任何
-    // 其它请求（含紧急呼叫/求助），并发上传更会串行叠加成秒级停顿。async writeFile 交给 libuv 线程池，事件循环
-    // 期间照常服务。await 保证写完再 createMedia（顺序不变）；写失败(磁盘满等)照旧抛出→500，不落半条 media 记录。
-    await writeFile(mediaPath(meta.id), body)
-    store.createMedia(meta)
-    return reply.code(201).send({ media: meta })
+    try {
+      const meta: MediaMeta = { id: randomUUID(), ownerId: sub, mime, size: body.length, createdAt: Date.now() }
+      ensureMediaDir()
+      // 异步落盘（非 writeFileSync）：单文件最大 50MB，同步写会**阻塞事件循环**——写盘期间整个服务不处理任何
+      // 其它请求（含紧急呼叫/求助），并发上传更会串行叠加成秒级停顿。async writeFile 交给 libuv 线程池，事件循环
+      // 期间照常服务。await 保证写完再 createMedia（顺序不变）；写失败(磁盘满等)照旧抛出→500，不落半条 media 记录。
+      await writeFile(mediaPath(meta.id), body)
+      store.createMedia(meta) // 字节已转入已落库计数（mediaBytesForOwner）
+      return reply.code(201).send({ media: meta })
+    } finally {
+      // 释放预留：成功时字节已入 mediaBytesForOwner、失败时不占额。createMedia→finally 同步相邻，无并发可见"双计"窗口。
+      const rem = (pendingBytes.get(sub) ?? 0) - body.length
+      if (rem > 0) pendingBytes.set(sub, rem); else pendingBytes.delete(sub)
+    }
   })
 
   app.get('/api/media/:id', { preHandler: requireAuth() }, async (req, reply) => {

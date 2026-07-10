@@ -28,6 +28,20 @@ describe('媒体总量配额', () => {
     await a.close()
   })
 
+  it('并发上传越配额竞态防护：两个并发上传合计越配额 → 恰一个 413（reserve；旧实现两者都在提交前过检查→双双 201 越额）', async () => {
+    process.env.MEDIA_QUOTA_MB = '1' // 1MB 配额
+    const { a, store, token, uid } = await seed()
+    // 各 0.6MB：单个都在 1MB 配额内，两个合计 1.2MB 越额。check+reserve 相邻同步 → 先跑者原子占额、后者检查即见占用被 413。
+    const [r1, r2] = await Promise.all([upload(a, token, 600 * 1024), upload(a, token, 600 * 1024)])
+    expect([r1.statusCode, r2.statusCode].sort()).toEqual([201, 413]) // 恰一成一拒；旧实现（record 在 await 后）会是 [201,201]
+    expect(store.mediaBytesForOwner(uid)).toBe(600 * 1024)           // 只落库一条，未越额
+    // 越额者被拒后预留已释放：删掉已传的那条 → 额度全清 → 可再传满配额。
+    const okId = (r1.statusCode === 201 ? r1 : r2).json().media.id
+    store.deleteMedia(okId)
+    expect((await upload(a, token, 900 * 1024)).statusCode).toBe(201) // 预留未泄漏（否则此处会被幽灵占额挡下）
+    await a.close()
+  })
+
   it('删除媒体即时释放额度（清理旧内容后能继续上传）', async () => {
     process.env.MEDIA_QUOTA_MB = '1'
     const { a, store, token, uid } = await seed()

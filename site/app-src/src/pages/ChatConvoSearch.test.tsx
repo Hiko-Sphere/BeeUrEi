@@ -82,6 +82,22 @@ describe('ChatPage 会话列表按名字搜索过滤', () => {
     await waitFor(() => expect(api.messagesWith).toHaveBeenCalledWith('p1', undefined, undefined))
   })
 
+  it('全局命中：对端已注销（服务端空名）→ 命中行本地化为"已注销用户"、aria-label 完整（不留空名/残缺短语）', async () => {
+    mock(api.conversations).mockResolvedValue({ conversations: [
+      { peer: { id: 'p9', displayName: '', avatar: null }, last: null, unread: 0 }, // 已注销：服务端下发空 displayName
+    ] })
+    mock(api.searchAllMessages).mockResolvedValue({ messages: [
+      { id: 'm9', fromId: 'p9', toId: 'me', kind: 'text', text: '之前发的地址', createdAt: 1000 },
+    ] })
+    render(<ChatPage />)
+    await screen.findByText('已注销用户') // 会话列表本身也本地化（items 收口）
+    fireEvent.change(search(), { target: { value: '地址' } })
+    await waitFor(() => expect(api.searchAllMessages).toHaveBeenCalledWith('地址'))
+    expect(await screen.findByText('之前发的地址')).toBeInTheDocument()
+    // 命中行标题与 aria-label 都是"已注销用户"，非空名（修 hitTarget 绕开 items 本地化的缺口）。
+    expect(screen.getByRole('button', { name: '打开与 已注销用户 的会话' })).toBeInTheDocument()
+  })
+
   it('查询不足 2 字（如"红"）不触发全局搜索（防每键一请求）', async () => {
     render(<ChatPage />)
     await screen.findByText('阿明')

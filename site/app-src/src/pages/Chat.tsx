@@ -86,7 +86,9 @@ export function ChatPage() {
     }
     const pid = m.fromId === meUser?.id ? m.toId : m.fromId
     const c = (convos ?? []).find((x) => x.peer.id === pid)
-    return c ? { key: `p:${m.id}`, name: c.peer.displayName, open: () => setSel({ kind: 'peer', id: pid, name: c.peer.displayName, avatar: c.peer.avatar, muted: c.muted ?? false }) } : null
+    if (!c) return null
+    const nm = c.peer.displayName || t('已注销用户', 'Deactivated user') // 已注销对端服务端发空名：与 items 同源本地化，免命中行空名/aria-label 残缺
+    return { key: `p:${m.id}`, name: nm, open: () => setSel({ kind: 'peer', id: pid, name: nm, avatar: c.peer.avatar, muted: c.muted ?? false }) }
   }
 
   const back = () => { setSel(null); if (peerId) nav('/chat') }

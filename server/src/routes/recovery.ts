@@ -9,6 +9,7 @@ import { passwordResetMail } from '../mail/templates'
 import { CodeSendLimiter } from '../auth/sendLimiter'
 import { notifyAccountSecurity } from '../notifications/notify'
 import { NoopPushSender, type PushSender } from '../push/apns'
+import { type CallControlBridge } from '../signaling/callControl'
 
 const forgotSchema = z.object({ username: z.string().trim().min(1) })
 const resetSchema = z.object({
@@ -20,7 +21,7 @@ const resetSchema = z.object({
 /// 找回密码（D1）：忘记密码 → 向账号绑定邮箱发验证码 → 凭码重置。
 /// 安全：① 不做用户枚举（无论用户/邮箱是否存在都返回 200）② 验证码哈希存储、限次、10 分钟过期
 /// ③ 重置成功递增 tokenVersion 并撤销所有 refresh token（与改密一致，令旧令牌立即失效）。
-export function registerRecoveryRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer, codeSend: CodeSendLimiter = new CodeSendLimiter(), pushSender: PushSender = new NoopPushSender()): void {
+export function registerRecoveryRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer, codeSend: CodeSendLimiter = new CodeSendLimiter(), pushSender: PushSender = new NoopPushSender(), callControl?: CallControlBridge): void {
   // 发起找回：若该用户存在且绑定了邮箱，则发码。始终返回 ok，避免据响应判断账号/邮箱是否存在。
   app.post('/api/auth/forgot-password', { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = forgotSchema.safeParse(req.body)
@@ -64,6 +65,9 @@ export function registerRecoveryRoutes(app: FastifyInstance, store: Store, codes
       tokenVersion: (user.tokenVersion ?? 0) + 1,
     })
     store.deleteRefreshTokensForUser(user.id)
+    // 同踢在线 /ws：找回密码=接管自救的关键动作，须即时切断攻击者**已打开**的信令 socket（否则其能继续中继
+    // 通话/发文字至 access token 到期）。重置已使全部会话失效，按 user 全关本人在线连接，与改密/admin severSessions 同口径。
+    callControl?.disconnectUser(user.id)
     // 安全预警本人：密码刚通过"找回"被重置——若非本人操作（他人拿到验证码/接管邮箱），即时告知。
     notifyAccountSecurity(store, pushSender, user, 'password_reset')
     return { ok: true }

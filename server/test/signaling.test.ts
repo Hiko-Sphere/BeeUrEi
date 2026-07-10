@@ -310,6 +310,33 @@ describe('WebRTC signaling relay', () => {
     await app.close()
   })
 
+  it('自助改密即时踢在线 /ws（威胁模型：滥权照护者持设备，受害者改密须切断其实时信令通道，非只挡 REST）', async () => {
+    // 回归：改密/重置/登出其它设备此前只升 tokenVersion + 删 refresh（挡 REST 与重连），攻击者**已打开**的 WS
+    // 不受影响、可继续 join 通话/中继媒体/发文字至 access token 到期。现自助撤销点也 disconnectUser 即时关 socket。
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    await app.listen({ port: 0, host: '127.0.0.1' })
+    const port = (app.server.address() as { port: number }).port
+    const reg = async (u: string, role: string) => (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const victim = await reg('pwvictim', 'blind')
+    const helper = await reg('pwhelper', 'helper')
+    const link = await app.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${victim.token}` }, payload: { username: 'pwhelper', relation: '志愿者', isEmergency: true } })
+    await app.inject({ method: 'POST', url: `/api/family/links/${link.json().link.id}/accept`, headers: { authorization: `Bearer ${helper.token}` } })
+    await app.inject({ method: 'POST', url: '/api/assist/call', headers: { authorization: `Bearer ${victim.token}` }, payload: { callId: 'pwc', targetUserIds: [helper.user.id] } })
+
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${victim.token}`)
+    await open(ws)
+    const joined = nextMessage(ws, (m) => m.type === 'joined') // 等 join 完成，确保 socket 已登记进 userSockets
+    ws.send(JSON.stringify({ type: 'join', callId: 'pwc', role: 'blind' }))
+    await joined
+    const closed = new Promise<number>((resolve) => ws.on('close', (code) => resolve(code)))
+    // 受害者在另一处改密（自救）——已打开的这条 WS 应被即时切断。
+    const pw = await app.inject({ method: 'POST', url: '/api/account/password', headers: { authorization: `Bearer ${victim.token}` }, payload: { oldPassword: 'secret123', newPassword: 'NewStr0ngPass!9x' } })
+    expect(pw.statusCode).toBe(200)
+    expect(await closed).toBe(4001) // session_revoked：改密即时切断攻击者/旧设备的实时信令通道
+    await app.close()
+  })
+
   it('跨通话隔离：定向帧(msg.to)绝不逃逸到别的通话——A 房间成员无法把 offer 投给 B 房间的人', async () => {
     // 安全不变量：relay 恒以 hub.peersInCall(joined.callId) 为域，msg.to 只在**本房间**内定向。若日后误改成全局
     // 按 userId 查投递，恶意/漏洞客户端就能把 SDP/媒体信令投进不相干的通话（跨通话窃听/注入）。此测锁死。

@@ -239,8 +239,8 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
     const bundleId = process.env.APPLE_BUNDLE_ID?.trim()
     const appleVerifier = options.appleVerifier ?? (bundleId ? createAppleVerifier(bundleId) : undefined)
     registerAuthRoutes(instance, store, codes, mailer, appleVerifier, codeSend, options.loginThrottle, pushSender) // 新设备登录预警本人
-    registerRecoveryRoutes(instance, store, codes, mailer, codeSend, pushSender) // 找回密码（D1）；改密安全预警本人
-    registerAccountRoutes(instance, store, codes, mailer, appleVerifier, codeSend, pushSender) // 账号安全变更预警本人
+    registerRecoveryRoutes(instance, store, codes, mailer, codeSend, pushSender, callControl) // 找回密码（D1）；改密安全预警本人 + 踢在线 /ws
+    registerAccountRoutes(instance, store, codes, mailer, appleVerifier, codeSend, pushSender, callControl) // 账号安全变更预警本人 + 撤销会话踢在线 /ws
     registerKycRoutes(instance, store) // 实名认证（KYC）：提交/查询（admin 审核端点在 admin 路由）
     registerPasskeyRoutes(instance, store, pushSender) // Passkey（WebAuthn）注册/登录；增删 passkey 预警本人
     registerPushRoutes(instance, store, webPushSender) // VoIP token 注册（A1）

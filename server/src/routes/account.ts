@@ -15,6 +15,7 @@ import { cascadeDeleteUser } from '../db/cascade'
 import { notifyAccountSecurity } from '../notifications/notify'
 import type { SecurityEvent } from '../push/pushStrings'
 import { NoopPushSender, type PushSender } from '../push/apns'
+import { type CallControlBridge } from '../signaling/callControl'
 
 const passwordSchema = z.object({
   oldPassword: z.string().min(1),
@@ -31,7 +32,7 @@ const avatarSchema = z.object({
   avatar: z.string().regex(/^data:image\/(png|jpeg|jpg|webp);base64,/).max(600_000),
 })
 
-export function registerAccountRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer, appleVerifier?: AppleTokenVerifier, codeSend: CodeSendLimiter = new CodeSendLimiter(), pushSender: PushSender = new NoopPushSender()): void {
+export function registerAccountRoutes(app: FastifyInstance, store: Store, codes: CodeRegistry, mailer: Mailer, appleVerifier?: AppleTokenVerifier, codeSend: CodeSendLimiter = new CodeSendLimiter(), pushSender: PushSender = new NoopPushSender(), callControl?: CallControlBridge): void {
   // 账号安全敏感变更 → 通知本人（in-app 持久化 + best-effort 推送到本人设备）：未授权变更即时预警。
   // 委托共享的 notifyAccountSecurity（单一真相，与 recovery/passkey 各路同口径，防漂移）。
   const notifySecurity = (u: User, event: SecurityEvent) => notifyAccountSecurity(store, pushSender, u, event)
@@ -56,6 +57,10 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
       tokenVersion: (user.tokenVersion ?? 0) + 1,
     })
     store.deleteRefreshTokensForUser(user.id)
+    // 撤销会话须**同时踢在线 /ws**：仅升 tokenVersion + 删 refresh 只挡 REST 与重连，攻击者**已打开**的信令 socket
+    // 会继续中继通话/发文字直至 access token 到期——改密自救对实时通道形同虚设（本 App 威胁模型=有设备接触的滥权
+    // 照护者，见 WS-AUTH 复审）。改密已使全部会话失效，故按 user 全关本人在线 socket，与 admin severSessions 同口径。
+    callControl?.disconnectUser(user.id)
     notifySecurity(user, 'password_changed')
     return { ok: true }
   })
@@ -161,6 +166,9 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     // 服务端权威：两端 UI 已对当前会话隐藏登出按钮，这里再兜一层，防改造/未来客户端误踢当前会话。
     if (req.user!.sid && parsed.data.sessionId === req.user!.sid) return reply.code(400).send({ error: 'cannot_revoke_current' })
     store.revokeSession(req.user!.sub, parsed.data.sessionId)
+    // 同踢在线 /ws（否则被吊销设备的已打开 socket 仍能中继通话）。userSockets 无 sid 粒度，故按 user 全关——
+    // 被吊销那台的 sid 已失效不能重连，当前/其余有效会话仅短暂重连一次（可接受，安全目标=切断被吊销设备的实时通道）。
+    callControl?.disconnectUser(req.user!.sub)
     return { ok: true }
   })
 
@@ -173,6 +181,9 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     if (!sid) return reply.code(400).send({ error: 'no_session' }) // 旧 token 无 sid，无法识别"当前"
     const keep = (req.body as { keepEndpoint?: string } | null)?.keepEndpoint
     store.revokeOtherSessions(req.user!.sub, sid)
+    // 同踢在线 /ws：其它设备的已打开 socket 也须即时切断（被盗设备场景的标准自救不能只挡 REST）。按 user 全关，
+    // 当前设备的 WS 短暂重连一次（其会话仍有效），其它设备 sid 已失效不能重连。
+    callControl?.disconnectUser(req.user!.sub)
     for (const sub of store.webPushSubscriptionsForUser(req.user!.sub)) {
       if (typeof keep === 'string' && sub.endpoint === keep) continue
       store.deleteWebPushSubscription(sub.endpoint)

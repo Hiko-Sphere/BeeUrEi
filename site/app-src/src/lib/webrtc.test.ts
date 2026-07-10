@@ -239,3 +239,47 @@ describe('CallEngine 挂断上报通话时长（connectedAt→duration）', () =
     expect((api.reportCallDuration as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1)
   })
 })
+
+// oniceconnectionstatechange 回调守卫 this.pc 已被 hangUp 置空（async 事件在拆机后派发的空指针）。
+describe('CallEngine oniceconnectionstatechange 挂断后不空指针', () => {
+  let captured: (() => void) | null = null
+  beforeEach(() => {
+    captured = null
+    const pcMock = { addTrack: vi.fn(), close: vi.fn(), iceConnectionState: 'connected',
+      set ontrack(_v: unknown) {}, set onicecandidate(_v: unknown) {},
+      set oniceconnectionstatechange(v: () => void) { captured = v } }
+    ;(globalThis as unknown as { MediaStream: unknown }).MediaStream = class { addTrack() {} getTracks() { return [] } getAudioTracks() { return [] } }
+    ;(globalThis as unknown as { RTCPeerConnection: unknown }).RTCPeerConnection = vi.fn(() => pcMock)
+    ;(globalThis as unknown as { WebSocket: unknown }).WebSocket = vi.fn(() => ({ set onopen(_v: unknown) {}, set onmessage(_v: unknown) {}, set onclose(_v: unknown) {}, close: vi.fn(), readyState: 0, send: vi.fn() }))
+    Object.defineProperty(navigator, 'mediaDevices', { value: { getUserMedia: vi.fn(() => Promise.resolve({ getTracks: () => [], getAudioTracks: () => [] })) }, configurable: true })
+  })
+  afterEach(() => { vi.restoreAllMocks() })
+  it('ICE statechange 排队 task 在 hangUp 置空 pc 后派发 → 回调不抛 TypeError（守卫非空断言）', async () => {
+    const e = new CallEngine({ callId: 'c1', token: 'T', iceServers: [], recordPolicy: { enabled: false, requireConsent: false }, cb: {} })
+    await e.start() // getUserMedia 立即 resolve → 建 pc → 挂上 oniceconnectionstatechange
+    expect(typeof captured).toBe('function')
+    e.hangUp() // 置空 this.pc
+    expect(() => captured!()).not.toThrow() // 修前 this.pc!.iceConnectionState 取值抛；修后守卫早退
+  })
+})
+
+// 录制 MediaRecorder 构造失败时不泄漏 AudioContext（onstop 永不触发 → finishAndUpload 不跑）。
+describe('CallEngine 录制失败不泄漏 AudioContext', () => {
+  let closeCalls: number
+  beforeEach(() => {
+    closeCalls = 0
+    const ctxMock = { resume: () => Promise.resolve(), createMediaStreamDestination: () => ({ stream: { getAudioTracks: () => [{}] } }), createMediaStreamSource: () => ({ connect: () => {} }), close: () => { closeCalls += 1 } }
+    ;(globalThis as unknown as { AudioContext: unknown }).AudioContext = vi.fn(() => ctxMock)
+    ;(globalThis as unknown as { MediaStream: unknown }).MediaStream = class { t: unknown[] = []; addTrack(x: unknown) { this.t.push(x) } getTracks() { return this.t } getAudioTracks() { return [] } getVideoTracks() { return [] } }
+    ;(globalThis as unknown as { MediaRecorder: unknown }).MediaRecorder = class { constructor() { throw new Error('unsupported mime') } static isTypeSupported() { return true } }
+  })
+  afterEach(() => { vi.restoreAllMocks() })
+  it('new MediaRecorder 抛错 → catch 关掉 buildRecordStream 建的 audioCtx 并置空（不泄漏）', async () => {
+    const e = new CallEngine({ callId: 'c1', token: 'T', iceServers: [], recordPolicy: { enabled: false, requireConsent: false }, cb: {} }) as unknown as { remoteStream: { getVideoTracks: () => unknown[]; getAudioTracks: () => unknown[] }; localStream: unknown; beginRecording: () => Promise<void>; audioCtx: unknown }
+    e.remoteStream = { getVideoTracks: () => [{}], getAudioTracks: () => [{}] } // 有远端视/音轨 → buildRecordStream 建 audioCtx
+    e.localStream = null
+    await e.beginRecording()
+    expect(closeCalls).toBe(1)     // audioCtx.close 被调（无泄漏）
+    expect(e.audioCtx).toBeNull()  // 且置空
+  })
+})

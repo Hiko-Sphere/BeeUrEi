@@ -230,7 +230,9 @@ export class CallEngine {
         this.send({ type: 'ice', candidate: e.candidate.candidate, sdpMid: e.candidate.sdpMid, sdpMLineIndex: e.candidate.sdpMLineIndex ?? 0 })
       }
     }
-    this.pc.oniceconnectionstatechange = () => this.onIceState(this.pc!.iceConnectionState)
+    // 守卫 this.pc 可能已被 hangUp 置空：ICE 变 disconnected 时浏览器排了一个 statechange task，用户在其派发前挂断
+    // → hangUp 同步 close+置 null → 随后 task 派发，回调若用 this.pc! 非空断言取值即抛 TypeError（拆机期未捕获异常）。
+    this.pc.oniceconnectionstatechange = () => { if (this.pc) this.onIceState(this.pc.iceConnectionState) }
 
     // 连接信令并加入房间（协助者 role=helper；声明 adminObserver 能力供合规旁观门控）。
     this.cb.onStatus?.('connecting')
@@ -533,11 +535,17 @@ export class CallEngine {
       this.send({ type: 'record-consent', accepted })
     })()
   }
+  /// 关闭并置空录制混音用的 AudioContext（浏览器每页约 6 个上限，泄漏累积会耗尽）。
+  private closeAudioCtx() {
+    try { void this.audioCtx?.close() } catch { /* ignore */ }
+    this.audioCtx = null
+  }
   private async beginRecording() {
     if (this.recording) return
     try {
       const stream = this.buildRecordStream()
-      if (!stream) return
+      // buildRecordStream 可能已建并 resume 了 audioCtx，却因无可录轨返回 null → 提前退出前须关掉，否则泄漏。
+      if (!stream) { this.closeAudioCtx(); return }
       this.recordMime = this.pickMime(stream.getVideoTracks().length > 0)
       const rec = new MediaRecorder(stream, this.recordMime ? { mimeType: this.recordMime } : undefined)
       this.recordChunks = []
@@ -549,7 +557,12 @@ export class CallEngine {
       this.recordStartedAt = performance.now()
       this.send({ type: 'record-state', recording: true })
       this.cb.onRecordingStateChange?.(true)
-    } catch { this.recording = false }
+    } catch {
+      // MediaRecorder 构造失败（浏览器不支持所选/默认 mime）→ onstop 永不触发 → finishAndUpload 不跑 →
+      // buildRecordStream 建的 audioCtx 会泄漏。此处补关（与 finishAndUpload 同一 closeAudioCtx）。
+      this.closeAudioCtx()
+      this.recording = false
+    }
   }
   stopRecording() {
     if (!this.recording) return
@@ -591,8 +604,7 @@ export class CallEngine {
   private async finishAndUpload() {
     const chunks = this.recordChunks; this.recordChunks = []
     const startedAt = this.recordStartedAt
-    try { void this.audioCtx?.close() } catch { /* ignore */ }
-    this.audioCtx = null
+    this.closeAudioCtx()
     if (!chunks.length) { this.cb.onRecordingError?.('empty'); return }
     const mime = this.recordMime || 'video/webm'
     const blob = new Blob(chunks, { type: mime })

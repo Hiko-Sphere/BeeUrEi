@@ -23,8 +23,11 @@ interface Copy {
   preheaderZh: string; preheaderEn: string
 }
 
+// 输出编码：& < > " ' 全转义（与 admin 面板/主应用 esc 同一字符集、对齐 OWASP HTML 输出编码标准）。当前所有
+// esc() 调用都在元素内容里（用户可控值如 newEmail 经此进 HTML 正文），单引号非必需；但补齐 ' 消除"日后若把
+// 用户内容放进单引号属性即被击穿"的潜在隐患，且保持全库转义一致。
 function esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
 
 function render(c: Copy, code: string): Mail {

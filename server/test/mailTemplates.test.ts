@@ -70,6 +70,15 @@ describe('邮箱变更告警邮件（发给旧邮箱）', () => {
     expect(m.html).toContain('&lt;script&gt;')          // 已转义
   })
 
+  it('输出编码含单引号（对齐全库 esc 字符集：& < > " \'）', () => {
+    const m = emailChangedAlertMail("o'brien<b>\"@evil.com")
+    // 五个元字符全部转义，一个未转义的原样字符都不进 HTML（防日后用户内容落进单引号属性被击穿）。
+    expect(m.html).toContain('&#39;')     // 单引号已转义
+    expect(m.html).not.toContain("o'brien") // 原样单引号串不出现
+    expect(m.html).toContain('&lt;b&gt;')
+    expect(m.html).toContain('&quot;')
+  })
+
   it('与验证码邮件主题不同（收件人一眼分清"是告警不是验证码"）', () => {
     expect(emailChangedAlertMail('x@y.com').subject).not.toBe(emailVerificationMail('1').subject)
   })

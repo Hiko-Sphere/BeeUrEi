@@ -5,7 +5,7 @@ import { api, APIError, type ContactLocation } from '../lib/api'
 import { pollWhileVisible } from '../lib/poll'
 import { batteryBadge, batteryPercent } from '../lib/battery'
 import { shareTtlSec, SHARE_DURATIONS } from '../lib/locationShare'
-import { validAccuracyMeters, accuracyText } from '../lib/geoAccuracy'
+import { validAccuracyMeters, accuracyText, shareAccuracyNote } from '../lib/geoAccuracy'
 import { headingPhrase } from '../lib/heading'
 import { appleMapsUrl } from '../lib/location'
 import { useI18n } from '../lib/i18n'
@@ -57,6 +57,7 @@ export function LocationsPage() {
   const [duration, setDuration] = useState(0)  // 开始前选的时长（秒）；0=直到我停止（默认，安全优先：家人一直看得到直到本人关）
   const [deadline, setDeadline] = useState(0)  // 本次共享的自动停止时刻（0=无限）；供"将持续到"显示与倒计时
   const [featureOff, setFeatureOff] = useState(false)
+  const [selfAccuracy, setSelfAccuracy] = useState<number | null>(null) // 本次定位精度（米）：让共享者看到自己被定位得多准，粗定位时如实告知联系人只看到大致区域
 
   // 初始化地图（一次）。
   useEffect(() => {
@@ -168,7 +169,7 @@ export function LocationsPage() {
     if (watchId.current != null) { navigator.geolocation.clearWatch(watchId.current); watchId.current = null }
     if (publishTimer.current) { clearInterval(publishTimer.current); publishTimer.current = null }
     void api.stopSharingLocation().catch(() => {})
-    setSharing(false); setDeadline(0)
+    setSharing(false); setDeadline(0); setSelfAccuracy(null) // 清自视精度：停止后不残留上次的精度显示
     if (selfMarker.current && map.current) { map.current.removeLayer(selfMarker.current); selfMarker.current = null }
   }, [])
 
@@ -189,6 +190,7 @@ export function LocationsPage() {
     watchId.current = navigator.geolocation.watchPosition(
       (pos) => {
         lastPos.current = pos.coords
+        setSelfAccuracy(pos.coords.accuracy ?? null) // 更新自视精度显示（粗定位则提示联系人只看到大致区域）
         // 自身标记。
         const m = map.current
         if (m) {
@@ -238,6 +240,12 @@ export function LocationsPage() {
                       ? t(`将于 ${new Date(deadline).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} 自动停止`, `Auto-stops at ${new Date(deadline).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`)
                       : t('直到你手动停止', 'Until you stop')
                 }</div>
+                {/* 自视定位精度：让共享者知道自己被定位得多准；粗定位（桌面 IP/WiFi 常公里级）明确告知联系人只看到大致区域，
+                    与本 App 一贯的诚实位置标注同旨。仅共享中且有有效精度时显示。 */}
+                {sharing && (() => {
+                  const note = shareAccuracyNote(selfAccuracy, t)
+                  return note ? <div className={`mt-0.5 text-xs ${note.coarse ? 'font-medium text-danger' : 'text-faint'}`}>{note.coarse ? '⚠️ ' : '📍 '}{note.text}</div> : null
+                })()}
               </div>
             </div>
             {sharing

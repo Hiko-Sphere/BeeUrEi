@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { type Store, acceptedContactIds } from '../db/store'
+import { type Store, acceptedContactIds, isBlockedBetween } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
 import { type LiveLocationRegistry } from '../location/liveLocations'
@@ -123,11 +123,14 @@ export function registerLocationRoutes(app: FastifyInstance, store: Store, live:
           const meUser = store.findById(me)
           const name = meUser?.displayName ?? ''
           for (const rid of requesters) {
+            requestDedup.clear(`${rid}:${me}`) // 无论是否发，先清请求 key（防重复；被拉黑者也不再残留）
+            // 请求后、共享前若已互相拉黑（DV/骚扰场景：请求者拉黑了共享者）→ 不反馈：拉黑者不应再收到关于对方的通知，
+            // 且点开也因拉黑看不到对方位置（与位置可见性/告警扇出 acceptedContactIds 排除黑名单同口径，收口块-bypass）。
+            if (isBlockedBetween(store, rid, me)) continue
             const rl = pushLang(store.findById(rid)?.language)
             notifyUser(store, push, rid, 'location_share_started',
                        pushStrings.locationShareStartedTitle(name || (rl === 'en' ? 'A contact' : '联系人'), rl),
                        pushStrings.locationShareStartedBody(rl), { fromId: me, fromName: name })
-            requestDedup.clear(`${rid}:${me}`)
           }
         }
       } catch { /* 反馈请求者失败绝不阻断位置上报 */ }

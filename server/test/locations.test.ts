@@ -171,6 +171,15 @@ describe('请求共享位置 /api/locations/request（nudge，绝非远程强开
     await app.close()
   })
 
+  it('请求后、共享前互相拉黑 → 对方共享不反馈拉黑者（DV/骚扰：拉黑者不再收关于对方的通知，点开也因拉黑看不到）', async () => {
+    const { store, app, A, B } = await seed()
+    await app.inject({ method: 'POST', url: '/api/locations/request', headers: auth(A.token), payload: { userId: B.id } })
+    store.createBlock({ id: 'blk-ab', blockerId: A.id, blockedId: B.id, createdAt: Date.now() }) // A 请求后拉黑 B
+    await app.inject({ method: 'POST', url: '/api/locations/update', headers: auth(B.token), payload: { lat: 31.2, lng: 121.5 } })
+    expect(store.notificationsForUser(A.id).filter((n) => n.kind === 'location_share_started')).toHaveLength(0) // 不反馈拉黑者
+    await app.close()
+  })
+
   it('同一对 5 分钟内重复请求 → deduped:true，通知只有一条（防 nudge 轰炸）', async () => {
     const { app, A, B, notifs } = await seed()
     expect((await app.inject({ method: 'POST', url: '/api/locations/request', headers: auth(A.token), payload: { userId: B.id } })).json()).toMatchObject({ ok: true })

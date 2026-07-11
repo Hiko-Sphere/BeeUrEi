@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { api, type EmergencyHistoryItem } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { appleMapsUrl } from '../lib/location'
-import { Card, Pill, RelativeTime } from './ui'
+import { emergencyLocInfo } from '../lib/emergencyLoc'
+import { Card, Pill, RelativeTime, fmtTime } from './ui'
 
 /// 本人紧急事件历史（Family 页，独立组件，折叠+懒加载）：过往 SOS/摔倒/撞击告警回看——何时、触达几人、
 /// 是否有人响应、是否已报平安。医疗警报行业标配的 alert history。空历史给安心文案。
@@ -59,9 +60,19 @@ export function EmergencyHistorySection() {
                     <RelativeTime ms={it.at} lang={lang} className="text-faint" />
                     <Pill tone={o.tone}>{o.text}</Pill>
                     <span className="text-xs text-faint">{t('触达', 'reached')} {it.notified}/{it.contacts}</span>
-                    {it.lat != null && it.lon != null && (
-                      <a href={appleMapsUrl(it.lat, it.lon)} target="_blank" rel="noreferrer" className="text-xs text-accent underline">{t('在地图查看', 'View on map')}</a>
-                    )}
+                    {it.lat != null && it.lon != null && (() => {
+                      // 位置新鲜度诚实标注（与告警模态/看板/通知同 emergencyLocInfo）：回看时"最后已知"的兜底
+                      // 坐标不冒充实时——复盘"当时我在哪"须能分辨实时点 vs 丢 GPS 时的旧点。
+                      const loc = emergencyLocInfo({ locSource: it.locSource ?? undefined, locAgeSec: it.locAgeSec != null ? String(it.locAgeSec) : undefined }, it.at)
+                      const label = loc.stale
+                        ? (loc.fixAt != null ? t(`最后位置·${fmtTime(loc.fixAt, lang)}`, `Last·${fmtTime(loc.fixAt, lang)}`) : t('最后位置', 'Last known'))
+                        : t('在地图查看', 'View on map')
+                      return (
+                        <a href={appleMapsUrl(it.lat, it.lon)} target="_blank" rel="noreferrer"
+                          title={loc.stale && loc.fixAt != null ? t(`最后已知位置，定位于 ${fmtTime(loc.fixAt, lang)}`, `Last known location, fixed at ${fmtTime(loc.fixAt, lang)}`) : undefined}
+                          className="text-xs text-accent underline">{loc.stale ? '⚠️ ' : ''}{label}</a>
+                      )
+                    })()}
                   </li>
                 )
               })}

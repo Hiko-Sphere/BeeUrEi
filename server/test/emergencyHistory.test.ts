@@ -13,14 +13,20 @@ describe('紧急事件历史 /api/emergency/history', () => {
     const other = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'ehOther', password: 'secret123', role: 'blind' } })).json()
     store.createEmergencyEvent({ id: 'e1', userId: me.user.id, kind: 'fall', locSource: 'live', lat: 31.2, lon: 121.4, notified: 2, contacts: 3, at: 1000, resolvedAt: 1500 })
     store.createEmergencyEvent({ id: 'e2', userId: me.user.id, kind: 'manual', locSource: 'none', notified: 0, contacts: 1, at: 3000, escalatedAt: 3500 })
-    store.createEmergencyEvent({ id: 'x1', userId: other.user.id, kind: 'crash', locSource: 'none', notified: 1, contacts: 1, at: 2000 })
+    store.createEmergencyEvent({ id: 'e3', userId: me.user.id, kind: 'crash', locSource: 'lastKnown', locAgeSec: 900, lat: 22.5, lon: 114.1, notified: 1, contacts: 2, at: 2000 })
+    store.createEmergencyEvent({ id: 'x1', userId: other.user.id, kind: 'crash', locSource: 'none', notified: 1, contacts: 1, at: 2500 })
 
     const r = await app.inject({ method: 'GET', url: '/api/emergency/history', headers: auth(me.token) })
     expect(r.statusCode).toBe(200)
     const h = r.json().history
-    expect(h.map((x: { id: string }) => x.id)).toEqual(['e2', 'e1']) // at 倒序，且不含他人 x1
-    expect(h[1]).toMatchObject({ kind: 'fall', notified: 2, contacts: 3, resolved: true, acked: false, escalated: false, lat: 31.2, lon: 121.4 })
-    expect(h[0]).toMatchObject({ kind: 'manual', resolved: false, escalated: true, lat: null, lon: null }) // 无坐标→null
+    expect(h.map((x: { id: string }) => x.id)).toEqual(['e2', 'e3', 'e1']) // at 倒序，且不含他人 x1
+    const byId = Object.fromEntries(h.map((x: { id: string }) => [x.id, x]))
+    // 实时坐标：locSource='live'、无 locAgeSec。
+    expect(byId['e1']).toMatchObject({ kind: 'fall', notified: 2, contacts: 3, resolved: true, acked: false, escalated: false, lat: 31.2, lon: 121.4, locSource: 'live', locAgeSec: null })
+    // 无坐标：全 null（含 locSource='none' 如实带出、locAgeSec=null）。
+    expect(byId['e2']).toMatchObject({ kind: 'manual', resolved: false, escalated: true, lat: null, lon: null, locSource: 'none', locAgeSec: null })
+    // 最后已知：坐标 + locSource='lastKnown' + locAgeSec 秒数（供客户端诚实标注"最后位置·定位时刻"）。
+    expect(byId['e3']).toMatchObject({ lat: 22.5, lon: 114.1, locSource: 'lastKnown', locAgeSec: 900 })
     await app.close()
   })
 

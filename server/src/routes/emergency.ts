@@ -192,6 +192,10 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
         resolved: e.resolvedAt != null, // 是否已报平安解除
         lat: e.lat ?? null,
         lon: e.lon ?? null,
+        // 位置来源与新鲜度（诚实标注，与 watching 看板/告警推送同口径）：回看历史时"最后已知"的兜底坐标
+        // 也不该冒充实时定位——本人复盘"当时我在哪"须能分辨这是实时点还是丢 GPS 时的旧点。
+        locSource: e.locSource ?? null,
+        locAgeSec: e.locAgeSec ?? null,
       })),
     }
   })

@@ -10,18 +10,19 @@ import { rmSync } from 'node:fs'
 // 逐用户表情回应（per-user reactions）：每人对一条消息至多一个 emoji；聚合成 [{emoji,count,mine}]。
 // 与旧单字段 message.reaction 并行 dual-write，旧客户端行为不变。
 
-describe('aggregateReactions 纯聚合（按 emoji 计数 + 我是否也回应，首现序稳定）', () => {
-  it('同 emoji 计数、不同 emoji 各一项、mine 按 viewer', () => {
+describe('aggregateReactions 纯聚合（按 emoji 计数 + 我是否也回应 + 回应者名单，首现序稳定）', () => {
+  const nameOf = (uid: string) => ({ a: '甲', b: '乙', c: '丙' } as Record<string, string>)[uid] ?? '—'
+  it('同 emoji 计数、不同 emoji 各一项、mine 按 viewer、names 保留回应者出现序', () => {
     const rows = [{ userId: 'a', emoji: '👍' }, { userId: 'b', emoji: '👍' }, { userId: 'c', emoji: '❤️' }]
-    expect(aggregateReactions(rows, 'a')).toEqual([{ emoji: '👍', count: 2, mine: true }, { emoji: '❤️', count: 1, mine: false }])
-    expect(aggregateReactions(rows, 'c')).toEqual([{ emoji: '👍', count: 2, mine: false }, { emoji: '❤️', count: 1, mine: true }])
-    expect(aggregateReactions(rows, 'z')).toEqual([{ emoji: '👍', count: 2, mine: false }, { emoji: '❤️', count: 1, mine: false }]) // 非参与者：全 mine=false
+    expect(aggregateReactions(rows, 'a', nameOf)).toEqual([{ emoji: '👍', count: 2, mine: true, names: ['甲', '乙'] }, { emoji: '❤️', count: 1, mine: false, names: ['丙'] }])
+    expect(aggregateReactions(rows, 'c', nameOf)).toEqual([{ emoji: '👍', count: 2, mine: false, names: ['甲', '乙'] }, { emoji: '❤️', count: 1, mine: true, names: ['丙'] }])
+    expect(aggregateReactions(rows, 'z', nameOf).every((r) => !r.mine)).toBe(true) // 非参与者：全 mine=false
   })
   it('首现序稳定（先出现的 emoji 排前，与插入序无关于 count）', () => {
     const rows = [{ userId: 'a', emoji: '😀' }, { userId: 'b', emoji: '🎉' }, { userId: 'c', emoji: '😀' }]
-    expect(aggregateReactions(rows, 'x').map((r) => r.emoji)).toEqual(['😀', '🎉']) // 😀 先出现
+    expect(aggregateReactions(rows, 'x', nameOf).map((r) => r.emoji)).toEqual(['😀', '🎉']) // 😀 先出现
   })
-  it('空 → 空数组', () => { expect(aggregateReactions([], 'a')).toEqual([]) })
+  it('空 → 空数组', () => { expect(aggregateReactions([], 'a', nameOf)).toEqual([]) })
 })
 
 const gmsg = (id: string, groupId: string, fromId = 'u1'): ChatMessage =>
@@ -85,7 +86,7 @@ describe('POST /api/messages/:id/reaction 端到端（逐用户 + mine 按 viewe
   async function seed() {
     const store = new MemoryStore()
     const a = buildApp(store)
-    const reg = async (u: string, role = 'helper') => (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const reg = async (u: string, role = 'helper') => (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role, displayName: u } })).json()
     const A = await reg('rxA'); const B = await reg('rxB', 'blind')
     // 建互相绑定（accepted）以满足单聊可达性。
     const link = (await a.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${A.token}` }, payload: { username: 'rxB', relation: '家人', isEmergency: false } })).json()
@@ -102,11 +103,11 @@ describe('POST /api/messages/:id/reaction 端到端（逐用户 + mine 按 viewe
     // A 视角
     const asA = (await a.inject({ method: 'GET', url: `/api/messages?with=${B.user.id}`, headers: auth(A.token) })).json().messages
     const mA = asA.find((m: { id: string }) => m.id === mid)
-    expect(mA.reactions).toEqual([{ emoji: '👍', count: 1, mine: true }, { emoji: '❤️', count: 1, mine: false }])
+    expect(mA.reactions).toEqual([{ emoji: '👍', count: 1, mine: true, names: ['rxA'] }, { emoji: '❤️', count: 1, mine: false, names: ['rxB'] }])
     // B 视角：mine 翻转
     const asB = (await a.inject({ method: 'GET', url: `/api/messages?with=${A.user.id}`, headers: auth(B.token) })).json().messages
     const mB = asB.find((m: { id: string }) => m.id === mid)
-    expect(mB.reactions).toEqual([{ emoji: '👍', count: 1, mine: false }, { emoji: '❤️', count: 1, mine: true }])
+    expect(mB.reactions).toEqual([{ emoji: '👍', count: 1, mine: false, names: ['rxA'] }, { emoji: '❤️', count: 1, mine: true, names: ['rxB'] }])
     // 旧单字段仍在（旧客户端兼容）
     expect(store.findMessage(mid)!.reaction).toBeTruthy()
     await a.close()
@@ -118,7 +119,7 @@ describe('POST /api/messages/:id/reaction 端到端（逐用户 + mine 按 viewe
     await a.inject({ method: 'POST', url: `/api/messages/${mid}/reaction`, headers: auth(B.token), payload: { emoji: '❤️' } })
     // A 取消自己的
     const resp = (await a.inject({ method: 'POST', url: `/api/messages/${mid}/reaction`, headers: auth(A.token), payload: { emoji: '' } })).json()
-    expect(resp.message.reactions).toEqual([{ emoji: '❤️', count: 1, mine: false }]) // 只剩 B 的（A 视角 mine=false）
+    expect(resp.message.reactions).toEqual([{ emoji: '❤️', count: 1, mine: false, names: ['rxB'] }]) // 只剩 B 的（A 视角 mine=false）
     // A 撤回（A 是发送者、2 分钟内）→ reactions 清空
     await a.inject({ method: 'POST', url: `/api/messages/${mid}/recall`, headers: auth(A.token) })
     const after = (await a.inject({ method: 'GET', url: `/api/messages?with=${B.user.id}`, headers: auth(A.token) })).json().messages
@@ -135,14 +136,14 @@ describe('POST /api/messages/:id/reaction 端到端（逐用户 + mine 按 viewe
     const edited = (await a.inject({ method: 'POST', url: `/api/messages/${mid}/edit`, headers: auth(A.token), payload: { text: '在的' } })).json()
     expect(edited.message.text).toBe('在的')
     expect(edited.message.editedAt).toBeTruthy()
-    expect(edited.message.reactions).toEqual([{ emoji: '👍', count: 1, mine: false }]) // A 视角：B 的 👍，mine=false，未被编辑清空
+    expect(edited.message.reactions).toEqual([{ emoji: '👍', count: 1, mine: false, names: ['rxB'] }]) // A 视角：B 的 👍，mine=false，未被编辑清空
     await a.close()
   })
 
   it('**群消息**同样带 reactions（各成员回应各显、mine 按视角）——GET ?group= 分支不漏（姊妹分支护栏）', async () => {
     const store = new MemoryStore()
     const a = buildApp(store)
-    const reg = async (u: string) => (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role: 'helper' } })).json()
+    const reg = async (u: string) => (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role: 'helper', displayName: u } })).json()
     const owner = await reg('rgOwner'); const m1 = await reg('rgM1'); const m2 = await reg('rgM2')
     // owner 与两成员互绑（建群要求成员是群主好友）。
     for (const [who, uname] of [[m1, 'rgM1'], [m2, 'rgM2']] as const) {
@@ -157,7 +158,7 @@ describe('POST /api/messages/:id/reaction 端到端（逐用户 + mine 按 viewe
     // 群消息 GET（?group=）必须带 reactions（此前只单聊分支带、群分支漏）。m1 视角：👍 是我的。
     const asM1 = (await a.inject({ method: 'GET', url: `/api/messages?group=${grp.id}`, headers: { authorization: `Bearer ${m1.token}` } })).json().messages
     const mm = asM1.find((x: { id: string }) => x.id === sent.id)
-    expect(mm.reactions).toEqual([{ emoji: '👍', count: 1, mine: true }, { emoji: '🎉', count: 1, mine: false }])
+    expect(mm.reactions).toEqual([{ emoji: '👍', count: 1, mine: true, names: ['rgM1'] }, { emoji: '🎉', count: 1, mine: false, names: ['rgM2'] }])
     await a.close()
   })
 })

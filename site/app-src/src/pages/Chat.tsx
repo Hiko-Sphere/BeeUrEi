@@ -876,7 +876,7 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForwar
   const forwardable = isForwardableKind(m.kind)
   // 逐用户表情回应胶囊：优先服务端 reactions 数组（每 emoji 计数 + 我是否也回应）；旧服务端只回单字段 reaction
   // 时兜底合成一枚（mine 未知置 false）。myReaction=我当前所选（点选器高亮 + 切换判定用）。
-  const reactionChips = m.reactions ?? (m.reaction ? [{ emoji: m.reaction, count: 1, mine: false }] : [])
+  const reactionChips = m.reactions ?? (m.reaction ? [{ emoji: m.reaction, count: 1, mine: false, names: [] }] : [])
   const myReaction = reactionChips.find((r) => r.mine)?.emoji
   const [picking, setPicking] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -919,15 +919,23 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForwar
           {editable && !editing && <button onClick={() => { setDraft(m.text); setEditing(true) }} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('编辑', 'Edit')}</button>}
           {replyable && !editing && <button onClick={onReply} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('回复', 'Reply')}</button>}
           {forwardable && !editing && <button onClick={onForward} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('转发', 'Forward')}</button>}
-          {/* 逐用户表情胶囊：每种 emoji 一枚，显数量（>1 才显）；我参与的高亮。点胶囊即切换本人的该表情（加/取消）。 */}
-          {reactionChips.map((r) => (
+          {/* 逐用户表情胶囊：每种 emoji 一枚，显数量（>1 才显）；我参与的高亮。点胶囊即切换本人的该表情（加/取消）。
+              **谁回应了**：names 进 aria-label（读屏盲人听得到"小明、你 回应了👍"）+ title（悬停）——比只念"👍2"有用。 */}
+          {reactionChips.map((r) => {
+            const who = joinNames(r.names, lang) // 回应者名单（旧单字段兜底时为空 → 退回计数措辞）
+            return (
             <button key={r.emoji} onClick={() => onReact(r.emoji)} data-testid="reaction-chip"
-              aria-label={t(`${r.emoji}，${r.count} 人回应${r.mine ? '，含你' : ''}，点击${r.mine ? '取消' : '也回应'}`,
-                `${r.emoji}, ${r.count} ${r.count > 1 ? 'reactions' : 'reaction'}${r.mine ? ', including you' : ''}, tap to ${r.mine ? 'remove' : 'add'} yours`)}
+              title={who || undefined}
+              aria-label={who
+                ? t(`${r.emoji}，${who} 回应${r.mine ? '（含你）' : ''}，点击${r.mine ? '取消' : '也回应'}`,
+                    `${r.emoji}, reacted by ${who}, tap to ${r.mine ? 'remove yours' : 'add yours'}`)
+                : t(`${r.emoji}，${r.count} 人回应${r.mine ? '，含你' : ''}，点击${r.mine ? '取消' : '也回应'}`,
+                    `${r.emoji}, ${r.count} ${r.count > 1 ? 'reactions' : 'reaction'}${r.mine ? ', including you' : ''}, tap to ${r.mine ? 'remove' : 'add'} yours`)}
               className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs leading-none transition ${r.mine ? 'bg-honey/25 font-semibold ring-1 ring-honey/40' : 'surface-2 hover:brightness-95'}`}>
               <span className="text-sm leading-none">{r.emoji}</span>{r.count > 1 && <span>{r.count}</span>}
             </button>
-          ))}
+            )
+          })}
           {reactable && (
             <button onClick={() => setPicking((v) => !v)} aria-label={t('表情回应', 'React')}
                     className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('回应', 'React')}</button>

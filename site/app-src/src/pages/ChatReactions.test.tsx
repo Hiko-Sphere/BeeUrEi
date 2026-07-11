@@ -30,20 +30,24 @@ describe('ChatPage 逐用户表情胶囊显示与切换', () => {
   const withReactions = (reactions: unknown, extra: Record<string, unknown> = {}) =>
     mock(api.messagesWith).mockResolvedValue({ messages: [{ id: 'm1', fromId: 'p1', toId: 'me', kind: 'text', text: '好耶', createdAt: 1000, ...(reactions ? { reactions } : {}), ...extra }] })
 
-  it('渲染 reactions 数组为胶囊：每 emoji 一枚，count>1 显数量，我参与的 aria 含"含你"', async () => {
-    withReactions([{ emoji: '👍', count: 2, mine: true }, { emoji: '❤️', count: 1, mine: false }])
+  it('渲染 reactions 数组为胶囊：每 emoji 一枚，count>1 显数量，回应者名单进 aria/title（读屏听得到谁回应）', async () => {
+    withReactions([{ emoji: '👍', count: 2, mine: true, names: ['小明', '我'] }, { emoji: '❤️', count: 1, mine: false, names: ['小红'] }])
     render(<ChatPage />)
     await screen.findByText('好耶')
     const chips = screen.getAllByTestId('reaction-chip')
     expect(chips).toHaveLength(2)
     expect(chips[0].textContent).toContain('👍'); expect(chips[0].textContent).toContain('2') // count>1 显数量
     expect(chips[1].textContent).toContain('❤️'); expect(chips[1].textContent).not.toContain('1') // count=1 不显数字
+    // 谁回应了：names 进 aria-label + title（对读屏盲人尤其有用）。
+    expect(chips[0].getAttribute('aria-label')).toContain('小明')     // 回应者名单
     expect(chips[0].getAttribute('aria-label')).toContain('含你')     // 👍 是我的
+    expect(chips[0].getAttribute('title')).toContain('小明')          // 悬停也见
+    expect(chips[1].getAttribute('aria-label')).toContain('小红')
     expect(chips[1].getAttribute('aria-label')).not.toContain('含你') // ❤️ 不是我的
   })
 
   it('点我已选胶囊(👍 mine)=取消 → reactMessage(id,"")；点别的(❤️)=改选 → reactMessage(id,"❤️")', async () => {
-    withReactions([{ emoji: '👍', count: 2, mine: true }, { emoji: '❤️', count: 1, mine: false }])
+    withReactions([{ emoji: '👍', count: 2, mine: true, names: ['小明', '我'] }, { emoji: '❤️', count: 1, mine: false, names: ['小红'] }])
     render(<ChatPage />)
     await screen.findByText('好耶')
     const chips = screen.getAllByTestId('reaction-chip')

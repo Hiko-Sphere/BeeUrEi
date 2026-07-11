@@ -498,22 +498,26 @@ export interface ChatMessage {
   editedAt?: number // 编辑时刻（WhatsApp 式，仅文字消息、限窗口内）；有值 → 客户端标"已编辑"
   replyTo?: string // 回复的消息 id（WhatsApp 式引用回复）；须为同一会话内的消息，否则发送时丢弃
   forwarded?: boolean // 转发标记（WhatsApp 式「已转发」）；客户端据此标注，防误以为是对方原创
-  /// 逐用户表情回应的聚合视图（服务端序列化时按查看者算出，不落库）：每个 emoji 一项（数量 + 我是否也回应了）。
+  /// 逐用户表情回应的聚合视图（服务端序列化时按查看者算出，不落库）：每个 emoji 一项（数量 + 我是否也回应 +
+  /// **回应者显示名**——供"谁回应了"展示，对读屏盲人尤其有用：能听到"小明和你回应了👍"而非仅"👍2"）。
   /// emoji 按**首次出现顺序**稳定排列（WhatsApp 式）。客户端据此渲染表情胶囊；旧客户端忽略此字段、仍读 reaction 单字段。
-  reactions?: { emoji: string; count: number; mine: boolean }[]
+  reactions?: { emoji: string; count: number; mine: boolean; names: string[] }[]
 }
 
-/// 把逐用户表情行聚合成"每 emoji 计数 + 我是否也回应"（纯函数，可单测）。emoji 按首次出现序稳定排列。
-export function aggregateReactions(rows: { userId: string; emoji: string }[], viewerId: string): { emoji: string; count: number; mine: boolean }[] {
+/// 把逐用户表情行聚合成"每 emoji 计数 + 我是否也回应 + 回应者名单"（首现序稳定）。nameOf 把 userId 解析成显示名
+/// （注入以保持可单测 + 让调用方缓存重复查名）。names 与 rows 内该 emoji 的回应者一一对应、保留出现序。
+export function aggregateReactions(
+  rows: { userId: string; emoji: string }[], viewerId: string, nameOf: (userId: string) => string,
+): { emoji: string; count: number; mine: boolean; names: string[] }[] {
   const order: string[] = []
-  const map = new Map<string, { count: number; mine: boolean }>()
+  const map = new Map<string, { mine: boolean; userIds: string[] }>()
   for (const r of rows) {
     let e = map.get(r.emoji)
-    if (!e) { e = { count: 0, mine: false }; map.set(r.emoji, e); order.push(r.emoji) }
-    e.count++
+    if (!e) { e = { mine: false, userIds: [] }; map.set(r.emoji, e); order.push(r.emoji) }
+    e.userIds.push(r.userId)
     if (r.userId === viewerId) e.mine = true
   }
-  return order.map((emoji) => { const e = map.get(emoji)!; return { emoji, count: e.count, mine: e.mine } })
+  return order.map((emoji) => { const e = map.get(emoji)!; return { emoji, count: e.userIds.length, mine: e.mine, names: e.userIds.map(nameOf) } })
 }
 
 /// 消息稳定全序比较：先 createdAt，再 id。让同毫秒消息排序确定、与翻页复合游标口径一致。

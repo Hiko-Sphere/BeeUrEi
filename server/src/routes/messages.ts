@@ -25,11 +25,18 @@ export function stripReadAtForViewer(store: Store, viewerId: string, m: ChatMess
 /// （mine 未知置 false），使旧回应仍可见、不凭空消失。撤回消息不带回应（recall 时已清）。
 export function withReactions(store: Store, viewerId: string, msgs: ChatMessage[]): ChatMessage[] {
   const byId = store.messageReactionsFor(msgs.map((m) => m.id))
+  // 查名缓存：同一线程里同一人常在多条消息上回应，缓存 userId→displayName 避免逐条 findById 重复查（已注销→'—'）。
+  const nameCache = new Map<string, string>()
+  const nameOf = (uid: string): string => {
+    let n = nameCache.get(uid)
+    if (n === undefined) { n = store.findById(uid)?.displayName ?? '—'; nameCache.set(uid, n) }
+    return n
+  }
   return msgs.map((m) => {
     if (m.kind === 'recalled') return m
     const rows = byId.get(m.id)
-    if (rows && rows.length) return { ...m, reactions: aggregateReactions(rows, viewerId) }
-    if (m.reaction) return { ...m, reactions: [{ emoji: m.reaction, count: 1, mine: false }] } // 旧单字段回应兜底显示
+    if (rows && rows.length) return { ...m, reactions: aggregateReactions(rows, viewerId, nameOf) }
+    if (m.reaction) return { ...m, reactions: [{ emoji: m.reaction, count: 1, mine: false, names: [] }] } // 旧单字段回应兜底（无从知回应者名）
     return m
   })
 }

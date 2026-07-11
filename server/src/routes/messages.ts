@@ -105,6 +105,14 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
       if (!media || media.ownerId !== me || !media.mime.startsWith('video/')) {
         return reply.code(400).send({ error: 'invalid_video' })
       }
+      // 且该媒体不得已被**录制实体**或**另一条视频消息**引用（与 recordings.ts 建录制守卫对称，见 iter55）。
+      // 否则录制主可把自己那份录制的 mediaId 挂成一条临时视频消息、再在 2 分钟撤回窗内 recall→deleteMedia+
+      // removeMediaFile，**销毁受法务保留/举报证据保护的录制源文件**（撤回删的名义是"消息媒体"，却连带毁了
+      // 录制指向的同一物理文件）。也防两条消息共用一份媒体致撤回其一删掉另一条的媒体。录制媒体本有独立下载
+      // 通道（/api/recordings），本就不该被当作聊天视频重复挂载。
+      if (store.recordingByMediaId(text) || store.findVideoMessageByMediaId(text)) {
+        return reply.code(409).send({ error: 'media_already_referenced' })
+      }
     }
 
     const sender = store.findById(me)
@@ -259,7 +267,9 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     if (!msg) return reply.code(404).send({ error: 'not_found' })
     if (msg.fromId !== req.user!.sub) return reply.code(403).send({ error: 'not_yours' })
     if (Date.now() - msg.createdAt > 2 * 60_000) return reply.code(400).send({ error: 'recall_window_passed' })
-    if (msg.kind === 'video' && msg.text !== '') {
+    // 纵深防御：撤回视频消息删其媒体，但**绝不删仍被录制实体引用的物理文件**——即便某路径让一条视频消息与
+    // 一份录制指向同一 mediaId（发送侧已挡此情形），撤回也不得连带销毁受法务保留/举报证据保护的录制源文件。
+    if (msg.kind === 'video' && msg.text !== '' && !store.recordingByMediaId(msg.text)) {
       store.deleteMedia(msg.text)
       removeMediaFile(msg.text)
     }

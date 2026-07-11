@@ -325,6 +325,47 @@ describe('视频消息（服务器磁盘媒体存储）', () => {
     expect((await app.inject({ method: 'GET', url: `/api/media/${m2}`, headers: auth(a.token) })).statusCode).toBe(200)
     await app.close()
   })
+
+  it('证据保护：不能把已被录制引用的媒体挂成视频消息（发送 409），杜绝撤回销毁录制证据源', async () => {
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const a = await reg(app, 'evA', 'blind'); const b = await reg(app, 'evB', 'helper')
+    await bind(app, a.token, b.token, 'evB')
+    // a 上传一份视频媒体，并令其成为一条**录制**的媒体（a 是录制拥有者，故也 own 该媒体）。
+    const up = await app.inject({ method: 'POST', url: '/api/media', headers: { ...auth(a.token), 'content-type': 'video/mp4' }, payload: Buffer.from('recording-evidence-bytes') })
+    const recMedia = (up.json() as any).media.id as string
+    store.createRecording({ id: 'rec1', callId: 'c1', ownerId: a.user.id, consentBy: [b.user.id], reason: 'consented', recordedAt: Date.now(), mediaId: recMedia, participants: [a.user.id, b.user.id] })
+
+    // a 试图把录制媒体挂成一条视频消息 → 409（媒体已被录制引用），发送侧即拒。
+    const attach = await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, kind: 'video', text: recMedia } })
+    expect(attach.statusCode).toBe(409)
+    expect((attach.json() as { error: string }).error).toBe('media_already_referenced')
+
+    // 对照：一份全新未被引用的视频媒体照常可发（不误伤正常视频消息）。
+    const up2 = await app.inject({ method: 'POST', url: '/api/media', headers: { ...auth(a.token), 'content-type': 'video/mp4' }, payload: Buffer.from('fresh-clip') })
+    const fresh = (up2.json() as any).media.id as string
+    expect((await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, kind: 'video', text: fresh } })).statusCode).toBe(201)
+    await app.close()
+  })
+
+  it('纵深防御：即便一条视频消息与某录制共用 mediaId，撤回也不销毁录制源文件', async () => {
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const a = await reg(app, 'ev2A', 'blind'); const b = await reg(app, 'ev2B', 'helper')
+    await bind(app, a.token, b.token, 'ev2B')
+    const up = await app.inject({ method: 'POST', url: '/api/media', headers: { ...auth(a.token), 'content-type': 'video/mp4' }, payload: Buffer.from('shared-evidence-bytes') })
+    const shared = (up.json() as any).media.id as string
+    store.createRecording({ id: 'rec2', callId: 'c2', ownerId: a.user.id, consentBy: [b.user.id], reason: 'consented', recordedAt: Date.now(), mediaId: shared, participants: [a.user.id, b.user.id] })
+    // 绕过发送守卫，直接造一条引用同一 mediaId 的视频消息（模拟"若某路径造出此关联"），再经 API 撤回。
+    store.createMessage({ id: 'vm1', fromId: a.user.id, toId: b.user.id, kind: 'video', text: shared, createdAt: Date.now() })
+    const recall = await app.inject({ method: 'POST', url: '/api/messages/vm1/recall', headers: auth(a.token) })
+    expect(recall.statusCode).toBe(200)
+    // 消息变占位，但录制的源文件与 media 元数据**仍在**（撤回守卫拒删被录制引用的物理文件）。
+    expect(mediaFileExists(shared)).toBe(true)
+    expect(store.findMedia(shared)).toBeTruthy()
+    expect(store.recordingByMediaId(shared)?.id).toBe('rec2')
+    await app.close()
+  })
 })
 
 describe('会话内消息搜索', () => {

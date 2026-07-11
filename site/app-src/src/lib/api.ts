@@ -138,8 +138,10 @@ export const tokenStore = {
   clear() { localStorage.removeItem(LS_TOKEN); localStorage.removeItem(LS_REFRESH); localStorage.removeItem(LS_USER) },
 }
 
-let onUnauthorized: (() => void) | null = null
-export function setUnauthorizedHandler(fn: () => void) { onUnauthorized = fn }
+// 登出处理器收到**清除前快照的 access token**：供退订 Web Push（否则共享浏览器上强制登出后，服务端仍会把上一
+// 用户的紧急/消息推送弹到这台机器，被下一个人看到——与显式 signOut 同口径的退订，此前强制登出漏了，见对抗复审）。
+let onUnauthorized: ((token?: string) => void) | null = null
+export function setUnauthorizedHandler(fn: (token?: string) => void) { onUnauthorized = fn }
 
 // 带 30s 超时的 fetch：网络挂死(连接被丢却无 RST)时 fetch 可能久久不返回——会让初始 /api/me 卡住、
 // 整个应用无限转圈，或 401 续期挂住、请求永不完成。AbortController 兜底。仅用于 JSON 请求
@@ -168,7 +170,8 @@ async function rawFetch(method: string, path: string, body: unknown, auth: boole
     }
     // 续期后重放仍 401（会话已被撤销/封禁/改密——远程登出安全特性即时生效），或 refresh 真失效：
     // 立即登出，不留"看似登录却样样 401"的中间态。瞬时故障已在上面 return，不会走到这里。
-    tokenStore.clear(); onUnauthorized?.()
+    const staleToken = tokenStore.token ?? undefined // 清除前快照：交登出处理器退订 Web Push
+    tokenStore.clear(); onUnauthorized?.(staleToken)
     throw new APIError('unauthorized', 401)
   }
   let data: unknown = null
@@ -201,6 +204,10 @@ async function tryRefresh(): Promise<RefreshResult> {
       if (r.ok) {
         const j = await r.json() as { token?: string; refreshToken?: string }
         if (!j.token) return 'transient' // 2xx 却无 token：异常响应，保守当瞬时，不误清有效令牌
+        // 在途续期期间用户可能已登出(signOut/远程登出已清 token)或换号：绝不把令牌**复活**写回 localStorage——
+        // 否则共享电脑上登出后一个在途刷新会把上一用户会话恢复、下一个人看到其数据(见对抗复审)。起始的 rt 仍在
+        // (== tokenStore.refresh) 才证明期间无登出/换号，方可写回。
+        if (tokenStore.refresh !== rt) return 'transient'
         localStorage.setItem(LS_TOKEN, j.token)
         if (j.refreshToken) localStorage.setItem(LS_REFRESH, j.refreshToken)
         return 'refreshed'

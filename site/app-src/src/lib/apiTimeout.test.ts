@@ -100,4 +100,34 @@ describe('rawFetch 401 续期与远程登出', () => {
     expect(loggedOut).toBe(true)       // refresh token 真被拒才登出
     expect(tokenStore.token).toBeNull()
   })
+
+  it('在途续期期间登出（signOut 清了 token）→ 续期即便成功也**不复活**令牌（共享电脑防泄漏）', async () => {
+    seedUser()
+    setUnauthorizedHandler(() => {})
+    let firstCfg = true
+    vi.stubGlobal('fetch', (url: string) => {
+      if (String(url).includes('/api/auth/refresh')) {
+        tokenStore.clear() // 模拟：续期在途时用户登出（同步清了本地令牌）
+        return Promise.resolve(jres(200, { token: 'AT_NEW', refreshToken: 'RT2' })) // 服务端仍返回了新令牌
+      }
+      // 首次 401 触发 refresh；**重放成功**（模拟复活的令牌若被写回则请求会通过、令牌残留于共享电脑）。
+      if (firstCfg) { firstCfg = false; return Promise.resolve(jres(401, { error: 'unauthorized' })) }
+      return Promise.resolve(jres(200, { minAppVersion: '1.0.0' }))
+    })
+    await api.appConfig().then(() => null).catch(() => {})
+    expect(tokenStore.token).toBeNull()   // **未被复活**（无守卫时会写回 AT_NEW 且因重放成功而残留 → 会话恢复）
+    expect(tokenStore.refresh).toBeNull()
+  })
+
+  it('强制登出把清除前的 access token 传给登出处理器（供退订 Web Push，防共享浏览器继续收上一用户告警）', async () => {
+    seedUser() // AT_OLD
+    let gotToken: string | undefined = 'unset'
+    setUnauthorizedHandler((tk?: string) => { gotToken = tk })
+    vi.stubGlobal('fetch', (url: string) => {
+      if (String(url).includes('/api/auth/refresh')) return Promise.resolve(jres(401, { error: 'invalid_refresh_token' })) // 真失效 → 登出
+      return Promise.resolve(jres(401, { error: 'unauthorized' }))
+    })
+    await api.appConfig().then(() => null).catch(() => {})
+    expect(gotToken).toBe('AT_OLD') // 清除前的 token 被传入（登出处理器据此退订 web push）
+  })
 })

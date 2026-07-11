@@ -50,7 +50,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [refreshMe])
 
   useEffect(() => {
-    setUnauthorizedHandler(() => { setUser(null); setSelf(null) })
+    // 强制登出(会话被远程撤销/封禁/refresh 失效)与显式 signOut 同口径退订 Web Push：否则共享浏览器上登出后，
+    // 服务端仍把上一用户的紧急/消息推送弹到这台机器。token 由 api 层在清除前快照传入(此刻已 401/失效，服务端
+    // DELETE 尽力而为，浏览器侧 sub.unsubscribe() 才是止推关键)。
+    setUnauthorizedHandler((tk) => { if (tk) void unsubscribeWebPushOnSignOut(tk); setUser(null); setSelf(null) })
     void (async () => { await refreshMe(); setReady(true) })()
   }, [refreshMe])
 

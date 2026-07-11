@@ -82,7 +82,8 @@ export function registerKycRoutes(app: FastifyInstance, store: Store): void {
     try {
       store.createVerification(v)
     } catch {
-      // 并发双提交撞唯一索引（uniq_verif_active）——回报 409。
+      // 并发双提交由上方 getActiveVerificationForUser 检查拦下(check+create 间无 await，原子)；
+      // 此 catch 仅作纵深防御兜底存储层异常(createVerification 走 INSERT OR REPLACE / 删旧活动行，正常不抛)。
       return reply.code(409).send({ error: 'already_pending' })
     }
     return reply.code(201).send({ status: 'pending', id, attempt: v.attempt })
@@ -122,9 +123,20 @@ export function registerKycRoutes(app: FastifyInstance, store: Store): void {
     await writeKycBlob(blobId, ciphertext)
     const ref: KycBlobRef = { kind: kind as KycDocKind, blobId, sealed, mime: normalized.mime }
 
-    // 覆盖同 kind 的旧图（删旧密文文件）。
-    const others = (v.blobs ?? []).filter((b) => b.kind !== kind)
-    const old = (v.blobs ?? []).find((b) => b.kind === kind)
+    // 关键：await writeKycBlob 之后**重读**记录再合并——绝不能用 await 前的 v.blobs 快照。
+    // 否则两张证件(如 front/back)并发上传时，两请求各自基于"空 blobs"快照回写 → 后提交者覆盖前者的 ref，
+    // 前者的密文文件成为**无任何引用的孤儿**：retention 清扫与删号 cascade 都只遍历 v.blobs 清理 →
+    // 永不清除，既违反"删号即抹除全部证件图"承诺(GDPR 擦除)、又慢性泄漏隔离磁盘(见对抗复审 F1)。
+    // 重读→计算合并→写库之间无 await，Node 单线程下为原子——另一并发请求只会在其整体前或整体后完整跑完。
+    const fresh = store.findVerification(id)
+    // 落盘期间记录可能被并发撤回(DELETE)或管理员决审 → 已不存在/非 pending：回滚本次刚写的密文，不留孤儿。
+    if (!fresh || fresh.userId !== userId || fresh.status !== 'pending') {
+      removeKycBlob(blobId)
+      return reply.code(409).send({ error: 'not_pending' })
+    }
+    // 覆盖同 kind 的旧图（删旧密文文件）——基于**重读后**的最新 blobs。
+    const others = (fresh.blobs ?? []).filter((b) => b.kind !== kind)
+    const old = (fresh.blobs ?? []).find((b) => b.kind === kind)
     if (old) removeKycBlob(old.blobId)
     store.updateVerification(id, { blobs: [...others, ref] })
     return reply.send({ ok: true, kind, docsUploaded: [...others.map((b) => b.kind), kind] })

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -289,6 +289,44 @@ describe('KYC security invariants (MemoryStore)', () => {
     const badKind = await app.inject({ method: 'POST', url: `/api/account/verification/${id}/doc/back2`, headers: { ...auth(token), 'content-type': 'image/jpeg' }, payload: makeJpeg() })
     expect(badKind.statusCode).toBe(400)
     await app.close()
+  })
+
+  it('并发上传两张证件不覆盖、不产生孤儿密文（F1：落盘后重读合并，非陈旧快照）', async () => {
+    // 用**独立**临时 KYC_DIR，精确断言磁盘文件数（kycDir() 每次动态读 env，可按测切换）。
+    const freshDir = mkdtempSync(join(tmpdir(), 'kyc-f1-'))
+    const prevDir = process.env.KYC_DIR
+    process.env.KYC_DIR = freshDir
+    try {
+      const store = new MemoryStore()
+      const app = buildApp(store)
+      const { token } = await reg(app, 'racer')
+      const sub = await app.inject({ method: 'POST', url: '/api/account/verification', headers: auth(token),
+        payload: { legalName: '张三', idType: 'national_id', idNumberLast4: '6789', consentVersion: 'kyc-1' } })
+      const id = sub.json().id as string
+
+      // 真实客户端常**并行**上传正/反面：两请求各在 await writeKycBlob 处让出，均基于"空 blobs"快照。
+      const [r1, r2] = await Promise.all([
+        app.inject({ method: 'POST', url: `/api/account/verification/${id}/doc/front`, headers: { ...auth(token), 'content-type': 'image/jpeg' }, payload: makeJpeg() }),
+        app.inject({ method: 'POST', url: `/api/account/verification/${id}/doc/back`, headers: { ...auth(token), 'content-type': 'image/jpeg' }, payload: makeJpeg() }),
+      ])
+      expect(r1.statusCode).toBe(200); expect(r2.statusCode).toBe(200)
+
+      // 两张都被引用（后者不覆盖前者）。
+      const st = await app.inject({ method: 'GET', url: '/api/account/verification', headers: auth(token) })
+      expect((st.json().docsUploaded as string[]).slice().sort()).toEqual(['back', 'front'])
+
+      // 磁盘密文文件数 == 被引用 blob 数，且每个文件都被引用（零孤儿）——修前后者覆盖前者会残留一份无引用密文。
+      const v = store.findVerification(id)!
+      const referenced = new Set((v.blobs ?? []).map((b) => b.blobId))
+      const onDisk = readdirSync(freshDir)
+      expect(referenced.size).toBe(2)
+      expect(onDisk.length).toBe(referenced.size)
+      for (const f of onDisk) expect(referenced.has(f)).toBe(true)
+      await app.close()
+    } finally {
+      process.env.KYC_DIR = prevDir
+      rmSync(freshDir, { recursive: true, force: true })
+    }
   })
 
   it('decideVerification is exactly-once under race (second call no-ops)', () => {

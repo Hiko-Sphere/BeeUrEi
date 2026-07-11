@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import { type Store, type ChatMessage, isBlockedBetween, publicUser, matchBannedTerm, areLinked } from '../db/store'
+import { type Store, type ChatMessage, isBlockedBetween, publicUser, matchBannedTerm, areLinked, aggregateReactions } from '../db/store'
 
 /// 读回执隐私（WhatsApp 语义）：单聊两端任一方显式关闭读回执（readReceiptsEnabled === false）即抑制
 /// "已读"暴露（互惠——关了的人也看不到别人的）。缺省(undefined)=开。同步 store 读兜底：查不到人按"开"处理。
@@ -18,6 +18,20 @@ export function receiptsOffBetween(store: Store, a: string, b: string): boolean 
 export function stripReadAtForViewer(store: Store, viewerId: string, m: ChatMessage): ChatMessage {
   if (m.groupId || m.fromId !== viewerId || m.readAt == null) return m
   return receiptsOffBetween(store, viewerId, m.toId) ? { ...m, readAt: undefined } : m
+}
+
+/// 给一批消息附上**逐用户表情回应**的聚合视图（按 viewer 算 mine）。批量取（一次 messageReactionsFor，不逐条 N+1）。
+/// 向后兼容：某消息尚无逐用户回应行但有旧的单字段 reaction（本次上线前的旧回应）→ 合成一条 count=1 的胶囊
+/// （mine 未知置 false），使旧回应仍可见、不凭空消失。撤回消息不带回应（recall 时已清）。
+export function withReactions(store: Store, viewerId: string, msgs: ChatMessage[]): ChatMessage[] {
+  const byId = store.messageReactionsFor(msgs.map((m) => m.id))
+  return msgs.map((m) => {
+    if (m.kind === 'recalled') return m
+    const rows = byId.get(m.id)
+    if (rows && rows.length) return { ...m, reactions: aggregateReactions(rows, viewerId) }
+    if (m.reaction) return { ...m, reactions: [{ emoji: m.reaction, count: 1, mine: false }] } // 旧单字段回应兜底显示
+    return m
+  })
 }
 import { totalUnreadFor } from '../db/unread'
 import { requireAuth } from '../auth/rbac'
@@ -227,7 +241,7 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     // 也看不到别人的已读）。只影响"已读/已送达"显示；markRead 照常写库，未读计数/角标完全不受影响。群回执只暴露
     // 匿名计数（readBy/readTotal，不点名谁读了），照 WhatsApp 群例外保持不变。
     const msgs = store.messagesBetween(me, peer, limit, before, beforeId)
-    return { messages: msgs.map((m) => stripReadAtForViewer(store, me, m)) }
+    return { messages: withReactions(store, me, msgs.map((m) => stripReadAtForViewer(store, me, m))) }
   })
 
   // 搜索文本消息：?q=关键词 + (?with=对端 或 ?group=群 id)；**两者都不带=跨会话全局搜索**（WhatsApp 式，
@@ -274,6 +288,7 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
       removeMediaFile(msg.text)
     }
     const updated = store.updateMessage(id, { kind: 'recalled', text: '', reaction: undefined })
+    store.deleteMessageReactions(id) // 撤回连带清逐用户表情（内容已撤，其上的表情也无处依附；与清 reaction 单字段一致）
     // 读回执剥离与消息列表同口径（复审补漏：写操作回显是曾被遗漏的 readAt 旁路出口）。
     return { message: updated && stripReadAtForViewer(store, req.user!.sub, updated) }
   })
@@ -334,9 +349,12 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     // （见 edit 门控注"与表情回应同源"）。emoji 字段虽名为表情，schema 却允许 ≤16 字任意文本——不过滤就能塞
     // 一句违禁短语当"表情"绕过发送/编辑侧的 matchBannedTerm 直达对方。补齐审核（正常单个 emoji 不含违禁词、不误伤）。
     if (emoji.length > 0 && matchBannedTerm(store.getAppConfig(), emoji)) return reply.code(403).send({ error: 'content_blocked' })
-    const updated = store.updateMessage(id, { reaction: emoji.length === 0 ? undefined : emoji })
+    // 逐用户回应（每人至多一个 emoji；空=取消本人的）。setMessageReaction 内部**同时**更新旧单字段 message.reaction，
+    // 使尚未升级的旧客户端行为完全同今日。回显带上按本人聚合的 reactions（新客户端即时反映自己刚点的态）。
+    store.setMessageReaction(id, me, emoji)
+    const updated = store.findMessage(id)
     // 读回执剥离与消息列表同口径（对"我发出的"那条才生效；给对端消息贴表情时 readAt 是我自己的已读时刻，非隐私面）。
-    return { message: updated && stripReadAtForViewer(store, me, updated) }
+    return { message: updated && withReactions(store, me, [stripReadAtForViewer(store, me, updated)])[0] }
   })
 
   // 标记已读：单聊传 fromId（已读回执），群聊传 groupId（按人记"读到的时间戳"）。

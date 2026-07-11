@@ -72,6 +72,9 @@ export class SqliteStore implements Store {
         id TEXT PRIMARY KEY, fromId TEXT, toId TEXT, kind TEXT, text TEXT, createdAt INTEGER, readAt INTEGER, reaction TEXT, groupId TEXT, editedAt INTEGER, replyTo TEXT, forwarded INTEGER);
       CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages (fromId, toId, createdAt);
       CREATE INDEX IF NOT EXISTS idx_messages_to ON messages (toId, readAt);
+      CREATE TABLE IF NOT EXISTS message_reactions (
+        messageId TEXT, userId TEXT, emoji TEXT, PRIMARY KEY (messageId, userId));
+      CREATE INDEX IF NOT EXISTS idx_msgreact_user ON message_reactions (userId);
       CREATE TABLE IF NOT EXISTS groups (
         id TEXT PRIMARY KEY, name TEXT, ownerId TEXT, memberIds TEXT, createdAt INTEGER);
       CREATE TABLE IF NOT EXISTS group_reads (
@@ -892,6 +895,33 @@ export class SqliteStore implements Store {
     const next = { ...cur, ...patch, id: cur.id }
     this.createMessage(next)
     return next
+  }
+  setMessageReaction(messageId: string, userId: string, emoji: string): void {
+    if (emoji === '') this.db.prepare('DELETE FROM message_reactions WHERE messageId = ? AND userId = ?').run(messageId, userId)
+    else this.db.prepare('INSERT OR REPLACE INTO message_reactions (messageId, userId, emoji) VALUES (?, ?, ?)').run(messageId, userId, emoji)
+    // 旧客户端兜底单字段：加则设为刚设的(=今日 last-writer 语义)，删则取任一现存表情、无则清空（同 MemoryStore）。
+    const legacy = emoji !== ''
+      ? emoji
+      : ((this.db.prepare('SELECT emoji FROM message_reactions WHERE messageId = ? LIMIT 1').get(messageId) as { emoji: string } | undefined)?.emoji)
+    this.updateMessage(messageId, { reaction: legacy || undefined })
+  }
+  messageReactionsFor(messageIds: string[]): Map<string, { userId: string; emoji: string }[]> {
+    const out = new Map<string, { userId: string; emoji: string }[]>()
+    if (messageIds.length === 0) return out
+    const ph = messageIds.map(() => '?').join(',')
+    const rows = this.db.prepare(`SELECT messageId, userId, emoji FROM message_reactions WHERE messageId IN (${ph})`).all(...messageIds) as { messageId: string; userId: string; emoji: string }[]
+    for (const r of rows) {
+      const list = out.get(r.messageId) ?? []
+      list.push({ userId: r.userId, emoji: r.emoji })
+      out.set(r.messageId, list)
+    }
+    return out
+  }
+  deleteMessageReactions(messageId: string): void {
+    this.db.prepare('DELETE FROM message_reactions WHERE messageId = ?').run(messageId)
+  }
+  deleteMessageReactionsByUser(userId: string): void {
+    this.db.prepare('DELETE FROM message_reactions WHERE userId = ?').run(userId)
   }
   messagesBetween(a: string, b: string, limit: number, beforeMs?: number, beforeId?: string): ChatMessage[] {
     const bm = beforeMs ?? null, bi = beforeId ?? null

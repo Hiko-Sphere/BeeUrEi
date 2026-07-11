@@ -498,6 +498,22 @@ export interface ChatMessage {
   editedAt?: number // 编辑时刻（WhatsApp 式，仅文字消息、限窗口内）；有值 → 客户端标"已编辑"
   replyTo?: string // 回复的消息 id（WhatsApp 式引用回复）；须为同一会话内的消息，否则发送时丢弃
   forwarded?: boolean // 转发标记（WhatsApp 式「已转发」）；客户端据此标注，防误以为是对方原创
+  /// 逐用户表情回应的聚合视图（服务端序列化时按查看者算出，不落库）：每个 emoji 一项（数量 + 我是否也回应了）。
+  /// emoji 按**首次出现顺序**稳定排列（WhatsApp 式）。客户端据此渲染表情胶囊；旧客户端忽略此字段、仍读 reaction 单字段。
+  reactions?: { emoji: string; count: number; mine: boolean }[]
+}
+
+/// 把逐用户表情行聚合成"每 emoji 计数 + 我是否也回应"（纯函数，可单测）。emoji 按首次出现序稳定排列。
+export function aggregateReactions(rows: { userId: string; emoji: string }[], viewerId: string): { emoji: string; count: number; mine: boolean }[] {
+  const order: string[] = []
+  const map = new Map<string, { count: number; mine: boolean }>()
+  for (const r of rows) {
+    let e = map.get(r.emoji)
+    if (!e) { e = { count: 0, mine: false }; map.set(r.emoji, e); order.push(r.emoji) }
+    e.count++
+    if (r.userId === viewerId) e.mine = true
+  }
+  return order.map((emoji) => { const e = map.get(emoji)!; return { emoji, count: e.count, mine: e.mine } })
 }
 
 /// 消息稳定全序比较：先 createdAt，再 id。让同毫秒消息排序确定、与翻页复合游标口径一致。
@@ -704,6 +720,13 @@ export interface Store {
   createMessage(m: ChatMessage): void
   findMessage(id: string): ChatMessage | undefined
   updateMessage(id: string, patch: Partial<ChatMessage>): ChatMessage | undefined
+  /// 逐用户表情回应（每人对一条消息至多一个 emoji；emoji='' = 取消本人的）。与旧的单字段 message.reaction 并行：
+  /// setMessageReaction **同时**把 message.reaction 更新为一个"当前单一表情"，让尚未升级的旧客户端(只读该单字段)
+  /// 行为完全同今日、绝不回归。messageReactionsFor 批量取（线程序列化用，避免逐条 N+1）。删消息/撤回/删号连带清理。
+  setMessageReaction(messageId: string, userId: string, emoji: string): void
+  messageReactionsFor(messageIds: string[]): Map<string, { userId: string; emoji: string }[]>
+  deleteMessageReactions(messageId: string): void
+  deleteMessageReactionsByUser(userId: string): void // 删号级联：抹掉该用户在**他人**消息上留下的表情
   /// 双方之间的单聊消息（时间正序）；beforeMs/beforeId 用于向前翻页。
   /// beforeId：与 beforeMs 组成 (createdAt,id) 复合游标，边界遇同毫秒消息不漏（缺省退回严格 createdAt<beforeMs，向后兼容）。
   messagesBetween(a: string, b: string, limit: number, beforeMs?: number, beforeId?: string): ChatMessage[]
@@ -778,6 +801,7 @@ export class MemoryStore implements Store {
   protected recordings = new Map<string, Recording>()
   protected savedRoutes = new Map<string, SavedRoute>()
   protected savedPlaces = new Map<string, SavedPlace>() // 键 = `${ownerId}\x00${label}`（复合唯一）
+  protected msgReactions = new Map<string, Map<string, string>>() // messageId → (userId → emoji)：逐用户表情回应
   protected safetyTimers = new Map<string, SafetyTimer>() // 键 = id（安全报到计时器）
   protected medicalInfo = new Map<string, MedicalInfo>()  // 键 = userId（紧急医疗信息，加密信封，1:1）
   protected verifications = new Map<string, Verification>()
@@ -1463,6 +1487,40 @@ export class MemoryStore implements Store {
     this.afterMutate()
     return next
   }
+  setMessageReaction(messageId: string, userId: string, emoji: string): void {
+    let m = this.msgReactions.get(messageId)
+    if (emoji === '') {
+      m?.delete(userId)
+      if (m && m.size === 0) this.msgReactions.delete(messageId)
+    } else {
+      if (!m) { m = new Map(); this.msgReactions.set(messageId, m) }
+      m.set(userId, emoji)
+    }
+    // 旧客户端兜底单字段：设为"当前单一表情"——加则为刚设的这个（=今日 last-writer 语义不变），
+    // 删则取任一现存表情、无则清空。经 updateMessage 落库（含 afterMutate 持久化）。
+    const remaining = this.msgReactions.get(messageId)
+    const legacy = emoji !== '' ? emoji : remaining?.values().next().value
+    this.updateMessage(messageId, { reaction: legacy || undefined })
+    this.afterMutate()
+  }
+  messageReactionsFor(messageIds: string[]): Map<string, { userId: string; emoji: string }[]> {
+    const out = new Map<string, { userId: string; emoji: string }[]>()
+    for (const id of messageIds) {
+      const m = this.msgReactions.get(id)
+      if (m && m.size > 0) out.set(id, [...m].map(([userId, emoji]) => ({ userId, emoji })))
+    }
+    return out
+  }
+  deleteMessageReactions(messageId: string): void {
+    if (this.msgReactions.delete(messageId)) this.afterMutate()
+  }
+  deleteMessageReactionsByUser(userId: string): void {
+    let changed = false
+    for (const [mid, m] of this.msgReactions) {
+      if (m.delete(userId)) { changed = true; if (m.size === 0) this.msgReactions.delete(mid) }
+    }
+    if (changed) this.afterMutate()
+  }
   messagesBetween(a: string, b: string, limit: number, beforeMs?: number, beforeId?: string): ChatMessage[] {
     const all = [...this.messages.values()]
       .filter((m) => !m.groupId)
@@ -1725,6 +1783,7 @@ export class JsonFileStore extends MemoryStore {
           emergencyEvents?: EmergencyEvent[]
           webPushSubs?: WebPushSubscription[]
           visionUsage?: Record<string, { day: string; count: number }>
+          msgReactions?: Record<string, Record<string, string>> // messageId → { userId: emoji }
         }
         for (const u of data.users ?? []) this.users.set(u.id, u)
         for (const l of data.links ?? []) this.links.set(l.id, l)
@@ -1737,6 +1796,7 @@ export class JsonFileStore extends MemoryStore {
         for (const rc of data.recoveryCodes ?? []) this.recoveryCodes.set(rc.id, rc)
         if (data.recordingConfig) this.recordingConfig = data.recordingConfig
         for (const m of data.messages ?? []) this.messages.set(m.id, m)
+        for (const [mid, users] of Object.entries(data.msgReactions ?? {})) this.msgReactions.set(mid, new Map(Object.entries(users)))
         for (const g of data.groups ?? []) this.groups.set(g.id, g)
         for (const [k, v] of Object.entries(data.groupReads ?? {})) this.groupReads.set(k, v)
         for (const k of data.groupMutes ?? []) this.groupMutes.add(k)
@@ -1774,6 +1834,7 @@ export class JsonFileStore extends MemoryStore {
       recoveryCodes: [...this.recoveryCodes.values()],
       recordingConfig: this.recordingConfig,
       messages: [...this.messages.values()],
+      msgReactions: Object.fromEntries([...this.msgReactions].map(([mid, m]) => [mid, Object.fromEntries(m)])),
       groups: [...this.groups.values()],
       groupReads: Object.fromEntries(this.groupReads),
       groupMutes: [...this.groupMutes],

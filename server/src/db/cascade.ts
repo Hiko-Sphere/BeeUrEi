@@ -8,6 +8,7 @@ import { removeMediaFile } from '../media/storage'
 export function dissolveGroup(store: Store, groupId: string): void {
   for (const m of store.groupMessages(groupId, 100_000)) {
     if (m.kind === 'video' && m.text !== '') { store.deleteMedia(m.text); removeMediaFile(m.text) }
+    store.deleteMessageReactions(m.id) // 群消息随群删 → 其上逐用户表情也一并清，不留指向已删消息的孤儿
   }
   store.deleteGroup(groupId)
 }
@@ -27,6 +28,10 @@ export function cascadeDeleteUser(store: Store, id: string): void {
   store.deleteGroupReadsForUser(id)
   store.deleteGroupMutesForUser(id) // 同已读游标：非群主退群不经 deleteGroup，其群静音标记须显式清，不留孤儿
   store.deleteDmMutesForUser(id) // 单聊静音：清该用户作为 muter 或 peer 的所有单聊静音，不留孤儿
+  // 逐用户表情回应：①抹掉该用户**自己消息**上（他人留的）表情，随其消息一起删；②抹掉该用户在**他人**消息上留的表情。
+  // ①须在 deleteMessagesForUser 之前（此时其消息仍在、可枚举其 id）；deleteMessageReactions 按 messageId 删、幂等。
+  for (const m of store.messagesSentBy(id, 100_000)) store.deleteMessageReactions(m.id)
+  store.deleteMessageReactionsByUser(id)
   store.deleteMessagesForUser(id)
   // 通话记录（我作为主叫或被叫的通话历史）：非证据、非审计，纯属该用户 PII——删号即清，否则残留"谁给谁打过电话"
   // 的孤儿记录（录制才有取证/留存价值并刻意保留；通话元数据本身无此价值，见上"刻意保留"未列 call_records）。

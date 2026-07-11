@@ -194,9 +194,14 @@ describe('sw.js 通知点击深链（notificationclick 路由）', () => {
   it('来电 → 首页（IncomingCallHost 全局轮询，任何页都弹铃，首页最快）', async () => {
     expect(await fireClick({ kind: 'incoming_call', callId: 'c1' })).toBe(`${O}/app/`)
   })
+  it('请求共享位置 nudge → /app/locations（可操作项直达其操作页，与应用内路由一致）', async () => {
+    expect(await fireClick({ kind: 'location_request', fromId: 'u1' })).toBe(`${O}/app/locations`)
+  })
   it('告警/其它 kind → 通知页（诚实位置标注 + 回拨都在那）', async () => {
     expect(await fireClick({ kind: 'emergency_alert', fromId: 'u1' })).toBe(`${O}/app/notifications`)
     expect(await fireClick({ kind: 'friend_request', fromId: 'u2' })).toBe(`${O}/app/notifications`)
+    // 未报到告警：data.kind='checkin' 但 type='emergency_alert'——须留在通知页(地图+回拨)，绝不因 'checkin' 被误引去别处。
+    expect(await fireClick({ kind: 'checkin', type: 'emergency_alert', fromId: 'u3' })).toBe(`${O}/app/notifications`)
   })
 })
 

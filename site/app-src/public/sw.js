@@ -121,6 +121,9 @@ self.addEventListener('notificationclick', (event) => {
       ? (d0.fromId ? '/app/chat/' + encodeURIComponent(d0.fromId)
         : d0.groupId ? '/app/chat/g/' + encodeURIComponent(d0.groupId)
         : '/app/chat')
+    // 请求共享位置（可操作 nudge）：直达位置页——那里就是"开始共享"的开关（与应用内 NotifDestination 一致）。
+    // 落通知收件箱还得再翻去位置页才能响应。location_request 绝非告警，路由无歧义。
+    : d0.kind === 'location_request' ? '/app/locations'
     : '/app/notifications'
   const target = new URL(path, self.location.origin).href
   event.waitUntil((async () => {

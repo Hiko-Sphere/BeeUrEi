@@ -89,4 +89,10 @@ describe('notifIconKind 通知图标选择（图标须与去处语义一致）',
     expect(notifIconKind('recording_ready')).toBe('film')
     expect(notifIconKind('some_unknown_kind')).toBe('bell')
   })
+  it('安全报到（dead-man\'s switch）→ 盾牌：开始/到期提醒/已超时都是安全攸关状态，须与去处 /family 语义一致，绝不落默认铃铛', () => {
+    // 回归：safety_checkin_* 曾漏配、落默认铃铛——一个安全打卡的到期状态在通知流里与普通提醒混同、难辨识。
+    expect(notifIconKind('safety_checkin_started')).toBe('shield')
+    expect(notifIconKind('safety_checkin_reminder')).toBe('shield')
+    expect(notifIconKind('safety_checkin_expired')).toBe('shield')
+  })
 })

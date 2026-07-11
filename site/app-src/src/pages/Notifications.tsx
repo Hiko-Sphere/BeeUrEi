@@ -53,6 +53,10 @@ export function notifIconKind(kind: string): NotifIconKind {
   // 账号/安全/实名/举报/医疗类用盾牌——**须在 friend/link/group 之前判**：security_apple_linked/unlinked 含子串
   // "link"，若 friend/link 先命中会被错配成 IconUsers（人形），账号安全告警该用盾牌。
   if (kind.includes('report') || kind.includes('moderation') || kind.includes('ban') || kind.includes('kyc') || kind.includes('verif') || kind.includes('security') || kind.includes('medical')) return 'shield'
+  // 安全报到（平安打卡开始/到期提醒/已超时，全部发给报到本人）：盾牌＝personal-safety 保护语义，与其去处
+  // /family 的 SafetyCheckInCard 一致。此前落到末尾默认铃铛——一个安全攸关的 dead-man's switch 状态被渲染得与
+  // 普通提醒无异、在通知流里难以一眼辨识。须在 friend/link 之前判（checkin 不含这些子串，纯为语义分组清晰）。
+  if (kind.includes('checkin')) return 'shield'
   // 位置/路线/围栏类用定位图标：route_added/place_arrival/**location_request**（有人请求你共享位置，去处即 /locations、
   // RequestShareList 里也用同款定位图标）。此前漏了 location_request——它不含 route/arrival/place，落到末尾默认铃铛，
   // 与其"位置"语义+/locations 去处不一致。加 `location` 子串一并覆盖当前与未来的 location_* 类。

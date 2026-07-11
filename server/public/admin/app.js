@@ -811,11 +811,15 @@ function promptRole() {
       <p class="confirm-msg">${esc(t('pickRole'))}</p>
       <div class="role-picks">${opts}</div>
       <div class="confirm-actions"><button class="btn ghost" data-no>${esc(state.lang === 'en' ? 'Cancel' : '取消')}</button></div></div>`;
+    const prevFocus = document.activeElement;
     document.body.appendChild(mask); document.body.appendChild(box);
-    const done = (v) => { mask.remove(); box.remove(); resolve(v); };
+    const onKey = (e) => { if (e.key === 'Escape') done(null); };            // Esc = 取消
+    const done = (v) => { mask.remove(); box.remove(); document.removeEventListener('keydown', onKey); if (prevFocus && prevFocus.focus) prevFocus.focus(); resolve(v); };
     mask.addEventListener('click', () => done(null));
     box.querySelector('[data-no]').addEventListener('click', () => done(null));
     box.querySelectorAll('.role-pick').forEach((b) => b.addEventListener('click', () => done(b.dataset.role)));
+    document.addEventListener('keydown', onKey);
+    box.querySelector('.role-pick').focus();                                // 打开焦点入首个角色选项
   });
 }
 async function onRoleChange(uid, role, selectEl) {
@@ -1047,13 +1051,16 @@ function promptDialog(title, placeholder, type) {
         <button class="btn" data-no>${esc(state.lang === 'en' ? 'Cancel' : '取消')}</button>
         <button class="btn ink" data-yes>${esc(state.lang === 'en' ? 'OK' : '确定')}</button>
       </div></div>`;
+    const prevFocus = document.activeElement;
     document.body.appendChild(mask); document.body.appendChild(box);
-    const done = (v) => { mask.remove(); box.remove(); resolve(v); };
+    const onKey = (e) => { if (e.key === 'Escape') done(null); };            // Esc = 取消
+    const done = (v) => { mask.remove(); box.remove(); document.removeEventListener('keydown', onKey); if (prevFocus && prevFocus.focus) prevFocus.focus(); resolve(v); };
     mask.addEventListener('click', () => done(null));
     box.querySelector('[data-no]').addEventListener('click', () => done(null));
     box.querySelector('[data-yes]').addEventListener('click', () => done(box.querySelector('#promptInput').value));
     const inp = box.querySelector('#promptInput');
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') done(inp.value); });
+    document.addEventListener('keydown', onKey);
     inp.focus();
   });
 }
@@ -1873,7 +1880,7 @@ async function fetchDocBlob(id, kind) {
 
 // 证件图全屏灯箱（KYC 审核要放大看清姓名/证件号/人脸/防伪，250px 缩略图看不清）：暗底居中大图，点背景/关闭键/Esc 关。
 // 用 createElement（不 innerHTML）避免任何注入；role=dialog+aria-modal，焦点移到关闭键，键盘可用。
-function openDocLightbox(src, alt) {
+function openDocLightbox(src, alt, trigger) {
   const ov = document.createElement('div');
   ov.className = 'doc-lightbox';
   ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', alt || '');
@@ -1881,8 +1888,11 @@ function openDocLightbox(src, alt) {
   closeBtn.className = 'doc-lightbox-close'; closeBtn.setAttribute('aria-label', t('closeBtn')); closeBtn.textContent = '✕';
   const big = document.createElement('img'); big.src = src; big.alt = alt || '';
   ov.append(closeBtn, big);
-  const onKey = (e) => { if (e.key === 'Escape') close(); };
-  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => {
+    if (e.key === 'Escape') close();
+    else if (e.key === 'Tab') { e.preventDefault(); closeBtn.focus(); } // Tab 锁在关闭键（灯箱内唯一可聚焦），焦点不逃出
+  };
+  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); if (trigger && trigger.focus) trigger.focus(); }; // 关闭焦点归还证件图
   ov.addEventListener('click', (e) => { if (e.target === ov || e.target === closeBtn) close(); }); // 点背景/关闭键关；点图本身不关
   document.addEventListener('keydown', onKey);
   document.body.appendChild(ov);
@@ -1957,7 +1967,7 @@ async function openVerifReview(id) {
       objectUrls.push(u); img.src = u;
       // 加载成功即可点/键盘放大（img 本身非可聚焦，补 role=button+tabindex+Enter/Space）：审核要放大读清证件细节。
       img.style.cursor = 'zoom-in'; img.tabIndex = 0; img.setAttribute('role', 'button');
-      const openZoom = () => openDocLightbox(u, img.alt);
+      const openZoom = () => openDocLightbox(u, img.alt, img); // 传 img 作 trigger：关闭灯箱焦点归还该证件图
       img.addEventListener('click', openZoom);
       img.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openZoom(); } });
     }
@@ -2009,11 +2019,14 @@ function confirmDialog(message) {
         <button class="btn" data-no>${esc(state.lang === 'en' ? 'Cancel' : '取消')}</button>
         <button class="btn ink" data-yes>${esc(state.lang === 'en' ? 'Confirm' : '确认')}</button>
       </div></div>`;
+    const prevFocus = document.activeElement;
     document.body.appendChild(mask); document.body.appendChild(box);
-    const done = (v) => { mask.remove(); box.remove(); resolve(v); };
+    const onKey = (e) => { if (e.key === 'Escape') done(false); };            // Esc = 取消（键盘可及，标准确认框行为）
+    const done = (v) => { mask.remove(); box.remove(); document.removeEventListener('keydown', onKey); if (prevFocus && prevFocus.focus) prevFocus.focus(); resolve(v); }; // 关闭焦点归还触发元素
     mask.addEventListener('click', () => done(false));
     box.querySelector('[data-no]').addEventListener('click', () => done(false));
     box.querySelector('[data-yes]').addEventListener('click', () => done(true));
+    document.addEventListener('keydown', onKey);
     box.querySelector('[data-yes]').focus();
   });
 }

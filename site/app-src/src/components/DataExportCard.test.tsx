@@ -22,8 +22,9 @@ describe('DataExportCard 数据导出（GDPR 可携权）', () => {
       render(<DataExportCard />)
       fireEvent.click(screen.getByRole('button', { name: '下载我的数据' }))
       await waitFor(() => expect(fetchAccountExportBlob).toHaveBeenCalled())
-      await waitFor(() => expect(names).toEqual(['beeurei-my-data.json']))
-      expect(revokeURL).toHaveBeenCalledWith('blob:dl') // 用后即 revoke，不泄漏
+      await waitFor(() => expect(names).toEqual(['beeurei-my-data.json'])) // 交给 saveBlob，以正确文件名触发下载
+      expect(createURL).toHaveBeenCalled()
+      // objectURL **延迟**释放（不同步 revoke，避免另存为对话框未确认前 URL 失效致空导出）由 saveBlob 单测 lib/download.test.ts 保证。
     } finally { clickSpy.mockRestore(); vi.unstubAllGlobals() }
   })
 

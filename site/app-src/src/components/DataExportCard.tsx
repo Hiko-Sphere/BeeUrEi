@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { fetchAccountExportBlob, APIError } from '../lib/api'
+import { saveBlob } from '../lib/download'
 import { useI18n } from '../lib/i18n'
 import { Card, Button, useToast } from './ui'
 
@@ -14,11 +15,7 @@ export function DataExportCard() {
     setBusy(true)
     try {
       const blob = await fetchAccountExportBlob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url; a.download = 'beeurei-my-data.json'
-      document.body.appendChild(a); a.click(); a.remove()
-      URL.revokeObjectURL(url)
+      saveBlob(blob, 'beeurei-my-data.json') // 延迟 revoke，避免另存为对话框未确认前 URL 失效致空导出（见 lib/download）
       toast(t('已开始下载你的数据', 'Your data download has started'), 'ok')
     } catch (e) {
       toast(e instanceof APIError && e.status === 429

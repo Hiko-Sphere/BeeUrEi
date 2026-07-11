@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
-import { buildUserExportBundle } from '../src/account/exportBundle'
+import { buildUserExportBundle, buildSelfExportExtras, SELF_ONLY_EXPORT_KEYS } from '../src/account/exportBundle'
+import { hashPassword } from '../src/auth/passwords'
 
 // 自助数据导出（GDPR 可携权）：本人拿得到自己的一切、拿不到别人的话、永远拿不到密钥类。
 describe('GET /api/account/export', () => {
@@ -270,6 +271,59 @@ describe('GET /api/account/export', () => {
     const adminBase = buildUserExportBundle(store, target.user.id, Date.now())!
     expect(adminBase.reports.againstUser[0].reporter).toBe('victimrep')
     expect(adminBase.reports.againstUser[0].reason).toContain('威胁恐吓')
+    await a.close()
+  })
+
+  // —— 数据最小化不变量：本人专属敏感键（住址/健康/位置历史/消息正文/头像）绝不经 admin 导出外泄 ——
+  // 该不变量此前仅对 avatar/mutedConversations 两键有回归护栏；savedPlaces(家庭住址)/medicalInfo(健康)/
+  // savedRoutes/safetyTimers/emergencyEvents/messagesSent/notifications 无守卫——若有人误把某敏感块搬进底座，
+  // 全体用户住址/健康数据会静默泄给每次 admin 导出而测试全绿。以下用 SELF_ONLY_EXPORT_KEYS 单一事实源整体锁定。
+  it('SELF_ONLY_EXPORT_KEYS 与 buildSelfExportExtras 实际产键完全一致（防清单与实现双向漂移）', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const me = (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'keysync', password: 'secret123', role: 'blind' } })).json()
+    const extrasKeys = Object.keys(buildSelfExportExtras(store, me.user.id)).sort()
+    // 双向：清单没漏掉实际产的键（漏了→该键会被误当"底座通用"而不被防御性剔除），也没多列不存在的键。
+    expect(extrasKeys).toEqual([...SELF_ONLY_EXPORT_KEYS].sort())
+    await a.close()
+  })
+
+  it('admin 底座(buildUserExportBundle)绝不含任一本人专属敏感键——即便填满了住址/健康/路线/报到/事故也不泄', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const me = (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'minim', password: 'secret123', role: 'blind' } })).json()
+    const uid = me.user.id
+    // 填满全部敏感数据，逼近真实用户：家庭住址 + 健康信息 + 头像。
+    store.upsertSavedPlace({ ownerId: uid, label: 'home', address: '北京市海淀区幸福路9号8888室', lat: 39.9, lng: 116.3, updatedAt: Date.now() })
+    await a.inject({ method: 'PUT', url: '/api/account/medical', headers: { authorization: `Bearer ${me.token}` }, payload: { text: '装有心脏起搏器，青霉素过敏' } })
+    store.updateUser(uid, { avatar: 'data:image/png;base64,iVBORw0KGgoAAAANSUHEUg' })
+
+    const base = buildUserExportBundle(store, uid, Date.now())! as Record<string, unknown>
+    for (const k of SELF_ONLY_EXPORT_KEYS) expect(k in base).toBe(false) // 底座不含任一敏感键
+    await a.close()
+  })
+
+  it('GET /api/admin/users/:id/export（DSAR 代办）不含本人专属敏感键，且住址/健康明文绝不出现', async () => {
+    const store = new MemoryStore()
+    const admin = { id: 'admin1', username: 'root', passwordHash: hashPassword('rootpass1'), displayName: 'root', role: 'admin' as const, status: 'active' as const, createdAt: Date.now() }
+    store.createUser(admin)
+    const a = buildApp(store)
+    const me = (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'dsartarget', password: 'secret123', role: 'blind' } })).json()
+    const uid = me.user.id
+    const HOME = '上海市浦东新区某小区3号楼2001'
+    const MED = '糖尿病，胰岛素依赖'
+    store.upsertSavedPlace({ ownerId: uid, label: 'home', address: HOME, lat: 31.2, lng: 121.5, updatedAt: Date.now() })
+    await a.inject({ method: 'PUT', url: '/api/account/medical', headers: { authorization: `Bearer ${me.token}` }, payload: { text: MED } })
+
+    const adminToken = (await a.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'root', password: 'rootpass1' } })).json().token
+    const res = await a.inject({ method: 'GET', url: `/api/admin/users/${uid}/export`, headers: { authorization: `Bearer ${adminToken}` } })
+    expect(res.statusCode).toBe(200)
+    const body = res.json()
+    for (const k of SELF_ONLY_EXPORT_KEYS) expect(k in body).toBe(false) // 敏感键一个都不在
+    expect(res.payload).not.toContain(HOME) // 家庭住址明文绝不出现在 admin 导出里
+    expect(res.payload).not.toContain(MED)  // 健康数据明文绝不出现
+    expect(body.exportedByAdminId).toBe('admin1') // 但正常的 DSAR 字段仍在（证明只剔敏感块、没误伤底座）
+    expect(body.profile.username).toBe('dsartarget')
     await a.close()
   })
 })

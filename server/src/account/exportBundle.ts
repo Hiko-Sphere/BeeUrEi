@@ -79,6 +79,16 @@ export function buildUserExportBundle(store: Store, id: string, now: number) {
   }
 }
 
+/// **仅本人可导出的敏感键**（住址/健康/位置历史/消息正文/收件箱/头像等）——即 buildSelfExportExtras 产出的全部键。
+/// 集中定义为单一事实源，供 admin 导出边界**防御性剔除**：这些块理应只由 buildSelfExportExtras 构造、绝不进
+/// buildUserExportBundle 底座（admin 代办导出用底座）；但若将来有人误把某敏感块搬进底座，admin 导出路由仍在
+/// 服务边界据此兜底剔除，绝不把弱势用户（盲人/长者）的家庭住址/健康数据外泄给管理员——数据最小化的最后一道闸。
+/// 单测锁定「此清单 === buildSelfExportExtras 实际产键」与「底座绝不含其中任何键」，防清单与实现漂移。
+export const SELF_ONLY_EXPORT_KEYS = [
+  'avatar', 'savedRoutes', 'savedPlaces', 'safetyTimers', 'mutedConversations',
+  'medicalInfo', 'emergencyEvents', 'messagesSent', 'notifications',
+] as const
+
 /// 自助导出的追加块（只有本人能拿到的部分）：
 /// - 本人的路线库（自己的资产，含航点坐标——admin 版无此块）；
 /// - **本人发出的**消息：文字含正文（自己的话属于自己的数据）；语音/图片是 data URL、视频是

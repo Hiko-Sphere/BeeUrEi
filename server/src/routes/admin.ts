@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { readFileSync, unlinkSync } from 'node:fs'
-import { buildUserExportBundle } from '../account/exportBundle'
+import { buildUserExportBundle, SELF_ONLY_EXPORT_KEYS } from '../account/exportBundle'
 import { passwordPolicyError } from '../auth/passwordPolicy'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -525,8 +525,13 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     const id = (req.params as { id: string }).id
     const base = buildUserExportBundle(store, id, Date.now())
     if (!base) return reply.code(404).send({ error: 'not_found' })
+    // 数据最小化的最后一道闸：底座本就不含本人专属敏感键（住址/健康/位置历史/消息正文/头像——这些只由
+    // buildSelfExportExtras 构造），但在服务边界再防御性剔除一次。将来若有人误把某敏感块搬进底座，此处仍确保
+    // admin 代办导出绝不外泄弱势用户的家庭住址/健康数据（约束由 SELF_ONLY_EXPORT_KEYS 单一事实源集中管辖）。
+    const safeBase = base as Record<string, unknown>
+    for (const k of SELF_ONLY_EXPORT_KEYS) delete safeBase[k]
     const data = {
-      ...base,
+      ...safeBase,
       exportedByAdminId: req.user!.sub,
       note: 'Chat message bodies are intentionally excluded to preserve conversation privacy; admins do not read messages. Tokens and password hashes are never exported.',
     }

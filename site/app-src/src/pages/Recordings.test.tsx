@@ -92,7 +92,7 @@ describe('RecordingsPage 列表渲染（防字段漂移）', () => {
 describe('RecordingsPage 下载录音（数据可携权的媒体通道）', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('点"下载"→ 取 Blob、按 MIME 推扩展名(.webm)、文件名带录制时刻、objectURL 用后即 revoke', async () => {
+  it('点"下载"→ 取 Blob、按 MIME 推扩展名(.webm)、文件名带录制时刻；objectURL **延迟**释放（不同步 revoke——避免"另存为"对话框/异步下载读到已失效 URL 致空文件）', async () => {
     mock(api.myRecordings).mockResolvedValue({
       recordings: [{ id: 'r1', recordedAt: Date.UTC(2026, 0, 5, 9, 30), durationSec: 10, hasMedia: true, participantNames: ['张三'], reason: '' }],
     })
@@ -104,13 +104,19 @@ describe('RecordingsPage 下载录音（数据可携权的媒体通道）', () =
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { names.push(this.download) })
     try {
       render(<RecordingsPage />)
-      fireEvent.click(await screen.findByRole('button', { name: '下载录音' }))
-      await waitFor(() => expect(fetchRecordingBlob).toHaveBeenCalledWith('r1'))
-      await waitFor(() => expect(names.length).toBe(1))
+      const btn = await screen.findByRole('button', { name: '下载录音' }) // 列表加载用真实计时器
+      vi.useFakeTimers()
+      fireEvent.click(btn)
+      // flush 取 Blob 的 await 链（Promise 微任务，默认不被 fake timers 影响）→ 同步体建 URL + a.click + 安排延迟 revoke。
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve() })
+      expect(fetchRecordingBlob).toHaveBeenCalledWith('r1')
+      expect(names.length).toBe(1)
       expect(names[0]).toMatch(/^beeurei-recording-2026\d{4}-\d{4}\.webm$/) // MIME→.webm，文件名带日期时刻
       expect(createURL).toHaveBeenCalled()
-      expect(revokeURL).toHaveBeenCalledWith('blob:dl') // 用后即 revoke，不泄漏
-    } finally { clickSpy.mockRestore(); vi.unstubAllGlobals() }
+      expect(revokeURL).not.toHaveBeenCalled()          // 回归护栏：**绝不同步 revoke**（否则下载可能读到已失效 URL）
+      vi.advanceTimersByTime(60_000)                      // 延迟到点
+      expect(revokeURL).toHaveBeenCalledWith('blob:dl')  // 才释放，不泄漏
+    } finally { clickSpy.mockRestore(); vi.useRealTimers(); vi.unstubAllGlobals() }
   })
 
   it('无媒体的录制：下载按钮禁用（不发无意义请求）', async () => {

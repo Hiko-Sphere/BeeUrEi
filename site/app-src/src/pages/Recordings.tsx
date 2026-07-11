@@ -52,7 +52,12 @@ export function RecordingsPage() {
       const a = document.createElement('a')
       a.href = url; a.download = name
       document.body.appendChild(a); a.click(); a.remove()
-      URL.revokeObjectURL(url)
+      // **不同步 revoke**：部分浏览器(Firefox/某些 Safari)在 click 返回后才异步开始读取 blob；且用户若开了"下载前
+      // 询问保存位置"，浏览器要等其在"另存为"对话框确认后（可能数秒）才读 blob。同步撤销会让下载读到已失效的
+      // URL → 空文件/下载失败（施救者导出取证录音却拿到空文件）。延后释放，给足下载真正开始/对话框确认的时间
+      // （对标 FileSaver）；blob 已在内存，仅这次下载短暂多占，到点即释放，不泄漏。不随卸载清除（click 已发出，
+      // 卸载后仍需释放这段内存；revoke 无副作用、不触 React）。
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch (e) {
       const msg = e instanceof APIError && e.status === 403 ? t('该录制已删除或无权查看', 'Recording deleted or no access')
         : t('下载失败，请重试', 'Download failed — try again')

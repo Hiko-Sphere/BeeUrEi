@@ -13,7 +13,7 @@ import { ReportDialog } from '../components/ReportDialog'
 import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo, fmtHm, fmtTime, Modal, Button } from '../components/ui'
 import { IconChat, IconSend, IconPlus, IconX, IconPin } from '../components/icons'
 
-type Selection = { kind: 'peer'; id: string; name: string; avatar?: string | null; muted?: boolean } | { kind: 'group'; id: string; name: string; members: User[]; ownerId: string; muted: boolean }
+type Selection = { kind: 'peer'; id: string; name: string; avatar?: string | null; muted?: boolean; unread?: number } | { kind: 'group'; id: string; name: string; members: User[]; ownerId: string; muted: boolean; unread?: number }
 
 export function ChatPage() {
   const { peerId } = useParams()
@@ -40,7 +40,7 @@ export function ChatPage() {
     if (!peerId) { appliedPeer.current = null; return } // 离开单聊路由：允许下次深链同一 peer 再预选
     if (appliedPeer.current === peerId) return           // 本 peerId 已预选过：后续 convos 轮询刷新不再抢回选择
     const c = convos?.find((x) => x.peer.id === peerId)
-    if (c) { appliedPeer.current = peerId; setSel({ kind: 'peer', id: peerId, name: c.peer.displayName || t('已注销用户', 'Deactivated user'), avatar: c.peer.avatar, muted: c.muted ?? false }) }
+    if (c) { appliedPeer.current = peerId; setSel({ kind: 'peer', id: peerId, name: c.peer.displayName || t('已注销用户', 'Deactivated user'), avatar: c.peer.avatar, muted: c.muted ?? false, unread: c.unread }) }
     else void api.lookupUser(peerId).then((r) => { if (r.user) { appliedPeer.current = peerId; setSel({ kind: 'peer', id: peerId, name: r.user.displayName, avatar: r.user.avatar }) } }).catch(() => {
       void api.familyLinks().then(({ links }) => { const l = links.find((x) => x.memberId === peerId); if (l) { appliedPeer.current = peerId; setSel({ kind: 'peer', id: peerId, name: l.memberName, avatar: l.memberAvatar }) } })
     })
@@ -118,10 +118,10 @@ export function ChatPage() {
             <ul className="divide-y divide-[var(--line)]">
               {shown.map((it) => it.kind === 'peer' ? (
                 <ConvoRow key={it.key} active={sel?.kind === 'peer' && sel.id === it.c.peer.id} convo={it.c} lang={lang} t={t} meId={meUser?.id}
-                  onClick={() => setSel({ kind: 'peer', id: it.c.peer.id, name: it.c.peer.displayName, avatar: it.c.peer.avatar, muted: it.c.muted ?? false })} />
+                  onClick={() => setSel({ kind: 'peer', id: it.c.peer.id, name: it.c.peer.displayName, avatar: it.c.peer.avatar, muted: it.c.muted ?? false, unread: it.c.unread })} />
               ) : (
                 <GroupRow key={it.key} active={sel?.kind === 'group' && sel.id === it.g.group.id} g={it.g} lang={lang} t={t} meId={meUser?.id}
-                  onClick={() => setSel({ kind: 'group', id: it.g.group.id, name: it.g.group.name, members: it.g.members, ownerId: it.g.group.ownerId, muted: it.g.muted ?? false })} />
+                  onClick={() => setSel({ kind: 'group', id: it.g.group.id, name: it.g.group.name, members: it.g.members, ownerId: it.g.group.ownerId, muted: it.g.muted ?? false, unread: it.g.unread })} />
               ))}
             </ul>
           )}
@@ -239,6 +239,26 @@ export function dateSeparatorLabel(ts: number, now: number, lang: 'zh' | 'en'): 
   return new Date(ts).toLocaleDateString(lang === 'en' ? 'en-US' : 'zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
+/// "新消息"分隔位置（IM 标配：打开会话一眼定位上次读到哪）：返回**第一条未读对端消息**的 id。
+/// 未读=打开会话那一刻服务端给的未读计数（unreadCount/群 unreadGroupCount，均为"非己发∧非撤回∧读游标之后"）——
+/// 即从末尾往前数 unreadCount 条"非己发∧非撤回"消息里最早的那条，其前即分隔线位。无未读→null。若已加载的对端
+/// 消息不足 unreadCount（部分未读更早、不在窗口）→ 取已加载最早一条对端消息（分隔线落窗口顶，仍诚实标"以下是新的"）。
+/// 纯函数、可单测（与服务端未读口径一致：只数非己发非撤回）。
+export function firstUnreadMessageId(msgs: ChatMessage[], myId: string | undefined, unreadCount: number): string | null {
+  if (unreadCount <= 0) return null
+  let peerCount = 0
+  let firstId: string | null = null
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i]
+    if (m.fromId !== myId && m.kind !== 'recalled') {
+      peerCount++
+      firstId = m.id
+      if (peerCount >= unreadCount) return firstId
+    }
+  }
+  return firstId
+}
+
 function preview(m: ChatMessage | null, t: (z: string, e: string) => string): string {
   if (!m) return t('暂无消息', 'No messages')
   switch (m.kind) {
@@ -318,6 +338,17 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
     setTimeout(() => setHighlightId((cur) => (cur === id ? null : cur)), 1600) // 到时清高亮（若期间又跳别处则不动新的）
   }, [])
   const PAGE = 50 // 与后端单次返回条数一致
+
+  // "新消息"分隔线（IM 标配）：打开会话那一刻的未读数 → 第一条未读对端消息 id，**计算一次并冻结**——之后 markRead
+  // 会把计数清零、轮询会不断进新消息，若每次重算分隔线会乱跳/消失。Thread 按会话 key 重挂载，故冻结天然是"每会话一次"。
+  const unreadAtOpen = useState(() => sel.unread ?? 0)[0]
+  const [firstUnreadId, setFirstUnreadId] = useState<string | null>(null)
+  const unreadComputed = useRef(false)
+  useEffect(() => {
+    if (unreadComputed.current || !msgs || msgs.length === 0) return
+    unreadComputed.current = true // 只认第一次加载完的消息窗口，之后不再动分隔线
+    if (unreadAtOpen > 0) setFirstUnreadId(firstUnreadMessageId(msgs, user?.id, unreadAtOpen))
+  }, [msgs, user?.id, unreadAtOpen])
 
   // 输入变化即写草稿；清空(发送成功→setText('')/手动清空)即删键。隐私模式/配额满仅丢失持久化，绝不影响发送本身。
   useEffect(() => {
@@ -555,6 +586,14 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
           <div className="grid h-full place-items-center text-sm text-faint">{t('开始你们的对话', 'Say hello')}</div>
         ) : msgs.map((m, i) => (
           <div key={m.id} id={`msg-${m.id}`} className={`rounded-xl transition-colors ${highlightId === m.id ? 'bg-honey/15' : ''}`}>
+            {/* "新消息"分隔线（IM 标配）：打开会话时冻结在第一条未读对端消息前，一眼定位上次读到哪。role=separator 供读屏。 */}
+            {firstUnreadId === m.id && (
+              <div className="my-1 flex items-center gap-2 px-2" role="separator" aria-label={t(`${unreadAtOpen} 条新消息`, `${unreadAtOpen} new messages`)} data-testid="unread-divider">
+                <span className="h-px flex-1 bg-honey/40" />
+                <span className="shrink-0 text-[10px] font-medium text-honey">{t(`${unreadAtOpen} 条新消息`, `${unreadAtOpen} new`)}</span>
+                <span className="h-px flex-1 bg-honey/40" />
+              </div>
+            )}
             {/* 日期分隔（IM 标配）：与上一条不同本地日则插"今天/昨天/日期"，跨天历史一眼分清；居中 role=separator 供读屏定位。 */}
             {needsDateSeparator(m.createdAt, i > 0 ? msgs[i - 1].createdAt : null) && (
               <div className="flex justify-center py-1.5" role="separator" aria-label={dateSeparatorLabel(m.createdAt, Date.now(), lang)}>

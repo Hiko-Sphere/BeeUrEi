@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { nextChatAnnouncement, mergeMessagesStable, conversationPreview, needsDateSeparator, dateSeparatorLabel, type AnnounceState } from './Chat'
+import { nextChatAnnouncement, mergeMessagesStable, conversationPreview, needsDateSeparator, dateSeparatorLabel, firstUnreadMessageId, type AnnounceState } from './Chat'
 import type { ChatMessage, User } from '../lib/api'
 
 const tzh = (z: string, _e: string) => z // 默认中文
@@ -161,5 +161,26 @@ describe('日期分隔（IM 标配：今天/昨天/日期）', () => {
   it('dateSeparatorLabel：昨天跨月边界（月初的今天 → 昨天是上月末）', () => {
     const firstOfMonth = noon('2026-08-01')
     expect(dateSeparatorLabel(noon('2026-07-31'), firstOfMonth, 'zh')).toBe('昨天') // setDate(-1) 正确回退到 7-31
+  })
+})
+
+describe('firstUnreadMessageId "新消息"分隔位置（与服务端未读口径一致：非己发∧非撤回）', () => {
+  const pm = (id: string, fromId: string, kind: ChatMessage['kind'] = 'text'): ChatMessage =>
+    ({ id, fromId, toId: 'me', kind, text: 'x', createdAt: 0 } as ChatMessage)
+  it('无未读 → null（不显分隔）', () => {
+    expect(firstUnreadMessageId([pm('1', 'p')], 'me', 0)).toBeNull()
+  })
+  it('未读1 → 末尾第一条对端消息前', () => {
+    expect(firstUnreadMessageId([pm('1', 'p'), pm('2', 'me'), pm('3', 'p')], 'me', 1)).toBe('3')
+  })
+  it('未读2 → 从末尾数第2条对端消息（跳过己发的插入）', () => {
+    // [p1, me, p2, me, p3]：对端从末尾数 p3(1)、p2(2) → 分隔落 p2 前
+    expect(firstUnreadMessageId([pm('p1', 'p'), pm('m1', 'me'), pm('p2', 'p'), pm('m2', 'me'), pm('p3', 'p')], 'me', 2)).toBe('p2')
+  })
+  it('撤回消息不计未读、不作分隔位', () => {
+    expect(firstUnreadMessageId([pm('p1', 'p'), pm('p2', 'p', 'recalled'), pm('p3', 'p')], 'me', 1)).toBe('p3')
+  })
+  it('已加载对端消息不足未读数（部分更早未加载）→ 取窗口内最早一条对端消息（分隔落窗口顶）', () => {
+    expect(firstUnreadMessageId([pm('m1', 'me'), pm('p1', 'p')], 'me', 3)).toBe('p1')
   })
 })

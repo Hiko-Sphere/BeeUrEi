@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { Store } from '../db/store'
+import { type Store, isBlockedBetween } from '../db/store'
 import type { PushSender } from '../push/apns'
 import type { WebPushSender } from '../push/webPush'
 import { pushLang, pushStrings } from '../push/pushStrings'
@@ -138,7 +138,9 @@ export function fireExpiredSafetyTimers(
       const sender = store.findById(t.ownerId)
       if (!sender) continue // 归属者已删号：无从告警（已 markFired，免反复扫）
 
-      const acceptedLinks = store.linksByOwner(t.ownerId).filter((l) => (l.status ?? 'accepted') === 'accepted')
+      // 排除被拉黑者：未报到（dead-man's switch）告警同 SOS/摔倒——不把盲人最后已知 GPS+hasMedical 播给
+      // 其为安全而拉黑之人（拉黑即撤回，与 medical/位置/emergency 告警同口径；策略经用户确认=完全排除，2026-07-11）。
+      const acceptedLinks = store.linksByOwner(t.ownerId).filter((l) => (l.status ?? 'accepted') === 'accepted' && !isBlockedBetween(store, t.ownerId, l.memberId))
       const emergencyMemberIds = new Set(acceptedLinks.filter((l) => l.isEmergency).map((l) => l.memberId))
       const members = acceptedLinks.map((l) => store.findById(l.memberId)).filter((m): m is NonNullable<typeof m> => !!m)
 

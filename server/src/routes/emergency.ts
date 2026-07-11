@@ -64,12 +64,19 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
   const safeBadge = (uid: string): number | undefined => {
     try { return totalUnreadFor(store, uid).total } catch { return undefined }
   }
+  // 仅 accepted **且未与本人互相拉黑**的绑定才作紧急联系人参与告警扇出/呼叫路由。拉黑不删链、也不清
+  // isEmergency（拉黑即撤回，与 medical.ts 授权/位置共享 acceptedContactIds/旁观 watching 同口径）：若不额外
+  // 查 isBlockedBetween，被明确拉黑者仍会在每次 SOS/摔倒/未报到时收到盲人当前或最后已知 GPS（isEmergency 链
+  // 还多得 hasMedical 存在位），把弱势用户的行踪播给其**为安全而拉黑之人**（DV/跟踪场景正是要切断者）。
+  // 策略经用户明确确认=完全排除被拉黑联系人（对抗复审 F1，2026-07-11）。单点定义，供本路由所有扇出点复用。
+  const acceptedContactLinks = (ownerId: string) =>
+    store.linksByOwner(ownerId).filter((l) => (l.status ?? 'accepted') === 'accepted' && !isBlockedBetween(store, ownerId, l.memberId))
   // 发起紧急呼叫：返回按优先级排好的呼叫目标列表（真正接通由 WebRTC 信令负责）。
   app.post('/api/emergency/trigger', { preHandler: requireAuth() }, async (req) => {
     const owner = req.user!
     const now = Date.now()
-    // 仅 accepted 的绑定可作为紧急联系人（pending 未经对方同意，不参与紧急路由，见审查 #6）。
-    const links = store.linksByOwner(owner.sub).filter((l) => (l.status ?? 'accepted') === 'accepted')
+    // 仅 accepted 的绑定可作为紧急联系人（pending 未经对方同意，不参与紧急路由，见审查 #6）；并排除被拉黑者。
+    const links = acceptedContactLinks(owner.sub)
     // 同信任层级内在线者优先：遇险先接通此刻真正待命的人，不在离线联系人上白等振铃。
     const ordered = planEmergencyRoute(links, (memberId) => presence.isAvailable(memberId, now))
     const targets = ordered.map((l) => {
@@ -91,7 +98,7 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
   // 安全网已悄然失效。医疗警报设备的「按键自检」同理。仅报本人自己的紧急联系人（本就是本人数据，不泄露他人）。
   // reachable 语义=能收到**即时推送**（非"能否收到告警"——无推送者仍会进收件箱），客户端据此提示"请对方开通知"。
   app.get('/api/emergency/readiness', { preHandler: requireAuth() }, async (req) => {
-    const allAccepted = store.linksByOwner(req.user!.sub).filter((l) => (l.status ?? 'accepted') === 'accepted')
+    const allAccepted = acceptedContactLinks(req.user!.sub) // 排除被拉黑者：就绪判定须与实际告警扇出面一致
     const emergencyLinks = allAccepted.filter((l) => l.isEmergency)
     // 与告警扇出时的 hasRealtimePush 同口径（emergency/alert 内）：有 APNs token 或（Web 推送已配置且有订阅）即可即时触达。
     const isReachable = (uid: string, apnsToken?: string): boolean =>
@@ -124,8 +131,10 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     const now = Date.now()
     const windowMs = 24 * 60 * 60 * 1000
     // 谁把我设为了 accepted 紧急联系人 → 我对其负责（linksByMember=我作为 member 的链）。
+    // 排除互相拉黑者：既然 owner 拉黑我后其告警不再扇给我（完全排除策略），我也不应经此聚合端点**拉取**其
+    // 进行中紧急事件的坐标——否则同一位置换个端点又泄露给被拉黑者，与推送侧不一致（对抗复审 F1 的对称面）。
     const ownerIds = new Set(store.linksByMember(me)
-      .filter((l) => (l.status ?? 'accepted') === 'accepted' && l.isEmergency)
+      .filter((l) => (l.status ?? 'accepted') === 'accepted' && l.isEmergency && !isBlockedBetween(store, me, l.ownerId))
       .map((l) => l.ownerId))
     const active: { ownerId: string; ownerName: string; eventId: string; kind: string; at: number; acked: boolean; escalated: boolean; lat: number | null; lon: number | null; hasMedical: boolean }[] = []
     for (const ownerId of ownerIds) {
@@ -181,7 +190,7 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
                                     config: { rateLimit: { max: 3, timeWindow: '1 hour' } } }, async (req, reply) => {
     const me = store.findById(req.user!.sub)
     if (!me) return reply.code(404).send({ error: 'not_found' })
-    const links = store.linksByOwner(me.id).filter((l) => (l.status ?? 'accepted') === 'accepted')
+    const links = acceptedContactLinks(me.id) // 排除被拉黑者：测试告警也不发给被拉黑联系人
     const members = links.map((l) => store.findById(l.memberId)).filter((m): m is NonNullable<typeof m> => !!m)
     const isReachable = (m: NonNullable<ReturnType<typeof store.findById>>): boolean =>
       !!m.apnsToken || (webPush.configured && safeWebPushSubs(m.id).length > 0)
@@ -217,7 +226,7 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     // 本次告警的事件 id：先生成，既用于事件日志，又随通知/推送下发给每个亲友——亲友"知道了"回执(ack)
     // 据此精确定位是哪一次告警（同一发起人短时间内多次告警时不混淆）。
     const eventId = randomUUID()
-    const links = store.linksByOwner(me.id).filter((l) => (l.status ?? 'accepted') === 'accepted')
+    const links = acceptedContactLinks(me.id) // 排除被拉黑者：摔倒/车祸告警不把实时 GPS+hasMedical 播给被拉黑联系人
     // 安全攸关：所有亲友必须**并行**收到告警，且任一推送失败绝不能中断其余推送或 500 整个请求。
     // 此前串行 await——第一个亲友的 APNs 抛错会让后面所有亲友收不到摔倒告警。
     const members = links
@@ -342,9 +351,9 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     if (!acker) return reply.code(404).send({ error: 'not_found' })
     const { fromId, eventId } = parsed.data
     if (fromId === acker.id) return reply.code(400).send({ error: 'invalid_input' }) // 不能确认自己的告警
-    // 授权：确认者必须是发起人的**已接受**亲友（发起人是 owner、亲友是 member）——否则任何人都能给
-    // 陌生人发"已看到你的求助"骚扰。
-    const isContact = store.linksByOwner(fromId).some((l) => (l.status ?? 'accepted') === 'accepted' && l.memberId === acker.id)
+    // 授权：确认者必须是发起人的**已接受且未被拉黑**亲友（发起人是 owner、亲友是 member）——否则任何人都能给
+    // 陌生人发"已看到你的求助"骚扰；被拉黑者已收不到告警，也不应能回执（完全排除策略）。
+    const isContact = acceptedContactLinks(fromId).some((l) => l.memberId === acker.id)
     if (!isContact) return reply.code(403).send({ error: 'not_contact' })
     const sender = store.findById(fromId)
     if (!sender) return reply.code(404).send({ error: 'not_found' })
@@ -390,8 +399,8 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     // 同时打电话把遇险者淹没，也避免"都以为别人在管"没人去。匿名（不点名响应者，零新增身份暴露：收件人本就
     // 都收到了该次告警）。kind='emergency_responding' 不在 web 告警白名单里→绝不弹响铃大模态，只作普通通知。
     if (isFirstAck) {
-      const coResponders = store.linksByOwner(fromId)
-        .filter((l) => (l.status ?? 'accepted') === 'accepted' && l.memberId !== acker.id)
+      const coResponders = acceptedContactLinks(fromId)
+        .filter((l) => l.memberId !== acker.id) // 排除被拉黑者：协调通知也不发给被拉黑联系人
         .map((l) => store.findById(l.memberId))
         .filter((m): m is NonNullable<typeof m> => !!m)
       const rData: Record<string, string> = { kind: 'emergency_responding', fromId: sender.id, fromName: sender.displayName }

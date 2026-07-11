@@ -37,10 +37,12 @@ describe('GET /api/emergency/watching', () => {
     store.setMedicalInfo({ userId: mom.user.id, sealed: '{"enc":"x"}', updatedAt: Date.now() }) // 存在即 hasMedical（内容加密，服务端不解）
     const withMed = (await app.inject({ method: 'GET', url: '/api/emergency/watching', headers: auth(helper.token) })).json().active
     expect(withMed[0].hasMedical).toBe(true)
-    // 拉黑即撤回（与 medical.ts 授权同口径）：mom 拉黑 helper 后，hasMedical 须变 false——否则泄露"有医疗信息"存在位却点查拿 403（假提示）。
+    // 拉黑即撤回（用户确认=完全排除被拉黑联系人，2026-07-11）：mom 拉黑 helper 后，mom 的进行中紧急**整条**
+    // 从 helper 的看板消失——否则被拉黑的 helper 只需轮询本端点即可绕过"告警不推给被拉黑者"，照样拿到 mom 的
+    // 实时坐标（对抗复审 F1 的对称面：pull 与 push 须一致排除）。
     store.createBlock({ id: 'blk1', blockerId: mom.user.id, blockedId: helper.user.id, createdAt: Date.now() })
     const blocked = (await app.inject({ method: 'GET', url: '/api/emergency/watching', headers: auth(helper.token) })).json().active
-    expect(blocked[0].hasMedical).toBe(false)
+    expect(blocked).toEqual([]) // mom 被排除，看板空（不再是"仍在列表但 hasMedical=false"）
     await app.close()
   })
 

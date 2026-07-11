@@ -169,6 +169,22 @@ describe('安全报到到期自动告警（fireExpiredSafetyTimers）', () => {
     expect(store.unacknowledgedEmergencyEvents(now, now).some((e) => e.id === after.eventId)).toBe(true)
   })
 
+  it('被拉黑的紧急联系人完全不收到未报到告警（dead-man switch 同 SOS：拉黑即撤回，不播最后已知 GPS+hasMedical）', async () => {
+    const { app, store, blind, family } = await setup()
+    const now = Date.now()
+    // 再加一名 accepted 紧急联系人 blocked，随后被 blind 拉黑（拉黑不删链、不清 isEmergency）。
+    const b = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'stblocked', password: 'secret123', role: 'helper' } })).json()
+    store.createLink({ id: 'lblk', ownerId: blind.id, memberId: b.user.id, relation: '家人', isEmergency: true, createdAt: 1, status: 'accepted' })
+    store.createBlock({ id: 'ciblk', blockerId: blind.id, blockedId: b.user.id, createdAt: now })
+    store.createSafetyTimer({ id: 'stblk', ownerId: blind.id, note: '步行回家', startedAt: now - 30 * 60_000, dueAt: now - 1000, status: 'active' })
+    expect(fireExpiredSafetyTimers(store, push, webPush, now, GRACE)).toBe(1)
+    // family（未拉黑）收到未报到告警；blocked **一条都没有**（不进其收件箱）。
+    expect(missed(store, family.id)).toHaveLength(1)
+    expect(missed(store, b.user.id)).toHaveLength(0)
+    // 事件 contacts 计数仅含未拉黑者（blocked 被排除出扇出面）。
+    expect(store.emergencyEventsForUser(blind.id)[0].contacts).toBe(1)
+  })
+
   it('陈旧超宽限（到期时宕机、恢复已晚 >staleGraceMs）→ 不惊动亲友、标 expired、不建 event、只通知本人（防误报风暴）', async () => {
     const { store, blind, family } = await setup()
     const now = Date.now()

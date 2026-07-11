@@ -501,4 +501,39 @@ describe('聊天（绑定好友互发）', () => {
     expect(aReact.statusCode).toBe(403)
     await app.close()
   })
+
+  it('被拉黑的联系人完全不收到 SOS/摔倒告警（拉黑即撤回；不给其播实时 GPS+hasMedical）', async () => {
+    const push = new FakePush()
+    const store = new MemoryStore()
+    const app = buildApp(store, { pushSender: push })
+    const blind = await reg(app, 'sosblind', 'blind')
+    const kept = await reg(app, 'soskept', 'helper')       // 仍在的紧急联系人 → 应收到
+    const blocked = await reg(app, 'sosblocked', 'helper') // 被拉黑的紧急联系人 → 应**完全**收不到
+    // 两人都设为 accepted 紧急联系人（isEmergency）——放大泄露面（hasMedical 也只给紧急联系人）。
+    store.createLink({ id: 'lk', ownerId: blind.user.id, memberId: kept.user.id, relation: '家人', isEmergency: true, createdAt: 1, status: 'accepted' })
+    store.createLink({ id: 'lb', ownerId: blind.user.id, memberId: blocked.user.id, relation: '家人', isEmergency: true, createdAt: 1, status: 'accepted' })
+    // blind 有紧急医疗信息（存在即 hasMedical）。
+    store.setMedicalInfo({ userId: blind.user.id, sealed: '{"enc":"x"}', updatedAt: Date.now() })
+    // 双方注册 APNs token。
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(kept.token), payload: { token: 'a'.repeat(64) } })
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(blocked.token), payload: { token: 'b'.repeat(64) } })
+    // blind 拉黑 blocked（拉黑不删链、不清 isEmergency）。
+    store.createBlock({ id: 'sosblk', blockerId: blind.user.id, blockedId: blocked.user.id, createdAt: Date.now() })
+
+    const res = await app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token),
+      payload: { kind: 'fall', lat: 39.9, lon: 116.4 } })
+    expect(res.statusCode).toBe(200)
+    expect((res.json() as any).contacts).toBe(1) // 仅 kept 计入告警面（blocked 被排除）
+
+    // 持久化通知：kept 收到 emergency_alert，blocked **一条都没有**（不进其收件箱）。
+    const alertsFor = (uid: string) => store.notificationsForUser(uid).filter((n) => n.kind === 'emergency_alert')
+    expect(alertsFor(kept.user.id)).toHaveLength(1)
+    expect(alertsFor(blocked.user.id)).toHaveLength(0)
+    // kept 的通知带坐标+hasMedical（紧急联系人）；blocked 既无通知也自然无坐标/医疗存在位泄露。
+    expect(alertsFor(kept.user.id)[0].data?.lat).toBe('39.9')
+    expect(alertsFor(kept.user.id)[0].data?.hasMedical).toBe('1')
+    // 推送：只发给 kept 的 token，绝不发给 blocked 的 token。
+    expect(push.sent.map((s) => s.token)).toEqual(['a'.repeat(64)])
+    await app.close()
+  })
 })

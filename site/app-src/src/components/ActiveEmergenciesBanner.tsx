@@ -3,7 +3,8 @@ import { api, type ActiveEmergency } from '../lib/api'
 import { pollWhileVisible } from '../lib/poll'
 import { useI18n } from '../lib/i18n'
 import { appleMapsUrl } from '../lib/location'
-import { Card, Button, timeAgo, useToast } from './ui'
+import { emergencyLocInfo } from '../lib/emergencyLoc'
+import { Card, Button, timeAgo, fmtTime, useToast } from './ui'
 import { ContactMedicalInfo } from './ContactMedicalInfo'
 import { IconPhone } from './icons'
 
@@ -46,9 +47,19 @@ export function ActiveEmergenciesBanner({ onCall }: { onCall?: (userId: string, 
             {e.escalated && !e.acked && <span className="rounded-full bg-danger/15 px-1.5 py-0.5 text-[10px] font-bold text-danger">{t('升级后仍无人响应', 'Unanswered')}</span>}
             {e.acked && <span className="rounded-full bg-ok/15 px-1.5 py-0.5 text-[10px] font-bold text-ok">{t('有人响应', 'Responded')}</span>}
             <div className="ml-auto flex items-center gap-2">
-              {e.lat != null && e.lon != null && (
-                <a href={appleMapsUrl(e.lat, e.lon, e.ownerName)} target="_blank" rel="noreferrer" className="text-xs text-accent underline">{t('位置', 'Map')}</a>
-              )}
+              {e.lat != null && e.lon != null && (() => {
+                // 位置新鲜度诚实标注（与 EmergencyAlertHost/通知同 emergencyLocInfo）：兜底的「最后已知」坐标
+                // 绝不冒充实时——协助者要照此赶去，必须一眼看出是实时还是 N 分钟前的旧坐标，否则可能扑空。
+                const loc = emergencyLocInfo({ locSource: e.locSource ?? undefined, locAgeSec: e.locAgeSec != null ? String(e.locAgeSec) : undefined }, e.at)
+                const label = loc.stale
+                  ? (loc.fixAt != null ? t(`最后位置·${fmtTime(loc.fixAt, lang)}`, `Last·${fmtTime(loc.fixAt, lang)}`) : t('最后位置', 'Last known'))
+                  : t('位置', 'Map')
+                return (
+                  <a href={appleMapsUrl(e.lat, e.lon, e.ownerName)} target="_blank" rel="noreferrer"
+                    title={loc.stale && loc.fixAt != null ? t(`最后已知位置，定位于 ${fmtTime(loc.fixAt, lang)}`, `Last known location, fixed at ${fmtTime(loc.fixAt, lang)}`) : undefined}
+                    className="text-xs text-accent underline">{loc.stale ? '⚠️' : '📍'} {label}</a>
+                )
+              })()}
               <Button variant="soft" onClick={() => void onMyWay(e)} disabled={responded.has(e.eventId)}>
                 {responded.has(e.eventId) ? t('已回应', 'Responded') : t('我在赶来', "I'm on my way")}
               </Button>

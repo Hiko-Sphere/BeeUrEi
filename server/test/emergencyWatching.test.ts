@@ -46,6 +46,31 @@ describe('GET /api/emergency/watching', () => {
     await app.close()
   })
 
+  it('带出位置来源与新鲜度 locSource/locAgeSec（协助者据此辨实时 vs 最后已知，绝不照旧坐标扑空）', async () => {
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const reg = async (u: string, role: string) => (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const helper = await reg('ewlHelper', 'helper')
+    const mom = await reg('ewlMom', 'blind')       // 手机丢 GPS → 告警附「最后已知」坐标
+    const dad = await reg('ewlDad', 'blind')       // 实时坐标
+    const gramps = await reg('ewlGramps', 'blind') // 完全无坐标
+    for (const [o, id] of [[mom, 'lm'], [dad, 'ld'], [gramps, 'lg']] as const)
+      store.createLink({ id, ownerId: o.user.id, memberId: helper.user.id, relation: '家人', isEmergency: true, createdAt: 1, status: 'accepted' })
+    store.createEmergencyEvent({ id: 'e-mom', userId: mom.user.id, kind: 'fall', notified: 1, contacts: 1, at: now - 60_000, lat: 31.2, lon: 121.4, locSource: 'lastKnown', locAgeSec: 600 })
+    store.createEmergencyEvent({ id: 'e-dad', userId: dad.user.id, kind: 'manual', notified: 1, contacts: 1, at: now - 50_000, lat: 39.9, lon: 116.4, locSource: 'live' })
+    store.createEmergencyEvent({ id: 'e-gramps', userId: gramps.user.id, kind: 'crash', notified: 0, contacts: 1, at: now - 40_000 }) // 无坐标
+
+    const active = (await app.inject({ method: 'GET', url: '/api/emergency/watching', headers: auth(helper.token) })).json().active
+    const byId = Object.fromEntries(active.map((a: { eventId: string }) => [a.eventId, a]))
+    // 最后已知：坐标 + locSource='lastKnown' + locAgeSec 秒数，供客户端诚实标注"最后位置·N 分钟前"。
+    expect(byId['e-mom']).toMatchObject({ lat: 31.2, lon: 121.4, locSource: 'lastKnown', locAgeSec: 600 })
+    // 实时：locSource='live'、无 locAgeSec（null）。
+    expect(byId['e-dad']).toMatchObject({ lat: 39.9, lon: 116.4, locSource: 'live', locAgeSec: null })
+    // 无坐标：lat/lon/locSource/locAgeSec 全 null（客户端不显地图链接）。
+    expect(byId['e-gramps']).toMatchObject({ lat: null, lon: null, locSource: null, locAgeSec: null })
+    await app.close()
+  })
+
   it('无人处于紧急 → active 空数组；ack/escalate 状态如实带出', async () => {
     const store = new MemoryStore()
     const app = buildApp(store)

@@ -147,7 +147,7 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     const ownerIds = new Set(store.linksByMember(me)
       .filter((l) => (l.status ?? 'accepted') === 'accepted' && l.isEmergency && !isBlockedBetween(store, me, l.ownerId))
       .map((l) => l.ownerId))
-    const active: { ownerId: string; ownerName: string; eventId: string; kind: string; at: number; acked: boolean; escalated: boolean; lat: number | null; lon: number | null; hasMedical: boolean }[] = []
+    const active: { ownerId: string; ownerName: string; eventId: string; kind: string; at: number; acked: boolean; escalated: boolean; lat: number | null; lon: number | null; locSource: string | null; locAgeSec: number | null; hasMedical: boolean }[] = []
     for (const ownerId of ownerIds) {
       const owner = store.findById(ownerId)
       if (!owner || owner.status !== 'active') continue
@@ -162,7 +162,10 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
         let hasMedical = false
         try { hasMedical = !!store.getMedicalInfo(ownerId) && !isBlockedBetween(store, me, ownerId) } catch { /* 非必需子读失败不使看板失明 */ }
         active.push({ ownerId, ownerName: owner.displayName, eventId: e.id, kind: e.kind, at: e.at,
-          acked: e.ackedAt != null, escalated: e.escalatedAt != null, lat: e.lat ?? null, lon: e.lon ?? null, hasMedical })
+          acked: e.ackedAt != null, escalated: e.escalatedAt != null, lat: e.lat ?? null, lon: e.lon ?? null,
+          // 位置来源与新鲜度（诚实标注）：兜底的"最后已知"坐标绝不能在看板上冒充实时——协助者据此决定
+          // 是否照此坐标赶去。与告警推送/EmergencyAlertHost 同口径，让本看板也能标"最后已知·N 分钟前"。
+          locSource: e.locSource ?? null, locAgeSec: e.locAgeSec ?? null, hasMedical })
       }
     }
     // 分诊排序（最需要行动者置顶，非只按时间）：升级后仍无人响应 > 尚无人响应 > 已有人响应；同档内新的在前。

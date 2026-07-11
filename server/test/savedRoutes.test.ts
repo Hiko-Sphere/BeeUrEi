@@ -231,6 +231,11 @@ describe('路线库（亲友远程路线编排 Phase 1：服务端）', () => {
     const upd = await app.inject({ method: 'PUT', url: `/api/routes/${id}`, headers: blind.h,
       payload: { waypoints: [{ lat: 31.2, lng: 121.4, note: 'badword' }, WP[0]] } })
     expect(upd.statusCode).toBe(403)
+    // 改**路线名**为违禁词也须 403（update 的 name 分支——与 note 分支同一 if 但独立子条件，回归其一时另一支仍绿会假绿）。
+    // 路线名对盲人执行时可见、也进"亲友改了你的路线"通知，脏名不得经改名漏出。
+    const updName = await app.inject({ method: 'PUT', url: `/api/routes/${id}`, headers: blind.h, payload: { name: '改成 BADWORD 的名' } })
+    expect(updName.statusCode).toBe(403)
+    expect(updName.json().error).toBe('content_blocked')
     await app.close()
   })
 

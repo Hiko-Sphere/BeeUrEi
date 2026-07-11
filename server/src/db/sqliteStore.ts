@@ -985,6 +985,11 @@ export class SqliteStore implements Store {
     ).all(groupId, bm, bm, bi, bm, bi, limit)
     return rows.map((r) => this.toMessage(r))
   }
+  lastGroupMessage(groupId: string): ChatMessage | undefined {
+    // 只取 1 行（同 groupMessages 的末尾：createdAt/id 最大），避免为拿"最后一条"取 200 行。
+    const r = this.db.prepare('SELECT * FROM messages WHERE groupId = ? ORDER BY createdAt DESC, id DESC LIMIT 1').get(groupId) as any
+    return r ? this.toMessage(r) : undefined
+  }
   searchDirectMessages(a: string, b: string, query: string, limit: number): ChatMessage[] {
     const q = query.trim().toLowerCase()
     if (q === '') return []

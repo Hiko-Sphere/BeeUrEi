@@ -49,7 +49,6 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store, push: Pu
   app.get('/api/groups', { preHandler: requireAuth() }, async (req) => {
     const me = req.user!.sub
     const groups = store.groupsFor(me).map((g) => {
-      const recent = store.groupMessages(g.id, 200)
       return {
         group: g,
         // 成员附在线/待命状态（与亲友列表 online 同口径：presence 待命 ∨ 在通话中）——盲人在群里一眼看出
@@ -58,7 +57,7 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store, push: Pu
           const u = store.findById(id)
           return u ? { ...publicUser(u), online: isOnline(id) } : { id, username: '', displayName: '已注销用户', role: '', status: '', avatar: null, online: false }
         }),
-        last: recent.length > 0 ? recent[recent.length - 1] : null,
+        last: store.lastGroupMessage(g.id) ?? null, // 只取最后一条（此前拉 200 行取末尾，群多时放大）
         // 无上限精确未读（与 App 图标总角标 totalUnreadFor 同口径）：此前用最近 200 条 filter，>200 未读会被封顶
         // 漏计、与总角标不一致（活跃家庭群久未看即触发）。unreadGroupCount 走 COUNT 既准又省，口径完全一致
         // （createdAt>已读时刻、非己发、非撤回）；db/unread 早已迁移，此端点是漏改的姊妹面。

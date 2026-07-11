@@ -725,6 +725,9 @@ export interface Store {
   deleteGroup(id: string): void // 解散：同时删群消息与已读标记
   /// 群消息（时间正序，分页同 messagesBetween；beforeId 同义）。
   groupMessages(groupId: string, limit: number, beforeMs?: number, beforeId?: string): ChatMessage[]
+  /// 群最后一条消息（会话列表预览用）：只取 1 条，别为拿"最后一条"而 groupMessages(_,200) 拉 200 行再取末尾
+  /// （群列表端点对每个群都这么做，成员多群多时按 群数×200 行放大）。无消息→undefined。
+  lastGroupMessage(groupId: string): ChatMessage | undefined
   /// 会话内按关键词搜索**文本**消息（不区分大小写，时间倒序，最多 limit 条）。仅 kind=text 可搜。
   searchDirectMessages(a: string, b: string, query: string, limit: number): ChatMessage[]
   searchGroupMessages(groupId: string, query: string, limit: number): ChatMessage[]
@@ -1546,6 +1549,15 @@ export class MemoryStore implements Store {
       .filter((m) => beforeCursor(m, beforeMs, beforeId))
       .sort(byTimeThenId)
     return all.slice(Math.max(0, all.length - limit))
+  }
+  lastGroupMessage(groupId: string): ChatMessage | undefined {
+    // 单次归约取 (createdAt,id) 最大者，与 groupMessages 末尾同序（byTimeThenId），不建整表切片。
+    let best: ChatMessage | undefined
+    for (const m of this.messages.values()) {
+      if (m.groupId !== groupId) continue
+      if (!best || byTimeThenId(best, m) < 0) best = m
+    }
+    return best
   }
   searchDirectMessages(a: string, b: string, query: string, limit: number): ChatMessage[] {
     const q = query.trim().toLowerCase()

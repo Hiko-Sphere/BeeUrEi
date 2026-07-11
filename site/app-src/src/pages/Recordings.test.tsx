@@ -28,6 +28,32 @@ describe('RecordingsPage 列表渲染（防字段漂移）', () => {
     expect(screen.getByText(/上海市黄浦区/)).toBeInTheDocument()      // locationLabel
   })
 
+  it('录制地点：有坐标→可点 Apple Maps 链接（死字段修复：lat/lon 此前未用）；有坐标无标签→显"查看位置"链接；无坐标有标签→纯文本；都无→不显', async () => {
+    mock(api.myRecordings).mockResolvedValue({
+      recordings: [
+        { id: 'r1', recordedAt: 1_700_000_000_000, hasMedia: true, participantNames: ['甲'], lat: 31.23, lon: 121.47, locationLabel: '上海市黄浦区' }, // 坐标+标签→链接带标签文本
+        { id: 'r2', recordedAt: 1_700_000_000_001, hasMedia: true, participantNames: ['乙'], lat: 39.9, lon: 116.4 },                                   // 坐标无标签→"查看位置"链接（此前整条不显）
+        { id: 'r3', recordedAt: 1_700_000_000_002, hasMedia: true, participantNames: ['丙'], locationLabel: '成都市' },                                   // 无坐标有标签→纯文本、无链接
+        { id: 'r4', recordedAt: 1_700_000_000_003, hasMedia: true, participantNames: ['丁'], lat: 999, lon: 0, locationLabel: '越界坐标' },              // 坐标越界→退回纯文本（不拼坏链）
+      ],
+    })
+    render(<RecordingsPage />)
+    await screen.findByText('甲')
+    // r1：标签作链接文本，href 指向 Apple Maps（坐标 + 编码后的标签查询名）。
+    const link1 = screen.getByRole('link', { name: /上海市黄浦区/ })
+    expect(link1).toHaveAttribute('href', `https://maps.apple.com/?ll=31.23,121.47&q=${encodeURIComponent('上海市黄浦区')}`)
+    // r2：有坐标无标签 → "查看位置"链接（此前 locationLabel 缺失时整条位置不显，坐标白白浪费）。
+    const link2 = screen.getByRole('link', { name: /查看位置/ })
+    expect(link2).toHaveAttribute('href', 'https://maps.apple.com/?ll=39.9,116.4&q=39.9,116.4')
+    // r3：无坐标有标签 → 纯文本呈现、不是链接。
+    expect(screen.getByText(/成都市/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /成都市/ })).toBeNull()
+    // r4：坐标越界 → validLatLng 挡下，退回纯文本标签、绝不渲染坏链接。
+    expect(screen.getByText(/越界坐标/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /越界坐标/ })).toBeNull()
+    expect(screen.getAllByRole('link', { name: /查看位置|上海市黄浦区/ })).toHaveLength(2) // 恰两条有效坐标出链接
+  })
+
   it('录制原因(reason)非空时渲染、空时不显示（死字段修复：服务端下发 reason 但列表从不呈现；知情同意透明度）', async () => {
     mock(api.myRecordings).mockResolvedValue({
       recordings: [

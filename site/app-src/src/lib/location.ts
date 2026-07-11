@@ -9,6 +9,15 @@ export function appleMapsUrl(lat: number | string, lng: number | string, label?:
   return `https://maps.apple.com/?ll=${lat},${lng}&q=${q}`
 }
 
+/// 坐标是否可作地图链接：有限且在地理范围内（纬度[-90,90]、经度[-180,180]）。可空入参（服务端字段常为 null）。
+/// 返回规整后的 {lat,lng} 或 null——供渲染前判定"有没有可用坐标"（如录制/事件的可选定位）。appleMapsUrl 本身
+/// 不校验（只拼串），故凡把可选/外来坐标渲染成地图链接前都应先过此校验，避免拼出 NaN/越界的坏链接。
+export function validLatLng(lat: number | null | undefined, lng: number | null | undefined): { lat: number; lng: number } | null {
+  if (typeof lat !== 'number' || typeof lng !== 'number') return null
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return null
+  return { lat, lng }
+}
+
 /// 聊天"发送我的位置"的消息正文（与 iOS LocationPayload.asText() 无名形式同口径：📍\n + Apple 地图链接）。
 /// kind 用 'text'（内嵌链接），故 web/iOS 两端 parseLocation 都能把它还原成同一个位置气泡。
 /// 坐标 6 位小数（≈0.1m，与 iOS %.6f 对齐）；WGS-84（浏览器定位原系，勿转）。非有限/越界坐标 → null（不发假位置）。

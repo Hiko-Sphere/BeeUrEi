@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseLocation, appleMapsUrl, haversineMeters, routeDistanceMeters, routeDistanceText, locationMessageText } from './location'
+import { parseLocation, appleMapsUrl, haversineMeters, routeDistanceMeters, routeDistanceText, locationMessageText, validLatLng } from './location'
 
 const zh = (a: string) => a // t 桩：取中文
 
@@ -51,6 +51,29 @@ describe('appleMapsUrl', () => {
     expect(u).toContain(`&q=${encodeURIComponent('a&b "c" <x>')}`)
     expect(u).not.toContain('"') // 编码后无裸引号，可安全放入 href="..."
     expect(u).not.toContain('<')
+  })
+})
+
+describe('validLatLng 坐标可作地图链接的校验（渲染可选/外来坐标成地图链接前的守卫）', () => {
+  it('有限且在范围内 → 规整后的 {lat,lng}', () => {
+    expect(validLatLng(31.23, 121.47)).toEqual({ lat: 31.23, lng: 121.47 })
+    expect(validLatLng(0, 0)).toEqual({ lat: 0, lng: 0 })      // 赤道/本初子午线是合法坐标（非"空"）
+    expect(validLatLng(-90, -180)).toEqual({ lat: -90, lng: -180 }) // 边界含
+    expect(validLatLng(90, 180)).toEqual({ lat: 90, lng: 180 })
+  })
+  it('null/undefined（服务端可选字段常见）→ null', () => {
+    expect(validLatLng(null, 121)).toBeNull()
+    expect(validLatLng(31, null)).toBeNull()
+    expect(validLatLng(undefined, undefined)).toBeNull()
+    expect(validLatLng(null, null)).toBeNull()
+  })
+  it('越界/非有限 → null（绝不拼出 NaN/越界的坏地图链接）', () => {
+    expect(validLatLng(91, 0)).toBeNull()     // 纬度越界
+    expect(validLatLng(-90.1, 0)).toBeNull()
+    expect(validLatLng(0, 181)).toBeNull()    // 经度越界
+    expect(validLatLng(0, -180.5)).toBeNull()
+    expect(validLatLng(NaN, 0)).toBeNull()
+    expect(validLatLng(0, Infinity)).toBeNull()
   })
 })
 

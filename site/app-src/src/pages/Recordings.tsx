@@ -4,6 +4,7 @@ import { useI18n } from '../lib/i18n'
 import { saveBlob } from '../lib/download'
 import { recordingFileName } from '../lib/recordingFile'
 import { joinNames } from '../lib/listFormat'
+import { appleMapsUrl, validLatLng } from '../lib/location'
 import { Card, Button, Pill, Spinner, EmptyState, useToast, fmtTime, fmtDuration, RelativeTime } from '../components/ui'
 import { IconFilm, IconX } from '../components/icons'
 
@@ -89,7 +90,20 @@ export function RecordingsPage() {
                 {/* 录制原因（知情同意透明度）：服务端一直下发 reason 却从未在列表呈现（死字段）。是"为何录这通话"
                     的审计线索——录制功能以双方知情同意为本，把原因如实展示强化透明度。空原因不显示（默认 ''）。 */}
                 {r.reason && r.reason.trim() && <div><span className="text-faint">{t('录制原因', 'Reason')}：</span>{r.reason}</div>}
-                {r.locationLabel && <div><span className="text-faint">{t('地点', 'Location')}：</span>{r.locationLabel}</div>}
+                {/* 录制地点：有坐标则渲染成可点的 Apple Maps 链接（与全站定位一致——协助者可看清这通被录的协助
+                    发生在哪；此前 lat/lon 是死字段、只显 locationLabel 文本，且有坐标无标签时整条位置不显）。
+                    坐标经 validLatLng 校验（越界/NaN 不拼坏链）；无坐标但有标签则退回纯文本；都无则不显。 */}
+                {(() => {
+                  const coord = validLatLng(r.lat, r.lon)
+                  if (coord) return (
+                    <div><span className="text-faint">{t('地点', 'Location')}：</span>
+                      <a href={appleMapsUrl(coord.lat, coord.lng, r.locationLabel ?? undefined)} target="_blank" rel="noreferrer"
+                        className="text-accent hover:underline">📍 {r.locationLabel?.trim() || t('查看位置', 'View location')}</a>
+                    </div>
+                  )
+                  if (r.locationLabel?.trim()) return <div><span className="text-faint">{t('地点', 'Location')}：</span>{r.locationLabel}</div>
+                  return null
+                })()}
               </div>
               <div className="flex gap-2">
                 <Button loading={loadingId === r.id} disabled={!r.hasMedia} onClick={() => play(r)} className="flex-1"><IconFilm width={16} height={16} />{t('播放', 'Play')}</Button>

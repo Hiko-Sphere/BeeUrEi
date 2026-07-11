@@ -195,8 +195,10 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
 
   // 测试告警投递（医疗警报行业标配"test your alert"）：用户主动发一条**明确标注为测试**的通知给自己的
   // 联系人，真正验证告警链路能送达（就绪自检只查"有推送通道"，测试则真发一条）。与真实告警口径一致地
-  // 扇给全体 accepted 联系人；但**不**建紧急事件、不升级、不带位置、kind=delivery_check（非危急词、受勿扰
-  // 约束——不会半夜为一条测试惊动联系人）。限流 3/时防骚扰联系人。notifyUser 走 in-app+APNs+WebPush 同款通道。
+  // 扇给全体 accepted 联系人；但**不**建紧急事件、不升级、不带位置、kind=delivery_check（客户端渲染为"测试"、
+  // 非应急大模态/响铃）。**越勿扰真送达**（isAlwaysThrough 含 delivery）——自测的意义是验证**真实应急投递路径**，
+  // 而真应急恒越勿扰；若自测反遵守勿扰就测不到真实路径（用户拍板，2026-07-11）。限流 3/时防骚扰联系人。
+  // notifyUser 走 in-app+APNs+WebPush 同款通道。
   app.post('/api/emergency/test', { preHandler: requireAuth(),
                                     config: { rateLimit: { max: 3, timeWindow: '1 hour' } } }, async (req, reply) => {
     const me = store.findById(req.user!.sub)

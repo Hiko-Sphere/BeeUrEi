@@ -54,8 +54,12 @@ export function isQuietedNow(q: QuietHours | undefined, nowMs: number): boolean 
 /// 含 **security**：账号安全变更预警（改密/关 2FA/换邮箱/找回重置=潜在**接管信号**）——若非本人操作，用户须**即时**
 /// 察觉才能抢救账号，勿扰中压掉横幅会把接管拖到次日早晨。行业通例（Apple/Google/银行）一律把账号安全告警按
 /// time-sensitive 越过勿扰；本人自助改密时的横幅只是可关的轻扰，接管检测价值远大于此。
+/// 含 **delivery**：应急投递自测（delivery_check，用户在协助/亲友端主动"测试我的应急告警能不能送达"）——自测的
+/// 意义是**验证真实应急投递路径**，而真实应急恒越勿扰；若自测反而遵守勿扰，就测不到真实路径（用户在联系人勿扰
+/// 时段自测、向其核对"收到没"会误判链路坏）。故自测也越勿扰真送达（用户拍板，2026-07-11）。它是**低调的测试**
+/// 通知（kind=delivery_check，客户端渲染为"测试"、非应急大模态/响铃），送达但不惊扰。
 export function isAlwaysThrough(kind: string): boolean {
-  return /emergency|sos|\bcall\b|incoming|escalat|alert|checkin|safety|security/i.test(kind)
+  return /emergency|sos|\bcall\b|incoming|escalat|alert|checkin|safety|security|delivery/i.test(kind)
 }
 
 /// 组合门：该通知此刻是否应**抑制推送横幅**（站内通知仍照常持久化）。

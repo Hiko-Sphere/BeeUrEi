@@ -36,10 +36,15 @@ describe('测试告警 POST /api/emergency/test', () => {
     await app.close()
   })
 
-  it('测试告警 kind=delivery_check **非**always-through → 受勿扰约束（不会半夜为测试惊动联系人）', () => {
-    // 安全不变量的反面：真实告警 kind 恒 always-through；测试则**不**能是——否则半夜测试也弹横幅。
-    expect(isAlwaysThrough('delivery_check')).toBe(false)
+  it('测试告警 kind=delivery_check 也 always-through（越勿扰真送达，准确反映真实应急投递路径；用户拍板 2026-07-11）', () => {
+    // 自测的意义是验证**真实应急投递路径**，而真应急恒 always-through；若自测反受勿扰约束就测不到真实路径
+    // （用户在联系人勿扰时段自测、向其核对会误判链路坏）。故自测也 always-through——但它是低调的"测试"通知
+    // （客户端渲染为测试、非应急大模态/响铃），送达但不惊扰。
+    expect(isAlwaysThrough('delivery_check')).toBe(true)
     expect(isAlwaysThrough('emergency_alert')).toBe(true) // 对照：真实告警仍恒穿透
+    // 反向纵深：加 delivery 关键词不误伤——普通软通知仍受勿扰约束。
+    expect(isAlwaysThrough('friend_request')).toBe(false)
+    expect(isAlwaysThrough('route_added')).toBe(false)
   })
 
   it('无联系人 → contacts:0 notified:0，仍 200（不报错）', async () => {

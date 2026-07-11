@@ -35,6 +35,13 @@ export function signAccessToken(payload: TokenPayload): string {
 export function verifyAccessToken(token: string): TokenPayload | null {
   try {
     const decoded = jwt.verify(token, SECRET) as jwt.JwtPayload
+    // 令牌混淆防护：完整 access token **绝不**带 scope 声明；凡带 scope 者（如 scope='media' 的媒体播放令牌——
+    // 同一 SECRET 签发但严格窄权：仅绑单个 recordingId、60s TTL）不得被当作 access token 接受。否则嵌在
+    // <video src> URL 里的媒体令牌一旦经服务器日志/浏览器历史/Referer 泄漏，攻击者塞进 Authorization: Bearer
+    // 即可对**任意鉴权端点**取得该账号 60s 全权访问（读私信/改设置/发消息…）。媒体令牌只应经 verifyMediaToken
+    // （校验 scope==='media' ∧ rec 匹配）在媒体流端点消费。反向已安全（verifyMediaToken 要求 scope==='media'，
+    // 拒无 scope 的 access token）——此处补齐正向不对称（见对抗复审 token-confusion）。
+    if (decoded.scope !== undefined) return null
     if (typeof decoded.sub !== 'string' || typeof decoded.role !== 'string') return null
     const tv = typeof decoded.tv === 'number' ? decoded.tv : 0
     const sid = typeof decoded.sid === 'string' ? decoded.sid : undefined

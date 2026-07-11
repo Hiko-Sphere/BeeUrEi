@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type NotificationInfo } from '../lib/api'
+import { pollWhileVisible } from '../lib/poll'
 import { emergencyLocInfo } from '../lib/emergencyLoc'
 import { appleMapsUrl } from '../lib/location'
 import { useI18n } from '../lib/i18n'
@@ -90,7 +91,10 @@ export function NotificationsPage() {
   const [filter, setFilter] = useState<'all' | 'unread' | 'emergency'>('all') // 筛选：全部/未读/紧急——多人多事件时快速聚焦安全攸关或未处理的
 
   const load = async () => { try { const r = await api.notifications(); setItems(r.notifications) } catch { setItems([]) } }
-  useEffect(() => { void load() }, [])
+  // 轮询刷新收件箱（与 Locations/Chat/紧急看板等所有列表面一致）：家人开着通知页时，新到的可操作通知
+  // （请求共享位置/SOS 回执/报到提醒等）会自动出现，无需手动刷新——尤其未授予 Web Push 的用户，此页是唯一入口。
+  // 前台可见才拉、切回即刷（pollWhileVisible）。乐观态（ackedIds/已读）是独立 state，不被重拉清掉。
+  useEffect(() => { void load(); return pollWhileVisible(load, 15000) }, [])
 
   // 从通知列表直接回执 SOS 告警："我已看到"——遇险者最需要的反馈是"有人在响应"，且服务端据此停止升级重呼、
   // 匿名协调其余亲友（与告警弹窗 onAck 同一后端流程）。此前列表只有"回拨"、没有"回执"，与弹窗不对等（尤其读屏

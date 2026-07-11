@@ -219,4 +219,19 @@ describe('NotificationsPage 删除 / 清空已读', () => {
     await screen.findByText('未读二')
     expect(screen.queryByRole('button', { name: '清空已读' })).toBeNull()
   })
+
+  it('挂载后每 15s 轮询刷新收件箱（与其它实时列表面一致，不再只加载一次）', async () => {
+    vi.useFakeTimers()
+    try {
+      ;(api.notifications as ReturnType<typeof vi.fn>).mockResolvedValue({ notifications: [], unread: 0 })
+      render(<NotificationsPage />)
+      expect(api.notifications).toHaveBeenCalledTimes(1)  // 挂载即加载一次
+      await vi.advanceTimersByTimeAsync(15000)
+      expect(api.notifications).toHaveBeenCalledTimes(2)  // 一个轮询周期后自动再拉（新到通知会出现）
+      await vi.advanceTimersByTimeAsync(15000)
+      expect(api.notifications).toHaveBeenCalledTimes(3)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

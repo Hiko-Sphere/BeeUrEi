@@ -46,6 +46,9 @@ describe('保存的地点（家/公司/自定义）', () => {
     expect((await app.inject({ method: 'PUT', url: '/api/places/home', headers: auth, payload: { address: '' } })).statusCode).toBe(400)
     expect((await app.inject({ method: 'PUT', url: '/api/places/home', headers: auth, payload: { address: 'x'.repeat(201) } })).statusCode).toBe(400)
     expect((await app.inject({ method: 'PUT', url: '/api/places/home', headers: auth, payload: { address: '这里有敏感词' } })).statusCode).toBe(403)
+    // **label 分支**也过审（label 会 TTS 给盲人"已把X设为..."+ 进"到达 X"geofence 通知发给家人）：此前只测了 address
+    // 分支，label 过滤一旦回归、脏地点名会漏进家人通知而无测试拦下。干净 address + 违禁 label → 仍须 403。
+    expect((await app.inject({ method: 'PUT', url: `/api/places/${encodeURIComponent('敏感词')}`, headers: auth, payload: { address: '干净的地址' } })).statusCode).toBe(403)
     expect((await app.inject({ method: 'GET', url: '/api/places' })).statusCode).toBe(401) // 无 token
     await app.close()
   })

@@ -180,7 +180,7 @@ describe('AMap walking nav proxy', () => {
       json: async () => ({
         status: '1', infocode: '10000',
         pois: [
-          { name: '全家便利店', location: '116.398,39.909', distance: '42', type: '购物服务;便利店;便利店' },
+          { name: '全家便利店', location: '116.398,39.909', distance: '42', type: '购物服务;便民商店;便利店' }, // 三段各异：锁定取**末段**(便利店)，非首段(购物服务)、非中段(便民商店)
           { name: '', location: '116.4,39.9', distance: '10', type: 'x' },              // 空名 → 剔
           { name: '坏坐标', location: 'abc,def', distance: '5', type: 'y' },            // 非法坐标 → 剔
           { name: '距离坏了', location: '116.40,39.90', distance: 'NaN', type: '公厕' }, // 距离非有限 → 归 0

@@ -519,14 +519,21 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
                     : sel.kind === 'group' ? (sel.members.find((mm) => mm.id === m.fromId)?.displayName ?? '') : sel.name
                   // 文本式位置命中时显示 📍 地名而非原始 maps URL。
                   const loc = parseLocation(m.text)
-                  return (
-                    <div key={m.id} className="rounded-xl surface-2 px-3 py-2">
-                      <div className="flex items-center justify-between text-[11px] text-faint">
-                        <span className="font-semibold text-accent">{who}</span><span>{timeAgo(m.createdAt, lang)}</span>
-                      </div>
-                      <div className="mt-0.5 break-words text-sm">{loc ? `📍 ${loc.name || t('位置', 'Location')}` : m.text}</div>
+                  // 命中消息在当前已加载窗口内 → 点击关搜索并跳到该条（在上下文里看，IM 标配）；不在窗口(更早、未加载)
+                  // 则保持静态，不给"可点却跳不过去"的假象（避免点了无反应）。
+                  const canJump = !!msgs?.some((x) => x.id === m.id)
+                  const inner = <>
+                    <div className="flex items-center justify-between text-[11px] text-faint">
+                      <span className="font-semibold text-accent">{who}</span><span>{timeAgo(m.createdAt, lang)}</span>
                     </div>
-                  )
+                    <div className="mt-0.5 break-words text-sm">{loc ? `📍 ${loc.name || t('位置', 'Location')}` : m.text}</div>
+                  </>
+                  return canJump
+                    ? <button key={m.id} type="button" data-testid="search-hit"
+                        onClick={() => { setSearchOpen(false); setSearchQuery(''); setSearchResults(null); jumpToMessage(m.id) }}
+                        aria-label={t('跳到这条消息', 'Jump to this message')}
+                        className="block w-full rounded-xl surface-2 px-3 py-2 text-left transition hover:brightness-105">{inner}</button>
+                    : <div key={m.id} className="rounded-xl surface-2 px-3 py-2">{inner}</div>
                 })}
               </>
             )}

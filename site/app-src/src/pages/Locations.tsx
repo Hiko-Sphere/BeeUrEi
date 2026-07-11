@@ -11,9 +11,12 @@ import { appleMapsUrl } from '../lib/location'
 import { useI18n } from '../lib/i18n'
 import { useSession } from '../lib/session'
 import { roleLabel } from '../components/Layout'
-import { Card, Avatar, Button, Pill, EmptyState, useToast, timeAgo, fmtTime, RelativeTime } from '../components/ui'
+import { Card, Button, Pill, EmptyState, useToast, timeAgo, fmtTime } from '../components/ui'
 import { RequestShareList } from '../components/RequestShareList'
 import { SavedPlaces } from '../components/SavedPlaces'
+import { SharingContactRow } from '../components/SharingContactRow'
+import { useNavigate } from 'react-router-dom'
+import { useCall } from './call/CallController'
 import { IconPin } from '../components/icons'
 
 const POLL_MS = 8000      // 拉取联系人位置的间隔
@@ -34,6 +37,8 @@ const divIcon = (name: string, color: string) =>
 export function LocationsPage() {
   const { t, lang } = useI18n()
   const { user } = useSession()
+  const { startOutgoing, active } = useCall() // 就地呼叫共享位置的联系人（低电量告警"趁没关机联系他"直达）
+  const navigate = useNavigate()
   const toast = useToast()
   const mapEl = useRef<HTMLDivElement>(null)
   const map = useRef<L.Map | null>(null)
@@ -275,21 +280,10 @@ export function LocationsPage() {
             ) : (
               <ul className="divide-y divide-[var(--line)]">
                 {contacts.map((c) => (
-                  <li key={c.userId}>
-                    {/* 行内容包 <button>：<li> 保留 listitem，按钮可键盘聚焦/激活（Enter 平移地图到该联系人）。 */}
-                    <button type="button" onClick={() => { const mk = markers.current.get(c.userId); if (mk && map.current) { map.current.setView(mk.getLatLng(), 16); mk.openPopup() } }}
-                      className="flex w-full items-center gap-3 px-4 py-3 text-left hover:surface-2">
-                      <Avatar name={c.displayName} src={c.avatar} size={38} />
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-medium">{c.displayName}</div>
-                        <div className="text-xs text-faint">
-                          {roleLabel(c.role, t)} · {t('更新于', 'updated')} <RelativeTime ms={c.updatedAt} lang={lang} />
-                          {(() => { const b = batteryBadge(c.battery, lang); return b ? <> · <span className={b.danger ? 'font-semibold text-danger' : ''}>{b.critical ? '⚠️ ' : ''}{b.text}</span></> : null })()}
-                        </div>
-                      </div>
-                      <span className="inline-block h-2 w-2 rounded-full bg-ok ring-live" />
-                    </button>
-                  </li>
+                  <SharingContactRow key={c.userId} c={c} lang={lang} t={t} callDisabled={!!active}
+                    onLocate={() => { const mk = markers.current.get(c.userId); if (mk && map.current) { map.current.setView(mk.getLatLng(), 16); mk.openPopup() } }}
+                    onCall={() => { if (!active) void startOutgoing(c.userId, c.displayName, c.avatar) }}
+                    onMessage={() => navigate(`/chat/${encodeURIComponent(c.userId)}`)} />
                 ))}
               </ul>
             )}

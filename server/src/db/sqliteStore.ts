@@ -75,6 +75,9 @@ export class SqliteStore implements Store {
       CREATE TABLE IF NOT EXISTS message_reactions (
         messageId TEXT, userId TEXT, emoji TEXT, PRIMARY KEY (messageId, userId));
       CREATE INDEX IF NOT EXISTS idx_msgreact_user ON message_reactions (userId);
+      CREATE TABLE IF NOT EXISTS message_pins (
+        convKey TEXT PRIMARY KEY, messageId TEXT, pinnedBy TEXT, pinnedAt INTEGER);
+      CREATE INDEX IF NOT EXISTS idx_pins_msg ON message_pins (messageId);
       CREATE TABLE IF NOT EXISTS groups (
         id TEXT PRIMARY KEY, name TEXT, ownerId TEXT, memberIds TEXT, createdAt INTEGER);
       CREATE TABLE IF NOT EXISTS group_reads (
@@ -922,6 +925,19 @@ export class SqliteStore implements Store {
   }
   deleteMessageReactionsByUser(userId: string): void {
     this.db.prepare('DELETE FROM message_reactions WHERE userId = ?').run(userId)
+  }
+  setPin(convKey: string, messageId: string, pinnedBy: string, at: number): void {
+    this.db.prepare('INSERT OR REPLACE INTO message_pins (convKey, messageId, pinnedBy, pinnedAt) VALUES (?, ?, ?, ?)').run(convKey, messageId, pinnedBy, at)
+  }
+  getPin(convKey: string): { messageId: string; pinnedBy: string; pinnedAt: number } | undefined {
+    const r = this.db.prepare('SELECT messageId, pinnedBy, pinnedAt FROM message_pins WHERE convKey = ?').get(convKey) as { messageId: string; pinnedBy: string; pinnedAt: number } | undefined
+    return r ? { messageId: r.messageId, pinnedBy: r.pinnedBy, pinnedAt: Number(r.pinnedAt) } : undefined
+  }
+  clearPin(convKey: string): void {
+    this.db.prepare('DELETE FROM message_pins WHERE convKey = ?').run(convKey)
+  }
+  clearPinByMessage(messageId: string): void {
+    this.db.prepare('DELETE FROM message_pins WHERE messageId = ?').run(messageId)
   }
   messagesBetween(a: string, b: string, limit: number, beforeMs?: number, beforeId?: string): ChatMessage[] {
     const bm = beforeMs ?? null, bi = beforeId ?? null

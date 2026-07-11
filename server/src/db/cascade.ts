@@ -10,6 +10,7 @@ export function dissolveGroup(store: Store, groupId: string): void {
     if (m.kind === 'video' && m.text !== '') { store.deleteMedia(m.text); removeMediaFile(m.text) }
     store.deleteMessageReactions(m.id) // 群消息随群删 → 其上逐用户表情也一并清，不留指向已删消息的孤儿
   }
+  store.clearPin(`g:${groupId}`) // 群解散 → 清该群置顶（convKey 与 convKeyFor 群口径一致）
   store.deleteGroup(groupId)
 }
 

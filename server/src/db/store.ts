@@ -520,6 +520,12 @@ export function aggregateReactions(
   return order.map((emoji) => { const e = map.get(emoji)!; return { emoji, count: e.userIds.length, mine: e.mine, names: e.userIds.map(nameOf) } })
 }
 
+/// 会话键（置顶等会话级状态用）：群 `g:<groupId>`；单聊 `d:<两端 id 升序 join>`。同一对话两端算出**同一键**
+/// （单聊两端 fromId/toId 互换也一致），故 pin-set（据消息）与 thread-read（据查询）能对上同一 pin。
+export function convKeyFor(m: { groupId?: string; fromId: string; toId: string }): string {
+  return m.groupId ? `g:${m.groupId}` : `d:${[m.fromId, m.toId].sort().join('\x00')}`
+}
+
 /// 消息稳定全序比较：先 createdAt，再 id。让同毫秒消息排序确定、与翻页复合游标口径一致。
 export function byTimeThenId(x: ChatMessage, y: ChatMessage): number {
   return x.createdAt !== y.createdAt ? x.createdAt - y.createdAt : (x.id < y.id ? -1 : x.id > y.id ? 1 : 0)
@@ -731,6 +737,12 @@ export interface Store {
   messageReactionsFor(messageIds: string[]): Map<string, { userId: string; emoji: string }[]>
   deleteMessageReactions(messageId: string): void
   deleteMessageReactionsByUser(userId: string): void // 删号级联：抹掉该用户在**他人**消息上留下的表情
+  /// 置顶消息（Telegram 式，每会话至多一条）：convKey=群 `g:<groupId>` 或单聊 `d:<两 id 排序>`。
+  /// setPin 覆盖式（新置顶取代旧）；getPin 取当前置顶引用；clearPin 取消。撤回/删消息/删群随之清理。
+  setPin(convKey: string, messageId: string, pinnedBy: string, at: number): void
+  getPin(convKey: string): { messageId: string; pinnedBy: string; pinnedAt: number } | undefined
+  clearPin(convKey: string): void
+  clearPinByMessage(messageId: string): void // 撤回/删除该消息 → 若它正被置顶则一并取消（不留置顶悬垂）
   /// 双方之间的单聊消息（时间正序）；beforeMs/beforeId 用于向前翻页。
   /// beforeId：与 beforeMs 组成 (createdAt,id) 复合游标，边界遇同毫秒消息不漏（缺省退回严格 createdAt<beforeMs，向后兼容）。
   messagesBetween(a: string, b: string, limit: number, beforeMs?: number, beforeId?: string): ChatMessage[]
@@ -806,6 +818,7 @@ export class MemoryStore implements Store {
   protected savedRoutes = new Map<string, SavedRoute>()
   protected savedPlaces = new Map<string, SavedPlace>() // 键 = `${ownerId}\x00${label}`（复合唯一）
   protected msgReactions = new Map<string, Map<string, string>>() // messageId → (userId → emoji)：逐用户表情回应
+  protected pins = new Map<string, { messageId: string; pinnedBy: string; pinnedAt: number }>() // convKey → 置顶引用
   protected safetyTimers = new Map<string, SafetyTimer>() // 键 = id（安全报到计时器）
   protected medicalInfo = new Map<string, MedicalInfo>()  // 键 = userId（紧急医疗信息，加密信封，1:1）
   protected verifications = new Map<string, Verification>()
@@ -1525,6 +1538,21 @@ export class MemoryStore implements Store {
     }
     if (changed) this.afterMutate()
   }
+  setPin(convKey: string, messageId: string, pinnedBy: string, at: number): void {
+    this.pins.set(convKey, { messageId, pinnedBy, pinnedAt: at })
+    this.afterMutate()
+  }
+  getPin(convKey: string): { messageId: string; pinnedBy: string; pinnedAt: number } | undefined {
+    return this.pins.get(convKey)
+  }
+  clearPin(convKey: string): void {
+    if (this.pins.delete(convKey)) this.afterMutate()
+  }
+  clearPinByMessage(messageId: string): void {
+    let changed = false
+    for (const [k, p] of this.pins) if (p.messageId === messageId) { this.pins.delete(k); changed = true }
+    if (changed) this.afterMutate()
+  }
   messagesBetween(a: string, b: string, limit: number, beforeMs?: number, beforeId?: string): ChatMessage[] {
     const all = [...this.messages.values()]
       .filter((m) => !m.groupId)
@@ -1788,6 +1816,7 @@ export class JsonFileStore extends MemoryStore {
           webPushSubs?: WebPushSubscription[]
           visionUsage?: Record<string, { day: string; count: number }>
           msgReactions?: Record<string, Record<string, string>> // messageId → { userId: emoji }
+          pins?: Record<string, { messageId: string; pinnedBy: string; pinnedAt: number }> // convKey → 置顶引用
         }
         for (const u of data.users ?? []) this.users.set(u.id, u)
         for (const l of data.links ?? []) this.links.set(l.id, l)
@@ -1801,6 +1830,7 @@ export class JsonFileStore extends MemoryStore {
         if (data.recordingConfig) this.recordingConfig = data.recordingConfig
         for (const m of data.messages ?? []) this.messages.set(m.id, m)
         for (const [mid, users] of Object.entries(data.msgReactions ?? {})) this.msgReactions.set(mid, new Map(Object.entries(users)))
+        for (const [k, p] of Object.entries(data.pins ?? {})) this.pins.set(k, p)
         for (const g of data.groups ?? []) this.groups.set(g.id, g)
         for (const [k, v] of Object.entries(data.groupReads ?? {})) this.groupReads.set(k, v)
         for (const k of data.groupMutes ?? []) this.groupMutes.add(k)
@@ -1839,6 +1869,7 @@ export class JsonFileStore extends MemoryStore {
       recordingConfig: this.recordingConfig,
       messages: [...this.messages.values()],
       msgReactions: Object.fromEntries([...this.msgReactions].map(([mid, m]) => [mid, Object.fromEntries(m)])),
+      pins: Object.fromEntries(this.pins),
       groups: [...this.groups.values()],
       groupReads: Object.fromEntries(this.groupReads),
       groupMutes: [...this.groupMutes],

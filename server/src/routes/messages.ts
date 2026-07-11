@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import { type Store, type ChatMessage, isBlockedBetween, publicUser, matchBannedTerm, areLinked, aggregateReactions } from '../db/store'
+import { type Store, type ChatMessage, isBlockedBetween, publicUser, matchBannedTerm, areLinked, aggregateReactions, convKeyFor } from '../db/store'
 
 /// 读回执隐私（WhatsApp 语义）：单聊两端任一方显式关闭读回执（readReceiptsEnabled === false）即抑制
 /// "已读"暴露（互惠——关了的人也看不到别人的）。缺省(undefined)=开。同步 store 读兜底：查不到人按"开"处理。
@@ -39,6 +39,17 @@ export function withReactions(store: Store, viewerId: string, msgs: ChatMessage[
     if (m.reaction) return { ...m, reactions: [{ emoji: m.reaction, count: 1, mine: false, names: [] }] } // 旧单字段回应兜底（无从知回应者名）
     return m
   })
+}
+
+/// 解析某会话当前置顶的消息（供线程顶部横幅）：置顶已被撤回/删除（悬垂）→ 自愈清理并当作无置顶；
+/// 否则返回带表情/读回执处理的置顶消息 + 置顶者名。无置顶 → null。
+export function resolvePinned(store: Store, viewerId: string, convKey: string): (ChatMessage & { pinnedBy?: string; pinnedByName?: string }) | null {
+  const pin = store.getPin(convKey)
+  if (!pin) return null
+  const m = store.findMessage(pin.messageId)
+  if (!m || m.kind === 'recalled') { store.clearPin(convKey); return null } // 悬垂/已撤回 → 自愈清理
+  const shaped = withReactions(store, viewerId, [stripReadAtForViewer(store, viewerId, m)])[0]
+  return { ...shaped, pinnedBy: pin.pinnedBy, pinnedByName: store.findById(pin.pinnedBy)?.displayName ?? '—' }
 }
 import { totalUnreadFor } from '../db/unread'
 import { requireAuth } from '../auth/rbac'
@@ -240,7 +251,8 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
         ? { ...m, readBy: otherReadAt.filter((t) => t >= m.createdAt).length, readTotal }
         : m)
       // 群消息同样附逐用户表情回应——群正是"各回应各显、不互相顶掉"最需要的场景（单聊分支在下方已带，这里补齐姊妹分支）。
-      return { messages: withReactions(store, me, withReceipts) }
+      // pinned：群置顶消息（顶部横幅用；悬垂/撤回自愈清理）。convKey 与置顶写入 convKeyFor(msg) 同口径。
+      return { messages: withReactions(store, me, withReceipts), pinned: resolvePinned(store, me, convKeyFor({ groupId: q.group, fromId: '', toId: '' })) }
     }
     const peer = q.with
     if (!peer) return reply.code(400).send({ error: 'invalid_input' })
@@ -249,7 +261,10 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     // 也看不到别人的已读）。只影响"已读/已送达"显示；markRead 照常写库，未读计数/角标完全不受影响。群回执只暴露
     // 匿名计数（readBy/readTotal，不点名谁读了），照 WhatsApp 群例外保持不变。
     const msgs = store.messagesBetween(me, peer, limit, before, beforeId)
-    return { messages: withReactions(store, me, msgs.map((m) => stripReadAtForViewer(store, me, m))) }
+    return {
+      messages: withReactions(store, me, msgs.map((m) => stripReadAtForViewer(store, me, m))),
+      pinned: resolvePinned(store, me, convKeyFor({ fromId: me, toId: peer })), // 单聊置顶（顶部横幅）
+    }
   })
 
   // 搜索文本消息：?q=关键词 + (?with=对端 或 ?group=群 id)；**两者都不带=跨会话全局搜索**（WhatsApp 式，
@@ -297,6 +312,7 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     }
     const updated = store.updateMessage(id, { kind: 'recalled', text: '', reaction: undefined })
     store.deleteMessageReactions(id) // 撤回连带清逐用户表情（内容已撤，其上的表情也无处依附；与清 reaction 单字段一致）
+    store.clearPinByMessage(id) // 撤回的消息若正被置顶 → 一并取消置顶（撤回空壳不该留在顶部横幅）
     // 读回执剥离与消息列表同口径（复审补漏：写操作回显是曾被遗漏的 readAt 旁路出口）。
     return { message: updated && stripReadAtForViewer(store, req.user!.sub, updated) }
   })
@@ -364,6 +380,38 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     const updated = store.findMessage(id)
     // 读回执剥离与消息列表同口径（对"我发出的"那条才生效；给对端消息贴表情时 readAt 是我自己的已读时刻，非隐私面）。
     return { message: updated && withReactions(store, me, [stripReadAtForViewer(store, me, updated)])[0] }
+  })
+
+  // 置顶消息（Telegram 式，每会话至多一条；参与者可置顶/取消）：把关键信息（地址/时刻/约定）钉在会话顶部，
+  // 盲人/家人随时可跳到、不必翻找。可达性与表情回应同口径（群须成员；单聊须绑定且未互拉黑）。撤回的不可置顶。
+  const pinParticipantGate = (me: string, msg: ChatMessage): string | null => {
+    if (msg.groupId) return store.findGroup(msg.groupId)?.memberIds.includes(me) ? null : 'not_participant'
+    if (msg.fromId !== me && msg.toId !== me) return 'not_participant'
+    const other = msg.fromId === me ? msg.toId : msg.fromId
+    if (!areLinked(store, me, other)) return 'not_linked'
+    if (isBlockedBetween(store, me, other)) return 'blocked'
+    return null
+  }
+  app.post('/api/messages/:id/pin', { preHandler: [requireAuth(), requireFeature(store, 'messaging')],
+                                      config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    const msg = store.findMessage(id)
+    if (!msg) return reply.code(404).send({ error: 'not_found' })
+    const me = req.user!.sub
+    const gate = pinParticipantGate(me, msg)
+    if (gate) return reply.code(gate === 'not_participant' ? 403 : 403).send({ error: gate })
+    if (msg.kind === 'recalled') return reply.code(400).send({ error: 'message_recalled' }) // 撤回的空壳不置顶
+    store.setPin(convKeyFor(msg), id, me, Date.now())
+    return { pinned: resolvePinned(store, me, convKeyFor(msg)) }
+  })
+  app.delete('/api/messages/:id/pin', { preHandler: [requireAuth(), requireFeature(store, 'messaging')] }, async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    const msg = store.findMessage(id)
+    if (!msg) return reply.code(404).send({ error: 'not_found' })
+    const me = req.user!.sub
+    if (pinParticipantGate(me, msg) === 'not_participant') return reply.code(403).send({ error: 'not_participant' })
+    store.clearPin(convKeyFor(msg)) // 取消该会话置顶（幂等；即便当前置顶的是别的消息，取消入口只对参与者开放，语义=清空本会话置顶）
+    return reply.code(204).send()
   })
 
   // 标记已读：单聊传 fromId（已读回执），群聊传 groupId（按人记"读到的时间戳"）。

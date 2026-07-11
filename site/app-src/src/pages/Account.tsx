@@ -94,7 +94,7 @@ export function AccountPage() {
           </div>
           {/* 更换头像：隐藏 file input + 触发按钮（头像显示在联系人/通话/家人视图，供已明眼一方识别协助者）。 */}
           <input ref={avatarInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
-            data-testid="avatar-input" onChange={onPickAvatar} />
+            aria-label={t('更换头像', 'Change profile photo')} data-testid="avatar-input" onChange={onPickAvatar} />
           <Button variant="soft" loading={avatarBusy} onClick={() => avatarInputRef.current?.click()}
             aria-label={t('更换头像', 'Change profile photo')}>{t('更换头像', 'Change photo')}</Button>
         </div>

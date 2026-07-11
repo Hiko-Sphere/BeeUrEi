@@ -57,7 +57,7 @@ const I18N = {
     requireConsent: '录制需各方同意', requireConsentDesc: '开启后，录制必须取得被录制方的明确同意。',
     retentionDays: '保留天数', retentionDesc: '到期自动删除录制元数据。', days: '天', save: '保存', saved: '已保存',
     recList: '录制记录', deleteRec: '删除', confirmDeleteRec: '确认彻底删除这条录制（含媒体文件，不可恢复）？', noRecordings: '暂无录制记录',
-    playRec: '播放', recParticipants: '参与者', recDuration: '时长', recLocation: '地点', recUserDeleted: '用户已删除·留存中', recNoMedia: '媒体不可用', playFailed: '无法播放该录制', closeBtn: '关闭',
+    playRec: '播放', recParticipants: '参与者', recDuration: '时长', recLocation: '地点', recViewLocation: '查看位置', recUserDeleted: '用户已删除·留存中', recNoMedia: '媒体不可用', playFailed: '无法播放该录制', closeBtn: '关闭',
     evidence: '附带录制证据', viewEvidence: '查看证据录制',
     idReview: '实名审核', idQueue: '待审核', idStatusAll: '全部', idStatusPending: '待审核', idStatusVerified: '已通过', idStatusRejected: '已拒绝',
     idApplicant: '申请人', idDocType: '证件类型', idSubmittedVia: '提交方式', idAttempt: '次数', idSubmittedAt: '提交时间', idDecidedAt: '审核时间', idDecidedBy: '审核人',
@@ -182,7 +182,7 @@ const I18N = {
     requireConsent: 'Require everyone’s consent', requireConsentDesc: 'When on, recording requires the recorded party’s explicit consent.',
     retentionDays: 'Retention', retentionDesc: 'Recording metadata is auto-deleted after this many days.', days: 'days', save: 'Save', saved: 'Saved',
     recList: 'Recordings', deleteRec: 'Delete', confirmDeleteRec: 'Permanently delete this recording (incl. media file, cannot be undone)?', noRecordings: 'No recordings',
-    playRec: 'Play', recParticipants: 'Participants', recDuration: 'Duration', recLocation: 'Location', recUserDeleted: 'User-deleted · retained', recNoMedia: 'Media unavailable', playFailed: "Couldn't play this recording", closeBtn: 'Close',
+    playRec: 'Play', recParticipants: 'Participants', recDuration: 'Duration', recLocation: 'Location', recViewLocation: 'View location', recUserDeleted: 'User-deleted · retained', recNoMedia: 'Media unavailable', playFailed: "Couldn't play this recording", closeBtn: 'Close',
     evidence: 'Recording evidence', viewEvidence: 'View evidence recording',
     idReview: 'Identity review', idQueue: 'Queue', idStatusAll: 'All', idStatusPending: 'Pending', idStatusVerified: 'Verified', idStatusRejected: 'Rejected',
     idApplicant: 'Applicant', idDocType: 'Document', idSubmittedVia: 'Via', idAttempt: 'Attempt', idSubmittedAt: 'Submitted', idDecidedAt: 'Decided', idDecidedBy: 'Reviewer',
@@ -1764,7 +1764,19 @@ function renderRecordings() {
   const recRows = state.recordings.map((r) => {
     const names = (r.participantNames || []).join(', ');
     const dur = (r.durationSec != null) ? ` · ${t('recDuration')} ${Math.floor(r.durationSec / 60)}:${String(r.durationSec % 60).padStart(2, '0')}` : '';
-    const loc = r.locationLabel ? ` · ${t('recLocation')} ${esc(r.locationLabel)}` : '';
+    // 录制地点：有坐标→可点 Apple Maps 链接（与紧急事件视图同款，激活死字段 lat/lon——此前只显 locationLabel
+    // 文本、有坐标无标签时整条位置不显）。坐标须有限且在地理范围内才出链接，否则退回纯文本标签（不拼坏链）；
+    // 坐标在 href 里 encodeURIComponent（输出编码在汇聚点，同紧急块从严：即便非数值坐标流到这也无法属性注入）。
+    let loc = '';
+    const latOk = typeof r.lat === 'number' && isFinite(r.lat) && r.lat >= -90 && r.lat <= 90;
+    const lonOk = typeof r.lon === 'number' && isFinite(r.lon) && r.lon >= -180 && r.lon <= 180;
+    if (latOk && lonOk) {
+      const la = encodeURIComponent(r.lat), lo = encodeURIComponent(r.lon);
+      const label = (r.locationLabel && r.locationLabel.trim()) ? r.locationLabel : t('recViewLocation');
+      loc = ` · ${t('recLocation')} <a href="https://maps.apple.com/?ll=${la},${lo}&q=${la},${lo}" target="_blank" rel="noreferrer">📍 ${esc(label)}</a>`;
+    } else if (r.locationLabel && r.locationLabel.trim()) {
+      loc = ` · ${t('recLocation')} ${esc(r.locationLabel)}`;
+    }
     const deleted = r.deletedAt ? ` <span class="pill off">${esc(t('recUserDeleted'))}</span>` : '';
     const playBtn = r.hasMedia
       ? `<button class="btn sm" data-playrec="${esc(r.id)}">${esc(t('playRec'))}</button>`

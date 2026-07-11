@@ -187,6 +187,25 @@ describe('群聊', () => {
     await app.close()
   })
 
+  it('加人 → 通知**既有成员**有新人加入（对称退群通知；透明度：盲人知谁能看会话）；被加者收 group_added、加人者不自扰', async () => {
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const owner = await reg(app, 'jnOwner', 'blind')
+    const m1 = await reg(app, 'jnM1', 'helper'); const m2 = await reg(app, 'jnM2', 'helper')
+    await bind(app, owner.token, m1.token, 'jnM1'); await bind(app, owner.token, m2.token, 'jnM2')
+    const gid = (await app.inject({ method: 'POST', url: '/api/groups', headers: auth(owner.token), payload: { name: '家群', memberIds: [m1.user.id] } })).json().group.id as string
+    // owner 加 m2 进已有 owner+m1 的群。
+    expect((await app.inject({ method: 'POST', url: `/api/groups/${gid}/members`, headers: auth(owner.token), payload: { userId: m2.user.id } })).statusCode).toBe(200)
+    // m1（既有成员）收 group_member_joined「m2 加入」；owner（加人者）不自扰；m2（被加者）收 group_added、不收 joined。
+    const m1joined = store.notificationsForUser(m1.user.id).filter((n) => n.kind === 'group_member_joined')
+    expect(m1joined.length).toBe(1)
+    expect(m1joined[0].body).toContain('jnM2'); expect(m1joined[0].body).toMatch(/加入|joined/)
+    expect(store.notificationsForUser(owner.user.id).filter((n) => n.kind === 'group_member_joined').length).toBe(0) // 加人者不自扰
+    expect(store.notificationsForUser(m2.user.id).filter((n) => n.kind === 'group_added').length).toBe(1)          // 被加者本人
+    expect(store.notificationsForUser(m2.user.id).filter((n) => n.kind === 'group_member_joined').length).toBe(0) // 被加者不收"有新人加入"（他就是新人）
+    await app.close()
+  })
+
   it('加人端点有端级限流（挡刷 group_added 推送骚扰；与建群同源、20/min）', async () => {
     const app = buildApp(new MemoryStore())
     const owner = await reg(app, 'rlgowner', 'blind')

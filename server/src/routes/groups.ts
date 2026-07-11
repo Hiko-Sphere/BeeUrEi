@@ -93,7 +93,18 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store, push: Pu
     // 新成员的"已读时刻"置为入群此刻——否则其未读数会把**入群前**的全部历史消息(至多 200 上限)都算上，
     // 刚进群就顶着一个巨大的未读角标（历史仍可上翻查看，只是不计未读）。与建群时群主 setGroupRead 同口径。
     store.setGroupRead(group.id, userId, Date.now())
-    notifyGroupAdded(store, push, [userId], me, group.name, group.id) // 通知被加入者
+    notifyGroupAdded(store, push, [userId], me, group.name, group.id) // 通知被加入者本人
+    // 通知**既有成员**有新人加入（对称于退群/被踢通知其余成员）——透明度+隐私：盲人须知谁新加入、从此能看其会话，
+    // 不能只靠"扫一眼成员数"。加人者（群主 me）自知不扰；group.memberIds 是加人**前**的既有成员，新人另经上面 group_added。
+    const joinerName = store.findById(userId)?.displayName ?? '—'
+    for (const uid of group.memberIds) {
+      if (uid === me) continue
+      const u = store.findById(uid)
+      if (!u) continue
+      const l = pushLang(u.language)
+      notifyUser(store, push, uid, 'group_member_joined',
+                 pushStrings.memberJoinedTitle(l), pushStrings.memberJoinedBody(joinerName, group.name, l), { groupId: group.id })
+    }
     return { group: updated }
   })
 

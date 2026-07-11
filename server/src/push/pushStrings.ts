@@ -132,6 +132,11 @@ export const pushStrings = {
     l === 'en' ? 'A member was removed' : '有成员被移出群聊',
   memberRemovedBody: (name: string, groupName: string, l: PushLang): string =>
     l === 'en' ? `${name} was removed from the group "${groupName}"` : `${name} 被移出了群聊「${groupName}」`,
+  // 新成员加入 → 通知**既有成员**（对称于退群通知；透明度+隐私：盲人须知谁新加入、从此能看到会话）。
+  memberJoinedTitle: (l: PushLang): string =>
+    l === 'en' ? 'A member joined the group' : '有新成员加入群聊',
+  memberJoinedBody: (name: string, groupName: string, l: PushLang): string =>
+    l === 'en' ? `${name} joined the group "${groupName}"` : `${name} 加入了群聊「${groupName}」`,
   groupDissolvedTitle: (l: PushLang): string =>
     l === 'en' ? 'A group chat was dissolved' : '群聊已解散',
   groupDissolvedBody: (groupName: string, l: PushLang): string =>

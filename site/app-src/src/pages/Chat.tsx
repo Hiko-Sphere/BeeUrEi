@@ -926,28 +926,36 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForwar
 /// 图片消息：缩略图（≤64 高）+ 点击开全屏灯箱看大图——盲人分享的证件/单据/信件/标签照，协助者常要放大看清细节。
 function ImageMessage({ src, t }: { src: string; t: (z: string, e: string) => string }) {
   const [zoomed, setZoomed] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const alt = t('图片消息', 'Photo')
   return (
     <>
-      <button type="button" onClick={() => setZoomed(true)} aria-label={t('放大查看图片', 'View photo full size')} className="block">
+      <button ref={triggerRef} type="button" onClick={() => setZoomed(true)} aria-label={t('放大查看图片', 'View photo full size')} className="block">
         <img src={src} alt={alt} className="max-h-64 rounded-lg" />
       </button>
-      {zoomed && <ImageLightbox src={src} alt={alt} onClose={() => setZoomed(false)} t={t} />}
+      {/* 关闭时把焦点还给缩略图（proper 模态焦点归还，键盘/读屏用户不至于焦点丢到文档开头）。 */}
+      {zoomed && <ImageLightbox src={src} alt={alt} onClose={() => { setZoomed(false); triggerRef.current?.focus() }} t={t} />}
     </>
   )
 }
 
 /// 图片灯箱（全屏查看）：暗底 + 居中大图（≤90vh/90vw）；点背景 / 关闭按钮 / Esc 关闭。role=dialog+aria-modal 供读屏。
+/// 模态焦点：打开即把焦点移入关闭键；Tab 锁在灯箱内（唯一可聚焦=关闭键），焦点不逃到背后被 aria-modal 标记为 inert 的内容。
 function ImageLightbox({ src, alt, onClose, t }: { src: string; alt: string; onClose: () => void; t: (z: string, e: string) => string }) {
+  const closeRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    closeRef.current?.focus() // 打开即焦点入灯箱
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+      else if (e.key === 'Tab') { e.preventDefault(); closeRef.current?.focus() } // 焦点锁在关闭键，不逃出灯箱
+    }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
   return (
     <div role="dialog" aria-modal="true" aria-label={alt} onClick={onClose} data-testid="image-lightbox"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
-      <button type="button" onClick={onClose} aria-label={t('关闭', 'Close')}
+      <button ref={closeRef} type="button" onClick={onClose} aria-label={t('关闭', 'Close')}
         className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white/90 hover:bg-white/20"><IconX width={20} height={20} /></button>
       {/* 点图片本身不关闭（stopPropagation），只点背景/关闭键关。 */}
       <img src={src} alt={alt} onClick={(e) => e.stopPropagation()} className="max-h-[90vh] max-w-[90vw] rounded-lg" />

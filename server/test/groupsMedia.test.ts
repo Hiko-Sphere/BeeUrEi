@@ -159,6 +159,34 @@ describe('群聊', () => {
     expect(gone.statusCode).toBe(404)
   })
 
+  it('成员退出/被移出 → 通知**其余成员**（退出者/触发者不自扰；盲人知支持网络变化）', async () => {
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const owner = await reg(app, 'lvOwner', 'blind')
+    const m1 = await reg(app, 'lvM1', 'helper'); const m2 = await reg(app, 'lvM2', 'helper'); const m3 = await reg(app, 'lvM3', 'helper')
+    for (const [tok, uname] of [[m1, 'lvM1'], [m2, 'lvM2'], [m3, 'lvM3']] as const) await bind(app, owner.token, tok.token, uname)
+    const gid = (await app.inject({ method: 'POST', url: '/api/groups', headers: auth(owner.token), payload: { name: '家群', memberIds: [m1.user.id, m2.user.id, m3.user.id] } })).json().group.id as string
+    const left = (uid: string) => store.notificationsForUser(uid).filter((n) => n.kind === 'group_member_left')
+
+    // m1 自愿退群 → owner/m2/m3 各收 1 条 group_member_left（"退出"措辞）；m1 自己不收。
+    expect((await app.inject({ method: 'DELETE', url: `/api/groups/${gid}/members/${m1.user.id}`, headers: auth(m1.token) })).statusCode).toBe(200)
+    expect(left(owner.user.id).length).toBe(1)
+    expect(left(owner.user.id)[0].body).toContain('lvM1')
+    expect(left(owner.user.id)[0].body).toMatch(/退出|left/)
+    expect(left(m2.user.id).length).toBe(1); expect(left(m3.user.id).length).toBe(1)
+    expect(left(m1.user.id).length).toBe(0) // 退出者不自扰
+
+    // owner 踢 m2 → m2 收 group_removed（被踢者本人）；owner(触发者)不新增 member_left；m3 收 memberRemoved（"被移出"）。
+    expect((await app.inject({ method: 'DELETE', url: `/api/groups/${gid}/members/${m2.user.id}`, headers: auth(owner.token) })).statusCode).toBe(200)
+    expect(store.notificationsForUser(m2.user.id).filter((n) => n.kind === 'group_removed').length).toBe(1)
+    expect(left(owner.user.id).length).toBe(1) // 触发者不自扰（仍是 m1 退群那 1 条）
+    expect(left(m3.user.id).length).toBe(2)   // m1 退 + m2 被踢，各 1 条
+    const m3bodies = left(m3.user.id).map((n) => n.body)
+    expect(m3bodies.some((b) => b.includes('lvM2') && /移出|removed/.test(b))).toBe(true) // m2 被移出
+    expect(m3bodies.some((b) => b.includes('lvM1') && /退出|left/.test(b))).toBe(true)   // m1 退出
+    await app.close()
+  })
+
   it('加人端点有端级限流（挡刷 group_added 推送骚扰；与建群同源、20/min）', async () => {
     const app = buildApp(new MemoryStore())
     const owner = await reg(app, 'rlgowner', 'blind')

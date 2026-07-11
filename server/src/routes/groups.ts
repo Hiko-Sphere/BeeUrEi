@@ -115,10 +115,25 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store, push: Pu
     // 却不重置 mute，导致"退群本想重置状态、重进却神秘地收不到横幅"（与已读重置不对称，几近确定是遗漏）。idempotent。
     store.setGroupMuted(group.id, userId, false)
     // 群主踢人才通知被踢者（自愿退群不通知自己）——否则被移出的盲人只见群悄然消失、不知缘由。
-    if (me === group.ownerId && userId !== me) {
+    const isKick = me === group.ownerId && userId !== me
+    if (isKick) {
       const l = pushLang(store.findById(userId)?.language)
       notifyUser(store, push, userId, 'group_removed',
                  pushStrings.groupRemovedTitle(l), pushStrings.groupRemovedBody(group.name, l), { groupId: group.id })
+    }
+    // 通知**其余成员**成员离开/被移出（此前只通知被踢者本人；剩下的人尤其盲人不知支持网络已变——家人/协助者
+    // 离群是会话级状态变化，与改群名/加人同族须知会）。触发者不再自扰（踢=群主自知；退=离开者已走、不在剩余里）。
+    const leaverName = store.findById(userId)?.displayName ?? '—'
+    const actorId = isKick ? me : userId
+    for (const uid of updated?.memberIds ?? []) {
+      if (uid === actorId) continue
+      const u = store.findById(uid)
+      if (!u) continue
+      const l = pushLang(u.language)
+      notifyUser(store, push, uid, 'group_member_left',
+                 isKick ? pushStrings.memberRemovedTitle(l) : pushStrings.memberLeftTitle(l),
+                 isKick ? pushStrings.memberRemovedBody(leaverName, group.name, l) : pushStrings.memberLeftBody(leaverName, group.name, l),
+                 { groupId: group.id })
     }
     return { group: updated }
   })

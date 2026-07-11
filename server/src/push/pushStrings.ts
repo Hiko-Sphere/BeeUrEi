@@ -123,6 +123,15 @@ export const pushStrings = {
     l === 'en' ? 'Removed from a group chat' : '你已被移出群聊',
   groupRemovedBody: (groupName: string, l: PushLang): string =>
     l === 'en' ? `You are no longer in the group "${groupName}"` : `你已不在群聊「${groupName}」中`,
+  // 群成员离开/被移出 → 通知**其余成员**（尤其盲人：家人/协助者离群=支持网络变化，须知情，不能只靠"扫一眼"成员数）。
+  memberLeftTitle: (l: PushLang): string =>
+    l === 'en' ? 'A member left the group' : '有成员退出了群聊',
+  memberLeftBody: (name: string, groupName: string, l: PushLang): string =>
+    l === 'en' ? `${name} left the group "${groupName}"` : `${name} 退出了群聊「${groupName}」`,
+  memberRemovedTitle: (l: PushLang): string =>
+    l === 'en' ? 'A member was removed' : '有成员被移出群聊',
+  memberRemovedBody: (name: string, groupName: string, l: PushLang): string =>
+    l === 'en' ? `${name} was removed from the group "${groupName}"` : `${name} 被移出了群聊「${groupName}」`,
   groupDissolvedTitle: (l: PushLang): string =>
     l === 'en' ? 'A group chat was dissolved' : '群聊已解散',
   groupDissolvedBody: (groupName: string, l: PushLang): string =>

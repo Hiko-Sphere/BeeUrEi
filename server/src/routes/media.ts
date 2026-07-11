@@ -5,7 +5,7 @@ import { writeFile } from 'node:fs/promises'
 import { type Store, type MediaMeta, areLinked, isBlockedBetween } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
-import { ensureMediaDir, mediaPath, mediaFileExists } from '../media/storage'
+import { ensureMediaDir, mediaPath, mediaFileExists, removeMediaFile } from '../media/storage'
 
 /// 单个媒体文件上限 50MB（约 1 分钟 720p H.264）；路由 bodyLimit 略放宽容纳传输开销。
 export const MAX_MEDIA_BYTES = 50 * 1024 * 1024
@@ -79,7 +79,15 @@ export function registerMediaRoutes(app: FastifyInstance, store: Store): void {
       // 其它请求（含紧急呼叫/求助），并发上传更会串行叠加成秒级停顿。async writeFile 交给 libuv 线程池，事件循环
       // 期间照常服务。await 保证写完再 createMedia（顺序不变）；写失败(磁盘满等)照旧抛出→500，不落半条 media 记录。
       await writeFile(mediaPath(meta.id), body)
-      store.createMedia(meta) // 字节已转入已落库计数（mediaBytesForOwner）
+      try {
+        store.createMedia(meta) // 字节已转入已落库计数（mediaBytesForOwner）
+      } catch (e) {
+        // 元数据落库失败（better-sqlite3 在 SQLITE_BUSY/IOERR 时**同步抛**）：文件已落盘但无元数据行。
+        // orphanSweep 只遍历 media 表元数据(allMedia)、**扫不到"裸文件"** → 永久占盘且不计配额。回滚刚写的
+        // 文件，保持磁盘与元数据一致（同 KYC F1「await 落盘后再抛错须回滚文件」；removeMediaFile 幂等）。
+        removeMediaFile(meta.id)
+        throw e
+      }
       return reply.code(201).send({ media: meta })
     } finally {
       // 释放预留：成功时字节已入 mediaBytesForOwner、失败时不占额。createMedia→finally 同步相邻，无并发可见"双计"窗口。

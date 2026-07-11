@@ -6,10 +6,25 @@ describe('notifDestination 通知点击跳转目的地', () => {
     expect(notifDestination('friend_request')).toBe('/family')
     expect(notifDestination('friend_accepted')).toBe('/family')
   })
-  it('群成员变更 → 聊天页', () => {
+  it('群成员变更 → 聊天页（无 data 兜底列表）', () => {
     expect(notifDestination('group_added')).toBe('/chat')
     expect(notifDestination('group_removed')).toBe('/chat')
     expect(notifDestination('group_dissolved')).toBe('/chat')
+  })
+  it('会话类通知带 data → 直达对应会话（群深链 /chat/g/:id、单聊 /chat/:peerId）', () => {
+    // 群成员变动/改名/加入/离开：有 groupId → 直达该群（iter123 群深链路由）。
+    expect(notifDestination('group_member_joined', { groupId: 'g1' })).toBe('/chat/g/g1')
+    expect(notifDestination('group_member_left', { groupId: 'g2' })).toBe('/chat/g/g2')
+    expect(notifDestination('group_renamed', { groupId: 'g3' })).toBe('/chat/g/g3')
+    // 置顶通知：群 → 群深链；单聊 → 对端会话；此前 message_pinned 无去处(null)、点了没反应。
+    expect(notifDestination('message_pinned', { groupId: 'g5' })).toBe('/chat/g/g5')
+    expect(notifDestination('message_pinned', { fromId: 'p3' })).toBe('/chat/p3')
+    expect(notifDestination('message_pinned')).toBe('/chat')   // 无 data 兜底（至少可点开列表，不再是死通知）
+    // 群 id 需 URL 编码（防特殊字符破链）。
+    expect(notifDestination('group_added', { groupId: 'a/b' })).toBe('/chat/g/a%2Fb')
+    // 例外：被移出/群解散——你已进不去那个群，即便带 groupId 也不深链，落聊天列表（否则点了进 403/空群）。
+    expect(notifDestination('group_removed', { groupId: 'g1' })).toBe('/chat')
+    expect(notifDestination('group_dissolved', { groupId: 'g1' })).toBe('/chat')
   })
   it('路线通知 → 路线库页（原断言 null 的前提"web 无路线页"已过时——/routes 库+预览页已建成）', () => {
     expect(notifDestination('route_added')).toBe('/routes')

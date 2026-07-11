@@ -11,7 +11,7 @@ import { ContactMedicalInfo } from './call/EmergencyAlertHost'
 
 /// 点击通知跳到"可操作页"：好友请求→亲友页（去接受/拒绝）、群变更→聊天页；其余无明确去处返回 null（仅标已读）。
 /// 纯函数便于单测。
-export function notifDestination(kind: string): string | null {
+export function notifDestination(kind: string, data?: Record<string, string> | null): string | null {
   // 账号/安全类**必须先判**（在 friend/link 之前）：安全告警 security_apple_linked/security_apple_unlinked
   // 含子串 "link"，若 friend/link 先命中会被错误送到 /family——而绑/解绑 Apple 登录该去 /account 复核/撤销。
   // 安全变更预警/医疗被查看/实名结果都归账户页。
@@ -23,7 +23,15 @@ export function notifDestination(kind: string): string | null {
   // 此前落到 null——点了没去处，而这条通知的全部意义就是"去操作报到"。
   if (kind.includes('checkin')) return '/family'
   if (kind.includes('friend') || kind.includes('link')) return '/family'
-  if (kind.includes('group')) return '/chat'
+  // 会话类通知（群成员变动 group_*、置顶 message_pinned）→ **直达对应会话**（群走 iter123 的 /chat/g/:id 深链、
+  // 单聊 /chat/:peerId），data 里带 groupId/fromId。此前群类一律落聊天列表、置顶通知无去处（null）——点了还得自己找。
+  if (kind.includes('group') || kind === 'message_pinned') {
+    // 例外：group_removed（你被移出）/group_dissolved（群已解散）——你已进不去那个群，深链会 403/空，落聊天列表。
+    if (kind === 'group_removed' || kind === 'group_dissolved') return '/chat'
+    if (data?.groupId) return `/chat/g/${encodeURIComponent(data.groupId)}`
+    if (data?.fromId) return `/chat/${encodeURIComponent(data.fromId)}`
+    return '/chat'
+  }
   if (kind.includes('route')) return '/routes' // 路线通知 → 路线库页（查看/预览亲友新加的路线；执行仍在 iOS）
   if (kind.includes('place') || kind.includes('arrival') || kind.includes('battery')) return '/locations' // 到达/离开围栏(place_arrival/place_departure)/低电量 → 位置页看对方在哪
   if (kind === 'location_request') return '/locations' // 有人请求你共享位置 → 位置页（开始共享的开关就在那里）
@@ -94,7 +102,7 @@ export function NotificationsPage() {
   const markAll = async () => { try { await api.markAllNotifsRead(); void load() } catch { /* ignore */ } }
   const markOne = async (n: NotificationInfo) => { if (n.readAt) return; try { await api.markNotifRead(n.id); setItems((cur) => cur?.map((x) => x.id === n.id ? { ...x, readAt: Date.now() } : x) ?? cur) } catch { /* ignore */ } }
   // 点击通知：标已读 + 跳到可操作页（好友请求→亲友页接受、群变更→聊天页）。
-  const onClickNotif = (n: NotificationInfo) => { void markOne(n); const dest = notifDestination(n.kind); if (dest) navigate(dest) }
+  const onClickNotif = (n: NotificationInfo) => { void markOne(n); const dest = notifDestination(n.kind, n.data); if (dest) navigate(dest) }
   // 删除单条：乐观从列表移除（收件箱清理，仅本人；服务端幂等）。
   const deleteOne = async (n: NotificationInfo) => { setItems((cur) => cur?.filter((x) => x.id !== n.id) ?? cur); try { await api.deleteNotif(n.id) } catch { void load() } }
   // 清空已读：只清已看过的，保留未读（避免误清尚未看的紧急/求助提醒）。
@@ -144,7 +152,7 @@ export function NotificationsPage() {
                       此前 onClick 挂在 <li> 上，对键盘/读屏完全不可达（同聊天会话行早先修过的一类）。
                       位置链接/回拨键是它的**兄弟**节点、不嵌套在按钮内——避免 nested-interactive 违规。 */}
                   <button type="button" onClick={() => onClickNotif(n)}
-                    aria-label={notifDestination(n.kind) ? t(`${n.title}，打开`, `${n.title}, open`) : n.title}
+                    aria-label={notifDestination(n.kind, n.data) ? t(`${n.title}，打开`, `${n.title}, open`) : n.title}
                     className="-mx-1 block w-full rounded px-1 text-left transition hover:surface-2">
                     <div className="flex items-center gap-2">
                       <span className="truncate font-medium">{n.title}</span>

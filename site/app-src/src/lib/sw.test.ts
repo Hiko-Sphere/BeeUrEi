@@ -197,6 +197,18 @@ describe('sw.js 通知点击深链（notificationclick 路由）', () => {
   it('请求共享位置 nudge → /app/locations（可操作项直达其操作页，与应用内路由一致）', async () => {
     expect(await fireClick({ kind: 'location_request', fromId: 'u1' })).toBe(`${O}/app/locations`)
   })
+  it('会话类通知（群成员变动/置顶）→ 直达会话；被移出/群解散例外落通知页', async () => {
+    // 群成员变动带 groupId → 群深链（与应用内 notifDestination 一致）。
+    expect(await fireClick({ kind: 'group_member_joined', groupId: 'g1' })).toBe(`${O}/app/chat/g/g1`)
+    expect(await fireClick({ kind: 'group_member_left', groupId: 'g2' })).toBe(`${O}/app/chat/g/g2`)
+    expect(await fireClick({ kind: 'group_renamed', groupId: 'g3' })).toBe(`${O}/app/chat/g/g3`)
+    // 置顶：群 → 群深链；单聊 → 对端会话。
+    expect(await fireClick({ kind: 'message_pinned', groupId: 'g5' })).toBe(`${O}/app/chat/g/g5`)
+    expect(await fireClick({ kind: 'message_pinned', fromId: 'p3' })).toBe(`${O}/app/chat/p3`)
+    // 例外：被移出/群解散——进不去，落通知页（绝不深链到 403/空群）。
+    expect(await fireClick({ kind: 'group_removed', groupId: 'g1' })).toBe(`${O}/app/notifications`)
+    expect(await fireClick({ kind: 'group_dissolved', groupId: 'g1' })).toBe(`${O}/app/notifications`)
+  })
   it('告警/其它 kind → 通知页（诚实位置标注 + 回拨都在那）', async () => {
     expect(await fireClick({ kind: 'emergency_alert', fromId: 'u1' })).toBe(`${O}/app/notifications`)
     expect(await fireClick({ kind: 'friend_request', fromId: 'u2' })).toBe(`${O}/app/notifications`)

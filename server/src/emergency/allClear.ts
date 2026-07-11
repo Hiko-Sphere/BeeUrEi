@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { Store } from '../db/store'
+import { type Store, isBlockedBetween } from '../db/store'
 import type { PushSender } from '../push/apns'
 import type { WebPushSender } from '../push/webPush'
 import { pushLang, pushStrings } from '../push/pushStrings'
@@ -22,8 +22,11 @@ export function broadcastAllClear(
   if (!me) return { resolved, notified: 0 }
   const safeSubs = (uid: string) => { try { return store.webPushSubscriptionsForUser(uid) } catch { return [] } }
   const safeBadge = (uid: string): number | undefined => { try { return totalUnreadFor(store, uid).total } catch { return undefined } }
+  // 排除被拉黑者：与首呼/未报到/升级三条 SOS 链同口径（用户拍板"完全排除被拉黑联系人"，iter62/79）。报平安虽不
+  // 带 GPS/hasMedical，但发给被拉黑者会泄露"盲人刚有过一次遇险事件"的存在位、且与"他们从未收到该告警"不一致
+  // ——被为安全而拉黑之人(DV/跟踪场景要切断者)不该获知本人的遇险状态。这是 SOS 扇出的**第四条链**(报平安)。
   const members = store.linksByOwner(userId)
-    .filter((l) => (l.status ?? 'accepted') === 'accepted')
+    .filter((l) => (l.status ?? 'accepted') === 'accepted' && !isBlockedBetween(store, userId, l.memberId))
     .map((l) => store.findById(l.memberId))
     .filter((m): m is NonNullable<typeof m> => !!m)
   // kind='emergency_clear'：客户端据此区别于告警——绝不触发响铃/大模态，只作普通通知 + 消掉对应告警模态。

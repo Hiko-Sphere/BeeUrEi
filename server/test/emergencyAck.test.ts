@@ -201,6 +201,23 @@ describe('紧急报平安 /api/emergency/all-clear', () => {
     expect(clear!.data).toMatchObject({ kind: 'emergency_clear', alertId: 'a1' }) // 带 alertId 供客户端消对应告警模态
   })
 
+  it('被拉黑的联系人不收报平安广播——与首呼/未报到/升级同口径"完全排除"（SOS 第四条链）', async () => {
+    const { a, store, owner, helperId } = await seed()
+    const ownerId = store.findByUsername('clearsender')!.id
+    // 再加一名 accepted 紧急联系人 blocked，被 owner 拉黑（拉黑不删链）。
+    const blocked = (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'clearblocked', password: 'secret123', role: 'helper' } })).json()
+    store.createLink({ id: 'lb', ownerId, memberId: blocked.user.id, relation: '家人', isEmergency: true, createdAt: 1, status: 'accepted' })
+    store.createBlock({ id: 'blk', blockerId: ownerId, blockedId: blocked.user.id, createdAt: Date.now() })
+
+    const res = await a.inject({ method: 'POST', url: '/api/emergency/all-clear',
+      headers: { authorization: `Bearer ${owner.token}` }, payload: { alertId: 'a1' } })
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toMatchObject({ notified: 1 }) // 仅未拉黑的 helper 计入
+    const clearFor = (uid: string) => store.notificationsForUser(uid).filter((n) => n.kind === 'emergency_clear')
+    expect(clearFor(helperId)).toHaveLength(1)        // 未拉黑者收到
+    expect(clearFor(blocked.user.id)).toHaveLength(0) // 被拉黑者一条都没有（不泄露"盲人刚遇险"的存在位）
+  })
+
   it('报平安把该用户最近的紧急事件标记为已解除（admin 事件列表可区分误报/已解除）', async () => {
     const { a, store, owner } = await seed()
     const ownerId = store.findByUsername('clearsender')!.id

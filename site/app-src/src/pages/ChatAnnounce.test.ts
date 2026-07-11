@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { nextChatAnnouncement, mergeMessagesStable, conversationPreview, needsDateSeparator, dateSeparatorLabel, firstUnreadMessageId, isNearBottom, type AnnounceState } from './Chat'
+import { nextChatAnnouncement, mergeMessagesStable, conversationPreview, needsDateSeparator, dateSeparatorLabel, firstUnreadMessageId, type AnnounceState } from './Chat'
+import { isNearBottom } from '../lib/scroll' // 聊天线程与通话内 RTT 共用的"是否贴底"判据
 import type { ChatMessage, User } from '../lib/api'
 
 const tzh = (z: string, _e: string) => z // 默认中文

@@ -5,6 +5,7 @@ import { useToast, Avatar, Button, Modal } from '../../components/ui'
 import { IconMic, IconMicOff, IconFlash, IconZoom, IconRecord, IconHangup, IconFlag, IconShield, IconChat, IconSend } from '../../components/icons'
 import { CallEngine, type MediaState, type Quality, CALL_TEXT_MAX, validCallText, callTextRejectText, CallQualityAnnouncer } from '../../lib/webrtc'
 import { ReportDialog } from '../../components/ReportDialog'
+import { isNearBottom } from '../../lib/scroll'
 import type { ActiveCall } from './CallController'
 
 export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?: 'peer' | 'admin' | 'signaling') => void }) {
@@ -47,7 +48,12 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
   // keydown 上已是 false——须自持合成态并用 setTimeout(0) 延迟复位才能挡住"确认候选词即误发送"。
   const composingRef = useRef(false)
   const rttLogRef = useRef<HTMLDivElement>(null)
-  useEffect(() => { rttLogRef.current?.scrollTo({ top: rttLogRef.current.scrollHeight }) }, [rtt, chatOpen])
+  const rttNearBottomRef = useRef(true) // 用户是否贴着 RTT 记录底部；新文字仅在此才自动滚到底
+  const onRttScroll = () => { const el = rttLogRef.current; if (el) rttNearBottomRef.current = isNearBottom(el) }
+  // 面板打开：滚到底看最新一条（并把"贴底"基线复位，因面板关着时容器未渲染、无法记录滚动位置）。
+  useEffect(() => { if (chatOpen) { rttNearBottomRef.current = true; rttLogRef.current?.scrollTo({ top: rttLogRef.current.scrollHeight }) } }, [chatOpen])
+  // 新文字到达：仅当用户本就贴底才自动滚到底——上翻回读较早文字（听障用户嘈杂环境下常需回看）时不被猛拽回底部。
+  useEffect(() => { if (rttNearBottomRef.current) rttLogRef.current?.scrollTo({ top: rttLogRef.current?.scrollHeight ?? 0 }) }, [rtt])
 
   // 通话计时（连接后）。
   useEffect(() => {
@@ -151,6 +157,7 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
       toast(t('尚未连接，文字未发送', 'Not connected — text not sent'), 'error')
       return
     }
+    rttNearBottomRef.current = true // 发出自己的文字 → 一定滚到底看到它（即便此前上翻着回读）
     setRtt((l) => [...l, { id, text: clean, mine: true }])
     setDraft('')
   }
@@ -239,7 +246,7 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
       {/* 通话内实时文字（RTT）面板：随音视频并行的文字通道，收发都在通话覆盖层内完成 */}
       {chatOpen && (
         <div className="mx-4 mt-2 flex max-h-52 flex-col rounded-2xl bg-white/5 p-2">
-          <div ref={rttLogRef} role="log" aria-live="polite" aria-label={t('通话文字消息', 'In-call text messages')}
+          <div ref={rttLogRef} onScroll={onRttScroll} role="log" aria-live="polite" aria-label={t('通话文字消息', 'In-call text messages')}
             tabIndex={0} /* 可键盘聚焦以滚动日志（WCAG 2.1.1）——纯文字气泡无可聚焦子元素 */
             className="min-h-[3.5rem] flex-1 space-y-1 overflow-y-auto px-1 py-1 text-sm">
             {rtt.length === 0 && (

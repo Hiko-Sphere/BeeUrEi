@@ -9,6 +9,7 @@ import { parseLocation, appleMapsUrl, locationMessageText } from '../lib/locatio
 import { linkifyParts } from '../lib/linkify'
 import { imageFileFromClipboard } from '../lib/clipboardImage'
 import { isForwardableKind } from '../lib/chatMessage'
+import { isNearBottom } from '../lib/scroll'
 import { ReportDialog } from '../components/ReportDialog'
 import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo, fmtHm, fmtTime, Modal, Button } from '../components/ui'
 import { IconChat, IconSend, IconPlus, IconX, IconPin } from '../components/icons'
@@ -268,12 +269,8 @@ export function firstUnreadMessageId(msgs: ChatMessage[], myId: string | undefin
   return firstId
 }
 
-/// 消息容器是否已滚到底部附近（阈值内）：新消息**仅在**用户已在底部附近时才自动滚到底——上翻看历史（如复看盲人
-/// 发的地址/单据）时，新消息不该把人猛拽回底部、丢失阅读位置（各主流 IM 一致）。纯函数、可注入 metrics 单测
-/// （jsdom 无真实布局，scrollHeight/Top/clientHeight 皆 0，故抽出以真实数值测判据）。
-export function isNearBottom(el: { scrollHeight: number; scrollTop: number; clientHeight: number }, threshold = 120): boolean {
-  return el.scrollHeight - el.scrollTop - el.clientHeight < threshold
-}
+// 「新消息是否自动滚到底」的判据 isNearBottom 抽到 lib/scroll（与通话内实时文字 RTT 共用，见 CallScreen），
+// 本模块由顶部 import 使用；单测见 ChatAnnounce.test.ts（直接测 lib/scroll）。
 
 function preview(m: ChatMessage | null, t: (z: string, e: string) => string): string {
   if (!m) return t('暂无消息', 'No messages')

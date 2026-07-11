@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api, type FamilyLink } from '../lib/api'
 import { useI18n } from '../lib/i18n'
+import { useCall } from '../pages/call/CallController'
 import { Avatar, Card, useToast } from './ui'
-import { IconPin } from './icons'
+import { IconPin, IconPhone, IconChat } from './icons'
 
 /// "未在共享的联系人"列表（Locations 页用；独立文件不碰 Leaflet，可在 jsdom 单测）：
 /// 已接受联系人里此刻**没有**共享位置者，各带"请求共享"按钮——家人打电话没人接开始担心时，
@@ -11,6 +13,8 @@ import { IconPin } from './icons'
 export function RequestShareList({ sharingIds }: { sharingIds: Set<string> }) {
   const { t } = useI18n()
   const toast = useToast()
+  const { startOutgoing, active } = useCall() // 就地呼叫未共享的联系人（担心时先打电话，比只能"请求共享"更直接）
+  const navigate = useNavigate()
   const [links, setLinks] = useState<FamilyLink[] | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [requestedIds, setRequestedIds] = useState<Set<string>>(new Set()) // 本会话内已请求（按钮变"已请求"防连点）
@@ -42,6 +46,18 @@ export function RequestShareList({ sharingIds }: { sharingIds: Set<string> }) {
               <div className="truncate font-medium">{l.memberName}</div>
               <div className="text-xs text-faint">{l.relation}</div>
             </div>
+            {/* 担心时先直接联系（呼叫/发消息），而非只能"请求共享"干等——与共享中联系人行(SharingContactRow)对齐，
+                让位置页成为完整的"看得到 + 联系得上"枢纽。呼叫通话中禁用防并发；三动作互不嵌套(合法 a11y)。 */}
+            <button type="button" onClick={() => { if (!active) void startOutgoing(l.memberId, l.memberName, l.memberAvatar) }} disabled={!!active}
+              aria-label={t(`呼叫 ${l.memberName}`, `Call ${l.memberName}`)}
+              className="shrink-0 rounded-full p-2 text-accent transition hover:surface-2 disabled:cursor-not-allowed disabled:opacity-40">
+              <IconPhone width={16} height={16} />
+            </button>
+            <button type="button" onClick={() => navigate(`/chat/${encodeURIComponent(l.memberId)}`)}
+              aria-label={t(`给 ${l.memberName} 发消息`, `Message ${l.memberName}`)}
+              className="shrink-0 rounded-full p-2 text-accent transition hover:surface-2">
+              <IconChat width={16} height={16} />
+            </button>
             <button type="button" onClick={() => void request(l)} disabled={busyId === l.memberId || requestedIds.has(l.memberId)}
               className="inline-flex shrink-0 items-center gap-1 rounded-lg surface-2 px-2.5 py-1.5 text-xs font-medium text-accent transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
               aria-label={t(`请求 ${l.memberName} 共享位置`, `Ask ${l.memberName} to share location`)}>

@@ -2,6 +2,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
+const h = vi.hoisted(() => ({ nav: vi.fn(), startOutgoing: vi.fn(), active: null as unknown }))
+vi.mock('react-router-dom', () => ({ useNavigate: () => h.nav }))
+vi.mock('../pages/call/CallController', () => ({ useCall: () => ({ startOutgoing: h.startOutgoing, active: h.active }) }))
 vi.mock('../lib/api', () => ({
   api: { familyLinks: vi.fn(), requestLocation: vi.fn() },
   APIError: class extends Error { code = ''; status = 0 },
@@ -19,6 +22,7 @@ const links = [
 describe('RequestShareList 请求共享位置（nudge）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    h.active = null
     mock(api.familyLinks).mockResolvedValue({ links })
     mock(api.requestLocation).mockResolvedValue({ ok: true })
   })
@@ -38,5 +42,26 @@ describe('RequestShareList 请求共享位置（nudge）', () => {
     render(<RequestShareList sharingIds={new Set(['m1', 'm2'])} />)
     await waitFor(() => expect(api.familyLinks).toHaveBeenCalled())
     expect(screen.queryByText('未在共享的联系人')).toBeNull()
+  })
+
+  it('未共享联系人可直接呼叫/发消息（担心时先联系，不必只能请求共享）', async () => {
+    render(<RequestShareList sharingIds={new Set()} />)
+    await screen.findByText('妈妈')
+    fireEvent.click(screen.getByRole('button', { name: '呼叫 妈妈' }))
+    expect(h.startOutgoing).toHaveBeenCalledWith('m1', '妈妈', undefined)
+    fireEvent.click(screen.getByRole('button', { name: '给 妈妈 发消息' }))
+    expect(h.nav).toHaveBeenCalledWith('/chat/m1')
+  })
+
+  it('通话中 → 呼叫按钮禁用、点击不触发 startOutgoing（防并发）；发消息不受限', async () => {
+    h.active = { callId: 'c1' } // 模拟通话中
+    render(<RequestShareList sharingIds={new Set()} />)
+    await screen.findByText('妈妈')
+    const callBtn = screen.getByRole('button', { name: '呼叫 妈妈' })
+    expect(callBtn).toBeDisabled()
+    fireEvent.click(callBtn)
+    expect(h.startOutgoing).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '给 妈妈 发消息' }))
+    expect(h.nav).toHaveBeenCalledWith('/chat/m1')
   })
 })

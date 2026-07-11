@@ -300,4 +300,21 @@ describe('每日定时报到配置（Snug Safety 式）', () => {
     expect(typeof arg.tz).toBe('string')
     expect(arg.tz.length).toBeGreaterThan(0) // 浏览器 IANA 时区
   })
+
+  it('备注从服务端回填到输入框（可念给亲友的上下文）', async () => {
+    mock(api.checkinSchedule).mockResolvedValue({ schedule: { enabled: true, startMinute: 540, durationMinutes: 60, tz: 'Asia/Shanghai', note: '每天晨跑' } })
+    render(<FamilyPage />)
+    const noteInput = await screen.findByLabelText('每日报到备注') as HTMLInputElement
+    await waitFor(() => expect(noteInput.value).toBe('每天晨跑'))
+  })
+
+  it('编辑备注 → 保存时带上 note（此前每日报到无处编辑备注、亲友收不到上下文）', async () => {
+    render(<FamilyPage />)
+    const noteInput = await screen.findByLabelText('每日报到备注')
+    fireEvent.change(noteInput, { target: { value: '每天晨跑，没报平安可能出事' } })
+    const sw = await screen.findByRole('switch', { name: '每日定时报到' })
+    fireEvent.click(sw) // 开→关，触发保存
+    await waitFor(() => expect(api.setCheckinSchedule).toHaveBeenCalled())
+    expect(mock(api.setCheckinSchedule).mock.calls[0][0].note).toBe('每天晨跑，没报平安可能出事')
+  })
 })

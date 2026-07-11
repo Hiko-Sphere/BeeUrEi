@@ -389,6 +389,12 @@ function DailyScheduleSection() {
         </select>
         {enabled && <Button variant="soft" onClick={() => void save(true)} disabled={busy}>{t('保存修改', 'Save')}</Button>}
       </div>
+      {/* 备注（会随「到期提醒」与「错过报到」告警念给亲友，给他们判断险情的上下文）——与一次性报到的备注对等，
+          此前每日报到独缺此输入：dnote 能从服务端载入回显、却无处编辑，网页用户设不了这条关键上下文。 */}
+      <div className="mt-2">
+        <Input value={dnote} onChange={(e) => setDnote(e.target.value)} maxLength={200} aria-label={t('每日报到备注', 'Daily check-in note')}
+          placeholder={t('备注（可选，会念给亲友）：每天晨跑，没报平安可能出事', 'Note (optional, read to your family): daily morning jog; if I miss it, something may be wrong')} />
+      </div>
     </div>
   )
 }

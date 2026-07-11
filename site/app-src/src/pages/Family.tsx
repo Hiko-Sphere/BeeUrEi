@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api, APIError, contentBlockedText, type FamilyLink, type IncomingLink, type SafetyTimer } from '../lib/api'
 import { hasUsableEmergencyContact } from '../lib/emergencyContacts'
 import { emergencyDirection } from '../lib/emergencyRelation'
-import { remainingText, durationName } from '../lib/safetyCheckin'
+import { durationName } from '../lib/safetyCheckin'
 import { classifyIdentifier } from '../lib/identifier'
 import { useI18n } from '../lib/i18n'
 import { useCall } from './call/CallController'
@@ -14,6 +14,7 @@ import { EmergencyReadinessCard } from '../components/EmergencyReadinessCard'
 import { CheckinHistorySection } from '../components/CheckinHistorySection'
 import { EmergencyContactPushWarning } from '../components/EmergencyContactPushWarning'
 import { EmergencyHistorySection } from '../components/EmergencyHistorySection'
+import { CheckinCountdown } from '../components/CheckinCountdown'
 
 export function FamilyPage() {
   const { t } = useI18n()
@@ -294,7 +295,8 @@ function SafetyCheckInCard() {
                  '⚠️ You have no contacts yet — no one will be alerted if you miss it. Add a contact below.')}
             </p>
           )}
-          <p className="text-lg font-semibold text-honey" aria-live="polite">{remainingText(timer.remainingSec, lang)}</p>
+          {/* 实时倒计时（每秒从 dueAt 递减）——此前只显服务端快照 remainingSec、卡片开着不动，是安全计时器的危险误导。 */}
+          <CheckinCountdown dueAt={timer.dueAt} lang={lang} />
           {timer.note && <p className="text-sm text-faint">{timer.note}</p>}
           <div className="flex flex-wrap gap-2">
             <Button onClick={complete} disabled={busy}>{t("我平安了", "I'm safe")}</Button>

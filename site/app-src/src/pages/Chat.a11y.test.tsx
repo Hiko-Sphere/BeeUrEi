@@ -56,3 +56,32 @@ describe('Chat 页无障碍门禁（axe 0 violations）', () => {
     expect(await axeViolations(container)).toEqual([])
   })
 })
+
+/// 键盘焦点可见（WCAG 2.4.7）：消息操作按钮（回应/回复/转发/编辑/撤回/置顶）平时 opacity-0、hover 才显。
+/// 它们是**真 <button>、始终在 Tab 序里**——若只随 hover 显现，纯键盘用户（含运动障碍者）会 Tab 到一串**隐形**
+/// 按钮、看不清焦点落在哪。修复：随 group-focus-within（焦点进气泡即整排显现，与 hover 对等）+ 兜底 focus-visible。
+/// 本测锁住该 class 不被回退（CSS 实际生成已在构建产物中人工核验）。
+describe('Chat 消息操作按钮键盘可见性（焦点进气泡即显现，不留"隐形却可 Tab 到"的按钮）', () => {
+  it('hover 才显的操作按钮带 group-focus-within:opacity-100（键盘聚焦时也显现）', async () => {
+    mock(api.conversations).mockResolvedValue({ conversations: [
+      { peer: { id: 'm1', username: 'xiaoming', displayName: '小明', role: 'blind', status: 'active', avatar: null }, last: { id: 'l1', fromId: 'm1', toId: 'me', kind: 'text', text: '你好', createdAt: 1_700_000_000_000 }, unread: 0, muted: false, online: true },
+    ] })
+    mock(api.groups).mockResolvedValue({ groups: [] })
+    mock(api.markRead).mockResolvedValue({})
+    mock(api.lookupUser).mockResolvedValue({ user: null })
+    mock(api.familyLinks).mockResolvedValue({ links: [] })
+    mock(api.messagesWith).mockResolvedValue({ messages: [
+      { id: 'msg1', fromId: 'm1', toId: 'me', kind: 'text', text: '帮我看看这段', createdAt: 1_700_000_000_000 },
+    ] })
+
+    const { findByText, getAllByLabelText } = render(<ChatPage />)
+    await findByText('帮我看看这段')
+    const reactButtons = getAllByLabelText('表情回应') // 每条消息一枚"回应"按钮（hover 才显那类）
+    expect(reactButtons.length).toBeGreaterThan(0)
+    for (const btn of reactButtons) {
+      expect(btn.tagName).toBe('BUTTON')                              // 真按钮 → 恒在 Tab 序里
+      expect(btn.className).toContain('opacity-0')                    // 默认隐藏（非永久占位）
+      expect(btn.className).toContain('group-focus-within:opacity-100') // 键盘焦点进气泡 → 整排显现
+    }
+  })
+})

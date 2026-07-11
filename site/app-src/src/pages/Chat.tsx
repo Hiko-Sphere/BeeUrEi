@@ -947,11 +947,11 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForwar
           {/* 气泡显时刻(HH:MM)而非相对时间：日期由上方日期分隔归天，二者不冗余；title 悬停给完整日期时间（可及）。 */}
           <span title={fmtTime(m.createdAt, lang)}>{fmtHm(m.createdAt, lang)}</span>
           {m.editedAt && m.kind !== 'recalled' && <span data-testid="edited-tag">{t('已编辑', 'edited')}</span>}
-          {editable && !editing && <button onClick={() => { setDraft(m.text); setEditing(true) }} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('编辑', 'Edit')}</button>}
-          {replyable && !editing && <button onClick={onReply} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('回复', 'Reply')}</button>}
-          {forwardable && !editing && <button onClick={onForward} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('转发', 'Forward')}</button>}
+          {editable && !editing && <button onClick={() => { setDraft(m.text); setEditing(true) }} className="opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:underline">{t('编辑', 'Edit')}</button>}
+          {replyable && !editing && <button onClick={onReply} className="opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:underline">{t('回复', 'Reply')}</button>}
+          {forwardable && !editing && <button onClick={onForward} className="opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:underline">{t('转发', 'Forward')}</button>}
           {/* 置顶/取消置顶（每会话至多一条；撤回的不给入口）：把关键信息钉到顶部横幅。已是本会话置顶则显"取消置顶"。 */}
-          {onPin && m.kind !== 'recalled' && !editing && <button onClick={onPin} className="opacity-0 transition group-hover:opacity-100 hover:underline">{pinnedHere ? t('取消置顶', 'Unpin') : t('置顶', 'Pin')}</button>}
+          {onPin && m.kind !== 'recalled' && !editing && <button onClick={onPin} className="opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:underline">{pinnedHere ? t('取消置顶', 'Unpin') : t('置顶', 'Pin')}</button>}
           {/* 逐用户表情胶囊：每种 emoji 一枚，显数量（>1 才显）；我参与的高亮。点胶囊即切换本人的该表情（加/取消）。
               **谁回应了**：names 进 aria-label（读屏盲人听得到"小明、你 回应了👍"）+ title（悬停）——比只念"👍2"有用。 */}
           {reactionChips.map((r) => {
@@ -971,9 +971,9 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForwar
           })}
           {reactable && (
             <button onClick={() => setPicking((v) => !v)} aria-label={t('表情回应', 'React')}
-                    className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('回应', 'React')}</button>
+                    className="opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:underline">{t('回应', 'React')}</button>
           )}
-          {recallable && <button onClick={onRecall} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('撤回', 'Recall')}</button>}
+          {recallable && <button onClick={onRecall} className="opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:underline">{t('撤回', 'Recall')}</button>}
           {/* 已读回执（与 iOS 对齐；仅自己发的单聊，撤回的不显示）：可见文字对读屏助手直接可读，无需图标 + aria-label。 */}
           {mine && m.kind !== 'recalled' && !isGroup && (
             <span className={m.readAt ? 'font-medium' : 'opacity-70'}>{m.readAt ? t('已读', 'Read') : t('已送达', 'Delivered')}</span>

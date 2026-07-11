@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { api, chatErrorText, fetchMediaObjectURL, uploadMedia, type ChatMessage, type Conversation, type GroupSummary, type User } from '../lib/api'
+import { api, chatErrorText, fetchMediaObjectURL, uploadMedia, type ChatMessage, type Conversation, type GroupSummary, type User, type PinnedMessage } from '../lib/api'
 import { pollWhileVisible } from '../lib/poll'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
@@ -334,6 +334,7 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
   const { t, lang } = useI18n()
   const toast = useToast()
   const [msgs, setMsgs] = useState<ChatMessage[] | null>(null)
+  const [pinned, setPinned] = useState<PinnedMessage | null>(null) // 会话置顶消息（顶部横幅）；服务端每次回带最新
   // 会话草稿本地键：按**当前用户 + 会话**命名空间，避免同一浏览器换账号后串读到别人的草稿（隐私）。
   const draftKey = `beeurei:draft:${user?.id ?? 'anon'}:${sel.kind}:${sel.id}`
   // 草稿持久化：未发送的输入按会话存 localStorage，切会话(Thread 重挂载)/刷新/误触返回都不丢。
@@ -402,6 +403,7 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
       // 合并保留已加载的更早历史（Thread 带 key，切会话会重挂载，cur 只含本会话消息）：
       // 否则每 5s 轮询会把上翻加载的旧消息冲掉。重叠 id 以服务器为准。见 mergeMessagesStable。
       setMsgs((cur) => mergeMessagesStable(r.messages, cur))
+      setPinned(r.pinned ?? null) // 置顶随每次轮询刷新（他人置顶/取消/撤回自愈即时反映）
       if (sel.kind === 'peer') void api.markRead(sel.id).catch(() => {})
       else void api.markGroupRead(sel.id).catch(() => {})
     } catch { setMsgs((cur) => cur ?? []) }
@@ -531,6 +533,19 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
     catch (e) { toast(chatErrorText(e, t, t('操作失败', 'Failed')), 'error') }
   }
 
+  // 置顶/取消置顶（每会话至多一条）：置顶把该消息钉到顶部横幅；乐观更新后 load 以服务端权威回带为准。
+  const pin = async (m: ChatMessage) => {
+    setPinned({ ...m }) // 乐观：立即钉上
+    try { const r = await api.pinMessage(m.id); setPinned(r.pinned); toast(t('已置顶', 'Pinned'), 'ok'); void load() }
+    catch (e) { toast(chatErrorText(e, t, t('置顶失败', 'Pin failed')), 'error'); void load() }
+  }
+  const unpin = async () => {
+    const target = pinned?.id
+    setPinned(null) // 乐观取消
+    try { if (target) await api.unpinMessage(target); void load() }
+    catch (e) { toast(chatErrorText(e, t, t('操作失败', 'Failed')), 'error'); void load() }
+  }
+
   return (
     <div className="flex w-full flex-col rounded-2xl surface border border-[var(--line)]">
       {/* 新消息读屏播报：隐藏 aria-live 区，会话进行中收到对端消息时播报"对端名：内容"。 */}
@@ -603,6 +618,21 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
         </div>
       )}
 
+      {/* 置顶消息横幅（Telegram 式）：钉在会话顶部；点跳到原消息（不在窗口内则静默不跳，横幅本身已显内容）；X 取消置顶。 */}
+      {pinned && !searchOpen && (
+        <div className="flex items-center gap-2 border-b border-[var(--line)] bg-honey/5 px-4 py-2" data-testid="pinned-banner">
+          <IconPin width={15} height={15} className="shrink-0 text-honey" />
+          <button type="button" onClick={() => jumpToMessage(pinned.id)} className="min-w-0 flex-1 text-left"
+            aria-label={t(`置顶消息${pinned.pinnedByName ? `（${pinned.pinnedByName} 置顶）` : ''}：${preview(pinned, t)}，点击跳转`,
+              `Pinned message${pinned.pinnedByName ? ` (by ${pinned.pinnedByName})` : ''}: ${preview(pinned, t)}, tap to jump`)}>
+            <div className="text-[10px] font-semibold text-honey">{t('置顶', 'Pinned')}{pinned.pinnedByName ? ` · ${pinned.pinnedByName}` : ''}</div>
+            <div className="truncate text-xs text-soft">{preview(pinned, t)}</div>
+          </button>
+          <button type="button" onClick={() => void unpin()} aria-label={t('取消置顶', 'Unpin')}
+            className="shrink-0 rounded p-1 text-faint hover:text-danger"><IconX width={15} height={15} /></button>
+        </div>
+      )}
+
       <div ref={scrollRef} onScroll={onMsgScroll} tabIndex={0} aria-label={t('消息记录', 'Message history')}
         className={`flex-1 space-y-2 overflow-y-auto px-4 py-4 ${searchOpen ? 'hidden' : ''}`}>
         {canLoadEarlier && (
@@ -633,6 +663,7 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
             )}
             <Bubble m={m} mine={m.fromId === user?.id} lang={lang} t={t} onRecall={() => recall(m)} onReact={(e) => react(m, e)} onEdit={(nt) => edit(m, nt)}
               onReply={() => setReplyingTo(m)} onForward={() => setForwarding(m)} onQuoteClick={jumpToMessage}
+              onPin={() => (pinned?.id === m.id ? void unpin() : void pin(m))} pinnedHere={pinned?.id === m.id}
               repliedTo={m.replyTo ? msgs.find((x) => x.id === m.replyTo) : undefined}
               repliedName={(rid) => { const r = msgs.find((x) => x.id === rid); return r ? (r.fromId === user?.id ? t('你', 'You') : (sel.kind === 'group' ? (sel.members.find((mm) => mm.id === r.fromId)?.displayName ?? t('成员', 'Member')) : sel.name)) : '' }}
               isGroup={sel.kind === 'group'}
@@ -866,7 +897,7 @@ function GroupInfoDialog({ groupId, groupName, ownerId, members, meId, onClose, 
 
 const REACTION_CHOICES = ['👍', '❤️', '😂', '😮', '😢', '🙏'] // 与 iOS ChatStrings.reactionChoices 对齐
 
-function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForward, onQuoteClick, repliedTo, repliedName, senderName, isGroup }: { m: ChatMessage; mine: boolean; lang: 'zh' | 'en'; t: (z: string, e: string) => string; onRecall: () => void; onReact: (emoji: string) => void; onEdit: (newText: string) => void; onReply: () => void; onForward: () => void; onQuoteClick?: (id: string) => void; repliedTo?: ChatMessage; repliedName?: (id: string) => string; senderName?: string; isGroup?: boolean }) {
+function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForward, onPin, pinnedHere, onQuoteClick, repliedTo, repliedName, senderName, isGroup }: { m: ChatMessage; mine: boolean; lang: 'zh' | 'en'; t: (z: string, e: string) => string; onRecall: () => void; onReact: (emoji: string) => void; onEdit: (newText: string) => void; onReply: () => void; onForward: () => void; onPin?: () => void; pinnedHere?: boolean; onQuoteClick?: (id: string) => void; repliedTo?: ChatMessage; repliedName?: (id: string) => string; senderName?: string; isGroup?: boolean }) {
   const recallable = mine && m.kind !== 'recalled' && Date.now() - m.createdAt < 2 * 60_000
   const editable = mine && m.kind === 'text' && Date.now() - m.createdAt < 15 * 60_000
   const reactable = m.kind !== 'recalled'
@@ -919,6 +950,8 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForwar
           {editable && !editing && <button onClick={() => { setDraft(m.text); setEditing(true) }} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('编辑', 'Edit')}</button>}
           {replyable && !editing && <button onClick={onReply} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('回复', 'Reply')}</button>}
           {forwardable && !editing && <button onClick={onForward} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('转发', 'Forward')}</button>}
+          {/* 置顶/取消置顶（每会话至多一条；撤回的不给入口）：把关键信息钉到顶部横幅。已是本会话置顶则显"取消置顶"。 */}
+          {onPin && m.kind !== 'recalled' && !editing && <button onClick={onPin} className="opacity-0 transition group-hover:opacity-100 hover:underline">{pinnedHere ? t('取消置顶', 'Unpin') : t('置顶', 'Pin')}</button>}
           {/* 逐用户表情胶囊：每种 emoji 一枚，显数量（>1 才显）；我参与的高亮。点胶囊即切换本人的该表情（加/取消）。
               **谁回应了**：names 进 aria-label（读屏盲人听得到"小明、你 回应了👍"）+ title（悬停）——比只念"👍2"有用。 */}
           {reactionChips.map((r) => {

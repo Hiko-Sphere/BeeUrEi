@@ -24,6 +24,8 @@ export interface IncomingCall { callId: string; fromName: string; fromUserId: st
 export interface HelpRequest { callId: string; fromName: string; fromAvatar?: string | null; language?: string; locality?: string; topic?: string; waitedSeconds: number }
 export interface MessageReaction { emoji: string; count: number; mine: boolean; names: string[] }
 export interface ChatMessage { id: string; fromId: string; toId: string; kind: string; text: string; createdAt: number; readAt?: number; reaction?: string; reactions?: MessageReaction[]; groupId?: string; editedAt?: number; replyTo?: string; readBy?: number; readTotal?: number; forwarded?: boolean }
+/// 会话置顶消息（线程顶部横幅）：是一条 ChatMessage + 谁置顶的名字。无置顶时线程响应 pinned 为 null。
+export type PinnedMessage = ChatMessage & { pinnedBy?: string; pinnedByName?: string }
 export interface Conversation { peer: User; last: ChatMessage; unread: number; muted?: boolean; online?: boolean }
 export interface ChatGroup { id: string; name: string; ownerId: string; memberIds: string[]; createdAt: number }
 export interface GroupSummary { group: ChatGroup; members: User[]; last: ChatMessage | null; unread: number; muted?: boolean }
@@ -346,8 +348,8 @@ export const api = {
   conversations: () => get('/api/conversations') as Promise<{ conversations: Conversation[] }>,
   muteConversation: (peerId: string, muted: boolean) => post(`/api/conversations/${encodeURIComponent(peerId)}/mute`, { muted }) as Promise<{ muted: boolean }>,
   // before+beforeId 组成 (createdAt,id) 复合游标，翻页边界遇同毫秒消息不漏。
-  messagesWith: (peerId: string, before?: number, beforeId?: string) => get(`/api/messages?with=${encodeURIComponent(peerId)}${before ? `&before=${before}` : ''}${beforeId ? `&beforeId=${encodeURIComponent(beforeId)}` : ''}`) as Promise<{ messages: ChatMessage[] }>,
-  groupMessages: (groupId: string, before?: number, beforeId?: string) => get(`/api/messages?group=${encodeURIComponent(groupId)}${before ? `&before=${before}` : ''}${beforeId ? `&beforeId=${encodeURIComponent(beforeId)}` : ''}`) as Promise<{ messages: ChatMessage[] }>,
+  messagesWith: (peerId: string, before?: number, beforeId?: string) => get(`/api/messages?with=${encodeURIComponent(peerId)}${before ? `&before=${before}` : ''}${beforeId ? `&beforeId=${encodeURIComponent(beforeId)}` : ''}`) as Promise<{ messages: ChatMessage[]; pinned?: PinnedMessage | null }>,
+  groupMessages: (groupId: string, before?: number, beforeId?: string) => get(`/api/messages?group=${encodeURIComponent(groupId)}${before ? `&before=${before}` : ''}${beforeId ? `&beforeId=${encodeURIComponent(beforeId)}` : ''}`) as Promise<{ messages: ChatMessage[]; pinned?: PinnedMessage | null }>,
   sendMessage: (target: { toId?: string; groupId?: string }, kind: string, text: string, replyTo?: string, forwarded?: boolean) => post('/api/messages', { ...target, kind, text, ...(replyTo ? { replyTo } : {}), ...(forwarded ? { forwarded: true } : {}) }) as Promise<{ message: ChatMessage }>,
   // 会话内搜索文本消息（时间倒序）：peerId 或 groupId 二选一。
   searchMessages: (scope: { peerId?: string; groupId?: string }, query: string) => {
@@ -360,6 +362,8 @@ export const api = {
   markGroupRead: (groupId: string) => post('/api/messages/read', { groupId }),
   recallMessage: (id: string) => post(`/api/messages/${id}/recall`) as Promise<{ message: ChatMessage }>,
   editMessage: (id: string, text: string) => post(`/api/messages/${id}/edit`, { text }) as Promise<{ message: ChatMessage }>,
+  pinMessage: (id: string) => post(`/api/messages/${id}/pin`) as Promise<{ pinned: PinnedMessage | null }>,
+  unpinMessage: (id: string) => del(`/api/messages/${id}/pin`),
   reactMessage: (id: string, emoji: string) => post(`/api/messages/${id}/reaction`, { emoji }) as Promise<{ message: ChatMessage }>,
   groups: () => get('/api/groups') as Promise<{ groups: GroupSummary[] }>,
   muteGroup: (groupId: string, muted: boolean) => post(`/api/groups/${encodeURIComponent(groupId)}/mute`, { muted }) as Promise<{ muted: boolean }>,

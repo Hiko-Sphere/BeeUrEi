@@ -240,4 +240,36 @@ describe('GET /api/account/export', () => {
     expect(adminBase.profile.hasAvatar).toBe(true)
     await a.close()
   })
+
+  it('自助导出不泄露"谁举报了你"的举报人身份与理由（反报复）；仍显示举报存在与状态；admin 底座保留举报人供调查', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const reg = async (u: string, role: string) =>
+      (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const target = await reg('reptarget', 'helper')   // 被举报的（潜在滥权）照护者
+    const reporter = await reg('victimrep', 'blind')   // 弱势举报人
+    // 举报人举报被举报者，理由含可反指其身份的自由文本
+    const rep = await a.inject({ method: 'POST', url: '/api/reports', headers: { authorization: `Bearer ${reporter.token}` },
+      payload: { targetUserId: target.user.id, reason: 'reptarget 威胁恐吓我' } })
+    expect(rep.statusCode).toBe(201)
+
+    // 被举报者自助导出
+    const res = await a.inject({ method: 'GET', url: '/api/account/export', headers: { authorization: `Bearer ${target.token}` } })
+    expect(res.statusCode).toBe(200)
+    const body = res.json()
+    const raw = res.payload
+    // 举报仍出现（本人知悉有一条针对自己的举报及其状态），但**无举报人身份、无理由文本**
+    expect(body.reports.againstUser.length).toBe(1)
+    expect(body.reports.againstUser[0]).toMatchObject({ status: 'open' })
+    expect(body.reports.againstUser[0].reporter).toBeUndefined()   // 不泄露举报人身份
+    expect(body.reports.againstUser[0].reason).toBeUndefined()     // 不泄露理由（可反指举报人）
+    expect(raw).not.toContain('victimrep')                          // 举报人用户名/显示名绝不出现
+    expect(raw).not.toContain('威胁恐吓')                            // 举报理由文本绝不出现
+
+    // admin 代办导出的底座**保留**举报人身份与理由（调查取证需要）——证明只在自助层脱敏。
+    const adminBase = buildUserExportBundle(store, target.user.id, Date.now())!
+    expect(adminBase.reports.againstUser[0].reporter).toBe('victimrep')
+    expect(adminBase.reports.againstUser[0].reason).toContain('威胁恐吓')
+    await a.close()
+  })
 })

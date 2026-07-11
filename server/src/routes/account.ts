@@ -424,8 +424,18 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
     const data = {
       ...base,
       blocks: { blocking: base.blocks.blocking },
+      // 举报块同 blockedBy 的反报复处理：自助导出**剥离"谁举报了你"的举报人身份(reporter)与理由(reason)**。
+      // 举报人身份在别处严格仅管理员可见（/api/admin/reports 及用户详情），结案通知给被举报方也刻意只带
+      // {reportId,decision}、绝不含举报人（复审 NOTIFY-LEAK），唯独此前自助导出漏剥——被举报的（潜在滥权）
+      // 照护者仅凭导出即得知是谁举报了他、举报词是什么 → 对弱势举报人（盲人/长者）报复。reason 是举报人自述
+      // 的自由文本，能反指其身份，故一并剥离。只保留"针对你的举报存在与其状态/结论/时间"（这些结论本就经
+      // notifyReportResolved 告知过被举报方）。本人**发起**的举报(filedByUser)是本人数据，照原样保留。
+      reports: {
+        filedByUser: base.reports.filedByUser,
+        againstUser: base.reports.againstUser.map((r) => ({ status: r.status, decision: r.decision, createdAt: r.createdAt })),
+      },
       ...buildSelfExportExtras(store, id),
-      note: 'Your own sent text messages are included; messages from others are not (their words are their data). Users who blocked you are not disclosed (that is their data). Voice/image/video messages list metadata only. Password hashes and tokens are never exported.',
+      note: 'Your own sent text messages are included; messages from others are not (their words are their data). Users who blocked you, and who reported you (and why), are not disclosed (that protects the other party from retaliation). Voice/image/video messages list metadata only. Password hashes and tokens are never exported.',
     }
     reply.header('content-disposition', `attachment; filename="beeurei-my-data.json"`)
     // 安全预警本人：全量数据（含解密医疗信息/住址/消息正文）刚被导出——被盗会话可借此静默外带全部隐私，

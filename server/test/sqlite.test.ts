@@ -270,6 +270,29 @@ describe('SqliteStore (node:sqlite)', () => {
     expect(mem).toEqual(sq) // 两存储逐格一致
   })
 
+  it('AI 视觉配额退还 refundVisionCall：Sqlite 与 Memory 同口径（下限0退还 / 跨日不误减 / 陌生用户 no-op）', () => {
+    // refundVisionCall 是"先占额、上游失败再退还"并发安全设计的关键（route 在 await 前 reserve、失败 catch 里 refund）：
+    // SqliteStore 用 `UPDATE ... WHERE day=? AND count>0`，与 Memory 的 `e.day===day && e.count>0` 必须逐格一致，
+    // 否则线上要么**少退**（失败也烧用户额度→付费功能假报"今日已用完"）、要么**误退为负/退错日**（配额泄漏→烧超运维预算）。
+    const exercise = (s: SqliteStore | MemoryStore) => {
+      const seq: number[] = []
+      s.recordVisionCall('u1', '2026-07-04')
+      s.recordVisionCall('u1', '2026-07-04'); seq.push(s.visionCallsOnDay('u1', '2026-07-04')) // 2：占两次
+      s.refundVisionCall('u1', '2026-07-04'); seq.push(s.visionCallsOnDay('u1', '2026-07-04')) // 1：退还一次
+      s.refundVisionCall('u1', '2026-07-04'); seq.push(s.visionCallsOnDay('u1', '2026-07-04')) // 0
+      s.refundVisionCall('u1', '2026-07-04'); seq.push(s.visionCallsOnDay('u1', '2026-07-04')) // 0：下限 0，绝不退为负
+      // 跨日不误减：当前单行桶已是 07-05，退还旧日 07-04 绝不动今日计数（WHERE day=? / e.day===day 守卫）。
+      s.recordVisionCall('u1', '2026-07-05'); seq.push(s.visionCallsOnDay('u1', '2026-07-05')) // 1：跨日重置
+      s.refundVisionCall('u1', '2026-07-04'); seq.push(s.visionCallsOnDay('u1', '2026-07-05')) // 1：退旧日不减今日
+      s.refundVisionCall('u2', '2026-07-05'); seq.push(s.visionCallsOnDay('u2', '2026-07-05')) // 0：陌生用户 no-op，不建行不抛
+      return seq
+    }
+    const sq = exercise(new SqliteStore(':memory:'))
+    const mem = exercise(new MemoryStore())
+    expect(sq).toEqual([2, 1, 0, 0, 1, 1, 0])
+    expect(mem).toEqual(sq) // 两存储逐格一致
+  })
+
   it('latestMessagesPerPeer：对端最新两条同毫秒时只返回一条（不重复出现在会话列表）', () => {
     const store = new SqliteStore(':memory:')
     store.createMessage({ id: 'x1', fromId: 'u1', toId: 'u2', kind: 'text', text: '1', createdAt: 5000 })

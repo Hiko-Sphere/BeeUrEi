@@ -61,6 +61,9 @@ describe('production hardening', () => {
     expect(csp).toContain("script-src 'self'") // 无 'unsafe-inline'：面板用外链 app.js
     expect(csp).toContain("frame-ancestors 'none'") // meta 交付时被忽略，头交付才生效（防点击劫持）
     expect(csp).toContain("object-src 'none'")
+    // img-src 必须含 blob:：KYC 证件图经带鉴权 fetch → URL.createObjectURL(blob:) 渲染，'self' 不覆盖 blob:，
+    // 缺 blob: 会被 CSP 静默拦掉、审核员看不到证件无法核验（回归护栏）。
+    expect(csp).toMatch(/img-src[^;]*\bblob:/)
     await a.close()
   })
 

@@ -177,6 +177,20 @@ export function AccountPage() {
             <span className="ml-1.5 text-xs text-faint">{verifLabel(verif?.status)}</span>
           </Button>
         </div>
+        {/* 密码找回锚点提醒：密码找回**仅经已验证邮箱**（服务端 forgot-password 只向 emailVerified 邮箱发码）。
+            无验证邮箱的账号一旦忘记密码即无自助找回、永久锁死——这里显式告警并一键直达绑定/验证，防静默锁死。
+            self 未载入时不显（避免闪现误报）。 */}
+        {self && (!self.email || !self.emailVerified) && (
+          <button type="button" onClick={() => setEmailOpen(true)} data-testid="recovery-email-hint"
+            className="mt-3 flex w-full items-start gap-2 rounded-xl border border-honey/50 bg-honey/5 px-3 py-2 text-left text-xs text-soft transition hover:bg-honey/10">
+            <span aria-hidden>⚠️</span>
+            <span>{self.email
+              ? t('你的邮箱尚未验证——忘记密码时将无法自助找回。点此完成验证以启用密码找回。',
+                  'Your email isn’t verified yet — you won’t be able to recover a forgotten password. Tap to verify it and enable recovery.')
+              : t('未绑定验证邮箱——一旦忘记密码将无法自助找回、账号会被锁死。点此绑定并验证邮箱以启用密码找回。',
+                  'No verified email — if you forget your password you won’t be able to recover it and will be locked out. Tap to add and verify an email.')}</span>
+          </button>
+        )}
       </Card>
 
       {/* 危险区 */}

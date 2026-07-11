@@ -32,6 +32,32 @@ describe('AccountPage 资料渲染（防字段漂移）', () => {
     expect(screen.getByText('已开启')).toBeInTheDocument()         // twoFactorEnabled=true → "已开启"
   })
 
+  it('无验证邮箱 → 显示密码找回提醒（点击开绑定邮箱弹窗）；已验证邮箱则不显示（防静默锁死）', async () => {
+    // 未绑邮箱：提醒"忘记密码将无法找回、账号锁死" + 一键直达绑定。
+    mock(api.me).mockResolvedValue({ id: 'u1', username: 'amin', displayName: '阿明', role: 'helper', email: null, emailVerified: false, twoFactorEnabled: false, usernameCustomized: true, verified: false })
+    mock(api.setEmail).mockResolvedValue({ ok: true })
+    const { unmount } = render(<AccountPage />)
+    const hint = await screen.findByTestId('recovery-email-hint')
+    expect(hint.tagName).toBe('BUTTON')
+    expect(hint.textContent).toMatch(/无法自助找回|锁死/)
+    fireEvent.click(hint)
+    expect(await screen.findByRole('dialog')).toBeInTheDocument() // 打开 EmailDialog（Modal）
+    unmount()
+
+    // 已验证邮箱：不显示提醒（找回锚点已具备）。
+    mock(api.me).mockResolvedValue({ id: 'u1', username: 'amin', displayName: '阿明', role: 'helper', email: 'a@b.com', emailVerified: true, twoFactorEnabled: false, usernameCustomized: true, verified: false })
+    render(<AccountPage />)
+    await screen.findByText(/a@b\.com/)
+    expect(screen.queryByTestId('recovery-email-hint')).toBeNull()
+  })
+
+  it('有邮箱但未验证 → 提醒改为"尚未验证"措辞（未验证邮箱不是找回锚点）', async () => {
+    mock(api.me).mockResolvedValue({ id: 'u1', username: 'amin', displayName: '阿明', role: 'helper', email: 'x@y.com', emailVerified: false, twoFactorEnabled: false, usernameCustomized: true, verified: false })
+    render(<AccountPage />)
+    const hint = await screen.findByTestId('recovery-email-hint')
+    expect(hint.textContent).toMatch(/尚未验证/)
+  })
+
   it('已读回执开关：me.readReceiptsEnabled=false → 开关呈关；点击 → setReadReceipts(true)（互惠隐私）', async () => {
     mock(api.me).mockResolvedValue({ id: 'u1', username: 'amin', displayName: '阿明', role: 'helper', usernameCustomized: true, verified: false, readReceiptsEnabled: false })
     mock(api.setReadReceipts).mockResolvedValue({ ok: true, readReceiptsEnabled: true })

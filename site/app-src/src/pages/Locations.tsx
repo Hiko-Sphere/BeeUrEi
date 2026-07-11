@@ -11,7 +11,7 @@ import { appleMapsUrl } from '../lib/location'
 import { useI18n } from '../lib/i18n'
 import { useSession } from '../lib/session'
 import { roleLabel } from '../components/Layout'
-import { Card, Avatar, Button, Pill, EmptyState, useToast, timeAgo } from '../components/ui'
+import { Card, Avatar, Button, Pill, EmptyState, useToast, timeAgo, fmtTime, RelativeTime } from '../components/ui'
 import { RequestShareList } from '../components/RequestShareList'
 import { IconPin } from '../components/icons'
 
@@ -123,7 +123,12 @@ export function LocationsPage() {
       // 「在地图中打开」：协助者要去找/接盲人时，一键在自己的地图 App 里导航到其位置（Apple Maps，境内可开+WGS-84 纠偏）。
       const mapsUrl = appleMapsUrl(c.lat, c.lng, c.displayName)
       const openHtml = `<br><a href="${mapsUrl}" target="_blank" rel="noreferrer" class="underline">${escapeHtml(t('在地图中打开', 'Open in Maps'))}</a>`
-      mk.bindPopup(`<b>${escapeHtml(c.displayName)}</b><br>${roleLabel(c.role, t)} · ${timeAgo(c.updatedAt, lang)}${battHtml}${accHtml}${headHtml}${openHtml}`)
+      // 语义 <time>：悬停显示精确时刻、读屏可取绝对时间（位置新鲜度是安全相关信息，相对"3分钟前"之外给出确切时刻）。
+      // 非有限 updatedAt 兜底纯文本（同 RelativeTime 守卫）：new Date(NaN).toISOString() 会抛 RangeError，绝不让坏值崩掉整张地图。
+      const freshHtml = Number.isFinite(c.updatedAt)
+        ? `<time datetime="${new Date(c.updatedAt).toISOString()}" title="${escapeHtml(fmtTime(c.updatedAt, lang))}">${escapeHtml(timeAgo(c.updatedAt, lang))}</time>`
+        : escapeHtml(timeAgo(c.updatedAt, lang))
+      mk.bindPopup(`<b>${escapeHtml(c.displayName)}</b><br>${roleLabel(c.role, t)} · ${freshHtml}${battHtml}${accHtml}${headHtml}${openHtml}`)
     }
     // 移除已不再共享的联系人标记 + 其精度圈。
     for (const [id, mk] of markers.current) if (!seen.has(id)) { m.removeLayer(mk); markers.current.delete(id) }
@@ -269,7 +274,7 @@ export function LocationsPage() {
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-medium">{c.displayName}</div>
                         <div className="text-xs text-faint">
-                          {roleLabel(c.role, t)} · {t('更新于', 'updated')} {timeAgo(c.updatedAt, lang)}
+                          {roleLabel(c.role, t)} · {t('更新于', 'updated')} <RelativeTime ms={c.updatedAt} lang={lang} />
                           {(() => { const b = batteryBadge(c.battery, lang); return b ? <> · <span className={b.danger ? 'font-semibold text-danger' : ''}>{b.critical ? '⚠️ ' : ''}{b.text}</span></> : null })()}
                         </div>
                       </div>

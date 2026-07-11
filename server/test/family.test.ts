@@ -59,6 +59,30 @@ describe('family + emergency', () => {
     await a.close()
   })
 
+  it('同角色双方（两盲/两非盲）反方向请求也去重：不建重复链（无向 pair 去重，非只按 owner 归一）', async () => {
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const reg = async (u: string, role: string) =>
+      (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const between = (x: string, y: string) =>
+      store.linksByOwner(x).filter((l) => l.memberId === y).length + store.linksByOwner(y).filter((l) => l.memberId === x).length
+
+    // 两盲：owner 归一("盲侧恒为 owner")对两盲不产生规范序，正/反方向落到不同 (owner,member) 元组。
+    const b1 = await reg('blindx', 'blind'); const b2 = await reg('blindy', 'blind')
+    expect((await app.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${b1.token}` }, payload: { username: 'blindy' } })).statusCode).toBe(201)
+    const bRev = await app.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${b2.token}` }, payload: { username: 'blindx' } })
+    expect(bRev.statusCode).toBe(409) // 反方向请求被去重（此前会建出第二条重复链）
+    expect(between(b1.user.id, b2.user.id)).toBe(1) // 两人之间恰一条链
+
+    // 两非盲（两 helper）：同理 owner=target，反方向落到镜像元组。
+    const p1 = await reg('helpx', 'helper'); const p2 = await reg('helpy', 'helper')
+    expect((await app.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${p1.token}` }, payload: { username: 'helpy' } })).statusCode).toBe(201)
+    const pRev = await app.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${p2.token}` }, payload: { username: 'helpx' } })
+    expect(pRev.statusCode).toBe(409)
+    expect(between(p1.user.id, p2.user.id)).toBe(1)
+    await app.close()
+  })
+
   it('拉黑后：来自被拉黑者的待确认请求不出现在收件箱，且接受被拒(403 blocked)', async () => {
     const { a, reg } = setup()
     const requester = await reg('reqr', 'helper') // 发起方

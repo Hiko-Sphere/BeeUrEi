@@ -41,9 +41,16 @@ export function registerFamilyRoutes(app: FastifyInstance, store: Store, push: P
     const ownerId = iAmBlind ? meId : target.id   // 视障侧恒为 owner
     const memberId = iAmBlind ? target.id : meId
 
-    // 去重 + 上限（按 owner 维度，防重复绑定/无界增长，见审查 #7）。
+    // 去重：两人之间**任一方向**已有链（pending 或 accepted）即拒。不能只查 linksByOwner(ownerId).memberId===memberId：
+    // ownerId 按"视障侧恒为 owner"归一，仅**恰一方为盲**时两个发起方向才映射到同一 (owner,member) 元组；**同角色对**
+    // （两盲 / 两非盲）时正/反方向落到不同元组，单向 owner 去重会漏掉反方向已存链 → 建出两条重复 accepted 链
+    // （联系人列表重影、匹配/紧急扇出重复计数，见对抗复审）。故按无向 pair 查两个方向。
+    if (store.linksByOwner(meId).some((l) => l.memberId === target.id)
+        || store.linksByOwner(target.id).some((l) => l.memberId === meId)) {
+      return reply.code(409).send({ error: 'already_linked' })
+    }
+    // 上限（按 owner 维度，防无界增长，见审查 #7）。
     const existing = store.linksByOwner(ownerId)
-    if (existing.some((l) => l.memberId === memberId)) return reply.code(409).send({ error: 'already_linked' })
     if (existing.length >= 200) return reply.code(422).send({ error: 'too_many_links' })
     // 上面的 existing(=linksByOwner(target)) 只约束"被绑定的视障侧"。当发起方是非盲（member 侧，
     // ownerId=target≠meId）时它约束不到发起方自身——单个非盲账号可向无数不同目标发 pending 请求：

@@ -47,14 +47,17 @@ export function registerNavRoutes(app: FastifyInstance, store: Store): void {
       }
 
       const origin = `${originLon},${originLat}` // 高德为 经度,纬度
-      const steps = await amapWalking(origin, dest)
+      const route = await amapWalking(origin, dest)
       // 目的地坐标（GCJ-02）拆成数值，供 App 实时引导做到达判定。
       const [dLon, dLat] = dest.split(',').map(Number)
       return {
         destination: dest,
         destinationLat: Number.isFinite(dLat) ? dLat : null,
         destinationLon: Number.isFinite(dLon) ? dLon : null,
-        steps,
+        steps: route.steps,
+        // 全程距离/时长（高德权威值）：App 起步先播"全程约 X 米、步行约 Y 分钟"，盲人据此决定走不走/改公交。
+        distanceMeters: route.distanceMeters,
+        durationSeconds: route.durationSeconds,
       }
     } catch (e) {
       // 高德服务侧错误（最常见：AMAP_API_KEY 不是「Web服务」类型 → infocode 10009 USERKEY_PLAT_NOMATCH）。

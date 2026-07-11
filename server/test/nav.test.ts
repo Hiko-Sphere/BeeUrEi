@@ -80,7 +80,7 @@ describe('AMap walking nav proxy', () => {
       json: async () =>
         url.includes('geocode')
           ? { status: '1', infocode: '10000', geocodes: [{ location: '116.397,39.908' }] }
-          : { status: '1', infocode: '10000', route: { paths: [{ steps: [{ instruction: '向北步行', distance: '120' }, { instruction: '到达目的地', distance: '0' }] }] } },
+          : { status: '1', infocode: '10000', route: { paths: [{ distance: '820', duration: '660', steps: [{ instruction: '向北步行', distance: '120' }, { instruction: '到达目的地', distance: '0' }] }] } },
     })))
     const app = buildApp(new MemoryStore())
     const t = await token(app)
@@ -94,6 +94,9 @@ describe('AMap walking nav proxy', () => {
     expect(body.destination).toBe('116.397,39.908')
     expect(body.steps[0]).toMatchObject({ instruction: '向北步行', distanceMeters: 120 })
     expect(body.steps.length).toBe(2)
+    // 全程距离/时长随响应返回（App 起步先播"全程约 820 米、约 11 分钟"），与逐步分开。
+    expect(body.distanceMeters).toBe(820)
+    expect(body.durationSeconds).toBe(660)
     await app.close()
   })
 

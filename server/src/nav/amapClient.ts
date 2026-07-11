@@ -104,6 +104,16 @@ export interface WalkStep {
   polyline: Array<[number, number]>
 }
 
+/// 一条步行路线：分步 + 高德给出的**全程**距离/时长。全程数据每个导航 App 都在起步先播（"全程约 800 米、
+/// 步行约 12 分钟"），盲人据此判断这趟值不值得走、要不要改坐公交——此前只取 steps、把高德已返回的
+/// path.distance/duration 丢弃了（与 transit 端点已返 durationSeconds 不对齐）。totals 用高德的**权威值**，
+/// 而非把各步 distance 相加（后者会因非数字步兜底为 0 而系统性偏小）。
+export interface WalkRoute {
+  steps: WalkStep[]
+  distanceMeters: number   // 全程距离（米，取整，坏值→0）
+  durationSeconds: number  // 全程预计步行时长（秒，取整，坏值→0）
+}
+
 function apiKey(): string | undefined {
   return process.env.AMAP_API_KEY
 }
@@ -144,18 +154,18 @@ export async function amapGeocode(address: string): Promise<string | undefined> 
 }
 
 /// 步行路线（origin/destination 均为 "经度,纬度"）。返回逐步指令。key/配额等错误抛 AmapError。
-export async function amapWalking(origin: string, destination: string): Promise<WalkStep[]> {
+export async function amapWalking(origin: string, destination: string): Promise<WalkRoute> {
   const key = apiKey()
-  if (!key) return []
+  if (!key) return { steps: [], distanceMeters: 0, durationSeconds: 0 }
   const url = `${AMAP_BASE}/direction/walking?origin=${origin}&destination=${destination}&key=${key}`
   const res = await amapFetch(url)
   const data = (await res.json()) as {
     status?: string; info?: string; infocode?: string
-    route?: { paths?: Array<{ steps?: Array<{ instruction?: string; distance?: string; polyline?: string }> }> }
+    route?: { paths?: Array<{ distance?: string; duration?: string; steps?: Array<{ instruction?: string; distance?: string; polyline?: string }> }> }
   }
   assertAmapOk(res, data)
-  const steps = data.route?.paths?.[0]?.steps ?? []
-  return steps.map((s) => {
+  const path = data.route?.paths?.[0]
+  const steps = (path?.steps ?? []).map((s) => {
     // 高德某步 distance 若是非数字字符串，Number(...) 得 NaN，JSON.stringify 会序列化成 null，
     // 致客户端整条路线解码失败、丢失整条路线 → 用 0 兜底，绝不外发 NaN（见审查 #8）。
     const d = Number(s.distance ?? 0)
@@ -165,6 +175,14 @@ export async function amapWalking(origin: string, destination: string): Promise<
       polyline: parsePolyline(s.polyline),
     }
   })
+  // 全程距离/时长用高德**路线级**权威值（坏值一律兜 0，绝不外发 NaN/负数——与逐步 distance 同口径）。
+  const totalDist = Number(path?.distance ?? 0)
+  const totalDur = Number(path?.duration ?? 0)
+  return {
+    steps,
+    distanceMeters: Number.isFinite(totalDist) && totalDist >= 0 ? Math.round(totalDist) : 0,
+    durationSeconds: Number.isFinite(totalDur) && totalDur >= 0 ? Math.round(totalDur) : 0,
+  }
 }
 
 /// 周边 POI（GCJ-02 坐标 + 名称 + 类型 + 高德算好的直线距离米）。用于「周围有什么」——国内 Apple Maps POI

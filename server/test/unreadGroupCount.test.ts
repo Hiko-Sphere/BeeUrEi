@@ -45,6 +45,25 @@ describe('unreadGroupCount：无上限精确群未读', () => {
     expect(r.messages).toBe(5) // 群 3 + 单聊 2
   })
 
+  it('totalUnreadFor.total = 单聊 + 群 + 通知 + 未接来电 四源精确相加（全站角标总口径：漏一源/重复计立失败）', () => {
+    const s = new MemoryStore()
+    // 单聊 u3→u1 两条未读
+    s.createMessage({ id: 'd1', fromId: 'u3', toId: 'u1', kind: 'text', text: 'a', createdAt: 10 })
+    s.createMessage({ id: 'd2', fromId: 'u3', toId: 'u1', kind: 'text', text: 'b', createdAt: 11 })
+    // 群 3 条未读
+    s.createGroup({ id: 'g', name: 'G', ownerId: 'u1', memberIds: ['u1', 'u2'], createdAt: 0 })
+    for (let i = 1; i <= 3; i++) s.createMessage(gmsg('g', 'u2', i))
+    // 铃铛通知 4 条未读
+    for (let i = 0; i < 4; i++) s.createNotification({ id: `n${i}`, userId: 'u1', kind: 'friend_request', title: 't', body: 'b', createdAt: 100 + i })
+    // 未接来电 1 条（u1 被叫、status=missed、createdAt > callHistorySeenAt；u1 未建号→seen=0 故计入）
+    s.createCallRecord({ id: 'c1', callId: 'call1', callerId: 'u3', calleeId: 'u1', status: 'missed', createdAt: 200 })
+    const r = totalUnreadFor(s, 'u1')
+    expect(r.messages).toBe(5)       // 单聊 2 + 群 3
+    expect(r.notifications).toBe(4)
+    expect(r.missedCalls).toBe(1)
+    expect(r.total).toBe(10)         // 5+4+1 —— total 必须是四源精确相加；此前测试只验了 messages 支
+  })
+
   it('SqliteStore 与 MemoryStore 同口径（SQL COUNT 真跑一遍，含游标/己发/撤回/>200）', () => {
     const dir = mkdtempSync(join(tmpdir(), 'beeurei-unread-'))
     try {

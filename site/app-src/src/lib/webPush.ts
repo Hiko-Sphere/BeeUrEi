@@ -26,6 +26,16 @@ export function webPushSupported(): boolean {
   return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
 }
 
+/// 应用启动即注册 SW（**不**请求通知权限、**不**订阅推送）：让所有协助者都获得 SW 的离线兜底页（导航请求失败→
+/// 诚实"无法连接"页，而非浏览器报错页），而非只有开了 Web Push 的人才有。用与 subscribeWebPush 同一 SW_URL
+/// （含 apiBase 查询串），故后续开推送时不会因 scriptURL 不同触发重装。best-effort：不支持/失败静默。
+export async function registerServiceWorker(): Promise<void> {
+  try {
+    if (!('serviceWorker' in navigator)) return
+    await navigator.serviceWorker.register(SW_URL)
+  } catch { /* 尽力而为 */ }
+}
+
 export async function subscribeWebPush(): Promise<WebPushStatus> {
   if (!webPushSupported()) return 'unsupported'
   let key: string

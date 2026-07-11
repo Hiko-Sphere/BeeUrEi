@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api, type IncomingCall, type HelpRequest, type CallRecordInfo } from '../lib/api'
 import { pollWhileVisible } from '../lib/poll'
-import { pickNewHelpRequests, playHelpChime } from '../lib/helpQueueAlert'
 import { useI18n } from '../lib/i18n'
 import { useCall } from './call/CallController'
 import { Card, Avatar, Button, Pill, Spinner, EmptyState, useToast } from '../components/ui'
@@ -31,11 +30,6 @@ export function CallsPage() {
   const [history, setHistory] = useState<CallRecordInfo[] | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [matching, setMatching] = useState(false)
-  // 求助队列"新到"提示：与 iOS 协助端多感知提示对齐（此前 web 端 helpQueueAlert 已建+已测却**从未接线**——
-  // 待命志愿者切到别的标签页时，盲人的新求助进队毫无声响，只能干等）。alertedRef 记已提示 id（跨轮询存活、不触发重渲染）。
-  const alertedRef = useRef<Set<string>>(new Set())
-  const baselinedRef = useRef(false) // 首帧只建基线不响：刚打开页面时已在队列的求助不该突然响铃（你正看着它）；此后新到才响
-  const inCall = !!active
 
   useEffect(() => {
     let alive = true
@@ -45,21 +39,11 @@ export function CallsPage() {
       // 每段独立：成功则更新；失败时——若已有数据则保留(轮询瞬时失败不清屏)，若仍是初始 null 则落为空数组，
       // 退出加载态(否则某个端点持续失败会让该段永远转圈；页面每 4s 轮询，恢复后自然填回)。
       if (inc.status === 'fulfilled') setIncoming(inc.value.calls); else setIncoming((c) => c ?? [])
-      if (q.status === 'fulfilled') {
-        const reqs = q.value.requests
-        setQueue(reqs)
-        // 通话中只更新列表、不动 alerted、不出声（同 iOS 复审#3）：否则通话期间到达的求助被标记已提示，
-        // 挂断后永不再响——公开求助又无推送兜底，正是本提示要覆盖的场景。挂断后（active 变化重跑 effect）再补响。
-        if (!inCall) {
-          const { fresh, nextAlerted } = pickNewHelpRequests(reqs, alertedRef.current)
-          alertedRef.current = nextAlerted
-          if (baselinedRef.current && fresh.length > 0) {
-            playHelpChime() // 两声中频短鸣（AudioContext 已处理 suspended；被静音/自动播放拒则 toast 兜底）
-            toast(t(`收到 ${fresh.length} 条新求助`, `${fresh.length} new help request${fresh.length > 1 ? 's' : ''}`), 'info')
-          }
-          baselinedRef.current = true
-        }
-      } else setQueue((c) => c ?? [])
+      // 只更新列表**展示**、不在此响铃/toast：新求助的声音提示由全局 HelpQueueAlertHost 单点负责（它已按"待命中且
+      // 不在通话"门控 + 代际去重）。此前本页也响一遍 → 停在通话页时同一条求助**响铃+toast 两次**（且本页还漏查"待命"
+      // 门控，未待命也响）。删本页响铃，交全局单点，去重（见对抗复审）。
+      if (q.status === 'fulfilled') setQueue(q.value.requests)
+      else setQueue((c) => c ?? [])
       if (hist.status === 'fulfilled') setHistory(hist.value.calls); else setHistory((c) => c ?? [])
     }
     void load()

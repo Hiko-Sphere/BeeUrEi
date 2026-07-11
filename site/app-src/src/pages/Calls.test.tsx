@@ -62,23 +62,21 @@ describe('CallsPage 公开求助队列渲染（防字段漂移复发）', () => 
     expect(screen.getByText('已注销用户').closest('a')).toBeNull()       // 已注销不可点
   })
 
-  it('新求助进队时响提示音——首帧建基线不响、之后新到才响（此前 helpQueueAlert 已建却未接线）', async () => {
+  it('求助队列新到时 Calls 页**不**自行响铃（响铃交全局 HelpQueueAlertHost 单点，避免停在通话页重复响铃）', async () => {
     vi.useFakeTimers()
     try {
       mock(api.incomingCalls).mockResolvedValue({ calls: [] })
       mock(api.callHistory).mockResolvedValue({ calls: [] })
-      // 首帧：队列已有 c1（打开页面时你正看着它，不该突然响）。
       mock(api.helpQueue).mockResolvedValue({ requests: [{ callId: 'c1', fromName: 'A', waitedSeconds: 5 }], count: 1 })
       render(<CallsPage />)
-      await vi.advanceTimersByTimeAsync(0) // 冲刷首帧 load 的微任务
-      expect(playHelpChime).not.toHaveBeenCalled() // 首帧只建基线，不响
-      // 新求助 c2 进队 → 下一轮轮询应响一次。
+      await vi.advanceTimersByTimeAsync(0)
+      // 新求助 c2 进队 → 下一轮轮询：本页只更新列表展示，**绝不响铃**（去重：ringing 由全局 HelpQueueAlertHost 负责，
+      // 否则停在本页时同一条求助会被本页 + 全局各响一次 = 两次）。
       mock(api.helpQueue).mockResolvedValue({ requests: [{ callId: 'c1', fromName: 'A', waitedSeconds: 9 }, { callId: 'c2', fromName: 'B', waitedSeconds: 2 }], count: 2 })
       await vi.advanceTimersByTimeAsync(4000)
-      expect(playHelpChime).toHaveBeenCalledTimes(1) // 只 c2 是新到
-      // 无新变化（仍是 c1+c2）→ 不重复响。
+      expect(playHelpChime).not.toHaveBeenCalled() // 本页从不响铃
       await vi.advanceTimersByTimeAsync(4000)
-      expect(playHelpChime).toHaveBeenCalledTimes(1)
+      expect(playHelpChime).not.toHaveBeenCalled()
     } finally {
       vi.useRealTimers()
     }

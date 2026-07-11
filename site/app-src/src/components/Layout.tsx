@@ -65,6 +65,8 @@ export function Layout({ children }: { children: ReactNode }) {
     document.title = (total > 0 ? `(${total > 99 ? '99+' : total}) ` : '') + appTitle(lang)
     // 已安装 PWA 的图标角标（Badging API）：standalone 模式下看不到标签标题，图标角标才是"有 N 条待处理"的可见提示。
     updateAppBadge(total)
+    // 卸载(登出/切账号——Layout 随会话卸载)时复位标题与图标角标，不残留上一用户的未读数（共享电脑尤其）。
+    return () => { document.title = appTitle(lang); updateAppBadge(0) }
   }, [unread, chatUnread, missedCalls, lang])
 
   // 待命心跳：开启后周期上报 available=true，让绑定的视障侧看到「在线」并能呼入；关闭立即下线。

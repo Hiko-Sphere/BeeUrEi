@@ -6,11 +6,14 @@ import { I18nProvider } from './lib/i18n'
 import { SessionProvider } from './lib/session'
 import { ToastProvider } from './components/ui'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { registerServiceWorker } from './lib/webPush'
 import { App } from './App'
 
 applyTheme()
 setLang(getLang())
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme)
+// 启动即注册 SW（不涉通知权限）：所有协助者都获得离线兜底页，不只开了 Web Push 的人（见对抗复审）。
+void registerServiceWorker()
 
 // 不用 StrictMode：本应用大量使用 WebRTC/WebSocket，StrictMode 在开发期的双挂载会造成
 // 信令双连接与 PeerConnection 重复创建，干扰联调。生产无双挂载，去掉即可避免开发幻象。

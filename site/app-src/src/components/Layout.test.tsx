@@ -78,6 +78,18 @@ describe('PWA 应用图标角标（Badging API）随未读总数更新', () => {
     render(<Layout><div>x</div></Layout>)
     await waitFor(() => expect(clear).toHaveBeenCalled())
   })
+
+  it('登出(卸载 Layout)复位标签标题与图标角标，不残留上一用户未读数（共享电脑）', async () => {
+    const clear = vi.fn().mockResolvedValue(undefined)
+    navAny.setAppBadge = vi.fn().mockResolvedValue(undefined); navAny.clearAppBadge = clear
+    ;(api.unreadSummary as ReturnType<typeof vi.fn>).mockResolvedValue({ notifications: 3, messages: 0, missedCalls: 0, total: 3 })
+    const { unmount } = render(<Layout><div>x</div></Layout>)
+    await waitFor(() => expect(document.title).toMatch(/^\(3\) /)) // 有未读 → 标题带 "(3) " 前缀
+    clear.mockClear()
+    unmount() // 会话卸载=登出
+    expect(document.title).not.toMatch(/^\(/) // 标题复位：不再带 "(N)" 前缀
+    expect(clear).toHaveBeenCalled()           // 图标角标被清（updateAppBadge(0)）
+  })
 })
 
 describe('待命心跳', () => {

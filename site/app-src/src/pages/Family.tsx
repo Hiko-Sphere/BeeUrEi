@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, APIError, contentBlockedText, type FamilyLink, type IncomingLink, type SafetyTimer } from '../lib/api'
+import { pollWhileVisible } from '../lib/poll'
 import { hasUsableEmergencyContact } from '../lib/emergencyContacts'
 import { emergencyDirection } from '../lib/emergencyRelation'
 import { durationName } from '../lib/safetyCheckin'
@@ -253,7 +254,19 @@ function SafetyCheckInCard() {
   const [hasAnyContact, setHasAnyContact] = useState(true) // 乐观默认 true，避免加载中闪现假警告
   const durations = [30, 60, 120, 240]
 
-  useEffect(() => { void (async () => { try { const r = await api.safetyCheckin(); setTimer(r.timer); setHasAnyContact(r.hasAnyContact) } catch { /* 未登录/网络：留空闲态 */ } })() }, [])
+  // 轮询报到状态（与全站列表面一致）：到期告警发出、被别处（iOS/另一标签）报平安、每日定时报到自动开始，
+  // 都会自动反映到卡片——尤其配 iter146 的实时倒计时：countdown 到 0 后，轮询把停滞的"active·0 分钟"刷成
+  // 服务端真实态（已告警→回到空闲/历史）。cancelled 防卸载后 setState；前台可见才拉（pollWhileVisible）。
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try { const r = await api.safetyCheckin(); if (!cancelled) { setTimer(r.timer); setHasAnyContact(r.hasAnyContact) } }
+      catch { /* 未登录/网络：留空闲态 */ }
+    }
+    void load()
+    const stop = pollWhileVisible(load, 20000)
+    return () => { cancelled = true; stop() }
+  }, [])
 
   const run = async (fn: () => Promise<SafetyTimer | null>, okMsg: string) => {
     setBusy(true)

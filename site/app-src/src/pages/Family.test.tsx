@@ -308,6 +308,18 @@ describe('每日定时报到配置（Snug Safety 式）', () => {
     await waitFor(() => expect(noteInput.value).toBe('每天晨跑'))
   })
 
+  it('SafetyCheckInCard 挂载后每 20s 轮询 safetyCheckin（到期/别处报平安/每日自动开始自动反映，不再只加载一次）', async () => {
+    vi.useFakeTimers()
+    try {
+      render(<FamilyPage />)
+      expect(api.safetyCheckin).toHaveBeenCalledTimes(1)  // 挂载即拉
+      await vi.advanceTimersByTimeAsync(20000)
+      expect(api.safetyCheckin).toHaveBeenCalledTimes(2)  // 一个轮询周期后自动再拉
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('编辑备注 → 保存时带上 note（此前每日报到无处编辑备注、亲友收不到上下文）', async () => {
     render(<FamilyPage />)
     const noteInput = await screen.findByLabelText('每日报到备注')

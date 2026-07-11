@@ -308,6 +308,15 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
   const [muted, setMuted] = useState(sel.muted ?? false) // 会话免打扰（群/单聊通用；乐观切换 + 回滚）
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  // 点引用预览 → 跳到并短暂高亮原消息（WhatsApp/iMessage 标配：回看长对话时不必手动翻找被引的那条）。
+  const [highlightId, setHighlightId] = useState<string | null>(null)
+  const jumpToMessage = useCallback((id: string) => {
+    const el = document.getElementById(`msg-${id}`)
+    if (!el) return // 原消息未加载（更早、不在当前窗口）：静默不跳（引用预览已显"引用的消息"占位）
+    if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center', behavior: 'smooth' }) // jsdom 无此 API，守卫防测试崩
+    setHighlightId(id)
+    setTimeout(() => setHighlightId((cur) => (cur === id ? null : cur)), 1600) // 到时清高亮（若期间又跳别处则不动新的）
+  }, [])
   const PAGE = 50 // 与后端单次返回条数一致
 
   // 输入变化即写草稿；清空(发送成功→setText('')/手动清空)即删键。隐私模式/配额满仅丢失持久化，绝不影响发送本身。
@@ -538,7 +547,7 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
         {msgs === null ? <Spinner /> : msgs.length === 0 ? (
           <div className="grid h-full place-items-center text-sm text-faint">{t('开始你们的对话', 'Say hello')}</div>
         ) : msgs.map((m, i) => (
-          <div key={m.id}>
+          <div key={m.id} id={`msg-${m.id}`} className={`rounded-xl transition-colors ${highlightId === m.id ? 'bg-honey/15' : ''}`}>
             {/* 日期分隔（IM 标配）：与上一条不同本地日则插"今天/昨天/日期"，跨天历史一眼分清；居中 role=separator 供读屏定位。 */}
             {needsDateSeparator(m.createdAt, i > 0 ? msgs[i - 1].createdAt : null) && (
               <div className="flex justify-center py-1.5" role="separator" aria-label={dateSeparatorLabel(m.createdAt, Date.now(), lang)}>
@@ -546,7 +555,7 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
               </div>
             )}
             <Bubble m={m} mine={m.fromId === user?.id} lang={lang} t={t} onRecall={() => recall(m)} onReact={(e) => react(m, e)} onEdit={(nt) => edit(m, nt)}
-              onReply={() => setReplyingTo(m)} onForward={() => setForwarding(m)}
+              onReply={() => setReplyingTo(m)} onForward={() => setForwarding(m)} onQuoteClick={jumpToMessage}
               repliedTo={m.replyTo ? msgs.find((x) => x.id === m.replyTo) : undefined}
               repliedName={(rid) => { const r = msgs.find((x) => x.id === rid); return r ? (r.fromId === user?.id ? t('你', 'You') : (sel.kind === 'group' ? (sel.members.find((mm) => mm.id === r.fromId)?.displayName ?? t('成员', 'Member')) : sel.name)) : '' }}
               isGroup={sel.kind === 'group'}
@@ -780,7 +789,7 @@ function GroupInfoDialog({ groupId, groupName, ownerId, members, meId, onClose, 
 
 const REACTION_CHOICES = ['👍', '❤️', '😂', '😮', '😢', '🙏'] // 与 iOS ChatStrings.reactionChoices 对齐
 
-function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForward, repliedTo, repliedName, senderName, isGroup }: { m: ChatMessage; mine: boolean; lang: 'zh' | 'en'; t: (z: string, e: string) => string; onRecall: () => void; onReact: (emoji: string) => void; onEdit: (newText: string) => void; onReply: () => void; onForward: () => void; repliedTo?: ChatMessage; repliedName?: (id: string) => string; senderName?: string; isGroup?: boolean }) {
+function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForward, onQuoteClick, repliedTo, repliedName, senderName, isGroup }: { m: ChatMessage; mine: boolean; lang: 'zh' | 'en'; t: (z: string, e: string) => string; onRecall: () => void; onReact: (emoji: string) => void; onEdit: (newText: string) => void; onReply: () => void; onForward: () => void; onQuoteClick?: (id: string) => void; repliedTo?: ChatMessage; repliedName?: (id: string) => string; senderName?: string; isGroup?: boolean }) {
   const recallable = mine && m.kind !== 'recalled' && Date.now() - m.createdAt < 2 * 60_000
   const editable = mine && m.kind === 'text' && Date.now() - m.createdAt < 15 * 60_000
   const reactable = m.kind !== 'recalled'
@@ -800,12 +809,16 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForwar
         {/* 「已转发」标注：防收件人误以为是发送者原创（WhatsApp 式）。 */}
         {m.forwarded && m.kind !== 'recalled' && <div data-testid="forwarded-tag" className={`mb-0.5 text-[10px] italic ${mine ? 'text-ink/55' : 'text-faint'}`}>↪ {t('已转发', 'Forwarded')}</div>}
         {/* 引用回复的原消息预览（WhatsApp 式）：已加载则显示"名字：内容"，未加载则显示占位。 */}
-        {m.replyTo && (
-          <div data-testid="quoted" className={`mb-1 rounded-lg border-l-2 px-2 py-1 text-xs ${mine ? 'border-ink/40 bg-ink/5' : 'border-honey bg-honey/10'}`}>
-            {repliedTo
-              ? <><span className="font-semibold">{repliedName?.(m.replyTo)}</span><span className="ml-1 opacity-80">{preview(repliedTo, t)}</span></>
-              : <span className="opacity-70">{t('引用的消息', 'Quoted message')}</span>}
-          </div>
+        {m.replyTo && (repliedTo && onQuoteClick
+          ? <button type="button" data-testid="quoted" onClick={() => onQuoteClick(m.replyTo!)}
+              aria-label={t('跳到被引用的消息', 'Jump to quoted message')}
+              className={`mb-1 block w-full rounded-lg border-l-2 px-2 py-1 text-left text-xs transition hover:brightness-95 ${mine ? 'border-ink/40 bg-ink/5' : 'border-honey bg-honey/10'}`}>
+              <span className="font-semibold">{repliedName?.(m.replyTo)}</span><span className="ml-1 opacity-80">{preview(repliedTo, t)}</span>
+            </button>
+          : <div data-testid="quoted" className={`mb-1 rounded-lg border-l-2 px-2 py-1 text-xs ${mine ? 'border-ink/40 bg-ink/5' : 'border-honey bg-honey/10'}`}>
+              {/* 原消息未加载（更早、不在当前窗口）：占位不可点，避免点了跳空。 */}
+              <span className="opacity-70">{t('引用的消息', 'Quoted message')}</span>
+            </div>
         )}
         {editing ? (
           <div className="flex flex-col gap-1.5" data-testid="edit-box">

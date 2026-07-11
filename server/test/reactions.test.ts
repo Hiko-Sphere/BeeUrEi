@@ -127,4 +127,26 @@ describe('POST /api/messages/:id/reaction 端到端（逐用户 + mine 按 viewe
     expect(m.reactions).toBeUndefined() // 撤回消息不带 reactions
     await a.close()
   })
+
+  it('**群消息**同样带 reactions（各成员回应各显、mine 按视角）——GET ?group= 分支不漏（姊妹分支护栏）', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const reg = async (u: string) => (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role: 'helper' } })).json()
+    const owner = await reg('rgOwner'); const m1 = await reg('rgM1'); const m2 = await reg('rgM2')
+    // owner 与两成员互绑（建群要求成员是群主好友）。
+    for (const [who, uname] of [[m1, 'rgM1'], [m2, 'rgM2']] as const) {
+      const l = (await a.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${owner.token}` }, payload: { username: uname, relation: '家人', isEmergency: false } })).json()
+      await a.inject({ method: 'POST', url: `/api/family/links/${l.link.id}/accept`, headers: { authorization: `Bearer ${who.token}` } })
+    }
+    const grp = (await a.inject({ method: 'POST', url: '/api/groups', headers: { authorization: `Bearer ${owner.token}` }, payload: { name: '家庭群', memberIds: [m1.user.id, m2.user.id] } })).json().group
+    const sent = (await a.inject({ method: 'POST', url: '/api/messages', headers: { authorization: `Bearer ${owner.token}` }, payload: { groupId: grp.id, kind: 'text', text: '大家好' } })).json().message
+    // 两成员各回应不同 emoji（群里就是要各显、不互顶）。
+    await a.inject({ method: 'POST', url: `/api/messages/${sent.id}/reaction`, headers: { authorization: `Bearer ${m1.token}` }, payload: { emoji: '👍' } })
+    await a.inject({ method: 'POST', url: `/api/messages/${sent.id}/reaction`, headers: { authorization: `Bearer ${m2.token}` }, payload: { emoji: '🎉' } })
+    // 群消息 GET（?group=）必须带 reactions（此前只单聊分支带、群分支漏）。m1 视角：👍 是我的。
+    const asM1 = (await a.inject({ method: 'GET', url: `/api/messages?group=${grp.id}`, headers: { authorization: `Bearer ${m1.token}` } })).json().messages
+    const mm = asM1.find((x: { id: string }) => x.id === sent.id)
+    expect(mm.reactions).toEqual([{ emoji: '👍', count: 1, mine: true }, { emoji: '🎉', count: 1, mine: false }])
+    await a.close()
+  })
 })

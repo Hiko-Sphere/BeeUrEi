@@ -232,7 +232,8 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
       const withReceipts = msgs.map((m) => (m.fromId === me && m.kind !== 'recalled')
         ? { ...m, readBy: otherReadAt.filter((t) => t >= m.createdAt).length, readTotal }
         : m)
-      return { messages: withReceipts }
+      // 群消息同样附逐用户表情回应——群正是"各回应各显、不互相顶掉"最需要的场景（单聊分支在下方已带，这里补齐姊妹分支）。
+      return { messages: withReactions(store, me, withReceipts) }
     }
     const peer = q.with
     if (!peer) return reply.code(400).send({ error: 'invalid_input' })

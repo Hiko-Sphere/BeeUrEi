@@ -58,8 +58,13 @@ export function isQuietedNow(q: QuietHours | undefined, nowMs: number): boolean 
 /// 意义是**验证真实应急投递路径**，而真实应急恒越勿扰；若自测反而遵守勿扰，就测不到真实路径（用户在联系人勿扰
 /// 时段自测、向其核对"收到没"会误判链路坏）。故自测也越勿扰真送达（用户拍板，2026-07-11）。它是**低调的测试**
 /// 通知（kind=delivery_check，客户端渲染为"测试"、非应急大模态/响铃），送达但不惊扰。
+/// 含 **fall|crash|panic|distress**：紧急事件的领域词汇——`fall`/`crash` 是 EmergencyEvent.kind 的一等取值
+/// （摔倒/车祸，见 store.ts），`panic`/`distress`（恐慌/呼救按钮）为同类求救语义。当前这些告警的**通知** kind 统一
+/// 是 'emergency_alert'（已被 'emergency'/'alert' 命中）、且多走独立扇出不经本门；此处补齐领域词汇是**纵深防御**：
+/// 一旦将来有告警通知的 kind 直接采用事件类型拼写（如 'fall_alert'/'panic_button'），安全网仍自动兜住、绝不被静默。
+/// 只增不减命中面——对危急"漏推比多推更糟"，扩大 always-through 集合永远是安全方向（这些词也不与任何软通知 kind 相交）。
 export function isAlwaysThrough(kind: string): boolean {
-  return /emergency|sos|\bcall\b|incoming|escalat|alert|checkin|safety|security|delivery/i.test(kind)
+  return /emergency|sos|\bcall\b|incoming|escalat|alert|checkin|safety|security|delivery|fall|crash|panic|distress/i.test(kind)
 }
 
 /// 组合门：该通知此刻是否应**抑制推送横幅**（站内通知仍照常持久化）。

@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { localMinuteOfDay, isQuietedNow, isAlwaysThrough, shouldSuppressPush } from '../src/notifications/quietHours'
+import { isCategoryMuted } from '../src/notifications/notifCategories'
 import { notifyUser, setNotifyWebPush } from '../src/notifications/notify'
 import { buildApp } from '../src/app'
 import { MemoryStore, type QuietHours } from '../src/db/store'
@@ -62,6 +63,48 @@ describe('quietHours 纯逻辑', () => {
                      'security_admin_password_reset', 'security_admin_passkey_cleared', 'security_admin_apple_unlinked',
                      'security_admin_identifier_changed']) expect(isAlwaysThrough(k)).toBe(true)
     for (const k of ['chat_message', 'friend_request', 'route_added', 'place_arrival', 'kyc_verified', 'recall', 'medical_info_viewed']) expect(isAlwaysThrough(k)).toBe(false)
+  })
+
+  it('isAlwaysThrough 覆盖紧急事件的领域词汇（fall/crash/panic/distress）——纵深防御：将来告警若直接用事件类型拼写也绝不被静默', () => {
+    // fall/crash 是 EmergencyEvent.kind 的一等取值（摔倒/车祸）；panic/distress 为同类求救语义。
+    // 当前告警通知 kind 统一 'emergency_alert'，但一旦有人直接用事件类型拼 kind，安全网必须仍兜住。
+    for (const k of ['fall', 'fall_alert', 'fall_detected', 'crash', 'crash_detected', 'panic', 'panic_button', 'distress', 'distress_signal']) {
+      expect(isAlwaysThrough(k)).toBe(true)
+    }
+    // 反向铁律：扩大命中面绝不能误伤软通知——新增词汇不与任何可勿扰/可静音 kind 相交（recall 不含 fall、install 不含 fall 等）。
+    for (const k of ['chat_message', 'friend_request', 'friend_accepted', 'route_added', 'route_updated', 'route_deleted',
+                     'group_added', 'group_removed', 'group_renamed', 'place_arrival', 'place_departure', 'battery_low',
+                     'kyc_verified', 'kyc_rejected', 'report_resolved', 'location_request', 'recall', 'recalled']) {
+      expect(isAlwaysThrough(k)).toBe(false)
+    }
+  })
+
+  it('完整性护栏：全部危急/安全前缀家族（emergency_*/security_*/safety_*/checkin*）恒 always-through，且既不可勿扰亦不可按类静音', () => {
+    // 安全不变量的整体锁定（"仅部分 kind 有护栏=false green"）：逐一枚举代码库中真实的危急/安全通知 kind，
+    // 断言三重保证——① isAlwaysThrough=true ② 勿扰时段内 shouldSuppressPush=false ③ 用户静音全部类别时 isCategoryMuted=false。
+    const CRITICAL_KINDS = [
+      // 紧急告警家族（SOS/摔倒/车祸/未报到 的通知与回执/协调/解除）
+      'emergency_alert', 'emergency_ack', 'emergency_responding', 'emergency_clear',
+      // 安全报到 dead-man's-switch 自身与到期自通知
+      'safety_checkin_started', 'safety_checkin_reminder', 'safety_checkin_expired', 'checkin_missed',
+      // 来电
+      'incoming_call',
+      // 账号安全变更预警（潜在接管信号）——全家族
+      'security_new_device', 'security_password_changed', 'security_password_reset', 'security_email_changed',
+      'security_phone_changed', 'security_username_changed', 'security_2fa_enabled', 'security_2fa_disabled',
+      'security_2fa_recovery_regenerated', 'security_apple_linked', 'security_apple_unlinked',
+      'security_passkey_added', 'security_passkey_removed', 'security_admin_action',
+      // 应急投递自测（须走真实应急路径才有意义）
+      'delivery_check',
+    ]
+    // 勿扰正午随便取个时刻；全类别静音（social/route/location）。
+    const quiet = { enabled: true, startMinute: 0, endMinute: 1439, tz: 'Asia/Shanghai' }
+    const now = Date.UTC(2026, 6, 12, 4, 0) // 上海 12:00，落在 [0,1439) 勿扰内
+    for (const k of CRITICAL_KINDS) {
+      expect(isAlwaysThrough(k), `${k} 必须 always-through`).toBe(true)
+      expect(shouldSuppressPush(quiet, k, now), `${k} 绝不可被勿扰静音`).toBe(false)
+      expect(isCategoryMuted(['social', 'route', 'location'], k), `${k} 绝不可被按类静音`).toBe(false)
+    }
   })
 
   it('账号安全告警在勿扰时段内也照常推送横幅（接管信号须即时触达，不拖到次日）', () => {

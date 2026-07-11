@@ -56,6 +56,7 @@ export function notifIconKind(kind: string): NotifIconKind {
   // 位置/路线/围栏类用定位图标：route_added/place_arrival/**location_request**（有人请求你共享位置，去处即 /locations、
   // RequestShareList 里也用同款定位图标）。此前漏了 location_request——它不含 route/arrival/place，落到末尾默认铃铛，
   // 与其"位置"语义+/locations 去处不一致。加 `location` 子串一并覆盖当前与未来的 location_* 类。
+  if (kind === 'message_pinned') return 'pin' // 置顶消息通知：📌 图标（去处=对应会话，图标与"置顶"语义一致，非默认铃铛）
   if (kind.includes('route') || kind.includes('arrival') || kind.includes('place') || kind.includes('location')) return 'pin'
   if (kind.includes('friend') || kind.includes('link') || kind.includes('group')) return 'users'
   if (kind.includes('record')) return 'film'

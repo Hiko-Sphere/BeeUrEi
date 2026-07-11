@@ -83,6 +83,9 @@ describe('notifIconKind 通知图标选择（图标须与去处语义一致）',
     expect(notifIconKind('contact_low_battery')).toBe('battery')
     expect(notifIconKind('friend_request')).toBe('users')
     expect(notifIconKind('group_added')).toBe('users')
+    expect(notifIconKind('group_member_joined')).toBe('users')  // 群成员变动=人形
+    expect(notifIconKind('group_member_left')).toBe('users')
+    expect(notifIconKind('message_pinned')).toBe('pin')          // 置顶消息=📌（与去处=会话+"置顶"语义一致，非默认铃铛）
     expect(notifIconKind('recording_ready')).toBe('film')
     expect(notifIconKind('some_unknown_kind')).toBe('bell')
   })

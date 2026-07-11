@@ -39,6 +39,9 @@ export interface RouteWaypoint { lat: number; lng: number; note?: string }
 /// 路线库条目（坐标全程 WGS-84——编辑器必须用 OSM 瓦片，绝不可换 amap GCJ-02 瓦片，会系统性偏移百米级）。
 export interface SavedRouteInfo { id: string; ownerId: string; createdBy: string; createdByName?: string | null; name: string; waypoints: RouteWaypoint[]; createdAt: number; updatedAt: number; role: 'owner' | 'creator' }
 export interface ContactLocation { userId: string; displayName: string; avatar?: string | null; role: string; lat: number; lng: number; accuracy?: number | null; heading?: number | null; battery?: number | null; updatedAt: number }
+/// 保存的常用地点（"家"/"公司"/自定义）：只存**本人**的地址字符串；服务端保存时一次性地理编码出 WGS-84 坐标
+/// （lat/lng）供围栏判定——地理编码失败（未配 amap/境外/查不到）则 lat/lng 为空，地点照存但**无到达/离开提醒**。
+export interface SavedPlace { ownerId: string; label: string; address: string; lat?: number | null; lng?: number | null; updatedAt: number }
 export interface SafetyTimer { id: string; note?: string | null; status: string; startedAt: number; dueAt: number; remainingSec: number }
 /// 应急就绪自检：每位紧急联系人能否即时收到告警（reachable=有 APNs token 或已配 Web Push 订阅）。
 /// 应急就绪：total/reachable=isEmergency 联系人；acceptedTotal/acceptedReachable=**全体 accepted 联系人**
@@ -338,6 +341,11 @@ export const api = {
   contactLocations: () => get('/api/locations/contacts') as Promise<{ sharing: boolean; sharingUntil: number; contacts: ContactLocation[] }>,
   // 请求对方共享位置（nudge，对方自行决定）：alreadySharing=对方已在共享；deduped=5 分钟内已请求过。
   requestLocation: (userId: string) => post('/api/locations/request', { userId }) as Promise<{ ok: boolean; alreadySharing?: boolean; deduped?: boolean }>,
+
+  // 常用地点（地理围栏）：共享位置时到达/离开这些地点会通知联系人。只管理**本人**的地点；按 label upsert（家/公司唯一）。
+  savedPlaces: () => get('/api/places') as Promise<{ places: SavedPlace[] }>,
+  upsertPlace: (label: string, address: string) => put(`/api/places/${encodeURIComponent(label)}`, { address }) as Promise<{ place: SavedPlace }>,
+  deletePlace: (label: string) => del(`/api/places/${encodeURIComponent(label)}`) as Promise<{ ok: boolean }>,
 
   // 录制（知情同意握手 + 创建元数据；策略经 app-config 下发）
   recordingConsent: (callId: string, granted: boolean) => post('/api/recordings/consent', { callId, granted }),

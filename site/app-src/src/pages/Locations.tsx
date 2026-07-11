@@ -13,6 +13,7 @@ import { useSession } from '../lib/session'
 import { roleLabel } from '../components/Layout'
 import { Card, Avatar, Button, Pill, EmptyState, useToast, timeAgo, fmtTime, RelativeTime } from '../components/ui'
 import { RequestShareList } from '../components/RequestShareList'
+import { SavedPlaces } from '../components/SavedPlaces'
 import { IconPin } from '../components/icons'
 
 const POLL_MS = 8000      // 拉取联系人位置的间隔
@@ -288,6 +289,9 @@ export function LocationsPage() {
 
           {/* 未在共享的联系人：一键"请求共享"（nudge，对方自行决定；独立组件不碰 Leaflet 便于单测）。 */}
           <RequestShareList sharingIds={new Set(contacts.map((c) => c.userId))} />
+
+          {/* 常用地点（地理围栏）：管理"家/公司"等，共享时到达/离开通知联系人。补齐 web 侧管理，闭合围栏回路。 */}
+          <SavedPlaces />
         </>
       )}
     </div>

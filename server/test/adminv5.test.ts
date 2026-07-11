@@ -77,6 +77,15 @@ describe('v5 批量操作', () => {
     expect(del.json().failed).toBe(1)
     expect(store.findById('admin1')).toBeTruthy()
     expect(store.findById(b.id)).toBeUndefined()
+
+    // 批量改**自己**角色 → cannot_change_own_role。bulk 与单条 /role 是**独立代码路径**，单条端点已测、bulk 的自
+    // 角色保护此前漏测——回归掉它时（多管理员下 last_admin 不兜底），管理员会经批量把自己降级、误失后台权限。
+    // 造第二名管理员，使 last_admin 保护不兜底、纯验"不可改自己角色"这一支（否则单管理员下 last_admin 会掩盖回归）。
+    const admin2 = await makeUser(app, 'admin2')
+    store.updateUser(admin2.id, { role: 'admin' })
+    const selfRole = await app.inject({ method: 'POST', url: '/api/admin/users/bulk', headers: aa, payload: { ids: ['admin1'], action: 'role', role: 'helper' } })
+    expect(selfRole.json().results.find((r: { id: string; error?: string }) => r.id === 'admin1')?.error).toBe('cannot_change_own_role')
+    expect(store.findById('admin1')!.role).toBe('admin') // 自角色未被改
   })
 })
 

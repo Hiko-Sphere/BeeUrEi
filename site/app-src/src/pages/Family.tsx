@@ -4,7 +4,7 @@ import { api, APIError, contentBlockedText, type FamilyLink, type IncomingLink, 
 import { pollWhileVisible } from '../lib/poll'
 import { hasUsableEmergencyContact } from '../lib/emergencyContacts'
 import { emergencyDirection } from '../lib/emergencyRelation'
-import { durationName } from '../lib/safetyCheckin'
+import { durationName, nextCheckinLabel } from '../lib/safetyCheckin'
 import { classifyIdentifier } from '../lib/identifier'
 import { useI18n } from '../lib/i18n'
 import { useCall } from './call/CallController'
@@ -431,6 +431,10 @@ function DailyScheduleSection() {
         </select>
         {enabled && <Button variant="soft" onClick={() => void save(true)} disabled={busy}>{t('保存修改', 'Save')}</Button>}
       </div>
+      {/* 已启用且未暂停 → 持久确认"下次何时报到"（安全网已生效、下次触发时刻一目了然，比 toast 一闪更安心）。 */}
+      {enabled && !isPaused && (
+        <p className="mt-1.5 text-xs text-soft" role="status">{t(`下次报到：${nextCheckinLabel(startMinuteOf(), new Date(), t)}`, `Next check-in: ${nextCheckinLabel(startMinuteOf(), new Date(), t)}`)}</p>
+      )}
       {/* 备注（会随「到期提醒」与「错过报到」告警念给亲友，给他们判断险情的上下文）——与一次性报到的备注对等，
           此前每日报到独缺此输入：dnote 能从服务端载入回显、却无处编辑，网页用户设不了这条关键上下文。 */}
       <div className="mt-2">

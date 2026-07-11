@@ -308,6 +308,18 @@ describe('每日定时报到配置（Snug Safety 式）', () => {
     await waitFor(() => expect(noteInput.value).toBe('每天晨跑'))
   })
 
+  it('启用中显示"下次报到：X 09:00"（安全网已生效的持久确认；startMinute 540→09:00，今天/明天随当前时刻）', async () => {
+    render(<FamilyPage />)
+    expect(await screen.findByText(/下次报到.*09:00/)).toBeInTheDocument()
+  })
+
+  it('暂停中不显示"下次报到"（暂停期间不会触发，显"已暂停"而非误导的下次时刻）', async () => {
+    mock(api.checkinSchedule).mockResolvedValue({ schedule: { enabled: true, startMinute: 540, durationMinutes: 60, tz: 'Asia/Shanghai', pausedUntil: Date.now() + 3 * 86_400_000 } })
+    render(<FamilyPage />)
+    expect(await screen.findByText(/已暂停/)).toBeInTheDocument()
+    expect(screen.queryByText(/下次报到/)).toBeNull()
+  })
+
   it('暂停：点"暂停 3 天"→ setCheckinSchedule 带上未来的 pausedUntil（≈ now+3天，到点自动恢复）', async () => {
     render(<FamilyPage />)
     await screen.findByRole('switch', { name: '每日定时报到' })

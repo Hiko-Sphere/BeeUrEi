@@ -15,6 +15,16 @@ export function liveRemainingSecFromDue(dueAtMs: number, nowMs: number): number 
   return Math.max(0, Math.round((dueAtMs - nowMs) / 1000))
 }
 
+/// 每日报到"下次开始"的本地化短标签（"今天 09:00" / "明天 09:00"）：给启用中的每日报到一个持久确认——
+/// 用户一眼看到安全网**已生效且下次何时触发**（比 toast 一闪更安心）。用本机当前时钟判今天/明天（配置时区
+/// 即本机时区、二者一致；跨时区旅行的偏差属暂停/旅行场景，本标签只做常态确认）。now 注入便于单测。
+export function nextCheckinLabel(startMinute: number, now: Date, t: (zh: string, en: string) => string): string {
+  const h = Math.floor(startMinute / 60), m = startMinute % 60
+  const hhmm = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  const nowMin = now.getHours() * 60 + now.getMinutes()
+  return nowMin < startMinute ? t(`今天 ${hhmm}`, `today at ${hhmm}`) : t(`明天 ${hhmm}`, `tomorrow at ${hhmm}`)
+}
+
 /// 时长选项显示名（30 分钟 / 2 小时…）。
 export function durationName(min: number, lang: 'zh' | 'en'): string {
   if (min >= 60 && min % 60 === 0) {

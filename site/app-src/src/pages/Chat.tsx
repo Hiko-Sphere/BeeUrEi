@@ -268,6 +268,13 @@ export function firstUnreadMessageId(msgs: ChatMessage[], myId: string | undefin
   return firstId
 }
 
+/// 消息容器是否已滚到底部附近（阈值内）：新消息**仅在**用户已在底部附近时才自动滚到底——上翻看历史（如复看盲人
+/// 发的地址/单据）时，新消息不该把人猛拽回底部、丢失阅读位置（各主流 IM 一致）。纯函数、可注入 metrics 单测
+/// （jsdom 无真实布局，scrollHeight/Top/clientHeight 皆 0，故抽出以真实数值测判据）。
+export function isNearBottom(el: { scrollHeight: number; scrollTop: number; clientHeight: number }, threshold = 120): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight < threshold
+}
+
 function preview(m: ChatMessage | null, t: (z: string, e: string) => string): string {
   if (!m) return t('暂无消息', 'No messages')
   switch (m.kind) {
@@ -336,6 +343,9 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
   const [forwarding, setForwarding] = useState<ChatMessage | null>(null) // 正在转发的消息（打开目标选择器）
   const [muted, setMuted] = useState(sel.muted ?? false) // 会话免打扰（群/单聊通用；乐观切换 + 回滚）
   const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const nearBottomRef = useRef(true) // 用户是否在底部附近；新消息仅在此才自动滚到底（上翻看历史不被拽走）
+  const onMsgScroll = () => { if (scrollRef.current) nearBottomRef.current = isNearBottom(scrollRef.current) }
   const fileRef = useRef<HTMLInputElement>(null)
   // 点引用预览 → 跳到并短暂高亮原消息（WhatsApp/iMessage 标配：回看长对话时不必手动翻找被引的那条）。
   const [highlightId, setHighlightId] = useState<string | null>(null)
@@ -408,7 +418,9 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
   useEffect(() => { void load(); return pollWhileVisible(load, 5000) }, [load])
   // 仅在**最新一条**变化时滚到底（新消息）；上翻加载更早消息时 last 不变，不应跳到底部。
   const lastId = msgs && msgs.length ? msgs[msgs.length - 1].id : null
-  useEffect(() => { bottomRef.current?.scrollIntoView({ block: 'end' }) }, [lastId])
+  // 新末尾变化即滚到底——**但仅当用户已在底部附近**（在底部聊天/刚进会话），上翻看历史时不打断。首帧 nearBottom
+  // 默认 true → 进会话正常落到底。发送自己消息走 send() 里强制置 true（一定看到自己刚发的）。
+  useEffect(() => { if (nearBottomRef.current) bottomRef.current?.scrollIntoView({ block: 'end' }) }, [lastId])
   const canLoadEarlier = (msgs?.length ?? 0) >= PAGE && !reachedStart
 
   // 会话内搜索：输入防抖 0.35s 调后端搜索端点。
@@ -449,6 +461,7 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
     const body = text.trim()
     if (!body || sending) return
     setSending(true)
+    nearBottomRef.current = true // 发出自己的消息 → 一定滚到底看到它（即便此前上翻着历史）
     try { await api.sendMessage(target, 'text', body, replyingTo?.id); setText(''); setReplyingTo(null); await load(); onSent() }
     catch (e) { toast(chatErrorText(e, t), 'error') } finally { setSending(false) }
   }
@@ -581,7 +594,7 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
         </div>
       )}
 
-      <div tabIndex={0} aria-label={t('消息记录', 'Message history')}
+      <div ref={scrollRef} onScroll={onMsgScroll} tabIndex={0} aria-label={t('消息记录', 'Message history')}
         className={`flex-1 space-y-2 overflow-y-auto px-4 py-4 ${searchOpen ? 'hidden' : ''}`}>
         {canLoadEarlier && (
           <div className="flex justify-center pb-1">

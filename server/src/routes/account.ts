@@ -469,6 +469,10 @@ export function registerAccountRoutes(app: FastifyInstance, store: Store, codes:
       return reply.code(401).send({ error: 'reauth_required' }) // 未带任何凭据：明确要求客户端先重新验证身份
     }
     cascadeDeleteUser(store, user.id)
+    // 删号后立即踢掉其在线 /ws：账号虽已级联清空，但已打开的信令 socket 仍会凭尚未过期(≤1h)的 access token
+    // 继续中继通话/RTT 帧（/ws 仅握手时查库，删号后既有连接不会自行断开）——与封禁/登出/改密同口径须即时切断
+    // （severSessions 已对那些做，删号此前漏了这条，见对抗复审 authz 姊妹缺口）。
+    callControl?.disconnectUser(user.id)
     return reply.code(204).send()
   })
 }

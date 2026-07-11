@@ -441,7 +441,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
         if (action === 'disable') { banUser(id, target.tokenVersion ?? 0); audit(adminId, 'user.disable', 'user', id, 'bulk') }
         else if (action === 'enable') { store.updateUser(id, { status: 'active' }); audit(adminId, 'user.enable', 'user', id, 'bulk') }
         else if (action === 'role') { store.updateUser(id, { role: role as Role }); audit(adminId, 'user.role', 'user', id, `bulk → ${role}`) }
-        else if (action === 'delete') { cascadeDeleteUser(store, id); audit(adminId, 'user.delete', 'user', id, `bulk username=${target.username}`) }
+        else if (action === 'delete') { cascadeDeleteUser(store, id); callControl?.disconnectUser(id); audit(adminId, 'user.delete', 'user', id, `bulk username=${target.username}`) }
         results.push({ id, ok: true })
       } catch { results.push({ id, ok: false, error: 'failed' }) }
     }
@@ -889,6 +889,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       return reply.code(400).send({ error: 'last_admin_protected' })
     }
     cascadeDeleteUser(store, id) // 级联清群/消息/绑定/Passkey/会话（保留审核与审计记录）
+    callControl?.disconnectUser(id) // 删号即踢在线 /ws（与封禁 severSessions 同口径，删号此前漏了，见对抗复审）
     audit(req.user!.sub, 'user.delete', 'user', id, `username=${target.username}`)
     return { ok: true }
   })

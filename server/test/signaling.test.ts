@@ -283,6 +283,40 @@ describe('WebRTC signaling relay', () => {
     await app.close()
   })
 
+  it('自助删号即时踢掉本人在线信令 socket（4001）——删号用户不再能凭旧 token 中继', async () => {
+    const app = buildApp(new MemoryStore())
+    await app.listen({ port: 0, host: '127.0.0.1' })
+    const port = (app.server.address() as { port: number }).port
+    const u = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'del_self', password: 'secret123', role: 'blind' } })).json()
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${u.token}`)
+    await open(ws)
+    const closed = new Promise<number>((resolve) => ws.on('close', (code) => resolve(code)))
+    // 本人删号（重验证：带密码）→ 级联删除 + 立即关闭其所有在线 /ws。
+    const del = await app.inject({ method: 'DELETE', url: '/api/account', headers: { authorization: `Bearer ${u.token}` }, payload: { password: 'secret123' } })
+    expect(del.statusCode).toBe(204)
+    expect(await closed).toBe(4001) // 已打开的 socket 被立即关闭（此前会残留至 access token 到期）
+    await app.close()
+  })
+
+  it('管理员删号即时踢掉目标在线信令 socket（4001）', async () => {
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    await app.listen({ port: 0, host: '127.0.0.1' })
+    const port = (app.server.address() as { port: number }).port
+    const reg = async (u: string) => (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role: 'blind' } })).json()
+    const target = await reg('del_target')
+    const adminU = await reg('del_admin')
+    store.updateUser(adminU.user.id, { role: 'admin' })
+    const adminTok = (await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'del_admin', password: 'secret123' } })).json().token
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${target.token}`)
+    await open(ws)
+    const closed = new Promise<number>((resolve) => ws.on('close', (code) => resolve(code)))
+    const del = await app.inject({ method: 'DELETE', url: `/api/admin/users/${target.user.id}`, headers: { authorization: `Bearer ${adminTok}` } })
+    expect(del.statusCode).toBe(200)
+    expect(await closed).toBe(4001)
+    await app.close()
+  })
+
   it('rejects joining a call the user is not a participant of (no eavesdropping)', async () => {
     const app = buildApp(new MemoryStore())
     await app.listen({ port: 0, host: '127.0.0.1' })

@@ -41,8 +41,11 @@ export function composeProductName(product: unknown): string | null {
   const brandRaw = typeof p.brands === 'string' ? p.brands : ''
   const brand = (brandRaw.split(',')[0] ?? '').trim()
   const name = typeof p.product_name === 'string' ? p.product_name.trim() : ''
+  // 名字已含品牌则不重复前缀——**大小写不敏感**比对：OFF 的 brands 常与 product_name 大小写不一致
+  // （brands 多为全大写，如 brands="COCA-COLA" / product_name="Coca-Cola Zero"）。区分大小写会判为"不含"、
+  // 于是把品牌又拼一遍 → 盲人听到"COCA-COLA Coca-Cola Zero"（同一品牌念两遍）。转小写比对消除该重复。
   const full = brand && name
-    ? (name.includes(brand) ? name : `${brand} ${name}`) // 名字已含品牌不重复
+    ? (name.toLowerCase().includes(brand.toLowerCase()) ? name : `${brand} ${name}`)
     : (name || brand)
   const trimmed = full.trim()
   return trimmed ? trimmed.slice(0, 120) : null

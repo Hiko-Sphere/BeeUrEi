@@ -15,6 +15,15 @@ describe('Open Food Facts 商品查询', () => {
     expect(composeProductName('nonsense')).toBeNull()
   })
 
+  it('名字含品牌但大小写不同 → 不重复前缀（OFF brands 常全大写，防盲人听到品牌念两遍）', () => {
+    // 真实场景：brands 全大写、product_name 正常大小写——区分大小写会误判"不含"而重复拼品牌。
+    expect(composeProductName({ brands: 'COCA-COLA', product_name: 'Coca-Cola Zero' })).toBe('Coca-Cola Zero')
+    expect(composeProductName({ brands: 'Oreo', product_name: 'OREO Chocolate' })).toBe('OREO Chocolate') // 反向大小写亦然
+    expect(composeProductName({ brands: 'nestlé', product_name: 'Nestlé KitKat' })).toBe('Nestlé KitKat')
+    // 名字确实不含品牌 → 仍正常前缀（大小写无关不会误吞该拼的品牌）。
+    expect(composeProductName({ brands: 'LAYS', product_name: 'Classic Chips' })).toBe('LAYS Classic Chips')
+  })
+
   it('组名截断超长到 120 字', () => {
     const long = 'x'.repeat(300)
     expect(composeProductName({ product_name: long })!.length).toBe(120)

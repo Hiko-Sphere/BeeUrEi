@@ -3,6 +3,7 @@ import { api, APIError, contentBlockedText, reencodeToJpeg, blobToDataUrl, uploa
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { subscribeWebPush, unsubscribeWebPush, isWebPushSubscribed, webPushSupported, resyncWebPushSubscription } from '../lib/webPush'
+import { inQuietHoursNow } from '../lib/quietHours'
 import { roleLabel } from '../components/Layout'
 import { Card, Avatar, Button, Field, Input, useToast, Modal, fmtTime } from '../components/ui'
 import { DataExportCard } from '../components/DataExportCard'
@@ -822,6 +823,13 @@ function QuietHoursCard() {
           <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${enabled ? 'left-[22px]' : 'left-0.5'}`} />
         </button>
       </div>
+      {/* 当前是否勿扰中：设了勿扰却不知此刻是否生效、为何收不到推送横幅时，一眼确认"正在勿扰"（背景配置的当前态确认，
+          与每日报到"下次报到"同旨）。以本机当前时刻 + 已保存的 start/end 判；跨午夜窗口正确处理。 */}
+      {enabled && inQuietHoursNow(hhmmToMin(start), hhmmToMin(end), new Date()) && (
+        <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-honey/10 px-2.5 py-1 text-xs font-medium text-soft" role="status">
+          🔕 {t('当前勿扰中——推送横幅已静音（站内通知照常）', 'Quiet hours active now — push banners muted (in-app notifications still arrive)')}
+        </p>
+      )}
       {enabled && (
         <div className="mt-4 flex flex-wrap items-end gap-3">
           <Field label={t('开始', 'From')}>

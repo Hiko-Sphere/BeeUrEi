@@ -150,6 +150,29 @@ describe('AccountPage 资料渲染（防字段漂移）', () => {
     expect((screen.getByLabelText('勿扰开始时间') as HTMLInputElement).value).toBe('22:30') // 1350
     expect((screen.getByLabelText('勿扰结束时间') as HTMLInputElement).value).toBe('06:30') // 390
   })
+
+  it('当前处于勿扰窗口内（23:00 于 22:30–06:30）→ 显示"当前勿扰中"（背景配置当前态确认）', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 0, 5, 23, 0))
+    try {
+      mock(api.me).mockResolvedValue({ id: 'u1', username: 'amin', displayName: '阿明', role: 'helper', usernameCustomized: true, verified: false })
+      mock(api.quietHours).mockResolvedValue({ quietHours: { enabled: true, startMinute: 1350, endMinute: 390, tz: 'Asia/Shanghai' } })
+      render(<AccountPage />)
+      expect(await screen.findByText(/当前勿扰中/)).toBeInTheDocument()
+    } finally { vi.useRealTimers() }
+  })
+
+  it('当前在勿扰窗口外（12:00）→ 不显示"当前勿扰中"（虽已启用）', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 0, 5, 12, 0))
+    try {
+      mock(api.me).mockResolvedValue({ id: 'u1', username: 'amin', displayName: '阿明', role: 'helper', usernameCustomized: true, verified: false })
+      mock(api.quietHours).mockResolvedValue({ quietHours: { enabled: true, startMinute: 1350, endMinute: 390, tz: 'Asia/Shanghai' } })
+      render(<AccountPage />)
+      await waitFor(() => expect(screen.getByRole('switch', { name: '勿扰时段' })).toHaveAttribute('aria-checked', 'true'))
+      expect(screen.queryByText(/当前勿扰中/)).toBeNull()
+    } finally { vi.useRealTimers() }
+  })
 })
 
 describe('VerificationDialog 撤回待审申请', () => {

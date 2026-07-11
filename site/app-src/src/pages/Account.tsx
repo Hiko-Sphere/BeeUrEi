@@ -992,8 +992,12 @@ function WebPushCard() {
       {state === 'on' && (
         // 端到端自测：订阅存在≠推送能到（VAPID 配错/浏览器厂商侧失败只有真发一次才知道）。
         <button onClick={() => void api.webPushTest()
-          .then((r) => toast(r.sent === r.total ? t('测试通知已发出，请留意系统通知', 'Test sent — check your system notifications')
-                                                : t(`部分发送失败（${r.sent}/${r.total}）`, `Partially failed (${r.sent}/${r.total})`), r.sent === r.total ? 'ok' : 'error'))
+          .then((r) => {
+            if (r.sent === r.total) return toast(t('测试通知已发出，请留意系统通知', 'Test sent — check your system notifications'), 'ok')
+            // sent<total：如实告知未送达原因与该做什么——expired=订阅失效（须重新开启通知）、failed=推送服务异常。
+            if (r.expired > 0 && r.failed === 0) return toast(t('通知订阅已失效，请关闭再重新开启通知以恢复', 'Your notification subscription expired — turn notifications off and on again to restore it'), 'error')
+            return toast(t(`部分未送达（送达 ${r.sent}/${r.total}）`, `Partially undelivered (${r.sent}/${r.total} delivered)`), 'error')
+          })
           .catch(() => toast(t('发送失败', 'Failed to send'), 'error'))}
           className="mt-2 text-xs font-medium text-accent hover:underline">
           {t('发送测试通知', 'Send a test notification')}

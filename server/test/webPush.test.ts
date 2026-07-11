@@ -8,8 +8,9 @@ import { type WebPushSender, type WebPushSubscriptionKeys, VapidWebPushSender, m
 class RecordingWebPush implements WebPushSender {
   readonly configured = true
   sent: { endpoint: string; payload: string }[] = []
-  async send(sub: WebPushSubscriptionKeys, payload: string): Promise<void> {
+  async send(sub: WebPushSubscriptionKeys, payload: string): Promise<'sent'> {
     this.sent.push({ endpoint: sub.endpoint, payload })
+    return 'sent'
   }
 }
 
@@ -193,7 +194,7 @@ describe('Web Push（浏览器推送紧急告警）', () => {
     await a.inject({ method: 'POST', url: '/api/push/web-subscribe', headers: hAuth, payload: SUB })
     const r = await a.inject({ method: 'POST', url: '/api/push/web-test', headers: hAuth })
     expect(r.statusCode).toBe(200)
-    expect(r.json()).toMatchObject({ ok: true, sent: 1, total: 1 })
+    expect(r.json()).toMatchObject({ ok: true, sent: 1, expired: 0, failed: 0, total: 1 })
     expect(JSON.parse(wp.sent[0].payload).data.kind).toBe('push_test')
     // 计数装饰器：送达健康度进 /metrics（buildApp 单点包裹，任何扇出路径都被计入）。
     const metrics = await a.inject({ method: 'GET', url: '/metrics' })
@@ -204,6 +205,21 @@ describe('Web Push（浏览器推送紧急告警）', () => {
     const { a: a2, hAuth: h2 } = await seed()
     expect((await a2.inject({ method: 'POST', url: '/api/push/web-test', headers: h2 })).statusCode).toBe(503)
     await a2.close()
+  })
+
+  it('自测如实区分死订阅：410/404 回收的订阅计为 expired 而非 sent（安全 web-push 通道不假安心）', async () => {
+    // 模拟浏览器推送服务返回 410（订阅已死、被回收）：send 返回 'gone'（真实 VapidWebPushSender 的行为）。
+    class GoneWebPush implements WebPushSender {
+      readonly configured = true
+      async send(): Promise<'gone'> { return 'gone' }
+    }
+    const { a, hAuth } = await seed(new GoneWebPush())
+    await a.inject({ method: 'POST', url: '/api/push/web-subscribe', headers: hAuth, payload: SUB })
+    const r = await a.inject({ method: 'POST', url: '/api/push/web-test', headers: hAuth })
+    expect(r.statusCode).toBe(200)
+    // 唯一订阅已死 → sent=0（**未送达**）、expired=1，绝不假报 sent=1（此前把 'gone' 当 fulfilled 计成 sent）。
+    expect(r.json()).toMatchObject({ ok: true, sent: 0, expired: 1, failed: 0, total: 1 })
+    await a.close()
   })
 
   it('封禁连带清浏览器推送订阅（被封账号只剩泄漏面）；代设密码/强登出不清（重登后推送应还在）', async () => {

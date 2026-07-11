@@ -91,7 +91,7 @@ class RecPush implements PushSender {
   async sendCallInvite(): Promise<void> { /* 无关 */ }
   async sendAlert(_t: string, title: string): Promise<void> { this.alerts.push(title) }
 }
-class RecWebPush implements WebPushSender { configured = true; sent: string[] = []; async send(_sub: unknown, payload: string): Promise<void> { this.sent.push(payload) } }
+class RecWebPush implements WebPushSender { configured = true; sent: string[] = []; async send(_sub: unknown, payload: string): Promise<'sent'> { this.sent.push(payload); return 'sent' } }
 
 describe('notifyUser 勿扰门（软通知抑制推送但仍持久化；紧急恒推送）', () => {
   afterEach(() => setNotifyWebPush(new NoopWebPushSender()))

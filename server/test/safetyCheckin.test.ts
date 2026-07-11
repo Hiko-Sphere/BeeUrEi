@@ -19,7 +19,7 @@ class CapturingPush implements PushSender {
 class RecordingWebPush implements WebPushSender {
   readonly configured = true
   sent: string[] = []
-  async send(_sub: WebPushSubscriptionKeys, payload: string): Promise<void> { this.sent.push(payload) }
+  async send(_sub: WebPushSubscriptionKeys, payload: string): Promise<'sent'> { this.sent.push(payload); return 'sent' }
 }
 
 async function setup(store: Store = new MemoryStore()) {

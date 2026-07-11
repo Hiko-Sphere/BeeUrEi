@@ -6,7 +6,7 @@ import { type WebPushSender, type WebPushSubscriptionKeys } from '../src/push/we
 // 已配置的 Web 推送替身（configured=true）：证明 Web 订阅也算"可即时触达"。
 class ConfiguredWebPush implements WebPushSender {
   readonly configured = true
-  async send(_s: WebPushSubscriptionKeys, _p: string): Promise<void> {}
+  async send(_s: WebPushSubscriptionKeys, _p: string): Promise<'sent'> { return 'sent' }
 }
 
 const reg = async (a: ReturnType<typeof buildApp>, u: string, role = 'family') =>

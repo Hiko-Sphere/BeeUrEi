@@ -15,7 +15,7 @@ class FakePush implements PushSender {
 // 迫使推送投递走 webPushSubscriptionsForUser 同步读路径。
 class ConfiguredWebPush implements WebPushSender {
   readonly configured = true
-  async send(): Promise<void> {}
+  async send(): Promise<'sent'> { return 'sent' }
 }
 // 模拟 better-sqlite3 在 SQLITE_BUSY/IOERR 时**同步抛**的那个读——推送投递路径踩到它绝不能 500 主操作/掐断扇出。
 class ThrowingSubsStore extends MemoryStore {

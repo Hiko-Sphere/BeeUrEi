@@ -109,8 +109,13 @@ export function registerPushRoutes(app: FastifyInstance, store: Store, webPush?:
     if (subs.length === 0) return reply.code(404).send({ error: 'no_subscription' })
     const payload = JSON.stringify({ title: 'BeeUrEi', body: '测试通知 / Test notification', data: { kind: 'push_test' } })
     const results = await Promise.allSettled(subs.map((sub) => webPush.send(sub, payload)))
-    const sent = results.filter((r) => r.status === 'fulfilled').length
-    return { ok: true, sent, total: subs.length } // sent<total 时客户端提示部分失败
+    // 如实区分：sent=推送服务真受理；expired=订阅已死(410/404)被回收、**未送达**（自测正是要暴露"订阅存在≠能送达"，
+    // 此前把 'gone' 计成 fulfilled 当成功，给安全 web-push 通道假安心）；failed=其余抛错(上游 5xx/网络)。
+    const sent = results.filter((r) => r.status === 'fulfilled' && r.value === 'sent').length
+    const expired = results.filter((r) => r.status === 'fulfilled' && r.value === 'gone').length
+    const failed = results.filter((r) => r.status === 'rejected').length
+    // sent<total 即部分/全部未真送达：expired=死订阅（需重新授权浏览器通知），failed=服务异常。
+    return { ok: true, sent, expired, failed, total: subs.length }
   })
 
   app.delete('/api/push/web-subscribe', { preHandler: requireAuth() }, async (req, reply) => {

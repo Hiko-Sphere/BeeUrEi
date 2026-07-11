@@ -220,7 +220,7 @@ describe('摔倒/车祸紧急警报', () => {
     }
     class ConfiguredWebPush implements WebPushSender {
       readonly configured = true // 迫使走 webPushSubscriptionsForUser 读路径
-      async send(): Promise<void> {}
+      async send(): Promise<'sent'> { return 'sent' }
     }
     const push = new FakePush()
     const app = buildApp(new ThrowingSubsStore(), { pushSender: push, webPushSender: new ConfiguredWebPush() })

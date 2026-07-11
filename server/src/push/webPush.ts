@@ -12,16 +12,21 @@ export interface WebPushSubscriptionKeys {
   auth: string
 }
 
+/// 单次发送结果：'sent'=浏览器推送服务已受理（真送达）；'gone'=订阅已死(410/404)、已回收但**未送达**。
+/// 扇出调用方历来忽略返回值（best-effort .catch/allSettled），故加此返回值不破坏它们；而自测端点据此**如实**
+/// 区分"真送达"与"死订阅被回收"——否则把 'gone' 当成功会给安全 web-push 通道假安心（订阅存在≠能送达）。
+export type WebPushOutcome = 'sent' | 'gone'
+
 export interface WebPushSender {
   readonly configured: boolean
   /// 推送一条 JSON 负载到订阅端点。410/404（订阅已失效：用户清了站点数据/换浏览器）时
-  /// 调用 onGone 回收订阅——与 APNs 410 回收 token 同口径，避免反复空投死订阅。
-  send(sub: WebPushSubscriptionKeys, payload: string): Promise<void>
+  /// 调用 onGone 回收订阅——与 APNs 410 回收 token 同口径，避免反复空投死订阅——并返回 'gone'（未送达）。
+  send(sub: WebPushSubscriptionKeys, payload: string): Promise<WebPushOutcome>
 }
 
 export class NoopWebPushSender implements WebPushSender {
   readonly configured = false
-  async send(): Promise<void> { /* 未配置 VAPID：无浏览器推送（订阅入口也已 503 关闭） */ }
+  async send(): Promise<WebPushOutcome> { return 'sent' /* 未配置 VAPID：无订阅可发（入口 503），返回值不被消费 */ }
 }
 
 export class VapidWebPushSender implements WebPushSender {
@@ -31,18 +36,19 @@ export class VapidWebPushSender implements WebPushSender {
     webpush.setVapidDetails(subject, publicKey, privateKey)
   }
 
-  async send(sub: WebPushSubscriptionKeys, payload: string): Promise<void> {
+  async send(sub: WebPushSubscriptionKeys, payload: string): Promise<WebPushOutcome> {
     try {
       await webpush.sendNotification(
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
         payload,
         { TTL: 300, urgency: 'high' }, // 紧急告警：高优先级、5 分钟内送达否则过期（过时告警无意义）
       )
+      return 'sent'
     } catch (e) {
       const status = (e as { statusCode?: number }).statusCode
       if (status === 404 || status === 410) {
         this.onGone?.(sub.endpoint) // 订阅已死：回收，不再空投
-        return
+        return 'gone' // 已回收但**未送达**——自测须据此计为未送达，勿假报成功
       }
       throw e // 其余错误交调用方（调用方均 best-effort allSettled，不阻断告警主流程）
     }
@@ -56,10 +62,11 @@ export class VapidWebPushSender implements WebPushSender {
 export class CountingWebPushSender implements WebPushSender {
   constructor(private inner: WebPushSender, private count: (name: string) => void) {}
   get configured(): boolean { return this.inner.configured }
-  async send(sub: WebPushSubscriptionKeys, payload: string): Promise<void> {
+  async send(sub: WebPushSubscriptionKeys, payload: string): Promise<WebPushOutcome> {
     try {
-      await this.inner.send(sub, payload)
-      this.count('web_push_sent_total')
+      const outcome = await this.inner.send(sub, payload)
+      this.count('web_push_sent_total') // 口径不变：非抛错即计 sent（含 410 回收——那是"正确处理"非故障）
+      return outcome // 透传 'sent'/'gone' 供自测如实区分（此前吞成 void 令自测把死订阅当已送达）
     } catch (e) {
       this.count('web_push_failed_total')
       throw e

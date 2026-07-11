@@ -34,7 +34,7 @@ export interface QuietHoursInfo { enabled: boolean; startMinute: number; endMinu
 export type PushCategory = 'social' | 'route' | 'location'
 export interface RouteWaypoint { lat: number; lng: number; note?: string }
 /// 路线库条目（坐标全程 WGS-84——编辑器必须用 OSM 瓦片，绝不可换 amap GCJ-02 瓦片，会系统性偏移百米级）。
-export interface SavedRouteInfo { id: string; ownerId: string; createdBy: string; name: string; waypoints: RouteWaypoint[]; createdAt: number; updatedAt: number; role: 'owner' | 'creator' }
+export interface SavedRouteInfo { id: string; ownerId: string; createdBy: string; createdByName?: string | null; name: string; waypoints: RouteWaypoint[]; createdAt: number; updatedAt: number; role: 'owner' | 'creator' }
 export interface ContactLocation { userId: string; displayName: string; avatar?: string | null; role: string; lat: number; lng: number; accuracy?: number | null; heading?: number | null; battery?: number | null; updatedAt: number }
 export interface SafetyTimer { id: string; note?: string | null; status: string; startedAt: number; dueAt: number; remainingSec: number }
 /// 应急就绪自检：每位紧急联系人能否即时收到告警（reachable=有 APNs token 或已配 Web Push 订阅）。

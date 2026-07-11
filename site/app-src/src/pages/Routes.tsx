@@ -238,6 +238,11 @@ export function RoutesPage() {
                       {t(`给${ownerName(r)} · ${r.waypoints.length} 个点`, `For ${ownerName(r)} · ${r.waypoints.length} points`)}
                       {r.waypoints.length >= 2 && ` · ${routeDistanceText(routeDistanceMeters(r.waypoints), t)}`}
                     </div>
+                    {/* 信任透明：这条是别人替我画的（role=owner 且有创建者名）→ 显示"由 X 创建"，让要沿它走的人知道路线可信度取决于谁画的
+                        （与 iOS 盲人端"这条是谁画的"同口径）。自己画的(createdByName 为空)不赘述。 */}
+                    {r.role === 'owner' && r.createdByName && (
+                      <div className="mt-0.5 text-xs text-faint">{t(`由 ${r.createdByName} 创建`, `Created by ${r.createdByName}`)}</div>
+                    )}
                   </div>
                 </div>
                 <div className="mt-3 flex gap-2">

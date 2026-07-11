@@ -5,6 +5,14 @@
 self.addEventListener('install', () => { self.skipWaiting() })
 self.addEventListener('activate', (event) => { event.waitUntil(self.clients.claim()) })
 
+// API 源：生产的 API 是**跨源**（站点 beeurei.hikosphere.com、API beeurei-api.hikosphere.com），而 SW 是静态
+// 文件、不参与打包、无法 import config——若对 API 用相对路径('/api/...')会打到**站点自身源**(无 /api)而失败。
+// 由注册方(webPush.ts)把 app 解析出的 API_BASE 经 SW 自身 URL 的查询串注入；SW 从 self.location 读取。
+// 本地/同源部署 apiBase='' → 相对路径(与 app 一致，走同源/代理)。跨源部署 → 绝对 API 源。
+function apiBase() {
+  try { return new URL(self.location.href).searchParams.get('apiBase') || '' } catch (_) { return '' }
+}
+
 // 离线兜底（仅导航请求）：**刻意不缓存任何应用资源**（实时应用，陈旧缓存有害）——离线时给一页
 // 诚实的"无法连接"而非浏览器报错页。资源/接口请求原样放行（失败由应用层各自处理）。
 self.addEventListener('fetch', (event) => {
@@ -36,7 +44,8 @@ self.addEventListener('pushsubscriptionchange', (event) => {
         || await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: oldSub.options.applicationServerKey })
       const newJson = newSub.toJSON()
       if (!oldJson.endpoint || !oldJson.keys || !newJson.endpoint || !newJson.keys) return
-      await fetch('/api/push/web-rotate', {
+      // 打到**正确的 API 源**（跨源部署下相对路径会打到站点源、404，轮换永不落库 → web-push 静默失效）。
+      await fetch(apiBase() + '/api/push/web-rotate', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({

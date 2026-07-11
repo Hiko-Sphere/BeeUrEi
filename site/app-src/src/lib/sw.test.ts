@@ -202,4 +202,27 @@ describe('sw.js 订阅轮换（pushsubscriptionchange 处理器）', () => {
     await waited!
     expect(calls.length).toBe(0)
   })
+
+  it('跨源部署：SW URL 携 apiBase 查询串 → 轮换 POST 打到**正确的 API 源**（非站点相对路径）', async () => {
+    const calls: { url: string }[] = []
+    globalThis.fetch = (async (url: string) => { calls.push({ url }); return { ok: true } }) as unknown as typeof fetch
+    const oldSub = { toJSON: () => ({ endpoint: 'https://e/old', keys: { p256dh: 'p', auth: 'a' } }), options: { applicationServerKey: 'KEY' } }
+    const newSub = { toJSON: () => ({ endpoint: 'https://e/new', keys: { p256dh: 'p2', auth: 'a2' } }) }
+    let waited: Promise<void> | null = null
+    // SW 自身 URL 带注册方注入的 apiBase（生产跨源），apiBase() 应读出并拼成绝对 API 源。
+    const src2 = readFileSync(join(__dirname, '../../public/sw.js'), 'utf8')
+    const localHandlers = new Map<string, Handler>()
+    const self2 = {
+      addEventListener: (n: string, f: Handler) => localHandlers.set(n, f),
+      skipWaiting: () => {}, clients: { claim: () => {} },
+      registration: { pushManager: { subscribe: async () => newSub }, showNotification: () => {} },
+      location: { origin: 'https://beeurei.hikosphere.com',
+        href: 'https://beeurei.hikosphere.com/app/sw.js?apiBase=' + encodeURIComponent('https://beeurei-api.hikosphere.com') },
+    }
+    new Function('self', 'Response', 'URL', 'fetch', src2)(self2, FakeResponse, URL, (...a: unknown[]) => (globalThis.fetch as (...x: unknown[]) => unknown)(...a))
+    localHandlers.get('pushsubscriptionchange')!({ oldSubscription: oldSub, newSubscription: newSub, waitUntil: (p: Promise<void>) => { waited = p } })
+    await waited!
+    expect(calls.length).toBe(1)
+    expect(calls[0].url).toBe('https://beeurei-api.hikosphere.com/api/push/web-rotate') // 绝对 API 源，非站点相对（此前相对→打站点 404→轮换丢失）
+  })
 })

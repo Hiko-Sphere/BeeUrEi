@@ -1,5 +1,11 @@
 import { api } from './api'
-import { apiURL } from './config'
+import { API_BASE, apiURL } from './config'
+
+// SW 注册 URL：把 app 解析出的 API_BASE 经查询串注入 SW，供其 pushsubscriptionchange 轮换时打到**正确的 API 源**
+// （SW 是静态文件、无法 import config；跨源部署下相对 '/api' 会打到站点源 404 → 轮换后 web-push 静默失效）。
+// scope 由路径 '/app/' 决定、不含查询串，故 getRegistration('/app/sw.js') 仍匹配同一注册。API_BASE 为空(同源/本地)
+// 则不带查询串、SW 回退相对路径。
+const SW_URL = '/app/sw.js' + (API_BASE ? '?apiBase=' + encodeURIComponent(API_BASE) : '')
 
 /// Web Push 订阅编排（浏览器推送紧急告警——关掉标签页也能收到系统通知）。
 /// 流程：SW 注册 → 服务端取 VAPID 公钥（未配置 503 → 'unsupported'）→ 请求通知权限 →
@@ -30,7 +36,7 @@ export async function subscribeWebPush(): Promise<WebPushStatus> {
   }
   const perm = await Notification.requestPermission()
   if (perm !== 'granted') return 'denied'
-  const reg = await navigator.serviceWorker.register('/app/sw.js')
+  const reg = await navigator.serviceWorker.register(SW_URL)
   await navigator.serviceWorker.ready
   const sub = (await reg.pushManager.getSubscription())
     ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) as BufferSource }))

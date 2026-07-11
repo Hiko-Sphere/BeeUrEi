@@ -128,6 +128,17 @@ describe('POST /api/messages/:id/reaction 端到端（逐用户 + mine 按 viewe
     await a.close()
   })
 
+  it('编辑消息的回显也带 reactions（编辑不动表情；写操作回显与列表同口径，别把胶囊清空）', async () => {
+    const { a, A, B, mid } = await seed()
+    await a.inject({ method: 'POST', url: `/api/messages/${mid}/reaction`, headers: auth(B.token), payload: { emoji: '👍' } })
+    // A 编辑自己发的这条（15 分钟内、text 类）→ 回显须仍带 B 的 👍。
+    const edited = (await a.inject({ method: 'POST', url: `/api/messages/${mid}/edit`, headers: auth(A.token), payload: { text: '在的' } })).json()
+    expect(edited.message.text).toBe('在的')
+    expect(edited.message.editedAt).toBeTruthy()
+    expect(edited.message.reactions).toEqual([{ emoji: '👍', count: 1, mine: false }]) // A 视角：B 的 👍，mine=false，未被编辑清空
+    await a.close()
+  })
+
   it('**群消息**同样带 reactions（各成员回应各显、mine 按视角）——GET ?group= 分支不漏（姊妹分支护栏）', async () => {
     const store = new MemoryStore()
     const a = buildApp(store)

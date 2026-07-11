@@ -319,8 +319,9 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     }
     if (matchBannedTerm(store.getAppConfig(), parsed.data.text)) return reply.code(403).send({ error: 'content_blocked' })
     const updated = store.updateMessage(id, { text: parsed.data.text, editedAt: Date.now() })
-    // 读回执剥离与消息列表同口径（复审补漏：写操作回显是曾被遗漏的 readAt 旁路出口）。
-    return { message: updated && stripReadAtForViewer(store, editor, updated) }
+    // 读回执剥离 + 逐用户表情回应，与消息列表/reaction 回显同口径：编辑不动表情，回显须带上现有 reactions，
+    // 否则直接用回显更新的客户端会把这条的表情胶囊清空（web 编辑后 reload 不受影响，但 iOS/乐观更新会）。
+    return { message: updated && withReactions(store, editor, [stripReadAtForViewer(store, editor, updated)])[0] }
   })
 
   // 表情回应（WhatsApp 式：单 emoji，最新覆盖；空字符串取消）。单聊双方或群成员可操作。

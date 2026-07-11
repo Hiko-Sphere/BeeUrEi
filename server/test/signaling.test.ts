@@ -428,6 +428,30 @@ describe('WebRTC signaling relay', () => {
     await app.close()
   })
 
+  it('信令令牌：/api/assist/turn 下发短时 wsToken，可连 /ws 握手并 join（access token 不再进 URL）', async () => {
+    const app = buildApp(new MemoryStore())
+    await app.listen({ port: 0, host: '127.0.0.1' })
+    const port = (app.server.address() as { port: number }).port
+    const reg = async (u: string, role: string) =>
+      (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const caller = await reg('wscaller', 'blind')
+    const helper = await reg('wshelper', 'helper')
+    const link = await app.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${caller.token}` }, payload: { username: 'wshelper', relation: '志愿者', isEmergency: true } })
+    await app.inject({ method: 'POST', url: `/api/family/links/${link.json().link.id}/accept`, headers: { authorization: `Bearer ${helper.token}` } })
+    await app.inject({ method: 'POST', url: '/api/assist/call', headers: { authorization: `Bearer ${caller.token}` }, payload: { callId: 'wsc1', targetUserIds: [helper.user.id] } })
+
+    // 建 WS 前本就要取 turn 凭据——同一次请求带回短时 wsToken。
+    const turn = (await app.inject({ method: 'GET', url: '/api/assist/turn', headers: { authorization: `Bearer ${caller.token}` } })).json()
+    expect(typeof turn.wsToken).toBe('string')
+    // 用 wsToken（而非 access token）连 /ws 并 join → 握手接受、收到 joined。
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${turn.wsToken}`)
+    await open(ws)
+    const joined = nextMessage(ws, (m) => m.type === 'joined')
+    ws.send(JSON.stringify({ type: 'join', callId: 'wsc1', role: 'blind' }))
+    expect(await joined).toBeTruthy()
+    ws.close(); await app.close()
+  })
+
   it('参与者中继的 end 帧被剥离 by/adminId 归因（防伪造"管理员强制结束了通话"）', async () => {
     const app = buildApp(new MemoryStore())
     await app.listen({ port: 0, host: '127.0.0.1' })

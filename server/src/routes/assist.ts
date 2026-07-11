@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { type Store, isBlockedBetween, blockedUserIdSet, matchBannedTerm, acceptedContactIds } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
+import { signWsToken } from '../auth/tokens'
 import { SignalingHub } from '../signaling/hub'
 import { PresenceRegistry } from '../assist/presence'
 import { rankHelpers, type Candidate } from '../assist/matcher'
@@ -75,7 +76,7 @@ export function registerAssistRoutes(
   })
 
   // WebRTC ICE 服务器（STUN + 短时效 TURN 凭据）。客户端通话前拉取。
-  app.get('/api/assist/turn', { preHandler: requireAuth() }, async () => {
+  app.get('/api/assist/turn', { preHandler: requireAuth() }, async (req) => {
     const stun = (process.env.STUN_URLS ?? 'stun:stun.l.google.com:19302').split(',').map((s) => s.trim()).filter(Boolean)
     const turn = (process.env.TURN_URLS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
     const iceServers = buildIceServers({
@@ -85,7 +86,11 @@ export function registerAssistRoutes(
       ttlSeconds: 6 * 60 * 60, // 6 小时
       nowMs: Date.now(),
     })
-    return { iceServers }
+    // 一并下发短时**信令握手令牌**：网页端拿它进 WS URL 查询串（而非 1h 全权 access token），泄漏进日志也无害。
+    // 与本次通话建连同一次请求取得（客户端建 WS 前本就 fetch 此端点），无额外往返；iOS 不用它、继续走 access token。
+    const u = req.user!
+    const wsToken = signWsToken({ sub: u.sub, role: u.role, tv: u.tv ?? 0, sid: u.sid })
+    return { iceServers, wsToken }
   })
 
   // 通话连接失败上报（把 ICE relay 不可达等**静默 degrade** 变成运维可见的计数）。客户端在 ICE failed /

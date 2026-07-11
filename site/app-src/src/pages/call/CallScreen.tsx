@@ -62,12 +62,15 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
     if (!token) { onEnd(); return }
     ;(async () => {
       let ice: RTCIceServer[] = []
-      try { const r = await api.iceServers(); ice = (r.iceServers || []) as RTCIceServer[] } catch { /* 用默认 STUN */ }
+      let wsToken: string | undefined
+      // 与 turn 凭据同一次请求取回短时**信令令牌**：进 WS URL 的是它（scope='ws'、300s、URL 泄漏进日志也不能当
+      // access token 用），而非 1h 全权 access token。turn 取失败则回退 access token（服务端握手仍接受，见 ws.ts）。
+      try { const r = await api.iceServers(); ice = (r.iceServers || []) as RTCIceServer[]; wsToken = r.wsToken } catch { /* 用默认 STUN */ }
       let policy = { enabled: false, requireConsent: true }
       try { const c = await api.appConfig(); policy = c.recording } catch { /* fail-safe 关闭 */ }
       if (cancelled) return
       const engine = new CallEngine({
-        callId: call.callId, token, iceServers: ice, recordPolicy: policy,
+        callId: call.callId, token: wsToken ?? token, iceServers: ice, recordPolicy: policy,
         cb: {
           onStatus: (k) => setStatusKey(k),
           onConnected: (c) => setConnected(c),

@@ -72,3 +72,25 @@ export function verifyMediaToken(token: string, recordingId: string): MediaToken
     return null
   }
 }
+
+/// 短时**信令握手令牌**（WebSocket 无法带 Authorization 头，token 只能进 URL 查询串 → 落服务端/代理访问日志）。
+/// 用 scope='ws' 的窄权短时令牌代替把 1h 全权 access token 放进 WS URL：一旦 URL 泄漏（日志/代理），该令牌
+/// **不能**被当作 access token 用（verifyAccessToken 拒任何带 scope 的令牌，见 token-confusion 修复），且 300s 即过期。
+/// 携带与 access token 同套声明(sub/role/tv/sid)，供 /ws 握手做同样的账号实时校验（封禁/改密/登出即时失效）。
+export const WS_TOKEN_TTL_SEC = 300 // 覆盖"取 turn 凭据 → getUserMedia 授权 → 建 WS"的正常窗口，远短于 access 的 1h
+export interface WsTokenPayload { sub: string; role: string; tv: number; sid?: string }
+export function signWsToken(payload: WsTokenPayload): string {
+  return jwt.sign({ ...payload, scope: 'ws' }, SECRET, { expiresIn: WS_TOKEN_TTL_SEC })
+}
+export function verifyWsToken(token: string): WsTokenPayload | null {
+  try {
+    const d = jwt.verify(token, SECRET) as jwt.JwtPayload
+    if (d.scope !== 'ws') return null
+    if (typeof d.sub !== 'string' || typeof d.role !== 'string') return null
+    const tv = typeof d.tv === 'number' ? d.tv : 0
+    const sid = typeof d.sid === 'string' ? d.sid : undefined
+    return { sub: d.sub, role: d.role, tv, sid }
+  } catch {
+    return null
+  }
+}

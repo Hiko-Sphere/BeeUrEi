@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import fastifyWebsocket from '@fastify/websocket'
 import { randomUUID } from 'node:crypto'
-import { verifyAccessToken } from '../auth/tokens'
+import { verifyAccessToken, verifyWsToken } from '../auth/tokens'
 import { blockedByVerificationGate } from '../auth/rbac'
 import { SignalingHub, type Member } from '../signaling/hub'
 import { type Store, matchBannedTerm } from '../db/store'
@@ -51,7 +51,9 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
 
     f.get('/ws', { websocket: true }, (socket: any, req) => {
       const token = (req.query as { token?: string }).token
-      const auth = token ? verifyAccessToken(token) : null
+      // 优先短时**信令令牌**(scope='ws'，网页端经 /api/assist/turn 取得)——URL 泄漏进日志也不能当 access token 用；
+      // 回退 access token 兼容 iOS/旧网页端。二者声明同套(sub/role/tv/sid)，下方账号实时校验一视同仁。
+      const auth = token ? (verifyWsToken(token) ?? verifyAccessToken(token)) : null
       if (!auth) {
         socket.close(4001, 'unauthorized')
         return

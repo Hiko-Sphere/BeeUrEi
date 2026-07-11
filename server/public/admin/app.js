@@ -292,6 +292,10 @@ function decisionLabel(d) { return d ? t('dec_' + d) : '—'; }
 function featLabel(k) { return (I18N[state.lang].featLabels[k]) || k; }
 function featDesc(k) { return (I18N[state.lang].featDescs[k]) || ''; }
 function localeCode() { return state.lang === 'en' ? 'en-US' : 'zh-CN'; }
+// 观察者信令 WS 令牌：WebSocket 无法带 Authorization 头，token 只能进 URL 查询串 → 落反代/访问日志。放长效
+// **admin 会话令牌**风险最高（可回放至过期换取全平台控制）。改用 /api/assist/turn 下发的短时 scope='ws' 令牌
+// （300s，且 verifyAccessToken 拒任何带 scope 的令牌，泄漏进日志也当不了 access token）。旧服务端无 wsToken → 回退。
+function pickWsToken(turnResp) { return (turnResp && turnResp.wsToken) || state.token; }
 
 // ---------------------------------------------------------------- dom helpers
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -383,6 +387,7 @@ function logout(silent) {
   state.token = null; state.user = null;
   localStorage.removeItem(LS.token); localStorage.removeItem(LS.user);
   if (state.refreshTimer) { clearInterval(state.refreshTimer); state.refreshTimer = null; }
+  if (state.liveTimer) { clearInterval(state.liveTimer); state.liveTimer = null; } // 登出连带停实时通话轮询定时器（此前只清 refreshTimer，遗漏此条）
   if (!silent) toast(t('logout'));
   location.hash = '';
   render();
@@ -1421,8 +1426,9 @@ function startObserver(call) {
 
   // —— 连接 ——
   (async () => {
-    try { const r = await api('/api/assist/turn'); if (r && r.iceServers && r.iceServers.length) iceServers = r.iceServers; } catch { /* fall back to public STUN */ }
-    ws = new WebSocket(wsProto + '//' + location.host + '/ws?token=' + encodeURIComponent(state.token));
+    let turnResp = null;
+    try { turnResp = await api('/api/assist/turn'); if (turnResp && turnResp.iceServers && turnResp.iceServers.length) iceServers = turnResp.iceServers; } catch { /* fall back to public STUN + access token */ }
+    ws = new WebSocket(wsProto + '//' + location.host + '/ws?token=' + encodeURIComponent(pickWsToken(turnResp)));
     ws.onopen = () => send({ type: 'join', callId: call.callId, role: 'admin', observe: true, caps: ['adminObserver'] });
     ws.onmessage = (ev) => {
       let m; try { m = JSON.parse(ev.data); } catch { return; }

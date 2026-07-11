@@ -8,12 +8,13 @@ import vm from 'node:vm'
 /// 不命中则显式抛错，绝不静默空测）；DOM 用**宽容自引用 stub 元素**（getElementById/querySelector 都回它，
 /// innerHTML 可读写）——渲染函数写完 innerHTML 后测试读回断言，事件绑定全 noop。
 interface SpaTest {
-  state: { lang: string; emergencies: unknown[]; calls: unknown[]; callsQuery: string; overview: unknown }
+  state: { lang: string; emergencies: unknown[]; calls: unknown[]; callsQuery: string; overview: unknown; token: string | null }
   t: (k: string) => string
   emergencySection: () => string
   statCard: (k: string, v: unknown, sub?: string, cls?: string) => string
   renderCalls: () => void
   renderDashboard: () => void
+  pickWsToken: (turnResp: unknown) => string
   view: { innerHTML: string } // 渲染函数写入的共享 stub 元素（viewEl()/$ 都解析到它）
 }
 function loadSpa(): SpaTest {
@@ -21,7 +22,7 @@ function loadSpa(): SpaTest {
   let src = readFileSync(path, 'utf8')
   const anchor = '\nrender();'
   if (!src.includes(anchor)) throw new Error('app.js bootstrap anchor "render();" not found — update test')
-  src = src.replace(anchor, '\nglobalThis.__test = { state, t, emergencySection, statCard, renderCalls, renderDashboard };\nrender();')
+  src = src.replace(anchor, '\nglobalThis.__test = { state, t, emergencySection, statCard, renderCalls, renderDashboard, pickWsToken };\nrender();')
   const noop = (): void => {}
   const classList = { add: noop, remove: noop, toggle: noop, contains: () => false }
   // 自引用宽容元素：querySelector 返回自身（事件绑定链不断）、querySelectorAll 空数组、其余 noop。
@@ -283,5 +284,15 @@ describe('管理面板 通话记录区（紧急求助可辨识）', () => {
     expect(html).toContain('3:24')                           // 204s → 3:24
     // 0 / 缺省时长显示 —（除表头"时长"外，— 恰两处：c2 与 c3）。
     expect(html.split('—').length - 1).toBe(2)
+  })
+
+  it('观察者信令用短时 wsToken（而非长效 admin 会话令牌）进 WS URL；旧服务端无 wsToken 则回退', () => {
+    const spa = loadSpa()
+    spa.state.token = 'ADMIN_SESSION_TOKEN'
+    // turn 下发了短时 scope=ws 令牌 → 用它（进 URL 泄漏进日志也当不了 admin access token）。
+    expect(spa.pickWsToken({ iceServers: [], wsToken: 'WS_SHORT_300s' })).toBe('WS_SHORT_300s')
+    // 旧服务端/取 turn 失败无 wsToken → 回退 access token（握手仍接受，不阻断观察）。
+    expect(spa.pickWsToken({ iceServers: [] })).toBe('ADMIN_SESSION_TOKEN')
+    expect(spa.pickWsToken(null)).toBe('ADMIN_SESSION_TOKEN')
   })
 })

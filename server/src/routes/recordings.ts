@@ -1,11 +1,11 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import { createReadStream, statSync } from 'node:fs'
 import { type Store, type Recording, type User } from '../db/store'
 import { requireAuth, blockedByVerificationGate } from '../auth/rbac'
 import { sweepExpiredRecordings } from '../recording/retention'
 import { removeMediaFile, mediaPath, mediaFileExists } from '../media/storage'
+import { streamWithRange } from '../media/stream'
 import { RecordingConsentRegistry } from '../recording/consentRegistry'
 import { type PendingCallRegistry } from '../assist/pendingCalls'
 import { type OpenHelpRegistry } from '../assist/openHelp'
@@ -241,32 +241,3 @@ export function registerRecordingRoutes(app: FastifyInstance, store: Store, cons
 
 /// 以 HTTP Range 流式发送一个文件（206 局部内容 / 200 全量），便于播放器拖动进度。
 /// 校验并钳制 start/end，非法/不可满足的区间返回 416。文件名是服务端生成的 UUID（无路径穿越）。
-function streamWithRange(req: FastifyRequest, reply: FastifyReply, path: string, mime: string): FastifyReply {
-  const size = statSync(path).size
-  reply.header('Accept-Ranges', 'bytes')
-  reply.header('Content-Type', mime)
-  reply.header('Cache-Control', 'private, no-store')
-  const range = req.headers.range
-  if (typeof range === 'string') {
-    const m = /^bytes=(\d*)-(\d*)$/.exec(range.trim())
-    if (!m || (m[1] === '' && m[2] === '')) {
-      return reply.code(416).header('Content-Range', `bytes */${size}`).send()
-    }
-    let start = m[1] === '' ? size - Number(m[2]) : Number(m[1])
-    // 后缀区间 bytes=-N（最后 N 字节）：start=size-N、end 必须是 size-1，而非 N——
-    // 否则如 bytes=-500 在 10000 字节文件上得 start=9500/end=500，被下方 start>end 误判 416。
-    // 这类后缀请求合法且 MOV/MP4 播放器常用（读片尾 moov 原子）。
-    let end = (m[2] === '' || m[1] === '') ? size - 1 : Number(m[2])
-    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0) start = 0
-    if (end >= size) end = size - 1
-    if (start > end || start >= size) {
-      return reply.code(416).header('Content-Range', `bytes */${size}`).send()
-    }
-    reply.code(206)
-    reply.header('Content-Range', `bytes ${start}-${end}/${size}`)
-    reply.header('Content-Length', String(end - start + 1))
-    return reply.send(createReadStream(path, { start, end }))
-  }
-  reply.header('Content-Length', String(size))
-  return reply.send(createReadStream(path))
-}

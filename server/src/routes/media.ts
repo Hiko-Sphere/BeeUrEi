@@ -1,11 +1,11 @@
 import type { FastifyInstance } from 'fastify'
 import { randomUUID } from 'node:crypto'
-import { createReadStream, statSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { type Store, type MediaMeta, areLinked, isBlockedBetween } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
 import { ensureMediaDir, mediaPath, mediaFileExists, removeMediaFile } from '../media/storage'
+import { streamWithRange } from '../media/stream'
 
 /// 单个媒体文件上限 50MB（约 1 分钟 720p H.264）；路由 bodyLimit 略放宽容纳传输开销。
 export const MAX_MEDIA_BYTES = 50 * 1024 * 1024
@@ -113,9 +113,9 @@ export function registerMediaRoutes(app: FastifyInstance, store: Store): void {
     if (me !== meta.ownerId && !sharedViaVisibleMessage(me, id) && !viaRelationship) {
       return reply.code(403).send({ error: 'forbidden' })
     }
-    const path = mediaPath(meta.id)
-    reply.header('content-type', meta.mime)
-    reply.header('content-length', String(statSync(path).size))
-    return reply.send(createReadStream(path))
+    // 与录制回看端点**共用** streamWithRange：宣告 Accept-Ranges 并支持 HTTP Range（206），让 <video>/原生
+    // 播放器可拖动定位、按需取片段而非整文件下载（此前视频消息是整文件流、无 Range，与录制端点不一致）。
+    // 无 Range 头时走整文件 200（web fetch→blob 即此路，行为不变）。授权已在上方完成。
+    return streamWithRange(req, reply, mediaPath(meta.id), meta.mime)
   })
 }

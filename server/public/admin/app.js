@@ -1871,6 +1871,24 @@ async function fetchDocBlob(id, kind) {
   return URL.createObjectURL(await res.blob());
 }
 
+// 证件图全屏灯箱（KYC 审核要放大看清姓名/证件号/人脸/防伪，250px 缩略图看不清）：暗底居中大图，点背景/关闭键/Esc 关。
+// 用 createElement（不 innerHTML）避免任何注入；role=dialog+aria-modal，焦点移到关闭键，键盘可用。
+function openDocLightbox(src, alt) {
+  const ov = document.createElement('div');
+  ov.className = 'doc-lightbox';
+  ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', alt || '');
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'doc-lightbox-close'; closeBtn.setAttribute('aria-label', t('closeBtn')); closeBtn.textContent = '✕';
+  const big = document.createElement('img'); big.src = src; big.alt = alt || '';
+  ov.append(closeBtn, big);
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+  ov.addEventListener('click', (e) => { if (e.target === ov || e.target === closeBtn) close(); }); // 点背景/关闭键关；点图本身不关
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(ov);
+  closeBtn.focus();
+}
+
 async function openVerifReview(id) {
   let d;
   try { d = await api('/api/admin/verifications/' + encodeURIComponent(id)); }
@@ -1937,6 +1955,11 @@ async function openVerifReview(id) {
       const u = await fetchDocBlob(id, img.dataset.kind);
       if (closed) { URL.revokeObjectURL(u); return; }
       objectUrls.push(u); img.src = u;
+      // 加载成功即可点/键盘放大（img 本身非可聚焦，补 role=button+tabindex+Enter/Space）：审核要放大读清证件细节。
+      img.style.cursor = 'zoom-in'; img.tabIndex = 0; img.setAttribute('role', 'button');
+      const openZoom = () => openDocLightbox(u, img.alt);
+      img.addEventListener('click', openZoom);
+      img.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openZoom(); } });
     }
     catch { if (!closed) img.replaceWith(Object.assign(document.createElement('div'), { className: 'kyc-img empty-doc', textContent: t('idDocLoadFail') })); }
   });

@@ -228,7 +228,14 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
           } else if (msg.type === 'offer' || msg.type === 'answer' || msg.type === 'ice') {
             targets = targets.filter((p) => p.role !== 'admin') // 1:1 主媒体不发给旁观管理员（管理员的画面/声音走 obs-*）
           }
-          for (const p of targets) relay(p.clientId, { ...msg, from: auth.sub })
+          // 剥离服务器权威归因字段：by/adminId 只应由 callControl.endCall（强制结束，直发不经此中继）设置。
+          // 否则通话参与者可中继一条 {type:'end', by:'admin'} 伪造"管理员强制结束了本次通话"横幅给对端——
+          // 客户端据 msg.by==='admin' 判定结束方（webrtc.ts case 'end'），会误导对方以为平台管理员介入、
+          // 冒充治理/合规信号（见对抗复审 SEC-B）。from 已由服务器覆盖以防冒名，此处同理不放行客户端自报的管理员归因。
+          const clean: Record<string, unknown> = { ...msg }
+          delete clean.by
+          delete clean.adminId
+          for (const p of targets) relay(p.clientId, { ...clean, from: auth.sub })
         }
       })
 

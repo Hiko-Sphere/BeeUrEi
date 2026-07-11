@@ -393,4 +393,38 @@ describe('WebRTC signaling relay', () => {
     expect(await closed).toBe(1009) // 1009 = message too big
     await app.close()
   })
+
+  it('参与者中继的 end 帧被剥离 by/adminId 归因（防伪造"管理员强制结束了通话"）', async () => {
+    const app = buildApp(new MemoryStore())
+    await app.listen({ port: 0, host: '127.0.0.1' })
+    const port = (app.server.address() as { port: number }).port
+    const reg = async (u: string, role: string) => {
+      const r = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+      return { token: r.token as string, id: r.user.id as string }
+    }
+    const caller = await reg('spoofc', 'blind')
+    const helper = await reg('spoofh', 'helper')
+    const link = await app.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${caller.token}` },
+      payload: { username: 'spoofh', relation: '志愿者', isEmergency: true } })
+    await app.inject({ method: 'POST', url: `/api/family/links/${link.json().link.id}/accept`, headers: { authorization: `Bearer ${helper.token}` } })
+    await app.inject({ method: 'POST', url: '/api/assist/call', headers: { authorization: `Bearer ${caller.token}` }, payload: { callId: 'cE', targetUserIds: [helper.id] } })
+
+    const base = `ws://127.0.0.1:${port}/ws`
+    const ws1 = new WebSocket(`${base}?token=${caller.token}`), ws2 = new WebSocket(`${base}?token=${helper.token}`)
+    await Promise.all([open(ws1), open(ws2)])
+    const j1 = nextMessage(ws1, (m) => m.type === 'joined'), j2 = nextMessage(ws2, (m) => m.type === 'joined')
+    ws1.send(JSON.stringify({ type: 'join', callId: 'cE', role: 'blind' }))
+    ws2.send(JSON.stringify({ type: 'join', callId: 'cE', role: 'helper' }))
+    await Promise.all([j1, j2])
+
+    // 恶意参与者(caller)中继一条伪造管理员归因的 end。helper 侧应收到 end，但 by/adminId 被服务器剥离
+    // → 客户端据 msg.by==='admin' 判定，故只会显示"对端挂断"而非伪造的"管理员强制结束"。
+    const endAtHelper = nextMessage(ws2, (m) => m.type === 'end')
+    ws1.send(JSON.stringify({ type: 'end', by: 'admin', adminId: 'evil' }))
+    const end = await endAtHelper
+    expect(end.by).toBeUndefined()       // 管理员归因被剥离
+    expect(end.adminId).toBeUndefined()
+    expect(end.from).toBe(caller.id)     // from 仍由服务器权威标注为真实发送者（不可冒名）
+    ws1.close(); ws2.close(); await app.close()
+  })
 })

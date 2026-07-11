@@ -285,10 +285,18 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   // 与 object-src 'none'（面板不用任何插件）。这是"CSP 应按页精调"的一个例外：面板自包含，策略明确。
   const ADMIN_CSP = "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; "
     + "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'"
+  // 显式 Permissions-Policy：此前面板不发此头 → 落浏览器默认(**所有**功能 allow-self)，等于对定位/相机/支付/USB
+  // 等面板根本不用的功能也敞开。面板是**最高权限面**，应最小化其浏览器功能面：仅放行**麦克风**(观察者"开麦说话"
+  // getUserMedia audio:true 需要，且显式=不因日后误设默认而破)，其余一律禁用(纵深防御，即便日后有 XSS/依赖想用
+  // 也被挡)。相机不放行(观察者只收对端视频、自身仅发音频，不用本机摄像头)。与网页端 app-headers 同款收口思路。
+  const ADMIN_PERMISSIONS_POLICY = 'microphone=(self), camera=(), geolocation=(), interest-cohort=(), browsing-topics=(), payment=(), usb=()'
   app.register(fastifyStatic, {
     root: join(publicDir, 'admin'),
     prefix: '/admin/',
-    setHeaders: (res) => { res.setHeader('Content-Security-Policy', ADMIN_CSP) },
+    setHeaders: (res) => {
+      res.setHeader('Content-Security-Policy', ADMIN_CSP)
+      res.setHeader('Permissions-Policy', ADMIN_PERMISSIONS_POLICY)
+    },
   })
   app.get('/admin', async (_req, reply) => reply.redirect('/admin/', 301))
   // 法律文件已迁至官网同源页面 https://beeurei.hikosphere.com/legal/（不再托管于 API 域）。

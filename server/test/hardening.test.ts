@@ -64,6 +64,19 @@ describe('production hardening', () => {
     await a.close()
   })
 
+  it('/admin 静态资源带 Permissions-Policy：仅放行麦克风(观察者开麦)，禁用其余浏览器功能（最高权限面最小化功能面）', async () => {
+    const a = app()
+    const res = await a.inject({ method: 'GET', url: '/admin/' })
+    expect(res.statusCode).toBe(200)
+    const pp = res.headers['permissions-policy'] as string
+    expect(pp).toBeTruthy()
+    expect(pp).toContain('microphone=(self)') // 观察者"开麦说话" getUserMedia(audio) 需要——显式放行(不靠浏览器默认，防误破)
+    expect(pp).not.toContain('microphone=()')  // 反面锁死：绝不能禁掉麦克风(否则开麦静默失效，同 geolocation 类 bug)
+    expect(pp).toContain('camera=()')          // 观察者只收对端视频、自身仅发音频，不用本机摄像头
+    expect(pp).toContain('geolocation=()')     // 面板不用定位
+    await a.close()
+  })
+
   it('CORS 预检对白名单源放行含 PATCH 的方法集（覆盖 API 全部方法）', async () => {
     const a = app()
     const res = await a.inject({ method: 'OPTIONS', url: '/api/version', headers: { origin: 'http://localhost:5173' } })

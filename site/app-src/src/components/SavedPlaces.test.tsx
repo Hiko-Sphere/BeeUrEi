@@ -62,4 +62,27 @@ describe('SavedPlaces 常用地点（地理围栏）管理', () => {
     await Promise.resolve()
     expect(api.deletePlace).not.toHaveBeenCalled()
   })
+
+  it('编辑：预填地址、锁定 label（只读），保存以同 label + 新地址 upsert（不改 label、不新建重复围栏）', async () => {
+    render(<SavedPlaces />)
+    await screen.findByText('家')
+    fireEvent.click(screen.getByRole('button', { name: '编辑常用地点 家 的地址' }))
+    const nameInput = screen.getByLabelText('地点名称') as HTMLInputElement
+    const addrInput = screen.getByLabelText('地址') as HTMLInputElement
+    expect(nameInput.value).toBe('家')          // 预填 label
+    expect(nameInput.readOnly).toBe(true)        // 锁定：编辑只改地址，不改 label
+    expect(addrInput.value).toBe('北京市朝阳区幸福路1号') // 预填现有地址
+    fireEvent.change(addrInput, { target: { value: '北京市海淀区中关村2号' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存修改' }))
+    await waitFor(() => expect(api.upsertPlace).toHaveBeenCalledWith('家', '北京市海淀区中关村2号'))
+  })
+
+  it('新增模式键入已存在的 label → "将更新其地址"预警（防不知情覆盖现有围栏）；换不存在的 label 预警消失', async () => {
+    render(<SavedPlaces />)
+    await screen.findByText('家')
+    fireEvent.change(screen.getByLabelText('地点名称'), { target: { value: '家' } })
+    expect(screen.getByText(/已存在"家"，保存将更新其地址/)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('地点名称'), { target: { value: '学校' } })
+    expect(screen.queryByText(/保存将更新其地址/)).toBeNull()
+  })
 })

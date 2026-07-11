@@ -19,9 +19,15 @@ export function SavedPlaces() {
   const [address, setAddress] = useState('')
   const [saving, setSaving] = useState(false)
   const [busyLabel, setBusyLabel] = useState<string | null>(null)
+  // 正在编辑的地点 label（null=新增模式）。编辑时锁定 label 只改地址——否则改了 label 就是**新建**一个地点、
+  // 把旧的留成重复围栏（家人收到两条到达/漏收），是静默出错的坑；显式编辑入口即防此。
+  const [editingLabel, setEditingLabel] = useState<string | null>(null)
 
   const load = () => api.savedPlaces().then((r) => setPlaces(r.places)).catch(() => setPlaces([]))
   useEffect(() => { void load() }, [])
+
+  const startEdit = (p: SavedPlace) => { setEditingLabel(p.label); setLabel(p.label); setAddress(p.address) }
+  const cancelEdit = () => { setEditingLabel(null); setLabel(''); setAddress('') }
 
   const add = async (e: FormEvent) => {
     e.preventDefault()
@@ -30,7 +36,7 @@ export function SavedPlaces() {
     setSaving(true)
     try {
       const r = await api.upsertPlace(lb, ad)
-      setLabel(''); setAddress('')
+      setLabel(''); setAddress(''); setEditingLabel(null)
       await load()
       // 地理编码失败（未配 amap/境外/查不到）→ 坐标为空、无围栏：不谎称"到达提醒已开"，如实提示。
       if (r.place.lat == null) toast(t(`已保存"${lb}"，但未能定位该地址，暂无到达提醒`, `Saved "${lb}", but couldn't locate the address — no arrival alerts`), 'info')
@@ -54,6 +60,12 @@ export function SavedPlaces() {
 
   const list = places ?? []
   const atLimit = list.length >= MAX_PLACES
+  const trimmedLabel = label.trim()
+  const editing = editingLabel !== null
+  // 新增模式下正好撞上已有 label：如实提示"将覆盖"，避免不知情地把现有地点地址改掉（编辑模式本就是覆盖、不提示）。
+  const willOverwrite = !editing && trimmedLabel !== '' && list.some((p) => p.label === trimmedLabel)
+  // 达上限仍允许**编辑**现有地点（编辑不新增），故表单在"未满 或 正在编辑"时显示。
+  const showForm = !atLimit || editing
   return (
     <Card className="overflow-hidden">
       <div className="border-b border-[var(--line)] px-4 py-3">
@@ -84,6 +96,9 @@ export function SavedPlaces() {
                        aria-label={t(`在地图上核对 ${p.label} 的位置是否正确`, `Verify ${p.label}'s location on the map`)}>{t('在地图上核对位置', 'Verify on map')}</a>
                   : <div className="text-[11px] text-danger">{t('未能定位此地址，暂无到达提醒', "Couldn't locate this address — no arrival alerts")}</div>}
               </div>
+              <button type="button" onClick={() => startEdit(p)}
+                className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium text-accent transition hover:bg-accent/10"
+                aria-label={t(`编辑常用地点 ${p.label} 的地址`, `Edit ${p.label}'s address`)}>{t('编辑', 'Edit')}</button>
               <button type="button" onClick={() => void remove(p)} disabled={busyLabel === p.label}
                 className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium text-danger transition hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label={t(`删除常用地点 ${p.label}`, `Delete saved place ${p.label}`)}>{t('删除', 'Delete')}</button>
@@ -93,24 +108,28 @@ export function SavedPlaces() {
         </ul>
       )}
 
-      {atLimit ? (
-        <div className="border-t border-[var(--line)] px-4 py-3 text-xs text-faint">{t(`已达 ${MAX_PLACES} 个上限，删除一个再添加。`, `Reached the limit of ${MAX_PLACES}. Delete one to add more.`)}</div>
-      ) : (
+      {showForm ? (
         <form onSubmit={add} className="flex flex-wrap items-end gap-2 border-t border-[var(--line)] px-4 py-3">
           <label className="flex flex-col gap-1 text-xs">
-            <span className="text-faint">{t('名称', 'Name')}</span>
-            <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={32} placeholder={t('家', 'Home')}
+            <span className="text-faint">{editing ? t('编辑', 'Editing') : t('名称', 'Name')}</span>
+            {/* 编辑时锁定 label（只读）：改 label = 新建地点，会留下重复围栏；编辑就只改地址。 */}
+            <input value={label} onChange={(e) => setLabel(e.target.value)} readOnly={editing} maxLength={32} placeholder={t('家', 'Home')}
               aria-label={t('地点名称', 'Place name')}
-              className="w-28 rounded-lg border border-[var(--line)] surface-2 px-2 py-1.5 text-sm outline-none" />
+              className={`w-28 rounded-lg border border-[var(--line)] surface-2 px-2 py-1.5 text-sm outline-none ${editing ? 'opacity-70' : ''}`} />
           </label>
           <label className="flex min-w-[10rem] flex-1 flex-col gap-1 text-xs">
             <span className="text-faint">{t('地址', 'Address')}</span>
             <input value={address} onChange={(e) => setAddress(e.target.value)} maxLength={200} placeholder={t('北京市朝阳区…', 'Street address…')}
-              aria-label={t('地址', 'Address')}
+              aria-label={t('地址', 'Address')} autoFocus={editing}
               className="w-full rounded-lg border border-[var(--line)] surface-2 px-2 py-1.5 text-sm outline-none" />
           </label>
-          <Button type="submit" disabled={saving || !label.trim() || !address.trim()}>{t('保存', 'Save')}</Button>
+          <Button type="submit" disabled={saving || !label.trim() || !address.trim()}>{editing ? t('保存修改', 'Save changes') : t('保存', 'Save')}</Button>
+          {editing && <button type="button" onClick={cancelEdit} className="rounded-lg px-2.5 py-2 text-sm text-faint hover:underline">{t('取消', 'Cancel')}</button>}
+          {/* 新增模式撞名提示：不知情地覆盖现有地点=静默改掉家人依赖的围栏，故如实预警。 */}
+          {willOverwrite && <span className="w-full text-[11px] text-honey">{t(`已存在"${trimmedLabel}"，保存将更新其地址（而非新建）`, `"${trimmedLabel}" already exists — saving updates its address (not a new one)`)}</span>}
         </form>
+      ) : (
+        <div className="border-t border-[var(--line)] px-4 py-3 text-xs text-faint">{t(`已达 ${MAX_PLACES} 个上限，删除一个再添加（仍可编辑现有地点）。`, `Reached the limit of ${MAX_PLACES}. Delete one to add more (you can still edit existing ones).`)}</div>
       )}
     </Card>
   )

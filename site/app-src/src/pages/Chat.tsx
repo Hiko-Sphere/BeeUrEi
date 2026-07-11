@@ -32,6 +32,15 @@ export function ChatPage() {
   }, [])
   useEffect(() => { void loadLists(); return pollWhileVisible(loadLists, 8000) }, [loadLists])
 
+  // 打开会话即乐观清其列表未读徽标（正在看的会话不该再显未读——桌面端列表与线程并排时尤其明显；轮询确认前的桥接）。
+  // 也让"读完→切走→8s 内切回"时"新消息"分隔线不再对已读消息重现（下次打开 sel.unread 已为 0）。分隔线本次的
+  // unreadAtOpen 已在 Thread 按当次 sel.unread 冻结，此清零只作用于列表徽标与**下次**打开，绝不影响当前分隔线。
+  useEffect(() => {
+    if (!sel) return
+    if (sel.kind === 'peer') setConvos((cur) => cur?.map((c) => (c.peer.id === sel.id && c.unread ? { ...c, unread: 0 } : c)) ?? cur)
+    else setGroups((cur) => cur?.map((g) => (g.group.id === sel.id && g.unread ? { ...g, unread: 0 } : g)) ?? cur)
+  }, [sel])
+
   // 由路由 /chat/:peerId 预选单聊对象。**每个 peerId 只预选一次**：effect 依赖 convos（首帧 convos 为
   // null 时要等它到达才能解析对端名），但会话列表每 8s 轮询刷新一次——若不设一次性守卫，每次轮询都会把
   // 用户从其手动打开的另一会话强拉回 URL 里的 peer，丢掉草稿/滚动位置/已加载历史（复审 HIGH）。
@@ -181,7 +190,7 @@ function ConvoRow({ convo, active, onClick, lang, t, meId }: { convo: Conversati
         </div>
         <div className="flex flex-col items-end gap-1">
           <span className="text-[10px] text-faint">{convo.last ? timeAgo(convo.last.createdAt, lang) : ''}</span>
-          {convo.unread > 0 && <span className="rounded-full bg-honey px-1.5 text-[10px] font-bold text-ink">{convo.unread}</span>}
+          {convo.unread > 0 && <span data-testid="convo-unread" className="rounded-full bg-honey px-1.5 text-[10px] font-bold text-ink">{convo.unread}</span>}
         </div>
       </button>
     </li>

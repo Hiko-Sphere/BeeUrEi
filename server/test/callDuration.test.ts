@@ -57,3 +57,16 @@ describe('通话时长上报 /api/assist/call/duration', () => {
     expect(s.callRecordsForUser('c').find((x) => x.callId === 'k2')?.durationSec).toBeUndefined() // 未被误更
   })
 })
+
+// 平价：allCallRecords(管理端全站通话) 也须带 durationSec，两 Store 一致。此前 SqliteStore.allCallRecords 漏读
+// durationSec → 生产下「全站通话」视图 + CSV 导出时长恒 null（已接通有时长也不显），而 MemoryStore 返回整对象
+// 含时长 → 测试盲区（见平价审计）。故此测试**两 Store 都跑**。
+describe.each([['MemoryStore', () => new MemoryStore()], ['SqliteStore', () => new SqliteStore(':memory:')]] as const)('allCallRecords 保留 durationSec (%s)', (_n, make) => {
+  it('setCallDuration 后 allCallRecords 读回该记录的 durationSec（不丢字段）', () => {
+    const store = make()
+    store.createCallRecord({ id: 'r1', callId: 'k1', callerId: 'a', calleeId: 'b', status: 'answered', createdAt: 1000 })
+    store.setCallDuration('k1', 'a', 204) // 参与方(主叫)上报时长
+    const rec = store.allCallRecords().find((c) => c.callId === 'k1')
+    expect(rec?.durationSec).toBe(204)
+  })
+})

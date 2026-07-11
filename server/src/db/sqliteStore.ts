@@ -483,7 +483,9 @@ export class SqliteStore implements Store {
   allCallRecords(limit = 200): CallRecord[] {
     return this.db.prepare('SELECT * FROM call_records ORDER BY createdAt DESC LIMIT ?')
       .all(limit)
-      .map((r: any) => ({ id: r.id, callId: r.callId, callerId: r.callerId, calleeId: r.calleeId, status: r.status as CallRecordStatus, createdAt: Number(r.createdAt), emergency: r.emergency === 1 }))
+      // durationSec 与 callRecordsForUser 同样映射：此前漏读 → 生产(SqliteStore)下管理端「全站通话」视图 + CSV
+      // 导出的时长恒为 null(即便已接通有时长)，而 MemoryStore(测试)返回整对象含时长 → 测试盲区(见平价审计)。
+      .map((r: any) => ({ id: r.id, callId: r.callId, callerId: r.callerId, calleeId: r.calleeId, status: r.status as CallRecordStatus, createdAt: Number(r.createdAt), emergency: r.emergency === 1, durationSec: r.durationSec != null ? Number(r.durationSec) : undefined }))
   }
 
   // MARK: reports

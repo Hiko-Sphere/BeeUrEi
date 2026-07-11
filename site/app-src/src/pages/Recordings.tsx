@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, APIError, fetchRecordingObjectURL, fetchRecordingBlob, type RecordingInfo } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { saveBlob } from '../lib/download'
+import { recordingFileName } from '../lib/recordingFile'
 import { joinNames } from '../lib/listFormat'
 import { Card, Button, Pill, Spinner, EmptyState, useToast, fmtTime, fmtDuration, RelativeTime } from '../components/ui'
 import { IconFilm, IconX } from '../components/icons'
@@ -45,10 +46,7 @@ export function RecordingsPage() {
     setDownloadingId(rec.id)
     try {
       const blob = await fetchRecordingBlob(rec.id)
-      const ext = blob.type.includes('quicktime') ? 'mov' : blob.type.includes('webm') ? 'webm' : blob.type.startsWith('audio/') ? 'm4a' : 'mp4'
-      const d = new Date(rec.recordedAt)
-      const pad = (n: number) => String(n).padStart(2, '0')
-      const name = `beeurei-recording-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.${ext}`
+      const name = recordingFileName(rec.recordedAt, blob.type) // 扩展名按实际 MIME 推导（含 codec 参数/纯音频/mp3），见 lib/recordingFile
       saveBlob(blob, name) // 统一下载：延迟 revoke，避免另存为对话框/异步下载读到已失效 URL 致空文件（见 lib/download）
     } catch (e) {
       const msg = e instanceof APIError && e.status === 403 ? t('该录制已删除或无权查看', 'Recording deleted or no access')

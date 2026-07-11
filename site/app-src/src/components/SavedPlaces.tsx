@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api, APIError, type SavedPlace } from '../lib/api'
+import { appleMapsUrl, validLatLng } from '../lib/location'
 import { useI18n } from '../lib/i18n'
 import { Card, Button, useToast } from './ui'
 import { IconPin } from './icons'
@@ -66,19 +67,29 @@ export function SavedPlaces() {
         <div className="px-4 py-3 text-sm text-faint">{t('还没有常用地点。添加"家""公司"等，方便亲友知道你何时到达。', 'No saved places yet. Add "Home", "Work", etc. so your contacts know when you arrive.')}</div>
       ) : (
         <ul className="divide-y divide-[var(--line)]">
-          {list.map((p) => (
+          {list.map((p) => {
+            // validLatLng 是渲染地图链接前的既定守卫：null/NaN/越界一律视作"无可用坐标"，即便服务端回了坏坐标也
+            // 优雅退化为"未定位"告警，绝不拼出坏链接。有坐标→给"在地图上核对"外链（地址地理编码常有偏差，
+            // 让用户亲眼确认"家"落对地方；落错→到达提醒会静默失灵，家人干等，故核对是安全相关而非纯装饰）。
+            const ll = validLatLng(p.lat, p.lng)
+            return (
             <li key={p.label} className="flex items-center gap-3 px-4 py-3">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-honey/15 text-honey"><IconPin width={16} height={16} /></span>
               <div className="min-w-0 flex-1">
                 <div className="truncate font-medium">{p.label}</div>
                 <div className="truncate text-xs text-faint">{p.address}</div>
-                {p.lat == null && <div className="text-[11px] text-danger">{t('未能定位此地址，暂无到达提醒', "Couldn't locate this address — no arrival alerts")}</div>}
+                {ll
+                  ? <a href={appleMapsUrl(ll.lat, ll.lng, p.label)} target="_blank" rel="noopener noreferrer"
+                       className="text-[11px] text-accent hover:underline"
+                       aria-label={t(`在地图上核对 ${p.label} 的位置是否正确`, `Verify ${p.label}'s location on the map`)}>{t('在地图上核对位置', 'Verify on map')}</a>
+                  : <div className="text-[11px] text-danger">{t('未能定位此地址，暂无到达提醒', "Couldn't locate this address — no arrival alerts")}</div>}
               </div>
               <button type="button" onClick={() => void remove(p)} disabled={busyLabel === p.label}
                 className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium text-danger transition hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label={t(`删除常用地点 ${p.label}`, `Delete saved place ${p.label}`)}>{t('删除', 'Delete')}</button>
             </li>
-          ))}
+            )
+          })}
         </ul>
       )}
 

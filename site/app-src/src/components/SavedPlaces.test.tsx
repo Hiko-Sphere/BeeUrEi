@@ -22,13 +22,18 @@ describe('SavedPlaces 常用地点（地理围栏）管理', () => {
     mock(api.deletePlace).mockResolvedValue({ ok: true })
   })
 
-  it('列出已保存地点；无坐标者如实标注"未能定位…暂无到达提醒"（不谎称围栏已生效）', async () => {
+  it('列出已保存地点；有坐标者给"在地图上核对"外链、无坐标者如实标注"未能定位…暂无到达提醒"', async () => {
     render(<SavedPlaces />)
     expect(await screen.findByText('家')).toBeInTheDocument()
     expect(screen.getByText('北京市朝阳区幸福路1号')).toBeInTheDocument()
     expect(screen.getByText('公司')).toBeInTheDocument()
-    // 仅无坐标的"公司"标注无到达提醒；有坐标的"家"不标注（恰一处）。
+    // 有坐标的"家"给核对外链，href 含其坐标（让用户亲眼确认地理编码落对地方）。
+    const verify = screen.getByRole('link', { name: '在地图上核对 家 的位置是否正确' })
+    expect(verify).toHaveAttribute('href', expect.stringContaining('39.9,116.4'))
+    expect(verify).toHaveAttribute('target', '_blank')
+    // 无坐标的"公司"：无核对链接、如实标注无到达提醒（不谎称围栏生效）。
     expect(screen.getByText('未能定位此地址，暂无到达提醒')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /在地图上核对 公司/ })).toBeNull()
   })
 
   it('填名称+地址→保存调 upsertPlace(label,address) 并重载列表', async () => {

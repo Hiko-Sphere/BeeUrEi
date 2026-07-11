@@ -113,8 +113,14 @@ self.addEventListener('notificationclick', (event) => {
   // 按类型直达：来电 → 首页（IncomingCallHost 全局轮询，任何 /app 页都弹铃，首页最快）；
   // 聊天 → 对应会话（单聊带 fromId 直达，群聊落消息列表）；告警 → 通知页（诚实位置标注+回拨）。
   const d0 = event.notification.data || {}
+  // 聊天：单聊按 fromId 直达对端会话、群聊按 groupId 直达该群（/app/chat/g/<id>，与单聊 /app/chat/<peerId> 对称）；
+  // 二者皆缺才落聊天列表。群消息 web push 服务端带 groupId（见 messages.ts 群扇出），此前 SW 只认 fromId、
+  // 群消息点开只到列表、还得再找那个群——补齐群深链。
   const path = d0.kind === 'incoming_call' ? '/app/'
-    : d0.kind === 'chat_message' ? (d0.fromId ? '/app/chat/' + encodeURIComponent(d0.fromId) : '/app/chat')
+    : d0.kind === 'chat_message'
+      ? (d0.fromId ? '/app/chat/' + encodeURIComponent(d0.fromId)
+        : d0.groupId ? '/app/chat/g/' + encodeURIComponent(d0.groupId)
+        : '/app/chat')
     : '/app/notifications'
   const target = new URL(path, self.location.origin).href
   event.waitUntil((async () => {

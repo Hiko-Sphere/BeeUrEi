@@ -47,6 +47,7 @@ export function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/calls" element={<CallsPage />} />
         <Route path="/chat" element={<ChatPage />} />
+        <Route path="/chat/g/:groupId" element={<ChatPage />} /> {/* 群深链（web push 点开直达该群）；须在 /chat/:peerId 之前，避免 'g' 被当 peerId */}
         <Route path="/chat/:peerId" element={<ChatPage />} />
         <Route path="/family" element={<FamilyPage />} />
         <Route path="/locations" element={<LocationsPage />} />

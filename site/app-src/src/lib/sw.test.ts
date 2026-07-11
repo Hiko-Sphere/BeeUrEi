@@ -161,6 +161,45 @@ describe('sw.js 通知分级（push 处理器）', () => {
   })
 })
 
+describe('sw.js 通知点击深链（notificationclick 路由）', () => {
+  // 重载 sw.js、注入捕获 openWindow 的 clients（matchAll 返回空 → 走 openWindow 开新窗口），取回目标 URL。
+  async function fireClick(data: Record<string, unknown>): Promise<string | null> {
+    const src = readFileSync(join(__dirname, '../../public/sw.js'), 'utf8')
+    let clickHandler: Handler | undefined
+    let opened: string | null = null
+    const self = {
+      addEventListener: (name: string, fn: Handler) => { if (name === 'notificationclick') clickHandler = fn },
+      skipWaiting: () => {},
+      clients: { claim: () => {}, matchAll: async () => [], openWindow: async (url: string) => { opened = url } },
+      registration: { showNotification: () => {} },
+      location: { origin: 'https://beeurei.hikosphere.com' },
+    }
+    new Function('self', 'Response', 'URL', 'fetch', src)(self, FakeResponse, URL, undefined)
+    let awaited: Promise<unknown> | undefined
+    clickHandler!({ notification: { close: () => {}, data }, waitUntil: (p: Promise<unknown>) => { awaited = p } })
+    await awaited
+    return opened
+  }
+  const O = 'https://beeurei.hikosphere.com'
+
+  it('单聊消息 → /app/chat/<fromId>（对端会话直达）', async () => {
+    expect(await fireClick({ kind: 'chat_message', fromId: 'peer1' })).toBe(`${O}/app/chat/peer1`)
+  })
+  it('群消息 → /app/chat/g/<groupId>（此前只到列表，须再找那个群）', async () => {
+    expect(await fireClick({ kind: 'chat_message', groupId: 'grp9' })).toBe(`${O}/app/chat/g/grp9`)
+  })
+  it('聊天但既无 fromId 又无 groupId → 聊天列表兜底', async () => {
+    expect(await fireClick({ kind: 'chat_message' })).toBe(`${O}/app/chat`)
+  })
+  it('来电 → 首页（IncomingCallHost 全局轮询，任何页都弹铃，首页最快）', async () => {
+    expect(await fireClick({ kind: 'incoming_call', callId: 'c1' })).toBe(`${O}/app/`)
+  })
+  it('告警/其它 kind → 通知页（诚实位置标注 + 回拨都在那）', async () => {
+    expect(await fireClick({ kind: 'emergency_alert', fromId: 'u1' })).toBe(`${O}/app/notifications`)
+    expect(await fireClick({ kind: 'friend_request', fromId: 'u2' })).toBe(`${O}/app/notifications`)
+  })
+})
+
 describe('sw.js 订阅轮换（pushsubscriptionchange 处理器）', () => {
   it('用旧三元组 POST /api/push/web-rotate 换新（含浏览器未给 newSubscription 时的重订阅）', async () => {
     const calls: { url: string; body: unknown }[] = []

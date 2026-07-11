@@ -17,7 +17,7 @@ import { IconChat, IconSend, IconPlus, IconX, IconPin } from '../components/icon
 type Selection = { kind: 'peer'; id: string; name: string; avatar?: string | null; muted?: boolean; unread?: number } | { kind: 'group'; id: string; name: string; members: User[]; ownerId: string; muted: boolean; unread?: number }
 
 export function ChatPage() {
-  const { peerId } = useParams()
+  const { peerId, groupId } = useParams()
   const nav = useNavigate()
   const { t, lang } = useI18n()
   const [convos, setConvos] = useState<Conversation[] | null>(null)
@@ -55,6 +55,17 @@ export function ChatPage() {
       void api.familyLinks().then(({ links }) => { const l = links.find((x) => x.memberId === peerId); if (l) { appliedPeer.current = peerId; setSel({ kind: 'peer', id: peerId, name: l.memberName, avatar: l.memberAvatar }) } })
     })
   }, [peerId, convos])
+
+  // 由路由 /chat/g/:groupId 预选群聊（群消息 web push 点开直达该群，与单聊 /chat/:peerId 对称）。**每个 groupId
+  // 只预选一次**（守卫同 appliedPeer）：groups 每 8s 轮询刷新，不设守卫会把用户从手动打开的会话强拉回 URL 里的群、
+  // 丢草稿/滚动位置。groups 首帧为 null 时等其到达再解析（群名/成员）；找不到（未在群/已退群）则不选、留在列表。
+  const appliedGroup = useRef<string | null>(null)
+  useEffect(() => {
+    if (!groupId) { appliedGroup.current = null; return }
+    if (appliedGroup.current === groupId) return
+    const g = groups?.find((x) => x.group.id === groupId)
+    if (g) { appliedGroup.current = groupId; setSel({ kind: 'group', id: groupId, name: g.group.name, members: g.members, ownerId: g.group.ownerId, muted: g.muted ?? false, unread: g.unread }) }
+  }, [groupId, groups])
 
   const items = useMemo(() => {
     // 已注销对端：服务端发空 displayName（语言中立）→ 在此单点本地化，下游列表/过滤/点开(sel.name)全继承，

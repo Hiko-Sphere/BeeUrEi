@@ -117,10 +117,10 @@ export function ChatPage() {
           ) : (
             <ul className="divide-y divide-[var(--line)]">
               {shown.map((it) => it.kind === 'peer' ? (
-                <ConvoRow key={it.key} active={sel?.kind === 'peer' && sel.id === it.c.peer.id} convo={it.c} lang={lang} t={t}
+                <ConvoRow key={it.key} active={sel?.kind === 'peer' && sel.id === it.c.peer.id} convo={it.c} lang={lang} t={t} meId={meUser?.id}
                   onClick={() => setSel({ kind: 'peer', id: it.c.peer.id, name: it.c.peer.displayName, avatar: it.c.peer.avatar, muted: it.c.muted ?? false })} />
               ) : (
-                <GroupRow key={it.key} active={sel?.kind === 'group' && sel.id === it.g.group.id} g={it.g} lang={lang} t={t}
+                <GroupRow key={it.key} active={sel?.kind === 'group' && sel.id === it.g.group.id} g={it.g} lang={lang} t={t} meId={meUser?.id}
                   onClick={() => setSel({ kind: 'group', id: it.g.group.id, name: it.g.group.name, members: it.g.members, ownerId: it.g.group.ownerId, muted: it.g.muted ?? false })} />
               ))}
             </ul>
@@ -164,7 +164,7 @@ export function ChatPage() {
   )
 }
 
-function ConvoRow({ convo, active, onClick, lang, t }: { convo: Conversation; active: boolean; onClick: () => void; lang: 'zh' | 'en'; t: (z: string, e: string) => string }) {
+function ConvoRow({ convo, active, onClick, lang, t, meId }: { convo: Conversation; active: boolean; onClick: () => void; lang: 'zh' | 'en'; t: (z: string, e: string) => string; meId?: string }) {
   return (
     // 行内容包一层 <button>：<li> 保留 listitem 语义，按钮天然可 Tab 聚焦 + Enter/Space 激活
     // （键盘/读屏用户此前无法选择会话——onClick 挂在 li 上对键盘完全不可达）。
@@ -177,7 +177,7 @@ function ConvoRow({ convo, active, onClick, lang, t }: { convo: Conversation; ac
             {convo.online && <span role="img" aria-label={t('在线', 'Online')} title={t('在线', 'Online')} className="h-2 w-2 shrink-0 rounded-full bg-ok" />}
             <span className="truncate font-medium">{convo.peer.displayName}</span>
             {convo.muted && <span role="img" aria-label={t('已静音', 'Muted')} title={t('已静音', 'Muted')} className="shrink-0 text-xs text-faint">🔕</span>}</div>
-          <div className="truncate text-xs text-faint">{preview(convo.last, t)}</div>
+          <div className="truncate text-xs text-faint">{conversationPreview(convo.last, meId, t)}</div>
         </div>
         <div className="flex flex-col items-end gap-1">
           <span className="text-[10px] text-faint">{convo.last ? timeAgo(convo.last.createdAt, lang) : ''}</span>
@@ -187,7 +187,7 @@ function ConvoRow({ convo, active, onClick, lang, t }: { convo: Conversation; ac
     </li>
   )
 }
-function GroupRow({ g, active, onClick, lang, t }: { g: GroupSummary; active: boolean; onClick: () => void; lang: 'zh' | 'en'; t: (z: string, e: string) => string }) {
+function GroupRow({ g, active, onClick, lang, t, meId }: { g: GroupSummary; active: boolean; onClick: () => void; lang: 'zh' | 'en'; t: (z: string, e: string) => string; meId?: string }) {
   return (
     <li className={active ? 'surface-2' : ''}>
       <button type="button" onClick={onClick} className="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:surface-2">
@@ -195,7 +195,7 @@ function GroupRow({ g, active, onClick, lang, t }: { g: GroupSummary; active: bo
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5"><span className="truncate font-medium">{g.group.name}</span><Pill>{g.members.length}</Pill>
             {g.muted && <span role="img" aria-label={t('已静音', 'Muted')} title={t('已静音', 'Muted')} className="shrink-0 text-xs text-faint">🔕</span>}</div>
-          <div className="truncate text-xs text-faint">{preview(g.last, t)}</div>
+          <div className="truncate text-xs text-faint">{conversationPreview(g.last, meId, t, g.members)}</div>
         </div>
         <div className="flex flex-col items-end gap-1">
           <span className="text-[10px] text-faint">{g.last ? timeAgo(g.last.createdAt, lang) : ''}</span>
@@ -204,6 +204,22 @@ function GroupRow({ g, active, onClick, lang, t }: { g: GroupSummary; active: bo
       </button>
     </li>
   )
+}
+
+/// 会话列表末条预览的**发送者前缀**（WhatsApp/iMessage/Telegram 等标配，便于一眼分清"我发的·在等对方回" vs
+/// "对方发的·在等我回"，协助者管理多会话时尤其省事）：我发的→"你："；群里别人发的→"{发送者名}："；单聊对端发的→
+/// 无前缀（行首已显对端名，再加冗余）。撤回消息 [已撤回] 自足、不加前缀（"你：[已撤回]"读着别扭）。纯函数，可单测。
+export function conversationPreview(
+  last: ChatMessage | null,
+  meId: string | undefined,
+  t: (z: string, e: string) => string,
+  members?: User[],
+): string {
+  const body = preview(last, t)
+  if (!last || last.kind === 'recalled') return body
+  if (last.fromId === meId) return t(`你：${body}`, `You: ${body}`)
+  if (members) { const s = members.find((mm) => mm.id === last.fromId); if (s?.displayName) return t(`${s.displayName}：${body}`, `${s.displayName}: ${body}`) }
+  return body
 }
 
 function preview(m: ChatMessage | null, t: (z: string, e: string) => string): string {

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { nextChatAnnouncement, mergeMessagesStable, type AnnounceState } from './Chat'
-import type { ChatMessage } from '../lib/api'
+import { nextChatAnnouncement, mergeMessagesStable, conversationPreview, type AnnounceState } from './Chat'
+import type { ChatMessage, User } from '../lib/api'
+
+const tzh = (z: string, _e: string) => z // 默认中文
 
 const msg = (id: string, fromId: string, text = 'hi'): ChatMessage =>
   ({ id, fromId, toId: 'me', kind: 'text', text, createdAt: Number(id) } as ChatMessage)
@@ -97,5 +99,38 @@ describe('mergeMessagesStable 轮询窗口与已加载历史合并', () => {
     const b = { id: 'a', fromId: 'peer', toId: 'me', kind: 'text', text: 'y', createdAt: 9 } as ChatMessage
     const out = mergeMessagesStable([a], [b]) // 同 createdAt=9，id a<b
     expect(out.map((m) => m.id)).toEqual(['a', 'b'])
+  })
+})
+
+describe('conversationPreview 会话列表末条发送者前缀', () => {
+  const members: User[] = [
+    { id: 'me', username: 'me', displayName: '我', role: 'helper', status: 'active' },
+    { id: 'p1', username: 'xm', displayName: '小明', role: 'blind', status: 'active' },
+  ]
+  it('我发的 → "你：" 前缀（一眼分清在等对方回）', () => {
+    expect(conversationPreview(msg('4', 'me', '好的'), 'me', tzh)).toBe('你：好的')
+  })
+  it('单聊对端发的 → 无前缀（行首已显对端名，不赘述）', () => {
+    expect(conversationPreview(msg('4', 'p1', '在哪'), 'me', tzh)).toBe('在哪')
+  })
+  it('群里别人发的 → "{发送者名}：" 前缀（群里知道是谁发的很重要）', () => {
+    expect(conversationPreview(msg('4', 'p1', '出发了'), 'me', tzh, members)).toBe('小明：出发了')
+  })
+  it('群里我发的 → "你："（优先于成员名解析）', () => {
+    expect(conversationPreview(msg('4', 'me', '收到'), 'me', tzh, members)).toBe('你：收到')
+  })
+  it('群里非成员（已退群者的历史末条）→ 无前缀兜底，不崩', () => {
+    expect(conversationPreview(msg('4', 'ghost', '旧消息'), 'me', tzh, members)).toBe('旧消息')
+  })
+  it('我发的图片 → "你：[图片]"（媒体预览也带前缀）', () => {
+    const img = { id: '4', fromId: 'me', toId: 'p1', kind: 'image', text: 'mid', createdAt: 4 } as ChatMessage
+    expect(conversationPreview(img, 'me', tzh)).toBe('你：[图片]')
+  })
+  it('撤回消息 → 仅 [已撤回]，不加"你："前缀（读着别扭）', () => {
+    const recalled = { id: '5', fromId: 'me', toId: 'p1', kind: 'recalled', text: '', createdAt: 5 } as ChatMessage
+    expect(conversationPreview(recalled, 'me', tzh)).toBe('[已撤回]')
+  })
+  it('无末条 → "暂无消息"', () => {
+    expect(conversationPreview(null, 'me', tzh)).toBe('暂无消息')
   })
 })

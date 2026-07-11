@@ -524,9 +524,10 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
     try { await api.editMessage(m.id, body); await load() } catch (e) { toast(chatErrorText(e, t, t('编辑失败', 'Edit failed')), 'error') }
   }
 
-  // 表情回应（与 iOS 对齐）：再次点同一表情=取消（后端空串清除）。
+  // 表情回应（逐用户）：点我已选的那个=取消；点别的=改成它（每人至多一个，后端替换）。后端空串=清除本人的。
   const react = async (m: ChatMessage, emoji: string) => {
-    try { await api.reactMessage(m.id, m.reaction === emoji ? '' : emoji); await load() }
+    const mine = m.reactions?.find((r) => r.mine)?.emoji
+    try { await api.reactMessage(m.id, mine === emoji ? '' : emoji); await load() }
     catch (e) { toast(chatErrorText(e, t, t('操作失败', 'Failed')), 'error') }
   }
 
@@ -873,6 +874,10 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForwar
   // 可转发：仅**内容自包含**的类型（文本/位置/图片/语音都是内联内容）。视频是 mediaId、转发到无权会话看不到，
   // 撤回/未知亦不转发。判定抽到 isForwardableKind（含语音——它与图片同为 data: URL，此前被漏，见其单测）。
   const forwardable = isForwardableKind(m.kind)
+  // 逐用户表情回应胶囊：优先服务端 reactions 数组（每 emoji 计数 + 我是否也回应）；旧服务端只回单字段 reaction
+  // 时兜底合成一枚（mine 未知置 false）。myReaction=我当前所选（点选器高亮 + 切换判定用）。
+  const reactionChips = m.reactions ?? (m.reaction ? [{ emoji: m.reaction, count: 1, mine: false }] : [])
+  const myReaction = reactionChips.find((r) => r.mine)?.emoji
   const [picking, setPicking] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(m.text)
@@ -914,7 +919,15 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForwar
           {editable && !editing && <button onClick={() => { setDraft(m.text); setEditing(true) }} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('编辑', 'Edit')}</button>}
           {replyable && !editing && <button onClick={onReply} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('回复', 'Reply')}</button>}
           {forwardable && !editing && <button onClick={onForward} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('转发', 'Forward')}</button>}
-          {m.reaction && <span className="text-sm">{m.reaction}</span>}
+          {/* 逐用户表情胶囊：每种 emoji 一枚，显数量（>1 才显）；我参与的高亮。点胶囊即切换本人的该表情（加/取消）。 */}
+          {reactionChips.map((r) => (
+            <button key={r.emoji} onClick={() => onReact(r.emoji)} data-testid="reaction-chip"
+              aria-label={t(`${r.emoji}，${r.count} 人回应${r.mine ? '，含你' : ''}，点击${r.mine ? '取消' : '也回应'}`,
+                `${r.emoji}, ${r.count} ${r.count > 1 ? 'reactions' : 'reaction'}${r.mine ? ', including you' : ''}, tap to ${r.mine ? 'remove' : 'add'} yours`)}
+              className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs leading-none transition ${r.mine ? 'bg-honey/25 font-semibold ring-1 ring-honey/40' : 'surface-2 hover:brightness-95'}`}>
+              <span className="text-sm leading-none">{r.emoji}</span>{r.count > 1 && <span>{r.count}</span>}
+            </button>
+          ))}
           {reactable && (
             <button onClick={() => setPicking((v) => !v)} aria-label={t('表情回应', 'React')}
                     className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('回应', 'React')}</button>
@@ -934,7 +947,7 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForwar
           <div className="absolute -top-9 right-0 z-10 flex gap-1 rounded-full surface border border-[var(--line)] px-2 py-1 shadow-lg">
             {REACTION_CHOICES.map((e) => (
               <button key={e} onClick={() => { onReact(e); setPicking(false) }}
-                      className={`text-lg leading-none transition hover:scale-125 ${m.reaction === e ? 'opacity-100' : 'opacity-80'}`}
+                      className={`text-lg leading-none transition hover:scale-125 ${myReaction === e ? 'opacity-100 scale-110' : 'opacity-80'}`}
                       aria-label={e}>{e}</button>
             ))}
           </div>

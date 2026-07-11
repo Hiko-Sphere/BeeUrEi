@@ -1068,19 +1068,21 @@ function downloadCSV(filename, rows) {
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   }).join(',')).join('\r\n');
   // 前置 BOM：Excel 据此识别 UTF-8，避免中文乱码。
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
-  a.remove(); URL.revokeObjectURL(url);
+  saveBlob(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }), filename);
 }
 // JSON 导出（GDPR 数据导出用）：缩进 2、UTF-8。
 function downloadJSON(filename, obj) {
-  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json;charset=utf-8' });
+  saveBlob(new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json;charset=utf-8' }), filename);
+}
+// 触发浏览器另存 blob 到文件（CSV/JSON/DB 备份共用）。**延迟 revoke**：a.click() 后同步 URL.revokeObjectURL 是跨
+// 浏览器下载 footgun——Firefox/某些 Safari 在 click 返回后才异步读 blob、或用户"另存为"对话框确认后才读，同步撤销
+// 会让下载读到已失效 URL → 空文件（DB 备份尤其致命）。延后释放，与 web 端 lib/download.saveBlob 同款修法。
+function saveBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
-  a.remove(); URL.revokeObjectURL(url);
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 // ---------------------------------------------------------------- relationships (links)
@@ -1728,9 +1730,7 @@ async function downloadDbBackup(ev) {
     const cd = res.headers.get('content-disposition') || '';
     const m = /filename="([^"]+)"/.exec(cd);
     const name = m ? m[1] : ('beeurei-backup-' + new Date().toISOString().slice(0, 16).replace(/[-:]/g, '').replace('T', '-') + '.db');
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = name;
-    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    saveBlob(blob, name); // 延迟 revoke，避免另存为对话框未确认前 URL 失效致空备份（灾难恢复文件尤其致命）
     toast(t('backupDone'), 'success');
   } catch (err) {
     toast(t('backupFail') + (typeof err === 'string' && err !== 'network' ? ' (' + err + ')' : ''), 'error');

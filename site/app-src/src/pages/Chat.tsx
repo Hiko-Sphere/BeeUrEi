@@ -923,6 +923,38 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForwar
   )
 }
 
+/// 图片消息：缩略图（≤64 高）+ 点击开全屏灯箱看大图——盲人分享的证件/单据/信件/标签照，协助者常要放大看清细节。
+function ImageMessage({ src, t }: { src: string; t: (z: string, e: string) => string }) {
+  const [zoomed, setZoomed] = useState(false)
+  const alt = t('图片消息', 'Photo')
+  return (
+    <>
+      <button type="button" onClick={() => setZoomed(true)} aria-label={t('放大查看图片', 'View photo full size')} className="block">
+        <img src={src} alt={alt} className="max-h-64 rounded-lg" />
+      </button>
+      {zoomed && <ImageLightbox src={src} alt={alt} onClose={() => setZoomed(false)} t={t} />}
+    </>
+  )
+}
+
+/// 图片灯箱（全屏查看）：暗底 + 居中大图（≤90vh/90vw）；点背景 / 关闭按钮 / Esc 关闭。role=dialog+aria-modal 供读屏。
+function ImageLightbox({ src, alt, onClose, t }: { src: string; alt: string; onClose: () => void; t: (z: string, e: string) => string }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return (
+    <div role="dialog" aria-modal="true" aria-label={alt} onClick={onClose} data-testid="image-lightbox"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
+      <button type="button" onClick={onClose} aria-label={t('关闭', 'Close')}
+        className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white/90 hover:bg-white/20"><IconX width={20} height={20} /></button>
+      {/* 点图片本身不关闭（stopPropagation），只点背景/关闭键关。 */}
+      <img src={src} alt={alt} onClick={(e) => e.stopPropagation()} className="max-h-[90vh] max-w-[90vw] rounded-lg" />
+    </div>
+  )
+}
+
 function MessageBody({ m, t }: { m: ChatMessage; t: (z: string, e: string) => string }) {
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [videoFailed, setVideoFailed] = useState(false)
@@ -939,7 +971,7 @@ function MessageBody({ m, t }: { m: ChatMessage; t: (z: string, e: string) => st
   }, [m.kind, m.text, attempt])
 
   if (m.kind === 'recalled') return <span>{t('该消息已撤回', 'Message recalled')}</span>
-  if (m.kind === 'image') return <img src={m.text} alt={t('图片消息', 'Photo')} className="max-h-64 rounded-lg" />
+  if (m.kind === 'image') return <ImageMessage src={m.text} t={t} />
   // 无障碍：给音/视频加 aria-label（同 image 的 alt）——读屏否则只念"音频/视频播放器"，不知这是一条消息。
   if (m.kind === 'audio') return <audio src={m.text} controls aria-label={t('语音消息', 'Voice message')} className="max-w-[240px]" />
   if (m.kind === 'video') {

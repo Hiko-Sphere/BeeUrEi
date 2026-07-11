@@ -1,5 +1,21 @@
 import { describe, it, expect } from 'vitest'
-import { timeAgo, fmtTime, fmtDuration } from './ui'
+import { timeAgo, fmtTime, fmtDuration, fmtHm } from './ui'
+
+describe('fmtHm 气泡时钟时间（HH:MM，本地时区）', () => {
+  it('返回时:分（含冒号、两段），非有限 ms 兜底、不吐 Invalid Date', () => {
+    const noon = Date.parse('2026-07-11T14:32:00') // 本地正午过后，避午夜边界
+    const s = fmtHm(noon, 'zh')
+    expect(s).toMatch(/\d{1,2}[:：]\d{2}/) // 含时:分
+    expect(s).not.toContain('Invalid')
+    expect(fmtHm(NaN, 'zh')).toBe('未知时间')
+    expect(fmtHm(Infinity, 'en')).toBe('unknown time')
+  })
+  it('同一时刻中英均产出稳定时钟串（不抛）', () => {
+    const t = Date.parse('2026-07-11T09:05:00')
+    expect(fmtHm(t, 'zh')).toMatch(/\d/)
+    expect(fmtHm(t, 'en')).toMatch(/\d/)
+  })
+})
 
 describe('timeAgo', () => {
   const now = Date.now()

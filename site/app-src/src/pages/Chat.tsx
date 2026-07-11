@@ -10,7 +10,7 @@ import { linkifyParts } from '../lib/linkify'
 import { imageFileFromClipboard } from '../lib/clipboardImage'
 import { isForwardableKind } from '../lib/chatMessage'
 import { ReportDialog } from '../components/ReportDialog'
-import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo, Modal, Button } from '../components/ui'
+import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo, fmtHm, fmtTime, Modal, Button } from '../components/ui'
 import { IconChat, IconSend, IconPlus, IconX, IconPin } from '../components/icons'
 
 type Selection = { kind: 'peer'; id: string; name: string; avatar?: string | null; muted?: boolean } | { kind: 'group'; id: string; name: string; members: User[]; ownerId: string; muted: boolean }
@@ -819,7 +819,8 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForwar
           </div>
         ) : <MessageBody m={m} t={t} />}
         <div className={`mt-1 flex items-center gap-2 text-[10px] ${mine ? 'text-ink/60' : 'text-faint'}`}>
-          <span>{timeAgo(m.createdAt, lang)}</span>
+          {/* 气泡显时刻(HH:MM)而非相对时间：日期由上方日期分隔归天，二者不冗余；title 悬停给完整日期时间（可及）。 */}
+          <span title={fmtTime(m.createdAt, lang)}>{fmtHm(m.createdAt, lang)}</span>
           {m.editedAt && m.kind !== 'recalled' && <span data-testid="edited-tag">{t('已编辑', 'edited')}</span>}
           {editable && !editing && <button onClick={() => { setDraft(m.text); setEditing(true) }} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('编辑', 'Edit')}</button>}
           {replyable && !editing && <button onClick={onReply} className="opacity-0 transition group-hover:opacity-100 hover:underline">{t('回复', 'Reply')}</button>}

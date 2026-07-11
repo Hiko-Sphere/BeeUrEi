@@ -167,6 +167,12 @@ export function fmtTime(ms: number, lang: 'zh' | 'en'): string {
   if (!Number.isFinite(ms)) return unknownTime(lang) // 否则渲染 "Invalid Date"
   return new Date(ms).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' })
 }
+/// 时钟时间 "HH:MM"（本地时区，locale-aware）：消息气泡在日期分隔之下只需显示"几点"——比相对时间("5天前")清晰，
+/// 且与日期分隔不冗余（各主流 IM：日期分隔归天、气泡显时刻）。非有限 ms → 兜底文案（绝不喂 Date 渲染 "Invalid Date"）。
+export function fmtHm(ms: number, lang: 'zh' | 'en'): string {
+  if (!Number.isFinite(ms)) return unknownTime(lang)
+  return new Date(ms).toLocaleTimeString(lang === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' })
+}
 /// 相对时间展示（复用既有 timeAgo 措辞，全站一致）：可见文本相对（"刚刚"/"5 分钟前"），
 /// 语义 <time> + `title`/`dateTime` 携带**精确绝对时间**——悬停可见、屏幕阅读器可取，无障碍。
 /// ⚠️ 相对措辞仅宜用于"何时发生"的列表；**紧急"最后已知位置"等安全攸关时刻绝不可用**（相对会随阅读时刻

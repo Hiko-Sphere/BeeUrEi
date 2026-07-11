@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { Store } from '../db/store'
+import { type Store, isBlockedBetween } from '../db/store'
 import type { PushSender } from '../push/apns'
 import type { WebPushSender } from '../push/webPush'
 import { pushLang, pushStrings } from '../push/pushStrings'
@@ -21,7 +21,11 @@ export function escalateUnackedEmergencies(
       store.markEmergencyEscalated(e.id, now) // 先标记：即便下面推送部分失败也不重复升级
       const sender = store.findById(e.userId)
       if (!sender) continue // 发起人已删号：无从重呼（已 markEscalated，免反复扫）
-      const acceptedLinks = store.linksByOwner(e.userId).filter((l) => (l.status ?? 'accepted') === 'accepted')
+      // 排除被拉黑者：与首呼(emergency.ts)/未报到(checkin.ts)同口径——用户已拍板"完全排除被拉黑联系人"(iter62)。
+      // 升级重呼此前**漏了**这层过滤(iter62 只改了首呼与未报到扇出)：被明确拉黑者仍会在告警满 thresholdMs 无人
+      // 确认时收到这条"最后兜底"重呼，附盲人当前/最后已知 GPS(+isEmergency 链的 hasMedical) → 正是要杜绝的、给
+      // 为安全而拉黑之人播行踪(见对抗复审姊妹缺口)。
+      const acceptedLinks = store.linksByOwner(e.userId).filter((l) => (l.status ?? 'accepted') === 'accepted' && !isBlockedBetween(store, e.userId, l.memberId))
       const emergencyMemberIds = new Set(acceptedLinks.filter((l) => l.isEmergency).map((l) => l.memberId))
       const members = acceptedLinks.map((l) => store.findById(l.memberId)).filter((m): m is NonNullable<typeof m> => !!m)
       const hasLoc = e.lat != null && e.lon != null

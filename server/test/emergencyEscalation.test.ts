@@ -129,4 +129,22 @@ describe('紧急升级重呼 escalateUnackedEmergencies', () => {
     expect(escalateUnackedEmergencies(store, push, web, now, 5 * MIN)).toBe(0)
     expect(push.alerts).toHaveLength(0)
   })
+
+  it('被拉黑的紧急联系人不收升级重呼——与首呼/未报到同口径"完全排除"（此前姊妹缺口：升级仍播 GPS+hasMedical 给被拉黑者）', () => {
+    const now = 100 * MIN
+    const { store, push, web } = setup()
+    store.createUser(user('famC', 'c'.repeat(64)))
+    store.createLink({ id: 'l3', ownerId: 'victim', memberId: 'famC', relation: '亲友', isEmergency: true, status: 'accepted', createdAt: 1 } as any)
+    store.createBlock({ id: 'blk', blockerId: 'victim', blockedId: 'famC', createdAt: 1 } as any) // victim 拉黑 famC
+    store.setMedicalInfo({ userId: 'victim', sealed: '{"enc":"x"}', updatedAt: 1 } as any)
+    store.createEmergencyEvent(evt({ at: now - 6 * MIN, lat: 39.9, lon: 116.4, locSource: 'live' }))
+
+    expect(escalateUnackedEmergencies(store, push, web, now, 5 * MIN)).toBe(1)
+    const escFor = (uid: string) => store.notificationsForUser(uid).filter((x: any) => x.kind === 'emergency_alert' && x.data?.escalated === '1')
+    expect(escFor('famC')).toHaveLength(0) // 被拉黑者：一条升级通知都没有（不播其 GPS/hasMedical）
+    expect(escFor('famA')).toHaveLength(1) // 未拉黑者正常收到
+    expect(escFor('famB')).toHaveLength(1)
+    // 推送也绝不发给被拉黑者的 token。
+    expect(push.alerts.map((a) => a.token).sort()).toEqual(['a'.repeat(64), 'b'.repeat(64)])
+  })
 })

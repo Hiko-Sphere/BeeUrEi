@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
+import type { PushSender } from '../src/push/apns'
 
 // 紧急告警"知道了"回执：亲友确认已看到 → 发起人收到"X 已看到你的求助"通知（遇险者最需要的反馈）。
 // 授权：仅**已接受**亲友可回执；不能确认自己的；同一亲友对同一事件多次点只回告一次（不轰炸遇险者）。
@@ -220,5 +221,35 @@ describe('紧急报平安 /api/emergency/all-clear', () => {
     expect(store.notificationsForUser(helperId).filter((n) => n.kind === 'emergency_clear').length).toBe(1)
     expect((await a.inject({ method: 'POST', url: '/api/emergency/all-clear', payload: { alertId: 'x' } })).statusCode).toBe(401)
     await a.close()
+  })
+
+  it('并发同状态回执只回告遇险者一次（幂等预留在 await/副作用前，不重复"X 已看到"通知）', async () => {
+    // 慢推送让 ack 的推送 await 真正让出事件循环，令两并发回执在对方 record 前交错——真实复现竞态。
+    class SlowPush implements PushSender {
+      sent: string[] = []
+      async send(): Promise<void> {}
+      async sendCallInvite(): Promise<void> {}
+      async sendAlert(token: string): Promise<void> { await new Promise((r) => setTimeout(r, 15)); this.sent.push(token) }
+    }
+    const store = new MemoryStore()
+    const app = buildApp(store, { pushSender: new SlowPush() })
+    const reg = async (u: string, role: string) =>
+      (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const owner = await reg('cackowner', 'blind')
+    const helper = await reg('cackhelper', 'helper')
+    const ownerId = store.findByUsername('cackowner')!.id
+    const l = await app.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${owner.token}` },
+      payload: { username: 'cackhelper', relation: '家人', isEmergency: true } })
+    await app.inject({ method: 'POST', url: `/api/family/links/${l.json().link.id}/accept`, headers: { authorization: `Bearer ${helper.token}` } })
+    // 遇险者注册 APNs token → ack 推送走慢 sendAlert，await 真让出。
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: { authorization: `Bearer ${owner.token}` }, payload: { token: 'a'.repeat(64) } })
+
+    // 同一 (fromId:eventId:acker:seen) 并发回执两次。
+    const ack = () => app.inject({ method: 'POST', url: '/api/emergency/ack', headers: { authorization: `Bearer ${helper.token}` }, payload: { fromId: ownerId, eventId: 'evc' } })
+    const [r1, r2] = await Promise.all([ack(), ack()])
+    expect(r1.statusCode).toBe(200); expect(r2.statusCode).toBe(200)
+    // 遇险者只收到**一条** emergency_ack（并发也不重复打扰）。
+    expect(store.notificationsForUser(ownerId).filter((n) => n.kind === 'emergency_ack')).toHaveLength(1)
+    await app.close()
   })
 })

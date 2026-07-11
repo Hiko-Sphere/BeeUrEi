@@ -37,7 +37,18 @@ class EmergencyAlertDedup {
   private readonly ttlMs = 5 * 60 * 1000
   check(key: string, now: number): unknown | undefined {
     const e = this.seen.get(key)
+    // 占位（reserve 后未 record）项 result 为 undefined，与"无项"同样返回 undefined——完成后才由 record 覆盖为真实结果。
     return e && now - e.at < this.ttlMs ? e.result : undefined
+  }
+  /// 同步"预留"去重键（无 await，原子）：TTL 内已存在（在途占位或已完成）→ 返回 false（本次不得重复执行副作用/扇出）；
+  /// 否则占位（result 暂空）并返回 true，调用方独占执行、随后 record 覆盖为真实结果。**须置于首个副作用/await 之前、
+  /// 且在所有可能同步抛错的库读之后**调用——从而并发同 key 重试不重复扇出，且首个请求即便中途抛错也不残留占位
+  /// （抛错发生在 reserve 之前）。首个请求完成后的后续重试由 check 命中已完成结果直接返回。
+  reserve(key: string, now: number): boolean {
+    const e = this.seen.get(key)
+    if (e && now - e.at < this.ttlMs) return false
+    this.seen.set(key, { result: undefined, at: now })
+    return true
   }
   record(key: string, result: unknown, now: number): void {
     this.seen.set(key, { result, at: now })
@@ -272,6 +283,11 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     let senderHasMedical = false
     try { senderHasMedical = !!store.getMedicalInfo(me.id) } catch { /* 非必需读失败不阻断告警 */ }
     const emergencyMemberIds = new Set(links.filter((l) => l.isEmergency).map((l) => l.memberId))
+    // 幂等预留：在**首个副作用（下方并行扇出 + 建紧急事件）之前**占住 dedupKey。否则并发同 alertId 重试都过了
+    // 顶部 check（此刻尚无已完成结果）、各自向全体亲友扇出告警并建**重复**紧急事件（见对抗复审）。置于此处的理由：
+    // 上方 acceptedContactLinks 等可能同步抛(SQLITE_BUSY)的库读均已完成，reserve 之后直到 record 无未捕获抛错，
+    // 故首个请求即便失败也不会残留占位卡住后续重试。此前 reserve 前所有代码皆为纯计算/只读，无副作用。
+    if (dedupKey && !alertDedup.reserve(dedupKey, Date.now())) return { ok: true, deduped: true }
     await Promise.allSettled(members.map((member) => {
       const l = pushLang(member.language)
       const title = pushStrings.emergencyAlertTitle(me.displayName, l)
@@ -370,6 +386,12 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     // （acker 已过"须为发起人已接受亲友"授权，但仍不该凭空捏造事件骚扰其余亲友）。无 eventId 的老告警不广播。
     const ackedEvent = eventId ? store.emergencyEventsForUser(fromId).find((e) => e.id === eventId) : undefined
     const isFirstAck = !!ackedEvent && !ackedEvent.ackedAt
+    // 幂等预留：在**首个副作用（markEmergencyAcked / 写回告通知 / 首响协调广播）之前**占住 key。否则并发同
+    // (发起人:事件:确认者:状态) 重试都过了顶部 check、各自给遇险者**重复**写"X 已看到"通知并重复触发协调广播
+    // （见对抗复审）。置于此处：上方 emergencyEventsForUser 等可能同步抛的读已完成，reserve 后至 record 无未捕获
+    // 抛错，故失败不残留占位。isFirstAck 已在 reserve 前据 markEmergencyAcked 之前的状态算好（并发者读到的是
+    // 首个请求已 mark 后的 ackedAt，isFirstAck=false，不会重复协调广播）。
+    if (!ackDedup.reserve(key, now)) return { ok: true, deduped: true }
     // 有亲友确认 → 记 ackedAt：后台升级重呼据此跳过（已有人在响应，不必再打扰全体）。best-effort。
     if (eventId) { try { store.markEmergencyAcked(eventId, now) } catch { /* 标记失败不阻断回告 */ } }
 

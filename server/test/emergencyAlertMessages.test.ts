@@ -502,6 +502,38 @@ describe('聊天（绑定好友互发）', () => {
     await app.close()
   })
 
+  it('并发同 alertId 重试只扇出一次（幂等预留在 await 前，不重复告警亲友、不建重复紧急事件）', async () => {
+    // 慢推送：sendAlert 在 setTimeout 后才 resolve → 令 /alert 的扇出 await 真正让出事件循环，第二个并发请求
+    // 得以在首个请求 record 之前跑到自己的 reserve/check——从而**真实复现**并发竞态（否则即时 resolve 的推送会让
+    // 首个请求抢先 record、由顶部 check 兜住，测不到 reserve）。
+    class SlowPush extends FakePush {
+      async sendAlert(token: string, title: string, body: string, extra?: Record<string, string>, threadId?: string, badge?: number): Promise<void> {
+        await new Promise((r) => setTimeout(r, 15))
+        await super.sendAlert(token, title, body, extra, threadId, badge)
+      }
+    }
+    const push = new SlowPush()
+    const store = new MemoryStore()
+    const app = buildApp(store, { pushSender: push })
+    const blind = await reg(app, 'ddblind', 'blind')
+    const fam = await reg(app, 'ddfam', 'helper')
+    await bind(app, blind.token, fam.token, 'ddfam')
+    await app.inject({ method: 'POST', url: '/api/push/apns-register', headers: auth(fam.token), payload: { token: 'a'.repeat(64) } })
+    await app.inject({ method: 'POST', url: '/api/notifications/read-all', headers: auth(fam.token) })
+
+    // 同一 alertId **并发**发两次（客户端为提高送达率重试）——两请求都在 await(扇出) 处让出、抢在对方 record 前。
+    const fire = () => app.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth(blind.token),
+      payload: { kind: 'fall', lat: 39.9, lon: 116.4, alertId: 'sos-xyz' } })
+    const [r1, r2] = await Promise.all([fire(), fire()])
+    expect(r1.statusCode).toBe(200); expect(r2.statusCode).toBe(200)
+
+    // 亲友只收到**一条** emergency_alert（非两条），紧急事件只建**一个**，推送也只一次。
+    expect(store.notificationsForUser(fam.user.id).filter((n) => n.kind === 'emergency_alert')).toHaveLength(1)
+    expect(store.emergencyEventsForUser(blind.user.id)).toHaveLength(1)
+    expect(push.sent).toHaveLength(1)
+    await app.close()
+  })
+
   it('被拉黑的联系人完全不收到 SOS/摔倒告警（拉黑即撤回；不给其播实时 GPS+hasMedical）', async () => {
     const push = new FakePush()
     const store = new MemoryStore()

@@ -70,6 +70,18 @@ describe('紧急告警回执 /api/emergency/ack', () => {
     await a.close()
   })
 
+  it('onMyWay=true 且事件存在 → 记 onWayAt（供 watching 看板持久显"有人正在赶来"）；仅"已看到"不记', async () => {
+    const { a, store, helper, ownerId } = await seed()
+    store.createEmergencyEvent({ id: 'evreal', userId: ownerId, kind: 'fall', notified: 1, contacts: 1, at: Date.now() })
+    await a.inject({ method: 'POST', url: '/api/emergency/ack', headers: bearer(helper.token), payload: { fromId: ownerId, eventId: 'evreal', onMyWay: true } })
+    expect(store.emergencyEventsForUser(ownerId).find((e) => e.id === 'evreal')?.onWayAt).toBeGreaterThan(0)
+    // 仅"已看到"（无 onMyWay）→ 不记 onWayAt（看板仍只显"有人响应"）。
+    store.createEmergencyEvent({ id: 'evseen2', userId: ownerId, kind: 'fall', notified: 1, contacts: 1, at: Date.now() })
+    await a.inject({ method: 'POST', url: '/api/emergency/ack', headers: bearer(helper.token), payload: { fromId: ownerId, eventId: 'evseen2' } })
+    expect(store.emergencyEventsForUser(ownerId).find((e) => e.id === 'evseen2')?.onWayAt).toBeUndefined()
+    await a.close()
+  })
+
   it('缺省 onMyWay → 仍是普通"已看到"回执（向后兼容：旧客户端不带此字段行为不变）', async () => {
     const { a, store, helper, ownerId } = await seed()
     const seen = await a.inject({ method: 'POST', url: '/api/emergency/ack', headers: bearer(helper.token),

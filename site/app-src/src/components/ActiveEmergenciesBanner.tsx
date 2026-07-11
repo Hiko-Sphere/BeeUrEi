@@ -45,7 +45,11 @@ export function ActiveEmergenciesBanner({ onCall }: { onCall?: (userId: string, 
             <span className="text-sm text-danger">{kindLabel(e.kind, t)}</span>
             <span className="text-xs text-faint">{timeAgo(e.at, lang)}</span>
             {e.escalated && !e.acked && <span className="rounded-full bg-danger/15 px-1.5 py-0.5 text-[10px] font-bold text-danger">{t('升级后仍无人响应', 'Unanswered')}</span>}
-            {e.acked && <span className="rounded-full bg-ok/15 px-1.5 py-0.5 text-[10px] font-bold text-ok">{t('有人响应', 'Responded')}</span>}
+            {/* "有人正在赶来"比"有人响应"更强的安心信号（有人已动身，非仅看到）：晚开 App 的其余亲友据此可安心待命，
+                不必都赶去。与推送 emergencyRespondingOnMyWay 口径一致；服务端 onWayAt 持久化后此处才可显。 */}
+            {e.onWay
+              ? <span className="rounded-full bg-ok/20 px-1.5 py-0.5 text-[10px] font-bold text-ok">{t('有人正在赶来', 'Someone on the way')}</span>
+              : e.acked && <span className="rounded-full bg-ok/15 px-1.5 py-0.5 text-[10px] font-bold text-ok">{t('有人响应', 'Responded')}</span>}
             <div className="ml-auto flex items-center gap-2">
               {e.lat != null && e.lon != null && (() => {
                 // 位置新鲜度诚实标注（与 EmergencyAlertHost/通知同 emergencyLocInfo）：兜底的「最后已知」坐标

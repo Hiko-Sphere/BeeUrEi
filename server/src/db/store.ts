@@ -172,6 +172,7 @@ export interface EmergencyEvent {
   at: number
   resolvedAt?: number   // 发起人报平安(all-clear)解除的时刻；未解除则 undefined。供 admin 区分"已解除/误报"与"可能仍在进行"
   ackedAt?: number      // 首个亲友"知道了"(ack)的时刻；有则不升级重呼（有人在响应）
+  onWayAt?: number      // 首个亲友"正在赶来"(onMyWay)的时刻——比"已看到"更强的安心信号；持久化后，晚开 App 的其余亲友也能看到"有人已动身"而非只"有人响应"
   escalatedAt?: number  // 无人响应达阈值 → 升级重呼的时刻；只升级一次
 }
 
@@ -718,6 +719,7 @@ export interface Store {
   emergencyEventsForUser(userId: string): EmergencyEvent[] // 本人事故记录（自助导出用，时间倒序）
   resolveOpenEmergencyEvents(userId: string, now: number): number // 报平安：标记该用户**全部**未解除事件为已解除，返回解除条数（报平安=本人已安全，其名下所有未决告警都该消，否则遗留的会被升级重呼误报）
   markEmergencyAcked(eventId: string, at: number): void   // 首个亲友确认：记 ackedAt（升级重呼据此跳过；后续确认不覆盖）
+  markEmergencyOnWay(eventId: string, at: number): void   // 首个亲友"正在赶来"：记 onWayAt（比 acked 更强的安心信号；后续不覆盖）
   markEmergencyEscalated(eventId: string, at: number): void // 升级重呼后标记，只升级一次
   unacknowledgedEmergencyEvents(olderThanAt: number, now: number): EmergencyEvent[] // 升级候选：未解除∧未确认∧未升级∧at≤olderThanAt
   deleteEmergencyEventsForUser(userId: string): void      // 删号级联（GDPR 抹除）
@@ -1448,6 +1450,10 @@ export class MemoryStore implements Store {
   markEmergencyAcked(eventId: string, at: number): void {
     const e = this.emergencyEvents.get(eventId)
     if (e && e.ackedAt == null) { e.ackedAt = at; this.afterMutate() } // 只记首个确认
+  }
+  markEmergencyOnWay(eventId: string, at: number): void {
+    const e = this.emergencyEvents.get(eventId)
+    if (e && e.onWayAt == null) { e.onWayAt = at; this.afterMutate() } // 只记首个"正在赶来"
   }
   markEmergencyEscalated(eventId: string, at: number): void {
     const e = this.emergencyEvents.get(eventId)

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
+import { SqliteStore } from '../src/db/sqliteStore'
 
 // 我负责的人当前未解除的紧急 GET /api/emergency/watching：漏看推送兜底。仅"把我设为 accepted 紧急联系人"的人、
 // 仅未解除、仅近 24h。隐私一致（我本就是其 accepted 紧急联系人、会收到告警）。
@@ -85,6 +86,34 @@ describe('GET /api/emergency/watching', () => {
     const active = (await app.inject({ method: 'GET', url: '/api/emergency/watching', headers: auth(helper.token) })).json().active
     expect(active[0]).toMatchObject({ eventId: 'e1', acked: true, escalated: true })
     await app.close()
+  })
+
+  it('onWay：有人"正在赶来"→ 看板 onWay=true（比 acked 更强的持久安心信号）；仅"已看到"→ onWay=false', async () => {
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const reg = async (u: string, role: string) => (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const helper = await reg('ewwHelper', 'helper')
+    const mom = await reg('ewwMom', 'blind')
+    const dad = await reg('ewwDad', 'blind')
+    store.createLink({ id: 'lm', ownerId: mom.user.id, memberId: helper.user.id, relation: '家人', isEmergency: true, createdAt: 1, status: 'accepted' })
+    store.createLink({ id: 'ld', ownerId: dad.user.id, memberId: helper.user.id, relation: '家人', isEmergency: true, createdAt: 1, status: 'accepted' })
+    store.createEmergencyEvent({ id: 'e-mom', userId: mom.user.id, kind: 'fall', notified: 1, contacts: 1, at: now - 60_000 })
+    store.markEmergencyAcked('e-mom', now - 30_000); store.markEmergencyOnWay('e-mom', now - 25_000) // 有人正在赶来
+    store.createEmergencyEvent({ id: 'e-dad', userId: dad.user.id, kind: 'fall', notified: 1, contacts: 1, at: now - 60_000 })
+    store.markEmergencyAcked('e-dad', now - 20_000) // 仅"已看到"，未上路
+    const active = (await app.inject({ method: 'GET', url: '/api/emergency/watching', headers: auth(helper.token) })).json().active
+    const byId = Object.fromEntries(active.map((a: { eventId: string }) => [a.eventId, a]))
+    expect(byId['e-mom']).toMatchObject({ acked: true, onWay: true })
+    expect(byId['e-dad']).toMatchObject({ acked: true, onWay: false })
+    await app.close()
+  })
+
+  it('SqliteStore：markEmergencyOnWay 只记首个、往返读回 onWayAt（列存取一致）', () => {
+    const s = new SqliteStore(':memory:')
+    s.createEmergencyEvent({ id: 'e1', userId: 'u1', kind: 'fall', notified: 1, contacts: 1, at: now })
+    expect(s.emergencyEventsForUser('u1')[0].onWayAt).toBeUndefined()
+    s.markEmergencyOnWay('e1', 1000); s.markEmergencyOnWay('e1', 2000) // 第二次不覆盖
+    expect(s.emergencyEventsForUser('u1')[0].onWayAt).toBe(1000)
   })
 
   it('分诊排序：升级后仍无人响应 > 尚无人响应 > 已有人响应（最需行动者置顶，非只按时间）', async () => {

@@ -85,9 +85,16 @@ describe('ActiveEmergenciesBanner 我负责的人活跃紧急（漏看推送兜�
     expect(await screen.findByText(/升级后仍无人响应/)).toBeInTheDocument()
   })
 
-  it('已有人响应（acked）→ 显示"有人响应"标', async () => {
+  it('已有人响应（acked 但未上路）→ 显示"有人响应"标', async () => {
     mock(api.watchingEmergencies).mockResolvedValue({ active: [ev({ escalated: true, acked: true })] })
     render(<ActiveEmergenciesBanner />)
-    expect(await screen.findByText(/有人响应/)).toBeInTheDocument()
+    expect(await screen.findByText('有人响应')).toBeInTheDocument()
+  })
+
+  it('有人正在赶来（onWay）→ 显示"有人正在赶来"（比"有人响应"更强的安心信号），且不再只显"有人响应"', async () => {
+    mock(api.watchingEmergencies).mockResolvedValue({ active: [ev({ acked: true, onWay: true })] })
+    render(<ActiveEmergenciesBanner />)
+    expect(await screen.findByText('有人正在赶来')).toBeInTheDocument()
+    expect(screen.queryByText('有人响应')).toBeNull() // onWay 时用更强措辞，不并列显弱的
   })
 })

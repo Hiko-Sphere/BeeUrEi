@@ -147,7 +147,7 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     const ownerIds = new Set(store.linksByMember(me)
       .filter((l) => (l.status ?? 'accepted') === 'accepted' && l.isEmergency && !isBlockedBetween(store, me, l.ownerId))
       .map((l) => l.ownerId))
-    const active: { ownerId: string; ownerName: string; eventId: string; kind: string; at: number; acked: boolean; escalated: boolean; lat: number | null; lon: number | null; locSource: string | null; locAgeSec: number | null; hasMedical: boolean }[] = []
+    const active: { ownerId: string; ownerName: string; eventId: string; kind: string; at: number; acked: boolean; onWay: boolean; escalated: boolean; lat: number | null; lon: number | null; locSource: string | null; locAgeSec: number | null; hasMedical: boolean }[] = []
     for (const ownerId of ownerIds) {
       const owner = store.findById(ownerId)
       if (!owner || owner.status !== 'active') continue
@@ -162,7 +162,7 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
         let hasMedical = false
         try { hasMedical = !!store.getMedicalInfo(ownerId) && !isBlockedBetween(store, me, ownerId) } catch { /* 非必需子读失败不使看板失明 */ }
         active.push({ ownerId, ownerName: owner.displayName, eventId: e.id, kind: e.kind, at: e.at,
-          acked: e.ackedAt != null, escalated: e.escalatedAt != null, lat: e.lat ?? null, lon: e.lon ?? null,
+          acked: e.ackedAt != null, onWay: e.onWayAt != null, escalated: e.escalatedAt != null, lat: e.lat ?? null, lon: e.lon ?? null,
           // 位置来源与新鲜度（诚实标注）：兜底的"最后已知"坐标绝不能在看板上冒充实时——协助者据此决定
           // 是否照此坐标赶去。与告警推送/EmergencyAlertHost 同口径，让本看板也能标"最后已知·N 分钟前"。
           locSource: e.locSource ?? null, locAgeSec: e.locAgeSec ?? null, hasMedical })
@@ -403,6 +403,8 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
     if (!ackDedup.reserve(key, now)) return { ok: true, deduped: true }
     // 有亲友确认 → 记 ackedAt：后台升级重呼据此跳过（已有人在响应，不必再打扰全体）。best-effort。
     if (eventId) { try { store.markEmergencyAcked(eventId, now) } catch { /* 标记失败不阻断回告 */ } }
+    // "正在赶来" → 额外记 onWayAt：晚开 App 的其余亲友在看板上看到"有人已动身"（比"有人响应"更安心），与推送口径一致。
+    if (eventId && onMyWay) { try { store.markEmergencyOnWay(eventId, now) } catch { /* 标记失败不阻断回告 */ } }
 
     const l = pushLang(sender.language)
     const title = onMyWay ? pushStrings.emergencyOnMyWayTitle(acker.displayName, l) : pushStrings.emergencyAckTitle(acker.displayName, l)

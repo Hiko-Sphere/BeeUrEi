@@ -96,6 +96,7 @@ export class SqliteStore implements Store {
     try { this.db.exec('ALTER TABLE emergency_events ADD COLUMN resolvedAt INTEGER') } catch { /* 列已存在 */ } // 报平安解除时刻
     try { this.db.exec('ALTER TABLE emergency_events ADD COLUMN ackedAt INTEGER') } catch { /* 列已存在 */ } // 首个亲友"知道了"时刻（有则不升级重呼）
     try { this.db.exec('ALTER TABLE emergency_events ADD COLUMN escalatedAt INTEGER') } catch { /* 列已存在 */ } // 无人响应升级重呼时刻（只升级一次）
+    try { this.db.exec('ALTER TABLE emergency_events ADD COLUMN onWayAt INTEGER') } catch { /* 列已存在 */ } // 首个亲友"正在赶来"时刻（比 acked 更强的安心信号）
     // 迁移：旧库 links 表补 phone 列、users 表补 language 列（已存在则忽略）。
     try { this.db.exec('ALTER TABLE links ADD COLUMN phone TEXT') } catch { /* 列已存在 */ }
     try { this.db.exec('ALTER TABLE users ADD COLUMN language TEXT') } catch { /* 列已存在 */ }
@@ -825,6 +826,7 @@ export class SqliteStore implements Store {
       notified: Number(r.notified), contacts: Number(r.contacts), at: Number(r.at),
       resolvedAt: r.resolvedAt != null ? Number(r.resolvedAt) : undefined,
       ackedAt: r.ackedAt != null ? Number(r.ackedAt) : undefined,
+      onWayAt: r.onWayAt != null ? Number(r.onWayAt) : undefined,
       escalatedAt: r.escalatedAt != null ? Number(r.escalatedAt) : undefined }
   }
   recentEmergencyEvents(limit = 100): EmergencyEvent[] {
@@ -843,6 +845,10 @@ export class SqliteStore implements Store {
   markEmergencyAcked(eventId: string, at: number): void {
     // 只在首个确认时落 ackedAt（后续确认者不覆盖首次时刻）。
     this.db.prepare('UPDATE emergency_events SET ackedAt = ? WHERE id = ? AND ackedAt IS NULL').run(at, eventId)
+  }
+  markEmergencyOnWay(eventId: string, at: number): void {
+    // 只在首个"正在赶来"时落 onWayAt（后续不覆盖）。
+    this.db.prepare('UPDATE emergency_events SET onWayAt = ? WHERE id = ? AND onWayAt IS NULL').run(at, eventId)
   }
   markEmergencyEscalated(eventId: string, at: number): void {
     this.db.prepare('UPDATE emergency_events SET escalatedAt = ? WHERE id = ?').run(at, eventId)

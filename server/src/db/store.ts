@@ -64,6 +64,9 @@ export interface DailyCheckin {
   durationMinutes: number  // 每次报到时长（分钟，5..1440，同手动 start 校验）
   tz: string               // IANA 时区（如 'Asia/Shanghai'；DST 由 Intl 正确处理）
   note?: string            // 可选备注（告警时读给亲友）
+  /// 暂停至（ms，绝对时刻）：住院/出行期间**临时**停用每日自动开启，到点**自动恢复**——比整体关闭更安全（关闭需
+  /// 手动记得重开，忘了＝静默失去安全网）。仅 pausedUntil>now 时跳过自动开启；过期即自动生效，无需清理。缺省=未暂停。
+  pausedUntil?: number
 }
 
 /// 勿扰时段配置（服务端据收件人本地时刻判定，正确处理跨午夜与时区/DST）。

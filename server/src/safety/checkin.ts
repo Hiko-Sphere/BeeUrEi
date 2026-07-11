@@ -22,6 +22,8 @@ export function startDueDailyCheckins(store: Store, push: PushSender, webPush: W
     try {
       const cfg = u.dailyCheckin
       if (!cfg?.enabled || u.status !== 'active') continue
+      // 暂停中（住院/出行临时停用）：跳过自动开启；pausedUntil 过期后（≤now）自动恢复，无需清理。
+      if (cfg.pausedUntil != null && cfg.pausedUntil > now) continue
       const cur = localMinuteOfDay(now, cfg.tz)
       const day = localDayIn(now, cfg.tz)
       if (cur == null || day == null) continue // 坏 tz：诚实跳过，绝不用服务器时区误开

@@ -340,6 +340,11 @@ function SafetyCheckInCard() {
   )
 }
 
+/// 暂停恢复日的短日期（"1月8日" / "Jan 8"）：暂停按天粒度，日期足矣。
+function fmtDay(ms: number, lang: 'zh' | 'en'): string {
+  return new Date(ms).toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US', { month: 'long', day: 'numeric' })
+}
+
 /// 每日定时报到配置区（SafetyCheckInCard 内）：每天固定本地时刻自动开启一次报到，超时未报平安自动告警
 /// 紧急联系人。时区自动取浏览器 IANA 时区；HH:MM ↔ startMinute 换算在此层。
 function DailyScheduleSection() {
@@ -349,6 +354,7 @@ function DailyScheduleSection() {
   const [time, setTime] = useState('09:00')
   const [dur, setDur] = useState(60)
   const [dnote, setDnote] = useState('')
+  const [pausedUntil, setPausedUntil] = useState<number | null>(null) // 临时暂停至（ms，到点自动恢复）；null/过去=未暂停
   const [busy, setBusy] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const durations = [30, 60, 120, 240]
@@ -358,19 +364,19 @@ function DailyScheduleSection() {
       if (schedule) {
         setEnabled(schedule.enabled)
         setTime(`${String(Math.floor(schedule.startMinute / 60)).padStart(2, '0')}:${String(schedule.startMinute % 60).padStart(2, '0')}`)
-        setDur(schedule.durationMinutes); setDnote(schedule.note ?? '')
+        setDur(schedule.durationMinutes); setDnote(schedule.note ?? ''); setPausedUntil(schedule.pausedUntil ?? null)
       }
     } catch { /* 网络失败留默认 */ }
     finally { setLoaded(true) }
   })() }, [])
   const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai' } catch { return 'Asia/Shanghai' } })()
+  const startMinuteOf = () => { const [h, m] = time.split(':').map(Number); return (Number.isFinite(h) ? h : 9) * 60 + (Number.isFinite(m) ? m : 0) }
   const save = async (nextEnabled: boolean) => {
-    const [h, m] = time.split(':').map(Number)
-    const startMinute = (Number.isFinite(h) ? h : 9) * 60 + (Number.isFinite(m) ? m : 0)
     setBusy(true)
     try {
-      const r = await api.setCheckinSchedule({ enabled: nextEnabled, startMinute, durationMinutes: dur, tz, note: dnote.trim() || undefined })
-      setEnabled(r.schedule.enabled)
+      // 保留 pausedUntil：改时间/时长/备注或开关时不该顺手清掉正在生效的暂停（那会静默恢复安全网到用户没预期的状态）。
+      const r = await api.setCheckinSchedule({ enabled: nextEnabled, startMinute: startMinuteOf(), durationMinutes: dur, tz, note: dnote.trim() || undefined, pausedUntil: pausedUntil ?? undefined })
+      setEnabled(r.schedule.enabled); setPausedUntil(r.schedule.pausedUntil ?? null)
       toast(nextEnabled
         ? (r.hasAnyContact
           ? t('每日报到已开启，每天到点会自动开始', 'Daily check-in on — starts automatically each day')
@@ -379,6 +385,27 @@ function DailyScheduleSection() {
     } catch { toast(t('保存失败，请重试', 'Failed — try again'), 'error') }
     finally { setBusy(false) }
   }
+  // 暂停 N 天（住院/出行临时停用；到点自动恢复，比整体关闭更安全——不必记得重开）。
+  const pauseFor = async (days: number) => {
+    const until = Date.now() + days * 86_400_000
+    setBusy(true)
+    try {
+      const r = await api.setCheckinSchedule({ enabled: true, startMinute: startMinuteOf(), durationMinutes: dur, tz, note: dnote.trim() || undefined, pausedUntil: until })
+      setEnabled(r.schedule.enabled); setPausedUntil(r.schedule.pausedUntil ?? null)
+      toast(t(`已暂停每日报到，${fmtDay(until, lang)} 自动恢复`, `Paused — resumes automatically on ${fmtDay(until, lang)}`), 'ok')
+    } catch { toast(t('操作失败，请重试', 'Failed — try again'), 'error') }
+    finally { setBusy(false) }
+  }
+  const resume = async () => {
+    setBusy(true)
+    try {
+      const r = await api.setCheckinSchedule({ enabled: true, startMinute: startMinuteOf(), durationMinutes: dur, tz, note: dnote.trim() || undefined, pausedUntil: undefined })
+      setEnabled(r.schedule.enabled); setPausedUntil(r.schedule.pausedUntil ?? null)
+      toast(t('已恢复每日报到', 'Daily check-in resumed'), 'ok')
+    } catch { toast(t('操作失败，请重试', 'Failed — try again'), 'error') }
+    finally { setBusy(false) }
+  }
+  const isPaused = pausedUntil != null && pausedUntil > Date.now()
   if (!loaded) return null
   return (
     <div className="mt-4 border-t border-[var(--line)] pt-3">
@@ -410,6 +437,24 @@ function DailyScheduleSection() {
         <Input value={dnote} onChange={(e) => setDnote(e.target.value)} maxLength={200} aria-label={t('每日报到备注', 'Daily check-in note')}
           placeholder={t('备注（可选，会念给亲友）：每天晨跑，没报平安可能出事', 'Note (optional, read to your family): daily morning jog; if I miss it, something may be wrong')} />
       </div>
+      {/* 临时暂停（住院/出行）：到点自动恢复，比整体关闭更安全——关闭需记得手动重开，忘了＝静默失去安全网。仅启用时可暂停。 */}
+      {enabled && (isPaused ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-honey/10 px-3 py-2 text-sm" role="status">
+          <span className="text-soft">{t(`已暂停，${fmtDay(pausedUntil!, lang)} 自动恢复`, `Paused — auto-resumes ${fmtDay(pausedUntil!, lang)}`)}</span>
+          <Button variant="soft" onClick={() => void resume()} disabled={busy}>{t('立即恢复', 'Resume now')}</Button>
+        </div>
+      ) : (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-faint">{t('临时暂停（到点自动恢复，比关闭更安全）：', 'Pause temporarily (auto-resumes, safer than turning off):')}</span>
+          {[1, 3, 7].map((d) => (
+            <button key={d} type="button" onClick={() => void pauseFor(d)} disabled={busy}
+              aria-label={t(`暂停 ${d} 天`, `Pause ${d} days`)}
+              className="rounded-lg surface-2 px-2.5 py-1 text-xs font-medium text-accent transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50">
+              {t(`${d} 天`, `${d}d`)}
+            </button>
+          ))}
+        </div>
+      ))}
     </div>
   )
 }

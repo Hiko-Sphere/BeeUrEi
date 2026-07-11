@@ -59,7 +59,10 @@ export function registerSafetyRoutes(app: FastifyInstance, store: Store,
     durationMinutes: z.number().int().min(MIN_MINUTES).max(MAX_MINUTES),
     tz: z.string().trim().min(1).max(64),
     note: z.string().trim().max(200).optional(),
+    // 暂停至（ms）：住院/出行临时停用、到点自动恢复。0/缺省=不暂停（恢复）。上限见 handler（须未来、且≤1 年防误设"永久暂停"）。
+    pausedUntil: z.number().int().nonnegative().optional(),
   })
+  const MAX_PAUSE_MS = 366 * 24 * 60 * 60 * 1000 // ~1 年上限：防 fat-finger 设成"永久暂停"而静默长期失去安全网
   app.get('/api/safety/checkin/schedule', { preHandler: requireAuth() }, async (req) => {
     const u = store.findById(req.user!.sub)
     return { schedule: u?.dailyCheckin ?? null }
@@ -90,9 +93,13 @@ export function registerSafetyRoutes(app: FastifyInstance, store: Store,
     const note = parsed.data.note
     // 备注会念给亲友（到期告警正文）——与手动 start 同口径过违禁词。
     if (note) { const cfg = store.getAppConfig(); if (matchBannedTerm(cfg, note)) return reply.code(403).send({ error: 'content_blocked' }) }
+    // 暂停至：仅接受**未来且 ≤1 年**的时刻；过去/超限一律视作"未暂停"（不存陈旧/离谱的暂停态，防静默长期失去安全网）。
+    const now = Date.now()
+    const pausedUntil = parsed.data.pausedUntil && parsed.data.pausedUntil > now && parsed.data.pausedUntil <= now + MAX_PAUSE_MS
+      ? parsed.data.pausedUntil : undefined
     // 重置 lastDay：改配置（尤其把时刻改到今天晚些时候）后当天即按新配置生效，不被旧标记挡住。
     const updated = store.updateUser(req.user!.sub, {
-      dailyCheckin: { enabled: parsed.data.enabled, startMinute: parsed.data.startMinute, durationMinutes: parsed.data.durationMinutes, tz: parsed.data.tz, note },
+      dailyCheckin: { enabled: parsed.data.enabled, startMinute: parsed.data.startMinute, durationMinutes: parsed.data.durationMinutes, tz: parsed.data.tz, note, pausedUntil },
       dailyCheckinLastDay: undefined,
     })
     if (!updated) return reply.code(404).send({ error: 'not_found' })

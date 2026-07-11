@@ -49,6 +49,24 @@ describe('每日定时报到 配置端点 /api/safety/checkin/schedule', () => {
     expect(store.findById(me.user.id)?.dailyCheckinLastDay).toBeUndefined()
     await app.close()
   })
+
+  it('pausedUntil：未来且≤1年→保存回显；过去/超1年→落"未暂停"（防陈旧/永久暂停的静默失网）', async () => {
+    const { app, h } = await seed()
+    const now = Date.now()
+    const future = now + 3 * 86400_000 // 3 天后
+    const r1 = await app.inject({ method: 'PUT', url: '/api/safety/checkin/schedule', headers: h,
+      payload: { enabled: true, startMinute: 540, durationMinutes: 30, tz: 'UTC', pausedUntil: future } })
+    expect((r1.json() as any).schedule.pausedUntil).toBe(future)
+    // 过去时刻 → 视作未暂停（不存陈旧暂停态）。
+    const r2 = await app.inject({ method: 'PUT', url: '/api/safety/checkin/schedule', headers: h,
+      payload: { enabled: true, startMinute: 540, durationMinutes: 30, tz: 'UTC', pausedUntil: now - 1000 } })
+    expect((r2.json() as any).schedule.pausedUntil).toBeUndefined()
+    // 超 1 年（fat-finger"永久暂停"）→ 拒收为暂停，落未暂停（绝不静默长期失网）。
+    const r3 = await app.inject({ method: 'PUT', url: '/api/safety/checkin/schedule', headers: h,
+      payload: { enabled: true, startMinute: 540, durationMinutes: 30, tz: 'UTC', pausedUntil: now + 400 * 86400_000 } })
+    expect((r3.json() as any).schedule.pausedUntil).toBeUndefined()
+    await app.close()
+  })
 })
 
 describe('每日定时报到 后台扫描 startDueDailyCheckins', () => {
@@ -90,6 +108,17 @@ describe('每日定时报到 后台扫描 startDueDailyCheckins', () => {
     expect(store.findById('u1')?.dailyCheckinLastDay).toBe('2026-01-05') // 当天已处理
   })
 
+  it('暂停中（pausedUntil>now）→ 跳过自动开启；暂停到期（≤now）→ 自动恢复照常开', () => {
+    const now = at(9, 0)
+    // 未来的 pausedUntil → 暂停中，不开（住院/出行临时停用）。
+    const paused = mk({ dailyCheckin: { enabled: true, startMinute: 540, durationMinutes: 30, tz: 'UTC', pausedUntil: now + 60_000 } })
+    expect(startDueDailyCheckins(paused, push, webPush, now)).toBe(0)
+    expect(paused.activeSafetyTimerForOwner('u1')).toBeUndefined()
+    // 已过期的 pausedUntil（≤now）→ 自动恢复、照常开启（无需清理陈旧字段）。
+    const resumed = mk({ dailyCheckin: { enabled: true, startMinute: 540, durationMinutes: 30, tz: 'UTC', pausedUntil: now - 1000 } })
+    expect(startDueDailyCheckins(resumed, push, webPush, now)).toBe(1)
+  })
+
   it('disabled/坏时区/封禁用户 → 一律不开启', () => {
     expect(startDueDailyCheckins(mk({ dailyCheckin: { enabled: false, startMinute: 540, durationMinutes: 30, tz: 'UTC' } }), push, webPush, at(9, 0))).toBe(0)
     expect(startDueDailyCheckins(mk({ dailyCheckin: { enabled: true, startMinute: 540, durationMinutes: 30, tz: 'Mars/Olympus' } }), push, webPush, at(9, 0))).toBe(0)
@@ -99,8 +128,8 @@ describe('每日定时报到 后台扫描 startDueDailyCheckins', () => {
   it('SqliteStore 列往返：dailyCheckin JSON + lastDay 存取一致；updateUser 重置 lastDay 生效', () => {
     const s = new SqliteStore(':memory:')
     s.createUser({ id: 'u1', username: 'dcsq', passwordHash: 'h', displayName: 'x', role: 'blind', status: 'active', createdAt: 1,
-      dailyCheckin: { enabled: true, startMinute: 540, durationMinutes: 30, tz: 'Asia/Shanghai', note: '晨间' }, dailyCheckinLastDay: '2026-01-05' })
-    expect(s.findById('u1')?.dailyCheckin).toMatchObject({ startMinute: 540, tz: 'Asia/Shanghai', note: '晨间' })
+      dailyCheckin: { enabled: true, startMinute: 540, durationMinutes: 30, tz: 'Asia/Shanghai', note: '晨间', pausedUntil: 9_999_999_999_000 }, dailyCheckinLastDay: '2026-01-05' })
+    expect(s.findById('u1')?.dailyCheckin).toMatchObject({ startMinute: 540, tz: 'Asia/Shanghai', note: '晨间', pausedUntil: 9_999_999_999_000 }) // pausedUntil 随 JSON 一并往返
     expect(s.findById('u1')?.dailyCheckinLastDay).toBe('2026-01-05')
     s.updateUser('u1', { dailyCheckinLastDay: undefined })
     expect(s.findById('u1')?.dailyCheckinLastDay).toBeUndefined()

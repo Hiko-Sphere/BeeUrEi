@@ -308,6 +308,27 @@ describe('每日定时报到配置（Snug Safety 式）', () => {
     await waitFor(() => expect(noteInput.value).toBe('每天晨跑'))
   })
 
+  it('暂停：点"暂停 3 天"→ setCheckinSchedule 带上未来的 pausedUntil（≈ now+3天，到点自动恢复）', async () => {
+    render(<FamilyPage />)
+    await screen.findByRole('switch', { name: '每日定时报到' })
+    const before = Date.now()
+    fireEvent.click(await screen.findByRole('button', { name: '暂停 3 天' }))
+    await waitFor(() => expect(api.setCheckinSchedule).toHaveBeenCalled())
+    const arg = mock(api.setCheckinSchedule).mock.calls.at(-1)![0]
+    expect(arg.pausedUntil).toBeGreaterThan(before + 2.9 * 86_400_000)
+    expect(arg.pausedUntil).toBeLessThan(before + 3.1 * 86_400_000)
+  })
+
+  it('暂停中回填 → 显示"已暂停…自动恢复"+隐藏暂停按钮；点"立即恢复"→ pausedUntil 清空', async () => {
+    mock(api.checkinSchedule).mockResolvedValue({ schedule: { enabled: true, startMinute: 540, durationMinutes: 60, tz: 'Asia/Shanghai', pausedUntil: Date.now() + 3 * 86_400_000 } })
+    render(<FamilyPage />)
+    expect(await screen.findByText(/已暂停/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '暂停 3 天' })).toBeNull() // 暂停中不再显示"暂停 N 天"
+    fireEvent.click(screen.getByRole('button', { name: '立即恢复' }))
+    await waitFor(() => expect(api.setCheckinSchedule).toHaveBeenCalled())
+    expect(mock(api.setCheckinSchedule).mock.calls.at(-1)![0].pausedUntil).toBeUndefined() // 恢复=清空暂停
+  })
+
   it('SafetyCheckInCard 挂载后每 20s 轮询 safetyCheckin（到期/别处报平安/每日自动开始自动反映，不再只加载一次）', async () => {
     vi.useFakeTimers()
     try {

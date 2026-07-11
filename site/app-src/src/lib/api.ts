@@ -160,10 +160,14 @@ async function rawFetch(method: string, path: string, body: unknown, auth: boole
     res = await timedFetch(apiURL(path), { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined })
   } catch { throw new APIError('network', 0) } // abort/网络失败统一按 network 错误
   if (res.status === 401 && auth) {
-    // 尝试用 refresh 续期一次并重放（retry=false 防死循环）。
-    if (retry && await tryRefresh()) return rawFetch(method, path, body, auth, false)
-    // 续期失败，或续期后重放仍 401（会话已被撤销/封禁/改密——远程登出安全特性即时生效）：
-    // 立即登出，不留"看似登录却样样 401"的中间态（否则要等下一个请求才自愈）。
+    if (retry) {
+      const rr = await tryRefresh()
+      if (rr === 'refreshed') return rawFetch(method, path, body, auth, false) // 续期成功 → 重放（retry=false 防死循环）
+      if (rr === 'transient') throw new APIError('network', 0) // 续期遇瞬时故障：**不清令牌不登出**，当网络错误上抛，下轮自愈
+      // rr === 'invalid'：refresh token 被服务端拒（会话真失效）→ 落到下方清+登出。
+    }
+    // 续期后重放仍 401（会话已被撤销/封禁/改密——远程登出安全特性即时生效），或 refresh 真失效：
+    // 立即登出，不留"看似登录却样样 401"的中间态。瞬时故障已在上面 return，不会走到这里。
     tokenStore.clear(); onUnauthorized?.()
     throw new APIError('unauthorized', 401)
   }
@@ -181,21 +185,30 @@ async function rawFetch(method: string, path: string, body: unknown, auth: boole
   return data
 }
 
-let refreshing: Promise<boolean> | null = null
-async function tryRefresh(): Promise<boolean> {
+// 刷新结果三态：'refreshed'=换发成功；'invalid'=refresh token 被服务端拒(撤销/封禁/改密/过期/重放)=会话真失效
+// →须清令牌+登出；'transient'=瞬时故障(网络/超时/5xx/429)——**绝不清令牌、绝不登出**，保留有效 refresh token 让
+// 下一次请求/轮询重试、服务端恢复后自愈。区分二者是关键：此前把瞬时失败也当失效，一次抖动就把常开的协助者
+// 静默踢下线、此后收不到 SOS（见对抗复审 HIGH）。
+type RefreshResult = 'refreshed' | 'invalid' | 'transient'
+let refreshing: Promise<RefreshResult> | null = null
+async function tryRefresh(): Promise<RefreshResult> {
   const rt = tokenStore.refresh
-  if (!rt) return false
+  if (!rt) return 'invalid' // 无 refresh token：无从续期，等同未登录 → 登出
   if (refreshing) return refreshing
   refreshing = (async () => {
     try {
       const r = await timedFetch(apiURL('/api/auth/refresh'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ refreshToken: rt }) })
-      if (!r.ok) return false
-      const j = await r.json() as { token?: string; refreshToken?: string }
-      if (!j.token) return false
-      localStorage.setItem(LS_TOKEN, j.token)
-      if (j.refreshToken) localStorage.setItem(LS_REFRESH, j.refreshToken)
-      return true
-    } catch { return false }
+      if (r.ok) {
+        const j = await r.json() as { token?: string; refreshToken?: string }
+        if (!j.token) return 'transient' // 2xx 却无 token：异常响应，保守当瞬时，不误清有效令牌
+        localStorage.setItem(LS_TOKEN, j.token)
+        if (j.refreshToken) localStorage.setItem(LS_REFRESH, j.refreshToken)
+        return 'refreshed'
+      }
+      // 服务端明确拒绝(401 invalid_refresh_token / 403 / 400 malformed)=refresh token 真失效 → 登出；
+      // 5xx(部署/崩溃)/429(限流)/其它 = 瞬时故障 → 保留令牌、下轮重试。
+      return (r.status === 401 || r.status === 403 || r.status === 400) ? 'invalid' : 'transient'
+    } catch { return 'transient' } // fetch 抛错/abort/30s 超时 = 瞬时 → 保留令牌
     finally { refreshing = null }
   })()
   return refreshing

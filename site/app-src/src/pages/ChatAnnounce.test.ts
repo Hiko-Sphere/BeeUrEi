@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { nextChatAnnouncement, mergeMessagesStable, conversationPreview, type AnnounceState } from './Chat'
+import { nextChatAnnouncement, mergeMessagesStable, conversationPreview, needsDateSeparator, dateSeparatorLabel, type AnnounceState } from './Chat'
 import type { ChatMessage, User } from '../lib/api'
 
 const tzh = (z: string, _e: string) => z // 默认中文
@@ -132,5 +132,34 @@ describe('conversationPreview 会话列表末条发送者前缀', () => {
   })
   it('无末条 → "暂无消息"', () => {
     expect(conversationPreview(null, 'me', tzh)).toBe('暂无消息')
+  })
+})
+
+describe('日期分隔（IM 标配：今天/昨天/日期）', () => {
+  // 本地正午时间戳：避开时区/夏令时的午夜边界，跨天判定在任何运行时区都确定。
+  const noon = (s: string) => Date.parse(`${s}T12:00:00`)
+  const now = noon('2026-07-11')
+
+  it('needsDateSeparator：第一条前总插；同本地日不插；跨本地日插', () => {
+    expect(needsDateSeparator(now, null)).toBe(true)                     // 第一条
+    expect(needsDateSeparator(noon('2026-07-11'), noon('2026-07-11'))).toBe(false) // 同日
+    expect(needsDateSeparator(noon('2026-07-11'), noon('2026-07-10'))).toBe(true)  // 跨日
+    expect(needsDateSeparator(noon('2026-01-01'), noon('2025-12-31'))).toBe(true)  // 跨年
+  })
+
+  it('dateSeparatorLabel：今天/昨天/更早本地化日期（中/英）', () => {
+    expect(dateSeparatorLabel(now, now, 'zh')).toBe('今天')
+    expect(dateSeparatorLabel(now, now, 'en')).toBe('Today')
+    expect(dateSeparatorLabel(noon('2026-07-10'), now, 'zh')).toBe('昨天')
+    expect(dateSeparatorLabel(noon('2026-07-10'), now, 'en')).toBe('Yesterday')
+    // 更早：本地化长日期（非今天/昨天）。断言含年份、且不是相对词。
+    const older = dateSeparatorLabel(noon('2026-07-05'), now, 'zh')
+    expect(older).toContain('2026')
+    expect(older).not.toBe('今天'); expect(older).not.toBe('昨天')
+  })
+
+  it('dateSeparatorLabel：昨天跨月边界（月初的今天 → 昨天是上月末）', () => {
+    const firstOfMonth = noon('2026-08-01')
+    expect(dateSeparatorLabel(noon('2026-07-31'), firstOfMonth, 'zh')).toBe('昨天') // setDate(-1) 正确回退到 7-31
   })
 })

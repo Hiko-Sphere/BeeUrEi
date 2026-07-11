@@ -222,6 +222,23 @@ export function conversationPreview(
   return body
 }
 
+/// 两个时间戳是否同一**本地**日历日（日期分隔用；本地时区，跨天以用户所见的午夜为界）。
+function sameLocalDay(a: number, b: number): boolean {
+  const x = new Date(a), y = new Date(b)
+  return x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth() && x.getDate() === y.getDate()
+}
+/// 消息前是否需要插入日期分隔（第一条前总插；与上一条不同本地日则插）。纯函数，可单测。
+export function needsDateSeparator(ts: number, prevTs: number | null): boolean {
+  return prevTs === null || !sameLocalDay(ts, prevTs)
+}
+/// 日期分隔标签（IM 标配）：今天/昨天/更早则本地化长日期。纯函数、now 注入，可单测。
+export function dateSeparatorLabel(ts: number, now: number, lang: 'zh' | 'en'): string {
+  if (sameLocalDay(ts, now)) return lang === 'en' ? 'Today' : '今天'
+  const y = new Date(now); y.setDate(y.getDate() - 1) // setDate 负溢出自动跨月/年
+  if (sameLocalDay(ts, y.getTime())) return lang === 'en' ? 'Yesterday' : '昨天'
+  return new Date(ts).toLocaleDateString(lang === 'en' ? 'en-US' : 'zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })
+}
+
 function preview(m: ChatMessage | null, t: (z: string, e: string) => string): string {
   if (!m) return t('暂无消息', 'No messages')
   switch (m.kind) {
@@ -520,13 +537,21 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
         )}
         {msgs === null ? <Spinner /> : msgs.length === 0 ? (
           <div className="grid h-full place-items-center text-sm text-faint">{t('开始你们的对话', 'Say hello')}</div>
-        ) : msgs.map((m) => (
-          <Bubble key={m.id} m={m} mine={m.fromId === user?.id} lang={lang} t={t} onRecall={() => recall(m)} onReact={(e) => react(m, e)} onEdit={(nt) => edit(m, nt)}
-            onReply={() => setReplyingTo(m)} onForward={() => setForwarding(m)}
-            repliedTo={m.replyTo ? msgs.find((x) => x.id === m.replyTo) : undefined}
-            repliedName={(rid) => { const r = msgs.find((x) => x.id === rid); return r ? (r.fromId === user?.id ? t('你', 'You') : (sel.kind === 'group' ? (sel.members.find((mm) => mm.id === r.fromId)?.displayName ?? t('成员', 'Member')) : sel.name)) : '' }}
-            isGroup={sel.kind === 'group'}
-            senderName={sel.kind === 'group' && m.fromId !== user?.id ? (sel.members.find((mm) => mm.id === m.fromId)?.displayName ?? '') : undefined} />
+        ) : msgs.map((m, i) => (
+          <div key={m.id}>
+            {/* 日期分隔（IM 标配）：与上一条不同本地日则插"今天/昨天/日期"，跨天历史一眼分清；居中 role=separator 供读屏定位。 */}
+            {needsDateSeparator(m.createdAt, i > 0 ? msgs[i - 1].createdAt : null) && (
+              <div className="flex justify-center py-1.5" role="separator" aria-label={dateSeparatorLabel(m.createdAt, Date.now(), lang)}>
+                <span className="rounded-full surface-2 px-2.5 py-0.5 text-[10px] text-faint">{dateSeparatorLabel(m.createdAt, Date.now(), lang)}</span>
+              </div>
+            )}
+            <Bubble m={m} mine={m.fromId === user?.id} lang={lang} t={t} onRecall={() => recall(m)} onReact={(e) => react(m, e)} onEdit={(nt) => edit(m, nt)}
+              onReply={() => setReplyingTo(m)} onForward={() => setForwarding(m)}
+              repliedTo={m.replyTo ? msgs.find((x) => x.id === m.replyTo) : undefined}
+              repliedName={(rid) => { const r = msgs.find((x) => x.id === rid); return r ? (r.fromId === user?.id ? t('你', 'You') : (sel.kind === 'group' ? (sel.members.find((mm) => mm.id === r.fromId)?.displayName ?? t('成员', 'Member')) : sel.name)) : '' }}
+              isGroup={sel.kind === 'group'}
+              senderName={sel.kind === 'group' && m.fromId !== user?.id ? (sel.members.find((mm) => mm.id === m.fromId)?.displayName ?? '') : undefined} />
+          </div>
         ))}
         <div ref={bottomRef} />
       </div>

@@ -30,20 +30,41 @@ export function notifDestination(kind: string): string | null {
   return null
 }
 
-function iconFor(kind: string) {
+/// 通知图标选择（纯函数、可单测）：kind → 图标键。与 notifDestination 同属"服务端发的每个 kind 都有意为之的
+/// web 呈现"——**图标须与去处语义一致**（location_request 去 /locations，就该用定位图标而非默认铃铛）。iconFor 只做
+/// 键→组件映射，选择逻辑集中在此以便回归测试（此前 iconFor 返回 JSX 无法直接断言，location_request 漏配才没被测出）。
+/// 顺序敏感：见各分支注释（emergency_contact 须先于 emergency；security 系须先于 friend/link）。
+export type NotifIconKind = 'users' | 'flash' | 'battery' | 'phone' | 'shield' | 'pin' | 'film' | 'bell'
+export function notifIconKind(kind: string): NotifIconKind {
   // 被设为紧急联系人=关系事件，用人形图标；**须在 emergency→闪电 之前判**，否则 emergency_contact_set 含子串
   // "emergency" 会误配成 SOS 告警闪电——把善意的"你被设为紧急联系人"渲染得像危险告警，并与真实告警视觉混淆。
-  if (kind.includes('emergency_contact')) return <IconUsers />
-  if (kind.includes('emergency')) return <IconFlash />
-  if (kind.includes('battery')) return <IconBattery /> // 共享者低电量提醒
-  if (kind.includes('call')) return <IconPhone />
+  if (kind.includes('emergency_contact')) return 'users'
+  if (kind.includes('emergency')) return 'flash'
+  if (kind.includes('battery')) return 'battery' // 共享者低电量提醒
+  if (kind.includes('call')) return 'phone'
   // 账号/安全/实名/举报/医疗类用盾牌——**须在 friend/link/group 之前判**：security_apple_linked/unlinked 含子串
   // "link"，若 friend/link 先命中会被错配成 IconUsers（人形），账号安全告警该用盾牌。
-  if (kind.includes('report') || kind.includes('moderation') || kind.includes('ban') || kind.includes('kyc') || kind.includes('verif') || kind.includes('security') || kind.includes('medical')) return <IconShield />
-  if (kind.includes('route') || kind.includes('arrival') || kind.includes('place')) return <IconPin /> // 路线库/到达围栏（route_added/place_arrival）用定位图标
-  if (kind.includes('friend') || kind.includes('link') || kind.includes('group')) return <IconUsers />
-  if (kind.includes('record')) return <IconFilm />
-  return <IconBell />
+  if (kind.includes('report') || kind.includes('moderation') || kind.includes('ban') || kind.includes('kyc') || kind.includes('verif') || kind.includes('security') || kind.includes('medical')) return 'shield'
+  // 位置/路线/围栏类用定位图标：route_added/place_arrival/**location_request**（有人请求你共享位置，去处即 /locations、
+  // RequestShareList 里也用同款定位图标）。此前漏了 location_request——它不含 route/arrival/place，落到末尾默认铃铛，
+  // 与其"位置"语义+/locations 去处不一致。加 `location` 子串一并覆盖当前与未来的 location_* 类。
+  if (kind.includes('route') || kind.includes('arrival') || kind.includes('place') || kind.includes('location')) return 'pin'
+  if (kind.includes('friend') || kind.includes('link') || kind.includes('group')) return 'users'
+  if (kind.includes('record')) return 'film'
+  return 'bell'
+}
+
+function iconFor(kind: string) {
+  switch (notifIconKind(kind)) {
+    case 'users': return <IconUsers />
+    case 'flash': return <IconFlash />
+    case 'battery': return <IconBattery />
+    case 'phone': return <IconPhone />
+    case 'shield': return <IconShield />
+    case 'pin': return <IconPin />
+    case 'film': return <IconFilm />
+    default: return <IconBell />
+  }
 }
 
 export function NotificationsPage() {

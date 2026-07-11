@@ -55,7 +55,8 @@ export function registerGroupRoutes(app: FastifyInstance, store: Store, push: Pu
         // 此刻谁（尤其协助者）能即时接应求助。已注销成员恒 false。
         members: g.memberIds.map((id) => {
           const u = store.findById(id)
-          return u ? { ...publicUser(u), online: isOnline(id) } : { id, username: '', displayName: '已注销用户', role: '', status: '', avatar: null, online: false }
+          // 已注销成员：displayName 留**空串**（语言中立），客户端据 username==='' 本地化「已注销用户/Deactivated user」——不硬编码中文（同 blocks/messages/assist 口径）
+          return u ? { ...publicUser(u), online: isOnline(id) } : { id, username: '', displayName: '', role: '', status: '', avatar: null, online: false }
         }),
         last: store.lastGroupMessage(g.id) ?? null, // 只取最后一条（此前拉 200 行取末尾，群多时放大）
         // 无上限精确未读（与 App 图标总角标 totalUnreadFor 同口径）：此前用最近 200 条 filter，>200 未读会被封顶

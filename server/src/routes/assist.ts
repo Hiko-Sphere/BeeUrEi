@@ -282,7 +282,8 @@ export function registerAssistRoutes(
           direction: outgoing ? 'outgoing' : 'incoming',
           status: r.status, // missed/answered/declined
           peerId: other?.id ?? null, // 对端 id：前端据此让通话记录可点进聊天/回拨（已注销用户为 null，不可点）
-          peerName: other?.displayName ?? '已注销用户',
+          peerName: other?.displayName ?? '', // 已注销对端：留**空串**（语言中立），由客户端本地化「已注销用户/Deactivated user」——不在服务端硬编码中文（同 blocks/messages/conversations 口径）
+
           peerAvatar: other?.avatar ?? null,
           emergency: r.emergency ?? false, // 紧急求助呼叫：前端突出"未接紧急求助"，提示优先回拨
           durationSec: r.durationSec ?? null, // 通话时长（秒）：接通并有上报才有；供通话记录显示"3:24"

@@ -39,6 +39,18 @@ describe('通话记录 + 双向呼叫', () => {
     await a.close()
   })
 
+  it('对端账号不存在（残留记录的防御态）→ peerId=null 且 peerName 为**空串**（语言中立，绝不服务端硬编码「已注销用户」中文）', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const blind = await reg(a, 'cBlind', 'blind')
+    // 直接建一条对端为"幽灵"（无对应用户）的通话记录——模拟对端账号已注销但记录残留的不一致防御态。
+    store.createCallRecord({ id: 'cr-ghost', callId: 'call-ghost', callerId: blind.user.id, calleeId: 'ghost-id', status: 'missed', createdAt: Date.now() })
+    const rec = (await a.inject({ method: 'GET', url: '/api/calls', headers: auth(blind.token) })).json().calls.find((c: { callId: string }) => c.callId === 'call-ghost')
+    expect(rec.peerId).toBeNull()   // 幽灵对端 → 不可点进聊天/回拨
+    expect(rec.peerName).toBe('')   // 语言中立空串，绝不硬编码「已注销用户」
+    await a.close()
+  })
+
   it('被叫拒绝 → 记录为已拒绝', async () => {
     const a = buildApp(new MemoryStore())
     const blind = await reg(a, 'cBlind', 'blind')

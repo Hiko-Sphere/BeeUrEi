@@ -58,7 +58,7 @@ export function EmergencyAlertModal({ alert, othersCount, beingHandled, onAck, o
         )}
         {/* 施救辅助：按需查看遇险者的紧急医疗信息（授权在服务端，仅其紧急联系人可读）。
             hasMedical=1（发起人确有医疗信息）→ 醒目提示，避免施救者忽略。 */}
-        {alert.data?.fromId && <ContactMedicalInfo userId={alert.data.fromId} emphasize={!!alert.data.hasMedical} />}
+        {alert.data?.fromId && <ContactMedicalInfo key={alert.data.fromId} userId={alert.data.fromId} emphasize={!!alert.data.hasMedical} />}
         <div className="mt-1 flex flex-col gap-2">
           <div className="flex gap-2">
             {alert.data?.fromId && (
@@ -140,12 +140,14 @@ export function EmergencyAlertHost() {
     if (top.data?.fromId) void api.emergencyAck(top.data.fromId, top.data.eventId ?? undefined, onMyWay === true).catch(() => {})
   }, [top])
 
-  const callBack = useCallback(() => {
+  const callBack = useCallback(async () => {
     if (!top?.data?.fromId) return
     const fromId = top.data.fromId
     const fromName = top.data.fromName ?? t('对方', 'Them')
-    ack() // 回拨即视为已确认
-    void startOutgoing(fromId, fromName, null)
+    // **先发起通话，成功启动才视为已确认**。此前顺序相反：先 ack(标已读+从看板消掉)再发起——呼叫被"已有通话/
+    // 守则未接受/注册失败"挡下时，SOS 已被静默清除、也标了服务端已读，却无人真正拨打（见对抗复审）。失败则
+    // 保留告警，供本人重试或其他亲友响应。
+    if (await startOutgoing(fromId, fromName, null)) ack() // 回拨成功发起 → 视为已确认
   }, [top, ack, startOutgoing, t])
 
   if (!top) return null

@@ -17,13 +17,13 @@ interface RingState { callId: string; fromName: string; fromAvatar?: string | nu
 
 interface CallCtx {
   active: ActiveCall | null
-  startOutgoing: (targetUserId: string, peerName: string, peerAvatar?: string | null) => Promise<void>
+  startOutgoing: (targetUserId: string, peerName: string, peerAvatar?: string | null) => Promise<boolean>
   claimQueue: (callId: string, fromName: string, fromAvatar?: string | null) => Promise<boolean>
   answerIncoming: (callId: string, fromName: string, fromAvatar?: string | null) => Promise<void>
   presentRing: (r: RingState) => void
   dismissRingIfGone: (activeCallIds: Set<string>) => void
 }
-const Ctx = createContext<CallCtx>({ active: null, startOutgoing: async () => {}, claimQueue: async () => false, answerIncoming: async () => {}, presentRing: () => {}, dismissRingIfGone: () => {} })
+const Ctx = createContext<CallCtx>({ active: null, startOutgoing: async () => false, claimQueue: async () => false, answerIncoming: async () => {}, presentRing: () => {}, dismissRingIfGone: () => {} })
 export const useCall = () => useContext(Ctx)
 
 export function CallProvider({ children }: { children: ReactNode }) {
@@ -77,16 +77,20 @@ export function CallProvider({ children }: { children: ReactNode }) {
   }, [])
   const dismissGuideline = useCallback(() => { resolveGuidelineRef.current(false) }, [])
 
-  const startOutgoing = useCallback(async (targetUserId: string, peerName: string, peerAvatar?: string | null) => {
-    if (active || startingRef.current) { toast(t('已有进行中的通话', 'A call is already in progress'), 'error'); return }
+  // 返回是否**成功发起**（true=已 setActive 进入呼叫）：调用方(如紧急回拨)据此决定是否把告警标为已确认——
+  // 呼叫被"已有通话/守则未接受/注册失败"挡下时返 false，绝不能在标已确认后静默失败致 SOS 消失、无人拨打（见对抗复审）。
+  const startOutgoing = useCallback(async (targetUserId: string, peerName: string, peerAvatar?: string | null): Promise<boolean> => {
+    if (active || startingRef.current) { toast(t('已有进行中的通话', 'A call is already in progress'), 'error'); return false }
     startingRef.current = true // 先上闩再 await：挡住守则卡/网络往返窗口内的并发第二通
     try {
-      if (!(await ensureGuideline())) return
+      if (!(await ensureGuideline())) return false
       const callId = crypto.randomUUID()
       await api.registerCall(callId, [targetUserId])
       setActive({ callId, kind: 'outgoing', peerUserId: targetUserId, peerName, peerAvatar, waitingText: t('正在呼叫…', 'Calling…') })
+      return true
     } catch (e) {
       toast(callErrorText(e, t, t('呼叫失败', 'Call failed')), 'error')
+      return false
     } finally {
       startingRef.current = false
     }

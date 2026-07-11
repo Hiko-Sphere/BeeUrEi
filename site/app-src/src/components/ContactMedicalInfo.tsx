@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api, APIError } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { timeAgo } from './ui'
@@ -8,6 +8,10 @@ import { timeAgo } from './ui'
 export function ContactMedicalInfo({ userId, emphasize }: { userId: string; emphasize?: boolean }) {
   const { t, lang } = useI18n()
   const [state, setState] = useState<{ kind: 'idle' | 'loading' | 'ok' | 'none' | 'denied' | 'error'; text?: string; updatedAt?: number | null }>({ kind: 'idle' })
+  // 换人即复位：本组件按 userId 拉取医疗信息，userId 变了(如告警模态从第一位遇险者切到第二位)必须清掉上一人的
+  // 已加载态，否则会**静默显示上一人的医疗信息(过敏/用药/血型)**——急救时据错人数据行动极危险（见对抗复审）。
+  // 调用点另加 key={userId} 令 React 直接重挂载(无残帧)；此复位是覆盖所有复用点的组件自身保障（双保险）。
+  useEffect(() => { setState({ kind: 'idle' }) }, [userId])
   const load = async () => {
     setState({ kind: 'loading' })
     try {

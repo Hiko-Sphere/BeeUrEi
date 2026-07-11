@@ -67,4 +67,17 @@ describe('ContactMedicalInfo（施救时按需查看遇险者医疗信息）', (
     fireEvent.click(screen.getByTestId('view-medical-btn'))
     await waitFor(() => expect(screen.getByTestId('medical-info-msg')).toHaveTextContent(/未填写/))
   })
+
+  it('换人(userId 变)即复位：绝不残留上一人的医疗信息（急救错数据防护）', async () => {
+    mock(api.contactMedicalInfo).mockResolvedValueOnce({ medicalInfo: 'A型血 · 青霉素过敏', updatedAt: 1 })
+    // rerender **不带 key**（复用同一实例）→ 专门验证组件自身的 userId 变化复位（key 保障在调用点另测）。
+    const { rerender } = render(<ContactMedicalInfo userId="personA" emphasize />)
+    fireEvent.click(screen.getByTestId('view-medical-btn'))
+    await waitFor(() => expect(screen.getByTestId('medical-info-content')).toHaveTextContent('青霉素过敏'))
+    // 切到第二位遇险者：必须复位为按钮，A 的医疗信息一个字都不能残留。
+    rerender(<ContactMedicalInfo userId="personB" emphasize />)
+    expect(screen.queryByTestId('medical-info-content')).toBeNull()
+    expect(screen.queryByText(/青霉素过敏/)).toBeNull()
+    expect(screen.getByTestId('view-medical-btn')).toBeInTheDocument()
+  })
 })

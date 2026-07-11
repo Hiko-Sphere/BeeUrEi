@@ -57,6 +57,7 @@ import { requireFeature } from '../auth/featureGate'
 import { NoopPushSender, type PushSender } from '../push/apns'
 import { NoopWebPushSender, type WebPushSender } from '../push/webPush'
 import { pushLang, pushStrings, type PushLang } from '../push/pushStrings'
+import { notifyUser } from '../notifications/notify'
 import { shouldSuppressPush } from '../notifications/quietHours'
 import { removeMediaFile } from '../media/storage'
 
@@ -401,7 +402,26 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
     const gate = pinParticipantGate(me, msg)
     if (gate) return reply.code(gate === 'not_participant' ? 403 : 403).send({ error: gate })
     if (msg.kind === 'recalled') return reply.code(400).send({ error: 'message_recalled' }) // 撤回的空壳不置顶
+    const already = store.getPin(convKeyFor(msg))?.messageId === id // 已是当前置顶 → 不重复通知（防反复点置顶刷通知）
     store.setPin(convKeyFor(msg), id, me, Date.now())
+    if (!already) {
+      // 通知其余参与者「X 置顶了一条消息：<预览>」（best-effort，绝不阻断置顶回执）——盲人把关键信息钉顶部随时可听、不必翻找。
+      try {
+        const pinner = store.findById(me)
+        const recipients = msg.groupId
+          ? (store.findGroup(msg.groupId)?.memberIds ?? []).filter((uid) => uid !== me)
+          : [msg.fromId === me ? msg.toId : msg.fromId]
+        for (const uid of recipients) {
+          const u = store.findById(uid)
+          if (!u || !pinner) continue
+          const l = pushLang(u.language)
+          notifyUser(store, pushSender, uid, 'message_pinned',
+            pushStrings.messagePinnedTitle(pinner.displayName, l),
+            pushStrings.messagePinnedBody(previewOf(msg.kind, msg.text, l), l),
+            msg.groupId ? { groupId: msg.groupId, fromId: me } : { fromId: me })
+        }
+      } catch { /* 通知失败绝不阻断置顶 */ }
+    }
     return { pinned: resolvePinned(store, me, convKeyFor(msg)) }
   })
   app.delete('/api/messages/:id/pin', { preHandler: [requireAuth(), requireFeature(store, 'messaging')] }, async (req, reply) => {

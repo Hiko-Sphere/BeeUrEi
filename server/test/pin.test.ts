@@ -99,4 +99,19 @@ describe('POST/DELETE /api/messages/:id/pin 端到端', () => {
     expect((await a.inject({ method: 'POST', url: `/api/messages/${mid}/pin`, headers: auth(C.token) })).statusCode).toBe(403)
     await a.close()
   })
+
+  it('置顶 → 通知其余参与者「X 置顶了一条消息：<预览>」；重复置顶同一条不重复通知', async () => {
+    const { a, store, A, B, mid } = await seed()
+    await a.inject({ method: 'POST', url: `/api/messages/${mid}/pin`, headers: auth(A.token) })
+    const notifs = store.notificationsForUser(B.user.id).filter((n) => n.kind === 'message_pinned')
+    expect(notifs.length).toBe(1)
+    expect(notifs[0].title).toContain('pinA')        // 谁置顶的
+    expect(notifs[0].body).toContain('幸福路9号')     // 被置顶内容预览
+    // 重复点置顶同一条（已是当前置顶）→ 不再通知，防刷。
+    await a.inject({ method: 'POST', url: `/api/messages/${mid}/pin`, headers: auth(A.token) })
+    expect(store.notificationsForUser(B.user.id).filter((n) => n.kind === 'message_pinned').length).toBe(1)
+    // A（置顶者本人）不收自己置顶的通知。
+    expect(store.notificationsForUser(A.user.id).filter((n) => n.kind === 'message_pinned').length).toBe(0)
+    await a.close()
+  })
 })

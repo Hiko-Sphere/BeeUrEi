@@ -110,6 +110,11 @@ export const pushStrings = {
   groupAddedBody: (name: string, groupName: string, l: PushLang): string =>
     l === 'en' ? `${name} added you to the group "${groupName}"` : `${name} 把你加入了群聊「${groupName}」`,
   // 群改名（群主改群名 → 通知其余成员，否则盲人只见群名突然变了、不知发生何事）。
+  // 置顶消息：把关键信息钉到会话顶部 → 通知其余参与者（尤其盲人：住址/约定等被钉住随时可听、不必翻找）。
+  messagePinnedTitle: (name: string, l: PushLang): string =>
+    l === 'en' ? `${name} pinned a message` : `${name} 置顶了一条消息`,
+  messagePinnedBody: (preview: string, l: PushLang): string =>
+    l === 'en' ? preview : preview, // 正文=被置顶内容预览（previewOf 已本地化 [图片]/[位置] 等）
   groupRenamedTitle: (l: PushLang): string =>
     l === 'en' ? 'Group renamed' : '群名已更改',
   groupRenamedBody: (name: string, groupName: string, l: PushLang): string =>

@@ -147,6 +147,30 @@ describe('请求共享位置 /api/locations/request（nudge，绝非远程强开
     await app.close()
   })
 
+  it('闭合回路：A 请求 B → B 开始共享 → A 收到 location_share_started（含 B 名，去地图看）；共享期间再上报不重复反馈', async () => {
+    const { store, app, A, B } = await seed()
+    const shareNotifs = () => store.notificationsForUser(A.id).filter((n) => n.kind === 'location_share_started')
+    await app.inject({ method: 'POST', url: '/api/locations/request', headers: auth(A.token), payload: { userId: B.id } })
+    expect(shareNotifs()).toHaveLength(0) // B 还没共享 → 尚无反馈
+    // B 响应、开始共享（本会话首次上报）→ 反馈请求者 A。
+    await app.inject({ method: 'POST', url: '/api/locations/update', headers: auth(B.token), payload: { lat: 31.2, lng: 121.5 } })
+    const n = shareNotifs()
+    expect(n).toHaveLength(1)
+    expect(n[0].title).toContain('req_b')             // "B 开始共享位置了"
+    expect(n[0].data).toMatchObject({ fromId: B.id }) // 点击去地图看 B
+    // 共享期间再次上报 → 不重复反馈（已 clear + 非首更新，isSharing 守卫）。
+    await app.inject({ method: 'POST', url: '/api/locations/update', headers: auth(B.token), payload: { lat: 31.21, lng: 121.51 } })
+    expect(shareNotifs()).toHaveLength(1)
+    await app.close()
+  })
+
+  it('无人请求时开始共享 → 不发 location_share_started（只在有 pending 请求时反馈，不凭空打扰）', async () => {
+    const { store, app, A, B } = await seed()
+    await app.inject({ method: 'POST', url: '/api/locations/update', headers: auth(B.token), payload: { lat: 31.2, lng: 121.5 } })
+    expect(store.notificationsForUser(A.id).filter((n) => n.kind === 'location_share_started')).toHaveLength(0)
+    await app.close()
+  })
+
   it('同一对 5 分钟内重复请求 → deduped:true，通知只有一条（防 nudge 轰炸）', async () => {
     const { app, A, B, notifs } = await seed()
     expect((await app.inject({ method: 'POST', url: '/api/locations/request', headers: auth(A.token), payload: { userId: B.id } })).json()).toMatchObject({ ok: true })

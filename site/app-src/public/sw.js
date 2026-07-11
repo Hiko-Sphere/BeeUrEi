@@ -121,9 +121,9 @@ self.addEventListener('notificationclick', (event) => {
       ? (d0.fromId ? '/app/chat/' + encodeURIComponent(d0.fromId)
         : d0.groupId ? '/app/chat/g/' + encodeURIComponent(d0.groupId)
         : '/app/chat')
-    // 请求共享位置（可操作 nudge）：直达位置页——那里就是"开始共享"的开关（与应用内 NotifDestination 一致）。
-    // 落通知收件箱还得再翻去位置页才能响应。location_request 绝非告警，路由无歧义。
-    : d0.kind === 'location_request' ? '/app/locations'
+    // 请求共享位置（可操作 nudge）/ 你请求的人开始共享了 → 直达位置页（开关/地图都在那里；与应用内 NotifDestination 一致）。
+    // location_request/location_share_started 绝非告警，路由无歧义。
+    : (d0.kind === 'location_request' || d0.kind === 'location_share_started') ? '/app/locations'
     // 会话类通知（群成员变动/置顶）→ 直达会话（群深链 /chat/g/:id、单聊 /chat/:peerId），与应用内 notifDestination 一致。
     // 例外：group_removed（你被移出）/group_dissolved（群已散）——进不去那个群，落通知页而非深链到空群。
     : ((d0.kind && d0.kind.indexOf('group') !== -1 && d0.kind !== 'group_removed' && d0.kind !== 'group_dissolved') || d0.kind === 'message_pinned')

@@ -35,7 +35,8 @@ export function notifDestination(kind: string, data?: Record<string, string> | n
   }
   if (kind.includes('route')) return '/routes' // 路线通知 → 路线库页（查看/预览亲友新加的路线；执行仍在 iOS）
   if (kind.includes('place') || kind.includes('arrival') || kind.includes('battery')) return '/locations' // 到达/离开围栏(place_arrival/place_departure)/低电量 → 位置页看对方在哪
-  if (kind === 'location_request') return '/locations' // 有人请求你共享位置 → 位置页（开始共享的开关就在那里）
+  // 有人请求你共享位置（去开开关）/ 你请求的人开始共享了（去地图看对方）→ 均落位置页。
+  if (kind === 'location_request' || kind === 'location_share_started') return '/locations'
   return null
 }
 

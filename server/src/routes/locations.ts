@@ -114,6 +114,23 @@ export function registerLocationRoutes(app: FastifyInstance, store: Store, live:
     if (!live.isSharing(me, now)) {
       geofence.clear(me)
       lowBatteryLevel.delete(me)
+      // 反馈"请求共享"的发起者："X 开始共享了，点击查看"——闭合请求回路（此前请求者只能自己反复刷位置页看对方来没来）。
+      // 仅本会话**首更新**（刚从未共享转为共享）时反馈，避免共享期间每次上报都反馈；反馈后清掉请求 key（不重复反馈）。
+      // best-effort：反馈失败绝不阻断位置上报本身（notifyUser 内部已全隔离，恒不抛）。
+      try {
+        const requesters = requestDedup.requestersFor(me, now)
+        if (requesters.length) {
+          const meUser = store.findById(me)
+          const name = meUser?.displayName ?? ''
+          for (const rid of requesters) {
+            const rl = pushLang(store.findById(rid)?.language)
+            notifyUser(store, push, rid, 'location_share_started',
+                       pushStrings.locationShareStartedTitle(name || (rl === 'en' ? 'A contact' : '联系人'), rl),
+                       pushStrings.locationShareStartedBody(rl), { fromId: me, fromName: name })
+            requestDedup.clear(`${rid}:${me}`)
+          }
+        }
+      } catch { /* 反馈请求者失败绝不阻断位置上报 */ }
     }
     const sharingUntil = live.update(me, parsed.data, now, parsed.data.ttlSec ? parsed.data.ttlSec * 1000 : undefined)
     checkGeofences(me, parsed.data.lat, parsed.data.lng) // 到达"家/公司"→ 通知家人（内部 best-effort）

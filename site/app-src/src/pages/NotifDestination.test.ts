@@ -34,8 +34,10 @@ describe('notifDestination 通知点击跳转目的地', () => {
     expect(notifDestination('place_departure')).toBe('/locations') // 离开围栏与到达对等
     expect(notifDestination('contact_low_battery')).toBe('/locations')
   })
-  it('有人请求你共享位置 → 位置页（开始共享的开关在那里）', () => {
+  it('有人请求你共享位置 / 你请求的人开始共享了 → 位置页（开关/地图都在那里）', () => {
     expect(notifDestination('location_request')).toBe('/locations')
+    expect(notifDestination('location_share_started')).toBe('/locations') // 请求回路闭合：对方开始共享 → 去地图看
+    expect(notifIconKind('location_share_started')).toBe('pin') // 含 'location' 子串 → 定位图标（非默认铃铛）
   })
   it('实名结果 → 账户页（实名认证区就在 /account）', () => {
     expect(notifDestination('kyc_verified')).toBe('/account')

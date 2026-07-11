@@ -41,6 +41,20 @@ describe('TtlDedup', () => {
     expect(d.size).toBe(1) // 陈旧条目已回收，非 101——证明有界，不泄漏
   })
 
+  it('requestersFor：反查 TTL 内请求过某 target 的请求者；过 TTL 不返；clear 后不再返', () => {
+    const d = new TtlDedup(5 * 60_000)
+    d.tryPass('r1:target', 0)   // r1 请求 target
+    d.tryPass('r2:target', 1000) // r2 也请求 target
+    d.tryPass('r3:other', 0)     // 请求的是别人
+    expect(d.requestersFor('target', 2000).sort()).toEqual(['r1', 'r2']) // 窗口内两个请求者
+    expect(d.requestersFor('other', 2000)).toEqual(['r3'])
+    // 过 TTL → 不返（陈旧请求不再反馈）。
+    expect(d.requestersFor('target', 6 * 60_000)).toEqual([])
+    // clear 后该请求者不再返（已反馈，避免重复）。
+    d.clear('r1:target')
+    expect(d.requestersFor('target', 2000)).toEqual(['r2'])
+  })
+
   it('有界清理不误伤仍在窗口内的条目', () => {
     const ttl = 10_000
     const d = new TtlDedup(ttl, 3) // 极小阈值便于触发

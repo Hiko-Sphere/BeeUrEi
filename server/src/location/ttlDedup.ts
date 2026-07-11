@@ -23,6 +23,21 @@ export class TtlDedup {
     return true
   }
 
+  /// TTL 内 key 形如 `<requester>:${suffix}` 的所有 `<requester>`（反向查找"谁在窗口内请求过 target 共享位置"，
+  /// 用于对方开始共享时反馈请求者）。用户 id 为 UUID、不含 ':'，故按尾串 `:${suffix}` 精确切分安全。
+  requestersFor(suffix: string, now: number): string[] {
+    const tail = `:${suffix}`
+    const out: string[] = []
+    for (const [k, ts] of this.seen) {
+      if (now - ts >= this.ttlMs) continue
+      if (k.endsWith(tail)) out.push(k.slice(0, -tail.length))
+    }
+    return out
+  }
+
+  /// 清除一个 key（已反馈请求者后清，避免同一请求重复反馈；清后请求者可在对方停止共享后再次请求）。
+  clear(key: string): void { this.seen.delete(key) }
+
   get size(): number {
     return this.seen.size
   }

@@ -92,6 +92,11 @@ export const pushStrings = {
   locationRequestBody: (l: PushLang): string =>
     l === 'en' ? 'They may be worried about you. Open the app and start sharing if you want to.'
                : '对方可能在担心你。若愿意，请打开 App 开启位置共享。',
+  // 对方响应你的"请求共享"、开始共享了——闭合请求回路（你不必再反复刷位置页看对方来没来）。
+  locationShareStartedTitle: (name: string, l: PushLang): string =>
+    l === 'en' ? `${name} started sharing their location` : `${name} 开始共享位置了`,
+  locationShareStartedBody: (l: PushLang): string =>
+    l === 'en' ? 'Tap to see where they are on the map.' : '点击在地图上查看对方位置。',
   // 共享位置者电量低（Life360/Find My "X 的手机电量低"式）：手机是盲人导航+SOS 的唯一工具，
   // 家人在其失联前主动联系。只在跌破阈值那次提醒（滞回防抖）。
   contactLowBatteryTitle: (name: string, l: PushLang): string =>

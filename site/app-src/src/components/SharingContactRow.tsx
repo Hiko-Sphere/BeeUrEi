@@ -7,10 +7,11 @@ import { IconPhone, IconChat } from './icons'
 /// 「正在共享位置的联系人」行（Locations 页用；独立文件不碰 Leaflet，可 jsdom 单测）。
 /// 除"在地图上定位"外，补**呼叫 / 发消息**直达——低电量告警把家人引到位置页说"趁没关机联系他"，此前这里
 /// 只能看位置、无从联系，得再切去亲友/聊天页；现可就地呼叫或发消息。定位/呼叫/消息三动作互不嵌套（合法 a11y）。
-export function SharingContactRow({ c, lang, t, callDisabled, onLocate, onCall, onMessage }: {
+export function SharingContactRow({ c, lang, t, live, callDisabled, onLocate, onCall, onMessage }: {
   c: ContactLocation
   lang: 'zh' | 'en'
   t: (zh: string, en: string) => string
+  live: boolean // 位置是否仍在活跃更新（见 isLocationLive）：false=共享中但近期无新位置，圆点不脉动、不冒充实时
   callDisabled?: boolean // 已在通话中：禁呼叫（避免并发呼叫）
   onLocate: () => void
   onCall: () => void
@@ -31,7 +32,13 @@ export function SharingContactRow({ c, lang, t, callDisabled, onLocate, onCall, 
           </div>
         </div>
       </button>
-      <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-ok ring-live" aria-hidden />
+      {/* 实时状态圆点：仅在位置确在活跃更新时脉动绿点（live）；若共享中但近期无新位置（对方可能关页/断网/没电），
+          改为静态弱色点、不脉动——避免"假实时"绿点误导担心的家人（相对时间"更新于 X 前"另已如实显示时长）。
+          data-live 供测试断言状态；title 给弱色点悬停释义。 */}
+      {live
+        ? <span data-testid="live-dot" data-live="1" className="inline-block h-2 w-2 shrink-0 rounded-full bg-ok ring-live" aria-hidden />
+        : <span data-testid="live-dot" data-live="0" title={t('共享中，暂无最新位置', 'Sharing, no recent update')}
+            className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--text-faint)]" aria-hidden />}
       {/* 呼叫（通话中禁，避免并发）＋ 发消息：把家人引到位置页的低电量告警"趁没关机联系他"就地可达。 */}
       <button type="button" onClick={onCall} disabled={callDisabled}
         aria-label={t(`呼叫 ${c.displayName}`, `Call ${c.displayName}`)}

@@ -15,6 +15,7 @@ import { Card, Button, Pill, EmptyState, useToast, timeAgo, fmtTime } from '../c
 import { RequestShareList } from '../components/RequestShareList'
 import { SavedPlaces } from '../components/SavedPlaces'
 import { SharingContactRow } from '../components/SharingContactRow'
+import { isLocationLive } from '../lib/locationFreshness'
 import { useNavigate } from 'react-router-dom'
 import { useCall } from './call/CallController'
 import { IconPin } from '../components/icons'
@@ -280,7 +281,7 @@ export function LocationsPage() {
             ) : (
               <ul className="divide-y divide-[var(--line)]">
                 {contacts.map((c) => (
-                  <SharingContactRow key={c.userId} c={c} lang={lang} t={t} callDisabled={!!active}
+                  <SharingContactRow key={c.userId} c={c} lang={lang} t={t} live={isLocationLive(c.updatedAt, Date.now())} callDisabled={!!active}
                     onLocate={() => { const mk = markers.current.get(c.userId); if (mk && map.current) { map.current.setView(mk.getLatLng(), 16); mk.openPopup() } }}
                     onCall={() => { if (!active) void startOutgoing(c.userId, c.displayName, c.avatar) }}
                     onMessage={() => navigate(`/chat/${encodeURIComponent(c.userId)}`)} />

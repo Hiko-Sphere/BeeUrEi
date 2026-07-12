@@ -3,7 +3,7 @@ import { nextChatAnnouncement, mergeMessagesStable, conversationPreview, needsDa
 import { isNearBottom } from '../lib/scroll' // 聊天线程与通话内 RTT 共用的"是否贴底"判据
 import type { ChatMessage, User } from '../lib/api'
 
-const tzh = (z: string, _e: string) => z // 默认中文
+const tzh = (z: string) => z // 默认中文;少参可赋给 (zh,en)=>string,避开 no-unused-vars
 
 const msg = (id: string, fromId: string, text = 'hi'): ChatMessage =>
   ({ id, fromId, toId: 'me', kind: 'text', text, createdAt: Number(id) } as ChatMessage)

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { remainingText, durationName, liveRemainingSecFromDue, nextCheckinLabel } from './safetyCheckin'
 
-const tz = (zh: string, _en: string) => zh
+const tz = (zh: string) => zh // 少参可赋给 (zh,en)=>string,避开 no-unused-vars
 const en = (_zh: string, e: string) => e
 
 describe('safety check-in 剩余时间/时长格式（与 iOS SafetyTimerFormat 同口径）', () => {

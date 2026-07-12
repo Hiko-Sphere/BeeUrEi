@@ -4,7 +4,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { SharingContactRow } from './SharingContactRow'
 import type { ContactLocation } from '../lib/api'
 
-const t = (zh: string, _en: string) => zh
+const t = (zh: string) => zh // 少参可赋给 (zh,en)=>string(TS 结构化类型),避开 no-unused-vars
 const c: ContactLocation = { userId: 'u1', displayName: '小明', avatar: null, role: 'blind', lat: 31, lng: 121, updatedAt: Date.now(), battery: 15 }
 
 describe('SharingContactRow 共享位置联系人行（定位/呼叫/发消息）', () => {

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { VoiceRecorderButton, VOICE_MAX_SEC } from './VoiceRecorder'
 
-const t = (zh: string, _en: string) => zh
+const t = (zh: string) => zh // 少参可赋给 (zh,en)=>string(TS 结构化类型),避开 no-unused-vars
 
 /// 假 MediaRecorder（jsdom 无原生实现）——**对齐真实浏览器语义**（宽松的假会漏掉真崩溃）：
 /// ① stop() 在非 recording 态**抛 InvalidStateError**（真实规范行为，快速双击"发送/取消"就会触发）；

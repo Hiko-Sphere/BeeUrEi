@@ -102,7 +102,8 @@ export function Layout({ children }: { children: ReactNode }) {
 
   // 关闭页面前主动下线（best-effort）。
   useEffect(() => {
-    const onUnload = () => { if (availRef.current) void api.heartbeat(false).catch(() => {}) }
+    // keepalive beacon（非普通 fetch）：pagehide 期间普通请求会被浏览器随页面销毁取消，"关标签即离线"就发不出去。
+    const onUnload = () => { if (availRef.current) api.heartbeatOffBeacon() }
     window.addEventListener('pagehide', onUnload)
     return () => window.removeEventListener('pagehide', onUnload)
   }, [])

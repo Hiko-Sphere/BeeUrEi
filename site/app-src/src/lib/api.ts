@@ -348,6 +348,21 @@ export const api = {
   callStatus: (callId: string) => get(`/api/assist/call/status?callId=${encodeURIComponent(callId)}`) as Promise<{ exists?: boolean; declinedAll?: boolean }>,
   onlineCount: () => get('/api/assist/online-count') as Promise<{ total: number; online: number }>,
   heartbeat: (available = true) => post('/api/assist/heartbeat', { available }),
+  // 关闭/离开页面时立即下线（best-effort）：**必须 keepalive**，否则 pagehide 期间普通 fetch 会被浏览器
+  // 连页面一起销毁而取消——"关标签即离线"就形同虚设、只能干等 45s 服务端 TTL，其间盲人仍可能呼到已走的人。
+  // keepalive 允许请求越过页面卸载完成（同 navigator.sendBeacon，但能带 Authorization 头）。不走 rawFetch：
+  // 卸载时不需要 30s 超时/401 续期，纯 fire-and-forget。
+  heartbeatOffBeacon: () => {
+    try {
+      const token = tokenStore.token
+      void fetch(apiURL('/api/assist/heartbeat'), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(token ? { authorization: 'Bearer ' + token } : {}) },
+        body: JSON.stringify({ available: false }),
+        keepalive: true,
+      }).catch(() => { /* best-effort */ })
+    } catch { /* best-effort */ }
+  },
   // 协助者行为守则确认（一次性守则卡）：服务端留痕，selfView.helperGuidelineAckAt 回传。
   guidelineAck: () => post('/api/assist/guideline-ack', {}) as Promise<{ ok: boolean; helperGuidelineAckAt: number }>,
   // 路线库（亲友远程路线编排）：替互链盲人画常走路线 / 自存路线；服务端校验互链与上限。

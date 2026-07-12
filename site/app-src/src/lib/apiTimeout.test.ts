@@ -171,3 +171,26 @@ describe('rawFetch 401 续期与远程登出', () => {
     expect(tokenStore.refresh).toBe('RT1')         // 有效 refresh token 保留（未被畸形响应误清）
   })
 })
+
+describe('heartbeatOffBeacon 关闭页面即下线（keepalive，unload 也发得出）', () => {
+  afterEach(() => { vi.unstubAllGlobals(); tokenStore.clear() })
+
+  it('用 keepalive:true 的 POST /api/assist/heartbeat {available:false}，带 Bearer 头（unload 期普通 fetch 会被取消）', () => {
+    tokenStore.set('AT9', 'RT9', { id: 'u', username: 'u', displayName: 'U', role: 'helper', status: 'active' })
+    const calls: Array<{ url: string; opts: RequestInit }> = []
+    vi.stubGlobal('fetch', (url: string, opts: RequestInit) => { calls.push({ url: String(url), opts }); return Promise.resolve({ ok: true, json: async () => ({}) }) })
+    api.heartbeatOffBeacon()
+    expect(calls).toHaveLength(1)
+    expect(calls[0].url).toContain('/api/assist/heartbeat')
+    expect(calls[0].opts.method).toBe('POST')
+    expect(calls[0].opts.keepalive).toBe(true) // 关键：keepalive 让请求越过页面卸载
+    expect(JSON.parse(String(calls[0].opts.body))).toEqual({ available: false })
+    expect((calls[0].opts.headers as Record<string, string>).authorization).toBe('Bearer AT9') // 带鉴权（sendBeacon 做不到）
+  })
+
+  it('fetch 抛错（unload 中途）不冒泡——纯 best-effort，绝不让卸载崩', () => {
+    tokenStore.set('AT9', 'RT9', { id: 'u', username: 'u', displayName: 'U', role: 'helper', status: 'active' })
+    vi.stubGlobal('fetch', () => { throw new Error('unloading') })
+    expect(() => api.heartbeatOffBeacon()).not.toThrow()
+  })
+})

@@ -15,6 +15,7 @@ vi.mock('../lib/api', () => ({
     appConfig: vi.fn().mockResolvedValue({}),
     unreadSummary: vi.fn().mockResolvedValue({ notifications: 0, messages: 0 }),
     heartbeat: vi.fn().mockResolvedValue(undefined),
+    heartbeatOffBeacon: vi.fn(),
   },
 }))
 vi.mock('../pages/call/CallController', () => ({ CallProvider: (p: { children: unknown }) => p.children as never }))
@@ -103,6 +104,26 @@ describe('待命心跳', () => {
     Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
     document.dispatchEvent(new Event('visibilitychange'))
     expect(heartbeat()).toHaveBeenCalledWith(true) // 回前台立即补，不干等下一次心跳
+    localStorage.removeItem('beeurei.web.available')
+  })
+
+  it('待命中关闭/离开页面(pagehide)→ 走 keepalive beacon 立即下线（非普通 heartbeat，否则 unload 被取消、发不出）', () => {
+    localStorage.setItem('beeurei.web.available', '1')
+    const beacon = api.heartbeatOffBeacon as ReturnType<typeof vi.fn>
+    beacon.mockClear()
+    render(<Layout><div>x</div></Layout>)
+    window.dispatchEvent(new Event('pagehide'))
+    expect(beacon).toHaveBeenCalledTimes(1) // 用 beacon（keepalive）而非普通 heartbeat
+    localStorage.removeItem('beeurei.web.available')
+  })
+
+  it('未待命时关闭页面不发下线 beacon（本就离线，无需骚扰服务端）', () => {
+    localStorage.setItem('beeurei.web.available', '0')
+    const beacon = api.heartbeatOffBeacon as ReturnType<typeof vi.fn>
+    beacon.mockClear()
+    render(<Layout><div>x</div></Layout>)
+    window.dispatchEvent(new Event('pagehide'))
+    expect(beacon).not.toHaveBeenCalled()
     localStorage.removeItem('beeurei.web.available')
   })
 })

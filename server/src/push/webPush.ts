@@ -32,7 +32,8 @@ export class NoopWebPushSender implements WebPushSender {
 export class VapidWebPushSender implements WebPushSender {
   readonly configured = true
   constructor(publicKey: string, privateKey: string, subject: string,
-              private onGone?: (endpoint: string) => void) {
+              private onGone?: (endpoint: string) => void,
+              private agent?: import('node:https').Agent) { // 自定义 https Agent（代理/keepalive/测试注入 CA）
     webpush.setVapidDetails(subject, publicKey, privateKey)
   }
 
@@ -41,7 +42,7 @@ export class VapidWebPushSender implements WebPushSender {
       await webpush.sendNotification(
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
         payload,
-        { TTL: 300, urgency: 'high' }, // 紧急告警：高优先级、5 分钟内送达否则过期（过时告警无意义）
+        { TTL: 300, urgency: 'high', ...(this.agent ? { agent: this.agent } : {}) }, // 紧急告警：高优先级、5 分钟内送达否则过期（过时告警无意义）
       )
       return 'sent'
     } catch (e) {

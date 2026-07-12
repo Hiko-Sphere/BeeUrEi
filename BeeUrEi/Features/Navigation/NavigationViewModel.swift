@@ -337,6 +337,7 @@ final class NavigationViewModel {
     private func planRoute(from loc: CLLocation, gen: Int) async {
         // 仅当本任务仍是最新一代（未被新的 start/stop 作废）时才解除重规划门控（见审查 #1）。
         defer { if gen == navGeneration { replanning = false } }
+        serverRouteTotals = nil // 每次规划先清：换目的地/重规划/海外分支不得沿用上一条路线的总里程
         switch region {
         case .china:
             do {
@@ -349,6 +350,8 @@ final class NavigationViewModel {
                                                    destination: destinationQuery,
                                                    destGcj: gDest.map { (lat: $0.lat, lon: $0.lon) })
                 guard running, gen == navGeneration else { return } // 已被新导航/停止作废，丢弃旧结果
+                // 高德权威全程里程/时长：原样暂存，取用时经 overviewTotals 统一校验（坏值→本地兜底）。
+                if let d = route.distanceMeters, let t = route.durationSeconds { serverRouteTotals = (meters: d, seconds: t) }
                 let result = route.steps
                 // 步距经 safeRoundedInt：distanceMeters 是后端 JSON 原样解码的 Double?，巨值有限数（如上游 bug
                 // 给出 1e19 > Int.max）直接 Int() 会**溢出陷阱崩溃**；?? 0 只挡 nil、挡不住量级（复审确认可达）。
@@ -456,20 +459,42 @@ final class NavigationViewModel {
         }
     }
 
+    /// 本次路线的服务端权威全程（高德 distanceMeters/durationSeconds）；每次 planRoute 先清，
+    /// 仅国内分支成功取路线时置。海外/自定义/旧后端为 nil → 概览退回本地累距。
+    private var serverRouteTotals: (meters: Double, seconds: Double)?
+
+    /// 全程概览数据源选择（纯逻辑可测）：优先服务端权威总里程/时长——高德按**真实道路**算全程
+    /// （含折线采样点之间的路程）、时长按其步行模型，比"转向点连线累距 + 默认步速"更准。
+    /// 服务端值坏（非有限/非正）→ 退回本地兜底；本地也无 → nil（不凭空报）。
+    nonisolated static func overviewTotals(serverMeters: Double?, serverSeconds: Double?,
+                                           fallbackMeters: Double?, fallbackEtaSeconds: Double?) -> (meters: Double, etaSeconds: Double?)? {
+        if let m = serverMeters, let s = serverSeconds, m.isFinite, s.isFinite, m > 0, s > 0 {
+            return (meters: m, etaSeconds: s)
+        }
+        guard let f = fallbackMeters, f.isFinite, f > 0 else { return nil }
+        return (meters: f, etaSeconds: fallbackEtaSeconds)
+    }
+
     /// 出发时的全程概览播报（"全程约 X，预计 Y"）——竞品在导航开始都会先报整条路线的长度与预计时长，
-    /// 给盲人一个整体预期（要不要带够时间/中途歇脚）。用核心 RouteRemaining 从起点沿路累距（真实路程
-    /// 非直线）；初始 ETA 用默认步速（尚未起步无实测速度，途中里程碑播报会用真实 loc.speed 精化）。
+    /// 给盲人一个整体预期（要不要带够时间/中途歇脚）。数据源经 overviewTotals：优先高德权威全程
+    /// （此前该字段被 Codable 丢弃、一律本地累距），海外/自定义/旧后端退回 RouteRemaining 沿路累距 +
+    /// 默认步速 ETA（尚未起步无实测速度，途中里程碑播报会用真实 loc.speed 精化）。
     /// 经 NavVoice 排在开始指令之后朗读；坐标系须与 maneuvers 一致（china=GCJ、overseas/自定义=WGS-84）。
     private func announceJourneyOverview(fromLat lat: Double, fromLon lon: Double) {
         guard let dest = destination, !maneuvers.isEmpty else { return }
         let mans = maneuvers.map { Coordinate(lat: $0.coordinate.latitude, lon: $0.coordinate.longitude) }
-        guard let total = RouteRemaining.distanceMeters(currentLat: lat, currentLon: lon,
-                                                        remainingManeuvers: mans,
-                                                        destination: Coordinate(lat: dest.latitude, lon: dest.longitude)) else { return }
-        let eta = RouteRemaining.etaSeconds(remainingMeters: total,
-                                            speedMps: RouteRemaining.effectiveWalkingSpeed(rawMps: nil))
+        let localTotal = RouteRemaining.distanceMeters(currentLat: lat, currentLon: lon,
+                                                       remainingManeuvers: mans,
+                                                       destination: Coordinate(lat: dest.latitude, lon: dest.longitude))
+        let localEta = localTotal.flatMap { RouteRemaining.etaSeconds(remainingMeters: $0,
+                                                                      speedMps: RouteRemaining.effectiveWalkingSpeed(rawMps: nil)) }
+        guard let totals = Self.overviewTotals(serverMeters: serverRouteTotals?.meters,
+                                               serverSeconds: serverRouteTotals?.seconds,
+                                               fallbackMeters: localTotal, fallbackEtaSeconds: localEta) else { return }
         // 直接经 NavVoice 排队（不走 VM 的去重 speak，避免占用 lastSpoken 干扰下个转向指令去重）。
-        NavVoice.shared.speak(NavStrings.journeyOverview(meters: Int(total.rounded()), etaSeconds: eta, arrivalClock: arrivalClockString(etaSeconds: eta), lang),
+        NavVoice.shared.speak(NavStrings.journeyOverview(meters: SpokenStrings.safeRoundedInt(totals.meters),
+                                                         etaSeconds: totals.etaSeconds,
+                                                         arrivalClock: arrivalClockString(etaSeconds: totals.etaSeconds), lang),
                               rate: FeatureSettings().speechRate)
     }
 

@@ -14,6 +14,11 @@ struct AMapWalkRoute: Decodable {
     let destinationLat: Double?
     let destinationLon: Double?
     let steps: [AMapWalkStep]
+    /// 高德权威全程里程/时长（服务端 /api/nav/walking 一直在返，此前被 Codable 静默丢弃）：
+    /// 里程按真实道路算（含折线采样点之间的路程）、时长按高德步行模型——比本地"转向点连线累距+
+    /// 默认步速"更准。可选：旧后端无此字段仍可解码。
+    let distanceMeters: Double?
+    let durationSeconds: Double?
 }
 
 /// 国内步行路线客户端：调用自托管后端 `/api/nav/walking`（后端持高德 key，App 不接触 key）。

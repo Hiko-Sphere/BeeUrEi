@@ -1090,16 +1090,21 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForwar
         {senderName && <div className="mb-0.5 text-xs font-semibold text-honey">{senderName}</div>}
         {/* 「已转发」标注：防收件人误以为是发送者原创（WhatsApp 式）。 */}
         {m.forwarded && m.kind !== 'recalled' && <div data-testid="forwarded-tag" className={`mb-0.5 text-[10px] italic ${mine ? 'text-ink/55' : 'text-faint'}`}>↪ {t('已转发', 'Forwarded')}</div>}
-        {/* 引用回复的原消息预览（WhatsApp 式）：已加载则显示"名字：内容"，未加载则显示占位。 */}
-        {m.replyTo && (repliedTo && onQuoteClick
+        {/* 引用回复的原消息预览（WhatsApp 式）：只要能跳（onQuoteClick 在）就渲染为**可点**——
+            即便原消息不在当前窗口（更早、已翻出），jumpToMessage 会回翻页（60 页×3000 条）把它载入并定位，
+            真找不到（已删/超回溯上限）才提示。此前"未加载即不可点"是误判：以为点了跳空，实则 jump 会回翻页找到，
+            让回复较早消息时用户跳不回原文。已加载→显示"名字：内容"，未加载→"引用的消息（点击查看）"。 */}
+        {m.replyTo && (onQuoteClick
           ? <button type="button" data-testid="quoted" onClick={() => onQuoteClick(m.replyTo!)}
               aria-label={t('跳到被引用的消息', 'Jump to quoted message')}
               className={`mb-1 block w-full rounded-lg border-l-2 px-2 py-1 text-left text-xs transition hover:brightness-95 ${mine ? 'border-ink/40 bg-ink/5' : 'border-honey bg-honey/10'}`}>
-              <span className="font-semibold">{repliedName?.(m.replyTo)}</span><span className="ml-1 opacity-80">{preview(repliedTo, t)}</span>
+              {repliedTo
+                ? <><span className="font-semibold">{repliedName?.(m.replyTo)}</span><span className="ml-1 opacity-80">{preview(repliedTo, t)}</span></>
+                : <span className="opacity-70">{t('引用的消息（点击查看）', 'Quoted message (tap to view)')}</span>}
             </button>
           : <div data-testid="quoted" className={`mb-1 rounded-lg border-l-2 px-2 py-1 text-xs ${mine ? 'border-ink/40 bg-ink/5' : 'border-honey bg-honey/10'}`}>
-              {/* 原消息未加载（更早、不在当前窗口）：占位不可点，避免点了跳空。 */}
-              <span className="opacity-70">{t('引用的消息', 'Quoted message')}</span>
+              {/* 无跳转能力（onQuoteClick 未传，罕见）：占位不可点。 */}
+              <span className="opacity-70">{repliedTo ? <><span className="font-semibold">{repliedName?.(m.replyTo)}</span><span className="ml-1 opacity-80">{preview(repliedTo, t)}</span></> : t('引用的消息', 'Quoted message')}</span>
             </div>
         )}
         {editing ? (

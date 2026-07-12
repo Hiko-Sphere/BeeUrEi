@@ -1,14 +1,17 @@
 import { describe, it, expect } from 'vitest'
 import { MemoryStore } from '../src/db/store'
+import { SqliteStore } from '../src/db/sqliteStore'
 import { cascadeDeleteUser } from '../src/db/cascade'
 
 function user(id: string) {
   return { id, username: id, passwordHash: 'h', displayName: id, role: 'blind', status: 'active', createdAt: 1 } as any
 }
 
-describe('cascadeDeleteUser — 抹除完整性', () => {
+// 双存储参数化：生产跑 SqliteStore，级联抹除（GDPR 承诺）此前只在 MemoryStore 上验证过。
+for (const [storeName, makeStore] of [['MemoryStore', () => new MemoryStore()], ['SqliteStore', () => new SqliteStore(':memory:')]] as const) {
+describe(`cascadeDeleteUser — 抹除完整性（${storeName}）`, () => {
   it('清除被删用户的黑名单(任一方向)与站内通知；不波及他人无关数据', () => {
-    const store = new MemoryStore()
+    const store = makeStore()
     store.createUser(user('u1'))
     store.createUser(user('u2'))
     store.createUser(user('u3'))
@@ -34,7 +37,7 @@ describe('cascadeDeleteUser — 抹除完整性', () => {
   })
 
   it('清除被删用户的 2FA 一次性恢复码（无主安全凭据不残留）；他人恢复码保留', () => {
-    const store = new MemoryStore()
+    const store = makeStore()
     store.createUser(user('u1'))
     store.createUser(user('u2'))
     store.replaceRecoveryCodes('u1', ['h1', 'h2', 'h3'])
@@ -46,7 +49,7 @@ describe('cascadeDeleteUser — 抹除完整性', () => {
   })
 
   it('清除被删用户上传的媒体(视频消息文件元数据)；他人媒体保留', () => {
-    const store = new MemoryStore()
+    const store = makeStore()
     store.createUser(user('u1'))
     store.createUser(user('u2'))
     store.createMedia({ id: 'vid-u1', ownerId: 'u1', mime: 'video/mp4', size: 100, createdAt: 1 })
@@ -60,7 +63,7 @@ describe('cascadeDeleteUser — 抹除完整性', () => {
   })
 
   it('录制方删号：其**录制**媒体随刻意保留的录制记录一并保留（不掏空成悬垂证据）；普通视频媒体照清', () => {
-    const store = new MemoryStore()
+    const store = makeStore()
     store.createUser(user('rec'))
     // 该用户既有一条录制媒体（挂在录制记录上，作证据保留），又有一条普通视频消息媒体（应随删号清）。
     store.createMedia({ id: 'rec-media', ownerId: 'rec', mime: 'video/quicktime', size: 500, createdAt: 1 })
@@ -77,7 +80,7 @@ describe('cascadeDeleteUser — 抹除完整性', () => {
   })
 
   it('群主删号 → 解散其群时一并清群内视频消息媒体（含他人发的，与解散端点同口径）', () => {
-    const store = new MemoryStore()
+    const store = makeStore()
     store.createUser(user('owner'))
     store.createUser(user('mem'))
     store.createGroup({ id: 'g1', name: 'g', ownerId: 'owner', memberIds: ['owner', 'mem'], createdAt: 1 } as never)
@@ -93,7 +96,7 @@ describe('cascadeDeleteUser — 抹除完整性', () => {
   })
 
   it('非群主成员删号 → 其在他人群里的已读游标(group_reads)一并清除（不留孤儿），不波及群与他人游标', () => {
-    const store = new MemoryStore()
+    const store = makeStore()
     store.createUser(user('owner'))
     store.createUser(user('mem'))
     store.createGroup({ id: 'g1', name: 'g', ownerId: 'owner', memberIds: ['owner', 'mem'], createdAt: 1 } as never)
@@ -110,7 +113,7 @@ describe('cascadeDeleteUser — 抹除完整性', () => {
   })
 
   it('清除被删用户参与的通话记录（PII，非证据）；他人无关记录保留', () => {
-    const store = new MemoryStore()
+    const store = makeStore()
     store.createUser(user('u1')); store.createUser(user('u2')); store.createUser(user('u3'))
     // u1 主叫 u2、u3 主叫 u1（任一方向含 u1，须随删号清）；u2 主叫 u3（与 u1 无关，须保留）。
     store.createCallRecord({ id: 'c1', callId: 'call1', callerId: 'u1', calleeId: 'u2', status: 'answered', createdAt: 1 })
@@ -127,3 +130,4 @@ describe('cascadeDeleteUser — 抹除完整性', () => {
     expect(store.allCallRecords().map((r) => r.id)).toEqual(['c3'])
   })
 })
+}

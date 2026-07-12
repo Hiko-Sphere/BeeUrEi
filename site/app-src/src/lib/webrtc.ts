@@ -243,6 +243,11 @@ export class CallEngine {
     ws.onmessage = (ev) => { try { this.handle(JSON.parse(String(ev.data))) } catch { /* 非 JSON 忽略 */ } }
     ws.onclose = () => {
       if (this.wsClosedByUs || this.ended) return
+      // 媒体已 P2P 连通（connectedAt>0）时，信令 WS 只是控制通道、**不承载媒体**——WS 抖动/服务端部署
+      // 重启不该掐断正在进行的通话（尤其紧急通话，且本项目每次部署 docker stop 都会断所有 WS）。静默保持
+      // 通话：媒体继续 P2P 流动；若对端真挂断/媒体真失败，由 ICE 状态机（onIceState→mediaFailed）负责结束。
+      // 媒体尚未连通（还在建立、connectedAt=0）时 WS 是命脉——关闭即建立失败，照常结束并计入可观测。
+      if (this.connectedAt > 0) return
       this.connected = false
       this.cb.onConnected?.(false)
       this.cb.onStatus?.('signalingClosed')

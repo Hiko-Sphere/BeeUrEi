@@ -283,3 +283,43 @@ describe('CallEngine 录制失败不泄漏 AudioContext', () => {
     expect(e.audioCtx).toBeNull()  // 且置空
   })
 })
+
+describe('CallEngine 信令 WS 断开：媒体已连不掐断通话（部署重启/网络抖动不该断正在进行的通话）', () => {
+  let closeCb: (() => void) | null
+  beforeEach(() => {
+    closeCb = null
+    ;(globalThis as unknown as { MediaStream: unknown }).MediaStream = class { addTrack() {} getTracks() { return [] } getAudioTracks() { return [] } }
+    ;(globalThis as unknown as { RTCPeerConnection: unknown }).RTCPeerConnection = vi.fn(() => ({ addTrack: vi.fn(), close: vi.fn(), set ontrack(_v: unknown) {}, set onicecandidate(_v: unknown) {}, set oniceconnectionstatechange(_v: unknown) {} }))
+    // 捕获引擎给 ws 设的 onclose，供测试手动触发"信令断开"。
+    ;(globalThis as unknown as { WebSocket: unknown }).WebSocket = vi.fn(() => ({ set onopen(_v: unknown) {}, set onmessage(_v: unknown) {}, set onclose(v: () => void) { closeCb = v }, close: vi.fn(), readyState: 1, send: vi.fn() }))
+    Object.defineProperty(navigator, 'mediaDevices', { value: { getUserMedia: vi.fn(() => Promise.resolve({ getTracks: () => [{ enabled: true, stop() {} }], getAudioTracks: () => [{ enabled: true, stop() {} }] })) }, configurable: true })
+  })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  const makeEngine = (cb: Record<string, unknown>) => new CallEngine({
+    callId: 'c1', token: 'T', iceServers: [], recordPolicy: { enabled: false, requireConsent: false }, cb,
+  }) as unknown as { start: () => Promise<void>; onIceState: (s: string) => void; hangUp: () => void }
+
+  it('媒体已连通(onIceState connected)后 WS 关闭 → **不**结束通话、不喷 signalingClosed、不计信令失败', async () => {
+    const ended: string[] = []; const statuses: string[] = []; let connectedFalse = false
+    const e = makeEngine({ onEnded: (r: string) => ended.push(r), onStatus: (k: string) => statuses.push(k), onConnected: (c: boolean) => { if (!c) connectedFalse = true } })
+    await e.start()
+    e.onIceState('connected')     // 媒体 P2P 连通 → connectedAt>0
+    expect(typeof closeCb).toBe('function')
+    closeCb!()                    // 信令 WS 意外断开（部署重启/抖动）
+    expect(ended).toEqual([])     // 通话**未**结束——媒体继续
+    expect(statuses).not.toContain('signalingClosed')
+    expect(connectedFalse).toBe(false) // 未误报"已断开"
+    const { api } = await import('./api')
+    expect(api.reportCallFailure).not.toHaveBeenCalled() // 媒体还在，不计信令失败
+  })
+
+  it('媒体尚未连通时 WS 关闭 → 照常结束(onEnded signaling)并计入可观测——建立期 WS 是命脉', async () => {
+    const ended: string[] = []
+    const e = makeEngine({ onEnded: (r: string) => ended.push(r) })
+    await e.start()
+    // 未 onIceState('connected')：connectedAt=0
+    closeCb!()
+    expect(ended).toEqual(['signaling']) // 建立期断信令即失败结束
+  })
+})

@@ -6,6 +6,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 vi.mock('react-router-dom', () => ({ useParams: () => ({}), useNavigate: () => vi.fn() }))
 vi.mock('../lib/session', () => ({ useSession: () => ({ user: { id: 'me', displayName: '我' } }) }))
 vi.mock('../lib/api', () => ({
+  SEARCH_LIMIT: 50, GLOBAL_SEARCH_LIMIT: 20, // Chat 搜索截断标注用常量（与真实 api.ts 同值）
   api: { conversations: vi.fn(), groups: vi.fn(), searchAllMessages: vi.fn(), messagesWith: vi.fn(), markRead: vi.fn() },
   APIError: class extends Error { code = ''; status = 0 },
 }))
@@ -118,6 +119,25 @@ describe('ChatPage 会话列表按名字搜索过滤', () => {
     expect(await screen.findByText('之前发的地址')).toBeInTheDocument()
     // 命中行标题与 aria-label 都是"已注销用户"，非空名（修 hitTarget 绕开 items 本地化的缺口）。
     expect(screen.getByRole('button', { name: '打开与 已注销用户 的会话' })).toBeInTheDocument()
+  })
+
+  it('全局命中打满上限(20)→列表尾如实标注"仅显示最近 20 条匹配"；未打满不标（no-silent-caps）', async () => {
+    // 20 条命中（= GLOBAL_SEARCH_LIMIT 打满）都来自 p1（可解析）→ 渲染 20 行 + 截断说明。
+    mock(api.searchAllMessages).mockResolvedValue({ messages: Array.from({ length: 20 }, (_, i) => (
+      { id: `hh${i}`, fromId: 'p1', toId: 'me', kind: 'text', text: `地址${i}号`, createdAt: 1000 + i }
+    )) })
+    render(<ChatPage />)
+    await screen.findByText('阿明')
+    fireEvent.change(search(), { target: { value: '地址' } })
+    await waitFor(() => expect(api.searchAllMessages).toHaveBeenCalledWith('地址'))
+    expect(await screen.findByText('仅显示最近 20 条匹配，可能还有更早的')).toBeInTheDocument()
+    // 未打满（1 条）→ 不显示截断说明（完整结果不加含糊）。
+    mock(api.searchAllMessages).mockResolvedValue({ messages: [
+      { id: 'one', fromId: 'p1', toId: 'me', kind: 'text', text: '唯一地址', createdAt: 1000 },
+    ] })
+    fireEvent.change(search(), { target: { value: '唯一地址' } })
+    await waitFor(() => expect(screen.getByText('唯一地址')).toBeInTheDocument())
+    expect(screen.queryByText(/仅显示最近/)).toBeNull()
   })
 
   it('查询不足 2 字（如"红"）不触发全局搜索（防每键一请求）', async () => {

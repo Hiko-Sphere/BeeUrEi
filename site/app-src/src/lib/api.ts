@@ -228,6 +228,11 @@ async function tryRefresh(): Promise<RefreshResult> {
   return refreshing
 }
 
+// 消息搜索单次返回上限（与请求里显式携带的 limit 同源；服务端 clamp [1,100]）：结果条数打满即视为
+// **被截断**（只回最近 N 条，可能还有更早的）——两处搜索 UI 据此如实标注，不把截断冒充"全部找到"。
+export const SEARCH_LIMIT = 50        // 会话内搜索
+export const GLOBAL_SEARCH_LIMIT = 20 // 跨会话全局搜索（会话列表搜索框）
+
 const get = (p: string) => rawFetch('GET', p, undefined, true)
 const post = (p: string, b?: unknown) => rawFetch('POST', p, b, true)
 const del = (p: string, b?: unknown) => rawFetch('DELETE', p, b, true) // 可带 body（如按 endpoint 退订 web push）
@@ -360,13 +365,14 @@ export const api = {
   messagesWith: (peerId: string, before?: number, beforeId?: string) => get(`/api/messages?with=${encodeURIComponent(peerId)}${before ? `&before=${before}` : ''}${beforeId ? `&beforeId=${encodeURIComponent(beforeId)}` : ''}`) as Promise<{ messages: ChatMessage[]; pinned?: PinnedMessage | null }>,
   groupMessages: (groupId: string, before?: number, beforeId?: string) => get(`/api/messages?group=${encodeURIComponent(groupId)}${before ? `&before=${before}` : ''}${beforeId ? `&beforeId=${encodeURIComponent(beforeId)}` : ''}`) as Promise<{ messages: ChatMessage[]; pinned?: PinnedMessage | null }>,
   sendMessage: (target: { toId?: string; groupId?: string }, kind: string, text: string, replyTo?: string, forwarded?: boolean) => post('/api/messages', { ...target, kind, text, ...(replyTo ? { replyTo } : {}), ...(forwarded ? { forwarded: true } : {}) }) as Promise<{ message: ChatMessage }>,
-  // 会话内搜索文本消息（时间倒序）：peerId 或 groupId 二选一。
+  // 会话内搜索文本消息（时间倒序）：peerId 或 groupId 二选一。limit 显式传（与 SEARCH_LIMIT 单一事实源），
+  // 返回条数打满 limit 时结果被截断（服务端只回最近 limit 条）——调用方须如实标注"可能还有更早的"，不冒充全量。
   searchMessages: (scope: { peerId?: string; groupId?: string }, query: string) => {
     const s = scope.groupId ? `group=${encodeURIComponent(scope.groupId)}` : `with=${encodeURIComponent(scope.peerId ?? '')}`
-    return get(`/api/messages/search?${s}&q=${encodeURIComponent(query)}`) as Promise<{ messages: ChatMessage[] }>
+    return get(`/api/messages/search?${s}&q=${encodeURIComponent(query)}&limit=${SEARCH_LIMIT}`) as Promise<{ messages: ChatMessage[] }>
   },
-  // 跨会话全局搜索（WhatsApp 式"那个地址在哪个对话里"）：本人参与的全部单聊+所在群，时间倒序。
-  searchAllMessages: (query: string, limit = 20) => get(`/api/messages/search?q=${encodeURIComponent(query)}&limit=${limit}`) as Promise<{ messages: ChatMessage[] }>,
+  // 跨会话全局搜索（WhatsApp 式"那个地址在哪个对话里"）：本人参与的全部单聊+所在群，时间倒序。截断语义同上。
+  searchAllMessages: (query: string, limit = GLOBAL_SEARCH_LIMIT) => get(`/api/messages/search?q=${encodeURIComponent(query)}&limit=${limit}`) as Promise<{ messages: ChatMessage[] }>,
   markRead: (fromId: string) => post('/api/messages/read', { fromId }),
   markGroupRead: (groupId: string) => post('/api/messages/read', { groupId }),
   recallMessage: (id: string) => post(`/api/messages/${id}/recall`) as Promise<{ message: ChatMessage }>,

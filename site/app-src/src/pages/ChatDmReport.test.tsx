@@ -6,6 +6,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 vi.mock('react-router-dom', () => ({ useParams: () => ({ peerId: 'p1' }), useNavigate: () => vi.fn() }))
 vi.mock('../lib/session', () => ({ useSession: () => ({ user: { id: 'me', displayName: '我' } }) }))
 vi.mock('../lib/api', () => ({
+  SEARCH_LIMIT: 50, GLOBAL_SEARCH_LIMIT: 20, // Chat 搜索截断标注用常量（与真实 api.ts 同值）
   api: {
     conversations: vi.fn(), groups: vi.fn(), messagesWith: vi.fn(), markRead: vi.fn(),
     lookupUser: vi.fn(), familyLinks: vi.fn(), searchMessages: vi.fn(), report: vi.fn(),

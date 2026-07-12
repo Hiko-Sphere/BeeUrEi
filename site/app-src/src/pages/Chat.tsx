@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { api, chatErrorText, fetchMediaObjectURL, uploadMedia, type ChatMessage, type Conversation, type GroupSummary, type User, type PinnedMessage, type FamilyLink } from '../lib/api'
+import { api, chatErrorText, fetchMediaObjectURL, uploadMedia, SEARCH_LIMIT, GLOBAL_SEARCH_LIMIT, type ChatMessage, type Conversation, type GroupSummary, type User, type PinnedMessage, type FamilyLink } from '../lib/api'
 import { pollWhileVisible } from '../lib/poll'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
@@ -168,6 +168,11 @@ export function ChatPage() {
                     </li>
                   ))}
                 </ul>
+                {/* 诚实截断（no-silent-caps）：按**服务端原始条数** msgHits 判断（rows 经会话解析过滤会更少，
+                    据 rows 判会漏标）；打满 GLOBAL_SEARCH_LIMIT 即可能还有更早的匹配未显示。 */}
+                {msgHits.length >= GLOBAL_SEARCH_LIMIT && (
+                  <p className="px-3 pb-2 pt-1 text-[11px] text-faint">{t(`仅显示最近 ${GLOBAL_SEARCH_LIMIT} 条匹配，可能还有更早的`, `Showing the ${GLOBAL_SEARCH_LIMIT} most recent matches — older ones may exist`)}</p>
+                )}
               </div>
             )
           })()}
@@ -636,7 +641,11 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
               <div className="grid h-full place-items-center text-sm text-faint">{t('没有找到匹配的消息', 'No matching messages')}</div>
             ) : (
               <>
-                <div className="pt-1 text-xs text-faint">{t(`找到 ${searchResults.length} 条`, `${searchResults.length} found`)}</div>
+                {/* 诚实截断（no-silent-caps）：服务端只回最近 SEARCH_LIMIT 条；打满即可能还有更早的匹配，
+                    绝不把截断说成"找到 N 条"冒充全量。 */}
+                <div className="pt-1 text-xs text-faint">{searchResults.length >= SEARCH_LIMIT
+                  ? t(`已显示最近 ${SEARCH_LIMIT} 条匹配，可能还有更早的`, `Showing the ${SEARCH_LIMIT} most recent matches — older ones may exist`)
+                  : t(`找到 ${searchResults.length} 条`, `${searchResults.length} found`)}</div>
                 {searchResults.map((m) => {
                   const who = m.fromId === user?.id ? t('我', 'Me')
                     : sel.kind === 'group' ? (sel.members.find((mm) => mm.id === m.fromId)?.displayName ?? '') : sel.name

@@ -15,6 +15,7 @@ vi.mock('react-router-dom', () => ({
 vi.mock('../lib/poll', () => ({ pollWhileVisible: () => () => {} })) // 桩掉可见性轮询，门禁只审静态可访问性
 vi.mock('../lib/session', () => ({ useSession: () => ({ user: { id: 'me', displayName: '阿明', role: 'helper' } }) }))
 vi.mock('../lib/api', () => ({
+  SEARCH_LIMIT: 50, GLOBAL_SEARCH_LIMIT: 20, // Chat 搜索截断标注用常量（与真实 api.ts 同值）
   api: {
     conversations: vi.fn(), groups: vi.fn(), messagesWith: vi.fn(), markRead: vi.fn(),
     // 动作方法（挂载不触发，存在即可）：

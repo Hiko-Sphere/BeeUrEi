@@ -6,6 +6,7 @@ import { render, screen, within } from '@testing-library/react'
 // useSession/useToast 仅在 Thread 内（无 peerId、未选会话时不渲染）。无 peerId → 不触发预选。
 vi.mock('react-router-dom', () => ({ useParams: () => ({}), useNavigate: () => vi.fn() }))
 vi.mock('../lib/api', () => ({
+  SEARCH_LIMIT: 50, GLOBAL_SEARCH_LIMIT: 20, // Chat 搜索截断标注用常量（与真实 api.ts 同值）
   api: { conversations: vi.fn(), groups: vi.fn(), lookupUser: vi.fn(), familyLinks: vi.fn() },
   APIError: class extends Error { code = ''; status = 0 },
 }))

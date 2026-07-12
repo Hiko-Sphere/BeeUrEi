@@ -492,6 +492,9 @@ final class HomeViewModel {
                 let guarded = clearSideAdvisor.awayFromObstacle(base, obstacleBearingDegrees: danger.bearingDegrees)
                 if let suffix = clearSideAdvisor.hintSuffix(guarded, language: lang) { phrase += suffix }
             }
+            // 逼近紧迫度：TTC 低于阈值（即将碰上，随速度伸缩）→ 前置"小心！"，让盲人**听出**危险等级
+            // （此前静态电线杆与快速逼近的车措辞一样）。纯附加、TTC 无效即无前导，不改既有打断/安全逻辑。
+            phrase = ObstacleApproach.classify(timeToCollisionSeconds: danger.timeToCollision).prepending(phrase, language: lang)
             proximityText = phrase
             let urgency = danger.timeToCollision.map { 1.0 / max($0, 0.3) }
                 ?? danger.distanceMeters.map { 1.0 / max($0, 0.3) } ?? 1.0

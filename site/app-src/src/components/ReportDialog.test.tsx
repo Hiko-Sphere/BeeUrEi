@@ -25,6 +25,11 @@ describe('ReportDialog 举报弹窗', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled())
   })
 
+  it('理由输入上限 500 与服务端 reports.reason.max(500) 一致（此前 1000 超上限：写到 600 字提交才 400，白写）', () => {
+    render(<ReportDialog targetUserId="u1" onClose={vi.fn()} />)
+    expect((screen.getByPlaceholderText('请描述问题（必填）') as HTMLTextAreaElement).maxLength).toBe(500)
+  })
+
   it('联系人模式（无 callId、无加好友/拉黑回调）：不渲染通话专属按钮，提交只带 targetUserId+理由', async () => {
     const onClose = vi.fn()
     render(<ReportDialog targetUserId="u9" onClose={onClose} />)

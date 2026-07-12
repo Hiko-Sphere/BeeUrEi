@@ -32,6 +32,12 @@ describe('AccountPage 资料渲染（防字段漂移）', () => {
     expect(screen.getByText('已开启')).toBeInTheDocument()         // twoFactorEnabled=true → "已开启"
   })
 
+  it('显示名称输入上限 64 与服务端 profileSchema.max(64) 一致（此前 40 无端更紧，跨端可设长度不一）', async () => {
+    mock(api.me).mockResolvedValue({ id: 'u1', username: 'amin', displayName: '阿明', role: 'helper', email: null, emailVerified: false, twoFactorEnabled: false, usernameCustomized: true, verified: false })
+    render(<AccountPage />)
+    expect(((await screen.findByDisplayValue('阿明')) as HTMLInputElement).maxLength).toBe(64)
+  })
+
   it('无验证邮箱 → 显示密码找回提醒（点击开绑定邮箱弹窗）；已验证邮箱则不显示（防静默锁死）', async () => {
     // 未绑邮箱：提醒"忘记密码将无法找回、账号锁死" + 一键直达绑定。
     mock(api.me).mockResolvedValue({ id: 'u1', username: 'amin', displayName: '阿明', role: 'helper', email: null, emailVerified: false, twoFactorEnabled: false, usernameCustomized: true, verified: false })

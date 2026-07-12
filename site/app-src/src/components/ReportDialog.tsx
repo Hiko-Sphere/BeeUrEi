@@ -32,7 +32,9 @@ export function ReportDialog({ targetUserId, callId, evidenceRecordingId, onClos
   return (
     <Modal onClose={onClose} label={t('举报与安全', 'Report & Safety')} panelClassName="w-full max-w-sm">
       <h3 className="text-lg font-semibold">{t('举报与安全', 'Report & Safety')}</h3>
-      <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} maxLength={1000}
+      {/* maxLength 与服务端 reports.reason.max(500) 一致：此前 1000 超服务端上限——写到 600 字提交才被 400，
+          只见笼统"提交失败"（举报人被骚扰后认真写长陈述，提交失败最伤）。输入端即截，绝不让白写。 */}
+      <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} maxLength={500}
         placeholder={t('请描述问题（必填）', 'Describe the issue (required)')}
         className="mt-3 w-full resize-none rounded-xl border border-[var(--line)] surface-2 px-3 py-2.5 text-sm outline-none focus:border-honey" />
       {evidenceRecordingId && (

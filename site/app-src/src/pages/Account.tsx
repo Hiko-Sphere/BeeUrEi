@@ -102,7 +102,9 @@ export function AccountPage() {
         <div className="mt-5">
           <Field label={t('显示名称', 'Display name')}>
             <div className="flex gap-2">
-              <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={40} />
+              {/* maxLength 与服务端 profileSchema.displayName.max(64) 一致（此前 40 无端更紧，且 iOS 按服务端上限
+                  可设 64——同一账号跨端能设的名字长度不一致）。 */}
+              <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={64} />
               <Button className="shrink-0" loading={savingName} onClick={saveName} disabled={!displayName.trim() || displayName.trim() === self?.displayName}>{t('保存', 'Save')}</Button>
             </div>
           </Field>

@@ -74,12 +74,18 @@ export interface AppOptions {
   appleVerifier?: AppleTokenVerifier
   codeSend?: CodeSendLimiter // 验证码发送节流；默认 60s 冷却+窗口上限；测试可注入宽松实例
   loginThrottle?: LoginThrottle // 按账号登录节流（NIST 800-63B）；测试可注入短延迟实例
+  // 路由注册观察钩子（仅测试用）：routeSecurity 守卫测试用它收集全路由表，断言
+  // "非白名单端点必有鉴权 preHandler / 无鉴权敏感端点必有限流"——新端点忘挂即红。
+  onRoute?: (route: { method: string | string[]; url: string; preHandler?: unknown; config?: unknown }) => void
 }
 
 /// 构建 Fastify 应用（与 listen 分离，便于用 app.inject() 单测）。
 /// 测试传入 MemoryStore；生产/开发默认 SQLite 持久化（见 makeDefaultStore）。
 export function buildApp(store: Store = makeDefaultStore(), options: AppOptions = {}): FastifyInstance {
   const app = Fastify({ logger: false })
+  if (options.onRoute) app.addHook('onRoute', options.onRoute) // 须先于一切路由注册
+
+
 
   // CORS：协助者/亲友网页端在 beeurei.hikosphere.com，跨源调用本 API（beeurei-api.hikosphere.com）。
   // 仅放行白名单源（默认官网域 + 本地开发），按请求回显具体 Origin（绝不用 '*'）。鉴权走 Bearer 头（非 Cookie），

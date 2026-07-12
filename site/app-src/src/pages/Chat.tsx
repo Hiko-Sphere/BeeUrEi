@@ -998,7 +998,12 @@ function GroupInfoDialog({ groupId, groupName, ownerId, members, meId, onClose, 
             })}
           </ul>
         </div>
-        {isOwner && addable.length > 0 && (
+        {/* 满员预检（与服务端 MAX_MEMBERS=50 一致）：满员就不给"添加成员"列表——否则点"添加"才被 400
+            group_full。role=status 讲清为什么加不了、怎么才能加（移出成员）。 */}
+        {isOwner && list.length >= GROUP_MAX_MEMBERS && (
+          <p role="status" className="mt-3 text-xs text-faint">{t(`群已满员（${GROUP_MAX_MEMBERS} 人），移出成员后才能再添加`, `Group is full (${GROUP_MAX_MEMBERS} members) — remove someone before adding`)}</p>
+        )}
+        {isOwner && list.length < GROUP_MAX_MEMBERS && addable.length > 0 && (
           <>
             <div className="mt-3 text-xs font-medium text-faint">{t('添加成员', 'Add member')}</div>
             <div className="mt-1 max-h-32 overflow-y-auto rounded-xl border border-[var(--line)]">
@@ -1007,7 +1012,9 @@ function GroupInfoDialog({ groupId, groupName, ownerId, members, meId, onClose, 
                   <li key={c.id} className="flex items-center gap-3 px-3 py-2">
                     <Avatar name={c.name} size={28} />
                     <span className="flex-1 truncate text-sm">{c.name}</span>
-                    <button onClick={() => add(c.id)} disabled={busy} className="text-xs text-honey hover:underline disabled:opacity-40">{t('添加', 'Add')}</button>
+                    {/* aria-label 带人名（候选列表 N 个同文案"添加"，读屏可辨加的是谁——同名按钮区分口径）。 */}
+                    <button onClick={() => add(c.id)} disabled={busy} aria-label={t(`添加 ${c.name} 入群`, `Add ${c.name} to group`)}
+                      className="text-xs text-honey hover:underline disabled:opacity-40">{t('添加', 'Add')}</button>
                   </li>
                 ))}
               </ul>
@@ -1218,9 +1225,10 @@ function LocationLink({ loc, t }: { loc: { lat: number; lng: number; name?: stri
             target="_blank" rel="noreferrer" className="underline">📍 {loc.name || t('位置', 'Location')}</a>
 }
 
-// 建群可邀成员上限（除群主外）：与服务端 createSchema memberIds.max(49) 一致（群共 50 人含群主）。
-// 客户端预检——不预检则勾到第 50 个提交才被 400 invalid_input，只见笼统"创建失败"不知为何。
-const MAX_GROUP_INVITE = 49
+// 群容量（与服务端一致，单一出处）：MAX_MEMBERS=50（groups.ts 同名常量）；建群可邀=50-1（群主占一席，
+// createSchema memberIds.max(49)）。客户端预检——不预检则勾到第 50 个提交才被 400，只见笼统"创建失败"。
+const GROUP_MAX_MEMBERS = 50
+const MAX_GROUP_INVITE = GROUP_MAX_MEMBERS - 1
 
 function CreateGroupDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { t } = useI18n()

@@ -40,6 +40,31 @@ describe('ChatPage 群改名（群主可改；非群主无入口）', () => {
     expect(await screen.findByLabelText('将 小红 移出群聊')).toBeInTheDocument()
   })
 
+  it('加人候选行"添加"键带人名（同名按钮区分：读屏可辨加的是谁）', async () => {
+    mock(api.familyLinks).mockResolvedValue({ links: [
+      { id: 'lx', memberId: 'mx', memberName: '阿伟', relation: '同事', isEmergency: false, status: 'accepted' },
+    ] })
+    await openGroupInfo('me')
+    expect(await screen.findByLabelText('添加 阿伟 入群')).toBeInTheDocument()
+  })
+
+  it('满员(50)预检：不给添加列表、显示满员说明——否则点"添加"才被服务端 group_full 拒', async () => {
+    mock(api.familyLinks).mockResolvedValue({ links: [
+      { id: 'lx', memberId: 'mx', memberName: '阿伟', relation: '同事', isEmergency: false, status: 'accepted' },
+    ] })
+    mock(api.groups).mockResolvedValue({ groups: [{
+      group: { id: 'g1', name: '家庭群', ownerId: 'me', createdAt: 1000 },
+      members: [{ id: 'me', displayName: '我' }, ...Array.from({ length: 49 }, (_, i) => ({ id: `mm${i}`, displayName: `成员${i}` }))],
+      last: null, unread: 0,
+    }] })
+    mock(api.groupMessages).mockResolvedValue({ messages: [] })
+    render(<ChatPage />)
+    fireEvent.click(await screen.findByText('家庭群'))
+    fireEvent.click(await screen.findByRole('button', { name: '群信息' }))
+    expect(await screen.findByText(/群已满员（50 人）/)).toBeInTheDocument() // 讲清为什么加不了、怎么才能加
+    expect(screen.queryByLabelText('添加 阿伟 入群')).toBeNull()            // 满员不给添加入口（预检在客户端）
+  })
+
   it('已注销成员（username 空）→ 成员列表本地化「已注销用户」，不显示服务端硬编码名（i18n 收口）', async () => {
     // 服务端占位：deleted 成员 username='' + 硬编码中文 displayName。客户端据 username==='' 覆盖本地化。
     mock(api.groups).mockResolvedValue({

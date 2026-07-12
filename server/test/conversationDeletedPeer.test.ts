@@ -13,7 +13,7 @@ describe('会话对端注销后 /api/conversations 占位', () => {
     const a = await reg('cvOwner', 'blind')
     const b = await reg('cvGone', 'helper')
     // 建立绑定 + 一条消息 → A↔B 有会话。
-    const link = await app.inject({ method: 'POST', url: '/api/family/links', headers: auth(a.token), payload: { username: 'cvGone', relation: '志愿者' } })
+    await app.inject({ method: 'POST', url: '/api/family/links', headers: auth(a.token), payload: { username: 'cvGone', relation: '志愿者' } })
     const inc = await app.inject({ method: 'GET', url: '/api/family/incoming', headers: auth(b.token) })
     await app.inject({ method: 'POST', url: `/api/family/links/${inc.json().links[0].id}/accept`, headers: auth(b.token) })
     await app.inject({ method: 'POST', url: '/api/messages', headers: auth(a.token), payload: { toId: b.user.id, kind: 'text', text: '你好' } })

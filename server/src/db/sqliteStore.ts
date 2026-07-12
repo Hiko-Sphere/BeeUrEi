@@ -869,7 +869,7 @@ export class SqliteStore implements Store {
   markEmergencyEscalated(eventId: string, at: number): void {
     this.db.prepare('UPDATE emergency_events SET escalatedAt = ? WHERE id = ?').run(at, eventId)
   }
-  unacknowledgedEmergencyEvents(olderThanAt: number, now: number): EmergencyEvent[] {
+  unacknowledgedEmergencyEvents(olderThanAt: number, _now: number): EmergencyEvent[] {
     // 升级候选：未报平安 ∧ 无亲友确认 ∧ 未升级过 ∧ 已发出满阈值时长。不设过老下限——由留存清扫另行删旧。
     return (this.db.prepare(
       `SELECT * FROM emergency_events

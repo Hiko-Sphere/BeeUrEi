@@ -61,7 +61,7 @@ export class ApnsPushSender implements PushSender {
     private readonly key: KeyObject,
     private readonly keyId: string,
     private readonly teamId: string,
-    private readonly topic: string,      // VoIP topic（…​.voip）
+    private readonly topic: string,      // VoIP topic（….voip）
     private readonly host: string,
     private readonly alertTopic: string, // 普通推送 topic（App bundle id，去掉 .voip 后缀）
     // APNs 返回 410 时的回调：把失效 token 交给上层（通常清除其在存储里的 token）。可选、失败安全。

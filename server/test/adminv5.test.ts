@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildApp } from '../src/app'
-import { MemoryStore, type User, normalizeAppConfig, matchBannedTerm, DEFAULT_APP_CONFIG } from '../src/db/store'
+import { MemoryStore, normalizeAppConfig, matchBannedTerm, DEFAULT_APP_CONFIG } from '../src/db/store'
 import { hashPassword } from '../src/auth/passwords'
 
 function withAdmin() {

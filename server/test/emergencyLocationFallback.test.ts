@@ -25,7 +25,7 @@ describe('紧急告警位置兜底（端到端）', () => {
   }
 
   it('无当前坐标 + 用户正共享位置 → 兜底最后已知，标 source=lastKnown 且带 ageSec', async () => {
-    const { a, owner, mom, auth } = await seed()
+    const { a, mom, auth } = await seed()
     // 用户开启位置共享，上报一个位置。
     await a.inject({ method: 'POST', url: '/api/locations/update', headers: auth, payload: { lat: 31.23, lng: 121.47, ttlSec: 3600 } })
     // 摔倒告警不带坐标。

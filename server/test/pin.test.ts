@@ -19,7 +19,7 @@ describe('convKeyFor 会话键（同一对话两端算出同一键）', () => {
   })
 })
 
-const dmsg = (id: string, fromId: string, toId: string): ChatMessage =>
+const _dmsg = (id: string, fromId: string, toId: string): ChatMessage => // 备用构造器(暂未用,留形)
   ({ id, fromId, toId, kind: 'text', text: 'hi', createdAt: Number(id.replace(/\D/g, '')) || 1 } as ChatMessage)
 
 describe('setPin/getPin/clearPin/clearPinByMessage 两 store 一致', () => {

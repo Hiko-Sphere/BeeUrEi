@@ -72,7 +72,6 @@ describe('RBAC 访问控制门 (requireAuth)', () => {
 })
 
 describe('access token 实时失效 (封禁/改密)', () => {
-  const ME_URL = '/api/account/me' // 任一受 requireAuth 守护的端点
   const SELF_URL = '/api/family/links'
 
   it('封禁后，封禁前签发的 access token 立即失效（不等 1h TTL）', async () => {

@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { SqliteStore } from '../src/db/sqliteStore'
 import { MemoryStore, type User } from '../src/db/store'
 
@@ -8,9 +11,6 @@ function user(id: string, username: string): User {
 
 describe('SqliteStore (node:sqlite)', () => {
   it('文件库启用 WAL + NORMAL + busy_timeout（服务端标准配置；崩溃安全不降级）', () => {
-    const { mkdtempSync, rmSync } = require('node:fs') as typeof import('node:fs')
-    const { tmpdir } = require('node:os') as typeof import('node:os')
-    const { join } = require('node:path') as typeof import('node:path')
     const dir = mkdtempSync(join(tmpdir(), 'beeurei-wal-'))
     try {
       const store = new SqliteStore(join(dir, 'wal.db')) as unknown as { db: { prepare: (s: string) => { get: () => any } }; backupTo: (p: string) => void }

@@ -50,7 +50,7 @@ describe('黑名单', () => {
     expect((await a.inject({ method: 'POST', url: '/api/assist/match', headers: auth(blind.token), payload: { emergency: false } })).json().count).toBe(0)
     expect((await a.inject({ method: 'POST', url: '/api/assist/call', headers: auth(blind.token), payload: { callId: 'blk-c', targetUserIds: [helper.user.id] } })).statusCode).toBe(403)
     // 再加好友（另一新人）被拉黑后不能加
-    const other = await reg(a, 'blkOther', 'helper')
+    await reg(a, 'blkOther', 'helper') // 建号副作用即够,绑定名未用
     await a.inject({ method: 'POST', url: '/api/blocks', headers: auth(blind.token), payload: { username: 'blkOther' } })
     expect((await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(blind.token), payload: { username: 'blkOther' } })).statusCode).toBe(403)
     await a.close()

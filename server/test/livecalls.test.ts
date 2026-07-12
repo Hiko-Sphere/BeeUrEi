@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildApp } from '../src/app'
-import { MemoryStore, type User } from '../src/db/store'
+import { MemoryStore } from '../src/db/store'
 import { SignalingHub } from '../src/signaling/hub'
 import { hashPassword } from '../src/auth/passwords'
 

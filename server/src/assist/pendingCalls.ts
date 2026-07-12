@@ -114,7 +114,7 @@ export class PendingCallRegistry {
     if (!c || c.answeredBy === undefined || c.answeredAt === undefined) return false
     if (now - c.answeredAt <= graceMs) return false        // 仍在建连宽限期内，不动（防误伤正在接通者）
     if (isAnswererPresent(c.answeredBy)) return false        // 赢家确已在房间 → 正常通话中，不动
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     
     const { answeredBy: _a, answeredAt: _t, ...rest } = c    // 清空接听态 → 呼叫重新振铃对其余目标可见
     this.calls.set(callId, rest)
     return true

@@ -1479,7 +1479,7 @@ export class MemoryStore implements Store {
     const e = this.emergencyEvents.get(eventId)
     if (e) { e.escalatedAt = at; this.afterMutate() }
   }
-  unacknowledgedEmergencyEvents(olderThanAt: number, now: number): EmergencyEvent[] {
+  unacknowledgedEmergencyEvents(olderThanAt: number, _now: number): EmergencyEvent[] {
     return [...this.emergencyEvents.values()]
       .filter((e) => e.resolvedAt == null && e.ackedAt == null && e.escalatedAt == null && e.at <= olderThanAt)
       .sort((a, b) => a.at - b.at)

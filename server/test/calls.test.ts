@@ -22,7 +22,7 @@ describe('通话记录 + 双向呼叫', () => {
 
     await a.inject({ method: 'POST', url: '/api/assist/call', headers: auth(blind.token), payload: { callId: 'rec-1', targetUserIds: [helper.user.id] } })
     // 主叫看到"呼出/未接"
-    let mine = (await a.inject({ method: 'GET', url: '/api/calls', headers: auth(blind.token) })).json().calls
+    const mine = (await a.inject({ method: 'GET', url: '/api/calls', headers: auth(blind.token) })).json().calls
     expect(mine.length).toBe(1)
     expect(mine[0].direction).toBe('outgoing')
     expect(mine[0].status).toBe('missed')

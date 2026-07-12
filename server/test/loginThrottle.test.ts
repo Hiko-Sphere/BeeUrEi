@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
 import { LoginThrottle } from '../src/auth/loginThrottle'

@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
 import { SqliteStore } from '../src/db/sqliteStore'
-import { totalUnreadFor } from '../src/db/unread'
 
 // 未接来电角标（与手机通话 App 一致）：盲人离开手机回来，从图标/导航角标就知道"有人来过电话"。
 describe('未看未接来电计数 missedCallCountForUser（Memory↔Sqlite parity）', () => {

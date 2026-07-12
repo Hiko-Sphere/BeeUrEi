@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
-import { visionConfigured, visionDescribe, VisionError } from '../src/vision/visionClient'
+import { visionConfigured, visionDescribe } from '../src/vision/visionClient'
 
 // 1×1 合法 base64（fetch 被 stub，内容不重要，只需通过 base64 字符集与大小校验）。
 const TINY_JPEG_B64 = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAEBAQ=='

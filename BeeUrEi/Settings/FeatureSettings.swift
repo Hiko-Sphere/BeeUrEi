@@ -119,6 +119,14 @@ struct FeatureSettings {
         set { defaults.set(Array(newValue).sorted(), forKey: myAllergensKey) }
     }
 
+    /// 用户**关注**的营养素（canonical key 集，如 ["sugars","salt"]）：扫码识食时若该营养含量 high 即额外醒目预警
+    /// （核心 NutrientAlert 比对）。默认空=不预警。糖尿病关注糖、高血压关注盐——安全叠加、不替代既有全量含量播报。
+    private let dietWatchKey = "feature.dietWatch"
+    var dietWatch: Set<String> {
+        get { Set(defaults.stringArray(forKey: dietWatchKey) ?? []) }
+        set { defaults.set(Array(newValue).sorted(), forKey: dietWatchKey) }
+    }
+
     /// 播报语言偏好（E5 多语言）："system"=跟随系统、"zh"=中文、"en"=English。默认跟随系统。
     /// 决定盲人实时听到的引导语言（核心 SpokenStrings）与 TTS 选用的嗓音（zh-CN / en-US）。
     private let languageKey = "feature.appLanguage"

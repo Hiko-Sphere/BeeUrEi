@@ -150,11 +150,11 @@ struct SettingsView: View {
                     var f = FeatureSettings(); f.fallDetectionEnabled = v
                 }
                 .accessibilityHint(SettingsStrings.fallDetectHint(lang))
-            // 过敏原预警：勾选自己的过敏原，扫码识别食品命中即醒目提醒（安全叠加，不替代全量过敏原播报）。
+            // 食品健康提醒：勾选过敏原与关注营养，扫码识食命中即醒目提醒（安全叠加，不替代全量播报）。
             NavigationLink { AllergenPickerView(lang: lang) } label: {
-                Text(SettingsStrings.allergenAlertTitle(lang))
+                Text(SettingsStrings.foodHealthTitle(lang))
             }
-            .accessibilityHint(SettingsStrings.allergenAlertHint(lang))
+            .accessibilityHint(SettingsStrings.foodHealthHint(lang))
             // 「亲友与紧急呼叫」已移到首屏 Hub 作为主要功能（摔倒会通知那里设置的家人）。
         } header: {
             Text(SettingsStrings.safetyHeader(lang))

@@ -103,12 +103,17 @@ enum SettingsStrings {
         l == .zh ? "检测到疑似摔倒或剧烈撞击且 30 秒无人取消时，自动通知绑定的亲友"
                  : "If a fall or severe impact is detected and not cancelled within 30 seconds, your family is notified"
     }
-    static func allergenAlertTitle(_ l: Language) -> String { l == .zh ? "过敏原预警" : "Allergy alerts" }
-    static func allergenAlertHint(_ l: Language) -> String {
-        l == .zh ? "勾选你的过敏原，扫码识别食品命中即在最前醒目提醒"
-                 : "Flag your allergens; scanning a food that lists them warns you up front"
+    static func foodHealthTitle(_ l: Language) -> String { l == .zh ? "食品健康提醒" : "Food health alerts" }
+    static func foodHealthHint(_ l: Language) -> String {
+        l == .zh ? "勾选你的过敏原与关注的营养，扫码识食命中即在最前醒目提醒"
+                 : "Flag your allergens and watched nutrients; scanning a food that hits them warns you up front"
     }
     static func allergenPickerHeader(_ l: Language) -> String { l == .zh ? "我的过敏原" : "My allergens" }
+    static func nutrientPickerHeader(_ l: Language) -> String { l == .zh ? "我关注的营养" : "Nutrients I watch" }
+    static func nutrientPickerFooter(_ l: Language) -> String {
+        l == .zh ? "扫码识别食品时，若产品某项关注营养含量偏高（如高糖、高盐），会在播报最前醒目提醒。缺营养数据的产品不会误报「不高」。"
+                 : "When you scan a food, if a nutrient you watch is high (e.g. high sugar or salt), you'll be warned up front. Products without nutrient data are never claimed 'not high'."
+    }
     static func allergenPickerFooter(_ l: Language) -> String {
         l == .zh ? "扫码识别食品时，若包装标注含有（或可能含微量）你勾选的过敏原，会在播报最前醒目提醒。缺过敏原数据的产品不会误报「安全」。"
                  : "When you scan a food, if its label lists (or may contain traces of) an allergen you flagged, you'll be warned up front. Products without allergen data are never claimed 'safe'."

@@ -333,6 +333,23 @@ enum FramingStrings {
                         : ". High in: \(names.joined(separator: ", "))"
     }
 
+    /// 设置页可勾选的关注营养素（canonical key，与服务端 extractNutrientLevels + nutrientNames 同套/同序：糖→盐→饱和脂肪→脂肪）。
+    static let selectableNutrients: [String] = nutrientNames.map { $0.key }
+
+    /// 单个营养素本地化名（勾选界面 / 预警用）。未知 key 连字符转空格兜底（不空、不漏）。
+    static func nutrientDisplay(_ key: String, _ l: Language) -> String {
+        if let n = nutrientNames.first(where: { $0.key == key.lowercased() }) { return l == .zh ? n.zh : n.en }
+        return key.replacingOccurrences(of: "-", with: " ")
+    }
+
+    /// 个人化营养**预警前缀**（拼在产品播报最前——用户关注的高糖/高盐等先说）：只报用户关注且含量 high 的。
+    /// 空→nil。与既有全量"含量偏高"播报**叠加不替代**（见 NutrientAlert 红线）。emoji+"偏高"双通道（读屏须有语义）。
+    static func dietAlertSpeak(highNutrients: [String], _ l: Language) -> String? {
+        guard !highNutrients.isEmpty else { return nil }
+        let names = highNutrients.map { nutrientDisplay($0, l) }.joined(separator: l == .zh ? "、" : ", ")
+        return l == .zh ? "⚠️ 你关注的营养偏高：\(names)。" : "⚠️ High in what you watch: \(names). "
+    }
+
     /// 净含量/规格播报后缀（拼在商品名后："这是蒙牛纯牛奶，500 ml"）——盲人看不到包装规格，据此判份量、选对大小
     /// （330ml vs 1.5L、大小罐难靠手感分）。**原样读** OFF 文本（不换算单位，各国写法不一原样最不失真）；空→nil。
     static func productQuantitySpeak(_ quantity: String?, _ l: Language) -> String? {

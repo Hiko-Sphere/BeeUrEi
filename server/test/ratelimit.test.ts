@@ -52,4 +52,18 @@ describe('rate limiting', () => {
     expect(limited).toBe(true)
     await app.close()
   })
+
+  it('未登录流量按真实客户端隔离：隧道后两客户端各自的桶——A(CF-IP) 打满不波及 B（防登录 DoS）', async () => {
+    // 生产在 Cloudflare 隧道后，inject 的 req.ip 恒为环回；此前未登录直接用 req.ip → 全站共享一个桶，
+    // 一人打满即所有人被限（登录 DoS）。现按 CF-Connecting-IP（对端私网才信）分桶。用走**全局** max
+    // 的 /health（无 per-route 限流覆盖）验分桶：A 请求 4 次（超 max=3）→ 429；B 首请求仍 200。
+    const app = buildApp(new MemoryStore(), { rateLimitMax: 3 })
+    const hit = (cfip: string) => app.inject({ method: 'GET', url: '/health', headers: { 'cf-connecting-ip': cfip } })
+    const codesA: number[] = []
+    for (let i = 0; i < 4; i++) codesA.push((await hit('203.0.113.10')).statusCode)
+    expect(codesA.filter((c) => c === 200).length).toBe(3) // 客户端 A（一个真实 IP）自己的桶：前 3 通
+    expect(codesA[3]).toBe(429)                             // 第 4 次触上限
+    expect((await hit('198.51.100.20')).statusCode).toBe(200) // 客户端 B 独立分桶——共享一个 IP 桶则也会 429
+    await app.close()
+  })
 })

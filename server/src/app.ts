@@ -10,6 +10,7 @@ import { diskUsage, dataDir } from './monitoring/disk'
 import { SqliteStore } from './db/sqliteStore'
 import { setAuthStore } from './auth/rbac'
 import { verifyAccessToken } from './auth/tokens'
+import { rateLimitClientKey } from './auth/clientIp'
 import { registerAuthRoutes } from './routes/auth'
 import { registerAccountRoutes } from './routes/account'
 import { registerKycRoutes } from './routes/kyc'
@@ -197,11 +198,13 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
 
   // 速率限制（防暴力/滥用）。必须在路由之前加载，故把 HTTP 路由放进随后加载的子插件，
   // 确保它们继承到限流钩子。
-  // keyGenerator：已登录请求按**用户(sub)**限流，未登录（登录/注册等）回落到 IP。
-  //   ·比纯按 IP 更准：不受运营商 NAT 共享 IP 误伤、也不受反代把源 IP 收敛成一个的影响
-  //    （若 API 在反代后又未配 trustProxy，纯 IP 限流会退化成全站共用一个桶——见部署待办）；
-  //    且用户无法靠换 IP 放大自己的额度（authed 滥用限流如加好友/改邮箱因此真正生效）。
-  //   ·无绕过面：token 验不过（verifyAccessToken 返回 null，绝不抛）即回落 IP，伪造 token 无效。
+  // keyGenerator：已登录请求按**用户(sub)**限流，未登录（登录/注册等）按**真实客户端 IP**。
+  //   ·未登录侧此前直接用 req.ip——生产在 Cloudflare 隧道后（容器绑 127.0.0.1），req.ip 恒为
+  //    环回/桥接地址 → 全部未登录流量共享一个桶：一人打满 login 桶=所有人登不进（登录 DoS）。
+  //    现经 rateLimitClientKey 修正：对端为本机/私网（=经隧道抵达）才信 CF-Connecting-IP
+  //    （边缘覆写不可预置；刻意不用可被客户端预置的 X-Forwarded-For），否则回落 req.ip。
+  //   ·已登录按 sub：用户无法靠换 IP 放大额度（authed 滥用限流如加好友/改邮箱真正生效）。
+  //   ·无绕过面：token 验不过（verifyAccessToken 返回 null，绝不抛）即回落 IP 路径，伪造 token 无效。
   app.register(rateLimit, {
     max: options.rateLimitMax ?? 300,
     timeWindow: '1 minute',
@@ -211,7 +214,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
         const claims = verifyAccessToken(authz.slice(7))
         if (claims?.sub) return `u:${claims.sub}`
       }
-      return req.ip
+      return rateLimitClientKey(req)
     },
   })
 

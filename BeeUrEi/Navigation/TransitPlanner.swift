@@ -60,13 +60,14 @@ final class TransitPlanner: NSObject, CLLocationManagerDelegate {
         guard let loc = locations.last else { finish(lang == .zh ? "定位失败，请稍后再试" : "Locating failed — please try again"); return }
         let dest = destination
         let l = lang // 主线程读取，避免后台 Task 里读 FeatureSettings 的数据竞争
+        let u = FeatureSettings().distanceUnit // 同上：主线程读距离单位（英制用户步行距离听英尺/英里）
         Task { [weak self] in
             guard let self else { return }
             // 起点 WGS-84 → GCJ-02（与步行导航同一变换），服务端直接喂高德。
             let g = ChinaCoord.wgs84ToGcj02(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude)
             do {
                 let plan = try await AMapTransitClient().transit(originLatGcj: g.lat, originLonGcj: g.lon, destination: dest)
-                await MainActor.run { self.finish(TransitPlanFormatter.summary(plan, language: l)) }
+                await MainActor.run { self.finish(TransitPlanFormatter.summary(plan, language: l, unit: u)) }
             } catch {
                 await MainActor.run { self.finish(self.failureText(for: error, dest: dest, lang: l)) }
             }

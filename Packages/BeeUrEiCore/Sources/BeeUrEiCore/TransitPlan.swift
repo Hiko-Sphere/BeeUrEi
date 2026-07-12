@@ -38,22 +38,24 @@ public struct TransitPlan: Decodable, Sendable, Equatable {
 /// 总时长/步行 → 逐段"步行N米 / 乘(换)线路 从X站上车 坐N站到Y站下车"。**上/下车站名是最关键信息**
 /// （盲人靠车内报站判断何时下车），故即便站数口径有±1 也不致误事——站名始终准确。
 public enum TransitPlanFormatter {
-    public static func summary(_ plan: TransitPlan, language: Language) -> String {
+    public static func summary(_ plan: TransitPlan, language: Language, unit: DistanceUnit = .metric) -> String {
         let zh = language == .zh
         // safeRoundedInt：巨大有限时长/距离(上游脏数据) Int() 会溢出陷阱崩溃，须夹取到 [0, 1e6]。
         let mins = max(1, SpokenStrings.safeRoundedInt(plan.durationSeconds / 60))
-        let walkM = SpokenStrings.safeRoundedInt(plan.walkingDistanceMeters)
+        // 步行距离随单位（英制用户全程听英尺/英里，这里的"步行共 X 米"曾裸报"米"＝单位割裂，sibling-gap）。
+        // 走 DistanceUnit.farDistance 同一换算源（内含 safeRoundedInt 溢出保护）：公制 <1km 逐字仍"X米"、≥1km 用公里；英制→英尺/英里。
+        let walkStr = unit.farDistance(meters: plan.walkingDistanceMeters, language: language)
         // 换乘次数（乘车段数−1）：换乘是盲人出行里最费神、最易坐错/下错站的一环。开头先报总换乘数，让他对
         // "这趟要换几次车"有心理准备（对标 Citymapper/Google 地图把换乘数放在最显眼处）。直达/纯步行不报（免"换乘0次"赘述）。
         let rideLegs = plan.legs.filter { $0.kind != .walk }.count
         let transfers = max(0, rideLegs - 1)
         let header: String
         if zh {
-            var h = "全程约\(mins)分钟，步行共\(walkM)米"
+            var h = "全程约\(mins)分钟，步行共\(walkStr)"
             if transfers > 0 { h += "，需换乘\(transfers)次" }
             header = h + "。"
         } else {
-            var h = "About \(mins) minutes total, \(walkM) meters of walking"
+            var h = "About \(mins) minutes total, \(walkStr) of walking"
             if transfers > 0 { h += ", \(transfers) transfer\(transfers == 1 ? "" : "s")" }
             header = h + ". "
         }
@@ -62,11 +64,12 @@ public enum TransitPlanFormatter {
         var hasRidden = false // 第一段乘车用"乘坐"，其后用"换乘"
         for (i, leg) in plan.legs.enumerated() {
             let isLast = i == plan.legs.count - 1
-            let m = SpokenStrings.safeRoundedInt(leg.distanceMeters) // 溢出安全（见 header 注）
             switch leg.kind {
             case .walk:
-                if zh { parts.append(isLast ? "步行\(m)米到达" : "步行\(m)米") }
-                else { parts.append(isLast ? "walk \(m) meters to arrive" : "walk \(m) meters") }
+                // 单段步行距离同样随单位（farDistance 溢出安全）；公制 <1km 逐字仍"X米"。
+                let legStr = unit.farDistance(meters: leg.distanceMeters, language: language)
+                if zh { parts.append(isLast ? "步行\(legStr)到达" : "步行\(legStr)") }
+                else { parts.append(isLast ? "walk \(legStr) to arrive" : "walk \(legStr)") }
             case .bus, .subway:
                 let line = (leg.line?.trimmingCharacters(in: .whitespaces)).flatMap { $0.isEmpty ? nil : $0 }
                     ?? (leg.kind == .subway ? (zh ? "地铁" : "the subway") : (zh ? "公交" : "a bus"))

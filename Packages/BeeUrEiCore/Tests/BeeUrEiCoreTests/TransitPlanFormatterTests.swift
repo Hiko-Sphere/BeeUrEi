@@ -77,6 +77,28 @@ final class TransitPlanFormatterTests: XCTestCase {
         XCTAssertEqual(out, "About 10 minutes total, 100 meters of walking. take 300路 from 甲站, ride 4 stops to 乙站, about 15 min, walk 100 meters to arrive.")
     }
 
+    func testImperialUnitFormatsWalkingDistances() {
+        // 英制 sibling-gap 收口：英制用户全程听英尺/英里，步行距离曾裸报"米"＝单位割裂。
+        // 350m→0.2英里（≥1000ft 用英里）；单段 200m→656英尺、150m→492英尺。走 DistanceUnit.farDistance 同一换算源。
+        let plan = TransitPlan(durationSeconds: 1980, walkingDistanceMeters: 350,
+                               legs: [walk(200), ride(.subway, "地铁1号线", "西单站", "国贸站", 6), walk(150)])
+        let zh = TransitPlanFormatter.summary(plan, language: .zh, unit: .imperial)
+        XCTAssertTrue(zh.hasPrefix("全程约33分钟，步行共0.2英里。"), zh)
+        XCTAssertTrue(zh.contains("步行656英尺，"), zh)        // walk(200)
+        XCTAssertTrue(zh.hasSuffix("步行492英尺到达。"), zh)    // walk(150)
+        let en = TransitPlanFormatter.summary(plan, language: .en, unit: .imperial)
+        XCTAssertTrue(en.contains("0.2 miles of walking"), en)
+        XCTAssertTrue(en.contains("walk 656 feet,"), en)
+        XCTAssertTrue(en.hasSuffix("walk 492 feet to arrive."), en)
+    }
+
+    func testMetricWalkingOver1kmUsesKilometers() {
+        // 公制 ≥1km 步行改"公里"（与全库 ≥1km→公里 口径一致，比"1500米"可听）；<1km 仍"米"（既有测试守卫）。
+        let plan = TransitPlan(durationSeconds: 1200, walkingDistanceMeters: 1500, legs: [walk(1500)])
+        XCTAssertTrue(TransitPlanFormatter.summary(plan, language: .zh).hasPrefix("全程约20分钟，步行共1.5公里。"))
+        XCTAssertTrue(TransitPlanFormatter.summary(plan, language: .en).contains("1.5 kilometers of walking"))
+    }
+
     func testMissingStopNamesDegradeGracefully() {
         // 缺站名/站数时不崩、不留悬空标点，仍给出线路。
         let leg = TransitLeg(kind: .subway, line: "地铁2号线", fromStop: nil, toStop: nil, stops: nil, distanceMeters: 3000, durationSeconds: 600)

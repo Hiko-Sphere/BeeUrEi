@@ -892,10 +892,29 @@ struct APIClient {
     }
 
     /// 通话记录（呼出/呼入/未接）。
-    func callHistory(token: String) async throws -> [CallRecordInfo] {
-        struct R: Codable { let calls: [CallRecordInfo] }
-        let data = try await authedGet("/api/calls", token: token)
-        return (try? JSONDecoder().decode(R.self, from: data))?.calls ?? []
+    /// 通话记录一页（服务端 createdAt 倒序，默认 100 条）。before/beforeId=向前翻页游标（"加载更早"）；
+    /// 翻页请求服务端**不**刷新已看基线（翻历史≠又看过当前，防与未接角标竞态）。
+    func callHistory(token: String, before: Int? = nil, beforeId: String? = nil) async throws -> CallHistoryPage {
+        var path = "/api/calls"
+        if let before {
+            path += "?before=\(before)"
+            if let beforeId { path += "&beforeId=\(beforeId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? beforeId)" }
+        }
+        let data = try await authedGet(path, token: token)
+        return try JSONDecoder().decode(CallHistoryPage.self, from: data)
+    }
+
+    /// 通话记录页（此前 iOS 只解 {calls}、hasMore 被丢弃——只能看到头 100 条，更早的历史无入口）。
+    struct CallHistoryPage: Codable, Sendable {
+        let calls: [CallRecordInfo]
+        var hasMore: Bool?   // 旧服务端无此字段 → nil（按无更多处理，不显"加载更早"）
+        var more: Bool { hasMore == true }
+        /// 下一页游标（纯逻辑可测，视图与测试共用）：取当前已载最旧一条（服务端倒序=末尾）。
+        /// 空列表 → nil（无从翻页）。before 用整数毫秒（服务端 ^\d+$ 校验，Double 直接拼会带小数点被拒）。
+        static func nextCursor(after calls: [CallRecordInfo]) -> (before: Int, beforeId: String)? {
+            guard let oldest = calls.last else { return nil }
+            return (before: Int(oldest.createdAt), beforeId: oldest.id)
+        }
     }
 
     /// 发起方轮询呼叫状态：是否所有目标已拒绝。

@@ -6,6 +6,8 @@ struct CallHistoryView: View {
     @State private var calls: [CallRecordInfo] = []
     @State private var loaded = false
     @State private var loadFailed = false
+    @State private var hasMore = false        // 服务端还有更早的通话（hasMore，此前被丢弃）
+    @State private var loadingMore = false
     private var lang: Language { FeatureSettings().language }
 
     var body: some View {
@@ -39,6 +41,14 @@ struct CallHistoryView: View {
                             .accessibilityLabel("\(c.peerName)，\(statusText(c))，\(timeText(c.createdAt))")
                     }
                 }
+                // 游标翻页（服务端 hasMore/before/beforeId，iter233 契约）：此前 iOS 只能看到头 100 条。
+                if hasMore {
+                    Button { Task { await loadMore() } } label: {
+                        if loadingMore { HStack { Spacer(); ProgressView(); Spacer() } }
+                        else { Text(AccountStrings.loadEarlierCalls(lang)).frame(maxWidth: .infinity) }
+                    }
+                    .disabled(loadingMore)
+                }
             }
         }
         .navigationTitle(AccountStrings.callHistory(lang))
@@ -49,12 +59,30 @@ struct CallHistoryView: View {
     private func load() async {
         guard let token = KeychainStore.read() else { loaded = true; return }
         do {
-            calls = try await APIClient().callHistory(token: token)
+            let page = try await APIClient().callHistory(token: token)
+            calls = page.calls
+            hasMore = page.more
             loadFailed = false
         } catch {
             loadFailed = true
         }
         loaded = true
+    }
+
+    /// 加载更早一页：游标=当前最旧一条（APIClient.CallHistoryPage.nextCursor，已测）；按 id 去重防重叠。
+    private func loadMore() async {
+        guard let token = KeychainStore.read(), !loadingMore,
+              let cursor = APIClient.CallHistoryPage.nextCursor(after: calls) else { return }
+        loadingMore = true; defer { loadingMore = false }
+        guard let page = try? await APIClient().callHistory(token: token, before: cursor.before, beforeId: cursor.beforeId) else {
+            A11y.announce(AccountStrings.callHistoryLoadFailed(lang))
+            return
+        }
+        let known = Set(calls.map(\.id))
+        let fresh = page.calls.filter { !known.contains($0.id) }
+        calls.append(contentsOf: fresh)
+        hasMore = page.more
+        A11y.announce(AccountStrings.loadedEarlierCalls(fresh.count, lang)) // 盲人对底部追加无感知，念结果
     }
 
     @ViewBuilder private func row(_ c: CallRecordInfo) -> some View {

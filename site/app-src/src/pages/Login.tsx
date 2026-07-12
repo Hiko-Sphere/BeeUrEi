@@ -209,6 +209,8 @@ export function LoginPage() {
           {t('继续即表示同意', 'By continuing you agree to our ')}
           <a className="text-accent hover:underline" href="https://beeurei.hikosphere.com/legal/" target="_blank" rel="noreferrer">{t('隐私政策与条款', 'Privacy & Terms')}</a>。
           <br />{t('视障用户请使用 iOS 客户端。', 'Blind users: please use the iOS app.')}
+          {/* 官网→网页版的漏斗回环：冷访客从官网点进来只见登录表单，给一条回官网了解产品的路（新标签，登录进度不丢）。 */}
+          <br /><a className="text-accent hover:underline" href="https://beeurei.hikosphere.com/" target="_blank" rel="noreferrer">{t('了解 BeeUrEi 是什么 →', 'Learn what BeeUrEi is →')}</a>
         </p>
       </div>
     </div>

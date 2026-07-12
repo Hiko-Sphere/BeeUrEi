@@ -72,6 +72,26 @@ final class HomeViewModel {
     @ObservationIgnored private var lang: Language = FeatureSettings().language
     @ObservationIgnored private var labels = LabelCatalog(language: FeatureSettings().language)
     @ObservationIgnored private var crossing = CrossingAssistant(language: FeatureSettings().language)
+    // 过街「起步」门控（核心已测：只认亲见红/黄→绿的新绿，且前置红相驻留≥3s 挡毛刺、新绿 5s 超窗降级）。
+    // 此前任何绿都念"可通行"——陈旧绿（半路赶到）走一半变红踩进车流的假安心（安全模块清单 #2）。
+    @ObservationIgnored private var crossingGate = CrossingSignalGate()
+
+    /// 红绿灯播报选择（纯函数，管线与测试共用同一门控——中子它=拔掉安全门）：
+    /// 绿灯走 CrossingSignalGate 裁决（crossNow=新绿可起步 / waitForNextGreen=陈旧绿等下一轮）；
+    /// 红/黄/未知与原判色播报**逐字一致**（TrafficLightClassifier.hint）。返回 (节流key, 文案)。
+    nonisolated static func trafficAnnouncement(effective: TrafficLightState,
+                                                gateAdvice: CrossingSignalGate.Advice,
+                                                lang: Language) -> (key: String, text: String)? {
+        if effective == .green {
+            switch gateAdvice {
+            case .crossNow: return ("trafficlight:green:fresh", SpokenStrings.crossFreshGreen(lang))
+            case .waitForNextGreen: return ("trafficlight:green:stale", SpokenStrings.crossWaitNextGreen(lang))
+            case .wait, .unknown: return nil // 门控视角与 effective 不一致（理论不达）：宁静默不误导
+            }
+        }
+        guard let text = TrafficLightClassifier().hint(effective) else { return nil }
+        return ("trafficlight:\(effective.rawValue)", text)
+    }
     // sameGroup：把 car/truck/bus 的逐帧类别抖动关联到同一条轨迹，避免逼近车辆被碎成多轨→距离低估（安全复审）。
     @ObservationIgnored private let tracker = ObstacleTracker(sameGroup: LabelCatalog.sameTrackingGroup)
     @ObservationIgnored private let risk = RiskScore()
@@ -163,6 +183,7 @@ final class HomeViewModel {
         source.stop()
         sonifier.stop()
         crossingSignal.stop()
+        crossingGate.reset() // 门控随会话清零：跨会话残留的"亲见新绿"绝不能延续到下次开启
         trafficLight = .unknown
         headTracker.stop()
         spatial.stop()
@@ -349,11 +370,16 @@ final class HomeViewModel {
                 trafficLight = effective
                 crossingSignal.update(effective) // 节奏音+节奏震动（色块由 HomeView 按 trafficLight 渲染）
             }
-            // 节流 key **按颜色区分**：否则刚播"绿灯可通行"后灯变红，"请等待"会被同一 key 的 4s minGap 吞掉，
-            // 盲人据"可通行"踏入车流（致命假安心，见安全复审）。分色后绿/红各自计时，变红即刻能播"请等待"。
-            if let hint = TrafficLightClassifier().hint(state),
-               throttle.shouldAnnounce(key: "trafficlight:\(state.rawValue)", now: frame.timestamp, minGap: 4) {
-                coordinator.submit(FeedbackEvent(priority: .turn, speech: hint))
+            // 过街起步门控：喂稳定后的 effective + 单调帧时戳（gate 合同）。绿灯播报改走门控裁决——
+            // 新绿（亲见变灯且在起步窗内）→"绿灯刚亮，可以起步"；陈旧绿/超窗 →"等下一个绿灯再过"。
+            // **只会比原行为更保守**：非绿路径与原判色播报逐字一致；绿灯从"一律可通行"降为按新鲜度裁决。
+            // ⚠️ 起步窗/驻留阈值为行业保守缺省（MUTCD 下限），真机路口标定后可调（unwired-safety-modules）。
+            let gateAdvice = crossingGate.update(confirmed: effective, at: frame.timestamp)
+            // 节流 key **按最终文案语义区分**（原教训：同 key 会吞变灯播报；绿的两种建议也须各自计时——
+            // 新绿 5s 超窗降级为"等下一轮"必须能即刻播出，不被 fresh 播报的 minGap 吞掉）。
+            if let a = Self.trafficAnnouncement(effective: effective, gateAdvice: gateAdvice, lang: lang),
+               throttle.shouldAnnounce(key: a.key, now: frame.timestamp, minGap: 4) {
+                coordinator.submit(FeedbackEvent(priority: .turn, speech: a.text))
             }
         }
         let obstacles = detections.map { det -> Obstacle in

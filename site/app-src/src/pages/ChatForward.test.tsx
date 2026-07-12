@@ -45,6 +45,28 @@ describe('消息转发', () => {
     expect(call[4]).toBe(true)            // forwarded 标记
   })
 
+  it('可转发给尚无会话历史的联系人（不止"有过消息的会话"）；与会话去重、pending 不列', async () => {
+    mock(api.sendMessage).mockResolvedValue({ message: {} })
+    mock(api.messagesWith).mockResolvedValue({ messages: [msg({ id: 'm1', kind: 'text', text: '会议改到五点' })] })
+    // 会话里只有 p1；联系人里有 p1（应去重）、p3（还没聊过，应可选）、p4（pending 不能收发，不列）。
+    mock(api.conversations).mockResolvedValue({ conversations: [{ peer: { id: 'p1', displayName: '阿明', avatar: null }, last: null, unread: 0 }] })
+    mock(api.familyLinks).mockResolvedValue({ links: [
+      { id: 'l1', memberId: 'p1', memberName: '阿明', relation: '朋友', isEmergency: false, status: 'accepted' },
+      { id: 'l3', memberId: 'p3', memberName: '阿伟', relation: '同事', isEmergency: false, status: 'accepted' },
+      { id: 'l4', memberId: 'p4', memberName: '待接受', relation: '', isEmergency: false, status: 'pending' },
+    ] })
+    render(<ChatPage />)
+    await screen.findByText('会议改到五点')
+    fireEvent.click(screen.getByText('转发'))
+    const targets = await screen.findAllByTestId('forward-target')
+    expect(targets).toHaveLength(2)                          // p1(会话) + p3(联系人无会话)；p1 不重复、pending p4 不列
+    expect(screen.getByText('阿伟')).toBeInTheDocument()     // 还没聊过的联系人也能选作转发目标
+    fireEvent.click(screen.getByText('阿伟'))
+    await waitFor(() => expect(api.sendMessage).toHaveBeenCalled())
+    expect(mock(api.sendMessage).mock.calls[0][0]).toEqual({ toId: 'p3' }) // 转发目标就是这位联系人
+    expect(mock(api.sendMessage).mock.calls[0][4]).toBe(true)              // forwarded 标记
+  })
+
   it('forwarded=true 的消息渲染「已转发」标注', async () => {
     mock(api.messagesWith).mockResolvedValue({ messages: [msg({ id: 'm2', kind: 'text', text: '这是转发来的', forwarded: true })] })
     render(<ChatPage />)

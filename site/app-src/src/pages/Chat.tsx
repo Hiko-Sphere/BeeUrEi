@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { api, chatErrorText, fetchMediaObjectURL, uploadMedia, type ChatMessage, type Conversation, type GroupSummary, type User, type PinnedMessage } from '../lib/api'
+import { api, chatErrorText, fetchMediaObjectURL, uploadMedia, type ChatMessage, type Conversation, type GroupSummary, type User, type PinnedMessage, type FamilyLink } from '../lib/api'
 import { pollWhileVisible } from '../lib/poll'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
@@ -758,13 +758,22 @@ function ForwardDialog({ message, onClose, onSent }: { message: ChatMessage; onC
   const toast = useToast()
   const [convos, setConvos] = useState<Conversation[] | null>(null)
   const [groups, setGroups] = useState<GroupSummary[]>([])
+  const [contacts, setContacts] = useState<FamilyLink[]>([]) // 已接受联系人：可转发给**尚无会话历史**的联系人（否则永远转不过去）
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    void Promise.all([api.conversations(), api.groups()])
-      .then(([c, g]) => { setConvos(c.conversations); setGroups(g.groups) })
+    void Promise.all([api.conversations(), api.groups(), api.familyLinks()])
+      .then(([c, g, f]) => {
+        setConvos(c.conversations); setGroups(g.groups)
+        setContacts(f.links.filter((l) => (l.status ?? 'accepted') === 'accepted')) // 仅已接受（pending 不能收发）
+      })
       .catch(() => setConvos([]))
   }, [])
+
+  // 转发目标 = 最近会话 ∪ 已接受联系人（去重）∪ 群。此前只列"有过消息的会话"——第一次要把消息转给某位
+  // 联系人时（还没聊过）该联系人根本不出现，转不过去。补上"还没会话历史的联系人"，与主流 IM 转发选人一致。
+  const convoIds = new Set((convos ?? []).map((c) => c.peer.id))
+  const extraContacts = contacts.filter((l) => !convoIds.has(l.memberId))
 
   const forwardTo = async (target: { toId?: string; groupId?: string }, name: string) => {
     if (busy) return
@@ -782,8 +791,8 @@ function ForwardDialog({ message, onClose, onSent }: { message: ChatMessage; onC
       <h3 className="text-lg font-semibold">{t('转发到', 'Forward to')}</h3>
       <p className="mt-1 text-sm text-faint">{t('选择一个会话', 'Choose a conversation')}</p>
       <div className="mt-3 max-h-[50vh] overflow-y-auto">
-        {convos === null ? <Spinner /> : (convos.length === 0 && groups.length === 0) ? (
-          <p className="py-6 text-center text-sm text-faint">{t('暂无可转发的会话', 'No conversations to forward to')}</p>
+        {convos === null ? <Spinner /> : (convos.length === 0 && extraContacts.length === 0 && groups.length === 0) ? (
+          <p className="py-6 text-center text-sm text-faint">{t('暂无可转发的联系人', 'No contacts to forward to')}</p>
         ) : (
           <ul className="divide-y divide-[var(--line)]">
             {convos.map((c) => {
@@ -798,6 +807,17 @@ function ForwardDialog({ message, onClose, onSent }: { message: ChatMessage; onC
               </li>
               )
             })}
+            {/* 还没会话历史的联系人（转发给从未聊过的联系人）：与会话行同样可转发，仅数据源不同（familyLinks）。 */}
+            {extraContacts.map((l) => (
+              <li key={`c:${l.memberId}`}>
+                <button disabled={busy} onClick={() => void forwardTo({ toId: l.memberId }, l.memberName)} data-testid="forward-target"
+                  className="flex w-full items-center gap-3 px-1 py-2.5 text-left hover:surface-2 disabled:opacity-50">
+                  <Avatar name={l.memberName} src={l.memberAvatar} size={36} />
+                  <span className="truncate text-sm font-medium">{l.memberName}</span>
+                  {l.relation ? <span className="ml-auto shrink-0 text-xs text-faint">{l.relation}</span> : null}
+                </button>
+              </li>
+            ))}
             {groups.map((g) => (
               <li key={`g:${g.group.id}`}>
                 <button disabled={busy} onClick={() => void forwardTo({ groupId: g.group.id }, g.group.name)} data-testid="forward-target"

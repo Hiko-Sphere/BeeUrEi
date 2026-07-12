@@ -1218,6 +1218,10 @@ function LocationLink({ loc, t }: { loc: { lat: number; lng: number; name?: stri
             target="_blank" rel="noreferrer" className="underline">📍 {loc.name || t('位置', 'Location')}</a>
 }
 
+// 建群可邀成员上限（除群主外）：与服务端 createSchema memberIds.max(49) 一致（群共 50 人含群主）。
+// 客户端预检——不预检则勾到第 50 个提交才被 400 invalid_input，只见笼统"创建失败"不知为何。
+const MAX_GROUP_INVITE = 49
+
 function CreateGroupDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { t } = useI18n()
   const toast = useToast()
@@ -1228,7 +1232,14 @@ function CreateGroupDialog({ onClose, onCreated }: { onClose: () => void; onCrea
 
   useEffect(() => { void api.familyLinks().then(({ links }) => setContacts(links.filter((l) => (l.status ?? 'accepted') === 'accepted').map((l) => ({ id: l.memberId, name: l.memberName })))).catch(() => {}) }, [])
 
-  const toggle = (id: string) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  // 满员后再增选为 no-op（取消勾选照常）——与复选框 disabled 双保险（点整行 label 的路径也进不了第 50 个）。
+  const toggle = (id: string) => setPicked((s) => {
+    const n = new Set(s)
+    if (n.has(id)) n.delete(id)
+    else if (n.size < MAX_GROUP_INVITE) n.add(id)
+    return n
+  })
+  const atCap = picked.size >= MAX_GROUP_INVITE
   const submit = async () => {
     if (!name.trim() || picked.size === 0) return
     setBusy(true)
@@ -1238,9 +1249,12 @@ function CreateGroupDialog({ onClose, onCreated }: { onClose: () => void; onCrea
   return (
     <Modal onClose={onClose} label={t('创建群聊', 'New group')} panelClassName="flex max-h-[80vh] w-full max-w-sm flex-col">
         <h3 className="text-lg font-semibold">{t('创建群聊', 'New group')}</h3>
-        <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} placeholder={t('群名称', 'Group name')}
+        {/* maxLength 50 与后端 name.max(50) 一致（改名输入同上限）：此前 40 无端更紧、两处不一致。 */}
+        <input value={name} onChange={(e) => setName(e.target.value)} maxLength={50} placeholder={t('群名称', 'Group name')}
           className="mt-3 w-full rounded-xl border border-[var(--line)] surface-2 px-3.5 py-2.5 text-sm outline-none focus:border-honey" />
         <div className="mt-3 text-xs font-medium text-faint">{t('选择成员', 'Select members')}</div>
+        {/* 满员提示（role=status 读屏可闻）：讲清为什么其余联系人勾不上。 */}
+        {atCap && <p role="status" className="mt-1 text-xs text-honey">{t(`最多可选 ${MAX_GROUP_INVITE} 人（群共 50 人，含你）`, `Up to ${MAX_GROUP_INVITE} members (50 per group including you)`)}</p>}
         <div className="mt-1 flex-1 overflow-y-auto rounded-xl border border-[var(--line)]">
           {contacts.length === 0 ? <div className="p-4 text-center text-sm text-faint">{t('暂无可选联系人', 'No contacts')}</div> : (
             <ul className="divide-y divide-[var(--line)]">
@@ -1248,10 +1262,11 @@ function CreateGroupDialog({ onClose, onCreated }: { onClose: () => void; onCrea
                 // 用 <label>+真复选框：点整行切换（label 原生行为），复选框天然可 Tab 聚焦 + 空格切换、
                 // 被读屏播报为"姓名，复选框，已选/未选"。此前 onClick 挂 li + readOnly 复选框对键盘不可达。
                 <li key={c.id}>
-                  <label className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:surface-2">
+                  <label className={`flex items-center gap-3 px-3 py-2.5 ${atCap && !picked.has(c.id) ? 'opacity-50' : 'cursor-pointer hover:surface-2'}`}>
                     <Avatar name={c.name} size={32} />
                     <span className="flex-1 text-sm">{c.name}</span>
-                    <input type="checkbox" checked={picked.has(c.id)} onChange={() => toggle(c.id)} className="accent-[var(--color-honey)]" />
+                    {/* 满员后未选复选框 disabled（读屏播报"已停用"，比静默 no-op 更可知）。 */}
+                    <input type="checkbox" checked={picked.has(c.id)} disabled={atCap && !picked.has(c.id)} onChange={() => toggle(c.id)} className="accent-[var(--color-honey)]" />
                   </label>
                 </li>
               ))}

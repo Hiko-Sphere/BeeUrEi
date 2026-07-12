@@ -13,6 +13,7 @@ describe('chatErrorText 错误码→用户文案映射', () => {
     expect(chatErrorText(new APIError('blocked', 403), t)).toContain('拉黑')
     expect(chatErrorText(new APIError('not_linked', 403), t)).toContain('联系人')
     expect(chatErrorText(new APIError('not_member', 403), t)).toContain('群聊')
+    expect(chatErrorText(new APIError('group_full', 400), t)).toContain('已满') // 群满员：加人被拒须讲清"满了"而非笼统"操作失败"
     expect(chatErrorText(new APIError('media_too_large', 413), t)).toContain('太大')
     expect(chatErrorText(new APIError('media_quota_exceeded', 413), t)).toContain('已满') // 配额满≠文件太大：引导清理而非换小文件
     expect(chatErrorText(new APIError('unsupported_media_type', 400), t)).toContain('格式')

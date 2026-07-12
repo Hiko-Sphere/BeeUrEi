@@ -86,6 +86,7 @@ export function chatErrorText(err: unknown, t: (zh: string, en: string) => strin
     case 'blocked': return t('你们之间存在拉黑，无法发送', "Can't send — one of you blocked the other")
     case 'not_linked': return t('对方已不是你的联系人，无法发送', 'This person is no longer your contact')
     case 'not_member': return t('你已不在该群聊中', "You're no longer in this group")
+    case 'group_full': return t('群人数已满（上限 50 人）', 'Group is full (max 50 members)')
     // 撤回/编辑的时限与可编辑性：给**确定**文案（此前各调用点靠带"？"的兜底猜"超过N分钟？"，
     // 且撤回失败恒显时限、掩盖了功能关停/维护等真因——见 recall 改用本映射）。
     case 'recall_window_passed': return t('消息发出已超过 2 分钟，无法撤回', 'Messages can only be recalled within 2 minutes of sending')

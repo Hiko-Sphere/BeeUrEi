@@ -149,6 +149,9 @@ export class SqliteStore implements Store {
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_blocks_blocked ON blocks (blockedId)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_callrec_caller ON call_records (callerId, createdAt)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_callrec_callee ON call_records (calleeId, createdAt)')
+    // 按 callId 查/改是热路径（每次挂断上报时长 setCallDuration、录制同意与时长上报的参与方判定
+    // isCallParticipant、被叫状态更新 updateCallStatus 都 WHERE callId=?）——无此索引则每次全表扫。
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_callrec_callid ON call_records (callId)')
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS saved_routes (
         id TEXT PRIMARY KEY,

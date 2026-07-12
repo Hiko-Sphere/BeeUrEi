@@ -85,6 +85,22 @@ describe.each([['MemoryStore', () => new MemoryStore()], ['SqliteStore', () => n
   })
 })
 
+// callId 查询走索引（EXPLAIN QUERY PLAN 锁定）：isCallParticipant/setCallDuration/updateCallStatus 都按
+// callId 查/改，是每次挂断都走的热路径——无 idx_callrec_callid 则全表扫（表随通话量线性涨、留存期内可观）。
+// 断言计划含 USING INDEX 而非 SCAN，防未来重构误删索引后静默退化（功能测试全绿、只有性能悄悄崩）。
+describe('call_records.callId 索引', () => {
+  it('isCallParticipant 的查询计划走 idx_callrec_callid（非全表 SCAN）', () => {
+    const s = new SqliteStore(':memory:')
+    s.createCallRecord({ id: 'r1', callId: 'k1', callerId: 'a', calleeId: 'b', status: 'answered', createdAt: 1 })
+    const plan = (s as unknown as { db: { prepare: (q: string) => { all: (...p: unknown[]) => { detail: string }[] } } })
+      .db.prepare('EXPLAIN QUERY PLAN SELECT 1 FROM call_records WHERE callId = ? AND (callerId = ? OR calleeId = ?) LIMIT 1')
+      .all('k1', 'a', 'a')
+    const detail = plan.map((r) => r.detail).join(' | ')
+    expect(detail).toContain('idx_callrec_callid') // 走索引
+    expect(detail).not.toMatch(/SCAN call_records(?! USING)/) // 非全表扫
+  })
+})
+
 // isCallParticipant（授权用全量参与判定）两 Store 平价：主叫/被叫 → true；陌生人/不存在的 callId → false；
 // **不受"最近 100 条"窗口影响**（授权正确性的关键——callRecordsForUser().some() 会对超窗旧通话假否定）。
 describe.each([['MemoryStore', () => new MemoryStore()], ['SqliteStore', () => new SqliteStore(':memory:')]] as const)('isCallParticipant (%s)', (_n, make) => {

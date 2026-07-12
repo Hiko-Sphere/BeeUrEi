@@ -415,7 +415,7 @@ struct ChatView: View {
                             .disabled(loadingEarlier)
                             .padding(.bottom, BeeSpacing.xs)
                         }
-                        ForEach(messages) { m in bubble(m) }
+                        ForEach(messages) { m in bubble(m, proxy: proxy) }
                     }
                     .padding()
                 }
@@ -493,7 +493,7 @@ struct ChatView: View {
 
     // MARK: 气泡
 
-    private func bubble(_ m: ChatMessageInfo) -> some View {
+    private func bubble(_ m: ChatMessageInfo, proxy: ScrollViewProxy? = nil) -> some View {
         let mine = m.fromId == myId
         return HStack {
             if mine { Spacer(minLength: 48) }
@@ -509,13 +509,17 @@ struct ChatView: View {
                 }
                 // 引用回复预览（WhatsApp 式，气泡上方）：显被回复者名 + 内容，让人看到在回哪条。视觉呈现；a11y 并入 bubbleA11y。
                 if m.replyTo != nil, m.kind != "recalled" {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(repliedName(m)).font(.caption2.bold()).foregroundStyle(Color.beeHoney)
-                        Text(repliedPreview(m)).font(.caption).lineLimit(1).foregroundStyle(.secondary)
+                    // 可点跳到原消息（与 web 同语义）；VoiceOver 用户走气泡自定义操作（本块并入 bubbleA11y，视觉钮隐藏）。
+                    Button { jumpToQuoted(m, proxy: proxy) } label: {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(repliedName(m)).font(.caption2.bold()).foregroundStyle(Color.beeHoney)
+                            Text(repliedPreview(m)).font(.caption).lineLimit(1).foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .frame(maxWidth: 220, alignment: .leading)
+                        .background(Color.beeHoney.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
                     }
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .frame(maxWidth: 220, alignment: .leading)
-                    .background(Color.beeHoney.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                    .buttonStyle(.plain)
                     .accessibilityHidden(true)
                 }
                 bubbleContent(m, mine: mine)
@@ -559,6 +563,12 @@ struct ChatView: View {
         .id(m.id)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(bubbleA11y(m))
+        // 引用消息：VoiceOver 自定义操作「跳到被引用的消息」（视觉引用钮已 accessibilityHidden，这里是读屏路径）。
+        .accessibilityActions {
+            if m.replyTo != nil, m.kind != "recalled" {
+                Button(ChatStrings.jumpToQuotedAction(lang)) { jumpToQuoted(m, proxy: proxy) }
+            }
+        }
     }
 
     @ViewBuilder
@@ -1205,6 +1215,21 @@ struct ChatView: View {
         }
     }
 
+    /// 跳到被引用的原消息：已加载 → 滚动定位 + 朗读原文（盲人对滚动无感知）；未加载 → 语音引导先加载更早消息。
+    private func jumpToQuoted(_ m: ChatMessageInfo, proxy: ScrollViewProxy?) {
+        switch QuoteJump.outcome(replyTo: m.replyTo, loadedIds: Set(messages.map(\.id))) {
+        case .jump(let rid):
+            withAnimation { proxy?.scrollTo(rid, anchor: .center) }
+            if let orig = repliedMessage(m) {
+                SpeechHub.shared.speak(ChatStrings.quotedSpeak(replyName(orig), messagePreview(orig), lang), channel: .query, voiceCode: lang.voiceCode)
+            }
+        case .notLoaded:
+            SpeechHub.shared.speak(ChatStrings.quotedNotLoaded(lang), channel: .query, voiceCode: lang.voiceCode)
+        case .none:
+            break
+        }
+    }
+
     private func toggleVoiceNote() {
         if recorder.isRecording {
             recorder.stop { data in
@@ -1493,6 +1518,18 @@ final class VoiceNoteRecorder {
         if let url { try? FileManager.default.removeItem(at: url) }
         url = nil
         AudioSessionManager.configure()
+    }
+}
+
+/// 引用跳转判定（纯逻辑，视图与测试共用同一门控——中子它=拔掉跳转接线）：
+/// 原消息已加载 → 滚动定位；在更早未加载窗口 → 语音引导先加载（此前点了没反应=静默死按钮）；非引用 → 无操作。
+enum QuoteJump: Equatable {
+    case jump(String)
+    case notLoaded
+    case none
+    static func outcome(replyTo: String?, loadedIds: Set<String>) -> QuoteJump {
+        guard let rid = replyTo, !rid.isEmpty else { return .none }
+        return loadedIds.contains(rid) ? .jump(rid) : .notLoaded
     }
 }
 

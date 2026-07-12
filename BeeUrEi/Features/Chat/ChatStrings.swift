@@ -93,6 +93,16 @@ enum ChatStrings {
     static func replyContextA11y(_ name: String, _ preview: String, _ l: Language) -> String {
         l == .zh ? "回复 \(name)：\(preview)。" : "Reply to \(name): \(preview). "
     }
+    // —— 引用跳转（点击引用预览/VoiceOver 自定义操作跳到原消息；与 web '跳到被引用的消息' 同措辞）——
+    static func jumpToQuotedAction(_ l: Language) -> String { l == .zh ? "跳到被引用的消息" : "Jump to quoted message" }
+    /// 跳转后的有声反馈（盲人对滚动本身无感知，必须听到跳到了哪条）。
+    static func quotedSpeak(_ name: String, _ preview: String, _ l: Language) -> String {
+        l == .zh ? "被引用的消息，\(name)：\(preview)" : "Quoted message from \(name): \(preview)"
+    }
+    /// 原消息在更早的未加载窗口：诚实引导（此前点了没反应=静默死按钮）。
+    static func quotedNotLoaded(_ l: Language) -> String {
+        l == .zh ? "被引用的消息在更早的位置，请先加载更早的消息再试" : "The quoted message is earlier in this conversation — load earlier messages first"
+    }
     static func pickContact(_ l: Language) -> String { l == .zh ? "选择联系人" : "Choose a contact" }
     static func noContacts(_ l: Language) -> String {
         l == .zh ? "还没有绑定的亲友/协助者。先到亲友页发送绑定请求，对方接受后即可聊天。"

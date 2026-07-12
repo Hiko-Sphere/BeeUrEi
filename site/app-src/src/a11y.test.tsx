@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
-import { render } from '@testing-library/react'
+import { render, fireEvent } from '@testing-library/react'
 import axe from 'axe-core' // 直接用于下方"axe 自检"（证明 axe 在 jsdom 里确实生效）
 import { axeViolations } from './lib/axeCheck'
 
@@ -35,6 +35,7 @@ vi.mock('./lib/api', () => ({
     conversations: vi.fn(), groups: vi.fn(), messagesWith: vi.fn(), markRead: vi.fn(), lookupUser: vi.fn(), familyLinks: vi.fn(), searchMessages: vi.fn(), sendMessage: vi.fn(), editMessage: vi.fn(),
     contactLocations: vi.fn(), updateLocation: vi.fn(), stopSharingLocation: vi.fn(), savedPlaces: vi.fn(), requestLocation: vi.fn(), upsertPlace: vi.fn(), deletePlace: vi.fn(),
     verificationStatus: vi.fn(),
+    emailRequestCode: vi.fn(() => Promise.resolve({ ok: true })), emailVerifyCode: vi.fn(),
   },
   APIError: class extends Error {},
 }))
@@ -55,6 +56,34 @@ describe('axe 无障碍回归门禁（代表性页面 0 violations）', () => {
     // 注册模式（多出身份选择/更多表单控件）同样干净。
     getByRole('button', { name: '注册' }).click()
     await expectNoAxeViolations(container)
+  })
+
+  it('登录页·邮箱验证码面板（本会话新增：身份选择 role=group + hint + 验证码字段）0 violations', async () => {
+    const { container, getByRole, findByLabelText } = render(<LoginPage />)
+    getByRole('button', { name: /邮箱验证码登录/ }).click() // 进入邮箱码面板（含身份选择器 + 说明 hint）
+    const emailInput = await findByLabelText('邮箱')
+    await expectNoAxeViolations(container)
+    // 发码后进入"填码"态（多出验证码字段）——同样无障碍干净。email 是 required，先填再发（jsdom 会做约束校验）。
+    fireEvent.change(emailInput, { target: { value: 'helper@example.com' } })
+    getByRole('button', { name: '发送验证码' }).click()
+    await findByLabelText('验证码')
+    await expectNoAxeViolations(container)
+  })
+
+  it('登录页·通行密钥按钮（本会话新增：浏览器支持时出现）0 violations', async () => {
+    // jsdom 默认无 WebAuthn → 按钮不渲染；桩上 PublicKeyCredential+credentials 让 passkeySupported() 为真、按钮出现，验其无障碍。
+    Object.defineProperty(window, 'PublicKeyCredential', { value: function () {}, configurable: true })
+    Object.defineProperty(navigator, 'credentials', { value: { get: () => {}, create: () => {} }, configurable: true })
+    try {
+      const { container, getByRole } = render(<LoginPage />)
+      getByRole('button', { name: /用通行密钥登录/ }) // 确认按钮已渲染（不存在即抛，测即红）
+      await expectNoAxeViolations(container)
+    } finally {
+      // @ts-expect-error 复位测试桩：PublicKeyCredential 非可选属性
+      delete window.PublicKeyCredential
+      // @ts-expect-error 复位测试桩：navigator.credentials 非可选属性
+      delete navigator.credentials
+    }
   })
 
   it('通知页（含紧急告警的位置链接与操作按钮）', async () => {

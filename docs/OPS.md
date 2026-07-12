@@ -61,19 +61,26 @@ SQLite 依 salt 校验通常会拒用不匹配的 WAL，但**绝不应赌这个*
 | `GET /metrics` | Prometheus 抓取（设 `METRICS_TOKEN` 则需 `Authorization: Bearer`） |
 | 管理面板 → 总览 | 在线人数/紧急事件/举报/版本·运行时长 |
 
-日志：`docker logs beeurei-api`。每小时留存清扫（录音/KYC/孤儿媒体/通知/refresh token/
+日志：`docker logs beeurei-api`。容器日志已封顶 **20MB×5 自动轮换**（`docker run --log-opt`，
+防日志吃满磁盘）。每小时留存清扫（录音/KYC/孤儿媒体/通知/refresh token/
 紧急事件日志/自动备份）各自打印一行结果，失败互不阻断。崩溃监控：配 `SENTRY_DSN` 即启用。
 
 ## 部署与回滚
 
 ```sh
 ./scripts/deploy-awsjapan.sh        # 构建并部署 origin/main（镜像同时打 :SHA 标签）
-# 回滚：用旧 SHA 标签重启容器
+./scripts/deploy-awsjapan.sh clean  # 只做镜像轮换清理（部署尾部也会自动跑）
+# 回滚：用旧 SHA 标签重启容器（--log-opt 与部署脚本一致，否则回滚出的容器丢日志封顶）
 docker stop beeurei-api && docker rm beeurei-api
 docker run -d --name beeurei-api --restart unless-stopped \
+  --log-driver json-file --log-opt max-size=20m --log-opt max-file=5 \
   -p 127.0.0.1:8787:8787 --env-file ~/repo/BeeUrEi/server/.env \
   -v beeurei-data:/app/data beeurei-api:<旧SHA>
 ```
+
+**回滚窗口 = 最近 5 个 SHA**：每次部署自动做镜像轮换（beeurei-api/site 各保留最近 5 个 SHA
+标签，其余连同悬空层/构建缓存清理——防高频部署把磁盘囤满）。需要回滚到更早版本时，从对应
+commit 重新构建镜像即可（`git checkout <SHA> && docker build …`），数据不受影响。
 
 数据库 schema 迁移是加列式幂等（`ALTER TABLE … ADD COLUMN` + try/catch），**新版可直接读旧库；
 回滚到旧版时新列被忽略、不破坏**——但新版写入的新字段语义会丢，回滚后建议尽快前滚。

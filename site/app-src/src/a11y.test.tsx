@@ -13,14 +13,28 @@ async function expectNoAxeViolations(container: Element) {
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
+  useParams: () => ({}), // Chat 会话列表态（无预选 peer）
   Link: (p: { to: string; children: unknown; className?: string; 'aria-label'?: string }) => <a href={p.to} className={p.className} aria-label={p['aria-label']}>{p.children as never}</a>,
 }))
-vi.mock('./lib/session', () => ({ useSession: () => ({ signIn: vi.fn(), user: { id: 'me', displayName: '阿明', role: 'helper' } }) }))
+vi.mock('./lib/session', () => ({ useSession: () => ({ signIn: vi.fn(), refreshMe: vi.fn(), signOut: vi.fn(), user: { id: 'me', displayName: '阿明', role: 'helper' } }) }))
+// Leaflet 桩化（Locations 挂载即建地图；地图 canvas 非 axe 审计点，页面 chrome 才是）。
+const leafletChain = (): unknown => {
+  const o: Record<string, ReturnType<typeof vi.fn>> = {}
+  const h: unknown = new Proxy(o, { get: (t, k: string) => (t[k] ??= vi.fn(() => h)) })
+  return h
+}
+vi.mock('leaflet', () => ({ default: new Proxy({}, { get: () => vi.fn(() => leafletChain()) }) }))
+vi.mock('leaflet/dist/leaflet.css', () => ({}))
 vi.mock('./lib/api', () => ({
+  SEARCH_LIMIT: 50, GLOBAL_SEARCH_LIMIT: 20,
+  chatErrorText: () => '', fetchMediaObjectURL: vi.fn(), uploadMedia: vi.fn(),
   api: {
     notifications: vi.fn(), markAllNotifsRead: vi.fn(), markNotifRead: vi.fn(),
     onlineCount: vi.fn(), incomingCalls: vi.fn(), helpQueue: vi.fn(), unreadSummary: vi.fn(), incomingLinks: vi.fn(), callHistory: vi.fn(), watchingEmergencies: vi.fn(() => Promise.resolve({ active: [] })),
     myRecordings: vi.fn(),
+    conversations: vi.fn(), groups: vi.fn(), messagesWith: vi.fn(), markRead: vi.fn(), lookupUser: vi.fn(), familyLinks: vi.fn(), searchMessages: vi.fn(), sendMessage: vi.fn(), editMessage: vi.fn(),
+    contactLocations: vi.fn(), updateLocation: vi.fn(), stopSharingLocation: vi.fn(), savedPlaces: vi.fn(), requestLocation: vi.fn(), upsertPlace: vi.fn(), deletePlace: vi.fn(),
+    verificationStatus: vi.fn(),
   },
   APIError: class extends Error {},
 }))
@@ -30,6 +44,9 @@ import { NotificationsPage } from './pages/Notifications'
 import { HomePage } from './pages/Home'
 import { CallsPage } from './pages/Calls'
 import { RecordingsPage } from './pages/Recordings'
+import { ChatPage } from './pages/Chat'
+import { LocationsPage } from './pages/Locations'
+import { VerificationGate } from './pages/VerificationGate'
 
 describe('axe 无障碍回归门禁（代表性页面 0 violations）', () => {
   it('登录页（含注册模式的身份选择）', async () => {
@@ -92,6 +109,38 @@ describe('axe 无障碍回归门禁（代表性页面 0 violations）', () => {
     ] })
     const { container, findByText } = render(<RecordingsPage />)
     await findByText(/证据留存/)
+    await expectNoAxeViolations(container)
+  })
+
+  it('聊天页（会话列表 + 搜索框 + 新建群入口）——全站最高流量页', async () => {
+    Element.prototype.scrollIntoView = vi.fn() // jsdom 未实现
+    ;(api.conversations as ReturnType<typeof vi.fn>).mockResolvedValue({ conversations: [
+      { peer: { id: 'p1', displayName: '李奶奶', avatar: null }, last: { id: 'm1', fromId: 'p1', toId: 'me', kind: 'text', text: '今天谢谢你', createdAt: 1000 }, unread: 2 },
+    ] })
+    ;(api.groups as ReturnType<typeof vi.fn>).mockResolvedValue({ groups: [] })
+    ;(api.familyLinks as ReturnType<typeof vi.fn>).mockResolvedValue({ links: [] })
+    const { container, findByText } = render(<ChatPage />)
+    await findByText('李奶奶')
+    await expectNoAxeViolations(container)
+  })
+
+  it('位置共享页（共享开关 + 时长选择 + 联系人行操作 + 请求共享）——安全功能页', async () => {
+    ;(api.contactLocations as ReturnType<typeof vi.fn>).mockResolvedValue({ sharing: false, contacts: [
+      { userId: 'c1', displayName: '女儿', role: 'helper', lat: 31.2, lng: 121.4, accuracy: 20, battery: 55, heading: null, updatedAt: Date.now() - 5000, avatar: null },
+    ] })
+    ;(api.familyLinks as ReturnType<typeof vi.fn>).mockResolvedValue({ links: [
+      { id: 'l1', memberId: 'c2', memberName: '儿子', relation: '家人', isEmergency: true, status: 'accepted' },
+    ] })
+    ;(api.savedPlaces as ReturnType<typeof vi.fn>).mockResolvedValue({ places: [] })
+    const { container, findByText } = render(<LocationsPage />)
+    await findByText('女儿')
+    await expectNoAxeViolations(container)
+  })
+
+  it('实名认证门禁屏（被拒态：原因说明 + 三个出口按钮）', async () => {
+    ;(api.verificationStatus as ReturnType<typeof vi.fn>).mockResolvedValue({ status: 'rejected', rejectReasonCode: 'blurry' })
+    const { container, findByText } = render(<VerificationGate />)
+    await findByText(/上次未通过/)
     await expectNoAxeViolations(container)
   })
 

@@ -15,7 +15,7 @@ import { Card, Button, Pill, EmptyState, useToast, timeAgo, fmtTime } from '../c
 import { RequestShareList } from '../components/RequestShareList'
 import { SavedPlaces } from '../components/SavedPlaces'
 import { SharingContactRow } from '../components/SharingContactRow'
-import { isLocationLive } from '../lib/locationFreshness'
+import { isLocationLive, isPublishStalled } from '../lib/locationFreshness'
 import { useNavigate } from 'react-router-dom'
 import { useCall } from './call/CallController'
 import { IconPin } from '../components/icons'
@@ -64,6 +64,11 @@ export function LocationsPage() {
   const [deadline, setDeadline] = useState(0)  // 本次共享的自动停止时刻（0=无限）；供"将持续到"显示与倒计时
   const [featureOff, setFeatureOff] = useState(false)
   const [selfAccuracy, setSelfAccuracy] = useState<number | null>(null) // 本次定位精度（米）：让共享者看到自己被定位得多准，粗定位时如实告知联系人只看到大致区域
+  // 我的上报送达自检（isPublishStalled）：最近一次**成功**上报时刻（开始共享时刻为基线；null=未共享）。
+  // 断网时 poll 同样失败、无法从服务端纠正 sharing 状态，须靠本地判据如实警示"联系人可能看不到你"。
+  const [lastPubOk, setLastPubOk] = useState<number | null>(null)
+  // 上报失败计数（值本身不用）：断网时 poll 抛错不 setState、页面不重渲，警示永远不出现——靠每次失败 bump 触发重渲。
+  const [, setPubFailTick] = useState(0)
 
   // 初始化地图（一次）。
   useEffect(() => {
@@ -164,7 +169,8 @@ export function LocationsPage() {
         ttlSec: shareTtlSec(deadlineRef.current, Date.now()) })
       if (!activeRef.current) return // await 期间用户已停止：不要把状态改回"共享中"
       setSharing(true)
-    } catch { /* 单次失败忽略，下个周期重试 */ }
+      setLastPubOk(Date.now()) // 送达自检基线：成功上报即刷新（见 isPublishStalled）
+    } catch { setPubFailTick((n) => n + 1) /* 单次失败忽略，下个周期重试；bump 触发重渲，停滞警示才能在断网时浮现 */ }
   }, [])
 
   const stopSharing = useCallback(() => {
@@ -175,7 +181,7 @@ export function LocationsPage() {
     if (watchId.current != null) { navigator.geolocation.clearWatch(watchId.current); watchId.current = null }
     if (publishTimer.current) { clearInterval(publishTimer.current); publishTimer.current = null }
     void api.stopSharingLocation().catch(() => {})
-    setSharing(false); setDeadline(0); setSelfAccuracy(null) // 清自视精度：停止后不残留上次的精度显示
+    setSharing(false); setDeadline(0); setSelfAccuracy(null); setLastPubOk(null) // 清自视精度/送达基线：停止后不残留上次状态
     if (selfMarker.current && map.current) { map.current.removeLayer(selfMarker.current); selfMarker.current = null }
   }, [])
 
@@ -185,6 +191,7 @@ export function LocationsPage() {
   const startSharing = useCallback((durationSec: number) => {
     if (!('geolocation' in navigator)) { toast(t('当前浏览器不支持定位', 'Geolocation not supported'), 'error'); return }
     activeRef.current = true
+    setLastPubOk(Date.now()) // 送达自检基线=开始时刻：即便**首次**上报就一直失败（一开始就断网）也能在阈值后警示
     // 定时共享：>0 则记录截止时刻并挂本地定时器到点自动停（用户不必记得关）；0=直到手动停止（保持旧行为）。
     const dl = durationSec > 0 ? Date.now() + durationSec * 1000 : 0
     deadlineRef.current = dl; setDeadline(dl)
@@ -252,6 +259,13 @@ export function LocationsPage() {
                   const note = shareAccuracyNote(selfAccuracy, t)
                   return note ? <div className={`mt-0.5 text-xs ${note.coarse ? 'font-medium text-danger' : 'text-faint'}`}>{note.coarse ? '⚠️ ' : '📍 '}{note.text}</div> : null
                 })()}
+                {/* 上报送达停滞警示（isPublishStalled）：>30s 无一次成功上报（断网等）→ 如实告知"联系人可能看不到你"。
+                    联系人端 90s 即被服务端剔除，此警示须先于消失出现；role=alert 读屏即时可闻（安全攸关）。 */}
+                {sharing && isPublishStalled(lastPubOk, Date.now()) && (
+                  <div role="alert" className="mt-0.5 text-xs font-medium text-danger">
+                    ⚠️ {t('位置更新未能送达（网络异常）——联系人可能看不到你的最新位置', 'Updates are not reaching the server — contacts may not see your latest position')}
+                  </div>
+                )}
               </div>
             </div>
             {sharing

@@ -11,3 +11,15 @@ export function isLocationLive(updatedAt: number, now: number): boolean {
   if (!Number.isFinite(updatedAt)) return false // 坏值不冒充"实时"
   return now - updatedAt <= LIVE_FRESH_MS
 }
+
+/// 镜像问题（共享者自视）：我的位置上报是否已**持续送达失败**。
+/// publish 每 ~8s 一次、单次失败静默重试；若网络断掉，联系人 90s 后就看不到我了，而我的界面仍显示
+/// "正在共享"（拉取共享状态的 poll 同样断网失败、无从纠正）——共享者以为家人看得到自己，是反向的假安心。
+/// lastOkAt：开始共享时刻为基线、其后每次**成功**上报刷新；null=未在共享。超过 PUBLISH_STALL_MS（≈4 个
+/// 上报周期）无成功上报即判定为"送达停滞"，界面如实警示"联系人可能看不到你的最新位置"。
+export const PUBLISH_STALL_MS = 30_000
+
+export function isPublishStalled(lastOkAt: number | null, now: number): boolean {
+  if (lastOkAt == null || !Number.isFinite(lastOkAt)) return false
+  return now - lastOkAt > PUBLISH_STALL_MS
+}

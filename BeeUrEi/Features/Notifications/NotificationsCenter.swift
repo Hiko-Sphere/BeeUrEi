@@ -334,6 +334,12 @@ struct NotificationsView: View {
                                 HStack {
                                     AvatarView(dataURL: r.ownerAvatar, name: r.ownerName, size: 36)
                                     Text(HelperStrings.wantsRelation(owner: r.ownerName, relation: r.relation, lang))
+                                    // 请求方实名徽标：决定是否接受一段安全关系时该看到（与列表徽标同源）。
+                                    if r.showsVerifiedBadge {
+                                        Image(systemName: "checkmark.seal.fill")
+                                            .font(.caption).foregroundStyle(Color.beeSuccess)
+                                            .accessibilityHidden(true) // 语义并入下方整行 label
+                                    }
                                 }
                                 HStack {
                                     Button(HelperStrings.accept(lang)) { Task { await accept(r) } }
@@ -344,7 +350,8 @@ struct NotificationsView: View {
                             }
                             .padding(.vertical, 4)
                             .accessibilityElement(children: .combine)
-                            .accessibilityLabel(HelperStrings.wantsRelation(owner: r.ownerName, relation: r.relation, lang))
+                            .accessibilityLabel(HelperStrings.wantsRelation(owner: r.ownerName, relation: r.relation, lang)
+                                + (r.showsVerifiedBadge ? "，" + AssistStrings.verifiedA11y(lang) : ""))
                         }
                     }
                 }

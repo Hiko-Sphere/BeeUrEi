@@ -39,6 +39,7 @@ struct LoginView: View {
     @State private var securityMsg: String?
     @State private var passkeyBusy = false
     @State private var detailLoadFailed = false           // /api/me 拉取失败：别把已绑定账号显示成空
+    @State private var missedCalls = 0                     // 未看的未接来电数（通话记录入口角标；打开记录即清）
     @State private var passkeyToRemove: PasskeyInfo?       // 移除 Passkey 前确认（不可逆）
     @State private var exportFileURL: URL?                 // 自助导出：文件就绪后出现 ShareLink
     @State private var exportBusy = false
@@ -87,7 +88,21 @@ struct LoginView: View {
                 .listRowBackground(Color.clear)
 
                 Section(AccountStrings.accountHeader(lang)) {
-                    NavigationLink(AccountStrings.callHistory(lang)) { CallHistoryView() }
+                    NavigationLink { CallHistoryView() } label: {
+                        HStack {
+                            Text(AccountStrings.callHistory(lang))
+                            Spacer()
+                            // 未看的未接来电角标（此前 missedCalls 被 Codable 丢弃，应用内无独立未接指示）。
+                            // 打开通话记录（GET /api/calls）服务端即刷新已看基线；返回本页 onAppear 重取自动消失。
+                            if missedCalls > 0 {
+                                Text("\(missedCalls)")
+                                    .font(.caption2.bold()).foregroundStyle(.white)
+                                    .padding(.horizontal, 7).padding(.vertical, 3)
+                                    .background(Color.beeDanger, in: Capsule())
+                                    .accessibilityLabel(AccountStrings.missedCallsBadgeA11y(missedCalls, lang))
+                            }
+                        }
+                    }
                     NavigationLink(AccountStrings.myRecordings(lang)) { MyRecordingsView() }
                     NavigationLink(AccountStrings.blocklist(lang)) { BlocklistView() }
                     NavigationLink {
@@ -263,6 +278,7 @@ struct LoginView: View {
             }
         }
         .task { await loadMe() }
+        .onAppear { Task { await refreshMissedCalls() } } // 从通话记录返回时重取（打开记录已刷新服务端基线→角标消失）
         .sheet(isPresented: $showEmail, onDismiss: { Task { await loadMe() } }) {
             EmailManageView()
         }
@@ -393,6 +409,12 @@ struct LoginView: View {
             Button(AccountStrings.addPasskey(lang)) { addPasskey() }
                 .disabled(passkeyBusy)
         }
+    }
+
+    /// 未看未接来电数（通话记录入口角标）：轻量汇总接口顺带返回；失败保留旧值（角标非关键路径）。
+    private func refreshMissedCalls() async {
+        guard session.isLoggedIn, let token = KeychainStore.read() else { missedCalls = 0; return }
+        if let s = try? await APIClient().unreadSummary(token: token) { missedCalls = s.missedCallBadgeCount }
     }
 
     private func loadMe() async {

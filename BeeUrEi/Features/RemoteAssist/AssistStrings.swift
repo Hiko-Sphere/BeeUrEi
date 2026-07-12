@@ -99,6 +99,9 @@ enum AssistStrings {
     }
     /// 对方此刻在线/待命——盲人据此优先呼叫"接得通"的联系人（与 web Family 在线圆点同义，服务端仅 accepted 才为 true）。
     static func onlineSuffix(_ l: Language) -> String { l == .zh ? " · 在线待命" : " · online" }
+    /// 实名徽标读屏标签（与 web VerifiedBadge aria-label 同措辞）：亲友是否经真人身份核验，
+    /// 是盲人决定信任/接受一段安全关系的关键信息。
+    static func verifiedA11y(_ l: Language) -> String { l == .zh ? "已通过实名认证" : "Identity verified" }
     static func dial(_ l: Language) -> String { l == .zh ? "拨打" : "Call" }
     static func dialA11y(_ name: String, _ l: Language) -> String {
         l == .zh ? "拨打 \(name) 的电话" : "Phone call \(name)"

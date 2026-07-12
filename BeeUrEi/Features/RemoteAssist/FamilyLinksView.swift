@@ -75,6 +75,12 @@ struct FamilyLinksView: View {
                                             .accessibilityHidden(true)
                                     }
                                     Text(l.memberName)
+                                    // 实名徽标（与 web VerifiedBadge 同源同义）：KYC 真人核验过的亲友——信任信号。
+                                    if l.showsVerifiedBadge {
+                                        Image(systemName: "checkmark.seal.fill")
+                                            .font(.caption).foregroundStyle(Color.beeSuccess)
+                                            .accessibilityLabel(AssistStrings.verifiedA11y(lang))
+                                    }
                                 }
                                 Text(l.relation
                                      + AssistStrings.emergencySuffix(lang, isEmergency: l.isEmergency, amOwner: l.amOwner)

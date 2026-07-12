@@ -283,8 +283,11 @@ struct FamilyLinkInfo: Codable, Sendable, Identifiable {
     var outgoing: Bool?   // true=我发起、待对方确认；false/nil=对方发起或已生效
     var online: Bool?     // 对方此刻在线/待命（服务端仅 accepted 关系才为 true；旧/缺省按离线）——盲人据此优先呼叫接得通的人
     var amOwner: Bool?    // 我是否为该链 owner（服务端 viewLink 提供）：定紧急联系人徽标方向——true/nil=对方是我的紧急联系人；false=我是对方的（我对 TA 负责）。此前 iOS 未解码=死字段。
+    var verified: Bool?   // 对方已通过实名认证（KYC 真人核验，信任信号）：此前 Codable 静默丢弃 → 联系人列表无实名徽标
     var isPending: Bool { status == "pending" }
     var isAccepted: Bool { (status ?? "accepted") == "accepted" }
+    /// 是否显示实名徽标（视图与测试共用同一门控）。
+    var showsVerifiedBadge: Bool { verified == true }
 }
 
 struct IncomingLinkInfo: Codable, Sendable, Identifiable {
@@ -295,7 +298,9 @@ struct IncomingLinkInfo: Codable, Sendable, Identifiable {
     let relation: String
     let isEmergency: Bool
     let status: String?   // "pending" 表示待我接受；"accepted" 已生效（旧数据无此字段按已接受）
+    var verified: Bool?   // 请求方已实名认证——决定是否接受一段安全关系时该看到（与列表徽标同源）
     var isPending: Bool { status == "pending" }
+    var showsVerifiedBadge: Bool { verified == true }
 }
 
 struct EmergencyTarget: Codable, Sendable, Identifiable {
@@ -1574,7 +1579,12 @@ struct APIClient {
     }
 
     /// 未读汇总（单聊+群聊+铃铛通知）：一次轻量拉取，供应用内角标与 App 图标角标同步。
-    struct UnreadSummary: Codable { let messages: Int; let notifications: Int; let total: Int }
+    struct UnreadSummary: Codable {
+        let messages: Int; let notifications: Int; let total: Int
+        var missedCalls: Int?  // 未看的未接来电数（total 已并入；此前 Codable 静默丢弃 → 应用内无独立未接指示）
+        /// 通话记录入口角标数（视图与测试共用；坏值/缺省→0 不显）。
+        var missedCallBadgeCount: Int { max(0, missedCalls ?? 0) }
+    }
     func unreadSummary(token: String) async throws -> UnreadSummary {
         let data = try await authedGet("/api/unread", token: token)
         guard let r = try? JSONDecoder().decode(UnreadSummary.self, from: data) else { throw APIError.decoding }

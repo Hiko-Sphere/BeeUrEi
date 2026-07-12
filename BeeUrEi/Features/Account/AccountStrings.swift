@@ -130,6 +130,10 @@ enum AccountStrings {
     static func editNickname(_ l: Language) -> String { l == .zh ? "改昵称" : "Edit nickname" }
     static func accountHeader(_ l: Language) -> String { l == .zh ? "账号" : "Account" }
     static func callHistory(_ l: Language) -> String { l == .zh ? "通话记录" : "Call history" }
+    /// 未看未接来电角标读屏标签（打开通话记录即清）。
+    static func missedCallsBadgeA11y(_ n: Int, _ l: Language) -> String {
+        l == .zh ? "有 \(n) 个未看的未接来电" : "\(n) unseen missed call\(n == 1 ? "" : "s")"
+    }
     static func myRecordings(_ l: Language) -> String { l == .zh ? "我的录音" : "My recordings" }
     static func blocklist(_ l: Language) -> String { l == .zh ? "黑名单" : "Blocklist" }
     static func changePassword(_ l: Language) -> String { l == .zh ? "修改密码" : "Change password" }

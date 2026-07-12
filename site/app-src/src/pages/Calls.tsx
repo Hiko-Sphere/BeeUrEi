@@ -50,7 +50,7 @@ export function CallsPage() {
     const stop = pollWhileVisible(load, 4000)
     return () => { alive = false; stop() }
     // 依赖仅 active（同原实现）：t/toast 在会话内稳定，inCall 由 active 派生——active 变化即重跑并捕获最新值。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [active])
 
   const onAnswer = async (c: IncomingCall) => { setBusyId(c.callId); await answerIncoming(c.callId, c.fromName, c.fromAvatar); setBusyId(null) }

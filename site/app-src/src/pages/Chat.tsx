@@ -59,7 +59,8 @@ export function ChatPage() {
     else void api.lookupUser(peerId).then((r) => { if (r.user) { appliedPeer.current = peerId; setSel({ kind: 'peer', id: peerId, name: r.user.displayName, avatar: r.user.avatar }) } }).catch(() => {
       void api.familyLinks().then(({ links }) => { const l = links.find((x) => x.memberId === peerId); if (l) { appliedPeer.current = peerId; setSel({ kind: 'peer', id: peerId, name: l.memberName, avatar: l.memberAvatar }) } })
     })
-  }, [peerId, convos])
+    // t 入依赖（exhaustive-deps 合规）：语言切换触发的重跑会被 appliedPeer 守卫早退，不会抢回用户当前会话。
+  }, [peerId, convos, t])
 
   // 由路由 /chat/g/:groupId 预选群聊（群消息 web push 点开直达该群，与单聊 /chat/:peerId 对称）。**每个 groupId
   // 只预选一次**（守卫同 appliedPeer）：groups 每 8s 轮询刷新，不设守卫会把用户从手动打开的会话强拉回 URL 里的群、

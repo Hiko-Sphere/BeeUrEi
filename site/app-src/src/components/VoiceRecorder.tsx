@@ -92,7 +92,7 @@ export function VoiceRecorderButton({ disabled, onSend, onError, t }: {
   const cancel = () => { discardRef.current = true; safeStop() }
 
   // 卸载（切会话/离开页面）时丢弃并释放麦克风：绝不后台继续录。
-  useEffect(() => () => { discardRef.current = true; safeStop() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { discardRef.current = true; safeStop() }, [])  
 
   if (!voiceRecordingSupported()) return null // 能力门控：录不出对端可播的格式就不给按钮（诚实，无假功能）
 

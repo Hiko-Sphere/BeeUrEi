@@ -107,6 +107,15 @@ enum ChatStrings {
     static func forwardGroupsHeader(_ l: Language) -> String { l == .zh ? "群聊" : "Groups" }
     /// 会话列表未发送草稿前缀（WhatsApp/Telegram 标配：没写完的话从列表一眼可见，不被新消息盖住）。
     static func draftTag(_ l: Language) -> String { l == .zh ? "草稿" : "Draft" }
+    // —— 全局搜索 + 命中跳转 ——
+    static func searchAllTitle(_ l: Language) -> String { l == .zh ? "搜索全部消息" : "Search all messages" }
+    static func searchJumpHint(_ l: Language) -> String { l == .zh ? "点击前往该消息" : "Tap to go to this message" }
+    static func searchLocatedSpeak(_ preview: String, _ l: Language) -> String {
+        l == .zh ? "已定位：\(preview)" : "Located: \(preview)"
+    }
+    static func messageNotLoaded(_ l: Language) -> String {
+        l == .zh ? "这条消息在更早的位置，请先加载更早的消息再试" : "This message is earlier in the conversation — load earlier messages first"
+    }
     /// 跳转后的有声反馈（盲人对滚动本身无感知，必须听到跳到了哪条）。
     static func quotedSpeak(_ name: String, _ preview: String, _ l: Language) -> String {
         l == .zh ? "被引用的消息，\(name)：\(preview)" : "Quoted message from \(name): \(preview)"

@@ -1241,9 +1241,10 @@ struct APIClient {
 
     /// 会话内搜索文本消息（时间倒序）。peerId 或 groupId 二选一；空查询后端返回空。
     func searchMessages(token: String, peerId: String? = nil, groupId: String? = nil, query: String) async throws -> [ChatMessageInfo] {
-        let scope = groupId.map { "group=\($0)" } ?? "with=\(peerId ?? "")"
+        // 作用域经 ChatSearch.scopeQuery（已测）：群/单聊/nil=全局（服务端搜本人全部单聊+所在群）。
+        let scope = ChatSearch.scopeQuery(peerId: peerId, groupId: groupId)
         let q = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let data = try await authedGet("/api/messages/search?\(scope)&q=\(q)", token: token)
+        let data = try await authedGet("/api/messages/search?\(scope.map { $0 + "&" } ?? "")q=\(q)", token: token)
         struct R: Codable { let messages: [ChatMessageInfo] }
         return try JSONDecoder().decode(R.self, from: data).messages
     }

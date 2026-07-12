@@ -33,6 +33,7 @@ struct ConversationsView: View {
     @State private var groups: [GroupConversationInfo] = []
     @State private var pollTask: Task<Void, Never>?
     @State private var opened: ChatTarget?
+    @State private var showGlobalSearch = false
     @State private var showNewChat = false
     @State private var showNewGroup = false
     @State private var contacts: [FamilyLinkInfo] = [] // accepted 绑定 = 可聊天联系人
@@ -108,6 +109,11 @@ struct ConversationsView: View {
             .navigationTitle(ChatStrings.navTitle(lang))
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
+                    // 全局跨会话搜索（此前只有会话内搜索——记不清在哪个会话说的话找不回来）。
+                    Button { showGlobalSearch = true } label: { Image(systemName: "magnifyingglass") }
+                        .accessibilityLabel(ChatStrings.searchAllTitle(lang))
+                }
+                ToolbarItem(placement: .primaryAction) {
                     Button { showNewChat = true } label: { Image(systemName: "square.and.pencil") }
                         .accessibilityLabel(ChatStrings.newChat(lang))
                 }
@@ -118,6 +124,13 @@ struct ConversationsView: View {
             }
             .navigationDestination(item: $opened) { target in
                 ChatView(session: session, target: target)
+            }
+            // 全局搜索：命中显示所属会话名，点结果直达该会话（ChatSearch.target 路由已测）。
+            .sheet(isPresented: $showGlobalSearch) {
+                MessageSearchSheet(session: session, peerId: nil, groupId: nil, memberName: nil,
+                                   selfId: myId, lang: lang,
+                                   conversationName: { m in globalHitName(m) },
+                                   onSelect: { m in openSearchHit(m) })
             }
             // 新建对话：从 accepted 绑定联系人中选一位进入聊天（首行可改为建群）。
             .sheet(isPresented: $showNewChat) {
@@ -185,6 +198,25 @@ struct ConversationsView: View {
         if let g = try? await APIClient().groups(token: token) { groups = g }
         if let links = try? await APIClient().familyLinks(token: token) {
             contacts = links.filter { $0.isAccepted }
+        }
+    }
+
+    /// 全局搜索命中的所属会话名：群→群名；单聊→对方名（会话列表→联系人表兜底）。
+    private func globalHitName(_ m: ChatMessageInfo) -> String {
+        let t = ChatSearch.target(for: m, selfId: myId)
+        if let gid = t.groupId { return groups.first { $0.group.id == gid }?.group.name ?? "" }
+        guard let pid = t.peerId else { return "" }
+        return conversations.first { $0.peer.id == pid }?.peer.displayName
+            ?? contacts.first { $0.memberId == pid }?.memberName ?? ""
+    }
+    /// 点全局命中 → 打开所属会话（与通知深链同机制 opened）。
+    private func openSearchHit(_ m: ChatMessageInfo) {
+        let t = ChatSearch.target(for: m, selfId: myId)
+        if let gid = t.groupId {
+            opened = .group(id: gid, name: groups.first { $0.group.id == gid }?.group.name ?? "")
+        } else if let pid = t.peerId {
+            opened = .direct(peerId: pid, name: globalHitName(m),
+                             avatar: conversations.first { $0.peer.id == pid }?.peer.avatar)
         }
     }
 
@@ -379,6 +411,7 @@ struct ChatView: View {
     @State private var replyingTo: ChatMessageInfo?       // 正在引用回复的消息（输入栏上方显引用条）
     @State private var pinned: PinnedMessageInfo?          // 会话置顶消息（顶部横幅）；随每次线程轮询刷新
     @State private var forwarding: ChatMessageInfo?        // 正在转发的消息（打开目标选择器）
+    @State private var pendingJumpId: String?              // 搜索命中待跳转的消息 id（sheet 关闭后由 proxy 执行）
     @State private var canLoadEarlier = false   // 顶部"加载更早消息"是否可见
     @State private var loadingEarlier = false    // 正在加载更早历史
     @State private var reachedStart = false      // 已翻到对话最开头（再无更早）
@@ -422,6 +455,19 @@ struct ChatView: View {
                 }
                 ScrollView {
                     LazyVStack(spacing: BeeSpacing.sm) {
+                        // 搜索命中跳转（sheet 关闭后执行，此处才拿得到 proxy）：已加载→滚动定位+朗读；
+                        // 更早未加载→语音引导（与引用跳转同口径，绝不静默无反应）。
+                        Color.clear.frame(height: 0)
+                            .onChange(of: pendingJumpId) { _, jid in
+                                guard let jid else { return }
+                                pendingJumpId = nil
+                                if let hit = messages.first(where: { $0.id == jid }) {
+                                    withAnimation { proxy.scrollTo(jid, anchor: .center) }
+                                    SpeechHub.shared.speak(ChatStrings.searchLocatedSpeak(messagePreview(hit), lang), channel: .query, voiceCode: lang.voiceCode)
+                                } else {
+                                    SpeechHub.shared.speak(ChatStrings.messageNotLoaded(lang), channel: .query, voiceCode: lang.voiceCode)
+                                }
+                            }
                         if canLoadEarlier {
                             Button { Task { await loadEarlier() } } label: {
                                 if loadingEarlier { ProgressView() }
@@ -483,7 +529,8 @@ struct ChatView: View {
         }
         .sheet(isPresented: $showSearch) {
             MessageSearchSheet(session: session, peerId: peerId, groupId: groupId,
-                               memberName: isGroup ? { senderName($0) } : nil, selfId: myId, lang: lang)
+                               memberName: isGroup ? { senderName($0) } : nil, selfId: myId, lang: lang,
+                               onSelect: { m in pendingJumpId = m.id })
         }
         .sheet(item: $forwarding) { m in
             // 转发目标选择器：已接受联系人（含**还没聊过的**）∪ 群聊——与 web ForwardDialog 同语义。
@@ -1355,6 +1402,8 @@ struct MessageSearchSheet: View {
     let memberName: ((String) -> String)?  // 群聊：按 fromId 取发送者名；单聊为 nil
     let selfId: String
     let lang: Language
+    var conversationName: ((ChatMessageInfo) -> String)? = nil // 全局搜索：命中所属会话名（显示"在哪个会话"）
+    var onSelect: ((ChatMessageInfo) -> Void)? = nil           // 点结果跳转（nil=旧静态行为）
 
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
@@ -1377,7 +1426,14 @@ struct MessageSearchSheet: View {
                 } else {
                     List {
                         Section(ChatStrings.searchResultsCount(results.count, lang)) {
-                            ForEach(results) { m in resultRow(m) }
+                            ForEach(results) { m in
+                                if let onSelect {
+                                    Button { dismiss(); onSelect(m) } label: { resultRow(m) }
+                                        .accessibilityHint(ChatStrings.searchJumpHint(lang))
+                                } else {
+                                    resultRow(m)
+                                }
+                            }
                         }
                     }
                     .listStyle(.plain)
@@ -1392,7 +1448,10 @@ struct MessageSearchSheet: View {
     }
 
     private func resultRow(_ m: ChatMessageInfo) -> some View {
-        let who = m.fromId == selfId ? ChatStrings.me(lang) : (memberName?(m.fromId) ?? "")
+        let conv = conversationName?(m) ?? ""
+        let sender = m.fromId == selfId ? ChatStrings.me(lang) : (memberName?(m.fromId) ?? "")
+        // 全局命中：优先显示"在哪个会话"（点击去处）；会话内搜索保持发送者名。
+        let who = conv.isEmpty ? sender : conv
         let time = ChatStrings.timeFormat(m.createdAt)
         // 文本式位置（kind=text + 内嵌 maps 链接）命中时，显示 📍 地名而非一串原始 URL。
         let display: String
@@ -1563,6 +1622,22 @@ final class VoiceNoteRecorder {
 
 /// 引用跳转判定（纯逻辑，视图与测试共用同一门控——中子它=拔掉跳转接线）：
 /// 原消息已加载 → 滚动定位；在更早未加载窗口 → 语音引导先加载（此前点了没反应=静默死按钮）；非引用 → 无操作。
+/// 消息搜索作用域与命中路由（纯函数可测）。
+/// scopeQuery：群→group=、单聊→with=、两者皆无→nil=**全局**（服务端 searchAllMessagesFor，本人全部单聊+所在群）。
+/// target：全局命中路由到所属会话——群消息回其群；单聊取**对方**一侧（自己发的取 toId，收到的取 fromId，
+/// 取错会"打开与自己的会话"）。
+enum ChatSearch {
+    static func scopeQuery(peerId: String?, groupId: String?) -> String? {
+        if let g = groupId { return "group=\(g)" }
+        if let p = peerId { return "with=\(p)" }
+        return nil
+    }
+    static func target(for m: ChatMessageInfo, selfId: String) -> (peerId: String?, groupId: String?) {
+        if let g = m.groupId, !g.isEmpty { return (nil, g) }
+        return (m.fromId == selfId ? m.toId : m.fromId, nil)
+    }
+}
+
 /// 消息线程日期分隔（与 web needsDateSeparator/dateSeparatorLabel 同口径；纯函数、calendar/now 注入可测）：
 /// 与上一条不同本地日则插「今天/昨天/长日期」行——跨天历史一眼分清（IM 标配）。
 enum ChatDay {

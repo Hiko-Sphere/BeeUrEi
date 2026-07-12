@@ -458,9 +458,14 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
     }
     if (!loaded) { toast(t('找不到这条消息，可能已被删除', "Can't find that message — it may have been deleted"), 'info'); return }
     setHighlightId(id)
-    setTimeout(() => { // 让新载入的消息挂上 DOM 再滚动定位（滚动为锦上添花，jsdom 无此 API，守卫防崩）
+    setTimeout(() => { // 让新载入的消息挂上 DOM 再定位（滚动为锦上添花，jsdom 无此 API，守卫防崩）
       const el = document.getElementById(`msg-${id}`)
-      if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      if (!el) return
+      if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      // 焦点移到目标消息（skip-link 同款范式）：搜索面板关闭后焦点会丢到 body，读屏用户"跳到了"却什么也听不到。
+      // tabindex=-1 允许编程聚焦（不进 Tab 序）；preventScroll 防与上面的平滑滚动打架。视觉高亮已有（bg-honey/15）。
+      el.setAttribute('tabindex', '-1')
+      ;(el as HTMLElement).focus({ preventScroll: true })
     }, 0)
     setTimeout(() => setHighlightId((cur) => (cur === id ? null : cur)), 1600) // 到时清高亮（若期间又跳别处则不动新的）
   }, [fetchWindow, toast, t])

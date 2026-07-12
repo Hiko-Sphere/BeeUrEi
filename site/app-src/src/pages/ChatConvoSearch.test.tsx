@@ -102,6 +102,7 @@ describe('ChatPage 会话列表按名字搜索过滤', () => {
     fireEvent.click(await screen.findByRole('button', { name: '打开与 阿明 的会话' }))
     // 打开会话 → 回溯分页把 old1 载入并高亮定位（否则只落到底部、命中消息在旧历史里看不到）。
     await waitFor(() => expect(document.getElementById('msg-old1')?.className ?? '').toContain('bg-honey/15'))
+    await waitFor(() => expect(document.activeElement).toBe(document.getElementById('msg-old1'))) // 焦点随跳转（读屏可闻目标消息）
     expect(mock(api.messagesWith).mock.calls.some((c) => c[1] !== undefined)).toBe(true) // 确发过带游标的回溯请求
   })
 

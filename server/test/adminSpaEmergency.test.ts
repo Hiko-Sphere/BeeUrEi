@@ -17,6 +17,7 @@ interface SpaTest {
   pickWsToken: (turnResp: unknown) => string
   emergenciesCsvRows: (list: Record<string, unknown>[]) => (string | number)[][]
   trackServerCommit: (o: { commit?: string } | null) => void
+  validateFilterTerms: (terms: string[]) => { ok: true } | { ok: false; error: string; index?: number }
   view: { innerHTML: string } // 渲染函数写入的共享 stub 元素（viewEl()/$ 都解析到它）
 }
 function loadSpa(): SpaTest {
@@ -24,7 +25,7 @@ function loadSpa(): SpaTest {
   let src = readFileSync(path, 'utf8')
   const anchor = '\nrender();'
   if (!src.includes(anchor)) throw new Error('app.js bootstrap anchor "render();" not found — update test')
-  src = src.replace(anchor, '\nglobalThis.__test = { state, t, emergencySection, statCard, renderCalls, renderDashboard, pickWsToken, emergenciesCsvRows, trackServerCommit };\nrender();')
+  src = src.replace(anchor, '\nglobalThis.__test = { state, t, emergencySection, statCard, renderCalls, renderDashboard, pickWsToken, emergenciesCsvRows, trackServerCommit, validateFilterTerms };\nrender();')
   const noop = (): void => {}
   const classList = { add: noop, remove: noop, toggle: noop, contains: () => false }
   // 自引用宽容元素：querySelector 返回自身（事件绑定链不断）、querySelectorAll 空数组、其余 noop。
@@ -360,5 +361,18 @@ describe('面板新版本提示（服务端镜像 commit 变化 → 值守长开
     expect(spa.view.innerHTML).toContain('管理面板有新版本')
     expect(spa.view.innerHTML).toContain('data-action="reloadPanel"')
     expect(spa.view.innerHTML).toContain('点击刷新')
+  })
+})
+
+describe('违禁词预检 validateFilterTerms（与服务端 contentFilterSchema 逐项对齐）', () => {
+  it('每条 ≤100 字、至多 500 条；超长逐行指认（index）；合法通过', () => {
+    const spa = loadSpa()
+    expect(spa.validateFilterTerms(['正常词', 'ok'])).toEqual({ ok: true })
+    expect(spa.validateFilterTerms([])).toEqual({ ok: true })                       // 清空=合法（关闭过滤词表）
+    expect(spa.validateFilterTerms(['a'.repeat(100)])).toEqual({ ok: true })        // 恰 100 字合法（边界与服务端一致）
+    const long = spa.validateFilterTerms(['短词', 'b'.repeat(101), '又一个'])
+    expect(long).toEqual({ ok: false, error: 'term_too_long', index: 1 })           // 指认第 2 行（改一行即可保存）
+    expect(spa.validateFilterTerms(Array.from({ length: 500 }, (_, i) => `w${i}`))).toEqual({ ok: true }) // 恰 500 条合法
+    expect(spa.validateFilterTerms(Array.from({ length: 501 }, (_, i) => `w${i}`))).toEqual({ ok: false, error: 'too_many' })
   })
 })

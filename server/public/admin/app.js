@@ -143,7 +143,7 @@ const I18N = {
     backupTitle: '数据库备份（灾难恢复）', backupDesc: '下载整个数据库的一致性快照（.db 文件，含全部账号/亲友/通知等数据）。请离线加密保存到安全处；此操作会记入审计。媒体文件另存于磁盘目录，不含在此备份内。', backupBtn: '下载数据库备份', backingUp: '正在生成备份…', backupDone: '备份已下载', backupFail: '备份失败',
     mailTestTitle: 'SMTP 自检（发送测试邮件）', mailTestDesc: '配好/改好 SMTP 凭据后，当场验证发信链路——不必等真实用户撞发码失败。发到下面的地址（留空=你本人已验证邮箱）。失败会显示上游报错（如 163 授权码过期的 535）。', mailTestBtn: '发送测试邮件', mailTestTo: '收件邮箱（可留空）', mailTesting: '正在发送…', mailTestOk: '测试邮件已发送，请查收', mailTestFail: '发送失败',
     contentFilterTitle: '内容过滤（防违规违法）', cfEnabled: '启用内容过滤', cfDesc: '命中违禁词的消息/群名/昵称会被拒收。每行一个词，大小写不敏感，子串匹配。默认空=不生效。',
-    cfTerms: '违禁词（每行一个）', saveBtn: '保存', err_content_blocked: '内容含违禁词，已拦截', err_maintenance: '系统维护中',
+    cfTerms: '违禁词（每行一个）', cfTermTooLong: '违禁词每条最多 100 字', cfTooMany: '违禁词最多 500 条', saveBtn: '保存', err_content_blocked: '内容含违禁词，已拦截', err_maintenance: '系统维护中',
     // v6：单用户功能覆盖
     featOverrides: '功能覆盖（仅此用户）', featOverridesDesc: '对该用户单独关停某功能（精准处置滥用者，不影响其他人）。开=随全站，关=对其强制禁用。', featuresSaved: '功能覆盖已更新', exportData: '导出数据', dataExported: '数据已导出',
     // 实时通话
@@ -269,7 +269,7 @@ const I18N = {
     backupTitle: 'Database backup (disaster recovery)', backupDesc: 'Download a consistent snapshot of the entire database (.db file, incl. all accounts / family links / notifications). Store it encrypted and offline; this action is audited. Media files live in a separate disk directory and are not part of this backup.', backupBtn: 'Download database backup', backingUp: 'Generating backup…', backupDone: 'Backup downloaded', backupFail: 'Backup failed',
     mailTestTitle: 'SMTP self-test (send test email)', mailTestDesc: 'After setting/fixing SMTP credentials, verify delivery right away — no need to wait for a real user to hit a code-send failure. Sends to the address below (blank = your verified email). Failures show the upstream error (e.g. 535 for an expired credential).', mailTestBtn: 'Send test email', mailTestTo: 'Recipient email (optional)', mailTesting: 'Sending…', mailTestOk: 'Test email sent — check your inbox', mailTestFail: 'Send failed',
     contentFilterTitle: 'Content filter (block violations)', cfEnabled: 'Enable content filter', cfDesc: 'Messages/group names/display names containing a banned term are rejected. One term per line, case-insensitive, substring match. Empty = no effect.',
-    cfTerms: 'Banned terms (one per line)', saveBtn: 'Save', err_content_blocked: 'Content contains a banned term', err_maintenance: 'Under maintenance',
+    cfTerms: 'Banned terms (one per line)', cfTermTooLong: 'Each term is limited to 100 characters', cfTooMany: 'At most 500 terms', saveBtn: 'Save', err_content_blocked: 'Content contains a banned term', err_maintenance: 'Under maintenance',
     // v6: per-user feature overrides
     featOverrides: 'Feature overrides (this user)', featOverridesDesc: 'Disable specific features for just this user (precise abuse handling, no global impact). On = follow global, Off = force-disabled for them.', featuresSaved: 'Feature overrides updated', exportData: 'Export data', dataExported: 'Data exported',
     // Live calls
@@ -1566,7 +1566,7 @@ function openModerateDialog(report) {
     <div class="mod-summary"><b>${esc(report.reporterName)}</b> <span class="arrow">→</span> <b>${esc(report.targetName)}</b>
       <div class="reason">${esc(report.reason || '—')}</div></div>
     <label class="mod-reason-label" for="modReason">${esc(t('modReason'))}</label>
-    <textarea id="modReason" class="mod-reason" rows="3" placeholder="${esc(t('modReasonPh'))}"></textarea>
+    <textarea id="modReason" class="mod-reason" rows="3" maxlength="1000" placeholder="${esc(t('modReasonPh'))}"></textarea>
     <div class="mod-actions">${actions}</div>
     <div class="confirm-actions"><button class="btn ghost" data-no>${esc(state.lang === 'en' ? 'Cancel' : '取消')}</button></div>
   </div>`;
@@ -1738,10 +1738,26 @@ function renderControls() {
   $('#saveMaint').addEventListener('click', () => saveConfig({ maintenance: { active: $('#mActive').checked, message: $('#mMsg').value } }));
   $('#saveCf').addEventListener('click', () => {
     const terms = $('#cfTerms').value.split('\n').map((s) => s.trim()).filter(Boolean);
+    // 预检（与服务端 contentFilterSchema 逐项对齐：每条 ≤100 字、至多 500 条）：不预检则整包 400 invalid_input，
+    // 管理员只见笼统报错、不知道是哪一行超长——逐行指认，改一行就能保存。
+    const v = validateFilterTerms(terms);
+    if (!v.ok) {
+      toast(v.error === 'term_too_long' ? `${t('cfTermTooLong')} (#${v.index + 1})` : t('cfTooMany'), 'error');
+      return;
+    }
     saveConfig({ contentFilter: { enabled: $('#cfEnabled').checked, terms } });
   });
   $('#dbBackup').addEventListener('click', downloadDbBackup);
   $('#mailTestBtn').addEventListener('click', sendMailTest);
+}
+
+// 违禁词预检（纯函数，供保存与单测）：与服务端 contentFilterSchema 一致——每条 ≤100 字、至多 500 条。
+// 返回 {ok:true} 或 {ok:false, error:'term_too_long', index} / {ok:false, error:'too_many'}（index 供逐行指认）。
+function validateFilterTerms(terms) {
+  const idx = terms.findIndex((s) => s.length > 100);
+  if (idx !== -1) return { ok: false, error: 'term_too_long', index: idx };
+  if (terms.length > 500) return { ok: false, error: 'too_many' };
+  return { ok: true };
 }
 
 // SMTP 自检：发一封测试邮件，成功 toast，失败把上游报错（如 535）显给管理员诊断。

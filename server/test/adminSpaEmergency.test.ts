@@ -77,6 +77,26 @@ describe('管理面板 紧急事件区（响应结果分诊信号）', () => {
     expect(html).not.toContain('升级后仍无人响应') // 已有人响应，即使升级过也不是"无人管"
   })
 
+  it('onWayAt 有值 → "有人正在赶来"（救援真在路上，比"有人响应"更强的分诊信号）；不降级显"有人响应"', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    // 有人已动身：服务端回 onWayAt（此前面板行丢弃该字段，与"仅已看到"混为一谈）。ackedAt 通常也在（赶来即已看到）。
+    spa.state.emergencies = [ev({ ackedAt: 1_700_000_100_000, onWayAt: 1_700_000_120_000 })]
+    const html = spa.emergencySection()
+    expect(html).toContain('有人正在赶来')
+    expect(html).not.toContain('有人响应')       // onWay 时不再降级显更弱的"有人响应"
+    expect(html).not.toContain('升级后仍无人响应')
+  })
+
+  it('仅 ackedAt（未 onWay）→ "有人响应"；有人看到但未必在赶来（两态可分）', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    spa.state.emergencies = [ev({ ackedAt: 1_700_000_100_000 })] // 无 onWayAt
+    const html = spa.emergencySection()
+    expect(html).toContain('有人响应')
+    expect(html).not.toContain('有人正在赶来')
+  })
+
   it('升级重呼后仍无人响应（未 ack + 已 escalate + 未解除）→ 红标（最需人工介入的状态）', () => {
     const spa = loadSpa()
     spa.state.lang = 'zh'

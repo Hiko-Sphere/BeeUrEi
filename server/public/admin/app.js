@@ -141,7 +141,7 @@ const I18N = {
     announce: '全站公告', announceActive: '启用公告', announceMsg: '公告内容', announceLevel: '级别', lvl_info: '信息', lvl_warning: '警告',
     maintenance: '维护模式', maintActive: '启用维护模式', maintDesc: '开启后所有功能写操作返回 503，App 显示维护横幅；登录与后台不受影响。', maintMsg: '维护提示',
     auditSearch: '搜索（管理员/对象/详情）', auditAllActions: '全部动作', auditNoMatch: '无匹配记录（共 {n} 条）',
-    emergTitle: '紧急事件（近 100 条 + 全部进行中）', emergEmpty: '暂无紧急事件', emergKind_fall: '疑似摔倒', emergKind_crash: '疑似撞击', emergKind_manual: '手动 SOS', emergKind_checkin: '安全报到未报平安', emergNotified: '推送', emergContacts: '亲友', emergLive: '实时位置', emergLastKnown: '最后已知', emergNoLoc: '无位置', emergResolved: '已报平安', emergAcked: '有人响应', emergUnanswered: '升级后仍无人响应', emergNoReach: '未触达任何人',
+    emergTitle: '紧急事件（近 100 条 + 全部进行中）', emergEmpty: '暂无紧急事件', emergKind_fall: '疑似摔倒', emergKind_crash: '疑似撞击', emergKind_manual: '手动 SOS', emergKind_checkin: '安全报到未报平安', emergNotified: '推送', emergContacts: '亲友', emergLive: '实时位置', emergLastKnown: '最后已知', emergNoLoc: '无位置', emergResolved: '已报平安', emergAcked: '有人响应', emergOnWay: '有人正在赶来', emergUnanswered: '升级后仍无人响应', emergNoReach: '未触达任何人',
     backupTitle: '数据库备份（灾难恢复）', backupDesc: '下载整个数据库的一致性快照（.db 文件，含全部账号/亲友/通知等数据）。请离线加密保存到安全处；此操作会记入审计。媒体文件另存于磁盘目录，不含在此备份内。', backupBtn: '下载数据库备份', backingUp: '正在生成备份…', backupDone: '备份已下载', backupFail: '备份失败',
     mailTestTitle: 'SMTP 自检（发送测试邮件）', mailTestDesc: '配好/改好 SMTP 凭据后，当场验证发信链路——不必等真实用户撞发码失败。发到下面的地址（留空=你本人已验证邮箱）。失败会显示上游报错（如 163 授权码过期的 535）。', mailTestBtn: '发送测试邮件', mailTestTo: '收件邮箱（可留空）', mailTesting: '正在发送…', mailTestOk: '测试邮件已发送，请查收', mailTestFail: '发送失败',
     contentFilterTitle: '内容过滤（防违规违法）', cfEnabled: '启用内容过滤', cfDesc: '命中违禁词的消息/群名/昵称会被拒收。每行一个词，大小写不敏感，子串匹配。默认空=不生效。',
@@ -269,7 +269,7 @@ const I18N = {
     announce: 'Announcement', announceActive: 'Enable announcement', announceMsg: 'Message', announceLevel: 'Level', lvl_info: 'Info', lvl_warning: 'Warning',
     maintenance: 'Maintenance mode', maintActive: 'Enable maintenance mode', maintDesc: 'When on, all feature writes return 503 and the app shows a maintenance banner; sign-in and admin are unaffected.', maintMsg: 'Maintenance message',
     auditSearch: 'Search (admin / target / detail)', auditAllActions: 'All actions', auditNoMatch: 'No matches (of {n} entries)',
-    emergTitle: 'Emergency events (last 100 + all ongoing)', emergEmpty: 'No emergency events', emergKind_fall: 'Suspected fall', emergKind_crash: 'Suspected crash', emergKind_manual: 'Manual SOS', emergKind_checkin: 'Missed safety check-in', emergNotified: 'pushed', emergContacts: 'contacts', emergLive: 'live location', emergLastKnown: 'last known', emergNoLoc: 'no location', emergResolved: 'resolved', emergAcked: 'responded', emergUnanswered: 'unanswered after escalation', emergNoReach: 'reached no one',
+    emergTitle: 'Emergency events (last 100 + all ongoing)', emergEmpty: 'No emergency events', emergKind_fall: 'Suspected fall', emergKind_crash: 'Suspected crash', emergKind_manual: 'Manual SOS', emergKind_checkin: 'Missed safety check-in', emergNotified: 'pushed', emergContacts: 'contacts', emergLive: 'live location', emergLastKnown: 'last known', emergNoLoc: 'no location', emergResolved: 'resolved', emergAcked: 'responded', emergOnWay: 'on the way', emergUnanswered: 'unanswered after escalation', emergNoReach: 'reached no one',
     backupTitle: 'Database backup (disaster recovery)', backupDesc: 'Download a consistent snapshot of the entire database (.db file, incl. all accounts / family links / notifications). Store it encrypted and offline; this action is audited. Media files live in a separate disk directory and are not part of this backup.', backupBtn: 'Download database backup', backingUp: 'Generating backup…', backupDone: 'Backup downloaded', backupFail: 'Backup failed',
     mailTestTitle: 'SMTP self-test (send test email)', mailTestDesc: 'After setting/fixing SMTP credentials, verify delivery right away — no need to wait for a real user to hit a code-send failure. Sends to the address below (blank = your verified email). Failures show the upstream error (e.g. 535 for an expired credential).', mailTestBtn: 'Send test email', mailTestTo: 'Recipient email (optional)', mailTesting: 'Sending…', mailTestOk: 'Test email sent — check your inbox', mailTestFail: 'Send failed',
     contentFilterTitle: 'Content filter (block violations)', cfEnabled: 'Enable content filter', cfDesc: 'Messages/group names/display names containing a banned term are rejected. One term per line, case-insensitive, substring match. Empty = no effect.',
@@ -673,7 +673,10 @@ function emergencySection() {
         const resolved = e.resolvedAt != null ? `<span class="pill ok">✓ ${esc(t('emergResolved'))}</span>` : '';
         // 响应结果（值守分诊的关键信号）：有人响应(ackedAt) vs **升级重呼后仍无人响应**（未 ack + 已 escalate + 未解除）
         // ——后者正是最需要管理员人工介入（联系本人/其亲友）的状态，此前面板只显示"已报平安"与否、看不出无人管。
-        const acked = e.ackedAt != null ? `<span class="pill ok">✓ ${esc(t('emergAcked'))}</span>` : '';
+        // 响应细分（值守分诊：有人**正在赶来**＝救援真在路上、最低介入优先级；仅**已看到**＝有人知情但未必去；
+        // 二者此前都只显"有人响应"，看不出救援是否真的在路上。服务端一直回 onWayAt（CSV 已含），此前面板行**丢弃**该字段。
+        const onWay = e.onWayAt != null ? `<span class="pill ok">🏃 ${esc(t('emergOnWay'))}</span>` : '';
+        const acked = (e.ackedAt != null && e.onWayAt == null) ? `<span class="pill ok">✓ ${esc(t('emergAcked'))}</span>` : '';
         const unanswered = e.ackedAt == null && e.escalatedAt != null && e.resolvedAt == null
           ? `<span class="pill danger">⚠️ ${esc(t('emergUnanswered'))}</span>` : '';
         // 触达=0：告警连一个亲友都没能即时推送到（无人装 App/无实时推送通道，或根本没紧急联系人）——
@@ -681,7 +684,7 @@ function emergencySection() {
         const noReach = e.notified === 0 && e.resolvedAt == null
           ? `<span class="pill danger">⚠️ ${esc(t('emergNoReach'))}</span>` : '';
         return `<div class="bar-row"><span class="pill ${e.kind === 'manual' ? '' : 'danger'}">${esc(kind)}</span>
-          <span>${who}</span><span>${loc}</span>${resolved}${acked}${unanswered}${noReach}
+          <span>${who}</span><span>${loc}</span>${resolved}${onWay}${acked}${unanswered}${noReach}
           <span class="n ${e.notified === 0 ? 'danger' : ''}">${esc(t('emergNotified'))} ${e.notified}/${e.contacts} ${esc(t('emergContacts'))}</span>
           <span class="n">${esc(fmtDate(e.at))}</span></div>`;
       }).join('');

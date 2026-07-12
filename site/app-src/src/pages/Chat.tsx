@@ -989,7 +989,9 @@ function GroupInfoDialog({ groupId, groupName, ownerId, members, meId, onClose, 
                   {m.id === ownerId && <span className="shrink-0 rounded-full bg-honey/20 px-2 py-0.5 text-[10px] text-accent">{t('群主', 'Owner')}</span>}
                 </span>
                 {isOwner && m.id !== ownerId && (
-                  <button onClick={() => kick(m.id)} disabled={busy} className="text-xs text-danger hover:underline disabled:opacity-40">{t('移出', 'Remove')}</button>
+                  // aria-label 带成员名（成员列表 N 个同文案"移出"，读屏 rotor 须能辨移出的是谁——踢错人是破坏性误操作）。
+                  <button onClick={() => kick(m.id)} disabled={busy} aria-label={t(`将 ${mname} 移出群聊`, `Remove ${mname} from group`)}
+                    className="text-xs text-danger hover:underline disabled:opacity-40">{t('移出', 'Remove')}</button>
                 )}
               </li>
               )

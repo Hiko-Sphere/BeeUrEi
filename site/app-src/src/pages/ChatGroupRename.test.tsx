@@ -35,6 +35,11 @@ describe('ChatPage 群改名（群主可改；非群主无入口）', () => {
     mock(api.renameGroup).mockResolvedValue({ group: { id: 'g1', name: '看病陪同群', ownerId: 'me', createdAt: 1000 } })
   })
 
+  it('踢人键 aria-label 带成员名（成员列表 N 个同文案"移出"，读屏可辨移出的是谁——踢错人是破坏性误操作）', async () => {
+    await openGroupInfo('me') // 我是群主 → 对成员小红显示"移出"键
+    expect(await screen.findByLabelText('将 小红 移出群聊')).toBeInTheDocument()
+  })
+
   it('已注销成员（username 空）→ 成员列表本地化「已注销用户」，不显示服务端硬编码名（i18n 收口）', async () => {
     // 服务端占位：deleted 成员 username='' + 硬编码中文 displayName。客户端据 username==='' 覆盖本地化。
     mock(api.groups).mockResolvedValue({

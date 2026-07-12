@@ -44,7 +44,16 @@ export function RequestShareList({ sharingIds }: { sharingIds: Set<string> }) {
             <Avatar name={l.memberName} src={l.memberAvatar} size={38} />
             <div className="min-w-0 flex-1">
               <div className="truncate font-medium">{l.memberName}</div>
-              <div className="text-xs text-faint">{l.relation}</div>
+              {/* 在线态（与亲友页同口径）：担心对方时的分诊信号——在线（App 开着，没共享大概率没事/可立即接请求）
+                  vs 离线（呼叫/电话更直接）。familyLinks 本就带 online，此前这里没呈现。 */}
+              <div className="text-xs">
+                {l.online && (
+                  <span className="mr-1 inline-flex items-center gap-1 font-medium text-ok">
+                    <span className="h-1.5 w-1.5 rounded-full bg-ok" aria-hidden="true" />{t('在线', 'Online')} ·{' '}
+                  </span>
+                )}
+                <span className="text-faint">{l.relation}</span>
+              </div>
             </div>
             {/* 担心时先直接联系（呼叫/发消息），而非只能"请求共享"干等——与共享中联系人行(SharingContactRow)对齐，
                 让位置页成为完整的"看得到 + 联系得上"枢纽。呼叫通话中禁用防并发；三动作互不嵌套(合法 a11y)。 */}

@@ -14,8 +14,8 @@ import { RequestShareList } from './RequestShareList'
 
 const mock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
 const links = [
-  { id: 'l1', memberId: 'm1', memberName: '妈妈', relation: '家人', isEmergency: true, status: 'accepted' },
-  { id: 'l2', memberId: 'm2', memberName: '老王', relation: '邻居', isEmergency: false, status: 'accepted' },
+  { id: 'l1', memberId: 'm1', memberName: '妈妈', relation: '家人', isEmergency: true, status: 'accepted', online: true },  // 在线：显示在线标
+  { id: 'l2', memberId: 'm2', memberName: '老王', relation: '邻居', isEmergency: false, status: 'accepted' },              // 无 online：不显示
   { id: 'l3', memberId: 'm3', memberName: '待定', relation: '亲友', isEmergency: false, status: 'pending' }, // 未接受：不列
 ]
 
@@ -63,5 +63,15 @@ describe('RequestShareList 请求共享位置（nudge）', () => {
     expect(h.startOutgoing).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: '给 妈妈 发消息' }))
     expect(h.nav).toHaveBeenCalledWith('/chat/m1')
+  })
+
+  it('在线态（与亲友页同口径）：online 联系人显示"在线"标、离线不显——担心时的分诊信号（在线可即时收请求；离线更该呼叫/电话）', async () => {
+    render(<RequestShareList sharingIds={new Set()} />)
+    await screen.findByText('妈妈')
+    // 文本节点是"在线 · "（拼接渲染），按行 textContent 断言（getByText 精确匹配不到拆开的节点）。
+    const mamaRow = screen.getByText('妈妈').closest('li')!
+    expect(mamaRow.textContent).toContain('在线')  // 妈妈 online:true → 行内有"在线"
+    const wangRow = screen.getByText('老王').closest('li')!
+    expect(wangRow.textContent).not.toContain('在线') // 老王无 online → 不显示
   })
 })

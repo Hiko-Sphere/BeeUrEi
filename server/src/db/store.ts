@@ -792,12 +792,14 @@ export interface Store {
   /// 与 unreadCount(单聊) 同为角标数据源；替代"取最近 N 条再 filter"的做法（后者 >N 条未读会漏计、且每次算角标都载 N 条消息体）。
   unreadGroupCount(groupId: string, userId: string): number
   deleteGroupReadsForUser(userId: string): void // 删号级联：清该用户在所有群的已读游标（非群主退群路径不经 deleteGroup，否则残留孤儿）
-  /// 群免打扰：某人是否静音某群的推送横幅（消息仍存库、未读照增，只压推送）。与已读游标同为「每人每群」软状态。
+  /// 群免打扰：某人是否静音某群（消息仍存库、列表行内未读照显；压推送横幅，且**不计入全局角标** totalUnreadFor——
+  /// 静音=用户明示"别再要我注意"，WhatsApp 同口径）。与已读游标同为「每人每群」软状态。
   setGroupMuted(groupId: string, userId: string, muted: boolean): void
   isGroupMuted(groupId: string, userId: string): boolean
   groupMutesForUser(userId: string): string[] // 该用户静音的群 id 列表（GDPR 自助导出：免打扰偏好属本人主动配置的数据）
   deleteGroupMutesForUser(userId: string): void // 删号级联：清该用户在所有群的静音标记（同已读游标，非群主退群路径须显式清）
-  /// 单聊免打扰：muter 是否静音了与 peer 的会话（只压推送横幅，消息/未读照常）。键为 (muter,peer) **有向**。
+  /// 单聊免打扰：muter 是否静音了与 peer 的会话（消息/列表行内未读照常；压推送横幅，且**不计入全局角标**
+  /// totalUnreadFor——同群静音口径）。键为 (muter,peer) **有向**。
   setDmMuted(muterId: string, peerId: string, muted: boolean): void
   isDmMuted(muterId: string, peerId: string): boolean
   dmMutesForUser(userId: string): string[] // 该用户(作为 muter)静音单聊的对端 id 列表（GDPR 自助导出）

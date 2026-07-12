@@ -45,6 +45,29 @@ describe('unreadGroupCount：无上限精确群未读', () => {
     expect(r.messages).toBe(5) // 群 3 + 单聊 2
   })
 
+  it('静音会话不计入全局角标（WhatsApp 口径）：静音群/单聊的未读被排除，解除静音即恢复计入', () => {
+    const s = new MemoryStore()
+    // 群 3 条未读 + 单聊 u3→u1 两条未读。
+    s.createGroup({ id: 'g', name: 'G', ownerId: 'u1', memberIds: ['u1', 'u2'], createdAt: 0 })
+    for (let i = 1; i <= 3; i++) s.createMessage(gmsg('g', 'u2', i))
+    s.createMessage({ id: 'd1', fromId: 'u3', toId: 'u1', kind: 'text', text: 'x', createdAt: 10 })
+    s.createMessage({ id: 'd2', fromId: 'u3', toId: 'u1', kind: 'text', text: 'y', createdAt: 11 })
+    expect(totalUnreadFor(s, 'u1').messages).toBe(5)
+    // 静音群 → 群 3 条不再顶角标（列表行内未读另有端点、不受影响）。
+    s.setGroupMuted('g', 'u1', true)
+    expect(totalUnreadFor(s, 'u1').messages).toBe(2)
+    // 再静音单聊 → 角标归零（用户明示"都别要我注意"）。
+    s.setDmMuted('u1', 'u3', true)
+    expect(totalUnreadFor(s, 'u1').messages).toBe(0)
+    // 解除静音 → 恢复计入（未读并没有被清掉，只是不进角标）。
+    s.setGroupMuted('g', 'u1', false)
+    s.setDmMuted('u1', 'u3', false)
+    expect(totalUnreadFor(s, 'u1').messages).toBe(5)
+    // 静音是有向的：u3 静音自己与 u1 的会话，不影响 u1 的角标。
+    s.setDmMuted('u3', 'u1', true)
+    expect(totalUnreadFor(s, 'u1').messages).toBe(5)
+  })
+
   it('totalUnreadFor.total = 单聊 + 群 + 通知 + 未接来电 四源精确相加（全站角标总口径：漏一源/重复计立失败）', () => {
     const s = new MemoryStore()
     // 单聊 u3→u1 两条未读

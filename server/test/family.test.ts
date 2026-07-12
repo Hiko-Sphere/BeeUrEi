@@ -353,4 +353,32 @@ describe('family + emergency', () => {
     expect(limited).toBe(true)
     await a.close()
   })
+
+  it('links 列表与待确认请求投影对方 identityVerified 为 verified（信任信号；viewLink/incomingView 曾漏投影）', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const reg = async (u: string, role?: string) => (await a.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+    const owner = await reg('vowner', 'blind')
+    const vhelper = await reg('vhelper', 'helper')   // 已实名
+    const uhelper = await reg('uhelper', 'helper')   // 未实名
+    store.updateUser(vhelper.user.id, { identityVerified: true })
+
+    // owner → 两个 helper 建链并接受。
+    for (const u of ['vhelper', 'uhelper']) {
+      const l = await a.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${owner.token}` }, payload: { username: u, relation: '志愿者' } })
+      await a.inject({ method: 'POST', url: `/api/family/links/${l.json().link.id}/accept`, headers: { authorization: `Bearer ${(u === 'vhelper' ? vhelper : uhelper).token}` } })
+    }
+    const list = (await a.inject({ method: 'GET', url: '/api/family/links', headers: { authorization: `Bearer ${owner.token}` } })).json()
+    const byName = Object.fromEntries(list.links.map((l: { memberName: string; verified: boolean }) => [l.memberName, l.verified]))
+    expect(byName['vhelper']).toBe(true)  // 已实名 helper
+    expect(byName['uhelper']).toBe(false) // 未实名 helper
+
+    // 待确认请求同样投影 verified：uhelper 主动加已实名的 vhelper，vhelper 侧收件箱应见 verified=true。
+    const req = await a.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${uhelper.token}` }, payload: { username: 'vhelper', relation: '朋友' } })
+    void req
+    const inbox = (await a.inject({ method: 'GET', url: '/api/family/incoming', headers: { authorization: `Bearer ${vhelper.token}` } })).json()
+    const fromU = inbox.links.find((l: { ownerName: string }) => l.ownerName === 'uhelper')
+    expect(fromU?.verified).toBe(false) // 请求发起者 uhelper 未实名
+    await a.close()
+  })
 })

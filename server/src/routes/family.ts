@@ -220,6 +220,7 @@ function viewLink(store: Store, link: FamilyLink, meId: string, isOnline: (userI
     status: link.status ?? 'accepted',
     outgoing: (link.status ?? 'accepted') === 'pending' && link.requestedBy === meId, // 我发起、待对方确认
     online: accepted && isOnline(otherId), // 对方此刻在线/待命（仅已建立关系才算——pending 未确认不显示状态）
+    verified: other?.identityVerified ?? false, // 实名认证（信任信号）：与 publicUser 同源；此前 viewLink 漏投影→联系人列表无实名标
   }
 }
 
@@ -235,5 +236,6 @@ function incomingView(store: Store, link: FamilyLink, meId: string) {
     relation: link.relation,
     isEmergency: link.isEmergency,
     status: link.status ?? 'accepted',
+    verified: other?.identityVerified ?? false, // 待确认请求也显示对方实名——决定是否接受一段安全关系时该看到
   }
 }

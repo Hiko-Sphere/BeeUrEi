@@ -288,6 +288,39 @@ describe('FamilyPage 联系人按名字搜索过滤', () => {
   })
 })
 
+describe('FamilyPage 实名徽标（信任信号：死字段修复，viewLink 此前漏投影 verified）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mock(api.familyLinks).mockResolvedValue({ links: [] })
+    mock(api.incomingLinks).mockResolvedValue({ links: [] })
+    mock(api.blocks).mockResolvedValue({ blocks: [] })
+  })
+
+  it('已实名联系人显示「已实名」徽标（含实名认证的 aria/title）；未实名的不显示', async () => {
+    mock(api.familyLinks).mockResolvedValue({ links: [
+      { id: 'l1', memberId: 'v1', memberName: '已核验阿姨', relation: '亲友', isEmergency: false, amOwner: true, status: 'accepted', verified: true },
+      { id: 'l2', memberId: 'u2', memberName: '未核验小哥', relation: '志愿者', isEmergency: false, amOwner: true, status: 'accepted', verified: false },
+    ] })
+    render(<FamilyPage />)
+    await screen.findByText('已核验阿姨')
+    // 已实名者：徽标存在且带可读的实名说明。
+    const badges = screen.getAllByLabelText('已通过实名认证')
+    expect(badges).toHaveLength(1)
+    expect(badges[0]).toHaveTextContent('已实名')
+    // 未实名者在列但无徽标——徽标数恰为 1，证明未对未核验者误标。
+    expect(screen.getByText('未核验小哥')).toBeInTheDocument()
+  })
+
+  it('待确认请求也显示对方实名（决定是否接受一段安全关系时该看到）', async () => {
+    mock(api.incomingLinks).mockResolvedValue({ links: [
+      { id: 'i1', ownerId: 'o1', ownerName: '请求者老王', relation: '亲友', isEmergency: true, status: 'pending', verified: true },
+    ] })
+    render(<FamilyPage />)
+    await screen.findByText('请求者老王')
+    expect(screen.getByLabelText('已通过实名认证')).toHaveTextContent('已实名')
+  })
+})
+
 describe('每日定时报到配置（Snug Safety 式）', () => {
   beforeEach(() => {
     vi.clearAllMocks()

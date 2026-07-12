@@ -125,7 +125,7 @@ export function FamilyPage() {
               <li key={l.id} className="flex items-center gap-3 px-4 py-3">
                 <Avatar name={l.ownerName} src={l.ownerAvatar} size={40} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium">{l.ownerName}</div>
+                  <div className="flex items-center gap-1.5"><span className="truncate font-medium">{l.ownerName}</span><VerifiedBadge on={l.verified} t={t} /></div>
                   {/* 待确认请求：发起者恒为链 owner，故 amOwner=false → 若设了紧急即「你是 TA 的紧急联系人」（接受前就讲清责任方向）。 */}
                   <div className="text-xs text-faint">{l.relation}{emergencyBadge(l.isEmergency, false)}</div>
                 </div>
@@ -159,7 +159,7 @@ export function FamilyPage() {
               <li key={l.id} className="flex items-center gap-3 px-4 py-3">
                 <Avatar name={l.memberName} src={l.memberAvatar} size={40} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium">{l.memberName}</div>
+                  <div className="flex items-center gap-1.5"><span className="truncate font-medium">{l.memberName}</span><VerifiedBadge on={l.verified} t={t} /></div>
                   <div className="text-xs">
                     {l.online && (
                       <span className="mr-1 inline-flex items-center gap-1 font-medium text-ok">
@@ -525,5 +525,17 @@ function AddContactDialog({ onClose, onAdded }: { onClose: () => void; onAdded: 
           <Button className="flex-1" loading={busy} onClick={submit} disabled={!q.trim()}>{t('发送请求', 'Send request')}</Button>
         </div>
     </Modal>
+  )
+}
+
+/// 实名认证徽标（信任信号）：identityVerified 通过者显示「已实名」。与 Admin 用户列表同款样式；
+/// 盲人的亲友/紧急联系人是否经过真人身份核验，是决定信任/接受关系的关键信息（此前仅 Account/Admin 有，
+/// 联系人列表因 viewLink 漏投影而缺席）。title 供悬停、aria 让读屏念得出。
+function VerifiedBadge({ on, t }: { on?: boolean; t: (zh: string, en: string) => string }) {
+  if (!on) return null
+  const label = t('已实名', 'Verified')
+  return (
+    <span className="shrink-0 rounded bg-ok/15 px-1.5 py-0.5 text-[10px] font-medium text-ok"
+      title={t('已通过实名认证', 'Identity verified')} aria-label={t('已通过实名认证', 'Identity verified')}>{label}</span>
   )
 }

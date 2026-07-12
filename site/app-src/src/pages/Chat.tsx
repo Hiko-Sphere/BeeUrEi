@@ -775,6 +775,16 @@ function ForwardDialog({ message, onClose, onSent }: { message: ChatMessage; onC
   const convoIds = new Set((convos ?? []).map((c) => c.peer.id))
   const extraContacts = contacts.filter((l) => !convoIds.has(l.memberId))
 
+  // 目标一多时按名字过滤（与 Family 页联系人过滤同一模式/同一理由：免逐条滚/Tab 找人，读屏用户尤甚）。
+  // 仅在目标 >6 时出搜索框，免小列表显无谓输入框。会话/联系人/群三源都参与过滤。
+  const [q, setQ] = useState('')
+  const query = q.trim().toLowerCase()
+  const targetCount = (convos?.length ?? 0) + extraContacts.length + groups.length
+  const showFilter = targetCount > 6
+  const shownConvos = query ? (convos ?? []).filter((c) => (c.peer.displayName || '').toLowerCase().includes(query)) : (convos ?? [])
+  const shownContacts = query ? extraContacts.filter((l) => l.memberName.toLowerCase().includes(query)) : extraContacts
+  const shownGroups = query ? groups.filter((g) => g.group.name.toLowerCase().includes(query)) : groups
+
   const forwardTo = async (target: { toId?: string; groupId?: string }, name: string) => {
     if (busy) return
     setBusy(true)
@@ -789,13 +799,22 @@ function ForwardDialog({ message, onClose, onSent }: { message: ChatMessage; onC
   return (
     <Modal onClose={onClose} label={t('转发到', 'Forward to')} panelClassName="w-full max-w-sm">
       <h3 className="text-lg font-semibold">{t('转发到', 'Forward to')}</h3>
-      <p className="mt-1 text-sm text-faint">{t('选择一个会话', 'Choose a conversation')}</p>
+      <p className="mt-1 text-sm text-faint">{t('选择联系人或群聊', 'Choose a contact or group')}</p>
+      {showFilter && (
+        <div className="mt-3">
+          <input type="search" value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder={t('搜索联系人或群', 'Search contacts or groups')} aria-label={t('搜索转发目标', 'Search forward targets')}
+            className="w-full rounded-xl surface-2 px-3 py-2 text-sm outline-none placeholder:text-faint focus:ring-2 focus:ring-[var(--color-honey)]/40" />
+        </div>
+      )}
       <div className="mt-3 max-h-[50vh] overflow-y-auto">
-        {convos === null ? <Spinner /> : (convos.length === 0 && extraContacts.length === 0 && groups.length === 0) ? (
+        {convos === null ? <Spinner /> : targetCount === 0 ? (
           <p className="py-6 text-center text-sm text-faint">{t('暂无可转发的联系人', 'No contacts to forward to')}</p>
+        ) : (shownConvos.length + shownContacts.length + shownGroups.length) === 0 ? (
+          <p className="py-6 text-center text-sm text-faint" role="status">{t('没有匹配的联系人', 'No matching contacts')}</p>
         ) : (
           <ul className="divide-y divide-[var(--line)]">
-            {convos.map((c) => {
+            {shownConvos.map((c) => {
               const pname = c.peer.displayName || t('已注销用户', 'Deactivated user') // 已注销对端本地化（同会话列表）
               return (
               <li key={`p:${c.peer.id}`}>
@@ -808,7 +827,7 @@ function ForwardDialog({ message, onClose, onSent }: { message: ChatMessage; onC
               )
             })}
             {/* 还没会话历史的联系人（转发给从未聊过的联系人）：与会话行同样可转发，仅数据源不同（familyLinks）。 */}
-            {extraContacts.map((l) => (
+            {shownContacts.map((l) => (
               <li key={`c:${l.memberId}`}>
                 <button disabled={busy} onClick={() => void forwardTo({ toId: l.memberId }, l.memberName)} data-testid="forward-target"
                   className="flex w-full items-center gap-3 px-1 py-2.5 text-left hover:surface-2 disabled:opacity-50">
@@ -818,7 +837,7 @@ function ForwardDialog({ message, onClose, onSent }: { message: ChatMessage; onC
                 </button>
               </li>
             ))}
-            {groups.map((g) => (
+            {shownGroups.map((g) => (
               <li key={`g:${g.group.id}`}>
                 <button disabled={busy} onClick={() => void forwardTo({ groupId: g.group.id }, g.group.name)} data-testid="forward-target"
                   className="flex w-full items-center gap-3 px-1 py-2.5 text-left hover:surface-2 disabled:opacity-50">

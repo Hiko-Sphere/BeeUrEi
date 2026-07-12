@@ -61,10 +61,29 @@ describe('消息转发', () => {
     const targets = await screen.findAllByTestId('forward-target')
     expect(targets).toHaveLength(2)                          // p1(会话) + p3(联系人无会话)；p1 不重复、pending p4 不列
     expect(screen.getByText('阿伟')).toBeInTheDocument()     // 还没聊过的联系人也能选作转发目标
+    expect(screen.queryByLabelText('搜索转发目标')).toBeNull()             // 目标少(2)时不出搜索框
     fireEvent.click(screen.getByText('阿伟'))
     await waitFor(() => expect(api.sendMessage).toHaveBeenCalled())
     expect(mock(api.sendMessage).mock.calls[0][0]).toEqual({ toId: 'p3' }) // 转发目标就是这位联系人
     expect(mock(api.sendMessage).mock.calls[0][4]).toBe(true)              // forwarded 标记
+  })
+
+  it('转发目标多（>6）时出现搜索框，按名字过滤；无匹配显示提示', async () => {
+    mock(api.messagesWith).mockResolvedValue({ messages: [msg({ id: 'm1', kind: 'text', text: '转发我' })] })
+    // 7 个会话 → 超过阈值出搜索框（小列表不出，见上一测）。
+    mock(api.conversations).mockResolvedValue({ conversations: Array.from({ length: 7 }, (_, i) => ({ peer: { id: `p${i}`, displayName: `联系人${i}`, avatar: null }, last: null, unread: 0 })) })
+    mock(api.familyLinks).mockResolvedValue({ links: [] })
+    render(<ChatPage />)
+    await screen.findByText('转发我')
+    fireEvent.click(screen.getByText('转发'))
+    expect(await screen.findAllByTestId('forward-target')).toHaveLength(7)  // 初始全列
+    const box = screen.getByLabelText('搜索转发目标')
+    fireEvent.change(box, { target: { value: '联系人3' } })
+    expect(screen.getAllByTestId('forward-target')).toHaveLength(1)          // 仅匹配项
+    expect(screen.getByTestId('forward-target')).toHaveTextContent('联系人3')
+    fireEvent.change(box, { target: { value: '查无此人' } })
+    expect(screen.queryAllByTestId('forward-target')).toHaveLength(0)        // 无匹配
+    expect(screen.getByText('没有匹配的联系人')).toBeInTheDocument()
   })
 
   it('forwarded=true 的消息渲染「已转发」标注', async () => {

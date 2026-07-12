@@ -24,10 +24,15 @@ export function ActiveEmergenciesBanner({ onCall }: { onCall?: (userId: string, 
   const load = useCallback(() => { void api.watchingEmergencies().then((r) => setActive(r.active)).catch(() => { /* 网络失败：保留现状，不清空（不制造"已无紧急"的假安心） */ }) }, [])
   useEffect(() => { load(); return pollWhileVisible(load, 15000) }, [load])
 
-  const onMyWay = async (e: ActiveEmergency) => {
+  // 回应遇险者：onMyWay=true → "我在赶来"（更强安心信号）；false → "我已看到"（纯 ack）。两者都停止升级重呼、
+  // 让遇险者知道有人在响应。补"我已看到"：远在外地/上班去不了的亲友，不必谎称"在赶来"或干等——ack 即可停升级、
+  // 告知遇险者有人在协调（与通知页/告警弹窗的双回应口径对齐）。乐观反馈、失败回滚。
+  const respond = async (e: ActiveEmergency, onMyWay: boolean) => {
     setResponded((prev) => new Set(prev).add(e.eventId)) // 乐观：立即反映，避免重复点
-    try { await api.emergencyAck(e.ownerId, e.eventId, true); toast(t(`已告诉 ${e.ownerName} 你在赶来`, `Told ${e.ownerName} you're on the way`), 'ok') }
-    catch { toast(t('操作失败，请重试', 'Failed — try again'), 'error'); setResponded((prev) => { const n = new Set(prev); n.delete(e.eventId); return n }) }
+    try {
+      await api.emergencyAck(e.ownerId, e.eventId, onMyWay)
+      toast(onMyWay ? t(`已告诉 ${e.ownerName} 你在赶来`, `Told ${e.ownerName} you're on the way`) : t(`已回执，${e.ownerName} 会看到有人在响应`, `Acknowledged — ${e.ownerName} will see someone is responding`), 'ok')
+    } catch { toast(t('操作失败，请重试', 'Failed — try again'), 'error'); setResponded((prev) => { const n = new Set(prev); n.delete(e.eventId); return n }) }
   }
 
   if (active.length === 0) return null
@@ -64,9 +69,13 @@ export function ActiveEmergenciesBanner({ onCall }: { onCall?: (userId: string, 
                     className="text-xs text-accent underline">{loc.stale ? '⚠️' : '📍'} {label}</a>
                 )
               })()}
-              <Button variant="soft" onClick={() => void onMyWay(e)} disabled={responded.has(e.eventId)}>
-                {responded.has(e.eventId) ? t('已回应', 'Responded') : t('我在赶来', "I'm on my way")}
-              </Button>
+              {responded.has(e.eventId) ? (
+                <span role="status" className="inline-flex items-center gap-1 text-xs font-medium text-ok">✓ {t('已回应', 'Responded')}</span>
+              ) : (<>
+                <Button variant="soft" onClick={() => void respond(e, true)}>{t('我在赶来', "I'm on my way")}</Button>
+                {/* 纯回执：去不了的亲友也能停止升级重呼 + 告知遇险者有人在响应，不必谎称"在赶来"（与通知页双回应对齐）。 */}
+                <Button variant="ghost" onClick={() => void respond(e, false)}>{t('我已看到', "I've seen it")}</Button>
+              </>)}
               {onCall && (
                 <Button variant="danger" onClick={() => onCall(e.ownerId, e.ownerName)}><IconPhone width={15} height={15} />{t('呼叫', 'Call')}</Button>
               )}

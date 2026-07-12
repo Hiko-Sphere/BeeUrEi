@@ -15,6 +15,7 @@ interface SpaTest {
   renderCalls: () => void
   renderDashboard: () => void
   pickWsToken: (turnResp: unknown) => string
+  emergenciesCsvRows: (list: Record<string, unknown>[]) => (string | number)[][]
   view: { innerHTML: string } // 渲染函数写入的共享 stub 元素（viewEl()/$ 都解析到它）
 }
 function loadSpa(): SpaTest {
@@ -22,7 +23,7 @@ function loadSpa(): SpaTest {
   let src = readFileSync(path, 'utf8')
   const anchor = '\nrender();'
   if (!src.includes(anchor)) throw new Error('app.js bootstrap anchor "render();" not found — update test')
-  src = src.replace(anchor, '\nglobalThis.__test = { state, t, emergencySection, statCard, renderCalls, renderDashboard, pickWsToken };\nrender();')
+  src = src.replace(anchor, '\nglobalThis.__test = { state, t, emergencySection, statCard, renderCalls, renderDashboard, pickWsToken, emergenciesCsvRows };\nrender();')
   const noop = (): void => {}
   const classList = { add: noop, remove: noop, toggle: noop, contains: () => false }
   // 自引用宽容元素：querySelector 返回自身（事件绑定链不断）、querySelectorAll 空数组、其余 noop。
@@ -294,5 +295,33 @@ describe('管理面板 通话记录区（紧急求助可辨识）', () => {
     // 旧服务端/取 turn 失败无 wsToken → 回退 access token（握手仍接受，不阻断观察）。
     expect(spa.pickWsToken({ iceServers: [] })).toBe('ADMIN_SESSION_TOKEN')
     expect(spa.pickWsToken(null)).toBe('ADMIN_SESSION_TOKEN')
+  })
+})
+
+describe('紧急事件 CSV 导出（事故留痕/合规审计）', () => {
+  it('emergencySection 带导出按钮：有事件可点、空列表 disabled', () => {
+    const spa = loadSpa()
+    spa.state.emergencies = [ev({})]
+    expect(spa.emergencySection()).toContain('data-action="exportEmerg"')
+    expect(spa.emergencySection()).not.toMatch(/data-action="exportEmerg" disabled/)
+    spa.state.emergencies = []
+    expect(spa.emergencySection()).toMatch(/data-action="exportEmerg" disabled/) // 空列表禁用（无可导出）
+  })
+
+  it('emergenciesCsvRows：稳定英文列名 + ISO 时间戳 + 空值留空；响应时间线四列齐全', () => {
+    const spa = loadSpa()
+    const rows = spa.emergenciesCsvRows([
+      ev({ lat: 31.2, lon: 121.5, locSource: 'live', ackedAt: 1_700_000_060_000, onWayAt: 1_700_000_120_000, escalatedAt: undefined, resolvedAt: 1_700_000_500_000 }) as Record<string, unknown>,
+      ev({ id: 'e2', kind: 'manual', userName: undefined, username: undefined, lat: undefined, lon: undefined, notified: 0 }) as Record<string, unknown>,
+    ])
+    expect(rows[0]).toEqual(['kind', 'user', 'username', 'lat', 'lon', 'locSource', 'locAgeSec', 'notified', 'contacts', 'at', 'ackedAt', 'onWayAt', 'escalatedAt', 'resolvedAt'])
+    // 事件行：坐标/来源/时间线如实；ISO-8601 时间戳（跨时区审计无歧义）。
+    expect(rows[1]).toEqual(['fall', '小明', 'xiaoming', 31.2, 121.5, 'live', '', 1, 2,
+      '2023-11-14T22:13:20.000Z', '2023-11-14T22:14:20.000Z', '2023-11-14T22:15:20.000Z', '', '2023-11-14T22:21:40.000Z'])
+    // 已注销用户（无 userName）回落 userId；空值一律空串不写 "undefined"。
+    expect(rows[2][1]).toBe('u1')
+    expect(rows[2].every((c) => c !== 'undefined' && c !== undefined && c !== null)).toBe(true)
+    // 空列表 → 只有表头（不吐空数据行）。
+    expect(spa.emergenciesCsvRows([])).toHaveLength(1)
   })
 })

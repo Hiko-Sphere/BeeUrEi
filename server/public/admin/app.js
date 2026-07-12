@@ -616,6 +616,11 @@ function renderDashboard() {
       <div class="card"><dl class="kv"><dt>${esc(t('version'))}</dt><dd>v${esc(o.version)}</dd><dt>${esc(t('uptime'))}</dt><dd>${esc(fmtUptime(o.uptimeSeconds))}</dd></dl></div>
     </div>`;
   applyDims(viewEl()); // 动态尺寸经 CSSOM 落定（CSP style-src 'self' 禁内联 style）
+  // 紧急事件导出（值守留痕）：querySelector 判空守卫——空列表时按钮 disabled 仍在 DOM，但测试 stub 环境可能返回空。
+  const expEmerg = viewEl().querySelector('[data-action="exportEmerg"]');
+  if (expEmerg) expEmerg.addEventListener('click', () => {
+    downloadCSV('beeurei-emergencies.csv', emergenciesCsvRows(state.emergencies || []));
+  });
 }
 // 紧急事件区（值守）：谁在何时触发了摔倒/撞击/SOS、通知到几人、位置来源诚实标注
 // （最后已知位置绝不伪装成实时；地图链接一律 Apple Maps，坐标为 WGS-84，与全栈口径一致）。
@@ -653,7 +658,19 @@ function emergencySection() {
           <span class="n ${e.notified === 0 ? 'danger' : ''}">${esc(t('emergNotified'))} ${e.notified}/${e.contacts} ${esc(t('emergContacts'))}</span>
           <span class="n">${esc(fmtDate(e.at))}</span></div>`;
       }).join('');
-  return `<div class="section"><h3>${esc(t('emergTitle'))}</h3><div class="card"><div class="bars">${rows}</div></div></div>`;
+  // 导出 CSV（事故留痕/合规审计）：与 通话/用户/审计 区一致的导出能力；空列表禁用。
+  return `<div class="section"><h3>${esc(t('emergTitle'))} <button class="btn ghost" data-action="exportEmerg" ${list.length ? '' : 'disabled'}>⬇ ${esc(t('exportCsv'))}</button></h3><div class="card"><div class="bars">${rows}</div></div></div>`;
+}
+// 紧急事件 CSV 行（纯函数，供导出与单测）：列名稳定英文（机器可读、跨语言一致），时间戳 ISO-8601、空值留空串。
+// 含完整响应时间线（ackedAt/onWayAt/escalatedAt/resolvedAt）——事故复盘"多久有人响应/是否升级"一行全览。
+function emergenciesCsvRows(list) {
+  const iso = (ms) => (ms != null ? new Date(ms).toISOString() : '');
+  const nn = (v) => (v != null ? v : '');
+  return [
+    ['kind', 'user', 'username', 'lat', 'lon', 'locSource', 'locAgeSec', 'notified', 'contacts', 'at', 'ackedAt', 'onWayAt', 'escalatedAt', 'resolvedAt'],
+    ...list.map((e) => [e.kind, e.userName != null ? e.userName : e.userId, nn(e.username), nn(e.lat), nn(e.lon), nn(e.locSource), nn(e.locAgeSec),
+      e.notified, e.contacts, iso(e.at), iso(e.ackedAt), iso(e.onWayAt), iso(e.escalatedAt), iso(e.resolvedAt)]),
+  ];
 }
 // 把 data-pct / data-h 落成实际宽高——CSSOM 赋值不受 CSP 内联样式限制。
 function applyDims(root) {

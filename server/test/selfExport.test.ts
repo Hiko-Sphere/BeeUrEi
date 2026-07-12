@@ -63,6 +63,7 @@ describe('GET /api/account/export', () => {
     await a.inject({ method: 'POST', url: '/api/safety/checkin/start', headers: auth, payload: { durationMinutes: 30, note: '走夜路' } }) // 安全报到
     await a.inject({ method: 'PUT', url: '/api/notifications/quiet-hours', headers: auth, payload: { enabled: true, startMinute: 1320, endMinute: 420, tz: 'Asia/Shanghai' } }) // 勿扰
     await a.inject({ method: 'PUT', url: '/api/notifications/push-categories', headers: auth, payload: { muted: ['route', 'social'] } }) // 按类别静音偏好
+    await a.inject({ method: 'POST', url: '/api/account/read-receipts', headers: auth, payload: { enabled: false } }) // 读回执开关（关）
 
     const body = (await a.inject({ method: 'GET', url: '/api/account/export', headers: auth })).json()
     expect(body.savedPlaces.length).toBe(1)
@@ -72,6 +73,8 @@ describe('GET /api/account/export', () => {
     expect(body.profile.quietHours).toMatchObject({ enabled: true, startMinute: 1320, endMinute: 420, tz: 'Asia/Shanghai' })
     // 按类别静音偏好也在 profile（与 quietHours 同为粗粒度勿扰配置，GDPR 访问完整性）；规整为稳定序。
     expect(body.profile.mutedPushCategories).toEqual(['social', 'route'])
+    // 读回执开关也在 profile（与 quietHours 同类隐私偏好，此前漏）；本人设为关 → 导出如实为 false。
+    expect(body.profile.readReceiptsEnabled).toBe(false)
     await a.close()
   })
 

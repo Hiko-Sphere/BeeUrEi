@@ -39,6 +39,9 @@ export function buildUserExportBundle(store: Store, id: string, now: number) {
       mutedPushCategories: u.mutedPushCategories ?? [],
       // 每日定时安全报到配置：与 quietHours 同为本人的粗粒度偏好（时刻/时长/时区/备注），GDPR 访问覆盖。
       dailyCheckin: u.dailyCheckin ?? null,
+      // 读回执开关（是否向对方显示"已读"，互惠隐私偏好）：与 quietHours/mutedPushCategories 同为本人隐私偏好、
+      // /api/me 也回带，此前导出漏了——补齐偏好集完整（缺省开，同 SelfView 口径）。
+      readReceiptsEnabled: u.readReceiptsEnabled ?? true,
     },
     familyLinks: [
       ...store.linksByOwner(id).map((l) => ({ direction: 'owner', other: nameOf(l.memberId), relation: l.relation, isEmergency: l.isEmergency, status: l.status ?? 'accepted', createdAt: l.createdAt })),

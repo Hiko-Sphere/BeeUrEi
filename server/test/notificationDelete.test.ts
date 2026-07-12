@@ -89,5 +89,45 @@ describe('删除通知存储 parity（Memory ↔ Sqlite 行为一致）', () => 
       expect(s.findNotification('b')).toBeTruthy()
       expect(s.findNotification('d')).toBeUndefined()
     })
+
+    it(`${name}: notificationsForUser 游标翻页（before/beforeId）无漏无重、同刻 tie-break 稳定`, () => {
+      const s = make()
+      const seed = (id: string, createdAt: number) => s.createNotification({ id, userId: 'me', kind: 'k', title: 't', body: 'b', createdAt })
+      seed('n1', 1000); seed('n2', 2000); seed('n3', 3000); seed('n4a', 4000); seed('n4b', 4000) // n4a/n4b 同刻
+      const p1 = s.notificationsForUser('me', 2)
+      expect(p1.map((n) => n.id)).toEqual(['n4b', 'n4a']) // 最新在前；同刻按 id 降序
+      const l1 = p1[1]
+      const p2 = s.notificationsForUser('me', 2, l1.createdAt, l1.id)
+      expect(p2.map((n) => n.id)).toEqual(['n3', 'n2']) // 跨同刻边界无漏无重
+      const l2 = p2[1]
+      const p3 = s.notificationsForUser('me', 2, l2.createdAt, l2.id)
+      expect(p3.map((n) => n.id)).toEqual(['n1'])
+      // 并集恰为全部 5、无重复。
+      const all = [...p1, ...p2, ...p3].map((n) => n.id)
+      expect(new Set(all).size).toBe(5)
+      expect(all).toEqual(['n4b', 'n4a', 'n3', 'n2', 'n1'])
+    })
   }
+})
+
+describe('通知列表端点游标分页 + hasMore（silent cap 修复：不再只见最近 100 条）', () => {
+  it('/api/notifications 支持 limit + before/beforeId 翻页，hasMore 精确到底转 false', async () => {
+    const { app, store, alice } = await setup()
+    for (let i = 1; i <= 5; i++) seed(store, alice.user.id, `m${i}`, i * 1000)
+    const h = auth(alice.token)
+    const get = async (qs = '') => (await app.inject({ method: 'GET', url: `/api/notifications${qs}`, headers: h })).json()
+    const p1 = await get('?limit=2')
+    expect(p1.notifications.map((n: { id: string }) => n.id)).toEqual(['m5', 'm4'])
+    expect(p1.hasMore).toBe(true)
+    expect(p1.unread).toBe(5) // unread 计数**全量**（不随分页窗口变）——正是此前"计数有数、列表找不到"的根因场景
+    const last1 = p1.notifications[1]
+    const p2 = await get(`?limit=2&before=${last1.createdAt}&beforeId=${last1.id}`)
+    expect(p2.notifications.map((n: { id: string }) => n.id)).toEqual(['m3', 'm2'])
+    expect(p2.hasMore).toBe(true)
+    const last2 = p2.notifications[1]
+    const p3 = await get(`?limit=2&before=${last2.createdAt}&beforeId=${last2.id}`)
+    expect(p3.notifications.map((n: { id: string }) => n.id)).toEqual(['m1'])
+    expect(p3.hasMore).toBe(false) // 到底
+    await app.close()
+  })
 })

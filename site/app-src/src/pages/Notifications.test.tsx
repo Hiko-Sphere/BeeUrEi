@@ -16,6 +16,7 @@ import { NotificationsPage, notifDestination } from './Notifications'
 const notif = (over: Record<string, unknown>) => ({
   id: 'n', userId: 'u1', kind: 'report_resolved', title: 't', body: 'b', createdAt: 1_700_000_000_000, ...over,
 })
+const mock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
 
 describe('NotificationsPage 渲染（防字段漂移）', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -239,5 +240,32 @@ describe('NotificationsPage 删除 / 清空已读', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('NotificationsPage "加载更多"（silent cap 修复：不再只见最近 100 条）', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('hasMore 时显示"加载更多"；点击→用最早一条游标翻页、追加更早的（首屏仍在）；到底后按钮消失', async () => {
+    mock(api.markNotifRead).mockResolvedValue({})
+    mock(api.notifications).mockImplementation((opts?: { before?: number; beforeId?: string }) => {
+      if (opts?.before == null) return Promise.resolve({ notifications: [notif({ id: 'a1', title: '最新', createdAt: 3000 }), notif({ id: 'a2', title: '次新', createdAt: 2000 })], unread: 7, hasMore: true })
+      expect(opts.before).toBe(2000); expect(opts.beforeId).toBe('a2') // 游标=当前最早一条
+      return Promise.resolve({ notifications: [notif({ id: 'b1', title: '更早', createdAt: 1000 })], unread: 7, hasMore: false })
+    })
+    render(<NotificationsPage />)
+    expect(await screen.findByText('最新')).toBeInTheDocument()
+    const more = await screen.findByRole('button', { name: '加载更多' })
+    fireEvent.click(more)
+    expect(await screen.findByText('更早')).toBeInTheDocument() // 追加了更早的
+    expect(screen.getByText('最新')).toBeInTheDocument()          // 首屏仍在（追加非替换）
+    expect(screen.queryByRole('button', { name: '加载更多' })).toBeNull() // 到底按钮消失
+  })
+
+  it('hasMore=false（通知不足一屏）时不显示"加载更多"', async () => {
+    mock(api.notifications).mockResolvedValue({ notifications: [notif({ id: 'x', title: '仅此一条' })], unread: 0, hasMore: false })
+    render(<NotificationsPage />)
+    await screen.findByText('仅此一条')
+    expect(screen.queryByRole('button', { name: '加载更多' })).toBeNull()
   })
 })

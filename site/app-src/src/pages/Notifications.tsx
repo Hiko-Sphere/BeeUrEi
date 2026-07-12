@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type NotificationInfo } from '../lib/api'
 import { pollWhileVisible } from '../lib/poll'
@@ -90,12 +90,45 @@ export function NotificationsPage() {
   const [items, setItems] = useState<NotificationInfo[] | null>(null)
   const [ackedIds, setAckedIds] = useState<Set<string>>(new Set()) // 本会话内已从列表回执的告警（立即显示"已回执"）
   const [filter, setFilter] = useState<'all' | 'unread' | 'emergency'>('all') // 筛选：全部/未读/紧急——多人多事件时快速聚焦安全攸关或未处理的
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const expandedRef = useRef(false) // 是否已"加载更多"：展开后轮询合并头尾并保留 hasMore（否则每 15s 把更早页刷掉）
 
-  const load = async () => { try { const r = await api.notifications(); setItems(r.notifications) } catch { setItems([]) } }
+  const load = async () => {
+    try {
+      const r = await api.notifications()
+      // 未展开：直接替换为首屏（保持原行为）。展开：用首屏刷新"头部"（拾取服务端已读态/新到），保留更早页的"尾部"。
+      setItems((prev) => {
+        if (!prev || !expandedRef.current) return r.notifications
+        const fresh = r.notifications
+        const oldest = fresh[fresh.length - 1]
+        const freshIds = new Set(fresh.map((n) => n.id))
+        const tail = prev.filter((n) => !freshIds.has(n.id) && (n.createdAt < (oldest?.createdAt ?? 0) || (oldest && n.createdAt === oldest.createdAt && n.id < oldest.id)))
+        return [...fresh, ...tail]
+      })
+      if (!expandedRef.current) setHasMore(!!r.hasMore) // 展开后 hasMore 由 loadMore 维护，不被轮询翻回
+    } catch { setItems((c) => c ?? []) }
+  }
   // 轮询刷新收件箱（与 Locations/Chat/紧急看板等所有列表面一致）：家人开着通知页时，新到的可操作通知
   // （请求共享位置/SOS 回执/报到提醒等）会自动出现，无需手动刷新——尤其未授予 Web Push 的用户，此页是唯一入口。
   // 前台可见才拉、切回即刷（pollWhileVisible）。乐观态（ackedIds/已读）是独立 state，不被重拉清掉。
   useEffect(() => { void load(); return pollWhileVisible(load, 15000) }, [])
+
+  // 加载更多：以当前列表最后一条（最早）为游标向前翻页，追加更早的通知。通知列表此前硬顶最近 100 条无从翻看更早。
+  const loadMore = async () => {
+    const last = items && items[items.length - 1]
+    if (!last || loadingMore) return
+    setLoadingMore(true)
+    expandedRef.current = true
+    try {
+      const r = await api.notifications({ before: last.createdAt, beforeId: last.id })
+      setItems((prev) => {
+        const seen = new Set((prev ?? []).map((n) => n.id))
+        return [...(prev ?? []), ...r.notifications.filter((n) => !seen.has(n.id))]
+      })
+      setHasMore(!!r.hasMore)
+    } catch { /* 忽略；用户可再点 */ } finally { setLoadingMore(false) }
+  }
 
   // 从通知列表直接回执 SOS 告警："我已看到"——遇险者最需要的反馈是"有人在响应"，且服务端据此停止升级重呼、
   // 匿名协调其余亲友（与告警弹窗 onAck 同一后端流程）。此前列表只有"回拨"、没有"回执"，与弹窗不对等（尤其读屏
@@ -253,6 +286,13 @@ export function NotificationsPage() {
               </li>
             ))}
           </ul>
+        )}
+        {/* 加载更多：通知此前硬顶最近 100 条、无从翻看更早（silent cap）。有更早通知时给出翻页入口——
+            即便当前筛选（未读/紧急）此刻为空，也可加载更早的以找到超窗的未读/紧急通知。 */}
+        {hasMore && items && items.length > 0 && (
+          <div className="border-t border-[var(--line)] p-3 text-center">
+            <Button variant="soft" loading={loadingMore} onClick={loadMore}>{t('加载更多', 'Load more')}</Button>
+          </div>
         )}
       </Card>
     </div>

@@ -799,8 +799,16 @@ export class SqliteStore implements Store {
     this.db.prepare('INSERT OR REPLACE INTO notifications (id, userId, kind, title, body, dataJson, createdAt, readAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
       .run(n.id, n.userId, n.kind, n.title, n.body, n.data ? JSON.stringify(n.data) : null, n.createdAt, n.readAt ?? null)
   }
-  notificationsForUser(userId: string, limit = 100): Notification[] {
-    return this.db.prepare('SELECT * FROM notifications WHERE userId = ? ORDER BY createdAt DESC LIMIT ?').all(userId, limit).map((r) => this.toNotification(r))
+  notificationsForUser(userId: string, limit = 100, beforeMs?: number, beforeId?: string): Notification[] {
+    // 稳定倒序全序（createdAt DESC, id DESC）+ 复合游标——须与 MemoryStore.notificationsForUser/beforeCursor 逐字节等价（差分套件锁）。
+    if (beforeMs == null) {
+      return this.db.prepare('SELECT * FROM notifications WHERE userId = ? ORDER BY createdAt DESC, id DESC LIMIT ?').all(userId, limit).map((r) => this.toNotification(r))
+    }
+    if (beforeId == null) { // beforeCursor：无 beforeId 时退回严格 createdAt<beforeMs
+      return this.db.prepare('SELECT * FROM notifications WHERE userId = ? AND createdAt < ? ORDER BY createdAt DESC, id DESC LIMIT ?').all(userId, beforeMs, limit).map((r) => this.toNotification(r))
+    }
+    return this.db.prepare('SELECT * FROM notifications WHERE userId = ? AND (createdAt < ? OR (createdAt = ? AND id < ?)) ORDER BY createdAt DESC, id DESC LIMIT ?')
+      .all(userId, beforeMs, beforeMs, beforeId, limit).map((r) => this.toNotification(r))
   }
   findNotification(id: string): Notification | undefined {
     const row = this.db.prepare('SELECT * FROM notifications WHERE id = ?').get(id)

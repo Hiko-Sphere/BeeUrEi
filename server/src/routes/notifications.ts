@@ -24,7 +24,16 @@ export function registerNotificationRoutes(app: FastifyInstance, store: Store): 
   // 我的通知（时间倒序）+ 未读数。
   app.get('/api/notifications', { preHandler: requireAuth() }, async (req) => {
     const me = req.user!.sub
-    return { notifications: store.notificationsForUser(me), unread: store.unreadNotificationCount(me) }
+    // 向前翻页游标（"加载更多"更早通知）：before=毫秒、beforeId=同刻 tie-break（同 /api/calls）。
+    // 此前硬顶最近 100 条无分页——重度用户 90 天留存内破百，更早通知（好友请求/紧急后续等）永不可见。
+    const q = req.query as { before?: string; beforeId?: string; limit?: string }
+    const beforeMs = q.before != null && /^\d+$/.test(q.before) ? Number(q.before) : undefined
+    const beforeId = typeof q.beforeId === 'string' && q.beforeId ? q.beforeId : undefined
+    const limNum = q.limit != null && /^\d+$/.test(q.limit) ? Number(q.limit) : 100
+    const limit = Math.max(1, Math.min(100, limNum)) // clamp [1,100]，默认 100 保持既有客户端不变
+    const recs = store.notificationsForUser(me, limit + 1, beforeMs, beforeId) // 多取一条判 hasMore
+    const hasMore = recs.length > limit
+    return { notifications: hasMore ? recs.slice(0, limit) : recs, unread: store.unreadNotificationCount(me), hasMore }
   })
 
   // 标记单条已读（仅本人；不存在/非本人均静默 204，避免探测他人通知存在性）。

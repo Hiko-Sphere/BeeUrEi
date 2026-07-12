@@ -708,7 +708,7 @@ export interface Store {
 
   // 站内通知（持久化收件箱）
   createNotification(n: Notification): void
-  notificationsForUser(userId: string, limit?: number): Notification[] // 时间倒序
+  notificationsForUser(userId: string, limit?: number, beforeMs?: number, beforeId?: string): Notification[] // 时间倒序；beforeMs/beforeId=向前翻页复合游标（同 callRecordsForUser）
   findNotification(id: string): Notification | undefined
   markNotificationRead(id: string, userId: string): void // 仅本人可标记
   markAllNotificationsRead(userId: string): number
@@ -1388,10 +1388,11 @@ export class MemoryStore implements Store {
     this.notifications.set(n.id, n)
     this.afterMutate()
   }
-  notificationsForUser(userId: string, limit = 100): Notification[] {
+  notificationsForUser(userId: string, limit = 100, beforeMs?: number, beforeId?: string): Notification[] {
     return [...this.notifications.values()]
-      .filter((n) => n.userId === userId)
-      .sort((a, b) => b.createdAt - a.createdAt)
+      .filter((n) => n.userId === userId && beforeCursor(n, beforeMs, beforeId))
+      // 稳定倒序全序（createdAt 降，同刻按 id 降）：翻页游标须有确定 tie-break（同 callRecordsForUser）。
+      .sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
       .slice(0, limit)
   }
   findNotification(id: string): Notification | undefined {

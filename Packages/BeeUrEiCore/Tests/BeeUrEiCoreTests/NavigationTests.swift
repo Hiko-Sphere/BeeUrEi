@@ -104,6 +104,22 @@ final class RouteProgressTests: XCTestCase {
         XCTAssertEqual(a.text, "前方约 15 米后左转")
     }
 
+    /// 英制单位：转向距离用英尺（决策/5米取档全在公制不变，仅输出按单位格式化）。收口 turn-by-turn 英制的漏网近距转向提示。
+    func testManeuverDistanceRespectsImperialUnit() {
+        func t(_ d: Double, _ l: Language) -> String? {
+            progress.decide(distanceToManeuverMeters: d, instruction: l == .zh ? "左转" : "turn left",
+                            level: .precise, language: l, unit: .imperial).text
+        }
+        XCTAssertEqual(t(15, .zh), "前方约 49英尺后左转")           // 15m 档 → 49 英尺
+        XCTAssertEqual(t(15, .en), "In about 49 feet, turn left")
+        XCTAssertEqual(t(20, .en), "In about 66 feet, turn left")   // 20m 档 → 66 英尺
+        XCTAssertEqual(t(12, .en), "In about 33 feet, turn left")   // 12m→10m 档 → 33 英尺
+        XCTAssertEqual(t(18, .en), t(20, .en))                      // 18、20 同 20m 档：英制文本仍稳定（去重生效）
+        // 高确定性"现在转向"(≤5m)不带距离、不受单位影响。
+        XCTAssertEqual(progress.decide(distanceToManeuverMeters: 3, instruction: "turn left",
+                                       level: .precise, language: .en, unit: .imperial).text, "Now turn left")
+    }
+
     /// 距离按 5 米档取整（防逐米刷屏）：同档内文本稳定（上层据此去重、只提醒一次），跨档才变。
     func testDistanceAnnouncedInFiveMeterBuckets() {
         func text(_ d: Double) -> String? { progress.decide(distanceToManeuverMeters: d, instruction: "左转", level: .precise).text }

@@ -309,7 +309,7 @@ final class NavigationViewModel {
         // 转向播报（精度门控，核心 RouteProgress，已测）。
         let next = maneuvers[stepIndex]
         let distance = Geo.distanceMeters(fromLat: lat, fromLon: lon, toLat: next.coordinate.latitude, toLon: next.coordinate.longitude)
-        let decision = progress.decide(distanceToManeuverMeters: distance, instruction: next.instruction, level: level, language: lang)
+        let decision = progress.decide(distanceToManeuverMeters: distance, instruction: next.instruction, level: level, language: lang, unit: unit)
         if decision.shouldAnnounce, let text = decision.text {
             // 触觉须与语音同用去重条件：站在/慢速通过路口时 decide() 每帧都返回同一"现在转向"，
             // 语音靠 lastSpoken 去重只念一次，但触觉若无守卫会每帧狂震（复审 MED）。须在 speak() 前

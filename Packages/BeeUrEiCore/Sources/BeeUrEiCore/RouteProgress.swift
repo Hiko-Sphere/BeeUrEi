@@ -30,7 +30,8 @@ public struct RouteProgress: Sendable {
     public func decide(distanceToManeuverMeters: Double,
                        instruction: String,
                        level: InstructionLevel,
-                       language: Language = .zh) -> ManeuverAnnouncement {
+                       language: Language = .zh,
+                       unit: DistanceUnit = .metric) -> ManeuverAnnouncement {
         // 精度太差：不下任何方向指令。
         guard level != .none else { return .silent }
         // 已越过转向点（GPS 抖动/回放延迟/卫星回跳导致负距离）：绝不下达高确定性「现在……」。
@@ -53,6 +54,6 @@ public struct RouteProgress: Sendable {
         // ("50米""20米")而非逐米连续念。取 5 米整档后同档内文本稳定、被去重，仅在跨档时提醒一次。
         let bucket = max(imminentMeters, (distanceToManeuverMeters / 5).rounded() * 5)
         let meters = Int(bucket)
-        return ManeuverAnnouncement(shouldAnnounce: true, text: SpokenStrings.maneuverInMeters(meters, instruction: instruction, language), isHighCertainty: false)
+        return ManeuverAnnouncement(shouldAnnounce: true, text: SpokenStrings.maneuverInMeters(meters, instruction: instruction, unit: unit, language), isHighCertainty: false)
     }
 }

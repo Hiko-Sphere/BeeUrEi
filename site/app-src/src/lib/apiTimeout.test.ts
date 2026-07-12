@@ -130,4 +130,44 @@ describe('rawFetch 401 续期与远程登出', () => {
     await api.appConfig().then(() => null).catch(() => {})
     expect(gotToken).toBe('AT_OLD') // 清除前的 token 被传入（登出处理器据此退订 web push）
   })
+
+  it('并发去重：token 过期时多个在途请求共享**一次** refresh（防雷鸣群刷新→refresh token 互相轮换失效→级联登出）', async () => {
+    seedUser()
+    setUnauthorizedHandler(() => {})
+    let refreshCalls = 0
+    let releaseRefresh: (() => void) | null = null
+    const firstHit = new Set<string>() // 每个业务端点：首打 401、续期后重放 200
+    vi.stubGlobal('fetch', (url: string) => {
+      const u = String(url)
+      if (u.includes('/api/auth/refresh')) {
+        refreshCalls++
+        // 刷新悬住，制造"多个 401 同时等同一次续期"的窗口——若无 `if(refreshing) return refreshing` 去重，
+        // 每个 401 各自发一次 refresh，服务端每次轮换 refresh token，先回的令牌把后回的作废→重放全 401→级联登出。
+        return new Promise((r) => { releaseRefresh = () => r(jres(200, { token: 'AT_NEW', refreshToken: 'RT2' })) })
+      }
+      if (!firstHit.has(u)) { firstHit.add(u); return Promise.resolve(jres(401, { error: 'unauthorized' })) }
+      return Promise.resolve(jres(200, { ok: true }))
+    })
+    // 三个不同端点并发触发 401（同一 token 过期时的真实场景：轮询+用户操作同时打）。
+    const ps = [api.appConfig(), api.me().catch(() => 'me-ok'), api.unreadSummary()].map((p) => p.catch((e) => e))
+    await Promise.resolve(); await Promise.resolve() // 让三个请求都跑过入口并进入 tryRefresh 排队
+    releaseRefresh!()
+    await Promise.all(ps)
+    expect(refreshCalls).toBe(1)          // 关键：三个 401 只触发一次续期
+    expect(tokenStore.token).toBe('AT_NEW')
+  })
+
+  it('续期返回 2xx 却无 token（异常/畸形响应）→ 保守当瞬时故障，不误清有效令牌', async () => {
+    seedUser()
+    let loggedOut = false
+    setUnauthorizedHandler(() => { loggedOut = true })
+    vi.stubGlobal('fetch', (url: string) => {
+      if (String(url).includes('/api/auth/refresh')) return Promise.resolve(jres(200, { refreshToken: 'RT2' })) // 200 但缺 token
+      return Promise.resolve(jres(401, { error: 'unauthorized' }))
+    })
+    const err = await api.appConfig().then(() => null).catch((e: unknown) => e)
+    expect((err as APIError).code).toBe('network') // 瞬时上抛
+    expect(loggedOut).toBe(false)                  // 不登出
+    expect(tokenStore.refresh).toBe('RT1')         // 有效 refresh token 保留（未被畸形响应误清）
+  })
 })

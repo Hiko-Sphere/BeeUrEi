@@ -80,6 +80,15 @@ describe('notifIconKind 通知图标选择（图标须与去处语义一致）',
     expect(notifIconKind('kyc_verified')).toBe('shield')
     expect(notifIconKind('medical_info_viewed')).toBe('shield')
   })
+  it('紧急后续/安心类须区别于 SOS 红闪电：报平安=绿勾、有人响应/已看到=电话；真 SOS 才闪电', () => {
+    // 收到这些的亲友不该在通知流里误以为又来一起**新**紧急（红闪电=警报）。
+    expect(notifIconKind('emergency_clear')).toBe('check')       // 报平安=最安心，绿勾
+    expect(notifIconKind('emergency_responding')).toBe('phone')  // 有人在处理=协调好消息
+    expect(notifIconKind('emergency_ack')).toBe('phone')         // 有人已看到
+    // 真 SOS 通知（kind 恒为 emergency_alert，fall/crash/manual 只是 data 里的 sub-kind）仍是红闪电——
+    // 对比锚点，证明只区分了后续/安心类、没误伤告警本身。
+    expect(notifIconKind('emergency_alert')).toBe('flash')
+  })
   it('其余类：来电=电话、低电量=电池、群/好友=人形、录制=胶片、无匹配=铃铛', () => {
     expect(notifIconKind('incoming_call')).toBe('phone')
     expect(notifIconKind('contact_low_battery')).toBe('battery')

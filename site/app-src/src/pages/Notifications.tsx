@@ -44,11 +44,17 @@ export function notifDestination(kind: string, data?: Record<string, string> | n
 /// web 呈现"——**图标须与去处语义一致**（location_request 去 /locations，就该用定位图标而非默认铃铛）。iconFor 只做
 /// 键→组件映射，选择逻辑集中在此以便回归测试（此前 iconFor 返回 JSX 无法直接断言，location_request 漏配才没被测出）。
 /// 顺序敏感：见各分支注释（emergency_contact 须先于 emergency；security 系须先于 friend/link）。
-export type NotifIconKind = 'users' | 'flash' | 'battery' | 'phone' | 'shield' | 'pin' | 'film' | 'bell'
+export type NotifIconKind = 'users' | 'flash' | 'battery' | 'phone' | 'shield' | 'pin' | 'film' | 'check' | 'bell'
 export function notifIconKind(kind: string): NotifIconKind {
   // 被设为紧急联系人=关系事件，用人形图标；**须在 emergency→闪电 之前判**，否则 emergency_contact_set 含子串
   // "emergency" 会误配成 SOS 告警闪电——把善意的"你被设为紧急联系人"渲染得像危险告警，并与真实告警视觉混淆。
   if (kind.includes('emergency_contact')) return 'users'
+  // 紧急**后续/安心**类须区别于 SOS 告警本身，否则收到的亲友在通知流里误以为又来一起**新**紧急（红闪电=警报）：
+  //   · emergency_clear（报平安）= 最不该报警——用绿勾（安心"已解除"）。
+  //   · emergency_responding / emergency_ack（有人在处理/已看到）= 协调好消息——用电话（"正在触达/响应中"），较缓。
+  //   真 SOS（emergency_alert / fall / crash / manual）仍落下方 flash 红闪电。**须在通配 emergency→flash 之前判**。
+  if (kind === 'emergency_clear') return 'check'
+  if (kind === 'emergency_responding' || kind === 'emergency_ack') return 'phone'
   if (kind.includes('emergency')) return 'flash'
   if (kind.includes('battery')) return 'battery' // 共享者低电量提醒
   if (kind.includes('call')) return 'phone'
@@ -78,6 +84,7 @@ function iconFor(kind: string) {
     case 'shield': return <IconShield />
     case 'pin': return <IconPin />
     case 'film': return <IconFilm />
+    case 'check': return <IconCheck />
     default: return <IconBell />
   }
 }

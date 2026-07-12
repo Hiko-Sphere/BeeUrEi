@@ -5,6 +5,8 @@ import { useI18n } from '../lib/i18n'
 import { api, type AppConfig } from '../lib/api'
 import { getTheme, setTheme, appTitle, type Theme } from '../lib/theme'
 import { updateAppBadge } from '../lib/appBadge'
+import { updateAvailable } from '../lib/appVersion'
+import { pollWhileVisible } from '../lib/poll'
 import { Avatar, Pill } from './ui'
 import { CallProvider } from '../pages/call/CallController'
 import { IconHome, IconPhone, IconChat, IconUsers, IconFilm, IconBell, IconUser, IconShield, IconLogo, IconPin, IconFlag } from './icons'
@@ -38,7 +40,21 @@ export function Layout({ children }: { children: ReactNode }) {
   // 但界面仍显示旧数据、看着一切正常——必须显式告知"你已离线"。恢复由**下一次成功轮询**清除
   // （而非 online 事件直接清：网络接口恢复≠服务器可达，见 tick 内 setOffline(false)）。
   const [offline, setOffline] = useState(false)
+  // 新版本可用（appVersion）：协助者整天开着标签页跑轮询、SW 又是 network-first（不刷新就一直跑旧包）——
+  // 部署修复/安全补丁后旧标签页可能跑数天旧码。周期比对部署产物 index.html 的主包哈希，不同则提示刷新。
+  const [updateReady, setUpdateReady] = useState(false)
   const loc = useLocation()
+
+  useEffect(() => {
+    const check = () => {
+      // no-store 直取源站（经 SW 的 network-first 也拿到最新）；解析失败/网络失败一律静默（绝不误报）。
+      void fetch(import.meta.env.BASE_URL, { cache: 'no-store' })
+        .then((r) => r.text())
+        .then((html) => { if (updateAvailable(html, document)) setUpdateReady(true) })
+        .catch(() => { /* 离线/瞬断：下个周期再查 */ })
+    }
+    return pollWhileVisible(check, 10 * 60_000) // 每 10 分钟（仅前台）；无需开屏即查——刚加载必是新版本
+  }, [])
 
   // 全站配置（公告/维护横幅、录制策略） + 通知未读数轮询。
   // 通知轮询**始终运行**（含后台标签）：协助者把页面切后台时正是最需要知道"有盲人需要我"的时候，
@@ -126,6 +142,16 @@ export function Layout({ children }: { children: ReactNode }) {
         {offline && (
           <div role="alert" className="bg-danger px-4 py-2 text-center text-sm font-medium text-white">
             {t('网络已断开——你暂时收不到新的消息与紧急告警', "You're offline — new messages and emergency alerts can't reach you right now")}
+          </div>
+        )}
+        {/* 新版本可用（非紧急，role=status）：长开标签页跑旧包的出口——点击即刷新拿新码；不自动刷（绝不打断正在进行的协助/通话）。 */}
+        {updateReady && (
+          <div role="status" className="flex items-center justify-center gap-3 border-b border-[var(--line)] bg-honey/20 px-4 py-2 text-center text-sm text-[var(--text)]">
+            <span>{t('应用有新版本', 'A new version is available')}</span>
+            <button type="button" onClick={() => location.reload()}
+              className="rounded-lg bg-honey px-2.5 py-1 text-xs font-semibold text-ink transition hover:brightness-105">
+              {t('点击刷新', 'Refresh now')}
+            </button>
           </div>
         )}
         {/* 全站公告 / 维护横幅 */}

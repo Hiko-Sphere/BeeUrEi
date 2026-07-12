@@ -24,4 +24,16 @@ export default defineConfig([
       'react-refresh/only-export-components': 'off',
     },
   },
+  {
+    // Service Worker（public/sw.js，不参与打包）：此前只被 files 通配 **/*.{ts,tsx} 略过=0 规则生效
+    //（--print-config 验证过）——推送/离线的生命线打错标识符要到运行时才炸。no-undef 静态兜底；
+    // serviceworker 全局（self/clients/registration…）；空 catch 是文内 best-effort 惯例。
+    files: ['public/sw.js'],
+    extends: [js.configs.recommended],
+    languageOptions: { sourceType: 'script', globals: globals.serviceworker },
+    rules: {
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrors: 'none' }],
+      'no-empty': ['error', { allowEmptyCatch: true }],
+    },
+  },
 ])

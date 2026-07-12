@@ -276,6 +276,15 @@ describe('admin + reports', () => {
     expect(growth.newUsers30d).toBeGreaterThanOrEqual(3) // root + frank + gina
     expect(ov.json().activeEmergencies).toBe(2) // 未解除近 24h：ae1(触达1) + ae4(触达0)；已解除/陈旧不计
     expect(ov.json().activeUnreachable).toBe(1) // 仅 ae4：活跃∧notified===0；ae1 有触达不计、ae5 已解除不计
+
+    // 高峰期回归（窗口截断假安心，b03ebba 列表截断的姊妹）：再来 220 条**已解除**的新事件——未解除的 ae1/ae4
+    // 被挤出"最近 200 条"窗口。危机计数必须仍然如实（全量查询），绝不能因窗口丢失而少报为 0。
+    for (let i = 0; i < 220; i++) {
+      store.createEmergencyEvent({ id: `flood${i}`, userId: 'u1', kind: 'manual', notified: 1, contacts: 1, at: Date.now() - 30_000 + i, resolvedAt: Date.now() })
+    }
+    const ov2 = await app.inject({ method: 'GET', url: '/api/admin/overview', headers: adminAuth })
+    expect(ov2.json().activeEmergencies).toBe(2) // ae1+ae4 虽超出最近 200 条窗口，计数不变
+    expect(ov2.json().activeUnreachable).toBe(1) // ae4 的"未触达任何人"红标计数同样不丢
     expect(ov.json().mail).toMatchObject({ sent: expect.any(Number), failed: expect.any(Number) }) // 邮件送达健康（SMTP 故障可见）
     expect(ov.json().mail.failed).toBe(0) // ConsoleMailer 从不失败 → 测试态无邮件失败
     expect(ov.json().safetyTickErrors).toBe(0) // 安全引擎 tick 报错累计（测试态无后台 tick 运行 → 0）
@@ -477,5 +486,24 @@ describe('Admin v3：审核处置 + 审计 + 全站控制', () => {
     const reopened = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'late', password: 'secret123' } })
     expect(reopened.statusCode).toBe(201)
     await app.close()
+  })
+})
+
+// openEmergencyEventsSince（危机计数的全量查询）两 Store 平价：未解除∧sinceMs 之后 → 计入；已解除/过旧不计；
+// **不受"最近 N 条"窗口影响**——220 条已解除新事件淹没后，旧的未解除事件仍在（recentEmergencyEvents(200) 会丢）。
+import { SqliteStore } from '../src/db/sqliteStore'
+describe.each([['MemoryStore', () => new MemoryStore()], ['SqliteStore', () => new SqliteStore(':memory:')]] as const)('openEmergencyEventsSince (%s)', (_n, make) => {
+  it('未解除∧窗内计入；已解除/过旧不计；被 220 条新事件淹没后仍不丢（全量非窗口）', () => {
+    const store = make()
+    const now = 1_000_000_000
+    store.createEmergencyEvent({ id: 'open1', userId: 'u1', kind: 'fall', notified: 1, contacts: 1, at: now - 3600_000 })                          // 未解除、1h 前 → 计
+    store.createEmergencyEvent({ id: 'done1', userId: 'u1', kind: 'manual', notified: 1, contacts: 1, at: now - 3600_000, resolvedAt: now - 1000 }) // 已解除 → 不计
+    store.createEmergencyEvent({ id: 'old1', userId: 'u1', kind: 'fall', notified: 1, contacts: 1, at: now - 25 * 3600_000 })                       // 25h 前 → 窗外不计
+    const open = store.openEmergencyEventsSince(now - 24 * 3600_000)
+    expect(open.map((e) => e.id)).toEqual(['open1'])
+    // 高峰淹没：220 条已解除新事件 → recentEmergencyEvents(200) 已看不到 open1，全量查询仍如实返回。
+    for (let i = 0; i < 220; i++) store.createEmergencyEvent({ id: `f${i}`, userId: 'u1', kind: 'manual', notified: 1, contacts: 1, at: now - 60_000 + i, resolvedAt: now })
+    expect(store.recentEmergencyEvents(200).some((e) => e.id === 'open1')).toBe(false) // 确认已被窗口挤出（回归前置）
+    expect(store.openEmergencyEventsSince(now - 24 * 3600_000).map((e) => e.id)).toEqual(['open1'])
   })
 })

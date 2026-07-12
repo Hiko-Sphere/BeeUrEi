@@ -191,7 +191,9 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       if (i !== undefined) trend[i].count++
     }
     // 当前正在进行的紧急（未解除 ∧ 近 24h）：一次取出，既数活跃总数、又数其中"未触达任何人"的。
-    const activeEmerg = store.recentEmergencyEvents(200).filter((e) => e.resolvedAt == null && e.at > now - DAY)
+    // **全量**查询（openEmergencyEventsSince），非 recentEmergencyEvents(N).filter——那是"最近 N 条"窗口，
+    // 高峰期未解除的旧事件掉出窗口会让危机计数**少报**（管理员误信"没有活跃紧急"，假安心；b03ebba 列表截断的姊妹）。
+    const activeEmerg = store.openEmergencyEventsSince(now - DAY)
     return {
       users: { total: users.length, active, disabled, byRole },
       online: { total: online.size, helpers: onlineHelpers },

@@ -821,8 +821,12 @@ export class SqliteStore implements Store {
     return Number(this.db.prepare('DELETE FROM notifications WHERE createdAt < ?').run(cutoffMs).changes)
   }
   createEmergencyEvent(e: EmergencyEvent): void {
-    this.db.prepare('INSERT OR REPLACE INTO emergency_events (id, userId, kind, lat, lon, locSource, locAgeSec, notified, contacts, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(e.id, e.userId, e.kind, e.lat ?? null, e.lon ?? null, e.locSource ?? null, e.locAgeSec ?? null, e.notified, e.contacts, e.at)
+    // 写入**全部**字段（与 MemoryStore 整对象存取平价）：此前漏 resolvedAt/ackedAt/onWayAt/escalatedAt——
+    // 生产创建路径虽总是未解除，但 INSERT OR REPLACE 同 id 重写会静默清掉这些时间线，且备份恢复/测试造数
+    // 传入的已解除事件会被"复活"为未解除（值对象须整体同生共死，同 cascade-recording-media 教训）。
+    this.db.prepare('INSERT OR REPLACE INTO emergency_events (id, userId, kind, lat, lon, locSource, locAgeSec, notified, contacts, at, resolvedAt, ackedAt, onWayAt, escalatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(e.id, e.userId, e.kind, e.lat ?? null, e.lon ?? null, e.locSource ?? null, e.locAgeSec ?? null, e.notified, e.contacts, e.at,
+           e.resolvedAt ?? null, e.ackedAt ?? null, e.onWayAt ?? null, e.escalatedAt ?? null)
   }
   private static mapEmergencyRow(r: any): EmergencyEvent {
     return { id: r.id, userId: r.userId, kind: r.kind,
@@ -836,6 +840,10 @@ export class SqliteStore implements Store {
   }
   recentEmergencyEvents(limit = 100): EmergencyEvent[] {
     return (this.db.prepare('SELECT * FROM emergency_events ORDER BY at DESC LIMIT ?').all(Math.max(0, limit)) as any[]).map(SqliteStore.mapEmergencyRow)
+  }
+  openEmergencyEventsSince(sinceMs: number): EmergencyEvent[] {
+    // 全量（无窗口）：危机计数不可少报——见 store 接口注释。
+    return (this.db.prepare('SELECT * FROM emergency_events WHERE resolvedAt IS NULL AND at > ? ORDER BY at DESC').all(sinceMs) as any[]).map(SqliteStore.mapEmergencyRow)
   }
   emergencyEventsForUser(userId: string): EmergencyEvent[] {
     return (this.db.prepare('SELECT * FROM emergency_events WHERE userId = ? ORDER BY at DESC').all(userId) as any[]).map(SqliteStore.mapEmergencyRow)

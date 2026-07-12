@@ -719,6 +719,10 @@ export interface Store {
   // 紧急事件日志（治理）：
   createEmergencyEvent(e: EmergencyEvent): void
   recentEmergencyEvents(limit?: number): EmergencyEvent[] // 时间倒序
+  /// 未解除（resolvedAt 空）且 at > sinceMs 的紧急事件——**全量**（无窗口），时间倒序。
+  /// 供"当前活跃紧急数/其中未触达任何人数"等**危机计数**：不可用 recentEmergencyEvents(N).filter(...)
+  /// 代替——那是"最近 N 条"窗口，高峰期未解除的旧事件会掉出窗口、危机计数少报（假安心）。
+  openEmergencyEventsSince(sinceMs: number): EmergencyEvent[]
   emergencyEventsForUser(userId: string): EmergencyEvent[] // 本人事故记录（自助导出用，时间倒序）
   resolveOpenEmergencyEvents(userId: string, now: number): number // 报平安：标记该用户**全部**未解除事件为已解除，返回解除条数（报平安=本人已安全，其名下所有未决告警都该消，否则遗留的会被升级重呼误报）
   markEmergencyAcked(eventId: string, at: number): void   // 首个亲友确认：记 ackedAt（升级重呼据此跳过；后续确认不覆盖）
@@ -1441,6 +1445,11 @@ export class MemoryStore implements Store {
   }
   recentEmergencyEvents(limit = 100): EmergencyEvent[] {
     return [...this.emergencyEvents.values()].sort((a, b) => b.at - a.at).slice(0, Math.max(0, limit))
+  }
+  openEmergencyEventsSince(sinceMs: number): EmergencyEvent[] {
+    return [...this.emergencyEvents.values()]
+      .filter((e) => e.resolvedAt == null && e.at > sinceMs)
+      .sort((a, b) => b.at - a.at)
   }
   emergencyEventsForUser(userId: string): EmergencyEvent[] {
     return [...this.emergencyEvents.values()].filter((e) => e.userId === userId).sort((a, b) => b.at - a.at)

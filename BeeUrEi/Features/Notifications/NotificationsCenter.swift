@@ -181,6 +181,53 @@ struct EmergencyAckButtons: View {
     }
 }
 
+/// 亲友请求共享位置（location_request）的**接收侧**一键响应：盲人用户基本只有 iOS——此前 iOS 不处理
+/// 该通知（只显示文字），亲友在网页端点了"请求共享"后对方无从一键响应，请求回路断在最关键的一环。
+/// 点按直接走 LiveLocationManager.startSharing()（权限/后台续传/语音播报它自己处理）；首帧位置上报落地后
+/// **服务端**自动通知请求者"对方已开始共享"（iter153 回路），客户端无需额外调用。
+enum LocationRequestStrings {
+    static func share(_ l: Language) -> String { l == .zh ? "开始共享位置" : "Share my location" }
+    static func alreadySharing(_ l: Language) -> String { l == .zh ? "已在共享位置，对方可以看到你" : "Already sharing — they can see you" }
+    static func started(_ l: Language) -> String { l == .zh ? "已开始共享，对方会收到通知" : "Sharing started — they'll be notified" }
+    static func shareA11y(_ name: String, _ l: Language) -> String {
+        name.isEmpty ? share(l) : (l == .zh ? "开始共享位置给 \(name)" : "Start sharing your location with \(name)")
+    }
+    /// 门控（纯函数，可测）：只对亲友的位置共享请求（location_request，带 fromId=请求者）显示；
+    /// location_share_started 等回执类、其他 kind 一律不显示。
+    static func shouldOffer(kind: String, fromId: String?) -> Bool {
+        kind == "location_request" && !(fromId ?? "").isEmpty
+    }
+}
+
+/// location_request 行内"开始共享位置"按钮：直连 LiveLocationManager（@Observable，sharing 状态自动驱动 UI）。
+/// 已在共享→显示状态不显示按钮（服务端对已共享者本就不发此通知，此为旧通知/中途开启的兜底）；
+/// 权限被拒→显示引导文案（manager 已语音播报过）。
+struct LocationRequestShareButton: View {
+    let fromName: String
+    @State private var manager = LiveLocationManager.shared
+    @State private var tapped = false
+    private var lang: Language { FeatureSettings().language }
+
+    var body: some View {
+        if manager.sharing {
+            Label(tapped ? LocationRequestStrings.started(lang) : LocationRequestStrings.alreadySharing(lang),
+                  systemImage: "checkmark.circle.fill")
+                .font(.footnote).foregroundStyle(.secondary)
+        } else if manager.authorizationDenied && tapped {
+            Text(LiveLocationStrings.permissionDenied(lang)).font(.footnote).foregroundStyle(Color.beeDanger)
+        } else {
+            Button {
+                tapped = true
+                manager.startSharing()
+            } label: {
+                Label(LocationRequestStrings.share(lang), systemImage: "location.fill")
+                    .font(.footnote.weight(.semibold)).foregroundStyle(Color.beeAccent)
+            }
+            .accessibilityLabel(LocationRequestStrings.shareA11y(fromName, lang))
+        }
+    }
+}
+
 /// 工具栏铃铛 + 未读角标，点开应用内通知列表。
 struct NotificationsBell: View {
     @State private var center = NotificationsCenter.shared
@@ -267,6 +314,12 @@ struct NotificationsView: View {
                                 // fromId 门天然排除关系事件（emergency_contact_set 无 fromId）。hasMedical=1 时醒目提示。
                                 if n.kind.contains("emergency"), let fromId = n.data?["fromId"], !fromId.isEmpty {
                                     EmergencyMedicalButton(userId: fromId, emphasize: n.data?["hasMedical"] == "1")
+                                        .padding(.leading, n.isUnread ? 16 : 0)
+                                }
+                                // 亲友请求共享位置：一键开始共享（LocationRequestStrings.shouldOffer 纯函数门控，已测）。
+                                // 首帧上报落地后服务端自动回执请求者，这里无需再调接口。
+                                if LocationRequestStrings.shouldOffer(kind: n.kind, fromId: n.data?["fromId"]) {
+                                    LocationRequestShareButton(fromName: n.data?["fromName"] ?? "")
                                         .padding(.leading, n.isUnread ? 16 : 0)
                                 }
                             }

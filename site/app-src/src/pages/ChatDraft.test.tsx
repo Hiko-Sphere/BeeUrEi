@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 
 // 打开与 p1 的单聊：mock useParams 给 peerId、useSession 给本人(me)、api 给会话+消息。
 vi.mock('react-router-dom', () => ({ useParams: () => ({ peerId: 'p1' }), useNavigate: () => vi.fn() }))
@@ -52,6 +52,25 @@ describe('ChatPage 会话草稿本地持久化', () => {
     render(<ChatPage />)
     await screen.findByPlaceholderText(PLACEHOLDER)
     await waitFor(() => expect(input().value).toBe('回家的路怎么走'))
+  })
+
+  it('会话列表行显示"[草稿] …"（优先于末条消息预览，WhatsApp/Telegram 标配）；无草稿行不标', async () => {
+    // 预置草稿（上次没写完就离开）+ 另一无草稿会话作对照。
+    localStorage.setItem('beeurei:draft:me:peer:p1', '还没发完的话')
+    mock(api.conversations).mockResolvedValue({ conversations: [
+      { peer: { id: 'p1', displayName: '阿明', avatar: null }, last: null, unread: 0 },
+      { peer: { id: 'p2', displayName: '小红', avatar: null }, last: { id: 'l1', fromId: 'p2', toId: 'me', kind: 'text', text: '上一条消息', createdAt: 1000 }, unread: 0 },
+    ] })
+    render(<ChatPage />)
+    await screen.findByText('小红')
+    // 限定在会话列表内找（"阿明"同时出现在自动进入的线程头，直接 getByText 会撞 multiple）。
+    const list = screen.getByLabelText('会话列表')
+    const mingRow = within(list).getByText('阿明').closest('li')!
+    expect(mingRow.textContent).toContain('[草稿]')
+    expect(mingRow.textContent).toContain('还没发完的话') // 草稿正文可见（不被末条消息盖住）
+    const hongRow = within(list).getByText('小红').closest('li')!
+    expect(hongRow.textContent).not.toContain('[草稿]')   // 无草稿：照常显示末条消息预览
+    expect(hongRow.textContent).toContain('上一条消息')
   })
 
   it('发送成功后清空草稿键（不残留已发内容）', async () => {

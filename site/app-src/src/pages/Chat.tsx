@@ -9,6 +9,7 @@ import { parseLocation, appleMapsUrl, locationMessageText } from '../lib/locatio
 import { linkifyParts } from '../lib/linkify'
 import { imageFileFromClipboard } from '../lib/clipboardImage'
 import { isForwardableKind } from '../lib/chatMessage'
+import { draftKey as draftKeyOf, draftPreview } from '../lib/draft'
 import { isNearBottom } from '../lib/scroll'
 import { ReportDialog } from '../components/ReportDialog'
 import { VoiceRecorderButton } from '../components/VoiceRecorder'
@@ -205,7 +206,13 @@ function ConvoRow({ convo, active, onClick, lang, t, meId }: { convo: Conversati
             {convo.online && <span role="img" aria-label={t('在线', 'Online')} title={t('在线', 'Online')} className="h-2 w-2 shrink-0 rounded-full bg-ok" />}
             <span className="truncate font-medium">{convo.peer.displayName}</span>
             {convo.muted && <span role="img" aria-label={t('已静音', 'Muted')} title={t('已静音', 'Muted')} className="shrink-0 text-xs text-faint">🔕</span>}</div>
-          <div className="truncate text-xs text-faint">{conversationPreview(convo.last, meId, t)}</div>
+          {/* 未发送草稿优先于最后一条消息（WhatsApp/Telegram 标配）：没写完的话从列表一眼可见、不被新消息盖住。 */}
+          {(() => {
+            const d = draftPreview(meId, 'peer', convo.peer.id)
+            return d
+              ? <div className="truncate text-xs text-faint"><span className="font-medium text-honey">[{t('草稿', 'Draft')}]</span> {d}</div>
+              : <div className="truncate text-xs text-faint">{conversationPreview(convo.last, meId, t)}</div>
+          })()}
         </div>
         <div className="flex flex-col items-end gap-1">
           <span className="text-[10px] text-faint">{convo.last ? timeAgo(convo.last.createdAt, lang) : ''}</span>
@@ -223,7 +230,13 @@ function GroupRow({ g, active, onClick, lang, t, meId }: { g: GroupSummary; acti
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5"><span className="truncate font-medium">{g.group.name}</span><Pill>{g.members.length}</Pill>
             {g.muted && <span role="img" aria-label={t('已静音', 'Muted')} title={t('已静音', 'Muted')} className="shrink-0 text-xs text-faint">🔕</span>}</div>
-          <div className="truncate text-xs text-faint">{conversationPreview(g.last, meId, t, g.members)}</div>
+          {/* 未发送草稿优先于最后一条消息（与单聊行同口径）。 */}
+          {(() => {
+            const d = draftPreview(meId, 'group', g.group.id)
+            return d
+              ? <div className="truncate text-xs text-faint"><span className="font-medium text-honey">[{t('草稿', 'Draft')}]</span> {d}</div>
+              : <div className="truncate text-xs text-faint">{conversationPreview(g.last, meId, t, g.members)}</div>
+          })()}
         </div>
         <div className="flex flex-col items-end gap-1">
           <span className="text-[10px] text-faint">{g.last ? timeAgo(g.last.createdAt, lang) : ''}</span>
@@ -350,8 +363,8 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
   const toast = useToast()
   const [msgs, setMsgs] = useState<ChatMessage[] | null>(null)
   const [pinned, setPinned] = useState<PinnedMessage | null>(null) // 会话置顶消息（顶部横幅）；服务端每次回带最新
-  // 会话草稿本地键：按**当前用户 + 会话**命名空间，避免同一浏览器换账号后串读到别人的草稿（隐私）。
-  const draftKey = `beeurei:draft:${user?.id ?? 'anon'}:${sel.kind}:${sel.id}`
+  // 会话草稿本地键（单一事实源 lib/draft：与会话列表"[草稿]"标示共用键格式，防漂移）。
+  const draftKey = draftKeyOf(user?.id, sel.kind, sel.id)
   // 草稿持久化：未发送的输入按会话存 localStorage，切会话(Thread 重挂载)/刷新/误触返回都不丢。
   // 读屏/键盘输入比触屏慢、丢草稿代价更高——各主流 IM 皆有此能力。惰性初始化：进会话即回填上次草稿。
   const [text, setText] = useState(() => { try { return localStorage.getItem(draftKey) ?? '' } catch { return '' } })

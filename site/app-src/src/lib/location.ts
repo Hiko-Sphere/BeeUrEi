@@ -54,6 +54,30 @@ export function routeDistanceText(meters: number, t: (zh: string, en: string) =>
   return t(`约 ${Math.round(m)} 米`, `~${Math.round(m)} m`)
 }
 
+/// 保守步速（米/秒）：与 iOS 核心 RouteRemaining.effectiveWalkingSpeed 的默认步速同值，保证同一条路线在
+/// App 与网页端给出**一致**的步行时间估计（约 4.3 km/h，普通步行；盲人沿信标行走+过街驻足实际可能更慢，
+/// 故此估计偏乐观，仅供家人对路线长短有个大致概念，非精确导航 ETA——真实 ETA 在 App 内用实测步速）。
+export const WALKING_SPEED_MPS = 1.2
+
+/// 路线预计步行分钟数：距离/步速，向上取整到 1 分钟（<2 点或坏距离→0，调用方省略）。
+export function routeWalkingMinutes(meters: number): number {
+  const m = Number.isFinite(meters) && meters > 0 ? meters : 0
+  if (m === 0) return 0
+  return Math.max(1, Math.round(m / WALKING_SPEED_MPS / 60))
+}
+
+/// 步行时间可读文本（"步行约 15 分钟" / "~15 min walk"）：≥60 分钟用"X 小时 Y 分钟"。
+/// 无有效距离（0）返回空串，调用方用 `&& text` 省略，绝不显示"步行约 0 分钟"。
+export function routeWalkingText(meters: number, t: (zh: string, en: string) => string): string {
+  const mins = routeWalkingMinutes(meters)
+  if (mins === 0) return ''
+  if (mins < 60) return t(`步行约 ${mins} 分钟`, `~${mins} min walk`)
+  const h = Math.floor(mins / 60), mm = mins % 60
+  return mm === 0
+    ? t(`步行约 ${h} 小时`, `~${h} h walk`)
+    : t(`步行约 ${h} 小时 ${mm} 分钟`, `~${h} h ${mm} min walk`)
+}
+
 export function parseLocation(text: string): { lat: number; lng: number; name?: string } | null {
   // 防御：text 类型虽为 string，但消息字段可能因后端数据异常为 null/undefined——
   // 下方 text.indexOf 在 try/catch 之外，无此守卫会抛 TypeError、连累整条聊天列表/会话渲染崩。

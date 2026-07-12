@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { api, APIError, contentBlockedText, type SavedRouteInfo, type RouteWaypoint, type FamilyLink } from '../lib/api'
-import { routeDistanceMeters, routeDistanceText } from '../lib/location'
+import { routeDistanceMeters, routeDistanceText, routeWalkingText } from '../lib/location'
 import { useI18n } from '../lib/i18n'
 import { useSession } from '../lib/session'
 import { Card, Button, EmptyState, useToast, Modal } from '../components/ui'
@@ -163,7 +163,7 @@ export function RoutesPage() {
             )}
             <span className="text-xs text-faint">
               {t(`${wp.length} 个点`, `${wp.length} points`)}
-              {wp.length >= 2 && ` · ${routeDistanceText(routeDistanceMeters(wp), t)}`}
+              {wp.length >= 2 && ` · ${routeDistanceText(routeDistanceMeters(wp), t)} · ${routeWalkingText(routeDistanceMeters(wp), t)}`}
             </span>
             <div className="ml-auto flex gap-2">
               <Button variant="soft" onClick={() => { if (wp.length) { setEditing({ ...editing, waypoints: wp.slice(0, -1) }); setSelectedIdx(null) } }} disabled={!wp.length}>
@@ -236,7 +236,7 @@ export function RoutesPage() {
                     <div className="truncate font-semibold">{r.name}</div>
                     <div className="mt-0.5 text-xs text-faint">
                       {t(`给${ownerName(r)} · ${r.waypoints.length} 个点`, `For ${ownerName(r)} · ${r.waypoints.length} points`)}
-                      {r.waypoints.length >= 2 && ` · ${routeDistanceText(routeDistanceMeters(r.waypoints), t)}`}
+                      {r.waypoints.length >= 2 && ` · ${routeDistanceText(routeDistanceMeters(r.waypoints), t)} · ${routeWalkingText(routeDistanceMeters(r.waypoints), t)}`}
                     </div>
                     {/* 信任透明：这条是别人替我画的（role=owner 且有创建者名）→ 显示"由 X 创建"，让要沿它走的人知道路线可信度取决于谁画的
                         （与 iOS 盲人端"这条是谁画的"同口径）。自己画的(createdByName 为空)不赘述。 */}

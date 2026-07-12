@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { parseLocation, appleMapsUrl, haversineMeters, routeDistanceMeters, routeDistanceText, locationMessageText, validLatLng } from './location'
+import { parseLocation, appleMapsUrl, haversineMeters, routeDistanceMeters, routeDistanceText, routeWalkingMinutes, routeWalkingText, locationMessageText, validLatLng } from './location'
 
 const zh = (a: string) => a // t 桩：取中文
+const en = (_a: string, b: string) => b // t 桩：取英文
 
 describe('haversineMeters / routeDistanceMeters', () => {
   it('两点距离与已知值吻合（~111km/纬度差 1°）', () => {
@@ -35,6 +36,26 @@ describe('routeDistanceText', () => {
   it('非有限/负→约 0 米（不崩不 NaN）', () => {
     expect(routeDistanceText(NaN, zh)).toBe('约 0 米')
     expect(routeDistanceText(-5, zh)).toBe('约 0 米')
+  })
+})
+
+describe('routeWalking* 步行时间估计（步速 1.2 m/s，与 iOS RouteRemaining 默认同口径）', () => {
+  it('分钟数=距离/步速向上取整，最少 1 分钟', () => {
+    expect(routeWalkingMinutes(1200)).toBe(17)  // 1200/1.2/60=16.7→17
+    expect(routeWalkingMinutes(72)).toBe(1)      // 恰 1 分钟
+    expect(routeWalkingMinutes(30)).toBe(1)      // 0.4 分钟也报 1（不报 0）
+    expect(routeWalkingMinutes(0)).toBe(0)       // 无距离→0
+    expect(routeWalkingMinutes(NaN)).toBe(0)
+    expect(routeWalkingMinutes(-5)).toBe(0)
+  })
+  it('<60 分钟用分钟；≥60 用小时[+分钟]；0 距离→空串（不显示"约 0 分钟"）', () => {
+    expect(routeWalkingText(1200, zh)).toBe('步行约 17 分钟')
+    expect(routeWalkingText(1200, en)).toBe('~17 min walk')
+    expect(routeWalkingText(4320, zh)).toBe('步行约 1 小时')        // 恰 60 分钟，分钟位省略
+    expect(routeWalkingText(4680, zh)).toBe('步行约 1 小时 5 分钟')  // 65 分钟
+    expect(routeWalkingText(4680, en)).toBe('~1 h 5 min walk')
+    expect(routeWalkingText(0, zh)).toBe('')                        // 空串→调用方省略
+    expect(routeWalkingText(NaN, zh)).toBe('')
   })
 })
 

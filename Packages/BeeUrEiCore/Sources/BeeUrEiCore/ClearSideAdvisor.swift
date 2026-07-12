@@ -41,6 +41,17 @@ public struct ClearSideAdvisor: Sendable {
         return d
     }
 
+    /// 跟踪到具体障碍时的**一致性护栏**（纯逻辑）：绕行侧必须**背离障碍**——否则会把盲人引向障碍那一侧。
+    /// 障碍偏右（bearing > deadZone）只许荐左、偏左只许荐右；建议与障碍同侧＝矛盾 → 抑制为 .none。
+    /// 障碍近正前方（|bearing| ≤ deadZone）：两侧皆背离，不额外设限。坏 bearing → 不设限（advisor 本身已保守）。
+    /// bearing 约定：右为正、左为负、0=正前方（ClockDirection.angleDegrees 同）。
+    public func awayFromObstacle(_ side: Side, obstacleBearingDegrees b: Double, deadZone: Double = 8) -> Side {
+        guard b.isFinite else { return side }
+        if b > deadZone { return side == .left ? .left : .none }
+        if b < -deadZone { return side == .right ? .right : .none }
+        return side
+    }
+
     /// 建议的播报后缀（信息性，附加在障碍警告之后）；`.none` → nil（不添噪）。
     public func hintSuffix(_ side: Side, language: Language = .zh) -> String? {
         switch side {

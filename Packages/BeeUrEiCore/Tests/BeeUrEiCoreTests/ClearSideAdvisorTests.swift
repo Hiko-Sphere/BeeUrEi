@@ -42,6 +42,26 @@ final class ClearSideAdvisorTests: XCTestCase {
         XCTAssertEqual(advisor.suggest(leftNearest: 2.5, rightNearest: 1.31), .none)
     }
 
+    func testAwayFromObstacleGuardSuppressesContradiction() {
+        // 障碍偏右(2 点钟, +60°)：只许荐左（背离障碍）；建议右＝往障碍侧走 → 抑制。
+        XCTAssertEqual(advisor.awayFromObstacle(.left, obstacleBearingDegrees: 60), .left)
+        XCTAssertEqual(advisor.awayFromObstacle(.right, obstacleBearingDegrees: 60), .none) // 矛盾抑制
+        // 障碍偏左(10 点钟, -60°)：只许荐右。
+        XCTAssertEqual(advisor.awayFromObstacle(.right, obstacleBearingDegrees: -60), .right)
+        XCTAssertEqual(advisor.awayFromObstacle(.left, obstacleBearingDegrees: -60), .none)
+    }
+
+    func testAwayFromObstacleNearCenterUnrestricted() {
+        // 障碍近正前方(|bearing| ≤ deadZone 8°)：两侧皆背离，不设限——原建议原样返回。
+        XCTAssertEqual(advisor.awayFromObstacle(.left, obstacleBearingDegrees: 3), .left)
+        XCTAssertEqual(advisor.awayFromObstacle(.right, obstacleBearingDegrees: -5), .right)
+        XCTAssertEqual(advisor.awayFromObstacle(.right, obstacleBearingDegrees: 8), .right) // 恰在 deadZone 边界(含)
+        // 坏 bearing 不额外设限（advisor 已保守）。
+        XCTAssertEqual(advisor.awayFromObstacle(.left, obstacleBearingDegrees: .nan), .left)
+        // .none 进 .none 出（无建议就没得护栏）。
+        XCTAssertEqual(advisor.awayFromObstacle(.none, obstacleBearingDegrees: 60), .none)
+    }
+
     func testHintSuffixBilingualAndSilentOnNone() {
         XCTAssertEqual(advisor.hintSuffix(.left, language: .zh), "，左侧较空")
         XCTAssertEqual(advisor.hintSuffix(.right, language: .zh), "，右侧较空")

@@ -486,7 +486,12 @@ final class HomeViewModel {
                                     clock: ClockDirection(angleDegrees: danger.bearingDegrees),
                                     distanceMeters: suppressMeters ? nil : danger.distanceMeters,
                                     confidence: 1)
-            let phrase = speechComposer.announce(smoothed, concise: FeatureSettings().conciseAnnouncements, language: lang)
+            var phrase = speechComposer.announce(smoothed, concise: FeatureSettings().conciseAnnouncements, language: lang)
+            // 绕行侧建议：只荐**背离障碍**的一侧（awayFromObstacle 护栏，防把盲人引向障碍侧）。纯附加、拿不准即无后缀。
+            if let base = clearSideSuffix(depth: depth, asSide: true) {
+                let guarded = clearSideAdvisor.awayFromObstacle(base, obstacleBearingDegrees: danger.bearingDegrees)
+                if let suffix = clearSideAdvisor.hintSuffix(guarded, language: lang) { phrase += suffix }
+            }
             proximityText = phrase
             let urgency = danger.timeToCollision.map { 1.0 / max($0, 0.3) }
                 ?? danger.distanceMeters.map { 1.0 / max($0, 0.3) } ?? 1.0
@@ -542,13 +547,23 @@ final class HomeViewModel {
     /// 绕行侧建议后缀（正前方有障碍时）：左右区各取一片深度样本 → 核心 ClearSideAdvisor 保守判定 →
     /// 仅当一侧独立够空且明显更空才返回"，左/右侧较空"。功能关或拿不准 → nil（纯附加，不改主警告）。
     /// 采样点 x=0.25 / 0.75（左右三分位）、y=0.55（略低于中线，取行走高度的侧向空间而非头顶天空）。
-    private func clearSideSuffix(depth: DepthMap) -> String? {
-        guard FeatureSettings().clearSideHint else { return nil }
+    /// 左右三分位取深度 → 核心 ClearSideAdvisor 保守判定，返回建议侧（功能关/无把握 → .none）。
+    private func clearSideSuggestion(depth: DepthMap) -> ClearSideAdvisor.Side {
+        guard FeatureSettings().clearSideHint else { return .none }
         let left = DepthSampling.samples(depth: depth.depth, confidence: depth.confidence, normalizedX: 0.25, normalizedY: 0.55)
         let right = DepthSampling.samples(depth: depth.depth, confidence: depth.confidence, normalizedX: 0.75, normalizedY: 0.55)
         let lNear = depthSampler.nearestDistance(depths: left.depths, confidences: left.confidences)
         let rNear = depthSampler.nearestDistance(depths: right.depths, confidences: right.confidences)
-        return clearSideAdvisor.hintSuffix(clearSideAdvisor.suggest(leftNearest: lNear, rightNearest: rNear), language: lang)
+        return clearSideAdvisor.suggest(leftNearest: lNear, rightNearest: rNear)
+    }
+    /// caution 区无跟踪目标时的后缀（无 bearing 护栏——中央深度受阻、无具体方位，直接给更空侧）。
+    private func clearSideSuffix(depth: DepthMap) -> String? {
+        clearSideAdvisor.hintSuffix(clearSideSuggestion(depth: depth), language: lang)
+    }
+    /// 供跟踪障碍路径取**未加后缀的建议侧**（asSide 仅为区分重载语义；调用方再套 awayFromObstacle 护栏）。
+    private func clearSideSuffix(depth: DepthMap, asSide: Bool) -> ClearSideAdvisor.Side? {
+        let s = clearSideSuggestion(depth: depth)
+        return s == .none ? nil : s
     }
 
     /// 动态 ROI：用碰撞走廊（核心 `CollisionCorridor`）从相机位姿投影出图像 ROI。

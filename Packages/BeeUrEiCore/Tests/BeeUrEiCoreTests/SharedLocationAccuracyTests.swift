@@ -34,6 +34,18 @@ final class SharedLocationAccuracyTests: XCTestCase {
         XCTAssertEqual(SharedLocationAccuracy.phrase(accuracyMeters: 1449.6, language: .en), "~1.4 km accuracy")
     }
 
+    func testImperialAccuracy() {
+        // 英制（英语盲人对标 Soundscape）：复用 DistanceUnit 换算，包进精度措辞。20m≈66ft；2000m≈1.2mi。
+        XCTAssertEqual(SharedLocationAccuracy.phrase(accuracyMeters: 20, language: .zh, unit: .imperial), "精确到约66英尺")
+        XCTAssertEqual(SharedLocationAccuracy.phrase(accuracyMeters: 20, language: .en, unit: .imperial), "~66 feet accuracy")
+        XCTAssertEqual(SharedLocationAccuracy.phrase(accuracyMeters: 2000, language: .en, unit: .imperial), "~1.2 miles accuracy")
+        // 无效精度：英制下同样返回 nil（守卫在单位分支之前，不报假精度）。
+        XCTAssertNil(SharedLocationAccuracy.phrase(accuracyMeters: 0, language: .en, unit: .imperial))
+        XCTAssertNil(SharedLocationAccuracy.phrase(accuracyMeters: .nan, language: .en, unit: .imperial))
+        // 巨值仍溢出安全（farDistance 内部夹取到 1000km=1e6m→约 621.4 英里）。
+        XCTAssertEqual(SharedLocationAccuracy.phrase(accuracyMeters: 1e19, language: .en, unit: .imperial), "~621.4 miles accuracy")
+    }
+
     func testHugeAccuracyDoesNotOverflowCrash() {
         // accuracy 来自网络：巨大有限值裸 Int() 会陷阱崩溃；safeRoundedInt 夹取到 1e6（=1000 公里），不崩。
         let out = SharedLocationAccuracy.phrase(accuracyMeters: 1e19, language: .zh)

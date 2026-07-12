@@ -10,6 +10,7 @@ struct LiveLocationView: View {
     @State private var manager = LiveLocationManager.shared
     @State private var camera: MapCameraPosition = .automatic
     private var lang: Language { FeatureSettings().language }
+    private var unit: DistanceUnit { FeatureSettings().distanceUnit } // 距离单位（公制/英制，随设置）
 
     var body: some View {
         Group {
@@ -118,7 +119,7 @@ struct LiveLocationView: View {
 
     private func contactRow(_ c: ContactLocationInfo) -> some View {
         let distanceText = distanceBearing(to: c)
-        let accuracy = SharedLocationAccuracy.phrase(accuracyMeters: c.accuracy, language: lang) // nil=无精度信息，不显示
+        let accuracy = SharedLocationAccuracy.phrase(accuracyMeters: c.accuracy, language: lang, unit: unit) // nil=无精度信息，不显示
         let updated = LiveLocationStrings.updatedAgo(secondsSince(c.updatedAt), lang)
         let battery = LiveLocationStrings.batteryText(c.battery, lang) // nil=对端未上报（老客户端），不显示不猜
         let batteryLow = (c.battery ?? 100) <= 20
@@ -157,7 +158,7 @@ struct LiveLocationView: View {
         guard let me = manager.lastCoordinate else { return LiveLocationStrings.distanceUnknown(lang) }
         let meters = Int(Geo.distanceMeters(fromLat: me.latitude, fromLon: me.longitude, toLat: c.lat, toLon: c.lng).rounded())
         let bearing = Geo.initialBearing(fromLat: me.latitude, fromLon: me.longitude, toLat: c.lat, toLon: c.lng)
-        var s = LiveLocationStrings.distanceBearing(meters: meters, bearing: LiveLocationStrings.compass(bearing, lang), lang)
+        var s = LiveLocationStrings.distanceBearing(meters: meters, bearing: LiveLocationStrings.compass(bearing, lang), unit: unit, lang)
         // 移动趋势（对端在行进时才有 heading）：正朝你靠近/正在远离——盲人等人来或知对方离开的关键。之前 heading
         // 字段一路传到端却从未播出（死字段）；此处兑现（横向移动不播，避免侧向被误说成靠近/远离）。
         if let h = c.heading, h.isFinite,

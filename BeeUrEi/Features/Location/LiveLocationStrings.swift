@@ -38,9 +38,14 @@ enum LiveLocationStrings {
         return l == .zh ? "\(m) 分钟前更新" : "updated \(m)m ago"
     }
 
-    /// 距离 + 方位的可读描述（盲人侧 VoiceOver/语音）："约 200 米，在你的东北方向"。
-    static func distanceBearing(meters: Int, bearing: String, _ l: Language) -> String {
-        l == .zh ? "约 \(meters) 米，在你的\(bearing)" : "about \(meters) m to your \(bearing)"
+    /// 距离 + 方位的可读描述（盲人侧 VoiceOver/语音）："约 200 米，在你的东北方向"。英制用英尺/英里
+    /// （复用 DistanceUnit 单一换算源，与"我在哪"/导航同口径）；公制分支逐字节不变。
+    static func distanceBearing(meters: Int, bearing: String, unit: DistanceUnit = .metric, _ l: Language) -> String {
+        if unit == .imperial {
+            let d = DistanceUnit.imperial.farDistance(meters: Double(max(0, meters)), language: l)
+            return l == .zh ? "约 \(d)，在你的\(bearing)" : "about \(d) to your \(bearing)"
+        }
+        return l == .zh ? "约 \(meters) 米，在你的\(bearing)" : "about \(meters) m to your \(bearing)"
     }
     static func distanceUnknown(_ l: Language) -> String { l == .zh ? "距离未知（需开启你自己的定位）" : "distance unknown (enable your own location)" }
 

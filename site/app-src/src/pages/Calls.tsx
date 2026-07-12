@@ -32,6 +32,8 @@ export function CallsPage() {
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const expandedRef = useRef(false) // 是否已加载更多：展开后轮询不再动 hasMore（否则每 4s 把"还有更多"翻回来、闪烁）
+  const historyListRef = useRef<HTMLUListElement>(null)
+  const pendingFocusRef = useRef<number | null>(null) // 加载更多后须聚焦的行下标（焦点接力）
   const [busyId, setBusyId] = useState<string | null>(null)
   const [matching, setMatching] = useState(false)
 
@@ -73,10 +75,21 @@ export function CallsPage() {
     expandedRef.current = true
     try {
       const r = await api.callHistory({ before: last.createdAt, beforeId: last.id })
+      // 焦点接力（读屏用户"加载更多"后不失位）：记下首条新记录将落在的行下标，追加后由 effect 把焦点移过去——
+      // 否则新内容默默出现在下方、且到底时"加载更多"按钮卸载会把焦点丢到 body（同 Chat jumpToMessage 的接力）。
+      if (r.calls.length > 0) pendingFocusRef.current = combinedHistory.length
       setOlderPages((p) => [...p, ...r.calls])
       setHasMore(!!r.hasMore)
     } catch { /* 忽略；用户可再点 */ } finally { setLoadingMore(false) }
   }
+
+  // 追加渲染后把焦点移到首条新记录行（tabindex=-1 + focus，同 Chat jumpToMessage）。
+  useEffect(() => {
+    if (pendingFocusRef.current == null) return
+    const el = historyListRef.current?.children[pendingFocusRef.current] as HTMLElement | undefined
+    if (el) { el.setAttribute('tabindex', '-1'); el.focus() }
+    pendingFocusRef.current = null
+  }, [combinedHistory.length])
 
   const onAnswer = async (c: IncomingCall) => { setBusyId(c.callId); await answerIncoming(c.callId, c.fromName, c.fromAvatar); setBusyId(null) }
   const onClaim = async (r: HelpRequest) => { setBusyId(r.callId); await claimQueue(r.callId, r.fromName || t('求助者', 'Requester'), undefined); setBusyId(null) }
@@ -172,7 +185,7 @@ export function CallsPage() {
             <EmptyState icon={<IconPhone />} title={t('暂无记录', 'No history')} />
           ) : (
             <>
-              <ul className="divide-y divide-[var(--line)]">
+              <ul ref={historyListRef} className="divide-y divide-[var(--line)]">
                 {combinedHistory.map((c) => <CallHistoryRow key={c.id} call={c} onCall={callBack} callDisabled={!!active} />)}
               </ul>
               {/* 加载更多：通话记录此前硬顶最近 100 条、无从翻看更早（silent cap）。有更早记录时给出翻页入口。 */}

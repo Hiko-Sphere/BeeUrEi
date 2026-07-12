@@ -93,6 +93,9 @@ export function NotificationsPage() {
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const expandedRef = useRef(false) // 是否已"加载更多"：展开后轮询合并头尾并保留 hasMore（否则每 15s 把更早页刷掉）
+  const notifListRef = useRef<HTMLUListElement>(null)
+  const pendingFocusRef = useRef<number | null>(null) // 加载更多后须聚焦的行下标（焦点接力）
+  const shownLenRef = useRef(0)                        // 当前渲染的 shown 行数（loadMore 据此定位首条新行）
 
   const load = async () => {
     try {
@@ -122,6 +125,8 @@ export function NotificationsPage() {
     expandedRef.current = true
     try {
       const r = await api.notifications({ before: last.createdAt, beforeId: last.id })
+      // 焦点接力（读屏用户"加载更多"后不失位）：记下首条新可见通知将落在的行下标（按当前渲染的 shown 长度）。
+      if (r.notifications.length > 0) pendingFocusRef.current = shownLenRef.current
       setItems((prev) => {
         const seen = new Set((prev ?? []).map((n) => n.id))
         return [...(prev ?? []), ...r.notifications.filter((n) => !seen.has(n.id))]
@@ -129,6 +134,14 @@ export function NotificationsPage() {
       setHasMore(!!r.hasMore)
     } catch { /* 忽略；用户可再点 */ } finally { setLoadingMore(false) }
   }
+
+  // 追加渲染后把焦点移到首条新通知行（tabindex=-1 + focus，同 Chat jumpToMessage / 通话记录加载更多）。
+  useEffect(() => {
+    if (pendingFocusRef.current == null) return
+    const el = notifListRef.current?.children[pendingFocusRef.current] as HTMLElement | undefined
+    if (el) { el.setAttribute('tabindex', '-1'); el.focus() }
+    pendingFocusRef.current = null
+  }, [items])
 
   // 从通知列表直接回执 SOS 告警："我已看到"——遇险者最需要的反馈是"有人在响应"，且服务端据此停止升级重呼、
   // 匿名协调其余亲友（与告警弹窗 onAck 同一后端流程）。此前列表只有"回拨"、没有"回执"，与弹窗不对等（尤其读屏
@@ -167,6 +180,7 @@ export function NotificationsPage() {
   const hasRead = (items ?? []).some((n) => n.readAt)
   // 紧急=kind 含 'emergency'（SOS 告警/回执/协调/报平安/被设为紧急联系人一类）——安全攸关，值得单独一屏聚焦。
   const shown = (items ?? []).filter((n) => filter === 'unread' ? !n.readAt : filter === 'emergency' ? n.kind.includes('emergency') : true)
+  shownLenRef.current = shown.length // 供 loadMore 定位首条新行（焦点接力）——渲染期读取当前值，无副作用
 
   return (
     <div className="flex flex-col gap-5">
@@ -199,7 +213,7 @@ export function NotificationsPage() {
             {filter === 'unread' ? t('没有未读通知', 'No unread notifications') : filter === 'emergency' ? t('没有紧急通知', 'No emergency notifications') : t('暂无通知', 'No notifications')}
           </p>
         ) : (
-          <ul className="divide-y divide-[var(--line)]">
+          <ul ref={notifListRef} className="divide-y divide-[var(--line)]">
             {shown.map((n) => (
               <li key={n.id} className={`flex gap-3 px-4 py-3.5 ${n.readAt ? '' : 'bg-honey/5'}`}>
                 <div className={`mt-0.5 shrink-0 ${n.readAt ? 'text-faint' : 'text-honey'}`}>{iconFor(n.kind)}</div>

@@ -260,6 +260,14 @@ describe('NotificationsPage "加载更多"（silent cap 修复：不再只见最
     expect(await screen.findByText('更早')).toBeInTheDocument() // 追加了更早的
     expect(screen.getByText('最新')).toBeInTheDocument()          // 首屏仍在（追加非替换）
     expect(screen.queryByRole('button', { name: '加载更多' })).toBeNull() // 到底按钮消失
+    // 焦点接力：焦点落在首条**新**通知行**本身**（否则到底时按钮卸载、焦点丢到 body，读屏用户失位）。
+    // 断言活动元素是该行 li（含"更早"、不含首屏"最新"）——不可只查 textContent.includes，因 body 含全部文本会假通过。
+    await waitFor(() => {
+      const active = document.activeElement as HTMLElement
+      expect(active.tagName).toBe('LI')
+      expect(active.textContent).toContain('更早')
+      expect(active.textContent).not.toContain('最新')
+    })
   })
 
   it('hasMore=false（通知不足一屏）时不显示"加载更多"', async () => {

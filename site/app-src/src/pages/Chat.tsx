@@ -1185,17 +1185,19 @@ function ImageMessage({ src, t }: { src: string; t: (z: string, e: string) => st
   const [zoomed, setZoomed] = useState(false)
   const [describing, setDescribing] = useState(false)
   const [desc, setDesc] = useState<string | null>(null)
+  const [question, setQuestion] = useState('')
   const triggerRef = useRef<HTMLButtonElement>(null)
   const { lang } = useI18n()
   const toast = useToast()
   const alt = t('图片消息', 'Photo')
 
-  const describe = async () => {
+  // question 为空=泛描述；有值=图像问答（VQA，端点支持 question 参数，系统提示已"有具体问题就直接回答"）。
+  const runDescribe = async (q?: string) => {
     const m = /^data:(image\/(?:jpeg|png|webp));base64,/.exec(src)
     if (!m) { toast(t('不支持的图片格式', 'Unsupported image format'), 'error'); return }
     setDescribing(true)
     try {
-      const r = await api.visionDescribe(src, m[1] as 'image/jpeg' | 'image/png' | 'image/webp', lang)
+      const r = await api.visionDescribe(src, m[1] as 'image/jpeg' | 'image/png' | 'image/webp', lang, q)
       let out = r.text
       if (typeof r.remaining === 'number' && r.remaining <= 3) {
         out += lang === 'zh' ? `（今日 AI 描述还剩 ${r.remaining} 次）` : ` (${r.remaining} AI descriptions left today)`
@@ -1215,10 +1217,19 @@ function ImageMessage({ src, t }: { src: string; t: (z: string, e: string) => st
       </button>
       {/* 关闭时把焦点还给缩略图（proper 模态焦点归还，键盘/读屏用户不至于焦点丢到文档开头）。 */}
       {zoomed && <ImageLightbox src={src} alt={alt} onClose={() => { setZoomed(false); triggerRef.current?.focus() }} t={t} />}
-      <button type="button" onClick={describe} disabled={describing}
+      <button type="button" onClick={() => runDescribe()} disabled={describing}
         className="mt-1 rounded-md px-2 py-1 text-xs text-accent hover:surface-2 disabled:opacity-50">
         {describing ? t('AI 描述中…', 'Describing…') : t('🔍 用 AI 描述图片', '🔍 Describe with AI')}
       </button>
+      {/* 图像问答：对这张图问具体问题（"上面的电话号码是多少""有没有台阶"）——比泛描述更有针对性。 */}
+      <form className="mt-1 flex max-w-xs gap-1" onSubmit={(e) => { e.preventDefault(); const q = question.trim(); if (q) runDescribe(q) }}>
+        <input value={question} onChange={(e) => setQuestion(e.target.value)} disabled={describing} maxLength={300}
+          placeholder={t('问关于这张图的问题…', 'Ask about this photo…')}
+          aria-label={t('向 AI 提问关于这张图片', 'Ask AI about this photo')}
+          className="min-w-0 flex-1 rounded-md surface-2 px-2 py-1 text-xs" />
+        <button type="submit" disabled={describing || !question.trim()}
+          className="shrink-0 rounded-md px-2 py-1 text-xs text-accent hover:surface-2 disabled:opacity-50">{t('问', 'Ask')}</button>
+      </form>
       {desc && <p className="mt-1 max-w-xs text-sm text-soft" aria-live="polite">{desc}</p>}
     </>
   )

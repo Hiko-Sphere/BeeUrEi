@@ -603,6 +603,9 @@ export class SqliteStore implements Store {
   deleteSavedRoutesForOwner(ownerId: string): void {
     this.db.prepare('DELETE FROM saved_routes WHERE ownerId = ?').run(ownerId)
   }
+  anonymizeRouteCreator(creatorId: string): void {
+    this.db.prepare('UPDATE saved_routes SET createdBy = ownerId WHERE createdBy = ? AND ownerId != ?').run(creatorId, creatorId)
+  }
   private rowToSavedPlace(r: any): SavedPlace {
     return {
       ownerId: r.ownerId, label: r.label, address: r.address,

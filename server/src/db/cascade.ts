@@ -64,8 +64,11 @@ export function cascadeDeleteUser(store: Store, id: string): void {
   store.deleteEmergencyEventsForUser(id)
   store.deleteWebPushSubscriptionsForUser(id) // 浏览器推送订阅：人已删，端点随之清（否则继续空投）
   store.deleteVisionUsageForUser(id) // AI 视觉每日配额计数：删号即清，不留无主行
-  // 路线库：归属者删号即清其全部路线（亲友替其画的也属其资产，随主体删除）；绘制者删号不影响他人路线。
+  // 路线库：归属者删号即清其全部路线（亲友替其画的也属其资产，随主体删除）；绘制者删号不删他人路线。
   store.deleteSavedRoutesForOwner(id)
+  // 绘制者维度：该用户为**他人**画的路线仍属归属者（不删），但其 createdBy 重置为归属者本人——否则已删
+  // 绘制者的 id 作为悬垂引用长留在他人路线上（读路径虽以 ?? null 兜住展示，但 id 本身未抹，与置顶 pinnedBy 同为 class-2 孤儿）。
+  store.anonymizeRouteCreator(id)
   // 保存的地点（家/公司/自定义）：归属者独有数据，删号即清。
   store.deleteSavedPlacesForOwner(id)
   // 安全报到计时器：归属者独有数据，删号即清（含任何进行中的——人已删，无从告警亦无从确认）。

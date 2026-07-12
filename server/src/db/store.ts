@@ -665,6 +665,9 @@ export interface Store {
   updateSavedRoute(id: string, patch: Partial<SavedRoute>): SavedRoute | undefined
   deleteSavedRoute(id: string): void
   deleteSavedRoutesForOwner(ownerId: string): void       // 删号级联（归属者维度）
+  /// 删号级联（绘制者维度）：绘制者注销 → 其为**他人**画的路线仍属归属者（资产不删），但 createdBy 重置为
+  /// ownerId，不让已删用户 id 作为悬垂引用长留在他人路线上（GDPR 抹除彻底 + cascade"不留孤儿"，与置顶 pinnedBy 同理）。
+  anonymizeRouteCreator(creatorId: string): void
 
   savedPlacesForUser(ownerId: string): SavedPlace[]      // 某人保存的地点，updatedAt 倒序
   upsertSavedPlace(p: SavedPlace): void                  // 按 (ownerId,label) 覆盖写（家/公司唯一）
@@ -1218,6 +1221,13 @@ export class MemoryStore implements Store {
   deleteSavedRoutesForOwner(ownerId: string): void {
     for (const [k, v] of this.savedRoutes) if (v.ownerId === ownerId) this.savedRoutes.delete(k)
     this.afterMutate()
+  }
+  anonymizeRouteCreator(creatorId: string): void {
+    let changed = false
+    for (const [k, v] of this.savedRoutes) {
+      if (v.createdBy === creatorId && v.ownerId !== creatorId) { this.savedRoutes.set(k, { ...v, createdBy: v.ownerId }); changed = true }
+    }
+    if (changed) this.afterMutate()
   }
   // 复合唯一键 (ownerId,label)：用 \x00 分隔（UUID/标签均不含 NUL，绝不碰撞）。
   // protected：JsonFileStore 载盘时必须复用**同一**键构造，否则写入(NUL)与查找(NUL)对不上

@@ -132,6 +132,28 @@ describe(`cascadeDeleteUser — 抹除完整性（${storeName}）`, () => {
     expect(store.getPin('g:g2')?.pinnedBy).toBe('owner')  // owner 所设置顶不受影响
   })
 
+  it('绘制者删号：其为**他人**所画路线仍在但 createdBy 归零到归属者（不留已删绘制者 id）；自有路线随删；他人自绘不动', () => {
+    const store = makeStore()
+    store.createUser(user('blind'))   // 归属者（存活）
+    store.createUser(user('drawer'))  // 绘制者（将删号）
+    const wp = [{ lat: 1, lng: 2 }, { lat: 3, lng: 4 }]
+    // drawer 替 blind 画的路线：ownerId=blind、createdBy=drawer——路线是 blind 的资产，drawer 删号不删它。
+    store.createSavedRoute({ id: 'r1', ownerId: 'blind', createdBy: 'drawer', name: '回家', waypoints: wp, createdAt: 1, updatedAt: 1 })
+    // drawer 自己的路线：ownerId=drawer → 删号级联（归属者维度）删除。
+    store.createSavedRoute({ id: 'r2', ownerId: 'drawer', createdBy: 'drawer', name: '自用', waypoints: wp, createdAt: 1, updatedAt: 1 })
+    // blind 自绘：ownerId=blind、createdBy=blind → 不受 drawer 删号影响。
+    store.createSavedRoute({ id: 'r3', ownerId: 'blind', createdBy: 'blind', name: '自绘', waypoints: wp, createdAt: 1, updatedAt: 1 })
+
+    cascadeDeleteUser(store, 'drawer')
+
+    const r1 = store.findSavedRoute('r1')
+    expect(r1).toBeTruthy()                                     // 归属者资产不删（drawer 删号不影响 blind 的路线）
+    expect(r1!.createdBy).toBe('blind')                         // createdBy 从已删 drawer 归零到 ownerId（旧实现：残留 'drawer' 悬垂引用）
+    expect(store.findSavedRoute('r2')).toBeUndefined()          // drawer 自有路线随删
+    expect(store.findSavedRoute('r3')?.createdBy).toBe('blind') // 他人自绘不受影响
+    expect(store.savedRoutesByCreator('drawer')).toHaveLength(0) // 已删 drawer 的 id 不再作为 createdBy 残留于任何路线
+  })
+
   it('清除被删用户参与的通话记录（PII，非证据）；他人无关记录保留', () => {
     const store = makeStore()
     store.createUser(user('u1')); store.createUser(user('u2')); store.createUser(user('u3'))

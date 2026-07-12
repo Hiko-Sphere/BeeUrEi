@@ -58,14 +58,28 @@ export function RecordingsPage() {
 
   const del = async (rec: RecordingInfo) => {
     if (!confirm(t('确定删除这条录制？删除后你将无法再看到（合规留存期内管理员仍可查看）。', 'Delete this recording? You will no longer see it (admins retain it for compliance).'))) return
-    try { await api.deleteMyRecording(rec.id); setItems((cur) => cur?.filter((x) => x.id !== rec.id) ?? cur); toast(t('已删除', 'Deleted'), 'ok') }
+    // 焦点接力（同通知页 deleteOne 口径）：删除键随卡片卸载后焦点会丢到 body——按 DOM 序记相邻卡的删除键，
+    // 删完聚焦它；删的是最后一条则聚焦页标题（tabindex=-1 兜底锚）。读屏连删多条不迷路。
+    const btns = [...document.querySelectorAll<HTMLElement>('[data-rec-del]')]
+    const idx = btns.findIndex((b) => b.dataset.recDel === rec.id)
+    const nextId = (btns[idx + 1] ?? btns[idx - 1])?.dataset.recDel ?? null
+    try {
+      await api.deleteMyRecording(rec.id)
+      setItems((cur) => cur?.filter((x) => x.id !== rec.id) ?? cur)
+      toast(t('已删除', 'Deleted'), 'ok')
+      setTimeout(() => {
+        const target = nextId ? document.querySelector<HTMLElement>(`[data-rec-del="${nextId}"]`) : null
+        ;(target ?? document.getElementById('recs-heading'))?.focus()
+      }, 0)
+    }
     catch { toast(t('删除失败', 'Failed'), 'error') }
   }
 
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{t('我的录音', 'My recordings')}</h1>
+        {/* tabindex=-1：删除最后一条录音后的焦点兜底锚（del 无相邻卡可接力时聚焦此处）。 */}
+        <h1 id="recs-heading" tabIndex={-1} className="text-2xl font-bold tracking-tight outline-none">{t('我的录音', 'My recordings')}</h1>
         <p className="mt-1 text-sm text-faint">{t('经双方知情同意录制的通话。仅你与管理员可在留存期内查看。', 'Calls recorded with mutual consent. Visible to you and admins during retention.')}</p>
       </div>
 
@@ -83,7 +97,10 @@ export function RecordingsPage() {
                     {r.hasMedia ? <Pill tone="ok">{t('可播放', 'Playable')}</Pill> : <Pill tone="danger">{t('无媒体', 'No media')}</Pill>}
                   </div>
                 </div>
-                <button onClick={() => del(r)} className="text-faint hover:text-danger" aria-label={t('删除', 'Delete')}><IconX width={18} height={18} /></button>
+                {/* aria-label 带录制时刻区分（此前各卡都叫"删除"，读屏 rotor 列出 N 个同名按钮无从分辨删的是哪条）；
+                    data-rec-del：焦点接力锚（见 del）。 */}
+                <button onClick={() => del(r)} data-rec-del={r.id} className="text-faint hover:text-danger"
+                  aria-label={t(`删除录音：${fmtTime(r.recordedAt, lang)}`, `Delete recording: ${fmtTime(r.recordedAt, lang)}`)}><IconX width={18} height={18} /></button>
               </div>
               <div className="text-sm text-soft">
                 <div><span className="text-faint">{t('参与者', 'Participants')}：</span>{joinNames(r.participantNames, lang)}</div>

@@ -154,3 +154,35 @@ describe('RecordingsPage 下载录音（数据可携权的媒体通道）', () =
     expect(fetchRecordingBlob).not.toHaveBeenCalled()
   })
 })
+
+describe('删除录音（区分性标签 + 焦点接力）', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('每张卡的删除键带录制时刻（读屏 rotor 可分辨删的是哪条）；删除→焦点接力到相邻卡、删最后一条→页标题', async () => {
+    vi.stubGlobal('confirm', vi.fn(() => true)) // 原生确认框：测试恒 OK
+    try {
+      mock(api.myRecordings).mockResolvedValue({
+        recordings: [
+          { id: 'ra', recordedAt: 1_700_000_000_000, durationSec: 10, hasMedia: true, participantNames: ['张三'] },
+          { id: 'rb', recordedAt: 1_700_090_000_000, durationSec: 20, hasMedia: true, participantNames: ['李四'] },
+        ],
+      })
+      mock(api.deleteMyRecording).mockResolvedValue(undefined)
+      render(<RecordingsPage />)
+      await screen.findByText('张三')
+      // 区分性标签：两个删除键名字不同（各带自己的录制时刻），不再是 N 个同名"删除"。
+      const delBtns = screen.getAllByRole('button', { name: /^删除录音：/ })
+      expect(delBtns).toHaveLength(2)
+      expect(delBtns[0].getAttribute('aria-label')).not.toBe(delBtns[1].getAttribute('aria-label'))
+      // 删第一条 → 焦点接力到第二条的删除键（读屏连删不迷路）。
+      fireEvent.click(delBtns[0])
+      await waitFor(() => expect(api.deleteMyRecording).toHaveBeenCalledWith('ra'))
+      await waitFor(() => expect(screen.queryByText('张三')).toBeNull())
+      await waitFor(() => expect(document.activeElement).toBe(document.querySelector('[data-rec-del="rb"]')))
+      // 删最后一条 → 焦点兜底到页标题。
+      fireEvent.click(document.querySelector<HTMLElement>('[data-rec-del="rb"]')!)
+      await waitFor(() => expect(screen.queryByText('李四')).toBeNull())
+      await waitFor(() => expect(document.activeElement).toBe(document.getElementById('recs-heading')))
+    } finally { vi.unstubAllGlobals() }
+  })
+})

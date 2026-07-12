@@ -34,6 +34,24 @@
 
   // ---- 主题：light | dark | null(跟随系统) ----
   var theme = readLS(LS_THEME);
+  // 手动主题时同步移动端浏览器地址栏底色（theme-color）：HTML 里的两条 theme-color 用 media=
+  // (prefers-color-scheme) 只跟**系统**深浅——用户手动切到与系统相反的主题时，页面已变、地址栏却没变
+  // （深色系统下手动切浅色 → 内容浅、地址栏仍深，割裂）。用一条**无 media** 的 theme-color 插到 <head>
+  // 最前覆盖（浏览器取首个 media 命中者）；跟随系统时撤掉，media 版本恢复接管（无 JS 时亦由 media 版兜底）。
+  var THEME_COLORS = { light: "#f2a900", dark: "#14161f" };
+  function applyThemeColor(mode) {
+    var head = document.head, el = document.getElementById("tc-dynamic");
+    if (mode === "light" || mode === "dark") {
+      if (!el) {
+        el = document.createElement("meta");
+        el.setAttribute("name", "theme-color"); el.id = "tc-dynamic";
+        head.insertBefore(el, head.firstChild); // 置首，优先于 media 版本
+      }
+      el.setAttribute("content", THEME_COLORS[mode]);
+    } else if (el && el.parentNode) {
+      el.parentNode.removeChild(el); // 跟随系统：撤覆盖，media 版本恢复
+    }
+  }
   function applyTheme(mode) {
     if (mode === "light" || mode === "dark") {
       root.setAttribute("data-theme", mode);
@@ -42,6 +60,7 @@
       root.removeAttribute("data-theme");
       root.style.colorScheme = "";
     }
+    applyThemeColor(mode);
     var b = document.getElementById("themeToggle");
     if (b) {
       var isDark = (mode === "light" || mode === "dark") ? mode === "dark" : prefersDark();

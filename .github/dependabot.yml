@@ -1,0 +1,19 @@
+# 依赖更新自动化：CI 的 npm audit 只在**已知通告**出现时变红；dependabot 负责另一半——
+# 主动提出更新 PR（含安全补丁），每周一批、minor+patch 合组降噪，major 单独出（需人审 breaking）。
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /server
+    schedule: { interval: weekly }
+    groups:
+      server-minor-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: npm
+    directory: /site/app-src
+    schedule: { interval: weekly }
+    groups:
+      web-minor-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }

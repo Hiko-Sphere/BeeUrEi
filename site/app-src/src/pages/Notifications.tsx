@@ -114,7 +114,19 @@ export function NotificationsPage() {
   // 点击通知：标已读 + 跳到可操作页（好友请求→亲友页接受、群变更→聊天页）。
   const onClickNotif = (n: NotificationInfo) => { void markOne(n); const dest = notifDestination(n.kind, n.data); if (dest) navigate(dest) }
   // 删除单条：乐观从列表移除（收件箱清理，仅本人；服务端幂等）。
-  const deleteOne = async (n: NotificationInfo) => { setItems((cur) => cur?.filter((x) => x.id !== n.id) ?? cur); try { await api.deleteNotif(n.id) } catch { void load() } }
+  // 焦点接力（读屏逐条清理不迷路）：被点的删除键随行卸载、焦点会丢到 body——删除前按 **DOM 渲染序**
+  // 记下相邻行的删除键（天然尊重当前筛选），删完聚焦它；删的是最后一条则聚焦页标题（tabindex=-1）。
+  const deleteOne = async (n: NotificationInfo) => {
+    const btns = [...document.querySelectorAll<HTMLElement>('[data-notif-del]')]
+    const idx = btns.findIndex((b) => b.dataset.notifDel === n.id)
+    const nextId = (btns[idx + 1] ?? btns[idx - 1])?.dataset.notifDel ?? null
+    setItems((cur) => cur?.filter((x) => x.id !== n.id) ?? cur)
+    setTimeout(() => { // 等移除后的 DOM 落定再接力焦点
+      const target = nextId ? document.querySelector<HTMLElement>(`[data-notif-del="${nextId}"]`) : null
+      ;(target ?? document.getElementById('notifs-heading'))?.focus()
+    }, 0)
+    try { await api.deleteNotif(n.id) } catch { void load() }
+  }
   // 清空已读：只清已看过的，保留未读（避免误清尚未看的紧急/求助提醒）。
   const clearRead = async () => { try { await api.clearReadNotifs(); void load() } catch { /* ignore */ } }
 
@@ -126,7 +138,8 @@ export function NotificationsPage() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold tracking-tight">{t('通知', 'Notifications')}</h1>
+        {/* tabindex=-1：删除最后一条通知后的焦点兜底锚（deleteOne 无相邻行可接力时聚焦此处，读屏不迷路）。 */}
+        <h1 id="notifs-heading" tabIndex={-1} className="text-2xl font-bold tracking-tight outline-none">{t('通知', 'Notifications')}</h1>
         <div className="flex gap-2">
           {unread > 0 && <Button variant="soft" onClick={markAll}>{t('全部标为已读', 'Mark all read')}</Button>}
           {hasRead && <Button variant="ghost" onClick={clearRead}>{t('清空已读', 'Clear read')}</Button>}
@@ -230,8 +243,9 @@ export function NotificationsPage() {
                   )}
                   <RelativeTime ms={n.createdAt} lang={lang} className="mt-1 block text-xs text-faint" />
                 </div>
-                {/* 删除本条（收件箱清理）：独立按钮、非嵌套在主操作按钮内（避免 nested-interactive）。读屏可闻"删除通知"。 */}
-                <button type="button" onClick={() => void deleteOne(n)}
+                {/* 删除本条（收件箱清理）：独立按钮、非嵌套在主操作按钮内（避免 nested-interactive）。读屏可闻"删除通知"。
+                    data-notif-del：焦点接力锚（见 deleteOne——逐条清理时焦点移到相邻行，不丢到 body）。 */}
+                <button type="button" onClick={() => void deleteOne(n)} data-notif-del={n.id}
                   className="mt-0.5 shrink-0 self-start rounded p-1 text-faint transition hover:text-danger hover:surface-2"
                   aria-label={t(`删除通知：${n.title}`, `Delete notification: ${n.title}`)}>
                   <IconX width={16} height={16} />

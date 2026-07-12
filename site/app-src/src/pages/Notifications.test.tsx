@@ -200,6 +200,12 @@ describe('NotificationsPage 删除 / 清空已读', () => {
     // 乐观移除：被删的不再在列表，另一条仍在。
     await waitFor(() => expect(screen.queryByText('处置完成一')).toBeNull())
     expect(screen.getByText('处置完成二')).toBeInTheDocument()
+    // 焦点接力（读屏逐条清理不迷路）：被点的删除键随行卸载，焦点移到相邻行的删除键而非丢到 body。
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: '删除通知：处置完成二' })))
+    // 删除最后一条 → 无相邻行可接力，焦点兜底到页标题（tabindex=-1）。
+    fireEvent.click(screen.getByRole('button', { name: '删除通知：处置完成二' }))
+    await waitFor(() => expect(screen.queryByText('处置完成二')).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(document.getElementById('notifs-heading')))
   })
 
   it('有已读通知时显示"清空已读"，点击→调 clearReadNotifs；无已读时不显示', async () => {

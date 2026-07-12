@@ -168,6 +168,18 @@ final class LabelDateReaderTests: XCTestCase {
         XCTAssertNil(LabelDateReader.find(texts: ["hobby club opens 2026-08"], language: .en))
     }
 
+    func testProductionPackagingBottlingLabels() {
+        // 出厂/包装/灌装日期：电子产品、包装食品、瓶装饮料酒油常见的生产类日期，与"生产日期"并列而非其子串。
+        XCTAssertTrue(LabelDateReader.find(texts: ["出厂日期 2026-01-15"], language: .zh)!.contains("2026-01-15"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["包装日期 2026.03.20"], language: .zh)!.contains("2026.03.20"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["灌装日期20260731"], language: .zh)!.contains("20260731"))
+        // "date of manufacture"（正式写法，此前只认 "manufactured"、这句漏识）+ "mfd"（manufactured date 缩写，词边界）。
+        XCTAssertTrue(LabelDateReader.find(texts: ["Date of manufacture: JUL 2026"], language: .en)!.contains("JUL 2026"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["MFD 2026-08"], language: .en)!.contains("2026-08"))
+        // 双门控守卫：无"日期"整词的"出厂编号"（流水号）即便同行有日期样式也不误报（"出厂"≠"出厂日期"标签）。
+        XCTAssertNil(LabelDateReader.find(texts: ["出厂编号 2026-08"], language: .zh))
+    }
+
     func testDedupAndCap() {
         // OCR 常重复同一行：去重。
         let r = LabelDateReader.find(texts: ["保质期 2026.07.15", "保质期 2026.07.15"], language: .zh)!

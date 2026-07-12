@@ -14,17 +14,23 @@ public enum LabelDateReader {
         // 有效日期/失效日期：药品/化妆品/食品极常见，但"有效期"**不是**"有效日期"的子串（有效**日**期断开连续），
         // 故须单列，否则整行被丢、盲人扫药盒读不出有效期（安全攸关）。
         "有效日期", "失效日期",
-        "best before", "best by", "use by", "expiry", "expires", "expiration", "manufactured", "sell by",
+        // 出厂/包装/灌装日期：电子产品、包装食品（肉/菜）、瓶装饮料酒油极常见的生产类日期，与"生产日期"并列而非其子串，
+        // 此前整行被丢——盲人扫这些包装拿不到出厂/包装/灌装日期（判新鲜度的安全刚需）。双门控（须同行有日期样式）故精度不降。
+        "出厂日期", "包装日期", "灌装日期",
+        // "manufacture"（非 "manufactured"）：兼收正式写法 "date of manufacture" 与 "manufactured"（后者含前者子串），
+        // 此前只认 "manufactured"、漏了 "date of manufacture"。
+        "best before", "best by", "use by", "expiry", "expires", "expiration", "manufacture", "sell by",
         "production date", "shelf life", "shelf-life", // shelf life=保质期、expiration(date)=美式常见有效期，此前完全不识
     ]
 
-    /// 短英文缩写标签（exp/mfg/bb/bbe/bbd）须**词边界**：它们是别的词的子串——exp ⊂ export/express/expo，
-    /// bb ⊂ rubber/hobby——若按子串匹配会误配。bb/bbe/bbd = best before / best before end / best before date，
+    /// 短英文缩写标签（exp/mfg/mfd/bb/bbe/bbd）须**词边界**：它们是别的词的子串——exp ⊂ export/express/expo，
+    /// bb ⊂ rubber/hobby——若按子串匹配会误配。mfd = manufactured date（与 mfg=manufacturing 并列，进口食品药品常见）。
+    /// bb/bbe/bbd = best before / best before end / best before date，
     /// 英国/欧盟/进口食品最主流的保质期缩写写法（"BB 15/03/2026"/"BBE JUL 2026"），此前只认全拼 "best before"、
     /// 缩写全漏。边界 `(?<![a-z]) … (?![a-z])`：前后不许字母，但允许数字/句点/空格——喷码 "EXP20261130"、
     /// "BB2026"、"BB." 仍命中。**同行须另有日期样式**的双重门控使 2 字母的 bb 也安全（无日期的 "BB 霜" 不会误报）。
     /// 大小写不敏感。
-    private static let boundedLabelRegexes: [NSRegularExpression] = ["exp", "mfg", "bbe", "bbd", "bb"].compactMap {
+    private static let boundedLabelRegexes: [NSRegularExpression] = ["exp", "mfg", "mfd", "bbe", "bbd", "bb"].compactMap {
         try? NSRegularExpression(pattern: "(?<![a-z])" + $0 + "(?![a-z])", options: [.caseInsensitive])
     }
 

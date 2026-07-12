@@ -8,6 +8,9 @@ export interface ShutdownOptions {
   timeoutMs?: number
   exit?: (code: number) => void
   log?: (msg: string) => void
+  // 在 app.close() **之前**同步调用一次（幂等，仅首个信号触发）：置"关停中"标志，让信令层在随后
+  // 关闭全房间 WS 时不广播 peer-left——进行中的通话（媒体走 P2P/TURN）得以熬过部署重启。
+  beforeClose?: () => void
 }
 
 /// 生成一个关闭处理器（与 process 信号解耦，便于单测）。
@@ -19,6 +22,7 @@ export function makeShutdownHandler(app: Pick<FastifyInstance, 'close'>, opts: S
   return () => {
     if (shuttingDown) return // 二次信号：已在关闭中，忽略（避免重复 app.close()）
     shuttingDown = true
+    try { opts.beforeClose?.() } catch { /* 置标志失败不该阻断关闭 */ }
     log('[shutdown] draining connections…')
     // 强制退出兜底：长连接可能让 close() 永挂 → 超时后强退（非 0，标示未干净排空）。
     const timer = setTimeout(() => { log('[shutdown] drain timeout, forcing exit'); exit(1) }, timeoutMs)

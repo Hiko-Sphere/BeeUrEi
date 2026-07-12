@@ -130,6 +130,43 @@ describe('WebRTC signaling relay', () => {
     await app.close()
   })
 
+  it('优雅关闭中(shuttingDown)：socket 关闭**不**广播 peer-left——部署重启不掐断进行中通话(媒体走 P2P/TURN)', async () => {
+    const app = buildApp(new MemoryStore())
+    await app.listen({ port: 0, host: '127.0.0.1' })
+    const port = (app.server.address() as { port: number }).port
+    const reg = async (u: string, role: string) => {
+      const r = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: u, password: 'secret123', role } })).json()
+      return { token: r.token as string, id: r.user.id as string }
+    }
+    const caller = await reg('sd_caller', 'blind')
+    const helper = await reg('sd_helper', 'helper')
+    const link = await app.inject({ method: 'POST', url: '/api/family/links', headers: { authorization: `Bearer ${caller.token}` }, payload: { username: 'sd_helper' } })
+    await app.inject({ method: 'POST', url: `/api/family/links/${link.json().link.id}/accept`, headers: { authorization: `Bearer ${helper.token}` } })
+    await app.inject({ method: 'POST', url: '/api/assist/call', headers: { authorization: `Bearer ${caller.token}` }, payload: { callId: 'sd1', targetUserIds: [helper.id] } })
+
+    const base = `ws://127.0.0.1:${port}/ws`
+    const ws1 = new WebSocket(`${base}?token=${caller.token}`)
+    const ws2 = new WebSocket(`${base}?token=${helper.token}`)
+    await Promise.all([open(ws1), open(ws2)])
+    const joined1 = nextMessage(ws1, (m) => m.type === 'joined')
+    const joined2 = nextMessage(ws2, (m) => m.type === 'joined')
+    ws1.send(JSON.stringify({ type: 'join', callId: 'sd1', role: 'blind' }))
+    ws2.send(JSON.stringify({ type: 'join', callId: 'sd1', role: 'helper' }))
+    await Promise.all([joined1, joined2])
+
+    // 模拟优雅关闭开始（shutdown 的 beforeClose 会做同样的事）。
+    app.callControl.shuttingDown = true
+    // caller 断线 → helper 收到 peer-left 则失败（500ms 窗口足够任何真实转发）；收不到才对。
+    let gotLeft = false
+    ws2.on('message', (data) => { if (JSON.parse(data.toString()).type === 'peer-left') gotLeft = true })
+    ws1.close()
+    await new Promise((r) => setTimeout(r, 500))
+    expect(gotLeft).toBe(false) // 关停中不广播 peer-left → helper 不被"对方已离开"骗着结束通话
+
+    ws2.close()
+    await app.close()
+  })
+
   it('同一用户重连同一通话：新连接顶替旧连接（不再被自己的僵尸占位挤成 call_full）', async () => {
     const app = buildApp(new MemoryStore())
     await app.listen({ port: 0, host: '127.0.0.1' })

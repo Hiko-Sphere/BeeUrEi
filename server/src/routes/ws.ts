@@ -247,7 +247,11 @@ export function registerSignaling(app: FastifyInstance, hub: SignalingHub, store
         if (ids) { ids.delete(clientId); if (ids.size === 0) userSockets.delete(auth.sub) }
         if (joined) {
           const { peers } = hub.leave(clientId)
-          for (const p of peers) relay(p.clientId, { type: 'peer-left', userId: auth.sub })
+          // 优雅关闭（部署重启）中**不**广播 peer-left：部署把全房间的 WS 一起关，媒体走 P2P/TURN 不经信令、
+          // 仍在流动——照发 peer-left 会让对端结束本可续流的通话（尤其紧急通话）。配合 web 端"媒体已连时 WS
+          // 断开不掐断"，通话得以熬过部署（信令暂缺，媒体继续；真挂断/失败仍由对端 ICE 状态机收尾）。
+          // 单客户端真掉线（非关停）照常发 peer-left，让对端干净结束、不卡在僵尸通话。
+          if (!callControl?.shuttingDown) for (const p of peers) relay(p.clientId, { type: 'peer-left', userId: auth.sub })
         }
       })
     })

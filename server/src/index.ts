@@ -101,7 +101,11 @@ async function main(): Promise<void> {
   escalateTimer.unref?.()
 
   // 有界优雅关闭：SIGTERM/SIGINT 先排空在途请求，超时兜底强退（防通话长连接让 close() 永挂）。
-  installGracefulShutdown(app, { timeoutMs: Number(process.env.SHUTDOWN_TIMEOUT_MS ?? 10_000) })
+  installGracefulShutdown(app, {
+    timeoutMs: Number(process.env.SHUTDOWN_TIMEOUT_MS ?? 10_000),
+    // 关停开始即置标志：信令层随后关闭全房间 WS 时不广播 peer-left，进行中的通话（媒体 P2P/TURN）熬过部署。
+    beforeClose: () => { app.callControl.shuttingDown = true },
+  })
 }
 
 main().catch((err) => {

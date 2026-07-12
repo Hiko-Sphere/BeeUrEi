@@ -46,4 +46,24 @@ describe('makeShutdownHandler（有界优雅关闭）', () => {
     await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0))
     expect(app.close).toHaveBeenCalledTimes(1)
   })
+
+  it('beforeClose 在 app.close() **之前**调用一次（置 shuttingDown 标志），且仅首个信号触发', async () => {
+    const app = { close: vi.fn().mockResolvedValue(undefined) }
+    const beforeClose = vi.fn()
+    const handler = makeShutdownHandler(app, { timeoutMs: 10_000, exit: () => {}, log: () => {}, beforeClose })
+    handler()
+    handler() // 二次信号
+    expect(beforeClose).toHaveBeenCalledTimes(1) // 仅首个信号
+    // beforeClose 先于 close（invocationCallOrder 全局单调递增）。
+    expect(beforeClose.mock.invocationCallOrder[0]).toBeLessThan(app.close.mock.invocationCallOrder[0])
+  })
+
+  it('beforeClose 抛错不阻断关闭（置标志失败仍要正常排空退出）', async () => {
+    const exit = vi.fn()
+    const app = { close: vi.fn().mockResolvedValue(undefined) }
+    const handler = makeShutdownHandler(app, { timeoutMs: 10_000, exit, log: () => {}, beforeClose: () => { throw new Error('boom') } })
+    expect(() => handler()).not.toThrow()
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0))
+    expect(app.close).toHaveBeenCalledTimes(1)
+  })
 })

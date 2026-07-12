@@ -83,6 +83,9 @@ jobs:
       # 曾人工审计过一次（全绿），固化成门禁防回归——断链/丢 alt 对官网（盲人辅助产品的门面）格外难堪。
       - name: check-site
         run: node scripts/check-site.mjs
+      # 部署脚本静态检查（runner 自带 shellcheck）：deploy 脚本直接驱动生产,quoting/未定义变量类错误代价最高。
+      - name: shellcheck
+        run: shellcheck scripts/*.sh
 
   ios-build:
     name: iOS 构建

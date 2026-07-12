@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016  # remote('…') 的单引号是**有意**的：$(…) 等表达式必须原样送到远端展开（经 base64 隧道），本地展开反而是 bug。
 # BeeUrEi 一键部署到 awsjapan（EC2，东京）。在本地跑，经 ssh 驱动远端。
 #
 # 用法：

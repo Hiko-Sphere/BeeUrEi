@@ -146,6 +146,10 @@ enum ChatStrings {
     static func photoTextCopied(_ l: Language) -> String { l == .zh ? "图中文字已复制" : "Text copied" }
     // —— AI 描述照片（读字之外的语义层："超市货架"/"公园长椅上有只猫"）——
     static func describePhoto(_ l: Language) -> String { l == .zh ? "描述这张照片" : "Describe this photo" }
+    static func askPhoto(_ l: Language) -> String { l == .zh ? "问关于这张照片" : "Ask about this photo" }
+    static func askPhotoTitle(_ l: Language) -> String { l == .zh ? "问关于这张照片" : "Ask about this photo" }
+    static func askPhotoPlaceholder(_ l: Language) -> String { l == .zh ? "例如：上面的电话号码是多少" : "e.g. What's the phone number?" }
+    static func askPhotoSubmit(_ l: Language) -> String { l == .zh ? "提问" : "Ask" }
     static func describingPhoto(_ l: Language) -> String { l == .zh ? "正在请 AI 描述照片…" : "Asking AI to describe the photo…" }
     /// 服务端错误码 → 盲人能听懂、不会徒劳重试的具体原因（与 sendErrorText 同范式）。
     static func aiDescribeErrorText(_ code: String, _ l: Language) -> String {

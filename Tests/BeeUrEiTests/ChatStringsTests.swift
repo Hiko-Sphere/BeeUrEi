@@ -69,6 +69,20 @@ final class ChatStringsTests: XCTestCase {
         }
     }
 
+    func testAskPhotoVQAStringsBilingual() {
+        // 图像问答 VQA（对图问具体问题）：操作名/标题/占位/提交各态非空、双语、英文不串中文；且"问"≠"描述"（两个独立操作）。
+        for l in [Language.zh, .en] {
+            for s in [ChatStrings.askPhoto(l), ChatStrings.askPhotoTitle(l), ChatStrings.askPhotoPlaceholder(l), ChatStrings.askPhotoSubmit(l)] {
+                XCTAssertFalse(s.isEmpty)
+            }
+        }
+        XCTAssertNotEqual(ChatStrings.askPhoto(.zh), ChatStrings.describePhoto(.zh)) // 问≠泛描述
+        XCTAssertNotEqual(ChatStrings.askPhoto(.en), ChatStrings.describePhoto(.en))
+        for s in [ChatStrings.askPhoto(.en), ChatStrings.askPhotoTitle(.en), ChatStrings.askPhotoPlaceholder(.en), ChatStrings.askPhotoSubmit(.en)] {
+            XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(s)")
+        }
+    }
+
     func testSendConfirmationStringsBilingualAndDistinct() {
         // 盲人看不到"已送达"的气泡出现，媒体/位置又是异步操作——成功须**朗读**确认（此前只报进度/失败、成功静默）。
         // 三态各不相同、双语、英文不串中文，且都点明"已发送/sent"。

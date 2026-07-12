@@ -604,6 +604,10 @@ enum FramingStrings {
         l == .zh ? "光线太暗，已为你打开手电筒，请重新对准再试。"
                  : "Too dark — I turned on the flashlight. Point at it again."
     }
+    /// 握稳指导（CaptureSteadiness 拦截时播报）：动着拍下的帧 OCR 必糊、识别失败却不自知。
+    static func holdSteady(_ l: Language) -> String {
+        l == .zh ? "请拿稳手机，停稳后再试一次" : "Hold the phone steady, then try again"
+    }
     static func uiDone(_ l: Language) -> String { l == .zh ? "完成" : "Done" }
     static func uiCopy(_ l: Language) -> String { l == .zh ? "复制内容" : "Copy" }
     static func uiCopyHint(_ l: Language) -> String {

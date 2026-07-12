@@ -4,6 +4,7 @@ import UIKit
 import AVFoundation
 import CoreGraphics
 import CoreVideo
+import CoreMotion
 import Vision
 
 /// 触摸探索条目：物体框或文字行（定向图像空间，Vision 归一化、原点左下）。
@@ -50,6 +51,12 @@ final class FramingAssistViewModel {
     /// 持续居中防复读：记录已播报的目标标签，目标移出中央或换了目标才允许重报（否则每 ~0.8s 重复"这是X"）。
     @ObservationIgnored private var centeredSpokenLabel: String?
     @ObservationIgnored private var latestBuffer: CVPixelBuffer?
+    // OCR 拍摄质量双件（核心已测；ocr-capture-pipeline 清单收尾）：握稳判据（旋转角速率迟滞去抖）+
+    // 成片曝光门（反光/太暗/低对比——LightMeter 只管环境明暗，这层管"这一帧能不能读"）。
+    @ObservationIgnored private var steadiness = CaptureSteadiness()
+    @ObservationIgnored private var steadyState: CaptureSteadiness.State?  // nil=尚无运动数据（模拟器/权限缺）→ fail-open 不拦
+    @ObservationIgnored private let motion = CMMotionManager()
+    @ObservationIgnored private let exposure = CaptureExposure()
     @ObservationIgnored private var latestDepth: DepthMap?
     @ObservationIgnored private var latestCamera: CameraGeometry?
     @ObservationIgnored private var latestTimestamp: TimeInterval = 0 // 最近帧时间戳（mach 秒），供点按动作与连续 feed 同钟
@@ -148,11 +155,23 @@ final class FramingAssistViewModel {
         source.onStateChange = { [weak self] in self?.state = $0 }
         source.onFrame = { [weak self] frame in self?.handle(frame) }
         source.start()
+        // 握稳判据数据源：设备旋转角速率（三轴取模）。不可用（模拟器/受限）→ steadyState 恒 nil＝fail-open。
+        if motion.isDeviceMotionAvailable {
+            motion.deviceMotionUpdateInterval = 1.0 / 30.0
+            motion.startDeviceMotionUpdates(to: .main) { [weak self] dm, _ in
+                guard let self, let r = dm?.rotationRate else { return }
+                let mag = (r.x * r.x + r.y * r.y + r.z * r.z).squareRoot()
+                self.steadyState = self.steadiness.ingest(rotationRate: mag, at: ProcessInfo.processInfo.systemUptime)
+            }
+        }
     }
 
     func stop() {
         paused = true
         source.stop()
+        motion.stopDeviceMotionUpdates()
+        steadyState = nil
+        steadiness.reset()
         stopContinuous() // 关闭/来电盖上：停所有持续背景模式，避免离开界面后仍在响
         SpeechHub.shared.stopChannel(.query) // 关闭/被来电盖上时立刻闭嘴，避免识别播报串入通话
     }
@@ -1312,15 +1331,86 @@ final class FramingAssistViewModel {
     /// 盲人正因看不见才用 App，无从自己找灯/开手电；只提醒"太暗"却不点灯等于把人卡在死路。点亮后本帧仍暗、
     /// 提示重新对准，连续模式随后帧被照亮自动继续。每会话至多自动点一次，之后尊重用户手动开关、不反复较劲。
     private func tooDarkToProceed() -> Bool {
-        guard let b = currentBrightness(), LightMeter().level(brightness: b) == .dark else { return false }
-        if !torchOn, !didAutoTorch, Torch.set(true) {
-            torchOn = true
-            didAutoTorch = true
-            speak(FramingStrings.torchAutoOn(lang))
+        // ① 环境明暗（LightMeter，原行为不变：暗→自动开手电/警告）。
+        if let b = currentBrightness(), LightMeter().level(brightness: b) == .dark {
+            if !torchOn, !didAutoTorch, Torch.set(true) {
+                torchOn = true
+                didAutoTorch = true
+                speak(FramingStrings.torchAutoOn(lang))
+                return true
+            }
+            speak(LightMeter().warning(brightness: b, language: lang) ?? SpokenStrings.lightLowWarning(lang))
             return true
         }
-        speak(LightMeter().warning(brightness: b, language: lang) ?? SpokenStrings.lightLowWarning(lang))
-        return true
+        // ② 握稳（CaptureSteadiness 核心已测）：正在明显移动时拍下的帧 OCR 必糊、识别失败却不自知。
+        //    无运动数据（nil，模拟器/受限）fail-open 不拦；settling（快稳了）放行——只拦明确的 moving。
+        // ③ 成片曝光门（CaptureExposure）：反光（大片高光溢出，字全白丢失）→ 拦 + 指导换角度；
+        //    低对比（褪色/字底相近）→ **只提醒不拦**（仍可能读出，宁多试不多拦）；太暗已由 ① 兜住。
+        let decision = Self.captureGate(quality: latestBuffer.flatMap { Self.lumaStats(from: $0) }
+                                            .map { exposure.assess(meanLuminance: $0.mean, brightClippedFraction: $0.clipped, contrast: $0.contrast) } ?? .ok,
+                                        steadiness: steadyState)
+        if let advice = decision.speakAdvice(exposure: exposure, lang: lang) { speak(advice) }
+        return decision.blocks
+    }
+
+    /// 拍摄门决策（纯函数，管线与测试共用——中子它=拔掉质量门）：
+    /// moving→拦（拿稳指导）；glare→拦（换角度指导）；lowContrast→放行但提醒；其余静默放行。
+    /// 优先级：握稳先于曝光（动着拍什么曝光都糊）。
+    enum CaptureGateDecision: Equatable {
+        case proceed
+        case advise(CaptureExposure.Quality)       // 放行 + 播报建议（lowContrast）
+        case blockSteady                            // 拦：请拿稳
+        case blockExposure(CaptureExposure.Quality) // 拦：曝光问题（glare）
+        var blocks: Bool { if case .proceed = self { return false }; if case .advise = self { return false }; return true }
+        func speakAdvice(exposure: CaptureExposure, lang: Language) -> String? {
+            switch self {
+            case .proceed: return nil
+            case .advise(let q), .blockExposure(let q): return exposure.advice(q, language: lang)
+            case .blockSteady: return FramingStrings.holdSteady(lang)
+            }
+        }
+    }
+    nonisolated static func captureGate(quality: CaptureExposure.Quality,
+                                        steadiness: CaptureSteadiness.State?) -> CaptureGateDecision {
+        if steadiness == .moving { return .blockSteady }
+        switch quality {
+        case .glare: return .blockExposure(.glare)
+        case .lowContrast: return .advise(.lowContrast)
+        case .tooDark, .ok: return .proceed // tooDark 已由 LightMeter 路径处理（先于本门），此处放行防双报
+        }
+    }
+
+    /// 亮度统计适配层（YCbCr 420f 亮度平面直读，1/8 步长降采样）：mean/clipped(≥248)/contrast(=2σ 夹 1)。
+    /// 非 420 双平面格式（罕见）返回 nil → 曝光门 fail-open。nonisolated static 供单测合成帧验证。
+    nonisolated static func lumaStats(from buffer: CVPixelBuffer) -> (mean: Double, clipped: Double, contrast: Double)? {
+        let fmt = CVPixelBufferGetPixelFormatType(buffer)
+        guard fmt == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange || fmt == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+              CVPixelBufferGetPlaneCount(buffer) >= 1 else { return nil }
+        CVPixelBufferLockBaseAddress(buffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
+        guard let base = CVPixelBufferGetBaseAddressOfPlane(buffer, 0) else { return nil }
+        let w = CVPixelBufferGetWidthOfPlane(buffer, 0), h = CVPixelBufferGetHeightOfPlane(buffer, 0)
+        let stride = CVPixelBufferGetBytesPerRowOfPlane(buffer, 0)
+        guard w > 0, h > 0 else { return nil }
+        let ptr = base.assumingMemoryBound(to: UInt8.self)
+        var count = 0, clippedCount = 0
+        var sum = 0.0, sumSq = 0.0
+        var y = 0
+        while y < h {
+            var x = 0
+            while x < w {
+                let v = Double(ptr[y * stride + x]) / 255.0
+                sum += v; sumSq += v * v; count += 1
+                if v >= 0.97 { clippedCount += 1 }
+                x += 8
+            }
+            y += 8
+        }
+        guard count > 0 else { return nil }
+        let mean = sum / Double(count)
+        let variance = max(0, sumSq / Double(count) - mean * mean)
+        let contrast = min(1, 2 * variance.squareRoot())
+        return (mean, Double(clippedCount) / Double(count), contrast)
     }
 
     /// OCR 识别语言优先级跟随 App 语言（英文用户优先英文模型，识别更准）。

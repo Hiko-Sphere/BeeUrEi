@@ -129,7 +129,7 @@ export function buildSelfExportExtras(store: Store, id: string) {
     // locAgeSec 同补（lastKnown 定位距告警的秒数）：与 locSource 同为位置诚实度信息，一并齐全。
     emergencyEvents: store.emergencyEventsForUser(id).map((e) => ({ kind: e.kind, lat: e.lat ?? null, lon: e.lon ?? null,
       locSource: e.locSource ?? null, locAgeSec: e.locAgeSec ?? null, notified: e.notified, contacts: e.contacts, at: e.at,
-      ackedAt: e.ackedAt ?? null, escalatedAt: e.escalatedAt ?? null, resolvedAt: e.resolvedAt ?? null })),
+      ackedAt: e.ackedAt ?? null, onWayAt: e.onWayAt ?? null, escalatedAt: e.escalatedAt ?? null, resolvedAt: e.resolvedAt ?? null })),
     messagesSent: store.messagesSentBy(id, 5000).map((m) => ({
       to: m.groupId ? `group:${m.groupId}` : nameOf(m.toId),
       kind: m.kind,

@@ -87,6 +87,7 @@ describe('GET /api/account/export', () => {
     // 一次紧急事件：被亲友"知道了"(ack) + 无人先应答后升级重呼(escalate) 过。
     store.createEmergencyEvent({ id: 'ev1', userId: uid, kind: 'fall', notified: 1, contacts: 1, at: 3000 })
     store.markEmergencyAcked('ev1', 3500)
+    store.markEmergencyOnWay('ev1', 3600) // 有亲友"正在赶来"——响应时间线的一环，须同 ackedAt 一并可携
     store.markEmergencyEscalated('ev1', 3800)
 
     const body = (await a.inject({ method: 'GET', url: '/api/account/export', headers: auth })).json()
@@ -96,9 +97,9 @@ describe('GET /api/account/export', () => {
     // 通话时长也如实导出（可携权完整；此前漏 durationSec）。
     expect(body.callRecords.find((c: { status: string }) => c.status === 'answered').durationSec).toBe(204)
     expect(body.callRecords.find((c: { status: string }) => c.status === 'missed').durationSec).toBeNull()
-    // 紧急事件的**响应结果**如实导出（此前漏 ackedAt/escalatedAt——用户无从知晓求助有没有被看到/升级过）。
+    // 紧急事件的**响应结果**如实导出（此前漏 ackedAt/escalatedAt/onWayAt——用户无从知晓求助有没有被看到/有人赶来/升级过）。
     expect(body.emergencyEvents.length).toBe(1)
-    expect(body.emergencyEvents[0]).toMatchObject({ kind: 'fall', ackedAt: 3500, escalatedAt: 3800 })
+    expect(body.emergencyEvents[0]).toMatchObject({ kind: 'fall', ackedAt: 3500, onWayAt: 3600, escalatedAt: 3800 })
     await a.close()
   })
 

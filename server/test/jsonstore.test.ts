@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { existsSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { JsonFileStore } from '../src/db/store'
+import { JsonFileStore, MemoryStore } from '../src/db/store'
 
 const path = join(tmpdir(), `beeurei-jsonstore-test-${process.pid}.json`)
 const user = (id: string, username: string) => ({
@@ -83,5 +83,48 @@ describe('JsonFileStore 持久化 + 原子写', () => {
       // 再次载盘确认删除已落盘。
       expect(new JsonFileStore(path).savedPlacesForUser('u1')).toHaveLength(0)
     })
+  })
+})
+
+// 结构守卫：上面的用例只**逐一点检**已知实体，防不住"新增一类实体到 MemoryStore、却忘了在 JsonFileStore
+// 的 afterMutate(写) 或构造函数(读) 里加一行"——那样该实体重启后**静默全丢**（groupMutes/dmMutes 的注释
+// "漏一处即重启丢静音"记录的正是这个坑）。本守卫**反射**枚举 MemoryStore 的所有集合字段(Map/Set)，逐个注入
+// 探针后经 JsonFileStore 存→读一整圈，断言每个集合都①出现在落盘 JSON 顶层键(写覆盖)②载盘后非空(读覆盖)。
+// 随新增字段**自动扩展**——加新实体忘了持久化，这里立即变红。
+describe('JsonFileStore 持久化完整性（反射守卫：新增实体不会漏持久化）', () => {
+  // 一个万能探针值：对普通实体 Map，值序列化成 {} 也不影响"非空"判定；对 msgReactions 这类**嵌套 Map**
+  // 字段，afterMutate 会对值做 Object.fromEntries(value)，故值必须是可迭代成键值对的 Map（普通对象会抛）。
+  const probeValue = () => new Map([['__probe_k__', '__probe_v__']])
+
+  it('每个 MemoryStore 集合字段都 写覆盖 + 读覆盖（漏一处即重启静默丢该实体全部数据）', () => {
+    // 反射得到权威"应持久化"集合清单（Map/Set 实例的自有字段）。
+    const mem = new MemoryStore()
+    const fields = Object.getOwnPropertyNames(mem).filter(
+      (k) => (mem as unknown as Record<string, unknown>)[k] instanceof Map
+        || (mem as unknown as Record<string, unknown>)[k] instanceof Set,
+    )
+    expect(fields.length).toBeGreaterThan(20) // 反射确实拿到了字段（防选择器意外为空导致空跑假绿）
+
+    // 向每个集合注入一条探针，然后强制落盘。
+    const s1 = new JsonFileStore(path) as unknown as Record<string, unknown> & { afterMutate: () => void }
+    for (const f of fields) {
+      const col = (s1 as Record<string, unknown>)[f]
+      if (col instanceof Set) col.add('__probe__')
+      else if (col instanceof Map) col.set('__probe__', probeValue())
+    }
+    s1.afterMutate() // 触发原子写盘
+
+    // ① 写覆盖：落盘 JSON 顶层必须含每个集合字段的键（afterMutate 漏列 = 该键根本不写盘）。
+    const json = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
+    const notWritten = fields.filter((f) => !(f in json))
+    expect(notWritten).toEqual([]) // 若非空：这些集合在 afterMutate 里漏了，重启丢数据
+
+    // ② 读覆盖：新实例从同一文件载盘后，每个集合都应非空（构造函数漏读 = 写了却不还原，等同丢失）。
+    const s2 = new JsonFileStore(path) as unknown as Record<string, unknown>
+    const emptyAfterReload = fields.filter((f) => {
+      const col = (s2 as Record<string, unknown>)[f]
+      return (col instanceof Map || col instanceof Set) ? col.size === 0 : true
+    })
+    expect(emptyAfterReload).toEqual([]) // 若非空：这些集合构造函数没载回，重启丢数据
   })
 })

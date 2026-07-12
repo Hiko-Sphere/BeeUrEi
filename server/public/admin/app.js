@@ -64,6 +64,7 @@ const I18N = {
     recList: '录制记录', deleteRec: '删除', confirmDeleteRec: '确认彻底删除这条录制（含媒体文件，不可恢复）？', noRecordings: '暂无录制记录',
     playRec: '播放', recParticipants: '参与者', recDuration: '时长', recLocation: '地点', recViewLocation: '查看位置', recUserDeleted: '用户已删除·留存中', recNoMedia: '媒体不可用', playFailed: '无法播放该录制', closeBtn: '关闭',
     evidence: '附带录制证据', viewEvidence: '查看证据录制',
+    openReportsAgainst: '条待处理举报', repeatOffenderHint: '该用户被多次举报（待处理），建议优先合并研判',
     idReview: '实名审核', idQueue: '待审核', idStatusAll: '全部', idStatusPending: '待审核', idStatusVerified: '已通过', idStatusRejected: '已拒绝',
     idApplicant: '申请人', idDocType: '证件类型', idSubmittedVia: '提交方式', idAttempt: '次数', idSubmittedAt: '提交时间', idDecidedAt: '审核时间', idDecidedBy: '审核人',
     idViaSelf: '本人', idViaAssisted: '亲友协助', noVerifications: '暂无实名申请',
@@ -192,6 +193,7 @@ const I18N = {
     recList: 'Recordings', deleteRec: 'Delete', confirmDeleteRec: 'Permanently delete this recording (incl. media file, cannot be undone)?', noRecordings: 'No recordings',
     playRec: 'Play', recParticipants: 'Participants', recDuration: 'Duration', recLocation: 'Location', recViewLocation: 'View location', recUserDeleted: 'User-deleted · retained', recNoMedia: 'Media unavailable', playFailed: "Couldn't play this recording", closeBtn: 'Close',
     evidence: 'Recording evidence', viewEvidence: 'View evidence recording',
+    openReportsAgainst: 'open reports', repeatOffenderHint: 'Multiple open reports against this user — prioritize a combined review',
     idReview: 'Identity review', idQueue: 'Queue', idStatusAll: 'All', idStatusPending: 'Pending', idStatusVerified: 'Verified', idStatusRejected: 'Rejected',
     idApplicant: 'Applicant', idDocType: 'Document', idSubmittedVia: 'Via', idAttempt: 'Attempt', idSubmittedAt: 'Submitted', idDecidedAt: 'Decided', idDecidedBy: 'Reviewer',
     idViaSelf: 'Self', idViaAssisted: 'Assisted', noVerifications: 'No identity submissions',
@@ -1549,14 +1551,48 @@ async function loadReports() {
   try { state.reports = (await api('/api/admin/reports')).reports || []; renderReports(); }
   catch (err) { viewEl().innerHTML = `<div class="err-banner">${esc(errText(err.code))}</div>`; }
 }
+// 同一被举报人的**待处理**举报计数（客户端聚合，无需服务端改动）：识别惯犯——反复被举报者应优先处置，
+// 尤其本 App 服务视障弱势群体，连环骚扰者不能淹没在零散行里。仅计 open（已处置的不再累加压力信号），
+// 按 targetUserId（非 targetName，防同名混淆）。缺字段兜底不崩。
+function openReportRepeatCounts(reports) {
+  const counts = {};
+  for (const r of (reports || [])) {
+    if (r && r.status === 'open' && r.targetUserId != null) {
+      const k = String(r.targetUserId);
+      counts[k] = (counts[k] || 0) + 1;
+    }
+  }
+  return counts;
+}
+
+// 待处理举报分诊排序（不改存储序，返回新数组）：① 反复被举报者（count 高）浮顶；② 同一被举报人聚在一起
+// （便于合并研判）；③ 同人内最早的先处置（不 languish）。缺 targetUserId/createdAt 兜底不崩。
+function reportsTriageSort(openReports) {
+  const list = (openReports || []).slice();
+  const counts = openReportRepeatCounts(list);
+  return list.sort((a, b) => {
+    const ka = String(a.targetUserId ?? ''), kb = String(b.targetUserId ?? '');
+    const ca = counts[ka] || 0, cb = counts[kb] || 0;
+    if (cb !== ca) return cb - ca;                          // 惯犯浮顶
+    if (ka !== kb) return ka < kb ? -1 : ka > kb ? 1 : 0;   // 同一被举报人聚在一起
+    return (a.createdAt || 0) - (b.createdAt || 0);         // 同人内最早先处置
+  });
+}
+
 function renderReports() {
-  const open = state.reports.filter((r) => r.status === 'open');
+  const open = reportsTriageSort(state.reports.filter((r) => r.status === 'open'));
   const resolved = state.reports.filter((r) => r.status !== 'open');
+  const counts = openReportRepeatCounts(state.reports);
   const decPillCls = { dismissed: 'ok', warned: 'off', suspended: 'role-admin', banned: 'role-admin' };
-  const row = (r) => `
+  const row = (r) => {
+    const cnt = counts[String(r.targetUserId)] || 0;
+    const repeat = (r.status === 'open' && cnt >= 2)
+      ? ` <span class="pill role-admin" title="${esc(t('repeatOffenderHint'))}">⚠️ ${cnt} ${esc(t('openReportsAgainst'))}</span>`
+      : '';
+    return `
     <div class="rep">
       <div class="body">
-        <div class="who">${esc(r.reporterName)} <span class="arrow">→</span> ${esc(r.targetName)}</div>
+        <div class="who">${esc(r.reporterName)} <span class="arrow">→</span> ${esc(r.targetName)}${repeat}</div>
         <div class="reason">${esc(r.reason || '—')}</div>
         <div class="meta">${esc(fmtDate(r.createdAt))}${r.callId ? ' · call ' + esc(r.callId.slice(0, 8)) : ''}${r.evidenceRecordingId ? ' · ' + esc(t('evidence')) : ''}${r.status !== 'open' && r.resolvedByName ? ' · ' + esc(t('resolvedBy')) + ' ' + esc(r.resolvedByName) : ''}</div>
       </div>
@@ -1567,6 +1603,7 @@ function renderReports() {
           : `<span class="pill ${decPillCls[r.decision] || 'ok'}">${esc(r.decision ? decisionLabel(r.decision) : t('resolved'))}</span>`}
       </div>
     </div>`;
+  };
   viewEl().innerHTML = !state.reports.length
     ? `<div class="empty"><div class="ico">✅</div><p>${esc(t('noReports'))}</p></div>`
     : `${open.length ? `<div class="section"><h3>${esc(t('open'))} (${open.length})</h3><div class="table-wrap">${open.map(row).join('')}</div></div>` : ''}

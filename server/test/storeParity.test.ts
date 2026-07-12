@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { MemoryStore, type Store, type User } from '../src/db/store'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { MemoryStore, JsonFileStore, convKeyFor, type Store, type User } from '../src/db/store'
 import { SqliteStore } from '../src/db/sqliteStore'
 
 /// 双存储差分一致性套件。生产跑的是 SqliteStore，但覆盖率显示 51 个 Sqlite 方法从未被任何
@@ -12,6 +15,8 @@ const FUTURE = T + 30 * 24 * 3600_000
 
 const user = (id: string, over?: Partial<User>): User =>
   ({ id, username: id, passwordHash: 'h', displayName: id, role: 'helper', status: 'active', createdAt: T, ...over }) as User
+
+const DM_KEY = convKeyFor({ fromId: 'alice', toId: 'bob' })
 
 /// 全量观测快照：涵盖本轮零命中的读方法 + 相邻语义（排序/过滤/所有权检查都在比对之内）。
 function snapshot(s: Store) {
@@ -65,6 +70,17 @@ function snapshot(s: Store) {
     groupMutesAlice: s.groupMutesForUser('alice').sort(),
     routesAlice: s.savedRoutesForUser('alice').map((r) => r.id),
     routesBob: s.savedRoutesForUser('bob').map((r) => r.id),
+    reactionM1: s.messageReactionsFor(['m1']).get('m1') ?? null,
+    pinDm: s.getPin(DM_KEY) ?? null,
+    groupReadAlice: s.groupReadAt('g-x', 'alice'),
+    placesAlice: s.savedPlacesForUser('alice'),
+    safetyActive: s.activeSafetyTimerForOwner('alice')?.id ?? null,
+    safetyHistory: s.safetyTimersForUser('alice').map((t) => ({ id: t.id, status: t.status })),
+    safetyExpiredCand: s.expiredActiveSafetyTimers(T + 4_000_000).map((t) => t.id),
+    medical: s.getMedicalInfo('alice') ?? null,
+    audit: s.allAuditEntries(5).map((a) => a.id),
+    appConfigReg: s.getAppConfig().registrationEnabled,
+    recordingConfig: s.getRecordingConfig(),
   }
 }
 
@@ -103,6 +119,21 @@ const stages: [string, (s: Store) => unknown][] = [
     s.setGroupMuted('g-x', 'alice', true)
     s.createSavedRoute({ id: 'route1', ownerId: 'alice', createdBy: 'bob', name: '去医院', waypoints: [{ lat: 31, lng: 121 }, { lat: 31.1, lng: 121.1 }], createdAt: T, updatedAt: T })
     s.createSavedRoute({ id: 'route2', ownerId: 'bob', createdBy: 'bob', name: 'b 的路线', waypoints: [{ lat: 30, lng: 120 }, { lat: 30.1, lng: 120.1 }], createdAt: T, updatedAt: T })
+    s.setMessageReaction('m1', 'bob', '👍')
+    s.setPin(DM_KEY, 'm1', 'alice', T + 4)
+    s.setGroupRead('g-x', 'alice', T + 2)
+    s.upsertSavedPlace({ ownerId: 'alice', label: 'home', address: '幸福路 1 号', lat: 31, lng: 121, updatedAt: T })
+    s.createSafetyTimer({ id: 'st1', ownerId: 'alice', note: '步行回家', startedAt: T, dueAt: T + 3_600_000, status: 'active' })
+    s.setMedicalInfo({ userId: 'alice', sealed: '{"v":1,"ct":"sealed-demo-free"}', updatedAt: T })
+    s.createAuditEntry({ id: 'a1', adminId: 'root', action: 'user.ban', targetType: 'user', targetId: 'bob', at: T })
+    s.setAppConfig({ registrationEnabled: false })
+    s.setRecordingConfig({ retentionDays: 14 })
+  }],
+  ['会话级状态：表情取消/置顶换条/报到完成/常用地点覆盖写', (s) => {
+    s.setMessageReaction('m1', 'bob', '')                 // 取消本人表情
+    s.setPin(DM_KEY, 'm2', 'bob', T + 6)                  // 覆盖式换置顶
+    s.updateSafetyTimer('st1', { status: 'completed', completedAt: T + 100 })
+    s.upsertSavedPlace({ ownerId: 'alice', label: 'home', address: '幸福路 2 号', lat: 31.2, lng: 121.2, updatedAt: T + 7 }) // (owner,label) 覆盖
   }],
   ['会话：轮换墓碑+按会话撤销+撤销其它', (s) => {
     s.markRefreshTokenRotated('rt1', T + 10)
@@ -151,6 +182,9 @@ const stages: [string, (s: Store) => unknown][] = [
     s.deleteRecoveryCodesForUser('alice')
     s.deleteSavedRoutesForOwner('alice')
     s.deleteWebPushSubscription('https://push.example/ep-1')
+    s.deleteSavedPlacesForOwner('carol')
+    s.deleteSafetyTimersForOwner('carol')
+    s.deleteMedicalInfoForUser('carol')
   }],
 ]
 
@@ -164,6 +198,25 @@ describe('MemoryStore ↔ SqliteStore 差分一致性（生产存储的行为契
       expect(rs, `阶段「${name}」返回值漂移`).toEqual(rm)
       expect(snapshot(sq), `阶段「${name}」后快照漂移`).toEqual(snapshot(mem))
     }
+  })
+
+  it('JsonFileStore 落盘→重载往返：与内存语义完全一致（防"加了状态忘了序列化"的姊妹缺口）', () => {
+    // JsonFileStore 每次变更同步 afterMutate() 落盘；真实风险不在读写逻辑（继承 MemoryStore），
+    // 而在**序列化清单**：MemoryStore 新增一块状态而 afterMutate/构造器载入漏了它 → 运行期全对、
+    // 重启后数据蒸发（placekey bug 即此类）。故先跑完整动作序列，再用同一文件**新建实例**模拟重启比对。
+    const dir = mkdtempSync(join(tmpdir(), 'beeurei-jsonstore-'))
+    try {
+      const mem = new MemoryStore()
+      const jf = new JsonFileStore(join(dir, 'data.json'))
+      for (const [name, act] of stages) {
+        const rm = act(mem)
+        const rj = act(jf)
+        expect(rj, `阶段「${name}」返回值漂移（JsonFile）`).toEqual(rm)
+      }
+      expect(snapshot(jf), '运行期快照漂移').toEqual(snapshot(mem))
+      const reloaded = new JsonFileStore(join(dir, 'data.json')) // 重启
+      expect(snapshot(reloaded), '重载后快照漂移=有状态没进序列化清单').toEqual(snapshot(mem))
+    } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
   it('恢复码消费语义（绝对断言，防两 store 一起错）：h1 消费一次后 h2 仍可用', () => {

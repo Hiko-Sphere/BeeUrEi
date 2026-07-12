@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { api, chatErrorText, fetchMediaObjectURL, uploadMedia, SEARCH_LIMIT, GLOBAL_SEARCH_LIMIT, type ChatMessage, type Conversation, type GroupSummary, type User, type PinnedMessage, type FamilyLink } from '../lib/api'
+import { api, chatErrorText, visionErrorText, fetchMediaObjectURL, uploadMedia, SEARCH_LIMIT, GLOBAL_SEARCH_LIMIT, type ChatMessage, type Conversation, type GroupSummary, type User, type PinnedMessage, type FamilyLink } from '../lib/api'
 import { pollWhileVisible } from '../lib/poll'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
@@ -1179,10 +1179,35 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForwar
 }
 
 /// 图片消息：缩略图（≤64 高）+ 点击开全屏灯箱看大图——盲人分享的证件/单据/信件/标签照，协助者常要放大看清细节。
+/// 「用 AI 描述图片」：低视力家人在网页端也能"听懂"收到的图片（与 iOS 聊天"描述照片"对齐，同 visionDescribe 端点）。
+/// 描述文本落在 aria-live 区，读屏即时播报；错误按码给具体原因（配额/未开通/太大）。
 function ImageMessage({ src, t }: { src: string; t: (z: string, e: string) => string }) {
   const [zoomed, setZoomed] = useState(false)
+  const [describing, setDescribing] = useState(false)
+  const [desc, setDesc] = useState<string | null>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const { lang } = useI18n()
+  const toast = useToast()
   const alt = t('图片消息', 'Photo')
+
+  const describe = async () => {
+    const m = /^data:(image\/(?:jpeg|png|webp));base64,/.exec(src)
+    if (!m) { toast(t('不支持的图片格式', 'Unsupported image format'), 'error'); return }
+    setDescribing(true)
+    try {
+      const r = await api.visionDescribe(src, m[1] as 'image/jpeg' | 'image/png' | 'image/webp', lang)
+      let out = r.text
+      if (typeof r.remaining === 'number' && r.remaining <= 3) {
+        out += lang === 'zh' ? `（今日 AI 描述还剩 ${r.remaining} 次）` : ` (${r.remaining} AI descriptions left today)`
+      }
+      setDesc(out)
+    } catch (err) {
+      toast(visionErrorText(err, t), 'error')
+    } finally {
+      setDescribing(false)
+    }
+  }
+
   return (
     <>
       <button ref={triggerRef} type="button" onClick={() => setZoomed(true)} aria-label={t('放大查看图片', 'View photo full size')} className="block">
@@ -1190,6 +1215,11 @@ function ImageMessage({ src, t }: { src: string; t: (z: string, e: string) => st
       </button>
       {/* 关闭时把焦点还给缩略图（proper 模态焦点归还，键盘/读屏用户不至于焦点丢到文档开头）。 */}
       {zoomed && <ImageLightbox src={src} alt={alt} onClose={() => { setZoomed(false); triggerRef.current?.focus() }} t={t} />}
+      <button type="button" onClick={describe} disabled={describing}
+        className="mt-1 rounded-md px-2 py-1 text-xs text-accent hover:surface-2 disabled:opacity-50">
+        {describing ? t('AI 描述中…', 'Describing…') : t('🔍 用 AI 描述图片', '🔍 Describe with AI')}
+      </button>
+      {desc && <p className="mt-1 max-w-xs text-sm text-soft" aria-live="polite">{desc}</p>}
     </>
   )
 }

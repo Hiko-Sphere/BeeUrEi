@@ -99,6 +99,21 @@ export function chatErrorText(err: unknown, t: (zh: string, en: string) => strin
   }
 }
 
+/// AI 图像描述错误码→用户文案（/api/vision/describe）。配额/未配置/太大等给**具体**原因，不笼统"失败"。
+export function visionErrorText(err: unknown, t: (zh: string, en: string) => string): string {
+  const code = err instanceof APIError ? err.code : ''
+  switch (code) {
+    case 'ai_daily_quota_exceeded': return t('今日 AI 描述次数已用完，明天再试', "You've used today's AI descriptions — try again tomorrow")
+    case 'feature_disabled': return t('AI 描述功能已被管理员关闭', 'AI description is turned off by the administrator')
+    case 'ai_not_configured': return t('AI 描述暂未开通', 'AI description is not available yet')
+    case 'image_too_large': return t('图片太大，无法描述', 'Image is too large to describe')
+    case 'too_many_requests': return t('操作太频繁，请稍候再试', 'Too many attempts — please wait a moment')
+    case 'maintenance': return t('系统维护中，请稍后再试', 'Under maintenance — please try again later')
+    case 'ai_error': case 'ai_unavailable': return t('AI 描述服务暂时不可用，请稍后再试', 'AI description is temporarily unavailable — try again later')
+    default: return t('描述失败，请稍后再试', 'Description failed — please try again')
+  }
+}
+
 /// 呼叫/求助路径错误码→用户文案（与 iOS AssistStrings.callErrorText 对齐）。
 /// /api/assist/call 受 requireFeature('calls')、/api/assist/help/claim 受 requireFeature('helpRequests') 门控，
 /// 关停/维护时会返回 feature_disabled/maintenance——这是"重试也没用"的状态，不加区分只报"呼叫失败"会让协助者
@@ -433,6 +448,10 @@ export const api = {
   // 录制
   myRecordings: () => get('/api/recordings/mine') as Promise<{ recordings: RecordingInfo[] }>,
   deleteMyRecording: (id: string) => del(`/api/recordings/mine/${id}`),
+  // 云端 AI 图像描述（与 iOS 同 /api/vision/describe 端点）：低视力家人在网页端也能"听懂"收到的图片。
+  // image 可带或不带 data: 前缀（服务端会剥离）；返回描述文本 + 当日剩余次数（付费额度配给）。
+  visionDescribe: (image: string, mime: 'image/jpeg' | 'image/png' | 'image/webp', lang: 'zh' | 'en', question?: string) =>
+    post('/api/vision/describe', { image, mime, lang, ...(question ? { question } : {}) }) as Promise<{ text: string; remaining?: number; dailyMax?: number }>,
   recordingPlayToken: (id: string) => get(`/api/recordings/${id}/play-token`) as Promise<{ token: string; expiresInSec: number }>,
 
   // 通知

@@ -17,6 +17,8 @@ struct WalkNavigationView: View {
 
     /// 导航屏文案语言（E5）。
     private var lang: Language { FeatureSettings().language }
+    /// 距离单位（公制/英制，随设置）——路线库副标题的里程随之切换。
+    private var unit: DistanceUnit { FeatureSettings().distanceUnit }
 
     /// 拉路线库：只留我可执行的（role=owner）。失败置重试行，绝不让加载态卡住页面。
     private func loadRoutes() async {
@@ -124,18 +126,20 @@ struct WalkNavigationView: View {
                     } else {
                         ForEach(savedRoutes) { route in
                             let wps = route.waypoints.map { (lat: $0.lat, lon: $0.lng, note: $0.note) }
+                            // 全程里程（相邻航点大圆距离和，核心 RouteRemaining，已测）——供副标题展示"这条多长/多久"。
+                            let routeMeters = RouteRemaining.totalRouteMeters(waypoints: route.waypoints.map { Coordinate(lat: $0.lat, lon: $0.lng) })
                             VStack(alignment: .leading, spacing: 6) {
                                 Button {
                                     model.startCustomRoute(name: route.name, waypoints: wps)
                                 } label: {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(route.name)
-                                        // "N 个路线点 · 由 X 创建"——信任透明：盲人须知这条路谁画的（自己/女儿）。
-                                        Text(NavStrings.routeSubtitle(route.waypoints.count, by: route.createdByName, lang))
+                                        // "N 个路线点 · 约1.2 公里 · 步行约 17 分钟 · 由 X 创建"——信任透明(谁画的) + 里程/时长(多长多久)。
+                                        Text(NavStrings.routeSubtitle(route.waypoints.count, meters: routeMeters, by: route.createdByName, unit: unit, lang))
                                             .font(.caption).foregroundStyle(.secondary)
                                     }
                                 }
-                                .accessibilityLabel(NavStrings.routeItemA11y(route.name, route.waypoints.count, by: route.createdByName, lang))
+                                .accessibilityLabel(NavStrings.routeItemA11y(route.name, route.waypoints.count, meters: routeMeters, by: route.createdByName, unit: unit, lang))
                                 // 出发前预览：不走路先试听全程（Soundscape 街景预览对齐）。
                                 Button(NavStrings.previewRoute(lang)) {
                                     model.previewCustomRoute(name: route.name, waypoints: wps)

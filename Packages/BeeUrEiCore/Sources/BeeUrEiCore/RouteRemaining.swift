@@ -41,6 +41,30 @@ public enum RouteRemaining {
         guard remainingMeters.isFinite, remainingMeters >= 0, speedMps.isFinite, speedMps > 0 else { return nil }
         return remainingMeters / speedMps
     }
+
+    /// 一条**完整路线**（航点序列，非导航中）的总步行里程（米）：相邻航点大圆距离之和。
+    /// 用于路线库"这条多长"的**静态展示**（区别于 `distanceMeters` 的"当前点起剩余里程"）。
+    /// <2 点或任一坐标非有限 → nil（坏数据不给可能误导的数字，与全库"未知不动作"一致）。
+    public static func totalRouteMeters(waypoints: [Coordinate]) -> Double? {
+        guard waypoints.count >= 2 else { return nil }
+        var total = 0.0
+        for i in 1..<waypoints.count {
+            let a = waypoints[i - 1], b = waypoints[i]
+            guard a.lat.isFinite, a.lon.isFinite, b.lat.isFinite, b.lon.isFinite else { return nil }
+            let d = Geo.distanceMeters(fromLat: a.lat, fromLon: a.lon, toLat: b.lat, toLon: b.lon)
+            guard d.isFinite else { return nil }
+            total += d
+        }
+        return total
+    }
+
+    /// 预计步行分钟数：里程/步速，四舍五入、**最少 1 分钟**。`speedMps` 默认 1.2（保守步行速，
+    /// 与网页端 `WALKING_SPEED_MPS`、本类 `effectiveWalkingSpeed` 默认同值→同一条路线**跨端估计一致**）。
+    /// 非有限/≤0 里程或步速≤0 → nil（调用方省略，绝不显示"约 0 分钟"）。仅供"路线多长"概念，非精确 ETA。
+    public static func estimatedWalkMinutes(meters: Double, speedMps: Double = 1.2) -> Int? {
+        guard meters.isFinite, meters > 0, speedMps > 0 else { return nil }
+        return max(1, Int((meters / speedMps / 60).rounded()))
+    }
 }
 
 /// 剩余里程里程碑播报判定（纯逻辑，可单测）。像 Google/Apple 导航那样，只在**跨过**某个里程碑

@@ -103,6 +103,27 @@ final class NavStringsTests: XCTestCase {
         XCTAssertFalse(NavStrings.routeSubtitle(3, by: "Daughter", .en).contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
 
+    /// 路线库副标题/无障碍名带里程 + 步行时间（补齐 web parity：盲人须知"这条多长/多久"）。
+    func testRouteSubtitleShowsDistanceAndWalkTime() {
+        let s = NavStrings.routeSubtitle(8, meters: 1200, by: "妈妈", unit: .metric, .zh)
+        XCTAssertTrue(s.contains("1.2 公里"), s)           // 1200m → 1.2 公里
+        XCTAssertTrue(s.contains("步行约 17 分钟"), s)      // 1200/1.2/60 → 17 分钟
+        XCTAssertTrue(s.contains("由妈妈创建"), s)
+        // 英制：里程用英里、步行时间不变（时间与单位无关）。
+        let e = NavStrings.routeSubtitle(8, meters: 1200, by: nil, unit: .imperial, .en)
+        XCTAssertTrue(e.contains("0.7 miles"), e)          // 1200m ≈ 0.7 mi
+        XCTAssertTrue(e.contains("~17 min walk"), e)
+        // 无 meters（默认 nil）→ 退回旧行为，既有调用零影响。
+        XCTAssertFalse(NavStrings.routeSubtitle(8, by: "妈妈", .zh).contains("公里"))
+        XCTAssertFalse(NavStrings.routeSubtitle(8, by: "妈妈", .zh).contains("步行"))
+        // meters<=0 也不追加（<2 点路线 totalRouteMeters 返回 nil，或坏数据）。
+        XCTAssertFalse(NavStrings.routeSubtitle(3, meters: 0, by: nil, .zh).contains("步行"))
+        // 无障碍名同样带里程/步行。
+        let a = NavStrings.routeItemA11y("家到菜场", 8, meters: 1200, by: "妈妈", unit: .metric, .zh)
+        XCTAssertTrue(a.contains("1.2 公里") && a.contains("步行约 17 分钟"), a)
+        XCTAssertTrue(a.hasSuffix("双击开始引导"), a)
+    }
+
     // 剩余路程 + ETA 播报：距离档（公里/米）+ ETA 档（分钟/不到 1 分钟/缺测省略）三向组合正确、英文不混中文。
     func testRemainingDistanceFormatting() {
         // ≥1km → 公里一位小数（1234m=1.2km）；ETA 正常分钟（240s=4min）。

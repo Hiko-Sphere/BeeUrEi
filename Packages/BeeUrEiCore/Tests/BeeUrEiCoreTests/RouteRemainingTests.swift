@@ -36,6 +36,35 @@ final class RouteRemainingTests: XCTestCase {
             destination: Coordinate(lat: 0, lon: 0.002)))
     }
 
+    // MARK: - 整条路线总里程 + 步行时间估计（路线库静态展示）
+
+    func testTotalRouteMetersSumsConsecutiveWaypoints() {
+        // 赤道三点直线：两段各 ~111.32m。
+        let m = RouteRemaining.totalRouteMeters(waypoints: [
+            Coordinate(lat: 0, lon: 0), Coordinate(lat: 0, lon: 0.001), Coordinate(lat: 0, lon: 0.002)])
+        XCTAssertNotNil(m)
+        XCTAssertEqual(m!, 222.64, accuracy: 2)
+    }
+
+    func testTotalRouteMetersGuards() {
+        XCTAssertNil(RouteRemaining.totalRouteMeters(waypoints: []))                       // 空
+        XCTAssertNil(RouteRemaining.totalRouteMeters(waypoints: [Coordinate(lat: 0, lon: 0)])) // 单点
+        // 任一坐标非有限 → nil（坏数据不给误导数字）。
+        XCTAssertNil(RouteRemaining.totalRouteMeters(waypoints: [
+            Coordinate(lat: 0, lon: 0), Coordinate(lat: .nan, lon: 0.001)]))
+    }
+
+    func testEstimatedWalkMinutes() {
+        XCTAssertEqual(RouteRemaining.estimatedWalkMinutes(meters: 1200), 17) // 1200/1.2/60=16.7→17
+        XCTAssertEqual(RouteRemaining.estimatedWalkMinutes(meters: 72), 1)     // 恰 1 分钟
+        XCTAssertEqual(RouteRemaining.estimatedWalkMinutes(meters: 30), 1)     // 0.4 分钟也报 1（不报 0）
+        XCTAssertNil(RouteRemaining.estimatedWalkMinutes(meters: 0))           // 无距离
+        XCTAssertNil(RouteRemaining.estimatedWalkMinutes(meters: -5))
+        XCTAssertNil(RouteRemaining.estimatedWalkMinutes(meters: .nan))
+        // 步速与网页端 1.2 m/s 同值：同一条路线跨端估计一致。
+        XCTAssertEqual(RouteRemaining.estimatedWalkMinutes(meters: 1200, speedMps: 1.2), 17)
+    }
+
     // MARK: - 步速夹取 + ETA
 
     func testEffectiveSpeedUsesMeasuredWhenValid() {

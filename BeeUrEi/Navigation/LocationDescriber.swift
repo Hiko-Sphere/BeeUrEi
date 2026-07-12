@@ -144,7 +144,7 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
             guard let self else { return }
             do {
                 let result = try await AMapReverseGeocodeClient().whereAmI(latGcj: g.lat, lonGcj: g.lon)
-                let text = WhereAmIComposer.compose(result, language: lang)
+                let text = WhereAmIComposer.compose(result, language: lang, unit: FeatureSettings().distanceUnit)
                 await MainActor.run { self.finish(text) }
             } catch {
                 // 高德失败（未配 key/查不到/网络）回退 Apple——但若看门狗已超时复位则不再做无用逆编码（复审并发#2）。
@@ -189,7 +189,7 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
                                    relativeBearingDegrees: self.relativeBearing(fromLat: g.lat, fromLon: g.lon,
                                                                                 toLat: p.lat, toLon: p.lon, heading: heading))
                 }
-                let text = PoiCalloutComposer.nearest(from: obs, query: query, radiusMeters: resp.radius, language: lang)
+                let text = PoiCalloutComposer.nearest(from: obs, query: query, radiusMeters: resp.radius, language: lang, unit: FeatureSettings().distanceUnit)
                 await MainActor.run { self.finish(text) }
             } catch {
                 // 高德失败回退 MapKit——但若看门狗已超时复位则不再做无用检索（复审并发#2）。
@@ -215,7 +215,7 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
                     relativeBearingDegrees: self.relativeBearing(fromLat: loc.coordinate.latitude, fromLon: loc.coordinate.longitude,
                                                                  toLat: ploc.coordinate.latitude, toLon: ploc.coordinate.longitude, heading: heading))
             }
-            let text = PoiCalloutComposer.nearest(from: obs, query: query, radiusMeters: radius, language: self.lang)
+            let text = PoiCalloutComposer.nearest(from: obs, query: query, radiusMeters: radius, language: self.lang, unit: FeatureSettings().distanceUnit)
             self.finish(text)
         }
     }
@@ -261,7 +261,8 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
                                    category: p.category) // 类别（"快餐厅"等）随 POI 一起喂给 composer，识别品牌店类型
                 }
                 let text = PoiCalloutComposer.compose(pois: obs, mode: mode, radiusMeters: resp.radius,
-                                                      headingAvailable: heading != nil, language: lang)
+                                                      headingAvailable: heading != nil, language: lang,
+                                                      unit: FeatureSettings().distanceUnit)
                 await MainActor.run { self.finish(text) }
             } catch {
                 // 高德不可用 → 回退 MapKit；但看门狗已超时复位则不再做无用检索（复审并发#2）。
@@ -285,7 +286,8 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
                                                                  toLat: ploc.coordinate.latitude, toLon: ploc.coordinate.longitude, heading: heading))
             }
             let text = PoiCalloutComposer.compose(pois: obs, mode: self.composerMode, radiusMeters: radius,
-                                                  headingAvailable: heading != nil, language: self.lang)
+                                                  headingAvailable: heading != nil, language: self.lang,
+                                                  unit: FeatureSettings().distanceUnit)
             self.finish(text)
         }
     }

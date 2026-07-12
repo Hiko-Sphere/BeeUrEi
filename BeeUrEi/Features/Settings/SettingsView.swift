@@ -17,6 +17,7 @@ struct SettingsView: View {
     @State private var languagePref: String
     @State private var rate: Double
     @State private var verbosity: Int
+    @State private var distanceUnit: DistanceUnit
     @State private var concise: Bool
     @State private var briefReminderOn: Bool   // 开始避障时的提醒语音（属语音偏好，从原「更多设置」上移）
     // 外观与屏幕
@@ -39,6 +40,7 @@ struct SettingsView: View {
         _languagePref = State(initialValue: f.languagePreference)
         _rate = State(initialValue: Double(f.speechRate))
         _verbosity = State(initialValue: f.verbosity)
+        _distanceUnit = State(initialValue: f.distanceUnit)
         _concise = State(initialValue: f.conciseAnnouncements)
         _briefReminderOn = State(initialValue: store.briefReminderSpeechEnabled)
         _highContrastOn = State(initialValue: f.highContrast)
@@ -194,6 +196,13 @@ struct SettingsView: View {
             }
             .onChange(of: verbosity) { _, v in
                 var f = FeatureSettings(); f.verbosity = v
+            }
+            Picker(SettingsStrings.distanceUnitPicker(lang), selection: $distanceUnit) {
+                Text(SettingsStrings.distanceUnitMetric(lang)).tag(DistanceUnit.metric)
+                Text(SettingsStrings.distanceUnitImperial(lang)).tag(DistanceUnit.imperial)
+            }
+            .onChange(of: distanceUnit) { _, v in
+                var f = FeatureSettings(); f.distanceUnit = v
             }
             Toggle(SettingsStrings.conciseToggle(lang), isOn: $concise)
                 .onChange(of: concise) { _, v in

@@ -70,6 +70,14 @@ struct FeatureSettings {
         set { defaults.set(newValue, forKey: spatialCuesKey) }
     }
 
+    /// 距离单位（默认公制）：英语区盲人用英尺/英里思考，可切英制。当前作用于**位置尺度**距离
+    /// （"我在哪"/周边 POI/地标）；实时避障近距单独迭代接。存字符串（DistanceUnit.rawValue）。
+    private let distanceUnitKey = "feature.distanceUnit"
+    var distanceUnit: DistanceUnit {
+        get { DistanceUnit(rawValue: defaults.string(forKey: distanceUnitKey) ?? "") ?? .metric }
+        set { defaults.set(newValue.rawValue, forKey: distanceUnitKey) }
+    }
+
     /// 绕行侧建议（默认开）：正前方有障碍时，若某一侧**独立读到足够远**且明显更空，附加"左/右侧较空"
     /// 供盲人选绕行方向（对标 biped.ai/WeWALK clear-path 引导，核心 ClearSideAdvisor 保守判定、已测）。
     /// 纯信息性附加、拿不准即静默，不掩盖障碍主警告。想更简洁播报的用户可关。

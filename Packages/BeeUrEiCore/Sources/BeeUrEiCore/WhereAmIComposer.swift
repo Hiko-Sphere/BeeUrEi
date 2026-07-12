@@ -41,7 +41,7 @@ public struct ReverseGeocode: Decodable, Equatable, Sendable {
 /// 把服务端逆地理结果组织成可听播报（纯逻辑核，可单测）。
 /// 只有**框架语**（"你大概在"/"最近的地标"）与**方位词**随界面语言本地化；中文地址原文始终保留。
 public enum WhereAmIComposer {
-    public static func compose(_ g: ReverseGeocode, language: Language) -> String {
+    public static func compose(_ g: ReverseGeocode, language: Language, unit: DistanceUnit = .metric) -> String {
         let zh = language == .zh
         // 主体优先用完整地址，其次退到街道/乡镇。
         let body = !g.address.isEmpty ? g.address : g.township
@@ -54,18 +54,18 @@ public enum WhereAmIComposer {
             out = (zh ? "你大概在：" : "You're near: ") + body
         }
         // 路口在地标之前：路口是更强的定向锚点（对标 Soundscape 优先播路口）。hasPrev=前面是否已有内容（决定用"。"接续还是起句）。
-        if let clause = intersectionClause(g.intersection, zh: zh, hasPrev: !out.isEmpty) {
+        if let clause = intersectionClause(g.intersection, zh: zh, hasPrev: !out.isEmpty, unit: unit) {
             out += clause
         }
-        if let clause = landmarkClause(g.landmark, zh: zh, hasBody: !out.isEmpty) {
+        if let clause = landmarkClause(g.landmark, zh: zh, hasBody: !out.isEmpty, unit: unit) {
             out += clause
         }
         return out
     }
 
-    private static func intersectionClause(_ x: ReverseGeocode.Intersection?, zh: Bool, hasPrev: Bool) -> String? {
+    private static func intersectionClause(_ x: ReverseGeocode.Intersection?, zh: Bool, hasPrev: Bool, unit: DistanceUnit) -> String? {
         guard let x = x, !x.firstRoad.isEmpty, !x.secondRoad.isEmpty else { return nil }
-        let distStr = SpokenStrings.locationDistance(x.distanceMeters, zh ? .zh : .en) // 溢出安全 + ≥1km 用公里
+        let distStr = SpokenStrings.locationDistance(x.distanceMeters, zh ? .zh : .en, unit: unit) // 溢出安全 + ≥1km 用公里
         let dir = directionWord(x.direction, zh: zh)
         let lead = hasPrev ? (zh ? "。附近路口：" : ". Nearby intersection: ")
                            : (zh ? "附近路口：" : "Nearby intersection: ")
@@ -78,11 +78,11 @@ public enum WhereAmIComposer {
         }
     }
 
-    private static func landmarkClause(_ lm: ReverseGeocode.Landmark?, zh: Bool, hasBody: Bool) -> String? {
+    private static func landmarkClause(_ lm: ReverseGeocode.Landmark?, zh: Bool, hasBody: Bool, unit: DistanceUnit) -> String? {
         guard let lm = lm, !lm.name.isEmpty else { return nil }
         // 距离来自网络：巨值裸 Int(Double) 会陷阱崩溃。locationDistance 内部走 safeRoundedInt（溢出安全），且
         // ≥1km 用公里（"约1.5公里"远胜"约1500米"，rural 地标常上千米）——[[benchmark-rtt]] 溢出镜头 + 可听度。
-        let distStr = SpokenStrings.locationDistance(lm.distanceMeters, zh ? .zh : .en)
+        let distStr = SpokenStrings.locationDistance(lm.distanceMeters, zh ? .zh : .en, unit: unit)
         let dir = directionWord(lm.direction, zh: zh)
         // 有主体地址时用"。"接续；无主体（只有地标）时直接起句。
         let lead = hasBody ? (zh ? "。最近的地标：" : ". Nearest landmark: ")

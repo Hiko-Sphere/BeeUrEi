@@ -43,7 +43,8 @@ public enum PoiCalloutComposer {
                               radiusMeters: Int,
                               headingAvailable: Bool,
                               language: Language,
-                              maxCount: Int? = nil) -> String {
+                              maxCount: Int? = nil,
+                              unit: DistanceUnit = .metric) -> String {
         let zh = language == .zh
         var seenNames = Set<String>() // 同名去重（保留最近的那个）——听觉上重复念"全家便利店"是噪音
         var entries: [(text: String, dist: Double)] = []
@@ -58,7 +59,7 @@ public enum PoiCalloutComposer {
             // 否则一个被扇区/距离过滤掉的同名 POI（如正后方的"全家"）会先占掉去重名额，
             // 使一个真正在前方、该播的同名 POI 被当"已见"丢弃（盲人正走向它却听不到，安全攸关）。
             // locationDistance：溢出安全 + ≥1km 用公里（周边检索半径可达 3km，远处 POI"约2.1公里"远胜"约2100米"）。
-            let dm = SpokenStrings.locationDistance(dist, zh ? .zh : .en)
+            let dm = SpokenStrings.locationDistance(dist, zh ? .zh : .en, unit: unit)
             var phrase: String
             if let rel = poi.relativeBearingDegrees, rel.isFinite {
                 if mode == .ahead, abs(rel) > 50 { continue } // 前方模式只留朝向 ±50° 扇区
@@ -105,7 +106,7 @@ public enum PoiCalloutComposer {
     /// 就近找**单个**地点的播报（voice「最近的X」/"nearest X"）：从候选里挑最近的合格者
     /// （距离有限 >5m、名字非空），报店名 + 时钟方位 + 距离；无合格者 → "附近没找到<query>"。
     /// query=用户所问类别（"厕所"），name=实际店名——两者都念，盲人才知道到底是哪家。
-    public static func nearest(from pois: [PoiObservation], query: String, radiusMeters: Int, language: Language) -> String {
+    public static func nearest(from pois: [PoiObservation], query: String, radiusMeters: Int, language: Language, unit: DistanceUnit = .metric) -> String {
         let zh = language == .zh
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let best = pois
@@ -116,7 +117,7 @@ public enum PoiCalloutComposer {
             return zh ? "附近\(radiusMeters)米内没找到\(q)" : "No \(q) found within \(radiusMeters) meters"
         }
         let name = best.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let dm = SpokenStrings.locationDistance(best.distanceMeters, zh ? .zh : .en) // 溢出安全 + ≥1km 用公里
+        let dm = SpokenStrings.locationDistance(best.distanceMeters, zh ? .zh : .en, unit: unit) // 溢出安全 + ≥1km 用公里
         if let rel = best.relativeBearingDegrees, rel.isFinite {
             let hour = ClockDirection(angleDegrees: rel).hour
             return zh ? "最近的\(q)：\(name)，\(hour)点钟方向约\(dm)"

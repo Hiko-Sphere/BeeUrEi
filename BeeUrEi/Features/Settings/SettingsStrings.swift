@@ -87,6 +87,9 @@ enum SettingsStrings {
                  : "Plays a cue from the obstacle's direction; with AirPods the direction stays fixed as you turn your head"
     }
     static func verbosityPicker(_ l: Language) -> String { l == .zh ? "播报详略" : "Verbosity" }
+    static func distanceUnitPicker(_ l: Language) -> String { l == .zh ? "距离单位" : "Distance units" }
+    static func distanceUnitMetric(_ l: Language) -> String { l == .zh ? "公制（米/公里）" : "Metric (m/km)" }
+    static func distanceUnitImperial(_ l: Language) -> String { l == .zh ? "英制（英尺/英里）" : "Imperial (ft/mi)" }
     static func verbosityQuiet(_ l: Language) -> String { l == .zh ? "安静（只危险）" : "Quiet (danger only)" }
     static func verbosityNormal(_ l: Language) -> String { l == .zh ? "正常（转向+危险）" : "Normal (turns + danger)" }
     static func verbosityDetailed(_ l: Language) -> String { l == .zh ? "详细（全部）" : "Detailed (everything)" }

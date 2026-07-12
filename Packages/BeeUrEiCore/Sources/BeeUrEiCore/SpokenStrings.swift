@@ -62,14 +62,9 @@ public enum SpokenStrings {
     /// 否则整米。读屏"约1.5公里"远胜"约1500米"——听者（出租车司机/路人）难快速换算「1500米」的量级
     /// （与 web accuracyText 同口径）。用**完整单位词**（米/公里、meters/kilometers）保证 TTS 清晰（"m"可能被念成"em"）。
     /// 返回**数值+单位**（不含"约"），调用方按语境加"约/大约"。溢出/非有限安全（safeRoundedInt 夹 [0, 1_000_000]）。
-    public static func locationDistance(_ meters: Double, _ lang: Language) -> String {
-        let m = safeRoundedInt(meters) // 非有限/负→0；夹到 1_000_000（1000 公里）
-        if m >= 1000 {
-            let km = (Double(m) / 100).rounded() / 10 // 四舍五入到 0.1 公里
-            let s = km == km.rounded() ? String(Int(km)) : String(format: "%.1f", km) // 2.0→"2"，去尾零
-            return lang == .zh ? "\(s)公里" : "\(s) kilometers"
-        }
-        return lang == .zh ? "\(m)米" : "\(m) meters"
+    public static func locationDistance(_ meters: Double, _ lang: Language, unit: DistanceUnit = .metric) -> String {
+        // 公制沿用原逻辑（回归口径不变）；英制走 DistanceUnit（英尺/英里）。默认公制＝现有行为不变。
+        return unit.farDistance(meters: meters, language: lang)
     }
 
     /// 简短距离：<0.5 很近、<1 半米、否则整米。

@@ -129,6 +129,7 @@ final class HomeViewModel {
     @ObservationIgnored private let clearConfirmer = ClearPathConfirmer()
     @ObservationIgnored private let announcePolicy = AnnouncementPolicy()
     @ObservationIgnored private let depthSampler = DepthSampler()
+    @ObservationIgnored private let clearSideAdvisor = ClearSideAdvisor()
     @ObservationIgnored private let speechComposer = SpeechComposer()
     @ObservationIgnored private let trackingGate = TrackingGate()
     @ObservationIgnored private let thermalPolicy = ThermalPolicy()
@@ -522,7 +523,9 @@ final class HomeViewModel {
         if let phrase = speechComposer.announceProximity(zone, nearestMeters: suppressMeters ? nil : centralResult.nearest) {
             let minGap = zone == .danger ? 1.5 : 3.0
             if throttle.shouldAnnounce(key: "proximity:\(zone)", now: frame.timestamp, minGap: minGap) {
-                coordinator.submit(FeedbackEvent(priority: .obstacle, speech: phrase))
+                // 有障碍时附加绕行侧建议（caution 区最有用：不是"停下"而是"绕过去"；纯信息性，拿不准即无后缀）。
+                let suffix = (zone == .caution) ? (clearSideSuffix(depth: depth) ?? "") : ""
+                coordinator.submit(FeedbackEvent(priority: .obstacle, speech: phrase + suffix))
             }
         }
 
@@ -534,6 +537,18 @@ final class HomeViewModel {
                 coordinator.submit(FeedbackEvent(priority: .status, speech: HomeStrings.clearAheadSpeech(lang)))
             }
         }
+    }
+
+    /// 绕行侧建议后缀（正前方有障碍时）：左右区各取一片深度样本 → 核心 ClearSideAdvisor 保守判定 →
+    /// 仅当一侧独立够空且明显更空才返回"，左/右侧较空"。功能关或拿不准 → nil（纯附加，不改主警告）。
+    /// 采样点 x=0.25 / 0.75（左右三分位）、y=0.55（略低于中线，取行走高度的侧向空间而非头顶天空）。
+    private func clearSideSuffix(depth: DepthMap) -> String? {
+        guard FeatureSettings().clearSideHint else { return nil }
+        let left = DepthSampling.samples(depth: depth.depth, confidence: depth.confidence, normalizedX: 0.25, normalizedY: 0.55)
+        let right = DepthSampling.samples(depth: depth.depth, confidence: depth.confidence, normalizedX: 0.75, normalizedY: 0.55)
+        let lNear = depthSampler.nearestDistance(depths: left.depths, confidences: left.confidences)
+        let rNear = depthSampler.nearestDistance(depths: right.depths, confidences: right.confidences)
+        return clearSideAdvisor.hintSuffix(clearSideAdvisor.suggest(leftNearest: lNear, rightNearest: rNear), language: lang)
     }
 
     /// 动态 ROI：用碰撞走廊（核心 `CollisionCorridor`）从相机位姿投影出图像 ROI。

@@ -70,6 +70,15 @@ struct FeatureSettings {
         set { defaults.set(newValue, forKey: spatialCuesKey) }
     }
 
+    /// 绕行侧建议（默认开）：正前方有障碍时，若某一侧**独立读到足够远**且明显更空，附加"左/右侧较空"
+    /// 供盲人选绕行方向（对标 biped.ai/WeWALK clear-path 引导，核心 ClearSideAdvisor 保守判定、已测）。
+    /// 纯信息性附加、拿不准即静默，不掩盖障碍主警告。想更简洁播报的用户可关。
+    private let clearSideHintKey = "feature.clearSideHint"
+    var clearSideHint: Bool {
+        get { defaults.object(forKey: clearSideHintKey) == nil ? true : defaults.bool(forKey: clearSideHintKey) }
+        set { defaults.set(newValue, forKey: clearSideHintKey) }
+    }
+
     /// 震动反馈（默认开）：障碍/转向按危险等级给可区分的震动节奏（HapticFeedback）——嘈杂/不便听语音时的冗余
     /// 安全通道。部分用户嫌震动打扰或想省电可关；与音频提示通道（proximitySonar/spatialObstacleCues）一样可控。
     private let hapticsKey = "feature.hapticsEnabled"

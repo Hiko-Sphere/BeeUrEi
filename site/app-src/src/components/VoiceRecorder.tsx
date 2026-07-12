@@ -32,6 +32,15 @@ export function VoiceRecorderButton({ disabled, onSend, onError, t }: {
   const chunksRef = useRef<Blob[]>([])
   const discardRef = useRef(false) // 取消：丢弃录音不发送（onstop 里检查）
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const elapsedRef = useRef(0) // 已录秒数（60s 上限判据）：放 ref、在 interval 回调里判——setState 更新器须纯，绝不在其中调 stop()
+
+  /// 安全停止：真实 MediaRecorder 的 stop() 在 inactive 态**抛 InvalidStateError**、且 dataavailable/stop 事件
+  /// **异步**派发（recRef 要到 onstop 才清）——快速双击"发送/取消"、或 60s 自动停与手动停竞态时，第二次会对
+  /// 已停实例再调 stop() 而崩。故一律经此守卫（state 检查 + try/catch 双保险），任何停止路径都幂等。
+  const safeStop = () => {
+    const r = recRef.current
+    if (r && r.state === 'recording') { try { r.stop() } catch { /* 已停（竞态）：无事可做 */ } }
+  }
 
   const cleanup = () => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
@@ -69,20 +78,21 @@ export function VoiceRecorderButton({ disabled, onSend, onError, t }: {
     }
     recRef.current = rec
     rec.start()
-    setRecording(true); setSec(0)
+    setRecording(true); setSec(0); elapsedRef.current = 0
     timerRef.current = setInterval(() => {
-      setSec((s) => {
-        if (s + 1 >= VOICE_MAX_SEC) recRef.current?.stop() // 到 60s 上限自动停止并发送（onstop 走发送）
-        return s + 1
-      })
+      // 上限判据与副作用都在 interval 回调里（elapsedRef），setState 更新器保持纯函数——
+      // 若把 stop() 塞进更新器，StrictMode 双调更新器会对已停实例二次 stop() 抛 InvalidStateError。
+      elapsedRef.current += 1
+      setSec(elapsedRef.current)
+      if (elapsedRef.current >= VOICE_MAX_SEC) safeStop() // 到 60s 上限自动停止并发送（onstop 走发送）
     }, 1000)
   }
 
-  const stopAndSend = () => { recRef.current?.stop() }
-  const cancel = () => { discardRef.current = true; recRef.current?.stop() }
+  const stopAndSend = () => { safeStop() }
+  const cancel = () => { discardRef.current = true; safeStop() }
 
   // 卸载（切会话/离开页面）时丢弃并释放麦克风：绝不后台继续录。
-  useEffect(() => () => { discardRef.current = true; try { recRef.current?.stop() } catch { /* 已停 */ } }, [])
+  useEffect(() => () => { discardRef.current = true; safeStop() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!voiceRecordingSupported()) return null // 能力门控：录不出对端可播的格式就不给按钮（诚实，无假功能）
 

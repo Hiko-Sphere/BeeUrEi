@@ -5,8 +5,10 @@ import { VoiceRecorderButton, VOICE_MAX_SEC } from './VoiceRecorder'
 
 const t = (zh: string, _en: string) => zh
 
-/// 假 MediaRecorder（jsdom 无原生实现）：stop() 同步吐一块 audio/mp4 数据并触发 onstop——
-/// 与真实浏览器时序一致（dataavailable 先于 stop）。
+/// 假 MediaRecorder（jsdom 无原生实现）——**对齐真实浏览器语义**（宽松的假会漏掉真崩溃）：
+/// ① stop() 在非 recording 态**抛 InvalidStateError**（真实规范行为，快速双击"发送/取消"就会触发）；
+/// ② state 同步变 inactive，但 dataavailable/stop 事件**异步**派发（真实浏览器如此——组件在 onstop 前
+///    仍持有已停实例，任何未守卫的二次 stop() 都会命中 ①）。
 class FakeMediaRecorder {
   static instances: FakeMediaRecorder[] = []
   static isTypeSupported: (m: string) => boolean = (m) => m === 'audio/mp4' // 显式注解防 TS 推断成类型谓词（重赋 ()=>false 会报错）
@@ -17,10 +19,12 @@ class FakeMediaRecorder {
   constructor(stream: MediaStream) { this.stream = stream; FakeMediaRecorder.instances.push(this) }
   start() { this.state = 'recording' }
   stop() {
-    if (this.state !== 'recording') return
+    if (this.state !== 'recording') throw new DOMException('The MediaRecorder is inactive', 'InvalidStateError')
     this.state = 'inactive'
-    this.ondataavailable?.({ data: new Blob(['abc'], { type: 'audio/mp4' }) })
-    this.onstop?.()
+    queueMicrotask(() => { // 事件异步派发（微任务不受 fake timers 控制，await 即冲刷）
+      this.ondataavailable?.({ data: new Blob(['abc'], { type: 'audio/mp4' }) })
+      this.onstop?.()
+    })
   }
 }
 
@@ -82,6 +86,26 @@ describe('VoiceRecorderButton 语音消息录制（web 补齐发送侧）', () =
     fireEvent.click(screen.getByTestId('voice-record'))
     await waitFor(() => expect(onError).toHaveBeenCalledWith('麦克风权限被拒绝，无法录语音'))
     expect(screen.queryByTestId('voice-recording')).toBeNull()
+  })
+
+  it('快速双击"结束并发送"：不崩（真实 stop() 对已停实例抛 InvalidStateError，须幂等守卫）、只发一次', async () => {
+    // jsdom 会吞掉事件监听器里抛出的异常、转成 window error 事件——不捕获它，"崩了"的断言就是假的
+    // （曾让本测在未守卫实现下照样绿）。故显式收集 window error 断言为空。
+    const windowErrors: unknown[] = []
+    const onWindowError = (e: ErrorEvent) => { windowErrors.push(e.error ?? e.message); e.preventDefault() }
+    window.addEventListener('error', onWindowError)
+    try {
+      const onSend = vi.fn(), onError = vi.fn()
+      render(<VoiceRecorderButton t={t} onSend={onSend} onError={onError} />)
+      fireEvent.click(screen.getByTestId('voice-record'))
+      await screen.findByTestId('voice-recording')
+      const sendBtn = screen.getByLabelText('结束并发送语音')
+      fireEvent.click(sendBtn)
+      fireEvent.click(sendBtn) // 第二击落在事件异步派发之前（onstop 未跑、recRef 未清、state 已 inactive）——未守卫即抛
+      await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1)) // 只发一次
+      expect(windowErrors).toEqual([])                             // 且无未捕获异常（守卫幂等）
+      expect(onError).not.toHaveBeenCalled()
+    } finally { window.removeEventListener('error', onWindowError) }
   })
 
   it(`录满 ${VOICE_MAX_SEC}s 自动停止并发送（不会无限录爆服务端体积上限）`, async () => {

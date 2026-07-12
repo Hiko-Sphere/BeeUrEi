@@ -1327,7 +1327,7 @@ function startObserver(call) {
   const pendingIce = {};     // peerId -> [candidate] (在 setRemoteDescription 前缓冲)
   const hasRemote = {};      // peerId -> bool
   let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
-  let ws = null, localStream = null, speaking = false, muted = false, closed = false;
+  let ws = null, localStream = null, muted = false, closed = false;
 
   // —— UI 覆盖层 ——
   const mask = document.createElement('div'); mask.className = 'drawer-mask'; mask.style.zIndex = '70';
@@ -1428,7 +1428,6 @@ function startObserver(call) {
   async function enableSpeak() {
     try { localStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
     catch { toast(t('observeMicDenied'), 'error'); return; }
-    speaking = true;
     box.querySelector('[data-speak]').hidden = true;
     box.querySelector('[data-mute]').hidden = false;
     for (const [peerId, pc] of Object.entries(pcs)) {

@@ -18,4 +18,17 @@ export default defineConfig([
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' }],
     },
   },
+  {
+    // 管理面板（无构建 vanilla JS）：node --check 只查语法——打错函数名/变量名要到**运行时**才炸
+    // （值守面板炸=危机盲区）。no-undef 静态揪出未定义引用；no-unused-vars 防死代码堆积。
+    // sourceType script（直接 <script src> 引入，非模块）；本文件"先用后定义"惯例合法（函数声明提升）。
+    files: ["public/admin/*.js"],
+    extends: [js.configs.recommended],
+    languageOptions: { sourceType: "script", globals: globals.browser },
+    rules: {
+      "no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrors: "none" }],
+      // 空 catch=本文件确立的 best-effort 惯例（每处均有注释或语义自明）；空的其他块仍报错。
+      "no-empty": ["error", { allowEmptyCatch: true }],
+    },
+  },
 ])

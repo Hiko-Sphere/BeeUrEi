@@ -32,9 +32,11 @@ export function ChatPage() {
   const loadLists = useCallback(async () => {
     const [c, g, f] = await Promise.allSettled([api.conversations(), api.groups(), api.familyLinks()])
     // 失败时：有数据则保留，仍是初始 null 则落空数组退出加载态（避免持续失败让列表永远转圈）。
-    if (c.status === 'fulfilled') setConvos(c.value.conversations); else setConvos((v) => v ?? [])
-    if (g.status === 'fulfilled') setGroups(g.value.groups); else setGroups((v) => v ?? [])
-    if (f.status === 'fulfilled') setContacts(f.value.links.filter((l) => (l.status ?? 'accepted') === 'accepted'))
+    // fulfilled 但**载荷异常**（响应体缺字段/为空 → value?.x 为 undefined）也须兜底：否则 .conversations/.links
+    // 直接读 undefined 会抛，且本函数经 `void loadLists()` 调用、异常成**未处理拒绝**（列表卡在加载态）。
+    if (c.status === 'fulfilled') setConvos(c.value?.conversations ?? []); else setConvos((v) => v ?? [])
+    if (g.status === 'fulfilled') setGroups(g.value?.groups ?? []); else setGroups((v) => v ?? [])
+    if (f.status === 'fulfilled') setContacts((f.value?.links ?? []).filter((l) => (l.status ?? 'accepted') === 'accepted'))
   }, [])
   useEffect(() => { void loadLists(); return pollWhileVisible(loadLists, 8000) }, [loadLists])
 

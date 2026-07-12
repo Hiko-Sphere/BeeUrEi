@@ -199,6 +199,7 @@ describe('SafetyCheckInCard 进行中无紧急联系人 → 持续警告横幅',
     mock(api.blocks).mockResolvedValue({ blocks: [] })
     mock(api.familyLinks).mockResolvedValue({ links: [] })
     mock(api.incomingLinks).mockResolvedValue({ links: [] })
+    mock(api.checkinSchedule).mockResolvedValue({ schedule: null }) // 每日报到日程读取正常（未配置）：不触发新的加载失败横幅（role=alert），避免与本组的无紧急联系人警告横幅撞车
   })
 
   it('active + 无任何联系人（hasAnyContact=false）→ 显示 role=alert 警告横幅', async () => {

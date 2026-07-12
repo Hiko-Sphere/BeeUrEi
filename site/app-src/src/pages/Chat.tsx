@@ -847,6 +847,7 @@ function ForwardDialog({ message, onClose, onSent }: { message: ChatMessage; onC
   const [convos, setConvos] = useState<Conversation[] | null>(null)
   const [groups, setGroups] = useState<GroupSummary[]>([])
   const [contacts, setContacts] = useState<FamilyLink[]>([]) // 已接受联系人：可转发给**尚无会话历史**的联系人（否则永远转不过去）
+  const [loadFailed, setLoadFailed] = useState(false) // 复审姊妹：加载失败≠没有联系人（网络问题被当成关系问题会误导"去添加联系人"）
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -855,7 +856,7 @@ function ForwardDialog({ message, onClose, onSent }: { message: ChatMessage; onC
         setConvos(c.conversations); setGroups(g.groups)
         setContacts(f.links.filter((l) => (l.status ?? 'accepted') === 'accepted')) // 仅已接受（pending 不能收发）
       })
-      .catch(() => setConvos([]))
+      .catch(() => { setConvos([]); setLoadFailed(true) })
   }, [])
 
   // 转发目标 = 最近会话 ∪ 已接受联系人（去重）∪ 群。此前只列"有过消息的会话"——第一次要把消息转给某位
@@ -896,7 +897,9 @@ function ForwardDialog({ message, onClose, onSent }: { message: ChatMessage; onC
         </div>
       )}
       <div className="mt-3 max-h-[50vh] overflow-y-auto">
-        {convos === null ? <Spinner /> : targetCount === 0 ? (
+        {convos === null ? <Spinner /> : (loadFailed && targetCount === 0) ? (
+          <p className="py-6 text-center text-sm text-danger" role="alert">{t('联系人加载失败，请检查网络后重开转发', 'Couldn\'t load contacts — check your connection and reopen')}</p>
+        ) : targetCount === 0 ? (
           <p className="py-6 text-center text-sm text-faint">{t('暂无可转发的联系人', 'No contacts to forward to')}</p>
         ) : (shownConvos.length + shownContacts.length + shownGroups.length) === 0 ? (
           <p className="py-6 text-center text-sm text-faint" role="status">{t('没有匹配的联系人', 'No matching contacts')}</p>

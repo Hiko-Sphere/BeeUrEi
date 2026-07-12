@@ -360,8 +360,10 @@ function DailyScheduleSection() {
   const [pausedUntil, setPausedUntil] = useState<number | null>(null) // 临时暂停至（ms，到点自动恢复）；null/过去=未暂停
   const [busy, setBusy] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false) // 复审姊妹：读取失败≠"未配置"——把默认值当权威展示会让用户误存、清掉真日程/生效中的暂停（dead-man's switch 被静默改写）
   const durations = [30, 60, 120, 240]
-  useEffect(() => { void (async () => {
+  const loadSchedule = async () => {
+    setLoadFailed(false)
     try {
       const { schedule } = await api.checkinSchedule()
       if (schedule) {
@@ -369,9 +371,13 @@ function DailyScheduleSection() {
         setTime(`${String(Math.floor(schedule.startMinute / 60)).padStart(2, '0')}:${String(schedule.startMinute % 60).padStart(2, '0')}`)
         setDur(schedule.durationMinutes); setDnote(schedule.note ?? ''); setPausedUntil(schedule.pausedUntil ?? null)
       }
-    } catch { /* 网络失败留默认 */ }
-    finally { setLoaded(true) }
-  })() }, [])
+      setLoaded(true)
+    } catch {
+      // 网络/服务错：**不得**把编译期默认（未启用/09:00/无暂停）当权威——用户一存就清掉真日程与住院暂停。
+      setLoadFailed(true); setLoaded(true)
+    }
+  }
+  useEffect(() => { void loadSchedule() }, [])
   const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai' } catch { return 'Asia/Shanghai' } })()
   const startMinuteOf = () => { const [h, m] = time.split(':').map(Number); return (Number.isFinite(h) ? h : 9) * 60 + (Number.isFinite(m) ? m : 0) }
   const save = async (nextEnabled: boolean) => {
@@ -410,6 +416,13 @@ function DailyScheduleSection() {
   }
   const isPaused = pausedUntil != null && pausedUntil > Date.now()
   if (!loaded) return null
+  if (loadFailed) return (
+    <div className="mt-4 border-t border-[var(--line)] pt-3">
+      <div className="text-sm font-semibold">{t('每日定时报到', 'Daily check-in')}</div>
+      <p className="mt-1 text-xs text-danger" role="alert">{t('日程读取失败——为防误改真实日程，已锁定编辑。', 'Couldn\'t load the schedule — editing is locked to protect your real settings.')}</p>
+      <Button variant="soft" className="mt-2" onClick={() => void loadSchedule()}>{t('重试读取', 'Retry')}</Button>
+    </div>
+  )
   return (
     <div className="mt-4 border-t border-[var(--line)] pt-3">
       <div className="flex items-center justify-between gap-3">

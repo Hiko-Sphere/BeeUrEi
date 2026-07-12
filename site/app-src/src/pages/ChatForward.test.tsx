@@ -87,6 +87,21 @@ describe('消息转发', () => {
     expect(screen.getByText('没有匹配的联系人')).toBeInTheDocument()
   })
 
+  it('转发目标加载失败 → 显示"加载失败"错误态而非误导性"暂无联系人"（复审姊妹修复）', async () => {
+    mock(api.messagesWith).mockResolvedValue({ messages: [msg({ id: 'm1', kind: 'text', text: '转发这条' })] })
+    // 主页挂载先成功加载会话（渲染出消息线程）；ForwardDialog 打开时的二次拉取整体 reject（网络故障）。
+    mock(api.conversations).mockResolvedValueOnce({ conversations: [{ peer: { id: 'p1', displayName: '阿明', avatar: null }, last: null, unread: 0 }] }).mockRejectedValue(new Error('network'))
+    mock(api.groups).mockResolvedValueOnce({ groups: [] }).mockRejectedValue(new Error('network'))
+    mock(api.familyLinks).mockResolvedValueOnce({ links: [] }).mockRejectedValue(new Error('network'))
+    render(<ChatPage />)
+    await screen.findByText('转发这条')
+    fireEvent.click(screen.getByText('转发'))
+    // 修复前：折叠成空表 → 误导"暂无可转发的联系人"（让用户以为要去加好友）。修复后：如实报加载失败 + role=alert。
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('联系人加载失败')
+    expect(screen.queryByText('暂无可转发的联系人')).not.toBeInTheDocument()
+  })
+
   it('forwarded=true 的消息渲染「已转发」标注', async () => {
     mock(api.messagesWith).mockResolvedValue({ messages: [msg({ id: 'm2', kind: 'text', text: '这是转发来的', forwarded: true })] })
     render(<ChatPage />)

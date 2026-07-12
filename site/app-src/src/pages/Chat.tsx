@@ -28,11 +28,13 @@ export function ChatPage() {
   const [sel, setSel] = useState<Selection | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
 
+  const [contacts, setContacts] = useState<FamilyLink[]>([]) // 已接受联系人：供列表搜索直达"还没聊过的人"（见 matchedContacts）
   const loadLists = useCallback(async () => {
-    const [c, g] = await Promise.allSettled([api.conversations(), api.groups()])
+    const [c, g, f] = await Promise.allSettled([api.conversations(), api.groups(), api.familyLinks()])
     // 失败时：有数据则保留，仍是初始 null 则落空数组退出加载态（避免持续失败让列表永远转圈）。
     if (c.status === 'fulfilled') setConvos(c.value.conversations); else setConvos((v) => v ?? [])
     if (g.status === 'fulfilled') setGroups(g.value.groups); else setGroups((v) => v ?? [])
+    if (f.status === 'fulfilled') setContacts(f.value.links.filter((l) => (l.status ?? 'accepted') === 'accepted'))
   }, [])
   useEffect(() => { void loadLists(); return pollWhileVisible(loadLists, 8000) }, [loadLists])
 
@@ -88,6 +90,15 @@ export function ChatPage() {
     if (!q) return items
     return items.filter((it) => (it.kind === 'peer' ? it.c.peer.displayName : it.g.group.name).toLowerCase().includes(q))
   }, [items, convoQuery])
+
+  // 搜索同时命中**还没聊过的联系人**（recent≠all：会话列表只含聊过的人——搜一位从未聊过的联系人
+  // 此前在本页找不到、还得绕去亲友页）。已在会话里的对端不重复列（上方会话行已命中）。点击即开聊。
+  const matchedContacts = useMemo(() => {
+    const q = convoQuery.trim().toLowerCase()
+    if (!q) return []
+    const inConvos = new Set((convos ?? []).map((c) => c.peer.id))
+    return contacts.filter((l) => !inConvos.has(l.memberId) && l.memberName.toLowerCase().includes(q))
+  }, [convoQuery, contacts, convos])
 
   // 跨会话全局消息搜索（WhatsApp 式）：同一个搜索框在按名字过滤会话之外，同时搜**全部**会话的消息正文——
   // "那个地址在哪个对话里"不必逐个打开找。≥2 字才查 + 0.35s 防抖（与线程内搜索同款）；点击命中直接打开对应会话。
@@ -148,6 +159,28 @@ export function ChatPage() {
                   onClick={() => setSel({ kind: 'group', id: it.g.group.id, name: it.g.group.name, members: it.g.members, ownerId: it.g.group.ownerId, muted: it.g.muted ?? false, unread: it.g.unread })} />
               ))}
             </ul>
+          )}
+          {/* 还没聊过的联系人命中（recent≠all）：点击即开聊（Thread 对空会话正常渲染 composer）。 */}
+          {matchedContacts.length > 0 && (
+            <div className="border-t border-[var(--line)]">
+              <h2 className="px-3 pb-1 pt-3 text-xs font-semibold text-faint">{t('联系人', 'Contacts')}</h2>
+              <ul className="divide-y divide-[var(--line)]">
+                {matchedContacts.map((l) => (
+                  <li key={`fc:${l.memberId}`}>
+                    <button type="button" data-testid="contact-hit"
+                      onClick={() => setSel({ kind: 'peer', id: l.memberId, name: l.memberName, avatar: l.memberAvatar })}
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:surface-2"
+                      aria-label={t(`与 ${l.memberName} 开始聊天`, `Start a chat with ${l.memberName}`)}>
+                      <Avatar name={l.memberName} src={l.memberAvatar} size={36} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{l.memberName}</span>
+                        <span className="block truncate text-xs text-faint">{l.relation}</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
           {/* 全局消息命中（与上方"按名字过滤的会话"并列）：点击直达对应会话。解析不到会话的命中不渲染。 */}
           {msgHits && msgHits.length > 0 && (() => {

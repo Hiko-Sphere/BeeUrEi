@@ -7,7 +7,7 @@ vi.mock('react-router-dom', () => ({ useParams: () => ({}), useNavigate: () => v
 vi.mock('../lib/session', () => ({ useSession: () => ({ user: { id: 'me', displayName: '我' } }) }))
 vi.mock('../lib/api', () => ({
   SEARCH_LIMIT: 50, GLOBAL_SEARCH_LIMIT: 20, // Chat 搜索截断标注用常量（与真实 api.ts 同值）
-  api: { conversations: vi.fn(), groups: vi.fn(), searchAllMessages: vi.fn(), messagesWith: vi.fn(), markRead: vi.fn() },
+  api: { conversations: vi.fn(), groups: vi.fn(), searchAllMessages: vi.fn(), messagesWith: vi.fn(), markRead: vi.fn(), familyLinks: vi.fn() },
   APIError: class extends Error { code = ''; status = 0 },
 }))
 import { api } from '../lib/api'
@@ -30,6 +30,7 @@ describe('ChatPage 会话列表按名字搜索过滤', () => {
     mock(api.searchAllMessages).mockResolvedValue({ messages: [] }) // 默认无消息命中；具体用例覆写
     mock(api.messagesWith).mockResolvedValue({ messages: [] })
     mock(api.markRead).mockResolvedValue({})
+    mock(api.familyLinks).mockResolvedValue({ links: [] }) // 默认无联系人;联系人命中用例覆写
   })
 
   it('键入即缩到匹配项（单聊与群名都可搜）；清空恢复全部', async () => {
@@ -120,6 +121,29 @@ describe('ChatPage 会话列表按名字搜索过滤', () => {
     expect(await screen.findByText('之前发的地址')).toBeInTheDocument()
     // 命中行标题与 aria-label 都是"已注销用户"，非空名（修 hitTarget 绕开 items 本地化的缺口）。
     expect(screen.getByRole('button', { name: '打开与 已注销用户 的会话' })).toBeInTheDocument()
+  })
+
+  it('搜索命中还没聊过的联系人（recent≠all）：出现"联系人"区、点击即开聊；已在会话的对端不重复列', async () => {
+    mock(api.familyLinks).mockResolvedValue({ links: [
+      { id: 'l1', memberId: 'p1', memberName: '阿明', relation: '朋友', isEmergency: false, status: 'accepted' },   // 已在会话：不重复列
+      { id: 'l3', memberId: 'p3', memberName: '阿伟', relation: '同事', isEmergency: false, status: 'accepted' },   // 没聊过：搜得到
+      { id: 'l4', memberId: 'p4', memberName: '伟哥待定', relation: '', isEmergency: false, status: 'pending' },    // pending：不列
+    ] })
+    render(<ChatPage />)
+    await screen.findByText('阿明')
+    expect(screen.queryByTestId('contact-hit')).toBeNull() // 未搜索：不显联系人区
+    fireEvent.change(search(), { target: { value: '伟' } })
+    const hits = await screen.findAllByTestId('contact-hit')
+    expect(hits).toHaveLength(1) // 仅阿伟（pending 的"伟哥待定"不列）
+    expect(screen.getByRole('button', { name: '与 阿伟 开始聊天' })).toBeInTheDocument()
+    // 搜"明"：阿明经**会话行**命中（联系人区不重复列）。
+    fireEvent.change(search(), { target: { value: '明' } })
+    await waitFor(() => expect(screen.getByText('阿明')).toBeInTheDocument())
+    expect(screen.queryByTestId('contact-hit')).toBeNull()
+    // 点击联系人命中 → 直接打开与其的空会话（可立即发消息）。
+    fireEvent.change(search(), { target: { value: '伟' } })
+    fireEvent.click(await screen.findByTestId('contact-hit'))
+    await waitFor(() => expect(api.messagesWith).toHaveBeenCalledWith('p3', undefined, undefined))
   })
 
   it('全局命中打满上限(20)→列表尾如实标注"仅显示最近 20 条匹配"；未打满不标（no-silent-caps）', async () => {

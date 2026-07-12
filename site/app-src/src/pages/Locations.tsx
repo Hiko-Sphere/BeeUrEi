@@ -6,6 +6,7 @@ import { pollWhileVisible } from '../lib/poll'
 import { batteryBadge, batteryPercent } from '../lib/battery'
 import { shareTtlSec, SHARE_DURATIONS } from '../lib/locationShare'
 import { validAccuracyMeters, accuracyText, shareAccuracyNote } from '../lib/geoAccuracy'
+import { getUnit } from '../lib/distanceUnit'
 import { headingPhrase } from '../lib/heading'
 import { appleMapsUrl } from '../lib/location'
 import { useI18n } from '../lib/i18n'
@@ -127,7 +128,7 @@ export function LocationsPage() {
       // critical(≤10%即将关机)加 ⚠️ 前缀，协助者盯多个联系人时一眼分清最危急的（读屏也念"警告"）。
       const battHtml = batt ? ` · <span class="${batt.danger ? 'text-danger font-semibold' : ''}">${batt.critical ? '⚠️ ' : ''}${escapeHtml(batt.text)}</span>` : ''
       // 精度文字（协助者读屏/看不清圈时也知道有多准）："精确到约 20 米"。
-      const accLabel = accuracyText(c.accuracy, t)
+      const accLabel = accuracyText(c.accuracy, t, getUnit())
       const accHtml = accLabel ? ` · ${escapeHtml(accLabel)}` : ''
       // 行进方向（服务端一直下发 heading、web 却从未呈现——死字段）：协助者据此判断对方是否正朝约定地点移动
       // （Find My/Google 式方向指示，用**文字**兼顾读屏与看不清地图者）。heading 仅移动时有效，静止/不可用→null 不显。
@@ -256,7 +257,7 @@ export function LocationsPage() {
                 {/* 自视定位精度：让共享者知道自己被定位得多准；粗定位（桌面 IP/WiFi 常公里级）明确告知联系人只看到大致区域，
                     与本 App 一贯的诚实位置标注同旨。仅共享中且有有效精度时显示。 */}
                 {sharing && (() => {
-                  const note = shareAccuracyNote(selfAccuracy, t)
+                  const note = shareAccuracyNote(selfAccuracy, t, getUnit())
                   return note ? <div className={`mt-0.5 text-xs ${note.coarse ? 'font-medium text-danger' : 'text-faint'}`}>{note.coarse ? '⚠️ ' : '📍 '}{note.text}</div> : null
                 })()}
                 {/* 上报送达停滞警示（isPublishStalled）：>30s 无一次成功上报（断网等）→ 如实告知"联系人可能看不到你"。

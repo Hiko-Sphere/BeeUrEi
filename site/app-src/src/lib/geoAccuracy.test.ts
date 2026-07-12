@@ -42,6 +42,16 @@ describe('geoAccuracy', () => {
     expect(accuracyText(2500, pick('en'))).toBe('~2.5 km accuracy')
   })
 
+  it('accuracyText 英制单位（英尺/英里，与 iOS 距离单位设置对齐）', () => {
+    expect(accuracyText(20, pick('en'), 'imperial')).toBe('~66 ft accuracy')    // 20m≈66ft
+    expect(accuracyText(20, t, 'imperial')).toBe('精确到约 66 英尺')
+    expect(accuracyText(1500, pick('en'), 'imperial')).toBe('~0.9 mi accuracy') // 1500m≈0.9mi
+    // 公制默认（不传 unit）逐字不变，回归守卫。
+    expect(accuracyText(20, t)).toBe('精确到约 20 米')
+    // shareAccuracyNote 同样随单位。
+    expect(shareAccuracyNote(30, pick('en'), 'imperial')?.text).toBe('~98 ft accuracy') // 30m≈98ft，<500m 不粗略
+  })
+
   it('shareAccuracyNote（共享者自视）：街道级只报精度、不告警；粗定位加"只看到大致区域"', () => {
     // 街道级（< 500m）：coarse=false，文字即精度本身。
     const good = shareAccuracyNote(30, t)

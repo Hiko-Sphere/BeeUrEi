@@ -10,11 +10,13 @@ import { Card, Avatar, Button, Field, Input, useToast, Modal, fmtTime } from '..
 import { DataExportCard } from '../components/DataExportCard'
 import { PasskeySection } from '../components/PasskeySection'
 import { VerificationDialog } from '../components/VerificationDialog'
+import { getUnit, setUnit, type DistanceUnit } from '../lib/distanceUnit'
 
 export function AccountPage() {
   const { user, refreshMe, signOut } = useSession()
   const { t, lang, setLang } = useI18n()
   const toast = useToast()
+  const [unit, setUnitState] = useState<DistanceUnit>(getUnit())
   const [self, setSelf] = useState<SelfView | null>(null)
   const [displayName, setDisplayName] = useState('')
   const [savingName, setSavingName] = useState(false)
@@ -137,6 +139,21 @@ export function AccountPage() {
             <button key={l} onClick={() => changeLang(l)}
               className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition ${lang === l ? 'border-honey bg-honey/10' : 'border-[var(--line)] text-soft'}`}>
               {l === 'zh' ? '简体中文' : 'English'}
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      {/* 距离单位（公制/英制）：路线里程、共享位置精度等距离随之切换，与 iOS 端设置对齐（英语区家人惯用英尺/英里）。
+          纯本地显示偏好（不影响服务端），改后当前及后续页面渲染即生效。 */}
+      <Card className="p-5">
+        <div className="mb-3 text-sm font-semibold">{t('距离单位', 'Distance units')}</div>
+        <div className="grid grid-cols-2 gap-2">
+          {(['metric', 'imperial'] as const).map((u) => (
+            <button key={u} onClick={() => { setUnit(u); setUnitState(u) }}
+              aria-pressed={unit === u}
+              className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition ${unit === u ? 'border-honey bg-honey/10' : 'border-[var(--line)] text-soft'}`}>
+              {u === 'metric' ? t('公制（米/公里）', 'Metric (m/km)') : t('英制（英尺/英里）', 'Imperial (ft/mi)')}
             </button>
           ))}
         </div>

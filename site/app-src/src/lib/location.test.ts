@@ -37,6 +37,13 @@ describe('routeDistanceText', () => {
     expect(routeDistanceText(NaN, zh)).toBe('约 0 米')
     expect(routeDistanceText(-5, zh)).toBe('约 0 米')
   })
+  it('英制单位（英尺/英里，与 iOS 距离单位设置对齐）', () => {
+    expect(routeDistanceText(200, en, 'imperial')).toBe('~656 ft')   // 200m≈656ft
+    expect(routeDistanceText(1200, en, 'imperial')).toBe('~0.7 mi')  // 1200m≈0.7mi
+    expect(routeDistanceText(1200, zh, 'imperial')).toBe('约 0.7 英里')
+    // 公制默认（不传 unit）逐字不变，回归守卫。
+    expect(routeDistanceText(1200, zh)).toBe('约 1.2 公里')
+  })
 })
 
 describe('routeWalking* 步行时间估计（步速 1.2 m/s，与 iOS RouteRemaining 默认同口径）', () => {

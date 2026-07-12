@@ -1,3 +1,5 @@
+import { farDistance, type DistanceUnit } from './distanceUnit'
+
 // 解析位置消息文本：两种形态都认——
 //  ① JSON {lat,lng,name?}（App/web 主动发的位置）
 //  ② 内嵌 https://maps.apple.com/?ll=lat,lng&q=name 文本链接（iOS 兼容未升级服务端时发的形态）
@@ -44,14 +46,11 @@ export function routeDistanceMeters(waypoints: { lat: number; lng: number }[]): 
   return total
 }
 
-/// 路线距离可读文本：≥1km 用公里(0.1 精度去尾零)，否则整米——"约 1.2 公里"胜过"约 1200 米"（同 accuracyText 口径）。
-export function routeDistanceText(meters: number, t: (zh: string, en: string) => string): string {
-  const m = Number.isFinite(meters) && meters > 0 ? meters : 0
-  if (m >= 1000) {
-    const km = (Math.round(m / 100) / 10).toString() // 四舍五入到 0.1km、toString 去尾零（2.0→2）
-    return t(`约 ${km} 公里`, `~${km} km`)
-  }
-  return t(`约 ${Math.round(m)} 米`, `~${Math.round(m)} m`)
+/// 路线距离可读文本：数值+单位走 DistanceUnit.farDistance 同一换算源（公制 ≥1km 用公里否则整米；英制→英尺/英里）。
+/// "约 1.2 公里"胜过"约 1200 米"；英语区家人惯用英尺/英里。unit 默认公制＝现有行为**逐字不变**（既有测试守卫）。
+export function routeDistanceText(meters: number, t: (zh: string, en: string) => string, unit: DistanceUnit = 'metric'): string {
+  const far = farDistance(meters, unit, t)
+  return t(`约 ${far}`, `~${far}`)
 }
 
 /// 保守步速（米/秒）：与 iOS 核心 RouteRemaining.effectiveWalkingSpeed 的默认步速同值，保证同一条路线在

@@ -2,6 +2,7 @@ import type { ContactLocation } from '../lib/api'
 import { Avatar, RelativeTime } from './ui'
 import { batteryBadge } from '../lib/battery'
 import { accuracyText } from '../lib/geoAccuracy'
+import { getUnit } from '../lib/distanceUnit'
 import { headingPhrase } from '../lib/heading'
 import { roleLabel } from './Layout'
 import { IconPhone, IconChat } from './icons'
@@ -24,7 +25,7 @@ export function SharingContactRow({ c, lang, t, live, callDisabled, onLocate, on
   onMessage: () => void
 }) {
   const b = batteryBadge(c.battery, lang)
-  const acc = accuracyText(c.accuracy, t)      // "精确到约 20 米"；无效精度→null 省略
+  const acc = accuracyText(c.accuracy, t, getUnit()) // "精确到约 20 米"/"~66 ft accuracy"；无效精度→null 省略
   const head = headingPhrase(c.heading, lang)  // "正朝东北方向移动"；静止/不可用→null 省略
   return (
     <li className="flex items-center gap-2 px-4 py-3 hover:surface-2">

@@ -361,3 +361,6 @@ tr.sel { background: color-mix(in srgb, var(--honey) 12%, transparent); }
 .kyc-reason { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: var(--surface); color: var(--text); font: inherit; }
 .kyc-note { flex: 1; min-width: 80px; }
+
+/* 新版本提示横幅（非错误，蜜色）：服务端镜像已更新（overview.commit 变化）→ 长开的值守标签页应刷新取新面板代码。 */
+.update-banner { display: flex; align-items: center; justify-content: center; gap: 10px; background: color-mix(in srgb, var(--honey) 14%, transparent); color: var(--text); border: 1px solid color-mix(in srgb, var(--honey) 35%, transparent); border-radius: var(--radius-sm); padding: 9px 13px; font-size: 13.5px; margin-bottom: 14px; }

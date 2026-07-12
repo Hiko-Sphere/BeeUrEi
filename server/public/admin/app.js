@@ -9,6 +9,8 @@ const state = {
   lang: localStorage.getItem(LS.lang) || (navigator.language || '').toLowerCase().startsWith('en') ? 'en' : 'zh',
   theme: localStorage.getItem(LS.theme) || 'auto',
   overview: null,
+  bootCommit: null,   // 本次会话首见的服务端镜像 commit（overview.commit）——之后变了即面板代码可能已更新
+  updateReady: false, // 服务端已更新 → 顶部提示"点击刷新"（值守长开标签页跑旧面板代码的出口）
   emergencies: [],
   users: [],
   reports: [],
@@ -41,6 +43,7 @@ const I18N = {
     tfaSub: '该账号已开启两步验证', tfaCode: '验证码（6 位）或恢复码', verify: '验证', tfaBack: '返回', tfaInvalid: '验证码不正确，请重试',
     dashboard: '总览', users: '用户', reports: '举报', recordings: '录制', logout: '退出登录',
     totalUsers: '用户总数', active: '正常', disabled: '已封禁', online: '在线', onlineHelpers: '在线协助者',
+    panelUpdated: '管理面板有新版本（服务端已更新）', refreshNow: '点击刷新',
     openReports: '待处理举报', recordingsCount: '录制记录', byRole: '按角色分布', version: '版本', uptime: '运行时长', activeEmergencies: '正在进行的紧急',
     activeUnreachable: '紧急·无人可即时触达', activeUnreachSub: '安全网正静默失效，速联系本人/亲友',
     relayFails: '通话中继失败', callFailSub: '本次启动以来 · 普通/信令', relayFailHint: '中继不可达多半是 TURN/安全组未放行 3478',
@@ -166,6 +169,7 @@ const I18N = {
     tfaSub: 'This account has two-factor authentication enabled', tfaCode: 'Code (6 digits) or recovery code', verify: 'Verify', tfaBack: 'Back', tfaInvalid: 'Incorrect code — try again',
     dashboard: 'Overview', users: 'Users', reports: 'Reports', recordings: 'Recordings', logout: 'Sign out',
     totalUsers: 'Total users', active: 'Active', disabled: 'Banned', online: 'Online', onlineHelpers: 'Online helpers',
+    panelUpdated: 'A new version of this panel is available (server updated)', refreshNow: 'Refresh now',
     openReports: 'Open reports', recordingsCount: 'Recordings', byRole: 'By role', version: 'Version', uptime: 'Uptime', activeEmergencies: 'Active emergencies',
     activeUnreachable: 'Emergency · reached no one', activeUnreachSub: 'Safety net silently failing — contact them/family',
     relayFails: 'Call relay failures', callFailSub: 'since start · generic/signaling', relayFailHint: 'Relay unreachable usually means TURN / security-group 3478 blocked',
@@ -546,17 +550,27 @@ function viewEl() { return document.getElementById('view'); }
 function showLoading() { const v = viewEl(); if (v) v.innerHTML = `<div class="loading"><span class="spinner"></span> ${esc(t('loading'))}</div>`; }
 
 // ---------------------------------------------------------------- dashboard
+// 服务端镜像更新检测：overview.commit = api 镜像构建时的 GIT_SHA，而本面板 app.js 由**同一镜像**提供——
+// commit 变了即面板代码可能已更新，长开的值守标签页应刷新取新码（与协助端 /app 的新版本提示同旨）。
+// commit 缺失/'unknown'（本地/测试未注入 SHA）→ 无从比较，绝不误报。**绝不自动刷新**（不打断正在盯的值守视图）。
+function trackServerCommit(o) {
+  const c = o && o.commit;
+  if (!c || c === 'unknown') return;
+  if (!state.bootCommit) { state.bootCommit = c; return; }
+  if (c !== state.bootCommit) state.updateReady = true;
+}
 async function loadDashboard() {
   showLoading();
   try {
     const [ov, em] = await Promise.allSettled([api('/api/admin/overview'), api('/api/admin/emergencies')]);
     if (ov.status === 'rejected') throw ov.reason;
     state.overview = ov.value;
+    trackServerCommit(state.overview);
     state.emergencies = em.status === 'fulfilled' ? (em.value.events || []) : [];
     renderChrome();
     renderDashboard();
     if (!state.refreshTimer) state.refreshTimer = setInterval(async () => {
-      if (currentRoute() === '') { try { state.overview = await api('/api/admin/overview'); renderDashboard(); } catch {} }
+      if (currentRoute() === '') { try { state.overview = await api('/api/admin/overview'); trackServerCommit(state.overview); renderDashboard(); } catch {} }
     }, 15000);
   } catch (err) { viewEl().innerHTML = `<div class="err-banner">${esc(errText(err.code))}</div>`; }
 }
@@ -589,6 +603,7 @@ function renderDashboard() {
       </div>
     </div>` : '';
   viewEl().innerHTML = `
+    ${state.updateReady ? `<div class="update-banner" role="status">${esc(t('panelUpdated'))} <button class="btn ghost" data-action="reloadPanel">↻ ${esc(t('refreshNow'))}</button></div>` : ''}
     <div class="cards">
       ${o.activeEmergencies != null && o.activeEmergencies > 0 ? statCard(t('activeEmergencies'), o.activeEmergencies, '', 'danger') : ''}
       ${o.activeUnreachable != null && o.activeUnreachable > 0 ? statCard(t('activeUnreachable'), o.activeUnreachable, t('activeUnreachSub'), 'danger') : ''}
@@ -621,6 +636,9 @@ function renderDashboard() {
   if (expEmerg) expEmerg.addEventListener('click', () => {
     downloadCSV('beeurei-emergencies.csv', emergenciesCsvRows(state.emergencies || []));
   });
+  // 面板更新提示：点击刷新取新码（绝不自动刷，见 trackServerCommit）。
+  const reloadBtn = viewEl().querySelector('[data-action="reloadPanel"]');
+  if (reloadBtn) reloadBtn.addEventListener('click', () => location.reload());
 }
 // 紧急事件区（值守）：谁在何时触发了摔倒/撞击/SOS、通知到几人、位置来源诚实标注
 // （最后已知位置绝不伪装成实时；地图链接一律 Apple Maps，坐标为 WGS-84，与全栈口径一致）。
@@ -2034,7 +2052,7 @@ async function openVerifReview(id) {
 async function refreshVerifBadge() { try { state.overview = await api('/api/admin/overview'); renderChrome(); } catch {} }
 
 // keep the reports badge fresh after resolving
-async function loadOverviewBadge() { try { state.overview = await api('/api/admin/overview'); renderChrome(); route(); } catch {} }
+async function loadOverviewBadge() { try { state.overview = await api('/api/admin/overview'); trackServerCommit(state.overview); renderChrome(); route(); } catch {} }
 
 // ---------------------------------------------------------------- confirm dialog
 function confirmDialog(message) {

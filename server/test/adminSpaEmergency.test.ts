@@ -8,7 +8,7 @@ import vm from 'node:vm'
 /// 不命中则显式抛错，绝不静默空测）；DOM 用**宽容自引用 stub 元素**（getElementById/querySelector 都回它，
 /// innerHTML 可读写）——渲染函数写完 innerHTML 后测试读回断言，事件绑定全 noop。
 interface SpaTest {
-  state: { lang: string; emergencies: unknown[]; calls: unknown[]; callsQuery: string; overview: unknown; token: string | null }
+  state: { lang: string; emergencies: unknown[]; calls: unknown[]; callsQuery: string; overview: unknown; token: string | null; bootCommit: string | null; updateReady: boolean }
   t: (k: string) => string
   emergencySection: () => string
   statCard: (k: string, v: unknown, sub?: string, cls?: string) => string
@@ -16,6 +16,7 @@ interface SpaTest {
   renderDashboard: () => void
   pickWsToken: (turnResp: unknown) => string
   emergenciesCsvRows: (list: Record<string, unknown>[]) => (string | number)[][]
+  trackServerCommit: (o: { commit?: string } | null) => void
   view: { innerHTML: string } // 渲染函数写入的共享 stub 元素（viewEl()/$ 都解析到它）
 }
 function loadSpa(): SpaTest {
@@ -23,7 +24,7 @@ function loadSpa(): SpaTest {
   let src = readFileSync(path, 'utf8')
   const anchor = '\nrender();'
   if (!src.includes(anchor)) throw new Error('app.js bootstrap anchor "render();" not found — update test')
-  src = src.replace(anchor, '\nglobalThis.__test = { state, t, emergencySection, statCard, renderCalls, renderDashboard, pickWsToken, emergenciesCsvRows };\nrender();')
+  src = src.replace(anchor, '\nglobalThis.__test = { state, t, emergencySection, statCard, renderCalls, renderDashboard, pickWsToken, emergenciesCsvRows, trackServerCommit };\nrender();')
   const noop = (): void => {}
   const classList = { add: noop, remove: noop, toggle: noop, contains: () => false }
   // 自引用宽容元素：querySelector 返回自身（事件绑定链不断）、querySelectorAll 空数组、其余 noop。
@@ -323,5 +324,41 @@ describe('紧急事件 CSV 导出（事故留痕/合规审计）', () => {
     expect(rows[2].every((c) => c !== 'undefined' && c !== undefined && c !== null)).toBe(true)
     // 空列表 → 只有表头（不吐空数据行）。
     expect(spa.emergenciesCsvRows([])).toHaveLength(1)
+  })
+})
+
+describe('面板新版本提示（服务端镜像 commit 变化 → 值守长开标签页"点击刷新"）', () => {
+  const ov = (commit: string) => ({
+    users: { total: 1, active: 1, disabled: 0, byRole: { blind: 1, helper: 0, family: 0, admin: 0, developer: 0 } },
+    online: { total: 0, helpers: 0 }, reports: { open: 0, total: 0 },
+    recordings: { total: 0, config: {} }, verifications: { pending: 0, total: 0 },
+    growth: { newUsers7d: 0, newUsers30d: 0, trend: [] }, version: '0.1.0', commit,
+  })
+
+  it('trackServerCommit：unknown 不当基线；首见有效 commit 记基线；同 commit 不提示；变了 → updateReady', () => {
+    const spa = loadSpa()
+    spa.trackServerCommit({ commit: 'unknown' })
+    expect(spa.state.bootCommit).toBeNull()          // 未注入 SHA（本地/测试）：无从比较，绝不误报
+    spa.trackServerCommit(null)
+    expect(spa.state.bootCommit).toBeNull()
+    spa.trackServerCommit({ commit: 'abc1234' })
+    expect(spa.state.bootCommit).toBe('abc1234')     // 首见记基线
+    spa.trackServerCommit({ commit: 'abc1234' })
+    expect(spa.state.updateReady).toBe(false)        // 同版本：不提示
+    spa.trackServerCommit({ commit: 'def5678' })
+    expect(spa.state.updateReady).toBe(true)         // 服务端已更新 → 提示
+  })
+
+  it('updateReady → 仪表盘顶部渲染"点击刷新"横幅（role=status）；未更新不渲染', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    spa.state.overview = ov('abc1234')
+    spa.renderDashboard()
+    expect(spa.view.innerHTML).not.toContain('reloadPanel') // 未更新：无横幅
+    spa.state.updateReady = true
+    spa.renderDashboard()
+    expect(spa.view.innerHTML).toContain('管理面板有新版本')
+    expect(spa.view.innerHTML).toContain('data-action="reloadPanel"')
+    expect(spa.view.innerHTML).toContain('点击刷新')
   })
 })

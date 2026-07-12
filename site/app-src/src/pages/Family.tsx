@@ -32,9 +32,11 @@ export function FamilyPage() {
   const reload = useCallback(async () => {
     const [l, i, b] = await Promise.allSettled([api.familyLinks(), api.incomingLinks(), api.blocks()])
     // 失败时：有数据则保留，仍是初始 null 则落空数组退出加载态（避免某端点持续失败让该段永远转圈）。
-    if (l.status === 'fulfilled') setLinks(l.value.links); else setLinks((c) => c ?? [])
-    if (i.status === 'fulfilled') setIncoming(i.value.links); else setIncoming((c) => c ?? [])
-    if (b.status === 'fulfilled') setBlocks(b.value.blocks); else setBlocks((c) => c ?? [])
+    // fulfilled 但载荷异常（value?.x 为 undefined）也兜底：否则读 undefined 抛，且 throw 会**跳过后续 setState**、
+    // 令后面几段永远卡加载态（本函数经 `void reload()` 调，异常成未处理拒绝）。见 iter292 Chat 同类修复。
+    if (l.status === 'fulfilled') setLinks(l.value?.links ?? []); else setLinks((c) => c ?? [])
+    if (i.status === 'fulfilled') setIncoming(i.value?.links ?? []); else setIncoming((c) => c ?? [])
+    if (b.status === 'fulfilled') setBlocks(b.value?.blocks ?? []); else setBlocks((c) => c ?? [])
   }, [])
 
   useEffect(() => { void reload() }, [reload])

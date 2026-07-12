@@ -32,17 +32,19 @@ export function HomePage() {
         api.onlineCount(), api.incomingCalls(), api.helpQueue(), api.unreadSummary(), api.incomingLinks(), api.callHistory({ peek: true }),
       ])
       if (!alive) return
+      // 每项 value?.x ?? 0：fulfilled 但载荷异常（缺字段/空体）也退回 0，否则读 undefined 抛、setStats 整个不执行、
+      // 首页统计永卡加载（且经 `void load()` 成未处理拒绝）。inc.value.calls.length 这类双层解引用尤其脆。见 iter292。
       setStats({
-        online: oc.status === 'fulfilled' ? oc.value.online : 0,
-        total: oc.status === 'fulfilled' ? oc.value.total : 0,
-        incoming: inc.status === 'fulfilled' ? inc.value.calls.length : 0,
-        queue: q.status === 'fulfilled' ? q.value.count : 0,
-        unread: sum.status === 'fulfilled' ? sum.value.notifications : 0,
-        unreadMessages: sum.status === 'fulfilled' ? sum.value.messages : 0,
-        missedCalls: sum.status === 'fulfilled' ? (sum.value.missedCalls ?? 0) : 0,
-        pendingLinks: links.status === 'fulfilled' ? links.value.links.length : 0,
+        online: oc.status === 'fulfilled' ? (oc.value?.online ?? 0) : 0,
+        total: oc.status === 'fulfilled' ? (oc.value?.total ?? 0) : 0,
+        incoming: inc.status === 'fulfilled' ? (inc.value?.calls?.length ?? 0) : 0,
+        queue: q.status === 'fulfilled' ? (q.value?.count ?? 0) : 0,
+        unread: sum.status === 'fulfilled' ? (sum.value?.notifications ?? 0) : 0,
+        unreadMessages: sum.status === 'fulfilled' ? (sum.value?.messages ?? 0) : 0,
+        missedCalls: sum.status === 'fulfilled' ? (sum.value?.missedCalls ?? 0) : 0,
+        pendingLinks: links.status === 'fulfilled' ? (links.value?.links?.length ?? 0) : 0,
       })
-      if (hist.status === 'fulfilled') setCalls(hist.value.calls.slice(0, 6)); else setCalls((c) => c ?? []) // 失败也退出加载态（stats 已带默认值，calls 此前会永远转圈）
+      if (hist.status === 'fulfilled') setCalls((hist.value?.calls ?? []).slice(0, 6)); else setCalls((c) => c ?? []) // 失败也退出加载态（stats 已带默认值，calls 此前会永远转圈）
     }
     void load()
     const stop = pollWhileVisible(load, 15_000)

@@ -44,14 +44,15 @@ export function CallsPage() {
       if (!alive) return
       // 每段独立：成功则更新；失败时——若已有数据则保留(轮询瞬时失败不清屏)，若仍是初始 null 则落为空数组，
       // 退出加载态(否则某个端点持续失败会让该段永远转圈；页面每 4s 轮询，恢复后自然填回)。
-      if (inc.status === 'fulfilled') setIncoming(inc.value.calls); else setIncoming((c) => c ?? [])
+      // fulfilled 但载荷异常也兜底（否则 throw 跳过后续 setQueue/setHistory→那两段永卡加载；见 iter292 Chat 修复）。
+      if (inc.status === 'fulfilled') setIncoming(inc.value?.calls ?? []); else setIncoming((c) => c ?? [])
       // 只更新列表**展示**、不在此响铃/toast：新求助的声音提示由全局 HelpQueueAlertHost 单点负责（它已按"待命中且
       // 不在通话"门控 + 代际去重）。此前本页也响一遍 → 停在通话页时同一条求助**响铃+toast 两次**（且本页还漏查"待命"
       // 门控，未待命也响）。删本页响铃，交全局单点，去重（见对抗复审）。
-      if (q.status === 'fulfilled') setQueue(q.value.requests)
+      if (q.status === 'fulfilled') setQueue(q.value?.requests ?? [])
       else setQueue((c) => c ?? [])
       // 首屏刷新（最近 N 条）：仅在**未展开**时同步 hasMore——展开后 hasMore 由 loadMore 维护。
-      if (hist.status === 'fulfilled') { setHistory(hist.value.calls); if (!expandedRef.current) setHasMore(!!hist.value.hasMore) }
+      if (hist.status === 'fulfilled') { setHistory(hist.value?.calls ?? []); if (!expandedRef.current) setHasMore(!!hist.value?.hasMore) }
       else setHistory((c) => c ?? [])
     }
     void load()

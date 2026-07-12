@@ -565,6 +565,13 @@ function trackServerCommit(o) {
   if (!state.bootCommit) { state.bootCommit = c; return; }
   if (c !== state.bootCommit) state.updateReady = true;
 }
+// allSettled 结果取字段（图形降级）：仅 fulfilled 且**载荷含该字段**时返回，否则 undefined——rejection 与
+// **fulfilled 但载荷畸形**（响应体缺字段/为空 → value?.field 为 undefined）都归 undefined，调用方 `?? / ||` 兜底。
+// 避免 `settled.value.field` 在 value 畸形时抛：loadDashboard 用 allSettled 正是要 emergencies 端点独立降级，
+// 若这里抛会连累整个仪表盘落到 catch 的错误横幅（与 web iter292/293 同类隐患，此为 admin 姊妹）。
+function settledField(settled, field) {
+  return settled && settled.status === 'fulfilled' && settled.value ? settled.value[field] : undefined;
+}
 async function loadDashboard() {
   showLoading();
   try {
@@ -572,7 +579,7 @@ async function loadDashboard() {
     if (ov.status === 'rejected') throw ov.reason;
     state.overview = ov.value;
     trackServerCommit(state.overview);
-    state.emergencies = em.status === 'fulfilled' ? (em.value.events || []) : [];
+    state.emergencies = settledField(em, 'events') || []; // 畸形/rejection 都退空——emergencies 端点独立降级，不连累整个仪表盘
     renderChrome();
     renderDashboard();
     if (!state.refreshTimer) state.refreshTimer = setInterval(async () => {

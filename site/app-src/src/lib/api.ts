@@ -307,7 +307,8 @@ export const api = {
   unblock: (id: string) => del(`/api/blocks/${id}`),
 
   // 通话 / 求助
-  callHistory: () => get('/api/calls') as Promise<{ calls: CallRecordInfo[] }>,
+  // peek=true：只读预览（首页仪表盘用）——不清"未接来电"角标基线；通话记录页才用默认路径（打开即看过）。
+  callHistory: (peek?: boolean) => get(`/api/calls${peek ? '?peek=1' : ''}`) as Promise<{ calls: CallRecordInfo[] }>,
   iceServers: () => get('/api/assist/turn') as Promise<{ iceServers: IceServer[]; wsToken?: string }>,
   // 通话连接失败上报（best-effort，把 ICE relay 不可达等静默故障变成服务端可观测计数）。reason 白名单。
   reportCallFailure: (reason: 'relay_unreachable' | 'generic' | 'signaling', callId?: string) =>

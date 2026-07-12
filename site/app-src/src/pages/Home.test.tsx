@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 
 // Home 用 Link(router)+useSession+useI18n(默认)+api。mock router 的 Link 与 session、api。
 vi.mock('react-router-dom', () => ({ Link: (p: { to: string; children: unknown }) => <a href={p.to}>{p.children as never}</a> }))
@@ -21,6 +21,15 @@ describe('HomePage 最近通话渲染（防字段漂移）', () => {
     mock(api.helpQueue).mockResolvedValue({ requests: [], count: 0 })
     mock(api.unreadSummary).mockResolvedValue({ messages: 0, notifications: 0, missedCalls: 0, total: 0 })
     mock(api.incomingLinks).mockResolvedValue({ links: [] })
+  })
+
+  it('首页最近通话用 peek 预览（callHistory(true)）——绝不因瞟一眼首页就清"未接来电"角标', async () => {
+    mock(api.callHistory).mockResolvedValue({ calls: [] })
+    render(<HomePage />)
+    await waitFor(() => expect(api.callHistory).toHaveBeenCalled())
+    // 关键回归：peek=true。若不带 peek，GET /api/calls 会刷新 callHistorySeenAt——打开首页即清未接角标
+    // （角标本是"去看看"的提示），且与并行 unreadSummary 竞态致"未接来电"卡时而 N 时而 0。
+    expect(mock(api.callHistory).mock.calls[0][0]).toBe(true)
   })
 
   it('锁定 peerName/direction/status 渲染键', async () => {

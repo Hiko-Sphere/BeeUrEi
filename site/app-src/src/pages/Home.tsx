@@ -26,8 +26,10 @@ export function HomePage() {
     const load = async () => {
       // 未读汇总用轻量计数端点 unreadSummary（含 messages/notifications/missedCalls），
       // 替代此前为拿一个 unread 计数却拉整份通知列表（≤100 条）的浪费。
+      // callHistory(peek)：首页只是**预览**最近通话——绝不清"未接来电"角标基线。否则瞟一眼首页角标就没了
+      // （角标本是"去看看"的提示），且与并行的 unreadSummary 竞态、"未接来电"卡时而 N 时而 0。
       const [oc, inc, q, sum, links, hist] = await Promise.allSettled([
-        api.onlineCount(), api.incomingCalls(), api.helpQueue(), api.unreadSummary(), api.incomingLinks(), api.callHistory(),
+        api.onlineCount(), api.incomingCalls(), api.helpQueue(), api.unreadSummary(), api.incomingLinks(), api.callHistory(true),
       ])
       if (!alive) return
       setStats({

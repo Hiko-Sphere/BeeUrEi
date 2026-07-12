@@ -268,12 +268,16 @@ export function registerAssistRoutes(
   })
 
   // 通话记录（呼出/呼入/未接）：我作为主叫或被叫的记录，按时间倒序。
+  // ?peek=1：**只读预览**（首页仪表盘"最近通话"用）——不刷新 callHistorySeenAt 基线。否则瞟一眼首页就把
+  // 未接来电角标清零（角标本是"去看看"的提示，扫过仪表盘≠看过通话记录；且首页并行拉 unreadSummary 会与
+  // 这里的基线刷新竞态，"未接来电"卡时而 N 时而 0）。真正打开通话记录页仍走默认路径清角标。
   app.get('/api/calls', { preHandler: requireAuth() }, async (req) => {
     const me = req.user!.sub
+    const peek = (req.query as { peek?: string }).peek === '1'
     const recs = store.callRecordsForUser(me, 100)
     // 打开通话记录即"看过"：刷新基线，未看未接来电角标随之清零（与手机通话 App 一致）。
     // 在读取 recs 之后再刷新——返回列表仍照常带 missed 状态（供客户端把未接来电标红），只是角标不再计它们。
-    store.updateUser(me, { callHistorySeenAt: Date.now() })
+    if (!peek) store.updateUser(me, { callHistorySeenAt: Date.now() })
     return {
       calls: recs.map((r) => {
         const outgoing = r.callerId === me

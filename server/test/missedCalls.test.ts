@@ -64,6 +64,22 @@ describe('未接来电并入总角标 + 打开通话记录即清（端到端）'
     await app.close()
   })
 
+  it('?peek=1（首页仪表盘预览）：返回同样的列表但**不**清未接来电角标；真正打开通话记录页才清', async () => {
+    const { app, blind, bh, hh } = await setup()
+    await app.inject({ method: 'POST', url: '/api/assist/call', headers: hh, payload: { callId: 'call-3', targetUserIds: [blind.user.id] } })
+    expect((await unread(app, bh)).missedCalls).toBe(1)
+    // 首页预览（peek）：列表照常返回（含 missed 供标红），但角标基线**不动**——瞟一眼首页 ≠ 看过通话记录，
+    // 角标是"去看看"的提示，预览若清基线则并行的 unreadSummary 会与之竞态、"未接来电"卡时而 1 时而 0。
+    const peek = await app.inject({ method: 'GET', url: '/api/calls?peek=1', headers: bh })
+    expect(peek.statusCode).toBe(200)
+    expect(peek.json().calls[0]).toMatchObject({ direction: 'incoming', status: 'missed' })
+    expect((await unread(app, bh)).missedCalls).toBe(1) // 角标仍在
+    // 真正打开通话记录页（无 peek）→ 角标清零（原行为不变）。
+    await app.inject({ method: 'GET', url: '/api/calls', headers: bh })
+    expect((await unread(app, bh)).missedCalls).toBe(0)
+    await app.close()
+  })
+
   it('呼出方（helper）不因自己发起的未接而计未接来电角标', async () => {
     const { app, blind, bh, hh } = await setup()
     void bh

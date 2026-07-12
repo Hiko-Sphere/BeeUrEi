@@ -129,8 +129,9 @@ export function FamilyPage() {
                   {/* 待确认请求：发起者恒为链 owner，故 amOwner=false → 若设了紧急即「你是 TA 的紧急联系人」（接受前就讲清责任方向）。 */}
                   <div className="text-xs text-faint">{l.relation}{emergencyBadge(l.isEmergency, false)}</div>
                 </div>
-                <button onClick={() => accept(l.id)} className="flex h-9 w-9 items-center justify-center rounded-full bg-ok text-white" aria-label={t('接受', 'Accept')}><IconCheck width={18} height={18} /></button>
-                <button onClick={() => remove(l.id, t('已拒绝', 'Rejected'))} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-danger" aria-label={t('拒绝', 'Reject')}><IconX width={18} height={18} /></button>
+                {/* aria-label 带请求者名区分（多条请求并列时 rotor 不再是 N 个同名"接受/拒绝"，读屏可辨对谁操作）。 */}
+                <button onClick={() => accept(l.id)} className="flex h-9 w-9 items-center justify-center rounded-full bg-ok text-white" aria-label={t(`接受 ${l.ownerName} 的请求`, `Accept ${l.ownerName}'s request`)}><IconCheck width={18} height={18} /></button>
+                <button onClick={() => remove(l.id, t('已拒绝', 'Rejected'))} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-danger" aria-label={t(`拒绝 ${l.ownerName} 的请求`, `Reject ${l.ownerName}'s request`)}><IconX width={18} height={18} /></button>
               </li>
             ))}
           </ul>
@@ -174,21 +175,23 @@ export function FamilyPage() {
                     )}
                   </div>
                 </div>
+                {/* 各操作键 aria-label 一律带联系人名（此前整列 N 行都是同名"呼叫/消息/拉黑/举报/删除"——
+                    读屏 rotor 无从分辨对谁操作；拉黑/删除这类破坏性操作点错人代价尤其高）。 */}
                 {l.amOwner && (
                   <button onClick={() => toggleEmergency(l)} aria-pressed={l.isEmergency}
                     className={`flex h-9 w-9 items-center justify-center rounded-full ${l.isEmergency ? 'bg-danger/15 text-danger' : 'surface-2 text-faint'}`}
                     title={l.isEmergency ? t('紧急联系人（点击取消）', 'Emergency contact (tap to remove)') : t('设为紧急联系人', 'Set as emergency contact')}
-                    aria-label={l.isEmergency ? t('取消紧急联系人', 'Remove from emergency contacts') : t('设为紧急联系人', 'Set as emergency contact')}>
+                    aria-label={l.isEmergency ? t(`取消 ${l.memberName} 的紧急联系人`, `Remove ${l.memberName} from emergency contacts`) : t(`将 ${l.memberName} 设为紧急联系人`, `Set ${l.memberName} as emergency contact`)}>
                     <IconFlash width={16} height={16} />
                   </button>
                 )}
                 <button onClick={() => startOutgoing(l.memberId, l.memberName, l.memberAvatar)} disabled={!!active}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-honey/15 text-honey disabled:opacity-40" aria-label={t('呼叫', 'Call')}><IconPhone width={18} height={18} /></button>
-                <button onClick={() => nav(`/chat/${l.memberId}`)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-soft" aria-label={t('消息', 'Message')}><IconChat width={18} height={18} /></button>
-                <button onClick={() => blockContact(l)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-faint hover:text-danger" aria-label={t('拉黑', 'Block')}><IconShield width={16} height={16} /></button>
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-honey/15 text-honey disabled:opacity-40" aria-label={t(`呼叫 ${l.memberName}`, `Call ${l.memberName}`)}><IconPhone width={18} height={18} /></button>
+                <button onClick={() => nav(`/chat/${l.memberId}`)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-soft" aria-label={t(`给 ${l.memberName} 发消息`, `Message ${l.memberName}`)}><IconChat width={18} height={18} /></button>
+                <button onClick={() => blockContact(l)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-faint hover:text-danger" aria-label={t(`拉黑 ${l.memberName}`, `Block ${l.memberName}`)}><IconShield width={16} height={16} /></button>
                 {/* 举报（信任与安全）：被骚扰不必非得在通话中才能举报——从联系人直接举报，服务端 /api/reports 无需 callId。 */}
-                <button onClick={() => setReportTarget(l)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-faint hover:text-danger" aria-label={t('举报', 'Report')}><IconFlag width={16} height={16} /></button>
-                <button onClick={() => removeContact(l)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-faint" aria-label={t('删除', 'Remove')}><IconX width={16} height={16} /></button>
+                <button onClick={() => setReportTarget(l)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-faint hover:text-danger" aria-label={t(`举报 ${l.memberName}`, `Report ${l.memberName}`)}><IconFlag width={16} height={16} /></button>
+                <button onClick={() => removeContact(l)} className="flex h-9 w-9 items-center justify-center rounded-full surface-2 text-faint" aria-label={t(`删除联系人 ${l.memberName}`, `Remove contact ${l.memberName}`)}><IconX width={16} height={16} /></button>
               </li>
             ))}
           </ul>
@@ -205,7 +208,7 @@ export function FamilyPage() {
                 <Avatar name={l.memberName} src={l.memberAvatar} size={36} />
                 <div className="min-w-0 flex-1"><div className="truncate text-sm font-medium">{l.memberName}</div><div className="text-xs text-faint">{t('等待对方确认', 'Awaiting confirmation')}</div></div>
                 <Pill>{t('待确认', 'Pending')}</Pill>
-                <button onClick={() => remove(l.id, t('已撤销请求', 'Request canceled'))} className="text-faint hover:text-danger" aria-label={t('撤销', 'Cancel')}><IconX width={16} height={16} /></button>
+                <button onClick={() => remove(l.id, t('已撤销请求', 'Request canceled'))} className="text-faint hover:text-danger" aria-label={t(`撤销对 ${l.memberName} 的请求`, `Cancel request to ${l.memberName}`)}><IconX width={16} height={16} /></button>
               </li>
             ))}
           </ul>

@@ -198,6 +198,19 @@ enum SettingsStrings {
             ? "填好地址后，说\u{201C}回家\u{201D}或\u{201C}去公司\u{201D}即可直接导航。你正在共享位置时，到达这些地点会提醒能看到你位置的家人（如\u{201C}已到家\u{201D}），让他们安心。"
             : "Once set, say \u{201C}take me home\u{201D} or \u{201C}go to work\u{201D} to navigate directly. While you're sharing your location, arriving at these places notifies the family who can see your location (e.g. \u{201C}arrived home\u{201D}), for their peace of mind."
     }
+    // —— 自定义地点管理（与 web iter139-141 同语义）——
+    static func customPlacesHeader(_ l: Language) -> String { l == .zh ? "自定义地点" : "Custom places" }
+    static func placeLabelPlaceholder(_ l: Language) -> String { l == .zh ? "名称（如：医院、女儿家）" : "Name (e.g. Hospital)" }
+    static func placeAddressPlaceholder(_ l: Language) -> String { l == .zh ? "地址或地点名" : "Address or place name" }
+    static func addPlace(_ l: Language) -> String { l == .zh ? "添加地点" : "Add place" }
+    static func updatePlace(_ l: Language) -> String { l == .zh ? "保存修改" : "Save changes" }
+    static func confirmOverwrite(_ l: Language) -> String { l == .zh ? "确认覆盖" : "Confirm overwrite" }
+    static func cancelEdit(_ l: Language) -> String { l == .zh ? "取消" : "Cancel" }
+    static func editPlaceHint(_ l: Language) -> String { l == .zh ? "点击编辑" : "Tap to edit" }
+    static func duplicateNameWarning(_ label: String, _ l: Language) -> String {
+        l == .zh ? "已有名为「\(label)」的地点，保存将覆盖它的地址。再点一次确认覆盖。"
+                 : "A place named “\(label)” already exists — saving will overwrite its address. Tap again to confirm."
+    }
     static func homeHeader(_ l: Language) -> String { l == .zh ? "家" : "Home" }
     static func workHeader(_ l: Language) -> String { l == .zh ? "公司" : "Work" }
     static func homeAddressPlaceholder(_ l: Language) -> String { l == .zh ? "家的地址或地点名" : "Home address or place name" }

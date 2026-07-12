@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>BeeUrEi 蜂之眼 — 让 iPhone 摄像头成为视障人士的实时之眼 | A camera that sees for you</title>
-<meta name="description" content="BeeUrEi 蜂之眼：端侧实时避障、场景识别、远程协助与紧急呼叫，为视障人士打造的原生 iOS 应用。隐私优先，视觉 AI 全部在设备本地运行。BeeUrEi turns an iPhone camera into real-time obstacle avoidance, scene understanding, and live human assistance for blind and low-vision people — privacy-first, all on-device.">
+<meta name="description" content="BeeUrEi 蜂之眼：端侧实时避障、场景识别、远程协助与紧急呼叫，为视障人士打造的原生 iOS 应用。隐私优先，视觉 AI 默认在本机运行。BeeUrEi turns an iPhone camera into real-time obstacle avoidance, scene understanding, and live human assistance for blind and low-vision people — privacy-first, on-device by default.">
 <meta name="theme-color" content="#f2a900" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#14161f" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
@@ -16,12 +16,12 @@
 <meta property="og:site_name" content="BeeUrEi 蜂之眼">
 <meta property="og:url" content="https://beeurei.hikosphere.com">
 <meta property="og:title" content="BeeUrEi 蜂之眼 — 视障人士的实时之眼 / A camera that sees for you">
-<meta property="og:description" content="端侧实时避障、场景识别、远程协助与紧急呼叫的原生 iOS 应用。隐私优先，视觉 AI 全部在设备本地运行。Real-time obstacle avoidance, scene understanding and live human assistance — privacy-first, all on-device.">
+<meta property="og:description" content="端侧实时避障、场景识别、远程协助与紧急呼叫的原生 iOS 应用。隐私优先，视觉 AI 默认在本机运行。Real-time obstacle avoidance, scene understanding and live human assistance — privacy-first, on-device by default.">
 <meta property="og:locale" content="zh_CN">
 <meta property="og:locale:alternate" content="en_US">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="BeeUrEi 蜂之眼 — 视障人士的实时之眼 / A camera that sees for you">
-<meta name="twitter:description" content="端侧实时避障、场景识别、远程协助与紧急呼叫的原生 iOS 应用。隐私优先。Real-time obstacle avoidance & live human assistance — privacy-first, all on-device.">
+<meta name="twitter:description" content="端侧实时避障、场景识别、远程协助与紧急呼叫的原生 iOS 应用。隐私优先。Real-time obstacle avoidance & live human assistance — privacy-first, on-device by default.">
 <meta property="og:image" content="https://beeurei.hikosphere.com/assets/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -65,7 +65,7 @@
       "name": "BeeUrEi 蜂之眼",
       "operatingSystem": "iOS",
       "applicationCategory": "HealthApplication",
-      "description": "On-device real-time obstacle avoidance, scene recognition, live remote assistance and emergency calls for blind and low-vision people. Privacy-first; all vision AI runs on the device.",
+      "description": "On-device real-time obstacle avoidance, scene recognition, live remote assistance and emergency calls for blind and low-vision people. Privacy-first; vision AI runs on-device by default, with an optional cloud AI Describe for richer scene descriptions.",
       "inLanguage": [
         "zh-Hans",
         "en"
@@ -75,6 +75,7 @@
       "featureList": [
         "Real-time on-device obstacle avoidance / 端侧实时避障",
         "Read text, identify objects and colours / 朗读文字、识物、辨色",
+        "Optional cloud AI scene description and visual Q&A / 可选云端 AI 场景描述与图像问答",
         "Walking navigation and retrace / 步行导航与原路返回",
         "One-tap remote human assistance / 一键远程协助",
         "Fall alerts and emergency calls / 摔倒报警与紧急呼叫",
@@ -120,7 +121,7 @@
           "name": "我的摄像头画面会被上传吗？",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "默认不会。所有视觉 AI 在本机完成；只有你主动向选定的人发起远程协助、并按住「显示画面」时，画面才会实时传输。"
+            "text": "默认不会——避障与识别都在本机完成，画面不离开手机。只有两种由你主动发起的情况会传出画面：① 向你选定的人发起远程协助并按住「显示画面」；② 使用「AI 描述」或对图片提问时，仅那一张图经我们的服务器发往云端视觉模型（不留存、不用于训练）。"
           }
         },
         {
@@ -213,8 +214,8 @@
         <a class="btn btn-ghost" href="#privacy"><span lang="zh">隐私如何保护</span><span lang="en">How privacy works</span></a>
       </div>
       <p class="hero-note">
-        <span lang="zh">所有视觉 AI 都在你的设备本地运行，画面默认不离开手机。</span>
-        <span lang="en">All vision AI runs on your device. Camera frames don’t leave the phone by default.</span>
+        <span lang="zh">视觉 AI 默认在本机运行，画面默认不离开手机（用「AI 描述」时那一张图才发往云端）。</span>
+        <span lang="en">Vision AI runs on-device by default; camera frames don’t leave the phone (only AI Describe sends that one image to the cloud).</span>
       </p>
     </div>
     <div class="hero-shot reveal">
@@ -260,7 +261,7 @@
     <div class="feature reverse reveal">
       <div class="copy">
         <h3><span lang="zh">看一看：朗读文字、识物、辨色</span><span lang="en">See for me: read text, identify objects &amp; colours</span></h3>
-        <p><span lang="zh">从主屏点「看一看」，一个九宫格把摄像头变成多面手：朗读文字与整页、识别颜色、扫码、辨纸币、找东西、识别公交、感知「周围的人」与光线——全部本机完成。</span><span lang="en">Tap “See for me” on the home screen and a single grid turns the camera into an all-rounder: read text or a whole page, identify colours, scan codes, recognise banknotes, find things, read bus numbers, and sense people nearby and ambient light — all on-device.</span></p>
+        <p><span lang="zh">从主屏点「看一看」，一个九宫格把摄像头变成多面手：朗读文字与整页、识别颜色、扫码、辨纸币、找东西、识别公交、感知「周围的人」与光线——这些都在本机完成；另有可选的云端「AI 描述」，对眼前画面给出更丰富的自然语言描述并能对图提问。</span><span lang="en">Tap “See for me” on the home screen and a single grid turns the camera into an all-rounder: read text or a whole page, identify colours, scan codes, recognise banknotes, find things, read bus numbers, and sense people nearby and ambient light — all of these on-device; plus an optional cloud “AI Describe” for a richer scene description and visual Q&amp;A.</span></p>
         <ul class="pts">
           <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">常用识别一屏直达，按钮大而清晰</span><span lang="en">Common tools one tap away, large and clear</span></span></li>
           <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">「前方有什么」一句话汇总眼前场景</span><span lang="en">“What’s ahead” sums up the scene in one sentence</span></span></li>
@@ -357,7 +358,7 @@
       <p class="kicker"><span lang="zh">隐私即安全</span><span lang="en">Privacy is safety</span></p>
       <h2 id="privacy-h"><span lang="zh">看见世界，不被世界窥看</span><span lang="en">See the world without being watched</span></h2>
       <ul class="checks">
-        <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><div><strong><span lang="zh">视觉 AI 全部在设备本地运行</span><span lang="en">All vision AI runs on-device</span></strong><span><span lang="zh">摄像头画面默认不离开你的手机，不上传、不留存、不用于训练。</span><span lang="en">Camera frames stay on your phone by default — never uploaded, stored, or used for training.</span></span></div></li>
+        <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><div><strong><span lang="zh">视觉 AI 默认在本机运行</span><span lang="en">Vision AI runs on-device by default</span></strong><span><span lang="zh">避障与识别在本机完成，画面不离开手机；仅当你主动使用「AI 描述」时，那一张图才经我们自己的服务器发往云端视觉模型——不留存、不用于训练。</span><span lang="en">Obstacle avoidance and recognition run on your phone and frames stay there. Only when you actively use AI Describe does that single image go — via our own server — to a cloud vision model, never stored or used for training.</span></span></div></li>
         <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><div><strong><span lang="zh">只有你主动发起协助时才共享视频</span><span lang="en">Video is shared only when you start assistance</span></strong><span><span lang="zh">而且只共享给你亲自选择的人。</span><span lang="en">And only with the person you choose.</span></span></div></li>
         <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><div><strong><span lang="zh">后端、信令与 TURN 全部自托管</span><span lang="en">Self-hosted backend, signaling &amp; TURN</span></strong><span><span lang="zh">数据通路掌握在自己手里。</span><span lang="en">The whole data path is run by us, not third parties.</span></span></div></li>
         <li><span class="ck no"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M6 6 18 18M18 6 6 18"/></svg></span><div><strong><span lang="zh">我们不做的事</span><span lang="en">What we never do</span></strong><span><span lang="zh">不识别人脸、不出售数据、不收集精确位置历史、不做广告画像、无第三方追踪。</span><span lang="en">No face identification, no data selling, no precise-location history, no ad profiling, no third-party trackers.</span></span></div></li>
@@ -450,7 +451,7 @@
       <details><summary><span><span lang="zh">需要联网吗？</span><span lang="en">Does it need the internet?</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg></summary>
         <div class="ans"><span lang="zh">避障与识别在本机离线运行，不需要联网。远程协助、消息与紧急通知是联网功能。</span><span lang="en">Obstacle avoidance and recognition run on-device and work offline. Remote assistance, messaging and emergency notifications use the network.</span></div></details>
       <details><summary><span><span lang="zh">我的摄像头画面会被上传吗？</span><span lang="en">Are my camera frames uploaded?</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg></summary>
-        <div class="ans"><span lang="zh">默认不会。所有视觉 AI 在本机完成；只有你主动向选定的人发起远程协助、并按住「显示画面」时，画面才会实时传输。</span><span lang="en">No, not by default. All vision AI happens on-device; frames are transmitted only when you actively start remote assistance with someone you choose and hold “Show My Camera”.</span></div></details>
+        <div class="ans"><span lang="zh">默认不会——避障与识别都在本机完成，画面不离开手机。只有两种由你主动发起的情况会传出画面：① 向你选定的人发起远程协助并按住「显示画面」；② 使用「AI 描述」或对图片提问时，仅那一张图经我们的服务器发往云端视觉模型（不留存、不用于训练）。</span><span lang="en">Not by default — obstacle avoidance and recognition run on your phone and frames stay there. Frames leave only in two cases you start yourself: (1) starting remote assistance with someone you choose and holding “Show My Camera”; (2) using AI Describe or asking about a photo, where that single image goes via our server to a cloud vision model (never stored or used for training).</span></div></details>
       <details><summary><span><span lang="zh">它能替代白手杖或导盲犬吗？</span><span lang="en">Can it replace a cane or guide dog?</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg></summary>
         <div class="ans"><span lang="zh">不能。它是增强感知的辅助工具，不是安全设备，无法检测出每一个障碍。请始终保留并优先使用白手杖、导盲犬与定向行走训练。</span><span lang="en">No. It is a perception-enhancing aid, not a safety device, and cannot detect every obstacle. Always keep and prioritise your white cane, guide dog and O&amp;M training.</span></div></details>
       <details><summary><span><span lang="zh">多少钱？什么时候上架？</span><span lang="en">What does it cost? When is it out?</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg></summary>

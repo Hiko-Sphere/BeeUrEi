@@ -119,4 +119,16 @@ final class BusDisplayReaderTests: XCTestCase {
         XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["Will arrive"], language: .en), "arriving now")
         XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["Approaching"], language: .en), "arriving now")
     }
+
+    func testChineseAlreadyArrivedIsImminent() {
+        // 中文"已到站"（车已抵达）= 即将到站——补齐与英文动词 arrived 对称的信号（此前只认"即将/进站"）。
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["103路", "已到站"], language: .zh), "即将到站")
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["车已到站"], language: .zh), "即将到站")
+        // **不**误判名词头"到站时间/到站信息"为即将到站（不含"已"）——否则会把真实读数压成假"车到了"、
+        // 让站台上的盲人提前迈向路缘（安全攸关，同英文 arriv(?!al) 防名词）。无到站信号 → nil。
+        XCTAssertNil(BusDisplayReader.arrivalHint(texts: ["到站时间", "查询"], language: .zh))
+        XCTAssertNil(BusDisplayReader.arrivalHint(texts: ["到站信息"], language: .zh))
+        // "到站时间"表头 + 真实"还有3分钟"：报分钟，不被误判即将（"已到站"不匹配"到站时间"）。
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["到站时间", "还有3分钟"], language: .zh), "还有约3分钟")
+    }
 }

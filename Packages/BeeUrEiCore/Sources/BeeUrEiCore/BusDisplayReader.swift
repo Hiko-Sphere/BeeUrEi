@@ -40,7 +40,11 @@ public enum BusDisplayReader {
             // 站台上的盲人被告知"车到了"而其实还有 5 分钟，可能提前迈向路缘（安全攸关）。同本文件 min⊂Mint、
             // 站⊂站台 的整词门控口径。lower 已小写，正则大小写无碍。
             let hasArriveVerb = lower.range(of: "arriv(?!al)", options: .regularExpression) != nil
-            if t.contains("即将") || t.contains("进站") || hasArriveVerb || lower.contains("approach") || lower.contains(" due") || lower == "due" {
+            // 中文即将到站：即将 / 进站 / **已到站**（车已抵达）。"已到站"补齐与英文动词 arrived 对称的"已抵达"信号——
+            // 此前中文只认"即将/进站"，漏了直白的"已到站"。**只收带"已"的形式**：裸"到站"是名词歧义
+            // （"距到站还有3分钟"/"到站时间"里 到站=名词，误判会把"还有3分钟"压成假"车到了"、让盲人提前迈向路缘，安全攸关），
+            // 而"已到站"里"已"恒为完成体动词标记、不构成名词头（无"已到站时间"这类词），故高精度零误报。
+            if t.contains("即将") || t.contains("进站") || t.contains("已到站") || hasArriveVerb || lower.contains("approach") || lower.contains(" due") || lower == "due" {
                 imminent = true
             }
             if minutes == nil, let n = firstNumber(minutesRegexes, in: lower) { minutes = n }

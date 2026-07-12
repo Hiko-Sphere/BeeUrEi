@@ -95,6 +95,16 @@ enum ChatStrings {
     }
     // —— 引用跳转（点击引用预览/VoiceOver 自定义操作跳到原消息；与 web '跳到被引用的消息' 同措辞）——
     static func jumpToQuotedAction(_ l: Language) -> String { l == .zh ? "跳到被引用的消息" : "Jump to quoted message" }
+    // —— 转发（把内容自包含的消息复制到另一会话；与 web 同语义）——
+    static func forwardAction(_ l: Language) -> String { l == .zh ? "转发" : "Forward" }
+    static func forwardTo(_ l: Language) -> String { l == .zh ? "转发到" : "Forward to" }
+    static func forwardedTo(_ name: String, _ l: Language) -> String { l == .zh ? "已转发给 \(name)" : "Forwarded to \(name)" }
+    static func forwardFailed(_ l: Language) -> String { l == .zh ? "转发失败，请重试" : "Forward failed — try again" }
+    static func forwardNoTargets(_ l: Language) -> String {
+        l == .zh ? "没有可转发的联系人或群。先在亲友页添加联系人。" : "No contacts or groups to forward to. Add contacts on the Family page first."
+    }
+    static func forwardContactsHeader(_ l: Language) -> String { l == .zh ? "联系人" : "Contacts" }
+    static func forwardGroupsHeader(_ l: Language) -> String { l == .zh ? "群聊" : "Groups" }
     /// 跳转后的有声反馈（盲人对滚动本身无感知，必须听到跳到了哪条）。
     static func quotedSpeak(_ name: String, _ preview: String, _ l: Language) -> String {
         l == .zh ? "被引用的消息，\(name)：\(preview)" : "Quoted message from \(name): \(preview)"

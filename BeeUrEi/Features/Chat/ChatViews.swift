@@ -364,6 +364,7 @@ struct ChatView: View {
     @State private var editDraft = ""                     // 编辑框文本
     @State private var replyingTo: ChatMessageInfo?       // 正在引用回复的消息（输入栏上方显引用条）
     @State private var pinned: PinnedMessageInfo?          // 会话置顶消息（顶部横幅）；随每次线程轮询刷新
+    @State private var forwarding: ChatMessageInfo?        // 正在转发的消息（打开目标选择器）
     @State private var canLoadEarlier = false   // 顶部"加载更早消息"是否可见
     @State private var loadingEarlier = false    // 正在加载更早历史
     @State private var reachedStart = false      // 已翻到对话最开头（再无更早）
@@ -452,6 +453,10 @@ struct ChatView: View {
         .sheet(isPresented: $showSearch) {
             MessageSearchSheet(session: session, peerId: peerId, groupId: groupId,
                                memberName: isGroup ? { senderName($0) } : nil, selfId: myId, lang: lang)
+        }
+        .sheet(item: $forwarding) { m in
+            // 转发目标选择器：已接受联系人（含**还没聊过的**）∪ 群聊——与 web ForwardDialog 同语义。
+            ForwardPickerSheet(session: session, message: m, lang: lang) { forwarding = nil }
         }
         .sheet(isPresented: $showReport) {
             // 聊天举报无通话录制可附，canAttach=false；提交只带 targetUserId+理由（服务端 callId 可选）。
@@ -692,6 +697,10 @@ struct ChatView: View {
             Button { unpin(messageId: m.id) } label: { Label(ChatStrings.unpinAction(lang), systemImage: "pin.slash") }
         } else {
             Button { pin(m) } label: { Label(ChatStrings.pinAction(lang), systemImage: "pin") }
+        }
+        // 转发（仅内容自包含类型，ChatForward.isForwardableKind 已测）：打开目标选择器。
+        if ChatForward.isForwardableKind(m.kind) {
+            Button { forwarding = m } label: { Label(ChatStrings.forwardAction(lang), systemImage: "arrowshape.turn.up.right") }
         }
         // 编辑（仅本人文字、15 分钟内；纯逻辑门控与服务端一致）：预填现文，弹编辑框改后保存。
         if ChatMessageEditPolicy.isEditable(m, myId: myId, nowMs: Date().timeIntervalSince1970 * 1000) {
@@ -1523,6 +1532,15 @@ final class VoiceNoteRecorder {
 
 /// 引用跳转判定（纯逻辑，视图与测试共用同一门控——中子它=拔掉跳转接线）：
 /// 原消息已加载 → 滚动定位；在更早未加载窗口 → 语音引导先加载（此前点了没反应=静默死按钮）；非引用 → 无操作。
+/// 可转发判定（与 web isForwardableKind 同口径，纯逻辑可测）：仅**内容自包含**的类型可转发——
+/// 文本/位置/图片/语音都是内联内容（data: URL/内嵌坐标），收件人无需访问原会话即可看到/听到；
+/// 视频是 mediaId（按会话鉴权，转发到无权会话看不到）、撤回/未知类型均不可转发。
+enum ChatForward {
+    static func isForwardableKind(_ kind: String) -> Bool {
+        kind == "text" || kind == "location" || kind == "image" || kind == "audio"
+    }
+}
+
 enum QuoteJump: Equatable {
     case jump(String)
     case notLoaded
@@ -1598,5 +1616,78 @@ private struct PinnedBannerView: View {
         .padding(.horizontal, 14).padding(.vertical, 8)
         .background(Color.beeHoney.opacity(0.08))
         .overlay(alignment: .bottom) { Divider() }
+    }
+}
+
+
+/// 转发目标选择器（与 web ForwardDialog 同语义）：已接受联系人（含还没聊过的——只列"有会话的"会让首转
+/// 永远转不过去）∪ 我在的群聊。点目标即转发（forwarded=true，收端标「已转发」），SpeechHub 有声确认。
+private struct ForwardPickerSheet: View {
+    let session: AuthSession
+    let message: ChatMessageInfo
+    let lang: Language
+    let onDone: () -> Void
+    @State private var contacts: [FamilyLinkInfo] = []
+    @State private var groups: [GroupConversationInfo] = []
+    @State private var loaded = false
+    @State private var busy = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if loaded && contacts.isEmpty && groups.isEmpty {
+                    Text(ChatStrings.forwardNoTargets(lang)).font(.footnote).foregroundStyle(.secondary)
+                }
+                if !contacts.isEmpty {
+                    Section(ChatStrings.forwardContactsHeader(lang)) {
+                        ForEach(contacts) { l in
+                            Button { Task { await forward(toId: l.memberId, name: l.memberName) } } label: {
+                                HStack {
+                                    AvatarView(dataURL: l.memberAvatar, name: l.memberName, size: 32)
+                                    Text(l.memberName)
+                                }
+                            }
+                            .disabled(busy)
+                        }
+                    }
+                }
+                if !groups.isEmpty {
+                    Section(ChatStrings.forwardGroupsHeader(lang)) {
+                        ForEach(groups, id: \.group.id) { g in
+                            Button { Task { await forward(groupId: g.group.id, name: g.group.name) } } label: {
+                                Label(g.group.name, systemImage: "person.3")
+                            }
+                            .disabled(busy)
+                        }
+                    }
+                }
+            }
+            .navigationTitle(ChatStrings.forwardTo(lang))
+            .task { await load() }
+        }
+    }
+
+    private func load() async {
+        guard let token = session.token else { loaded = true; return }
+        // 已接受联系人（pending 不能收发）∪ 群；任一失败不阻断另一半。
+        contacts = ((try? await APIClient().familyLinks(token: token)) ?? []).filter { $0.isAccepted }
+        groups = (try? await APIClient().groups(token: token)) ?? []
+        loaded = true
+    }
+
+    private func forward(toId: String? = nil, groupId: String? = nil, name: String) async {
+        guard let token = session.token, !busy else { return }
+        busy = true; defer { busy = false }
+        do {
+            if let groupId {
+                _ = try await APIClient().sendGroupMessage(token: token, groupId: groupId, kind: message.kind, text: message.text, forwarded: true)
+            } else if let toId {
+                _ = try await APIClient().sendMessage(token: token, toId: toId, kind: message.kind, text: message.text, forwarded: true)
+            }
+            SpeechHub.shared.speak(ChatStrings.forwardedTo(name, lang), channel: .query, voiceCode: lang.voiceCode)
+            onDone()
+        } catch {
+            SpeechHub.shared.speak(ChatStrings.sendErrorText(error, lang), channel: .query, voiceCode: lang.voiceCode)
+        }
     }
 }

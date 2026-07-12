@@ -1017,9 +1017,10 @@ struct APIClient {
 
     // MARK: 聊天（绑定亲友/协助者互发）
 
-    func sendMessage(token: String, toId: String, kind: String, text: String, replyTo: String? = nil) async throws -> ChatMessageInfo {
+    func sendMessage(token: String, toId: String, kind: String, text: String, replyTo: String? = nil, forwarded: Bool = false) async throws -> ChatMessageInfo {
         var body: [String: Any] = ["toId": toId, "kind": kind, "text": text]
         if let replyTo { body["replyTo"] = replyTo }
+        if forwarded { body["forwarded"] = true } // 转发标记：收端显「已转发」（防误信非原创内容）
         let data = try await authedSend("POST", "/api/messages", token: token, body: body)
         struct R: Codable { let message: ChatMessageInfo }
         return try JSONDecoder().decode(R.self, from: data).message
@@ -1213,9 +1214,10 @@ struct APIClient {
     }
 
     /// 发群消息。
-    func sendGroupMessage(token: String, groupId: String, kind: String, text: String, replyTo: String? = nil) async throws -> ChatMessageInfo {
+    func sendGroupMessage(token: String, groupId: String, kind: String, text: String, replyTo: String? = nil, forwarded: Bool = false) async throws -> ChatMessageInfo {
         var body: [String: Any] = ["groupId": groupId, "kind": kind, "text": text]
         if let replyTo { body["replyTo"] = replyTo }
+        if forwarded { body["forwarded"] = true }
         let data = try await authedSend("POST", "/api/messages", token: token, body: body)
         struct R: Codable { let message: ChatMessageInfo }
         return try JSONDecoder().decode(R.self, from: data).message

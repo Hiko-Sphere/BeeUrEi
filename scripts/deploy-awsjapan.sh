@@ -75,11 +75,27 @@ done
 curl -sf -m 3 -o /dev/null http://127.0.0.1:8088/app/ && echo "/app/ OK" || { echo "!! /app/ 不可用"; exit 1; }'
 }
 
+# 镜像轮换（每次部署自动跑；也可单独 `deploy-awsjapan.sh clean`）：每个 :SHA 标签都是一份镜像，频繁部署
+# 会囤上百个（曾达 455 个镜像 20GB + 8.5GB 构建缓存），磁盘吃满后 sqlite 写失败整站瘫。
+# 只动本项目：beeurei-api/site 各保留最近 5 个 SHA 标签供回滚；悬空层与构建缓存全清；
+# **绝不** docker system prune（本机还有其他项目的容器/卷，不越界）。
+cleanup_images() {
+  say "镜像轮换（各保留最近 5 个 SHA 供回滚）+ 清悬空层/构建缓存"
+  remote 'for repo in beeurei-api beeurei-site; do
+  docker images --format "{{.Tag}}" "$repo" | grep -vE "^(latest|<none>)$" | tail -n +6 \
+    | while read -r t; do docker rmi "$repo:$t" >/dev/null 2>&1 || true; done
+done
+docker image prune -f >/dev/null 2>&1 || true
+docker builder prune -f >/dev/null 2>&1 || true
+echo "清理后磁盘："; df -h / | tail -1; docker system df | sed -n "1,5p"'
+}
+
 case "$COMPONENT" in
-  api)  deploy_api ;;
-  site) deploy_site ;;
-  all)  deploy_api; deploy_site ;;
-  *)    die "未知组件：$COMPONENT（可选 api|site|all）" ;;
+  api)  deploy_api; cleanup_images ;;
+  site) deploy_site; cleanup_images ;;
+  all)  deploy_api; deploy_site; cleanup_images ;;
+  clean) cleanup_images; exit 0 ;;
+  *)    die "未知组件：$COMPONENT（可选 api|site|all|clean）" ;;
 esac
 
 say "公网验证（经 Cloudflare 隧道）"

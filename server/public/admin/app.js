@@ -652,7 +652,8 @@ function renderDashboard() {
 // 紧急事件区（值守）：谁在何时触发了摔倒/撞击/SOS、通知到几人、位置来源诚实标注
 // （最后已知位置绝不伪装成实时；地图链接一律 Apple Maps，坐标为 WGS-84，与全栈口径一致）。
 function emergencySection() {
-  const list = state.emergencies || [];
+  // 分诊排序：待介入事件浮顶（emergencyTriageSort，已测）。CSV 导出仍用 state.emergencies 原时间序（存档口径）。
+  const list = emergencyTriageSort(state.emergencies || []);
   // 渲染**全部**取到的事件（端点上限 100）：标题写着"近 100 条"，此前却只渲染 20 条——一旦累积 20 条更新事件，
   // "升级后仍无人响应"的待介入红标会被静默截掉，管理员误信"当前无无人响应事件"（最终批次复审 CONFIRMED）。
   const rows = list.length === 0
@@ -690,6 +691,25 @@ function emergencySection() {
       }).join('');
   // 导出 CSV（事故留痕/合规审计）：与 通话/用户/审计 区一致的导出能力；空列表禁用。
   return `<div class="section"><h3>${esc(t('emergTitle'))} <button class="btn ghost" data-action="exportEmerg" ${list.length ? '' : 'disabled'}>⬇ ${esc(t('exportCsv'))}</button></h3><div class="card"><div class="bars">${rows}</div></div></div>`;
+}
+// 紧急事件值守分诊层级（纯函数，可单测）：把**需人工介入**的事件浮到列表顶（否则时间序会把几小时前
+// 未响应的 SOS 埋在近期已解除事件之下——值守扫不到、错过救援窗口）。层级越高越紧急：
+//   3 = 未触达任何人且未解除（求助压根没送出，最上游最危急）；
+//   2 = 升级重呼后仍无人响应且未解除（触达了但没人管）；
+//   1 = 进行中（有人响应/尚未升级，正在处理或太新）；
+//   0 = 已报平安解除（最低，沉底）。与屏上红标(noReach/unanswered)口径一致。
+function emergencyTier(e) {
+  if (e.resolvedAt != null) return 0;
+  if (e.notified === 0) return 3;
+  if (e.ackedAt == null && e.escalatedAt != null) return 2;
+  return 1;
+}
+// 分诊排序：先按层级降序（紧急在前），同层按时间新→旧。**不改导出/存储顺序**，只排屏显。
+function emergencyTriageSort(list) {
+  return [...list].sort((a, b) => {
+    const t = emergencyTier(b) - emergencyTier(a);
+    return t !== 0 ? t : ((b.at || 0) - (a.at || 0));
+  });
 }
 // 紧急事件 CSV 行（纯函数，供导出与单测）：列名稳定英文（机器可读、跨语言一致），时间戳 ISO-8601、空值留空串。
 // 含完整响应时间线（ackedAt/onWayAt/escalatedAt/resolvedAt）——事故复盘"多久有人响应/是否升级"一行全览。

@@ -16,6 +16,7 @@ interface SpaTest {
   renderDashboard: () => void
   pickWsToken: (turnResp: unknown) => string
   emergenciesCsvRows: (list: Record<string, unknown>[]) => (string | number)[][]
+  emergencyTriageSort: (list: Record<string, unknown>[]) => Record<string, unknown>[]
   trackServerCommit: (o: { commit?: string } | null) => void
   validateFilterTerms: (terms: string[]) => { ok: true } | { ok: false; error: string; index?: number }
   view: { innerHTML: string } // 渲染函数写入的共享 stub 元素（viewEl()/$ 都解析到它）
@@ -25,7 +26,7 @@ function loadSpa(): SpaTest {
   let src = readFileSync(path, 'utf8')
   const anchor = '\nrender();'
   if (!src.includes(anchor)) throw new Error('app.js bootstrap anchor "render();" not found — update test')
-  src = src.replace(anchor, '\nglobalThis.__test = { state, t, emergencySection, statCard, renderCalls, renderDashboard, pickWsToken, emergenciesCsvRows, trackServerCommit, validateFilterTerms };\nrender();')
+  src = src.replace(anchor, '\nglobalThis.__test = { state, t, emergencySection, statCard, renderCalls, renderDashboard, pickWsToken, emergenciesCsvRows, emergencyTriageSort, trackServerCommit, validateFilterTerms };\nrender();')
   const noop = (): void => {}
   const classList = { add: noop, remove: noop, toggle: noop, contains: () => false }
   // 自引用宽容元素：querySelector 返回自身（事件绑定链不断）、querySelectorAll 空数组、其余 noop。
@@ -394,5 +395,32 @@ describe('违禁词预检 validateFilterTerms（与服务端 contentFilterSchema
     expect(long).toEqual({ ok: false, error: 'term_too_long', index: 1 })           // 指认第 2 行（改一行即可保存）
     expect(spa.validateFilterTerms(Array.from({ length: 500 }, (_, i) => `w${i}`))).toEqual({ ok: true }) // 恰 500 条合法
     expect(spa.validateFilterTerms(Array.from({ length: 501 }, (_, i) => `w${i}`))).toEqual({ ok: false, error: 'too_many' })
+  })
+})
+
+describe('紧急事件值守分诊排序 emergencyTriageSort（待介入浮顶，不改存储序）', () => {
+  const ev = (o: Record<string, unknown>) => ({ userId: 'u', kind: 'manual', notified: 2, contacts: 2, at: 1_700_000_000_000, ...o })
+  it('层级：未触达 > 升级无响应 > 进行中 > 已解除；同层按时间新→旧', () => {
+    const spa = loadSpa()
+    const resolvedRecent = ev({ at: 9_000, resolvedAt: 9_100 })            // 已解除但最新
+    const ongoing = ev({ at: 5_000 })                                     // 进行中
+    const unansweredOld = ev({ at: 1_000, ackedAt: null, escalatedAt: 1_050 }) // 升级后无响应（老）
+    const noReach = ev({ at: 2_000, notified: 0 })                        // 未触达任何人
+    const sorted = spa.emergencyTriageSort([resolvedRecent, ongoing, unansweredOld, noReach])
+    expect(sorted.map((e) => e.at)).toEqual([2_000, 1_000, 5_000, 9_000]) // noReach→unanswered→ongoing→resolved
+  })
+
+  it('已解除的即使最新也沉底；未触达的即使最老也浮顶（时间序会埋掉待介入项，本排序修正）', () => {
+    const spa = loadSpa()
+    const list = [ev({ at: 8_000, resolvedAt: 8_050 }), ev({ at: 1_000, notified: 0 })]
+    expect(spa.emergencyTriageSort(list).map((e) => e.at)).toEqual([1_000, 8_000])
+  })
+
+  it('同层（都已解除）纯按时间新→旧；不改原数组（返回副本）', () => {
+    const spa = loadSpa()
+    const input = [ev({ at: 1_000, resolvedAt: 1_050 }), ev({ at: 3_000, resolvedAt: 3_050 })]
+    const out = spa.emergencyTriageSort(input)
+    expect(out.map((e) => e.at)).toEqual([3_000, 1_000])
+    expect(input.map((e) => e.at)).toEqual([1_000, 3_000]) // 原数组顺序不变（CSV 导出仍用原序）
   })
 })

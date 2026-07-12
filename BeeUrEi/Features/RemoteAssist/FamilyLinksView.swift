@@ -243,6 +243,22 @@ enum SafetyTimerFormat {
         if m >= 60, m % 60 == 0 { let h = m / 60; return l == .zh ? "\(h) 小时" : "\(h)h" }
         return l == .zh ? "\(m) 分钟" : "\(m) min"
     }
+    /// 实时剩余秒（与网页 liveRemainingSecFromDue 同口径）：绝对到期时刻 dueAt(ms) 减本机 now(ms)。
+    /// 服务端 remainingSec 只是取时快照——页面开着数字不动，半小时后仍显"还有约 60 分钟"是
+    /// dead-man's switch 的危险误导。坏输入（非有限）→ 0，绝不显 NaN/负数。
+    static func liveRemainingSec(dueAtMs: Double, nowMs: Double) -> Int {
+        guard dueAtMs.isFinite, nowMs.isFinite else { return 0 }
+        return max(0, Int(((dueAtMs - nowMs) / 1000).rounded()))
+    }
+    /// 每日报到"下次开始"短标签（与网页 nextCheckinLabel 同口径）："今天 09:00"/"明天 09:00"——
+    /// 启用中的持久确认，一眼看到安全网已生效且下次何时触发。nowMinuteOfDay=本机当前分钟数(0-1439)；
+    /// 边界：当前恰为报到时刻本身算"明天"（本分钟的扫描已经或即将开启今天那次）。
+    static func nextCheckinLabel(startMinute: Int, nowMinuteOfDay: Int, _ l: Language) -> String {
+        let h = startMinute / 60, m = startMinute % 60
+        let hhmm = String(format: "%02d:%02d", h, m)
+        return nowMinuteOfDay < startMinute ? (l == .zh ? "今天 \(hhmm)" : "today at \(hhmm)")
+                                            : (l == .zh ? "明天 \(hhmm)" : "tomorrow at \(hhmm)")
+    }
 }
 
 /// 安全报到文案（双语）。
@@ -266,6 +282,23 @@ enum SafetyStrings {
     static func cancelCheckin(_ l: Language) -> String { l == .zh ? "取消报到" : "Cancel check-in" }
     static func canceled(_ l: Language) -> String { l == .zh ? "已取消安全报到。" : "Safety check-in canceled." }
     static func failed(_ l: Language) -> String { l == .zh ? "操作失败，请重试。" : "Something went wrong — try again." }
+    // —— 每日报到日程（与网页 Family 页同语义）——
+    static func dailyHeader(_ l: Language) -> String { l == .zh ? "每日报到" : "Daily check-in" }
+    static func dailyExplain(_ l: Language) -> String {
+        l == .zh ? "每天固定时刻自动开始一次报到，忘了报平安就通知紧急联系人——独居的日常安全网。"
+                 : "A check-in starts automatically at the same time every day; if you don't mark yourself safe, your emergency contacts are notified — a daily safety net for living alone."
+    }
+    static func dailyEnable(_ l: Language) -> String { l == .zh ? "启用每日报到" : "Enable daily check-in" }
+    static func dailyTimeLabel(_ l: Language) -> String { l == .zh ? "每天开始时刻" : "Starts every day at" }
+    static func dailySave(_ l: Language) -> String { l == .zh ? "保存日程" : "Save schedule" }
+    static func dailySaved(_ l: Language) -> String { l == .zh ? "每日报到日程已保存。" : "Daily check-in schedule saved." }
+    static func nextCheckin(_ label: String, _ l: Language) -> String { l == .zh ? "下次报到：\(label)" : "Next check-in: \(label)" }
+    static func pause7(_ l: Language) -> String { l == .zh ? "暂停 7 天" : "Pause 7 days" }
+    static func pause30(_ l: Language) -> String { l == .zh ? "暂停 30 天" : "Pause 30 days" }
+    static func pausedUntil(_ date: String, _ l: Language) -> String { l == .zh ? "已暂停至 \(date)，到期自动恢复" : "Paused until \(date) — resumes automatically" }
+    static func resumeNow(_ l: Language) -> String { l == .zh ? "立即恢复" : "Resume now" }
+    static func paused(_ l: Language) -> String { l == .zh ? "每日报到已暂停，到期自动恢复。" : "Daily check-in paused — it will resume automatically." }
+    static func resumed(_ l: Language) -> String { l == .zh ? "每日报到已恢复。" : "Daily check-in resumed." }
 }
 
 /// 视障侧：安全报到（dead-man's switch）。空闲态设时长+备注开始；进行中显剩余时间 + 报平安/延长/取消。
@@ -283,7 +316,13 @@ struct SafetyCheckInView: View {
         Form {
             if let t = timer, t.isActive {
                 Section {
-                    Text(SafetyTimerFormat.remainingText(sec: t.remainingSec, lang)).font(.headline)
+                    // 实时倒计时：每秒从绝对 dueAt 重算——服务端 remainingSec 只是取时快照，页面开着
+                    // 数字不动是 dead-man's switch 的危险误导（以为还有 1 小时，其实已快到期）。
+                    TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                        Text(SafetyTimerFormat.remainingText(
+                            sec: SafetyTimerFormat.liveRemainingSec(dueAtMs: t.dueAt, nowMs: ctx.date.timeIntervalSince1970 * 1000),
+                            lang)).font(.headline)
+                    }
                     if let n = t.note, !n.isEmpty { Text(n).font(.footnote).foregroundStyle(.secondary) }
                 } header: { Text(SafetyStrings.active(lang)) }
                 Section {
@@ -305,6 +344,8 @@ struct SafetyCheckInView: View {
                     Button(SafetyStrings.start(lang)) { Task { await start() } }.disabled(busy)
                 }
             }
+            // 每日报到日程（独居日常安全网）：与一次性报到并存——拆独立子视图防 SwiftUI 类型推断超时。
+            DailyCheckinSection(token: token, announce: announce)
         }
         .navigationTitle(SafetyStrings.navTitle(lang))
         .task { timer = try? await api.safetyCheckin(token: token) }
@@ -334,5 +375,107 @@ struct SafetyCheckInView: View {
         busy = true; defer { busy = false }
         do { try await api.cancelSafetyCheckin(token: token); timer = nil; announce(SafetyStrings.canceled(lang)) }
         catch { announce(SafetyStrings.failed(lang)) }
+    }
+}
+
+/// 每日报到日程编辑（与网页 Family 页同语义、同端点 PUT /api/safety/checkin/schedule）：
+/// 启用开关 + 每天开始时刻 + 时长 + 备注 + 显式保存；启用中显示「下次报到：今天/明天 HH:MM」持久确认；
+/// 暂停 7/30 天（住院/出行，到点自动恢复——比整体关闭安全，不必记得重开）+ 立即恢复。
+/// 保存时**保留生效中的 pausedUntil**（改时间/备注不该顺手清掉暂停——与网页同教训）。
+struct DailyCheckinSection: View {
+    let token: String
+    let announce: (String) -> Void
+    @State private var loaded = false
+    @State private var enabled = false
+    @State private var startTime = Calendar.current.date(from: DateComponents(hour: 9, minute: 0)) ?? .now
+    @State private var duration = 60
+    @State private var dnote = ""
+    @State private var pausedUntil: Double? // 生效中的暂停至(ms)；nil/过去=未暂停
+    @State private var busy = false
+    private let durations = [30, 60, 120, 240]
+    private let api = APIClient()
+    private var lang: Language { FeatureSettings().language }
+    private var startMinute: Int {
+        let c = Calendar.current.dateComponents([.hour, .minute], from: startTime)
+        return (c.hour ?? 9) * 60 + (c.minute ?? 0)
+    }
+    private var isPaused: Bool { (pausedUntil ?? 0) > Date().timeIntervalSince1970 * 1000 }
+
+    var body: some View {
+        Section {
+            Text(SafetyStrings.dailyExplain(lang)).font(.footnote).foregroundStyle(.secondary)
+            Toggle(SafetyStrings.dailyEnable(lang), isOn: $enabled).disabled(busy || !loaded)
+            if enabled {
+                DatePicker(SafetyStrings.dailyTimeLabel(lang), selection: $startTime, displayedComponents: .hourAndMinute)
+                Picker(SafetyStrings.durationLabel(lang), selection: $duration) {
+                    ForEach(durations, id: \.self) { m in Text(SafetyTimerFormat.durationName(m, lang)).tag(m) }
+                }
+                TextField(SafetyStrings.notePlaceholder(lang), text: $dnote, axis: .vertical).lineLimit(1...3)
+            }
+            Button(SafetyStrings.dailySave(lang)) { Task { await save() } }.disabled(busy || !loaded)
+            if enabled, loaded {
+                if isPaused {
+                    Text(SafetyStrings.pausedUntil(pausedDateText, lang)).font(.footnote).foregroundStyle(.secondary)
+                    Button(SafetyStrings.resumeNow(lang)) { Task { await setPause(nil) } }.disabled(busy)
+                } else {
+                    // 持久确认：安全网已生效 + 下次何时触发（比 toast 一闪更安心；VoiceOver 可随时摸到）。
+                    Text(SafetyStrings.nextCheckin(
+                        SafetyTimerFormat.nextCheckinLabel(startMinute: startMinute,
+                                                           nowMinuteOfDay: nowMinuteOfDay(), lang), lang))
+                        .font(.footnote).foregroundStyle(.secondary)
+                    Button(SafetyStrings.pause7(lang)) { Task { await setPause(7) } }.disabled(busy)
+                    Button(SafetyStrings.pause30(lang)) { Task { await setPause(30) } }.disabled(busy)
+                }
+            }
+        } header: { Text(SafetyStrings.dailyHeader(lang)) }
+        .task { await load() }
+    }
+
+    private func nowMinuteOfDay() -> Int {
+        let c = Calendar.current.dateComponents([.hour, .minute], from: Date())
+        return (c.hour ?? 0) * 60 + (c.minute ?? 0)
+    }
+    private var pausedDateText: String {
+        guard let p = pausedUntil else { return "" }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: lang == .zh ? "zh_CN" : "en_US")
+        f.setLocalizedDateFormatFromTemplate("MMMd")
+        return f.string(from: Date(timeIntervalSince1970: p / 1000))
+    }
+    private func load() async {
+        guard !loaded else { return }
+        if let s = try? await api.getCheckinSchedule(token: token) {
+            enabled = s.enabled
+            startTime = Calendar.current.date(from: DateComponents(hour: s.startMinute / 60, minute: s.startMinute % 60)) ?? startTime
+            duration = s.durationMinutes
+            dnote = s.note ?? ""
+            pausedUntil = s.pausedUntil
+        }
+        loaded = true
+    }
+    private func save() async {
+        busy = true; defer { busy = false }
+        do {
+            // 保留生效中的暂停（服务端把过去的 pausedUntil 视作未暂停，回传过期值无害）。
+            let s = try await api.setCheckinSchedule(token: token, enabled: enabled, startMinute: startMinute,
+                                                     durationMinutes: duration, tz: TimeZone.current.identifier,
+                                                     note: dnote.trimmingCharacters(in: .whitespacesAndNewlines),
+                                                     pausedUntil: pausedUntil)
+            enabled = s.enabled; pausedUntil = s.pausedUntil
+            announce(SafetyStrings.dailySaved(lang))
+        } catch { announce(SafetyStrings.failed(lang)) }
+    }
+    /// days=nil → 立即恢复（pausedUntil 传 0，服务端视作未暂停）。
+    private func setPause(_ days: Int?) async {
+        busy = true; defer { busy = false }
+        let target: Double = days.map { Date().timeIntervalSince1970 * 1000 + Double($0) * 86_400_000 } ?? 0
+        do {
+            let s = try await api.setCheckinSchedule(token: token, enabled: enabled, startMinute: startMinute,
+                                                     durationMinutes: duration, tz: TimeZone.current.identifier,
+                                                     note: dnote.trimmingCharacters(in: .whitespacesAndNewlines),
+                                                     pausedUntil: target)
+            pausedUntil = s.pausedUntil
+            announce(days == nil ? SafetyStrings.resumed(lang) : SafetyStrings.paused(lang))
+        } catch { announce(SafetyStrings.failed(lang)) }
     }
 }

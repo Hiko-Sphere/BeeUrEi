@@ -234,6 +234,19 @@ struct SafetyTimer: Codable, Sendable {
     var isActive: Bool { status == "active" }
 }
 
+/// 每日报到日程（User.dailyCheckin）：每天 startMinute 自动开始一次 durationMinutes 的报到。
+/// pausedUntil：暂停至该时刻(ms)自动恢复（住院/出行临时停用，比整体关闭安全——不必记得重开）；过去/缺省=未暂停。
+struct DailyCheckinSchedule: Codable, Sendable {
+    let enabled: Bool
+    let startMinute: Int      // 0-1439，本地时区的每天开始分钟
+    let durationMinutes: Int
+    let tz: String            // IANA 时区（服务端按此判"每天"）
+    let note: String?
+    let pausedUntil: Double?
+    /// 是否处于生效中的暂停（相对给定 now，可测）。
+    func isPaused(nowMs: Double) -> Bool { (pausedUntil ?? 0) > nowMs }
+}
+
 struct FamilyLinkInfo: Codable, Sendable, Identifiable {
     let id: String
     let memberId: String   // 对方 userId（无论我是 owner 还是 member）
@@ -1061,6 +1074,24 @@ struct APIClient {
     /// 取消报到（不再计时、不告警）。
     func cancelSafetyCheckin(token: String) async throws {
         _ = try await authedSend("POST", "/api/safety/checkin/cancel", token: token, body: [:])
+    }
+    /// 每日报到日程：每天固定时刻自动开始一次报到（独居日常安全网）。null=从未配置。
+    func getCheckinSchedule(token: String) async throws -> DailyCheckinSchedule? {
+        let data = try await authedGet("/api/safety/checkin/schedule", token: token)
+        struct R: Codable { let schedule: DailyCheckinSchedule? }
+        return try JSONDecoder().decode(R.self, from: data).schedule
+    }
+    /// 保存每日报到日程。pausedUntil：未来时刻(ms)=暂停至该时刻自动恢复；0/nil=不暂停。
+    /// 注意：改时间/时长/备注时须**回传当前 pausedUntil**，否则会静默清掉生效中的暂停（与网页同教训）。
+    func setCheckinSchedule(token: String, enabled: Bool, startMinute: Int, durationMinutes: Int,
+                            tz: String, note: String?, pausedUntil: Double?) async throws -> DailyCheckinSchedule {
+        var body: [String: Any] = ["enabled": enabled, "startMinute": startMinute,
+                                   "durationMinutes": durationMinutes, "tz": tz]
+        if let note, !note.isEmpty { body["note"] = note }
+        if let pausedUntil { body["pausedUntil"] = pausedUntil }
+        let data = try await authedSend("PUT", "/api/safety/checkin/schedule", token: token, body: body)
+        struct R: Codable { let schedule: DailyCheckinSchedule }
+        return try JSONDecoder().decode(R.self, from: data).schedule
     }
 
     func unregisterApnsToken(token: String) async {

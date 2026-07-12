@@ -45,6 +45,24 @@ describe('紧急事件日志', () => {
     await a.close()
   })
 
+  it('高峰期列表：进行中事件被 120 条新事件挤出"最近 100"仍在列表（列表 = 近 100 ∪ 全部进行中，红标不丢）', async () => {
+    const { a, store, adminTok, owner } = await seed()
+    const now = Date.now()
+    // 一条进行中（未解除、未触达任何人=最该人工介入的红标）+ 120 条已解除的新事件把它挤出"最近 100"。
+    store.createEmergencyEvent({ id: 'ongoing', userId: owner.user.id, kind: 'fall', notified: 0, contacts: 1, at: now - 3600_000 })
+    for (let i = 0; i < 120; i++) {
+      store.createEmergencyEvent({ id: `fl${i}`, userId: owner.user.id, kind: 'manual', notified: 1, contacts: 1, at: now - 60_000 + i, resolvedAt: now })
+    }
+    expect(store.recentEmergencyEvents(100).some((e) => e.id === 'ongoing')).toBe(false) // 确已被窗口挤出（回归前置）
+    const res = await a.inject({ method: 'GET', url: '/api/admin/emergencies', headers: { authorization: `Bearer ${adminTok}` } })
+    const ids = res.json().events.map((e: { id: string }) => e.id)
+    expect(ids).toContain('ongoing')            // 概览计数里有的进行中事件，列表里必须找得到（不许"计数有、列表无"）
+    expect(res.json().events.length).toBe(101)  // 最近 100 ∪ 1 条进行中；已解除陈旧事件不因并集无限膨胀
+    // 时间倒序不变（并入者按 at 落位到列表尾部附近，仍带显示名）。
+    expect(res.json().events[res.json().events.length - 1]).toMatchObject({ id: 'ongoing', userName: 'evfaller' })
+    await a.close()
+  })
+
   it('alertId 重试幂等：同一事件只落一条账', async () => {
     const { a, auth, store } = await seed()
     const payload = { kind: 'fall', alertId: 'once-1' }

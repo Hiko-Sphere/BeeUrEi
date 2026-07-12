@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { PKG_VERSION, gitCommit } from '../version'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import { type Store, type Role, type User, type AdminAuditEntry, type FeatureKey, FEATURE_KEYS, publicUser } from '../db/store'
+import { type Store, type Role, type User, type AdminAuditEntry, type FeatureKey, type EmergencyEvent, FEATURE_KEYS, publicUser } from '../db/store'
 import { requireAuth } from '../auth/rbac'
 import { hashPassword } from '../auth/passwords'
 import { normalizePhone } from '../auth/apple'
@@ -101,8 +101,13 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
 
   // 紧急事件日志（值守/事后追溯）：谁在何时触发了摔倒/车祸/SOS、通知到几人、位置来源（诚实标注）。
   // 坐标为敏感 PII——仅 admin 可见；查看不逐次审计（高频轮询会刷爆审计日志；导出级别的整库操作才审计）。
+  // 列表 = 最近 100 条 ∪ **全部进行中**（未解除∧近 24h）：概览的 activeEmergencies 是全量计数（见 overview），
+  // 若列表只取最近 100，高峰期被挤出窗口的进行中事件会"计数里有、列表里找不到"——待介入红标必须始终可见。
   app.get('/api/admin/emergencies', adminOnly, async () => {
-    const events = store.recentEmergencyEvents(100).map((e) => {
+    const merged = new Map<string, EmergencyEvent>()
+    for (const e of store.recentEmergencyEvents(100)) merged.set(e.id, e)
+    for (const e of store.openEmergencyEventsSince(Date.now() - 24 * 3600_000)) merged.set(e.id, e)
+    const events = [...merged.values()].sort((a, b) => b.at - a.at).map((e) => {
       const u = store.findById(e.userId)
       return { ...e, userName: u?.displayName ?? null, username: u?.username ?? null }
     })

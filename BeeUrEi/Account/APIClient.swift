@@ -1087,10 +1087,18 @@ struct APIClient {
     }
 
     /// 取消该会话置顶。返回最新置顶（正常为 nil）。
+    /// 复审 HIGH：服务端 DELETE 成功回 **204 空体**——对空体跑 JSONDecoder 恒抛 dataCorrupted，
+    /// 曾把每次成功取消都报成"置顶操作失败"。经 parsePinResponse（纯函数已测）空体=无置顶。
     func unpinMessage(token: String, id: String) async throws -> PinnedMessageInfo? {
         let data = try await authedSend("DELETE", "/api/messages/\(id)/pin", token: token, body: [:])
+        return Self.parsePinResponse(data)
+    }
+
+    /// 置顶响应解析（纯函数可测）：204 空体/无 pinned 字段 → nil（无置顶）；有 → 解出。
+    nonisolated static func parsePinResponse(_ data: Data) -> PinnedMessageInfo? {
+        guard !data.isEmpty else { return nil }
         struct R: Codable { let pinned: PinnedMessageInfo? }
-        return try JSONDecoder().decode(R.self, from: data).pinned
+        return (try? JSONDecoder().decode(R.self, from: data))?.pinned
     }
 
     func conversations(token: String) async throws -> [ConversationInfo] {
@@ -1195,7 +1203,9 @@ struct APIClient {
         var body: [String: Any] = ["enabled": enabled, "startMinute": startMinute,
                                    "durationMinutes": durationMinutes, "tz": tz]
         if let note, !note.isEmpty { body["note"] = note }
-        if let pausedUntil { body["pausedUntil"] = pausedUntil }
+        // 复审 HIGH：服务端 z.number().int() 拒绝带小数的毫秒（Date().timeIntervalSince1970*1000 必带
+        // 亚毫秒尾数）——曾让"暂停 7/30 天"每次都 400。取整为 Int 再入 JSON。
+        if let pausedUntil { body["pausedUntil"] = Int(pausedUntil.rounded()) }
         let data = try await authedSend("PUT", "/api/safety/checkin/schedule", token: token, body: body)
         struct R: Codable { let schedule: DailyCheckinSchedule }
         return try JSONDecoder().decode(R.self, from: data).schedule

@@ -148,11 +148,14 @@ struct QuietHoursView: View {
                 startDate = QuietHoursTime.date(fromMinuteOfDay: q.startMinute)
                 endDate = QuietHoursTime.date(fromMinuteOfDay: q.endMinute)
             } // nil=未设过：保留默认 22:00→07:00、未开启
-            let cats = try await api.getPushCategories(token: token)
-            mutedCategories = cats.muted
-            if let avail = cats.available, !avail.isEmpty { availableCategories = avail } // 服务端权威表；旧服务端缺省用内置
         } catch {
             loadFailed = true
+        }
+        // 分类静音独立拉取（复审：与勿扰共用一个 loadFailed 会让新接口的任何失败**整屏**变"加载失败"，
+        // 砸掉本来能用的勿扰设置；分类读不到就用内置表+空静音展示，保存时服务端仍是权威）。
+        if let cats = try? await api.getPushCategories(token: token) {
+            mutedCategories = cats.muted
+            if let avail = cats.available, !avail.isEmpty { availableCategories = avail }
         }
         loading = false
     }

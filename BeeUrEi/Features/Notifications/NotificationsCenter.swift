@@ -170,13 +170,20 @@ struct EmergencyAckButtons: View {
     }
 
     private func respond(onMyWay: Bool) async {
-        guard let token = KeychainStore.read() else { state = .failed; return }
+        // 复审：紧急响应链的失败**必须有声**——静默失败＝响应者以为已回执、遇险者与升级重呼都不知情
+        //（视觉红字仅明眼可见）。两个失败出口都念。
+        guard let token = KeychainStore.read() else {
+            state = .failed
+            A11y.announce(EmergencyAckStrings.failed(lang))
+            return
+        }
         state = .sending
         if await APIClient().postEmergencyAck(token: token, fromId: fromId, eventId: eventId, onMyWay: onMyWay) {
             state = .acked(onMyWay: onMyWay)
             A11y.announce(onMyWay ? EmergencyAckStrings.ackedOnMyWay(lang) : EmergencyAckStrings.ackedSeen(lang))
         } else {
             state = .failed
+            A11y.announce(EmergencyAckStrings.failed(lang))
         }
     }
 }
@@ -218,6 +225,10 @@ struct LocationRequestShareButton: View {
         } else {
             Button {
                 tapped = true
+                // 复审 HIGH：manager 的上传 token 只在位置页 startViewing 时注入——从通知冷启动直接点
+                // "开始共享"时 token 为 nil：sharing=true、播"已开始共享"，但每次上报都静默 no-op，
+                // 请求者永远收不到"对方已开始共享"。先注入当前会话 token 再开。
+                if let t = KeychainStore.read() { manager.adoptToken(t) }
                 manager.startSharing()
             } label: {
                 Label(LocationRequestStrings.share(lang), systemImage: "location.fill")

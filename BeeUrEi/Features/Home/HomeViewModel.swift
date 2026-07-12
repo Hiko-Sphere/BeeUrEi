@@ -75,22 +75,34 @@ final class HomeViewModel {
     // 过街「起步」门控（核心已测：只认亲见红/黄→绿的新绿，且前置红相驻留≥3s 挡毛刺、新绿 5s 超窗降级）。
     // 此前任何绿都念"可通行"——陈旧绿（半路赶到）走一半变红踩进车流的假安心（安全模块清单 #2）。
     @ObservationIgnored private var crossingGate = CrossingSignalGate()
+    // 本段绿灯是否已播过"可以起步"（复审：①4s 节流 < 5s 起步窗 → 窗尾会再播"刚亮可起步"诱导迟起步；
+    // ②起步后 5s 降级播"等下一轮"会在斑马线中央叫停盲人——门控自述"只裁决起步，不管途中"）。
+    // 语义：每段绿 crossNow 至多播一次；播过 crossNow 后同段绿的降级静默（用户已在途中）。非绿清零。
+    @ObservationIgnored private var freshAnnouncedThisGreen = false
 
     /// 红绿灯播报选择（纯函数，管线与测试共用同一门控——中子它=拔掉安全门）：
     /// 绿灯走 CrossingSignalGate 裁决（crossNow=新绿可起步 / waitForNextGreen=陈旧绿等下一轮）；
     /// 红/黄/未知与原判色播报**逐字一致**（TrafficLightClassifier.hint）。返回 (节流key, 文案)。
     nonisolated static func trafficAnnouncement(effective: TrafficLightState,
                                                 gateAdvice: CrossingSignalGate.Advice,
-                                                lang: Language) -> (key: String, text: String)? {
+                                                freshAlreadyAnnounced: Bool,
+                                                lang: Language) -> (key: String, text: String, marksFresh: Bool)? {
         if effective == .green {
             switch gateAdvice {
-            case .crossNow: return ("trafficlight:green:fresh", SpokenStrings.crossFreshGreen(lang))
-            case .waitForNextGreen: return ("trafficlight:green:stale", SpokenStrings.crossWaitNextGreen(lang))
+            case .crossNow:
+                // 每段绿至多播一次"刚亮可起步"（复审：4s 节流 < 5s 窗 → 窗尾重播会诱导在相位末尾起步）。
+                if freshAlreadyAnnounced { return nil }
+                return ("trafficlight:green:fresh", SpokenStrings.crossFreshGreen(lang), true)
+            case .waitForNextGreen:
+                // 已播过"可以起步"的同段绿：降级静默——用户多半已在斑马线上，途中喊"等下一轮"会把人
+                // 叫停在车道中央（门控自述只裁决起步不管途中）。未播过（陈旧绿到达）照常提示等下一轮。
+                if freshAlreadyAnnounced { return nil }
+                return ("trafficlight:green:stale", SpokenStrings.crossWaitNextGreen(lang), false)
             case .wait, .unknown: return nil // 门控视角与 effective 不一致（理论不达）：宁静默不误导
             }
         }
         guard let text = TrafficLightClassifier().hint(effective) else { return nil }
-        return ("trafficlight:\(effective.rawValue)", text)
+        return ("trafficlight:\(effective.rawValue)", text, false)
     }
     // sameGroup：把 car/truck/bus 的逐帧类别抖动关联到同一条轨迹，避免逼近车辆被碎成多轨→距离低估（安全复审）。
     @ObservationIgnored private let tracker = ObstacleTracker(sameGroup: LabelCatalog.sameTrackingGroup)
@@ -192,6 +204,11 @@ final class HomeViewModel {
     /// 暂停避障会话：当呼叫/取景等**也用相机**的界面盖在主页上时调用，避免与之争抢相机致
     /// ARKit "World Tracking failed"（求助返回后主页报错的根因）。
     func pauseSession() {
+        // 复审 HIGH：帧流中断（暂停/来电/ARKit 中断/重试）期间灯已换相，门控的"红相驻留"会跨越
+        // 未观测的空窗——恢复后 红→绿 被误判亲见新绿（陈旧绿念"可以起步"＝致命假安心）。中断即清零，
+        // 恢复后须重新亲见 ≥3s 红相才可能判新绿（宁多等一轮）。
+        crossingGate.reset()
+        freshAnnouncedThisGreen = false
         paused = true               // 先置位：丢弃在途帧，杜绝暂停后再提交"前方…"
         source.stop()
         sonifier.stop()
@@ -209,6 +226,11 @@ final class HomeViewModel {
     /// 会话被外部中断（来电、被其它界面/ App 抢相机、退后台）：帧流停止 → 避障静默停摆。
     /// 主动告知盲人"测距暂停"，避免误以为避障仍在工作（见 P1 安全审计）。我方主动暂停（通话/取景）不另行播报。
     private func handleInterruption(_ interrupted: Bool) {
+        // 复审 HIGH：帧流中断（暂停/来电/ARKit 中断/重试）期间灯已换相，门控的"红相驻留"会跨越
+        // 未观测的空窗——恢复后 红→绿 被误判亲见新绿（陈旧绿念"可以起步"＝致命假安心）。中断即清零，
+        // 恢复后须重新亲见 ≥3s 红相才可能判新绿（宁多等一轮）。
+        crossingGate.reset()
+        freshAnnouncedThisGreen = false
         guard !paused else { return } // 我方主动暂停（通话/取景）的中断起止都不另行播报
         if interrupted {
             degradeStop()
@@ -225,6 +247,11 @@ final class HomeViewModel {
 
     /// 恢复避障会话（上述界面关闭返回主页时调用）。重跑得到干净的世界跟踪。
     func resumeSession() {
+        // 复审 HIGH：帧流中断（暂停/来电/ARKit 中断/重试）期间灯已换相，门控的"红相驻留"会跨越
+        // 未观测的空窗——恢复后 红→绿 被误判亲见新绿（陈旧绿念"可以起步"＝致命假安心）。中断即清零，
+        // 恢复后须重新亲见 ≥3s 红相才可能判新绿（宁多等一轮）。
+        crossingGate.reset()
+        freshAnnouncedThisGreen = false
         guard DeviceSupport.hasLiDAR else { return }
         paused = false
         zoneHysteresis.reset() // 重新开始：不携带暂停前的分区状态
@@ -248,6 +275,11 @@ final class HomeViewModel {
 
     /// 相机出错（.failed）后重试：重新启动会话。
     func retrySession() {
+        // 复审 HIGH：帧流中断（暂停/来电/ARKit 中断/重试）期间灯已换相，门控的"红相驻留"会跨越
+        // 未观测的空窗——恢复后 红→绿 被误判亲见新绿（陈旧绿念"可以起步"＝致命假安心）。中断即清零，
+        // 恢复后须重新亲见 ≥3s 红相才可能判新绿（宁多等一轮）。
+        crossingGate.reset()
+        freshAnnouncedThisGreen = false
         guard DeviceSupport.hasLiDAR else { return }
         paused = false
         state = .idle
@@ -375,11 +407,16 @@ final class HomeViewModel {
             // **只会比原行为更保守**：非绿路径与原判色播报逐字一致；绿灯从"一律可通行"降为按新鲜度裁决。
             // ⚠️ 起步窗/驻留阈值为行业保守缺省（MUTCD 下限），真机路口标定后可调（unwired-safety-modules）。
             let gateAdvice = crossingGate.update(confirmed: effective, at: frame.timestamp)
+            if effective != .green { freshAnnouncedThisGreen = false } // 本段绿结束：下段绿重新允许播一次
+            // 节奏音/色块（crossingSignal）刻意保持"灯色事实"通道不经门控：节奏=灯是什么色（Oko/APS 同义），
+            // 语音=起步建议。两通道语义不同不属矛盾；若让节奏也跟建议走，用户将失去"灯真实颜色"这一信息。
             // 节流 key **按最终文案语义区分**（原教训：同 key 会吞变灯播报；绿的两种建议也须各自计时——
             // 新绿 5s 超窗降级为"等下一轮"必须能即刻播出，不被 fresh 播报的 minGap 吞掉）。
-            if let a = Self.trafficAnnouncement(effective: effective, gateAdvice: gateAdvice, lang: lang),
+            if let a = Self.trafficAnnouncement(effective: effective, gateAdvice: gateAdvice,
+                                                freshAlreadyAnnounced: freshAnnouncedThisGreen, lang: lang),
                throttle.shouldAnnounce(key: a.key, now: frame.timestamp, minGap: 4) {
                 coordinator.submit(FeedbackEvent(priority: .turn, speech: a.text))
+                if a.marksFresh { freshAnnouncedThisGreen = true }
             }
         }
         let obstacles = detections.map { det -> Obstacle in

@@ -57,6 +57,7 @@ final class FramingAssistViewModel {
     @ObservationIgnored private var steadyState: CaptureSteadiness.State?  // nil=尚无运动数据（模拟器/权限缺）→ fail-open 不拦
     @ObservationIgnored private let motion = CMMotionManager()
     @ObservationIgnored private let exposure = CaptureExposure()
+    @ObservationIgnored private var throttle = AnnouncementThrottle()  // 自动拍质量门指导语节流（4s，防每帧重复念"拿稳"）
     @ObservationIgnored private var latestDepth: DepthMap?
     @ObservationIgnored private var latestCamera: CameraGeometry?
     @ObservationIgnored private var latestTimestamp: TimeInterval = 0 // 最近帧时间戳（mach 秒），供点按动作与连续 feed 同钟
@@ -596,6 +597,20 @@ final class FramingAssistViewModel {
         if area < 0.18 {
             docStableFrames = 0
             docHint(FramingStrings.docCloser(lang), at: frame.timestamp)
+            return
+        }
+        // 复审：自动快门是 CaptureSteadiness 的**本命消费者**（"稳了自动拍"），此前只有手动读文字过质量门、
+        // 自动拍绕过——手抖/反光时自动拍下糊页，版面朗读念出乱码盲人不自知。门不过：不累计稳定帧并给出
+        // 具体指导（拿稳/换角度），fail-open（无运动数据/正常帧照旧）。
+        let gate = Self.captureGate(quality: Self.lumaStats(from: frame.pixelBuffer)
+                                        .map { exposure.assess(meanLuminance: $0.mean, brightClippedFraction: $0.clipped, contrast: $0.contrast) } ?? .ok,
+                                    steadiness: steadyState)
+        if gate.blocks {
+            docStableFrames = 0
+            if let advice = gate.speakAdvice(exposure: exposure, lang: lang),
+               throttle.shouldAnnounce(key: "doc:gate", now: frame.timestamp, minGap: 4) {
+                speak(advice)
+            }
             return
         }
         docStableFrames += 1

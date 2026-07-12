@@ -100,6 +100,9 @@ enum ChatStrings {
     static func forwardTo(_ l: Language) -> String { l == .zh ? "转发到" : "Forward to" }
     static func forwardedTo(_ name: String, _ l: Language) -> String { l == .zh ? "已转发给 \(name)" : "Forwarded to \(name)" }
     static func forwardFailed(_ l: Language) -> String { l == .zh ? "转发失败，请重试" : "Forward failed — try again" }
+    static func forwardLoadFailed(_ l: Language) -> String {
+        l == .zh ? "联系人加载失败，请检查网络后重开转发" : "Couldn't load contacts — check your connection and reopen"
+    }
     static func forwardNoTargets(_ l: Language) -> String {
         l == .zh ? "没有可转发的联系人或群。先在亲友页添加联系人。" : "No contacts or groups to forward to. Add contacts on the Family page first."
     }
@@ -110,6 +113,8 @@ enum ChatStrings {
     // —— 全局搜索 + 命中跳转 ——
     static func searchAllTitle(_ l: Language) -> String { l == .zh ? "搜索全部消息" : "Search all messages" }
     static func searchJumpHint(_ l: Language) -> String { l == .zh ? "点击前往该消息" : "Tap to go to this message" }
+    /// 全局命中的 hint：只打开所属会话（消息级定位是会话内搜索的能力）——不许诺做不到的事。
+    static func searchOpenConvHint(_ l: Language) -> String { l == .zh ? "点击打开所属会话" : "Tap to open the conversation" }
     static func searchLocatedSpeak(_ preview: String, _ l: Language) -> String {
         l == .zh ? "已定位：\(preview)" : "Located: \(preview)"
     }
@@ -144,7 +149,10 @@ enum ChatStrings {
     static func describingPhoto(_ l: Language) -> String { l == .zh ? "正在请 AI 描述照片…" : "Asking AI to describe the photo…" }
     /// 服务端错误码 → 盲人能听懂、不会徒劳重试的具体原因（与 sendErrorText 同范式）。
     static func aiDescribeErrorText(_ code: String, _ l: Language) -> String {
-        switch code {
+        // 复审：/api/vision 的 10/min 限流由 fastify 插件直接回 "Too Many Requests"（非蛇形码）——
+        // 归一化后匹配，否则限流用户听到笼统"重试"（越重试越被限）。
+        let normalized = code.lowercased().replacingOccurrences(of: " ", with: "_")
+        switch normalized {
         case "ai_not_configured":
             return l == .zh ? "AI 描述服务未配置，请联系管理员" : "AI description isn't configured — contact the administrator"
         case "ai_daily_quota_exceeded":

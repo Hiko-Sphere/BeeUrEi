@@ -11,6 +11,12 @@ enum PlaceSaveCheck: Equatable {
     case ok
     case duplicateName
     case renames(from: String)
+    /// 保存成功后须删除的旧条目（纯函数可测）：编辑中且名字变了 → 删旧（**两种**改名都算：改成全新名
+    /// 与改成撞已有名后确认覆盖——复审：只清前者会把旧围栏留成重复，正是本功能要防的坑）。
+    static func cleanupLabel(newLabel: String, originalLabel: String?) -> String? {
+        guard let orig = originalLabel, orig != newLabel else { return nil }
+        return orig
+    }
     static func check(newLabel: String, originalLabel: String?, existing: [String]) -> PlaceSaveCheck {
         if let orig = originalLabel, orig == newLabel { return .ok }
         if existing.contains(newLabel) { return .duplicateName }
@@ -57,6 +63,9 @@ struct SavedPlacesView: View {
                 .onDelete { idx in idx.map { customPlaces[$0] }.forEach { pl in delete(label: pl.label) } }
                 TextField(SettingsStrings.placeLabelPlaceholder(lang), text: $newLabel)
                     .autocorrectionDisabled()
+                    // 复审：撞名确认态跟着**当时那个名字**走——改了名字必须重新走一次警示，否则
+                    // 上次的确认会"预授权"覆盖另一个地点（两步确认被绕过）。
+                    .onChange(of: newLabel) { _, _ in pendingOverwrite = false }
                 TextField(SettingsStrings.placeAddressPlaceholder(lang), text: $newAddress)
                     .textInputAutocapitalization(.never).autocorrectionDisabled()
                 if pendingOverwrite {
@@ -88,7 +97,7 @@ struct SavedPlacesView: View {
         .task { await load() }
         // 保存/清除结果主动朗读——盲人在设"家/公司"（喂"回家/去公司"导航），此前只把结果放进静态 Text、
         // 不朗读：**保存悄悄失败**时盲人以为设好了，日后"回家"却失败（导航攸关）。与 BlocklistView 同口径。
-        .onChange(of: status) { _, s in if !s.isEmpty { A11y.announce(s) } }
+        // 播报改由 announceStatus 直接触发（onChange 对相同串不触发→连续同结果第二次静默，复审）。
     }
 
     @ViewBuilder private func placeSection(header: String, placeholder: String, text: Binding<String>,
@@ -107,6 +116,13 @@ struct SavedPlacesView: View {
                 }
             }
         }
+    }
+
+    /// 结果播报（直接念，不经 onChange）：连续两次同样结果（连删两个地点都念"已清除"）时
+    /// onChange(of: status) 因值未变不触发——第二次会静默（复审）。status 仍更新供视觉。
+    private func announceStatus(_ text: String) {
+        status = text
+        A11y.announce(text)
     }
 
     private func load() async {
@@ -128,23 +144,26 @@ struct SavedPlacesView: View {
         let check = PlaceSaveCheck.check(newLabel: label, originalLabel: editingOriginal, existing: existing)
         if case .duplicateName = check, !pendingOverwrite {
             pendingOverwrite = true // 一次警示、二次确认（不静默覆盖别的围栏）
-            status = SettingsStrings.duplicateNameWarning(label, lang)
+            announceStatus(SettingsStrings.duplicateNameWarning(label, lang))
             return
         }
         Task {
             do {
                 try await APIClient().setSavedPlace(token: token, label: label, address: address)
-                if case .renames(let from) = check {
-                    try? await APIClient().deleteSavedPlace(token: token, label: from) // 删旧条，防重复围栏
+                // 复审：改名清旧须覆盖**两种**改名——改成全新名(.renames)与改成撞已有名(.duplicateName 确认
+                // 覆盖后)。此前只清前者：把"药店"改名成已有的"医院"会更新医院却留下旧药店围栏（正是本功能
+                // 要防的重复围栏）。统一按"编辑中且名字变了"清旧。
+                if let from = PlaceSaveCheck.cleanupLabel(newLabel: label, originalLabel: editingOriginal) {
+                    try? await APIClient().deleteSavedPlace(token: token, label: from)
                 }
                 await MainActor.run {
                     newLabel = ""; newAddress = ""; editingOriginal = nil; pendingOverwrite = false
-                    status = SettingsStrings.placeSaved(lang)
+                    announceStatus(SettingsStrings.placeSaved(lang))
                     loaded = false
                 }
                 await load()
             } catch {
-                await MainActor.run { status = SettingsStrings.placeSaveFailed(lang) }
+                await MainActor.run { announceStatus(SettingsStrings.placeSaveFailed(lang)) }
             }
         }
     }
@@ -152,10 +171,16 @@ struct SavedPlacesView: View {
     private func delete(label: String) {
         guard let token = session.token else { return }
         Task {
-            try? await APIClient().deleteSavedPlace(token: token, label: label)
-            await MainActor.run {
-                customPlaces.removeAll { $0.label == label }
-                status = SettingsStrings.placeCleared(lang)
+            // 复审：失败被 try? 吞掉却照样删行+念"已清除"＝假成功——服务端围栏还在，之后"你到X了"
+            // 照播，用户却被明确告知删掉了。失败保留行、念失败。
+            do {
+                try await APIClient().deleteSavedPlace(token: token, label: label)
+                await MainActor.run {
+                    customPlaces.removeAll { $0.label == label }
+                    announceStatus(SettingsStrings.placeCleared(lang))
+                }
+            } catch {
+                await MainActor.run { announceStatus(SettingsStrings.placeSaveFailed(lang)) }
             }
         }
     }
@@ -166,9 +191,9 @@ struct SavedPlacesView: View {
         Task {
             do {
                 try await APIClient().setSavedPlace(token: token, label: label, address: a)
-                await MainActor.run { status = SettingsStrings.placeSaved(lang) }
+                await MainActor.run { announceStatus(SettingsStrings.placeSaved(lang)) }
             } catch {
-                await MainActor.run { status = SettingsStrings.placeSaveFailed(lang) }
+                await MainActor.run { announceStatus(SettingsStrings.placeSaveFailed(lang)) }
             }
         }
     }
@@ -177,7 +202,7 @@ struct SavedPlacesView: View {
         guard let token = session.token else { return }
         Task {
             try? await APIClient().deleteSavedPlace(token: token, label: label)
-            await MainActor.run { text.wrappedValue = ""; status = SettingsStrings.placeCleared(lang) }
+            await MainActor.run { text.wrappedValue = ""; announceStatus(SettingsStrings.placeCleared(lang)) }
         }
     }
 }

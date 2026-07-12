@@ -410,6 +410,7 @@ struct ChatView: View {
     @State private var editDraft = ""                     // 编辑框文本
     @State private var replyingTo: ChatMessageInfo?       // 正在引用回复的消息（输入栏上方显引用条）
     @State private var pinned: PinnedMessageInfo?          // 会话置顶消息（顶部横幅）；随每次线程轮询刷新
+    @State private var pinMutationTick = 0                 // pin/unpin 计数：轮询快照晚到时不得回写覆盖刚完成的操作（复审）
     @State private var forwarding: ChatMessageInfo?        // 正在转发的消息（打开目标选择器）
     @State private var pendingJumpId: String?              // 搜索命中待跳转的消息 id（sheet 关闭后由 proxy 执行）
     @State private var canLoadEarlier = false   // 顶部"加载更早消息"是否可见
@@ -445,11 +446,12 @@ struct ChatView: View {
                     PinnedBannerView(pin: pin, lang: lang,
                                      preview: pinnedPreview(pin),
                                      onJump: {
+                                         // 复审：已加载（常见情形）只滚动＝对盲人完全静默——点"置顶消息"的价值就是随时可听。
+                                         // 两种情形都朗读；已加载额外滚动定位（视觉用户同样受益）。
                                          if messages.contains(where: { $0.id == pin.id }) {
                                              withAnimation { proxy.scrollTo(pin.id, anchor: .center) }
-                                         } else {
-                                             SpeechHub.shared.speak(ChatStrings.pinnedSpeakFallback(pinnedByName: pin.pinnedByName, preview: pinnedPreview(pin), lang), channel: .query, voiceCode: lang.voiceCode)
                                          }
+                                         SpeechHub.shared.speak(ChatStrings.pinnedSpeakFallback(pinnedByName: pin.pinnedByName, preview: pinnedPreview(pin), lang), channel: .query, voiceCode: lang.voiceCode)
                                      },
                                      onUnpin: { unpin(messageId: pin.id) })
                 }
@@ -996,6 +998,7 @@ struct ChatView: View {
 
     private func refresh(announceNew: Bool) async {
         guard let token = session.token else { return }
+        let tickAtStart = pinMutationTick
         let thread: ChatThreadInfo?
         if let groupId {
             thread = try? await APIClient().groupMessages(token: token, groupId: groupId)
@@ -1003,7 +1006,9 @@ struct ChatView: View {
             thread = try? await APIClient().messages(token: token, with: peerId ?? "")
         }
         guard let list = thread?.messages else { return }
-        pinned = thread?.pinned // 置顶随每次轮询刷新（他人置顶/取消/撤回自愈即时反映，与 web 同口径）
+        if tickAtStart == pinMutationTick { // 轮询期间本人 pin/unpin 过 → 丢弃过期快照（下轮再同步他人变更）
+            pinned = thread?.pinned // 置顶随每次轮询刷新（他人置顶/取消/撤回自愈即时反映，与 web 同口径）
+        }
         if announceNew {
             let known = Set(messages.map(\.id))
             let fresh = list.filter { !known.contains($0.id) && $0.fromId != myId }
@@ -1141,7 +1146,10 @@ struct ChatView: View {
                 let msg = ChatStrings.sendErrorText(error, lang)
                 errorText = msg
                 SpeechHub.shared.speak(msg, channel: .query, voiceCode: lang.voiceCode)
-                draft = text // 失败还原草稿，不丢内容
+                draft = text
+                // 复审：用户已离开会话时上面这行写进**已销毁视图的 @State**（静默丢失整条没发出去的话）。
+                // 同步写入持久草稿：回到会话即恢复；仍在会话时 onChange(of: draft) 会再写一次，幂等无害。
+                ChatDrafts.save(text, userId: myId, peerId: peerId, groupId: groupId) // 失败还原草稿，不丢内容
             }
         }
     }
@@ -1319,6 +1327,7 @@ struct ChatView: View {
         guard let token = session.token else { return }
         Task {
             if let r = try? await APIClient().pinMessage(token: token, id: m.id) {
+                pinMutationTick += 1
                 pinned = r
                 SpeechHub.shared.speak(ChatStrings.pinnedConfirm(lang), channel: .query, voiceCode: lang.voiceCode)
             } else {
@@ -1330,6 +1339,7 @@ struct ChatView: View {
         guard let token = session.token else { return }
         Task {
             if let r = try? await APIClient().unpinMessage(token: token, id: messageId) {
+                pinMutationTick += 1
                 pinned = r // 正常为 nil；若他人恰好又置顶了新的，回带最新
                 SpeechHub.shared.speak(ChatStrings.unpinnedConfirm(lang), channel: .query, voiceCode: lang.voiceCode)
             } else {
@@ -1464,8 +1474,10 @@ struct MessageSearchSheet: View {
                         Section(ChatStrings.searchResultsCount(results.count, lang)) {
                             ForEach(results) { m in
                                 if let onSelect {
+                                    // 全局命中只打开所属会话（消息级定位是会话内搜索的能力）——hint 如实区分，
+                                    // 不许诺做不到的"前往该消息"（复审）。
                                     Button { dismiss(); onSelect(m) } label: { resultRow(m) }
-                                        .accessibilityHint(ChatStrings.searchJumpHint(lang))
+                                        .accessibilityHint(conversationName != nil ? ChatStrings.searchOpenConvHint(lang) : ChatStrings.searchJumpHint(lang))
                                 } else {
                                     resultRow(m)
                                 }
@@ -1820,13 +1832,15 @@ private struct ForwardPickerSheet: View {
     @State private var contacts: [FamilyLinkInfo] = []
     @State private var groups: [GroupConversationInfo] = []
     @State private var loaded = false
+    @State private var loadFailed = false // 复审：网络失败被折叠成空表会念"没有联系人，去亲友页添加"——错误指引
     @State private var busy = false
 
     var body: some View {
         NavigationStack {
             List {
                 if loaded && contacts.isEmpty && groups.isEmpty {
-                    Text(ChatStrings.forwardNoTargets(lang)).font(.footnote).foregroundStyle(.secondary)
+                    Text(loadFailed ? ChatStrings.forwardLoadFailed(lang) : ChatStrings.forwardNoTargets(lang))
+                        .font(.footnote).foregroundStyle(loadFailed ? Color.beeDanger : .secondary)
                 }
                 if !contacts.isEmpty {
                     Section(ChatStrings.forwardContactsHeader(lang)) {
@@ -1858,10 +1872,14 @@ private struct ForwardPickerSheet: View {
     }
 
     private func load() async {
-        guard let token = session.token else { loaded = true; return }
-        // 已接受联系人（pending 不能收发）∪ 群；任一失败不阻断另一半。
-        contacts = ((try? await APIClient().familyLinks(token: token)) ?? []).filter { $0.isAccepted }
-        groups = (try? await APIClient().groups(token: token)) ?? []
+        guard let token = session.token else { loaded = true; loadFailed = true; return }
+        // 已接受联系人（pending 不能收发）∪ 群；任一失败不阻断另一半，但**双双失败**须如实报
+        //（复审：折叠成空表会误导"没有联系人，去亲友页添加"——网络问题被当成关系问题）。
+        let c = try? await APIClient().familyLinks(token: token)
+        let g = try? await APIClient().groups(token: token)
+        contacts = (c ?? []).filter { $0.isAccepted }
+        groups = g ?? []
+        loadFailed = (c == nil && g == nil)
         loaded = true
     }
 

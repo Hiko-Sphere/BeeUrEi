@@ -305,6 +305,10 @@ enum SafetyStrings {
     static func resumeNow(_ l: Language) -> String { l == .zh ? "立即恢复" : "Resume now" }
     static func paused(_ l: Language) -> String { l == .zh ? "每日报到已暂停，到期自动恢复。" : "Daily check-in paused — it will resume automatically." }
     static func resumed(_ l: Language) -> String { l == .zh ? "每日报到已恢复。" : "Daily check-in resumed." }
+    static func dailyLoadFailed(_ l: Language) -> String {
+        l == .zh ? "日程读取失败——为防误改真实日程，已锁定编辑。" : "Couldn't load the schedule — editing is locked to protect your real settings."
+    }
+    static func dailyRetry(_ l: Language) -> String { l == .zh ? "重试读取" : "Retry" }
 }
 
 /// 视障侧：安全报到（dead-man's switch）。空闲态设时长+备注开始；进行中显剩余时间 + 报平安/延长/取消。
@@ -389,9 +393,17 @@ struct SafetyCheckInView: View {
 /// 暂停 7/30 天（住院/出行，到点自动恢复——比整体关闭安全，不必记得重开）+ 立即恢复。
 /// 保存时**保留生效中的 pausedUntil**（改时间/备注不该顺手清掉暂停——与网页同教训）。
 struct DailyCheckinSection: View {
+    /// 暂停目标时刻（纯函数可测）：**整毫秒**——服务端 z.int() 拒绝小数（复审 HIGH：曾让暂停恒 400）。
+    /// nil=立即恢复（0，服务端视作未暂停）。
+    nonisolated static func pauseTarget(days: Int?, nowMs: Double) -> Int {
+        guard let d = days else { return 0 }
+        return Int((nowMs + Double(d) * 86_400_000).rounded())
+    }
+
     let token: String
     let announce: (String) -> Void
     @State private var loaded = false
+    @State private var loadFailed = false   // 复审：读取失败≠"未配置"——把默认值当权威展示会让用户误存、清掉真日程/生效中的暂停
     @State private var enabled = false
     @State private var startTime = Calendar.current.date(from: DateComponents(hour: 9, minute: 0)) ?? .now
     @State private var duration = 60
@@ -405,12 +417,21 @@ struct DailyCheckinSection: View {
         let c = Calendar.current.dateComponents([.hour, .minute], from: startTime)
         return (c.hour ?? 9) * 60 + (c.minute ?? 0)
     }
-    private var isPaused: Bool { (pausedUntil ?? 0) > Date().timeIntervalSince1970 * 1000 }
+    private var isPaused: Bool {
+        // 用已测的模型判定（复审：此前视图私有重实现，被测的 isPaused(nowMs:) 是死代码=假覆盖）。
+        DailyCheckinSchedule(enabled: enabled, startMinute: startMinute, durationMinutes: duration,
+                             tz: TimeZone.current.identifier, note: nil, pausedUntil: pausedUntil)
+            .isPaused(nowMs: Date().timeIntervalSince1970 * 1000)
+    }
 
     var body: some View {
         Section {
             Text(SafetyStrings.dailyExplain(lang)).font(.footnote).foregroundStyle(.secondary)
-            Toggle(SafetyStrings.dailyEnable(lang), isOn: $enabled).disabled(busy || !loaded)
+            if loadFailed {
+                Text(SafetyStrings.dailyLoadFailed(lang)).font(.footnote).foregroundStyle(Color.beeDanger)
+                Button(SafetyStrings.dailyRetry(lang)) { loaded = false; Task { await load() } }
+            }
+            Toggle(SafetyStrings.dailyEnable(lang), isOn: $enabled).disabled(busy || !loaded || loadFailed)
             if enabled {
                 DatePicker(SafetyStrings.dailyTimeLabel(lang), selection: $startTime, displayedComponents: .hourAndMinute)
                 Picker(SafetyStrings.durationLabel(lang), selection: $duration) {
@@ -418,7 +439,7 @@ struct DailyCheckinSection: View {
                 }
                 TextField(SafetyStrings.notePlaceholder(lang), text: $dnote, axis: .vertical).lineLimit(1...3)
             }
-            Button(SafetyStrings.dailySave(lang)) { Task { await save() } }.disabled(busy || !loaded)
+            Button(SafetyStrings.dailySave(lang)) { Task { await save() } }.disabled(busy || !loaded || loadFailed)
             if enabled, loaded {
                 if isPaused {
                     Text(SafetyStrings.pausedUntil(pausedDateText, lang)).font(.footnote).foregroundStyle(.secondary)
@@ -450,14 +471,29 @@ struct DailyCheckinSection: View {
     }
     private func load() async {
         guard !loaded else { return }
-        if let s = try? await api.getCheckinSchedule(token: token) {
+        loadFailed = false
+        do {
+            let s = try await api.getCheckinSchedule(token: token)
+            loaded = true
+            guard let s else { return } // null=从未配置：默认值是真实状态
+            apply(s)
+            return
+        } catch {
+            // 网络/服务错：**不得**把编译期默认(未启用/09:00/无暂停)当权威展示——用户一存就清掉真日程
+            // 与住院暂停（dead-man's switch 被静默改写）。标失败、禁保存、给重试。
+            loadFailed = true
+            loaded = true
+            return
+        }
+    }
+    private func apply(_ s: DailyCheckinSchedule) {
+        if true {
             enabled = s.enabled
             startTime = Calendar.current.date(from: DateComponents(hour: s.startMinute / 60, minute: s.startMinute % 60)) ?? startTime
             duration = s.durationMinutes
             dnote = s.note ?? ""
             pausedUntil = s.pausedUntil
         }
-        loaded = true
     }
     private func save() async {
         busy = true; defer { busy = false }
@@ -474,7 +510,7 @@ struct DailyCheckinSection: View {
     /// days=nil → 立即恢复（pausedUntil 传 0，服务端视作未暂停）。
     private func setPause(_ days: Int?) async {
         busy = true; defer { busy = false }
-        let target: Double = days.map { Date().timeIntervalSince1970 * 1000 + Double($0) * 86_400_000 } ?? 0
+        let target = Double(DailyCheckinSection.pauseTarget(days: days, nowMs: Date().timeIntervalSince1970 * 1000))
         do {
             let s = try await api.setCheckinSchedule(token: token, enabled: enabled, startMinute: startMinute,
                                                      durationMinutes: duration, tz: TimeZone.current.identifier,

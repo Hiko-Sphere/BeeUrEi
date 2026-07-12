@@ -87,6 +87,10 @@ final class LiveLocationManager: NSObject, CLLocationManagerDelegate {
 
     // MARK: 共享自身位置
 
+    /// 注入上报 token（通知"开始共享"等**不经位置页**的入口用）：位置页 startViewing 是既有注入点，
+    /// 冷启动直点共享时若不注入，上报会对 nil token 静默 no-op（复审 HIGH：假"已开始共享"）。
+    func adoptToken(_ t: String) { token = t }
+
     func toggleSharing() { sharing ? stopSharing() : startSharing() }
 
     func startSharing() {

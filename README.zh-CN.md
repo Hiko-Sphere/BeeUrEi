@@ -19,11 +19,11 @@
 ![Swift 5](https://img.shields.io/badge/Swift-5-F05138?logo=swift&logoColor=white)
 ![端侧 AI](https://img.shields.io/badge/AI-%E7%AB%AF%E4%BE%A7%E8%BF%90%E8%A1%8C-FFC42E?labelColor=14161F)
 ![后端 Node + Fastify](https://img.shields.io/badge/%E5%90%8E%E7%AB%AF-Node%20%2B%20Fastify-3178C6)
-![测试 603](https://img.shields.io/badge/%E6%B5%8B%E8%AF%95-603-3FB950)
+![测试 1723](https://img.shields.io/badge/%E6%B5%8B%E8%AF%95-1723-3FB950)
 ![双语](https://img.shields.io/badge/%E5%8F%8C%E8%AF%AD-EN%20%C2%B7%20%E4%B8%AD%E6%96%87-FFC42E?labelColor=14161F)
 ![许可 PolyForm Noncommercial](https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF-PolyForm%20Noncommercial%201.0.0-14161F)
 
-[官网](https://beeurei.hikosphere.com) · [法律与隐私](https://beeurei.hikosphere.com/legal/) · [品牌资产](BeeUrEi-Brand-Assets/)
+[官网](https://beeurei.hikosphere.com) · [协助者网页版](https://beeurei.hikosphere.com/app/) · [法律与隐私](https://beeurei.hikosphere.com/legal/) · [品牌资产](BeeUrEi-Brand-Assets/)
 
 </div>
 
@@ -174,7 +174,7 @@ BeeUrEi/
 ├── Packages/BeeUrEiCore/     平台无关安全核心 —— 319 单测
 ├── Tests/BeeUrEiTests/       应用层回归 —— 72 测
 ├── server/                   自托管后端（Node + TS）—— 289 测 · 50 个测试文件
-├── site/                     官网静态站 + /legal/ 法律页
+├── site/                     官网静态站 + /legal/ 法律页 + 协助者网页版（site/app-src → /app）
 ├── BeeUrEi-Brand-Assets/     图标 · 字标 · 配色
 └── .github/workflows/ci.yml  持续集成
 ```

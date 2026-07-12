@@ -19,11 +19,11 @@ The visual AI runs entirely on the device; the camera feed stays on your phone b
 ![Swift 5](https://img.shields.io/badge/Swift-5-F05138?logo=swift&logoColor=white)
 ![On-device AI](https://img.shields.io/badge/AI-on--device-FFC42E?labelColor=14161F)
 ![Backend: Node + Fastify](https://img.shields.io/badge/backend-Node%20%2B%20Fastify-3178C6)
-![tests 682](https://img.shields.io/badge/tests-682-3FB950)
+![tests 1723](https://img.shields.io/badge/tests-1723-3FB950)
 ![Bilingual](https://img.shields.io/badge/i18n-EN%20%C2%B7%20%E4%B8%AD%E6%96%87-FFC42E?labelColor=14161F)
 ![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-14161F)
 
-[Website](https://beeurei.hikosphere.com) · [Legal & Privacy](https://beeurei.hikosphere.com/legal/) · [Brand Assets](BeeUrEi-Brand-Assets/)
+[Website](https://beeurei.hikosphere.com) · [Helper Web App](https://beeurei.hikosphere.com/app/) · [Legal & Privacy](https://beeurei.hikosphere.com/legal/) · [Brand Assets](BeeUrEi-Brand-Assets/)
 
 </div>
 
@@ -179,7 +179,7 @@ BeeUrEi/
 ├── Packages/BeeUrEiCore/     platform-independent safety core — 319 unit tests
 ├── Tests/BeeUrEiTests/       app-layer regression — 72 tests
 ├── server/                   self-hosted backend (Node + TS) — 212 tests · 42 test files
-├── site/                     marketing site + /legal/ pages
+├── site/                     marketing site + /legal/ pages + helper web app (site/app-src → /app)
 ├── BeeUrEi-Brand-Assets/     icon · wordmark · palette
 └── .github/workflows/ci.yml  continuous integration
 ```

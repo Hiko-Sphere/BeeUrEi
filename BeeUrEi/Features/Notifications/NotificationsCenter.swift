@@ -109,6 +109,78 @@ struct EmergencyMedicalButton: View {
     }
 }
 
+/// 响应者回执 SOS 告警（与网页通知列表/告警横幅同语义、同后端流程）：「我在赶来」（更强安心信号）/
+/// 「我已看到」（纯 ack——远在外地去不了的亲友不必谎称"在赶来"或干等，ack 即可停升级重呼）。
+/// 此前 iOS 完全缺失——iOS 响应者收到 SOS 只能回拨，遇险者与其余亲友不知道"有人已动身"，
+/// 服务端升级重呼也不知道已有人响应（会继续轰炸全体亲友）。
+enum EmergencyAckStrings {
+    static func onMyWay(_ l: Language) -> String { l == .zh ? "我在赶来" : "I'm on my way" }
+    static func seen(_ l: Language) -> String { l == .zh ? "我已看到" : "I've seen it" }
+    static func ackedOnMyWay(_ l: Language) -> String { l == .zh ? "已告知对方你正在赶来" : "They'll see you're on the way" }
+    static func ackedSeen(_ l: Language) -> String { l == .zh ? "已回执，对方会看到你在响应" : "Acknowledged — they'll see you're responding" }
+    static func failed(_ l: Language) -> String { l == .zh ? "回执失败，请重试" : "Couldn't send — try again" }
+    static func onMyWayA11y(_ name: String, _ l: Language) -> String { l == .zh ? "我正赶去帮 \(name)" : "Tell \(name) you're on the way" }
+    static func seenA11y(_ name: String, _ l: Language) -> String { l == .zh ? "回执：告诉 \(name) 我已看到求助" : "Let \(name) know you've seen the alert" }
+    /// 门控（纯函数，可测）：只对**收到的** SOS 告警显示——kind 恒为 emergency_alert（升级重呼复用同 kind，
+    /// 自然也显示），且须带 fromId（回执对象）。emergency_clear/emergency_responding/emergency_ack 等
+    /// 后续协调通知、以及无 fromId 的关系事件（emergency_contact_set）都不显示。
+    static func shouldOffer(kind: String, fromId: String?) -> Bool {
+        kind == "emergency_alert" && !(fromId ?? "").isEmpty
+    }
+}
+
+/// 紧急告警行内回执按钮组。乐观状态机：idle →（点击）sending → acked（就地显示回执状态，防连点）/
+/// failed（可重试）。服务端本就幂等去重（同状态 5 分钟一条），连点无害但 UI 仍防。
+struct EmergencyAckButtons: View {
+    let fromId: String
+    let fromName: String
+    let eventId: String?
+    private enum AckState: Equatable { case idle, sending, acked(onMyWay: Bool), failed }
+    @State private var state: AckState = .idle
+    private var lang: Language { FeatureSettings().language }
+
+    var body: some View {
+        switch state {
+        case .idle, .failed:
+            VStack(alignment: .leading, spacing: 4) {
+                if state == .failed {
+                    Text(EmergencyAckStrings.failed(lang)).font(.footnote).foregroundStyle(Color.beeDanger)
+                }
+                HStack(spacing: BeeSpacing.sm) {
+                    Button { Task { await respond(onMyWay: true) } } label: {
+                        Label(EmergencyAckStrings.onMyWay(lang), systemImage: "figure.run")
+                    }
+                    .buttonStyle(.borderedProminent).controlSize(.small)
+                    .accessibilityLabel(EmergencyAckStrings.onMyWayA11y(fromName, lang))
+                    Button { Task { await respond(onMyWay: false) } } label: {
+                        Label(EmergencyAckStrings.seen(lang), systemImage: "checkmark")
+                    }
+                    .buttonStyle(.bordered).controlSize(.small)
+                    .accessibilityLabel(EmergencyAckStrings.seenA11y(fromName, lang))
+                }
+            }
+        case .sending:
+            ProgressView().controlSize(.small)
+        case .acked(let onMyWay):
+            Label(onMyWay ? EmergencyAckStrings.ackedOnMyWay(lang) : EmergencyAckStrings.ackedSeen(lang),
+                  systemImage: "checkmark.circle.fill")
+                .font(.footnote).foregroundStyle(.secondary)
+                .accessibilityAddTraits(.updatesFrequently)
+        }
+    }
+
+    private func respond(onMyWay: Bool) async {
+        guard let token = KeychainStore.read() else { state = .failed; return }
+        state = .sending
+        if await APIClient().postEmergencyAck(token: token, fromId: fromId, eventId: eventId, onMyWay: onMyWay) {
+            state = .acked(onMyWay: onMyWay)
+            A11y.announce(onMyWay ? EmergencyAckStrings.ackedOnMyWay(lang) : EmergencyAckStrings.ackedSeen(lang))
+        } else {
+            state = .failed
+        }
+    }
+}
+
 /// 工具栏铃铛 + 未读角标，点开应用内通知列表。
 struct NotificationsBell: View {
     @State private var center = NotificationsCenter.shared
@@ -182,6 +254,14 @@ struct NotificationsView: View {
                                         Label(label, systemImage: loc.stale ? "exclamationmark.triangle" : "mappin.and.ellipse").font(.footnote)
                                     }
                                     .padding(.leading, n.isUnread ? 16 : 0)
+                                }
+                                // 回执 SOS 告警：「我在赶来」/「我已看到」——回告遇险者有人在响应 + 停止服务端升级重呼。
+                                // 只对收到的 emergency_alert 显示（EmergencyAckStrings.shouldOffer，纯函数已测）；与网页通知列表对等。
+                                if EmergencyAckStrings.shouldOffer(kind: n.kind, fromId: n.data?["fromId"]) {
+                                    EmergencyAckButtons(fromId: n.data?["fromId"] ?? "",
+                                                        fromName: n.data?["fromName"] ?? "",
+                                                        eventId: n.data?["eventId"])
+                                        .padding(.leading, n.isUnread ? 16 : 0)
                                 }
                                 // 紧急告警：按需查看遇险者医疗信息（血型/过敏/用药）——与网页通知列表一致，施救关键。
                                 // fromId 门天然排除关系事件（emergency_contact_set 无 fromId）。hasMedical=1 时醒目提示。

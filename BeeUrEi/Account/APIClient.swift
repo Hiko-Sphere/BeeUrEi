@@ -944,6 +944,16 @@ struct APIClient {
         return (try? await authedSend("POST", "/api/emergency/all-clear", token: token, body: body)) != nil
     }
 
+    /// 响应者回执 SOS 告警：onMyWay=true「我在赶来」（更强安心信号）/ false「我已看到」（纯 ack）。
+    /// 两者都让遇险者知道"有人在响应"并停止服务端升级重呼；服务端幂等去重（同状态 5 分钟内只回告一次）。
+    /// 与网页通知列表/告警横幅同一后端流程（POST /api/emergency/ack）。best-effort：失败返回 false 供 UI 提示重试。
+    @discardableResult
+    func postEmergencyAck(token: String, fromId: String, eventId: String?, onMyWay: Bool) async -> Bool {
+        var body: [String: Any] = ["fromId": fromId, "onMyWay": onMyWay]
+        if let eventId { body["eventId"] = eventId }
+        return (try? await authedSend("POST", "/api/emergency/ack", token: token, body: body)) != nil
+    }
+
     // MARK: 聊天（绑定亲友/协助者互发）
 
     func sendMessage(token: String, toId: String, kind: String, text: String, replyTo: String? = nil) async throws -> ChatMessageInfo {

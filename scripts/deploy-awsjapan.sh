@@ -3,9 +3,12 @@
 # BeeUrEi 一键部署到 awsjapan（EC2，东京）。在本地跑，经 ssh 驱动远端。
 #
 # 用法：
-#   scripts/deploy-awsjapan.sh          # 部署 api + site（默认）
-#   scripts/deploy-awsjapan.sh api      # 只部署后端（server/ → beeurei-api）
-#   scripts/deploy-awsjapan.sh site     # 只部署官网+协助者网页端（site/ → beeurei-site）
+#   scripts/deploy-awsjapan.sh                    # 部署 api + site（默认）
+#   scripts/deploy-awsjapan.sh api                # 只部署后端（server/ → beeurei-api）
+#   scripts/deploy-awsjapan.sh site               # 只部署官网+协助者网页端（site/ → beeurei-site）
+#   scripts/deploy-awsjapan.sh clean              # 只做镜像轮换清理
+#   scripts/deploy-awsjapan.sh rollback <sha> [api|site|all]   # 回滚到已存在的 :<sha> 镜像（默认 api）
+#     回滚会把 :latest 重打到 <sha>（容器重启后仍停在回滚版），下次正常部署自然覆盖回新版。
 #
 # 前提：本机能 `ssh awsjapan`（~/.ssh/config 已配 alias；出口 22 口未被墙）。
 # 远端命令统一 base64 编码后作参数传递——经验教训：抖动连接下 stdin 喂脚本会被截断。
@@ -32,11 +35,8 @@ ssh -o ConnectTimeout=8 -o BatchMode=yes "$HOST" true 2>/dev/null \
 SHA=$(remote 'cd ~/repo/BeeUrEi && git fetch origin main -q && git rev-parse --short origin/main')
 remote 'cd ~/repo/BeeUrEi && git pull --ff-only origin main -q && echo "远端已同步到 $(git rev-parse --short HEAD)"'
 
-deploy_api() {
-  say "构建 beeurei-api:$SHA（npm ci 锁定版本）"
-  remote "cd ~/repo/BeeUrEi && docker build -q --build-arg GIT_SHA=$SHA -t beeurei-api:$SHA -t beeurei-api:latest server/"
-
-  say "重建容器 beeurei-api"
+# —— 容器启动/健康检查（deploy 与 rollback 共用；tag 为唯一变量）——
+start_api_container() { # $1=镜像 tag
   # 改过 .env 也生效：docker restart 不重读 env-file，必须 stop/rm/run 重建。
   # --log-opt 封顶容器日志（20MB×5 轮换）：默认 json-file 无上限，长期运行会把磁盘吃满——磁盘满则 sqlite
   # 写入失败、整站瘫（自托管最常见的"慢性死亡"）。改此参数须重建容器（本脚本每次部署本就重建）。
@@ -44,7 +44,7 @@ deploy_api() {
 docker run -d --name beeurei-api --restart unless-stopped \
   --log-driver json-file --log-opt max-size=20m --log-opt max-file=5 \
   -p 127.0.0.1:8787:8787 --env-file ~/repo/BeeUrEi/server/.env \
-  -v beeurei-data:/app/data beeurei-api:latest >/dev/null && echo 容器已启动'
+  -v beeurei-data:/app/data beeurei-api:'"$1"' >/dev/null && echo 容器已启动'
 
   say "健康检查：/api/ready（最多等 30s）"
   remote 'for i in $(seq 1 30); do
@@ -52,6 +52,28 @@ docker run -d --name beeurei-api --restart unless-stopped \
   sleep 1
 done
 echo "!! /api/ready 30s 未就绪，最近日志："; docker logs --tail 30 beeurei-api; exit 1'
+}
+
+start_site_container() { # $1=镜像 tag
+  # 日志封顶同 api（nginx access 日志走容器 stdout，流量大时增长更快）。
+  remote 'docker rm -f beeurei-site >/dev/null 2>&1 || true
+docker run -d --name beeurei-site --restart unless-stopped \
+  --log-driver json-file --log-opt max-size=20m --log-opt max-file=5 \
+  -p 127.0.0.1:8088:80 beeurei-site:'"$1"' >/dev/null && echo 容器已启动'
+
+  say "健康检查：/healthz + /app/"
+  remote 'for i in $(seq 1 15); do
+  curl -sf -m 2 -o /dev/null http://127.0.0.1:8088/healthz && { echo healthz OK; break; }
+  sleep 1
+done
+curl -sf -m 3 -o /dev/null http://127.0.0.1:8088/app/ && echo "/app/ OK" || { echo "!! /app/ 不可用"; exit 1; }'
+}
+
+deploy_api() {
+  say "构建 beeurei-api:$SHA（npm ci 锁定版本）"
+  remote "cd ~/repo/BeeUrEi && docker build -q --build-arg GIT_SHA=$SHA -t beeurei-api:$SHA -t beeurei-api:latest server/"
+  say "重建容器 beeurei-api"
+  start_api_container latest
 
   say "SMTP 自检（线上凭据是否仍好）"
   remote 'sleep 2; docker logs beeurei-api 2>&1 | grep -m1 "\[mail\]" || echo "（暂无 [mail] 日志行）"'
@@ -60,20 +82,20 @@ echo "!! /api/ready 30s 未就绪，最近日志："; docker logs --tail 30 beeu
 deploy_site() {
   say "构建 beeurei-site:$SHA（官网 + /app 协助者端 vite build）"
   remote "cd ~/repo/BeeUrEi && docker build -q -t beeurei-site:$SHA -t beeurei-site:latest site/"
-
   say "重建容器 beeurei-site"
-  # 日志封顶同 api（nginx access 日志走容器 stdout，流量大时增长更快）。
-  remote 'docker rm -f beeurei-site >/dev/null 2>&1 || true
-docker run -d --name beeurei-site --restart unless-stopped \
-  --log-driver json-file --log-opt max-size=20m --log-opt max-file=5 \
-  -p 127.0.0.1:8088:80 beeurei-site:latest >/dev/null && echo 容器已启动'
+  start_site_container latest
+}
 
-  say "健康检查：/healthz + /app/"
-  remote 'for i in $(seq 1 15); do
-  curl -sf -m 2 -o /dev/null http://127.0.0.1:8088/healthz && { echo healthz OK; break; }
-  sleep 1
-done
-curl -sf -m 3 -o /dev/null http://127.0.0.1:8088/app/ && echo "/app/ OK" || { echo "!! /app/ 不可用"; exit 1; }'
+# 回滚：不拉代码不构建，直接切到已存在的 :<sha> 镜像（发布出问题时的秒级逃生门）。
+# 把 :latest 也重打到 <sha>：否则容器意外重启会悄悄跳回坏版本；下次正常部署自然覆盖。
+rollback_one() { # $1=repo(beeurei-api|beeurei-site) $2=sha
+  say "回滚 $1 → :$2"
+  remote 'docker image inspect '"$1:$2"' >/dev/null 2>&1 || { echo "!! 镜像 '"$1:$2"' 不存在。可用 SHA："; docker images --format "{{.Tag}}" '"$1"' | grep -vE "^(latest|<none>)$" | head -6; exit 1; }
+docker tag '"$1:$2"' '"$1"':latest && echo "latest 已重打到 '"$2"'"'
+  case "$1" in
+    beeurei-api)  start_api_container "$2" ;;
+    beeurei-site) start_site_container "$2" ;;
+  esac
 }
 
 # 镜像轮换（每次部署自动跑；也可单独 `deploy-awsjapan.sh clean`）：每个 :SHA 标签都是一份镜像，频繁部署
@@ -91,18 +113,37 @@ docker builder prune -f >/dev/null 2>&1 || true
 echo "清理后磁盘："; df -h / | tail -1; docker system df | sed -n "1,5p"'
 }
 
+verify_public() {
+  say "公网验证（经 Cloudflare 隧道）"
+  curl -sf -m 10 https://beeurei-api.hikosphere.com/api/ready && echo " ← api" || echo "!! 公网 api 探测失败"
+  curl -sf -m 10 -o /dev/null -w '%{http_code} ← site\n' https://beeurei.hikosphere.com/ || true
+  curl -sf -m 10 -o /dev/null -w '%{http_code} ← app\n' https://beeurei.hikosphere.com/app/ || true
+}
+
 case "$COMPONENT" in
   api)  deploy_api; cleanup_images ;;
   site) deploy_site; cleanup_images ;;
   all)  deploy_api; deploy_site; cleanup_images ;;
   clean) cleanup_images; exit 0 ;;
-  *)    die "未知组件：$COMPONENT（可选 api|site|all|clean）" ;;
+  rollback)
+    RB_SHA="${2:-}"; RB_COMP="${3:-api}"
+    [ -n "$RB_SHA" ] || die "用法：deploy-awsjapan.sh rollback <sha> [api|site|all]"
+    case "$RB_COMP" in
+      api)  rollback_one beeurei-api "$RB_SHA" ;;
+      site) rollback_one beeurei-site "$RB_SHA" ;;
+      all)  rollback_one beeurei-api "$RB_SHA"; rollback_one beeurei-site "$RB_SHA" ;;
+      *)    die "未知组件：$RB_COMP（可选 api|site|all）" ;;
+    esac
+    verify_public
+    # 实际生效版本以 /api/version 为准（镜像构建时注入的 GIT_SHA），别信心里以为的。
+    curl -sf -m 10 https://beeurei-api.hikosphere.com/api/version && echo " ← 线上实际版本"
+    say "回滚完成：$RB_COMP → :$RB_SHA（下次正常部署会覆盖回 origin/main 最新版）"
+    exit 0
+    ;;
+  *)    die "未知组件：$COMPONENT（可选 api|site|all|clean|rollback）" ;;
 esac
 
-say "公网验证（经 Cloudflare 隧道）"
-curl -sf -m 10 https://beeurei-api.hikosphere.com/api/ready && echo " ← api" || echo "!! 公网 api 探测失败"
-curl -sf -m 10 -o /dev/null -w '%{http_code} ← site\n' https://beeurei.hikosphere.com/ || true
-curl -sf -m 10 -o /dev/null -w '%{http_code} ← app\n' https://beeurei.hikosphere.com/app/ || true
+verify_public
 
 say "完成：origin/main $SHA 已部署（镜像同时打了 :$SHA 标签，回滚用 docker run …:$SHA）"
 echo "提示：本次 api 部署首次启用每小时孤儿媒体清扫（sweepOrphanMedia，删除 ≥7 天未被任何消息/录制引用的媒体文件）。"

@@ -21,6 +21,14 @@
 
 媒体文件（视频消息等）在 `/app/data` 卷内独立目录、**不在**数据库快照里；异地同步整卷即全覆盖。
 
+**恢复演练（建议每月跑一次）**：没验证过"能打开、数据在"的备份不算备份。
+
+```sh
+./scripts/verify-backup-awsjapan.sh
+# 找最新每日备份 → 容器内 node:sqlite 只读打开 → integrity_check + foreign_key_check
+# + 关键表计数与线上并排比对；备份缺失/超 26h/完整性不过 任一即非零退出（可挂 cron 告警）。
+```
+
 ## 恢复
 
 > 快照是完整独立的 SQLite 库文件，恢复 = 用快照替换现行库文件。
@@ -68,14 +76,12 @@ SQLite 依 salt 校验通常会拒用不匹配的 WAL，但**绝不应赌这个*
 ## 部署与回滚
 
 ```sh
-./scripts/deploy-awsjapan.sh        # 构建并部署 origin/main（镜像同时打 :SHA 标签）
-./scripts/deploy-awsjapan.sh clean  # 只做镜像轮换清理（部署尾部也会自动跑）
-# 回滚：用旧 SHA 标签重启容器（--log-opt 与部署脚本一致，否则回滚出的容器丢日志封顶）
-docker stop beeurei-api && docker rm beeurei-api
-docker run -d --name beeurei-api --restart unless-stopped \
-  --log-driver json-file --log-opt max-size=20m --log-opt max-file=5 \
-  -p 127.0.0.1:8787:8787 --env-file ~/repo/BeeUrEi/server/.env \
-  -v beeurei-data:/app/data beeurei-api:<旧SHA>
+./scripts/deploy-awsjapan.sh                     # 构建并部署 origin/main（镜像同时打 :SHA 标签）
+./scripts/deploy-awsjapan.sh clean               # 只做镜像轮换清理（部署尾部也会自动跑）
+./scripts/deploy-awsjapan.sh rollback <SHA> api  # 一键回滚（api|site|all，默认 api）：
+#   校验镜像存在（不存在则列出可用 SHA）→ :latest 重打到 <SHA>（容器意外重启不会跳回坏版）
+#   → 按部署同款参数重建容器 → 健康检查 → 公网验证 + /api/version 打印线上实际 commit。
+#   已在生产实测（回滚到当前版自身 = 零风险全路径演练）。
 ```
 
 **回滚窗口 = 最近 5 个 SHA**：每次部署自动做镜像轮换（beeurei-api/site 各保留最近 5 个 SHA

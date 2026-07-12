@@ -98,6 +98,9 @@ final class HomeStringsTests: XCTestCase {
         XCTAssertTrue(HomeStrings.voiceCommandsHelp(.en).lowercased().contains("share my location"))
         XCTAssertTrue(HomeStrings.voiceCommandsHelp(.zh).contains("读一下消息"))
         XCTAssertTrue(HomeStrings.voiceCommandsHelp(.en).lowercased().contains("read my messages"))
+        // AI 详细描述场景（iter296 新增）必须在自述里，否则盲人无从发现（iter297 补齐可发现性）。
+        XCTAssertTrue(HomeStrings.voiceCommandsHelp(.zh).contains("描述场景"))
+        XCTAssertTrue(HomeStrings.voiceCommandsHelp(.en).lowercased().contains("describe the scene"))
         XCTAssertFalse(HomeStrings.voiceCommandsHelp(.en).contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
 

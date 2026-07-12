@@ -553,7 +553,7 @@ enum FramingStrings {
 
     // MARK: 界面文案（识别屏 View 静态文案——按钮/弹窗/对话框，含 VoiceOver hint）
 
-    enum UIAction { case whatsAhead, readText, fullPage, light, color, scan, explore, banknote, people, find, stopFind, bus }
+    enum UIAction { case whatsAhead, sceneAI, readText, fullPage, light, color, scan, explore, banknote, people, find, stopFind, bus }
 
     /// 光探测按钮标题：开启连续音调后变"关闭光探测"，否则为"光线"。
     static func lightToneTitle(_ on: Bool, _ l: Language) -> String {
@@ -571,6 +571,7 @@ enum FramingStrings {
         case .zh:
             switch a {
             case .whatsAhead: return "前方有什么"
+            case .sceneAI: return "AI 描述场景"
             case .readText: return "朗读文字"
             case .fullPage: return "读整页"
             case .light: return "光线"
@@ -586,6 +587,7 @@ enum FramingStrings {
         case .en:
             switch a {
             case .whatsAhead: return "What's Ahead"
+            case .sceneAI: return "AI Describe"
             case .readText: return "Read Text"
             case .fullPage: return "Full Page"
             case .light: return "Light"
@@ -606,6 +608,7 @@ enum FramingStrings {
         case .zh:
             switch a {
             case .whatsAhead: return "汇总播报前方识别到的物体"
+            case .sceneAI: return "请云端 AI 用一句话详细描述眼前画面（比「前方有什么」更丰富，需联网、每日有次数）"
             case .readText: return "识别并朗读相机里看到的文字"
             case .fullPage: return "引导你把整页纸放进画面，自动拍摄并按顺序朗读全文"
             case .light: return "报告明暗和亮光方向，并开启连续音调——扫动手机、越亮音越高，靠耳朵找窗户或灯"
@@ -620,6 +623,7 @@ enum FramingStrings {
         case .en:
             switch a {
             case .whatsAhead: return "Summarize the objects detected ahead"
+            case .sceneAI: return "Ask cloud AI for a rich sentence describing the scene (more detailed than What's Ahead; needs internet, daily limit)"
             case .readText: return "Recognize and read text seen by the camera"
             case .fullPage: return "Guides you to fit the whole page, then captures and reads it in order"
             case .light: return "Report brightness and light direction, then play a continuous tone — sweep the phone, brighter is higher-pitched, to find a window or lamp by ear"

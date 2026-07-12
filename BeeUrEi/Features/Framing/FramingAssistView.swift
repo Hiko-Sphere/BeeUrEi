@@ -1593,6 +1593,11 @@ struct FramingAssistView: View {
                 .padding(.horizontal)
                 .accessibilityHint(FramingStrings.uiHint(.whatsAhead, model.lang))
 
+                // AI 详细描述（对标 Be My AI）：与本地"前方有什么"并列，云端更丰富的自然语言描述。
+                overlayAction(FramingStrings.uiTitle(.sceneAI, model.lang), systemImage: "sparkles",
+                              hint: FramingStrings.uiHint(.sceneAI, model.lang)) { model.describeSceneAI() }
+                    .padding(.horizontal)
+
                 HStack(spacing: BeeSpacing.sm) {
                     overlayAction(FramingStrings.uiTitle(.readText, model.lang), systemImage: "text.viewfinder",
                                   hint: FramingStrings.uiHint(.readText, model.lang)) { model.readText() }

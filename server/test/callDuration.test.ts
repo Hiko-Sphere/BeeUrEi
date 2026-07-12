@@ -39,6 +39,20 @@ describe('通话时长上报 /api/assist/call/duration', () => {
     await app.close()
   })
 
+  it('活跃用户的旧通话（超出"最近 100 条"窗口）上报 → 仍 200：授权是全量判定，不是窗口扫描', async () => {
+    const { store, app, caller } = await seed() // k1 (createdAt=1000) 是最旧的一通
+    // 之后又打了 120 通 → k1 跌出 callRecordsForUser 默认 100 条窗口。
+    for (let i = 0; i < 120; i++) {
+      store.createCallRecord({ id: `rn${i}`, callId: `kn${i}`, callerId: caller.user.id, calleeId: 'ghost', status: 'answered', createdAt: 2000 + i })
+    }
+    expect(store.callRecordsForUser(caller.user.id).some((x) => x.callId === 'k1')).toBe(false) // 确认已超窗（回归前置）
+    // 迟到的时长上报（如离线重试）→ 参与方身份仍须被认可，绝不能因窗口截断误拒。
+    const r = await app.inject({ method: 'POST', url: '/api/assist/call/duration', headers: auth(caller.token), payload: { callId: 'k1', seconds: 77 } })
+    expect(r.statusCode).toBe(200)
+    expect(store.allCallRecords(1000).find((x) => x.callId === 'k1')?.durationSec).toBe(77)
+    await app.close()
+  })
+
   it('坏输入 → 400（负数/超 24h/缺 callId）；未登录 → 401', async () => {
     const { app, callee } = await seed()
     expect((await app.inject({ method: 'POST', url: '/api/assist/call/duration', headers: auth(callee.token), payload: { callId: 'k1', seconds: -1 } })).statusCode).toBe(400)
@@ -68,5 +82,21 @@ describe.each([['MemoryStore', () => new MemoryStore()], ['SqliteStore', () => n
     store.setCallDuration('k1', 'a', 204) // 参与方(主叫)上报时长
     const rec = store.allCallRecords().find((c) => c.callId === 'k1')
     expect(rec?.durationSec).toBe(204)
+  })
+})
+
+// isCallParticipant（授权用全量参与判定）两 Store 平价：主叫/被叫 → true；陌生人/不存在的 callId → false；
+// **不受"最近 100 条"窗口影响**（授权正确性的关键——callRecordsForUser().some() 会对超窗旧通话假否定）。
+describe.each([['MemoryStore', () => new MemoryStore()], ['SqliteStore', () => new SqliteStore(':memory:')]] as const)('isCallParticipant (%s)', (_n, make) => {
+  it('主叫/被叫 true；陌生人与未知 callId false；120 通新通话后旧通话仍 true（全量非窗口）', () => {
+    const store = make()
+    store.createCallRecord({ id: 'r0', callId: 'old', callerId: 'a', calleeId: 'b', status: 'answered', createdAt: 1 })
+    expect(store.isCallParticipant('a', 'old')).toBe(true)   // 主叫
+    expect(store.isCallParticipant('b', 'old')).toBe(true)   // 被叫
+    expect(store.isCallParticipant('z', 'old')).toBe(false)  // 陌生人
+    expect(store.isCallParticipant('a', 'nope')).toBe(false) // 不存在的 callId
+    for (let i = 0; i < 120; i++) store.createCallRecord({ id: `x${i}`, callId: `kx${i}`, callerId: 'a', calleeId: 'b', status: 'answered', createdAt: 100 + i })
+    expect(store.callRecordsForUser('a').some((r) => r.callId === 'old')).toBe(false) // 旧通话已超窗
+    expect(store.isCallParticipant('a', 'old')).toBe(true)                             // 全量判定不受窗口影响
   })
 })

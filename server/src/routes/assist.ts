@@ -260,7 +260,9 @@ export function registerAssistRoutes(
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     const me = req.user!.sub
     // 授权：上报者须是该 callId 的参与方（主叫或被叫）——否则不能给他人通话记录塞时长。
-    if (!store.callRecordsForUser(me).some((r) => r.callId === parsed.data.callId)) return reply.code(403).send({ error: 'not_participant' })
+    // 全量判定 isCallParticipant，绝非 callRecordsForUser().some(...)——后者是"最近 100 条"窗口，
+    // 活跃用户对稍旧通话的迟到上报（离线重试等）会被误拒（假否定）。
+    if (!store.isCallParticipant(me, parsed.data.callId)) return reply.code(403).send({ error: 'not_participant' })
     store.setCallDuration(parsed.data.callId, me, parsed.data.seconds)
     return { ok: true }
   })

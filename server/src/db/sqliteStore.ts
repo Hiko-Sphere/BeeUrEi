@@ -477,6 +477,11 @@ export class SqliteStore implements Store {
       .all(userId, userId, limit)
       .map((r: any) => ({ id: r.id, callId: r.callId, callerId: r.callerId, calleeId: r.calleeId, status: r.status as CallRecordStatus, createdAt: Number(r.createdAt), emergency: r.emergency === 1, durationSec: r.durationSec != null ? Number(r.durationSec) : undefined }))
   }
+  isCallParticipant(userId: string, callId: string): boolean {
+    // 全量判定（命中即止）——供授权检查；不可用 callRecordsForUser().some(...)（最近 100 条窗口）代替。
+    return this.db.prepare('SELECT 1 FROM call_records WHERE callId = ? AND (callerId = ? OR calleeId = ?) LIMIT 1')
+      .get(callId, userId, userId) != null
+  }
   missedCallCountForUser(userId: string, sinceMs: number): number {
     const row = this.db.prepare("SELECT COUNT(*) AS n FROM call_records WHERE calleeId = ? AND status = 'missed' AND createdAt > ?").get(userId, sinceMs) as { n: number }
     return Number(row.n)

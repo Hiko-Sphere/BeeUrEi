@@ -602,6 +602,9 @@ export interface Store {
   // 通话时长上报：把 durationSec 写入该 callId 下 participantId 参与（主叫或被叫）的记录（授权在调用侧已核参与方）
   setCallDuration(callId: string, participantId: string, seconds: number): void
   callRecordsForUser(userId: string, limit?: number): CallRecord[] // 我作为主叫或被叫，按时间倒序
+  /// 该用户是否为某 callId 的参与方（主叫或被叫）——**全量**判定，供授权检查（时长上报/录制同意）。
+  /// 不可用 callRecordsForUser().some(...) 代替：那是"最近 limit（默认 100）条"窗口，超窗的旧通话会被误拒（假否定）。
+  isCallParticipant(userId: string, callId: string): boolean
   // 未看的未接来电数（我作为被叫、status='missed'、createdAt > sinceMs）——供未接来电角标（打开通话记录即清）。
   missedCallCountForUser(userId: string, sinceMs: number): number
   deleteCallRecordsForUser(userId: string): void // 删号级联：清该用户参与的全部通话记录（PII，非证据）
@@ -1091,6 +1094,12 @@ export class MemoryStore implements Store {
       .filter((r) => r.callerId === userId || r.calleeId === userId)
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, limit)
+  }
+  isCallParticipant(userId: string, callId: string): boolean {
+    for (const r of this.callRecords.values()) {
+      if (r.callId === callId && (r.callerId === userId || r.calleeId === userId)) return true
+    }
+    return false
   }
   missedCallCountForUser(userId: string, sinceMs: number): number {
     let n = 0

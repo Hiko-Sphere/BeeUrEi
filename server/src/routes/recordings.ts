@@ -68,7 +68,8 @@ export function registerRecordingRoutes(app: FastifyInstance, store: Store, cons
     const me = req.user!.sub
     const callId = parsed.data.callId
     const inRegistry = (pendingCalls.participants(callId, now) ?? openHelp.participants(callId, now))?.includes(me) ?? false
-    const inCallRecord = store.callRecordsForUser(me).some((r) => r.callId === callId)
+    // 全量判定（非"最近 100 条"窗口）：活跃用户就稍旧通话补授/撤回同意不被误拒——撤回权尤其不能因窗口丢失。
+    const inCallRecord = store.isCallParticipant(me, callId)
     if (!inRegistry && !inCallRecord) {
       return reply.code(403).send({ error: 'not_a_participant' })
     }

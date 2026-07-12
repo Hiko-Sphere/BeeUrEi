@@ -46,6 +46,7 @@ const I18N = {
     panelUpdated: '管理面板有新版本（服务端已更新）', refreshNow: '点击刷新',
     openReports: '待处理举报', recordingsCount: '录制记录', byRole: '按角色分布', version: '版本', uptime: '运行时长', activeEmergencies: '正在进行的紧急',
     activeUnreachable: '紧急·无人可即时触达', activeUnreachSub: '安全网正静默失效，速联系本人/亲友',
+    diskLow: '磁盘余量告急', diskFree: '磁盘余量', diskLowHint: '满盘将致数据库写入失败整站瘫——清理镜像/日志或扩容',
     relayFails: '通话中继失败', callFailSub: '本次启动以来 · 普通/信令', relayFailHint: '中继不可达多半是 TURN/安全组未放行 3478',
     mailFail: '邮件发送失败', mailFailHint: 'SMTP 凭据/连接故障（如 163 授权码过期）——发码/找回密码/安全邮件发不出，请检查 SMTP_*',
     tickErr: '安全引擎报错', tickErrHint: '后台升级重呼/报到告警在异常（DB/bug）——报到未报平安可能不再自动告警亲友，速查日志',
@@ -172,6 +173,7 @@ const I18N = {
     panelUpdated: 'A new version of this panel is available (server updated)', refreshNow: 'Refresh now',
     openReports: 'Open reports', recordingsCount: 'Recordings', byRole: 'By role', version: 'Version', uptime: 'Uptime', activeEmergencies: 'Active emergencies',
     activeUnreachable: 'Emergency · reached no one', activeUnreachSub: 'Safety net silently failing — contact them/family',
+    diskLow: 'Disk space critical', diskFree: 'Disk free', diskLowHint: 'A full disk breaks database writes and takes the site down — prune images/logs or grow the volume',
     relayFails: 'Call relay failures', callFailSub: 'since start · generic/signaling', relayFailHint: 'Relay unreachable usually means TURN / security-group 3478 blocked',
     mailFail: 'Email delivery failures', mailFailHint: 'SMTP auth/connection error (e.g. expired credential) — codes/reset/security emails not sending, check SMTP_*',
     tickErr: 'Safety engine errors', tickErrHint: 'Background escalation/check-in alerts are failing (DB/bug) — missed check-ins may no longer auto-alert family; check logs',
@@ -607,6 +609,7 @@ function renderDashboard() {
     <div class="cards">
       ${o.activeEmergencies != null && o.activeEmergencies > 0 ? statCard(t('activeEmergencies'), o.activeEmergencies, '', 'danger') : ''}
       ${o.activeUnreachable != null && o.activeUnreachable > 0 ? statCard(t('activeUnreachable'), o.activeUnreachable, t('activeUnreachSub'), 'danger') : ''}
+      ${o.disk && o.disk.low ? statCard(t('diskLow'), (o.disk.freeBytes / 1073741824).toFixed(1) + ' GB (' + Math.round(o.disk.freeBytes / o.disk.totalBytes * 100) + '%)', t('diskLowHint'), 'danger') : ''}
       ${statCard(t('totalUsers'), o.users.total)}
       ${statCard(t('active'), o.users.active, '', 'success')}
       ${statCard(t('disabled'), o.users.disabled, '', o.users.disabled ? 'danger' : '')}
@@ -614,6 +617,7 @@ function renderDashboard() {
       ${statCard(t('newUsers7d'), g.newUsers7d, t('newUsers30d') + ': ' + g.newUsers30d, g.newUsers7d ? 'success' : '')}
       ${statCard(t('openReports'), o.reports.open, (state.lang === 'en' ? 'of ' : '共 ') + o.reports.total, o.reports.open ? 'danger' : '')}
       ${statCard(t('recordingsCount'), o.recordings.total)}
+      ${o.disk && !o.disk.low ? statCard(t('diskFree'), (o.disk.freeBytes / 1073741824).toFixed(1) + ' GB (' + Math.round(o.disk.freeBytes / o.disk.totalBytes * 100) + '%)') : ''}
       ${o.callConnect ? statCard(t('relayFails'), o.callConnect.relayUnreachable,
         t('callFailSub') + ': ' + (o.callConnect.generic + o.callConnect.signaling) + (o.callConnect.relayUnreachable ? ' · ' + t('relayFailHint') : ''),
         o.callConnect.relayUnreachable ? 'danger' : '') : ''}

@@ -5,6 +5,7 @@ import { passwordPolicyError } from '../auth/passwordPolicy'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PKG_VERSION, gitCommit } from '../version'
+import { diskUsage, isDiskLow, dataDir } from '../monitoring/disk'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import { type Store, type Role, type User, type AdminAuditEntry, type FeatureKey, type EmergencyEvent, FEATURE_KEYS, publicUser } from '../db/store'
@@ -219,6 +220,12 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
         generic: metrics.get('call_ice_failure_generic_total'),
         signaling: metrics.get('call_ice_failure_signaling_total'),
       },
+      // 磁盘余量（数据卷所在文件系统）：满盘=sqlite 写失败整站瘫（自托管头号慢性死亡）。
+      // low=剩余 <10% 或 <2GiB（见 monitoring/disk.ts）；statfs 失败→null（诚实缺席，面板不渲染）。
+      disk: (() => {
+        const u = diskUsage(dataDir())
+        return u ? { freeBytes: u.freeBytes, totalBytes: u.totalBytes, low: isDiskLow(u) } : null
+      })(),
       // 邮件送达健康（自启动累计）：failed>0 = SMTP 凭据/连接故障（如 163 授权码过期），发码/找回密码/安全告警
       // 邮件发不出去——运维一眼可见并去修 SMTP_*，不必翻日志等用户报障。
       mail: {

@@ -6,6 +6,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { JsonFileStore, type Store } from './db/store'
+import { diskUsage, dataDir } from './monitoring/disk'
 import { SqliteStore } from './db/sqliteStore'
 import { setAuthStore } from './auth/rbac'
 import { verifyAccessToken } from './auth/tokens'
@@ -235,9 +236,15 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
         return reply.code(401).send('unauthorized\n') // 常量时间比较防计时侧信道（见审查 #15）
       }
       reply.type('text/plain; version=0.0.4; charset=utf-8')
+      // 磁盘余量 gauge（防"慢性死亡"：磁盘满→sqlite 写失败整站瘫）。statfs 失败则该组 gauge 缺席
+      //（诚实缺席，不编造 0 触发假警报）；量数据目录所在文件系统（DB/媒体/备份都在这）。
+      const disk = diskUsage(dataDir())
       return metrics.render({
         nowMs: Date.now(),
-        gauges: { users_total: store.userCount() },
+        gauges: {
+          users_total: store.userCount(),
+          ...(disk ? { disk_free_bytes: disk.freeBytes, disk_total_bytes: disk.totalBytes } : {}),
+        },
       })
     })
     // 就绪探针：触达存储确认可用（供监控/编排健康检查）。
@@ -343,3 +350,4 @@ export function makeDefaultStore(): Store {
   }
   return new SqliteStore(process.env.DB_PATH ?? 'data/beeurei.db')
 }
+

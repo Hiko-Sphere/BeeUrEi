@@ -120,7 +120,9 @@ export function LoginPage() {
     e.preventDefault(); setError(null)
     setBusy(true)
     try {
-      const res = await api.emailVerifyCode(email.trim(), emailCode.trim(), emailTotp ? { totpCode: totpCode.trim() } : undefined)
+      // role 只对**新账号**创建生效（服务端对既有账号登录忽略此参）——本 App 是协助/亲友端，
+      // 必须传 helper/family，否则服务端默认落 blind（在此 Web 端毫无意义、体验错乱）。
+      const res = await api.emailVerifyCode(email.trim(), emailCode.trim(), { role, ...(emailTotp ? { totpCode: totpCode.trim() } : {}) })
       signIn(res.token, res.refreshToken, res.user)
     } catch (err) {
       const code = err instanceof APIError ? err.code : 'unknown'
@@ -205,6 +207,9 @@ export function LoginPage() {
               <Field label={t('邮箱', 'Email')}>
                 <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" autoCapitalize="none" required readOnly={emailCodeSent} placeholder={t('you@example.com', 'you@example.com')} />
               </Field>
+              {/* 身份：仅影响**新账号**创建（既有邮箱登录时服务端忽略此参）——本 App 是协助/亲友端，
+                  缺省不传会让服务端落 blind（错），故这里明确选 志愿者/亲友。发码前就选，措辞与注册一致。 */}
+              {!emailCodeSent && <RoleSelect role={role} setRole={setRole} t={t} hint={t('若为新邮箱将据此创建账号', 'Used only if this email is new')} />}
               {emailCodeSent && (
                 <Field label={t('验证码', 'Code')}>
                   <Input value={emailCode} onChange={(e) => setEmailCode(e.target.value)} autoComplete="one-time-code" required placeholder="123456" />
@@ -272,19 +277,7 @@ export function LoginPage() {
                 <Field label={t('用户名', 'Username')} hint={t('3–32 位，字母/数字/下划线', '3–32 chars, letters/numbers/_')}>
                   <Input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" required minLength={3} maxLength={32} placeholder={t('设置登录用户名', 'Choose a username')} />
                 </Field>
-                {/* 身份是一组互斥按钮（非单个表单控件），用 role=group + aria-label 命名分组；
-                    不可用 Field(<label>) 包多个按钮——会把"身份"拼进每个按钮的可朗读名且语义非法。 */}
-                <div role="group" aria-label={t('身份', 'Your role')}>
-                  <span className="mb-1.5 block text-sm font-medium text-soft">{t('身份', 'Your role')}</span>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(['helper', 'family'] as const).map((r) => (
-                      <button type="button" key={r} aria-pressed={role === r} onClick={() => setRole(r)}
-                        className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition ${role === r ? 'border-honey bg-honey/10' : 'border-[var(--line)] text-soft'}`}>
-                        {r === 'helper' ? t('志愿者', 'Volunteer') : t('亲友', 'Family')}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <RoleSelect role={role} setRole={setRole} t={t} />
               </>
             )}
             <Field label={t('密码', 'Password')}>
@@ -322,6 +315,30 @@ export function LoginPage() {
           <br /><a className="text-accent hover:underline" href="https://beeurei.hikosphere.com/" target="_blank" rel="noreferrer">{t('了解 BeeUrEi 是什么 →', 'Learn what BeeUrEi is →')}</a>
         </p>
       </div>
+    </div>
+  )
+}
+
+/// 身份选择（志愿者/亲友）——注册表单与邮箱码新账号共用；一组互斥按钮用 role=group + aria-label
+/// 命名分组（不可用 Field(<label>) 包多按钮：会把"身份"拼进每个按钮的可朗读名且语义非法）。
+function RoleSelect({ role, setRole, t, hint }: {
+  role: 'helper' | 'family'
+  setRole: (r: 'helper' | 'family') => void
+  t: (zh: string, en: string) => string
+  hint?: string
+}) {
+  return (
+    <div role="group" aria-label={t('身份', 'Your role')}>
+      <span className="mb-1.5 block text-sm font-medium text-soft">{t('身份', 'Your role')}</span>
+      <div className="grid grid-cols-2 gap-2">
+        {(['helper', 'family'] as const).map((r) => (
+          <button type="button" key={r} aria-pressed={role === r} onClick={() => setRole(r)}
+            className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition ${role === r ? 'border-honey bg-honey/10' : 'border-[var(--line)] text-soft'}`}>
+            {r === 'helper' ? t('志愿者', 'Volunteer') : t('亲友', 'Family')}
+          </button>
+        ))}
+      </div>
+      {hint && <p className="mt-1 text-xs text-faint">{hint}</p>}
     </div>
   )
 }

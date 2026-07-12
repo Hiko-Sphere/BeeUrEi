@@ -57,6 +57,22 @@ describe('邮箱验证码登录/注册（无密码）', () => {
     expect(reuse.statusCode).toBe(400)
   })
 
+  it('新账号 role 透传：verify-code 带 role=family → 建 family 号；已有账号登录忽略 role（不改角色）', async () => {
+    const mailer = new CaptureMailer()
+    const app = buildApp(new MemoryStore(), { mailer, codeSend: noThrottle() })
+    // 新邮箱带 role=family → 建 family 号（web 协助端修复依赖此：缺省会落 blind）。
+    await app.inject({ method: 'POST', url: '/api/auth/email/request-code', payload: { email: 'fam@example.com' } })
+    const v = await app.inject({ method: 'POST', url: '/api/auth/email/verify-code', payload: { email: 'fam@example.com', code: mailer.code(), role: 'family' } })
+    expect(v.statusCode).toBe(201)
+    expect((v.json() as any).user.role).toBe('family')
+    // 既有 family 账号再登录，即便带 role=helper 也**不**改角色（role 仅建号时生效）。
+    await app.inject({ method: 'POST', url: '/api/auth/email/request-code', payload: { email: 'fam@example.com' } })
+    const v2 = await app.inject({ method: 'POST', url: '/api/auth/email/verify-code', payload: { email: 'fam@example.com', code: mailer.code(), role: 'helper' } })
+    expect(v2.statusCode).toBe(200)
+    expect((v2.json() as any).user.role).toBe('family') // 未被 helper 覆盖
+    await app.close()
+  })
+
   it('发码端点防枚举：无论邮箱是否存在都返回 ok', async () => {
     const app = buildApp(new MemoryStore(), { codeSend: noThrottle() })
     const r = await app.inject({ method: 'POST', url: '/api/auth/email/request-code', payload: { email: 'ghost@nowhere.com' } })

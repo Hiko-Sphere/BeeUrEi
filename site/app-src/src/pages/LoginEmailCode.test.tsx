@@ -42,7 +42,8 @@ describe('LoginPage 邮箱验证码登录', () => {
     fireEvent.change(screen.getByLabelText('验证码'), { target: { value: '482913' } })
     fireEvent.click(screen.getByRole('button', { name: '验证并登录' }))
     await waitFor(() => expect(signIn).toHaveBeenCalledWith('tok', 'rtok', expect.objectContaining({ id: 'me' })))
-    expect(api.emailVerifyCode).toHaveBeenCalledWith('mom@example.com', '482913', undefined)
+    // 必传 role（默认 helper）——本 App 是协助/亲友端，新账号绝不能落服务端默认的 blind。
+    expect(api.emailVerifyCode).toHaveBeenCalledWith('mom@example.com', '482913', { role: 'helper' })
   })
 
   it('开了 2FA 的账号：verify 返回 two_factor_required → 追加两步验证码输入，重交带 totpCode', async () => {
@@ -56,7 +57,7 @@ describe('LoginPage 邮箱验证码登录', () => {
     fireEvent.change(totp, { target: { value: '000111' } })
     fireEvent.click(screen.getByRole('button', { name: '验证并登录' }))
     await waitFor(() => expect(signIn).toHaveBeenCalled())
-    expect(mock(api.emailVerifyCode).mock.calls.at(-1)).toEqual(['mom@example.com', '482913', { totpCode: '000111' }])
+    expect(mock(api.emailVerifyCode).mock.calls.at(-1)).toEqual(['mom@example.com', '482913', { role: 'helper', totpCode: '000111' }])
   })
 
   it('错误面说人话：发送冷却→稍等再试；邮件服务故障→改用密码；注册关闭→明示未注册且不开放', async () => {
@@ -77,6 +78,19 @@ describe('LoginPage 邮箱验证码登录', () => {
     fireEvent.click(screen.getByRole('button', { name: '验证并登录' }))
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('未开放新账号注册'))
     expect(signIn).not.toHaveBeenCalled()
+  })
+
+  it('新账号身份：面板选「亲友」→ 建号请求带 role:family（协助端新号绝不落服务端默认 blind）', async () => {
+    render(<LoginPage />)
+    fireEvent.click(screen.getByRole('button', { name: /邮箱验证码登录/ }))
+    // 发码前身份选择器可见（老账号登录时服务端忽略此参，无害）；默认志愿者，改选亲友。
+    fireEvent.click(screen.getByRole('button', { name: '亲友' }))
+    fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'newfam@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送验证码' }))
+    await screen.findByLabelText('验证码')
+    fireEvent.change(screen.getByLabelText('验证码'), { target: { value: '246810' } })
+    fireEvent.click(screen.getByRole('button', { name: '验证并登录' }))
+    await waitFor(() => expect(api.emailVerifyCode).toHaveBeenCalledWith('newfam@example.com', '246810', { role: 'family' }))
   })
 
   it('重新发送验证码：再次发码并清已填的旧码；返回密码登录清面板状态', async () => {

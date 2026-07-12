@@ -329,6 +329,14 @@ export function mergeMessagesStable(fresh: ChatMessage[], existing: ChatMessage[
   return extra.length ? [...fresh, ...extra].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)) : fresh
 }
 
+// 把一页**更早**消息并入当前列表（按 id 去重、按 createdAt+id 稳定排序）：loadEarlier 上翻分页与
+// jumpToMessage 回溯定位共用同一合并，防两处逻辑漂移。重叠 id 保留已有那条（既有可能是编辑后的更新版）。
+export function mergeOlder(older: ChatMessage[], existing: ChatMessage[] | null): ChatMessage[] {
+  const byId = new Map<string, ChatMessage>()
+  for (const m of [...older, ...(existing ?? [])]) byId.set(m.id, m)
+  return [...byId.values()].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
+}
+
 function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: () => void; onSent: () => void; peerOnline?: boolean }) {
   const { user } = useSession()
   const { t, lang } = useI18n()
@@ -354,17 +362,12 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const nearBottomRef = useRef(true) // 用户是否在底部附近；新消息仅在此才自动滚到底（上翻看历史不被拽走）
+  const msgsRef = useRef<ChatMessage[] | null>(null) // 最新 msgs 的镜像：供 jumpToMessage 回溯分页时无闭包陈旧地取当前最旧游标
+  const [jumping, setJumping] = useState(false) // 正在为跳转回溯加载更早历史（搜索/引用/置顶跳到未加载的旧消息）
   const onMsgScroll = () => { if (scrollRef.current) nearBottomRef.current = isNearBottom(scrollRef.current) }
   const fileRef = useRef<HTMLInputElement>(null)
   // 点引用预览 → 跳到并短暂高亮原消息（WhatsApp/iMessage 标配：回看长对话时不必手动翻找被引的那条）。
   const [highlightId, setHighlightId] = useState<string | null>(null)
-  const jumpToMessage = useCallback((id: string) => {
-    const el = document.getElementById(`msg-${id}`)
-    if (!el) return // 原消息未加载（更早、不在当前窗口）：静默不跳（引用预览已显"引用的消息"占位）
-    if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center', behavior: 'smooth' }) // jsdom 无此 API，守卫防测试崩
-    setHighlightId(id)
-    setTimeout(() => setHighlightId((cur) => (cur === id ? null : cur)), 1600) // 到时清高亮（若期间又跳别处则不动新的）
-  }, [])
   const PAGE = 50 // 与后端单次返回条数一致
 
   // "新消息"分隔线（IM 标配）：打开会话那一刻的未读数 → 第一条未读对端消息 id，**计算一次并冻结**——之后 markRead
@@ -416,14 +419,42 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
     try {
       const r = await fetchWindow(oldest.createdAt, oldest.id)
       if (r.messages.length === 0) { setReachedStart(true); return }
-      setMsgs((cur) => {
-        const byId = new Map<string, ChatMessage>()
-        for (const m of [...r.messages, ...(cur ?? [])]) byId.set(m.id, m)
-        return [...byId.values()].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
-      })
+      setMsgs((cur) => mergeOlder(r.messages, cur))
       if (r.messages.length < PAGE) setReachedStart(true) // 不足一页 = 已到对话开头
     } catch { /* 失败下次再试 */ } finally { setLoadingEarlier(false) }
   }, [msgs, loadingEarlier, fetchWindow])
+
+  useEffect(() => { msgsRef.current = msgs }, [msgs]) // 镜像最新 msgs，供 jumpToMessage 回溯分页取当前游标
+
+  // 跳到并短暂高亮某条消息（搜索命中/点引用/点置顶横幅共用）。若目标不在当前已加载窗口（更早的历史），
+  // 先**向前回溯分页**逐页载入直到该条进入列表或到达对话开头（上限保护），再定位——这样跳转对**任意历史深度**
+  // 都生效（WhatsApp/Telegram 口径：搜索到很旧的消息也能点进去看上下文）。高亮基于"已载入"而非 DOM 时序，测试可确定。
+  const jumpToMessage = useCallback(async (id: string) => {
+    let loaded = !!msgsRef.current?.some((m) => m.id === id)
+    if (!loaded) {
+      setJumping(true)
+      try {
+        let acc = msgsRef.current ?? []
+        for (let i = 0; i < 60 && !loaded; i++) { // 60 页×50 = 3000 条回溯上限，防坏数据无限翻页
+          const oldest = acc[0]
+          if (!oldest) break
+          const r = await fetchWindow(oldest.createdAt, oldest.id)
+          if (r.messages.length === 0) { setReachedStart(true); break }
+          acc = mergeOlder(r.messages, acc) // 本地游标推进
+          setMsgs((cur) => mergeOlder(r.messages, cur)) // 函数式并入，不覆盖并发轮询新增的消息
+          loaded = r.messages.some((m) => m.id === id)
+          if (r.messages.length < PAGE) { setReachedStart(true); break } // 不足一页 = 已到开头
+        }
+      } catch { /* 加载失败：落到下方"找不到"提示 */ } finally { setJumping(false) }
+    }
+    if (!loaded) { toast(t('找不到这条消息，可能已被删除', "Can't find that message — it may have been deleted"), 'info'); return }
+    setHighlightId(id)
+    setTimeout(() => { // 让新载入的消息挂上 DOM 再滚动定位（滚动为锦上添花，jsdom 无此 API，守卫防崩）
+      const el = document.getElementById(`msg-${id}`)
+      if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }, 0)
+    setTimeout(() => setHighlightId((cur) => (cur === id ? null : cur)), 1600) // 到时清高亮（若期间又跳别处则不动新的）
+  }, [fetchWindow, toast, t])
 
   useEffect(() => { void load(); return pollWhileVisible(load, 5000) }, [load])
   // 仅在**最新一条**变化时滚到底（新消息）；上翻加载更早消息时 last 不变，不应跳到底部。
@@ -596,21 +627,19 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
                     : sel.kind === 'group' ? (sel.members.find((mm) => mm.id === m.fromId)?.displayName ?? '') : sel.name
                   // 文本式位置命中时显示 📍 地名而非原始 maps URL。
                   const loc = parseLocation(m.text)
-                  // 命中消息在当前已加载窗口内 → 点击关搜索并跳到该条（在上下文里看，IM 标配）；不在窗口(更早、未加载)
-                  // 则保持静态，不给"可点却跳不过去"的假象（避免点了无反应）。
-                  const canJump = !!msgs?.some((x) => x.id === m.id)
-                  const inner = <>
-                    <div className="flex items-center justify-between text-[11px] text-faint">
-                      <span className="font-semibold text-accent">{who}</span><span>{timeAgo(m.createdAt, lang)}</span>
-                    </div>
-                    <div className="mt-0.5 break-words text-sm">{loc ? `📍 ${loc.name || t('位置', 'Location')}` : m.text}</div>
-                  </>
-                  return canJump
-                    ? <button key={m.id} type="button" data-testid="search-hit"
-                        onClick={() => { setSearchOpen(false); setSearchQuery(''); setSearchResults(null); jumpToMessage(m.id) }}
-                        aria-label={t('跳到这条消息', 'Jump to this message')}
-                        className="block w-full rounded-xl surface-2 px-3 py-2 text-left transition hover:brightness-105">{inner}</button>
-                    : <div key={m.id} className="rounded-xl surface-2 px-3 py-2">{inner}</div>
+                  // 每条命中都可点：搜索本就是为翻旧消息（命中多半不在当前已加载窗口）——点击关搜索、跳到该条并在
+                  // 上下文里高亮；若更早未加载，jumpToMessage 会先回溯分页把它载进来再定位（IM 标配，见其实现）。
+                  return (
+                    <button key={m.id} type="button" data-testid="search-hit"
+                      onClick={() => { setSearchOpen(false); setSearchQuery(''); setSearchResults(null); void jumpToMessage(m.id) }}
+                      aria-label={t('跳到这条消息', 'Jump to this message')}
+                      className="block w-full rounded-xl surface-2 px-3 py-2 text-left transition hover:brightness-105">
+                      <div className="flex items-center justify-between text-[11px] text-faint">
+                        <span className="font-semibold text-accent">{who}</span><span>{timeAgo(m.createdAt, lang)}</span>
+                      </div>
+                      <div className="mt-0.5 break-words text-sm">{loc ? `📍 ${loc.name || t('位置', 'Location')}` : m.text}</div>
+                    </button>
+                  )
                 })}
               </>
             )}
@@ -618,11 +647,11 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
         </div>
       )}
 
-      {/* 置顶消息横幅（Telegram 式）：钉在会话顶部；点跳到原消息（不在窗口内则静默不跳，横幅本身已显内容）；X 取消置顶。 */}
+      {/* 置顶消息横幅（Telegram 式）：钉在会话顶部；点跳到原消息（更早未加载则先回溯分页载入再定位，见 jumpToMessage）；X 取消置顶。 */}
       {pinned && !searchOpen && (
         <div className="flex items-center gap-2 border-b border-[var(--line)] bg-honey/5 px-4 py-2" data-testid="pinned-banner">
           <IconPin width={15} height={15} className="shrink-0 text-honey" />
-          <button type="button" onClick={() => jumpToMessage(pinned.id)} className="min-w-0 flex-1 text-left"
+          <button type="button" onClick={() => void jumpToMessage(pinned.id)} className="min-w-0 flex-1 text-left"
             aria-label={t(`置顶消息${pinned.pinnedByName ? `（${pinned.pinnedByName} 置顶）` : ''}：${preview(pinned, t)}，点击跳转`,
               `Pinned message${pinned.pinnedByName ? ` (by ${pinned.pinnedByName})` : ''}: ${preview(pinned, t)}, tap to jump`)}>
             <div className="text-[10px] font-semibold text-honey">{t('置顶', 'Pinned')}{pinned.pinnedByName ? ` · ${pinned.pinnedByName}` : ''}</div>
@@ -635,6 +664,11 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
 
       <div ref={scrollRef} onScroll={onMsgScroll} tabIndex={0} aria-label={t('消息记录', 'Message history')}
         className={`flex-1 space-y-2 overflow-y-auto px-4 py-4 ${searchOpen ? 'hidden' : ''}`}>
+        {jumping && ( // 跳转正在回溯加载更早历史（搜索/引用/置顶跳到很旧的消息）：给读屏与视觉一个进度反馈
+          <div role="status" className="flex justify-center pb-1">
+            <span className="rounded-full surface-2 px-3 py-1 text-xs text-soft">{t('定位到该消息…', 'Locating message…')}</span>
+          </div>
+        )}
         {canLoadEarlier && (
           <div className="flex justify-center pb-1">
             <button onClick={() => void loadEarlier()} disabled={loadingEarlier}

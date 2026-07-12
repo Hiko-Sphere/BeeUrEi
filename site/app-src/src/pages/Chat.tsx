@@ -11,6 +11,7 @@ import { imageFileFromClipboard } from '../lib/clipboardImage'
 import { isForwardableKind } from '../lib/chatMessage'
 import { isNearBottom } from '../lib/scroll'
 import { ReportDialog } from '../components/ReportDialog'
+import { VoiceRecorderButton } from '../components/VoiceRecorder'
 import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo, fmtHm, fmtTime, Modal, Button } from '../components/ui'
 import { IconChat, IconSend, IconPlus, IconX, IconPin } from '../components/icons'
 
@@ -549,6 +550,15 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
     } catch (e) { toast(chatErrorText(e, t, t('视频发送失败', 'Failed to send video')), 'error') } finally { setSending(false) }
   }
 
+  // 发送语音消息（补齐 iOS 早有的语音：此前 web 只能收听不能回发）：VoiceRecorderButton 录成
+  // audio/mp4 data URL（AAC——iOS AVAudioPlayer 可播；webm/opus 它播不了，服务端也只收 AAC 家族）。
+  const sendAudio = async (dataUrl: string) => {
+    setSending(true)
+    nearBottomRef.current = true // 同 send()：发出自己的消息滚到底看到它
+    try { await api.sendMessage(target, 'audio', dataUrl); await load(); onSent() }
+    catch (e) { toast(chatErrorText(e, t, t('语音发送失败', 'Failed to send voice message')), 'error') } finally { setSending(false) }
+  }
+
   // 发送我的当前位置（补齐 iOS 早有的 sendLocation）：取浏览器定位 → 发与 iOS 同口径的位置文本，
   // 两端都渲染成位置气泡。协助者/家人在聊天里一句"我在这"即分享落点，免口述经纬度。
   const sendLocation = () => {
@@ -744,6 +754,8 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
         <input ref={fileRef} type="file" accept="image/*,video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) { void (f.type.startsWith('video/') ? sendVideo(f) : sendImage(f)) } e.target.value = '' }} />
         <button onClick={() => fileRef.current?.click()} disabled={sending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full surface-2 text-soft disabled:opacity-40" aria-label={t('发送图片或视频', 'Send image or video')}><IconPlus /></button>
         <button onClick={sendLocation} disabled={sending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full surface-2 text-soft disabled:opacity-40" aria-label={t('发送我的位置', 'Send my location')}><IconPin width={18} height={18} /></button>
+        {/* 语音消息（盲人收件方的首选形态）：录 audio/mp4；浏览器不支持该格式时按钮自隐藏（能力门控，见组件）。 */}
+        <VoiceRecorderButton disabled={sending} t={t} onSend={(dataUrl) => void sendAudio(dataUrl)} onError={(m) => toast(m, 'error')} />
         <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }}
           // 粘贴发图（WhatsApp Web/Slack 式）：剪贴板里是图片（截图/复制的图）→ 确认后直接发进会话，免存盘再点附件。
           // 只拦图片文件（imageFileFromClipboard 只认 image/* 文件项）：粘贴纯文本走默认输入，绝不受影响。

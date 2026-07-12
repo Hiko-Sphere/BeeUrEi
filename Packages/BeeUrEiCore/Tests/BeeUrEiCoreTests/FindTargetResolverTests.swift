@@ -44,6 +44,25 @@ final class FindTargetResolverTests: XCTestCase {
         XCTAssertEqual(r, .category("cup"))
     }
 
+    func testSeatSynonymResolvesToChair() {
+        // 自然说法「空座位/座位/座椅/seat」→ chair 类别（否则座位≠椅子子串，「找空座位」会失败、拿不到座位占用播报）。
+        for s in ["座位", "空座位", "座椅", "找个座位", "seat", "a seat", "empty seat"] {
+            XCTAssertEqual(resolve(s), .category("chair"), "『\(s)』应解析为 chair 类别")
+        }
+    }
+
+    func testSeatSynonymOnlyWhenChairFindable() {
+        // 仅当 chair 在可找类别中才映射——否则绝不谎报「可找」（返回 none）。
+        let r = FindTargetResolver.resolve(spoken: "空座位", taughtNames: [], categories: [(label: "bottle", name: "瓶子")])
+        XCTAssertEqual(r, .none)
+    }
+
+    func testTaughtSeatItemBeatsSeatSynonym() {
+        // 已教物品优先于座位同义词兜底：已教「座位垫」含「座位」→ 返回已教，不被兜底成 chair。
+        let r = FindTargetResolver.resolve(spoken: "座位", taughtNames: ["座位垫"], categories: [(label: "chair", name: "椅子")])
+        XCTAssertEqual(r, .taught("座位垫"))
+    }
+
     /// 对抗复审 MED：短已教名/ASCII 子串不得靠包含劫持无关查询（"机"不命中"手机"；"key"不命中"monkey"）。
     func testShortOrSubstringTaughtDoesNotHijack() {
         XCTAssertEqual(FindTargetResolver.resolve(spoken: "手机", taughtNames: ["机"], categories: []), .none)     // 1 字候选不子串

@@ -24,6 +24,14 @@ public enum FindTargetResolver {
         // ② 再模糊（双向包含）：已教模糊 → 类别模糊（同层已教优先，本人的东西）。
         if let t = taughtNames.first(where: { contains(norm($0), q) }) { return .taught(t) }
         if let c = categories.first(where: { contains(norm($0.name), q) }) { return .category(c.label) }
+        // ③ 「座位」类同义词兜底：自然说法（空座位/座位/座椅/seat）→ chair 类别——否则用户想「找空座位」却因类别名
+        // 叫「椅子」而解析失败（座位≠椅子子串），拿不到本就已实现的座位占用播报（SeatOccupancy）。仅当 chair 确在
+        // 可找类别中才返回（否则绝不谎报"可找"）。已教物品优先级不受影响（本兜底在两表匹配之后）。
+        let seatWords = ["座位", "座椅", "seat"]
+        if seatWords.contains(where: { contains($0, q) || norm($0) == q }),
+           let c = categories.first(where: { $0.label == "chair" }) {
+            return .category(c.label)
+        }
         return .none
     }
 

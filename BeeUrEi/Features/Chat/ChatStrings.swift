@@ -105,6 +105,8 @@ enum ChatStrings {
     }
     static func forwardContactsHeader(_ l: Language) -> String { l == .zh ? "联系人" : "Contacts" }
     static func forwardGroupsHeader(_ l: Language) -> String { l == .zh ? "群聊" : "Groups" }
+    /// 会话列表未发送草稿前缀（WhatsApp/Telegram 标配：没写完的话从列表一眼可见，不被新消息盖住）。
+    static func draftTag(_ l: Language) -> String { l == .zh ? "草稿" : "Draft" }
     /// 跳转后的有声反馈（盲人对滚动本身无感知，必须听到跳到了哪条）。
     static func quotedSpeak(_ name: String, _ preview: String, _ l: Language) -> String {
         l == .zh ? "被引用的消息，\(name)：\(preview)" : "Quoted message from \(name): \(preview)"

@@ -196,7 +196,13 @@ struct ConversationsView: View {
                     Text(c.peer.displayName).font(.headline)
                     if c.muted == true { Image(systemName: "bell.slash.fill").font(.caption2).foregroundStyle(.secondary).accessibilityHidden(true) }
                 }
-                Text(preview(c.last)).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                // 未发送草稿优先于最后一条消息（与 web 同口径）：没写完的话一眼可见。
+                if let d = ChatDrafts.preview(userId: myId, peerId: c.peer.id, groupId: nil) {
+                    (Text("[\(ChatStrings.draftTag(lang))] ").bold().foregroundStyle(Color.beeHoney) + Text(d).foregroundStyle(.secondary))
+                        .font(.subheadline).lineLimit(1)
+                } else {
+                    Text(preview(c.last)).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                }
             }
             Spacer()
             trailing(time: c.last.createdAt, unread: c.unread)
@@ -216,7 +222,12 @@ struct ConversationsView: View {
                     Text(g.group.name).font(.headline)
                     if g.muted == true { Image(systemName: "bell.slash.fill").font(.caption2).foregroundStyle(.secondary).accessibilityHidden(true) }
                 }
-                Text(groupPreview(g)).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                if let d = ChatDrafts.preview(userId: myId, peerId: nil, groupId: g.group.id) {
+                    (Text("[\(ChatStrings.draftTag(lang))] ").bold().foregroundStyle(Color.beeHoney) + Text(d).foregroundStyle(.secondary))
+                        .font(.subheadline).lineLimit(1)
+                } else {
+                    Text(groupPreview(g)).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                }
             }
             Spacer()
             trailing(time: g.last?.createdAt ?? g.group.createdAt, unread: g.unread)
@@ -256,7 +267,10 @@ struct ConversationsView: View {
     }
 
     private func rowA11y(_ c: ConversationInfo) -> String {
-        var parts = [c.peer.displayName, preview(c.last), ChatStrings.timeFormat(c.last.createdAt)]
+        // 草稿优先并入读屏标签（视觉行同口径——盲人也该"一眼"听到没写完的话）。
+        let body = ChatDrafts.preview(userId: myId, peerId: c.peer.id, groupId: nil)
+            .map { "\(ChatStrings.draftTag(lang))：\($0)" } ?? preview(c.last)
+        var parts = [c.peer.displayName, body, ChatStrings.timeFormat(c.last.createdAt)]
         if c.unread > 0 { parts.append(ChatStrings.unreadBadgeA11y(c.unread, lang)) }
         if c.muted == true { parts.append(ChatStrings.mutedBadge(lang)) } // 盲人看不到🔕，须并入 a11y 标签
         return parts.joined(separator: lang.listSeparator)
@@ -416,7 +430,17 @@ struct ChatView: View {
                             .disabled(loadingEarlier)
                             .padding(.bottom, BeeSpacing.xs)
                         }
-                        ForEach(messages) { m in bubble(m, proxy: proxy) }
+                        ForEach(Array(zip(messages.indices, messages)), id: \.1.id) { i, m in
+                            // 日期分隔（ChatDay 已测，与 web 同口径）：读屏标 isHeader——VoiceOver 转子可按"天"跳转。
+                            if ChatDay.needsSeparator(ts: m.createdAt, prevTs: i > 0 ? messages[i - 1].createdAt : nil) {
+                                Text(ChatDay.label(ts: m.createdAt, nowMs: Int(Date().timeIntervalSince1970 * 1000), lang))
+                                    .font(.caption2).foregroundStyle(.secondary)
+                                    .padding(.horizontal, 10).padding(.vertical, 3)
+                                    .background(Color(.secondarySystemBackground), in: Capsule())
+                                    .accessibilityAddTraits(.isHeader)
+                            }
+                            bubble(m, proxy: proxy)
+                        }
                     }
                     .padding()
                 }
@@ -449,6 +473,13 @@ struct ChatView: View {
                         .accessibilityLabel(CallStrings.reportShort(lang))
                 }
             }
+        }
+        .onAppear {
+            // 恢复未发送草稿（ChatDrafts 与列表标示同键）：仅空输入时恢复，不覆盖正在输入的内容。
+            if draft.isEmpty, let saved = ChatDrafts.preview(userId: myId, peerId: peerId, groupId: groupId) { draft = saved }
+        }
+        .onChange(of: draft) { _, d in
+            ChatDrafts.save(d, userId: myId, peerId: peerId, groupId: groupId) // 空=清（发送后 draft="" 即自动清）
         }
         .sheet(isPresented: $showSearch) {
             MessageSearchSheet(session: session, peerId: peerId, groupId: groupId,
@@ -1532,6 +1563,54 @@ final class VoiceNoteRecorder {
 
 /// 引用跳转判定（纯逻辑，视图与测试共用同一门控——中子它=拔掉跳转接线）：
 /// 原消息已加载 → 滚动定位；在更早未加载窗口 → 语音引导先加载（此前点了没反应=静默死按钮）；非引用 → 无操作。
+/// 消息线程日期分隔（与 web needsDateSeparator/dateSeparatorLabel 同口径；纯函数、calendar/now 注入可测）：
+/// 与上一条不同本地日则插「今天/昨天/长日期」行——跨天历史一眼分清（IM 标配）。
+enum ChatDay {
+    static func sameLocalDay(_ aMs: Int, _ bMs: Int, calendar: Calendar = .current) -> Bool {
+        calendar.isDate(Date(timeIntervalSince1970: Double(aMs) / 1000),
+                        inSameDayAs: Date(timeIntervalSince1970: Double(bMs) / 1000))
+    }
+    static func needsSeparator(ts: Int, prevTs: Int?, calendar: Calendar = .current) -> Bool {
+        guard let p = prevTs else { return true } // 首条前必有（标明这段历史从哪天开始）
+        return !sameLocalDay(ts, p, calendar: calendar)
+    }
+    static func label(ts: Int, nowMs: Int, _ l: Language, calendar: Calendar = .current) -> String {
+        if sameLocalDay(ts, nowMs, calendar: calendar) { return l == .zh ? "今天" : "Today" }
+        if let y = calendar.date(byAdding: .day, value: -1, to: Date(timeIntervalSince1970: Double(nowMs) / 1000)),
+           sameLocalDay(ts, Int(y.timeIntervalSince1970 * 1000), calendar: calendar) {
+            return l == .zh ? "昨天" : "Yesterday"
+        }
+        let f = DateFormatter()
+        f.calendar = calendar
+        f.timeZone = calendar.timeZone
+        f.locale = Locale(identifier: l.localeIdentifier)
+        f.setLocalizedDateFormatFromTemplate("yMMMd")
+        return f.string(from: Date(timeIntervalSince1970: Double(ts) / 1000))
+    }
+}
+
+/// 会话草稿（与 web lib/draft.ts 同语义、同键格式）：按**当前用户+会话**命名空间——换账号不串读（隐私）。
+/// 线程写入与会话列表「[草稿]」标示共用同一键（单一事实源，防漂移）。trim 后非空才算草稿。
+enum ChatDrafts {
+    static func key(userId: String?, peerId: String?, groupId: String?) -> String {
+        let kind = groupId != nil ? "group" : "peer"
+        return "beeurei:draft:\(userId ?? "anon"):\(kind):\(groupId ?? peerId ?? "")"
+    }
+    static func preview(userId: String?, peerId: String?, groupId: String?, defaults: UserDefaults = .standard) -> String? {
+        guard let v = defaults.string(forKey: key(userId: userId, peerId: peerId, groupId: groupId)),
+              !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return v
+    }
+    static func save(_ text: String, userId: String?, peerId: String?, groupId: String?, defaults: UserDefaults = .standard) {
+        let k = key(userId: userId, peerId: peerId, groupId: groupId)
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            defaults.removeObject(forKey: k) // 空草稿=清（发送后/删光后列表不再标）
+        } else {
+            defaults.set(text, forKey: k)
+        }
+    }
+}
+
 /// 可转发判定（与 web isForwardableKind 同口径，纯逻辑可测）：仅**内容自包含**的类型可转发——
 /// 文本/位置/图片/语音都是内联内容（data: URL/内嵌坐标），收件人无需访问原会话即可看到/听到；
 /// 视频是 mediaId（按会话鉴权，转发到无权会话看不到）、撤回/未知类型均不可转发。

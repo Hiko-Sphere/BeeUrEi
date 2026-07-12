@@ -111,12 +111,16 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   // - nosniff：禁 MIME 嗅探——防把媒体/JSON 被浏览器改判为 HTML/脚本执行（媒体流的存储型 XSS 兜底）。
   // - X-Frame-Options DENY：防点击劫持——尤其 /admin 后台 HTML 不得被恶意站点 iframe。
   // - Referrer-Policy：跨站只发来源、不泄完整路径。
-  // 全局 CSP/HSTS 刻意不在此设：任意响应的 CSP 需按页精调（易误伤 SPA），HSTS 应在 TLS 终止的反代层设。
+  // - HSTS：与官网 nginx 同口径（同为 CF 隧道后的**源站**发头——官网 beeurei. 的 includeSubDomains 只覆盖
+  //   其下级子域，盖不到兄弟域 beeurei-api.，故 api 源站必须自己发）。浏览器对纯 http 响应会忽略 HSTS
+  //   （RFC 6797），本地开发 http://localhost 不受影响，可无条件发。
+  // 全局 CSP 刻意不在此设：任意响应的 CSP 需按页精调（易误伤 SPA）。
   //   （例外：自包含的 /admin 后台单独发 header CSP，见下方 fastifyStatic 注册处。）
   app.addHook('onRequest', async (req, reply) => {
     reply.header('X-Content-Type-Options', 'nosniff')
     reply.header('X-Frame-Options', 'DENY')
     reply.header('Referrer-Policy', 'strict-origin-when-cross-origin')
+    reply.header('Strict-Transport-Security', 'max-age=63072000; includeSubDomains')
     // Cache-Control: no-store —— 仅对 /api/* 响应。这些几乎全部携带令牌(登录/注册/刷新)或 PII
     // (用户资料/亲友含手机号/通知/整库备份)，绝不应被浏览器 bfcache 或中间代理缓存（OWASP 敏感数据
     // 缓存弱点）。默认 Fastify 不设 Cache-Control → 落到启发式缓存，故显式关闭。

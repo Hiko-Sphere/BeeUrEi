@@ -23,12 +23,15 @@ describe('production hardening', () => {
     await a.close()
   })
 
-  it('响应带安全头（nosniff / DENY / Referrer-Policy）', async () => {
+  it('响应带安全头（nosniff / DENY / Referrer-Policy / HSTS）', async () => {
     const a = app()
     const res = await a.inject({ method: 'GET', url: '/api/version' })
     expect(res.headers['x-content-type-options']).toBe('nosniff')
     expect(res.headers['x-frame-options']).toBe('DENY')
     expect(res.headers['referrer-policy']).toBe('strict-origin-when-cross-origin')
+    // HSTS：api 源站自己发（官网 beeurei. 的 includeSubDomains 盖不到兄弟域 beeurei-api.；
+    // 浏览器对纯 http 响应忽略 HSTS，本地开发不受影响）。与官网 nginx 同 max-age。
+    expect(res.headers['strict-transport-security']).toBe('max-age=63072000; includeSubDomains')
     await a.close()
   })
 

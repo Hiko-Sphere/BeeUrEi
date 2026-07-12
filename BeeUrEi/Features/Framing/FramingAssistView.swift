@@ -717,21 +717,30 @@ final class FramingAssistViewModel {
         resultText = FramingStrings.readingText(lang)
         let request = VNRecognizeTextRequest { [weak self] req, _ in
             // Vision 不保证按阅读顺序返回观测 → 经核心 ReadingOrder 重排(从上到下、行内左→右)，否则盲人听到错乱文本。
-            let items: [(text: String, box: CGRect)] = ((req.results as? [VNRecognizedTextObservation]) ?? []).compactMap { o in
+            let obs = (req.results as? [VNRecognizedTextObservation]) ?? []
+            let items: [(text: String, box: CGRect)] = obs.compactMap { o in
                 guard let s = o.topCandidates(1).first?.string else { return nil }
                 return (s, o.boundingBox)
             }
+            // 逐行置信度：低置信度朗读须如实带"可能不准确"（核心 OCRConfidenceGate，已测）——盲人看不到画面，
+            // 把糊字误读当真去按（药品剂量/门牌）后果严重。与拍摄质量门互补（那层挡拍前抖动/反光，这层兜识别后）。
+            let confs = obs.compactMap { $0.topCandidates(1).first?.confidence }
             let joined = FramingAssistViewModel.orderedOCRText(from: items)
             DispatchQueue.main.async {
                 guard let self else { return }
-                let out = joined.isEmpty ? FramingStrings.noTextFound(self.lang) : joined
-                self.resultText = out
-                self.copyableResult = joined.isEmpty ? nil : joined
                 if joined.isEmpty {
-                    self.speak(out) // "没有识别到文字"：App 语言提示
+                    self.resultText = FramingStrings.noTextFound(self.lang)
+                    self.copyableResult = nil
+                    self.speak(FramingStrings.noTextFound(self.lang)) // "没有识别到文字"：App 语言提示
                 } else {
+                    // 复制留存的是**纯识别文本**（不含提醒，避免把"（可能不准确）"粘进备忘录）；朗读/显示带提醒。
+                    // 提醒语言随**文本语言**（非 App 语言）：否则英文正文配中文提醒会让 speakInTextLanguage 选错嗓音。
+                    let textLang: Language = FramingAssistViewModel.dominantTextIsChinese(joined) ? .zh : .en
+                    let annotated = OCRConfidenceGate().annotate(joined, lineConfidences: confs, language: textLang)
+                    self.resultText = annotated
+                    self.copyableResult = joined
                     self.historyStore.add(kind: "text", content: joined)
-                    self.speakInTextLanguage(joined) // 正文语音随文本语言（中/英）切换，中文语音不再念乱英文（反之亦然）
+                    self.speakInTextLanguage(annotated) // 正文语音随文本语言（中/英）切换；提醒随之朗读
                 }
             }
         }

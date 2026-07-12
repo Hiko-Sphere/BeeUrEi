@@ -228,6 +228,46 @@ struct LocationRequestShareButton: View {
     }
 }
 
+/// 通知逐 kind 图标（与 web notifIconKind **同键集、同判定顺序**，跨端一致；纯函数可测）。
+/// 排序陷阱（与 web 同注释，勿重排）：
+/// - emergency_contact（关系事件，人形）须在 emergency→闪电 之前——否则含子串 "emergency" 被误配成 SOS 红闪电。
+/// - emergency_clear（报平安，绿勾）/ responding/ack（协调好消息，电话）须在通配 emergency→flash 之前——
+///   否则亲友在通知流里把"安心"类误读成又一起新告警。
+/// - security/kyc/report 等（盾牌）须在 friend/link/group 之前——security_apple_linked 含子串 "link"。
+/// - checkin（安全报到）用盾牌=personal-safety 语义；location_request/route/place 用定位；message_pinned 用图钉键。
+enum NotifIcon {
+    static func kind(_ kind: String) -> String {
+        if kind.contains("emergency_contact") { return "users" }
+        if kind == "emergency_clear" { return "check" }
+        if kind == "emergency_responding" || kind == "emergency_ack" { return "phone" }
+        if kind.contains("emergency") { return "flash" }
+        if kind.contains("battery") { return "battery" }
+        if kind.contains("call") { return "phone" }
+        if kind.contains("report") || kind.contains("moderation") || kind.contains("ban") || kind.contains("kyc")
+            || kind.contains("verif") || kind.contains("security") || kind.contains("medical") { return "shield" }
+        if kind.contains("checkin") { return "shield" }
+        if kind == "message_pinned" { return "pin" }
+        if kind.contains("route") || kind.contains("arrival") || kind.contains("place") || kind.contains("location") { return "pin" }
+        if kind.contains("friend") || kind.contains("link") || kind.contains("group") { return "users" }
+        if kind.contains("record") { return "film" }
+        return "bell"
+    }
+    /// 键 → SF Symbol（视图用；键集与 web 一致，符号按 iOS 习惯选形）。
+    static func symbol(forKey key: String) -> String {
+        switch key {
+        case "users": return "person.2.fill"
+        case "flash": return "bolt.fill"
+        case "battery": return "battery.25"
+        case "phone": return "phone.fill"
+        case "shield": return "checkmark.shield.fill"
+        case "pin": return "mappin.and.ellipse"
+        case "film": return "film.fill"
+        case "check": return "checkmark.circle.fill"
+        default: return "bell.fill"
+        }
+    }
+}
+
 /// 工具栏铃铛 + 未读角标，点开应用内通知列表。
 struct NotificationsBell: View {
     @State private var center = NotificationsCenter.shared
@@ -279,6 +319,15 @@ struct NotificationsView: View {
                                         Circle().fill(Color.beeHoney).frame(width: 8, height: 8).padding(.top, 6)
                                             .accessibilityHidden(true)
                                     }
+                                    // 逐 kind 图标（NotifIcon 纯函数已测，与 web 同判定）：SOS 红闪电/报平安绿勾/
+                                    // 安全盾牌/位置定位/置顶图钉一眼可辨。纯装饰（语义在标题正文），a11y 隐藏。
+                                    let ik = NotifIcon.kind(n.kind)
+                                    Image(systemName: NotifIcon.symbol(forKey: ik))
+                                        .font(.footnote)
+                                        .foregroundStyle(ik == "flash" ? Color.beeDanger : ik == "check" ? Color.beeSuccess : Color.beeHoney)
+                                        .frame(width: 20)
+                                        .padding(.top, 2)
+                                        .accessibilityHidden(true)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(n.title).font(.subheadline.weight(.semibold))
                                         Text(n.body).font(.footnote).foregroundStyle(.secondary)

@@ -492,6 +492,13 @@ export interface AdminOverview {
   version: string
   uptimeSeconds: number
   nowMs: number
+  // —— 危机/健康信号（与 vanilla 管理面板同源同口径）——
+  activeEmergencies?: number      // 正在进行的紧急（未解除，近 24h）
+  activeUnreachable?: number      // 其中"未触达任何人"的——安全网正在静默失效
+  callConnect?: { relayUnreachable: number; generic: number; signaling: number } // ICE 失败累计（relay=TURN/安全组）
+  mail?: { sent: number; failed: number } // SMTP 送达健康（failed>0=凭据/连接故障）
+  safetyTickErrors?: number       // 安全报到后台 tick 错误累计
+  disk?: { freeBytes: number; totalBytes: number; low: boolean } | null // 数据卷余量（low=不足 10% 或 <2GiB）
 }
 export interface AdminUser { id: string; username: string; displayName: string; role: string; status: string; avatar?: string | null; createdAt: number; online?: boolean; hasEmail?: boolean; hasPhone?: boolean; emailVerified?: boolean; appleLinked?: boolean; verified?: boolean }
 export interface AdminReport { id: string; reporterId: string; reporterName: string; targetUserId: string; targetName: string; reason: string; status: string; decision?: string | null; callId?: string | null; evidenceRecordingId?: string | null; createdAt: number; resolvedAt?: number | null; resolvedByName?: string | null }

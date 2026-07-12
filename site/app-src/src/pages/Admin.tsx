@@ -43,16 +43,38 @@ function OverviewTab() {
   const [ov, setOv] = useState<AdminOverview | null>(null)
   useEffect(() => { let a = true; const f = () => void api.adminOverview().then((o) => a && setOv(o)).catch(() => {}); f(); const id = setInterval(f, 15_000); return () => { a = false; clearInterval(id) } }, [])
   if (!ov) return <Spinner />
+  const gb = (n: number) => `${(n / 1073741824).toFixed(1)} GB`
+  // 危机/健康信号（与 vanilla 面板同源同口径，此前 React 版总览全部缺席——只看这页的运维会漏掉正在发生的危机）。
+  // 触发中的才显示（danger 置顶）；磁盘特殊：正常也常显余量卡（满盘是头号慢性死亡，余量应常在视野里）。
+  const crisis: { label: string; value: number | string; sub: string }[] = []
+  if (ov.activeEmergencies) crisis.push({ label: t('正在进行的紧急', 'Active emergencies'), value: ov.activeEmergencies, sub: t('未解除，需关注', 'unresolved — watch closely') })
+  if (ov.activeUnreachable) crisis.push({ label: t('紧急·无人可触达', 'Emergency · reached no one'), value: ov.activeUnreachable, sub: t('安全网正静默失效，速联系本人/亲友', 'safety net silently failing — contact them/family') })
+  if (ov.disk?.low) crisis.push({ label: t('磁盘余量告急', 'Disk space critical'), value: `${gb(ov.disk.freeBytes)} (${Math.round(ov.disk.freeBytes / ov.disk.totalBytes * 100)}%)`, sub: t('满盘将致数据库写入失败整站瘫', 'a full disk breaks DB writes and takes the site down') })
+  if (ov.mail && ov.mail.failed > 0) crisis.push({ label: t('邮件发送失败', 'Mail failures'), value: ov.mail.failed, sub: t('检查 SMTP 凭据（发码/找回密码受影响）', 'check SMTP credentials — codes/recovery affected') })
+  if (ov.callConnect && ov.callConnect.relayUnreachable > 0) crisis.push({ label: t('通话中继不可达', 'Relay unreachable'), value: ov.callConnect.relayUnreachable, sub: t('指向 TURN/安全组故障', 'points to TURN / security-group issues') })
+  if (ov.safetyTickErrors) crisis.push({ label: t('报到后台错误', 'Safety tick errors'), value: ov.safetyTickErrors, sub: t('安全报到自动告警可能受阻', 'check-in auto-alerts may be blocked') })
   const stat = [
-    { label: t('用户总数', 'Total users'), value: ov.users.total, sub: `${ov.users.active} ${t('活跃', 'active')} · ${ov.users.disabled} ${t('停用', 'disabled')}` },
+    { label: t('用户总数', 'Total users'), value: ov.users.total as number | string, sub: `${ov.users.active} ${t('活跃', 'active')} · ${ov.users.disabled} ${t('停用', 'disabled')}` },
     { label: t('在线协助者', 'Online helpers'), value: ov.online.helpers, sub: `${ov.online.total} ${t('在线', 'online')}` },
     { label: t('待处理举报', 'Open reports'), value: ov.reports.open, sub: `${ov.reports.total} ${t('累计', 'total')}` },
     { label: t('录制总数', 'Recordings'), value: ov.recordings.total, sub: ov.recordings.config.enabled ? t('录制已开启', 'recording on') : t('录制已关闭', 'recording off') },
     { label: t('近7天新增', 'New (7d)'), value: ov.growth.newUsers7d, sub: `${ov.growth.newUsers30d} ${t('近30天', 'in 30d')}` },
+    ...(ov.disk && !ov.disk.low ? [{ label: t('磁盘余量', 'Disk free'), value: gb(ov.disk.freeBytes), sub: `${t('共', 'of')} ${gb(ov.disk.totalBytes)} (${Math.round(ov.disk.freeBytes / ov.disk.totalBytes * 100)}%)` }] : []),
   ]
   const maxTrend = Math.max(1, ...ov.growth.trend.map((d) => d.count))
   return (
     <div className="flex flex-col gap-4">
+      {crisis.length > 0 && (
+        <div role="alert" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {crisis.map((s) => (
+            <Card key={s.label} className="border-danger/40 bg-danger/5 p-4">
+              <div className="text-xs font-medium text-danger">{s.label}</div>
+              <div className="mt-1 text-2xl font-bold text-danger">{s.value}</div>
+              <div className="mt-0.5 text-[11px] text-soft">{s.sub}</div>
+            </Card>
+          ))}
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {stat.map((s) => (
           <Card key={s.label} className="p-4"><div className="text-xs text-faint">{s.label}</div><div className="mt-1 text-2xl font-bold">{s.value}</div><div className="mt-0.5 text-[11px] text-faint">{s.sub}</div></Card>

@@ -475,10 +475,17 @@ export class SqliteStore implements Store {
     // 只更新该 callId 下 participant 参与（主叫或被叫）的记录——两侧一致。
     this.db.prepare('UPDATE call_records SET durationSec = ? WHERE callId = ? AND (callerId = ? OR calleeId = ?)').run(seconds, callId, participantId, participantId)
   }
-  callRecordsForUser(userId: string, limit = 100): CallRecord[] {
-    return this.db.prepare('SELECT * FROM call_records WHERE callerId = ? OR calleeId = ? ORDER BY createdAt DESC LIMIT ?')
-      .all(userId, userId, limit)
-      .map((r: any) => ({ id: r.id, callId: r.callId, callerId: r.callerId, calleeId: r.calleeId, status: r.status as CallRecordStatus, createdAt: Number(r.createdAt), emergency: r.emergency === 1, durationSec: r.durationSec != null ? Number(r.durationSec) : undefined }))
+  callRecordsForUser(userId: string, limit = 100, beforeMs?: number, beforeId?: string): CallRecord[] {
+    const map = (r: any): CallRecord => ({ id: r.id, callId: r.callId, callerId: r.callerId, calleeId: r.calleeId, status: r.status as CallRecordStatus, createdAt: Number(r.createdAt), emergency: r.emergency === 1, durationSec: r.durationSec != null ? Number(r.durationSec) : undefined })
+    // 稳定倒序全序（createdAt DESC, id DESC）+ 复合游标——须与 MemoryStore.callRecordsForUser/beforeCursor 逐字节等价（差分套件锁）。
+    if (beforeMs == null) {
+      return this.db.prepare('SELECT * FROM call_records WHERE (callerId = ? OR calleeId = ?) ORDER BY createdAt DESC, id DESC LIMIT ?').all(userId, userId, limit).map(map)
+    }
+    if (beforeId == null) { // beforeCursor：无 beforeId 时退回严格 createdAt<beforeMs
+      return this.db.prepare('SELECT * FROM call_records WHERE (callerId = ? OR calleeId = ?) AND createdAt < ? ORDER BY createdAt DESC, id DESC LIMIT ?').all(userId, userId, beforeMs, limit).map(map)
+    }
+    return this.db.prepare('SELECT * FROM call_records WHERE (callerId = ? OR calleeId = ?) AND (createdAt < ? OR (createdAt = ? AND id < ?)) ORDER BY createdAt DESC, id DESC LIMIT ?')
+      .all(userId, userId, beforeMs, beforeMs, beforeId, limit).map(map)
   }
   isCallParticipant(userId: string, callId: string): boolean {
     // 全量判定（命中即止）——供授权检查；不可用 callRecordsForUser().some(...)（最近 100 条窗口）代替。

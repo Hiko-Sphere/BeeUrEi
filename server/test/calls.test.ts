@@ -140,4 +140,51 @@ describe('群呼首接抢占（信任圈群呼）', () => {
     expect(res.json()).toMatchObject({ youWon: false, gone: true, answeredBy: null })
     await a.close()
   })
+
+  it('通话记录游标分页：limit + before/beforeId 向前翻页无缝、无漏无重、hasMore 精确（silent cap 修复）', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const me = await reg(a, 'pgme', 'blind')
+    const peer = await reg(a, 'pgpeer', 'helper')
+    // 播种 5 条通话记录（时间递增，其中含一对同毫秒以验 id tie-break）。
+    const seed = (id: string, createdAt: number) => store.createCallRecord({ id, callId: 'c-' + id, callerId: me.user.id, calleeId: peer.user.id, status: 'answered', createdAt })
+    seed('r1', 1000); seed('r2', 2000); seed('r3', 3000); seed('r4a', 4000); seed('r4b', 4000) // r4a/r4b 同刻
+    const page = async (qs = '') => (await a.inject({ method: 'GET', url: `/api/calls?peek=1${qs}`, headers: auth(me.token) })).json()
+
+    const p1 = await page('&limit=2')
+    expect(p1.calls.map((c: { id: string }) => c.id)).toEqual(['r4b', 'r4a']) // 最新在前；同刻按 id 降序（r4b>r4a）
+    expect(p1.hasMore).toBe(true)
+    const last1 = p1.calls[1]
+    const p2 = await page(`&limit=2&before=${last1.createdAt}&beforeId=${last1.id}`)
+    expect(p2.calls.map((c: { id: string }) => c.id)).toEqual(['r3', 'r2']) // 跨"同刻边界"无漏无重
+    expect(p2.hasMore).toBe(true)
+    const last2 = p2.calls[1]
+    const p3 = await page(`&limit=2&before=${last2.createdAt}&beforeId=${last2.id}`)
+    expect(p3.calls.map((c: { id: string }) => c.id)).toEqual(['r1']) // 最后一页
+    expect(p3.hasMore).toBe(false) // 到底
+    // 并集恰为全部 5 条、无重复。
+    const all = [...p1.calls, ...p2.calls, ...p3.calls].map((c: { id: string }) => c.id)
+    expect(new Set(all).size).toBe(5)
+    expect(all).toEqual(['r4b', 'r4a', 'r3', 'r2', 'r1'])
+    await a.close()
+  })
+
+  it('翻页请求（带 before）不刷新未接来电"看过"基线（翻看历史≠又看过一次当前）', async () => {
+    const store = new MemoryStore()
+    const a = buildApp(store)
+    const blind = await reg(a, 'sbblind', 'blind')
+    const helper = await reg(a, 'sbh', 'helper')
+    const lk = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth(blind.token), payload: { username: 'sbh' } }) // 建链
+    await a.inject({ method: 'POST', url: `/api/family/links/${lk.json().link.id}/accept`, headers: auth(helper.token) })
+    // helper 呼叫 blind（未接）→ blind 有一条未接、角标=1。
+    await a.inject({ method: 'POST', url: '/api/assist/call', headers: auth(helper.token), payload: { callId: 'mc-1', targetUserIds: [blind.user.id] } })
+    expect((await a.inject({ method: 'GET', url: '/api/unread', headers: auth(blind.token) })).json().missedCalls).toBe(1)
+    // 翻页请求（带 before）：只读历史，**不**清角标。
+    await a.inject({ method: 'GET', url: `/api/calls?before=${Date.now() + 1000}&beforeId=zzz`, headers: auth(blind.token) })
+    expect((await a.inject({ method: 'GET', url: '/api/unread', headers: auth(blind.token) })).json().missedCalls).toBe(1) // 仍在
+    // 首屏请求（无 before）：清角标（原行为不变）。
+    await a.inject({ method: 'GET', url: '/api/calls', headers: auth(blind.token) })
+    expect((await a.inject({ method: 'GET', url: '/api/unread', headers: auth(blind.token) })).json().missedCalls).toBe(0)
+    await a.close()
+  })
 })

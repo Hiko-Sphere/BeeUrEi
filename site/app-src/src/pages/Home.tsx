@@ -29,7 +29,7 @@ export function HomePage() {
       // callHistory(peek)：首页只是**预览**最近通话——绝不清"未接来电"角标基线。否则瞟一眼首页角标就没了
       // （角标本是"去看看"的提示），且与并行的 unreadSummary 竞态、"未接来电"卡时而 N 时而 0。
       const [oc, inc, q, sum, links, hist] = await Promise.allSettled([
-        api.onlineCount(), api.incomingCalls(), api.helpQueue(), api.unreadSummary(), api.incomingLinks(), api.callHistory(true),
+        api.onlineCount(), api.incomingCalls(), api.helpQueue(), api.unreadSummary(), api.incomingLinks(), api.callHistory({ peek: true }),
       ])
       if (!alive) return
       setStats({

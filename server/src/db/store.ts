@@ -534,9 +534,10 @@ export function convKeyFor(m: { groupId?: string; fromId: string; toId: string }
 export function byTimeThenId(x: ChatMessage, y: ChatMessage): number {
   return x.createdAt !== y.createdAt ? x.createdAt - y.createdAt : (x.id < y.id ? -1 : x.id > y.id ? 1 : 0)
 }
-/// 复合游标判定：消息是否严格早于 (beforeMs, beforeId) 这个 (createdAt,id) 点。
+/// 复合游标判定：记录是否严格早于 (beforeMs, beforeId) 这个 (createdAt,id) 点。
 /// beforeMs 缺省=不翻页（全取）；beforeId 缺省=退回严格 createdAt<beforeMs（向后兼容旧客户端）。
-export function beforeCursor(m: ChatMessage, beforeMs?: number, beforeId?: string): boolean {
+/// 结构化入参（只需 createdAt+id）：消息与通话记录等按时间倒序、需向前翻页的实体共用同一游标语义。
+export function beforeCursor(m: { createdAt: number; id: string }, beforeMs?: number, beforeId?: string): boolean {
   if (beforeMs == null) return true
   if (m.createdAt < beforeMs) return true
   return beforeId != null && m.createdAt === beforeMs && m.id < beforeId
@@ -601,7 +602,7 @@ export interface Store {
   updateCallStatus(callId: string, calleeId: string, status: CallRecordStatus): void
   // 通话时长上报：把 durationSec 写入该 callId 下 participantId 参与（主叫或被叫）的记录（授权在调用侧已核参与方）
   setCallDuration(callId: string, participantId: string, seconds: number): void
-  callRecordsForUser(userId: string, limit?: number): CallRecord[] // 我作为主叫或被叫，按时间倒序
+  callRecordsForUser(userId: string, limit?: number, beforeMs?: number, beforeId?: string): CallRecord[] // 我作为主叫或被叫，按时间倒序；beforeMs/beforeId=向前翻页复合游标（同 messagesBetween）
   /// 该用户是否为某 callId 的参与方（主叫或被叫）——**全量**判定，供授权检查（时长上报/录制同意）。
   /// 不可用 callRecordsForUser().some(...) 代替：那是"最近 limit（默认 100）条"窗口，超窗的旧通话会被误拒（假否定）。
   isCallParticipant(userId: string, callId: string): boolean
@@ -1095,10 +1096,11 @@ export class MemoryStore implements Store {
     }
     if (changed) this.afterMutate()
   }
-  callRecordsForUser(userId: string, limit = 100): CallRecord[] {
+  callRecordsForUser(userId: string, limit = 100, beforeMs?: number, beforeId?: string): CallRecord[] {
     return [...this.callRecords.values()]
-      .filter((r) => r.callerId === userId || r.calleeId === userId)
-      .sort((a, b) => b.createdAt - a.createdAt)
+      .filter((r) => (r.callerId === userId || r.calleeId === userId) && beforeCursor(r, beforeMs, beforeId))
+      // 稳定倒序全序（createdAt 降，同刻按 id 降）：翻页游标须有确定 tie-break，否则同毫秒记录跨页会漏/重。
+      .sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
       .slice(0, limit)
   }
   isCallParticipant(userId: string, callId: string): boolean {

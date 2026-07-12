@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, type IncomingCall, type HelpRequest, type CallRecordInfo } from '../lib/api'
 import { pollWhileVisible } from '../lib/poll'
 import { useI18n } from '../lib/i18n'
@@ -27,7 +27,11 @@ export function CallsPage() {
   const callBack = (c: CallRecordInfo) => { if (c.peerId) void startOutgoing(c.peerId, c.peerName || t('对方', 'Them'), c.peerAvatar ?? null) }
   const [incoming, setIncoming] = useState<IncomingCall[] | null>(null)
   const [queue, setQueue] = useState<HelpRequest[] | null>(null)
-  const [history, setHistory] = useState<CallRecordInfo[] | null>(null)
+  const [history, setHistory] = useState<CallRecordInfo[] | null>(null) // 轮询刷新的首屏（最近 N 条）
+  const [olderPages, setOlderPages] = useState<CallRecordInfo[]>([])     // "加载更多"累积的更早通话（不参与轮询，不被刷新覆盖）
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const expandedRef = useRef(false) // 是否已加载更多：展开后轮询不再动 hasMore（否则每 4s 把"还有更多"翻回来、闪烁）
   const [busyId, setBusyId] = useState<string | null>(null)
   const [matching, setMatching] = useState(false)
 
@@ -44,7 +48,9 @@ export function CallsPage() {
       // 门控，未待命也响）。删本页响铃，交全局单点，去重（见对抗复审）。
       if (q.status === 'fulfilled') setQueue(q.value.requests)
       else setQueue((c) => c ?? [])
-      if (hist.status === 'fulfilled') setHistory(hist.value.calls); else setHistory((c) => c ?? [])
+      // 首屏刷新（最近 N 条）：仅在**未展开**时同步 hasMore——展开后 hasMore 由 loadMore 维护。
+      if (hist.status === 'fulfilled') { setHistory(hist.value.calls); if (!expandedRef.current) setHasMore(!!hist.value.hasMore) }
+      else setHistory((c) => c ?? [])
     }
     void load()
     const stop = pollWhileVisible(load, 4000)
@@ -52,6 +58,25 @@ export function CallsPage() {
     // 依赖仅 active（同原实现）：t/toast 在会话内稳定，inCall 由 active 派生——active 变化即重跑并捕获最新值。
      
   }, [active])
+
+  // 合并首屏 + 已加载的更早页；按 id 去重（首屏轮询与更早页理论不重叠——仅 >首屏 才有"加载更多"——但防御性去重）。
+  const combinedHistory = (() => {
+    const seen = new Set<string>()
+    return [...(history ?? []), ...olderPages].filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true)))
+  })()
+
+  // 加载更多：以当前列表最后一条（最早）为游标向前翻页，追加到 olderPages。
+  const loadMore = async () => {
+    const last = combinedHistory[combinedHistory.length - 1]
+    if (!last || loadingMore) return
+    setLoadingMore(true)
+    expandedRef.current = true
+    try {
+      const r = await api.callHistory({ before: last.createdAt, beforeId: last.id })
+      setOlderPages((p) => [...p, ...r.calls])
+      setHasMore(!!r.hasMore)
+    } catch { /* 忽略；用户可再点 */ } finally { setLoadingMore(false) }
+  }
 
   const onAnswer = async (c: IncomingCall) => { setBusyId(c.callId); await answerIncoming(c.callId, c.fromName, c.fromAvatar); setBusyId(null) }
   const onClaim = async (r: HelpRequest) => { setBusyId(r.callId); await claimQueue(r.callId, r.fromName || t('求助者', 'Requester'), undefined); setBusyId(null) }
@@ -143,12 +168,20 @@ export function CallsPage() {
       <section>
         <SectionHead icon={<IconPhone />} title={t('通话记录', 'Call history')} />
         <Card className="overflow-hidden">
-          {history === null ? <Spinner /> : history.length === 0 ? (
+          {history === null ? <Spinner /> : combinedHistory.length === 0 ? (
             <EmptyState icon={<IconPhone />} title={t('暂无记录', 'No history')} />
           ) : (
-            <ul className="divide-y divide-[var(--line)]">
-              {history.map((c) => <CallHistoryRow key={c.id} call={c} onCall={callBack} callDisabled={!!active} />)}
-            </ul>
+            <>
+              <ul className="divide-y divide-[var(--line)]">
+                {combinedHistory.map((c) => <CallHistoryRow key={c.id} call={c} onCall={callBack} callDisabled={!!active} />)}
+              </ul>
+              {/* 加载更多：通话记录此前硬顶最近 100 条、无从翻看更早（silent cap）。有更早记录时给出翻页入口。 */}
+              {hasMore && (
+                <div className="border-t border-[var(--line)] p-3 text-center">
+                  <Button variant="soft" loading={loadingMore} onClick={loadMore}>{t('加载更多', 'Load more')}</Button>
+                </div>
+              )}
+            </>
           )}
         </Card>
       </section>

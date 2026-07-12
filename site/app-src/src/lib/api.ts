@@ -325,7 +325,14 @@ export const api = {
 
   // 通话 / 求助
   // peek=true：只读预览（首页仪表盘用）——不清"未接来电"角标基线；通话记录页才用默认路径（打开即看过）。
-  callHistory: (peek?: boolean) => get(`/api/calls${peek ? '?peek=1' : ''}`) as Promise<{ calls: CallRecordInfo[] }>,
+  // peek=首页预览（不清未接角标）；before/beforeId=向前翻页游标（"加载更多"更早通话）。hasMore=还有更早的可翻。
+  callHistory: (opts?: { peek?: boolean; before?: number; beforeId?: string }) => {
+    const p = new URLSearchParams()
+    if (opts?.peek) p.set('peek', '1')
+    if (opts?.before != null) { p.set('before', String(opts.before)); if (opts.beforeId) p.set('beforeId', opts.beforeId) }
+    const qs = p.toString()
+    return get(`/api/calls${qs ? `?${qs}` : ''}`) as Promise<{ calls: CallRecordInfo[]; hasMore?: boolean }>
+  },
   iceServers: () => get('/api/assist/turn') as Promise<{ iceServers: IceServer[]; wsToken?: string }>,
   // 通话连接失败上报（best-effort，把 ICE relay 不可达等静默故障变成服务端可观测计数）。reason 白名单。
   reportCallFailure: (reason: 'relay_unreachable' | 'generic' | 'signaling', callId?: string) =>

@@ -273,13 +273,24 @@ export function registerAssistRoutes(
   // 这里的基线刷新竞态，"未接来电"卡时而 N 时而 0）。真正打开通话记录页仍走默认路径清角标。
   app.get('/api/calls', { preHandler: requireAuth() }, async (req) => {
     const me = req.user!.sub
-    const peek = (req.query as { peek?: string }).peek === '1'
-    const recs = store.callRecordsForUser(me, 100)
-    // 打开通话记录即"看过"：刷新基线，未看未接来电角标随之清零（与手机通话 App 一致）。
+    const q = req.query as { peek?: string; before?: string; beforeId?: string; limit?: string }
+    const peek = q.peek === '1'
+    // 向前翻页游标（"加载更多"更早的通话）：before=毫秒时间戳、beforeId=同刻 tie-break。翻页请求本身即只读，
+    // **不**刷新 callHistorySeenAt（翻看历史 ≠ 又"看过一次当前"，否则会与未接角标竞态）——等同 peek。
+    const beforeMs = q.before != null && /^\d+$/.test(q.before) ? Number(q.before) : undefined
+    const beforeId = typeof q.beforeId === 'string' && q.beforeId ? q.beforeId : undefined
+    const isPage = beforeMs != null
+    const limNum = q.limit != null && /^\d+$/.test(q.limit) ? Number(q.limit) : 100 // 默认 100：保持既有 iOS 无参调用的首屏条数不变
+    const limit = Math.max(1, Math.min(100, limNum)) // clamp [1,100]：与 chat 分页同口径，防超大页拖库
+    const recs = store.callRecordsForUser(me, limit + 1, beforeMs, beforeId) // 多取一条判 hasMore
+    const hasMore = recs.length > limit
+    const page = hasMore ? recs.slice(0, limit) : recs
+    // 打开通话记录即"看过"：刷新基线，未看未接来电角标随之清零（与手机通话 App 一致）。仅**首屏**（非 peek、非翻页）刷新。
     // 在读取 recs 之后再刷新——返回列表仍照常带 missed 状态（供客户端把未接来电标红），只是角标不再计它们。
-    if (!peek) store.updateUser(me, { callHistorySeenAt: Date.now() })
+    if (!peek && !isPage) store.updateUser(me, { callHistorySeenAt: Date.now() })
     return {
-      calls: recs.map((r) => {
+      hasMore, // 是否还有更早的通话可翻页（web/iOS 据此显示"加载更多"）
+      calls: page.map((r) => {
         const outgoing = r.callerId === me
         const other = store.findById(outgoing ? r.calleeId : r.callerId)
         return {

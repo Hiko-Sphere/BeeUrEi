@@ -133,3 +133,35 @@ describe('formatWaited 等待时长格式（秒/分钟/小时）', () => {
     expect(formatWaited(Infinity, t)).toBe('waited 0s')
   })
 })
+
+describe('CallsPage 通话记录"加载更多"（silent cap 修复：不再只见最近 100 条）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mock(api.incomingCalls).mockResolvedValue({ calls: [] })
+    mock(api.helpQueue).mockResolvedValue({ requests: [] })
+  })
+  const rec = (id: string, createdAt: number) => ({ id, callId: 'c' + id, direction: 'outgoing', status: 'answered', peerId: 'p', peerName: '联系人' + id, createdAt })
+
+  it('hasMore 时显示"加载更多"；点击→用最早一条为游标翻页并追加；到底后按钮消失', async () => {
+    mock(api.callHistory).mockImplementation((opts?: { before?: number; beforeId?: string }) => {
+      if (opts?.before == null) return Promise.resolve({ calls: [rec('n1', 3000), rec('n2', 2000)], hasMore: true }) // 首屏
+      // 翻页：断言游标取自当前最早一条（n2）。
+      expect(opts.before).toBe(2000); expect(opts.beforeId).toBe('n2')
+      return Promise.resolve({ calls: [rec('o1', 1000)], hasMore: false }) // 更早一页，到底
+    })
+    render(<CallsPage />)
+    expect(await screen.findByText('联系人n1')).toBeInTheDocument()
+    const more = await screen.findByRole('button', { name: '加载更多' })
+    more.click()
+    expect(await screen.findByText('联系人o1')).toBeInTheDocument() // 追加了更早的
+    expect(screen.getByText('联系人n1')).toBeInTheDocument()          // 首屏仍在（追加非替换）
+    expect(screen.queryByRole('button', { name: '加载更多' })).toBeNull() // hasMore=false → 按钮消失
+  })
+
+  it('hasMore=false（通话不足一屏）时不显示"加载更多"', async () => {
+    mock(api.callHistory).mockResolvedValue({ calls: [rec('x1', 1000)], hasMore: false })
+    render(<CallsPage />)
+    await screen.findByText('联系人x1')
+    expect(screen.queryByRole('button', { name: '加载更多' })).toBeNull()
+  })
+})

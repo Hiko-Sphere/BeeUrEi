@@ -64,12 +64,12 @@ final class SpeechHub: NSObject {
             stash[channel] = (text, rate, voice)
         case .speakEnqueue:
             current = (channel, droppable, text, rate, voice)
-            synthesizer.speak(makeUtterance(text, rate: rate, voice: voice))
+            synthesizer.speak(Self.makeUtterance(text, rate: rate, voice: voice, channel: channel))
         case .speakInterrupt:
             transitioning = true
             if synthesizer.isSpeaking { synthesizer.stopSpeaking(at: .immediate) }
             current = (channel, droppable, text, rate, voice)
-            synthesizer.speak(makeUtterance(text, rate: rate, voice: voice))
+            synthesizer.speak(Self.makeUtterance(text, rate: rate, voice: voice, channel: channel))
             transitioning = false
         }
     }
@@ -129,12 +129,15 @@ final class SpeechHub: NSObject {
         speakOnMain(item.text, channel: top, rate: item.rate, voice: item.voice, droppable: false)
     }
 
-    private func makeUtterance(_ text: String, rate: Float?, voice: String?) -> AVSpeechUtterance {
+    /// 通道感知的发声工厂（nonisolated static 可测）：按 ChannelVoiceProfile 给各通道不同音高——
+    /// 盲人不必解析句子就知道类别（导航偏低/来电偏高/环境基准）。语言与语速逻辑不变。
+    nonisolated static func makeUtterance(_ text: String, rate: Float?, voice: String?, channel: SpeechChannel) -> AVSpeechUtterance {
         let u = AVSpeechUtterance(string: text)
         u.voice = AVSpeechSynthesisVoice(language: voice ?? FeatureSettings().language.voiceCode)
         let t = rate ?? FeatureSettings().speechRate
         u.rate = AVSpeechUtteranceMinimumSpeechRate
             + (AVSpeechUtteranceMaximumSpeechRate - AVSpeechUtteranceMinimumSpeechRate) * t
+        u.pitchMultiplier = ChannelVoiceProfile.pitchMultiplier(for: channel)
         return u
     }
 }

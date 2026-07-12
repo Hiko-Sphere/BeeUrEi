@@ -9,6 +9,21 @@ public enum SpeechChannel: Int, Comparable, Sendable, CaseIterable {
     public static func < (l: Self, r: Self) -> Bool { l.rawValue < r.rawValue }
 }
 
+/// 通道声线档案（纯逻辑，可单测）：同一语言同一嗓音下按**音高**区分通道——盲人不必听完句子开头
+/// 就知道这句是"环境/识别"（基准声）、"导航指令"（沉稳偏低）还是"来电"（醒目偏高）。混合播报场景
+/// （导航中夹杂识别结果与来电）大幅降低类别辨析负荷（BlindSquare/Soundscape 以声线/音色区分指引与环境同理）。
+/// 设计约束：**只调音高、不换嗓音**——换名嗓音依赖设备已装语音包（不可假设、跨语言不齐），
+/// pitchMultiplier 全设备全语言可用（AVSpeechUtterance 合法域 0.5–2.0）。避障安全通道不经本档案（独立通路）。
+public enum ChannelVoiceProfile {
+    public static func pitchMultiplier(for channel: SpeechChannel) -> Float {
+        switch channel {
+        case .query: return 1.0        // 环境/识别：基准"叙述者"
+        case .navigation: return 0.88  // 导航指令：偏低沉稳（与叙述者可分，不至于变声怪异）
+        case .call: return 1.15        // 来电：偏高醒目（社交紧迫感）
+        }
+    }
+}
+
 /// 语音总线仲裁决策（纯逻辑）：一条新播报相对总线当前状态该怎么处理。
 /// 解决"避障语音与导航/查询语音同时出声"：
 /// - 避障播报期间（safetyHold）：提示类丢弃；其余积压（每通道仅留最新一条），避障说完按优先级补播；

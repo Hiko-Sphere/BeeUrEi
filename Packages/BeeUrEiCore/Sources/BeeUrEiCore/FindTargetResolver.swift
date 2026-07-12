@@ -24,15 +24,31 @@ public enum FindTargetResolver {
         // ② 再模糊（双向包含）：已教模糊 → 类别模糊（同层已教优先，本人的东西）。
         if let t = taughtNames.first(where: { contains(norm($0), q) }) { return .taught(t) }
         if let c = categories.first(where: { contains(norm($0.name), q) }) { return .category(c.label) }
-        // ③ 「座位」类同义词兜底：自然说法（空座位/座位/座椅/seat）→ chair 类别——否则用户想「找空座位」却因类别名
-        // 叫「椅子」而解析失败（座位≠椅子子串），拿不到本就已实现的座位占用播报（SeatOccupancy）。仅当 chair 确在
-        // 可找类别中才返回（否则绝不谎报"可找"）。已教物品优先级不受影响（本兜底在两表匹配之后）。
-        let seatWords = ["座位", "座椅", "seat"]
-        if seatWords.contains(where: { contains($0, q) || norm($0) == q }),
-           let c = categories.first(where: { $0.label == "chair" }) {
+        // ③ 常见自然说法同义词兜底：用户口语（找空座位/找桌子/找电话/找水瓶/找洗手间…）常与 YOLO 类别的本地化名
+        // 不同（座位≠椅子、桌子≠餐桌、电话≠手机、水瓶≠瓶子），双向包含也不命中 → 本会失败拿不到本已实现的识别。
+        // 映射到规范 label；**仅当该类别确在可找列表中才返回**（绝不谎报"可找"）。已教/精确/模糊匹配均优先（在此之前）。
+        if let label = categorySynonymLabel(for: q), let c = categories.first(where: { $0.label == label }) {
             return .category(c.label)
         }
         return .none
+    }
+
+    /// 类别自然说法同义词 → 规范 label。只收**明确且常用**的口语词（避免过泛误配）；已含类别本地化名亦无害
+    /// （更早的精确/模糊匹配已先命中，此处仅在其未命中时兜底）。
+    private static let categorySynonyms: [(label: String, words: [String])] = [
+        ("chair", ["座位", "座椅", "凳子", "seat"]),
+        ("dining table", ["桌子", "书桌", "table", "desk"]),
+        ("toilet", ["厕所", "洗手间", "卫生间", "马桶", "restroom", "bathroom"]),
+        ("bottle", ["水瓶", "矿泉水", "water bottle"]),
+        ("cup", ["水杯", "茶杯", "马克杯", "mug"]),
+        ("cell phone", ["电话", "cellphone", "mobile phone"]),
+        ("backpack", ["书包", "双肩包", "book bag"]),
+    ]
+    private static func categorySynonymLabel(for q: String) -> String? {
+        for entry in categorySynonyms where entry.words.contains(where: { contains($0, q) || norm($0) == q }) {
+            return entry.label
+        }
+        return nil
     }
 
     private static func norm(_ s: String) -> String {

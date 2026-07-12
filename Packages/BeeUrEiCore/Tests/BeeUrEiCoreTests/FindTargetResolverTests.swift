@@ -63,6 +63,38 @@ final class FindTargetResolverTests: XCTestCase {
         XCTAssertEqual(r, .taught("座位垫"))
     }
 
+    func testCommonSynonymsResolveToCategories() {
+        // 常见口语说法映射到规范类别（桌子≠餐桌、电话≠手机、水瓶≠瓶子…双向包含都不命中，靠同义词兜底）。
+        let cats = [(label: "dining table", name: "餐桌"), (label: "toilet", name: "马桶"),
+                    (label: "bottle", name: "瓶子"), (label: "cup", name: "杯子"),
+                    (label: "cell phone", name: "手机"), (label: "backpack", name: "背包"),
+                    (label: "chair", name: "椅子")]
+        let cases: [(String, String)] = [
+            ("桌子", "dining table"), ("书桌", "dining table"),
+            ("厕所", "toilet"), ("洗手间", "toilet"), ("卫生间", "toilet"), ("restroom", "toilet"),
+            ("水瓶", "bottle"), ("水杯", "cup"), ("茶杯", "cup"), ("mug", "cup"),
+            ("电话", "cell phone"), ("cellphone", "cell phone"),
+            ("书包", "backpack"), ("双肩包", "backpack"),
+            ("凳子", "chair"),
+        ]
+        for (spoken, label) in cases {
+            XCTAssertEqual(FindTargetResolver.resolve(spoken: spoken, taughtNames: [], categories: cats),
+                           .category(label), "『\(spoken)』应解析为 \(label)")
+        }
+    }
+
+    func testSynonymDoesNotFalseMatchUnrelated() {
+        // 同义词不误配无关物：说「电视」（非可找类别，且与「电话」仅首字同）→ none，不硬塞成手机等。
+        let cats = [(label: "chair", name: "椅子"), (label: "cell phone", name: "手机")]
+        XCTAssertEqual(FindTargetResolver.resolve(spoken: "电视", taughtNames: [], categories: cats), .none)
+    }
+
+    func testSynonymGatedOnCategoryAvailable() {
+        // 目标类别不在可找列表时，同义词也不谎报「可找」：只提供 chair 时说「桌子」→ none。
+        let r = FindTargetResolver.resolve(spoken: "桌子", taughtNames: [], categories: [(label: "chair", name: "椅子")])
+        XCTAssertEqual(r, .none)
+    }
+
     /// 对抗复审 MED：短已教名/ASCII 子串不得靠包含劫持无关查询（"机"不命中"手机"；"key"不命中"monkey"）。
     func testShortOrSubstringTaughtDoesNotHijack() {
         XCTAssertEqual(FindTargetResolver.resolve(spoken: "手机", taughtNames: ["机"], categories: []), .none)     // 1 字候选不子串

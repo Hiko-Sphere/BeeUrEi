@@ -35,6 +35,42 @@ enum QuietHoursStrings {
     }
 }
 
+/// 推送分类静音（与 web Account 同文案同语义）：开关 on=**接收**该类推送（未静音），符合直觉。
+/// 危急类（紧急告警/来电/SOS/安全报到）服务端保证永不可静音——不在此表，非仅前端不展示。
+enum PushCategories {
+    /// 内置类别表（与服务端 MUTABLE_CATEGORIES 一致；服务端 available 为权威，此表作旧服务端兜底与文案键）。
+    static let known = ["social", "route", "location"]
+    static func label(_ key: String, _ l: Language) -> String {
+        switch key {
+        case "social": return l == .zh ? "社交" : "Social"
+        case "route": return l == .zh ? "路线" : "Routes"
+        case "location": return l == .zh ? "位置" : "Location"
+        default: return key
+        }
+    }
+    static func desc(_ key: String, _ l: Language) -> String {
+        switch key {
+        case "social": return l == .zh ? "好友请求、群成员变更" : "Friend requests, group changes"
+        case "route": return l == .zh ? "亲友为你添加/修改/删除路线" : "Routes added/changed/removed for you"
+        case "location": return l == .zh ? "到达/离开常用地点、共享者低电量" : "Place arrivals/departures, low battery"
+        default: return ""
+        }
+    }
+    /// 切换后的新静音集合（纯函数可测，视图与测试共用）：receive=true→移出静音；false→加入（去重）。
+    static func toggled(muted: [String], key: String, receive: Bool) -> [String] {
+        if receive { return muted.filter { $0 != key } }
+        return muted.contains(key) ? muted : muted + [key]
+    }
+    static func header(_ l: Language) -> String { l == .zh ? "按类别静音" : "Mute by category" }
+    static func footer(_ l: Language) -> String {
+        l == .zh ? "关闭某类即不再收到该类推送横幅（站内通知照常保留）。紧急告警、来电与安全报到永不静音。"
+                 : "Turn a category off to stop its push banners (in-app notifications are kept). Emergency alerts, calls and safety check-ins are never muted."
+    }
+    static func toggleFailed(_ l: Language) -> String { l == .zh ? "设置失败，请重试" : "Couldn't update — try again" }
+    static func nowReceiving(_ label: String, _ l: Language) -> String { l == .zh ? "已开启\(label)类推送" : "\(label) push on" }
+    static func nowMuted(_ label: String, _ l: Language) -> String { l == .zh ? "已静音\(label)类推送" : "\(label) push muted" }
+}
+
 struct QuietHoursView: View {
     let token: String
     @State private var enabled = false
@@ -46,6 +82,10 @@ struct QuietHoursView: View {
     @State private var statusText: String?
     private let api = APIClient()
     private var lang: Language { FeatureSettings().language }
+
+    @State private var mutedCategories: [String] = []
+    @State private var availableCategories: [String] = PushCategories.known
+    @State private var categoryBusy = false
 
     var body: some View {
         Form {
@@ -79,6 +119,21 @@ struct QuietHoursView: View {
                             .accessibilityAddTraits(.updatesFrequently)
                     }
                 }
+                // 按类别静音（与勿扰时段正交：时段决定何时静、类别决定哪类静）。开关 on=接收（未静音）。
+                Section {
+                    ForEach(availableCategories, id: \.self) { key in
+                        Toggle(isOn: Binding(
+                            get: { !mutedCategories.contains(key) },
+                            set: { receive in Task { await setCategory(key, receive: receive) } }
+                        )) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(PushCategories.label(key, lang))
+                                Text(PushCategories.desc(key, lang)).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        .disabled(categoryBusy)
+                    }
+                } header: { Text(PushCategories.header(lang)) } footer: { Text(PushCategories.footer(lang)) }
             }
         }
         .navigationTitle(QuietHoursStrings.navTitle(lang))
@@ -93,10 +148,29 @@ struct QuietHoursView: View {
                 startDate = QuietHoursTime.date(fromMinuteOfDay: q.startMinute)
                 endDate = QuietHoursTime.date(fromMinuteOfDay: q.endMinute)
             } // nil=未设过：保留默认 22:00→07:00、未开启
+            let cats = try await api.getPushCategories(token: token)
+            mutedCategories = cats.muted
+            if let avail = cats.available, !avail.isEmpty { availableCategories = avail } // 服务端权威表；旧服务端缺省用内置
         } catch {
             loadFailed = true
         }
         loading = false
+    }
+
+    /// 切换某类接收/静音：乐观更新（PushCategories.toggled，已测），失败回滚 + 语音告知。
+    private func setCategory(_ key: String, receive: Bool) async {
+        guard !categoryBusy else { return }
+        categoryBusy = true; defer { categoryBusy = false }
+        let previous = mutedCategories
+        mutedCategories = PushCategories.toggled(muted: mutedCategories, key: key, receive: receive)
+        do {
+            mutedCategories = try await api.setPushCategories(token: token, muted: mutedCategories) // 服务端规整后回传为准
+            let label = PushCategories.label(key, lang)
+            A11y.announce(receive ? PushCategories.nowReceiving(label, lang) : PushCategories.nowMuted(label, lang))
+        } catch {
+            mutedCategories = previous // 回滚，不留"看着已静音实际没生效"的假状态
+            A11y.announce(PushCategories.toggleFailed(lang))
+        }
     }
 
     private func save() async {

@@ -741,6 +741,22 @@ struct APIClient {
         return try JSONDecoder().decode(R.self, from: data).quietHours
     }
 
+    /// 按类别静音推送横幅（与勿扰时段正交：时段决定"何时静"、类别决定"哪类静"）。
+    /// 危急类（紧急告警/来电/SOS/安全报到）服务端 notifCategory→null 保证**永不可静音**，不在 available 里。
+    struct PushCategoriesInfo: Codable, Sendable {
+        let muted: [String]
+        var available: [String]?  // 服务端权威可静音类别表（旧服务端缺省→客户端内置表兜底）
+    }
+    func getPushCategories(token: String) async throws -> PushCategoriesInfo {
+        let data = try await authedGet("/api/notifications/push-categories", token: token)
+        return try JSONDecoder().decode(PushCategoriesInfo.self, from: data)
+    }
+    func setPushCategories(token: String, muted: [String]) async throws -> [String] {
+        let data = try await authedSend("PUT", "/api/notifications/push-categories", token: token, body: ["muted": muted])
+        struct R: Codable { let muted: [String] }
+        return try JSONDecoder().decode(R.self, from: data).muted
+    }
+
     // MARK: 遇险者医疗信息（施救按需查看）——仅其已接受**紧急**联系人可读；服务端会通知本人"X 查看了你的医疗信息"（GDPR Art.9 透明）。
 
     struct ContactMedical: Decodable, Sendable { let medicalInfo: String; let updatedAt: Double? }

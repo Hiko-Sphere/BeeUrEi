@@ -15,12 +15,15 @@ import { IncomingCallHost } from './pages/call/IncomingCallHost'
 import { EmergencyAlertHost } from './pages/call/EmergencyAlertHost'
 import { HelpQueueAlertHost } from './pages/call/HelpQueueAlertHost'
 import { VerificationGate } from './pages/VerificationGate'
+import { importWithReload } from './lib/lazyReload'
 
 // 懒加载重/少用页，缩小首屏主包：Locations 带 Leaflet 地图库(~140KB)、Admin 仅管理员可达。
 // 其余为核心页（多数会话都用），保持 eager 避免每次导航闪烁。
-const LocationsPage = lazy(() => import('./pages/Locations').then((m) => ({ default: m.LocationsPage })))
-const AdminPage = lazy(() => import('./pages/Admin').then((m) => ({ default: m.AdminPage })))
-const RoutesPage = lazy(() => import('./pages/Routes').then((m) => ({ default: m.RoutesPage }))) // 带 Leaflet，与 Locations 同策略懒加载
+// importWithReload：部署替换哈希 chunk 后，旧标签页首次点开这些页会 404——自动整页刷新一次自愈
+// （同会话第二次仍败=真网络故障，抛给 ErrorBoundary，绝不无限刷）。
+const LocationsPage = lazy(importWithReload(() => import('./pages/Locations').then((m) => ({ default: m.LocationsPage }))))
+const AdminPage = lazy(importWithReload(() => import('./pages/Admin').then((m) => ({ default: m.AdminPage }))))
+const RoutesPage = lazy(importWithReload(() => import('./pages/Routes').then((m) => ({ default: m.RoutesPage })))) // 带 Leaflet，与 Locations 同策略懒加载
 
 export function App() {
   const { user, ready, requireVerification } = useSession()

@@ -33,6 +33,20 @@ const consentSchema = z.object({ callId: z.string().min(1), granted: z.boolean()
 export function registerRecordingRoutes(app: FastifyInstance, store: Store, consent: RecordingConsentRegistry,
                                         pendingCalls: PendingCallRegistry, openHelp: OpenHelpRegistry): void {
   const adminOnly = { preHandler: requireAuth(['admin']) }
+  // 管理员查看录制的审计**去重**（合规日志失真修复）：media 流端点被 <video> 用 HTTP Range 反复请求
+  // （首帧/seek/预缓冲各一次），若每次都留痕，一次观看会刷出几十条重复 recording.view，淹没"谁看了什么"、
+  // 撑大审计表。同一管理员对同一录制在窗口内的多次请求合并为**一条**观看记录（首次留、其后静默）。
+  // 内存注册表（每 app 实例独立，随进程重启清；部署后同一观看首个请求会补记一条，可接受）。
+  const RECORDING_VIEW_DEDUP_MS = 10 * 60_000
+  const lastRecordingView = new Map<string, number>() // `${adminId}:${recId}` → 最近留痕时刻
+  const shouldAuditRecordingView = (adminId: string, recId: string, now: number): boolean => {
+    const key = `${adminId}:${recId}`
+    const prev = lastRecordingView.get(key)
+    if (prev != null && now - prev < RECORDING_VIEW_DEDUP_MS) return false // 同一观看会话内的后续 Range 请求：不重复留痕
+    lastRecordingView.set(key, now)
+    if (lastRecordingView.size > 5000) for (const [k, t] of lastRecordingView) if (now - t >= RECORDING_VIEW_DEDUP_MS) lastRecordingView.delete(k) // 机会式清过期项，防无界
+    return true
+  }
 
   /// 解析参与者 userId → 展示名（缺失/已删用户回退为 '(unknown)'）。
   const nameOf = (id: string): string => store.findById(id)?.displayName ?? '(unknown)'
@@ -169,8 +183,8 @@ export function registerRecordingRoutes(app: FastifyInstance, store: Store, cons
     if (!mediaFileExists(rec.mediaId)) return reply.code(404).send({ error: 'not_found' })
     const media = store.findMedia(rec.mediaId)
     const mime = media?.mime ?? 'video/quicktime'
-    // 管理员查看留痕（尤其是查看用户已软删除的录制——可追责）。
-    if (isAdmin && !isOwner) {
+    // 管理员查看留痕（尤其是查看用户已软删除的录制——可追责）。去重：一次观看的多个 Range 请求只留一条。
+    if (isAdmin && !isOwner && shouldAuditRecordingView(ident.user.id, id, Date.now())) {
       store.createAuditEntry({ id: randomUUID(), adminId: ident.user.id, action: 'recording.view', targetType: 'recording', targetId: id, detail: rec.deletedAt != null ? 'user-deleted (legal hold)' : undefined, at: Date.now() })
     }
     return streamWithRange(req, reply, mediaPath(rec.mediaId), mime)

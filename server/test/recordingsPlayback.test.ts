@@ -160,6 +160,18 @@ describe('录制媒体播放（流式 + 授权 + Range）', () => {
     await app.close()
   })
 
+  it('管理员观看审计去重：一次观看的多个 Range 请求（<video> seek/缓冲）只留**一条** recording.view，不刷屏审计', async () => {
+    const { app, store, at, recording } = await makeRecording()
+    const auditCount = () => store.allAuditEntries().filter((e) => e.action === 'recording.view' && e.targetId === recording.id).length
+    // 模拟一次观看的多个请求：整取 + 三个 Range（首帧/seek/尾）。
+    await app.inject({ method: 'GET', url: `/api/recordings/${recording.id}/media`, headers: auth(at) })
+    await app.inject({ method: 'GET', url: `/api/recordings/${recording.id}/media`, headers: { ...auth(at), range: 'bytes=0-3' } })
+    await app.inject({ method: 'GET', url: `/api/recordings/${recording.id}/media`, headers: { ...auth(at), range: 'bytes=10-20' } })
+    await app.inject({ method: 'GET', url: `/api/recordings/${recording.id}/media`, headers: { ...auth(at), range: 'bytes=-5' } })
+    expect(auditCount()).toBe(1) // 一次观看 = 一条审计（修复前=每个请求各一条，共 4 条）
+    await app.close()
+  })
+
   it('play-token 用于 Web <video>：?t= 可播；令牌严格绑定单个录制', async () => {
     const { app, owner, recording } = await makeRecording()
     const tokenRes = await app.inject({ method: 'GET', url: `/api/recordings/${recording.id}/play-token`, headers: auth(owner.token) })

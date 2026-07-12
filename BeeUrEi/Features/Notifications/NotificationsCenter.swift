@@ -268,6 +268,49 @@ enum NotifIcon {
     }
 }
 
+/// 通知深链（与 web notifDestination 同判定顺序；纯函数可测）：点通知行的「打开」直达对应页面。
+/// 排序陷阱同 web：security_apple_linked 含子串 "link" 须先归账户页；emergency_contact 是关系事件归亲友页
+/// （真 SOS 告警有专属行内按钮，故意不深链）。iOS 差异（诚实适配，不跳错地方）：
+/// - route 类：iOS 无独立路线库页 → 不深链（none）；
+/// - group_removed/dissolved：你已进不去那个群，web 落聊天列表，iOS 通知文案已说明一切 → 不深链。
+enum NotifDestination: Equatable {
+    case account
+    case family
+    case directChat(peerId: String)
+    case groupChat(groupId: String)
+    case locations
+    case none
+
+    static func destination(kind: String, data: [String: String]?) -> NotifDestination {
+        if kind.contains("security") || kind.contains("medical") || kind.contains("kyc") || kind.contains("verif") { return .account }
+        if kind.contains("emergency_contact") { return .family }
+        if kind.contains("checkin") { return .family }
+        if kind.contains("friend") || kind.contains("link") { return .family }
+        if kind.contains("group") || kind == "message_pinned" {
+            if kind == "group_removed" || kind == "group_dissolved" { return .none }
+            if let g = data?["groupId"], !g.isEmpty { return .groupChat(groupId: g) }
+            if let f = data?["fromId"], !f.isEmpty { return .directChat(peerId: f) }
+            return .none
+        }
+        if kind.contains("route") { return .none }
+        if kind.contains("place") || kind.contains("arrival") || kind.contains("battery") { return .locations }
+        if kind == "location_request" || kind == "location_share_started" { return .locations }
+        return .none
+    }
+
+    /// 链接文案（读屏念得出去处，比笼统"查看"有用）。none 不显链接。
+    func label(_ l: Language) -> String {
+        switch self {
+        case .account: return l == .zh ? "打开账户页" : "Open account"
+        case .family: return l == .zh ? "打开亲友页" : "Open family"
+        case .directChat: return l == .zh ? "打开会话" : "Open chat"
+        case .groupChat: return l == .zh ? "打开群聊" : "Open group chat"
+        case .locations: return l == .zh ? "打开位置页" : "Open locations"
+        case .none: return ""
+        }
+    }
+}
+
 /// 工具栏铃铛 + 未读角标，点开应用内通知列表。
 struct NotificationsBell: View {
     @State private var center = NotificationsCenter.shared
@@ -294,6 +337,7 @@ struct NotificationsBell: View {
 /// 应用内通知列表：待确认的请求（接受/拒绝）。
 struct NotificationsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AuthSession.self) private var session
     @State private var center = NotificationsCenter.shared
     @State private var busy: Set<String> = []
     /// 通知列表文案语言（E5）。
@@ -371,6 +415,17 @@ struct NotificationsView: View {
                                     LocationRequestShareButton(fromName: n.data?["fromName"] ?? "")
                                         .padding(.leading, n.isUnread ? 16 : 0)
                                 }
+                                // 通知深链（NotifDestination 纯函数已测，与 web 同判定）：直达对应页面。
+                                // 独立链接元素而非整行可点——行内已有回执/共享等按钮，整行手势会与之冲突；
+                                // 读屏用户也因此得到明确的"打开X页"独立元素。
+                                let dest = NotifDestination.destination(kind: n.kind, data: n.data)
+                                if dest != .none {
+                                    NavigationLink { destinationView(dest, n: n) } label: {
+                                        Label(dest.label(lang), systemImage: "arrow.forward.circle")
+                                            .font(.footnote).foregroundStyle(Color.beeAccent)
+                                    }
+                                    .padding(.leading, n.isUnread ? 16 : 0)
+                                }
                             }
                             .padding(.vertical, 2)
                         }
@@ -410,6 +465,21 @@ struct NotificationsView: View {
             .refreshable { await center.refresh() }
             .task { await center.refresh() }
             .onDisappear { Task { await center.markFeedRead() } } // 打开过即视为看过收件箱 → 清角标
+        }
+    }
+
+    /// 深链目的地视图（NotifDestination → 具体页面）。ChatView 名字用通知 data 的 fromName/groupName，
+    /// 缺省空串（ChatView 自会刷新详情）；位置页 isBlind 按当前身份。
+    @ViewBuilder private func destinationView(_ dest: NotifDestination, n: NotificationInfo) -> some View {
+        switch dest {
+        case .account: LoginView()
+        case .family: FamilyLinksView()
+        case .directChat(let pid):
+            ChatView(session: session, target: .direct(peerId: pid, name: n.data?["fromName"] ?? "", avatar: nil))
+        case .groupChat(let gid):
+            ChatView(session: session, target: .group(id: gid, name: n.data?["groupName"] ?? ""))
+        case .locations: LiveLocationView(isBlind: session.user?.role == "blind")
+        case .none: EmptyView()
         }
     }
 

@@ -683,11 +683,19 @@ struct ChatView: View {
                             .accessibilityAction(named: Text(ChatStrings.readPhotoText(lang))) { readImageText(img) }
                             // 复制图中文字：盲人可把处方/地址/时刻表存下，粘进备忘录/提醒/地图（读=听、复制=留存转发）。
                             .accessibilityAction(named: Text(ChatStrings.copyPhotoText(lang))) { copyImageText(img) }
+                            // AI 场景描述（读字之外的语义层）：亲友拍来的不只是文字——"看看我家新沙发"这类照片
+                            // OCR 无字可读，此前盲人只能听"图片"两个字。走服务端视觉大模型（配额/限流/fail-closed）。
+                            .accessibilityAction(named: Text(ChatStrings.describePhoto(lang))) { describeImage(img) }
                         // 可见"读文字"按钮：上面的 OCR 读文字此前**只在 VoiceOver 转子**（最难发现的层）——转子操作连很多
                         // VoiceOver 用户都不知道、不用 VoiceOver 的盲人更无从触发。读亲友拍来的处方/时刻表/纸条是核心场景，
                         // 须有可见可点入口（同音频气泡的可见播放按钮）。转子操作保留，作为熟练用户的快捷。
                         Button { readImageText(img) } label: {
                             Label(ChatStrings.readPhotoText(lang), systemImage: "text.viewfinder").font(.footnote)
+                        }
+                        .buttonStyle(.borderless)
+                        // 可见"描述照片"按钮（与"读文字"同理：转子最难发现，核心场景须可见入口）。
+                        Button { describeImage(img) } label: {
+                            Label(ChatStrings.describePhoto(lang), systemImage: "sparkles").font(.footnote)
                         }
                         .buttonStyle(.borderless)
                     }
@@ -732,6 +740,34 @@ struct ChatView: View {
 
     /// 读出图片里的文字（盲人收图看不见内容——亲友常拍处方/时刻表/说明书/纸条让盲人"看"）。
     /// 语音**随文字语言**（中/英）朗读，与识别屏"读文字"同一管线（orderedOCRText + dominantTextIsChinese）。
+    /// AI 描述照片：降采样(长边 1024/JPEG 0.7——护每日付费配额与上传体积)→服务端视觉大模型→朗读。
+    /// 失败按错误码给具体原因（配额用尽/未配置/太大——绝不笼统"失败"让盲人徒劳重试）；临近配额上限（≤3）追加提醒。
+    private func describeImage(_ img: UIImage) {
+        let lang = self.lang
+        guard let token = session.token else { return }
+        SpeechHub.shared.speak(ChatStrings.describingPhoto(lang), channel: .query, voiceCode: lang.voiceCode) // 即时提示，云端往返不冷场
+        let scaled = Self.resized(img, maxSide: 1024)
+        guard let jpeg = scaled.jpegData(compressionQuality: 0.7) else {
+            SpeechHub.shared.speak(ChatStrings.aiDescribeErrorText("encode_failed", lang), channel: .query, voiceCode: lang.voiceCode)
+            return
+        }
+        Task {
+            do {
+                let r = try await APIClient().visionDescribe(token: token, jpegBase64: jpeg.base64EncodedString(),
+                                                             lang: lang == .zh ? "zh" : "en")
+                var out = r.text
+                if let note = ChatStrings.quotaRemainingNote(remaining: r.remaining, lang) {
+                    out += lang == .zh ? "。\(note)" : ". \(note)"
+                }
+                SpeechHub.shared.speak(out, channel: .query, voiceCode: lang.voiceCode)
+            } catch APIError.server(let code) {
+                SpeechHub.shared.speak(ChatStrings.aiDescribeErrorText(code, lang), channel: .query, voiceCode: lang.voiceCode)
+            } catch {
+                SpeechHub.shared.speak(ChatStrings.aiDescribeErrorText("network", lang), channel: .query, voiceCode: lang.voiceCode)
+            }
+        }
+    }
+
     private func readImageText(_ img: UIImage) {
         let lang = self.lang
         SpeechHub.shared.speak(ChatStrings.readingPhoto(lang), channel: .query, voiceCode: lang.voiceCode) // 即时提示，计算期间不冷场

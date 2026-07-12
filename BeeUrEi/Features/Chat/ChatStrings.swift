@@ -139,6 +139,31 @@ enum ChatStrings {
     /// 复制图中文字（盲人存下处方/地址/时刻表，粘进备忘录/提醒/地图）：读=听、复制=留存转发，两个独立操作。
     static func copyPhotoText(_ l: Language) -> String { l == .zh ? "复制图中文字" : "Copy text in photo" }
     static func photoTextCopied(_ l: Language) -> String { l == .zh ? "图中文字已复制" : "Text copied" }
+    // —— AI 描述照片（读字之外的语义层："超市货架"/"公园长椅上有只猫"）——
+    static func describePhoto(_ l: Language) -> String { l == .zh ? "描述这张照片" : "Describe this photo" }
+    static func describingPhoto(_ l: Language) -> String { l == .zh ? "正在请 AI 描述照片…" : "Asking AI to describe the photo…" }
+    /// 服务端错误码 → 盲人能听懂、不会徒劳重试的具体原因（与 sendErrorText 同范式）。
+    static func aiDescribeErrorText(_ code: String, _ l: Language) -> String {
+        switch code {
+        case "ai_not_configured":
+            return l == .zh ? "AI 描述服务未配置，请联系管理员" : "AI description isn't configured — contact the administrator"
+        case "ai_daily_quota_exceeded":
+            return l == .zh ? "今日 AI 描述次数已用完，明天会重置" : "Today's AI description quota is used up — it resets tomorrow"
+        case "image_too_large":
+            return l == .zh ? "图片太大，无法描述" : "The photo is too large to describe"
+        case "too_many_requests":
+            return l == .zh ? "请求太频繁，请稍等再试" : "Too many requests — wait a moment and try again"
+        case "feature_disabled":
+            return l == .zh ? "AI 描述已被管理员关闭" : "AI description is turned off by the administrator"
+        default:
+            return l == .zh ? "描述失败，请重试" : "Couldn't describe the photo — try again"
+        }
+    }
+    /// 剩余配额提醒（纯门控可测）：付费额度有限，**临近上限（≤3）才提醒**——每次都念"还剩 N 次"是噪声。
+    static func quotaRemainingNote(remaining: Int?, _ l: Language) -> String? {
+        guard let r = remaining, r <= 3, r >= 0 else { return nil }
+        return l == .zh ? "今日 AI 描述还剩 \(r) 次" : "\(r) AI description\(r == 1 ? "" : "s") left today"
+    }
     static func recall(_ l: Language) -> String { l == .zh ? "撤回" : "Unsend" }
     static func recalled(_ l: Language) -> String { l == .zh ? "已撤回" : "Message unsent" }
     static func recallFailed(_ l: Language) -> String {

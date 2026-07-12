@@ -1040,6 +1040,16 @@ struct APIClient {
         return (try? await authedSend("POST", "/api/emergency/all-clear", token: token, body: body)) != nil
     }
 
+    /// AI 场景描述（服务端 /api/vision/describe：云端视觉大模型，每日配额+10/min 限流+未配置 503 fail-closed）。
+    /// remaining/dailyMax：服务端回带的当日剩余次数（付费额度，供临近上限时提醒盲人配给使用）。
+    struct VisionDescribeResult: Codable, Sendable { let text: String; var remaining: Int?; var dailyMax: Int? }
+    func visionDescribe(token: String, jpegBase64: String, question: String? = nil, lang: String) async throws -> VisionDescribeResult {
+        var body: [String: Any] = ["image": jpegBase64, "mime": "image/jpeg", "lang": lang]
+        if let question, !question.isEmpty { body["question"] = question }
+        let data = try await authedSend("POST", "/api/vision/describe", token: token, body: body)
+        return try JSONDecoder().decode(VisionDescribeResult.self, from: data)
+    }
+
     /// 响应者回执 SOS 告警：onMyWay=true「我在赶来」（更强安心信号）/ false「我已看到」（纯 ack）。
     /// 两者都让遇险者知道"有人在响应"并停止服务端升级重呼；服务端幂等去重（同状态 5 分钟内只回告一次）。
     /// 与网页通知列表/告警横幅同一后端流程（POST /api/emergency/ack）。best-effort：失败返回 false 供 UI 提示重试。

@@ -252,6 +252,11 @@ export const api = {
   async register(username: string, password: string, role: string): Promise<{ token: string; refreshToken: string; user: User; created?: boolean }> {
     return rawFetch('POST', '/api/auth/register', { username, password, role }, false) as Promise<{ token: string; refreshToken: string; user: User; created?: boolean }>
   },
+  // 邮箱验证码登录（免密，与 iOS 同链）：发码反枚举对称；已有账号即登录（2FA 账号须补 totpCode），
+  // 未注册邮箱自动建号（受服务端注册开关管制，403 registration_disabled）。
+  emailRequestCode: (email: string) => rawFetch('POST', '/api/auth/email/request-code', { email }, false) as Promise<{ ok: boolean }>,
+  emailVerifyCode: (email: string, code: string, opts?: { totpCode?: string; role?: string }) =>
+    rawFetch('POST', '/api/auth/email/verify-code', { email, code, ...opts }, false) as Promise<{ token: string; refreshToken: string; user: User; created?: boolean }>,
   // 找回密码（未登录）：① 按标识发验证码到已验证邮箱（服务端反枚举，恒返回 ok）② 凭码设新密码。与 iOS 同链、同服务端端点。
   forgotPassword: (username: string) => rawFetch('POST', '/api/auth/forgot-password', { username }, false) as Promise<{ ok: boolean }>,
   resetPassword: (username: string, code: string, newPassword: string) =>

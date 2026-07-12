@@ -19,6 +19,12 @@ export function LoginPage() {
   const [role, setRole] = useState<'helper' | 'family'>('helper')
   const [busy, setBusy] = useState(false)
   const [pkBusy, setPkBusy] = useState(false) // 通行密钥登录进行中（独立于表单 busy：浏览器弹窗期间表单仍可用）
+  // 邮箱验证码登录（免密）：两步（发码→验码）；2FA 账号第三步补验证码。
+  const [emailMode, setEmailMode] = useState(false)
+  const [email, setEmail] = useState('')
+  const [emailCode, setEmailCode] = useState('')
+  const [emailCodeSent, setEmailCodeSent] = useState(false)
+  const [emailTotp, setEmailTotp] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [twoFA, setTwoFA] = useState(false)     // 登录遇两步验证挑战：显示验证码输入
   const [totpCode, setTotpCode] = useState('')
@@ -40,6 +46,8 @@ export function LoginPage() {
       case 'account_disabled': return t('该账号已被停用，请联系管理员', 'This account has been disabled — please contact the administrator')
       case 'too_many_requests': return t('尝试过于频繁，请稍候再试', 'Too many attempts — please wait a moment')
       case 'invalid_code': return t('验证码不对或已过期，请重新获取', 'That code is wrong or expired — request a new one')
+      case 'code_cooldown': case 'code_too_many': return t('发送太频繁，请稍等再试', 'Too many requests — wait a moment and try again')
+      case 'mail_unavailable': return t('邮件服务暂时不可用，请稍后再试或改用密码登录', 'Email service is temporarily unavailable — try later or use your password')
       case 'content_blocked': return t('该内容不被允许，请换一个', "That's not allowed — please choose another")
       case 'network': return t('网络连接失败，请重试', 'Network error, please retry')
       case 'invalid_input': return t('请检查输入内容', 'Please check your input')
@@ -95,6 +103,39 @@ export function LoginPage() {
     } finally { setPkBusy(false) }
   }
 
+  // 邮箱验证码登录 · 发码：反枚举对称（已注册/未注册都发），提示措辞不暴露账号是否存在。
+  const sendEmailCode = async (e: React.FormEvent) => {
+    e.preventDefault(); setError(null); setNotice(null)
+    setBusy(true)
+    try {
+      await api.emailRequestCode(email.trim())
+      setEmailCodeSent(true)
+      setNotice(t('验证码已发送，请查收邮箱后填写下方。', 'Code sent — check your inbox and enter it below.'))
+    } catch (err) { setError(errorText(err instanceof APIError ? err.code : 'unknown')) }
+    finally { setBusy(false) }
+  }
+
+  // 邮箱验证码登录 · 验码：已有账号即登录（开了 2FA 的追加第二因子）；未注册邮箱自动建号（服务端注册开关管制）。
+  const verifyEmailCode = async (e: React.FormEvent) => {
+    e.preventDefault(); setError(null)
+    setBusy(true)
+    try {
+      const res = await api.emailVerifyCode(email.trim(), emailCode.trim(), emailTotp ? { totpCode: totpCode.trim() } : undefined)
+      signIn(res.token, res.refreshToken, res.user)
+    } catch (err) {
+      const code = err instanceof APIError ? err.code : 'unknown'
+      if (code === 'two_factor_required') { setEmailTotp(true); setError(null) }
+      else if (code === 'invalid_2fa') { setEmailTotp(true); setError(t('验证码不对，请重试', "That code didn't work — please try again")) }
+      // 邮箱流里的"注册关闭"要点破前半句（该邮箱未注册）——通用文案"注册暂时关闭"会让存量用户误以为自己登录被关。
+      else if (code === 'registration_disabled') setError(t('该邮箱未注册，且当前未开放新账号注册', "This email isn't registered, and new sign-ups are currently closed"))
+      else setError(errorText(code))
+    } finally { setBusy(false) }
+  }
+
+  const leaveEmailMode = () => {
+    setEmailMode(false); setEmailCodeSent(false); setEmailCode(''); setEmailTotp(false); setTotpCode(''); setError(null); setNotice(null)
+  }
+
   // 找回密码 · 第一步：向账号绑定的**已验证**邮箱发验证码。服务端反枚举、恒 ok，故成功即进填码步、提示措辞不暴露账号是否存在。
   const sendResetCode = async (e: React.FormEvent) => {
     e.preventDefault(); setError(null); setNotice(null)
@@ -145,14 +186,48 @@ export function LoginPage() {
         </div>
 
         <div className="surface rounded-2xl border border-[var(--line)] p-6 shadow-sm">
-          {!twoFA && !forgot && (
+          {!twoFA && !forgot && !emailMode && (
           <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl surface-2 p-1 text-sm">
             <button aria-pressed={mode === 'login'} onClick={() => { setMode('login'); setError(null); setNotice(null) }} className={`rounded-lg py-2 font-medium transition ${mode === 'login' ? 'surface shadow-sm' : 'text-faint'}`}>{t('登录', 'Sign in')}</button>
             <button aria-pressed={mode === 'register'} onClick={() => { setMode('register'); setError(null); setNotice(null) }} className={`rounded-lg py-2 font-medium transition ${mode === 'register' ? 'surface shadow-sm' : 'text-faint'}`}>{t('注册', 'Register')}</button>
           </div>
           )}
 
-          {forgot ? (
+          {emailMode ? (
+            <form onSubmit={emailCodeSent ? verifyEmailCode : sendEmailCode} className="flex flex-col gap-4">
+              <div>
+                <h2 className="text-base font-semibold">{t('邮箱验证码登录', 'Sign in with an email code')}</h2>
+                <p className="mt-1 text-sm text-soft">
+                  {t('免密码：验证码发到你的邮箱，输入即登录。未注册的邮箱会自动创建新账号。',
+                    "No password needed — we'll email you a code. A new account is created automatically for unregistered emails.")}
+                </p>
+              </div>
+              <Field label={t('邮箱', 'Email')}>
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" autoCapitalize="none" required readOnly={emailCodeSent} placeholder={t('you@example.com', 'you@example.com')} />
+              </Field>
+              {emailCodeSent && (
+                <Field label={t('验证码', 'Code')}>
+                  <Input value={emailCode} onChange={(e) => setEmailCode(e.target.value)} autoComplete="one-time-code" required placeholder="123456" />
+                </Field>
+              )}
+              {emailTotp && (
+                <Field label={t('两步验证码 / 恢复码', '2FA code / recovery code')} hint={t('该账号开启了两步验证', 'This account has two-factor enabled')}>
+                  <Input value={totpCode} onChange={(e) => setTotpCode(e.target.value)} autoComplete="one-time-code" autoCapitalize="characters" required placeholder="123456" />
+                </Field>
+              )}
+              {notice && <div className="rounded-xl bg-ok/10 px-3 py-2 text-sm text-ok" role="status">{notice}</div>}
+              {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">{error}</div>}
+              <Button type="submit" loading={busy} className="mt-1 w-full py-3 text-base">
+                {emailCodeSent ? t('验证并登录', 'Verify & sign in') : t('发送验证码', 'Send code')}
+              </Button>
+              {emailCodeSent && (
+                <button type="button" onClick={(e) => { setEmailCodeSent(false); setEmailCode(''); setEmailTotp(false); void sendEmailCode(e as unknown as React.FormEvent) }} className="text-sm text-faint hover:text-soft">
+                  {t('重新发送验证码', 'Resend code')}
+                </button>
+              )}
+              <button type="button" onClick={leaveEmailMode} className="text-sm text-faint hover:text-soft">{t('返回密码登录', 'Back to password sign-in')}</button>
+            </form>
+          ) : forgot ? (
             <form onSubmit={codeSent ? doReset : sendResetCode} className="flex flex-col gap-4">
               <div>
                 <h2 className="text-base font-semibold">{t('找回密码', 'Reset password')}</h2>
@@ -225,6 +300,11 @@ export function LoginPage() {
                  指纹/面容确认即登录。UV 强制（服务端 requireUserVerification），等价满足两步验证。 */
               <Button type="button" variant="soft" loading={pkBusy} onClick={() => void passkeyLogin()} className="w-full py-3 text-base">
                 🔑 {t('用通行密钥登录', 'Sign in with a passkey')}
+              </Button>
+            )}
+            {mode === 'login' && (
+              <Button type="button" variant="soft" onClick={() => { setEmailMode(true); setError(null); setNotice(null) }} className="w-full py-3 text-base">
+                ✉️ {t('邮箱验证码登录', 'Sign in with an email code')}
               </Button>
             )}
             {mode === 'login' && (

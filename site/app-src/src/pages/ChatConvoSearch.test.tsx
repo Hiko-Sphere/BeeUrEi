@@ -69,17 +69,39 @@ describe('ChatPage 会话列表按名字搜索过滤', () => {
       { id: 'm2', fromId: 'me', toId: '', groupId: 'g1', kind: 'text', text: '群里说地址改了', createdAt: 2000 }, // 群 → 家庭群
       { id: 'm3', fromId: 'ghost', toId: 'me', kind: 'text', text: '幽灵地址', createdAt: 3000 },               // 对端不在会话列表 → 不渲染
     ] })
+    mock(api.messagesWith).mockResolvedValue({ messages: [{ id: 'm1', fromId: 'p1', toId: 'me', kind: 'text', text: '医院地址是幸福路1号', createdAt: 1000 }] })
     render(<ChatPage />)
     await screen.findByText('阿明')
     fireEvent.change(search(), { target: { value: '地址' } })
     // 防抖 0.35s 后调全局搜索并渲染"消息"区。
     await waitFor(() => expect(api.searchAllMessages).toHaveBeenCalledWith('地址'))
-    expect(await screen.findByText('医院地址是幸福路1号')).toBeInTheDocument()
+    const hit = await screen.findByRole('button', { name: '打开与 阿明 的会话' }) // 等命中区渲染
     expect(screen.getByText('群里说地址改了')).toBeInTheDocument()
     expect(screen.queryByText('幽灵地址')).not.toBeInTheDocument() // 解析不到会话 → 不渲染死行
-    // 点击单聊命中 → 打开与阿明的会话（Thread 拉取该对端消息）。
-    fireEvent.click(screen.getByRole('button', { name: '打开与 阿明 的会话' }))
+    // 点击单聊命中 → 打开与阿明的会话（Thread 拉取该对端消息）并**跳到并高亮命中消息**（不只落到会话底部）。
+    fireEvent.click(hit)
     await waitFor(() => expect(api.messagesWith).toHaveBeenCalledWith('p1', undefined, undefined))
+    await waitFor(() => expect(document.getElementById('msg-m1')?.className ?? '').toContain('bg-honey/15'))
+  })
+
+  it('全局命中很旧的消息：点击打开会话后回溯分页载入并高亮该条（不只落到底部看不到命中）', async () => {
+    const now = 1_000_000
+    mock(api.searchAllMessages).mockResolvedValue({ messages: [
+      { id: 'old1', fromId: 'p1', toId: 'me', kind: 'text', text: '很久以前的地址', createdAt: now - 9_999_999 },
+    ] })
+    // 会话首屏（before 未定）不含 old1；带 before 游标的回溯分页才返回它。
+    mock(api.messagesWith).mockImplementation((_id: string, before?: number) =>
+      Promise.resolve(before === undefined
+        ? { messages: [{ id: 'recent', fromId: 'p1', toId: 'me', kind: 'text', text: '最近消息', createdAt: now }] }
+        : { messages: [{ id: 'old1', fromId: 'p1', toId: 'me', kind: 'text', text: '很久以前的地址', createdAt: now - 9_999_999 }] }))
+    render(<ChatPage />)
+    await screen.findByText('阿明')
+    fireEvent.change(search(), { target: { value: '地址' } })
+    await waitFor(() => expect(api.searchAllMessages).toHaveBeenCalledWith('地址'))
+    fireEvent.click(await screen.findByRole('button', { name: '打开与 阿明 的会话' }))
+    // 打开会话 → 回溯分页把 old1 载入并高亮定位（否则只落到底部、命中消息在旧历史里看不到）。
+    await waitFor(() => expect(document.getElementById('msg-old1')?.className ?? '').toContain('bg-honey/15'))
+    expect(mock(api.messagesWith).mock.calls.some((c) => c[1] !== undefined)).toBe(true) // 确发过带游标的回溯请求
   })
 
   it('全局命中：对端已注销（服务端空名）→ 命中行本地化为"已注销用户"、aria-label 完整（不留空名/残缺短语）', async () => {

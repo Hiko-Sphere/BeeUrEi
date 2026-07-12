@@ -14,7 +14,8 @@ import { ReportDialog } from '../components/ReportDialog'
 import { Avatar, Pill, Spinner, EmptyState, useToast, timeAgo, fmtHm, fmtTime, Modal, Button } from '../components/ui'
 import { IconChat, IconSend, IconPlus, IconX, IconPin } from '../components/icons'
 
-type Selection = { kind: 'peer'; id: string; name: string; avatar?: string | null; muted?: boolean; unread?: number } | { kind: 'group'; id: string; name: string; members: User[]; ownerId: string; muted: boolean; unread?: number }
+// jumpTo：打开会话后要跳到并高亮的消息 id（全局消息搜索命中→直达那条消息，而非只落到会话底部）。见 Thread 内 jumpToMessage。
+type Selection = { kind: 'peer'; id: string; name: string; avatar?: string | null; muted?: boolean; unread?: number; jumpTo?: string } | { kind: 'group'; id: string; name: string; members: User[]; ownerId: string; muted: boolean; unread?: number; jumpTo?: string }
 
 export function ChatPage() {
   const { peerId, groupId } = useParams()
@@ -103,13 +104,13 @@ export function ChatPage() {
   const hitTarget = (m: ChatMessage): { key: string; name: string; open: () => void } | null => {
     if (m.groupId) {
       const g = (groups ?? []).find((x) => x.group.id === m.groupId)
-      return g ? { key: `g:${m.id}`, name: g.group.name, open: () => setSel({ kind: 'group', id: g.group.id, name: g.group.name, members: g.members, ownerId: g.group.ownerId, muted: g.muted ?? false }) } : null
+      return g ? { key: `g:${m.id}`, name: g.group.name, open: () => setSel({ kind: 'group', id: g.group.id, name: g.group.name, members: g.members, ownerId: g.group.ownerId, muted: g.muted ?? false, jumpTo: m.id }) } : null
     }
     const pid = m.fromId === meUser?.id ? m.toId : m.fromId
     const c = (convos ?? []).find((x) => x.peer.id === pid)
     if (!c) return null
     const nm = c.peer.displayName || t('已注销用户', 'Deactivated user') // 已注销对端服务端发空名：与 items 同源本地化，免命中行空名/aria-label 残缺
-    return { key: `p:${m.id}`, name: nm, open: () => setSel({ kind: 'peer', id: pid, name: nm, avatar: c.peer.avatar, muted: c.muted ?? false }) }
+    return { key: `p:${m.id}`, name: nm, open: () => setSel({ kind: 'peer', id: pid, name: nm, avatar: c.peer.avatar, muted: c.muted ?? false, jumpTo: m.id }) }
   }
 
   const back = () => { setSel(null); if (peerId) nav('/chat') }
@@ -361,7 +362,9 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
   const [muted, setMuted] = useState(sel.muted ?? false) // 会话免打扰（群/单聊通用；乐观切换 + 回滚）
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const nearBottomRef = useRef(true) // 用户是否在底部附近；新消息仅在此才自动滚到底（上翻看历史不被拽走）
+  // 用户是否在底部附近；新消息仅在此才自动滚到底（上翻看历史不被拽走）。带 jumpTo（从全局搜索命中打开）时初始置
+  // false：不先把视图强拽到底再跳，避免"闪一下底部再跳到命中处"的跳动——直接由 jumpTo 效应定位到命中消息。
+  const nearBottomRef = useRef(sel.jumpTo == null)
   const msgsRef = useRef<ChatMessage[] | null>(null) // 最新 msgs 的镜像：供 jumpToMessage 回溯分页时无闭包陈旧地取当前最旧游标
   const [jumping, setJumping] = useState(false) // 正在为跳转回溯加载更早历史（搜索/引用/置顶跳到未加载的旧消息）
   const onMsgScroll = () => { if (scrollRef.current) nearBottomRef.current = isNearBottom(scrollRef.current) }
@@ -457,6 +460,18 @@ function Thread({ sel, onBack, onSent, peerOnline }: { sel: Selection; onBack: (
   }, [fetchWindow, toast, t])
 
   useEffect(() => { void load(); return pollWhileVisible(load, 5000) }, [load])
+
+  // 从全局消息搜索命中打开会话时（sel.jumpTo）：首屏消息加载完后跳到并高亮那条命中消息（更早未加载则回溯分页
+  // 载入，见 jumpToMessage）——否则只落到会话底部，用户还得在会话里再搜一次（与线程内搜索命中同一"直达"口径）。
+  // 每个 jumpTo 目标只跳一次：防 5s 轮询刷新 msgs 时反复重跳、把用户从正在看的位置反复拽回。
+  const jumpedForRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!sel.jumpTo || msgs === null) return // 等首屏消息加载完（msgsRef 有值）再跳
+    if (jumpedForRef.current === sel.jumpTo) return
+    jumpedForRef.current = sel.jumpTo
+    void jumpToMessage(sel.jumpTo)
+  }, [sel.jumpTo, msgs, jumpToMessage])
+
   // 仅在**最新一条**变化时滚到底（新消息）；上翻加载更早消息时 last 不变，不应跳到底部。
   const lastId = msgs && msgs.length ? msgs[msgs.length - 1].id : null
   // 新末尾变化即滚到底——**但仅当用户已在底部附近**（在底部聊天/刚进会话），上翻看历史时不打断。首帧 nearBottom

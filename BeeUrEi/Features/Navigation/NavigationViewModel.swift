@@ -29,6 +29,7 @@ final class NavigationViewModel {
     private(set) var remaining = ""
     private(set) var remainingArrivalClock: String? = nil // 剩余里程对应的预计到达时钟时刻；供"重听"回述报「预计几点到达」
     @ObservationIgnored private var lang: Language = FeatureSettings().language // 播报语言（E5，进导航/预览/记路时解析）
+    @ObservationIgnored private var unit: DistanceUnit = FeatureSettings().distanceUnit // 距离单位（公制/英制，与 lang 同时解析）
     private(set) var steps: [String] = []     // 国内：路线步骤列表（VoiceOver 可读）
     private(set) var running = false
     /// 最近一次**成功建立路线**的目的地查询串——仅成功后才入收藏，避免把找不到的垃圾目的地存进常用（见 P2 审计）。
@@ -105,6 +106,7 @@ final class NavigationViewModel {
 
     func start(destination query: String, region: Region, fixedCoordinate: CLLocationCoordinate2D? = nil) async {
         lang = FeatureSettings().language   // 进导航解析一次（设置页改语言后重开生效）
+        unit = FeatureSettings().distanceUnit
         guard FeatureSettings().navigationEnabled else {
             failStatus(NavStrings.enableFirst(lang)) // 盲人点完按钮须听到原因（见 P1 审计）
             return
@@ -263,7 +265,7 @@ final class NavigationViewModel {
                                                        destination: Coordinate(lat: dest.latitude, lon: dest.longitude)) {
                 let speed = RouteRemaining.effectiveWalkingSpeed(rawMps: loc.speed)
                 let eta = RouteRemaining.etaSeconds(remainingMeters: rem, speedMps: speed)
-                remaining = NavStrings.remainingDistance(meters: Int(rem.rounded()), etaSeconds: eta, lang)
+                remaining = NavStrings.remainingDistance(meters: Int(rem.rounded()), etaSeconds: eta, unit: unit, lang)
                 remainingArrivalClock = arrivalClockString(etaSeconds: eta) // 与 remaining 同步更新，供"重听"报到达时刻
                 if remainingAnnouncer.update(remainingMeters: rem) != nil {
                     NavVoice.shared.speakCallout(remaining)
@@ -355,7 +357,7 @@ final class NavigationViewModel {
                 let result = route.steps
                 // 步距经 safeRoundedInt：distanceMeters 是后端 JSON 原样解码的 Double?，巨值有限数（如上游 bug
                 // 给出 1e19 > Int.max）直接 Int() 会**溢出陷阱崩溃**；?? 0 只挡 nil、挡不住量级（复审确认可达）。
-                steps = result.map { NavStrings.stepListItem($0.instruction, meters: SpokenStrings.safeRoundedInt($0.distanceMeters ?? 0), lang) }
+                steps = result.map { NavStrings.stepListItem($0.instruction, meters: SpokenStrings.safeRoundedInt($0.distanceMeters ?? 0), unit: unit, lang) }
 
                 // 实时逐向引导（与海外同一引擎）：每步折线首点=转向点；全折线供偏航检测；目的地坐标供到达判定。
                 let withLine = result.filter { ($0.polyline?.first?.count ?? 0) >= 2 }
@@ -494,7 +496,7 @@ final class NavigationViewModel {
         // 直接经 NavVoice 排队（不走 VM 的去重 speak，避免占用 lastSpoken 干扰下个转向指令去重）。
         NavVoice.shared.speak(NavStrings.journeyOverview(meters: SpokenStrings.safeRoundedInt(totals.meters),
                                                          etaSeconds: totals.etaSeconds,
-                                                         arrivalClock: arrivalClockString(etaSeconds: totals.etaSeconds), lang),
+                                                         arrivalClock: arrivalClockString(etaSeconds: totals.etaSeconds), unit: unit, lang),
                               rate: FeatureSettings().speechRate)
     }
 
@@ -668,6 +670,7 @@ final class NavigationViewModel {
     /// 清除已记路线（持久轨迹存单例，跨会话不灭——给用户主动丢弃旧路线的入口，兼顾隐私）。
     func clearTrail() {
         lang = FeatureSettings().language
+        unit = FeatureSettings().distanceUnit
         BreadcrumbStore.shared.reset()
         trailCount = 0
         recordingTrail = false
@@ -678,6 +681,7 @@ final class NavigationViewModel {
     /// 开始记路：行进中每 ≥8m 记一个航点（去抖原地抖动），供之后一键原路返回。
     func startTrailRecording() {
         lang = FeatureSettings().language
+        unit = FeatureSettings().distanceUnit
         let wasNavigating = running
         if running { stop() } // 与导航互斥（共用定位服务）
         if wasNavigating { speak(NavStrings.navStoppedForNew(lang)) } // 告知"已停止当前导航"，再开始记路（见 P2 审计）
@@ -704,6 +708,7 @@ final class NavigationViewModel {
     /// 一键原路返回：把轨迹反向作为航点喂给同一套实时引导引擎（信标+转向+到达判定）。
     func startBacktrack() {
         lang = FeatureSettings().language
+        unit = FeatureSettings().distanceUnit
         guard trail.count >= 2, let origin = trail.start else {
             status = NavStrings.noTrailYet(lang)
             speak(status)
@@ -755,6 +760,7 @@ final class NavigationViewModel {
     /// 返回 false 表示门控未过（已播报原因），调用方不应继续。
     private func setupCustomRoute(name: String, waypoints: [(lat: Double, lon: Double, note: String?)]) -> Bool {
         lang = FeatureSettings().language
+        unit = FeatureSettings().distanceUnit
         // 与 start() 同门控：导航功能被关时点路线须听到原因，不静默什么都不发生（复审 MED）。
         guard FeatureSettings().navigationEnabled else { failStatus(NavStrings.enableFirst(lang)); return false }
         guard waypoints.count >= 2 else { return false } // 服务端已保证 >=2；纵深防御

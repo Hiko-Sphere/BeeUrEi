@@ -184,7 +184,14 @@ enum NavStrings {
     static func enteringRoad(_ name: String, _ l: Language) -> String { l == .zh ? "进入\(name)" : "Entering \(name)" }
 
     /// 距离短语："1.2 公里"（≥1km 用公里一位小数）/ "300 米"（≥10m 取整到 10 米）/ "4 米"（<10m 报精确值）。
-    private static func distancePhrase(meters: Int, _ l: Language) -> String {
+    /// 英制（英语盲人对标 Soundscape/Apple/Google Maps 均念英尺/英里）：委托 DistanceUnit.farDistance
+    /// （<1000ft 念英尺、≥ 念英里，溢出/非有限安全）。公制分支保持历史口径**逐字节不变**（10 米取整/末段精确/
+    /// 公里一位小数），只在用户显式选英制时切换——不打扰现有用户。
+    private static func distancePhrase(meters: Int, unit: DistanceUnit = .metric, _ l: Language) -> String {
+        if unit == .imperial {
+            // 末段临门一脚：英尺分辨率天然更细（1m≈3.3ft），farDistance 取整到 1 英尺不会把几步抹成 0。
+            return DistanceUnit.imperial.farDistance(meters: Double(max(0, meters)), language: l)
+        }
         if meters >= 1000 {
             let km = (Double(meters) / 100).rounded() / 10   // 一位小数
             return l == .zh ? "\(km) 公里" : "\(km) km"
@@ -209,8 +216,8 @@ enum NavStrings {
 
     /// 剩余路程 + 预计到达播报（导航中跨里程碑时报一次）："还有约 300 米，预计 4 分钟"。
     /// 末段（≤30 米）加"快到了"前缀——50 之后临近到达，盲人最想听到的语义提示（放慢、准备找门）。
-    static func remainingDistance(meters: Int, etaSeconds: Double?, _ l: Language) -> String {
-        let dist = distancePhrase(meters: meters, l)
+    static func remainingDistance(meters: Int, etaSeconds: Double?, unit: DistanceUnit = .metric, _ l: Language) -> String {
+        let dist = distancePhrase(meters: meters, unit: unit, l)
         let nearPrefix = meters <= 30 ? (l == .zh ? "快到了，" : "Almost there — ") : ""
         guard let eta = etaPhrase(etaSeconds, l) else {
             return l == .zh ? "\(nearPrefix)还有约\(dist)" : "\(nearPrefix)about \(dist) to go"
@@ -223,8 +230,8 @@ enum NavStrings {
     /// arrivalClock：预计到达的**本地化时钟时刻**（如"下午3:25"/"3:25 PM"，由调用方按用户 locale 格式化）。
     /// 出发前给"预计几点到达"——对标 Google/Apple 地图；盲人据此判断能否赶上约定，省去"现在几点+还有几分钟"的心算。
     /// 仅在有有效 ETA 时附（无 ETA 连时长都没有，更谈不上到达时刻）。
-    static func journeyOverview(meters: Int, etaSeconds: Double?, arrivalClock: String? = nil, _ l: Language) -> String {
-        let dist = distancePhrase(meters: meters, l)
+    static func journeyOverview(meters: Int, etaSeconds: Double?, arrivalClock: String? = nil, unit: DistanceUnit = .metric, _ l: Language) -> String {
+        let dist = distancePhrase(meters: meters, unit: unit, l)
         guard let eta = etaPhrase(etaSeconds, l) else {
             return l == .zh ? "全程约\(dist)" : "Route is about \(dist)"
         }
@@ -232,9 +239,13 @@ enum NavStrings {
         return l == .zh ? "全程约\(dist)，\(eta)\(arrival)" : "Route is about \(dist), \(eta)\(arrival)"
     }
 
-    /// 步骤列表行："右转（30 米）" / "Turn right (30 m)"。
-    static func stepListItem(_ instruction: String, meters: Int, _ l: Language) -> String {
-        l == .zh ? "\(instruction)（\(meters) 米）" : "\(instruction) (\(meters) m)"
+    /// 步骤列表行："右转（30 米）" / "Turn right (30 m)"。英制用英尺/英里（与播报口径一致）。
+    static func stepListItem(_ instruction: String, meters: Int, unit: DistanceUnit = .metric, _ l: Language) -> String {
+        if unit == .imperial {
+            let d = DistanceUnit.imperial.farDistance(meters: Double(max(0, meters)), language: l)
+            return l == .zh ? "\(instruction)（\(d)）" : "\(instruction) (\(d))"
+        }
+        return l == .zh ? "\(instruction)（\(meters) 米）" : "\(instruction) (\(meters) m)"
     }
 
     // MARK: 导航屏界面文案（E5）

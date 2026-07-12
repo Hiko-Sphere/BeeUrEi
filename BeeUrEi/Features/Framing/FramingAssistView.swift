@@ -641,10 +641,12 @@ final class FramingAssistViewModel {
         let request = VNRecognizeTextRequest { [weak self] req, _ in
             // 版面阅读顺序统一走核心 ReadingOrder（从上到下、行内左→右，正确的排序-分行两步法）——替换原先手写的
             // 成对比较器（`abs(midY差)>阈值 ? 按midY : 按minX` 非严格弱序，边界版式可能排错）。同一视觉行的多块并成一行。
-            let items: [(text: String, box: CGRect)] = ((req.results as? [VNRecognizedTextObservation]) ?? []).compactMap { o in
+            let obs = (req.results as? [VNRecognizedTextObservation]) ?? []
+            let items: [(text: String, box: CGRect)] = obs.compactMap { o in
                 guard let s = o.topCandidates(1).first?.string else { return nil }
                 return (s, o.boundingBox)
             }
+            let confs = obs.compactMap { $0.topCandidates(1).first?.confidence } // 整页逐行置信度：低则朗读带"可能不准确"
             let lines = FramingAssistViewModel.orderedOCRLines(from: items)
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -658,14 +660,17 @@ final class FramingAssistViewModel {
                 } else {
                     // 多页连读（Envision 批量扫描式）：本页念完提示翻页；全文随页累计、随时可复制。
                     let full = lines.joined(separator: "\n")
-                    self.docPages.append(full)
+                    self.docPages.append(full) // 累计/复制/历史存**纯文本**（不含提醒）
                     self.historyStore.add(kind: "page", content: full)
                     self.docAwaitingNextPage = true
                     self.copyableResult = self.docPages.joined(separator: "\n\n")
                     self.resultText = FramingStrings.docPageResult(self.docPages.count, lines.first ?? "", self.lang)
                     self.guidanceText = FramingStrings.docDoneGuide(lines.count, self.lang)
+                    // 低置信整页朗读带"（识别可能不准确）"（药品说明书/合同尤须诚实）；ocrSpokenText 统一措辞/语言（已测）。
+                    let spokenBody = FramingAssistViewModel.ocrSpokenText(lines.joined(separator: FramingStrings.docJoinSeparator(self.lang)),
+                                                                          lineConfidences: confs)
                     self.speak(FramingStrings.docPageDonePrefix(self.docPages.count, self.lang)
-                               + lines.joined(separator: FramingStrings.docJoinSeparator(self.lang))
+                               + spokenBody
                                + FramingStrings.docNextPageHint(self.lang))
                 }
             }
@@ -708,6 +713,15 @@ final class FramingAssistViewModel {
         return Double(cjk) / Double(total) >= 0.12
     }
 
+    /// 朗读用 OCR 文本（纯静态，可测）：提醒语言随**文本语言**（非 App 语言，否则英文正文配中文提醒选错嗓音），
+    /// 低置信度经 OCRConfidenceGate 追加"（识别可能不准确）"。**复制/历史存的仍是入参纯文本**（本函数只产朗读串）。
+    /// 三处文本朗读 OCR（识别屏 readText / 读整页 / 聊天读图）共用，防措辞/语言判定漂移。
+    static func ocrSpokenText(_ raw: String, lineConfidences: [Float]) -> String {
+        guard !raw.isEmpty else { return raw }
+        let textLang: Language = dominantTextIsChinese(raw) ? .zh : .en
+        return OCRConfidenceGate().annotate(raw, lineConfidences: lineConfidences, language: textLang)
+    }
+
     /// 朗读相机里看到的文字（端侧 Vision OCR，中英文）——盲人读标牌/标签/菜单。
     func readText() {
         stopContinuous() // 切到其它识别活动：停所有持续背景模式（光探测/连续颜色）
@@ -733,10 +747,8 @@ final class FramingAssistViewModel {
                     self.copyableResult = nil
                     self.speak(FramingStrings.noTextFound(self.lang)) // "没有识别到文字"：App 语言提示
                 } else {
-                    // 复制留存的是**纯识别文本**（不含提醒，避免把"（可能不准确）"粘进备忘录）；朗读/显示带提醒。
-                    // 提醒语言随**文本语言**（非 App 语言）：否则英文正文配中文提醒会让 speakInTextLanguage 选错嗓音。
-                    let textLang: Language = FramingAssistViewModel.dominantTextIsChinese(joined) ? .zh : .en
-                    let annotated = OCRConfidenceGate().annotate(joined, lineConfidences: confs, language: textLang)
+                    // 复制留存的是**纯识别文本**（不含提醒，避免把"（可能不准确）"粘进备忘录）；朗读/显示带提醒（ocrSpokenText 已测）。
+                    let annotated = FramingAssistViewModel.ocrSpokenText(joined, lineConfidences: confs)
                     self.resultText = annotated
                     self.copyableResult = joined
                     self.historyStore.add(kind: "text", content: joined)

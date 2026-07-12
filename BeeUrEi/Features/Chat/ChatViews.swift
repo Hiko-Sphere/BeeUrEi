@@ -720,15 +720,17 @@ struct ChatView: View {
 
     /// 端侧 OCR 一张图片（中英双语），主线程回调**按阅读序整理**的正文（空=无文字）。读图/复制图共用。
     /// **纯端侧、不上传图片**（隐私优先，图片本就在本机）。cgImage 缺失（如 CIImage 后端）回调空串。
-    private func ocrImage(_ img: UIImage, then handle: @escaping (String) -> Void) {
-        guard let cg = img.cgImage else { handle(""); return }
+    private func ocrImage(_ img: UIImage, then handle: @escaping (String, [Float]) -> Void) {
+        guard let cg = img.cgImage else { handle("", []); return }
         let request = VNRecognizeTextRequest { req, _ in
-            let items: [(text: String, box: CGRect)] = ((req.results as? [VNRecognizedTextObservation]) ?? []).compactMap { o in
+            let obs = (req.results as? [VNRecognizedTextObservation]) ?? []
+            let items: [(text: String, box: CGRect)] = obs.compactMap { o in
                 guard let s = o.topCandidates(1).first?.string else { return nil }
                 return (s, o.boundingBox)
             }
             let text = FramingAssistViewModel.orderedOCRText(from: items) // 核心 ReadingOrder 阅读序（已测）
-            DispatchQueue.main.async { handle(text) }
+            let confs = obs.compactMap { $0.topCandidates(1).first?.confidence } // 逐行置信度：低则朗读带"可能不准确"
+            DispatchQueue.main.async { handle(text, confs) }
         }
         // 简体 + **繁体** + 英文（与识别屏同用核心 OCRLanguagePolicy）：读亲友拍来的**繁体**处方/时刻表/纸条
         // 此前会乱码（台湾/港澳），单点补齐。
@@ -773,12 +775,14 @@ struct ChatView: View {
     private func readImageText(_ img: UIImage) {
         let lang = self.lang
         SpeechHub.shared.speak(ChatStrings.readingPhoto(lang), channel: .query, voiceCode: lang.voiceCode) // 即时提示，计算期间不冷场
-        ocrImage(img) { text in
+        ocrImage(img) { text, confs in
             if text.isEmpty {
                 SpeechHub.shared.speak(ChatStrings.noTextInPhoto(lang), channel: .query, voiceCode: lang.voiceCode)
             } else {
-                let voice = FramingAssistViewModel.dominantTextIsChinese(text) ? Language.zh.voiceCode : Language.en.voiceCode
-                SpeechHub.shared.speak(text, channel: .query, voiceCode: voice)
+                // 低置信度带提醒 + 提醒语言随文本语言（ocrSpokenText 与识别屏共用，已测）。嗓音随文本语言。
+                let textLang: Language = FramingAssistViewModel.dominantTextIsChinese(text) ? .zh : .en
+                let annotated = FramingAssistViewModel.ocrSpokenText(text, lineConfidences: confs)
+                SpeechHub.shared.speak(annotated, channel: .query, voiceCode: textLang.voiceCode)
             }
         }
     }
@@ -787,11 +791,11 @@ struct ChatView: View {
     /// 读出=当下听；复制=留存转发，两个独立操作。复制后语音回执"已复制"（否则盲人无从确认成功）。
     private func copyImageText(_ img: UIImage) {
         let lang = self.lang
-        ocrImage(img) { text in
+        ocrImage(img) { text, _ in
             if text.isEmpty {
                 SpeechHub.shared.speak(ChatStrings.noTextInPhoto(lang), channel: .query, voiceCode: lang.voiceCode)
             } else {
-                UIPasteboard.general.string = text
+                UIPasteboard.general.string = text // 复制纯识别文本，不含"（可能不准确）"提醒
                 SpeechHub.shared.speak(ChatStrings.photoTextCopied(lang), channel: .query, voiceCode: lang.voiceCode)
             }
         }

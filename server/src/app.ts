@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { JsonFileStore, type Store } from './db/store'
 import { diskUsage, dataDir } from './monitoring/disk'
+import { latestBackupInfo, backupKeepDays } from './backup/autoBackup'
 import { SqliteStore } from './db/sqliteStore'
 import { setAuthStore } from './auth/rbac'
 import { verifyAccessToken } from './auth/tokens'
@@ -242,11 +243,19 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
       // 磁盘余量 gauge（防"慢性死亡"：磁盘满→sqlite 写失败整站瘫）。statfs 失败则该组 gauge 缺席
       //（诚实缺席，不编造 0 触发假警报）；量数据目录所在文件系统（DB/媒体/备份都在这）。
       const disk = diskUsage(dataDir())
+      // 备份新鲜度 gauge（供 Prometheus 告警规则"backup_age_seconds > 26h → page"）：与 admin 概览同源。
+      // 备份关闭（BACKUP_KEEP_DAYS=0）→ 整组缺席，不告警（合法意图，同磁盘 statfs 失败的诚实缺席）。
+      // 无备份/坏目录 → latestAgeMs=null → age gauge 缺席但 count=0 会露出（"启用了却 0 份"即可被告警规则捕获）。
+      const backup = backupKeepDays() > 0 ? latestBackupInfo(Date.now()) : null
       return metrics.render({
         nowMs: Date.now(),
         gauges: {
           users_total: store.userCount(),
           ...(disk ? { disk_free_bytes: disk.freeBytes, disk_total_bytes: disk.totalBytes } : {}),
+          ...(backup ? {
+            backup_count: backup.count,
+            ...(backup.latestAgeMs != null ? { backup_age_seconds: Math.round(backup.latestAgeMs / 1000) } : {}),
+          } : {}),
         },
       })
     })

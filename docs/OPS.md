@@ -67,7 +67,17 @@ SQLite 依 salt 校验通常会拒用不匹配的 WAL，但**绝不应赌这个*
 | `GET /api/ready` | 就绪探针（触达存储确认可用）——**Docker HEALTHCHECK 用它**，配合 `--restart unless-stopped` 自愈；部署脚本的上线等待也打它 |
 | `GET /api/version` | 部署验证：`{version, commit}`，commit 应等于所部署的 git SHA |
 | `GET /metrics` | Prometheus 抓取（设 `METRICS_TOKEN` 则需 `Authorization: Bearer`） |
-| 管理面板 → 总览 | 在线人数/紧急事件/举报/版本·运行时长 |
+| 管理面板 → 总览 | 在线人数/紧急事件/举报/版本·运行时长/磁盘余量/备份新鲜度 |
+
+**推荐 Prometheus 告警规则**（两条"慢性死亡"守门；gauge 缺席=对应功能关闭，规则自然不触发）：
+```yaml
+# 磁盘将满 → sqlite 写失败整站瘫
+- alert: BeeUrEiDiskLow
+  expr: beeurei_disk_free_bytes / beeurei_disk_total_bytes < 0.1 or beeurei_disk_free_bytes < 2147483648
+# 每日备份断了（>26h）或一份都没有（count=0）
+- alert: BeeUrEiBackupStale
+  expr: beeurei_backup_age_seconds > 93600 or beeurei_backup_count == 0
+```
 
 日志：`docker logs beeurei-api`。容器日志已封顶 **20MB×5 自动轮换**（`docker run --log-opt`，
 防日志吃满磁盘）。每小时留存清扫（录音/KYC/孤儿媒体/通知/refresh token/

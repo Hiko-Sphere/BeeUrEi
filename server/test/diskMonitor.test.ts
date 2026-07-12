@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest'
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { diskUsage, isDiskLow, dataDir, DISK_LOW_ABS_BYTES } from '../src/monitoring/disk'
 import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
@@ -62,5 +65,29 @@ describe('磁盘余量在运维面（overview + /metrics）如实呈现', () => 
     expect(r.body).toMatch(/beeurei_disk_free_bytes \d+/)
     expect(r.body).toMatch(/beeurei_disk_total_bytes \d+/)
     await app.close()
+  })
+
+  it('/metrics 暴露 backup_count（默认启用）+ 有备份时 backup_age_seconds gauge（Prometheus 告警"备份超 26h"）', async () => {
+    // 默认无备份目录 → count=0、无 age（诚实缺席，不编造 0 龄触发假"新鲜"）。
+    const app1 = buildApp(new MemoryStore())
+    const b1 = (await app1.inject({ method: 'GET', url: '/metrics' })).body
+    expect(b1).toMatch(/beeurei_backup_count 0/)
+    expect(b1).not.toMatch(/beeurei_backup_age_seconds/) // 无备份 → age gauge 缺席
+    await app1.close()
+    // 指向含一份备份的目录 → count=1 且 age gauge 露出（Prometheus 据此设"age > 93600 → page"）。
+    const dir = mkdtempSync(join(tmpdir(), 'beeurei-mx-'))
+    writeFileSync(join(dir, 'beeurei-20260712.db'), 'x')
+    const prevDir = process.env.BACKUP_DIR
+    process.env.BACKUP_DIR = dir
+    try {
+      const app2 = buildApp(new MemoryStore())
+      const b2 = (await app2.inject({ method: 'GET', url: '/metrics' })).body
+      expect(b2).toMatch(/beeurei_backup_count 1/)
+      expect(b2).toMatch(/beeurei_backup_age_seconds \d+/)
+      await app2.close()
+    } finally {
+      if (prevDir === undefined) delete process.env.BACKUP_DIR; else process.env.BACKUP_DIR = prevDir
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

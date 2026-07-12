@@ -133,12 +133,42 @@ final class PoiCalloutComposerTests: XCTestCase {
     }
 
     func testNearestNoneFound() {
+        // 公制半径 ≥1km 走 farDistance→"公里"（与上方 POI 距离 ≥1km→公里 同口径，比"1000米"更可听）。
         XCTAssertEqual(
             PoiCalloutComposer.nearest(from: [], query: "药店", radiusMeters: 1000, language: .zh),
-            "附近1000米内没找到药店")
+            "附近1公里内没找到药店")
         XCTAssertEqual(
             PoiCalloutComposer.nearest(from: [poi("  ", 50, 0)], query: "pharmacy", radiusMeters: 800, language: .en),
-            "No pharmacy found within 800 meters") // 只有空名/被过滤者=没找到
+            "No pharmacy found within 800 meters") // 公制 <1km 仍"米"（逐字不变）；只有空名/被过滤者=没找到
+    }
+
+    /// sibling-gap 收口：英制用户听 POI 距离是英尺/英里，"没查到"兜底句的半径也须随单位（曾裸报"米"＝单位割裂）。
+    func testEmptyRadiusRespectsImperialUnit() {
+        // 250m → 820 英尺（<1000ft）。ahead + around 两分支都覆盖。
+        XCTAssertEqual(
+            PoiCalloutComposer.compose(pois: [], mode: .ahead, radiusMeters: 250, headingAvailable: true, language: .en, unit: .imperial),
+            "No places found within 820 feet ahead")
+        XCTAssertEqual(
+            PoiCalloutComposer.compose(pois: [], mode: .around, radiusMeters: 250, headingAvailable: true, language: .zh, unit: .imperial),
+            "周围820英尺内没有查到地点")
+        // 3000m → 1.9 英里（≥1000ft 用英里）。
+        XCTAssertEqual(
+            PoiCalloutComposer.compose(pois: [], mode: .around, radiusMeters: 3000, headingAvailable: true, language: .en, unit: .imperial),
+            "No places found within 1.9 miles around you")
+        // nearest 兜底同样随单位。
+        XCTAssertEqual(
+            PoiCalloutComposer.nearest(from: [], query: "restroom", radiusMeters: 250, language: .en, unit: .imperial),
+            "No restroom found within 820 feet")
+    }
+
+    /// 公制默认（不传 unit）行为守卫：<1km 半径逐字仍"米"，不被单位改动波及。
+    func testEmptyRadiusMetricUnchangedUnder1km() {
+        XCTAssertEqual(
+            PoiCalloutComposer.compose(pois: [], mode: .around, radiusMeters: 250, headingAvailable: true, language: .zh),
+            "周围250米内没有查到地点")
+        XCTAssertEqual(
+            PoiCalloutComposer.compose(pois: [], mode: .ahead, radiusMeters: 400, headingAvailable: true, language: .en),
+            "No places found within 400 meters ahead")
     }
 
     func testNearestEnglish() {

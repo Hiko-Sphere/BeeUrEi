@@ -85,16 +85,20 @@ public enum PoiCalloutComposer {
         let picked = entries.prefix(limit).map(\.text)
 
         if picked.isEmpty {
+            // 检索半径也随单位（英制用户听 POI 距离是英尺/英里，这句"没查到"却裸报"米"＝单位割裂，
+            // sibling-gap：距离早接英制、此兜底句漏接）。走 DistanceUnit.farDistance 同一换算源：
+            // 公制 <1km 仍"X米"（逐字不变）、≥1km 改"X公里"（与上方 POI 距离同 ≥1km→公里 口径）；英制→英尺/英里。
+            let radiusStr = unit.farDistance(meters: Double(radiusMeters), language: language)
             switch mode {
             case .ahead:
                 if !headingAvailable {
                     return zh ? "无法确定你的朝向，请稍后再试" : "Can't determine your heading — try again"
                 }
-                return zh ? "前方\(radiusMeters)米内没有查到地点"
-                          : "No places found within \(radiusMeters) meters ahead"
+                return zh ? "前方\(radiusStr)内没有查到地点"
+                          : "No places found within \(radiusStr) ahead"
             case .around:
-                return zh ? "周围\(radiusMeters)米内没有查到地点"
-                          : "No places found within \(radiusMeters) meters around you"
+                return zh ? "周围\(radiusStr)内没有查到地点"
+                          : "No places found within \(radiusStr) around you"
             }
         }
 
@@ -114,7 +118,9 @@ public enum PoiCalloutComposer {
                       && !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .min { $0.distanceMeters < $1.distanceMeters }
         guard let best else {
-            return zh ? "附近\(radiusMeters)米内没找到\(q)" : "No \(q) found within \(radiusMeters) meters"
+            // 半径随单位（同 compose 兜底：英制用户别听裸"米"）——走 DistanceUnit.farDistance 同一换算源。
+            let radiusStr = unit.farDistance(meters: Double(radiusMeters), language: language)
+            return zh ? "附近\(radiusStr)内没找到\(q)" : "No \(q) found within \(radiusStr)"
         }
         let name = best.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let dm = SpokenStrings.locationDistance(best.distanceMeters, zh ? .zh : .en, unit: unit) // 溢出安全 + ≥1km 用公里

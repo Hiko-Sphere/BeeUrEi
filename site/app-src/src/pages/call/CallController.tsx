@@ -1,9 +1,14 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { api, callErrorText } from '../../lib/api'
 import { useI18n } from '../../lib/i18n'
-import { useToast, Avatar, Button, Modal } from '../../components/ui'
+import { useToast, Avatar, Button, Modal, Spinner } from '../../components/ui'
 import { IconPhone, IconX } from '../../components/icons'
-import { CallScreen } from './CallScreen'
+// CallScreen 拉起 webrtc.ts（682 行，全库最大文件，仅通话时用）。懒加载出主包 + 挂载后空闲**预载**：
+// 首屏解析更少、更快可交互，而通话真正开始前（用户 App 打开数分钟后才可能通话）chunk 早已预热，
+// 零应答延迟。preloadCallScreen 只是提前触发同一 import，浏览器去重、与 lazy 共用缓存。
+const importCallScreen = () => import('./CallScreen').then((m) => ({ default: m.CallScreen }))
+const CallScreen = lazy(importCallScreen)
+function preloadCallScreen() { void importCallScreen().catch(() => { /* 预载失败无妨：真用时 lazy 再拉，失败才提示 */ }) }
 
 export interface ActiveCall {
   callId: string
@@ -32,6 +37,14 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const [active, setActive] = useState<ActiveCall | null>(null)
   const [ring, setRing] = useState<RingState | null>(null)
   const ringtone = useRef<Ringtone | null>(null)
+  // 挂载后空闲预载 CallScreen（webrtc 大 chunk）：任何通话开始前就绪，应答零延迟。requestIdleCallback
+  // 不可用则退回 setTimeout。CallProvider 包裹全应用、只挂一次。
+  useEffect(() => {
+    const ric = (window as unknown as { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback
+    if (ric) { ric(preloadCallScreen); return }
+    const id = setTimeout(preloadCallScreen, 2000)
+    return () => clearTimeout(id)
+  }, [])
   // 同步"启动中"闩：呼叫/认领/接听在 setActive 之前有 await(守则卡/registerCall/answered)，其间 active 仍为 null。
   // 若只用 active 门控，并发/连点(或无 active 守卫的紧急回拨按钮)会各注册一通、第二个 setActive 覆盖第一个，
   // 首个 callId 被孤立在服务器——盲人求助者可接入那个"没有协助者在场"的房间空等到 TTL 过期(见通话可靠性复审)。
@@ -166,7 +179,12 @@ export function CallProvider({ children }: { children: ReactNode }) {
       {ring && !active && (
         <IncomingRing fromName={ring.fromName} fromAvatar={ring.fromAvatar} emergency={ring.emergency} onAnswer={answerRing} onDecline={declineRing} />
       )}
-      {active && <CallScreen call={active} onEnd={endActive} />}
+      {active && (
+        // 通话界面（webrtc）懒加载：预载通常已就绪、瞬时挂载；万一未就绪则显示"正在接通…"占位而非崩溃。
+        <Suspense fallback={<div className="fixed inset-0 z-50 grid place-items-center bg-ink/90 text-soft"><div className="flex flex-col items-center gap-3"><Spinner /><span>{t('正在接通…', 'Connecting…')}</span></div></div>}>
+          <CallScreen call={active} onEnd={endActive} />
+        </Suspense>
+      )}
       {/* 一次性协助守则卡（Aira 范式）：确认前不进入任何协助通话；关闭=放弃本次动作，下次仍会展示。 */}
       {guidelinePrompt && (
         <Modal onClose={dismissGuideline} label={t('协助守则', 'Helper guidelines')}>

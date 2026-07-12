@@ -32,12 +32,28 @@ vi.mock('../../components/ui', () => ({
   Modal: (p: { children?: unknown }) => p.children as never,
   Avatar: () => null,
   Button: (p: { children?: unknown }) => p.children as never,
+  Spinner: () => null, // CallScreen 懒加载的 Suspense fallback 用到
 }))
 vi.mock('../../components/icons', () => ({ IconPhone: () => null, IconX: () => null }))
 vi.mock('./CallScreen', () => ({ CallScreen: () => null })) // 不拉起真 WebRTC
 
 let ctx: ReturnType<typeof useCall> | null = null
 function Grab() { ctx = useCall(); return null }
+
+describe('CallProvider 挂载即空闲预载 CallScreen（webrtc 大 chunk 提前预热，应答零延迟）', () => {
+  it('挂载时经 requestIdleCallback 触发 CallScreen 预载——防"删预载→通话时才拉、应答卡顿"', () => {
+    const ricSpy = vi.fn()
+    Object.defineProperty(window, 'requestIdleCallback', { value: ricSpy, configurable: true })
+    try {
+      render(<CallProvider><Grab /></CallProvider>)
+      expect(ricSpy).toHaveBeenCalledTimes(1)
+      expect(typeof ricSpy.mock.calls[0][0]).toBe('function') // 传入的是预载回调
+    } finally {
+      // @ts-expect-error 复位测试桩
+      delete window.requestIdleCallback
+    }
+  })
+})
 
 describe('CallController 单通闩：并发启动只注册一通', () => {
   beforeEach(() => { registerCall.mockClear(); answeredCall.mockClear(); resolveRegister = null; ctx = null })

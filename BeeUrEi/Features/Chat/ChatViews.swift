@@ -363,6 +363,7 @@ struct ChatView: View {
     @State private var editingMessage: ChatMessageInfo?   // 正在编辑的消息（弹出编辑框）
     @State private var editDraft = ""                     // 编辑框文本
     @State private var replyingTo: ChatMessageInfo?       // 正在引用回复的消息（输入栏上方显引用条）
+    @State private var pinned: PinnedMessageInfo?          // 会话置顶消息（顶部横幅）；随每次线程轮询刷新
     @State private var canLoadEarlier = false   // 顶部"加载更早消息"是否可见
     @State private var loadingEarlier = false    // 正在加载更早历史
     @State private var reachedStart = false      // 已翻到对话最开头（再无更早）
@@ -390,6 +391,20 @@ struct ChatView: View {
     var body: some View {
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
+                // 置顶横幅（与 web 同语义）：把关键信息钉在顶部随时可听。点击→已加载则滚到该消息，
+                // 不在当前窗口则直接**朗读内容**（盲人要的是随时可听，不强依赖滚动定位）。
+                if let pin = pinned {
+                    PinnedBannerView(pin: pin, lang: lang,
+                                     preview: pinnedPreview(pin),
+                                     onJump: {
+                                         if messages.contains(where: { $0.id == pin.id }) {
+                                             withAnimation { proxy.scrollTo(pin.id, anchor: .center) }
+                                         } else {
+                                             SpeechHub.shared.speak(ChatStrings.pinnedSpeakFallback(pinnedByName: pin.pinnedByName, preview: pinnedPreview(pin), lang), channel: .query, voiceCode: lang.voiceCode)
+                                         }
+                                     },
+                                     onUnpin: { unpin(messageId: pin.id) })
+                }
                 ScrollView {
                     LazyVStack(spacing: BeeSpacing.sm) {
                         if canLoadEarlier {
@@ -662,6 +677,12 @@ struct ChatView: View {
         }
         // 回复（引用某条消息，群聊尤其需要——不然分不清在回谁哪句）：置引用条，下条文字带 replyTo 发出。
         Button { replyingTo = m } label: { Label(ChatStrings.replyAction(lang), systemImage: "arrowshape.turn.up.left") }
+        // 置顶/取消置顶（每会话至多一条；服务端通知其余参与者）。已是当前置顶 → 取消入口。
+        if pinned?.id == m.id {
+            Button { unpin(messageId: m.id) } label: { Label(ChatStrings.unpinAction(lang), systemImage: "pin.slash") }
+        } else {
+            Button { pin(m) } label: { Label(ChatStrings.pinAction(lang), systemImage: "pin") }
+        }
         // 编辑（仅本人文字、15 分钟内；纯逻辑门控与服务端一致）：预填现文，弹编辑框改后保存。
         if ChatMessageEditPolicy.isEditable(m, myId: myId, nowMs: Date().timeIntervalSince1970 * 1000) {
             Button { editDraft = m.text; editingMessage = m } label: { Label(ChatStrings.editAction(lang), systemImage: "pencil") }
@@ -842,13 +863,14 @@ struct ChatView: View {
 
     private func refresh(announceNew: Bool) async {
         guard let token = session.token else { return }
-        let list: [ChatMessageInfo]?
+        let thread: ChatThreadInfo?
         if let groupId {
-            list = try? await APIClient().groupMessages(token: token, groupId: groupId)
+            thread = try? await APIClient().groupMessages(token: token, groupId: groupId)
         } else {
-            list = try? await APIClient().messages(token: token, with: peerId ?? "")
+            thread = try? await APIClient().messages(token: token, with: peerId ?? "")
         }
-        guard let list else { return }
+        guard let list = thread?.messages else { return }
+        pinned = thread?.pinned // 置顶随每次轮询刷新（他人置顶/取消/撤回自愈即时反映，与 web 同口径）
         if announceNew {
             let known = Set(messages.map(\.id))
             let fresh = list.filter { !known.contains($0.id) && $0.fromId != myId }
@@ -905,9 +927,9 @@ struct ChatView: View {
         loadingEarlier = true; defer { loadingEarlier = false }
         let older: [ChatMessageInfo]?
         if let groupId {
-            older = try? await APIClient().groupMessages(token: token, groupId: groupId, before: oldest.createdAt, beforeId: oldest.id)
+            older = (try? await APIClient().groupMessages(token: token, groupId: groupId, before: oldest.createdAt, beforeId: oldest.id))?.messages
         } else {
-            older = try? await APIClient().messages(token: token, with: peerId ?? "", before: oldest.createdAt, beforeId: oldest.id)
+            older = (try? await APIClient().messages(token: token, with: peerId ?? "", before: oldest.createdAt, beforeId: oldest.id))?.messages
         }
         guard let older else { return }
         if older.isEmpty { reachedStart = true; canLoadEarlier = false; return }
@@ -1150,6 +1172,35 @@ struct ChatView: View {
                 SpeechHub.shared.speak(msg, channel: .query, voiceCode: lang.voiceCode)
             } else {
                 SpeechHub.shared.speak(ChatStrings.reactionFailed(lang), channel: .query, voiceCode: lang.voiceCode)
+            }
+        }
+    }
+
+    /// 置顶横幅预览文本（复用消息预览：文字截断/图片/语音/位置标签）。
+    private func pinnedPreview(_ pin: PinnedMessageInfo) -> String {
+        messagePreview(ChatMessageInfo(id: pin.id, fromId: pin.fromId, toId: "", kind: pin.kind,
+                                       text: pin.text, createdAt: pin.createdAt))
+    }
+    /// 置顶（有声确认——盲人看不到横幅出现）。服务端幂等，失败可重试。
+    private func pin(_ m: ChatMessageInfo) {
+        guard let token = session.token else { return }
+        Task {
+            if let r = try? await APIClient().pinMessage(token: token, id: m.id) {
+                pinned = r
+                SpeechHub.shared.speak(ChatStrings.pinnedConfirm(lang), channel: .query, voiceCode: lang.voiceCode)
+            } else {
+                SpeechHub.shared.speak(ChatStrings.pinFailed(lang), channel: .query, voiceCode: lang.voiceCode)
+            }
+        }
+    }
+    private func unpin(messageId: String) {
+        guard let token = session.token else { return }
+        Task {
+            if let r = try? await APIClient().unpinMessage(token: token, id: messageId) {
+                pinned = r // 正常为 nil；若他人恰好又置顶了新的，回带最新
+                SpeechHub.shared.speak(ChatStrings.unpinnedConfirm(lang), channel: .query, voiceCode: lang.voiceCode)
+            } else {
+                SpeechHub.shared.speak(ChatStrings.pinFailed(lang), channel: .query, voiceCode: lang.voiceCode)
             }
         }
     }
@@ -1474,5 +1525,41 @@ private struct ReactionChipsRow: View {
                 }
             }
         }
+    }
+}
+
+/// 会话置顶横幅（线程顶部，与 web pinned-banner 同语义）：📌 +「X 置顶：预览」可点跳转 + 取消置顶按钮。
+/// 读屏整条念"置顶消息（X 置顶）：预览，点击跳转"（与 web aria-label 同措辞）；取消按钮独立可达。
+private struct PinnedBannerView: View {
+    let pin: PinnedMessageInfo
+    let lang: Language
+    let preview: String
+    let onJump: () -> Void
+    let onUnpin: () -> Void
+
+    var body: some View {
+        HStack(spacing: BeeSpacing.sm) {
+            Image(systemName: "pin.fill").font(.caption).foregroundStyle(Color.beeHoney)
+                .accessibilityHidden(true)
+            Button(action: onJump) {
+                VStack(alignment: .leading, spacing: 1) {
+                    if let name = pin.pinnedByName, !name.isEmpty {
+                        Text(name).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                    }
+                    Text(preview).font(.footnote).lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(ChatStrings.pinnedBannerA11y(pinnedByName: pin.pinnedByName, preview: preview, lang))
+            Button(action: onUnpin) {
+                Image(systemName: "pin.slash").font(.caption)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(ChatStrings.unpinAction(lang))
+        }
+        .padding(.horizontal, 14).padding(.vertical, 8)
+        .background(Color.beeHoney.opacity(0.08))
+        .overlay(alignment: .bottom) { Divider() }
     }
 }

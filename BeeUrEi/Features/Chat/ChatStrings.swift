@@ -130,6 +130,22 @@ enum ChatStrings {
     }
     static func react(_ l: Language) -> String { l == .zh ? "表情回应" : "React" }
     static func removeReaction(_ l: Language) -> String { l == .zh ? "取消回应" : "Remove reaction" }
+    // —— 置顶消息（与网页同语义：每会话至多一条，顶部横幅随时可听）——
+    static func pinAction(_ l: Language) -> String { l == .zh ? "置顶" : "Pin" }
+    static func unpinAction(_ l: Language) -> String { l == .zh ? "取消置顶" : "Unpin" }
+    static func pinnedConfirm(_ l: Language) -> String { l == .zh ? "已置顶" : "Pinned" }
+    static func unpinnedConfirm(_ l: Language) -> String { l == .zh ? "已取消置顶" : "Unpinned" }
+    static func pinFailed(_ l: Language) -> String { l == .zh ? "置顶操作失败，请重试" : "Pin action failed — try again" }
+    /// 置顶横幅读屏标签（与网页 aria-label 同措辞）："置顶消息（X 置顶）：预览，点击跳转"。可单测。
+    static func pinnedBannerA11y(pinnedByName: String?, preview: String, _ l: Language) -> String {
+        let by = (pinnedByName?.isEmpty == false) ? (l == .zh ? "（\(pinnedByName!) 置顶）" : " (pinned by \(pinnedByName!))") : ""
+        return l == .zh ? "置顶消息\(by)：\(preview)，点击跳转" : "Pinned message\(by): \(preview), tap to jump"
+    }
+    /// 置顶消息不在当前已加载窗口时，点横幅改为朗读其内容（盲人要的是"随时可听"，不强依赖滚动定位）。
+    static func pinnedSpeakFallback(pinnedByName: String?, preview: String, _ l: Language) -> String {
+        let by = (pinnedByName?.isEmpty == false) ? (l == .zh ? "\(pinnedByName!) 置顶：" : "Pinned by \(pinnedByName!): ") : (l == .zh ? "置顶消息：" : "Pinned message: ")
+        return by + preview
+    }
     static func reactionA11y(_ emoji: String, _ l: Language) -> String {
         l == .zh ? "对方回应了\(emoji)" : "Reacted with \(emoji)"
     }

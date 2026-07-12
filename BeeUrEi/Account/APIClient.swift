@@ -207,6 +207,25 @@ extension ChatMessageInfo {
     }
 }
 
+/// 线程响应（GET /api/messages?with=|?group=）：消息窗口 + 会话当前置顶（无置顶为 nil）。
+/// 此前 iOS 只解 messages、pinned 被 Codable 静默丢弃——置顶横幅无从渲染。
+struct ChatThreadInfo: Codable, Sendable {
+    let messages: [ChatMessageInfo]
+    var pinned: PinnedMessageInfo?
+}
+
+/// 会话置顶消息（顶部横幅）：一条消息 + 谁置顶的（与网页 PinnedMessage 同形状；服务端 resolvePinned 产出，
+/// 悬垂/已撤回已自愈清理）。只声明横幅所需字段，其余服务端字段忽略。
+struct PinnedMessageInfo: Codable, Sendable, Equatable {
+    let id: String
+    let fromId: String
+    let kind: String
+    let text: String
+    let createdAt: Int
+    var pinnedBy: String?
+    var pinnedByName: String?
+}
+
 /// 群组（WhatsApp 式：群主建群/加人/踢人/解散，成员可退群）。
 struct GroupInfo: Codable, Sendable, Identifiable, Equatable {
     let id: String
@@ -1006,13 +1025,26 @@ struct APIClient {
         return try JSONDecoder().decode(R.self, from: data).message
     }
 
-    func messages(token: String, with peerId: String, before: Int? = nil, beforeId: String? = nil) async throws -> [ChatMessageInfo] {
+    func messages(token: String, with peerId: String, before: Int? = nil, beforeId: String? = nil) async throws -> ChatThreadInfo {
         var path = "/api/messages?with=\(peerId)&limit=50"
         if let before { path += "&before=\(before)" }
         if let beforeId { path += "&beforeId=\(beforeId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? beforeId)" }
         let data = try await authedGet(path, token: token)
-        struct R: Codable { let messages: [ChatMessageInfo] }
-        return try JSONDecoder().decode(R.self, from: data).messages
+        return try JSONDecoder().decode(ChatThreadInfo.self, from: data)
+    }
+
+    /// 置顶一条消息（每会话至多一条，新置顶取代旧）。服务端会通知其余参与者；返回最新置顶。
+    func pinMessage(token: String, id: String) async throws -> PinnedMessageInfo? {
+        let data = try await authedSend("POST", "/api/messages/\(id)/pin", token: token, body: [:])
+        struct R: Codable { let pinned: PinnedMessageInfo? }
+        return try JSONDecoder().decode(R.self, from: data).pinned
+    }
+
+    /// 取消该会话置顶。返回最新置顶（正常为 nil）。
+    func unpinMessage(token: String, id: String) async throws -> PinnedMessageInfo? {
+        let data = try await authedSend("DELETE", "/api/messages/\(id)/pin", token: token, body: [:])
+        struct R: Codable { let pinned: PinnedMessageInfo? }
+        return try JSONDecoder().decode(R.self, from: data).pinned
     }
 
     func conversations(token: String) async throws -> [ConversationInfo] {
@@ -1163,13 +1195,12 @@ struct APIClient {
     }
 
     /// 群消息（时间正序）。
-    func groupMessages(token: String, groupId: String, before: Int? = nil, beforeId: String? = nil) async throws -> [ChatMessageInfo] {
+    func groupMessages(token: String, groupId: String, before: Int? = nil, beforeId: String? = nil) async throws -> ChatThreadInfo {
         var path = "/api/messages?group=\(groupId)&limit=50"
         if let before { path += "&before=\(before)" }
         if let beforeId { path += "&beforeId=\(beforeId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? beforeId)" }
         let data = try await authedGet(path, token: token)
-        struct R: Codable { let messages: [ChatMessageInfo] }
-        return try JSONDecoder().decode(R.self, from: data).messages
+        return try JSONDecoder().decode(ChatThreadInfo.self, from: data)
     }
 
     /// 会话内搜索文本消息（时间倒序）。peerId 或 groupId 二选一；空查询后端返回空。

@@ -221,6 +221,15 @@ public enum SpokenStrings {
         }
     }
 
+    /// 某分区物体种类超过播报上限时的"等等"后缀（听觉不宜过载：报最显著的几种、其余以"等"带过，
+    /// 盲人知道还有更多而不被长清单淹没）。拼在该区已列举的物体之后。
+    public static func sceneMore(_ lang: Language) -> String {
+        switch lang {
+        case .zh: return "等"
+        case .en: return " and more"
+        }
+    }
+
     // MARK: 转向（RouteProgress）
 
     public static func maneuverNow(_ instruction: String, _ lang: Language) -> String {

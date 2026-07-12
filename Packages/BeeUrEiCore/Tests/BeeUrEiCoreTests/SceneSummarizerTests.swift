@@ -32,6 +32,32 @@ final class SceneSummarizerTests: XCTestCase {
         XCTAssertEqual(s.summary(objects: [("椅子", 0.5)]), "前方：中间有椅子")
     }
 
+    func testSalienceOrderMostFrequentFirst() {
+        // 显著度排序：同一区里出现次数多的物体先报（一堆椅子比一个杯子更该先说），即便杯子先被检测到。
+        // 输入次序 杯子 在前，但椅子×3 更显著 → 椅子先。
+        let out = s.summary(objects: [("杯子", 0.5), ("椅子", 0.5), ("椅子", 0.5), ("椅子", 0.5)])
+        XCTAssertEqual(out, "前方：中间有3个椅子、杯子")
+    }
+
+    func testPerZoneCapAddsEtc() {
+        // 每区至多 3 种（默认），超出以"等"带过——盲人听觉不宜被长清单淹没。4 种 → 报前 3 种 + 等。
+        let out = s.summary(objects: [("椅子", 0.5), ("桌子", 0.5), ("行人", 0.5), ("杯子", 0.5)])
+        XCTAssertEqual(out, "前方：中间有椅子、桌子、行人等")
+    }
+
+    func testMaxPerZoneOverrideAndMostSalientKept() {
+        // 显式收紧到每区 1 种：只留最显著者（椅子×2）+ 等；杯子被"等"带过而非丢失语义。
+        let out = s.summary(objects: [("杯子", 0.5), ("椅子", 0.5), ("椅子", 0.5)], maxPerZone: 1)
+        XCTAssertEqual(out, "前方：中间有2个椅子等")
+    }
+
+    func testEnglishAndMoreSuffix() {
+        // 英文超上限后缀 "and more"。
+        let out = s.summary(objects: [("apple", 0.5), ("book", 0.5), ("cup", 0.5), ("desk", 0.5)], language: .en)
+        XCTAssertTrue(out.contains("and more"), out)
+        XCTAssertTrue(out.hasPrefix("Ahead:"), out)
+    }
+
     /// 英文方向映射回归（安全攸关）：左框(0.1)必须说 on the left、右框(0.9)必须说 on the right——
     /// 若日后误把 sceneZone 的英文数组顺序或 zone 阈值调反，英文盲人用户会被指向**相反方向**。
     /// 断言「物体+方向」连续子串（如 "chair on the left"），换向即命中失败。中文由 testThreeZones 守。

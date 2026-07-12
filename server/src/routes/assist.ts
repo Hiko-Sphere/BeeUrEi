@@ -324,7 +324,12 @@ export function registerAssistRoutes(
 
   // 视障侧广播一条公开求助：登记 callId + 粗粒度信息，供在线志愿者浏览/匹配并加入 callId 房间。
   // language 缺省取账号语言。重复广播（同一发起人同一 callId）幂等更新。
-  app.post('/api/assist/help/request', { preHandler: [requireAuth(), requireFeature(store, 'helpRequests')] }, async (req, reply) => {
+  // 端级限流 30/min（补齐与 /api/assist/call 同款 churn 防护）：每次登记都跑内容审核正则(matchBannedTerm)
+  // 并把 topic/locality 广播进全体在线志愿者的轮询队列。此前仅并发上限(activeCountFor≥5)——只挡"同时"，
+  // 挡不住 register→cancel→register 快速轮替刷审核+队列（受害面是全体在线志愿者的队列被灌 + 审核 CPU）。
+  // 30/min(≈每 2s 一次)远超真人重发等待信息的节奏，绝不误伤（正常用户通常只 1 条、偶尔更新），恶意 churn 被硬顶。
+  app.post('/api/assist/help/request', { preHandler: [requireAuth(), requireFeature(store, 'helpRequests')],
+                                         config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = helpRequestSchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
     // 内容审核：topic/locality 会广播给队列里所有在线志愿者（可见面最广的用户文本），与消息/群名/昵称同口径过滤。

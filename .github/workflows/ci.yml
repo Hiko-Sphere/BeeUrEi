@@ -29,7 +29,7 @@ jobs:
         working-directory: server
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: npm
@@ -54,7 +54,7 @@ jobs:
         working-directory: site/app-src
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: npm
@@ -76,7 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
       # 零依赖脚本（无 npm install）：lang/h1/img-alt/锚点命中/站内链接可达/sitemap↔页面互查/robots 声明。

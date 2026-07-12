@@ -148,6 +148,26 @@ final class LabelDateReaderTests: XCTestCase {
         XCTAssertTrue(LabelDateReader.find(texts: ["EXP 15/07/26"], language: .en)!.contains("15/07/26")) // 三段式整体
     }
 
+    func testValidExpiryDateChineseLabels() {
+        // "有效日期"/"失效日期"：药品/化妆品/食品极常见。"有效期"**不是**"有效日期"的子串（有效日期断开连续），
+        // 此前整行被丢——盲人扫药盒读不出有效期（安全攸关）。现单列，须识别。
+        XCTAssertTrue(LabelDateReader.find(texts: ["有效日期 2026-12-31"], language: .zh)!.contains("2026-12-31"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["失效日期 2027-06"], language: .zh)!.contains("2027-06"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["有效日期至20261231"], language: .zh)!.contains("20261231"))
+    }
+
+    func testBestBeforeAbbreviations() {
+        // BB / BBE / BBD = best before / best before end / best before date：英/欧/进口食品最主流的保质期缩写，
+        // 此前只认全拼 "best before" → 缩写全漏。须**词边界**（bb ⊂ rubber/hobby）+ 同行日期样式双门控。
+        XCTAssertTrue(LabelDateReader.find(texts: ["BB 15/03/2026"], language: .en)!.contains("15/03/2026"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["BBE JUL 2026"], language: .en)!.contains("JUL 2026"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["BBD 20261231"], language: .en)!.contains("20261231"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["BB2026-08"], language: .en)!.contains("2026-08")) // 紧贴喷码无空格
+        // 词边界不失守：bb 在 rubber/hobby 内部**不**命中——即便同行有真日期样式(2026-08)也不误报（无其它标签）。
+        XCTAssertNil(LabelDateReader.find(texts: ["rubber gasket 2026-08 batch"], language: .en))
+        XCTAssertNil(LabelDateReader.find(texts: ["hobby club opens 2026-08"], language: .en))
+    }
+
     func testDedupAndCap() {
         // OCR 常重复同一行：去重。
         let r = LabelDateReader.find(texts: ["保质期 2026.07.15", "保质期 2026.07.15"], language: .zh)!

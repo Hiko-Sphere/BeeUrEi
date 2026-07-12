@@ -99,6 +99,27 @@ final class TransitPlanFormatterTests: XCTestCase {
         XCTAssertTrue(TransitPlanFormatter.summary(plan, language: .en).contains("1.5 kilometers of walking"))
     }
 
+    func testTaxiLegNarratedNotDropped() {
+        // 出租车段（首末公里/无公交覆盖时高德给的一段打车）：如实报"打车约X"，**绝不静默丢弃整段**（否则路线漏一截）。
+        let plan = TransitPlan(durationSeconds: 1200, walkingDistanceMeters: 100,
+                               legs: [walk(100),
+                                      TransitLeg(kind: .taxi, line: nil, fromStop: nil, toStop: nil, stops: nil,
+                                                 distanceMeters: 3000, durationSeconds: 600)])
+        let zh = TransitPlanFormatter.summary(plan, language: .zh)
+        XCTAssertTrue(zh.contains("打车约3公里"), zh)      // 3000m→3公里
+        XCTAssertTrue(zh.contains("约10分钟"), zh)         // 600s→10分钟
+        // 英制：里程用英里。
+        let en = TransitPlanFormatter.summary(plan, language: .en, unit: .imperial)
+        XCTAssertTrue(en.contains("take a taxi ~1.9 miles"), en)   // 3000m≈1.9mi
+        // 无距离数据时至少报"打车"，绝不臆造"打车约0米"。
+        let noDist = TransitPlan(durationSeconds: 300, walkingDistanceMeters: 0,
+                                 legs: [TransitLeg(kind: .taxi, line: nil, fromStop: nil, toStop: nil, stops: nil,
+                                                   distanceMeters: 0, durationSeconds: 0)])
+        let nd = TransitPlanFormatter.summary(noDist, language: .zh)
+        XCTAssertTrue(nd.contains("打车"), nd)
+        XCTAssertFalse(nd.contains("打车约"), nd) // 无距离不带"约X"
+    }
+
     func testMissingStopNamesDegradeGracefully() {
         // 缺站名/站数时不崩、不留悬空标点，仍给出线路。
         let leg = TransitLeg(kind: .subway, line: "地铁2号线", fromStop: nil, toStop: nil, stops: nil, distanceMeters: 3000, durationSeconds: 600)

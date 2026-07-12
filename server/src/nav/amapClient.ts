@@ -332,7 +332,7 @@ export async function amapRegeoAdcode(location: string): Promise<string | undefi
 }
 
 /// 一段公交出行腿：步行 / 公交 / 地铁 / 火车。数值均米/秒（已由字符串转安全数）。
-export type TransitLegKind = 'walk' | 'bus' | 'subway' | 'railway'
+export type TransitLegKind = 'walk' | 'bus' | 'subway' | 'railway' | 'taxi'
 export interface TransitLeg {
   kind: TransitLegKind
   line?: string           // 线路名（"1号线"/"300路"/车次），已去掉"(始发-终点)"括注
@@ -379,6 +379,9 @@ export async function amapTransit(origin: string, destination: string, city: str
     entrance?: { name?: string }
     exit?: { name?: string }
     railway?: { name?: string; trip?: string; distance?: string; time?: string; departure_stop?: Stop; arrival_stop?: Stop }
+    // 出租车段（首末公里/跨城无公交覆盖时高德会给一段打车）——此前整段被丢弃，盲人拿到的路线漏了一截、走到某处无所适从。
+    // 至少如实告知"这段建议打车"（distance/drivetime 尽力取，缺则只报"打车"）。
+    taxi?: { distance?: string; drivetime?: string; duration?: string }
   }
   const data = (await res.json()) as {
     status?: string; info?: string; infocode?: string
@@ -425,6 +428,12 @@ export async function amapTransit(origin: string, destination: string, city: str
         distanceMeters: numOrZero(rw.distance),
         durationSeconds: numOrZero(rw.time),
       })
+    }
+    // 出租车段：只在**有真实距离**时算作一段（高德给所有键留空对象占位，taxi:{} 不能误当一段）。distance 是高德各段
+    // 通用字段（近乎必有）；时长取 drivetime（打车段专有）或 duration 兜底。缺距离即不成段，绝不臆造"打车0米"。
+    const taxi = seg.taxi
+    if (taxi && numOrZero(taxi.distance) > 0) {
+      legs.push({ kind: 'taxi', distanceMeters: numOrZero(taxi.distance), durationSeconds: numOrZero(taxi.drivetime ?? taxi.duration) })
     }
   }
   if (legs.length === 0) return null // 有 transit 壳但无可用腿（异常数据）→ 视为无方案

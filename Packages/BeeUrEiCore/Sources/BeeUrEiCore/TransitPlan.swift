@@ -3,7 +3,7 @@ import Foundation
 /// 公交/地铁出行方案（来自服务端 /api/nav/transit，字段与其 JSON 一一对应，App 直接解码进这些类型）。
 /// 一段腿：步行 / 公交 / 地铁 / 火车。数值米/秒（服务端已把高德的字符串数值转安全非负数）。
 public enum TransitLegKind: String, Decodable, Sendable {
-    case walk, bus, subway, railway
+    case walk, bus, subway, railway, taxi
 }
 
 public struct TransitLeg: Decodable, Sendable, Equatable {
@@ -105,6 +105,16 @@ public enum TransitPlanFormatter {
                 var s = zh ? "\(verbZh)\(line)" : "\(verbEn) \(line)"
                 if let f = clean(leg.fromStop) { s += zh ? "，\(f)上车" : " from \(f)" }
                 if let t = clean(leg.toStop) { s += zh ? "到\(t)下车" : " to \(t)" }
+                parts.append(s + rideDurationSuffix(leg.durationSeconds, zh: zh))
+            case .taxi:
+                // 出租车段（首末公里/无公交覆盖时高德给的一段打车）：如实告知"这段建议打车"，绝不再静默丢弃整段。
+                // 距离随单位（farDistance）、时长尽力报；无距离数据则只报"打车"。打车非"换乘线路"，用独立措辞，
+                // 但仍置 hasRidden（其后乘车说"换乘"更顺）。
+                hasRidden = true
+                var s = zh ? "打车" : "take a taxi"
+                if leg.distanceMeters.isFinite, leg.distanceMeters > 0 {
+                    s += (zh ? "约" : " ~") + unit.farDistance(meters: leg.distanceMeters, language: language)
+                }
                 parts.append(s + rideDurationSuffix(leg.durationSeconds, zh: zh))
             }
         }

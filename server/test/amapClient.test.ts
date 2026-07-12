@@ -105,6 +105,26 @@ describe('amapClient（国内步行导航）', () => {
     expect(bus.exit).toBeUndefined()
   })
 
+  it('公交方案：出租车段（首末公里）解成 taxi 腿，不再被整段丢弃；空占位 taxi:{} 不误当一段', async () => {
+    process.env.AMAP_API_KEY = 'testkey'
+    // 步行 + 打车（有真实距离/时长）+ 一个空占位 taxi:{}（高德给所有键留空对象）。
+    vi.stubGlobal('fetch', vi.fn(async () => ok({
+      status: '1', infocode: '10000',
+      route: { transits: [{ duration: '1200', walking_distance: '100', segments: [
+        { walking: { distance: '100', duration: '90' } },
+        { taxi: { distance: '3000', drivetime: '600' } },
+        { taxi: {} }, // 空占位：distance 缺失→numOrZero 0→不成段
+      ] }] },
+    })))
+    const plan = await amapTransit('116.4,39.9', '116.5,39.9', '021')
+    expect(plan).not.toBeNull()
+    const taxis = plan!.legs.filter((l) => l.kind === 'taxi')
+    expect(taxis.length).toBe(1)                 // 只有真实距离那段成腿，空占位不计
+    expect(taxis[0].distanceMeters).toBe(3000)
+    expect(taxis[0].durationSeconds).toBe(600)   // drivetime
+    expect(plan!.legs.some((l) => l.kind === 'walk')).toBe(true) // 步行段仍在
+  })
+
   it('HTTP 非 2xx → 抛 AmapError（http_<status>）', async () => {
     process.env.AMAP_API_KEY = 'testkey'
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 403, json: async () => ({}) })))

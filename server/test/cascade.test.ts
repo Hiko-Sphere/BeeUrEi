@@ -112,6 +112,26 @@ describe(`cascadeDeleteUser — 抹除完整性（${storeName}）`, () => {
     expect(store.groupReadAt('g1', 'owner')).toBe(100)       // 群主游标不受影响
   })
 
+  it('删号清除该用户**所设**的置顶（pinnedBy 幽灵引用）——被置顶消息仍在时读路径自愈不触发，须显式清；他人所设置顶保留', () => {
+    const store = makeStore()
+    store.createUser(user('owner'))
+    store.createUser(user('mem'))
+    store.createGroup({ id: 'g1', name: 'g', ownerId: 'owner', memberIds: ['owner', 'mem'], createdAt: 1 } as never)
+    store.createGroup({ id: 'g2', name: 'g2', ownerId: 'owner', memberIds: ['owner', 'mem'], createdAt: 1 } as never)
+    // 关键：被置顶消息由**群主(存活者)**发出（fromId=owner、toId=''）——mem 删号不会删掉它，
+    // 故读路径"消息不存/已撤回才清"的悬垂自愈**永不触发**；唯有按 pinnedBy 清才能除掉这条幽灵置顶。
+    store.createMessage({ id: 'm1', fromId: 'owner', toId: '', groupId: 'g1', kind: 'text', text: 'hi', createdAt: 2 })
+    store.createMessage({ id: 'm2', fromId: 'owner', toId: '', groupId: 'g2', kind: 'text', text: 'yo', createdAt: 3 })
+    store.setPin('g:g1', 'm1', 'mem', 4)     // mem（将删号）设的置顶
+    store.setPin('g:g2', 'm2', 'owner', 5)   // owner（存活）设的置顶——须保留
+
+    cascadeDeleteUser(store, 'mem') // 非群主成员删号：群 g1/g2 仍在
+
+    expect(store.findMessage('m1')).toBeTruthy()          // 被置顶消息仍在（证明这不是悬垂自愈能处理的场景）
+    expect(store.getPin('g:g1')).toBeUndefined()          // mem 所设置顶已清（旧实现：残留 pinnedBy='mem' 的幽灵，群里长期显示"置顶人 —"）
+    expect(store.getPin('g:g2')?.pinnedBy).toBe('owner')  // owner 所设置顶不受影响
+  })
+
   it('清除被删用户参与的通话记录（PII，非证据）；他人无关记录保留', () => {
     const store = makeStore()
     store.createUser(user('u1')); store.createUser(user('u2')); store.createUser(user('u3'))

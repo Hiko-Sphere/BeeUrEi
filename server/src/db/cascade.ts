@@ -34,6 +34,9 @@ export function cascadeDeleteUser(store: Store, id: string): void {
   for (const m of store.messagesSentBy(id, 100_000)) store.deleteMessageReactions(m.id)
   store.deleteMessageReactionsByUser(id)
   store.deleteMessagesForUser(id)
+  // 该用户设的置顶：pinnedBy===id 的置顶须显式清。被删消息上的置顶由读路径悬垂自愈兜底，但"消息仍在、
+  // 设置者注销"的置顶自愈永不触发（消息还查得到），会长期显示「置顶人 —」的幽灵——按 pinnedBy 清，兑现"不留孤儿"。
+  store.deletePinsForUser(id)
   // 通话记录（我作为主叫或被叫的通话历史）：非证据、非审计，纯属该用户 PII——删号即清，否则残留"谁给谁打过电话"
   // 的孤儿记录（录制才有取证/留存价值并刻意保留；通话元数据本身无此价值，见上"刻意保留"未列 call_records）。
   store.deleteCallRecordsForUser(id)

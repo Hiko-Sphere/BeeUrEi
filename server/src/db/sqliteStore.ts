@@ -976,6 +976,9 @@ export class SqliteStore implements Store {
   clearPinByMessage(messageId: string): void {
     this.db.prepare('DELETE FROM message_pins WHERE messageId = ?').run(messageId)
   }
+  deletePinsForUser(userId: string): void {
+    this.db.prepare('DELETE FROM message_pins WHERE pinnedBy = ?').run(userId)
+  }
   messagesBetween(a: string, b: string, limit: number, beforeMs?: number, beforeId?: string): ChatMessage[] {
     const bm = beforeMs ?? null, bi = beforeId ?? null
     const rows = this.db.prepare(

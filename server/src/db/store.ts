@@ -756,6 +756,10 @@ export interface Store {
   getPin(convKey: string): { messageId: string; pinnedBy: string; pinnedAt: number } | undefined
   clearPin(convKey: string): void
   clearPinByMessage(messageId: string): void // 撤回/删除该消息 → 若它正被置顶则一并取消（不留置顶悬垂）
+  /// 删号级联：清该用户**所设**的所有置顶（pinnedBy===userId）。区别于 clearPinByMessage（按被删消息清）：
+  /// 当被置顶消息仍存在、只是**设置者注销**时，读路径的悬垂自愈（消息不存/已撤回才清）永远不触发，置顶会
+  /// 长期显示「置顶人 —」的幽灵引用——cascade 承诺"不留孤儿"，须按 pinnedBy 显式清。
+  deletePinsForUser(userId: string): void
   /// 双方之间的单聊消息（时间正序）；beforeMs/beforeId 用于向前翻页。
   /// beforeId：与 beforeMs 组成 (createdAt,id) 复合游标，边界遇同毫秒消息不漏（缺省退回严格 createdAt<beforeMs，向后兼容）。
   messagesBetween(a: string, b: string, limit: number, beforeMs?: number, beforeId?: string): ChatMessage[]
@@ -1583,6 +1587,11 @@ export class MemoryStore implements Store {
   clearPinByMessage(messageId: string): void {
     let changed = false
     for (const [k, p] of this.pins) if (p.messageId === messageId) { this.pins.delete(k); changed = true }
+    if (changed) this.afterMutate()
+  }
+  deletePinsForUser(userId: string): void {
+    let changed = false
+    for (const [k, p] of this.pins) if (p.pinnedBy === userId) { this.pins.delete(k); changed = true }
     if (changed) this.afterMutate()
   }
   messagesBetween(a: string, b: string, limit: number, beforeMs?: number, beforeId?: string): ChatMessage[] {

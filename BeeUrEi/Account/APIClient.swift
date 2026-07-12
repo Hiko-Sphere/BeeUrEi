@@ -174,13 +174,37 @@ struct ChatMessageInfo: Codable, Sendable, Identifiable, Equatable {
     let text: String
     let createdAt: Int
     var readAt: Int?
-    var reaction: String? // 表情回应（单 emoji，最新覆盖）
+    var reaction: String? // 旧单字段表情回应（最新覆盖）——仅老服务端兜底；新服务端以 reactions 为准
+    var reactions: [MessageReactionInfo]? // 逐用户表情回应聚合（每 emoji 计数+我是否回应+谁回应）；此前 Codable 静默丢弃该字段
     var groupId: String?  // 群消息所属群（单聊为 nil）
     var forwarded: Bool?  // 转发标记：让收件人知道非发送者原创（含盲人——防误信转发的链式内容）
     var editedAt: Int?    // 编辑时刻（ms）；非 nil = 发出后被改过，标"已编辑"（与 web 对齐）
     var readBy: Int?      // 群已读回执：已读到本条的其他成员数（仅自己发的群消息由服务端附）
     var readTotal: Int?   // 群其他成员总数（配 readBy 显示"已读 N/总"；此前群消息无任何已读反馈）
     var replyTo: String?  // 引用回复的消息 id（同会话内）；渲染被引消息预览 + 盲人听到"回复X：…"（与 web 对齐）
+}
+
+/// 逐用户表情回应聚合（与网页 MessageReaction 同形状；服务端 aggregateReactions 产出）。
+struct MessageReactionInfo: Codable, Sendable, Equatable {
+    let emoji: String
+    let count: Int
+    let mine: Bool        // 我是否也回应了这个 emoji（胶囊高亮 + 点击语义"取消/也回应"）
+    let names: [String]   // 回应者显示名（"谁回应了"——读屏念名单比只念数字有用）
+}
+
+extension ChatMessageInfo {
+    /// 表情胶囊数据（与网页 reactionChips 同口径，纯逻辑可测）：优先服务端 reactions 聚合；
+    /// 老服务端只回单字段 reaction 时兜底合成一枚（mine 未知置 false、无名单）。
+    var reactionChips: [MessageReactionInfo] {
+        if let rs = reactions { return rs }
+        if let r = reaction, !r.isEmpty { return [MessageReactionInfo(emoji: r, count: 1, mine: false, names: [])] }
+        return []
+    }
+    /// 我当前所选的表情（菜单"取消回应"入口 + 点胶囊切换判定）；老服务端兜底退回 legacy 单字段。
+    var myReaction: String? {
+        if let rs = reactions { return rs.first { $0.mine }?.emoji }
+        return reaction
+    }
 }
 
 /// 群组（WhatsApp 式：群主建群/加人/踢人/解散，成员可退群）。

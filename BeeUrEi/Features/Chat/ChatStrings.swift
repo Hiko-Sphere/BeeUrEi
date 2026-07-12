@@ -133,6 +133,25 @@ enum ChatStrings {
     static func reactionA11y(_ emoji: String, _ l: Language) -> String {
         l == .zh ? "对方回应了\(emoji)" : "Reacted with \(emoji)"
     }
+    /// 逐用户表情胶囊的读屏标签（与网页 aria-label 同措辞）：有名单念"谁回应了"（比只念数字有用），
+    /// 无名单（老服务端兜底）退回计数措辞；mine 时点击语义是"取消"。可单测。
+    static func reactionChipA11y(emoji: String, names: [String], count: Int, mine: Bool, _ l: Language) -> String {
+        let who = names.joined(separator: l == .zh ? "、" : ", ")
+        if !who.isEmpty {
+            return l == .zh ? "\(emoji)，\(who) 回应\(mine ? "（含你）" : "")，点击\(mine ? "取消" : "也回应")"
+                            : "\(emoji), reacted by \(who), tap to \(mine ? "remove yours" : "add yours")"
+        }
+        return l == .zh ? "\(emoji)，\(count) 人回应\(mine ? "，含你" : "")，点击\(mine ? "取消" : "也回应")"
+                        : "\(emoji), \(count) \(count > 1 ? "reactions" : "reaction")\(mine ? ", including you" : ""), tap to \(mine ? "remove" : "add") yours"
+    }
+    /// 全部胶囊并入气泡整体 a11y 的后缀（视觉胶囊独立可点、有自己的标签；整体标签给"扫读"用户一句总览）。
+    static func reactionsSummaryA11y(_ chips: [MessageReactionInfo], _ l: Language) -> String {
+        chips.map { c in
+            let who = c.names.joined(separator: l == .zh ? "、" : ", ")
+            if !who.isEmpty { return l == .zh ? "\(who) 回应了\(c.emoji)" : "\(who) reacted \(c.emoji)" }
+            return l == .zh ? "\(c.count) 人回应了\(c.emoji)" : "\(c.count) reacted \(c.emoji)"
+        }.joined(separator: l == .zh ? "；" : "; ")
+    }
     /// 转发标记（视觉标签 + a11y 后缀）：让收件人知道这条**非发送者原创**——盲人靠 a11y 听到，防误信链式转发内容。
     static func forwardedTag(_ l: Language) -> String { l == .zh ? "已转发" : "Forwarded" }
     /// 编辑标记（视觉 + a11y）：消息发出后被改过（与 web "已编辑" 对齐；盲人此前完全听不到消息被改过）。

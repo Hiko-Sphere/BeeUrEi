@@ -509,15 +509,11 @@ struct ChatView: View {
                     .background(mine ? Color.beeHoney : Color(.secondarySystemBackground),
                                 in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .foregroundStyle(mine ? Color.beeInk : Color.primary)
-                    // 表情回应角标（WhatsApp 式贴在气泡角上）。
+                    // 逐用户表情胶囊（WhatsApp 式贴在气泡角上）：每 emoji 一枚、>1 显计数、我参与的高亮，
+                    // 点胶囊切换本人该表情；读屏念"谁回应了"。此前只显旧单字段（最新覆盖单角标，看不到几人/谁）。
                     .overlay(alignment: mine ? .bottomLeading : .bottomTrailing) {
-                        if let r = m.reaction, !r.isEmpty {
-                            Text(r).font(.footnote)
-                                .padding(5)
-                                .background(.thinMaterial, in: Circle())
-                                .offset(y: 12)
-                                .accessibilityLabel(ChatStrings.reactionA11y(r, lang))
-                        }
+                        ReactionChipsRow(m: m, lang: lang) { emoji in react(m, emoji: emoji) }
+                            .offset(y: 12)
                     }
                     // 长按菜单：表情回应（双方）/ 撤回（自己 2 分钟内）。已撤回的不给菜单。
                     .contextMenu { if m.kind != "recalled" { bubbleMenu(m, mine: mine) } }
@@ -661,7 +657,7 @@ struct ChatView: View {
         ForEach(ChatStrings.reactionChoices, id: \.self) { emoji in
             Button(emoji) { react(m, emoji: emoji) }
         }
-        if let r = m.reaction, !r.isEmpty {
+        if let r = m.myReaction, !r.isEmpty {
             Button(ChatStrings.removeReaction(lang)) { react(m, emoji: "") }
         }
         // 回复（引用某条消息，群聊尤其需要——不然分不清在回谁哪句）：置引用条，下条文字带 replyTo 发出。
@@ -712,7 +708,9 @@ struct ChatView: View {
         if m.fromId == myId, m.kind != "recalled", isGroup, let total = m.readTotal, total > 0 {
             label += "，" + ChatStrings.groupReceiptA11y(m.readBy ?? 0, total, lang)
         }
-        if let r = m.reaction, !r.isEmpty { label += "，" + ChatStrings.reactionA11y(r, lang) }
+        // 逐用户表情总览并入整体标签（胶囊本身独立可点、有各自标签；这里给"扫读整条"的用户一句总览）。
+        let chips = m.reactionChips
+        if !chips.isEmpty { label += "，" + ChatStrings.reactionsSummaryA11y(chips, lang) }
         return label
     }
 
@@ -1145,8 +1143,9 @@ struct ChatView: View {
             if let updated = await APIClient().reactMessage(token: token, id: m.id, emoji: emoji) {
                 if let i = messages.firstIndex(where: { $0.id == m.id }) { messages[i] = updated }
                 // 盲人看不到表情角标——长按选完表情必须**有声确认**是否加上/取消（此前成功也静默，
-                // 用户完全不知回应有没有成）。据服务器回传的最终 reaction 判"加上"还是"取消"。
-                let applied = updated.reaction ?? ""
+                // 用户完全不知回应有没有成）。据服务器回传的**我的**表情（reactions.mine，legacy 兜底）判加上/取消——
+                // 旧单字段是"最新覆盖"，群里他人后回应会把它盖掉，误报"已取消"。
+                let applied = updated.myReaction ?? ""
                 let msg = applied.isEmpty ? ChatStrings.reactionRemoved(lang) : ChatStrings.reactionAdded(applied, lang)
                 SpeechHub.shared.speak(msg, channel: .query, voiceCode: lang.voiceCode)
             } else {
@@ -1443,5 +1442,37 @@ final class VoiceNoteRecorder {
         if let url { try? FileManager.default.removeItem(at: url) }
         url = nil
         AudioSessionManager.configure()
+    }
+}
+
+/// 逐用户表情胶囊行（贴气泡角，与网页 reaction-chip 同语义）：每 emoji 一枚、>1 显计数、我参与的高亮描边；
+/// 点胶囊切换**本人**该表情（mine→取消、否则也回应）。读屏逐枚念"谁回应了+点击语义"（ChatStrings.reactionChipA11y）。
+private struct ReactionChipsRow: View {
+    let m: ChatMessageInfo
+    let lang: Language
+    let onTap: (String) -> Void   // 参数=要发给服务端的 emoji（""=取消我的回应）
+
+    var body: some View {
+        let chips = m.reactionChips
+        if !chips.isEmpty {
+            HStack(spacing: 3) {
+                ForEach(chips, id: \.emoji) { c in
+                    Button { onTap(c.mine ? "" : c.emoji) } label: {
+                        HStack(spacing: 2) {
+                            Text(c.emoji).font(.footnote)
+                            if c.count > 1 {
+                                Text("\(c.count)").font(.caption2.weight(c.mine ? .semibold : .regular))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.horizontal, 6).padding(.vertical, 4)
+                        .background(.thinMaterial, in: Capsule())
+                        .overlay { if c.mine { Capsule().strokeBorder(Color.beeHoney, lineWidth: 1.5) } }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(ChatStrings.reactionChipA11y(emoji: c.emoji, names: c.names, count: c.count, mine: c.mine, lang))
+                }
+            }
+        }
     }
 }

@@ -63,6 +63,26 @@ final class VoiceCommandParserTests: XCTestCase {
         }
     }
 
+    func testDescribeSceneAI() {
+        // AI 详细描述画面（对标 Be My AI）——多种说法都路由到 .describeScene。
+        for p in ["描述场景", "描述画面", "描述一下", "帮我描述", "描述眼前", "描述这个场景",
+                  "describe the scene", "describe my surroundings", "what am I looking at",
+                  "tell me what you see", "describe this scene"] {
+            XCTAssertEqual(VoiceCommandParser.parse(p), .describeScene, "『\(p)』应解析为 describeScene")
+        }
+    }
+
+    func testDescribeSceneDoesNotStealNeighbors() {
+        // 新增 describeScene 不得误抢既有相邻命令（碰撞回归）：
+        XCTAssertEqual(VoiceCommandParser.parse("看一看"), .look)          // 通用识别仍是 look
+        XCTAssertEqual(VoiceCommandParser.parse("这是什么"), .look)         // "这是什么" 仍 look（未含"描述"）
+        XCTAssertEqual(VoiceCommandParser.parse("周围有什么"), .around)     // around 不被"描述"关键字影响
+        XCTAssertEqual(VoiceCommandParser.parse("前方有什么"), .ahead)      // ahead 同上
+        XCTAssertEqual(VoiceCommandParser.parse("有几个人"), .describePeople) // 描述"人" 仍 describePeople
+        XCTAssertEqual(VoiceCommandParser.parse("描述人"), .describePeople)   // "描述人" 归 describePeople（非 describeScene）
+        XCTAssertEqual(VoiceCommandParser.parse("说详细点"), .adjustVerbosity(.moreDetail)) // "详细"仍走语速详略，不被 describeScene 吃
+    }
+
     func testCountCashDistinctFromBanknoteAndPeopleAndWallet() {
         // 点钞（数一叠）用 cash 专属说法，均解析到 countCash。
         for p in ["数钱", "点钞", "数一叠钱", "数现金", "帮我数钱", "一共多少张", "count my cash", "count cash", "tally my cash"] {

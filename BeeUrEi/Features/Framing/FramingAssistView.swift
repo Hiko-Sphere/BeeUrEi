@@ -122,6 +122,7 @@ final class FramingAssistViewModel {
         case .dates: readDates() // 语音"保质期/日期"：读包装上的日期
         case .phone: readPhoneNumbers() // 语音"读电话号码"：读名片/海报上的号码
         case .email: readEmails() // 语音"读邮箱"：读名片/信笺上的邮箱地址
+        case .sceneAI: describeSceneAI() // 语音"描述场景"：云端 AI 详细描述眼前画面
         }
     }
     @ObservationIgnored private var paused = false // 关闭/被来电盖上后：停止播报并丢弃在途帧/异步识别结果
@@ -879,6 +880,53 @@ final class FramingAssistViewModel {
         resultText = text
         copyableResult = nil
         speak(text)
+    }
+
+    /// 云端 AI 详细描述眼前画面（对标 Be My AI/Envision）——比本地 SceneSummarizer 的左/中/右粗汇总更丰富的
+    /// 自然语言描述（"一个人坐在木桌前，桌上有笔记本电脑和一杯咖啡"）。降采样→服务端视觉大模型→朗读，附配额
+    /// 提醒；失败按错误码给具体原因（与聊天"描述照片"同一 visionDescribe 管线）。捕获当前帧、需登录+联网+每日配额。
+    func describeSceneAI() {
+        stopContinuous() // 切到该动作：停持续背景模式（光探测/连续颜色）
+        guard let live = latestBuffer else { speak(FramingStrings.aimAhead(lang)); return }
+        if tooDarkToProceed() { return }
+        guard let token = KeychainStore.read() else { speak(ChatStrings.aiDescribeErrorText("network", lang)); return }
+        guard let oriented = Self.orientedBuffer(from: live), let jpeg = Self.visionJPEG(from: oriented.cgImage) else {
+            speak(ChatStrings.aiDescribeErrorText("encode_failed", lang)); return
+        }
+        resultText = FramingStrings.describingSceneAI(lang)
+        speak(FramingStrings.describingSceneAI(lang), hint: true) // 即时可丢弃提示，云端往返不冷场
+        copyableResult = nil
+        let lang = self.lang
+        let b64 = jpeg.base64EncodedString()
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let r = try await APIClient().visionDescribe(token: token, jpegBase64: b64, lang: lang == .zh ? "zh" : "en")
+                guard !self.paused else { return } // 已关闭/被来电盖上：不再改 UI/播报
+                var out = r.text
+                if let note = ChatStrings.quotaRemainingNote(remaining: r.remaining, lang) { out += lang == .zh ? "。\(note)" : ". \(note)" }
+                self.resultText = out
+                self.speak(out)
+            } catch APIError.server(let code) {
+                guard !self.paused else { return }
+                self.speak(ChatStrings.aiDescribeErrorText(code, lang))
+            } catch {
+                guard !self.paused else { return }
+                self.speak(ChatStrings.aiDescribeErrorText("network", lang))
+            }
+        }
+    }
+
+    /// 视觉大模型用 JPEG：长边降到 ≤1024（护每日付费配额与上传体积，同聊天"描述照片"口径），质量 0.6。
+    private static func visionJPEG(from cg: CGImage, maxSide: CGFloat = 1024) -> Data? {
+        let w = CGFloat(cg.width), h = CGFloat(cg.height)
+        let img = UIImage(cgImage: cg)
+        let scale = min(1, maxSide / max(w, h))
+        if scale >= 1 { return img.jpegData(compressionQuality: 0.6) }
+        let size = CGSize(width: w * scale, height: h * scale)
+        return UIGraphicsImageRenderer(size: size).jpegData(withCompressionQuality: 0.6) { _ in
+            img.draw(in: CGRect(origin: .zero, size: size))
+        }
     }
 
     /// 识别二维码/条码并朗读内容（端侧 Vision）——读 QR 海报、产品码、WiFi 码等。

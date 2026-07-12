@@ -46,6 +46,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case battery                    // 电量还剩多少（手机没电=丢失导航/求助工具，盲人尤需随时确认）
     case date                       // 今天几号/星期几
     case openSettings               // 打开设置（语言/无障碍/摔倒检测等非语音可调项——语音直达免找按钮）
+    case describeScene              // 云端 AI 详细描述眼前画面（对标 Be My AI/Envision——比本地 SceneSummarizer 粗汇总更丰富的自然语言描述）
     case unknown
 }
 
@@ -162,6 +163,13 @@ public enum VoiceCommandParser {
         if has(["颜色", "什么色", "识别颜色", "报颜色", "what color", "which color", "what colour", "which colour", "read color", "color of", "identify color"]) { return .readColor }
         // "看看/帮我看看"（叠词口语，极常见）也收：作为**末位兜底**在此，具体命令（看看几点/看看周围/看看电话…）
         // 早被前面对应命令命中；"看看X"落到这里=没有更具体意图，识别一下正是所求，与既有"看一看X"落 look 同口径。
+        // AI 详细描述画面须在通用「看一看」之前：这是比 look（打开识别界面）更具体的"用 AI 描述眼前场景"意图。
+        // 关键词避开 look 的裸"看/识别/这是什么"、避开 verbosity 的"详细/detail"、避开 around/ahead 的"周围/前方"——
+        // 只用无歧义的"描述场景/画面/一下"、英文完整短语，落到这里即明确要 AI 描述（"what am i looking at" 含"look"
+        // 故必须先于 look 命中）。全套件 VoiceCommandParser 回归测试守护无误抢既有命令。
+        if has(["描述场景", "描述画面", "描述一下", "帮我描述", "描述这个场景", "描述眼前",
+                "describe the scene", "describe my surroundings", "what am i looking at",
+                "tell me what you see", "describe this scene"]) { return .describeScene }
         if has(["看一看", "看看", "识别", "这是什么", "拍一下", "look", "what is this", "identify", "recognize"]) { return .look }
         // 自述：刻意不收裸"帮助/help"（那是 .help 求助的领地），只收明确问能力的说法。
         // 语速调节：正常/恢复须在 快/慢 之前（"恢复正常语速"含"语速"但意图是复位）。避免裸"快/慢"误伤。

@@ -462,6 +462,7 @@ struct HubView: View {
         case .scanCode: route.pendingChannel = .scan; showFraming = true
         case .readBus: route.pendingChannel = .bus; showFraming = true
         case .describePeople: route.pendingChannel = .people; showFraming = true
+        case .describeScene: route.pendingChannel = .sceneAI; showFraming = true // "描述场景"：云端 AI 详细描述眼前画面（对标 Be My AI）
         case .readLight: route.pendingChannel = .light; showFraming = true
         case .readColor: route.pendingChannel = .color; showFraming = true
         case .matchColors: route.pendingChannel = .colorMatch; showFraming = true // "这两件搭不搭"：扫两次比配色

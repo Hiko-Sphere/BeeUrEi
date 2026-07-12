@@ -35,6 +35,7 @@ enum FramingStrings {
         l == .zh ? "识别到：\(name)" : "Recognized: \(name)"
     }
     static func thisIs(_ name: String, _ l: Language) -> String { l == .zh ? "这是\(name)" : "This is \(name)" }
+    static func describingSceneAI(_ l: Language) -> String { l == .zh ? "正在请 AI 详细描述眼前画面…" : "Asking AI to describe the scene…" }
     /// 低置信版本（核心 ConfidencePolicy 判定）："少说但说对"——不确定就明说。
     static func recognizedMaybeResult(_ name: String, _ l: Language) -> String {
         l == .zh ? "可能是：\(name)" : "Possibly: \(name)"

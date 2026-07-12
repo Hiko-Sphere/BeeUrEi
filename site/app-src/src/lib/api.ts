@@ -286,6 +286,17 @@ export const api = {
   twoFADisable: (code: string) => post('/api/account/2fa/disable', { code }),
   twoFARecovery: (code: string) => post('/api/account/2fa/recovery-codes', { code }) as Promise<{ recoveryCodes: string[] }>,
 
+  // 通行密钥（Passkey / WebAuthn）：免密登录。web 端 rpID=前端域（服务端按 Origin 分流，双域各自作用域）。
+  // 登录两步无鉴权且不走 401 续期（auth=false）——和 login 同性质。
+  passkeyList: () => get('/api/auth/passkey/list') as Promise<{ passkeys: { id: string; deviceName: string | null; createdAt: number }[] }>,
+  passkeyRegisterOptions: () => post('/api/auth/passkey/register/options') as Promise<Record<string, unknown>>,
+  passkeyRegisterVerify: (response: unknown, deviceName?: string) =>
+    post('/api/auth/passkey/register/verify', { response, deviceName }) as Promise<{ ok: boolean; id: string }>,
+  passkeyLoginOptions: () => rawFetch('POST', '/api/auth/passkey/login/options', undefined, false) as Promise<{ flowId: string; options: Record<string, unknown> }>,
+  passkeyLoginVerify: (flowId: string, response: unknown) =>
+    rawFetch('POST', '/api/auth/passkey/login/verify', { flowId, response }, false) as Promise<{ token: string; refreshToken: string; user: User }>,
+  passkeyDelete: (id: string) => del(`/api/auth/passkey/${encodeURIComponent(id)}`),
+
   // 实名认证（KYC）
   verificationStatus: () => get('/api/account/verification') as Promise<VerificationStatusInfo>,
   submitVerification: (body: { legalName: string; idType: string; idNumberLast4: string; idNumber?: string; consentVersion: string }) =>

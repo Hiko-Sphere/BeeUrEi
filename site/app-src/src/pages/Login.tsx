@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { api, APIError } from '../lib/api'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
+import { passkeySupported, getPasskey } from '../lib/webauthn'
 import { getTheme, setTheme, type Theme } from '../lib/theme'
 import { Button, Field, Input } from '../components/ui'
 import { IconLogo } from '../components/icons'
@@ -17,6 +18,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<'helper' | 'family'>('helper')
   const [busy, setBusy] = useState(false)
+  const [pkBusy, setPkBusy] = useState(false) // 通行密钥登录进行中（独立于表单 busy：浏览器弹窗期间表单仍可用）
   const [error, setError] = useState<string | null>(null)
   const [twoFA, setTwoFA] = useState(false)     // 登录遇两步验证挑战：显示验证码输入
   const [totpCode, setTotpCode] = useState('')
@@ -71,6 +73,26 @@ export function LoginPage() {
     } finally {
       setBusy(false)
     }
+  }
+
+  // 通行密钥登录：options（服务端按 Origin 用前端域做 rpID）→ 浏览器系统级确认 → verify 发令牌。
+  // 用户取消（NotAllowedError）静默返回——那是改主意，不是错误。
+  const passkeyLogin = async () => {
+    setError(null); setNotice(null); setPkBusy(true)
+    try {
+      const { flowId, options } = await api.passkeyLoginOptions()
+      const assertion = await getPasskey(options)
+      const res = await api.passkeyLoginVerify(flowId, assertion)
+      signIn(res.token, res.refreshToken, res.user)
+    } catch (err) {
+      if (err instanceof APIError) {
+        setError(err.code === 'unknown_credential'
+          ? t('这把通行密钥不属于任何账号（可能已被删除）', "This passkey doesn't match any account (it may have been deleted)")
+          : err.code === 'account_disabled' ? t('该账号已被停用', 'This account is disabled') : errorText(err.code))
+      } else if ((err as Error)?.name !== 'NotAllowedError') {
+        setError(t('通行密钥登录失败，请重试或改用密码', 'Passkey sign-in failed — try again or use your password'))
+      }
+    } finally { setPkBusy(false) }
   }
 
   // 找回密码 · 第一步：向账号绑定的**已验证**邮箱发验证码。服务端反枚举、恒 ok，故成功即进填码步、提示措辞不暴露账号是否存在。
@@ -198,6 +220,13 @@ export function LoginPage() {
             {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">{error}</div>}
 
             <Button type="submit" loading={busy} className="mt-1 w-full py-3 text-base">{mode === 'login' ? t('登录', 'Sign in') : t('创建账户', 'Create account')}</Button>
+            {mode === 'login' && passkeySupported() && (
+              /* 通行密钥登录（可发现凭据）：无需先输账号——浏览器列出本站已存的 passkey，
+                 指纹/面容确认即登录。UV 强制（服务端 requireUserVerification），等价满足两步验证。 */
+              <Button type="button" variant="soft" loading={pkBusy} onClick={() => void passkeyLogin()} className="w-full py-3 text-base">
+                🔑 {t('用通行密钥登录', 'Sign in with a passkey')}
+              </Button>
+            )}
             {mode === 'login' && (
               <button type="button" onClick={() => { setForgot(true); setError(null); setNotice(null) }} className="text-center text-sm text-accent hover:underline">{t('忘记密码？', 'Forgot password?')}</button>
             )}

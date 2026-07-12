@@ -19,9 +19,23 @@ import { NoopPushSender, type PushSender } from '../push/apns'
 // 根域 hikosphere.com 是独立主页，托管不了 AASA（可用 PASSKEY_RP_* 环境变量覆盖）。
 const rpID = process.env.PASSKEY_RP_ID?.trim() || 'beeurei-api.hikosphere.com'
 const rpName = process.env.PASSKEY_RP_NAME?.trim() || 'BeeUrEi'
+// 协助者网页端（beeurei.hikosphere.com）与 API 域是**兄弟**子域：WebAuthn 要求 rpID 是页面域的
+// 可注册后缀，web 端用不了 API 域的 rpID（父域 hikosphere.com 又托管不了 iOS AASA）。
+// 行业解法=按客户端平台分 rpID：请求 Origin 等于 web 前端源 → 用 web 域做 rpID 生成 options；
+// 验证端同时接受两个 rpID/两个 origin（@simplewebauthn 原生支持数组）。两平台的 passkey 各自
+// 域内有效（web 注册的用于 web、iOS 的用于 iOS）——与凭据本身多设备同步与否无关，纯作用域语义。
+const webOrigin = process.env.PASSKEY_WEB_ORIGIN?.trim() || 'https://beeurei.hikosphere.com'
+const webRpID = new URL(webOrigin).hostname
 // iOS passkey 的 clientDataJSON.origin 为 https://<关联域>。允许逗号分隔多个。
-const expectedOrigins = (process.env.PASSKEY_RP_ORIGIN?.trim() || `https://${rpID}`)
-  .split(',').map((s) => s.trim()).filter(Boolean)
+const expectedOrigins = [
+  ...(process.env.PASSKEY_RP_ORIGIN?.trim() || `https://${rpID}`).split(',').map((s) => s.trim()).filter(Boolean),
+  webOrigin,
+]
+const expectedRPIDs = [rpID, webRpID]
+/// 本次请求应使用的 rpID：web 前端（Origin 匹配）→ web 域；其它（iOS/未带 Origin）→ API 域（原行为）。
+function rpIdFor(req: { headers: { origin?: string } }): string {
+  return req.headers.origin === webOrigin ? webRpID : rpID
+}
 
 /// 短时效挑战登记（内存，5 分钟）：注册按 userId，登录按随机 flowId。取出即焚（防重放）。
 export class ChallengeStore {
@@ -57,7 +71,8 @@ export function registerPasskeyRoutes(app: FastifyInstance, store: Store, pushSe
     const existing = store.passkeysForUser(user.id)
     const options = await generateRegistrationOptions({
       rpName,
-      rpID,
+      rpID: rpIdFor(req), // web 前端来的注册用 web 域（兄弟子域用不了 API 域 rpID），其余走 API 域
+
       userID: new TextEncoder().encode(user.id),
       userName: user.username,
       userDisplayName: user.displayName,
@@ -89,7 +104,7 @@ export function registerPasskeyRoutes(app: FastifyInstance, store: Store, pushSe
         response: parsed.data.response,
         expectedChallenge,
         expectedOrigin: expectedOrigins,
-        expectedRPID: rpID,
+        expectedRPID: expectedRPIDs, // iOS(API 域) 与 web(前端域) 两个作用域都合法
         requireUserVerification: true, // 强制 UV：登记的 passkey 必须可做用户验证，方可作为强多因子凭据
       })
     } catch {
@@ -116,8 +131,8 @@ export function registerPasskeyRoutes(app: FastifyInstance, store: Store, pushSe
   })
 
   // 登录 options（无用户名/可发现凭据）：返回 flowId + options。
-  app.post('/api/auth/passkey/login/options', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (_req, reply) => {
-    const options = await generateAuthenticationOptions({ rpID, userVerification: 'required' })
+  app.post('/api/auth/passkey/login/options', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const options = await generateAuthenticationOptions({ rpID: rpIdFor(req), userVerification: 'required' })
     const flowId = randomUUID()
     challenges.set(`login:${flowId}`, options.challenge)
     return reply.send({ flowId, options })
@@ -142,7 +157,7 @@ export function registerPasskeyRoutes(app: FastifyInstance, store: Store, pushSe
         response: parsed.data.response,
         expectedChallenge,
         expectedOrigin: expectedOrigins,
-        expectedRPID: rpID,
+        expectedRPID: expectedRPIDs,
         credential: {
           id: passkey.credentialId,
           publicKey: new Uint8Array(Buffer.from(passkey.publicKey, 'base64url')),

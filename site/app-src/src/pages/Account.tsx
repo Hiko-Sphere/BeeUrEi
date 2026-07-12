@@ -8,6 +8,7 @@ import { installAvailable, promptInstall, onInstallAvailable } from '../lib/inst
 import { roleLabel } from '../components/Layout'
 import { Card, Avatar, Button, Field, Input, useToast, Modal, fmtTime } from '../components/ui'
 import { DataExportCard } from '../components/DataExportCard'
+import { PasskeySection } from '../components/PasskeySection'
 
 export function AccountPage() {
   const { user, refreshMe, signOut } = useSession()
@@ -179,6 +180,7 @@ export function AccountPage() {
             {t('两步验证', 'Two-factor')}
             <span className="ml-1.5 text-xs text-faint">{self?.twoFactorEnabled ? t('已开启', 'On') : t('未开启', 'Off')}</span>
           </Button>
+          <PasskeySection />
           <Button variant="soft" onClick={() => setSessionsOpen(true)}>{t('登录设备', 'Devices')}</Button>
           <Button variant="soft" onClick={() => setVerifOpen(true)}>
             {t('实名认证', 'Identity')}

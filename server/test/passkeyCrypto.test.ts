@@ -37,17 +37,18 @@ class SoftAuthenticator {
   readonly priv: KeyObject
   readonly jwk: { x: string; y: string }
   readonly credId = randomBytes(16)
-  constructor() {
+  // rpId/origin 可换（默认 iOS/API 域）：web 端 passkey 的作用域是前端域 beeurei.hikosphere.com。
+  constructor(private rpId = RP_ID, private origin = ORIGIN) {
     const kp = generateKeyPairSync('ec', { namedCurve: 'P-256' })
     this.priv = kp.privateKey
     const jwk = kp.publicKey.export({ format: 'jwk' }) as { x: string; y: string }
     this.jwk = jwk
   }
-  private clientData(type: 'webauthn.create' | 'webauthn.get', challenge: string, origin = ORIGIN): Buffer {
+  private clientData(type: 'webauthn.create' | 'webauthn.get', challenge: string, origin = this.origin): Buffer {
     return Buffer.from(JSON.stringify({ type, challenge, origin, crossOrigin: false }))
   }
   private authData(flags: number, counter: number, withCred: boolean): Buffer {
-    const head = Buffer.concat([sha256(RP_ID), Buffer.from([flags])])
+    const head = Buffer.concat([sha256(this.rpId), Buffer.from([flags])])
     const cnt = Buffer.alloc(4); cnt.writeUInt32BE(counter)
     if (!withCred) return Buffer.concat([head, cnt])
     const cose = cbor(new Map<number, unknown>([[1, 2], [3, -7], [-1, 1],
@@ -173,6 +174,35 @@ describe('Passkey 真实密码学闭环（软件认证器 ↔ 真服务端）', 
     // 拿注册挑战伪装登录断言：登录侧按 flowId 取不到这个挑战 → 无从匹配。
     const bogusFlow = await loginVerify('not-a-real-flow', authenticator.assert(regChallenge, { counter: 9 }))
     expect(bogusFlow.statusCode).toBe(400)
+  })
+
+  it('web 端 passkey（兄弟子域）：Origin=前端源 → options 用 web 域 rpID；注册+登录全流程通过', async () => {
+    // 协助者网页端跑在 beeurei.hikosphere.com（与 API 域是兄弟子域）——WebAuthn 要求 rpID 是页面域
+    // 的可注册后缀，web 端必须用自己的域做 rpID。服务端按 Origin 分流、验证端接受双 rpID。
+    const WEB_ORIGIN = 'https://beeurei.hikosphere.com'
+    const webAuth = new SoftAuthenticator('beeurei.hikosphere.com', WEB_ORIGIN)
+    const optRes = await app.inject({ method: 'POST', url: '/api/auth/passkey/register/options', headers: { ...auth(), origin: WEB_ORIGIN } })
+    const opts = optRes.json()
+    expect(opts.rp.id).toBe('beeurei.hikosphere.com') // web 来源拿到 web 域 rpID
+    const reg = await app.inject({ method: 'POST', url: '/api/auth/passkey/register/verify', headers: { ...auth(), origin: WEB_ORIGIN }, payload: { response: webAuth.attest(opts.challenge), deviceName: 'Chrome · Mac' } })
+    expect(reg.statusCode).toBe(201)
+    // 登录（web 来源）：options 也拿 web rpID，断言按 web 域签 → 发令牌。
+    const lo = await app.inject({ method: 'POST', url: '/api/auth/passkey/login/options', headers: { origin: WEB_ORIGIN } })
+    const { flowId, options } = lo.json()
+    expect(options.rpId).toBe('beeurei.hikosphere.com')
+    const lv = await app.inject({ method: 'POST', url: '/api/auth/passkey/login/verify', headers: { origin: WEB_ORIGIN }, payload: { flowId, response: webAuth.assert(options.challenge, { counter: 3 }) } })
+    expect(lv.statusCode).toBe(200)
+    expect(lv.json().user.id).toBe(userId)
+    // iOS 侧（API 域 rpID）的既有 passkey 不受影响：无 Origin 头照旧拿 API 域 rpID。
+    const iosOpts = (await app.inject({ method: 'POST', url: '/api/auth/passkey/login/options' })).json()
+    expect(iosOpts.options.rpId).toBe('beeurei-api.hikosphere.com')
+  })
+
+  it('web 端 passkey 拒绝面：别的 rpID（非两作用域之一）签的断言 → 401', async () => {
+    const evil = new SoftAuthenticator('evil.example', 'https://beeurei.hikosphere.com')
+    const optRes = await app.inject({ method: 'POST', url: '/api/auth/passkey/register/options', headers: { ...auth(), origin: 'https://beeurei.hikosphere.com' } })
+    const reg = await app.inject({ method: 'POST', url: '/api/auth/passkey/register/verify', headers: auth(), payload: { response: evil.attest(optRes.json().challenge) } })
+    expect(reg.statusCode).toBe(400) // rpIdHash 不在 [API 域, web 域] → 拒
   })
 
   it('停用账号（管理员封禁）→ 即便断言合法也 403，不发令牌', async () => {

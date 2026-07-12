@@ -27,12 +27,14 @@ beforeEach(() => {
 
 describe('Admin 总览危机信号（React 版补齐 vanilla 面板 parity）', () => {
   it('一切正常：零危机卡（不摆空 alert 区）；磁盘健康时常显余量卡', async () => {
-    mock(api.adminOverview).mockResolvedValue({ ...baseOverview, activeEmergencies: 0, activeUnreachable: 0, mail: { sent: 9, failed: 0 }, callConnect: { relayUnreachable: 0, generic: 0, signaling: 0 }, safetyTickErrors: 0, disk: { freeBytes: 57 * GiB, totalBytes: 100 * GiB, low: false } })
+    mock(api.adminOverview).mockResolvedValue({ ...baseOverview, activeEmergencies: 0, activeUnreachable: 0, mail: { sent: 9, failed: 0 }, callConnect: { relayUnreachable: 0, generic: 0, signaling: 0 }, safetyTickErrors: 0, disk: { freeBytes: 57 * GiB, totalBytes: 100 * GiB, low: false }, backup: { count: 3, latestAgeMs: 5 * 3600_000, latestSizeBytes: 600_000, stale: false } })
     render(<AdminPage />)
     expect(await screen.findByText('用户总数')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).toBeNull() // 无危机=无 alert 区，绝不"常红"麻痹
     expect(screen.getByText('磁盘余量')).toBeInTheDocument()
     expect(screen.getByText('57.0 GB')).toBeInTheDocument() // 余量常在视野里
+    expect(screen.getByText('最近备份')).toBeInTheDocument()
+    expect(screen.getByText('5.0h')).toBeInTheDocument()    // 备份新鲜度常显（5 小时前）
   })
 
   it('危机置顶：活跃紧急/无人触达/磁盘告急/邮件失败/中继不可达 各自亮 danger 卡（role=alert）', async () => {
@@ -40,6 +42,7 @@ describe('Admin 总览危机信号（React 版补齐 vanilla 面板 parity）', 
       ...baseOverview,
       activeEmergencies: 2, activeUnreachable: 1,
       disk: { freeBytes: 1.5 * GiB, totalBytes: 100 * GiB, low: true },
+      backup: { count: 0, latestAgeMs: null, latestSizeBytes: 0, stale: true },
       mail: { sent: 9, failed: 3 },
       callConnect: { relayUnreachable: 4, generic: 1, signaling: 0 },
       safetyTickErrors: 2,
@@ -51,6 +54,8 @@ describe('Admin 总览危机信号（React 版补齐 vanilla 面板 parity）', 
     expect(alert.textContent).toContain('安全网正静默失效')
     expect(alert.textContent).toContain('磁盘余量告急')
     expect(alert.textContent).toContain('1.5 GB (2%)')
+    expect(alert.textContent).toContain('备份已过期')       // 备份陈旧红卡
+    expect(alert.textContent).toContain('灾备正静默失效')
     expect(alert.textContent).toContain('邮件发送失败')
     expect(alert.textContent).toContain('通话中继不可达')
     expect(alert.textContent).toContain('报到后台错误')

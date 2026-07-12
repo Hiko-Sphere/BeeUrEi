@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PKG_VERSION, gitCommit } from '../version'
 import { diskUsage, isDiskLow, dataDir } from '../monitoring/disk'
+import { latestBackupInfo, backupKeepDays } from '../backup/autoBackup'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import { type Store, type Role, type User, type AdminAuditEntry, type FeatureKey, type EmergencyEvent, FEATURE_KEYS, publicUser } from '../db/store'
@@ -226,6 +227,9 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
         const u = diskUsage(dataDir())
         return u ? { freeBytes: u.freeBytes, totalBytes: u.totalBytes, low: isDiskLow(u) } : null
       })(),
+      // 备份新鲜度：运维一眼看"每日备份还在跑吗"，无需 SSH 跑演练脚本。启用了却陈旧/一份都没有 = 灾备正静默失效。
+      // 显式关闭（BACKUP_KEEP_DAYS=0，运营者自有异地方案）→ null，不告警（合法意图，同磁盘 statfs 失败的诚实缺席）。
+      backup: backupKeepDays() > 0 ? latestBackupInfo(Date.now()) : null,
       // 邮件送达健康（自启动累计）：failed>0 = SMTP 凭据/连接故障（如 163 授权码过期），发码/找回密码/安全告警
       // 邮件发不出去——运维一眼可见并去修 SMTP_*，不必翻日志等用户报障。
       mail: {

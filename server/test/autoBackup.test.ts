@@ -1,10 +1,10 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { mkdtempSync, writeFileSync, readdirSync, readFileSync, rmSync, existsSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, readdirSync, readFileSync, rmSync, existsSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { MemoryStore } from '../src/db/store'
 import { SqliteStore } from '../src/db/sqliteStore'
-import { runAutoBackup, backupKeepDays, DEFAULT_BACKUP_KEEP_DAYS, defaultBackupDir } from '../src/backup/autoBackup'
+import { runAutoBackup, backupKeepDays, DEFAULT_BACKUP_KEEP_DAYS, defaultBackupDir, latestBackupInfo } from '../src/backup/autoBackup'
 
 // 每日自动备份 + 轮换：快照真实可恢复、按天去重、只清自己命名的文件、显式 0 关闭。
 describe('自动备份', () => {
@@ -77,5 +77,35 @@ describe('自动备份', () => {
 
   it('defaultBackupDir 跟随 DB 所在目录', () => {
     expect(defaultBackupDir('/srv/data/beeurei.db')).toBe('/srv/data/backups')
+  })
+
+  it('latestBackupInfo：新鲜备份不 stale、含 count/age/size；过 26h 或空目录 stale；坏目录也 stale', () => {
+    const dir = mkdir()
+    const NOW2 = new Date(2026, 6, 3, 12).getTime()
+    const H = 3600_000
+    // 空目录 → stale（启用了备份却一份都没有=灾备静默失效），age=null。
+    expect(latestBackupInfo(NOW2, dir)).toMatchObject({ count: 0, latestAgeMs: null, stale: true })
+    // 写两份，用 utimesSync 精确控制 mtime（否则文件 mtime=真实当下，与固定 NOW2 算出的 age 为负、不可控）。
+    const write = (name: string, bytes: number, ageH: number) => {
+      const f = join(dir, name)
+      writeFileSync(f, 'x'.repeat(bytes))
+      const t = (NOW2 - ageH * H) / 1000 // utimesSync 用秒
+      utimesSync(f, t, t)
+    }
+    write('beeurei-20260701.db', 100, 40) // 40h 前（旧）
+    write('beeurei-20260703.db', 200, 5)  // 5h 前（最新、新鲜）
+    const fresh = latestBackupInfo(NOW2, dir)
+    expect(fresh.count).toBe(2)
+    expect(fresh.stale).toBe(false)          // 最新一份 5h < 26h → 新鲜
+    expect(Math.round(fresh.latestAgeMs! / H)).toBe(5)
+    expect(fresh.latestSizeBytes).toBe(200)  // 最新一份（20260703）的大小
+    // 把最新一份也挪到 30h 前 → 超 26h 阈值 → stale（每日备份断了）。
+    write('beeurei-20260703.db', 200, 30)
+    expect(latestBackupInfo(NOW2, dir).stale).toBe(true)
+    // 不存在的目录（从未成功备份）→ stale，不抛。
+    expect(latestBackupInfo(NOW2, '/no/such/beeurei-backups')).toMatchObject({ count: 0, stale: true })
+    // 只数本工具命名的文件：运营者放的其它文件不算备份。
+    writeFileSync(join(dir, 'notes.txt'), 'z')
+    expect(latestBackupInfo(NOW2, dir).count).toBe(2)
   })
 })

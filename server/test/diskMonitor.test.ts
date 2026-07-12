@@ -48,6 +48,10 @@ describe('磁盘余量在运维面（overview + /metrics）如实呈现', () => 
     expect(disk.freeBytes).toBeGreaterThan(0)
     expect(disk.totalBytes).toBeGreaterThanOrEqual(disk.freeBytes)
     expect(disk.low).toBe(isDiskLow(disk)) // 面板据 low 亮红卡——口径必须与纯逻辑同源
+    // 备份新鲜度也在概览里（默认 BACKUP_KEEP_DAYS 启用 → 非 null；测试环境无备份目录 → stale=true，count=0）。
+    const backup = r.json().backup
+    expect(backup).not.toBeNull()
+    expect(backup).toMatchObject({ count: expect.any(Number), stale: expect.any(Boolean) })
     await app.close()
   })
 

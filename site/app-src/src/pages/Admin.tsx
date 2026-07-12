@@ -44,12 +44,14 @@ function OverviewTab() {
   useEffect(() => { let a = true; const f = () => void api.adminOverview().then((o) => a && setOv(o)).catch(() => {}); f(); const id = setInterval(f, 15_000); return () => { a = false; clearInterval(id) } }, [])
   if (!ov) return <Spinner />
   const gb = (n: number) => `${(n / 1073741824).toFixed(1)} GB`
+  const backupAge = (ms: number | null) => ms == null ? '—' : ms < 3600_000 ? `${Math.round(ms / 60_000)}m` : `${(ms / 3600_000).toFixed(1)}h`
   // 危机/健康信号（与 vanilla 面板同源同口径，此前 React 版总览全部缺席——只看这页的运维会漏掉正在发生的危机）。
   // 触发中的才显示（danger 置顶）；磁盘特殊：正常也常显余量卡（满盘是头号慢性死亡，余量应常在视野里）。
   const crisis: { label: string; value: number | string; sub: string }[] = []
   if (ov.activeEmergencies) crisis.push({ label: t('正在进行的紧急', 'Active emergencies'), value: ov.activeEmergencies, sub: t('未解除，需关注', 'unresolved — watch closely') })
   if (ov.activeUnreachable) crisis.push({ label: t('紧急·无人可触达', 'Emergency · reached no one'), value: ov.activeUnreachable, sub: t('安全网正静默失效，速联系本人/亲友', 'safety net silently failing — contact them/family') })
   if (ov.disk?.low) crisis.push({ label: t('磁盘余量告急', 'Disk space critical'), value: `${gb(ov.disk.freeBytes)} (${Math.round(ov.disk.freeBytes / ov.disk.totalBytes * 100)}%)`, sub: t('满盘将致数据库写入失败整站瘫', 'a full disk breaks DB writes and takes the site down') })
+  if (ov.backup?.stale) crisis.push({ label: t('备份已过期', 'Backup stale'), value: backupAge(ov.backup.latestAgeMs), sub: t('每日备份超 26 小时未更新——灾备正静默失效', 'no daily backup in over 26 hours — disaster recovery is silently failing') })
   if (ov.mail && ov.mail.failed > 0) crisis.push({ label: t('邮件发送失败', 'Mail failures'), value: ov.mail.failed, sub: t('检查 SMTP 凭据（发码/找回密码受影响）', 'check SMTP credentials — codes/recovery affected') })
   if (ov.callConnect && ov.callConnect.relayUnreachable > 0) crisis.push({ label: t('通话中继不可达', 'Relay unreachable'), value: ov.callConnect.relayUnreachable, sub: t('指向 TURN/安全组故障', 'points to TURN / security-group issues') })
   if (ov.safetyTickErrors) crisis.push({ label: t('报到后台错误', 'Safety tick errors'), value: ov.safetyTickErrors, sub: t('安全报到自动告警可能受阻', 'check-in auto-alerts may be blocked') })
@@ -60,6 +62,7 @@ function OverviewTab() {
     { label: t('录制总数', 'Recordings'), value: ov.recordings.total, sub: ov.recordings.config.enabled ? t('录制已开启', 'recording on') : t('录制已关闭', 'recording off') },
     { label: t('近7天新增', 'New (7d)'), value: ov.growth.newUsers7d, sub: `${ov.growth.newUsers30d} ${t('近30天', 'in 30d')}` },
     ...(ov.disk && !ov.disk.low ? [{ label: t('磁盘余量', 'Disk free'), value: gb(ov.disk.freeBytes), sub: `${t('共', 'of')} ${gb(ov.disk.totalBytes)} (${Math.round(ov.disk.freeBytes / ov.disk.totalBytes * 100)}%)` }] : []),
+    ...(ov.backup && !ov.backup.stale ? [{ label: t('最近备份', 'Last backup'), value: backupAge(ov.backup.latestAgeMs), sub: ov.backup.count > 1 ? `${ov.backup.count} ${t('份', 'copies')}` : t('每日自动', 'daily auto') }] : []),
   ]
   const maxTrend = Math.max(1, ...ov.growth.trend.map((d) => d.count))
   return (

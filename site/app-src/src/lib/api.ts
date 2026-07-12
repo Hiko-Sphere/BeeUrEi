@@ -512,6 +512,7 @@ export interface AdminOverview {
   mail?: { sent: number; failed: number } // SMTP 送达健康（failed>0=凭据/连接故障）
   safetyTickErrors?: number       // 安全报到后台 tick 错误累计
   disk?: { freeBytes: number; totalBytes: number; low: boolean } | null // 数据卷余量（low=不足 10% 或 <2GiB）
+  backup?: { count: number; latestAgeMs: number | null; latestSizeBytes: number; stale: boolean } | null // 备份新鲜度（stale=超 26h 或无备份；关闭备份=null）
 }
 export interface AdminUser { id: string; username: string; displayName: string; role: string; status: string; avatar?: string | null; createdAt: number; online?: boolean; hasEmail?: boolean; hasPhone?: boolean; emailVerified?: boolean; appleLinked?: boolean; verified?: boolean }
 export interface AdminReport { id: string; reporterId: string; reporterName: string; targetUserId: string; targetName: string; reason: string; status: string; decision?: string | null; callId?: string | null; evidenceRecordingId?: string | null; createdAt: number; resolvedAt?: number | null; resolvedByName?: string | null }

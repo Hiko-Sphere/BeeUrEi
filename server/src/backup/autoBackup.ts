@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, renameSync, unlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { Store } from '../db/store'
 
@@ -25,6 +25,19 @@ export function defaultBackupDir(dbPath: string = process.env.DB_PATH ?? 'data/b
 }
 
 const NAME_RE = /^beeurei-(\d{4})(\d{2})(\d{2})\.db$/
+
+/// 备份健康快照（供 admin 概览一眼看"备份还在正常跑吗"，无需 SSH 跑演练脚本）。
+/// stale=最新备份超过 staleAfterMs（默认 26h，容一天节奏+宽限）或**一份都没有**——两者都该运维立刻查。
+/// 纯读文件、不落盘：目录不可读/不存在=从未成功备份→stale。latestAgeMs=null（无备份时；JSON 安全，非 Infinity）。
+export interface BackupHealth { count: number; latestAgeMs: number | null; latestSizeBytes: number; stale: boolean }
+export function latestBackupInfo(now: number, dir: string = defaultBackupDir(), staleAfterMs = 26 * 3600_000): BackupHealth {
+  let names: string[]
+  try { names = readdirSync(dir).filter((n) => NAME_RE.test(n)).sort() } catch { return { count: 0, latestAgeMs: null, latestSizeBytes: 0, stale: true } }
+  if (names.length === 0) return { count: 0, latestAgeMs: null, latestSizeBytes: 0, stale: true }
+  const st = statSync(join(dir, names[names.length - 1]))
+  const age = now - st.mtimeMs
+  return { count: names.length, latestAgeMs: age, latestSizeBytes: st.size, stale: age > staleAfterMs }
+}
 
 /// 跑一轮自动备份（由每小时 sweep 调用；按天去重，一天只落一份）。
 /// 返回 { created, purged }。任何失败抛给调用方记日志（sweep 已各自 try/catch，不互相阻断）。

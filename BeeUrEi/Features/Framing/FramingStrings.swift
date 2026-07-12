@@ -265,6 +265,32 @@ enum FramingStrings {
         return tag.replacingOccurrences(of: "-", with: " ")
     }
 
+    /// 设置页可勾选的过敏原清单（EU 14 大类 + 小麦；canonical key 与 OFF 规范化标签同一套）。
+    /// 固定顺序（确定、可测）。名称走 allergenDisplay 本地化。
+    static let selectableAllergens: [String] = [
+        "gluten", "wheat", "crustaceans", "molluscs", "fish", "eggs", "milk",
+        "peanuts", "nuts", "soybeans", "sesame-seeds", "celery", "mustard", "lupin",
+        "sulphur-dioxide-and-sulphites",
+    ]
+
+    /// 个人化过敏原**预警前缀**（拼在产品播报最前——最要紧的先说）：含有=确定命中、微量=可能命中，分级措辞。
+    /// 空(无命中)→nil。名称走 allergenDisplay 本地化。与全量"包装标注含有"播报**叠加不替代**（见 AllergenAlert 红线：
+    /// 只在有交集时报警、绝不据此报"安全"）。emoji + "警告"双通道（VoiceOver 听不到❗颜色，语义须在词里）。
+    static func allergenAlertSpeak(contained: [String], traces: [String], _ l: Language) -> String? {
+        guard !contained.isEmpty || !traces.isEmpty else { return nil }
+        var parts: [String] = []
+        if !contained.isEmpty {
+            let names = contained.map { allergenDisplay($0, l) }.joined(separator: l == .zh ? "、" : ", ")
+            parts.append(l == .zh ? "含有你标记的过敏原：\(names)" : "contains your flagged allergen: \(names)")
+        }
+        if !traces.isEmpty {
+            let names = traces.map { allergenDisplay($0, l) }.joined(separator: l == .zh ? "、" : ", ")
+            parts.append(l == .zh ? "可能含微量：\(names)" : "may contain traces: \(names)")
+        }
+        let body = parts.joined(separator: l == .zh ? "；" : "; ")
+        return l == .zh ? "⚠️ 过敏警告！\(body)。" : "⚠️ Allergy warning! \(body). "
+    }
+
     /// 过敏原播报后缀（拼接在"这是X"之后，一次 speak 播完——.query 通道是替换语义，分两次会吞前半句）。
     /// 只报包装**标注含有**的；空=无数据→nil（**绝不播"不含过敏原"**——缺数据≠不含，误导可致命）。
     static func productAllergensSpeak(_ tags: [String], _ l: Language) -> String? {

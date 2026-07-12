@@ -110,6 +110,15 @@ struct FeatureSettings {
         set { defaults.set(newValue, forKey: fallDetectionKey) }
     }
 
+    /// 用户**自己标记**的过敏原（canonical key 集，如 ["milk","peanuts"]，与 OFF 标签同套）：扫码识物时若产品
+    /// 标注命中即额外醒目预警（核心 AllergenAlert 比对）。默认空=不预警。存为排序后的 [String]。安全叠加、不替代
+    /// 既有全量过敏原播报。
+    private let myAllergensKey = "feature.myAllergens"
+    var myAllergens: Set<String> {
+        get { Set(defaults.stringArray(forKey: myAllergensKey) ?? []) }
+        set { defaults.set(Array(newValue).sorted(), forKey: myAllergensKey) }
+    }
+
     /// 播报语言偏好（E5 多语言）："system"=跟随系统、"zh"=中文、"en"=English。默认跟随系统。
     /// 决定盲人实时听到的引导语言（核心 SpokenStrings）与 TTS 选用的嗓音（zh-CN / en-US）。
     private let languageKey = "feature.appLanguage"

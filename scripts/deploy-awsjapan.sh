@@ -37,8 +37,11 @@ deploy_api() {
 
   say "重建容器 beeurei-api"
   # 改过 .env 也生效：docker restart 不重读 env-file，必须 stop/rm/run 重建。
+  # --log-opt 封顶容器日志（20MB×5 轮换）：默认 json-file 无上限，长期运行会把磁盘吃满——磁盘满则 sqlite
+  # 写入失败、整站瘫（自托管最常见的"慢性死亡"）。改此参数须重建容器（本脚本每次部署本就重建）。
   remote 'docker stop beeurei-api >/dev/null 2>&1 || true; docker rm beeurei-api >/dev/null 2>&1 || true
 docker run -d --name beeurei-api --restart unless-stopped \
+  --log-driver json-file --log-opt max-size=20m --log-opt max-file=5 \
   -p 127.0.0.1:8787:8787 --env-file ~/repo/BeeUrEi/server/.env \
   -v beeurei-data:/app/data beeurei-api:latest >/dev/null && echo 容器已启动'
 
@@ -58,8 +61,10 @@ deploy_site() {
   remote "cd ~/repo/BeeUrEi && docker build -q -t beeurei-site:$SHA -t beeurei-site:latest site/"
 
   say "重建容器 beeurei-site"
+  # 日志封顶同 api（nginx access 日志走容器 stdout，流量大时增长更快）。
   remote 'docker rm -f beeurei-site >/dev/null 2>&1 || true
 docker run -d --name beeurei-site --restart unless-stopped \
+  --log-driver json-file --log-opt max-size=20m --log-opt max-file=5 \
   -p 127.0.0.1:8088:80 beeurei-site:latest >/dev/null && echo 容器已启动'
 
   say "健康检查：/healthz + /app/"

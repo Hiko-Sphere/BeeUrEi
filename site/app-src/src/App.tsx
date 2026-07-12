@@ -7,16 +7,16 @@ import { Layout } from './components/Layout'
 import { HomePage } from './pages/Home'
 import { CallsPage } from './pages/Calls'
 import { NotificationsPage } from './pages/Notifications'
-import { AccountPage } from './pages/Account'
 // 紧急/通话关键路径保持 eager（Home 的 SOS 横幅、Calls 应答、Notifications 的告警列表 + 全局
 // IncomingCall/EmergencyAlert/HelpQueue host 都在主包，随首屏即时可用）。其余大页（Chat 900+ 行、
 // Family、Recordings）非即时响应路径，懒加载出主包——缩小首屏解析、加快到可交互，尤其协助者收到
 // SOS 时越快看到并响应越好。importWithReload 同 Locations/Admin/Routes：陈旧 chunk 自愈。
-// Account 保持 eager：它与 eager 的 VerificationGate（KYC 门禁）共用 VerificationDialog，懒加载也拆不出
-// 主包，反成误导性 no-op，故不列入（要拆需先抽离 VerificationDialog，收益 ~10KB gzip、暂不值当风险）。
+// Account（870 行）也懒加载：VerificationDialog 已抽到独立 components/VerificationDialog（eager 的
+// VerificationGate 改引它），Account 不再被 eager 图可达，故真能拆出主包。
 const ChatPage = lazy(importWithReload(() => import('./pages/Chat').then((m) => ({ default: m.ChatPage }))))
 const FamilyPage = lazy(importWithReload(() => import('./pages/Family').then((m) => ({ default: m.FamilyPage }))))
 const RecordingsPage = lazy(importWithReload(() => import('./pages/Recordings').then((m) => ({ default: m.RecordingsPage }))))
+const AccountPage = lazy(importWithReload(() => import('./pages/Account').then((m) => ({ default: m.AccountPage }))))
 import { IncomingCallHost } from './pages/call/IncomingCallHost'
 import { EmergencyAlertHost } from './pages/call/EmergencyAlertHost'
 import { HelpQueueAlertHost } from './pages/call/HelpQueueAlertHost'

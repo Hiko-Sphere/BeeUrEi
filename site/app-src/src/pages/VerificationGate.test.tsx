@@ -9,8 +9,8 @@ const refreshMe = vi.fn()
 const signOut = vi.fn()
 vi.mock('../lib/session', () => ({ useSession: () => ({ user: { id: 'me', username: 'helper_wang' }, refreshMe, signOut }) }))
 vi.mock('../lib/api', () => ({ api: { verificationStatus: vi.fn() } }))
-// VerificationDialog 是 Account 页的重组件（拍照/上传），有自己的归属；此处只验门禁开合。
-vi.mock('./Account', () => ({ VerificationDialog: () => <div data-testid="verification-dialog" /> }))
+// VerificationDialog 是独立重组件（拍照/上传），有自己的归属；此处只验门禁开合。
+vi.mock('../components/VerificationDialog', () => ({ VerificationDialog: () => <div data-testid="verification-dialog" /> }))
 import { api } from '../lib/api'
 import { VerificationGate } from './VerificationGate'
 

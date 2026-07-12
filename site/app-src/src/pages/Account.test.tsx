@@ -9,7 +9,8 @@ vi.mock('../lib/api', () => ({
   reencodeToJpeg: vi.fn(), blobToDataUrl: vi.fn(), uploadVerificationDoc: vi.fn(),
 }))
 import { api, reencodeToJpeg, blobToDataUrl, uploadVerificationDoc } from '../lib/api'
-import { AccountPage, VerificationDialog, SessionsDialog } from './Account'
+import { AccountPage, SessionsDialog } from './Account'
+import { VerificationDialog } from '../components/VerificationDialog'
 
 const mock = (fn: unknown) => fn as ReturnType<typeof vi.fn>
 

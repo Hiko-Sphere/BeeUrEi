@@ -3,7 +3,7 @@ import { api, type VerificationStatusInfo } from '../lib/api'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { Card, Button } from '../components/ui'
-import { VerificationDialog } from './Account'
+import { VerificationDialog } from '../components/VerificationDialog'
 
 /// 实名认证门禁屏（协助/亲友网页端）：管理员开启「要求实名认证」且当前用户未通过 KYC 时，
 /// 取代正常应用——仅允许提交/查询实名认证与退出登录。审核通过后刷新即解除。

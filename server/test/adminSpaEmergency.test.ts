@@ -195,6 +195,18 @@ describe('管理面板 总览「通话中继失败」卡（运维可见 TURN 故
     expect(spa.view.innerHTML).not.toContain('正在进行的紧急')
   })
 
+  it('vision 用量卡：有 vision 字段 → 渲染「AI 描述（今日）」+ 数量；旧后端无字段 → 不渲染（不崩）', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    spa.state.overview = overview({ vision: { today: 5, dailyMaxPerUser: 200 } })
+    spa.renderDashboard()
+    expect(spa.view.innerHTML).toContain('AI 描述（今日）')
+    expect(spa.view.innerHTML).toMatch(/AI 描述（今日）[\s\S]*?>\s*5/) // 数量 5 出现在卡里
+    spa.state.overview = overview() // 旧后端无 vision 字段
+    spa.renderDashboard()
+    expect(spa.view.innerHTML).not.toContain('AI 描述（今日）') // 优雅缺省，不崩、不占位
+  })
+
   it('activeUnreachable>0 → 置顶 danger 卡「紧急·无人可即时触达」+ 行动提示；=0/缺省不渲染', () => {
     const spa = loadSpa()
     spa.state.lang = 'zh'

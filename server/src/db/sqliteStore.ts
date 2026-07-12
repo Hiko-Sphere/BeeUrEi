@@ -1178,6 +1178,10 @@ export class SqliteStore implements Store {
     const row = this.db.prepare('SELECT count FROM vision_usage WHERE userId = ? AND day = ?').get(userId, day) as { count: number } | undefined
     return row ? Number(row.count) : 0
   }
+  totalVisionCallsOnDay(day: string): number {
+    const row = this.db.prepare('SELECT SUM(count) AS s FROM vision_usage WHERE day = ?').get(day) as { s: number | null } | undefined
+    return row && row.s != null ? Number(row.s) : 0
+  }
   recordVisionCall(userId: string, day: string): void {
     // 单行/用户 upsert：同日累加、跨日重置为 1（day 变即视为新的一天，count 归 1）。
     this.db.prepare(

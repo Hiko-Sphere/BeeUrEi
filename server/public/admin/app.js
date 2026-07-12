@@ -44,7 +44,7 @@ const I18N = {
     dashboard: '总览', users: '用户', reports: '举报', recordings: '录制', logout: '退出登录',
     totalUsers: '用户总数', active: '正常', disabled: '已封禁', online: '在线', onlineHelpers: '在线协助者',
     panelUpdated: '管理面板有新版本（服务端已更新）', refreshNow: '点击刷新',
-    openReports: '待处理举报', recordingsCount: '录制记录', byRole: '按角色分布', version: '版本', uptime: '运行时长', activeEmergencies: '正在进行的紧急',
+    openReports: '待处理举报', recordingsCount: '录制记录', visionToday: 'AI 描述（今日）', visionCap: '单用户每日上限', byRole: '按角色分布', version: '版本', uptime: '运行时长', activeEmergencies: '正在进行的紧急',
     activeUnreachable: '紧急·无人可即时触达', activeUnreachSub: '安全网正静默失效，速联系本人/亲友',
     diskLow: '磁盘余量告急', diskFree: '磁盘余量', diskLowHint: '满盘将致数据库写入失败整站瘫——清理镜像/日志或扩容',
     backupStale: '备份已过期', backupOk: '最近备份', backupStaleHint: '每日备份超过 26 小时未更新（或一份都没有）——灾备正静默失效，请检查磁盘/权限',
@@ -173,7 +173,7 @@ const I18N = {
     dashboard: 'Overview', users: 'Users', reports: 'Reports', recordings: 'Recordings', logout: 'Sign out',
     totalUsers: 'Total users', active: 'Active', disabled: 'Banned', online: 'Online', onlineHelpers: 'Online helpers',
     panelUpdated: 'A new version of this panel is available (server updated)', refreshNow: 'Refresh now',
-    openReports: 'Open reports', recordingsCount: 'Recordings', byRole: 'By role', version: 'Version', uptime: 'Uptime', activeEmergencies: 'Active emergencies',
+    openReports: 'Open reports', recordingsCount: 'Recordings', visionToday: 'AI describes (today)', visionCap: 'Per-user daily cap', byRole: 'By role', version: 'Version', uptime: 'Uptime', activeEmergencies: 'Active emergencies',
     activeUnreachable: 'Emergency · reached no one', activeUnreachSub: 'Safety net silently failing — contact them/family',
     diskLow: 'Disk space critical', diskFree: 'Disk free', diskLowHint: 'A full disk breaks database writes and takes the site down — prune images/logs or grow the volume',
     backupStale: 'Backup stale', backupOk: 'Last backup', backupStaleHint: 'No daily backup in over 26 hours (or none at all) — disaster recovery is silently failing; check disk/permissions',
@@ -630,6 +630,7 @@ function renderDashboard() {
       ${statCard(t('newUsers7d'), g.newUsers7d, t('newUsers30d') + ': ' + g.newUsers30d, g.newUsers7d ? 'success' : '')}
       ${statCard(t('openReports'), o.reports.open, (state.lang === 'en' ? 'of ' : '共 ') + o.reports.total, o.reports.open ? 'danger' : '')}
       ${statCard(t('recordingsCount'), o.recordings.total)}
+      ${o.vision ? statCard(t('visionToday'), o.vision.today, t('visionCap') + ': ' + o.vision.dailyMaxPerUser + '/' + (state.lang === 'en' ? 'user' : '人')) : ''}
       ${o.disk && !o.disk.low ? statCard(t('diskFree'), (o.disk.freeBytes / 1073741824).toFixed(1) + ' GB (' + Math.round(o.disk.freeBytes / o.disk.totalBytes * 100) + '%)') : ''}
       ${o.backup && !o.backup.stale ? statCard(t('backupOk'), backupAge(o) + (o.backup.count>1?' · '+o.backup.count+'×':'')) : ''}
       ${o.callConnect ? statCard(t('relayFails'), o.callConnect.relayUnreachable,

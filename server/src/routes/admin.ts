@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PKG_VERSION, gitCommit } from '../version'
 import { diskUsage, isDiskLow, dataDir } from '../monitoring/disk'
+import { visionDailyMax } from './vision'
 import { latestBackupInfo, backupKeepDays } from '../backup/autoBackup'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
@@ -206,6 +207,9 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       online: { total: online.size, helpers: onlineHelpers },
       reports: { open: openReports, total: reports.length },
       recordings: { total: store.allRecordings().length, config: store.getRecordingConfig() },
+      // AI 视觉描述用量（今日 UTC）：每次成功=一次外部付费调用，运维据此监控成本/滥用（无专门 metrics 面板亦可见）。
+      // today=全体当日成功调用数；dailyMaxPerUser=单用户每日上限（VISION_DAILY_MAX，默认 200）。
+      vision: { today: store.totalVisionCallsOnDay(dayKey(now)), dailyMaxPerUser: visionDailyMax() },
       verifications: { pending: store.countPendingVerifications(), total: store.allVerifications().length },
       growth: { newUsers7d, newUsers30d, trend },
       // 运维在仪表盘一眼看出此刻有没有正在发生的危机，无需先点进紧急事件区逐条看（危机感知置顶）。

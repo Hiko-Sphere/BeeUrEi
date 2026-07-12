@@ -821,6 +821,7 @@ export interface Store {
   mediaBytesForOwner(userId: string): number // 某用户媒体总字节数（配额检查，防单账号撑爆磁盘）
   // AI 视觉每日配额：护外部付费视觉模型额度（10/min 限流只限速率、不限当日总量）。单行/用户，跨 UTC 日自动重置。
   visionCallsOnDay(userId: string, day: string): number // 该用户在 day(UTC yyyy-mm-dd)当日已成功的视觉调用次数
+  totalVisionCallsOnDay(day: string): number            // **全体**用户在 day 当日的视觉调用总数（付费 AI 用量监控，供 admin 概览）
   recordVisionCall(userId: string, day: string): void   // 记一次调用（同日累加，跨日重置为 1）——配额"预留"用（reserve）
   refundVisionCall(userId: string, day: string): void   // 回退一次预留（上游失败时；仅当当前行仍是该 day 且 count>0，下限 0）
   deleteVisionUsageForUser(userId: string): void        // 删号级联清计数
@@ -1800,6 +1801,11 @@ export class MemoryStore implements Store {
   visionCallsOnDay(userId: string, day: string): number {
     const e = this.visionUsage.get(userId)
     return e && e.day === day ? e.count : 0 // 跨日的旧行视为 0（下次 record 会重置）
+  }
+  totalVisionCallsOnDay(day: string): number {
+    let total = 0
+    for (const e of this.visionUsage.values()) if (e.day === day) total += e.count // 跨日旧行不计（下次 record 归 1）
+    return total
   }
   recordVisionCall(userId: string, day: string): void {
     const e = this.visionUsage.get(userId)

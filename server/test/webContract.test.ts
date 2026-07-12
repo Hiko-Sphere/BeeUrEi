@@ -21,7 +21,6 @@ const mem = new Map<string, string>()
   get length() { return mem.size },
 } as unknown as Storage
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- 动态导入的 web 模块无类型（见上），形状由断言本身验证 */
 let app: ReturnType<typeof buildApp>
 let api: any
 let tokenStore: any

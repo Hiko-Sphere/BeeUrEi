@@ -128,7 +128,7 @@ const I18N = {
     fldDisplayName: '昵称', fldUsername: '用户名', fldEmail: '邮箱', fldPhone: '手机号', fldLanguage: '语言（如 zh/en）', clearAvatarBtn: '清除头像',
     resetPassword: '重设密码', newPasswordPh: '新密码（至少 6 位）', confirmResetPassword: '确认为该用户设置新密码？这会撤销其所有设备的登录。', passwordResetDone: '密码已重设',
     deleteUser: '删除用户', confirmDeleteUser: '确认永久删除该用户？将级联清除其全部绑定、Passkey 与会话，且不可恢复。', userDeleted: '用户已删除', dangerZone: '危险操作',
-    sessionsLabel: '活跃会话', tokenVersionLabel: '令牌版本', usernameCustomizedLabel: '自定义用户名', legalConsentLabel: '合规同意', avatarLabel: '头像', voipLabel: 'VoIP 推送', apnsLabel: 'APNs 推送', yes: '是', no: '否',
+    sessionsLabel: '活跃会话', tokenVersionLabel: '令牌版本', usernameCustomizedLabel: '自定义用户名', legalConsentLabel: '合规同意', avatarLabel: '头像', voipLabel: 'VoIP 推送', apnsLabel: 'APNs 推送', visionUsageLabel: 'AI 描述用量（今日）', atCap: '已达上限', yes: '是', no: '否',
     reportsByLabel: '发起的举报', reportsAgainstLabel: '收到的举报', recordingsOwnLabel: '录制', blockingLabel: '已拉黑', blockedByLabel: '被拉黑',
     err_username_taken: '用户名已被占用', err_email_taken: '邮箱已被占用', err_phone_taken: '手机号已被占用', err_invalid_username: '用户名格式不合法（仅字母数字 _.-）', err_invalid_phone: '手机号不合法', err_cannot_delete_self: '不能删除自己',
     // v5：分页/排序/批量
@@ -257,7 +257,7 @@ const I18N = {
     fldDisplayName: 'Display name', fldUsername: 'Username', fldEmail: 'Email', fldPhone: 'Phone', fldLanguage: 'Language (e.g. zh/en)', clearAvatarBtn: 'Clear avatar',
     resetPassword: 'Reset password', newPasswordPh: 'New password (min 6 chars)', confirmResetPassword: 'Set a new password for this user? It signs them out on all devices.', passwordResetDone: 'Password reset',
     deleteUser: 'Delete user', confirmDeleteUser: 'Permanently delete this user? Their links, passkeys, and sessions are cascade-deleted. This cannot be undone.', userDeleted: 'User deleted', dangerZone: 'Danger zone',
-    sessionsLabel: 'Active sessions', tokenVersionLabel: 'Token version', usernameCustomizedLabel: 'Custom username', legalConsentLabel: 'Legal consent', avatarLabel: 'Avatar', voipLabel: 'VoIP push', apnsLabel: 'APNs push', yes: 'yes', no: 'no',
+    sessionsLabel: 'Active sessions', tokenVersionLabel: 'Token version', usernameCustomizedLabel: 'Custom username', legalConsentLabel: 'Legal consent', avatarLabel: 'Avatar', voipLabel: 'VoIP push', apnsLabel: 'APNs push', visionUsageLabel: 'AI describes (today)', atCap: 'at cap', yes: 'yes', no: 'no',
     reportsByLabel: 'Reports filed', reportsAgainstLabel: 'Reports received', recordingsOwnLabel: 'Recordings', blockingLabel: 'Blocking', blockedByLabel: 'Blocked by',
     err_username_taken: 'Username taken', err_email_taken: 'Email taken', err_phone_taken: 'Phone taken', err_invalid_username: 'Invalid username (letters, digits, _.- only)', err_invalid_phone: 'Invalid phone', err_cannot_delete_self: 'Cannot delete yourself',
     // v5: pagination / sort / bulk
@@ -971,6 +971,7 @@ async function openUserDrawer(uid) {
           <dt>${esc(t('avatarLabel'))}</dt><dd>${yn(u.hasAvatar)}</dd>
           <dt>${esc(t('voipLabel'))}</dt><dd>${yn(u.hasVoipToken)}</dd>
           <dt>${esc(t('apnsLabel'))}</dt><dd>${yn(u.hasApnsToken)}</dd>
+          <dt>${esc(t('visionUsageLabel'))}</dt><dd>${(d.vision?.today ?? 0)} / ${d.vision?.dailyMax ?? '—'}${(d.vision?.today ?? 0) >= (d.vision?.dailyMax ?? Infinity) ? ` <span class="pill off">${esc(t('atCap'))}</span>` : ''}</dd>
           <dt>${esc(t('legalConsentLabel'))}</dt><dd>${u.legalConsentVersion ? esc(u.legalConsentVersion) + (u.legalConsentAt ? ' · ' + esc(fmtDate(u.legalConsentAt)) : '') : '—'}</dd>
           <dt>${esc(t('created'))}</dt><dd>${esc(fmtDate(u.createdAt))}</dd>
         </dl>`;

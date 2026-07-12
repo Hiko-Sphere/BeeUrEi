@@ -43,3 +43,24 @@ describe('admin 总览 vision（AI 视觉用量可观测）', () => {
     await app.close()
   })
 })
+
+describe('admin 用户详情 vision（付费用量可归因到人）', () => {
+  it('users/:id.vision.today 只反映**该用户**当日调用量，不是全体总数', async () => {
+    const store = new MemoryStore()
+    const admin: User = { id: 'a1', username: 'root', passwordHash: hashPassword('rootpass1'), displayName: 'root', role: 'admin', status: 'active', createdAt: Date.now() }
+    const target: User = { id: 'blind1', username: 'blind1', passwordHash: hashPassword('blindpass1'), displayName: '小明', role: 'blind', status: 'active', createdAt: Date.now() }
+    store.createUser(admin); store.createUser(target)
+    const app = buildApp(store)
+    const adminTok = (await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'root', password: 'rootpass1' } })).json().token as string
+
+    const day = new Date().toISOString().slice(0, 10) // 与详情端点 dayKey 同 UTC 口径
+    // 目标用户 2 次；**另一**用户 5 次——若端点误用全体聚合(totalVisionCallsOnDay)，today 会是 7 而非 2。
+    store.recordVisionCall('blind1', day); store.recordVisionCall('blind1', day)
+    for (let i = 0; i < 5; i++) store.recordVisionCall('someone-else', day)
+
+    const d = (await app.inject({ method: 'GET', url: '/api/admin/users/blind1', headers: { authorization: `Bearer ${adminTok}` } })).json()
+    expect(d.vision.today).toBe(2)        // 只算 blind1 自己，不含 someone-else 的 5 次
+    expect(d.vision.dailyMax).toBeGreaterThan(0)
+    await app.close()
+  })
+})

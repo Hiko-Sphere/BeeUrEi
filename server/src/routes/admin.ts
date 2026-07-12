@@ -499,6 +499,9 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     const reportsAgainst = allReports.filter((r) => r.targetUserId === id).map((r) => ({ id: r.id, reporterName: nameOf(r.reporterId), reason: r.reason, status: r.status, decision: r.decision ?? null, createdAt: r.createdAt }))
     const recordings = store.allRecordings().filter((r) => r.ownerId === id).map((r) => ({ id: r.id, callId: r.callId, reason: r.reason, recordedAt: r.recordedAt }))
     const passkeys = store.passkeysForUser(id).map((p) => ({ id: p.id, deviceName: p.deviceName ?? null, createdAt: p.createdAt, counter: p.counter }))
+    // 该用户当日 AI 视觉调用量（付费第三方模型）——供审核员定位单个滥用/异常烧配额的用户，
+    // 补齐 overview 只有全体总数、无法归因到人的观测缺口。dailyMax=单用户每日上限（同 overview）。
+    const visionToday = store.visionCallsOnDay(id, new Date(now).toISOString().slice(0, 10))
     return {
       user: {
         ...publicUser(u),
@@ -529,6 +532,8 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       reportsAgainst,
       recordings,
       passkeys,
+      // 该用户今日 AI 视觉调用量 + 单用户每日上限（付费用量归因，异常烧配额定位）。
+      vision: { today: visionToday, dailyMax: visionDailyMax() },
       // 审核记录：该用户收到的警告（轻处置）历史，供审核员判断是否升级处置。
       warnings: store.warningsForUser(id).map((w) => ({
         id: w.id,

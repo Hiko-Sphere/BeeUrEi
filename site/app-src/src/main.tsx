@@ -7,6 +7,9 @@ import { SessionProvider } from './lib/session'
 import { ToastProvider } from './components/ui'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { registerServiceWorker } from './lib/webPush'
+// 副作用 import：尽早挂 beforeinstallprompt 监听（事件在加载后很早派发，懒加载会错过）——
+// 捕获后由账户页"安装为应用"卡呈现（已安装 PWA 才有图标角标：未接来电/未读的桌面级提示）。
+import './lib/installPrompt'
 import { App } from './App'
 
 applyTheme()

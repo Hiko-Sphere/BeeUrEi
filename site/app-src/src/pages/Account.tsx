@@ -4,6 +4,7 @@ import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { subscribeWebPush, unsubscribeWebPush, isWebPushSubscribed, webPushSupported, resyncWebPushSubscription } from '../lib/webPush'
 import { inQuietHoursNow } from '../lib/quietHours'
+import { installAvailable, promptInstall, onInstallAvailable } from '../lib/installPrompt'
 import { roleLabel } from '../components/Layout'
 import { Card, Avatar, Button, Field, Input, useToast, Modal, fmtTime } from '../components/ui'
 import { DataExportCard } from '../components/DataExportCard'
@@ -141,6 +142,10 @@ export function AccountPage() {
 
       {/* 浏览器通知（Web Push）：关掉标签页也能收到紧急告警的系统通知 */}
       <WebPushCard />
+
+      {/* 安装为应用（Chromium 捕获到 beforeinstallprompt 才渲染——Safari/Firefox 无此能力,诚实隐藏）：
+          已安装 PWA 才有图标角标（未接来电/未读），桌面级"有人找我"提示。 */}
+      <InstallAppCard />
 
       {/* 勿扰时段：软通知在此时段只抑制推送横幅，紧急告警/来电不受影响 */}
       <QuietHoursCard />
@@ -948,6 +953,29 @@ function MedicalInfoCard() {
         <span className="text-xs text-faint">{text.length}/4000</span>
         <Button variant="soft" onClick={save} disabled={loading || saving}>{t('保存', 'Save')}</Button>
       </div>
+    </Card>
+  )
+}
+
+/// 安装为应用卡：仅当捕获到 beforeinstallprompt（Chromium 且满足可安装条件、尚未安装）才渲染。
+/// 点安装弹浏览器原生确认；接受→toast 确认（appinstalled 事件清暂存、卡片自行消失）；拒绝→收起卡
+/// （浏览器本次会话不会再给机会，如实收起，绝不留一个点了没反应的按钮）。
+function InstallAppCard() {
+  const { t } = useI18n()
+  const toast = useToast()
+  const [available, setAvailable] = useState(installAvailable())
+  useEffect(() => onInstallAvailable(() => setAvailable(installAvailable())), [])
+  if (!available) return null
+  // data-testid 挂在自有 div 上——共享 Card 组件只收 className/children，其余 props 会被静默丢弃（曾据此误判未渲染）。
+  return (
+    <Card className="flex flex-wrap items-center justify-between gap-3 p-5">
+      <div className="min-w-0" data-testid="install-app-card">
+        <div className="font-semibold">{t('安装为应用', 'Install as an app')}</div>
+        <div className="mt-0.5 text-sm text-faint">{t('主屏/桌面图标 + 未接来电与未读的图标角标提醒（角标仅安装后生效）', 'Home-screen icon plus badge counts for missed calls and unread (badges require install)')}</div>
+      </div>
+      <Button onClick={() => void promptInstall().then((r) => {
+        if (r === 'accepted') toast(t('已安装——图标角标提醒随之生效', 'Installed — icon badges are now active'), 'ok')
+      })}>{t('安装', 'Install')}</Button>
     </Card>
   )
 }

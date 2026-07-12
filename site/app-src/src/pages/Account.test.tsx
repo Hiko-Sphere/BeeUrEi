@@ -32,6 +32,25 @@ describe('AccountPage 资料渲染（防字段漂移）', () => {
     expect(screen.getByText('已开启')).toBeInTheDocument()         // twoFactorEnabled=true → "已开启"
   })
 
+  it('安装为应用卡：无 beforeinstallprompt（Safari/Firefox/已安装）不渲染；捕获到→出卡，点安装调 promptInstall', async () => {
+    mock(api.me).mockResolvedValue({ id: 'u1', username: 'amin', displayName: '阿明', role: 'helper', email: null, emailVerified: false, twoFactorEnabled: false, usernameCustomized: true, verified: false })
+    const { unmount } = render(<AccountPage />)
+    await screen.findByDisplayValue('阿明')
+    expect(screen.queryByTestId('install-app-card')).toBeNull() // 无事件：诚实隐藏（绝不给假按钮）
+    unmount()
+    // 派发可控 beforeinstallprompt（jsdom 无原生：手动补 prompt/userChoice）→ 卡片出现，点安装走原生确认。
+    const ev = new Event('beforeinstallprompt', { cancelable: true }) as Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> }
+    ev.prompt = vi.fn().mockResolvedValue(undefined)
+    ev.userChoice = Promise.resolve({ outcome: 'accepted' })
+    window.dispatchEvent(ev)
+    render(<AccountPage />)
+    expect(await screen.findByTestId('install-app-card')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '安装' }))
+    await waitFor(() => expect(ev.prompt).toHaveBeenCalled())
+    // accepted 后暂存已清 → 卡片消失（appinstalled 亦同）。
+    await waitFor(() => expect(screen.queryByTestId('install-app-card')).toBeNull())
+  })
+
   it('显示名称输入上限 64 与服务端 profileSchema.max(64) 一致（此前 40 无端更紧，跨端可设长度不一）', async () => {
     mock(api.me).mockResolvedValue({ id: 'u1', username: 'amin', displayName: '阿明', role: 'helper', email: null, emailVerified: false, twoFactorEnabled: false, usernameCustomized: true, verified: false })
     render(<AccountPage />)

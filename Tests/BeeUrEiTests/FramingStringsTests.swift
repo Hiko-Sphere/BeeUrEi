@@ -252,4 +252,18 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertFalse(FramingStrings.calendarEventSpeak(title: "Launch", start: "2026-07-20", .en)
             .contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
+
+    func testContactDetailTitleAndUrl() {
+        // 职务紧随姓名、网址在末尾。
+        XCTAssertEqual(
+            FramingStrings.contactDetail(name: "王小明", org: "蜂之眼科技", phones: ["13800001111"], emails: [], title: "销售经理", url: "https://x.example", .zh),
+            "名片：王小明，销售经理，蜂之眼科技，电话 13800001111，网址 https://x.example")
+        // 无 title/url（默认）→ 退回旧行为（既有调用零影响）。
+        XCTAssertEqual(FramingStrings.contactDetail(name: "张三", org: "某公司", phones: [], emails: ["a@b.com"], .zh),
+                       "名片：张三，某公司，邮箱 a@b.com")
+        // 英文。
+        XCTAssertEqual(
+            FramingStrings.contactDetail(name: "Jane", org: "Acme", phones: [], emails: [], title: "CTO", url: "https://acme.example", .en),
+            "Contact card: Jane, CTO, Acme, website https://acme.example")
+    }
 }

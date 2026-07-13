@@ -458,13 +458,15 @@ enum FramingStrings {
         return "It's a calendar event" + (t.map { ": \($0)" } ?? "") + (s.map { ", starts \($0)" } ?? "") + ". Please verify."
     }
     /// 已解析的名片：读出姓名/单位/电话/邮箱（核心 VCardParser）。
-    static func contactDetail(name: String?, org: String?, phones: [String], emails: [String], _ l: Language) -> String {
+    static func contactDetail(name: String?, org: String?, phones: [String], emails: [String], title: String? = nil, url: String? = nil, _ l: Language) -> String {
         let sep = l == .zh ? "，" : ", "
         var parts: [String] = []
         if let name, !name.isEmpty { parts.append(name) }
+        if let title, !title.isEmpty { parts.append(title) } // 职务紧随姓名（"王小明，销售经理，某公司"）
         if let org, !org.isEmpty { parts.append(org) }
         if !phones.isEmpty { parts.append((l == .zh ? "电话 " : "phone ") + phones.joined(separator: l == .zh ? "、" : ", ")) }
         if !emails.isEmpty { parts.append((l == .zh ? "邮箱 " : "email ") + emails.joined(separator: l == .zh ? "、" : ", ")) }
+        if let url, !url.isEmpty { parts.append((l == .zh ? "网址 " : "website ") + url) }
         let body = parts.joined(separator: sep)
         return l == .zh ? "名片：\(body)" : "Contact card: \(body)"
     }

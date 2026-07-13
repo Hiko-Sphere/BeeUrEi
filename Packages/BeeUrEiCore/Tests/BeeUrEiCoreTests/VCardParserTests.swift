@@ -56,4 +56,20 @@ final class VCardParserTests: XCTestCase {
         // 是 vCard 壳但无任何有用字段 → nil（不报空名片）。
         XCTAssertNil(VCardParser.parse("BEGIN:VCARD\nVERSION:3.0\nEND:VCARD"))
     }
+
+    func testVCardTitleAndUrl() {
+        // TITLE(职务) + URL(网址)：名片核心信息，此前被丢；参数化/分组前缀（item2.URL）也须解出。CRLF 换行照收。
+        let v = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:王小明\r\nTITLE:销售经理\r\nORG:蜂之眼科技\r\nTEL:13800001111\r\nitem2.URL:https://beeurei.example.com\r\nEND:VCARD"
+        let c = VCardParser.parse(v)!
+        XCTAssertEqual(c.name, "王小明")
+        XCTAssertEqual(c.title, "销售经理")
+        XCTAssertEqual(c.org, "蜂之眼科技")
+        XCTAssertEqual(c.url, "https://beeurei.example.com")
+        // MECARD 有 URL（无 TITLE 字段）。
+        let m = VCardParser.parse("MECARD:N:李四;TEL:13712340000;URL:https://foo.example;;")!
+        XCTAssertEqual(m.url, "https://foo.example")
+        XCTAssertNil(m.title)
+        // 只有 TITLE（无名/无联系方式）也算有效名片（不当空）。
+        XCTAssertEqual(VCardParser.parse("BEGIN:VCARD\nTITLE:CTO\nEND:VCARD")?.title, "CTO")
+    }
 }

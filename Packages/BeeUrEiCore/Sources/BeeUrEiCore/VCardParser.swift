@@ -8,10 +8,14 @@ public enum VCardParser {
         public let phones: [String]
         public let emails: [String]
         public let org: String?
-        public init(name: String?, phones: [String], emails: [String], org: String?) {
-            self.name = name; self.phones = phones; self.emails = emails; self.org = org
+        public let title: String?  // 职务（TITLE，如"销售经理"）——名片上最常见、盲人靠它知道对方是谁/什么角色
+        public let url: String?    // 网址（URL，公司/个人主页）
+        public init(name: String?, phones: [String], emails: [String], org: String?, title: String? = nil, url: String? = nil) {
+            self.name = name; self.phones = phones; self.emails = emails; self.org = org; self.title = title; self.url = url
         }
-        public var isEmpty: Bool { name == nil && phones.isEmpty && emails.isEmpty && org == nil }
+        public var isEmpty: Bool {
+            name == nil && phones.isEmpty && emails.isEmpty && org == nil && title == nil && url == nil
+        }
     }
 
     public static func parse(_ payload: String) -> Contact? {
@@ -26,9 +30,9 @@ public enum VCardParser {
 
     /// vCard：逐行 `KEY[;参数]:VALUE`。FN 优先作姓名（N 为结构化姓名兜底）；TEL/EMAIL 可多条。
     private static func parseVCard(_ text: String) -> Contact {
-        var fn: String?, n: String?, org: String?
+        var fn: String?, n: String?, org: String?, title: String?, url: String?
         var phones: [String] = [], emails: [String] = []
-        for rawLine in text.split(whereSeparator: { $0 == "\n" || $0 == "\r" }) {
+        for rawLine in text.split(whereSeparator: { $0 == "\n" || $0 == "\r" || $0 == "\r\n" }) {
             let line = String(rawLine)
             guard let colon = line.firstIndex(of: ":") else { continue }
             let rawKey = line[line.startIndex..<colon].uppercased()
@@ -43,14 +47,16 @@ public enum VCardParser {
             else if key == "TEL" { phones.append(value) }
             else if key == "EMAIL" { emails.append(value) }
             else if key == "ORG" { org = value.replacingOccurrences(of: ";", with: " ").trimmingCharacters(in: .whitespaces) }
+            else if key == "TITLE" { title = value }  // 职务（名片核心信息之一）
+            else if key == "URL" { url = value }       // 主页/网址
         }
-        return Contact(name: fn ?? n, phones: dedup(phones), emails: dedup(emails), org: org)
+        return Contact(name: fn ?? n, phones: dedup(phones), emails: dedup(emails), org: org, title: title, url: url)
     }
 
     /// MECARD:`MECARD:N:名;TEL:号;EMAIL:邮;;`——按 ; 切字段，每段 `KEY:VALUE`。
     private static func parseMECARD(_ text: String) -> Contact {
         let body = String(text.dropFirst("MECARD:".count))
-        var name: String?, org: String?
+        var name: String?, org: String?, url: String?
         var phones: [String] = [], emails: [String] = []
         for field in body.split(separator: ";") {
             let f = String(field)
@@ -63,10 +69,11 @@ public enum VCardParser {
             case "TEL": phones.append(value)
             case "EMAIL": emails.append(value)
             case "ORG": org = value
+            case "URL": url = value  // MECARD 有 URL（无 TITLE 字段）
             default: break
             }
         }
-        return Contact(name: name, phones: dedup(phones), emails: dedup(emails), org: org)
+        return Contact(name: name, phones: dedup(phones), emails: dedup(emails), org: org, url: url)
     }
 
     private static func dedup(_ arr: [String]) -> [String] {

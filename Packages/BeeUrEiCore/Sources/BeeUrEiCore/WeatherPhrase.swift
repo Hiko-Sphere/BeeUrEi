@@ -134,6 +134,15 @@ public enum WeatherPhrase {
         // windTip 已按语言定型（中文无前导空格接在"。"后；英文带前导空格）——直接拼接。
         func withWind(_ base: String) -> String { strongWind ? base + windTip : base }
 
+        // 严寒（≤-10℃）保暖后缀（像 windTip 可追加）：降雪等"须出行仍要走"的条件下，除防滑外还要提醒盲人保暖、
+        // 减少在外逗留——他们导航更慢=在外更久、又看不到温度计，冻伤/失温风险高，而独立的严寒分支被降雪分支提前返回
+        // 够不到（漏了这层）。缺/坏 todayMin（?? 999 / NaN 比较皆假）不触发（宁可不提，同本文件一贯原则）。
+        // 冻雨/雷暴已是"避免外出"最高级、在上方先返回，不叠加此后缀。
+        let severeCold = (todayMin ?? 999) <= -10
+        let coldTip = language == .zh ? "天气严寒，注意保暖、减少在外逗留。"
+                                      : " It's bitterly cold — dress warmly and limit time outside."
+        func withCold(_ base: String) -> String { severeCold ? base + coldTip : base }
+
         // 雾（WMO 45/48）：盲人自身不靠视觉，但**司机/协助者看不清行人**——过街/路边是被撞风险。
         // 建议走有信号灯的路口、穿浅色/反光衣物、必要时求助。排在带伞之前（可见性安全 > 湿滑舒适）。
         if code == 45 || code == 48 {
@@ -153,11 +162,12 @@ public enum WeatherPhrase {
         let snow: Set<Int> = [71, 73, 75, 77, 85, 86]
         if snow.contains(code) {
             let heavy = code == 75
-            return withWind(language == .zh
+            // 降雪 + 严寒(≤-10℃)：除防滑/盲道被盖外追加保暖提醒（withCold）——单独的严寒分支被这里提前返回够不到。
+            return withCold(withWind(language == .zh
                 ? (heavy ? "正在下大雪，地面积雪湿滑、可能结冰，盲道会被盖住，出行请格外防滑慢行、最好有人陪同。"
                          : "正在下雪，地面湿滑、可能结冰，出行请小心防滑、慢行。")
                 : (heavy ? " Heavy snow — the snow-covered ground is slippery and may ice over, and the tactile paving you follow will be buried; walk very carefully, ideally with someone."
-                         : " Snowing — the ground is slippery and may ice over; walk carefully to avoid slipping."))
+                         : " Snowing — the ground is slippery and may ice over; walk carefully to avoid slipping.")))
         }
         let wet: Set<Int> = [51, 53, 55, 61, 63, 65, 80, 81, 82] // 降雪已在上方单独处理；雷暴 95/96/99 亦已单独强警告
         if wet.contains(code) {

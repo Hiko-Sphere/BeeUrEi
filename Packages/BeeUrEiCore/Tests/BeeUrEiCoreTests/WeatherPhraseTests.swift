@@ -43,6 +43,22 @@ final class WeatherPhraseTests: XCTestCase {
         XCTAssertFalse(snow.contains("带伞")) // 雪不该给"带伞"建议
     }
 
+    /// 降雪 + 严寒(≤-10℃)：除防滑/盲道被盖，还追加保暖提醒——独立的严寒分支被降雪分支提前返回够不到（withCold 补齐）。
+    func testHeavySnowSevereColdAddsWarmthReminder() {
+        // 大雪 + -15℃：防滑/盲道 + 保暖都在。
+        let zh = WeatherPhrase.advice(code: 75, todayMax: -6, todayMin: -15, precipProbability: nil, language: .zh)!
+        XCTAssertTrue(zh.contains("防滑") && zh.contains("盲道"), "大雪须保留防滑/盲道：\(zh)")
+        XCTAssertTrue(zh.contains("保暖"), "大雪+严寒须追加保暖：\(zh)")
+        let en = WeatherPhrase.advice(code: 73, todayMax: -6, todayMin: -12, precipProbability: nil, language: .en)!
+        XCTAssertTrue(en.lowercased().contains("slippery") && en.lowercased().contains("dress warmly"), "en 大雪+严寒：\(en)")
+        // 降雪但**不**严寒（min=-5）：不追加保暖（宁可不提），仍给防滑。
+        let mild = WeatherPhrase.advice(code: 73, todayMax: 1, todayMin: -5, precipProbability: nil, language: .zh)!
+        XCTAssertTrue(mild.contains("防滑") && !mild.contains("保暖"), "非严寒降雪不该加保暖：\(mild)")
+        // 缺 todayMin（?? 999）：不触发保暖，仍给防滑。
+        let noMin = WeatherPhrase.advice(code: 73, todayMax: nil, todayMin: nil, precipProbability: nil, language: .zh)!
+        XCTAssertTrue(noMin.contains("防滑") && !noMin.contains("保暖"), "缺 min 不该加保暖：\(noMin)")
+    }
+
     /// 严寒（todayMin ≤ -10℃）：升级为**健康**提示（保暖 + 减少在外逗留），与 ≥35℃ 高温提示对称；仍保留结冰警告。
     /// 冰点以下但未到严寒（-10 < min ≤ 0）：维持原"冰点以下、结冰、小心"通用提示，不误升级。
     func testBitterColdHealthAdvice() {

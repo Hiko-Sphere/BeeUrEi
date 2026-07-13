@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type NotificationInfo } from '../../lib/api'
 import { pickUnreadEmergencies, playEmergencyChime, clearedSenderLatest, isClearedByLaterAllClear, ackEventNotifIds, respondingEventIds } from '../../lib/emergencyAlerts'
 import { emergencyLocInfo } from '../../lib/emergencyLoc'
-import { appleMapsUrl } from '../../lib/location'
+import { appleMapsUrl, appleMapsDirectionsUrl } from '../../lib/location'
 import { useI18n } from '../../lib/i18n'
 import { Modal, fmtTime } from '../../components/ui'
 import { IconPhone, IconFlash, IconCheck } from '../../components/icons'
@@ -43,15 +43,24 @@ export function EmergencyAlertModal({ alert, othersCount, beingHandled, onAck, o
         )}
         <div className="text-xs text-faint">{fmtTime(alert.createdAt, lang)}</div>
         {hasCoord && (
-          <a href={appleMapsUrl(alert.data!.lat, alert.data!.lon)}
-            target="_blank" rel="noreferrer"
-            className="inline-flex items-center gap-1 text-sm font-medium text-accent hover:underline">
-            {loc.stale ? '⚠️' : '📍'} {loc.stale
-              ? (loc.fixAt != null
-                ? t(`最后已知位置 · ${fmtTime(loc.fixAt, lang)}`, `Last known location · ${fmtTime(loc.fixAt, lang)}`)
-                : t('最后已知位置（非实时）', 'Last known location (not live)'))
-              : t('查看位置', 'View location')}
-          </a>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <a href={appleMapsUrl(alert.data!.lat, alert.data!.lon)}
+              target="_blank" rel="noreferrer"
+              className="inline-flex items-center gap-1 text-sm font-medium text-accent hover:underline">
+              {loc.stale ? '⚠️' : '📍'} {loc.stale
+                ? (loc.fixAt != null
+                  ? t(`最后已知位置 · ${fmtTime(loc.fixAt, lang)}`, `Last known location · ${fmtTime(loc.fixAt, lang)}`)
+                  : t('最后已知位置（非实时）', 'Last known location (not live)'))
+                : t('查看位置', 'View location')}
+            </a>
+            {/* 一键导航前往（daddr）：收到 SOS 的家人最需要**立刻赶去**——比落图钉少一步（承 iter323/324）。
+                位置陈旧已由左侧图钉 ⚠️ 标注，title 再提醒可能已移动。 */}
+            <a href={appleMapsDirectionsUrl(alert.data!.lat, alert.data!.lon)} target="_blank" rel="noreferrer"
+              title={loc.stale ? t('导航到最后已知位置（对方可能已移动）', 'Directions to last known location (they may have moved)') : t('导航前往（在地图中选驾车/步行）', 'Get directions (choose driving/walking in Maps)')}
+              className="inline-flex items-center gap-1 text-sm font-medium text-accent hover:underline">
+              🧭 {t('导航前往', 'Directions')}
+            </a>
+          </div>
         )}
         {othersCount > 0 && (
           <p className="text-xs text-faint">{t(`还有 ${othersCount} 条未读紧急告警，见通知页`, `${othersCount} more unread emergency alert(s) in Alerts`)}</p>

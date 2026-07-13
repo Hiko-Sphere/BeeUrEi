@@ -19,9 +19,10 @@ describe('EmergencyAlertModal（告警模态展示）', () => {
       othersCount={0} onAck={onAck} onCallBack={onCall} />)
     expect(screen.getByText('紧急：faller 可能需要帮助')).toBeInTheDocument()
     expect(screen.getByText('App 检测到疑似摔倒。')).toBeInTheDocument()
-    // 诚实标注：兜底位置不得伪装成实时（链接文案带"最后已知位置"）。
-    expect(screen.getByRole('link').textContent).toContain('最后已知位置')
-    expect(screen.getByRole('link')).toHaveAttribute('href', expect.stringContaining('31.2,121.5'))
+    // 诚实标注：兜底位置不得伪装成实时（图钉链接文案带"最后已知位置"）。
+    expect(screen.getByRole('link', { name: /最后已知位置/ })).toHaveAttribute('href', expect.stringContaining('31.2,121.5'))
+    // 一键导航前往（daddr 直接导航，赶去的家人少一步；承 iter323/324，收到 SOS 的模态最时间攸关）。
+    expect(screen.getByRole('link', { name: /导航/ })).toHaveAttribute('href', expect.stringContaining('daddr=31.2,121.5'))
     // 回拨与确认可用。
     fireEvent.click(screen.getByText(/回拨/))
     expect(onCall).toHaveBeenCalledOnce()
@@ -33,7 +34,8 @@ describe('EmergencyAlertModal（告警模态展示）', () => {
     render(<EmergencyAlertModal
       alert={alert({ lat: '31.2', lon: '121.5', locSource: 'live' })}
       othersCount={2} onAck={() => {}} onCallBack={() => {}} />)
-    expect(screen.getByRole('link').textContent).toContain('查看位置')
+    expect(screen.getByRole('link', { name: /查看位置/ })).toBeInTheDocument() // 实时坐标：图钉链接标"查看位置"
+    expect(screen.getByRole('link', { name: /导航/ })).toHaveAttribute('href', expect.stringContaining('daddr=')) // 导航前往
     expect(screen.queryByText(/回拨/)).toBeNull()          // 无 fromId → 无回拨按钮
     expect(screen.getByText(/还有 2 条/)).toBeInTheDocument() // 多条提示
   })

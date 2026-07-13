@@ -190,4 +190,20 @@ final class HomeStringsTests: XCTestCase {
         XCTAssertTrue(HomeStrings.batterySpeak(percent: 150, charging: false, .zh).contains("百分之100"))
         XCTAssertTrue(HomeStrings.batterySpeak(percent: -5, charging: false, .zh).contains("百分之0"))
     }
+
+    /// 安全报到 Hub 直达磁贴文案：标题/提示双语齐备；提示须点明 dead-man's switch 语义（到点未报→自动通知）
+    /// 与语音完成通道（"报平安"）——盲人从磁贴 hint 就能学会全流程，不必翻教程。
+    func testCheckinTileStrings() {
+        XCTAssertEqual(HomeStrings.tileCheckin(.zh), "安全报到")
+        XCTAssertFalse(HomeStrings.tileCheckin(.en).isEmpty)
+        for l in [Language.zh, .en] {
+            XCTAssertFalse(HomeStrings.hintCheckin(l).isEmpty)
+        }
+        XCTAssertTrue(HomeStrings.hintCheckin(.zh).contains("报平安"))       // 语音完成通道可发现
+        XCTAssertTrue(HomeStrings.hintCheckin(.zh).contains("自动通知"))     // dead-man's switch 语义
+        XCTAssertTrue(HomeStrings.hintCheckin(.en).contains("I'm safe"))
+        // 语音能力自述也须含"报平安"（语音功能必须能被语音发现，iter336）。
+        XCTAssertTrue(HomeStrings.voiceCommandsHelp(.zh).contains("报平安"))
+        XCTAssertTrue(HomeStrings.voiceCommandsHelp(.en).contains("I'm safe"))
+    }
 }

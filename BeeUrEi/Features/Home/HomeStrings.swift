@@ -62,6 +62,13 @@ enum HomeStrings {
     static func hintRecordings(_ l: Language) -> String {
         l == .zh ? "查看与回放你的通话录音" : "View and replay your call recordings"
     }
+    /// 安全报到 Hub 直达（dead-man's switch）：出行安全的日常功能不该埋在亲友页三层深——与位置/录音/亲友
+    /// 提升到 Hub 同一先例。到点未报平安会自动通知紧急联系人；说"报平安"即可结束（语音已接 iter336）。
+    static func tileCheckin(_ l: Language) -> String { l == .zh ? "安全报到" : "Safety check-in" }
+    static func hintCheckin(_ l: Language) -> String {
+        l == .zh ? "独自出门前设一个时间，到点没报平安会自动通知你的紧急联系人；回来后说\u{201C}报平安\u{201D}即可"
+                 : "Set a timer before heading out alone; if you don't check in, your emergency contacts are alerted. Say \u{201C}I'm safe\u{201D} when back"
+    }
 
     /// 落地一次性朗读：问候 + 求助提醒。
     static func greetingSpeak(_ name: String?, hour: Int, _ l: Language) -> String {

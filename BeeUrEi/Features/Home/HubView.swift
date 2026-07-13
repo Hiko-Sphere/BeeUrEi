@@ -16,6 +16,7 @@ struct HubView: View {
     @State private var showLocation = false
     @State private var showFamily = false        // 亲友与紧急呼叫（从设置移到首屏主要功能）
     @State private var showRecordings = false     // 我的录音（从设置移到首屏主要功能）
+    @State private var showCheckin = false        // 安全报到（出行安全日常功能，从亲友页三层深提升到 Hub 直达）
     @State private var showTutorial = false
     @State private var locationDescriber = LocationDescriber()
     @State private var weatherSpeaker = WeatherSpeaker()
@@ -91,6 +92,16 @@ struct HubView: View {
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button(SettingsStrings.done(lang)) { showFamily = false } } }
             }
         }
+        .sheet(isPresented: $showCheckin) {
+            NavigationStack {
+                if let token = session.token ?? KeychainStore.read() {
+                    SafetyCheckInView(token: token)
+                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button(SettingsStrings.done(lang)) { showCheckin = false } } }
+                } else {
+                    Text(HomeStrings.voiceNeedLogin(lang)).padding() // 理论不可达（Hub 已登录态）；防御兜底
+                }
+            }
+        }
         .sheet(isPresented: $showRecordings) {
             NavigationStack {
                 MyRecordingsView()
@@ -164,6 +175,10 @@ struct HubView: View {
                      hint: HomeStrings.hintNav(lang),
                      disabledReason: session.features.navigation ? nil : HomeStrings.featureOff(lang), minHeight: 116) { showNavigation = true }
             }
+            // 安全报到直达（dead-man's switch）：出行安全的日常动作，此前埋在 亲友页 三层深——与位置/录音/亲友
+            // 提升 Hub 同一先例。出发设时限、回来"报平安"（语音 iter336 已接）；到点未报自动通知紧急联系人。
+            tile(HomeStrings.tileCheckin(lang), systemImage: "checkmark.shield.fill",
+                 hint: HomeStrings.hintCheckin(lang)) { showCheckin = true }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(HomeStrings.sectionMove(lang))

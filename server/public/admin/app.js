@@ -636,7 +636,7 @@ function renderDashboard() {
       ${o.callConnect ? statCard(t('relayFails'), o.callConnect.relayUnreachable,
         t('callFailSub') + ': ' + (o.callConnect.generic + o.callConnect.signaling) + (o.callConnect.relayUnreachable ? ' · ' + t('relayFailHint') : ''),
         o.callConnect.relayUnreachable ? 'danger' : '') : ''}
-      ${o.mail != null && o.mail.failed > 0 ? statCard(t('mailFail'), o.mail.failed, t('mailFailHint'), 'danger') : ''}
+      ${o.mail != null && o.mail.failed > 0 ? statCard(t('mailFail'), o.mail.failed, (o.mail.lastError ? `${o.mail.lastError} · ` : '') + t('mailFailHint'), 'danger') : ''}
       ${o.safetyTickErrors != null && o.safetyTickErrors > 0 ? statCard(t('tickErr'), o.safetyTickErrors, t('tickErrHint'), 'danger') : ''}
     </div>
     ${trendCard}

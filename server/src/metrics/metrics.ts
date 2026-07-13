@@ -30,6 +30,16 @@ export class Metrics {
     this.counters.set(name, (this.counters.get(name) ?? 0) + by)
   }
 
+  /// 字符串"便签"（**不进 Prometheus** 文本——那里只放数值）：供 admin 总览呈现"最后一次失败的原因"这类
+  /// 计数器表达不了、但运维排障刚需的短文本（如 SMTP 535 authentication failed）。值截断防日志膨胀/注入。
+  private notes = new Map<string, { value: string; at: number }>()
+  setNote(name: string, value: string, at: number): void {
+    this.notes.set(name, { value: value.slice(0, 200), at })
+  }
+  getNote(name: string): { value: string; at: number } | null {
+    return this.notes.get(name) ?? null
+  }
+
   /// 渲染为 Prometheus 文本格式。gauges 为抓取时计算的存量（如在线用户、用户总数）。
   render(opts: { nowMs: number; gauges?: Record<string, number> }): string {
     const lines: string[] = []

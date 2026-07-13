@@ -22,4 +22,17 @@ describe('CountingMailer', () => {
     await new CountingMailer(inner, () => {}).send('x@y.com', 'S', 'T', '<b>H</b>')
     expect(seen).toEqual(['x@y.com', 'S', 'T', '<b>H</b>'])
   })
+
+  it('失败时把**错误原因**一并喂给 onOutcome（供面板显示"为什么发不出去"）；成功时无错误参数', async () => {
+    const seen: Array<{ ok: boolean; err?: string }> = []
+    const onOutcome = (ok: boolean, err?: string) => seen.push({ ok, err })
+    await new CountingMailer({ async send() {} }, onOutcome).send('a@b.com', 's', 't')
+    expect(seen[0]).toEqual({ ok: true, err: undefined })
+    await expect(new CountingMailer({ async send() { throw new Error('535 authentication failed') } }, onOutcome)
+      .send('a@b.com', 's', 't')).rejects.toThrow('535')
+    expect(seen[1]).toEqual({ ok: false, err: '535 authentication failed' })
+    // 非 Error 抛出（如字符串）也转成字符串上报，不崩。
+    await expect(new CountingMailer({ async send() { throw 'boom' } }, onOutcome).send('a@b.com', 's', 't')).rejects.toBeTruthy()
+    expect(seen[2]).toEqual({ ok: false, err: 'boom' })
+  })
 })

@@ -239,6 +239,9 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       mail: {
         sent: metrics.get('mail_sent_total'),
         failed: metrics.get('mail_failed_total'),
+        // 最后一次发信失败的原因（如 SMTP 535 authentication failed）+ 时刻：failed>0 时运维一眼知"为什么"，不必翻日志。
+        lastError: metrics.getNote('mail_last_error')?.value ?? null,
+        lastErrorAt: metrics.getNote('mail_last_error')?.at ?? null,
       },
       // 安全引擎 tick 报错累计：>0 = 后台升级/报到告警在异常（DB 锁/bug），dead-man's-switch 可能悄悄失灵。
       // 与 mail 同理摆到概览，让不跑 Prometheus 的自托管运维也看得见（引擎失灵是生命攸关，绝不能只躺日志）。

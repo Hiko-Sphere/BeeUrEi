@@ -158,7 +158,11 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
   const recordingConsent = new RecordingConsentRegistry() // 录制知情同意（服务端权威）
   const codeSend = options.codeSend ?? new CodeSendLimiter() // 发送侧节流：同一收件人 60s 冷却 + 窗口上限（防连点/邮件轰炸）
   // 邮件送达健康度进 /metrics（mail_sent/failed）：SMTP 凭据失效（163 授权码过期撞 535）运维一眼可见，不必翻日志。
-  const mailer = new CountingMailer(options.mailer ?? new ConsoleMailer(), (ok) => metrics.inc(ok ? 'mail_sent_total' : 'mail_failed_total'))
+  const mailer = new CountingMailer(options.mailer ?? new ConsoleMailer(), (ok, error) => {
+    metrics.inc(ok ? 'mail_sent_total' : 'mail_failed_total')
+    // 失败原因存为便签，供 admin 总览显示"为什么发不出去"（如 163 授权码失效撞 535）——不必 SSH 翻日志。
+    if (!ok && error) metrics.setNote('mail_last_error', error, Date.now())
+  })
   const pushSender = options.pushSender ?? new NoopPushSender()
   // 计数包裹须在 metrics 构造之后——见下方 webPushSender 最终定型处。
   const rawWebPushSender = options.webPushSender ?? new NoopWebPushSender()

@@ -61,6 +61,23 @@ describe('POST /api/admin/mail-test（SMTP 自检）', () => {
     await app.close()
   })
 
+  it('发信失败后 admin 总览 mail.lastError 显示原因（运维一眼知"为什么发不出去"，不必 SSH 翻日志）', async () => {
+    const { app } = setup(new ThrowingMailer())
+    const t = await login(app)
+    const headers = { authorization: `Bearer ${t}` }
+    // 初始：无失败、无原因。
+    const ov0 = (await app.inject({ method: 'GET', url: '/api/admin/overview', headers })).json()
+    expect(ov0.mail.failed).toBe(0)
+    expect(ov0.mail.lastError).toBeNull()
+    // 一次失败的发信（mail-test 撞 535）→ 失败计数 +1 且原因入便签。
+    await app.inject({ method: 'POST', url: '/api/admin/mail-test', headers, payload: { to: 'ops@example.com' } })
+    const ov1 = (await app.inject({ method: 'GET', url: '/api/admin/overview', headers })).json()
+    expect(ov1.mail.failed).toBe(1)
+    expect(ov1.mail.lastError).toContain('535')        // 原因回带到面板
+    expect(typeof ov1.mail.lastErrorAt).toBe('number')
+    await app.close()
+  })
+
   it('非管理员 403；非法邮箱 400', async () => {
     const { app } = setup(new CapturingMailer())
     const reg = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'bob', password: 'secret123' } })

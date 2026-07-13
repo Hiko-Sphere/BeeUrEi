@@ -97,4 +97,17 @@ describe('Metrics', () => {
       delete process.env.METRICS_TOKEN
     }
   })
+
+  it('setNote/getNote：字符串便签存取（供 admin 面板呈现失败原因），值截断 200、未设→null', () => {
+    const m = new Metrics(1000)
+    expect(m.getNote('mail_last_error')).toBeNull()
+    m.setNote('mail_last_error', '535 authentication failed', 2000)
+    expect(m.getNote('mail_last_error')).toEqual({ value: '535 authentication failed', at: 2000 })
+    // 超长值截断到 200，防日志膨胀。
+    m.setNote('x', 'a'.repeat(500), 3000)
+    expect(m.getNote('x')!.value.length).toBe(200)
+    // 后写覆盖前写。
+    m.setNote('mail_last_error', 'ECONNREFUSED', 4000)
+    expect(m.getNote('mail_last_error')).toEqual({ value: 'ECONNREFUSED', at: 4000 })
+  })
 })

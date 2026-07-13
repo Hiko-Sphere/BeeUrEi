@@ -15,13 +15,15 @@ export class NoopMailer implements Mailer {
 /// SMTP 故障（如 163 授权码失效撞 535），而非等第一个用户发码失败才从日志翻出来。失败照旧向上抛，保持
 /// "发信失败 → 路由回 503 mail_unavailable" 契约不变（与 CountingWebPushSender 同款单点包裹）。
 export class CountingMailer implements Mailer {
-  constructor(private readonly inner: Mailer, private readonly onOutcome: (ok: boolean) => void) {}
+  constructor(private readonly inner: Mailer, private readonly onOutcome: (ok: boolean, error?: string) => void) {}
   async send(to: string, subject: string, text: string, html?: string): Promise<void> {
     try {
       await this.inner.send(to, subject, text, html)
       this.onOutcome(true)
     } catch (e) {
-      this.onOutcome(false)
+      // 失败原因（如 SMTP "535 authentication failed"）一并上报——运维在面板一眼看出"为什么发不出去"，
+      // 而非只有一个失败计数还要去翻日志。SMTP 错误文本不含密码（只报状态/原因），透传安全。
+      this.onOutcome(false, e instanceof Error ? e.message : String(e))
       throw e
     }
   }

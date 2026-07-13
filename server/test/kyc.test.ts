@@ -11,7 +11,7 @@ import { MemoryStore, type Store, type User, publicUser, selfView } from '../src
 import { SqliteStore } from '../src/db/sqliteStore'
 import { hashPassword } from '../src/auth/passwords'
 import { kycBlobExists } from '../src/kyc/storage'
-import { sweepStaleVerifications, STALE_PENDING_DAYS, VERIFIED_GRACE_DAYS } from '../src/kyc/retention'
+import { sweepStaleVerifications, STALE_PENDING_DAYS } from '../src/kyc/retention'
 import { cascadeDeleteUser } from '../src/db/cascade'
 
 const auth = (t: string) => ({ authorization: `Bearer ${t}` })
@@ -64,7 +64,7 @@ const stores: Array<[string, () => Store]> = [
 ]
 
 describe.each(stores)('KYC end-to-end (%s)', (_name, make) => {
-  it('submit → pending; admin approve → verified badge + docs purged; name kept', async () => {
+  it('submit → pending; admin approve → verified badge + docs RETAINED (长期保留); clear-docs purges on demand', async () => {
     const store = seedAdminStore(make)
     const app = buildApp(store)
     const { token } = await reg(app, 'alice')
@@ -89,23 +89,51 @@ describe.each(stores)('KYC end-to-end (%s)', (_name, make) => {
     const ap = await app.inject({ method: 'POST', url: `/api/admin/verifications/${id}/approve`, headers: auth(adminToken) })
     expect(ap.statusCode).toBe(200)
 
-    // 徽章 true；记录 verified；blob 文件已删；nameSealed 保留（徽章法律依据）；idNumber 已清
+    // 徽章 true；记录 verified；**长期保留策略：证件图/证件号/加密姓名均保留供后续复核**（通过不清）。
     const me2 = await app.inject({ method: 'GET', url: '/api/me', headers: auth(token) })
     expect(me2.json().user.verified).toBe(true)
     const after = store.findVerification(id)!
     expect(after.status).toBe('verified')
     expect(after.nameSealed).toBeTruthy()
-    expect(after.idNumberSealed).toBeUndefined()
-    expect(after.blobs == null || after.blobs.length === 0).toBe(true)
-    expect(blobIds.some((b) => kycBlobExists(b))).toBe(false)
+    expect(after.idNumberSealed).toBeTruthy()                    // 证件号长期保留（运营者选定 2026-07-13）
+    expect(after.blobs?.length).toBe(2)                          // 证件图引用保留
+    expect(blobIds.every((b) => kycBlobExists(b))).toBe(true)    // 密文文件仍在磁盘
 
-    // 通过后再取证件图 → 404
+    // 通过后仍可取证件图供复核 → 200（此前 404，正是本次修复的核心诉求）
     const doc = await app.inject({ method: 'GET', url: `/api/admin/verifications/${id}/doc/front`, headers: auth(adminToken) })
-    expect(doc.statusCode).toBe(404)
+    expect(doc.statusCode).toBe(200)
+    expect(doc.headers['content-type']).toContain('image/')
 
     // 用户收到 kyc_verified 通知
     const notifs = store.notificationsForUser(store.findByUsername('alice')!.id)
     expect(notifs.some((n) => n.kind === 'kyc_verified')).toBe(true)
+
+    // 合规兜底：管理员可随时手动清除证件图+证件号（保留姓名作徽章法律依据）；清后 doc-view 立即 404。
+    const clr = await app.inject({ method: 'POST', url: `/api/admin/verifications/${id}/clear-docs`, headers: auth(adminToken) })
+    expect(clr.statusCode).toBe(200)
+    const cleared = store.findVerification(id)!
+    expect(cleared.blobs == null || cleared.blobs.length === 0).toBe(true)
+    expect(cleared.idNumberSealed).toBeUndefined()
+    expect(cleared.nameSealed).toBeTruthy()                      // 姓名保留（徽章法律依据）
+    expect(blobIds.some((b) => kycBlobExists(b))).toBe(false)    // 密文文件已删
+    const docAfterClear = await app.inject({ method: 'GET', url: `/api/admin/verifications/${id}/doc/front`, headers: auth(adminToken) })
+    expect(docAfterClear.statusCode).toBe(404)
+    await app.close()
+  })
+
+  it('删号级联：已通过(长期保留)记录的证件密文文件也被彻底清除（GDPR 抹除，不留孤儿）', async () => {
+    const store = seedAdminStore(make)
+    const app = buildApp(store)
+    const { token } = await reg(app, 'erin')
+    const adminToken = await login(app, 'root', 'rootpass1')
+    const id = await submitKyc(app, token)
+    const blobIds = store.findVerification(id)!.blobs!.map((b) => b.blobId)
+    await app.inject({ method: 'POST', url: `/api/admin/verifications/${id}/approve`, headers: auth(adminToken) })
+    expect(blobIds.every((b) => kycBlobExists(b))).toBe(true)          // 通过后长期保留：文件仍在
+    // 删号 → 即便是长期保留的已通过记录，其证件密文文件也随号清除（本次行为变更下这条不变量最关键）。
+    cascadeDeleteUser(store, store.findByUsername('erin')!.id)
+    expect(blobIds.some((b) => kycBlobExists(b))).toBe(false)          // 密文文件已彻底删除
+    expect(store.findVerification(id)).toBeUndefined()                 // 记录已删
     await app.close()
   })
 
@@ -376,17 +404,18 @@ describe('KYC retention + cascade (MemoryStore)', () => {
     expect(v.blobs).toBeUndefined()
   })
 
-  it('verified past 7d grace purges docs but keeps name + badge', () => {
+  it('verified 记录长期保留：留存清扫绝不触碰已通过记录（证件图/证件号/姓名全留）', () => {
     const now = Date.now()
     const store = new MemoryStore()
-    store.createVerification({ id: 'v2', userId: 'u2', status: 'verified', idType: 'national_id', nameSealed: { keyId: 'k1', wrappedDek: 'x', iv: 'y', tag: 'z', ct: 'c' }, idNumberSealed: { keyId: 'k1', wrappedDek: 'x', iv: 'y', tag: 'z', ct: 'c' }, blobs: [{ kind: 'front', blobId: 'v2-b', sealed: { keyId: 'k1', wrappedDek: 'x', iv: 'y', tag: 'z' }, mime: 'image/jpeg' }], submittedVia: 'self', submittedById: 'u2', submittedAt: now - 30 * 86_400_000, decidedAt: now - (VERIFIED_GRACE_DAYS + 1) * 86_400_000, attempt: 1 })
+    // 一条 90 天前就已通过的老记录——即便很久,长期保留策略下也**不**被清扫。
+    store.createVerification({ id: 'v2', userId: 'u2', status: 'verified', idType: 'national_id', nameSealed: { keyId: 'k1', wrappedDek: 'x', iv: 'y', tag: 'z', ct: 'c' }, idNumberSealed: { keyId: 'k1', wrappedDek: 'x', iv: 'y', tag: 'z', ct: 'c' }, blobs: [{ kind: 'front', blobId: 'v2-b', sealed: { keyId: 'k1', wrappedDek: 'x', iv: 'y', tag: 'z' }, mime: 'image/jpeg' }], submittedVia: 'self', submittedById: 'u2', submittedAt: now - 120 * 86_400_000, decidedAt: now - 90 * 86_400_000, attempt: 1 })
     const n = sweepStaleVerifications(store, now)
-    expect(n).toBe(1)
+    expect(n).toBe(0) // 已通过记录不被清扫（长期保留）
     const v = store.findVerification('v2')!
     expect(v.status).toBe('verified')
-    expect(v.blobs).toBeUndefined()
-    expect(v.idNumberSealed).toBeUndefined()
-    expect(v.nameSealed).toBeTruthy() // 保留
+    expect(v.blobs?.length).toBe(1)      // 证件图保留
+    expect(v.idNumberSealed).toBeTruthy() // 证件号保留
+    expect(v.nameSealed).toBeTruthy()     // 姓名保留
   })
 
   it('legal hold exempts from sweep and survives cascade delete; non-held purged on cascade', () => {

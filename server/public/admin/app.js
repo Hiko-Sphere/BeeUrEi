@@ -74,6 +74,7 @@ const I18N = {
     idCompareHint: '请核对：① 填写姓名与证件是否一致；② 证件是否真实/未过期/未篡改；③ 自拍与证件是否同一人；④ 证件是否清晰可读。',
     idChkName: '姓名与证件一致', idChkValid: '证件真实·未过期·未篡改', idChkFace: '自拍与证件同一人', idChkClear: '证件清晰可读',
     idApprove: '通过', idReject: '拒绝', idRevoke: '撤销认证', idHold: '法务保留', idHoldOn: '已保留', idHoldOff: '未保留',
+    idClearDocs: '清除证件图', idConfirmClearDocs: '确认清除该记录的证件照片与证件号？将保留姓名与徽章，此操作不可恢复。',
     idRejectReason: '拒绝原因', idRejectNote: '补充说明（可选）', idConfirmRevoke: '确认撤销该用户的实名认证？徽章将被移除。',
     idApproveBlocked: '请先勾选全部核对项再通过', idDocType_national_id: '身份证', idDocType_passport: '护照', idDocType_drivers_license: '驾照', idDocType_residence_permit: '居住证',
     idReason_blurry: '照片模糊', idReason_glare: '反光', idReason_name_mismatch: '姓名不符', idReason_face_mismatch: '人脸不符', idReason_expired: '证件过期', idReason_unsupported_doc: '证件不支持', idReason_incomplete: '资料不完整', idReason_suspected_fraud: '疑似伪造', idReason_other: '其他', idReason_timeout: '审核超时关闭', idReason_revoked: '已撤销认证',
@@ -205,6 +206,7 @@ const I18N = {
     idCompareHint: 'Check: ① name matches the document; ② document is genuine / not expired / not altered; ③ selfie is the same person as the document; ④ document is legible.',
     idChkName: 'Name matches document', idChkValid: 'Document genuine · not expired · not altered', idChkFace: 'Selfie matches document', idChkClear: 'Document legible',
     idApprove: 'Approve', idReject: 'Reject', idRevoke: 'Revoke', idHold: 'Legal hold', idHoldOn: 'On hold', idHoldOff: 'Not held',
+    idClearDocs: 'Clear documents', idConfirmClearDocs: 'Clear this record’s ID photos and ID number? Name and badge are kept; this cannot be undone.',
     idRejectReason: 'Reject reason', idRejectNote: 'Note (optional)', idConfirmRevoke: 'Revoke this user’s verification? The badge will be removed.',
     idApproveBlocked: 'Tick all checklist items before approving', idDocType_national_id: 'National ID', idDocType_passport: 'Passport', idDocType_drivers_license: 'Driver’s license', idDocType_residence_permit: 'Residence permit',
     idReason_blurry: 'Blurry', idReason_glare: 'Glare', idReason_name_mismatch: 'Name mismatch', idReason_face_mismatch: 'Face mismatch', idReason_expired: 'Expired', idReason_unsupported_doc: 'Unsupported document', idReason_incomplete: 'Incomplete', idReason_suspected_fraud: 'Suspected fraud', idReason_other: 'Other', idReason_timeout: 'Timed out', idReason_revoked: 'Revoked',
@@ -2072,7 +2074,7 @@ async function openVerifReview(id) {
         <button class="btn primary" data-act="approve" disabled>${esc(t('idApprove'))}</button>
       </div>`
     : (d.status === 'verified'
-      ? `<div class="kyc-decide"><button class="btn danger" data-act="revoke">${esc(t('idRevoke'))}</button></div>`
+      ? `<div class="kyc-decide"><button class="btn danger" data-act="revoke">${esc(t('idRevoke'))}</button><button class="btn ghost" data-act="clear-docs">${esc(t('idClearDocs'))}</button></div>`
       : `<div class="kyc-decide"><span class="muted-note">${esc(t('idStatusRejected'))}${d.rejectReasonCode ? ' · ' + esc(t('idReason_' + d.rejectReasonCode) || d.rejectReasonCode) : ''}</span></div>`);
   const holdBtn = `<button class="btn ghost sm" data-act="hold">${d.legalHold ? '⚖︎ ' + esc(t('idHoldOn')) : esc(t('idHold'))}</button>`;
 
@@ -2141,6 +2143,12 @@ async function openVerifReview(id) {
   box.querySelector('[data-act="revoke"]')?.addEventListener('click', async () => {
     if (!(await confirmDialog(t('idConfirmRevoke')))) return;
     decide(`/api/admin/verifications/${encodeURIComponent(id)}/revoke`);
+  });
+  // 长期保留策略下的合规兜底：手动清除该记录证件图+证件号（保留姓名/徽章）。清后弹窗关闭并刷新。
+  box.querySelector('[data-act="clear-docs"]')?.addEventListener('click', async () => {
+    if (!(await confirmDialog(t('idConfirmClearDocs')))) return;
+    try { await api(`/api/admin/verifications/${encodeURIComponent(id)}/clear-docs`, { method: 'POST' }); toast(t('saved'), 'success'); close(); await loadVerifications(); }
+    catch (err) { toast(errText(err.code), 'error'); }
   });
   box.querySelector('[data-act="hold"]')?.addEventListener('click', async () => {
     try { await api(`/api/admin/verifications/${encodeURIComponent(id)}/hold`, { method: 'POST' }); close(); await loadVerifications(); }

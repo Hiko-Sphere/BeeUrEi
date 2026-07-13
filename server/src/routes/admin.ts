@@ -336,7 +336,8 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     return reply.send(plain)
   })
 
-  // 通过：状态→verified、置用户徽章、清证件号+图片（保留加密姓名作徽章法律依据）、审计、通知。
+  // 通过：状态→verified、置用户徽章、审计、通知。**长期保留**证件图/证件号/加密姓名供后续复核/审计/防冒用
+  //（运营者选定的留存策略，2026-07-13）——不在通过时清除。随时可经 /clear-docs 手动清；仍在 拒绝/撤销/撤回/删号 时清。
   app.post('/api/admin/verifications/:id/approve', adminOnly, async (req, reply) => {
     const id = (req.params as { id: string }).id
     const adminId = req.user!.sub
@@ -344,17 +345,28 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     if (!v) return reply.code(404).send({ error: 'not_found' })
     if (v.userId === adminId) return reply.code(403).send({ error: 'cannot_review_self' })
     if (v.status !== 'pending') return reply.code(409).send({ error: 'not_pending' })
-    const blobs = v.blobs ?? []
     const decided = store.decideVerification(id, {
-      status: 'verified', decidedBy: adminId, decidedAt: Date.now(), idNumberSealed: undefined, blobs: undefined,
+      status: 'verified', decidedBy: adminId, decidedAt: Date.now(),
     })
     if (!decided) return reply.code(409).send({ error: 'not_pending' }) // 竞态败者——不重复副作用
-    for (const b of blobs) removeKycBlob(b.blobId)
     store.updateUser(v.userId, { identityVerified: true })
     audit(adminId, 'kyc.approve', 'kyc', id, `attempt ${v.attempt}`)
     const u = store.findById(v.userId)
     if (u) { const l = pushLang(u.language); notifyUser(store, push, v.userId, 'kyc_verified', pushStrings.kycVerifiedTitle(l), pushStrings.kycVerifiedBody(l), { status: 'verified' }) }
     return reply.send({ ok: true, status: 'verified' })
+  })
+
+  // 手动清除某记录的证件图+证件号（长期保留策略下的合规兜底：随时可删）。保留加密姓名（徽章法律依据）+ 状态不变。
+  // 幂等：无该记录/已无证件也照常返回 ok。删除动作不披露 PII，故不设自审禁止。审计 kyc.clear-docs。
+  app.post('/api/admin/verifications/:id/clear-docs', adminOnly, async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    const v = store.findVerification(id)
+    if (!v) return reply.code(404).send({ error: 'not_found' })
+    const blobs = v.blobs ?? []
+    store.updateVerification(id, { blobs: undefined, idNumberSealed: undefined }) // 先清库引用（doc-view 立即 404），再删文件
+    for (const b of blobs) removeKycBlob(b.blobId)
+    audit(req.user!.sub, 'kyc.clear-docs', 'kyc', id, `attempt ${v.attempt}`)
+    return reply.send({ ok: true })
   })
 
   // 拒绝：状态→rejected、清姓名+证件号+图片、审计、通知（含原因码）。

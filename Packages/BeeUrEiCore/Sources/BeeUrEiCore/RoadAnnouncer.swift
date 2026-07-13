@@ -15,12 +15,16 @@ public struct RoadAnnouncer: Sendable {
 
     /// road：本次反向地理编码得到的路名（可空）。返回需要播报的路名；nil = 这次不播。
     /// 间隔内的变化只压制不记账——之后再次见到同一新路名仍会播（不会永久丢失）。
+    /// 先去首尾空白再判断/比较：CLPlacemark.thoroughfare 不保证已 trim，纯空白（"   "）不能当有效路名
+    /// （否则播报"进入 ⟨空⟩"），且同一路名的带空白/不带空白变体（"中山路" vs " 中山路 "）不该被当作换路而重复播报。
     public mutating func update(road: String?, now: TimeInterval) -> String? {
-        guard let road, !road.isEmpty else { return nil }
-        guard road != lastAnnounced else { return nil }
+        guard let raw = road else { return nil }
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+        guard name != lastAnnounced else { return nil }
         if let t = lastAnnounceAt, now - t < minInterval { return nil }
-        lastAnnounced = road
+        lastAnnounced = name
         lastAnnounceAt = now
-        return road
+        return name
     }
 }

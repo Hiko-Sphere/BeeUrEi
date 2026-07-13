@@ -500,6 +500,9 @@ struct HubView: View {
                 var fs = FeatureSettings(); fs.verbosity = next.rawValue
                 speak(HomeStrings.verbosityChanged(next, lang))
             }
+        // 报平安（安全报到 complete）：到点前手在盲杖上，语音是最该有的完成通道；漏报会给亲友发假告警。
+        // 服务端幂等：进行中→结束并确认；已到期告警→等价 all-clear 解除；都没有→completed:false 如实告知。
+        case .checkinSafe: Task { await reportSafeByVoice() }
         case .commands: speak(HomeStrings.voiceCommandsHelp(lang)) // 能力自述：语音功能的语音说明书
         case .repeatLast: speak(HomeStrings.nothingToRepeat(lang)) // Hub 无避障会话可重复
         case .time:
@@ -560,6 +563,20 @@ struct HubView: View {
             }
             let items = withTime.sorted { $0.at > $1.at }.map(\.item) // 最新的未读会话先读
             speak(HomeStrings.unreadReadout(items, lang))
+        }
+    }
+
+    /// 语音"报平安"：结束进行中的安全报到（已到期告警则等价 all-clear 解除）。到点前人在路上、手在盲杖上，
+    /// 语音是最该有的完成通道——漏报会给亲友发假告警。服务端幂等：没有进行中的报到→completed:false，
+    /// 如实告知（绝不假装已报）；失败给替代路径（亲友页手动点），绝不静默。
+    private func reportSafeByVoice() async {
+        func speak(_ t: String) { SpeechHub.shared.speak(t, channel: .query, voiceCode: lang.voiceCode) }
+        guard let token = session.token ?? KeychainStore.read() else { speak(HomeStrings.voiceNeedLogin(lang)); return }
+        do {
+            let completed = try await APIClient().completeSafetyCheckin(token: token)
+            speak(completed ? SafetyStrings.safeConfirm(lang) : SafetyStrings.noActiveCheckin(lang))
+        } catch {
+            speak(SafetyStrings.reportSafeFailed(lang))
         }
     }
 

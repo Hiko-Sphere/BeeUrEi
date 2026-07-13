@@ -288,6 +288,16 @@ enum SafetyStrings {
     static func cancelCheckin(_ l: Language) -> String { l == .zh ? "取消报到" : "Cancel check-in" }
     static func canceled(_ l: Language) -> String { l == .zh ? "已取消安全报到。" : "Safety check-in canceled." }
     static func failed(_ l: Language) -> String { l == .zh ? "操作失败，请重试。" : "Something went wrong — try again." }
+    /// 语音"报平安"但当前没有进行中的报到：如实告知（服务端幂等 completed:false），绝不假装已报。
+    static func noActiveCheckin(_ l: Language) -> String {
+        l == .zh ? "当前没有进行中的安全报到。要出门前可以在亲友页开始一次报到。"
+                 : "You have no active safety check-in. You can start one from the Family screen before heading out."
+    }
+    /// 语音报平安失败（网络等）：如实告知并给替代路径——报到逾期会给亲友发告警，失败绝不能静默。
+    static func reportSafeFailed(_ l: Language) -> String {
+        l == .zh ? "报平安没有成功，请稍后再说一次，或到亲友页手动点「我平安了」。"
+                 : "Marking you safe failed. Try saying it again, or tap “I'm safe” on the Family screen."
+    }
     // —— 每日报到日程（与网页 Family 页同语义）——
     static func dailyHeader(_ l: Language) -> String { l == .zh ? "每日报到" : "Daily check-in" }
     static func dailyExplain(_ l: Language) -> String {

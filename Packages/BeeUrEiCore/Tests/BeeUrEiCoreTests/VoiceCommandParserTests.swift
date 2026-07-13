@@ -491,6 +491,24 @@ final class VoiceCommandParserTests: XCTestCase {
         XCTAssertEqual(VoiceCommandParser.parse("读一下这段文字"), .readText)
     }
 
+    /// 报平安（安全报到 complete）：陈述式锚点收音；疑问/导航/发消息不被劫。
+    func testCheckinSafe() {
+        // 正向：常见报平安说法（中/英）。
+        for p in ["报平安", "帮我报个平安", "我平安到了", "我平安", "平安到达", "我到家了",
+                  "i'm safe", "I am safe", "arrived safely", "I made it home", "mark me safe"] {
+            XCTAssertEqual(VoiceCommandParser.parse(p), .checkinSafe, "『\(p)』应解析为 checkinSafe")
+        }
+        // 对抗：导航中的疑问「我到了吗/快到家了吗」是问是否到达，不是报平安（刻意不收裸"我到了/到家了"）。
+        XCTAssertNotEqual(VoiceCommandParser.parse("我到了吗"), .checkinSafe)
+        XCTAssertNotEqual(VoiceCommandParser.parse("快到家了吗"), .checkinSafe)
+        // 对抗：目的地含"到家"子串的导航（"导航到家乐福"）仍是导航，不被报平安劫走。
+        XCTAssertEqual(VoiceCommandParser.parse("导航到家乐福"), .navigate("家乐福"))
+        // 对抗：「给妈妈发消息说我平安到了」是发消息（parseSendMessage 先行），内容含"我平安"不改判。
+        XCTAssertEqual(VoiceCommandParser.parse("给妈妈发消息说我平安到了"), .sendMessage(to: "妈妈", text: "我平安到了"))
+        // 对抗：「回家」仍是导航回家，与报平安互不遮蔽。
+        XCTAssertEqual(VoiceCommandParser.parse("回家"), .navigateHome)
+    }
+
     func testSpeechRateBoundary() {
         XCTAssertEqual(VoiceCommandParser.parse("恢复正常语速"), .adjustSpeech(.normal))
         XCTAssertEqual(VoiceCommandParser.parse("语速慢一点"), .adjustSpeech(.slower))

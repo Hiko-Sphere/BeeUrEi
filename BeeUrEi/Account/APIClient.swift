@@ -1177,8 +1177,12 @@ struct APIClient {
         return try JSONDecoder().decode(R.self, from: data).timer
     }
     /// 报平安（我平安到了）：结束进行中的报到；若已到期告警则等价 all-clear（服务端解除+广播）。
-    func completeSafetyCheckin(token: String) async throws {
-        _ = try await authedSend("POST", "/api/safety/checkin/complete", token: token, body: [:])
+    /// 返回服务端 completed——false=当前没有进行中的报到（幂等 no-op），语音路径据此如实告知而非假装已报。
+    @discardableResult
+    func completeSafetyCheckin(token: String) async throws -> Bool {
+        let data = try await authedSend("POST", "/api/safety/checkin/complete", token: token, body: [:])
+        struct R: Codable { let completed: Bool? }
+        return (try? JSONDecoder().decode(R.self, from: data))?.completed ?? true // 无字段兜底按已完成（保守不误报"没有报到"）
     }
     /// 延长报到（addMinutes，5–1440）。
     func extendSafetyCheckin(token: String, addMinutes: Int) async throws -> SafetyTimer {

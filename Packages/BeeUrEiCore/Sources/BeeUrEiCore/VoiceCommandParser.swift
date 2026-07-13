@@ -47,6 +47,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case date                       // 今天几号/星期几
     case openSettings               // 打开设置（语言/无障碍/摔倒检测等非语音可调项——语音直达免找按钮）
     case describeScene              // 云端 AI 详细描述眼前画面（对标 Be My AI/Envision——比本地 SceneSummarizer 粗汇总更丰富的自然语言描述）
+    case checkinSafe                // 报平安（结束安全报到/解除已发告警）——报到到点前手在盲杖上，语音是最该有的通道
     case unknown
 }
 
@@ -113,6 +114,14 @@ public enum VoiceCommandParser {
         // 也收自然问法："要带伞吗/带伞"(降水)、"冷不冷/热不热"(气温)——天气播报正好答这些（带伞建议+气温+冷/热提示），
         // 此前这些自然口语全落 unknown（无应答），与上方 readLight 收"暗不暗/灯关了吗"同因补齐。问句形式极少撞地名。
         if has(["天气", "下雨", "气温", "带伞", "打伞", "冷不冷", "热不热", "weather", "temperature", "rain", "umbrella"]) { return .weather }
+        // 报平安（安全报到 complete）：报到快到点时人在路上、手在盲杖上，语音是最该有的完成通道（漏报会给亲友
+        // 发假告警）。键都是**陈述式**锚点（含"我/平安/safely"）——刻意不收裸"我到了/到家了"：「我到了吗/快到家了吗」
+        // 是导航中的**疑问**（问是否到了），误吞会答非所问；"导航到家乐福"含"到家"但不含这些键。「给妈妈发消息说
+        // 我平安到了」已被最上方 parseSendMessage 先解析；"回家"(navigateHome)与这些键互不含子串。
+        // 服务端 complete 幂等（无进行中→completed:false，如实告知）。
+        if has(["报平安", "报个平安", "我平安", "平安到达", "安全到达", "我到家了",
+                "i'm safe", "i am safe", "im safe", "arrived safely", "made it safely", "made it home",
+                "safe and sound", "report safe", "mark me safe"]) { return .checkinSafe }
         // 日常信息（时间/电量/日期）：盲人看不到时钟/电量图标/日历，靠语音随时查——最高频的日常查询。
         // 置于具体命令之后、通用 look 之前：与现有触发词无子串冲突（"打电话"含"电话"非"电量"；readBus 的"几路"非"几点"）。
         if has(["几点", "报时", "报个时", "报一下时间", "报下时间", "告诉我时间", "现在时间", "什么时间", "时间是", "what time", "the time", "tell me the time"]) { return .time }

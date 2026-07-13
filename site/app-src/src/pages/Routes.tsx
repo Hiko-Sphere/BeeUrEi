@@ -3,6 +3,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { api, APIError, contentBlockedText, type SavedRouteInfo, type RouteWaypoint, type FamilyLink } from '../lib/api'
 import { routeDistanceMeters, routeDistanceText, routeWalkingText } from '../lib/location'
+import { insertWaypoint } from '../lib/routeEdit'
 import { getUnit } from '../lib/distanceUnit'
 import { useI18n } from '../lib/i18n'
 import { useSession } from '../lib/session'
@@ -45,6 +46,10 @@ export function RoutesPage() {
   const layerRef = useRef<L.LayerGroup | null>(null)
   const editingRef = useRef(editing)
   editingRef.current = editing
+  // 地图 click 监听只在进入编辑态时挂一次，闭包会捕获初始 selectedIdx——用 ref 让它读到当前选中点，
+  // 才能"在选中的中段点之后插入"。
+  const selectedIdxRef = useRef(selectedIdx)
+  selectedIdxRef.current = selectedIdx
 
   const reload = useCallback(async () => {
     try {
@@ -70,8 +75,10 @@ export function RoutesPage() {
       const cur = editingRef.current
       if (!cur) return
       if (cur.waypoints.length >= MAX_WAYPOINTS) { toast(t(`最多 ${MAX_WAYPOINTS} 个路线点`, `Max ${MAX_WAYPOINTS} points`), 'error'); return }
-      setEditing({ ...cur, waypoints: [...cur.waypoints, { lat: e.latlng.lat, lng: e.latlng.lng }] })
-      setSelectedIdx(cur.waypoints.length)
+      // 选中中段点时插到其后（给已有路线补点），否则追加到末尾（顺序画线）——纯逻辑在 insertWaypoint。
+      const res = insertWaypoint(cur.waypoints, { lat: e.latlng.lat, lng: e.latlng.lng }, selectedIdxRef.current)
+      setEditing({ ...cur, waypoints: res.waypoints })
+      setSelectedIdx(res.selectedIdx)
     })
     layerRef.current = L.layerGroup().addTo(map)
     mapRef.current = map
@@ -148,7 +155,7 @@ export function RoutesPage() {
         <Card>
           <div className="flex flex-wrap items-center gap-3">
             <h2 className="text-lg font-semibold">{editing.id ? t('编辑路线', 'Edit route') : t('新建路线', 'New route')}</h2>
-            <span className="text-xs text-faint">{t('在地图上点击依次添加路线点（步行顺序）', 'Click the map to add points in walking order')}</span>
+            <span className="text-xs text-faint">{t('在地图上点击依次添加路线点（步行顺序）；先选中某点再点击可在其后插入', 'Click the map to add points in walking order; select a point first to insert right after it')}</span>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <input value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} maxLength={NAME_MAX}

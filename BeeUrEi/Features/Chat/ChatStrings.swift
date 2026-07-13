@@ -317,6 +317,13 @@ enum ChatStrings {
         l == .zh ? "无法获取位置，请检查定位权限" : "Couldn't get your location — check location permission"
     }
     static func openInMaps(_ l: Language) -> String { l == .zh ? "在地图中打开" : "Open in Maps" }
+    /// 紧急/共享位置的「一键导航前往」（daddr：从当前位置直接开始导航，赶去的家人少一步；对标网页端与 Find My）。
+    static func getDirections(_ l: Language) -> String { l == .zh ? "导航前往" : "Directions" }
+    /// 「导航前往」的 Apple 地图深链（`?daddr=`，从当前位置起算方向，用户在地图 App 选驾车/步行）。lat/lon 为坐标串
+    /// （来自通知 data/服务端）。**不设 dirflg**——紧急时家人可能驾车或步行，让其在地图内自选（与网页端 appleMapsDirectionsUrl 同口径）。
+    static func directionsURLString(lat: String, lon: String) -> String {
+        "https://maps.apple.com/?daddr=\(lat),\(lon)&q=\(lat),\(lon)"
+    }
     /// 紧急告警兜底位置的诚实标注（配核心 EmergencyLocationTag）：绝不把最后已知位置伪装成实时定位。
     static func lastKnownLocationAt(_ time: String, _ l: Language) -> String {
         l == .zh ? "最后已知位置 · \(time)" : "Last known location · \(time)"

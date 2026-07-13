@@ -401,8 +401,17 @@ struct NotificationsView: View {
                                         ? (loc.fixAtMs.map { ChatStrings.lastKnownLocationAt(RecordingStrings.timeText($0, lang), lang) }
                                            ?? ChatStrings.lastKnownLocation(lang))
                                         : ChatStrings.openInMaps(lang)
-                                    Link(destination: url) {
-                                        Label(label, systemImage: loc.stale ? "exclamationmark.triangle" : "mappin.and.ellipse").font(.footnote)
+                                    HStack(spacing: 14) {
+                                        Link(destination: url) {
+                                            Label(label, systemImage: loc.stale ? "exclamationmark.triangle" : "mappin.and.ellipse").font(.footnote)
+                                        }
+                                        // 一键导航前往（daddr 从当前位置直接导航）：赶去救助的家人少一步，与网页端 iter323 对齐。
+                                        // 陈旧位置已由左侧图钉链接 ⚠️ 标注，故此处不重复告警。坐标坏则外层 if 已挡。
+                                        if let dirURL = URL(string: ChatStrings.directionsURLString(lat: lat, lon: lon)) {
+                                            Link(destination: dirURL) {
+                                                Label(ChatStrings.getDirections(lang), systemImage: "arrow.triangle.turn.up.right.diamond").font(.footnote)
+                                            }
+                                        }
                                     }
                                     .padding(.leading, n.isUnread ? 16 : 0)
                                 }

@@ -314,4 +314,14 @@ final class ChatStringsTests: XCTestCase {
         XCTAssertTrue(en.contains("Sam") && en.lowercased().contains("unsent"))
         XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
+
+    func testGetDirectionsAndURLString() {
+        // 「导航前往」用 daddr（从当前位置直接导航），区别于落图钉的 ll——与网页端 iter323 对齐，赶去的家人少一步。
+        XCTAssertEqual(ChatStrings.getDirections(.zh), "导航前往")
+        XCTAssertEqual(ChatStrings.getDirections(.en), "Directions")
+        let url = ChatStrings.directionsURLString(lat: "31.2", lon: "121.4")
+        XCTAssertEqual(url, "https://maps.apple.com/?daddr=31.2,121.4&q=31.2,121.4")
+        XCTAssertTrue(url.contains("daddr="))   // 导航方向，非 ?ll= 落图钉
+        XCTAssertFalse(url.contains("?ll="))
+    }
 }

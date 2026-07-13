@@ -51,6 +51,17 @@ export function RoutesPage() {
   const selectedIdxRef = useRef(selectedIdx)
   selectedIdxRef.current = selectedIdx
 
+  // 添加一个路线点（地图点击与"把地图中心加为点"按钮共用）：选中中段点时插到其后，否则追加（insertWaypoint 已测）。
+  // 经 ref 读当前状态——两个调用方（一次性挂载的 map click 监听、按钮）都可能持陈旧闭包。
+  const addWaypointAt = (lat: number, lng: number) => {
+    const cur = editingRef.current
+    if (!cur) return
+    if (cur.waypoints.length >= MAX_WAYPOINTS) { toast(t(`最多 ${MAX_WAYPOINTS} 个路线点`, `Max ${MAX_WAYPOINTS} points`), 'error'); return }
+    const res = insertWaypoint(cur.waypoints, { lat, lng }, selectedIdxRef.current)
+    setEditing({ ...cur, waypoints: res.waypoints })
+    setSelectedIdx(res.selectedIdx)
+  }
+
   const reload = useCallback(async () => {
     try {
       const [r, l] = await Promise.all([api.listRoutes(), api.familyLinks()])
@@ -71,15 +82,7 @@ export function RoutesPage() {
     }).addTo(map)
     const first = editing.waypoints[0]
     map.setView(first ? [first.lat, first.lng] : [31.2304, 121.4737], first ? 17 : 12)
-    map.on('click', (e: L.LeafletMouseEvent) => {
-      const cur = editingRef.current
-      if (!cur) return
-      if (cur.waypoints.length >= MAX_WAYPOINTS) { toast(t(`最多 ${MAX_WAYPOINTS} 个路线点`, `Max ${MAX_WAYPOINTS} points`), 'error'); return }
-      // 选中中段点时插到其后（给已有路线补点），否则追加到末尾（顺序画线）——纯逻辑在 insertWaypoint。
-      const res = insertWaypoint(cur.waypoints, { lat: e.latlng.lat, lng: e.latlng.lng }, selectedIdxRef.current)
-      setEditing({ ...cur, waypoints: res.waypoints })
-      setSelectedIdx(res.selectedIdx)
-    })
+    map.on('click', (e: L.LeafletMouseEvent) => addWaypointAt(e.latlng.lat, e.latlng.lng))
     layerRef.current = L.layerGroup().addTo(map)
     mapRef.current = map
     return () => { map.remove(); mapRef.current = null; layerRef.current = null }
@@ -183,6 +186,12 @@ export function RoutesPage() {
               {wp.length >= 2 && ` · ${routeDistanceText(routeDistanceMeters(wp), t, getUnit())} · ${routeWalkingText(routeDistanceMeters(wp), t)}`}
             </span>
             <div className="ml-auto flex gap-2">
+              {/* 键盘等效添加通道（WCAG 2.1.1）：航点列表可备注/排序/删除但**添加**此前只能鼠标点地图。
+                  Leaflet 地图聚焦后方向键可平移——平移到位后按此键把地图中心加为点，键盘全程可作。 */}
+              <Button variant="soft" onClick={() => { const c = mapRef.current?.getCenter(); if (c) addWaypointAt(c.lat, c.lng) }}
+                title={t('聚焦地图后可用方向键平移，再点此把中心加为路线点', 'Focus the map and pan with arrow keys, then add its centre as a point')}>
+                {t('把地图中心加为点', 'Add map centre')}
+              </Button>
               <Button variant="soft" onClick={() => { if (wp.length) { setEditing({ ...editing, waypoints: wp.slice(0, -1) }); setSelectedIdx(null) } }} disabled={!wp.length}>
                 {t('撤销最后一点', 'Undo last')}
               </Button>

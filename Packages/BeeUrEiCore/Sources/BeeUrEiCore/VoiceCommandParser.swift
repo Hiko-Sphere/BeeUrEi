@@ -49,6 +49,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case describeScene              // 云端 AI 详细描述眼前画面（对标 Be My AI/Envision——比本地 SceneSummarizer 粗汇总更丰富的自然语言描述）
     case checkinSafe                // 报平安（结束安全报到/解除已发告警）——报到到点前手在盲杖上，语音是最该有的通道
     case savedRoute(String)         // 走某条保存的路线（"走家到菜场的路线"）——人工踩好的路线是最安全的导航，须语音可达
+    case stopNavigation             // 结束/取消步行导航（"结束导航"）——走路的盲人想停下时找不到屏上按钮，语音是最该有的通道；只停导航，绝不解析"挂断"以防切断求助
     case unknown
 }
 
@@ -201,6 +202,11 @@ public enum VoiceCommandParser {
         // 找具体物品：置于具体命令**之后**作兜底——否则"find my location"(含"find my")会抢掉 whereAmI、
         // "找一下路"等也会误当找物。到这里说明不是任何具体命令，"找X"/"find X" 才解析为找物（泛指"找东西"除外）。
         if let obj = parseFindTarget(text) { return .find(obj) }
+        // 结束导航（"结束/停止/取消/退出导航"）须在下方**通用 navigate 兜底之前**——否则含"导航"会被 `.navigate(nil)`
+        // 当成"打开导航"（南辕北辙）。双锚点＝停止动词 + "导航/navigat"；"开始导航"(start)/"带我去X"/"走X路线"均不含这些
+        // 停止词，互不遮蔽。**只停导航，绝不涉及挂断求助**（与文件顶部"危险动作不做"一致——停导航无害、切求助致命）。
+        if (has(["结束", "停止", "取消", "退出", "关闭", "别导", "不导", "end", "stop", "cancel", "exit"])
+            && has(["导航", "navigat"])) { return .stopNavigation }
         // 导航意图（带目的地提取）：「带我去/导航去/去 北京西站」 / "navigate to / take me to X"
         if let dest = parseDestination(text) { return .navigate(dest) }
         if has(["导航", "navigate", "navigation", "directions"]) { return .navigate(nil) }

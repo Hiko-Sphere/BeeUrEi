@@ -493,6 +493,11 @@ struct HubView: View {
         case .savedRoute(let name):
             AppRoute.shared.pendingNavAction = .savedRoute(name)
             showNavigation = true
+        // 「结束导航」：走路的盲人想停下时找不到屏上按钮，语音直达。关掉导航 sheet→其 onDisappear 已 model.stop()（干净停）。
+        // 没在导航时如实告知，不静默（盲人无从确认命令是否生效）。只停导航，绝不涉及挂断求助。
+        case .stopNavigation:
+            if showNavigation { showNavigation = false; speak(HomeStrings.navStoppedSpeak(lang)) }
+            else { speak(HomeStrings.navNotActiveSpeak(lang)) }
         case .navigateHome: navigateToSaved(label: "home") // 「回家」：导航到已保存的家地址
         case .navigateWork: navigateToSaved(label: "work") // 「去公司」：导航到已保存的公司地址
         case .messages: showMessages = true

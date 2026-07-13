@@ -491,6 +491,23 @@ final class VoiceCommandParserTests: XCTestCase {
         XCTAssertEqual(VoiceCommandParser.parse("读一下这段文字"), .readText)
     }
 
+    /// 结束导航（双锚点：停止动词 + 导航词）；开始导航/带路/走路线/公交不被劫；绝不吃"挂断"。
+    func testStopNavigation() {
+        for p in ["结束导航", "停止导航", "取消导航", "退出导航", "关闭导航", "别导航了", "不导航了",
+                  "stop navigation", "end navigation", "cancel navigation", "stop navigating", "exit navigation"] {
+            XCTAssertEqual(VoiceCommandParser.parse(p), .stopNavigation, "『\(p)』应解析为 stopNavigation")
+        }
+        // 对抗：开始/打开导航不是停止。
+        XCTAssertEqual(VoiceCommandParser.parse("开始导航"), .navigate(nil))
+        XCTAssertEqual(VoiceCommandParser.parse("打开导航"), .navigate(nil))
+        XCTAssertEqual(VoiceCommandParser.parse("带我去北京西站"), .navigate("北京西站"))
+        XCTAssertEqual(VoiceCommandParser.parse("走家到菜场的路线"), .savedRoute("家到菜场"))
+        XCTAssertEqual(VoiceCommandParser.parse("坐地铁去西单"), .transit("西单"))
+        // 对抗（安全底线）：绝不把"挂断/停止通话"当成任何命令（危险动作不解析，防误切求助）。
+        XCTAssertEqual(VoiceCommandParser.parse("挂断"), .unknown)
+        XCTAssertEqual(VoiceCommandParser.parse("停止通话"), .unknown)
+    }
+
     /// 走保存的路线（双锚点：路线/route 词 + 行走动词）；缺动词/缺名字不触发，导航/公交不被劫。
     func testSavedRoute() {
         XCTAssertEqual(VoiceCommandParser.parse("走家到菜场的路线"), .savedRoute("家到菜场"))

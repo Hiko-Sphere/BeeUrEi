@@ -841,9 +841,14 @@ final class NavigationViewModel {
                 guard let self else { return }
                 self.calloutBusy = false
                 guard self.running else { return }
-                guard let item = items.first(where: { ($0.name ?? "").isEmpty == false && $0.name != self.lastCalloutName }),
-                      let name = item.name, let ploc = item.placemark.location,
-                      loc.distance(from: ploc) <= 60 else { return }
+                // 选**最近**的合格地标（有名、≠上次、≤60m），而非 MKLocalSearch 相关性排序的首个（可能是远处大 POI）；
+                // 距离判据并入选择，避免"首个有名候选恰在半径外→整帧漏报更近候选"。名字去空白归一在核心内（同 RoadAnnouncer）。
+                let candidates = items.map { item in
+                    NearbyLandmarkPicker.Candidate(
+                        name: item.name,
+                        distanceMeters: item.placemark.location.map { loc.distance(from: $0) } ?? .greatestFiniteMagnitude)
+                }
+                guard let name = NearbyLandmarkPicker.pick(candidates, lastAnnounced: self.lastCalloutName, maxMeters: 60) else { return }
                 self.lastCalloutName = name
                 NavVoice.shared.speakCallout(NavStrings.passingBy(name, self.lang)) // 信息性：让位于转向指令，繁忙时丢弃
             }

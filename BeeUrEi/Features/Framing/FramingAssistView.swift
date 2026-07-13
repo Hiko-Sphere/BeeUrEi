@@ -723,6 +723,15 @@ final class FramingAssistViewModel {
         return OCRConfidenceGate().annotate(raw, lineConfidences: lineConfidences, language: textLang)
     }
 
+    /// 读日期的朗读串合成（纯静态，可测）：LabelDateReader 挑出带日期标签的行 → 低置信度经 OCRConfidenceGate
+    /// 追加"识别可能不准确、建议再拍一次"。药品/食品保质期在糊字/凹凸压印下常被低置信误读（把 2023 读成 2028），
+    /// 后果是吃过期药/食——此前**三条 OCR 朗读路径里唯独读日期漏了这层置信兜底**（readText / 读整页都有，见姊妹缺口）。
+    /// 无日期行 → nil（调用方走"没找到日期"分支）。返回纯文本（供复制/历史，不含提醒）与朗读串（低置信带提醒）。
+    static func spokenDates(texts: [String], lineConfidences: [Float], language: Language) -> (pure: String, spoken: String)? {
+        guard let out = LabelDateReader.find(texts: texts, language: language) else { return nil }
+        return (pure: out, spoken: ocrSpokenText(out, lineConfidences: lineConfidences))
+    }
+
     /// 朗读相机里看到的文字（端侧 Vision OCR，中英文）——盲人读标牌/标签/菜单。
     func readText() {
         stopContinuous() // 切到其它识别活动：停所有持续背景模式（光探测/连续颜色）
@@ -774,15 +783,18 @@ final class FramingAssistViewModel {
         guard let buffer = copyPixelBuffer(live) else { speak(FramingStrings.recognizeFailed(lang)); return }
         resultText = FramingStrings.readingDates(lang)
         let request = VNRecognizeTextRequest { [weak self] req, _ in
-            let texts = (req.results as? [VNRecognizedTextObservation])?
-                .compactMap { $0.topCandidates(1).first?.string } ?? []
+            let obs = (req.results as? [VNRecognizedTextObservation]) ?? []
+            let texts = obs.compactMap { $0.topCandidates(1).first?.string }
+            // 逐行置信度：读日期尤须置信兜底——保质期被糊字/凹凸压印低置信误读（2023→2028）＝吃过期药/食，
+            // 与 readText / 读整页同口径（核心 OCRConfidenceGate）。此前读日期路径独漏此保护（三 OCR 朗读路径的姊妹缺口）。
+            let confs = obs.compactMap { $0.topCandidates(1).first?.confidence }
             DispatchQueue.main.async {
                 guard let self else { return }
-                if let out = LabelDateReader.find(texts: texts, language: self.lang) {
-                    self.resultText = out
-                    self.copyableResult = out
-                    self.historyStore.add(kind: "dates", content: out) // 存识别历史，供事后搜索/回看（与 readText 口径一致）
-                    self.speak(out)
+                if let r = FramingAssistViewModel.spokenDates(texts: texts, lineConfidences: confs, language: self.lang) {
+                    self.resultText = r.spoken                      // 显示带提醒（与 readText 一致）
+                    self.copyableResult = r.pure                    // 复制/历史存**纯日期**（不含提醒，避免粘进备忘录）
+                    self.historyStore.add(kind: "dates", content: r.pure) // 存识别历史，供事后搜索/回看（与 readText 口径一致）
+                    self.speak(r.spoken)
                 } else {
                     self.resultText = FramingStrings.noDatesFound(self.lang)
                     self.copyableResult = nil

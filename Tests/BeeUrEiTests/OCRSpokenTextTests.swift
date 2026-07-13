@@ -31,4 +31,28 @@ final class OCRSpokenTextTests: XCTestCase {
         // 空文本（"没识别到文字"另有分支）→ 不加提醒。
         XCTAssertEqual(FramingAssistViewModel.ocrSpokenText("", lineConfidences: lowConf), "")
     }
+
+    // MARK: 读日期（保质期/生产日期）也走置信兜底——与 readText / 读整页姊妹对齐
+
+    func testSpokenDatesLowConfidenceAppendsCaveat() {
+        // 药品/食品保质期是最安全攸关的 OCR：糊字低置信误读（2023→2028）＝吃过期。低置信须带"可能不准确、建议再拍一次"。
+        let r = FramingAssistViewModel.spokenDates(texts: ["保质期至 2026-06"], lineConfidences: [0.2], language: .zh)
+        XCTAssertNotNil(r)
+        XCTAssertTrue(r!.pure.contains("2026-06"))           // 纯日期（复制/历史）
+        XCTAssertFalse(r!.pure.contains("识别可能不准确"))     // 复制/历史不含提醒
+        XCTAssertTrue(r!.spoken.contains("2026-06"))          // 朗读串含日期
+        XCTAssertTrue(r!.spoken.contains("识别可能不准确"))    // 且低置信带提醒
+    }
+
+    func testSpokenDatesHighConfidenceNoCaveat() {
+        let r = FramingAssistViewModel.spokenDates(texts: ["保质期至 2026-06"], lineConfidences: [0.95], language: .zh)
+        XCTAssertNotNil(r)
+        XCTAssertEqual(r!.spoken, r!.pure)                    // 高置信：朗读串=纯日期，无提醒
+        XCTAssertFalse(r!.spoken.contains("识别可能不准确"))
+    }
+
+    func testSpokenDatesNoDateReturnsNil() {
+        // 无日期标签/样式的行 → nil（不猜），调用方走"没找到日期"。
+        XCTAssertNil(FramingAssistViewModel.spokenDates(texts: ["随便一行普通字"], lineConfidences: [0.2], language: .zh))
+    }
 }

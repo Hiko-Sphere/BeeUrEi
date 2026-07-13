@@ -3,7 +3,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { api, APIError, contentBlockedText, type SavedRouteInfo, type RouteWaypoint, type FamilyLink } from '../lib/api'
 import { routeDistanceMeters, routeDistanceText, routeWalkingText } from '../lib/location'
-import { insertWaypoint } from '../lib/routeEdit'
+import { insertWaypoint, moveWaypointTo } from '../lib/routeEdit'
 import { getUnit } from '../lib/distanceUnit'
 import { useI18n } from '../lib/i18n'
 import { useSession } from '../lib/session'
@@ -92,8 +92,17 @@ export function RoutesPage() {
     if (!layer || !editing) return
     layer.clearLayers()
     editing.waypoints.forEach((w, i) => {
-      L.marker([w.lat, w.lng], { icon: wpIcon(i + 1, i === selectedIdx) })
+      L.marker([w.lat, w.lng], { icon: wpIcon(i + 1, i === selectedIdx), draggable: true })
         .on('click', () => setSelectedIdx(i))
+        // 拖动微调位置（行业标配）：此前点画错只能删了重插再排序。dragend 经 ref 读当前航点（防陈旧闭包），
+        // 纯逻辑 moveWaypointTo 保留 note、坏输入不动作；状态更新触发本 effect 重绘折线与序号。
+        .on('dragend', (e: L.LeafletEvent) => {
+          const cur = editingRef.current
+          if (!cur) return
+          const p = (e.target as L.Marker).getLatLng()
+          setEditing({ ...cur, waypoints: moveWaypointTo(cur.waypoints, i, p.lat, p.lng) })
+          setSelectedIdx(i)
+        })
         .addTo(layer)
     })
     if (editing.waypoints.length >= 2) {
@@ -155,7 +164,7 @@ export function RoutesPage() {
         <Card>
           <div className="flex flex-wrap items-center gap-3">
             <h2 className="text-lg font-semibold">{editing.id ? t('编辑路线', 'Edit route') : t('新建路线', 'New route')}</h2>
-            <span className="text-xs text-faint">{t('在地图上点击依次添加路线点（步行顺序）；先选中某点再点击可在其后插入', 'Click the map to add points in walking order; select a point first to insert right after it')}</span>
+            <span className="text-xs text-faint">{t('在地图上点击依次添加路线点（步行顺序）；先选中某点再点击可在其后插入；拖动点可微调位置', 'Click the map to add points in walking order; select a point first to insert right after it; drag a point to fine-tune')}</span>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <input value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} maxLength={NAME_MAX}

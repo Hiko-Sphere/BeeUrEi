@@ -20,3 +20,12 @@ export function insertWaypoint<T extends LatLng>(
   const next = [...waypoints.slice(0, at), point, ...waypoints.slice(at)]
   return { waypoints: next, selectedIdx: at }
 }
+
+/// 把第 i 个航点**原地移动**到新坐标（地图上拖动标记微调位置）：保留 note 等附加字段。
+/// 越界索引或非有限坐标 → 原样返回（不动，与全库"坏输入不动作"一贯原则；Leaflet 正常不会给非有限，防御为主）。
+export function moveWaypointTo<T extends LatLng>(waypoints: readonly T[], i: number, lat: number, lng: number): T[] {
+  if (i < 0 || i >= waypoints.length || !Number.isFinite(lat) || !Number.isFinite(lng)) return [...waypoints]
+  const next = [...waypoints]
+  next[i] = { ...next[i], lat, lng }
+  return next
+}

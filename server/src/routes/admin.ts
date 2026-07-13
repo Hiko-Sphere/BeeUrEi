@@ -178,6 +178,10 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     const onlineHelpers = users.filter(
       (u) => (u.role === 'helper' || u.role === 'family') && online.has(u.id),
     ).length
+    // 在线盲人数（需求侧）：与在线协助者（供给侧）配对，运维一眼看出"此刻有盲人在线但没有协助者/亲友在线"
+    // 的**覆盖缺口**——这正是最该人工补位的时刻。此前概览只有 total + helpers 供给侧，盲人在线数无从得出
+    //（total 混了所有角色）。仅新增字段，向后兼容。
+    const onlineBlind = users.filter((u) => u.role === 'blind' && online.has(u.id)).length
     // 注册增长：最近 30 个自然日（UTC）每日新增 + 近 7/30 天滚动新增，供仪表盘趋势图与判断活跃度。
     const DAY = 86_400_000
     const dayKey = (ms: number) => new Date(ms).toISOString().slice(0, 10)
@@ -204,7 +208,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     const activeEmerg = store.openEmergencyEventsSince(now - DAY)
     return {
       users: { total: users.length, active, disabled, byRole },
-      online: { total: online.size, helpers: onlineHelpers },
+      online: { total: online.size, helpers: onlineHelpers, blind: onlineBlind },
       reports: { open: openReports, total: reports.length },
       recordings: { total: store.allRecordings().length, config: store.getRecordingConfig() },
       // AI 视觉描述用量（今日 UTC）：每次成功=一次外部付费调用，运维据此监控成本/滥用（无专门 metrics 面板亦可见）。

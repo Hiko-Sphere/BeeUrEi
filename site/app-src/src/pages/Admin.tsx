@@ -57,7 +57,7 @@ function OverviewTab() {
   if (ov.safetyTickErrors) crisis.push({ label: t('报到后台错误', 'Safety tick errors'), value: ov.safetyTickErrors, sub: t('安全报到自动告警可能受阻', 'check-in auto-alerts may be blocked') })
   const stat = [
     { label: t('用户总数', 'Total users'), value: ov.users.total as number | string, sub: `${ov.users.active} ${t('活跃', 'active')} · ${ov.users.disabled} ${t('停用', 'disabled')}` },
-    { label: t('在线协助者', 'Online helpers'), value: ov.online.helpers, sub: `${ov.online.total} ${t('在线', 'online')}` },
+    { label: t('在线协助者', 'Online helpers'), value: ov.online.helpers, sub: `${t('在线盲人', 'Blind online')}: ${ov.online.blind ?? 0} · ${ov.online.total} ${t('在线', 'online')}` },
     { label: t('待处理举报', 'Open reports'), value: ov.reports.open, sub: `${ov.reports.total} ${t('累计', 'total')}` },
     { label: t('录制总数', 'Recordings'), value: ov.recordings.total, sub: ov.recordings.config.enabled ? t('录制已开启', 'recording on') : t('录制已关闭', 'recording off') },
     { label: t('近7天新增', 'New (7d)'), value: ov.growth.newUsers7d, sub: `${ov.growth.newUsers30d} ${t('近30天', 'in 30d')}` },

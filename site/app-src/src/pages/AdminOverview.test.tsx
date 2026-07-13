@@ -13,7 +13,7 @@ const GiB = 1024 ** 3
 
 const baseOverview = {
   users: { total: 14, active: 13, disabled: 1, byRole: { blind: 4, helper: 8, family: 2 } },
-  online: { total: 3, helpers: 2 },
+  online: { total: 3, helpers: 2, blind: 1 },
   reports: { open: 0, total: 5 },
   recordings: { total: 1, config: { enabled: true, requireConsent: true } },
   growth: { newUsers7d: 2, newUsers30d: 6, trend: [{ date: '2026-07-11', count: 1 }, { date: '2026-07-12', count: 1 }] },
@@ -30,6 +30,8 @@ describe('Admin 总览危机信号（React 版补齐 vanilla 面板 parity）', 
     mock(api.adminOverview).mockResolvedValue({ ...baseOverview, activeEmergencies: 0, activeUnreachable: 0, mail: { sent: 9, failed: 0 }, callConnect: { relayUnreachable: 0, generic: 0, signaling: 0 }, safetyTickErrors: 0, disk: { freeBytes: 57 * GiB, totalBytes: 100 * GiB, low: false }, backup: { count: 3, latestAgeMs: 5 * 3600_000, latestSizeBytes: 600_000, stale: false } })
     render(<AdminPage />)
     expect(await screen.findByText('用户总数')).toBeInTheDocument()
+    // 覆盖信号：在线协助者卡的副文本含"在线盲人"数（需求侧），运维一眼看有没有盲人在线却无人接。
+    expect(screen.getByText(/在线盲人: 1/)).toBeInTheDocument()
     expect(screen.queryByRole('alert')).toBeNull() // 无危机=无 alert 区，绝不"常红"麻痹
     expect(screen.getByText('磁盘余量')).toBeInTheDocument()
     expect(screen.getByText('57.0 GB')).toBeInTheDocument() // 余量常在视野里

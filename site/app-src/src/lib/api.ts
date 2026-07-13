@@ -532,7 +532,7 @@ export const api = {
 
 export interface AdminOverview {
   users: { total: number; active: number; disabled: number; byRole: Record<string, number> }
-  online: { total: number; helpers: number }
+  online: { total: number; helpers: number; blind: number }
   reports: { open: number; total: number }
   recordings: { total: number; config: { enabled: boolean; requireConsent: boolean; retentionDays?: number } }
   growth: { newUsers7d: number; newUsers30d: number; trend: { date: string; count: number }[] }

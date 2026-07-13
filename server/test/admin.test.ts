@@ -300,6 +300,28 @@ describe('admin + reports', () => {
     await app.close()
   })
 
+  it('overview online 拆出在线盲人（需求侧）与在线协助者（供给侧）覆盖信号', async () => {
+    const { store, app } = withAdmin()
+    const adminToken = await login(app, 'root', 'rootpass1')
+    const adminAuth = { authorization: `Bearer ${adminToken}` }
+    // 一个盲人 + 一个协助者，带密码哈希以便登录发心跳上线。
+    store.createUser({ id: 'b1', username: 'blindy', passwordHash: hashPassword('secret123'), displayName: 'Blindy', role: 'blind', status: 'active', createdAt: Date.now() })
+    store.createUser({ id: 'h1', username: 'helpy', passwordHash: hashPassword('secret123'), displayName: 'Helpy', role: 'helper', status: 'active', createdAt: Date.now() })
+    // 一个离线盲人：不发心跳，不该被计入在线盲人（证明计的是"在线"而非"总数"）。
+    store.createUser({ id: 'b2', username: 'offliney', passwordHash: hashPassword('secret123'), displayName: 'Offliney', role: 'blind', status: 'active', createdAt: Date.now() })
+
+    const bTok = await login(app, 'blindy', 'secret123')
+    const hTok = await login(app, 'helpy', 'secret123')
+    await app.inject({ method: 'POST', url: '/api/assist/heartbeat', headers: { authorization: `Bearer ${bTok}` }, payload: { available: true } })
+    await app.inject({ method: 'POST', url: '/api/assist/heartbeat', headers: { authorization: `Bearer ${hTok}` }, payload: { available: true } })
+
+    const ov = (await app.inject({ method: 'GET', url: '/api/admin/overview', headers: adminAuth })).json()
+    expect(ov.online.blind).toBe(1)    // 仅 blindy 在线；offliney 未发心跳不计
+    expect(ov.online.helpers).toBe(1)  // helpy 在线（供给侧）
+    expect(ov.online.total).toBeGreaterThanOrEqual(2)
+    await app.close()
+  })
+
   it('admin support actions: verify-email / unlink-apple / clear-passkeys / force-logout', async () => {
     const { store, app } = withAdmin()
     const adminToken = await login(app, 'root', 'rootpass1')

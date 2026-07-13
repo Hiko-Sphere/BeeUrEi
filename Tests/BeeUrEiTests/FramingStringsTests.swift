@@ -42,6 +42,9 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } })) // 英文不混中文
         // 未知 key 不丢弃（连字符转空格原样读，避免"只这些"的假完整）。
         XCTAssertTrue(FramingStrings.productDietaryLabelsSpeak(["some-new-cert"], .en)!.contains("some new cert"))
+        // 非转基因（中国食用油/大豆制品法定醒目标注，盲人刚需）+ 无防腐剂：canonical key → 本地化名。
+        XCTAssertEqual(FramingStrings.productDietaryLabelsSpeak(["no-gmo", "no-preservatives"], .zh), "。包装标注：非转基因、无防腐剂")
+        XCTAssertTrue(FramingStrings.productDietaryLabelsSpeak(["no-gmo"], .en)!.contains("non-GMO"))
     }
 
     func testCashCountingFormatting() {

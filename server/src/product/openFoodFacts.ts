@@ -17,8 +17,8 @@ export interface ProductInfo {
   /// 加工程度 NOVA 组（1=未/微加工 … 4=超加工）。"超加工食品"是可听的健康提示。无数据→ null。
   novaGroup?: number | null
   /// 包装**标注**的膳食/宗教认证（OFF labels_tags 里与饮食合规相关的规范化子集：无麸质/无乳糖/纯素/素食/清真/
-  /// 洁食/有机/无糖/不含棕榈油）。盲人看不到包装上的这些认证，而这正是刚需——乳糜泻(无麸质)、乳糖不耐、素食/纯素、
-  /// 清真/洁食(宗教)、糖尿病(无糖)。**是厂商标注的认证**（多为法规监管），措辞用"标注"如实转述、不替用户判定。
+  /// 洁食/有机/无糖/不含棕榈油/非转基因/无防腐剂）。盲人看不到包装上的这些认证，而这正是刚需——乳糜泻(无麸质)、乳糖不耐、
+  /// 素食/纯素、清真/洁食(宗教)、糖尿病(无糖)、非转基因(食用油/大豆)。**是厂商标注的认证**（多为法规监管），措辞用"标注"如实转述、不替用户判定。
   /// 空数组=无该项标注数据（同过敏原：**缺数据≠不含/不符**）。
   dietaryLabels: string[]
   /// 净含量/规格文本（OFF quantity，如 "500 ml"/"200 g"/"1 L"）。盲人看不到包装规格，而它决定份量与选对大小
@@ -81,6 +81,10 @@ const DIETARY_LABEL_MAP: Record<string, string> = {
   'organic': 'organic', 'eu-organic': 'organic',
   'sugar-free': 'sugar-free', 'no-sugar': 'sugar-free', 'no-added-sugar': 'sugar-free',
   'palm-oil-free': 'palm-oil-free', 'no-palm-oil': 'palm-oil-free',
+  // 非转基因：中国食用油/大豆/玉米制品最醒目的法定标注（转基因/非转基因是购买决策关键），盲人看不到，刚需。
+  'no-gmos': 'no-gmo', 'no-gmo': 'no-gmo', 'non-gmo': 'no-gmo', 'without-gmos': 'no-gmo', 'gmo-free': 'no-gmo',
+  // 无防腐剂：常见健康诉求标注（对防腐剂敏感/追求少添加者的购买依据）。
+  'no-preservatives': 'no-preservatives', 'without-preservatives': 'no-preservatives',
 }
 
 /// 从 OFF labels_tags 提取规范化膳食标签（["en:organic","en:gluten-free","fr:bio"] → ["organic","gluten-free"]）。

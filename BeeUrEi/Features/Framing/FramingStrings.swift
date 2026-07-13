@@ -365,6 +365,7 @@ enum FramingStrings {
         "halal": ("清真", "halal"), "kosher": ("洁食", "kosher"),
         "organic": ("有机", "organic"), "sugar-free": ("无糖", "sugar-free"),
         "palm-oil-free": ("不含棕榈油", "palm oil free"),
+        "no-gmo": ("非转基因", "non-GMO"), "no-preservatives": ("无防腐剂", "no preservatives"),
     ]
 
     /// 膳食/宗教认证标注播报后缀（无麸质/纯素/清真/洁食/有机/无糖…）——拼在营养后缀之后，一次 speak 播完。

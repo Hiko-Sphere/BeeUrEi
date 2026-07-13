@@ -42,6 +42,9 @@ describe('Open Food Facts 商品查询', () => {
     expect(extractDietaryLabels(['en:gluten-free', 'en:vegan', 'en:halal'])).toEqual(['gluten-free', 'vegan', 'halal'])
     expect(extractDietaryLabels(['en:no-gluten', 'en:no-lactose', 'en:no-added-sugar'])).toEqual(['gluten-free', 'lactose-free', 'sugar-free']) // 同义词归并到 canonical
     expect(extractDietaryLabels(['en:eu-organic', 'fr:organic'])).toEqual(['organic']) // 归并 + 去重（canonical 首现）
+    // 非转基因（中国食用油/大豆制品法定醒目标注，盲人刚需）+ 无防腐剂：多同义写法归并到 canonical。
+    expect(extractDietaryLabels(['en:no-gmos', 'en:no-preservatives'])).toEqual(['no-gmo', 'no-preservatives'])
+    expect(extractDietaryLabels(['en:non-gmo', 'en:gmo-free', 'en:without-gmos'])).toEqual(['no-gmo']) // 同义词归并 + 去重
     expect(extractDietaryLabels(['en:green-dot', 'en:nutriscore', 'en:made-in-france'])).toEqual([]) // 表外噪声标签一律忽略（精度优先）
     expect(extractDietaryLabels(['en:VEGAN', '  ', 42, null, 'kosher'])).toEqual(['vegan', 'kosher']) // 大小写/坏项/无前缀
     expect(extractDietaryLabels('en:vegan')).toEqual([]) // 非数组 → 空

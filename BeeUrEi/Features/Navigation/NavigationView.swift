@@ -216,6 +216,16 @@ struct WalkNavigationView: View {
                     await model.start(toLat: lat, lon: lon, name: name, region: region)
                 case .backtrack:
                     model.startBacktrack()
+                case .savedRoute(let spoken):
+                    // 语音"走X路线"：加载路线库 → 模糊匹配（SavedRouteMatcher，已测）→ 唯一命中即沿信标执行；
+                    // 无匹配/歧义则读出全部路线名让用户再说（宁可不选也不选错——人工路线走错比没走上更危险）。
+                    await loadRoutes()
+                    if let i = SavedRouteMatcher.match(spoken: spoken, names: savedRoutes.map(\.name)) {
+                        let route = savedRoutes[i]
+                        model.startCustomRoute(name: route.name, waypoints: route.waypoints.map { (lat: $0.lat, lon: $0.lng, note: $0.note) })
+                    } else {
+                        NavVoice.shared.speakCallout(NavStrings.savedRouteNotFound(spoken, names: savedRoutes.map(\.name), lang))
+                    }
                 }
             }
             .toolbar {

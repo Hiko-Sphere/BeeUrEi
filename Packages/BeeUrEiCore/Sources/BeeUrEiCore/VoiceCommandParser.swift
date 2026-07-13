@@ -48,6 +48,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case openSettings               // 打开设置（语言/无障碍/摔倒检测等非语音可调项——语音直达免找按钮）
     case describeScene              // 云端 AI 详细描述眼前画面（对标 Be My AI/Envision——比本地 SceneSummarizer 粗汇总更丰富的自然语言描述）
     case checkinSafe                // 报平安（结束安全报到/解除已发告警）——报到到点前手在盲杖上，语音是最该有的通道
+    case savedRoute(String)         // 走某条保存的路线（"走家到菜场的路线"）——人工踩好的路线是最安全的导航，须语音可达
     case unknown
 }
 
@@ -99,6 +100,10 @@ public enum VoiceCommandParser {
         // 朝向须带**第一人称锚点**——去掉裸"哪个方向/什么方向/哪个方位"，否则"厕所在什么方向"（问某地点方位）
         // 会被误当成"我朝哪"报出自己的罗盘朝向，对盲人是危险误导（对抗复审 HIGH）。
         if has(["朝哪个方向", "朝哪个方位", "我朝哪个方向", "我朝什么方向", "面朝", "朝向", "我朝哪", "我面朝哪", "which way am i facing", "which way i'm facing", "which direction am i", "what direction am i", "which way am i", "my heading", "compass direction"]) { return .facing }
+        // 走保存的路线（"走家到菜场的路线"/"take the home route"）须在 transit/navigate 之前——
+        // 亲友踩好的路线是**最安全**的导航（人工验证过的路径），语音必须直达；锚点是"路线/route"词
+        // （parseDestination 的"带我去X"不含"路线"不冲突；名字为空返回 nil 落回下方规则）。
+        if let name = parseSavedRoute(text) { return .savedRoute(name) }
         // 公交/地铁出行须在 readBus（"公交/公交车"识别车辆）之前——都含"公交"，但带**乘坐位交通方式词+目的地**
         // （"坐公交去X"）走公交规划（过城刚需）；无目的地的"几路车/这是什么车"仍归 readBus（parseTransit 无 dest 返 nil）。
         if let dest = parseTransit(text) { return .transit(dest) }
@@ -216,6 +221,46 @@ public enum VoiceCommandParser {
             for s in suffixes where x.hasSuffix(s) && x.count > s.count { x = String(x.dropLast(s.count)).trimmingCharacters(in: trimSet); changed = true; break }
         }
         return phrases.contains(x)
+    }
+
+    /// 「走X(的)路线」「带我走X路线」「按/沿X路线走」/ "take/follow/walk the X route"、"start route X"：
+    /// 提取要走的**保存路线**名。双锚点＝「路线/route」词 + 行走动词（走/沿/按/用/开始、take/follow/walk/start）——
+    /// 缺动词的"这是什么路线"等询问不触发；名字为空（裸"走路线"）返回 nil 落回后续规则。
+    /// 名字只做粗提取（剥动词/礼貌前缀与"的"尾），模糊匹配交给 SavedRouteMatcher（对已存路线名归一化比对）。
+    static func parseSavedRoute(_ text: String) -> String? {
+        let t = text.lowercased()
+        // 中文：名字在「路线」之前。
+        if let r = t.range(of: "路线") {
+            guard ["走", "沿", "按", "用", "开始"].contains(where: { t.contains($0) }) else { return nil }
+            var name = String(t[..<r.lowerBound])
+            let prefixes = ["请", "帮我", "我要", "我想", "现在", "带我", "给我", "开始", "沿着", "沿", "按照", "按", "走", "用"]
+            var changed = true
+            while changed {
+                changed = false
+                for p in prefixes where name.hasPrefix(p) && name.count > p.count {
+                    name = String(name.dropFirst(p.count)); changed = true; break
+                }
+            }
+            if name.hasSuffix("的") { name = String(name.dropLast()) }
+            name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            return name.isEmpty ? nil : name
+        }
+        // 英文：动词 + [the] + 名字 + route（"take the home route"），或 动词 + route + 名字（"start route 2"）。
+        guard t.contains("route"), ["take", "follow", "walk", "start"].contains(where: { t.contains($0) }) else { return nil }
+        if let r = t.range(of: " route"), r.lowerBound > t.startIndex {
+            var name = String(t[..<r.lowerBound])
+            for v in ["take", "follow", "walk", "start"] {
+                if let vr = name.range(of: v) { name = String(name[vr.upperBound...]); break }
+            }
+            name = name.replacingOccurrences(of: " the ", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+            if name.hasPrefix("the ") { name = String(name.dropFirst(4)) }
+            if !name.isEmpty { return name }
+        }
+        if let r = t.range(of: "route ") {
+            let name = String(t[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty { return name }
+        }
+        return nil
     }
 
     /// 「坐公交/地铁去X」「怎么坐车到X」/ "take transit/the bus to X"、"how do I get to X by subway"：

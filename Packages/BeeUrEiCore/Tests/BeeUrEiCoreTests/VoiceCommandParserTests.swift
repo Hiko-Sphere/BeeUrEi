@@ -491,6 +491,22 @@ final class VoiceCommandParserTests: XCTestCase {
         XCTAssertEqual(VoiceCommandParser.parse("读一下这段文字"), .readText)
     }
 
+    /// 走保存的路线（双锚点：路线/route 词 + 行走动词）；缺动词/缺名字不触发，导航/公交不被劫。
+    func testSavedRoute() {
+        XCTAssertEqual(VoiceCommandParser.parse("走家到菜场的路线"), .savedRoute("家到菜场"))
+        XCTAssertEqual(VoiceCommandParser.parse("带我走家到菜场路线"), .savedRoute("家到菜场"))
+        XCTAssertEqual(VoiceCommandParser.parse("按妈妈画的路线走"), .savedRoute("妈妈画"))   // "的"尾剥离
+        XCTAssertEqual(VoiceCommandParser.parse("take the home to market route"), .savedRoute("home to market"))
+        XCTAssertEqual(VoiceCommandParser.parse("follow route 2"), .savedRoute("2"))
+        // 缺名字（裸"走路线"）→ 不触发（落 unknown，而非带空名开导航）。
+        XCTAssertNotEqual(VoiceCommandParser.parse("走路线"), .savedRoute(""))
+        // 缺行走动词（询问类）→ 不触发。
+        if case .savedRoute = VoiceCommandParser.parse("这是什么路线") { XCTFail("询问类不应触发 savedRoute") }
+        // 不含"路线"词的导航/公交照旧，不被劫。
+        XCTAssertEqual(VoiceCommandParser.parse("带我去北京西站"), .navigate("北京西站"))
+        XCTAssertEqual(VoiceCommandParser.parse("坐地铁去西单"), .transit("西单"))
+    }
+
     /// 报平安（安全报到 complete）：陈述式锚点收音；疑问/导航/发消息不被劫。
     func testCheckinSafe() {
         // 正向：常见报平安说法（中/英）。

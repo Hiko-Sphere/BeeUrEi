@@ -489,6 +489,10 @@ struct HubView: View {
         case .goHome:
             AppRoute.shared.pendingNavAction = .backtrack
             showNavigation = true
+        // 「走X路线」：人工踩好的路线是最安全的导航，语音直达（匹配/歧义/未找到都在导航屏语音反馈）。
+        case .savedRoute(let name):
+            AppRoute.shared.pendingNavAction = .savedRoute(name)
+            showNavigation = true
         case .navigateHome: navigateToSaved(label: "home") // 「回家」：导航到已保存的家地址
         case .navigateWork: navigateToSaved(label: "work") // 「去公司」：导航到已保存的公司地址
         case .messages: showMessages = true

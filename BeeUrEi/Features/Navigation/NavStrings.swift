@@ -316,6 +316,18 @@ enum NavStrings {
     static func navScreenTitle(_ l: Language) -> String { l == .zh ? "步行导航" : "Walking Navigation" }
     static func done(_ l: Language) -> String { l == .zh ? "完成" : "Done" }
 
+    /// 语音"走X路线"未匹配到唯一一条：读出全部已存路线名让用户再说一遍（宁可不选也不选错——
+    /// 人工路线是安全路径，走错一条比没走上更危险）。无任何路线时引导去建。
+    static func savedRouteNotFound(_ spoken: String, names: [String], _ l: Language) -> String {
+        if names.isEmpty {
+            return l == .zh ? "你还没有保存的路线。可以请亲友在网页端替你画一条常走路线。"
+                            : "You have no saved routes yet. Ask a family member to draw one for you on the web."
+        }
+        let list = names.joined(separator: l == .zh ? "、" : ", ")
+        return l == .zh ? "没有找到叫\u{201C}\(spoken)\u{201D}的路线。你保存的路线有：\(list)。请再说一遍路线名。"
+                        : "No route called \u{201C}\(spoken)\u{201D}. Your saved routes are: \(list). Please say the route name again."
+    }
+
     /// 反向地理编码/POI 查询的地名语言。
     static func geocodeLocale(_ l: Language) -> Locale {
         Locale(identifier: l == .zh ? "zh_CN" : "en_US")

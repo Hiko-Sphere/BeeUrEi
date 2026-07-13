@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, type ActiveEmergency } from '../lib/api'
 import { pollWhileVisible } from '../lib/poll'
 import { useI18n } from '../lib/i18n'
-import { appleMapsUrl } from '../lib/location'
+import { appleMapsUrl, appleMapsDirectionsUrl } from '../lib/location'
 import { emergencyLocInfo } from '../lib/emergencyLoc'
 import { Card, Button, timeAgo, fmtTime, useToast } from './ui'
 import { ContactMedicalInfo } from './ContactMedicalInfo'
@@ -63,11 +63,15 @@ export function ActiveEmergenciesBanner({ onCall }: { onCall?: (userId: string, 
                 const label = loc.stale
                   ? (loc.fixAt != null ? t(`最后位置·${fmtTime(loc.fixAt, lang)}`, `Last·${fmtTime(loc.fixAt, lang)}`) : t('最后位置', 'Last known'))
                   : t('位置', 'Map')
-                return (
+                return (<>
                   <a href={appleMapsUrl(e.lat, e.lon, e.ownerName)} target="_blank" rel="noreferrer"
                     title={loc.stale && loc.fixAt != null ? t(`最后已知位置，定位于 ${fmtTime(loc.fixAt, lang)}`, `Last known location, fixed at ${fmtTime(loc.fixAt, lang)}`) : undefined}
                     className="text-xs text-accent underline">{loc.stale ? '⚠️' : '📍'} {label}</a>
-                )
+                  {/* 一键导航前往（比落图钉少一步——赶去的家人最需要）。位置陈旧时 title 提醒可能已移动，别扑空。 */}
+                  <a href={appleMapsDirectionsUrl(e.lat, e.lon, e.ownerName)} target="_blank" rel="noreferrer"
+                    title={loc.stale ? t('导航到最后已知位置（对方可能已移动）', 'Directions to last known location (they may have moved)') : t('导航前往（在地图中选驾车/步行）', 'Get directions (choose driving/walking in Maps)')}
+                    className="text-xs text-accent underline">🧭 {t('导航', 'Directions')}</a>
+                </>)
               })()}
               {responded.has(e.eventId) ? (
                 <span role="status" className="inline-flex items-center gap-1 text-xs font-medium text-ok">✓ {t('已回应', 'Responded')}</span>

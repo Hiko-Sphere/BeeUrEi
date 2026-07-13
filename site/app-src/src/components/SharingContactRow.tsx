@@ -5,7 +5,8 @@ import { accuracyText } from '../lib/geoAccuracy'
 import { getUnit } from '../lib/distanceUnit'
 import { headingPhrase } from '../lib/heading'
 import { roleLabel } from './Layout'
-import { IconPhone, IconChat } from './icons'
+import { IconPhone, IconChat, IconPin } from './icons'
+import { appleMapsDirectionsUrl, validLatLng } from '../lib/location'
 
 /// 「正在共享位置的联系人」行（Locations 页用；独立文件不碰 Leaflet，可 jsdom 单测）。
 /// 除"在地图上定位"外，补**呼叫 / 发消息**直达——低电量告警把家人引到位置页说"趁没关机联系他"，此前这里
@@ -61,6 +62,15 @@ export function SharingContactRow({ c, lang, t, live, callDisabled, onLocate, on
         className="shrink-0 rounded-full p-2 text-accent transition hover:surface-2">
         <IconChat width={18} height={18} />
       </button>
+      {/* 一键导航前往对方位置（开系统地图，选驾车/步行）——"在地图上定位"是站内看，这个是**去**。坏坐标不渲染。 */}
+      {validLatLng(c.lat, c.lng) && (
+        <a href={appleMapsDirectionsUrl(c.lat, c.lng, c.displayName)} target="_blank" rel="noopener noreferrer"
+          aria-label={t(`导航前往 ${c.displayName} 的位置`, `Get directions to ${c.displayName}`)}
+          title={t('导航前往（在地图中选驾车/步行）', 'Get directions')}
+          className="shrink-0 rounded-full p-2 text-accent transition hover:surface-2">
+          <IconPin width={18} height={18} />
+        </a>
+      )}
     </li>
   )
 }

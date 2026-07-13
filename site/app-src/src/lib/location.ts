@@ -11,6 +11,13 @@ export function appleMapsUrl(lat: number | string, lng: number | string, label?:
   return `https://maps.apple.com/?ll=${lat},${lng}&q=${q}`
 }
 
+/// Apple Maps **导航**链接（daddr=目的地，从当前位置起算，用户在地图 App 内选驾车/步行）：家人一键**前往**
+/// 遇险/共享位置的视障亲友——比只落图钉少一步（Find My/Google 位置共享皆有"导航"）。坐标 WGS-84（境内 Apple 地图自动纠偏）。
+export function appleMapsDirectionsUrl(lat: number | string, lng: number | string, label?: string): string {
+  const q = label && String(label).trim() ? encodeURIComponent(label) : `${lat},${lng}`
+  return `https://maps.apple.com/?daddr=${lat},${lng}&q=${q}`
+}
+
 /// 坐标是否可作地图链接：有限且在地理范围内（纬度[-90,90]、经度[-180,180]）。可空入参（服务端字段常为 null）。
 /// 返回规整后的 {lat,lng} 或 null——供渲染前判定"有没有可用坐标"（如录制/事件的可选定位）。appleMapsUrl 本身
 /// 不校验（只拼串），故凡把可选/外来坐标渲染成地图链接前都应先过此校验，避免拼出 NaN/越界的坏链接。

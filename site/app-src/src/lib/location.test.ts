@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseLocation, appleMapsUrl, haversineMeters, routeDistanceMeters, routeDistanceText, routeWalkingMinutes, routeWalkingText, locationMessageText, validLatLng } from './location'
+import { parseLocation, appleMapsUrl, appleMapsDirectionsUrl, haversineMeters, routeDistanceMeters, routeDistanceText, routeWalkingMinutes, routeWalkingText, locationMessageText, validLatLng } from './location'
 
 const zh = (a: string) => a // t 桩：取中文
 const en = (_a: string, b: string) => b // t 桩：取英文
@@ -78,6 +78,17 @@ describe('appleMapsUrl', () => {
     const u = appleMapsUrl(1, 2, 'a&b "c" <x>')
     expect(u).toContain(`&q=${encodeURIComponent('a&b "c" <x>')}`)
     expect(u).not.toContain('"') // 编码后无裸引号，可安全放入 href="..."
+    expect(u).not.toContain('<')
+  })
+
+  it('appleMapsDirectionsUrl：用 daddr（导航前往）而非 ll（落图钉）；label 同样编码', () => {
+    // 导航链接=daddr（从当前位置起算的方向），区别于落图钉的 ll。
+    expect(appleMapsDirectionsUrl(31.23, 121.47, '阿明')).toBe(`https://maps.apple.com/?daddr=31.23,121.47&q=${encodeURIComponent('阿明')}`)
+    expect(appleMapsDirectionsUrl(31.23, 121.47)).toBe('https://maps.apple.com/?daddr=31.23,121.47&q=31.23,121.47')
+    // 特殊字符编码，不破 href 属性。
+    const u = appleMapsDirectionsUrl(1, 2, 'a&b "c" <x>')
+    expect(u).toContain('daddr=1,2')
+    expect(u).not.toContain('"')
     expect(u).not.toContain('<')
   })
 })

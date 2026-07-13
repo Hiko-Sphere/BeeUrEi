@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
 import { visionConfigured, visionDescribe } from '../src/vision/visionClient'
+import { hashPassword } from '../src/auth/passwords'
 
 // 1×1 合法 base64（fetch 被 stub，内容不重要，只需通过 base64 字符集与大小校验）。
 const TINY_JPEG_B64 = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAEBAQ=='
@@ -113,6 +114,29 @@ describe('POST /api/vision/describe（路由）', () => {
       payload: { image: TINY_JPEG_B64, mime: 'image/jpeg' } })
     expect(res.statusCode).toBe(403)
     expect(res.json()).toMatchObject({ error: 'feature_disabled', feature: 'aiDescribe' })
+    await app.close()
+  })
+
+  it('上游失败的**原因**进 admin 总览 vision.lastError（运维一眼知 401 密钥错等配置问题，不必翻日志）', async () => {
+    setConfig()
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 401, json: async () => ({ error: { message: 'invalid api key' } }) })))
+    const store = new MemoryStore()
+    store.createUser({ id: 'a1', username: 'root', passwordHash: hashPassword('rootpass1'), displayName: 'root', role: 'admin', status: 'active', createdAt: Date.now() })
+    const app = buildApp(store)
+    const adminTok = (await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'root', password: 'rootpass1' } })).json().token as string
+    const userTok = await token(app, 'blinduser')
+    const ah = { authorization: `Bearer ${adminTok}` }
+    // 初始：无 vision 错误、无原因。
+    const ov0 = (await app.inject({ method: 'GET', url: '/api/admin/overview', headers: ah })).json()
+    expect(ov0.vision.errors).toBe(0)
+    expect(ov0.vision.lastError).toBeNull()
+    // 一次失败的 describe（上游 401）→ 502 + 计数/便签置。
+    const r = await app.inject({ method: 'POST', url: '/api/vision/describe', headers: { authorization: `Bearer ${userTok}` }, payload: { image: TINY_JPEG_B64, mime: 'image/jpeg' } })
+    expect(r.statusCode).toBe(502)
+    const ov1 = (await app.inject({ method: 'GET', url: '/api/admin/overview', headers: ah })).json()
+    expect(ov1.vision.errors).toBe(1)
+    expect(ov1.vision.lastError).toContain('invalid api key')   // 原因回带到面板
+    expect(typeof ov1.vision.lastErrorAt).toBe('number')
     await app.close()
   })
 

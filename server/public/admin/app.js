@@ -51,6 +51,7 @@ const I18N = {
     relayFails: '通话中继失败', callFailSub: '本次启动以来 · 普通/信令', relayFailHint: '中继不可达多半是 TURN/安全组未放行 3478',
     mailFail: '邮件发送失败', mailFailHint: 'SMTP 凭据/连接故障（如 163 授权码过期）——发码/找回密码/安全邮件发不出，请检查 SMTP_*',
     amapErr: '高德导航失败', amapErrHint: '高德 key/配额/上游错误——导航/周边/地理编码不可用（盲人过城骨干）；USERKEY_PLAT_NOMATCH 即 key 非「Web服务」类型，请检查 AMAP_API_KEY',
+    visionErr: 'AI 视觉描述失败', visionErrHint: '视觉大模型 provider 故障/配额耗尽/VISION_* 配错——盲人「描述场景/Be My AI」不可用；如 401 即密钥错，请检查 VISION_API_KEY/BASE/MODEL',
     tickErr: '安全引擎报错', tickErrHint: '后台升级重呼/报到告警在异常（DB/bug）——报到未报平安可能不再自动告警亲友，速查日志',
     refresh: '刷新', search: '搜索用户名 / 昵称…', allRoles: '全部角色', allStatus: '全部状态',
     role: '角色', status: '状态', created: '注册时间', actions: '操作', lastActive: '在线',
@@ -181,6 +182,7 @@ const I18N = {
     relayFails: 'Call relay failures', callFailSub: 'since start · generic/signaling', relayFailHint: 'Relay unreachable usually means TURN / security-group 3478 blocked',
     mailFail: 'Email delivery failures', mailFailHint: 'SMTP auth/connection error (e.g. expired credential) — codes/reset/security emails not sending, check SMTP_*',
     amapErr: 'AMap navigation errors', amapErrHint: 'AMap key/quota/upstream error — navigation/nearby/geocoding unavailable (the backbone for getting around); USERKEY_PLAT_NOMATCH means the key is not a “Web service” type, check AMAP_API_KEY',
+    visionErr: 'AI vision (Describe) errors', visionErrHint: 'Vision model provider failure / quota exhausted / VISION_* misconfigured — “Describe scene / Be My AI” is down for blind users; a 401 means a bad key, check VISION_API_KEY/BASE/MODEL',
     tickErr: 'Safety engine errors', tickErrHint: 'Background escalation/check-in alerts are failing (DB/bug) — missed check-ins may no longer auto-alert family; check logs',
     refresh: 'Refresh', search: 'Search username / name…', allRoles: 'All roles', allStatus: 'All status',
     role: 'Role', status: 'Status', created: 'Joined', actions: 'Actions', lastActive: 'Online',
@@ -640,6 +642,7 @@ function renderDashboard() {
         o.callConnect.relayUnreachable ? 'danger' : '') : ''}
       ${o.mail != null && o.mail.failed > 0 ? statCard(t('mailFail'), o.mail.failed, (o.mail.lastError ? `${o.mail.lastError} · ` : '') + t('mailFailHint'), 'danger') : ''}
       ${o.amap != null && o.amap.upstreamErrors > 0 ? statCard(t('amapErr'), o.amap.upstreamErrors, (o.amap.lastError ? `${o.amap.lastError} · ` : '') + t('amapErrHint'), 'danger') : ''}
+      ${o.vision != null && o.vision.errors > 0 ? statCard(t('visionErr'), o.vision.errors, (o.vision.lastError ? `${o.vision.lastError} · ` : '') + t('visionErrHint'), 'danger') : ''}
       ${o.safetyTickErrors != null && o.safetyTickErrors > 0 ? statCard(t('tickErr'), o.safetyTickErrors, t('tickErrHint'), 'danger') : ''}
     </div>
     ${trendCard}

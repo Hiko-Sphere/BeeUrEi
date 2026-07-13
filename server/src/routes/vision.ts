@@ -82,9 +82,13 @@ export function registerVisionRoutes(app: FastifyInstance, store: Store, metrics
       metrics?.inc('vision_errors_total') // 值守：上游失败率（飙升=provider 故障/配额耗尽/配置错，可告警）
       if (e instanceof VisionError) {
         console.error('[vision] describe failed status=%s detail=%s', e.status, e.detail)
+        // 失败原因存便签供 admin 总览呈现"为什么描述不了"（如 provider 401/配额/VISION_* 配错）——不必翻日志。
+        // detail 已由 visionClient 截断(≤200)、不含密钥，透传安全。盲人「描述场景/Be My AI」骨干，挂了运维要一眼可见。
+        metrics?.setNote('vision_last_error', `${e.status}: ${e.detail}`, Date.now())
         return reply.code(502).send({ error: 'ai_error' })
       }
       console.error('[vision] unexpected error', e)
+      metrics?.setNote('vision_last_error', 'unexpected error', Date.now())
       return reply.code(502).send({ error: 'ai_unavailable' })
     }
   })

@@ -209,7 +209,14 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       recordings: { total: store.allRecordings().length, config: store.getRecordingConfig() },
       // AI 视觉描述用量（今日 UTC）：每次成功=一次外部付费调用，运维据此监控成本/滥用（无专门 metrics 面板亦可见）。
       // today=全体当日成功调用数；dailyMaxPerUser=单用户每日上限（VISION_DAILY_MAX，默认 200）。
-      vision: { today: store.totalVisionCallsOnDay(dayKey(now)), dailyMaxPerUser: visionDailyMax() },
+      vision: {
+        today: store.totalVisionCallsOnDay(dayKey(now)), dailyMaxPerUser: visionDailyMax(),
+        // AI 视觉「描述场景/Be My AI」健康：errors=上游失败累计（provider 故障/配额/VISION_* 配错）；lastError=最后原因
+        //（如 `401: invalid api key`）。盲人识别骨干功能挂了运维一眼可见，不必等用户报"描述用不了"。
+        errors: metrics.get('vision_errors_total'),
+        lastError: metrics.getNote('vision_last_error')?.value ?? null,
+        lastErrorAt: metrics.getNote('vision_last_error')?.at ?? null,
+      },
       verifications: { pending: store.countPendingVerifications(), total: store.allVerifications().length },
       growth: { newUsers7d, newUsers30d, trend },
       // 运维在仪表盘一眼看出此刻有没有正在发生的危机，无需先点进紧急事件区逐条看（危机感知置顶）。

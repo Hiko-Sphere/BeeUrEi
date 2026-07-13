@@ -188,7 +188,11 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
                       'amap_breaker_open_total', 'amap_breaker_rejected_total']) metrics.inc(name, 0)
   // 暴露 metrics 给后台 tick（index.ts）：升级重呼/安全报到到期告警发生在 tick 里，计数须在那里 inc。
   app.decorate('metrics', metrics)
-  setAmapMetrics((name) => metrics.inc(name)) // 高德外部依赖可观测性（限额/计费，监控量/超时/网络/上游错误）
+  setAmapMetrics((name, detail) => { // 高德外部依赖可观测性（限额/计费，监控量/超时/网络/上游错误）
+    metrics.inc(name)
+    // 失败原因存便签，供 admin 总览显示"高德为什么失败"（如 USERKEY_PLAT_NOMATCH＝key 非 Web服务类型）——不必翻日志。
+    if (detail) metrics.setNote('amap_last_error', detail, Date.now())
+  })
   // Web Push 计数装饰（单点包裹，扇出调用点零改动）：送达健康度进 /metrics。
   // APNs 送达健康度：挂钩注入（接口契约"绝不抛出"，外层装饰器观察不到失败——见 apns.ts onOutcome）。
   pushSender.onOutcome = (ok) => metrics.inc(ok ? 'apns_sent_total' : 'apns_failed_total')

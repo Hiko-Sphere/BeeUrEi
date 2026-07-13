@@ -14,8 +14,10 @@ function amapTimeoutMs(): number {
 /// - 只对纯网络瞬断（连接被拒/重置等 fetch 抛错）重试一次，透明恢复高德侧的偶发抖动，盲人无感。
 /// 可观测性钩子（buildApp 注入，与 notify 的 setNotifyWebPush 同先例）：高德是**限额/计费**外部依赖，
 /// 监控调用量/超时/网络失败/上游错误(key 平台不符·配额耗尽)对运维至关重要。默认 noop（未注入不计）。
-let amapMetric: (name: string) => void = () => {}
-export function setAmapMetrics(hook: (name: string) => void): void { amapMetric = hook }
+/// hook 第二参 detail：失败原因短文本（如上游 `USERKEY_PLAT_NOMATCH: key 平台不符` / `timeout`）——供 admin 面板
+/// 显示"高德为什么失败"，不必翻日志。key 平台配错是自托管最常见坑（须「Web服务」类型），有了原因一眼可修。
+let amapMetric: (name: string, detail?: string) => void = () => {}
+export function setAmapMetrics(hook: (name: string, detail?: string) => void): void { amapMetric = hook }
 
 /// 熔断器（circuit breaker，resilience 标配）：高德持续故障（超时/网络失败）时**快速失败**而非每次都等满超时。
 /// 三态：closed（正常）→ 连续失败达阈值 → open（冷却期内直接快失败，不再打高德）→ 冷却满 → halfOpen（放一个探测请求）
@@ -70,7 +72,7 @@ async function amapFetchInner(url: string, allowRetry: boolean): Promise<Respons
       amapMetric('amap_calls_total') // 每次实际 fetch（含重试）——监控配额消耗
       return await fetch(url, { signal: ctrl.signal })
     } catch (e) {
-      amapMetric(ctrl.signal.aborted ? 'amap_timeouts_total' : 'amap_errors_total')
+      amapMetric(ctrl.signal.aborted ? 'amap_timeouts_total' : 'amap_errors_total', ctrl.signal.aborted ? 'timeout' : 'network error')
       if (ctrl.signal.aborted || !allowRetry || attempt >= 1) throw e // 超时不重试；探测不重试；已重试过一次则放弃
     } finally {
       clearTimeout(timer) // 成功/失败都清定时器，避免泄漏
@@ -138,8 +140,12 @@ export class AmapError extends Error {
 /// 高德成功 status='1' 且 infocode='10000'；失败 status='0' 且带 info/infocode。
 /// 不校验会把"key 配置错误"静默当成"目的地未找到"，对盲人导航是致命的误导（见审查）。
 function assertAmapOk(res: Response, data: { status?: string; info?: string; infocode?: string }): void {
-  if (!res.ok) { amapMetric('amap_upstream_errors_total'); throw new AmapError(`http_${res.status}`, `HTTP ${res.status}`) }
-  if (data.status !== '1') { amapMetric('amap_upstream_errors_total'); throw new AmapError(data.infocode ?? 'unknown', data.info ?? 'unknown') }
+  if (!res.ok) { amapMetric('amap_upstream_errors_total', `HTTP ${res.status}`); throw new AmapError(`http_${res.status}`, `HTTP ${res.status}`) }
+  if (data.status !== '1') {
+    // 上游语义错误：把 infocode+info 作原因（如 `10009: USERKEY_PLAT_NOMATCH`——key 不是「Web服务」类型，自托管头号坑）。
+    amapMetric('amap_upstream_errors_total', `${data.infocode ?? 'unknown'}: ${data.info ?? 'unknown'}`)
+    throw new AmapError(data.infocode ?? 'unknown', data.info ?? 'unknown')
+  }
 }
 
 /// 地址 → "经度,纬度"（GCJ-02）。返回 undefined 表示**地址确实无匹配**；key/配额等错误抛 AmapError。

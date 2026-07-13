@@ -225,6 +225,18 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
         generic: metrics.get('call_ice_failure_generic_total'),
         signaling: metrics.get('call_ice_failure_signaling_total'),
       },
+      // 高德导航依赖健康（导航/周边/地理编码/公交全靠它，是盲人过城的骨干）：此前面板完全不可见——高德挂/key 配错时
+      // 运维只能等用户报"导航用不了"。upstreamErrors=key平台不符/配额/上游 4xx-5xx（**配置问题**，最该修）；
+      // timeouts/netErrors=网络/慢；lastError=最后一次失败原因（如 USERKEY_PLAT_NOMATCH＝key 非 Web服务类型）。
+      amap: {
+        calls: metrics.get('amap_calls_total'),
+        upstreamErrors: metrics.get('amap_upstream_errors_total'),
+        timeouts: metrics.get('amap_timeouts_total'),
+        netErrors: metrics.get('amap_errors_total'),
+        breakerOpen: metrics.get('amap_breaker_open_total'),
+        lastError: metrics.getNote('amap_last_error')?.value ?? null,
+        lastErrorAt: metrics.getNote('amap_last_error')?.at ?? null,
+      },
       // 磁盘余量（数据卷所在文件系统）：满盘=sqlite 写失败整站瘫（自托管头号慢性死亡）。
       // low=剩余 <10% 或 <2GiB（见 monitoring/disk.ts）；statfs 失败→null（诚实缺席，面板不渲染）。
       disk: (() => {

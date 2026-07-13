@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
+import { hashPassword } from '../src/auth/passwords'
 
 // 高德是限额/计费外部依赖：调用量/超时/网络失败/上游错误(key 平台不符·配额)必须可观测。
 // 经 PUT /api/places/:label（best-effort geocode，无论成败都走 amapFetch）触发真实调用路径，
@@ -48,6 +49,29 @@ describe('高德调用可观测性指标进 /metrics', () => {
     expect((await savePlace(app, h)).statusCode).toBe(200)
     const c = await amapCounters(app)
     expect(c).toEqual({ calls: 1, timeouts: 0, errors: 0, upstream: 0 })
+    await app.close()
+  })
+
+  it('上游错误的**原因**进 admin 总览 amap.lastError（运维一眼知 key 配错须「Web服务」类型，不必翻日志）', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200,
+      json: async () => ({ status: '0', info: 'USERKEY_PLAT_NOMATCH', infocode: '10009' }) })))
+    const store = new MemoryStore()
+    store.createUser({ id: 'a1', username: 'root', passwordHash: hashPassword('rootpass1'), displayName: 'root', role: 'admin', status: 'active', createdAt: Date.now() })
+    const app = buildApp(store)
+    const adminTok = (await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'root', password: 'rootpass1' } })).json().token as string
+    const blindTok = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'blind1', password: 'secret123', role: 'blind' } })).json().token as string
+    const ah = { authorization: `Bearer ${adminTok}` }
+    // 初始：无上游错误、无原因。
+    const ov0 = (await app.inject({ method: 'GET', url: '/api/admin/overview', headers: ah })).json()
+    expect(ov0.amap.upstreamErrors).toBe(0)
+    expect(ov0.amap.lastError).toBeNull()
+    // 触发一次 best-effort geocode（撞 USERKEY_PLAT_NOMATCH）——route 吞错，但计数/便签在 assertAmapOk 内已置。
+    await app.inject({ method: 'PUT', url: '/api/places/home', headers: { authorization: `Bearer ${blindTok}` }, payload: { address: '北京市朝阳区某路' } })
+    const ov1 = (await app.inject({ method: 'GET', url: '/api/admin/overview', headers: ah })).json()
+    expect(ov1.amap.upstreamErrors).toBe(1)
+    expect(ov1.amap.lastError).toContain('USERKEY_PLAT_NOMATCH')   // 原因回带到面板
+    expect(typeof ov1.amap.lastErrorAt).toBe('number')
     await app.close()
   })
 

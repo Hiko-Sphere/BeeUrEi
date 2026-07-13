@@ -81,4 +81,17 @@ final class PhoneNumberFinderTests: XCTestCase {
         // 同号裸写与带分隔在同一段：按纯数字去重，只留先出现者（裸号在前→分组形）。
         XCTAssertEqual(PhoneNumberFinder.find(texts: ["4008208820", "400-820-8820"]), ["400 820 8820"])
     }
+
+    func testDoubleZeroInternationalPrefix() {
+        // "00" 国际冠码（ITU 标准，等价于 +）：此前非 + 的国际号被整段漏。中国座机绝不以 00 开头，故安全。
+        // "0086" + 11 位手机 → 归一成 "+86 3-4-4"（同 +86 分支逐组念清）。
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["0086 138 1234 5678"]), ["+86 138 1234 5678"])
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["联系 008613812345678"]), ["+86 138 1234 5678"]) // 无分隔喷码
+        // 其余国际号（英国 0044…）原样读出，不强套 3-4-4。
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["Tel 0044 20 7946 0958"]), ["0044 20 7946 0958"])
+        // 中国座机 010 前缀（单 0）不受影响，仍按座机原样（"01" 非 "00"）。
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["座机 010-87654321"]), ["010-87654321"])
+        // 太短的 00 串（< 10 位）不误当国际号。
+        XCTAssertEqual(PhoneNumberFinder.find(texts: ["00123"]), [])
+    }
 }

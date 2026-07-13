@@ -65,6 +65,19 @@ public enum PhoneNumberFinder {
             }
         }
         let trimmed = span.trimmingCharacters(in: .whitespaces)
+        // 国际号写成 "00" 国际冠码（ITU 标准，等价于 +）：名片/材料上 "0086 138…"/"0044 20…" 等常见形态，
+        // 此前因非 + 被整段漏识。**须在座机分支之前**：中国座机区号恒 "0+非零"（010/021/0755），绝不以 "00" 开头，
+        // 故 "00" 前缀不与座机冲突、可安全归国际。00 + 8-15 位（总 10-17）。
+        if digits.hasPrefix("00"), d.count >= 10, d.count <= 17 {
+            // "0086" + 11 位手机 → 归一成 "+86 3-4-4"（逐组念清，同 +86 分支）；其余国际号原样读出。
+            if digits.hasPrefix("0086"), d.count == 15 {
+                let rest = String(digits.dropFirst(4)), r = Array(rest)
+                if r[0] == "1", let sec = r[1].wholeNumberValue, (3...9).contains(sec) {
+                    return "+86 \(groupedMobile(rest))"
+                }
+            }
+            return trimmed
+        }
         // 座机（区号 0 开头，10-12 位；欧洲点分写法照收）：保留印刷分隔，原样返回。
         if d.count >= 10, d.count <= 12, digits.hasPrefix("0") { return trimmed }
         // 服务号 400/800：真号恒为 **10 位**（400/800 + 7 位），且不写成 IP/坐标式的 **4+ 组点分**——

@@ -670,9 +670,16 @@ final class FramingAssistViewModel {
                     // 低置信整页朗读带"（识别可能不准确）"（药品说明书/合同尤须诚实）；ocrSpokenText 统一措辞/语言（已测）。
                     let spokenBody = FramingAssistViewModel.ocrSpokenText(lines.joined(separator: FramingStrings.docJoinSeparator(self.lang)),
                                                                           lineConfidences: confs)
-                    self.speak(FramingStrings.docPageDonePrefix(self.docPages.count, self.lang)
-                               + spokenBody
-                               + FramingStrings.docNextPageHint(self.lang))
+                    // 多嗓音分段：前后缀 App 嗓音、正文按其语言选嗓音（中文界面读英文文件不再全程乱码）；
+                    // 正文与 App 同语言时合并单段=旧行为（docPageSpeechSegments 已测）。
+                    let segments = FramingAssistViewModel.docPageSpeechSegments(
+                        prefix: FramingStrings.docPageDonePrefix(self.docPages.count, self.lang),
+                        body: spokenBody,
+                        hint: FramingStrings.docNextPageHint(self.lang),
+                        appLang: self.lang)
+                    if !self.paused {
+                        SpeechHub.shared.speakSegments(segments.map { (text: $0.text, voice: Optional($0.voice)) }, channel: .query)
+                    }
                 }
             }
         }
@@ -730,6 +737,21 @@ final class FramingAssistViewModel {
     static func spokenDates(texts: [String], lineConfidences: [Float], language: Language) -> (pure: String, spoken: String)? {
         guard let out = LabelDateReader.find(texts: texts, language: language) else { return nil }
         return (pure: out, spoken: ocrSpokenText(out, lineConfidences: lineConfidences))
+    }
+
+    /// 读整页的**多嗓音**播报分段（纯静态，可测）：App 语言的前后缀（"第 N 页读完"/"翻页提示"）用 App 嗓音，
+    /// 文档正文用**正文语言**嗓音——此前整句用 App 嗓音，中文界面读英文文件＝中文嗓念英文全程乱码（正文才是主体）。
+    /// 正文语言与 App 相同时合并为**一段**（与旧行为逐字一致，一次 utterance 无停顿）；不同才拆三段。
+    /// 空段丢弃。对标 Seeing AI 按文本语言选嗓音（readText 的 speakInTextLanguage 已同理，此处补齐带框架文案的混合播报）。
+    static func docPageSpeechSegments(prefix: String, body: String, hint: String,
+                                      appLang: Language) -> [(text: String, voice: String)] {
+        let bodyVoice = (dominantTextIsChinese(body) ? Language.zh : Language.en).voiceCode
+        let appVoice = appLang.voiceCode
+        if bodyVoice == appVoice {
+            let joined = prefix + body + hint
+            return joined.isEmpty ? [] : [(joined, appVoice)]
+        }
+        return [(prefix, appVoice), (body, bodyVoice), (hint, appVoice)].filter { !$0.0.isEmpty }
     }
 
     /// 朗读相机里看到的文字（端侧 Vision OCR，中英文）——盲人读标牌/标签/菜单。

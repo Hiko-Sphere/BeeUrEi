@@ -74,6 +74,42 @@ final class SpeechHub: NSObject {
         }
     }
 
+    /// 多嗓音**分段**播报（读整页等混合语言场景）：一组分段作为**一个逻辑单元**过一次仲裁，随后逐段
+    /// 入合成器原生队列顺读——每段可用不同嗓音（App 语言前后缀 + 正文语言正文），中途 didFinish 因
+    /// `synthesizer.isSpeaking` 仍真而不清 current（与导航多行顺读同机制）；被打断时 stopSpeaking 清整组。
+    /// 积压/补播退化为**单嗓音**整段重播（用首段嗓音；避障打断读整页是罕见路径，宁可单嗓也不丢内容）。
+    /// VoiceOver 下仍并成一条公告（VO 自选嗓音、自带多语言处理，不需要也不该替它分段）。
+    func speakSegments(_ segments: [(text: String, voice: String?)], channel: SpeechChannel, rate: Float? = nil) {
+        let parts = segments.filter { !$0.text.isEmpty }
+        guard !parts.isEmpty else { return }
+        let joined = parts.map(\.text).joined()
+        onMain {
+            if UIAccessibility.isVoiceOverRunning {
+                let announcement = NSAttributedString(string: joined, attributes: [
+                    .accessibilitySpeechAnnouncementPriority: UIAccessibilityPriority.default,
+                ])
+                UIAccessibility.post(notification: .announcement, argument: announcement)
+                return
+            }
+            let cur = self.synthesizer.isSpeaking ? self.current.map { (channel: $0.channel, droppable: $0.droppable) } : nil
+            switch SpeechGate.action(newChannel: channel, newDroppable: false, current: cur, safetyHold: self.safetyHold) {
+            case .drop:
+                return
+            case .stash:
+                self.stash[channel] = (joined, rate, parts[0].voice) // 补播退化单嗓音（内容不丢优先）
+            case .speakInterrupt:
+                self.transitioning = true
+                if self.synthesizer.isSpeaking { self.synthesizer.stopSpeaking(at: .immediate) }
+                self.current = (channel, false, joined, rate, parts[0].voice)
+                for p in parts { self.synthesizer.speak(Self.makeUtterance(p.text, rate: rate, voice: p.voice, channel: channel)) }
+                self.transitioning = false
+            case .speakEnqueue:
+                self.current = (channel, false, joined, rate, parts[0].voice)
+                for p in parts { self.synthesizer.speak(Self.makeUtterance(p.text, rate: rate, voice: p.voice, channel: channel)) }
+            }
+        }
+    }
+
     /// 停掉某通道（导航停止时清导航语音）：不波及其他通道正在播的内容。
     func stopChannel(_ channel: SpeechChannel) {
         onMain {

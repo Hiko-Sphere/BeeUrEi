@@ -55,4 +55,42 @@ final class OCRSpokenTextTests: XCTestCase {
         // 无日期标签/样式的行 → nil（不猜），调用方走"没找到日期"。
         XCTAssertNil(FramingAssistViewModel.spokenDates(texts: ["随便一行普通字"], lineConfidences: [0.2], language: .zh))
     }
+
+    // MARK: 读整页多嗓音分段（中文界面读英文文件不再全程被中文嗓念成乱码）
+
+    func testDocSegmentsMixedLanguageSplitsThreeWays() {
+        // 中文界面 + 英文正文 → 三段：zh 前缀 / en 正文 / zh 后缀，各配对应嗓音。
+        let segs = FramingAssistViewModel.docPageSpeechSegments(
+            prefix: "第 1 页读完：", body: "This agreement is made between the parties hereto.", hint: "翻到下一页后再次拍摄。",
+            appLang: .zh)
+        guard segs.count == 3 else { return XCTFail("应拆三段，实际 \(segs.count) 段") } // guard 防回归时下标越界崩掉整个测试进程
+        XCTAssertEqual(segs[0].text, "第 1 页读完：")
+        XCTAssertEqual(segs[0].voice, Language.zh.voiceCode)
+        XCTAssertEqual(segs[1].voice, Language.en.voiceCode)  // 正文用英文嗓音（核心诉求）
+        XCTAssertEqual(segs[2].voice, Language.zh.voiceCode)
+    }
+
+    func testDocSegmentsSameLanguageMergesToOne() {
+        // 正文与界面同语言 → 合并单段（与旧行为一致：一次 utterance，无段间停顿）。
+        let segs = FramingAssistViewModel.docPageSpeechSegments(
+            prefix: "第 2 页读完：", body: "本协议由双方共同签署，自签署之日起生效。", hint: "翻到下一页后再次拍摄。",
+            appLang: .zh)
+        XCTAssertEqual(segs.count, 1)
+        XCTAssertEqual(segs[0].text, "第 2 页读完：本协议由双方共同签署，自签署之日起生效。翻到下一页后再次拍摄。")
+        XCTAssertEqual(segs[0].voice, Language.zh.voiceCode)
+        // 英文界面 + 英文正文同理合并。
+        let en = FramingAssistViewModel.docPageSpeechSegments(
+            prefix: "Page 1 done: ", body: "This is an English document.", hint: " Turn the page.", appLang: .en)
+        XCTAssertEqual(en.count, 1)
+        XCTAssertEqual(en[0].voice, Language.en.voiceCode)
+    }
+
+    func testDocSegmentsDropsEmptyParts() {
+        // 空前缀/后缀不产生空段（空 utterance 会让合成器空转）。
+        let segs = FramingAssistViewModel.docPageSpeechSegments(
+            prefix: "", body: "English body only.", hint: "", appLang: .zh)
+        XCTAssertEqual(segs.count, 1)
+        XCTAssertEqual(segs[0].text, "English body only.")
+        XCTAssertEqual(segs[0].voice, Language.en.voiceCode)
+    }
 }

@@ -444,6 +444,19 @@ enum FramingStrings {
     static func contactSpeak(_ l: Language) -> String {
         l == .zh ? "是一张电子名片，内容已可复制" : "It's a contact card; you can copy it"
     }
+    /// 日程码（iCalendar）：报"日程事件"+标题+开始时刻（都可选；缺则省略）。**不做时区换算、不判过没过**——只如实读印着的，交用户核对。
+    static func calendarEventResult(title: String?, start: String?, _ l: Language) -> String {
+        let t = title.flatMap { $0.isEmpty ? nil : $0 }
+        let s = start.flatMap { $0.isEmpty ? nil : $0 }
+        if l == .zh { return "日程事件" + (t.map { "：\($0)" } ?? "") + (s.map { "，\($0)" } ?? "") }
+        return "Calendar event" + (t.map { ": \($0)" } ?? "") + (s.map { ", \($0)" } ?? "")
+    }
+    static func calendarEventSpeak(title: String?, start: String?, _ l: Language) -> String {
+        let t = title.flatMap { $0.isEmpty ? nil : $0 }
+        let s = start.flatMap { $0.isEmpty ? nil : $0 }
+        if l == .zh { return "是一个日程事件" + (t.map { "：\($0)" } ?? "") + (s.map { "，\($0)" } ?? "") + "，请核对" }
+        return "It's a calendar event" + (t.map { ": \($0)" } ?? "") + (s.map { ", starts \($0)" } ?? "") + ". Please verify."
+    }
     /// 已解析的名片：读出姓名/单位/电话/邮箱（核心 VCardParser）。
     static func contactDetail(name: String?, org: String?, phones: [String], emails: [String], _ l: Language) -> String {
         let sep = l == .zh ? "，" : ", "

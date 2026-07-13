@@ -138,4 +138,26 @@ final class BarcodePayloadTests: XCTestCase {
         XCTAssertEqual(BarcodePayload.classify("geo:100,200"), .text)   // 纬>90 经>180
         XCTAssertEqual(BarcodePayload.classify("geo:"), .text)          // 空
     }
+
+    func testCalendarEvent() {
+        // 标准 VCALENDAR 包 VEVENT：解出标题 + 开始时刻（DTSTART 带 Z 取到分钟）。
+        let ical = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nSUMMARY:产品发布会\r\nDTSTART:20260720T140000Z\r\nEND:VEVENT\r\nEND:VCALENDAR"
+        XCTAssertEqual(BarcodePayload.classify(ical), .calendarEvent(title: "产品发布会", start: "2026-07-20 14:00"))
+        // 裸 VEVENT + 纯日期 DTSTART（无时间）。
+        XCTAssertEqual(BarcodePayload.classify("BEGIN:VEVENT\nSUMMARY:Meeting\nDTSTART:20260720\nEND:VEVENT"),
+                       .calendarEvent(title: "Meeting", start: "2026-07-20"))
+        // DTSTART 带 TZID 参数：值在**首个冒号后**（参数不干扰）。
+        XCTAssertEqual(BarcodePayload.classify("BEGIN:VEVENT\nDTSTART;TZID=America/New_York:20260720T090000\nSUMMARY:Call\nEND:VEVENT"),
+                       .calendarEvent(title: "Call", start: "2026-07-20 09:00"))
+        // SUMMARY 转义 \, → , 。
+        XCTAssertEqual(BarcodePayload.classify("BEGIN:VEVENT\nSUMMARY:Product\\, Launch\nEND:VEVENT"),
+                       .calendarEvent(title: "Product, Launch", start: nil))
+        // 缺 SUMMARY/DTSTART 仍分类为日程（title/start=nil）——上层报"这是日程事件"，不落回天书原文。
+        XCTAssertEqual(BarcodePayload.classify("BEGIN:VEVENT\nUID:123\nEND:VEVENT"), .calendarEvent(title: nil, start: nil))
+        // vCard 不被误当日程（vCard 检查在前）；非 iCal 文本不误配。
+        XCTAssertEqual(BarcodePayload.classify("BEGIN:VCARD\nFN:张三\nEND:VCARD"), .contact)
+        XCTAssertEqual(BarcodePayload.classify("just some text"), .text)
+        // 无法解析的 DTSTART 原样返回（不臆造日期）。
+        XCTAssertEqual(BarcodePayload.classify("BEGIN:VEVENT\nDTSTART:TBD\nEND:VEVENT"), .calendarEvent(title: nil, start: "TBD"))
+    }
 }

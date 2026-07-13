@@ -10,6 +10,7 @@ public enum BarcodePayloadKind: Equatable, Sendable {
     case sms(number: String?, body: String?) // SMSTO:/sms: 发短信（number=收件号码，body=预填正文）
     case contact                        // vCard / MECARD 名片
     case geo(latitude: Double, longitude: Double, label: String?) // geo: 地理坐标（RFC 5870/地图分享）——可导航前往
+    case calendarEvent(title: String?, start: String?) // iCalendar 日程（BEGIN:VEVENT/VCALENDAR，活动海报/票据/会议牌常见）——盲人扫码该听到"这是日程：标题+时间"，而非一堆 iCal 原文
     case text                           // 其余普通文本
 }
 
@@ -57,6 +58,12 @@ public enum BarcodePayload {
             return .sms(number: num.isEmpty ? nil : num, body: body)
         }
         if upper.hasPrefix("BEGIN:VCARD") || upper.hasPrefix("MECARD:") { return .contact }
+        // iCalendar 日程（标准 BEGIN:VCALENDAR 包 VEVENT，或极简的裸 BEGIN:VEVENT）：活动海报/门票/会议牌常见的"加入日历"码。
+        // 盲人扫到该听"这是日程：标题+时间"，而非一整段 iCal 原文（此前落 .text=念天书）。解出 SUMMARY/DTSTART 供播报核对。
+        if upper.hasPrefix("BEGIN:VCALENDAR") || upper.hasPrefix("BEGIN:VEVENT") {
+            let e = parseCalendarEvent(trimmed)
+            return .calendarEvent(title: e.title, start: e.start)
+        }
         // 地理位置码（RFC 5870 `geo:lat,lng`，及地图分享变体 `geo:0,0?q=lat,lng(名)`/`geo:lat,lng?q=地名`）：
         // 盲人看不到地图，扫到"位置码"该能听到这是位置/地名并**一键导航过去**（本 App 有全程导航）。解析失败/占位坐标
         // 回落 .text（不谎报一个没法导航的"位置"）。
@@ -132,6 +139,54 @@ public enum BarcodePayload {
         guard let (lat, lng) = coord else { return nil }
         if lat == 0, lng == 0 { return nil } // Null Island 占位，非真实目的地（与服务端 nav 拒 0,0 同口径）
         return (lat, lng, label)
+    }
+
+    /// iCalendar 事件解析：取 SUMMARY(标题) 与 DTSTART(开始时刻)。iCal 每行 `KEY[;参数]:VALUE`；
+    /// DTSTART 可带参数（`DTSTART;TZID=...:20260720T140000`），值在**首个冒号之后**。日期轻格式化成可听的
+    /// "YYYY-MM-DD[ HH:MM]"（无法解析则原样）。两者都缺 → (nil,nil)（上层仍报"这是日程事件"）。绝不做时区换算/判断过没过。
+    public static func parseCalendarEvent(_ payload: String) -> (title: String?, start: String?) {
+        var title: String?, start: String?
+        // 注意：Swift 里 "\r\n"(CRLF) 是**单个**字素簇 Character——须显式作分隔符，否则 iCal 标准的 CRLF 换行不被切开，整段成一行。
+        for rawLine in payload.split(whereSeparator: { $0 == "\n" || $0 == "\r" || $0 == "\r\n" }) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard let colon = line.firstIndex(of: ":") else { continue }
+            // key = 冒号前、到首个 ; (参数分隔) 为止，大写归一
+            let key = String(line[line.startIndex..<colon].prefix { $0 != ";" }).uppercased()
+            let value = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+            guard !value.isEmpty else { continue }
+            if key == "SUMMARY", title == nil { title = unescapeICal(value) }
+            else if key == "DTSTART", start == nil { start = formatICalDate(value) }
+        }
+        return (title, start)
+    }
+
+    /// iCal 文本值转义展开（`\,`→`,` `\;`→`;` `\\`→`\` `\n`/`\N`→空格便于朗读）。未知转义原样保留其后字符。
+    private static func unescapeICal(_ s: String) -> String {
+        var out = "", escaped = false
+        for ch in s {
+            if escaped {
+                if ch == "n" || ch == "N" { out.append(" ") } else { out.append(ch) }
+                escaped = false
+            } else if ch == "\\" { escaped = true }
+            else { out.append(ch) }
+        }
+        if escaped { out.append("\\") }
+        return out
+    }
+
+    /// iCal DTSTART 值 → 可听日期。识别 `YYYYMMDD` 与 `YYYYMMDDTHHMMSS[Z]`（取到分钟）；其余原样返回（不臆造）。
+    private static func formatICalDate(_ v: String) -> String {
+        let digits = v.prefix { $0.isNumber }      // 前导数字（遇 T 停）
+        guard digits.count >= 8 else { return v }   // 非 YYYYMMDD 形态 → 原样
+        let y = digits.prefix(4), mo = digits.dropFirst(4).prefix(2), d = digits.dropFirst(6).prefix(2)
+        var out = "\(y)-\(mo)-\(d)"
+        if let tIdx = v.firstIndex(where: { $0 == "T" || $0 == "t" }) {
+            let time = v[v.index(after: tIdx)...].prefix { $0.isNumber }
+            if time.count >= 4 {
+                out += " \(time.prefix(2)):\(time.dropFirst(2).prefix(2))"
+            }
+        }
+        return out
     }
 
     /// "lat,lng[,alt][;params]" → (lat,lng)，校验有限且经纬度在界内；否则 nil。

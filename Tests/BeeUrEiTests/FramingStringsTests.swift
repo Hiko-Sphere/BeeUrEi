@@ -237,4 +237,19 @@ final class FramingStringsTests: XCTestCase {
         let joined = FramingStrings.foundCategorySpeak("椅子", "3 点钟方向", FramingStrings.approx(1.5, .zh), .zh) + FramingStrings.seatMaybeOccupied(.zh)
         XCTAssertEqual(joined, "椅子，在3 点钟方向，大约1.5 米，可能有人")
     }
+
+    func testCalendarEventStrings() {
+        // 标题+时间都有：读"日程事件：标题，时间"，播报附"请核对"。
+        XCTAssertEqual(FramingStrings.calendarEventResult(title: "产品发布会", start: "2026-07-20 14:00", .zh),
+                       "日程事件：产品发布会，2026-07-20 14:00")
+        XCTAssertTrue(FramingStrings.calendarEventSpeak(title: "产品发布会", start: "2026-07-20 14:00", .zh).contains("请核对"))
+        XCTAssertEqual(FramingStrings.calendarEventResult(title: "Launch", start: "2026-07-20", .en),
+                       "Calendar event: Launch, 2026-07-20")
+        // 缺标题/时间：省略对应片段（不留悬空标点）。
+        XCTAssertEqual(FramingStrings.calendarEventResult(title: nil, start: nil, .zh), "日程事件")
+        XCTAssertEqual(FramingStrings.calendarEventResult(title: "会议", start: nil, .zh), "日程事件：会议")
+        // 英文不混中文。
+        XCTAssertFalse(FramingStrings.calendarEventSpeak(title: "Launch", start: "2026-07-20", .en)
+            .contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
 }

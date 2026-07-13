@@ -1031,6 +1031,12 @@ final class FramingAssistViewModel {
                     if let url = URL(string: FramingStrings.geoNavigationURL(lat, lng)) {
                         self.resultAction = FramingAction(label: FramingStrings.uiNavigate(self.lang), url: url)
                     }
+                case .calendarEvent(let title, let start):
+                    // 日程码（iCalendar，核心 BarcodePayload 已解出标题/开始时刻）：报"这是日程事件：标题+时间"，
+                    // 而非把一整段 iCal 原文念成天书。不做时区换算/不判过没过——如实读、附"请核对"。文本可复制。
+                    self.resultText = FramingStrings.calendarEventResult(title: title, start: start, self.lang)
+                    self.copyableResult = self.resultText
+                    self.speak(FramingStrings.calendarEventSpeak(title: title, start: start, self.lang))
                 case .text:
                     self.resultText = FramingStrings.codeContent(first, self.lang)
                     self.speak(FramingStrings.recognizedResult(first, self.lang))

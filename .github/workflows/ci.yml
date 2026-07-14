@@ -17,7 +17,7 @@ jobs:
     name: 核心逻辑单测 (Swift)
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: swift test (BeeUrEiCore)
         run: swift test --package-path Packages/BeeUrEiCore
 
@@ -28,7 +28,7 @@ jobs:
       run:
         working-directory: server
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -53,7 +53,7 @@ jobs:
       run:
         working-directory: site/app-src
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -75,7 +75,7 @@ jobs:
     name: 官网静态质量门禁
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -93,7 +93,7 @@ jobs:
     # 用最新镜像并显式选镜像内最新 Xcode。core 的 swift test 在 macos-14 一直绿，不动。
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Select newest Xcode on runner
         run: |
           sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"

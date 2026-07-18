@@ -8,6 +8,7 @@ import { headingPhrase } from '../lib/heading'
 import { roleLabel } from './Layout'
 import { IconPhone, IconChat, IconPin, IconZoom } from './icons'
 import { appleMapsDirectionsUrl, validLatLng } from '../lib/location'
+import { composeContactAddress } from '../lib/contactAddress'
 
 /// 「正在共享位置的联系人」行（Locations 页用；独立文件不碰 Leaflet，可 jsdom 单测）。
 /// 除"在地图上定位"外，补**呼叫 / 发消息**直达——低电量告警把家人引到位置页说"趁没关机联系他"，此前这里
@@ -41,20 +42,8 @@ export function SharingContactRow({ c, lang, t, live, callDisabled, onLocate, on
     setAddrState('loading')
     try {
       const r = await api.contactAddress(c.userId)
-      const line = (r.address || r.township || '').trim()
-      const area = r.aoi?.name?.trim()
-      // 地址 + 所在区域（"在XX一带"）——区域是比街道更强的大方位锚点，家人一听即知在哪片。二者皆空→按无地址处理。
-      let text = area && !line.includes(area) ? `${line}（${t('在', 'near ')}${area}${t('一带', '')}）`.trim() : line
-      // 最近路口（两条**不同**相交路名）：转告出租/路人的强定位锚点，与盲人端「我在哪」同款。同名两路不成交叉口→跳过。
-      const f = r.intersection?.firstRoad?.trim(); const sec = r.intersection?.secondRoad?.trim()
-      if (text && f && sec && f !== sec) {
-        text += t(`，附近路口${f}与${sec}交叉口`, `, nearby intersection ${f} and ${sec}`)
-      }
-      // 最近地标（如"国贸大厦"）：中式定位常靠地标（"到X大厦"），同为强转告锚点。地标名已现于前文（与 AOI/门牌重名）→ 跳过防赘述。
-      const lm = r.landmark?.name?.trim()
-      if (text && lm && !text.includes(lm)) {
-        text += t(`，最近地标${lm}`, `, nearest landmark ${lm}`)
-      }
+      // 组合（AOI ≤300m 距离门 + 路口/地标）走纯函数 composeContactAddress（与 iOS/盲人端「我在哪」同口径、可单测）。
+      const text = composeContactAddress(r, t)
       if (!text) { setAddrState('error'); return }
       setAddr({ text, at: c.updatedAt }); setAddrState('idle') // 绑定当前 updatedAt：对方移动后此地址即被 freshAddr 判过时
     } catch { setAddrState('error') } // 404(境外/无数据/未共享)/网络/服务端错误一律显式提示，绝不留空

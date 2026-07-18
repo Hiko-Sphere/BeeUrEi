@@ -195,4 +195,22 @@ final class AssistStringsTests: XCTestCase {
         XCTAssertTrue(SafetyStrings.explain(.zh).contains("紧急联系人"))
         XCTAssertTrue(SafetyStrings.explain(.en).lowercased().contains("emergency contact"))
     }
+
+    /// 开始报到播报：无任何联系人时**防假安心**——明确"无人会被通知"，别让盲人 arming 一个静默失效的 dead-man's switch。
+    func testCheckinStartedNoticeWarnsWhenNoContact() {
+        func hasCJK(_ s: String) -> Bool { s.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }
+        // 有联系人 → 与普通"已开始"确认一致，绝不含"无人"。
+        XCTAssertEqual(SafetyStrings.startedNotice(hasAnyContact: true, .zh), SafetyStrings.started(.zh))
+        XCTAssertFalse(SafetyStrings.startedNotice(hasAnyContact: true, .zh).contains("无人"))
+        // 无任何 accepted 联系人 → 防假安心警告：明确"无人会被通知"+可行动"添加联系人"，且不同于普通确认。
+        let warn = SafetyStrings.startedNotice(hasAnyContact: false, .zh)
+        XCTAssertTrue(warn.contains("无人会被通知"))
+        XCTAssertTrue(warn.contains("添加联系人"))
+        XCTAssertNotEqual(warn, SafetyStrings.started(.zh))
+        // 英文不串中文，含 "no one" + "contact"。
+        let en = SafetyStrings.startedNotice(hasAnyContact: false, .en)
+        XCTAssertFalse(hasCJK(en))
+        XCTAssertTrue(en.lowercased().contains("no one"))
+        XCTAssertTrue(en.lowercased().contains("contact"))
+    }
 }

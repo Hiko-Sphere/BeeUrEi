@@ -277,6 +277,16 @@ struct SafetyTimer: Codable, Sendable {
     var isActive: Bool { status == "active" }
 }
 
+/// 安全报到状态 + 联系人可达性（服务端 /api/safety/checkin[/start] 恒返 hasAnyContact/hasEmergencyContact）。
+/// **报到到期告警扇给全体 accepted 联系人**（fireExpiredSafetyTimers），故"到点没报平安会不会有人被通知"
+/// 须以 hasAnyContact 为准——一个 accepted 联系人都没有才是真"无人会被通知"（此前 iOS 丢弃这两个字段、
+/// 报到页毫无提示，盲人可能armed一个静默失效的 dead-man's switch=最危险的假安心；web 早据 hasAnyContact 修）。
+struct SafetyCheckinStatus: Sendable {
+    let timer: SafetyTimer?
+    let hasAnyContact: Bool       // 有任何 accepted 联系人（到期告警的实际扇出面）
+    let hasEmergencyContact: Bool // 有 accepted∧紧急 联系人（额外授医疗信息可见）
+}
+
 /// 每日报到日程（User.dailyCheckin）：每天 startMinute 自动开始一次 durationMinutes 的报到。
 /// pausedUntil：暂停至该时刻(ms)自动恢复（住院/出行临时停用，比整体关闭安全——不必记得重开）；过去/缺省=未暂停。
 struct DailyCheckinSchedule: Codable, Sendable {
@@ -1273,19 +1283,23 @@ struct APIClient {
     }
 
     // MARK: 安全报到（dead-man's switch）——与服务端 /api/safety/checkin 契约一致。
-    /// 当前进行中的报到（无则 nil）。
-    func safetyCheckin(token: String) async throws -> SafetyTimer? {
+    /// 当前进行中的报到 + 联系人可达性（无进行中报到则 timer=nil）。hasAnyContact 缺省乐观 true（避免加载中/
+    /// 旧服务端闪现假"无联系人"警告）。
+    func safetyCheckin(token: String) async throws -> SafetyCheckinStatus {
         let data = try await authedGet("/api/safety/checkin", token: token)
-        struct R: Codable { let timer: SafetyTimer? }
-        return try JSONDecoder().decode(R.self, from: data).timer
+        struct R: Codable { let timer: SafetyTimer?; let hasAnyContact: Bool?; let hasEmergencyContact: Bool? }
+        let r = try JSONDecoder().decode(R.self, from: data)
+        return SafetyCheckinStatus(timer: r.timer, hasAnyContact: r.hasAnyContact ?? true, hasEmergencyContact: r.hasEmergencyContact ?? true)
     }
-    /// 开始报到：durationMinutes(5–1440) + 可选备注（到期告警正文念给亲友）。
-    func startSafetyCheckin(token: String, durationMinutes: Int, note: String?) async throws -> SafetyTimer {
+    /// 开始报到：durationMinutes(5–1440) + 可选备注（到期告警正文念给亲友）。返回状态含 hasAnyContact——
+    /// 无任何联系人时 arming 的是一个静默失效的 dead-man's switch，调用方须据此告警本人（防假安心）。
+    func startSafetyCheckin(token: String, durationMinutes: Int, note: String?) async throws -> SafetyCheckinStatus {
         var body: [String: Any] = ["durationMinutes": durationMinutes]
         if let note, !note.isEmpty { body["note"] = note }
         let data = try await authedSend("POST", "/api/safety/checkin/start", token: token, body: body)
-        struct R: Codable { let timer: SafetyTimer }
-        return try JSONDecoder().decode(R.self, from: data).timer
+        struct R: Codable { let timer: SafetyTimer; let hasAnyContact: Bool?; let hasEmergencyContact: Bool? }
+        let r = try JSONDecoder().decode(R.self, from: data)
+        return SafetyCheckinStatus(timer: r.timer, hasAnyContact: r.hasAnyContact ?? true, hasEmergencyContact: r.hasEmergencyContact ?? true)
     }
     /// 报平安（我平安到了）：结束进行中的报到；若已到期告警则等价 all-clear（服务端解除+广播）。
     /// 返回服务端 completed——false=当前没有进行中的报到（幂等 no-op），语音路径据此如实告知而非假装已报。

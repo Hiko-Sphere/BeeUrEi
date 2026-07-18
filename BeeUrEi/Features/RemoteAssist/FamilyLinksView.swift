@@ -325,6 +325,13 @@ enum SafetyStrings {
     static func notePlaceholder(_ l: Language) -> String { l == .zh ? "例：我去菜市场，2 小时没回就是出事了" : "e.g. Going to the market; if not back in 2h, something's wrong" }
     static func start(_ l: Language) -> String { l == .zh ? "开始报到" : "Start check-in" }
     static func started(_ l: Language) -> String { l == .zh ? "安全报到已开始，到点前记得报平安。" : "Safety check-in started — remember to mark yourself safe." }
+    /// 开始报到后的播报：有联系人→正常确认；**无任何 accepted 联系人→防假安心警告**（到期告警扇给全体 accepted，
+    /// 一个都没有＝这道 dead-man's switch 到点也无人被通知）。纯逻辑·可单测·与网页端 Family 起始文案同口径。
+    static func startedNotice(hasAnyContact: Bool, _ l: Language) -> String {
+        if hasAnyContact { return started(l) }
+        return l == .zh ? "已开始，但你还没有任何联系人——到点没报平安也无人会被通知。请先在下方添加联系人。"
+                        : "Started, but you have no contacts yet — no one will be alerted if you miss it. Add a contact below first."
+    }
     static func active(_ l: Language) -> String { l == .zh ? "报到进行中" : "Check-in active" }
     static func imSafe(_ l: Language) -> String { l == .zh ? "我平安了（结束报到）" : "I'm safe (end check-in)" }
     static func safeConfirm(_ l: Language) -> String { l == .zh ? "已报平安，报到结束。" : "You're marked safe — check-in ended." }
@@ -413,7 +420,7 @@ struct SafetyCheckInView: View {
             DailyCheckinSection(token: token, announce: announce)
         }
         .navigationTitle(SafetyStrings.navTitle(lang))
-        .task { timer = try? await api.safetyCheckin(token: token) }
+        .task { timer = (try? await api.safetyCheckin(token: token))?.timer }
     }
 
     /// 双路播报（安全攸关，未开 VoiceOver 的盲人也须听到确认）。
@@ -423,7 +430,12 @@ struct SafetyCheckInView: View {
     }
     private func start() async {
         busy = true; defer { busy = false }
-        do { timer = try await api.startSafetyCheckin(token: token, durationMinutes: duration, note: note.trimmingCharacters(in: .whitespacesAndNewlines)); announce(SafetyStrings.started(lang)) }
+        do {
+            let status = try await api.startSafetyCheckin(token: token, durationMinutes: duration, note: note.trimmingCharacters(in: .whitespacesAndNewlines))
+            timer = status.timer
+            // 防假安心：无任何 accepted 联系人时，明确告知这道 dead-man's switch 到点也无人被通知（盲人听得到）。
+            announce(SafetyStrings.startedNotice(hasAnyContact: status.hasAnyContact, lang))
+        }
         catch { announce(SafetyStrings.failed(lang)) }
     }
     private func complete() async {

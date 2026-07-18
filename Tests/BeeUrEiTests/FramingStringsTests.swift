@@ -287,6 +287,20 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertEqual(joined, "椅子，在3 点钟方向，大约1.5 米，可能有人")
     }
 
+    func testForgetTaughtItemStrings() {
+        // 「忘记已教物品」菜单 + 删除后语音确认（补 deleteTaughtItem 死功能 + 静默无反馈的缺口）。
+        XCTAssertTrue(FramingStrings.uiForgetMenu(.zh).contains("忘记"))
+        XCTAssertEqual(FramingStrings.uiForgetItem("旧钥匙", .zh), "忘记：旧钥匙") // 物名插值
+        XCTAssertEqual(FramingStrings.uiForgetItem("old keys", .en), "Forget: old keys")
+        // 删除后确认须点名该物 + 说明"不再帮你找"（盲人靠这句确认命令生效）。
+        let speak = FramingStrings.forgotSpeak("旧钥匙", .zh)
+        XCTAssertTrue(speak.contains("旧钥匙") && speak.contains("不再"))
+        // 英文分支不串中文。
+        for s in [FramingStrings.uiForgetMenu(.en), FramingStrings.uiForgetMenuTitle(.en), FramingStrings.forgotSpeak("keys", .en)] {
+            XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(s)")
+        }
+    }
+
     func testCalendarEventStrings() {
         // 标题+时间都有：读"日程事件：标题，时间"，播报附"请核对"。
         XCTAssertEqual(FramingStrings.calendarEventResult(title: "产品发布会", start: "2026-07-20 14:00", .zh),

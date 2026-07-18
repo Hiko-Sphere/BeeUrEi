@@ -365,6 +365,9 @@ final class FramingAssistViewModel {
     func deleteTaughtItem(_ name: String) {
         itemsStore.delete(name: name)
         refreshTaughtItems()
+        // 语音确认（盲人看不到菜单收起/列表更新，须听到"已忘记X"才确认命令生效）——此前静默无反馈。
+        guidanceText = FramingStrings.forgotSpeak(name, lang)
+        speak(FramingStrings.forgotSpeak(name, lang))
     }
 
     /// 开始寻找某个已学物品。
@@ -1599,6 +1602,7 @@ final class FramingAssistViewModel {
 struct FramingAssistView: View {
     @State private var model = FramingAssistViewModel()
     @State private var showFindMenu = false
+    @State private var showForgetMenu = false  // 二级"忘记已教物品"菜单（清理教过的东西，此前无入口=死功能）
     @State private var teachName = ""
     @State private var productName = ""
     @State private var showHistory = false
@@ -1778,9 +1782,21 @@ struct FramingAssistView: View {
                 }
             }
             Button(FramingStrings.uiTeachNew(model.lang)) { model.startTeaching() }
+            // 「忘记已教物品」：仅在教过东西时显示（否则无从忘起）。清理不再拥有的旧物品，让找东西菜单不越堆越长。
+            if !model.taughtItems.isEmpty {
+                Button(FramingStrings.uiForgetMenu(model.lang)) { showForgetMenu = true }
+            }
             Button(FramingStrings.uiCancel(model.lang), role: .cancel) {}
         } message: {
             Text(FramingStrings.uiFindMenuMessage(model.lang))
+        }
+        // 二级：选哪个已教物品忘记（destructive 删除；删后 model.deleteTaughtItem 语音确认"已忘记X"）。
+        .confirmationDialog(FramingStrings.uiForgetMenuTitle(model.lang),
+                            isPresented: $showForgetMenu, titleVisibility: .visible) {
+            ForEach(model.taughtItems, id: \.self) { item in
+                Button(FramingStrings.uiForgetItem(item, model.lang), role: .destructive) { model.deleteTaughtItem(item) }
+            }
+            Button(FramingStrings.uiCancel(model.lang), role: .cancel) {}
         }
         // 扫到陌生商品条码：起名字存本地商品库（键盘话筒可语音输入）。
         .alert(FramingStrings.uiProductNameTitle(model.lang),

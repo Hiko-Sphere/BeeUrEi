@@ -745,6 +745,14 @@ enum FramingStrings {
         l == .zh ? "找周围的\(name)" : "Find nearby \(name)"
     }
     static func uiTeachNew(_ l: Language) -> String { l == .zh ? "教我认一个新东西" : "Teach me a new item" }
+    /// 「忘记已教物品」入口 + 二级删除菜单（此前 deleteTaughtItem 无 UI 可达=死功能，教过的东西只增不减、找东西菜单越堆越长）。
+    static func uiForgetMenu(_ l: Language) -> String { l == .zh ? "忘记一个已教的东西…" : "Forget an item I taught…" }
+    static func uiForgetMenuTitle(_ l: Language) -> String { l == .zh ? "忘记哪个？" : "Forget which one?" }
+    static func uiForgetItem(_ name: String, _ l: Language) -> String { l == .zh ? "忘记：\(name)" : "Forget: \(name)" }
+    /// 删除后的**语音确认**（盲人看不到菜单收起，须听到"已忘记X"才知生效）——deleteTaughtItem 此前静默、无反馈。
+    static func forgotSpeak(_ name: String, _ l: Language) -> String {
+        l == .zh ? "已忘记\(name)，以后不再帮你找它。" : "Forgotten \(name) — I won't look for it anymore."
+    }
     static func uiFindMenuMessage(_ l: Language) -> String {
         l == .zh ? "个人物品先「教我认一个新东西」拍三张；椅子、瓶子这类通用物品不用教，直接找。"
                  : "For your own items, use \"Teach me a new item\" first; common items like chairs and bottles need no teaching."

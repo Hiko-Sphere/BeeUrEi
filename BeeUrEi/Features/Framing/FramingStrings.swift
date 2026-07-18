@@ -140,6 +140,13 @@ enum FramingStrings {
     static func docReading(_ l: Language) -> String { l == .zh ? "正在识别整页…" : "Reading the page…" }
     static func captureFailed(_ l: Language) -> String { l == .zh ? "拍摄失败，请重试" : "Capture failed, please try again" }
     static func noTextFound(_ l: Language) -> String { l == .zh ? "没有识别到文字" : "No text found" }
+    /// 「读文字」没识别到文字时引导改用「描述场景」（云端 AI）：屏幕数字（7 段液晶 OCR 常读不出）、手写、或想知道
+    /// 画面里有什么——这些本地 OCR 读不出、AI 描述能读/能看。盲人不知道有这条后路时会以为"这东西没法读"而卡住，
+    /// 故在"没找到文字"时主动指路（对标 Seeing AI 短文本读不到时的场景描述兜底）。
+    static func noTextFoundTryAI(_ l: Language) -> String {
+        l == .zh ? "没有识别到文字。如果是屏幕上的数字、手写、或想知道画面里有什么，可以试试「描述场景」。"
+                 : "No text found. For a screen's digits, handwriting, or what's in view, try “Describe scene”."
+    }
     static func docRetryGuide(_ l: Language) -> String {
         l == .zh ? "没有识别到文字，请再试一次" : "No text found, please try again"
     }

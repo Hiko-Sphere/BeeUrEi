@@ -88,6 +88,18 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertEqual(FramingStrings.thisIs("蒙牛纯牛奶", .zh) + (FramingStrings.productQuantitySpeak("500 ml", .zh) ?? ""), "这是蒙牛纯牛奶，500 ml")
     }
 
+    func testNoTextFoundSuggestsSceneDescribe() {
+        // 「读文字」没读到时须指路「描述场景」（AI 能读屏幕数字/手写、能看画面）——否则盲人以为读不了就卡住。
+        let zh = FramingStrings.noTextFoundTryAI(.zh)
+        XCTAssertTrue(zh.contains("没有识别到文字"), zh)      // 仍先如实说没读到
+        XCTAssertTrue(zh.contains("描述场景"), zh)            // 指向 AI 描述这条后路
+        XCTAssertTrue(zh.contains("屏幕") || zh.contains("手写"), zh) // 点明适用场景（屏幕数字/手写）
+        let en = FramingStrings.noTextFoundTryAI(.en)
+        XCTAssertTrue(en.contains("No text found"), en)
+        XCTAssertTrue(en.contains("Describe scene"), en)
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), en) // 英文不串中文
+    }
+
     func testProductEnergySpeakKcalPer100g() {
         // 热量后缀（"每100克约X千卡"）：盲人读不到卡路里、数卡/控糖控重需要；真 0（水/无糖饮料）照常报；nil/负→nil。
         XCTAssertEqual(FramingStrings.productEnergySpeak(54, .zh), "。每100克约54千卡")

@@ -775,9 +775,10 @@ final class FramingAssistViewModel {
             DispatchQueue.main.async {
                 guard let self else { return }
                 if joined.isEmpty {
-                    self.resultText = FramingStrings.noTextFound(self.lang)
+                    // 没识别到文字：主动指路「描述场景」（AI 能读屏幕数字/手写、能看画面）——否则盲人以为读不了就卡住。
+                    self.resultText = FramingStrings.noTextFoundTryAI(self.lang)
                     self.copyableResult = nil
-                    self.speak(FramingStrings.noTextFound(self.lang)) // "没有识别到文字"：App 语言提示
+                    self.speak(FramingStrings.noTextFoundTryAI(self.lang))
                 } else {
                     // 复制留存的是**纯识别文本**（不含提醒，避免把"（可能不准确）"粘进备忘录）；朗读/显示带提醒（ocrSpokenText 已测）。
                     let annotated = FramingAssistViewModel.ocrSpokenText(joined, lineConfidences: confs)

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { composeProductName, extractAllergens, extractDietaryLabels, extractNutrientLevels, lookupProduct, parseNutriScore, parseNovaGroup, parseQuantity, parseIngredients } from '../src/product/openFoodFacts'
+import { composeProductName, extractAllergens, extractDietaryLabels, extractNutrientLevels, lookupProduct, parseNutriScore, parseNovaGroup, parseQuantity, parseIngredients, parseEnergyKcal } from '../src/product/openFoodFacts'
 import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
 
@@ -57,11 +57,11 @@ describe('Open Food Facts 商品查询', () => {
   it('lookup 三态：found（含过敏原+微量标注）/notFound（未收录·无名）/failed（非200·异常）——区分瞬时故障与真未收录', async () => {
     const respond = (body: unknown) => async () => ({ ok: true, json: async () => body })
     // 声明含牛奶、可能含微量花生：allergens 与 traces **分开**提取，语义不同（确定含 vs 可能微量含）。
-    expect(await lookupProduct('6901234567890', respond({ status: 1, product: { brands: '蒙牛', product_name: '纯牛奶', allergens_tags: ['en:milk'], traces_tags: ['en:peanuts', 'en:nuts'], nutriscore_grade: 'c', nova_group: 4, labels_tags: ['en:organic', 'en:halal'], quantity: '  500 ml ', nutrient_levels: { sugars: 'high', salt: 'moderate', fat: 'low', energy: 'high' }, ingredients_text: '  生牛乳、白砂糖、\n食品添加剂（柠檬酸）  ' } })))
-      .toEqual({ kind: 'found', info: { name: '蒙牛 纯牛奶', allergens: ['milk'], traces: ['peanuts', 'nuts'], nutriScore: 'c', novaGroup: 4, dietaryLabels: ['organic', 'halal'], quantity: '500 ml', nutrientLevels: { sugars: 'high', salt: 'moderate', fat: 'low' }, ingredients: '生牛乳、白砂糖、 食品添加剂（柠檬酸）' } }) // energy 非白名单 4 素 → 丢弃；配料表去首尾空白 + 折叠内部换行/多空白为单空格
-    // 无 allergens_tags/traces_tags/labels_tags/quantity/nutrient_levels/ingredients_text → 各空（缺数据≠不含；客户端只在非空时播"标注含有/可能含微量/标注/净含量/偏高/配料"）；无营养分级 → null（不猜）。
+    expect(await lookupProduct('6901234567890', respond({ status: 1, product: { brands: '蒙牛', product_name: '纯牛奶', allergens_tags: ['en:milk'], traces_tags: ['en:peanuts', 'en:nuts'], nutriscore_grade: 'c', nova_group: 4, labels_tags: ['en:organic', 'en:halal'], quantity: '  500 ml ', nutrient_levels: { sugars: 'high', salt: 'moderate', fat: 'low', energy: 'high' }, ingredients_text: '  生牛乳、白砂糖、\n食品添加剂（柠檬酸）  ', nutriments: { 'energy-kcal_100g': 54.4, 'energy-kj_100g': 228 } } })))
+      .toEqual({ kind: 'found', info: { name: '蒙牛 纯牛奶', allergens: ['milk'], traces: ['peanuts', 'nuts'], nutriScore: 'c', novaGroup: 4, dietaryLabels: ['organic', 'halal'], quantity: '500 ml', nutrientLevels: { sugars: 'high', salt: 'moderate', fat: 'low' }, ingredients: '生牛乳、白砂糖、 食品添加剂（柠檬酸）', energyKcal100g: 54 } }) // energy 非白名单 4 素 → 丢弃；配料表去空白折叠；热量取 kcal/100 四舍五入(54.4→54，kJ 忽略)
+    // 无 allergens_tags/traces_tags/labels_tags/quantity/nutrient_levels/ingredients_text/nutriments → 各空（缺数据≠不含；客户端只在非空时播）；无营养分级/热量 → null（不猜）。
     expect(await lookupProduct('6901234567890', respond({ status: 1, product: { brands: '蒙牛', product_name: '纯牛奶' } })))
-      .toEqual({ kind: 'found', info: { name: '蒙牛 纯牛奶', allergens: [], traces: [], nutriScore: null, novaGroup: null, dietaryLabels: [], quantity: '', nutrientLevels: {}, ingredients: '' } })
+      .toEqual({ kind: 'found', info: { name: '蒙牛 纯牛奶', allergens: [], traces: [], nutriScore: null, novaGroup: null, dietaryLabels: [], quantity: '', nutrientLevels: {}, ingredients: '', energyKcal100g: null } })
     // status 0（明确未收录）与"有记录但无名"→ notFound（路由可长缓存）。
     expect(await lookupProduct('0000000000000', respond({ status: 0 }))).toEqual({ kind: 'notFound' })
     expect(await lookupProduct('6901234567890', respond({ status: 1, product: {} }))).toEqual({ kind: 'notFound' })
@@ -100,6 +100,19 @@ describe('Open Food Facts 商品查询', () => {
     expect(long.length).toBe(201); expect(long.endsWith('…')).toBe(true)     // 截到 200 字 + 省略号
     expect(parseIngredients(['water'])).toBe('')                             // 非字符串→空
     expect(parseIngredients(undefined)).toBe('')
+  })
+
+  it('parseEnergyKcal：数字/数字串取整；非有限/负/缺→null；夹上限', () => {
+    expect(parseEnergyKcal(54.4)).toBe(54)          // 四舍五入
+    expect(parseEnergyKcal(54.6)).toBe(55)
+    expect(parseEnergyKcal('250')).toBe(250)        // 数字字符串
+    expect(parseEnergyKcal(' 89.5 ')).toBe(90)      // 带空白的数字串
+    expect(parseEnergyKcal(0)).toBe(0)              // 真 0 千卡（如水）照常保留
+    expect(parseEnergyKcal(-5)).toBeNull()          // 负值（异常）→ null
+    expect(parseEnergyKcal(NaN)).toBeNull()
+    expect(parseEnergyKcal('abc')).toBeNull()       // 非数字串→null
+    expect(parseEnergyKcal(undefined)).toBeNull()   // 缺→null
+    expect(parseEnergyKcal(1e9)).toBe(100_000)      // 异常巨值夹到上限
   })
 
   it('parseNutriScore：只接受 a..e（大小写/空白归一）；unknown/not-applicable/其它→null（不猜）', () => {

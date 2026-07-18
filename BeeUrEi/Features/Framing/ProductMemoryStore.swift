@@ -13,6 +13,7 @@ final class ProductMemoryStore {
     private var quantityItems: [String: String] = [:]  // 条码 → 净含量/规格文本（"500 ml"/"200 g"）
     private var nutrientLevelItems: [String: [String: String]] = [:] // 条码 → 逐营养素含量档（fat/saturated-fat/sugars/salt→low|moderate|high）
     private var ingredientItems: [String: String] = [:] // 条码 → 配料表原文（"生牛乳、白砂糖…"，在线查到时随名字存，离线复扫也能报）
+    private var energyItems: [String: Int] = [:] // 条码 → 热量千卡/100（在线查到时随名字存，离线复扫也能报卡路里）
     private let fileURL: URL
     private let allergensURL: URL // 独立旁路文件：老版本的名字 plist 原样不动（零迁移风险），缺文件=全空
     private let tracesURL: URL    // 同款独立旁路文件（缺文件=全空，零迁移风险）
@@ -22,6 +23,7 @@ final class ProductMemoryStore {
     private let quantityURL: URL  // 同款独立旁路文件（缺文件=全空，零迁移风险）
     private let nutrientLevelsURL: URL // 同款独立旁路文件（缺文件=全空，零迁移风险）
     private let ingredientsURL: URL // 同款独立旁路文件（缺文件=全空，零迁移风险）
+    private let energyURL: URL     // 同款独立旁路文件（缺文件=全空，零迁移风险）
 
     /// fileURL 可注入（单测用临时目录）；默认存 Application Support。
     init(fileURL: URL? = nil) {
@@ -41,6 +43,7 @@ final class ProductMemoryStore {
         self.quantityURL = self.fileURL.deletingPathExtension().appendingPathExtension("quantity.plist")
         self.nutrientLevelsURL = self.fileURL.deletingPathExtension().appendingPathExtension("nutrientlevels.plist")
         self.ingredientsURL = self.fileURL.deletingPathExtension().appendingPathExtension("ingredients.plist")
+        self.energyURL = self.fileURL.deletingPathExtension().appendingPathExtension("energy.plist")
         load()
     }
 
@@ -71,10 +74,13 @@ final class ProductMemoryStore {
     /// 配料表原文（在线查到时存下的）。nil=无数据（不猜、不硬凑）。
     func ingredients(for barcode: String) -> String? { ingredientItems[barcode] }
 
-    /// allergens/traces/营养/膳食标注/净含量/配料 只在**有数据**时覆盖——用户手动改名（save(barcode:name:) 默认空）不得抹掉已存的标注。
+    /// 热量千卡/100（在线查到时存下的）。nil=无数据（不猜、不硬凑）。
+    func energyKcal(for barcode: String) -> Int? { energyItems[barcode] }
+
+    /// allergens/traces/营养/膳食标注/净含量/配料/热量 只在**有数据**时覆盖——用户手动改名（save(barcode:name:) 默认空）不得抹掉已存的标注。
     func save(barcode: String, name: String, allergens: [String] = [], traces: [String] = [],
               nutriScore: String? = nil, novaGroup: Int? = nil, dietaryLabels: [String] = [], quantity: String? = nil,
-              nutrientLevels: [String: String] = [:], ingredients: String? = nil) {
+              nutrientLevels: [String: String] = [:], ingredients: String? = nil, energyKcal: Int? = nil) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !barcode.isEmpty else { return }
         items[barcode] = trimmed
@@ -86,6 +92,7 @@ final class ProductMemoryStore {
         if let quantity, !quantity.isEmpty { quantityItems[barcode] = quantity }
         if !nutrientLevels.isEmpty { nutrientLevelItems[barcode] = nutrientLevels }
         if let ingredients, !ingredients.isEmpty { ingredientItems[barcode] = ingredients }
+        if let energyKcal { energyItems[barcode] = energyKcal }
         persist()
     }
 
@@ -99,6 +106,7 @@ final class ProductMemoryStore {
         quantityItems.removeValue(forKey: barcode)
         nutrientLevelItems.removeValue(forKey: barcode)
         ingredientItems.removeValue(forKey: barcode)
+        energyItems.removeValue(forKey: barcode)
         persist()
     }
 
@@ -130,6 +138,9 @@ final class ProductMemoryStore {
         }
         if let data = try? PropertyListEncoder().encode(ingredientItems) {
             try? data.write(to: ingredientsURL, options: [.atomic, .completeFileProtection])
+        }
+        if let data = try? PropertyListEncoder().encode(energyItems) {
+            try? data.write(to: energyURL, options: [.atomic, .completeFileProtection])
         }
     }
 
@@ -169,6 +180,10 @@ final class ProductMemoryStore {
         if let data = try? Data(contentsOf: ingredientsURL),
            let decoded = try? PropertyListDecoder().decode([String: String].self, from: data) {
             ingredientItems = decoded
+        }
+        if let data = try? Data(contentsOf: energyURL),
+           let decoded = try? PropertyListDecoder().decode([String: Int].self, from: data) {
+            energyItems = decoded
         }
     }
 }

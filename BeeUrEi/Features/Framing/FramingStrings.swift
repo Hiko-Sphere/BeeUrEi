@@ -390,6 +390,14 @@ enum FramingStrings {
         guard let s = ingredients?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
         return l == .zh ? "。配料：\(s)" : ". Ingredients: \(s)"
     }
+
+    /// 热量播报（"每100克约54千卡"）——盲人读不到营养表上的卡路里，而数卡/控糖控重（减肥、糖尿病碳水计量）正需这个
+    /// 绝对值，nutriScore/含量档都给不了。"每100克"是营养标签标准参照（OFF energy-kcal_100g）；真 0 千卡（如水/无糖饮料）
+    /// 照常报（确认零卡也是有用信息）。nil/负（无数据/异常）→ nil（不猜、不硬凑）。
+    static func productEnergySpeak(_ kcal: Int?, _ l: Language) -> String? {
+        guard let k = kcal, k >= 0 else { return nil }
+        return l == .zh ? "。每100克约\(k)千卡" : ". About \(k) kcal per 100g"
+    }
     /// Wi-Fi 配置码：显示网络名 + **密码**——盲人看不到贴纸上的密码，密码正是扫这张码的目的（此前只报网络名，
     /// 拿不到密码根本连不上网）。开放网络明确标注无密码。cred 为 nil（畸形 WIFI: 码）退化为通用词。
     static func wifiResult(_ cred: WifiCredential?, _ l: Language) -> String {

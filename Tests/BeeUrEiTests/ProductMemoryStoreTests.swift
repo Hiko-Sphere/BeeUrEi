@@ -13,7 +13,7 @@ final class ProductMemoryStoreTests: XCTestCase {
 
     override func tearDown() {
         try? FileManager.default.removeItem(at: fileURL)
-        for ext in ["allergens.plist", "traces.plist", "nutri.plist", "nova.plist", "dietary.plist", "quantity.plist", "nutrientlevels.plist", "ingredients.plist"] {
+        for ext in ["allergens.plist", "traces.plist", "nutri.plist", "nova.plist", "dietary.plist", "quantity.plist", "nutrientlevels.plist", "ingredients.plist", "energy.plist"] {
             try? FileManager.default.removeItem(at: fileURL.deletingPathExtension().appendingPathExtension(ext))
         }
         super.tearDown()
@@ -140,6 +140,22 @@ final class ProductMemoryStoreTests: XCTestCase {
         XCTAssertNil(store.ingredients(for: "unknown")) // 无数据=nil（不猜）
     }
 
+    func testEnergyRoundTripAndRenamePreserves() {
+        let store = ProductMemoryStore(fileURL: fileURL)
+        // 热量随名字存（供离线复扫也能报卡路里——盲人读不到营养表，数卡/控糖控重需要）。
+        store.save(barcode: "690", name: "汽水", energyKcal: 42)
+        XCTAssertEqual(store.energyKcal(for: "690"), 42)
+        // 用户手动改名（默认 nil 热量）不得抹掉已存的热量。
+        store.save(barcode: "690", name: "我的汽水")
+        XCTAssertEqual(store.energyKcal(for: "690"), 42)
+        // 落盘重载后仍在（独立旁路 plist）；删除连带清。
+        let reloaded = ProductMemoryStore(fileURL: fileURL)
+        XCTAssertEqual(reloaded.energyKcal(for: "690"), 42)
+        reloaded.delete(barcode: "690")
+        XCTAssertNil(reloaded.energyKcal(for: "690"))
+        XCTAssertNil(store.energyKcal(for: "unknown")) // 无数据=nil（不猜）
+    }
+
     func testLegacyNameOnlyFileStillLoads() {
         // 老版本只有名字 plist（无 allergens/traces/dietary 旁路文件）：名字照常、过敏原/微量/膳食标注为空——零迁移。
         let legacy = ["123": "酱油"]
@@ -154,20 +170,23 @@ final class ProductMemoryStoreTests: XCTestCase {
         XCTAssertNil(store.quantity(for: "123"))
         XCTAssertEqual(store.nutrientLevels(for: "123"), [:])
         XCTAssertNil(store.ingredients(for: "123"))
+        XCTAssertNil(store.energyKcal(for: "123"))
     }
 
     func testProductLookupInfoDecodesNutrientLevels() throws {
         // 服务端 /api/product 下发 nutrientLevels（逐素含量档）；iOS 须解码——此前缺此字段，糖尿病/高血压盲人扫码听不到"糖/盐偏高"。
-        let json = #"{"name":"汽水","allergens":[],"traces":[],"nutriScore":"e","novaGroup":4,"dietaryLabels":[],"quantity":"330 ml","nutrientLevels":{"sugars":"high","salt":"low"},"ingredients":"水、白砂糖、二氧化碳"}"#
+        let json = #"{"name":"汽水","allergens":[],"traces":[],"nutriScore":"e","novaGroup":4,"dietaryLabels":[],"quantity":"330 ml","nutrientLevels":{"sugars":"high","salt":"low"},"ingredients":"水、白砂糖、二氧化碳","energyKcal100g":42}"#
         let info = try JSONDecoder().decode(APIClient.ProductLookupInfo.self, from: Data(json.utf8))
         XCTAssertEqual(info.nutrientLevels?["sugars"], "high")
         XCTAssertEqual(info.nutrientLevels?["salt"], "low")
         XCTAssertEqual(info.ingredients, "水、白砂糖、二氧化碳") // 配料表下发须解码——盲人读不到配料表
+        XCTAssertEqual(info.energyKcal100g, 42)                // 热量下发须解码——盲人数卡/控糖控重需要
         // 旧/缺字段负载 → nil（向后兼容，不崩）。
         let legacy = #"{"name":"牛奶"}"#
         let legacyInfo = try JSONDecoder().decode(APIClient.ProductLookupInfo.self, from: Data(legacy.utf8))
         XCTAssertNil(legacyInfo.nutrientLevels)
         XCTAssertNil(legacyInfo.ingredients)
+        XCTAssertNil(legacyInfo.energyKcal100g)
     }
 
     func testSaveAndLookup() {

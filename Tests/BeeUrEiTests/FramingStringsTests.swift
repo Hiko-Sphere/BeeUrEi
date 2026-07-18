@@ -88,6 +88,15 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertEqual(FramingStrings.thisIs("蒙牛纯牛奶", .zh) + (FramingStrings.productQuantitySpeak("500 ml", .zh) ?? ""), "这是蒙牛纯牛奶，500 ml")
     }
 
+    func testProductEnergySpeakKcalPer100g() {
+        // 热量后缀（"每100克约X千卡"）：盲人读不到卡路里、数卡/控糖控重需要；真 0（水/无糖饮料）照常报；nil/负→nil。
+        XCTAssertEqual(FramingStrings.productEnergySpeak(54, .zh), "。每100克约54千卡")
+        XCTAssertEqual(FramingStrings.productEnergySpeak(250, .en), ". About 250 kcal per 100g")
+        XCTAssertEqual(FramingStrings.productEnergySpeak(0, .zh), "。每100克约0千卡") // 真零卡也报（确认零卡有用）
+        XCTAssertNil(FramingStrings.productEnergySpeak(nil, .zh))                    // 无数据→nil（不猜）
+        XCTAssertNil(FramingStrings.productEnergySpeak(-5, .zh))                     // 负（异常）→nil
+    }
+
     func testTorchAutoOnTellsUserItWasSolved() {
         // 太暗自动点灯的播报：须点明已打开手电筒 + 提示重试（而非只说"太暗"卡住）。
         let zh = FramingStrings.torchAutoOn(.zh)

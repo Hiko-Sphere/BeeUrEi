@@ -33,6 +33,10 @@ export interface ProductInfo {
   /// (有无明胶)、忌口(某成分)、"这到底是什么做的"的核心刚需，过敏原/膳食标注覆盖不了的具体成分靠它。去空白、
   /// 截断防超长朗读（按 OFF 递减含量序，前段即主料）；空串=无数据。
   ingredients: string
+  /// 热量（OFF nutriments["energy-kcal_100g"]，每 100 克/毫升的千卡）。盲人读不到营养表上的卡路里，而**数卡路里/
+  /// 控糖控重**（减肥、糖尿病碳水计量）正是很多人扫食品要的那个数——nutriScore(a..e)/NOVA/含量档(高糖高盐)都给不了
+  /// 这个绝对值。取整（语音听感）；非有限/负/缺 → null（不猜、不硬凑，同营养分级口径）。
+  energyKcal100g?: number | null
 }
 
 type FetchLike = (url: string, init?: unknown) => Promise<{ ok: boolean; json: () => Promise<unknown> }>
@@ -126,6 +130,14 @@ export function parseIngredients(v: unknown): string {
   return t.length > 200 ? t.slice(0, 200).trimEnd() + '…' : t
 }
 
+/// 热量千卡/100（OFF nutriments["energy-kcal_100g"]，可能是数字或数字字符串）：转有限非负数并取整（语音听感）。
+/// 非有限/负/缺/非数 → null（不猜、不硬凑，同营养分级口径）。上限夹到 100000 防异常巨值（食品能量密度物理上远低于此）。
+export function parseEnergyKcal(v: unknown): number | null {
+  const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v.trim()) : NaN
+  if (!Number.isFinite(n) || n < 0) return null
+  return Math.round(Math.min(n, 100_000))
+}
+
 /// Nutri-Score 分级：只接受可信的 a..e（OFF 用小写；'unknown'/'not-applicable'/空/其它 → null，绝不猜）。
 export function parseNutriScore(grade: unknown): string | null {
   if (typeof grade !== 'string') return null
@@ -166,7 +178,7 @@ export type LookupOutcome =
 
 /// 查一个条码，区分"真未收录(notFound)"与"瞬时故障(failed)"（用于差异化缓存；两者对客户端都表现为拿不到名字）。
 export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeoutMs = 5000): Promise<LookupOutcome> {
-  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,allergens_tags,traces_tags,nutriscore_grade,nova_group,labels_tags,quantity,nutrient_levels,ingredients_text`
+  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,allergens_tags,traces_tags,nutriscore_grade,nova_group,labels_tags,quantity,nutrient_levels,ingredients_text,nutriments`
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
@@ -190,6 +202,7 @@ export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeo
       quantity: parseQuantity(p?.quantity),
       nutrientLevels: extractNutrientLevels(p?.nutrient_levels),
       ingredients: parseIngredients(p?.ingredients_text),
+      energyKcal100g: parseEnergyKcal((p?.nutriments as Record<string, unknown> | undefined)?.['energy-kcal_100g']),
     } }
   } catch {
     return { kind: 'failed' } // 超时/网络/解析异常：瞬时故障，不长缓存，绝不编造商品名

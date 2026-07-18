@@ -41,3 +41,20 @@ export function shareAccuracyNote(
   const text = coarse ? t(`${label}·较粗略，联系人只看到大致区域`, `${label} · coarse — contacts see only an approximate area`) : label
   return { text, coarse }
 }
+
+/// 位置**接收方（查看正在共享位置的对方）**的精度提示（纯逻辑，可单测）：粗定位须**显式**告知"大致位置、可能偏差较大"，
+/// 而非只给个米数——读屏/低视力家人（SharingContactRow 注明"本身可能也有障碍"）看不到地图精度圈，若只听到"精确到约 600 米"
+/// 易误当街道级、照 pin 去找却扑空（对方实际可能在数百米外）。与 shareAccuracyNote 对称：那条提醒**分享方**"联系人只看到
+/// 大致区域"，这条提醒**接收方**"这个位置是大致的"。coarse 供 UI 标红/加⚠️。无有效精度返回 null（不显示、不报假数字）。
+export function viewAccuracyNote(
+  accuracy: number | null | undefined,
+  t: (zh: string, en: string) => string,
+  unit: DistanceUnit = 'metric',
+): { text: string; coarse: boolean } | null {
+  const a = validAccuracyMeters(accuracy)
+  if (a == null) return null
+  const label = accuracyText(accuracy, t, unit)! // a 有效 → 必非 null
+  const coarse = a >= COARSE_ACCURACY_M
+  const text = coarse ? t(`${label}·大致位置，可能偏差较大`, `${label} · approximate — may be well off`) : label
+  return { text, coarse }
+}

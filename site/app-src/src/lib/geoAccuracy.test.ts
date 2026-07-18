@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validAccuracyMeters, accuracyText, shareAccuracyNote, COARSE_ACCURACY_M } from './geoAccuracy'
+import { validAccuracyMeters, accuracyText, shareAccuracyNote, viewAccuracyNote, COARSE_ACCURACY_M } from './geoAccuracy'
 
 const pick = (lang: 'zh' | 'en') => (zh: string, en: string) => (lang === 'zh' ? zh : en)
 const t = pick('zh')
@@ -69,6 +69,24 @@ describe('geoAccuracy', () => {
     expect(shareAccuracyNote(undefined, t)).toBeNull()
     expect(shareAccuracyNote(0, t)).toBeNull()
     expect(shareAccuracyNote(NaN, t)).toBeNull()
+  })
+
+  it('viewAccuracyNote（查看方看对方）：街道级只报精度；粗定位显式加"大致位置、可能偏差较大"（读屏家人不误信街道级）', () => {
+    // 街道级（< 500m）：coarse=false，文字即精度本身（与 shareAccuracyNote 街道级同）。
+    expect(viewAccuracyNote(30, t)).toEqual({ text: '精确到约 30 米', coarse: false })
+    // 边界：499 街道级、500 起粗定位。
+    expect(viewAccuracyNote(COARSE_ACCURACY_M - 1, t)?.coarse).toBe(false)
+    const coarse = viewAccuracyNote(COARSE_ACCURACY_M, t)
+    expect(coarse?.coarse).toBe(true)
+    expect(coarse?.text).toContain('大致位置，可能偏差较大') // 接收方措辞（区别于分享方"联系人只看到大致区域"）
+    expect(coarse?.text).toContain('精确到约 500 米')         // 精度文字嵌在提示里
+    // 随单位：英制。
+    expect(viewAccuracyNote(30, pick('en'), 'imperial')?.text).toBe('~98 ft accuracy')
+    expect(viewAccuracyNote(2000, pick('en'), 'imperial')?.text).toMatch(/approximate — may be well off/)
+    // 无有效精度 → null。
+    expect(viewAccuracyNote(null, t)).toBeNull()
+    expect(viewAccuracyNote(0, t)).toBeNull()
+    expect(viewAccuracyNote(NaN, t)).toBeNull()
   })
 
   it('shareAccuracyNote 双语（粗定位英文文案）', () => {

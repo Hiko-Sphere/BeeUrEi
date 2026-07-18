@@ -1,7 +1,7 @@
 import type { ContactLocation } from '../lib/api'
 import { Avatar, RelativeTime } from './ui'
 import { batteryBadge } from '../lib/battery'
-import { accuracyText } from '../lib/geoAccuracy'
+import { viewAccuracyNote } from '../lib/geoAccuracy'
 import { getUnit } from '../lib/distanceUnit'
 import { headingPhrase } from '../lib/heading'
 import { roleLabel } from './Layout'
@@ -26,7 +26,7 @@ export function SharingContactRow({ c, lang, t, live, callDisabled, onLocate, on
   onMessage: () => void
 }) {
   const b = batteryBadge(c.battery, lang)
-  const acc = accuracyText(c.accuracy, t, getUnit()) // "精确到约 20 米"/"~66 ft accuracy"；无效精度→null 省略
+  const acc = viewAccuracyNote(c.accuracy, t, getUnit()) // {text,coarse}｜null：粗定位(≥500m)显式标"大致位置"，读屏家人不误信街道级
   const head = headingPhrase(c.heading, lang)  // "正朝东北方向移动"；静止/不可用→null 省略
   return (
     <li className="flex items-center gap-2 px-4 py-3 hover:surface-2">
@@ -39,7 +39,7 @@ export function SharingContactRow({ c, lang, t, live, callDisabled, onLocate, on
           <div className="text-xs text-faint">
             {roleLabel(c.role, t)} · {t('更新于', 'updated')} <RelativeTime ms={c.updatedAt} lang={lang} />
             {b ? <> · <span className={b.danger ? 'font-semibold text-danger' : ''}>{b.critical ? '⚠️ ' : ''}{b.text}</span></> : null}
-            {acc ? <> · {acc}</> : null}
+            {acc ? <> · <span className={acc.coarse ? 'font-semibold text-danger' : ''}>{acc.coarse ? '⚠️ ' : ''}{acc.text}</span></> : null}
             {head ? <> · {head}</> : null}
           </div>
         </div>

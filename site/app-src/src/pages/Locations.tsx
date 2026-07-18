@@ -5,7 +5,7 @@ import { api, APIError, type ContactLocation } from '../lib/api'
 import { pollWhileVisible } from '../lib/poll'
 import { batteryBadge, batteryPercent } from '../lib/battery'
 import { shareTtlSec, SHARE_DURATIONS } from '../lib/locationShare'
-import { validAccuracyMeters, accuracyText, shareAccuracyNote } from '../lib/geoAccuracy'
+import { validAccuracyMeters, viewAccuracyNote, shareAccuracyNote } from '../lib/geoAccuracy'
 import { getUnit } from '../lib/distanceUnit'
 import { headingPhrase } from '../lib/heading'
 import { appleMapsUrl } from '../lib/location'
@@ -127,9 +127,12 @@ export function LocationsPage() {
       const batt = batteryBadge(c.battery, lang)
       // critical(≤10%即将关机)加 ⚠️ 前缀，协助者盯多个联系人时一眼分清最危急的（读屏也念"警告"）。
       const battHtml = batt ? ` · <span class="${batt.danger ? 'text-danger font-semibold' : ''}">${batt.critical ? '⚠️ ' : ''}${escapeHtml(batt.text)}</span>` : ''
-      // 精度文字（协助者读屏/看不清圈时也知道有多准）："精确到约 20 米"。
-      const accLabel = accuracyText(c.accuracy, t, getUnit())
-      const accHtml = accLabel ? ` · ${escapeHtml(accLabel)}` : ''
+      // 精度文字（协助者读屏/看不清圈时也知道有多准）："精确到约 20 米"；粗定位(≥500m)显式标"大致位置、可能偏差较大"
+      // 并标红/加⚠️——读屏家人看不到精度圈，不能只给米数让其误当街道级、照 pin 扑空（与 shareAccuracyNote 对称）。
+      const accNote = viewAccuracyNote(c.accuracy, t, getUnit())
+      const accHtml = accNote
+        ? ` · <span class="${accNote.coarse ? 'text-danger font-medium' : ''}">${accNote.coarse ? '⚠️ ' : ''}${escapeHtml(accNote.text)}</span>`
+        : ''
       // 行进方向（服务端一直下发 heading、web 却从未呈现——死字段）：协助者据此判断对方是否正朝约定地点移动
       // （Find My/Google 式方向指示，用**文字**兼顾读屏与看不清地图者）。heading 仅移动时有效，静止/不可用→null 不显。
       const headPhrase = headingPhrase(c.heading, lang)

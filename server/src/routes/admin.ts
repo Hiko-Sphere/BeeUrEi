@@ -540,10 +540,17 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     const u = store.findById(id)
     if (!u) return reply.code(404).send({ error: 'not_found' })
     const now = Date.now()
-    // 绑定关系：盲人侧(owner) 与 协助侧(member) 两个方向合并，标出对方与状态。
+    // 对方能否被**即时推送触达**（有 APNs token 或已订阅 Web 推送）——诊断"SOS/告警为何无人收到"的关键：
+    // 一个盲人有紧急联系人、但那些联系人都没装 App/没开推送时，其 SOS 静默失效（overview 的 unreachable 计数
+    // 只给总量、无法定位到人）。运维据此可主动让用户"请家人装 App 开通知"。best-effort：订阅查询异常按不可达。
+    const hasPush = (uid: string): boolean => {
+      if (store.findById(uid)?.apnsToken) return true
+      try { return store.webPushSubscriptionsForUser(uid).length > 0 } catch { return false }
+    }
+    // 绑定关系：盲人侧(owner) 与 协助侧(member) 两个方向合并，标出对方与状态、及**对方可否被推送触达**。
     const links = [
-      ...store.linksByOwner(id).map((l) => ({ direction: 'owner' as const, otherId: l.memberId, otherName: nameOf(l.memberId), relation: l.relation, isEmergency: l.isEmergency, status: l.status ?? 'accepted' })),
-      ...store.linksByMember(id).map((l) => ({ direction: 'member' as const, otherId: l.ownerId, otherName: nameOf(l.ownerId), relation: l.relation, isEmergency: l.isEmergency, status: l.status ?? 'accepted' })),
+      ...store.linksByOwner(id).map((l) => ({ direction: 'owner' as const, otherId: l.memberId, otherName: nameOf(l.memberId), relation: l.relation, isEmergency: l.isEmergency, status: l.status ?? 'accepted', reachable: hasPush(l.memberId) })),
+      ...store.linksByMember(id).map((l) => ({ direction: 'member' as const, otherId: l.ownerId, otherName: nameOf(l.ownerId), relation: l.relation, isEmergency: l.isEmergency, status: l.status ?? 'accepted', reachable: hasPush(l.ownerId) })),
     ]
     const recentCalls = store.callRecordsForUser(id, 20).map((c) => ({
       callId: c.callId,

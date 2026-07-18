@@ -94,6 +94,7 @@ const I18N = {
     err_forbidden: '无权操作', err_unauthorized: '登录已过期，请重新登录', err_network: '网络错误，请重试', err_cannot_review_self: '不能审核自己的实名提交',
     sessionExpired: '登录已过期，请重新登录', loading: '加载中…',
     relationships: '关系', calls: '通话', owner: '视障用户', member: '协助者 / 亲友', relationCol: '关系',
+    unreachablePush: '推送不可达', unreachablePushHint: '此联系人无 App 推送/未开通知，SOS 与告警无法即时送达（请让其装 App、开启通知）',
     emergency: '紧急', sosCall: '紧急求助', exportCsv: '导出 CSV', noLinks: '暂无绑定关系', caller: '主叫', callee: '被叫', time: '时间', duration: '时长',
     callCount: '通话记录', searchLinks: '搜索姓名…', searchCalls: '搜索姓名…',
     linkAccepted: '已绑定', linkPending: '待确认', linkDeclined: '已拒绝',
@@ -232,6 +233,7 @@ const I18N = {
     err_forbidden: 'Forbidden', err_unauthorized: 'Session expired — sign in again', err_network: 'Network error, try again', err_cannot_review_self: 'You cannot review your own ID submission',
     sessionExpired: 'Session expired — sign in again', loading: 'Loading…',
     relationships: 'Relations', calls: 'Calls', owner: 'Blind user', member: 'Helper / family', relationCol: 'Relation',
+    unreachablePush: 'no push', unreachablePushHint: "No app push / notifications off — SOS and alerts can't reach them instantly (ask them to install the app and enable notifications)",
     emergency: 'Emergency', sosCall: 'SOS', exportCsv: 'Export CSV', noLinks: 'No relationships yet', caller: 'Caller', callee: 'Callee', time: 'Time', duration: 'Duration',
     callCount: 'Call records', searchLinks: 'Search name…', searchCalls: 'Search name…',
     linkAccepted: 'Linked', linkPending: 'Pending', linkDeclined: 'Declined',
@@ -959,7 +961,7 @@ async function openUserDrawer(uid) {
     let editing = false;
     const yn = (b) => (b ? t('yes') : t('no'));
     const emptyMini = (txt) => `<div class="mini text-faint">${esc(txt || '—')}</div>`;
-    const linksHTML = (d.links || []).map((l) => `<div class="mini"><b>${esc(l.otherName)}</b> · ${esc(l.relation || '—')} ${l.isEmergency ? '· ⚠️' : ''} <span class="pill ${l.status === 'accepted' ? 'ok' : 'off'} fr">${esc(l.status === 'accepted' ? (state.lang === 'en' ? 'linked' : '已绑定') : (state.lang === 'en' ? 'pending' : '待确认'))}</span></div>`).join('') || emptyMini();
+    const linksHTML = (d.links || []).map((l) => `<div class="mini"><b>${esc(l.otherName)}</b> · ${esc(l.relation || '—')} ${l.isEmergency ? '· ⚠️' : ''} ${l.reachable === false ? `<span class="pill ${l.isEmergency && l.status === 'accepted' ? 'danger' : 'off'}" title="${esc(t('unreachablePushHint'))}">${esc(t('unreachablePush'))}</span>` : ''} <span class="pill ${l.status === 'accepted' ? 'ok' : 'off'} fr">${esc(l.status === 'accepted' ? (state.lang === 'en' ? 'linked' : '已绑定') : (state.lang === 'en' ? 'pending' : '待确认'))}</span></div>`).join('') || emptyMini();
     const callsHTML = (d.recentCalls || []).map((c) => `<div class="mini">${esc(t('dir')[c.direction] || c.direction)} · ${esc(c.peerName)} · <span class="text-dim">${esc(t('callStatus')[c.status] || c.status)}</span><span class="when">${esc(fmtDate(c.createdAt))}</span></div>`).join('') || `<div class="empty pad"><p>${esc(t('noCalls'))}</p></div>`;
     const warnings = d.warnings || [];
     const warningsHTML = warnings.map((w) => `<div class="mini warn-mini"><span class="pill off">⚠</span> ${esc(w.reason)}<span class="when">${esc(t('warnedBy'))} ${esc(w.byAdminName)} · ${esc(fmtDate(w.at))}</span></div>`).join('') || emptyMini(t('noWarnings'));

@@ -128,6 +128,22 @@ describe('Admin v4：全字段查看 + 编辑用户', () => {
     expect(b.user.sessions).toBeGreaterThanOrEqual(1) // 注册即建会话
   })
 
+  it('用户详情：每个联系人标注**可否被推送触达**（诊断"SOS/告警为何无人收到"的根因）', async () => {
+    const { app, store } = withAdmin()
+    const aa = await adminAuth(app)
+    const blind = await makeUser(app, 'reachBlind')
+    const reach = await makeUser(app, 'reachHelper')     // 将设 apnsToken → 可达
+    const noPush = await makeUser(app, 'noPushHelper')    // 无任何推送 → 不可达
+    store.createLink({ id: 'lkR', ownerId: blind.id, memberId: reach.id, relation: '女儿', isEmergency: true, status: 'accepted', createdAt: Date.now() })
+    store.createLink({ id: 'lkU', ownerId: blind.id, memberId: noPush.id, relation: '儿子', isEmergency: true, status: 'accepted', createdAt: Date.now() })
+    store.updateUser(reach.id, { apnsToken: 'k'.repeat(64) }) // 有 APNs → 可达
+    const d = (await app.inject({ method: 'GET', url: `/api/admin/users/${blind.id}`, headers: aa })).json()
+    const byName = Object.fromEntries((d.links as { otherName: string; reachable: boolean; isEmergency: boolean }[]).map((l) => [l.otherName, l]))
+    expect(byName['reachHelper'].reachable).toBe(true)    // 有 APNs token → 可达
+    expect(byName['noPushHelper'].reachable).toBe(false)  // 无任何推送 → SOS 到不了他
+    expect(byName['noPushHelper'].isEmergency).toBe(true) // 且是紧急联系人 → 该盲人 SOS 有静默失效风险（运维据此让其家人装 App/开通知）
+  })
+
   it('PATCH 改昵称/用户名/邮箱/手机/语言；唯一性冲突 409；改邮箱重置验证态；改登录标识预警本人', async () => {
     const { app, store } = withAdmin()
     const aa = await adminAuth(app)

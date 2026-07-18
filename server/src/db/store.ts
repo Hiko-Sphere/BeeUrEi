@@ -261,6 +261,7 @@ export interface AppConfig {
   maintenance: MaintenanceMode   // 维护模式
   contentFilter: ContentFilter   // 内容违禁词过滤
   requireVerification: boolean   // 是否要求实名认证：开启后未通过 KYC 的可门控角色除"提交认证/紧急/账户基本"外一律 403（管理员可即时开关，作为安全攸关 App 的兜底开关）
+  visionDailyMax: number | null  // 每用户每日 AI 视觉调用上限（护外部付费额度）。null=跟随环境变量 VISION_DAILY_MAX/默认；管理员可即时上调/下调，无需重新部署（成本/滥用实时可控，尤其对话式追问增大用量后）
 }
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
@@ -270,6 +271,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   maintenance: { active: false, message: '' },
   contentFilter: { enabled: false, terms: [] },
   requireVerification: false, // 默认关：现网由管理员显式开启；测试默认不门控
+  visionDailyMax: null,       // 默认 null=跟随 env/默认（向后兼容现网 VISION_DAILY_MAX），管理员显式设值才覆盖
 }
 
 /// 配置补丁：嵌套对象可只带部分键（逐键合并）。
@@ -280,6 +282,7 @@ export interface AppConfigPatch {
   maintenance?: Partial<MaintenanceMode>
   contentFilter?: Partial<ContentFilter>
   requireVerification?: boolean
+  visionDailyMax?: number | null // number=设上限；null=重置为跟随 env/默认；undefined=不改
 }
 
 /// 归一化：补齐缺失键，使历史旧配置（无 features/announcement 等）平滑升级（向后兼容，无需迁移脚本）。
@@ -307,6 +310,9 @@ export function normalizeAppConfig(raw: Partial<AppConfig> | undefined | null): 
       terms: Array.isArray(cf.terms) ? cf.terms.filter((t: unknown): t is string => typeof t === 'string') : [],
     },
     requireVerification: raw?.requireVerification ?? false,
+    // 只接受正整数上限；其它（缺/0/负/非整/非数）一律归 null=跟随 env/默认（不接受无意义配额）。
+    visionDailyMax: (typeof raw?.visionDailyMax === 'number' && Number.isInteger(raw.visionDailyMax) && raw.visionDailyMax >= 1)
+      ? raw.visionDailyMax : null,
   }
 }
 
@@ -319,6 +325,8 @@ export function mergeAppConfig(base: AppConfig, patch: AppConfigPatch): AppConfi
     maintenance: { ...base.maintenance, ...(patch.maintenance ?? {}) },
     contentFilter: { ...base.contentFilter, ...(patch.contentFilter ?? {}) },
     requireVerification: patch.requireVerification ?? base.requireVerification,
+    // 显式区分"不改"(undefined)与"重置为跟随 env"(null)：不能用 ?? （null ?? base 会误回 base、无法重置）。
+    visionDailyMax: patch.visionDailyMax !== undefined ? patch.visionDailyMax : base.visionDailyMax,
   })
 }
 

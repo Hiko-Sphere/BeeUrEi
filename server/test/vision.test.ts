@@ -289,6 +289,25 @@ describe('POST /api/vision/describe（路由）', () => {
     await app.close()
   })
 
+  it('每日配额：管理员配置(visionDailyMax)覆盖 env——无需重新部署即可实时调配额；重置 null 后回落 env', async () => {
+    setConfig()
+    process.env.VISION_DAILY_MAX = '10' // env 上限 10
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) })))
+    const store = new MemoryStore()
+    store.setAppConfig({ visionDailyMax: 1 }) // 管理员实时把上限压到 1（覆盖 env 的 10）
+    const app = buildApp(store)
+    const t = await token(app)
+    const call = () => app.inject({ method: 'POST', url: '/api/vision/describe', headers: { authorization: `Bearer ${t}` },
+      payload: { image: TINY_JPEG_B64, mime: 'image/jpeg' } })
+    const r1 = await call(); expect(r1.statusCode).toBe(200); expect(r1.json()).toMatchObject({ dailyMax: 1 }) // 用配置的 1，非 env 的 10
+    expect((await call()).statusCode).toBe(429) // 第二次即超配置上限（证明配置优先）
+    // 管理员重置为 null → 回落 env 的 10（次日；此处直接验证 dailyMax 回到 10）。
+    store.setAppConfig({ visionDailyMax: null })
+    const readback = await app.inject({ method: 'GET', url: '/api/vision/quota', headers: { authorization: `Bearer ${t}` } })
+    expect(readback.json().dailyMax).toBe(10) // 跟随 env
+    await app.close()
+  })
+
   it('每日配额：失败调用不烧用户额度（只有成功才计入）', async () => {
     setConfig()
     process.env.VISION_DAILY_MAX = '1'

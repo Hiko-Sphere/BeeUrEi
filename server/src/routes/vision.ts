@@ -55,7 +55,7 @@ export function registerVisionRoutes(app: FastifyInstance, store: Store, metrics
 
     // 每日配额（护外部付费额度；见 visionDailyMax）：当日已达上限即 429，绝不再打上游。
     const day = utcDay()
-    const dailyMax = visionDailyMax()
+    const dailyMax = store.getAppConfig().visionDailyMax ?? visionDailyMax() // 配置优先(管理员实时可调)，未设则跟随 env/默认
     const sub = req.user!.sub
     // 检查 + **预留**须原子：两次同步 store 调用间无 await，故并发请求不会都在自增前通过检查（此前 record 在 await
     // **之后**才自增——边界处 N 个并发全过检查、齐打上游、齐自增，可越配额多打 ~限流并发数(10) 次付费调用，
@@ -106,7 +106,7 @@ export function registerVisionRoutes(app: FastifyInstance, store: Store, metrics
   }, async (req, reply) => {
     if (!visionConfigured()) return reply.code(503).send({ error: 'ai_not_configured' })
     const day = utcDay()
-    const dailyMax = visionDailyMax()
+    const dailyMax = store.getAppConfig().visionDailyMax ?? visionDailyMax() // 配置优先(管理员实时可调)，未设则跟随 env/默认
     const calls = store.visionCallsOnDay(req.user!.sub, day)
     // used 夹到 dailyMax：运维把配额调小后旧计数仍在，避免显示成越界的"用了 N/更小上限"（remaining 已 Math.max(0) 兜住不为负）。
     // day 一并回带：客户端可据 UTC 日算出本地"次日 0 点(UTC)重置"的确切时刻，而非笼统说"明天重置"。

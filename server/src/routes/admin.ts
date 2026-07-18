@@ -47,6 +47,8 @@ const configSchema = z.object({
   registrationEnabled: z.boolean(), features: featuresSchema,
   announcement: announcementSchema, maintenance: maintenanceSchema, contentFilter: contentFilterSchema,
   requireVerification: z.boolean(),
+  // AI 视觉每日配额：正整数上限（≤100000 防误设天量）或 null=重置为跟随 env/默认。nullable 以支持"重置"。
+  visionDailyMax: z.number().int().min(1).max(100_000).nullable(),
 }).partial()
 // 实名审核拒绝原因（timeout/revoked 为系统/撤销专用，不在管理员可选项内）。
 const kycRejectSchema = z.object({
@@ -214,7 +216,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       // AI 视觉描述用量（今日 UTC）：每次成功=一次外部付费调用，运维据此监控成本/滥用（无专门 metrics 面板亦可见）。
       // today=全体当日成功调用数；dailyMaxPerUser=单用户每日上限（VISION_DAILY_MAX，默认 200）。
       vision: {
-        today: store.totalVisionCallsOnDay(dayKey(now)), dailyMaxPerUser: visionDailyMax(),
+        today: store.totalVisionCallsOnDay(dayKey(now)), dailyMaxPerUser: store.getAppConfig().visionDailyMax ?? visionDailyMax(),
         // AI 视觉「描述场景/Be My AI」健康：errors=上游失败累计（provider 故障/配额/VISION_* 配错）；lastError=最后原因
         //（如 `401: invalid api key`）。盲人识别骨干功能挂了运维一眼可见，不必等用户报"描述用不了"。
         errors: metrics.get('vision_errors_total'),
@@ -571,7 +573,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       recordings,
       passkeys,
       // 该用户今日 AI 视觉调用量 + 单用户每日上限（付费用量归因，异常烧配额定位）。
-      vision: { today: visionToday, dailyMax: visionDailyMax() },
+      vision: { today: visionToday, dailyMax: store.getAppConfig().visionDailyMax ?? visionDailyMax() },
       // 审核记录：该用户收到的警告（轻处置）历史，供审核员判断是否升级处置。
       warnings: store.warningsForUser(id).map((w) => ({
         id: w.id,
@@ -988,7 +990,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     // requireVerification 也必须计入——否则单独 {requireVerification} 补丁（独立开关 KYC 门禁、不改其它配置）
     // 会被误判为空补丁而 400，管理员无法单独切换实名门禁。
     const nonEmpty = (o?: object) => o && Object.keys(o).length > 0
-    if (data.registrationEnabled === undefined && data.requireVerification === undefined && !nonEmpty(data.features) &&
+    if (data.registrationEnabled === undefined && data.requireVerification === undefined && data.visionDailyMax === undefined && !nonEmpty(data.features) &&
         !nonEmpty(data.announcement) && !nonEmpty(data.maintenance) && !nonEmpty(data.contentFilter)) {
       return reply.code(400).send({ error: 'invalid_input' })
     }

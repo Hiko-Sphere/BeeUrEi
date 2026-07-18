@@ -90,6 +90,14 @@ describe('mergeAppConfig 逐键合并（PATCH 语义，不整体替换）', () =
     expect(merged.features.calls).toBe(true)
     expect(merged.features.groups).toBe(true)
   })
+  it('visionDailyMax：设值/重置(null)/不改(undefined) 三态区分（?? 会误把 null 当不改，故用显式 undefined 判定）', () => {
+    const set = mergeAppConfig(base, { visionDailyMax: 500 })
+    expect(set.visionDailyMax).toBe(500)              // 管理员设上限
+    const reset = mergeAppConfig(set, { visionDailyMax: null })
+    expect(reset.visionDailyMax).toBeNull()           // 重置为跟随 env/默认
+    const untouched = mergeAppConfig(set, { registrationEnabled: false })
+    expect(untouched.visionDailyMax).toBe(500)        // 别的补丁不改动配额
+  })
 })
 
 describe('normalizeAppConfig 配置消毒（默认值 + 类型强制，防坏配置击穿）', () => {
@@ -101,7 +109,15 @@ describe('normalizeAppConfig 配置消毒（默认值 + 类型强制，防坏配
       expect(c.maintenance.active).toBe(false)
       expect(c.contentFilter.enabled).toBe(false)
       expect(c.contentFilter.terms).toEqual([])
+      expect(c.visionDailyMax).toBeNull() // 默认 null=跟随 env/默认
     }
+  })
+  it('visionDailyMax：仅接受正整数上限；0/负/非整/非数/缺 → null（跟随 env，不接受无意义配额）', () => {
+    expect(normalizeAppConfig({ visionDailyMax: 300 }).visionDailyMax).toBe(300)
+    expect(normalizeAppConfig({ visionDailyMax: 0 } as Partial<AppConfig>).visionDailyMax).toBeNull()
+    expect(normalizeAppConfig({ visionDailyMax: -5 } as Partial<AppConfig>).visionDailyMax).toBeNull()
+    expect(normalizeAppConfig({ visionDailyMax: 12.5 } as Partial<AppConfig>).visionDailyMax).toBeNull()
+    expect(normalizeAppConfig({ visionDailyMax: 'x' } as unknown as Partial<AppConfig>).visionDailyMax).toBeNull()
   })
   it('announcement.level 仅 warning 保留，其余一律归 info', () => {
     expect(normalizeAppConfig({ announcement: { active: true, message: 'x', level: 'warning' } }).announcement.level).toBe('warning')

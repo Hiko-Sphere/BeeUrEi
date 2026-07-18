@@ -217,6 +217,9 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       // today=全体当日成功调用数；dailyMaxPerUser=单用户每日上限（VISION_DAILY_MAX，默认 200）。
       vision: {
         today: store.totalVisionCallsOnDay(dayKey(now)), dailyMaxPerUser: store.getAppConfig().visionDailyMax ?? visionDailyMax(),
+        // 撞每日配额上限累计次数：运维据此判断配额是否**过紧**（用户频繁被挡=该调高，可在控制台即时改，见 visionDailyMax
+        // 配置）——把"配额可调"与"何时该调"闭环。对话式追问增大用量后尤其要盯。
+        quotaExceeded: metrics.get('vision_quota_exceeded_total'),
         // AI 视觉「描述场景/Be My AI」健康：errors=上游失败累计（provider 故障/配额/VISION_* 配错）；lastError=最后原因
         //（如 `401: invalid api key`）。盲人识别骨干功能挂了运维一眼可见，不必等用户报"描述用不了"。
         errors: metrics.get('vision_errors_total'),

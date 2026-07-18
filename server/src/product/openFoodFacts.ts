@@ -106,7 +106,10 @@ const DIETARY_LABEL_MAP: Record<string, string> = {
   'halal': 'halal',
   'kosher': 'kosher',
   'organic': 'organic', 'eu-organic': 'organic',
-  'sugar-free': 'sugar-free', 'no-sugar': 'sugar-free', 'no-added-sugar': 'sugar-free',
+  // "无糖"(sugar-free，≈无糖)与"无添加糖"(no-added-sugar，未加糖但**仍可能含天然/果糖**)是**不同**声明——
+  // 糖尿病人靠总糖控糖：把"无添加糖"并成"无糖"会误导其"这个不含糖"、放心吃却被天然糖升血糖（与 lactose-free/
+  // dairy-free 单列同理，安全攸关不合并）。故 no-added-sugar 独立 canonical，客户端分别本地化"无糖"/"无添加糖"。
+  'sugar-free': 'sugar-free', 'no-sugar': 'sugar-free', 'no-added-sugar': 'no-added-sugar',
   'palm-oil-free': 'palm-oil-free', 'no-palm-oil': 'palm-oil-free',
   // 非转基因：中国食用油/大豆/玉米制品最醒目的法定标注（转基因/非转基因是购买决策关键），盲人看不到，刚需。
   'no-gmos': 'no-gmo', 'no-gmo': 'no-gmo', 'non-gmo': 'no-gmo', 'without-gmos': 'no-gmo', 'gmo-free': 'no-gmo',

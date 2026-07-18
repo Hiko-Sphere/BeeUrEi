@@ -40,7 +40,11 @@ describe('Open Food Facts 商品查询', () => {
 
   it('extractDietaryLabels：归并同义词到 canonical、只收膳食/宗教认证子集、剥前缀/去重/表外忽略', () => {
     expect(extractDietaryLabels(['en:gluten-free', 'en:vegan', 'en:halal'])).toEqual(['gluten-free', 'vegan', 'halal'])
-    expect(extractDietaryLabels(['en:no-gluten', 'en:no-lactose', 'en:no-added-sugar'])).toEqual(['gluten-free', 'lactose-free', 'sugar-free']) // 同义词归并到 canonical
+    expect(extractDietaryLabels(['en:no-gluten', 'en:no-lactose'])).toEqual(['gluten-free', 'lactose-free']) // 同义词归并到 canonical
+    // "无糖"(sugar-free)与"无添加糖"(no-added-sugar)是**不同**声明、绝不合并——无添加糖仍可能含天然/果糖，
+    // 并成"无糖"会误导糖尿病人（与 lactose-free/dairy-free 单列同理）。
+    expect(extractDietaryLabels(['en:sugar-free', 'en:no-added-sugar'])).toEqual(['sugar-free', 'no-added-sugar'])
+    expect(extractDietaryLabels(['en:no-sugar'])).toEqual(['sugar-free']) // no-sugar≈无糖，仍归 sugar-free
     // 无奶(dairy-free) 与 无乳糖(lactose-free) 是**不同** canonical（无奶=完全不含奶，牛奶过敏/纯素据此决策；无乳糖仅去乳糖仍可能含乳蛋白）：各自保留、绝不合并。
     expect(extractDietaryLabels(['en:dairy-free', 'en:lactose-free'])).toEqual(['dairy-free', 'lactose-free'])
     expect(extractDietaryLabels(['en:no-dairy', 'en:milk-free'])).toEqual(['dairy-free']) // no-dairy/milk-free 同义归并 + 去重

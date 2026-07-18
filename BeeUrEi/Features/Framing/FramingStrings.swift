@@ -403,6 +403,8 @@ enum FramingStrings {
         "vegan": ("纯素", "vegan"), "vegetarian": ("素食", "vegetarian"),
         "halal": ("清真", "halal"), "kosher": ("洁食", "kosher"),
         "organic": ("有机", "organic"), "sugar-free": ("无糖", "sugar-free"),
+        // "无添加糖"与"无糖"分开（服务端不合并）：无添加糖仍可能含天然/果糖，糖尿病人据此区别对待、绝不当"无糖"。
+        "no-added-sugar": ("无添加糖", "no added sugar"),
         "palm-oil-free": ("不含棕榈油", "palm oil free"),
         "no-gmo": ("非转基因", "non-GMO"), "no-preservatives": ("无防腐剂", "no preservatives"),
     ]

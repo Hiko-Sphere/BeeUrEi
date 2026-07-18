@@ -45,6 +45,13 @@ final class FramingStringsTests: XCTestCase {
         // 非转基因（中国食用油/大豆制品法定醒目标注，盲人刚需）+ 无防腐剂：canonical key → 本地化名。
         XCTAssertEqual(FramingStrings.productDietaryLabelsSpeak(["no-gmo", "no-preservatives"], .zh), "。包装标注：非转基因、无防腐剂")
         XCTAssertTrue(FramingStrings.productDietaryLabelsSpeak(["no-gmo"], .en)!.contains("non-GMO"))
+        // **无添加糖 ≠ 无糖**（服务端已拆两 canonical）：无添加糖仍可能含天然/果糖，糖尿病人须区别对待、绝不当"无糖"。
+        // 本地化须分别读"无添加糖"/"无糖"，不能把 no-added-sugar 念成"无糖"（假安心）。
+        let noAdded = FramingStrings.productDietaryLabelsSpeak(["no-added-sugar"], .zh)!
+        XCTAssertTrue(noAdded.contains("无添加糖"))
+        XCTAssertFalse(noAdded.contains("包装标注：无糖")) // 绝不被误读成"无糖"
+        XCTAssertEqual(FramingStrings.productDietaryLabelsSpeak(["sugar-free", "no-added-sugar"], .zh), "。包装标注：无糖、无添加糖")
+        XCTAssertTrue(FramingStrings.productDietaryLabelsSpeak(["no-added-sugar"], .en)!.contains("no added sugar"))
     }
 
     func testCashCountingFormatting() {

@@ -394,6 +394,10 @@ export function registerAssistRoutes(
       Date.now(),
       blockedUserIdSet(store, req.user!.sub), // 排除黑名单双方
     )
+    // 自动匹配**也是一次"接起"**：matchOne 原子认领了这条求助，与显式 /claim 同为盲人求助被接起。此前只 /claim 计数、
+    // match 漏计 → help_claims_total 系统性低估接起数（凡走"帮我随机匹配一条"的志愿者都不计），使"接起率"虚低、
+    // 运维面板/Prometheus 误报"多数求助无人接"。姊妹路径缺失同一计数（与拉黑绕过同类：改了一处漏了平行的另一处）。
+    if (matched) metrics.inc('help_claims_total')
     return { request: matched ? detailView(matched) : null }
   })
 

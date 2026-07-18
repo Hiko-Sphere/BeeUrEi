@@ -43,6 +43,7 @@ const I18N = {
     tfaSub: '该账号已开启两步验证', tfaCode: '验证码（6 位）或恢复码', verify: '验证', tfaBack: '返回', tfaInvalid: '验证码不正确，请重试',
     dashboard: '总览', users: '用户', reports: '举报', recordings: '录制', logout: '退出登录',
     totalUsers: '用户总数', active: '正常', disabled: '已封禁', online: '在线', onlineHelpers: '在线协助者', onlineBlind: '在线盲人',
+    helpRequests: '协助求助', helpClaimed: '已接起', helpNoneClaimedHint: '无人接起——请检查志愿者供给/推送',
     panelUpdated: '管理面板有新版本（服务端已更新）', refreshNow: '点击刷新',
     openReports: '待处理举报', recordingsCount: '录制记录', visionToday: 'AI 描述（今日）', visionCap: '单用户每日上限', byRole: '按角色分布', version: '版本', uptime: '运行时长', activeEmergencies: '正在进行的紧急',
     activeUnreachable: '紧急·无人可即时触达', activeUnreachSub: '安全网正静默失效，速联系本人/亲友',
@@ -179,6 +180,7 @@ const I18N = {
     tfaSub: 'This account has two-factor authentication enabled', tfaCode: 'Code (6 digits) or recovery code', verify: 'Verify', tfaBack: 'Back', tfaInvalid: 'Incorrect code — try again',
     dashboard: 'Overview', users: 'Users', reports: 'Reports', recordings: 'Recordings', logout: 'Sign out',
     totalUsers: 'Total users', active: 'Active', disabled: 'Banned', online: 'Online', onlineHelpers: 'Online helpers', onlineBlind: 'Blind online',
+    helpRequests: 'Help requests', helpClaimed: 'Claimed', helpNoneClaimedHint: 'none claimed — check helper supply/push',
     panelUpdated: 'A new version of this panel is available (server updated)', refreshNow: 'Refresh now',
     openReports: 'Open reports', recordingsCount: 'Recordings', visionToday: 'AI describes (today)', visionCap: 'Per-user daily cap', byRole: 'By role', version: 'Version', uptime: 'Uptime', activeEmergencies: 'Active emergencies',
     activeUnreachable: 'Emergency · reached no one', activeUnreachSub: 'Safety net silently failing — contact them/family',
@@ -641,6 +643,7 @@ function renderDashboard() {
       ${statCard(t('active'), o.users.active, '', 'success')}
       ${statCard(t('disabled'), o.users.disabled, '', o.users.disabled ? 'danger' : '')}
       ${statCard(t('online'), o.online.total, t('onlineBlind') + ': ' + (o.online.blind ?? 0) + ' · ' + t('onlineHelpers') + ': ' + o.online.helpers)}
+      ${o.help != null && o.help.requests > 0 ? statCard(t('helpRequests'), o.help.requests, t('helpClaimed') + ': ' + o.help.claims + (o.help.claims === 0 ? ' · ' + t('helpNoneClaimedHint') : ''), o.help.claims === 0 ? 'danger' : '') : ''}
       ${statCard(t('newUsers7d'), g.newUsers7d, t('newUsers30d') + ': ' + g.newUsers30d, g.newUsers7d ? 'success' : '')}
       ${statCard(t('openReports'), o.reports.open, (state.lang === 'en' ? 'of ' : '共 ') + o.reports.total, o.reports.open ? 'danger' : '')}
       ${statCard(t('recordingsCount'), o.recordings.total)}

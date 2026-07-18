@@ -95,6 +95,12 @@ describe('公开求助队列路由', () => {
     // 剩 h-en；强制要求 zh → 无匹配
     const m2 = await a.inject({ method: 'POST', url: '/api/assist/help/match', headers: auth(helper.token), payload: { preferredLanguage: 'zh', requireLanguageMatch: true } })
     expect(m2.json().request).toBeNull()
+
+    // **自动匹配也计为一次接起**（help_claims_total）：命中 h-zh 计 1 次；无匹配的 m2 不计。
+    // 此前 match 漏计致接起率虚低、面板误报"无人接"（与显式 /claim 同为"接起"）。
+    const metrics = (await a.inject({ method: 'GET', url: '/metrics' })).body
+    expect(metrics).toContain('beeurei_help_claims_total 1')   // 恰 1 次（命中的 match，未命中不计）
+    expect(metrics).toContain('beeurei_help_requests_total 2') // 两条求助
     await a.close()
   })
 

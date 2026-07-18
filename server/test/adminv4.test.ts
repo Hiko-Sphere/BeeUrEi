@@ -231,6 +231,23 @@ describe('Admin v4 评审修复：补全功能开关 + 删号级联', () => {
     expect(match.json().error).toBe('feature_disabled')
   })
 
+  it('概览 help 反映求助供需履约：requests/claims 累计，且**自动 match 也计接起**（接起率不虚低）', async () => {
+    const { app } = withAdmin()
+    const aa = await adminAuth(app)
+    const blind = await makeUser(app, 'blindHelp')
+    const helper = await makeUser(app, 'helperHelp')
+    const ov0 = (await app.inject({ method: 'GET', url: '/api/admin/overview', headers: aa })).json()
+    expect(ov0.help).toMatchObject({ requests: 0, claims: 0 }) // 初始无求助
+    // 盲人发两条求助；志愿者显式认领一条 + 自动匹配另一条 → 2 请求、2 接起。
+    await app.inject({ method: 'POST', url: '/api/assist/help/request', headers: auth(blind.token), payload: { callId: 'hh-1' } })
+    await app.inject({ method: 'POST', url: '/api/assist/help/request', headers: auth(blind.token), payload: { callId: 'hh-2' } })
+    await app.inject({ method: 'POST', url: '/api/assist/help/claim', headers: auth(helper.token), payload: { callId: 'hh-1' } })
+    await app.inject({ method: 'POST', url: '/api/assist/help/match', headers: auth(helper.token), payload: {} })
+    const ov1 = (await app.inject({ method: 'GET', url: '/api/admin/overview', headers: aa })).json()
+    // match 也计接起：此前 match 漏计 → claims 会是 1（虚低），面板误报"半数求助无人接"。
+    expect(ov1.help).toMatchObject({ requests: 2, claims: 2 })
+  })
+
   it('删号级联：清空该用户单聊消息 + 自建群解散 + 参与群退出', async () => {
     const { app, store } = withAdmin()
     const aa = await adminAuth(app)

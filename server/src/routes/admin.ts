@@ -212,6 +212,11 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     return {
       users: { total: users.length, active, disabled, byRole },
       online: { total: online.size, helpers: onlineHelpers, blind: onlineBlind },
+      // 协助求助的**供需履约**（自本进程启动累计，与 online 供给侧互补）：requests=盲人发起的公开求助总数，
+      // claims=被志愿者接起（显式 /claim 或自动 /match，二者同计）总数。接起率(claims/requests)是盲人求助"到底
+      // 有没有人接"的核心可靠性信号——只看 online 供给数看不出真被接起了没（有志愿者在线也可能无人认领/超时）。
+      // 自托管者未必跑 Prometheus，故直接摆上概览。
+      help: { requests: metrics.get('help_requests_total'), claims: metrics.get('help_claims_total') },
       reports: { open: openReports, total: reports.length },
       recordings: { total: store.allRecordings().length, config: store.getRecordingConfig() },
       // AI 视觉描述用量（今日 UTC）：每次成功=一次外部付费调用，运维据此监控成本/滥用（无专门 metrics 面板亦可见）。

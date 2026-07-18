@@ -76,14 +76,14 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
     /// 天气与空气质量两个请求并发跑（async let），空气质量是"锦上添花"：失败/超时只是不追加、绝不拖垮天气。
     private func fetch(lat: Double, lon: Double, lang l: Language) async {
         async let phraseTask = fetchPhrase(lat: lat, lon: lon, lang: l)
-        async let pmTask = fetchAirPM25(lat: lat, lon: lon)
+        async let airTask = fetchAirQuality(lat: lat, lon: lon)
         let weather = await phraseTask  // nil = 天气取数失败
-        let pm = await pmTask
+        let air = await airTask
         // 天气失败：只报失败，**绝不**把空气质量拼到失败句后（否则"天气获取失败…空气中度污染"自相矛盾且无分隔，见自审 #1）。
         var phrase = weather ?? WeatherPhrase.failed(l)
-        // 空气质量健康提醒（盲人看不到雾霾）：仅天气成功且"污染"档才追加，优/良不打扰。
-        if weather != nil, let pm, let air = WeatherPhrase.airQualityAdvice(pm25: pm, language: l) {
-            phrase += air
+        // 空气质量健康提醒（盲人看不到雾霾/扬尘）：仅天气成功且"污染"档才追加，优/良不打扰；PM2.5 与 PM10 取更差一档（扬尘天不漏报）。
+        if weather != nil, let advice = WeatherPhrase.airQualityAdvice(pm25: air.pm25, pm10: air.pm10, language: l) {
+            phrase += advice
         }
         let finalPhrase = phrase // 定格为不可变，供并发 MainActor 闭包安全捕获（消除 var 捕获数据竞争告警，Swift 6 下为错误）
         await MainActor.run {
@@ -93,25 +93,26 @@ final class WeatherSpeaker: NSObject, CLLocationManagerDelegate {
         }
     }
 
-    /// 空气质量 PM2.5（µg/m³）：Open-Meteo 空气质量 API（免 key、仅发坐标）。best-effort——任何失败返回 nil。
-    private func fetchAirPM25(lat: Double, lon: Double) async -> Double? {
+    /// 空气质量颗粒物（PM2.5 + PM10，µg/m³）：Open-Meteo 空气质量 API（免 key、仅发坐标）。best-effort——任何失败两者皆 nil。
+    /// PM10 一并取：北方春季**扬沙/浮尘/沙尘暴**时 PM2.5 可能未超标而 PM10 高企，只看 PM2.5 会漏报（假安心，见 WeatherPhrase）。
+    private func fetchAirQuality(lat: Double, lon: Double) async -> (pm25: Double?, pm10: Double?) {
         var c = URLComponents(string: "https://air-quality-api.open-meteo.com/v1/air-quality")!
         c.queryItems = [
             .init(name: "latitude", value: String(format: "%.3f", lat)),
             .init(name: "longitude", value: String(format: "%.3f", lon)),
-            .init(name: "current", value: "pm2_5"),
+            .init(name: "current", value: "pm2_5,pm10"),
             .init(name: "timezone", value: "auto"),
         ]
         struct Response: Decodable {
-            struct Current: Decodable { let pm2_5: Double? }
+            struct Current: Decodable { let pm2_5: Double?; let pm10: Double? }
             let current: Current?
         }
         var request = URLRequest(url: c.url!)
         request.timeoutInterval = 8 // 短于天气看门狗；空气慢/挂不拖累天气播报
         guard let (data, resp) = try? await URLSession.shared.data(for: request),
               (resp as? HTTPURLResponse)?.statusCode == 200,
-              let r = try? JSONDecoder().decode(Response.self, from: data) else { return nil }
-        return r.current?.pm2_5
+              let r = try? JSONDecoder().decode(Response.self, from: data) else { return (nil, nil) }
+        return (r.current?.pm2_5, r.current?.pm10)
     }
 
     /// 纯网络请求，不触碰任何实例状态（线程安全）。成功返回文案，**失败返回 nil**（由 fetch() 决定是否只报失败、

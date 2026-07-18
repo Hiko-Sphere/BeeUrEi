@@ -393,4 +393,22 @@ extension WeatherPhraseTests {
         // 英文。
         XCTAssertTrue(WeatherPhrase.airQualityAdvice(pm25: 130, language: .en)!.contains("mask"))
     }
+
+    func testAirQualityAdvicePM10SandDust() {
+        // 扬尘/浮尘天（北方春季）：PM2.5 未超标（<75，单看它=不提，假安心），但粗颗粒 PM10 高企——须据 PM10 提醒戴口罩。
+        // PM10 分档：<150 不提｜<250 轻度｜<350 中度｜<420 重度｜≥420 严重。
+        XCTAssertNil(WeatherPhrase.airQualityAdvice(pm25: 40, pm10: 120, language: .zh))                  // 都低 → 不提
+        XCTAssertTrue(WeatherPhrase.airQualityAdvice(pm25: 40, pm10: 200, language: .zh)!.contains("轻度污染")) // PM2.5 低、PM10 轻度 → 提
+        XCTAssertTrue(WeatherPhrase.airQualityAdvice(pm25: 50, pm10: 300, language: .zh)!.contains("中度污染")) // PM10 中度（沙尘）
+        XCTAssertTrue(WeatherPhrase.airQualityAdvice(pm25: 60, pm10: 500, language: .zh)!.contains("严重污染")) // PM10 严重（沙尘暴）→ 尽量别出门
+        // 取**两者更差**的一档：PM2.5 中度(130) 与 PM10 严重(500) → 按严重报。
+        XCTAssertTrue(WeatherPhrase.airQualityAdvice(pm25: 130, pm10: 500, language: .zh)!.contains("严重污染"))
+        // 反之 PM2.5 更差时按 PM2.5：PM2.5 严重(300) 与 PM10 轻度(200) → 严重。
+        XCTAssertTrue(WeatherPhrase.airQualityAdvice(pm25: 300, pm10: 200, language: .zh)!.contains("严重污染"))
+        // PM10 非有限/负/缺 → 退化为只按 PM2.5（向后兼容，老调用方不传 pm10）。
+        XCTAssertNil(WeatherPhrase.airQualityAdvice(pm25: 40, pm10: .nan, language: .zh))
+        XCTAssertEqual(WeatherPhrase.airQualityAdvice(pm25: 90, pm10: nil, language: .zh), "空气轻度污染，对呼吸道敏感的人建议戴口罩。")
+        // 仅 PM10 有效（PM2.5 缺）：也据 PM10 报。
+        XCTAssertTrue(WeatherPhrase.airQualityAdvice(pm25: nil, pm10: 400, language: .zh)!.contains("重度污染"))
+    }
 }

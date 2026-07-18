@@ -266,23 +266,37 @@ public enum WeatherPhrase {
         }
     }
 
-    /// 空气质量（PM2.5，µg/m³）健康提醒：盲人看不到雾霾，无法自行判断该不该戴口罩。按中国 AQI 的 PM2.5
-    /// 分级——只在"污染"档（≥75，即轻度污染起）才播报（优/良不提，免打扰、保持高信噪）；污染越重措辞越强。
-    /// 非有限或负值（异常 API 响应）返回 nil——绝不据此瞎报一个空气等级（宁可不说）。
-    public static func airQualityAdvice(pm25: Double?, language: Language) -> String? {
-        guard let v = pm25, v.isFinite, v >= 0 else { return nil }
+    /// 空气质量健康提醒：盲人看不到雾霾/扬尘，无法自行判断该不该戴口罩。按中国 AQI 取 **PM2.5 与 PM10 两者中更差的一档**——
+    /// 只看 PM2.5 会漏报**扬沙/浮尘/沙尘暴**（北方春季常见：细颗粒 PM2.5 未超标而粗颗粒 PM10 高企，空气已呛人却"报平安"=假安心；
+    /// 粗颗粒同样刺激呼吸道/眼睛，戴口罩有用）。只在"污染"档（轻度起）才播报（优/良不提，免打扰、保持高信噪）；越重措辞越强。
+    /// 两者皆无效（非有限/负/缺）→ nil，绝不瞎报一个空气等级（宁可不说）。pm10 可缺（老调用方/API 未取），只按 PM2.5 判。
+    public static func airQualityAdvice(pm25: Double?, pm10: Double? = nil, language: Language) -> String? {
+        // 取两种颗粒物各自的污染等级（0=优/良不提 … 4=严重），播报**更差**的一档——粗颗粒(PM10)高的扬尘天不再被 PM2.5 单指标漏掉。
+        var level = 0
+        if let v = pm25, v.isFinite, v >= 0 { level = max(level, pm25Level(v)) }
+        if let v = pm10, v.isFinite, v >= 0 { level = max(level, pm10Level(v)) }
         let zh = language == .zh
-        switch v {
-        case ..<75:   return nil                                  // 优 / 良：不提
-        case ..<115:  return zh ? "空气轻度污染，对呼吸道敏感的人建议戴口罩。"
-                                : " Air quality is unhealthy for sensitive groups; if you're sensitive, wear a mask."
-        case ..<150:  return zh ? "空气中度污染，外出建议戴口罩。"
-                                : " Air quality is unhealthy; wear a mask outdoors."
-        case ..<250:  return zh ? "空气重度污染，建议戴口罩、减少外出。"
-                                : " Air quality is very unhealthy; wear a mask and limit time outside."
-        default:      return zh ? "空气严重污染，尽量别出门；必须外出请戴口罩。"
-                                : " Air quality is hazardous; stay indoors if you can, and wear a mask if you must go out."
+        switch level {
+        case 0:  return nil                                       // 优 / 良：不提
+        case 1:  return zh ? "空气轻度污染，对呼吸道敏感的人建议戴口罩。"
+                           : " Air quality is unhealthy for sensitive groups; if you're sensitive, wear a mask."
+        case 2:  return zh ? "空气中度污染，外出建议戴口罩。"
+                           : " Air quality is unhealthy; wear a mask outdoors."
+        case 3:  return zh ? "空气重度污染，建议戴口罩、减少外出。"
+                           : " Air quality is very unhealthy; wear a mask and limit time outside."
+        default: return zh ? "空气严重污染，尽量别出门；必须外出请戴口罩。"
+                           : " Air quality is hazardous; stay indoors if you can, and wear a mask if you must go out."
         }
+    }
+
+    /// PM2.5 污染等级（中国 AQI，µg/m³）：0 优/良（<75，不提）｜1 轻度（<115）｜2 中度（<150）｜3 重度（<250）｜4 严重。
+    private static func pm25Level(_ v: Double) -> Int {
+        switch v { case ..<75: return 0; case ..<115: return 1; case ..<150: return 2; case ..<250: return 3; default: return 4 }
+    }
+    /// PM10 污染等级（中国 AQI，µg/m³；粗颗粒/扬尘为主，同一空气档位的浓度阈值高于 PM2.5）：
+    /// 0（<150）｜1 轻度（<250）｜2 中度（<350）｜3 重度（<420）｜4 严重。
+    private static func pm10Level(_ v: Double) -> Int {
+        switch v { case ..<150: return 0; case ..<250: return 1; case ..<350: return 2; case ..<420: return 3; default: return 4 }
     }
 
     /// 取数过程提示与失败文案（App 层播报用，集中在此保持双语一致）。

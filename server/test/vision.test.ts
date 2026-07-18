@@ -56,6 +56,20 @@ describe('visionClient（AI 视觉描述，provider 无关 / OpenAI 兼容）', 
     expect(body.temperature).toBeLessThanOrEqual(0.3) // 低温偏客观
   })
 
+  it('系统提示含"图像太差则提示重拍"指引（盲人无法自查坏照片，中英皆有）', async () => {
+    setConfig()
+    const cap: string[] = []
+    const f = vi.fn(async (_url: string, opts: { body: string }) => {
+      cap.push(JSON.parse(opts.body).messages[0].content as string)
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) }
+    })
+    vi.stubGlobal('fetch', f)
+    await visionDescribe({ imageDataUrl: 'data:image/jpeg;base64,ABC', lang: 'zh' })
+    await visionDescribe({ imageDataUrl: 'data:image/jpeg;base64,ABC', lang: 'en' })
+    expect(cap[0]).toContain('重拍')    // zh：太暗/太模糊/没对准 → 建议重拍
+    expect(cap[1]).toMatch(/retake/i)  // en：same guidance
+  })
+
   it('空回复 → 抛 VisionError（fail-closed，绝不返回罐头兜底文案）', async () => {
     setConfig()
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '   ' } }] }) })))

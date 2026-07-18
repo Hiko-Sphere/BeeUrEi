@@ -19,7 +19,7 @@ describe('紧急事件日志', () => {
     const l = await a.inject({ method: 'POST', url: '/api/family/links', headers: auth, payload: { username: 'evhelper', relation: '家人', isEmergency: true } })
     await a.inject({ method: 'POST', url: `/api/family/links/${l.json().link.id}/accept`, headers: { authorization: `Bearer ${helper.token}` } })
     const adminTok = (await a.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'root', password: 'secret123' } })).json().token
-    return { a, store, owner, auth, adminTok }
+    return { a, store, owner, helper, auth, adminTok }
   }
 
   it('告警落账：kind/坐标/位置来源/通知数如实记录；admin 端点带显示名；非 admin 403', async () => {
@@ -42,6 +42,18 @@ describe('紧急事件日志', () => {
     const metrics = await a.inject({ method: 'GET', url: '/metrics' })
     expect(metrics.payload).toContain('emergency_alerts_total 2')
     void owner
+    await a.close()
+  })
+
+  it('概览 emergencyTotals 反映紧急响应履约：alerts/acked/unreachable 累计（自托管者无 Prometheus 亦可见）', async () => {
+    const { a, auth, adminTok, owner, helper } = await seed()
+    const overview = async () => (await a.inject({ method: 'GET', url: '/api/admin/overview', headers: { authorization: `Bearer ${adminTok}` } })).json()
+    expect((await overview()).emergencyTotals).toMatchObject({ alerts: 0, acked: 0, unreachable: 0 }) // 初始
+    // 盲人发一次告警；亲友"知道了"响应。
+    await a.inject({ method: 'POST', url: '/api/emergency/alert', headers: auth, payload: { kind: 'manual' } })
+    await a.inject({ method: 'POST', url: '/api/emergency/ack', headers: { authorization: `Bearer ${helper.token}` }, payload: { fromId: owner.user.id } })
+    // 概览如实反映：1 次告警、1 次响应（响应率=有人看见/管的可靠性履历）。
+    expect((await overview()).emergencyTotals).toMatchObject({ alerts: 1, acked: 1 })
     await a.close()
   })
 

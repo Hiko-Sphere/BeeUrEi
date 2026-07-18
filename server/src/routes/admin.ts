@@ -240,6 +240,16 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       // （联系本人/其亲友）的信号。自托管者未必跑 Prometheus（emergency_unreachable_total 累计计数看不到），
       // per-event「未触达任何人」红标又要滚列表才见——故把这个点时计数直接摆到概览、逼近置顶。
       activeUnreachable: activeEmerg.filter((e) => e.notified === 0).length,
+      // 紧急告警**响应履约**（自本进程启动累计，与上面 activeEmergencies 点时态互补）：alerts=告警总数（含手动 SOS/
+      // 摔倒 与 dead-man's-switch 未报到，iter385 已统一计入）；acked=被亲友"知道了/在赶来"响应的累计次数；unreachable=
+      // 触达 0 人的累计次数。响应率(acked/alerts)是"SOS 到底有没有人看见/管"的可靠性履历——只看点时态 activeEmergencies
+      // 看不出历史上多少次告警石沉大海。自托管者未必跑 Prometheus 故直接摆概览。注：一条告警可被多位亲友各 ack 一次，
+      // 故 acked 可＞alerts，只报**原始三数**、不算会误导（可＞100%）的"率"（与 help 履约同口径，iter384）。
+      emergencyTotals: {
+        alerts: metrics.get('emergency_alerts_total'),
+        acked: metrics.get('emergency_acks_total'),
+        unreachable: metrics.get('emergency_unreachable_total'),
+      },
       // 通话连接失败（自本次进程启动以来累计，与 uptime/online 同为"当前健康"信号）：把客户端 ICE 失败上报
       // （见 /api/assist/call-failure）呈现在运维实际看的面板里——relay 不可达尤其指向 TURN/安全组故障。
       callConnect: {

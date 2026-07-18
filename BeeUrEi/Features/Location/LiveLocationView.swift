@@ -9,7 +9,7 @@ struct LiveLocationView: View {
     @Environment(AuthSession.self) private var session
     @State private var manager = LiveLocationManager.shared
     @State private var camera: MapCameraPosition = .automatic
-    @State private var addresses: [String: String] = [:]   // userId → 已取到的可读所在地址（盲人按需查、缓存复听不重复打高德）
+    @State private var addresses: [String: (text: String, at: Double)] = [:] // userId → (可读所在地址, 逆地理时对应的 updatedAt)：对方移动后旧地址视为过时、重查，绝不复述旧位置
     @State private var addressLoadingIds: Set<String> = []  // 正在查询的 userId（防同一联系人并发重复请求）
     private var lang: Language { FeatureSettings().language }
     private var unit: DistanceUnit { FeatureSettings().distanceUnit } // 距离单位（公制/英制，随设置）
@@ -125,7 +125,9 @@ struct LiveLocationView: View {
         let updated = LiveLocationStrings.updatedAgo(secondsSince(c.updatedAt), lang)
         let battery = LiveLocationStrings.batteryText(c.battery, lang) // nil=对端未上报（老客户端），不显示不猜
         let batteryLow = (c.battery ?? 100) <= 20
-        let address = addresses[c.userId]
+        // 仅当缓存地址仍对应联系人**当前**位置（updatedAt 未变）才显示——对方移动后旧地址过时，不再显示误导性旧位置。
+        let cached = addresses[c.userId]
+        let address = LiveLocationStrings.addressStillFresh(cachedUpdatedAt: cached?.at, currentUpdatedAt: c.updatedAt) ? cached?.text : nil
         return Button {
             // 盲人侧：地图不显示，点行=**读出对方所在街道地址**（看不到 pin 的刚需）；明眼侧：点行把地图移到其位置。
             if isBlind {
@@ -164,10 +166,11 @@ struct LiveLocationView: View {
         .accessibilityHint(isBlind ? LiveLocationStrings.viewAddressHint(lang) : "") // 盲人：告知双击可听所在地址
     }
 
-    /// 盲人点联系人行：把其位置逆地理成街道地址并**读出**（缓存复听不重复打高德；查不到显式告知，绝不编造）。
+    /// 盲人点联系人行：把其位置逆地理成街道地址并**读出**（查不到显式告知，绝不编造）。
     @MainActor private func loadAndSpeakAddress(_ c: ContactLocationInfo) async {
-        if let cached = addresses[c.userId] { // 已查过：直接复听，不再打高德
-            SpeechHub.shared.speak(LiveLocationStrings.contactAtAddressSpeak(name: c.displayName, address: cached, lang), channel: .query, voiceCode: lang.voiceCode)
+        // 已查过且仍对应**当前**位置：直接复听，不再打高德。对方已移动（updatedAt 变了）→ 视为未缓存、重新逆地理，绝不复述旧位置。
+        if let cached = addresses[c.userId], LiveLocationStrings.addressStillFresh(cachedUpdatedAt: cached.at, currentUpdatedAt: c.updatedAt) {
+            SpeechHub.shared.speak(LiveLocationStrings.contactAtAddressSpeak(name: c.displayName, address: cached.text, lang), channel: .query, voiceCode: lang.voiceCode)
             return
         }
         guard let token = session.token, !addressLoadingIds.contains(c.userId) else { return }
@@ -176,7 +179,7 @@ struct LiveLocationView: View {
         let info = await APIClient().contactAddress(token: token, userId: c.userId)
         addressLoadingIds.remove(c.userId)
         if let info, let text = LiveLocationStrings.contactAddressText(address: info.address, township: info.township, aoiName: info.aoi?.name, lang) {
-            addresses[c.userId] = text
+            addresses[c.userId] = (text, c.updatedAt) // 记下对应的 updatedAt：对方下次移动后此地址即被判过时、重查
             SpeechHub.shared.speak(LiveLocationStrings.contactAtAddressSpeak(name: c.displayName, address: text, lang), channel: .query, voiceCode: lang.voiceCode)
         } else {
             SpeechHub.shared.speak(LiveLocationStrings.addressUnavailableSpeak(lang), channel: .query, voiceCode: lang.voiceCode)

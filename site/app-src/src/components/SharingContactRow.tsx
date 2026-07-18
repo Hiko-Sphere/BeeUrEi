@@ -32,8 +32,10 @@ export function SharingContactRow({ c, lang, t, live, callDisabled, onLocate, on
 
   // 「查看所在地址」：读屏/低视力家人看不到地图 pin，点一下把对方位置逆地理成文字街道地址（对标 Find My/Google
   // 位置共享给出地址）。**按需**请求（点击才打高德，非随位置刷新反复打）；仅境内有数据，境外/无数据显式告知。
-  const [addr, setAddr] = useState<string | null>(null)
+  // addr 记下逆地理时对应的 updatedAt：对方移动后（updatedAt 变了）旧地址即过时、不再显示误导性旧位置（下方 freshAddr 门控）。
+  const [addr, setAddr] = useState<{ text: string; at: number } | null>(null)
   const [addrState, setAddrState] = useState<'idle' | 'loading' | 'error'>('idle')
+  const freshAddr = addr && addr.at === c.updatedAt ? addr.text : null // 仅当仍对应当前位置才显示
   async function loadAddress() {
     if (addrState === 'loading') return
     setAddrState('loading')
@@ -44,7 +46,7 @@ export function SharingContactRow({ c, lang, t, live, callDisabled, onLocate, on
       // 地址 + 所在区域（"在XX一带"）——区域是比街道更强的大方位锚点，家人一听即知在哪片。二者皆空→按无地址处理。
       const text = area && !line.includes(area) ? `${line}（${t('在', 'near ')}${area}${t('一带', '')}）`.trim() : line
       if (!text) { setAddrState('error'); return }
-      setAddr(text); setAddrState('idle')
+      setAddr({ text, at: c.updatedAt }); setAddrState('idle') // 绑定当前 updatedAt：对方移动后此地址即被 freshAddr 判过时
     } catch { setAddrState('error') } // 404(境外/无数据/未共享)/网络/服务端错误一律显式提示，绝不留空
   }
 
@@ -99,14 +101,15 @@ export function SharingContactRow({ c, lang, t, live, callDisabled, onLocate, on
         </a>
       )}
       </div>
-      {/* 地址结果：aria-live 让读屏在加载完成时即时念出地址（安全相关信息）。加载中/失败均显式，绝不留空。 */}
-      {(addr || addrState !== 'idle') && (
+      {/* 地址结果：aria-live 让读屏在加载完成时即时念出地址（安全相关信息）。加载中/失败均显式，绝不留空。
+          用 freshAddr（仅当仍对应当前位置）——对方移动后旧地址隐藏、不误导（家人可再点取新地址）。 */}
+      {(freshAddr || addrState !== 'idle') && (
         <div aria-live="polite" className="pl-[50px] text-xs text-faint">
           {addrState === 'loading'
             ? t('正在获取地址…', 'Getting address…')
             : addrState === 'error'
               ? <span className="text-danger">{t('暂时无法获取地址（可能在境外或无数据）', "Address unavailable (may be overseas or no data)")}</span>
-              : addr && <>📍 {addr}</>}
+              : freshAddr && <>📍 {freshAddr}</>}
         </div>
       )}
     </li>

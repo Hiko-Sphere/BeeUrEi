@@ -120,6 +120,14 @@ enum LiveLocationStrings {
     }
     static func viewAddressHint(_ l: Language) -> String { l == .zh ? "双击可听所在地址" : "Double-tap to hear their address" }
 
+    /// 已查到/缓存的所在地址是否仍对应联系人**当前**位置：缓存时记下当时的 updatedAt，与当前一致才可复用/显示。
+    /// 对方已移动（updatedAt 前进）→ 旧地址过时，追踪移动中的家人时复述旧位置是误导——须视为不新鲜、重新逆地理，
+    /// 绝不复用/显示旧值。无缓存（nil）→ 不新鲜。纯逻辑、可单测。
+    static func addressStillFresh(cachedUpdatedAt: Double?, currentUpdatedAt: Double) -> Bool {
+        guard let cached = cachedUpdatedAt else { return false }
+        return cached == currentUpdatedAt
+    }
+
     static func featureOffTitle(_ l: Language) -> String { l == .zh ? "位置共享已关闭" : "Location sharing is off" }
     static func featureOffMessage(_ l: Language) -> String { l == .zh ? "管理员已停用该功能" : "Disabled by the administrator" }
 

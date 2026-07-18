@@ -88,6 +88,13 @@ final class LiveLocationStringsTests: XCTestCase {
         XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
 
+    func testAddressStillFreshInvalidatesOnMove() {
+        // 缓存地址仅当仍对应联系人当前位置（updatedAt 一致）才复用/显示——对方移动后旧地址过时，须重查、不复述旧位置。
+        XCTAssertTrue(LiveLocationStrings.addressStillFresh(cachedUpdatedAt: 1_700_000_000_000, currentUpdatedAt: 1_700_000_000_000)) // 未移动→仍新鲜
+        XCTAssertFalse(LiveLocationStrings.addressStillFresh(cachedUpdatedAt: 1_700_000_000_000, currentUpdatedAt: 1_700_000_005_000)) // 已移动(updatedAt 前进)→过时
+        XCTAssertFalse(LiveLocationStrings.addressStillFresh(cachedUpdatedAt: nil, currentUpdatedAt: 1_700_000_000_000)) // 无缓存→不新鲜
+    }
+
     func testContactA11yIncludesAddressOnlyWhenPresent() {
         // 取到地址 → 合并 a11y 标签含"所在地址：X"（VoiceOver 复读也念）；未取到（nil）→ 不含该段（严格附加）。
         let withAddr = LiveLocationStrings.contactA11y(name: "妈妈", role: "亲友", distance: "约 200 米，在你的东北", updated: "刚刚更新", address: "朝阳区XX路", .zh)

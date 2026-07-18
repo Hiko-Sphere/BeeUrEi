@@ -9,6 +9,7 @@ final class TransitPlanner: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     private var planning = false
     private var destination = ""
+    private var destCoordinate: (lat: Double, lon: Double)? // WGS-84；给了则按坐标精确规划（聊天分享位置），否则按 destination 名字 geocode
     private var watchdog: DispatchWorkItem?
     private var lang: Language { FeatureSettings().language }
 
@@ -20,10 +21,25 @@ final class TransitPlanner: NSObject, CLLocationManagerDelegate {
 
     func plan(to dest: String) {
         guard !planning else { return }
+        destCoordinate = nil // 按名字规划：清掉可能残留的坐标（否则会误用上次的精确坐标）
         destination = dest.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !destination.isEmpty else {
             speak(lang == .zh ? "请说出你要去哪里" : "Please say where you want to go"); return
         }
+        beginPlanning()
+    }
+
+    /// 按**已知精确坐标**规划公交（聊天分享位置的跨城出行）：绝不按地名重搜（与步行 pendingNavAction=.coordinate 同款）。
+    /// coord 为 WGS-84（与 payload/全栈一致）；name 仅用于播报"正在规划到X的公交路线"，缺则用通用词。
+    func plan(toCoordinate coord: CLLocationCoordinate2D, name: String?) {
+        guard !planning else { return }
+        destCoordinate = (lat: coord.latitude, lon: coord.longitude)
+        let n = (name?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
+        destination = n ?? (lang == .zh ? "那里" : "there")
+        beginPlanning()
+    }
+
+    private func beginPlanning() {
         planning = true
         speak(lang == .zh ? "正在规划到\(destination)的公交路线" : "Planning transit to \(destination)")
         let work = DispatchWorkItem { [weak self] in
@@ -59,6 +75,8 @@ final class TransitPlanner: NSObject, CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let loc = locations.last else { finish(lang == .zh ? "定位失败，请稍后再试" : "Locating failed — please try again"); return }
         let dest = destination
+        // 精确坐标（聊天分享位置）：WGS-84 → GCJ-02（同起点/步行导航变换），传服务端 destGcj 跳过 geocode，绝不按名重搜。
+        let destGcj = destCoordinate.map { ChinaCoord.wgs84ToGcj02(lat: $0.lat, lon: $0.lon) }.map { (lat: $0.lat, lon: $0.lon) }
         let l = lang // 主线程读取，避免后台 Task 里读 FeatureSettings 的数据竞争
         let u = FeatureSettings().distanceUnit // 同上：主线程读距离单位（英制用户步行距离听英尺/英里）
         Task { [weak self] in
@@ -66,7 +84,7 @@ final class TransitPlanner: NSObject, CLLocationManagerDelegate {
             // 起点 WGS-84 → GCJ-02（与步行导航同一变换），服务端直接喂高德。
             let g = ChinaCoord.wgs84ToGcj02(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude)
             do {
-                let plan = try await AMapTransitClient().transit(originLatGcj: g.lat, originLonGcj: g.lon, destination: dest)
+                let plan = try await AMapTransitClient().transit(originLatGcj: g.lat, originLonGcj: g.lon, destination: dest, destGcj: destGcj)
                 await MainActor.run {
                     // 预计到达时刻（now+总时长）：盲人据此判断能否赶上约定，省心算——与步行导航同源、公交此前只报总时长。
                     let arrival = self.arrivalClockString(durationSeconds: plan.durationSeconds, lang: l)

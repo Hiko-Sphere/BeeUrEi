@@ -92,6 +92,27 @@ final class NavStringsTests: XCTestCase {
         XCTAssertEqual(NavStrings.geocodeLocale(.en).identifier, "en_US")
     }
 
+    func testTransitQueryParamsPrefersCoordinateOverName() {
+        // 给了精确坐标(destGcj)→发 destLat/destLon、**不发** destination（避免服务端按名重搜命中别处，同步行 destGcj 优先）。
+        let withCoord = AMapTransitClient.queryParams(originLatGcj: 39.9, originLonGcj: 116.4, destination: "国贸", destGcj: (lat: 39.92, lon: 116.45))
+        let dict = Dictionary(uniqueKeysWithValues: withCoord.map { ($0.name, $0.value) })
+        XCTAssertEqual(dict["destLat"], "39.92"); XCTAssertEqual(dict["destLon"], "116.45")
+        XCTAssertNil(dict["destination"], "有精确坐标就不发目的地名字，绝不按名重搜")
+        XCTAssertEqual(dict["originLat"], "39.9"); XCTAssertEqual(dict["originLon"], "116.4")
+        // 没坐标→发 destination 名字（服务端 geocode），不发 destLat/destLon。
+        let withName = AMapTransitClient.queryParams(originLatGcj: 39.9, originLonGcj: 116.4, destination: "国贸", destGcj: nil)
+        let d2 = Dictionary(uniqueKeysWithValues: withName.map { ($0.name, $0.value) })
+        XCTAssertEqual(d2["destination"], "国贸")
+        XCTAssertNil(d2["destLat"]); XCTAssertNil(d2["destLon"])
+    }
+
+    func testTransitHereFromChatBilingual() {
+        XCTAssertTrue(NavStrings.transitHereFromChat(.zh).contains("公交"))
+        let en = NavStrings.transitHereFromChat(.en)
+        XCTAssertTrue(en.lowercased().contains("transit"))
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
+
     // 目的地回读确认（按名字导航时）：出发前念高德规范化全称让盲人核对；无名字（精确坐标导航）→ 空、自然跳过。
     func testDestinationConfirmation() {
         XCTAssertEqual(NavStrings.destinationConfirmation("北京市东城区协和医院", .zh), "导航到北京市东城区协和医院。")

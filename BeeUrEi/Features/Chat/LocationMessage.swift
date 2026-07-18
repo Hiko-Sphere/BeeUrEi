@@ -146,6 +146,7 @@ struct LocationBubble: View {
     var mine: Bool = false          // 自己发的位置无需"导航去这里"（导航到自己脚下无意义）
     @State private var snapshot: UIImage?
     @State private var showNav = false
+    @State private var transitPlanner = TransitPlanner() // 「坐公交前往」分享位置（跨城赴约）：一次性定位→规划→朗读整段路线
 
     private var place: String { payload.name ?? ChatStrings.unknownPlace(lang) }
 
@@ -167,6 +168,15 @@ struct LocationBubble: View {
                 .buttonStyle(.borderedProminent)
                 .tint(.beeHoney)
                 .foregroundStyle(Color.beeInk)
+                // 跨城赴约（"我在城那头等你"）：步行导航够不着，公交才行。用**分享的精确坐标**规划（destGcj，绝不按地名重搜）。
+                Button {
+                    transitPlanner.plan(toCoordinate: CLLocationCoordinate2D(latitude: payload.lat, longitude: payload.lng), name: payload.name)
+                } label: {
+                    Label(NavStrings.transitHereFromChat(lang), systemImage: "tram.fill")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .buttonStyle(.bordered)
+                .tint(.beeHoney)
             }
         }
         // 在聊天自身语境上盖全屏导航（sheet 之上盖 fullScreenCover 合法）：不做跨 sheet 关此开彼的编排。

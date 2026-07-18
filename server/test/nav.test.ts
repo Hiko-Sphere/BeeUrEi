@@ -265,7 +265,7 @@ describe('AMap walking nav proxy', () => {
     expect(body.walkingDistanceMeters).toBe(350)
     expect(body.legs).toEqual([
       { kind: 'walk', distanceMeters: 200, durationSeconds: 170 },
-      { kind: 'subway', line: '地铁1号线', fromStop: '西单站', toStop: '国贸站', stops: 6, distanceMeters: 6000, durationSeconds: 900 },
+      { kind: 'subway', line: '地铁1号线', direction: '苹果园--四惠东', fromStop: '西单站', toStop: '国贸站', stops: 6, distanceMeters: 6000, durationSeconds: 900 },
       { kind: 'walk', distanceMeters: 150, durationSeconds: 130 },
     ])
     await app.close()
@@ -281,7 +281,7 @@ describe('AMap walking nav proxy', () => {
     const t = await token(app)
     const res = await app.inject({ method: 'GET', url: '/api/nav/transit?originLat=39.9&originLon=116.4&destLat=39.92&destLon=116.45', headers: { authorization: `Bearer ${t}` } })
     expect(res.statusCode).toBe(200)
-    expect(res.json().legs[0]).toEqual({ kind: 'bus', line: '300路', fromStop: '甲站', toStop: '乙站', stops: 4, distanceMeters: 2000, durationSeconds: 480 })
+    expect(res.json().legs[0]).toEqual({ kind: 'bus', line: '300路', direction: '北京站东-马家堡', fromStop: '甲站', toStop: '乙站', stops: 4, distanceMeters: 2000, durationSeconds: 480 })
     await app.close()
   })
 

@@ -45,10 +45,6 @@ public enum WhereAmIComposer {
         let zh = language == .zh
         // 主体优先用完整地址，其次退到街道/乡镇。
         let body = !g.address.isEmpty ? g.address : g.township
-        // 地址、路口、地标都没有 → 明确告知无法确定，绝不播空串（盲人会以为没响应）。
-        if body.isEmpty && g.landmark == nil && g.intersection == nil {
-            return zh ? "无法确定当前位置" : "Can't determine your location"
-        }
         var out = ""
         if !body.isEmpty {
             out = (zh ? "你大概在：" : "You're near: ") + body
@@ -60,11 +56,16 @@ public enum WhereAmIComposer {
         if let clause = landmarkClause(g.landmark, zh: zh, hasBody: !out.isEmpty, unit: unit) {
             out += clause
         }
-        return out
+        // 判据是「最终是否产出内容」，而非原始字段是否 nil：空/同名路口、空名地标等坏数据被 clause 剔成 nil 后
+        // out 仍可能为空串——必须在此统一兜住，明确告知无法确定，**绝不播空串**（盲人会以为没响应）。
+        return out.isEmpty ? (zh ? "无法确定当前位置" : "Can't determine your location") : out
     }
 
     private static func intersectionClause(_ x: ReverseGeocode.Intersection?, zh: Bool, hasPrev: Bool, unit: DistanceUnit) -> String? {
         guard let x = x, !x.firstRoad.isEmpty, !x.secondRoad.isEmpty else { return nil }
+        // 同名两路不成"交叉口"：服务端已剔（amapClient first===second），但缓存/旧版服务端/他源数据仍可能带来
+        // "X与X交叉口"——念给司机/路人毫无意义，此处渲染层再兜一道（防御纵深，与全库"未知/坏数据不外发"一致）。
+        guard x.firstRoad.trimmingCharacters(in: .whitespaces) != x.secondRoad.trimmingCharacters(in: .whitespaces) else { return nil }
         let distStr = SpokenStrings.locationDistance(x.distanceMeters, zh ? .zh : .en, unit: unit) // 溢出安全 + ≥1km 用公里
         let dir = directionWord(x.direction, zh: zh)
         let lead = hasPrev ? (zh ? "。附近路口：" : ". Nearby intersection: ")

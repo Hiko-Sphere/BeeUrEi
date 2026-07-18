@@ -310,7 +310,7 @@ export async function amapReverseGeocode(location: string): Promise<AmapReverseG
   for (const ri of rc.roadinters ?? []) {
     const first = amapStr(ri.first_name).trim()
     const second = amapStr(ri.second_name).trim()
-    if (!first || !second) continue // 须两条相交路名齐全，否则不成"交叉口"
+    if (!first || !second || first === second) continue // 须两条**不同**相交路名齐全，否则不成"交叉口"：同名（高德自相交路/改名点/数据缺陷会让 first_name===second_name）会拼成"X与X交叉口"，盲人念给司机/路人时毫无意义、反而误导
     const ds = amapStr(ri.distance).trim()
     if (!ds) continue // 空距离陷阱同 POI：高德空字段 []→''→Number('')===0，会伪装成"0米"抢最近名额，先剔
     const d = Number(ds)

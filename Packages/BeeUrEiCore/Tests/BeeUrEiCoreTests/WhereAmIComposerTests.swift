@@ -101,6 +101,25 @@ final class WhereAmIComposerTests: XCTestCase {
         XCTAssertEqual(WhereAmIComposer.compose(gw, language: .en), "You're near: somewhere. Nearby intersection: A St and B St, about 15 meters")
     }
 
+    func testSameRoadIntersectionDroppedDefensively() {
+        // 同名两路（firstRoad==secondRoad，含仅空白之差）不成交叉口：渲染层兜底剔除，绝不念"X与X交叉口"。
+        // 有地址+地标时：正常出地址与地标，静默跳过同名路口。
+        let g = ReverseGeocode(address: "北京市朝阳区", township: "望京街道",
+                               landmark: lm("银泰", "东", 50),
+                               intersection: inter("广顺北大街", " 广顺北大街 ", "西", 40))
+        XCTAssertEqual(WhereAmIComposer.compose(g, language: .zh),
+                       "你大概在：北京市朝阳区。最近的地标：银泰，东约50米")
+    }
+
+    func testSameRoadIntersectionAloneFallsBackToCannotDetermineNotEmpty() {
+        // 同名路口作**唯一**信息（地址/地标皆无）：坏数据被剔后不得回空串（盲人会以为没响应），
+        // 必须落"无法确定当前位置"——判据是最终产出而非 intersection 字段非 nil。
+        let g = ReverseGeocode(address: "", township: "", landmark: nil,
+                               intersection: inter("中山路", "中山路", "南", 25))
+        XCTAssertEqual(WhereAmIComposer.compose(g, language: .zh), "无法确定当前位置")
+        XCTAssertEqual(WhereAmIComposer.compose(g, language: .en), "Can't determine your location")
+    }
+
     func testDecodableMatchesServerContract() throws {
         // 服务端 /api/nav/whereami 的 JSON（landmark/intersection 可缺省）能被 Decodable 正确解出。
         let json = """

@@ -60,6 +60,25 @@ describe('AMap reverse-geocode「我在哪」proxy', () => {
     await app.close()
   })
 
+  it('同名路口（first===second）即便最近也剔除——"X与X交叉口"念给司机/路人毫无意义', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({
+      status: '1', infocode: '10000',
+      regeocode: {
+        formatted_address: '北京市朝阳区', addressComponent: { township: '望京街道' }, pois: [],
+        roadinters: [
+          { first_name: '广顺北大街', second_name: '广顺北大街', direction: '西', distance: '5' },        // 同名且最近 → 剔（高德自相交/改名点）
+          { first_name: '阜通东大街', second_name: '望京中环南路', direction: '东北', distance: '30' },     // 有效不同名 → 选中
+        ],
+      },
+    }) })))
+    const app = buildApp(new MemoryStore())
+    const res = await get(app, await token(app))
+    expect(res.statusCode).toBe(200)
+    expect(res.json().intersection).toEqual({ firstRoad: '阜通东大街', secondRoad: '望京中环南路', direction: '东北', distanceMeters: 30 })
+    await app.close()
+  })
+
   it('无 roadinters / 全无效：intersection 字段省略（不外发空/坏路口）', async () => {
     process.env.AMAP_API_KEY = 'webkey'
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({

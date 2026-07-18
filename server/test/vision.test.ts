@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
-import { visionConfigured, visionDescribe } from '../src/vision/visionClient'
+import { visionConfigured, visionDescribe, buildVisionMessages } from '../src/vision/visionClient'
 import { hashPassword } from '../src/auth/passwords'
 
 // 1×1 合法 base64（fetch 被 stub，内容不重要，只需通过 base64 字符集与大小校验）。
@@ -54,6 +54,31 @@ describe('visionClient（AI 视觉描述，provider 无关 / OpenAI 兼容）', 
     expect(body.messages[1].content[0]).toMatchObject({ type: 'text', text: '前面能走吗' })
     expect(body.messages[1].content[1].image_url.url).toBe('data:image/jpeg;base64,ABC')
     expect(body.temperature).toBeLessThanOrEqual(0.3) // 低温偏客观
+  })
+
+  it('buildVisionMessages：追问历史注入为 user/assistant 轮，图片始终在**当前**轮（连续图像问答，对标 Be My AI）', () => {
+    // 无历史 = 单轮：system + 当前(图+问)，与原行为一致。
+    const single = buildVisionMessages({ imageDataUrl: 'data:image/jpeg;base64,IMG', question: '有台阶吗', lang: 'zh' }) as any[]
+    expect(single).toHaveLength(2)
+    expect(single[0].role).toBe('system')
+    expect(single[1]).toMatchObject({ role: 'user' })
+    expect(single[1].content[0]).toMatchObject({ type: 'text', text: '有台阶吗' })
+    expect(single[1].content[1].image_url.url).toBe('data:image/jpeg;base64,IMG')
+    // 有历史：system + 历史 Q/A（纯文本轮）+ 当前(图+新问)。图片只在当前轮（模型现在看图、结合历史答追问）。
+    const multi = buildVisionMessages({
+      imageDataUrl: 'data:image/jpeg;base64,IMG', question: '价格是多少',
+      history: [{ q: '这是什么', a: '一盒饼干' }, { q: ' ', a: '' }], // 空轮被剔除
+      lang: 'zh',
+    }) as any[]
+    expect(multi).toHaveLength(4) // system + 1 有效历史(user+assistant) + 当前
+    expect(multi[0].role).toBe('system')
+    expect(multi[1]).toEqual({ role: 'user', content: '这是什么' })       // 历史用户轮：纯文本
+    expect(multi[2]).toEqual({ role: 'assistant', content: '一盒饼干' })   // 历史模型轮
+    expect(multi[3].role).toBe('user')
+    expect(multi[3].content[0]).toMatchObject({ type: 'text', text: '价格是多少' })
+    expect(multi[3].content[1].image_url.url).toBe('data:image/jpeg;base64,IMG') // 图在当前轮
+    // 历史轮里没有任何 image_url（图片不在历史轮，避免重复发大图/上下文膨胀）。
+    expect(JSON.stringify([multi[1], multi[2]])).not.toContain('image_url')
   })
 
   it('系统提示含"图像太差则提示重拍"指引（盲人无法自查坏照片，中英皆有）', async () => {

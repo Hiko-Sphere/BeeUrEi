@@ -26,6 +26,8 @@ const bodySchema = z.object({
   image: z.string().min(1),                        // base64（可带或不带 data: 前缀，见下方剥离）
   mime: z.enum(['image/jpeg', 'image/png', 'image/webp']),
   question: z.string().trim().max(300).optional(), // 可选：图像问答
+  // 可选：同一张图的**追问历史**（对标 Be My AI 连续追问）。上限 8 轮防上下文/token 膨胀；每轮 q/a 有界。
+  history: z.array(z.object({ q: z.string().trim().max(300), a: z.string().trim().max(4000) })).max(8).optional(),
   lang: z.enum(['zh', 'en']).optional(),
 })
 
@@ -42,7 +44,7 @@ export function registerVisionRoutes(app: FastifyInstance, store: Store, metrics
     if (!visionConfigured()) return reply.code(503).send({ error: 'ai_not_configured' })
     const parsed = bodySchema.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
-    const { mime, question, lang } = parsed.data
+    const { mime, question, history, lang } = parsed.data
 
     // 容错：客户端可能连 data: 前缀一起发来，剥离后取纯 base64；再去掉可能的空白。
     const b64 = parsed.data.image.replace(/^data:[^;,]+;base64,/, '').replace(/\s+/g, '')
@@ -70,6 +72,7 @@ export function registerVisionRoutes(app: FastifyInstance, store: Store, metrics
       const text = await visionDescribe({
         imageDataUrl: `data:${mime};base64,${b64}`,
         question,
+        history, // 追问历史（连续图像问答的上下文）；无=单轮
         lang: lang ?? 'zh',
       })
       metrics?.inc('vision_describe_total') // 值守：成功描述数≈外部付费调用量（乘单价即成本，可对账/告警）

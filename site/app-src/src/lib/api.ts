@@ -459,8 +459,9 @@ export const api = {
   deleteMyRecording: (id: string) => del(`/api/recordings/mine/${id}`),
   // 云端 AI 图像描述（与 iOS 同 /api/vision/describe 端点）：低视力家人在网页端也能"听懂"收到的图片。
   // image 可带或不带 data: 前缀（服务端会剥离）；返回描述文本 + 当日剩余次数（付费额度配给）。
-  visionDescribe: (image: string, mime: 'image/jpeg' | 'image/png' | 'image/webp', lang: 'zh' | 'en', question?: string) =>
-    post('/api/vision/describe', { image, mime, lang, ...(question ? { question } : {}) }) as Promise<{ text: string; remaining?: number; dailyMax?: number }>,
+  // history=同一张图的追问历史（连续图像问答/VQA，对标 Be My AI）；无则单轮。
+  visionDescribe: (image: string, mime: 'image/jpeg' | 'image/png' | 'image/webp', lang: 'zh' | 'en', question?: string, history?: { q: string; a: string }[]) =>
+    post('/api/vision/describe', { image, mime, lang, ...(question ? { question } : {}), ...(history && history.length ? { history } : {}) }) as Promise<{ text: string; remaining?: number; dailyMax?: number }>,
   recordingPlayToken: (id: string) => get(`/api/recordings/${id}/play-token`) as Promise<{ token: string; expiresInSec: number }>,
 
   // 通知

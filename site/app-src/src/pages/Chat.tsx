@@ -1184,25 +1184,28 @@ function Bubble({ m, mine, lang, t, onRecall, onReact, onEdit, onReply, onForwar
 function ImageMessage({ src, t }: { src: string; t: (z: string, e: string) => string }) {
   const [zoomed, setZoomed] = useState(false)
   const [describing, setDescribing] = useState(false)
-  const [desc, setDesc] = useState<string | null>(null)
+  // 追问对话（连续图像问答，对标 Be My AI）：每轮 {q,a}，q=null 表示"用 AI 描述"（泛描述，显示时不带问句）。
+  const [turns, setTurns] = useState<{ q: string | null; a: string }[]>([])
   const [question, setQuestion] = useState('')
   const triggerRef = useRef<HTMLButtonElement>(null)
   const { lang } = useI18n()
   const toast = useToast()
   const alt = t('图片消息', 'Photo')
 
-  // question 为空=泛描述；有值=图像问答（VQA，端点支持 question 参数，系统提示已"有具体问题就直接回答"）。
+  // q 为空=泛描述；有值=图像问答（VQA）。把已有对话作为 history 一并送上，模型据此答**追问**（"它多少钱""上面第二行写什么"）。
   const runDescribe = async (q?: string) => {
     const m = /^data:(image\/(?:jpeg|png|webp));base64,/.exec(src)
     if (!m) { toast(t('不支持的图片格式', 'Unsupported image format'), 'error'); return }
     setDescribing(true)
     try {
-      const r = await api.visionDescribe(src, m[1] as 'image/jpeg' | 'image/png' | 'image/webp', lang, q)
-      let out = r.text
+      // 泛描述轮的 q 记为默认问句送服务端（供后续追问有上下文），显示时仍按 null 处理不显问句。
+      const history = turns.map((tn) => ({ q: tn.q ?? t('请描述这张照片', 'Describe this photo.'), a: tn.a }))
+      const r = await api.visionDescribe(src, m[1] as 'image/jpeg' | 'image/png' | 'image/webp', lang, q, history.length ? history : undefined)
+      setTurns((prev) => [...prev, { q: q?.trim() ? q.trim() : null, a: r.text }])
+      setQuestion('')
       if (typeof r.remaining === 'number' && r.remaining <= 3) {
-        out += lang === 'zh' ? `（今日 AI 描述还剩 ${r.remaining} 次）` : ` (${r.remaining} AI descriptions left today)`
+        toast(lang === 'zh' ? `今日 AI 描述还剩 ${r.remaining} 次` : `${r.remaining} AI descriptions left today`, 'info')
       }
-      setDesc(out)
     } catch (err) {
       toast(visionErrorText(err, t), 'error')
     } finally {
@@ -1217,20 +1220,32 @@ function ImageMessage({ src, t }: { src: string; t: (z: string, e: string) => st
       </button>
       {/* 关闭时把焦点还给缩略图（proper 模态焦点归还，键盘/读屏用户不至于焦点丢到文档开头）。 */}
       {zoomed && <ImageLightbox src={src} alt={alt} onClose={() => { setZoomed(false); triggerRef.current?.focus() }} t={t} />}
-      <button type="button" onClick={() => runDescribe()} disabled={describing}
-        className="mt-1 rounded-md px-2 py-1 text-xs text-accent hover:surface-2 disabled:opacity-50">
-        {describing ? t('AI 描述中…', 'Describing…') : t('🔍 用 AI 描述图片', '🔍 Describe with AI')}
-      </button>
-      {/* 图像问答：对这张图问具体问题（"上面的电话号码是多少""有没有台阶"）——比泛描述更有针对性。 */}
+      {turns.length === 0 && (
+        <button type="button" onClick={() => runDescribe()} disabled={describing}
+          className="mt-1 rounded-md px-2 py-1 text-xs text-accent hover:surface-2 disabled:opacity-50">
+          {describing ? t('AI 描述中…', 'Describing…') : t('🔍 用 AI 描述图片', '🔍 Describe with AI')}
+        </button>
+      )}
+      {/* 对话式图像问答（连续追问，对标 Be My AI）：每轮答案带上文，可就同一张图接着问"它多少钱""第二行写什么"。 */}
+      {turns.length > 0 && (
+        <div className="mt-1 max-w-xs space-y-1.5" aria-live="polite">
+          {turns.map((tn, i) => (
+            <div key={i} className="text-sm">
+              {tn.q && <div className="text-xs font-medium text-faint">{t('问', 'Q')}：{tn.q}</div>}
+              <div className="text-soft">{tn.a}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {/* 提问/追问框：首次也可直接问具体问题（"电话号码是多少""有没有台阶"）；已有对话后即为追问、带上下文。 */}
       <form className="mt-1 flex max-w-xs gap-1" onSubmit={(e) => { e.preventDefault(); const q = question.trim(); if (q) runDescribe(q) }}>
         <input value={question} onChange={(e) => setQuestion(e.target.value)} disabled={describing} maxLength={300}
-          placeholder={t('问关于这张图的问题…', 'Ask about this photo…')}
-          aria-label={t('向 AI 提问关于这张图片', 'Ask AI about this photo')}
+          placeholder={turns.length ? t('继续追问…', 'Ask a follow-up…') : t('问关于这张图的问题…', 'Ask about this photo…')}
+          aria-label={turns.length ? t('继续向 AI 追问这张图片', 'Ask AI a follow-up about this photo') : t('向 AI 提问关于这张图片', 'Ask AI about this photo')}
           className="min-w-0 flex-1 rounded-md surface-2 px-2 py-1 text-xs" />
         <button type="submit" disabled={describing || !question.trim()}
-          className="shrink-0 rounded-md px-2 py-1 text-xs text-accent hover:surface-2 disabled:opacity-50">{t('问', 'Ask')}</button>
+          className="shrink-0 rounded-md px-2 py-1 text-xs text-accent hover:surface-2 disabled:opacity-50">{describing ? t('…', '…') : t('问', 'Ask')}</button>
       </form>
-      {desc && <p className="mt-1 max-w-xs text-sm text-soft" aria-live="polite">{desc}</p>}
     </>
   )
 }

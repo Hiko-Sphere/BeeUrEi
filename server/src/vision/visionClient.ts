@@ -44,10 +44,35 @@ function defaultQuestion(lang: VisionLang): string {
   return lang === 'zh' ? '请描述这张照片。' : 'Describe this photo.'
 }
 
+/// 追问对话的一轮（图像问答的历史）：用户问 q、模型答 a。图片只需附在**当前**轮，历史仅文本（模型据此上下文答追问）。
+export interface VqaTurn { q: string; a: string }
+
 export interface DescribeInput {
   imageDataUrl: string // 形如 data:image/jpeg;base64,....
   question?: string    // 可选的用户提问（图像问答）
+  history?: VqaTurn[]  // 可选：同一张图的**追问历史**（对标 Be My AI 连续追问）；空=单轮
   lang: VisionLang
+}
+
+/// 组装视觉接口的多轮 messages（纯逻辑，可单测）：system 提示 + 历史 Q&A（追问的对话上下文，仅文本）+ 当前提问
+/// （图片附在**当前**轮——模型现在看到图、结合历史文本答追问，对标 Be My AI 的连续追问）。历史空=单轮（与原行为逐字一致）。
+/// 剔除空 q 或空 a 的坏历史轮（不污染上下文）。
+export function buildVisionMessages(input: DescribeInput): unknown[] {
+  const question = input.question?.trim() || defaultQuestion(input.lang)
+  const historyTurns = (input.history ?? [])
+    .filter((h) => h.q.trim() && h.a.trim())
+    .flatMap((h) => [
+      { role: 'user', content: h.q.trim() },
+      { role: 'assistant', content: h.a.trim() },
+    ])
+  return [
+    { role: 'system', content: systemPrompt(input.lang) },
+    ...historyTurns,
+    { role: 'user', content: [
+      { type: 'text', text: question },
+      { type: 'image_url', image_url: { url: input.imageDataUrl } },
+    ] },
+  ]
 }
 
 /// 调 OpenAI 兼容视觉接口，返回描述文本。空回复/异常状态一律抛 VisionError（**绝不返回罐头兜底文案**）。
@@ -55,16 +80,9 @@ export async function visionDescribe(input: DescribeInput): Promise<string> {
   const c = cfg()
   if (!c.key || !c.base || !c.model) throw new VisionError(503, 'not_configured')
   const url = `${c.base.replace(/\/+$/, '')}/chat/completions`
-  const question = input.question?.trim() || defaultQuestion(input.lang)
   const body = {
     model: c.model,
-    messages: [
-      { role: 'system', content: systemPrompt(input.lang) },
-      { role: 'user', content: [
-        { type: 'text', text: question },
-        { type: 'image_url', image_url: { url: input.imageDataUrl } },
-      ] },
-    ],
+    messages: buildVisionMessages(input),
     max_tokens: Number.isFinite(c.maxTokens) && c.maxTokens > 0 ? c.maxTokens : 500,
     temperature: 0.2, // 低温：偏客观、少发挥（安全攸关，减少臆造）
   }

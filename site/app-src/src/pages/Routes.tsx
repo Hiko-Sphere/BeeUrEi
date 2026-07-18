@@ -3,7 +3,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { api, APIError, contentBlockedText, type SavedRouteInfo, type RouteWaypoint, type FamilyLink } from '../lib/api'
 import { routeDistanceMeters, routeDistanceText, routeWalkingText } from '../lib/location'
-import { insertWaypoint, moveWaypointTo, deleteWaypoint } from '../lib/routeEdit'
+import { insertWaypoint, moveWaypointTo, deleteWaypoint, reorderWaypoint } from '../lib/routeEdit'
 import { getUnit } from '../lib/distanceUnit'
 import { useI18n } from '../lib/i18n'
 import { useSession } from '../lib/session'
@@ -122,12 +122,11 @@ export function RoutesPage() {
   // 上移(-1)/下移(+1)一个航点：交换相邻两点，选中态跟随移动的点。
   const moveWaypoint = (i: number, dir: -1 | 1) => {
     if (!editing) return
-    const j = i + dir
-    if (j < 0 || j >= editing.waypoints.length) return
-    const next = [...editing.waypoints]
-    ;[next[i], next[j]] = [next[j], next[i]]
-    setEditing({ ...editing, waypoints: next })
-    setSelectedIdx(j)
+    // 纯逻辑 reorderWaypoint（已测）：换序并让选中跟着挪动的点走；越界返回 null → 无操作。
+    const res = reorderWaypoint(editing.waypoints, i, dir)
+    if (!res) return
+    setEditing({ ...editing, waypoints: res.waypoints })
+    setSelectedIdx(res.selectedIdx)
   }
 
   const save = async () => {

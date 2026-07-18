@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { insertWaypoint, moveWaypointTo, deleteWaypoint, type LatLng } from './routeEdit'
+import { insertWaypoint, moveWaypointTo, deleteWaypoint, reorderWaypoint, type LatLng } from './routeEdit'
 
 const P = (n: number) => ({ lat: n, lng: n })
 
@@ -95,5 +95,26 @@ describe('deleteWaypoint（删航点并调整选中）', () => {
   it('保留 note 等附加字段', () => {
     const wps: LatLng[] = [{ lat: 1, lng: 1, note: 'a' }, { lat: 2, lng: 2, note: 'b' }]
     expect(deleteWaypoint(wps, 0, null).waypoints).toEqual([{ lat: 2, lng: 2, note: 'b' }])
+  })
+})
+
+describe('reorderWaypoint（上移/下移调序）', () => {
+  it('下移(dir=+1)：与后一个交换，选中跟到目标位置 j', () => {
+    expect(reorderWaypoint([P(1), P(2), P(3)], 0, 1)).toEqual({ waypoints: [P(2), P(1), P(3)], selectedIdx: 1 })
+  })
+
+  it('上移(dir=-1)：与前一个交换，选中跟到目标位置 j', () => {
+    expect(reorderWaypoint([P(1), P(2), P(3)], 2, -1)).toEqual({ waypoints: [P(1), P(3), P(2)], selectedIdx: 1 })
+  })
+
+  it('到顶再上移 / 到底再下移 / 越界 i → null（无操作，调用方保持原状）', () => {
+    expect(reorderWaypoint([P(1), P(2)], 0, -1)).toBeNull() // 顶点上移
+    expect(reorderWaypoint([P(1), P(2)], 1, 1)).toBeNull()  // 末点下移
+    expect(reorderWaypoint([P(1), P(2)], 5, -1)).toBeNull() // 越界 i
+  })
+
+  it('保留 note 等附加字段', () => {
+    const wps: LatLng[] = [{ lat: 1, lng: 1, note: 'a' }, { lat: 2, lng: 2, note: 'b' }]
+    expect(reorderWaypoint(wps, 0, 1)!.waypoints).toEqual([{ lat: 2, lng: 2, note: 'b' }, { lat: 1, lng: 1, note: 'a' }])
   })
 })

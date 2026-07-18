@@ -50,3 +50,18 @@ export function deleteWaypoint<T extends LatLng>(
   else sel = selectedIdx
   return { waypoints: next, selectedIdx: sel }
 }
+
+/// 把第 i 个航点上移(dir=-1)/下移(dir=+1)一格——步行顺序至关重要，画错顺序可就地调、不必删了重画。
+/// 返回新序列与**跟随移动的选中索引**（=目标位置 j，让高亮跟着挪动的点走）。保留 note 等附加字段。
+/// 到顶再上移 / 到底再下移 / 越界 i → 返回 null（无操作，调用方保持原状不变，同 moveWaypointTo 越界不动作口径）。
+export function reorderWaypoint<T extends LatLng>(
+  waypoints: readonly T[],
+  i: number,
+  dir: -1 | 1,
+): { waypoints: T[]; selectedIdx: number } | null {
+  const j = i + dir
+  if (i < 0 || i >= waypoints.length || j < 0 || j >= waypoints.length) return null
+  const next = [...waypoints]
+  ;[next[i], next[j]] = [next[j], next[i]]
+  return { waypoints: next, selectedIdx: j }
+}

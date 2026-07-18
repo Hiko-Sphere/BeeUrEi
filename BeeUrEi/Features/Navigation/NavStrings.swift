@@ -112,6 +112,13 @@ enum NavStrings {
         return l == .zh ? "路线\(name)，\(n) 个路线点，\(howFar)\(who)双击开始引导" : "Route \(name), \(n) points, \(howFar)\(who)double-tap to start"
     }
     static func nearDestination(_ l: Language) -> String { l == .zh ? "已接近目的地" : "You're near the destination" }
+    /// 到达播报**带目的地名**：盲人看不到自己到没到、也无从确认到的是不是**对**的地方——念出目的地名（"已接近
+    /// 目的地：协和医院"）让他一听即知到对了。名字空（理论上不该发生）→ 回退通用"已接近目的地"。纯逻辑可单测。
+    static func arrivedNear(destinationName: String, _ l: Language) -> String {
+        let name = destinationName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nearDestination(l) }
+        return l == .zh ? "已接近目的地：\(name)" : "You're near your destination: \(name)"
+    }
     static func approachingDestination(_ l: Language) -> String {
         l == .zh ? "正在接近目的地" : "Approaching the destination"
     }

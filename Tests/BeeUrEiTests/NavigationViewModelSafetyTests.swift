@@ -182,7 +182,8 @@ final class NavigationViewModelSafetyTests: XCTestCase {
         // 好精度逼近 → 宣布到达并停止。
         service.onLocation?(loc(latOffset: 0, accuracy: 5))
         XCTAssertFalse(vm.running)
-        XCTAssertEqual(vm.status, NavStrings.nearDestination(FeatureSettings().language))
+        // 到达播报带目的地名（此处 backtrack→"回到出发点"）：盲人据此确认到对了地方。
+        XCTAssertEqual(vm.status, NavStrings.arrivedNear(destinationName: NavStrings.backtrackDestinationName(FeatureSettings().language), FeatureSettings().language))
         // 到达时补一记 .status 触觉确认（盲人最需明确知道"到了"）。
         XCTAssertTrue(haptic.played.contains(.status))
         // 差精度的单帧逼近（accuracy=60）不得误触发到达触觉——只有精度可信的到达才震。

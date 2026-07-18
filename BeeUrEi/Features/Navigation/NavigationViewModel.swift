@@ -298,10 +298,12 @@ final class NavigationViewModel {
             let toDest = Geo.distanceMeters(fromLat: lat, fromLon: lon, toLat: dest.latitude, toLon: dest.longitude)
             if toDest < 15 {
                 if level == .precise {
+                    // 到达播报带目的地名（"已接近目的地：协和医院"）：盲人据此确认到的是**对**的地方，闭合"我到没到、到对没有"。
+                    let arrival = NavStrings.arrivedNear(destinationName: destinationQuery, lang)
                     haptics.play(FeedbackEvent(priority: .status, speech: nil)) // 到达触觉确认（1 下）：盲人最需明确知道"到了"
-                    speak(NavStrings.nearDestination(lang))
+                    speak(arrival)
                     stop()
-                    status = NavStrings.nearDestination(lang) // 置于 stop() 之后：不被"导航已停止"覆盖（单测揪出）
+                    status = arrival // 置于 stop() 之后：不被"导航已停止"覆盖（单测揪出）
                 } else {
                     status = NavStrings.approachingDestination(lang)   // 精度不足：不轻易宣布到达并终止
                 }

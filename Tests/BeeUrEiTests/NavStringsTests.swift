@@ -13,6 +13,21 @@ final class NavStringsTests: XCTestCase {
         XCTAssertEqual(NavStrings.passingBy("银行", .zh), "途经银行")
     }
 
+    /// 到达播报带目的地名：盲人据此确认到的是**对**的地方；名字空→回退通用"已接近目的地"。
+    func testArrivedNearNamesDestination() {
+        // 有名 → "已接近目的地：X"（异于通用，含目的地名）。
+        XCTAssertEqual(NavStrings.arrivedNear(destinationName: "协和医院", .zh), "已接近目的地：协和医院")
+        XCTAssertEqual(NavStrings.arrivedNear(destinationName: "  国贸  ", .zh), "已接近目的地：国贸") // 去首尾空白
+        XCTAssertNotEqual(NavStrings.arrivedNear(destinationName: "协和医院", .zh), NavStrings.nearDestination(.zh))
+        // 空/纯空白 → 回退通用（不出"已接近目的地："这种半句）。
+        XCTAssertEqual(NavStrings.arrivedNear(destinationName: "", .zh), NavStrings.nearDestination(.zh))
+        XCTAssertEqual(NavStrings.arrivedNear(destinationName: "   ", .zh), NavStrings.nearDestination(.zh))
+        // 英文：含目的地名 + 不串中文。
+        let en = NavStrings.arrivedNear(destinationName: "Union Hospital", .en)
+        XCTAssertEqual(en, "You're near your destination: Union Hospital")
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
+
     func testNavigateHereFromChatBilingual() {
         // 聊天位置卡的"用蜂之眼导航"入口：中文点名蜂之眼，英文不串中文（区别于跳 Apple 地图的通用引导）。
         XCTAssertTrue(NavStrings.navigateHereFromChat(.zh).contains("蜂之眼"))

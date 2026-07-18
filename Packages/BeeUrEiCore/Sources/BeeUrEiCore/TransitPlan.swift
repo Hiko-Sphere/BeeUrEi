@@ -29,9 +29,11 @@ public struct TransitLeg: Decodable, Sendable, Equatable {
 public struct TransitPlan: Decodable, Sendable, Equatable {
     public let durationSeconds: Double
     public let walkingDistanceMeters: Double
+    public let fareYuan: Double?    // 方案总票价（元）——盲人扫不到票价牌，须提前备零钱/知道花费。缺→不报
     public let legs: [TransitLeg]
-    public init(durationSeconds: Double, walkingDistanceMeters: Double, legs: [TransitLeg]) {
-        self.durationSeconds = durationSeconds; self.walkingDistanceMeters = walkingDistanceMeters; self.legs = legs
+    public init(durationSeconds: Double, walkingDistanceMeters: Double, fareYuan: Double? = nil, legs: [TransitLeg]) {
+        self.durationSeconds = durationSeconds; self.walkingDistanceMeters = walkingDistanceMeters
+        self.fareYuan = fareYuan; self.legs = legs
     }
 }
 
@@ -50,14 +52,22 @@ public enum TransitPlanFormatter {
         // "这趟要换几次车"有心理准备（对标 Citymapper/Google 地图把换乘数放在最显眼处）。直达/纯步行不报（免"换乘0次"赘述）。
         let rideLegs = plan.legs.filter { $0.kind != .walk }.count
         let transfers = max(0, rideLegs - 1)
+        // 票价（盲人扫不到票价牌，须提前备零钱/知道花多少，与 Citymapper/Google 一致）：整数去尾零、否则 1 位小数；缺/≤0 不报。
+        let fareStr: String? = {
+            guard let f = plan.fareYuan, f.isFinite, f > 0 else { return nil }
+            let num = f.rounded() == f ? "\(SpokenStrings.safeRoundedInt(f))" : String(format: "%.1f", f)
+            return zh ? "票价约\(num)元" : "fare about \(num) yuan"
+        }()
         let header: String
         if zh {
             var h = "全程约\(mins)分钟，步行共\(walkStr)"
             if transfers > 0 { h += "，需换乘\(transfers)次" }
+            if let fs = fareStr { h += "，\(fs)" }
             header = h + "。"
         } else {
             var h = "About \(mins) minutes total, \(walkStr) of walking"
             if transfers > 0 { h += ", \(transfers) transfer\(transfers == 1 ? "" : "s")" }
+            if let fs = fareStr { h += ", \(fs)" }
             header = h + ". "
         }
 

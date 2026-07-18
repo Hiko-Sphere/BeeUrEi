@@ -356,6 +356,7 @@ export interface TransitLeg {
 export interface TransitPlan {
   durationSeconds: number
   walkingDistanceMeters: number
+  fareYuan?: number       // 方案总票价（元）——盲人扫不到票价牌，须提前备零钱/知道花费。缺/0（高德未给或步行方案）→ 省略
   legs: TransitLeg[]
 }
 
@@ -402,7 +403,8 @@ export async function amapTransit(origin: string, destination: string, city: str
   }
   const data = (await res.json()) as {
     status?: string; info?: string; infocode?: string
-    route?: { transits?: Array<{ duration?: string; walking_distance?: string; segments?: Segment[] }> }
+    // cost：v3 transit 的方案总票价（元，字符串）。盲人扫不到票价牌、也要提前备好零钱/知道花多少，与 Citymapper/Google 一致。
+    route?: { transits?: Array<{ duration?: string; walking_distance?: string; cost?: string; segments?: Segment[] }> }
   }
   assertAmapOk(res, data)
   const transit = data.route?.transits?.[0]
@@ -455,7 +457,13 @@ export async function amapTransit(origin: string, destination: string, city: str
     }
   }
   if (legs.length === 0) return null // 有 transit 壳但无可用腿（异常数据）→ 视为无方案
-  return { durationSeconds: numOrZero(transit.duration), walkingDistanceMeters: numOrZero(transit.walking_distance), legs }
+  const fare = numOrZero(transit.cost) // 高德脏值→0（numOrZero 有限非负）；0=未给票价，客户端省略不报
+  return {
+    durationSeconds: numOrZero(transit.duration),
+    walkingDistanceMeters: numOrZero(transit.walking_distance),
+    ...(fare > 0 ? { fareYuan: fare } : {}),
+    legs,
+  }
 }
 
 /// 高德折线 "lon,lat;lon,lat;…"（GCJ-02）→ [[lat, lon]]。非法点跳过，绝不外发 NaN。

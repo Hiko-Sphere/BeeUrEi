@@ -78,7 +78,7 @@ describe('amapClient（国内步行导航）', () => {
     // 高德 transit/integrated 响应：一段地铁（带 entrance/exit）+ 一段公交（无站口）。空对象/空名的兜底一并覆盖。
     vi.stubGlobal('fetch', vi.fn(async () => ok({
       status: '1', infocode: '10000',
-      route: { transits: [{ duration: '1800', walking_distance: '200', segments: [
+      route: { transits: [{ duration: '1800', walking_distance: '200', cost: '6', segments: [
         {
           entrance: { name: 'A口' }, exit: { name: 'D口' },
           bus: { buslines: [{ name: '地铁1号线(苹果园-四惠东)', type: '地铁', via_num: '3',
@@ -96,6 +96,7 @@ describe('amapClient（国内步行导航）', () => {
     })))
     const plan = await amapTransit('116.4,39.9', '116.5,39.9', '021')
     expect(plan).not.toBeNull()
+    expect(plan!.fareYuan).toBe(6) // 方案总票价从 transit.cost 解出（盲人备零钱/知花费）
     const subway = plan!.legs.find((l) => l.kind === 'subway')!
     expect(subway.entrance).toBe('A口')
     expect(subway.exit).toBe('D口')

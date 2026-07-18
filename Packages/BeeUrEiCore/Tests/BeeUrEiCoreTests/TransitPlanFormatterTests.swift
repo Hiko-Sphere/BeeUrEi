@@ -172,6 +172,21 @@ final class TransitPlanFormatterTests: XCTestCase {
         XCTAssertFalse(z3.contains("方向"), "无方向数据不该出现'方向'：\(z3)")
     }
 
+    func testFareAnnouncedInHeader() {
+        // 票价：盲人扫不到票价牌，须提前备零钱/知道花费（与 Citymapper/Google 一致）。整数去尾零；缺/0→不报。
+        let leg = TransitLeg(kind: .subway, line: "地铁1号线", fromStop: "A", toStop: "B", stops: 3, distanceMeters: 5000, durationSeconds: 600)
+        let zh = TransitPlanFormatter.summary(TransitPlan(durationSeconds: 900, walkingDistanceMeters: 200, fareYuan: 6, legs: [leg]), language: .zh)
+        XCTAssertTrue(zh.contains("票价约6元"), "须报整数票价、去尾零：\(zh)")
+        let en = TransitPlanFormatter.summary(TransitPlan(durationSeconds: 900, walkingDistanceMeters: 200, fareYuan: 6, legs: [leg]), language: .en)
+        XCTAssertTrue(en.contains("fare about 6 yuan"), "en 票价：\(en)")
+        // 小数票价保留 1 位。
+        let z2 = TransitPlanFormatter.summary(TransitPlan(durationSeconds: 900, walkingDistanceMeters: 200, fareYuan: 6.5, legs: [leg]), language: .zh)
+        XCTAssertTrue(z2.contains("票价约6.5元"), "小数票价 1 位：\(z2)")
+        // 缺票价/0（步行方案或高德未给）→ 不出现"票价"字样（严格附加，不硬报）。
+        XCTAssertFalse(TransitPlanFormatter.summary(TransitPlan(durationSeconds: 900, walkingDistanceMeters: 200, fareYuan: nil, legs: [leg]), language: .zh).contains("票价"))
+        XCTAssertFalse(TransitPlanFormatter.summary(TransitPlan(durationSeconds: 900, walkingDistanceMeters: 200, fareYuan: 0, legs: [leg]), language: .zh).contains("票价"))
+    }
+
     func testEmptyLineFallsBackToGenericMode() {
         let leg = TransitLeg(kind: .bus, line: "  ", fromStop: "甲", toStop: "乙", stops: 2, distanceMeters: 1000, durationSeconds: 300)
         let out = TransitPlanFormatter.summary(TransitPlan(durationSeconds: 300, walkingDistanceMeters: 0, legs: [leg]), language: .zh)

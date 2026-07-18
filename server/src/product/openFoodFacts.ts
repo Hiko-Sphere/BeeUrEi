@@ -37,6 +37,18 @@ export interface ProductInfo {
   /// 控糖控重**（减肥、糖尿病碳水计量）正是很多人扫食品要的那个数——nutriScore(a..e)/NOVA/含量档(高糖高盐)都给不了
   /// 这个绝对值。取整（语音听感）；非有限/负/缺 → null（不猜、不硬凑，同营养分级口径）。
   energyKcal100g?: number | null
+  /// 四大营养素**克数**（每 100 克/毫升，OFF nutriments["<key>_100g"]）：碳水/糖/蛋白质/脂肪。热量(energyKcal)之外
+  /// 的定量刚需——**糖尿病人靠总碳水克数算胰岛素/控碳水**（nutrientLevels 只给"高糖"定性档、给不了这个用于计量的数），
+  /// 健身/肾病看蛋白质、控脂看脂肪。含量档是"高/中/低"、克数才是"多少"，二者互补。缺/脏数据各字段独立 → null（不猜）。
+  macros100g: Macros100g
+}
+
+/// 每 100 克四大营养素克数（各字段可缺，独立 null，绝不因某素缺就丢整组）。糖(sugars)是碳水的子项，OFF 常两者都给。
+export interface Macros100g {
+  carbohydrates: number | null // 碳水化合物 g/100g——糖尿病碳水计量、生酮/低碳的核心数
+  sugars: number | null        // 其中糖 g/100g
+  protein: number | null       // 蛋白质 g/100g
+  fat: number | null           // 脂肪 g/100g
 }
 
 type FetchLike = (url: string, init?: unknown) => Promise<{ ok: boolean; json: () => Promise<unknown> }>
@@ -138,6 +150,15 @@ export function parseEnergyKcal(v: unknown): number | null {
   return Math.round(Math.min(n, 100_000))
 }
 
+/// 每 100 克某营养素克数（OFF nutriments["<key>_100g"]，可能是数字或数字字符串）：转有限非负数，**保留 1 位小数**
+/// （克数是计量值，12.5 克碳水 ≠ 13 克——糖尿病算胰岛素需这点精度，与整数千卡的热量口径有意不同）。非有限/负/缺/非数
+/// → null（不猜、不硬凑，同热量口径）。上限夹到 1000：每 100 克某素克数物理上 ≤100，给足冗余仍拦住脏数据的天文数字。
+export function parseNutrimentGrams(v: unknown): number | null {
+  const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v.trim()) : NaN
+  if (!Number.isFinite(n) || n < 0) return null
+  return Math.round(Math.min(n, 1000) * 10) / 10
+}
+
 /// Nutri-Score 分级：只接受可信的 a..e（OFF 用小写；'unknown'/'not-applicable'/空/其它 → null，绝不猜）。
 export function parseNutriScore(grade: unknown): string | null {
   if (typeof grade !== 'string') return null
@@ -203,6 +224,15 @@ export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeo
       nutrientLevels: extractNutrientLevels(p?.nutrient_levels),
       ingredients: parseIngredients(p?.ingredients_text),
       energyKcal100g: parseEnergyKcal((p?.nutriments as Record<string, unknown> | undefined)?.['energy-kcal_100g']),
+      macros100g: ((): Macros100g => {
+        const nut = p?.nutriments as Record<string, unknown> | undefined
+        return {
+          carbohydrates: parseNutrimentGrams(nut?.['carbohydrates_100g']),
+          sugars: parseNutrimentGrams(nut?.['sugars_100g']),
+          protein: parseNutrimentGrams(nut?.['proteins_100g']), // OFF 键为 proteins（复数）
+          fat: parseNutrimentGrams(nut?.['fat_100g']),
+        }
+      })(),
     } }
   } catch {
     return { kind: 'failed' } // 超时/网络/解析异常：瞬时故障，不长缓存，绝不编造商品名

@@ -156,6 +156,23 @@ final class ProductMemoryStoreTests: XCTestCase {
         XCTAssertNil(store.energyKcal(for: "unknown")) // 无数据=nil（不猜）
     }
 
+    func testMacrosRoundTripAndRenamePreserves() {
+        let store = ProductMemoryStore(fileURL: fileURL)
+        // 四大营养素克数随名字存（供离线复扫也能报——糖尿病算碳水/健身看蛋白的定量刚需）。
+        let macros: [String: Double] = ["carbohydrates": 12.3, "sugars": 4.5, "protein": 3, "fat": 3.6]
+        store.save(barcode: "690", name: "牛奶", macros: macros)
+        XCTAssertEqual(store.macros(for: "690"), macros)
+        // 用户手动改名（默认空 macros）不得抹掉已存的克数。
+        store.save(barcode: "690", name: "我的牛奶")
+        XCTAssertEqual(store.macros(for: "690"), macros)
+        // 落盘重载后仍在（单一合并旁路 plist）；删除连带清。
+        let reloaded = ProductMemoryStore(fileURL: fileURL)
+        XCTAssertEqual(reloaded.macros(for: "690"), macros)
+        reloaded.delete(barcode: "690")
+        XCTAssertEqual(reloaded.macros(for: "690"), [:])
+        XCTAssertEqual(store.macros(for: "unknown"), [:]) // 无数据=空（不猜）
+    }
+
     func testLegacyNameOnlyFileStillLoads() {
         // 老版本只有名字 plist（无 allergens/traces/dietary 旁路文件）：名字照常、过敏原/微量/膳食标注为空——零迁移。
         let legacy = ["123": "酱油"]
@@ -171,22 +188,28 @@ final class ProductMemoryStoreTests: XCTestCase {
         XCTAssertEqual(store.nutrientLevels(for: "123"), [:])
         XCTAssertNil(store.ingredients(for: "123"))
         XCTAssertNil(store.energyKcal(for: "123"))
+        XCTAssertEqual(store.macros(for: "123"), [:]) // 无 macros 旁路文件→空
     }
 
     func testProductLookupInfoDecodesNutrientLevels() throws {
         // 服务端 /api/product 下发 nutrientLevels（逐素含量档）；iOS 须解码——此前缺此字段，糖尿病/高血压盲人扫码听不到"糖/盐偏高"。
-        let json = #"{"name":"汽水","allergens":[],"traces":[],"nutriScore":"e","novaGroup":4,"dietaryLabels":[],"quantity":"330 ml","nutrientLevels":{"sugars":"high","salt":"low"},"ingredients":"水、白砂糖、二氧化碳","energyKcal100g":42}"#
+        let json = #"{"name":"汽水","allergens":[],"traces":[],"nutriScore":"e","novaGroup":4,"dietaryLabels":[],"quantity":"330 ml","nutrientLevels":{"sugars":"high","salt":"low"},"ingredients":"水、白砂糖、二氧化碳","energyKcal100g":42,"macros100g":{"carbohydrates":12.3,"sugars":4.5,"protein":3,"fat":3.6}}"#
         let info = try JSONDecoder().decode(APIClient.ProductLookupInfo.self, from: Data(json.utf8))
         XCTAssertEqual(info.nutrientLevels?["sugars"], "high")
         XCTAssertEqual(info.nutrientLevels?["salt"], "low")
         XCTAssertEqual(info.ingredients, "水、白砂糖、二氧化碳") // 配料表下发须解码——盲人读不到配料表
         XCTAssertEqual(info.energyKcal100g, 42)                // 热量下发须解码——盲人数卡/控糖控重需要
+        XCTAssertEqual(info.macros100g?.carbohydrates, 12.3)  // 四大营养素克数下发须解码——糖尿病算碳水的定量刚需
+        XCTAssertEqual(info.macros100g?.sugars, 4.5)
+        XCTAssertEqual(info.macros100g?.protein, 3)
+        XCTAssertEqual(info.macros100g?.fat, 3.6)
         // 旧/缺字段负载 → nil（向后兼容，不崩）。
         let legacy = #"{"name":"牛奶"}"#
         let legacyInfo = try JSONDecoder().decode(APIClient.ProductLookupInfo.self, from: Data(legacy.utf8))
         XCTAssertNil(legacyInfo.nutrientLevels)
         XCTAssertNil(legacyInfo.ingredients)
         XCTAssertNil(legacyInfo.energyKcal100g)
+        XCTAssertNil(legacyInfo.macros100g) // 缺字段→nil（向后兼容）
     }
 
     func testSaveAndLookup() {

@@ -1142,6 +1142,15 @@ struct APIClient {
         let nutrientLevels: [String: String]? // 逐营养素含量档（fat/saturated-fat/sugars/salt→low|moderate|high）——只警示 high（糖/盐/脂偏高），对标 Yuka
         let ingredients: String?     // 配料表原文（"生牛乳、白砂糖、食品添加剂…"）——盲人**读不到配料表**，查素食/忌口成分/"这是什么做的"的核心刚需，过敏原标注覆盖不了的具体成分靠它；空/缺省=无数据
         let energyKcal100g: Int?     // 热量（每 100 克/毫升千卡）——盲人读不到卡路里，而数卡/控糖控重(减肥/糖尿病)正需这个绝对值；nil/缺省=无数据
+        let macros100g: Macros100g? // 四大营养素克数（每 100 克）：碳水/糖/蛋白质/脂肪——热量之外的定量刚需（糖尿病算碳水、健身看蛋白）；各字段独立 nil=无数据
+
+        /// 每 100 克四大营养素**克数**（服务端保留 1 位小数）。各字段独立可缺，缺=nil（不猜）。
+        struct Macros100g: Codable, Equatable {
+            let carbohydrates: Double?
+            let sugars: Double?
+            let protein: Double?
+            let fat: Double?
+        }
     }
 
     /// 商品条码 → 商品名+标注过敏原（服务端代理 Open Food Facts）。查不到/离线/任何错误一律 nil（上层回退"用户起名"，绝不编造）。

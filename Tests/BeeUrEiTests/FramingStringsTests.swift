@@ -122,6 +122,18 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertNil(FramingStrings.productEnergySpeak(-5, .zh))                     // 负（异常）→nil
     }
 
+    func testProductMacrosSpeakGramsPer100g() {
+        // 四大营养素克数后缀：糖尿病算碳水/健身看蛋白的定量刚需；各素独立可缺、只报有的；整数去尾零；全缺/负/非有限→跳过。
+        XCTAssertEqual(FramingStrings.productMacrosSpeak(carbohydrates: 12.3, sugars: 4.5, protein: 3, fat: 3.6, .zh),
+                       "。每100克：碳水12.3克，糖4.5克，蛋白质3克，脂肪3.6克") // 3 去尾零为"3克"
+        XCTAssertEqual(FramingStrings.productMacrosSpeak(carbohydrates: 12.3, sugars: nil, protein: 3, fat: nil, .en),
+                       ". Per 100g: carbs 12.3 g, protein 3 g") // 缺的（糖/脂）跳过，不硬凑 0
+        XCTAssertEqual(FramingStrings.productMacrosSpeak(carbohydrates: 20, sugars: nil, protein: nil, fat: nil, .zh),
+                       "。每100克：碳水20克") // 只碳水一素也报
+        XCTAssertNil(FramingStrings.productMacrosSpeak(carbohydrates: nil, sugars: nil, protein: nil, fat: nil, .zh)) // 全缺→nil（不猜）
+        XCTAssertNil(FramingStrings.productMacrosSpeak(carbohydrates: -1, sugars: .nan, protein: .infinity, fat: nil, .zh)) // 负/非有限全跳过→nil
+    }
+
     func testTorchAutoOnTellsUserItWasSolved() {
         // 太暗自动点灯的播报：须点明已打开手电筒 + 提示重试（而非只说"太暗"卡住）。
         let zh = FramingStrings.torchAutoOn(.zh)

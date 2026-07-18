@@ -408,6 +408,26 @@ enum FramingStrings {
         guard let k = kcal, k >= 0 else { return nil }
         return l == .zh ? "。每100克约\(k)千卡" : ". About \(k) kcal per 100g"
     }
+
+    /// 四大营养素**克数**播报（"每100克：碳水12.3克，糖4.5克，蛋白质3克，脂肪3.6克"）——热量之外的定量刚需：
+    /// **糖尿病人靠总碳水克数算胰岛素/控碳水**（含量档只给"高糖"定性、给不了用于计量的克数），健身/肾病看蛋白、控脂看脂肪。
+    /// 各素**独立可缺**：只报有数据的、缺的跳过（绝不硬凑 0，缺≠0）；全缺 → nil（不猜）。整数去尾零（"3克"非"3.0克"）；
+    /// 非有限/负（异常/脏数据）该素跳过。放在热量之后（同为"每100克"定量信息，聚成一簇）。
+    static func productMacrosSpeak(carbohydrates: Double?, sugars: Double?, protein: Double?, fat: Double?, _ l: Language) -> String? {
+        let zh = l == .zh
+        func grams(_ v: Double) -> String {
+            let s = v.rounded() == v ? String(Int(v)) : String(format: "%.1f", v)
+            return zh ? "\(s)克" : "\(s) g"
+        }
+        var parts: [String] = []
+        if let c = carbohydrates, c.isFinite, c >= 0 { parts.append((zh ? "碳水" : "carbs ") + grams(c)) }
+        if let s = sugars, s.isFinite, s >= 0 { parts.append((zh ? "糖" : "sugar ") + grams(s)) }
+        if let p = protein, p.isFinite, p >= 0 { parts.append((zh ? "蛋白质" : "protein ") + grams(p)) }
+        if let f = fat, f.isFinite, f >= 0 { parts.append((zh ? "脂肪" : "fat ") + grams(f)) }
+        guard !parts.isEmpty else { return nil }
+        let joined = parts.joined(separator: zh ? "，" : ", ")
+        return zh ? "。每100克：\(joined)" : ". Per 100g: \(joined)"
+    }
     /// Wi-Fi 配置码：显示网络名 + **密码**——盲人看不到贴纸上的密码，密码正是扫这张码的目的（此前只报网络名，
     /// 拿不到密码根本连不上网）。开放网络明确标注无密码。cred 为 nil（畸形 WIFI: 码）退化为通用词。
     static func wifiResult(_ cred: WifiCredential?, _ l: Language) -> String {

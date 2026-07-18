@@ -1007,8 +1007,12 @@ final class FramingAssistViewModel {
                         // 配料表最长、放最后播——避免打断前面的过敏原/营养警示（"最要紧先说"）。
                         let ingredientsSuffix = FramingStrings.productIngredientsSpeak(self.productStore.ingredients(for: first), self.lang) ?? ""
                         let energySuffix = FramingStrings.productEnergySpeak(self.productStore.energyKcal(for: first), self.lang) ?? "" // 热量随营养信息（含量档之后、膳食/配料之前）
-                        self.resultText = alertPrefix + dietPrefix + FramingStrings.productResult(name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + energySuffix + dietarySuffix + ingredientsSuffix
-                        self.speak(alertPrefix + dietPrefix + FramingStrings.thisIs(name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + energySuffix + dietarySuffix + ingredientsSuffix)
+                        let macrosSuffix: String = { // 四大营养素克数紧随热量（同为"每100克"定量信息）；离线复扫从本地库读回
+                            let m = self.productStore.macros(for: first)
+                            return FramingStrings.productMacrosSpeak(carbohydrates: m["carbohydrates"], sugars: m["sugars"], protein: m["protein"], fat: m["fat"], self.lang) ?? ""
+                        }()
+                        self.resultText = alertPrefix + dietPrefix + FramingStrings.productResult(name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + energySuffix + macrosSuffix + dietarySuffix + ingredientsSuffix
+                        self.speak(alertPrefix + dietPrefix + FramingStrings.thisIs(name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + energySuffix + macrosSuffix + dietarySuffix + ingredientsSuffix)
                     } else {
                         // 本地没起过名：先在线查一次（Open Food Facts）——查到直接报名字并记住（对标 Seeing AI），
                         // 查不到/离线再回退到"用户起名"（严格附加，绝不回退失败）。
@@ -1444,9 +1448,21 @@ final class FramingAssistViewModel {
                 let traces = info.traces ?? []
                 let dietaryLabels = info.dietaryLabels ?? []
                 let nutrientLevels = info.nutrientLevels ?? [:]
+                // 四大营养素克数 → 只存有效（有限、非负）的素，缺/脏值跳过（缺≠0，同热量口径）；离线复扫从本地库读回。
+                let macros: [String: Double] = {
+                    var d: [String: Double] = [:]
+                    if let m = info.macros100g {
+                        if let c = m.carbohydrates, c.isFinite, c >= 0 { d["carbohydrates"] = c }
+                        if let s = m.sugars, s.isFinite, s >= 0 { d["sugars"] = s }
+                        if let p = m.protein, p.isFinite, p >= 0 { d["protein"] = p }
+                        if let f = m.fat, f.isFinite, f >= 0 { d["fat"] = f }
+                    }
+                    return d
+                }()
                 self.productStore.save(barcode: barcode, name: info.name, allergens: allergens, traces: traces,
                                        nutriScore: info.nutriScore, novaGroup: info.novaGroup, dietaryLabels: dietaryLabels, quantity: info.quantity,
-                                       nutrientLevels: nutrientLevels, ingredients: info.ingredients, energyKcal: info.energyKcal100g) // 过敏原+微量+营养+膳食标注+净含量+逐素含量档+配料表+热量随名字存，下次离线也能报
+                                       nutrientLevels: nutrientLevels, ingredients: info.ingredients, energyKcal: info.energyKcal100g,
+                                       macros: macros) // 过敏原+微量+营养+膳食标注+净含量+逐素含量档+配料表+热量+四大营养素克数随名字存，下次离线也能报
                 // 个人化过敏原预警置最前（命中用户标记的即醒目警告；叠加不替代全量播报）。营养预警紧随其后。
                 let match = AllergenAlert.matched(productAllergens: allergens, productTraces: traces, userAllergens: FeatureSettings().myAllergens)
                 let alertPrefix = FramingStrings.allergenAlertSpeak(contained: match.contained, traces: match.traces, self.lang) ?? ""
@@ -1460,8 +1476,9 @@ final class FramingAssistViewModel {
                 let dietarySuffix = FramingStrings.productDietaryLabelsSpeak(dietaryLabels, self.lang) ?? ""
                 let ingredientsSuffix = FramingStrings.productIngredientsSpeak(info.ingredients, self.lang) ?? "" // 配料表最长放最后播
                 let energySuffix = FramingStrings.productEnergySpeak(info.energyKcal100g, self.lang) ?? "" // 热量随营养信息
-                self.resultText = alertPrefix + dietPrefix + FramingStrings.productResult(info.name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + energySuffix + dietarySuffix + ingredientsSuffix
-                self.speak(alertPrefix + dietPrefix + FramingStrings.thisIs(info.name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + energySuffix + dietarySuffix + ingredientsSuffix) // 一次 speak：.query 替换语义
+                let macrosSuffix = FramingStrings.productMacrosSpeak(carbohydrates: info.macros100g?.carbohydrates, sugars: info.macros100g?.sugars, protein: info.macros100g?.protein, fat: info.macros100g?.fat, self.lang) ?? "" // 四大营养素克数紧随热量
+                self.resultText = alertPrefix + dietPrefix + FramingStrings.productResult(info.name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + energySuffix + macrosSuffix + dietarySuffix + ingredientsSuffix
+                self.speak(alertPrefix + dietPrefix + FramingStrings.thisIs(info.name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + energySuffix + macrosSuffix + dietarySuffix + ingredientsSuffix) // 一次 speak：.query 替换语义
             } else {
                 // 回退：原"起名"路径（弹窗 + 提示），与在线查询前行为一致。
                 self.pendingProductCode = barcode

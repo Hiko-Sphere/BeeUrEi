@@ -29,6 +29,10 @@ export interface ProductInfo {
   /// 营养表，而"糖/盐/脂肪偏高"是**可听的、可据以决策**的健康提示——对标 Yuka / Open Food Facts 的红黄绿标。
   /// 只收白名单 4 素 × 3 档，其它一律丢弃。空对象=无数据（客户端只在有档时播，且只警示 high、不播"不高"避免假安心）。
   nutrientLevels: Record<string, string>
+  /// 配料表（OFF ingredients_text，原文语言，如"水、白砂糖、食品添加剂…"）。盲人**读不到配料表**——这是查素食
+  /// (有无明胶)、忌口(某成分)、"这到底是什么做的"的核心刚需，过敏原/膳食标注覆盖不了的具体成分靠它。去空白、
+  /// 截断防超长朗读（按 OFF 递减含量序，前段即主料）；空串=无数据。
+  ingredients: string
 }
 
 type FetchLike = (url: string, init?: unknown) => Promise<{ ok: boolean; json: () => Promise<unknown> }>
@@ -113,6 +117,15 @@ export function parseQuantity(v: unknown): string {
   return typeof v === 'string' ? v.trim().replace(/\s+/g, ' ').slice(0, 40) : ''
 }
 
+/// 配料表文本（OFF ingredients_text 自由文本）：去多余空白、截断防超长朗读（>200 字截到 200 + "…"；OFF 按递减
+/// 含量列，前段即主要成分）。非字符串/空→空串。**不做成分解析/翻译**——原文最不失真（同 parseQuantity 取向）。
+export function parseIngredients(v: unknown): string {
+  if (typeof v !== 'string') return ''
+  const t = v.trim().replace(/\s+/g, ' ')
+  if (!t) return ''
+  return t.length > 200 ? t.slice(0, 200).trimEnd() + '…' : t
+}
+
 /// Nutri-Score 分级：只接受可信的 a..e（OFF 用小写；'unknown'/'not-applicable'/空/其它 → null，绝不猜）。
 export function parseNutriScore(grade: unknown): string | null {
   if (typeof grade !== 'string') return null
@@ -153,7 +166,7 @@ export type LookupOutcome =
 
 /// 查一个条码，区分"真未收录(notFound)"与"瞬时故障(failed)"（用于差异化缓存；两者对客户端都表现为拿不到名字）。
 export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeoutMs = 5000): Promise<LookupOutcome> {
-  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,allergens_tags,traces_tags,nutriscore_grade,nova_group,labels_tags,quantity,nutrient_levels`
+  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,allergens_tags,traces_tags,nutriscore_grade,nova_group,labels_tags,quantity,nutrient_levels,ingredients_text`
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
@@ -176,6 +189,7 @@ export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeo
       dietaryLabels: extractDietaryLabels(p?.labels_tags),
       quantity: parseQuantity(p?.quantity),
       nutrientLevels: extractNutrientLevels(p?.nutrient_levels),
+      ingredients: parseIngredients(p?.ingredients_text),
     } }
   } catch {
     return { kind: 'failed' } // 超时/网络/解析异常：瞬时故障，不长缓存，绝不编造商品名

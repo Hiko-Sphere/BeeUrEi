@@ -382,6 +382,14 @@ enum FramingStrings {
         return l == .zh ? "。包装标注：\(names.joined(separator: "、"))"
                         : ". Labeled: \(names.joined(separator: ", "))"
     }
+
+    /// 配料表播报（"配料：生牛乳、白砂糖、食品添加剂…"）——盲人**读不到配料表**，这是过敏原/膳食标注覆盖不了的具体
+    /// 成分刚需：查有无明胶(素食)/某忌口成分/"这到底是什么做的"。服务端已去空白+截断（原文语言、按含量递减序），
+    /// 此处只做去空白兜底 + 拼成独立句（配料通常较长，末位播报避免打断前面的过敏原/营养警示）。空=无数据→nil（缺数据≠无配料）。
+    static func productIngredientsSpeak(_ ingredients: String?, _ l: Language) -> String? {
+        guard let s = ingredients?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
+        return l == .zh ? "。配料：\(s)" : ". Ingredients: \(s)"
+    }
     /// Wi-Fi 配置码：显示网络名 + **密码**——盲人看不到贴纸上的密码，密码正是扫这张码的目的（此前只报网络名，
     /// 拿不到密码根本连不上网）。开放网络明确标注无密码。cred 为 nil（畸形 WIFI: 码）退化为通用词。
     static func wifiResult(_ cred: WifiCredential?, _ l: Language) -> String {

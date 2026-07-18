@@ -1003,8 +1003,10 @@ final class FramingAssistViewModel {
                         let nutritionSuffix = FramingStrings.productNutritionSpeak(self.productStore.nutriScore(for: first), self.productStore.novaGroup(for: first), self.lang) ?? ""
                         let nutrientLevelsSuffix = FramingStrings.productNutrientLevelsSpeak(nutrientLevels, self.lang) ?? ""
                         let dietarySuffix = FramingStrings.productDietaryLabelsSpeak(self.productStore.dietaryLabels(for: first), self.lang) ?? ""
-                        self.resultText = alertPrefix + dietPrefix + FramingStrings.productResult(name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + dietarySuffix
-                        self.speak(alertPrefix + dietPrefix + FramingStrings.thisIs(name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + dietarySuffix)
+                        // 配料表最长、放最后播——避免打断前面的过敏原/营养警示（"最要紧先说"）。
+                        let ingredientsSuffix = FramingStrings.productIngredientsSpeak(self.productStore.ingredients(for: first), self.lang) ?? ""
+                        self.resultText = alertPrefix + dietPrefix + FramingStrings.productResult(name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + dietarySuffix + ingredientsSuffix
+                        self.speak(alertPrefix + dietPrefix + FramingStrings.thisIs(name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + dietarySuffix + ingredientsSuffix)
                     } else {
                         // 本地没起过名：先在线查一次（Open Food Facts）——查到直接报名字并记住（对标 Seeing AI），
                         // 查不到/离线再回退到"用户起名"（严格附加，绝不回退失败）。
@@ -1442,7 +1444,7 @@ final class FramingAssistViewModel {
                 let nutrientLevels = info.nutrientLevels ?? [:]
                 self.productStore.save(barcode: barcode, name: info.name, allergens: allergens, traces: traces,
                                        nutriScore: info.nutriScore, novaGroup: info.novaGroup, dietaryLabels: dietaryLabels, quantity: info.quantity,
-                                       nutrientLevels: nutrientLevels) // 过敏原+微量+营养+膳食标注+净含量+逐素含量档随名字存，下次离线也能报
+                                       nutrientLevels: nutrientLevels, ingredients: info.ingredients) // 过敏原+微量+营养+膳食标注+净含量+逐素含量档+配料表随名字存，下次离线也能报
                 // 个人化过敏原预警置最前（命中用户标记的即醒目警告；叠加不替代全量播报）。营养预警紧随其后。
                 let match = AllergenAlert.matched(productAllergens: allergens, productTraces: traces, userAllergens: FeatureSettings().myAllergens)
                 let alertPrefix = FramingStrings.allergenAlertSpeak(contained: match.contained, traces: match.traces, self.lang) ?? ""
@@ -1454,8 +1456,9 @@ final class FramingAssistViewModel {
                 let nutritionSuffix = FramingStrings.productNutritionSpeak(info.nutriScore, info.novaGroup, self.lang) ?? ""
                 let nutrientLevelsSuffix = FramingStrings.productNutrientLevelsSpeak(nutrientLevels, self.lang) ?? ""
                 let dietarySuffix = FramingStrings.productDietaryLabelsSpeak(dietaryLabels, self.lang) ?? ""
-                self.resultText = alertPrefix + dietPrefix + FramingStrings.productResult(info.name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + dietarySuffix
-                self.speak(alertPrefix + dietPrefix + FramingStrings.thisIs(info.name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + dietarySuffix) // 一次 speak：.query 替换语义
+                let ingredientsSuffix = FramingStrings.productIngredientsSpeak(info.ingredients, self.lang) ?? "" // 配料表最长放最后播
+                self.resultText = alertPrefix + dietPrefix + FramingStrings.productResult(info.name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + dietarySuffix + ingredientsSuffix
+                self.speak(alertPrefix + dietPrefix + FramingStrings.thisIs(info.name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + dietarySuffix + ingredientsSuffix) // 一次 speak：.query 替换语义
             } else {
                 // 回退：原"起名"路径（弹窗 + 提示），与在线查询前行为一致。
                 self.pendingProductCode = barcode

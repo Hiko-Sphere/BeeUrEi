@@ -1119,6 +1119,7 @@ struct APIClient {
         let dietaryLabels: [String]? // 膳食/宗教认证标注（无麸质/纯素/清真…）——盲人看不到包装认证，刚需
         let quantity: String?        // 净含量/规格（"500 ml"/"200 g"）——盲人看不到包装规格，判份量/选对大小
         let nutrientLevels: [String: String]? // 逐营养素含量档（fat/saturated-fat/sugars/salt→low|moderate|high）——只警示 high（糖/盐/脂偏高），对标 Yuka
+        let ingredients: String?     // 配料表原文（"生牛乳、白砂糖、食品添加剂…"）——盲人**读不到配料表**，查素食/忌口成分/"这是什么做的"的核心刚需，过敏原标注覆盖不了的具体成分靠它；空/缺省=无数据
     }
 
     /// 商品条码 → 商品名+标注过敏原（服务端代理 Open Food Facts）。查不到/离线/任何错误一律 nil（上层回退"用户起名"，绝不编造）。

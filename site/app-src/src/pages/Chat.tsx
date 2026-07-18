@@ -5,7 +5,7 @@ import { pollWhileVisible } from '../lib/poll'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { joinNames } from '../lib/listFormat'
-import { parseLocation, appleMapsUrl, locationMessageText } from '../lib/location'
+import { parseLocation, appleMapsUrl, appleMapsDirectionsUrl, locationMessageText } from '../lib/location'
 import { linkifyParts } from '../lib/linkify'
 import { imageFileFromClipboard } from '../lib/clipboardImage'
 import { isForwardableKind } from '../lib/chatMessage'
@@ -1321,8 +1321,15 @@ function MessageBody({ m, t }: { m: ChatMessage; t: (z: string, e: string) => st
 /// 地图链接一律 Apple Maps（项目约定，与紧急告警/Notifications/iOS 一致）：境内可打开，
 /// 且在中国境内展示时自动做 WGS-84→GCJ 纠偏；OSM 境内时常不可达。
 function LocationLink({ loc, t }: { loc: { lat: number; lng: number; name?: string }; t: (z: string, e: string) => string }) {
-  return <a href={appleMapsUrl(loc.lat, loc.lng, loc.name)}
-            target="_blank" rel="noreferrer" className="underline">📍 {loc.name || t('位置', 'Location')}</a>
+  // 📍 地名=查看该位置；「导航前往」=**去**那里（收到亲友分享位置的家人常要赶去，与位置页 SharingContactRow 同口径，
+  // 少一步"先看再手点导航"）。地图链接一律 Apple Maps（境内可开 + WGS-84 纠偏，全栈约定一致）。
+  return (
+    <span className="inline-flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+      <a href={appleMapsUrl(loc.lat, loc.lng, loc.name)} target="_blank" rel="noreferrer" className="underline">📍 {loc.name || t('位置', 'Location')}</a>
+      <a href={appleMapsDirectionsUrl(loc.lat, loc.lng, loc.name)} target="_blank" rel="noreferrer"
+         className="text-xs text-accent underline">{t('导航前往', 'Directions')}</a>
+    </span>
+  )
 }
 
 // 群容量（与服务端一致，单一出处）：MAX_MEMBERS=50（groups.ts 同名常量）；建群可邀=50-1（群主占一席，

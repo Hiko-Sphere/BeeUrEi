@@ -410,14 +410,25 @@ function lineDirection(name: string | undefined): string | undefined {
   return inner ? inner : undefined
 }
 
+/// 夜班车标志：高德 transit 默认 `nightflag=0`（**不计算夜班车**）。深夜常规公交/地铁已收车，此时若不置夜班车标志，
+/// 盲人查公交要么**查不到任何可乘方案**、要么拿到一条已停运线路（更误导——半夜赶去站台等一辆不会来的车）。按**中国本地时**
+/// 判定夜班车运营窗口 23:00–次日05:00（常规线路已收车、夜班车（夜1/夜X 等）正是这段唯一在跑的公交），置 1 让高德计算
+/// 夜班车路线；其余时段 0。中国全境 UTC+8 且无夏令时，本地小时 = UTC 小时 + 8。纯函数，可单测。白天置 1 也无害（夜班车不
+/// 运营、高德不会返回），但保持默认 0 语义最清晰。
+export function nightBusFlag(nowMs: number): 0 | 1 {
+  const chinaHour = new Date(nowMs + 8 * 3600_000).getUTCHours()
+  return (chinaHour >= 23 || chinaHour < 5) ? 1 : 0
+}
+
 /// 公交/地铁路径规划（origin/destination="经度,纬度" GCJ-02，city=起点 adcode）。返回高德推荐的第一条方案；
 /// 无方案（太近应步行/无公交覆盖/跨城无直达）→ null（路由据此回 404，区别于 key 错误）。key/配额等错误抛 AmapError。
 /// 高德会把每个 segment 的 walking/bus/entrance/exit/railway 键都返回、空的用空对象/空数组占位——故按**内容非空**判定该腿是否存在。
-export async function amapTransit(origin: string, destination: string, city: string): Promise<TransitPlan | null> {
+/// nowMs 可注入（默认当下）：仅用于按中国本地时决定 nightflag（夜间纳入夜班车），单测据此稳定断言。
+export async function amapTransit(origin: string, destination: string, city: string, nowMs: number = Date.now()): Promise<TransitPlan | null> {
   const key = apiKey()
   if (!key) return null
   const url = `${AMAP_BASE}/direction/transit/integrated?origin=${origin}&destination=${destination}`
-    + `&city=${encodeURIComponent(city)}&strategy=0&nightflag=0&key=${key}`
+    + `&city=${encodeURIComponent(city)}&strategy=0&nightflag=${nightBusFlag(nowMs)}&key=${key}`
   const res = await amapFetch(url)
   interface Stop { name?: string }
   interface Busline {

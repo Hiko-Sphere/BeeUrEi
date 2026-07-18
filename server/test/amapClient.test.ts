@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { amapWalking, amapGeocode, amapConfigured, AmapError, amapTransit } from '../src/nav/amapClient'
+import { amapWalking, amapGeocode, amapConfigured, AmapError, amapTransit, nightBusFlag } from '../src/nav/amapClient'
 
 /// 高德客户端单测：折线解析（跳过非法点、distance 非数字兜底为 0，绝不外发 NaN）、未配置兜底，
 /// 以及**响应状态校验**（key 平台不符等错误抛 AmapError，不静默退化成"目的地未找到"）。
@@ -106,6 +106,25 @@ describe('amapClient（国内步行导航）', () => {
     expect(bus.entrance).toBeUndefined() // 公交段不携带站口（空对象/非地铁 → undefined）
     expect(bus.exit).toBeUndefined()
     expect(bus.direction).toBeUndefined() // "300路" 无括注 → 无方向
+  })
+
+  it('夜班车标志 nightBusFlag：中国本地时 23:00–05:00 置 1（夜班车运营窗口），白天 0；amapTransit URL 携带该标志', async () => {
+    // 构造"中国本地 h 点"对应的 UTC ms（中国 UTC+8 无夏令时 → UTC 小时 = h-8）。
+    const chinaTime = (h: number) => Date.UTC(2026, 0, 1, (h - 8 + 24) % 24, 0, 0)
+    expect(nightBusFlag(chinaTime(23))).toBe(1) // 23 点：常规线路已收车，夜班车窗口起点
+    expect(nightBusFlag(chinaTime(2))).toBe(1)  // 凌晨 2 点：深夜
+    expect(nightBusFlag(chinaTime(4))).toBe(1)  // 4 点仍在窗口内
+    expect(nightBusFlag(chinaTime(5))).toBe(0)  // 5 点：窗口外（常规线路陆续首班）
+    expect(nightBusFlag(chinaTime(14))).toBe(0) // 下午：常规
+    expect(nightBusFlag(chinaTime(22))).toBe(0) // 22 点：仍常规（窗口未到）
+    // URL 携带：注入夜间时刻 → nightflag=1；白天 → nightflag=0（盲人半夜也能查到在跑的夜班车）。
+    process.env.AMAP_API_KEY = 'testkey'
+    let captured = ''
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => { captured = url; return ok({ status: '1', infocode: '10000', route: { transits: [] } }) }))
+    await amapTransit('116.4,39.9', '116.5,39.9', '021', chinaTime(2))
+    expect(captured).toContain('nightflag=1')
+    await amapTransit('116.4,39.9', '116.5,39.9', '021', chinaTime(14))
+    expect(captured).toContain('nightflag=0')
   })
 
   it('公交方案：出租车段（首末公里）解成 taxi 腿，不再被整段丢弃；空占位 taxi:{} 不误当一段', async () => {

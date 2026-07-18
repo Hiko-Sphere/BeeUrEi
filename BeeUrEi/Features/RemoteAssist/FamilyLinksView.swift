@@ -360,6 +360,14 @@ enum SafetyStrings {
     static func dailyTimeLabel(_ l: Language) -> String { l == .zh ? "每天开始时刻" : "Starts every day at" }
     static func dailySave(_ l: Language) -> String { l == .zh ? "保存日程" : "Save schedule" }
     static func dailySaved(_ l: Language) -> String { l == .zh ? "每日报到日程已保存。" : "Daily check-in schedule saved." }
+    /// 每日报到保存后的播报（与网页端 Family 同口径）：关闭→已关闭；开启且有联系人→正常确认；**开启但无任何
+    /// accepted 联系人→防假安心警告**（每日到点告警扇给全体 accepted，一个都没有＝这道每日安全网静默失效）。纯逻辑可单测。
+    static func dailySavedNotice(enabled: Bool, hasAnyContact: Bool, _ l: Language) -> String {
+        if !enabled { return l == .zh ? "每日报到已关闭。" : "Daily check-in off." }
+        if hasAnyContact { return l == .zh ? "每日报到已开启，每天到点会自动开始。" : "Daily check-in on — starts automatically each day." }
+        return l == .zh ? "已开启，但你还没有任何联系人——超时也无人会被通知，请先添加联系人。"
+                        : "On, but you have no contacts yet — no one will be alerted. Add a contact first."
+    }
     static func nextCheckin(_ label: String, _ l: Language) -> String { l == .zh ? "下次报到：\(label)" : "Next check-in: \(label)" }
     static func pause7(_ l: Language) -> String { l == .zh ? "暂停 7 天" : "Pause 7 days" }
     static func pause30(_ l: Language) -> String { l == .zh ? "暂停 30 天" : "Pause 30 days" }
@@ -570,8 +578,9 @@ struct DailyCheckinSection: View {
                                                      durationMinutes: duration, tz: TimeZone.current.identifier,
                                                      note: dnote.trimmingCharacters(in: .whitespacesAndNewlines),
                                                      pausedUntil: pausedUntil)
-            enabled = s.enabled; pausedUntil = s.pausedUntil
-            announce(SafetyStrings.dailySaved(lang))
+            enabled = s.schedule.enabled; pausedUntil = s.schedule.pausedUntil
+            // 防假安心：开启每日报到但一个 accepted 联系人都没有时，明确告知这道每日安全网到点也无人被通知（盲人听得到）。
+            announce(SafetyStrings.dailySavedNotice(enabled: s.schedule.enabled, hasAnyContact: s.hasAnyContact, lang))
         } catch { announce(SafetyStrings.failed(lang)) }
     }
     /// days=nil → 立即恢复（pausedUntil 传 0，服务端视作未暂停）。
@@ -583,7 +592,7 @@ struct DailyCheckinSection: View {
                                                      durationMinutes: duration, tz: TimeZone.current.identifier,
                                                      note: dnote.trimmingCharacters(in: .whitespacesAndNewlines),
                                                      pausedUntil: target)
-            pausedUntil = s.pausedUntil
+            pausedUntil = s.schedule.pausedUntil
             announce(days == nil ? SafetyStrings.resumed(lang) : SafetyStrings.paused(lang))
         } catch { announce(SafetyStrings.failed(lang)) }
     }

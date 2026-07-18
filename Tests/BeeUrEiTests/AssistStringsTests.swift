@@ -213,4 +213,22 @@ final class AssistStringsTests: XCTestCase {
         XCTAssertTrue(en.lowercased().contains("no one"))
         XCTAssertTrue(en.lowercased().contains("contact"))
     }
+
+    /// 每日报到保存播报：开启但无任何联系人时**防假安心**（与一次性报到同族 bug、与网页端同口径）。
+    func testDailyCheckinSavedNoticeWarnsWhenEnabledWithoutContact() {
+        func hasCJK(_ s: String) -> Bool { s.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }
+        // 关闭 → "已关闭"，与联系人有无无关、绝不含"无人"（关了本就不会告警）。
+        XCTAssertTrue(SafetyStrings.dailySavedNotice(enabled: false, hasAnyContact: false, .zh).contains("已关闭"))
+        XCTAssertFalse(SafetyStrings.dailySavedNotice(enabled: false, hasAnyContact: false, .zh).contains("无人"))
+        // 开启 + 有联系人 → 正常确认（自动开始），不含"无人"。
+        let ok = SafetyStrings.dailySavedNotice(enabled: true, hasAnyContact: true, .zh)
+        XCTAssertTrue(ok.contains("已开启")); XCTAssertFalse(ok.contains("无人"))
+        // 开启 + 无任何 accepted 联系人 → 防假安心警告：明确"无人会被通知"+可行动"添加联系人"。
+        let warn = SafetyStrings.dailySavedNotice(enabled: true, hasAnyContact: false, .zh)
+        XCTAssertTrue(warn.contains("无人会被通知"))
+        XCTAssertTrue(warn.contains("添加联系人"))
+        // 英文分支不串中文，无联系人时含 "no one"。
+        let en = SafetyStrings.dailySavedNotice(enabled: true, hasAnyContact: false, .en)
+        XCTAssertFalse(hasCJK(en)); XCTAssertTrue(en.lowercased().contains("no one"))
+    }
 }

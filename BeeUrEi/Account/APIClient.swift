@@ -287,6 +287,13 @@ struct SafetyCheckinStatus: Sendable {
     let hasEmergencyContact: Bool // 有 accepted∧紧急 联系人（额外授医疗信息可见）
 }
 
+/// 每日报到保存结果 + 联系人可达性（服务端 PUT /api/safety/checkin/schedule 恒返 hasAnyContact）。开启一个每日
+/// dead-man's switch 却无任何 accepted 联系人时，每日到点告警也无人可发＝静默失效——保存后须据此警告本人（防假安心）。
+struct DailyCheckinResult: Sendable {
+    let schedule: DailyCheckinSchedule
+    let hasAnyContact: Bool
+}
+
 /// 每日报到日程（User.dailyCheckin）：每天 startMinute 自动开始一次 durationMinutes 的报到。
 /// pausedUntil：暂停至该时刻(ms)自动恢复（住院/出行临时停用，比整体关闭安全——不必记得重开）；过去/缺省=未暂停。
 struct DailyCheckinSchedule: Codable, Sendable {
@@ -1328,7 +1335,7 @@ struct APIClient {
     /// 保存每日报到日程。pausedUntil：未来时刻(ms)=暂停至该时刻自动恢复；0/nil=不暂停。
     /// 注意：改时间/时长/备注时须**回传当前 pausedUntil**，否则会静默清掉生效中的暂停（与网页同教训）。
     func setCheckinSchedule(token: String, enabled: Bool, startMinute: Int, durationMinutes: Int,
-                            tz: String, note: String?, pausedUntil: Double?) async throws -> DailyCheckinSchedule {
+                            tz: String, note: String?, pausedUntil: Double?) async throws -> DailyCheckinResult {
         var body: [String: Any] = ["enabled": enabled, "startMinute": startMinute,
                                    "durationMinutes": durationMinutes, "tz": tz]
         if let note, !note.isEmpty { body["note"] = note }
@@ -1336,8 +1343,9 @@ struct APIClient {
         // 亚毫秒尾数）——曾让"暂停 7/30 天"每次都 400。取整为 Int 再入 JSON。
         if let pausedUntil { body["pausedUntil"] = Int(pausedUntil.rounded()) }
         let data = try await authedSend("PUT", "/api/safety/checkin/schedule", token: token, body: body)
-        struct R: Codable { let schedule: DailyCheckinSchedule }
-        return try JSONDecoder().decode(R.self, from: data).schedule
+        struct R: Codable { let schedule: DailyCheckinSchedule; let hasAnyContact: Bool? }
+        let r = try JSONDecoder().decode(R.self, from: data)
+        return DailyCheckinResult(schedule: r.schedule, hasAnyContact: r.hasAnyContact ?? true) // 缺省乐观 true，不闪假警告
     }
 
     func unregisterApnsToken(token: String) async {

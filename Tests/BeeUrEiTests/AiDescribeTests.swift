@@ -29,6 +29,29 @@ final class AiDescribeTests: XCTestCase {
         XCTAssertNil(ChatStrings.quotaRemainingNote(remaining: -1, .zh))    // 坏值不念
     }
 
+    func testVqaConversationMultiTurnAndResetOnImageChange() {
+        var convo = APIClient.VqaConversation()
+        // 首轮（图 A 泛描述）：无历史（单轮）。
+        XCTAssertEqual(convo.historyForNewQuestion(imageKey: "A"), [])
+        convo.record(question: nil, answer: "一盒饼干", defaultQuestion: "请描述这张照片")
+        // 追问（同图 A）：历史含首轮，泛描述记为默认问句（供上下文）。
+        let h1 = convo.historyForNewQuestion(imageKey: "A")
+        XCTAssertEqual(h1, [APIClient.VqaTurn(q: "请描述这张照片", a: "一盒饼干")])
+        convo.record(question: "多少钱", answer: "15 元", defaultQuestion: "请描述这张照片")
+        // 再追问（同图 A）：历史累积两轮，用户问句原样。
+        let h2 = convo.historyForNewQuestion(imageKey: "A")
+        XCTAssertEqual(h2, [APIClient.VqaTurn(q: "请描述这张照片", a: "一盒饼干"), APIClient.VqaTurn(q: "多少钱", a: "15 元")])
+        // 换到图 B（不同 key）：对话**重置**，历史清空（不把图 A 的上下文误带给图 B）。
+        XCTAssertEqual(convo.historyForNewQuestion(imageKey: "B"), [])
+        convo.record(question: "这是什么", answer: "一只猫", defaultQuestion: "请描述这张照片")
+        XCTAssertEqual(convo.historyForNewQuestion(imageKey: "B"), [APIClient.VqaTurn(q: "这是什么", a: "一只猫")])
+        // 空白问句按泛描述处理（记默认问句，不记空 q 污染上下文）。
+        var c2 = APIClient.VqaConversation()
+        _ = c2.historyForNewQuestion(imageKey: "X")
+        c2.record(question: "   ", answer: "答", defaultQuestion: "请描述这张照片")
+        XCTAssertEqual(c2.historyForNewQuestion(imageKey: "X"), [APIClient.VqaTurn(q: "请描述这张照片", a: "答")])
+    }
+
     func testEnglishHasNoChinese() {
         var samples = [ChatStrings.describePhoto(.en), ChatStrings.describingPhoto(.en),
                        ChatStrings.quotaRemainingNote(remaining: 1, .en)!,

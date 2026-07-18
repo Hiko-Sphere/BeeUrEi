@@ -1043,11 +1043,32 @@ struct APIClient {
     /// AI 场景描述（服务端 /api/vision/describe：云端视觉大模型，每日配额+10/min 限流+未配置 503 fail-closed）。
     /// remaining/dailyMax：服务端回带的当日剩余次数（付费额度，供临近上限时提醒盲人配给使用）。
     struct VisionDescribeResult: Codable, Sendable { let text: String; var remaining: Int?; var dailyMax: Int? }
-    func visionDescribe(token: String, jpegBase64: String, question: String? = nil, lang: String) async throws -> VisionDescribeResult {
+    /// 图像问答的一轮（追问对话上下文）：用户问 q、模型答 a。与服务端 history 契约一致。
+    struct VqaTurn: Codable, Sendable, Equatable { let q: String; let a: String }
+    /// history=同一张图的**追问历史**（连续图像问答，对标 Be My AI）；无=单轮。
+    func visionDescribe(token: String, jpegBase64: String, question: String? = nil, history: [VqaTurn]? = nil, lang: String) async throws -> VisionDescribeResult {
         var body: [String: Any] = ["image": jpegBase64, "mime": "image/jpeg", "lang": lang]
         if let question, !question.isEmpty { body["question"] = question }
+        if let history, !history.isEmpty { body["history"] = history.map { ["q": $0.q, "a": $0.a] } }
         let data = try await authedSend("POST", "/api/vision/describe", token: token, body: body)
         return try JSONDecoder().decode(VisionDescribeResult.self, from: data)
+    }
+
+    /// 图像问答的**多轮对话状态**（纯逻辑，可单测）：按图片 key 归属对话——换图(key 变)即重置，同图追问带历史。
+    /// 盲人对收到的图片连续追问（"这是什么"→"多少钱"→"保质期到哪"），对标 Be My AI；泛描述轮记默认问句供后续追问有上下文。
+    struct VqaConversation: Equatable {
+        private(set) var turns: [VqaTurn] = []
+        private(set) var key: String?
+        /// 开始一轮提问：换了图片(key 变)则先重置对话；返回应作为 history 发送的已有轮（空数组=单轮，调用方转 nil）。
+        mutating func historyForNewQuestion(imageKey: String) -> [VqaTurn] {
+            if key != imageKey { turns = []; key = imageKey }
+            return turns
+        }
+        /// 上游**成功**后记录一轮（只记成功轮，失败不入对话）：泛描述(question 空)记 defaultQuestion 供后续追问上下文。
+        mutating func record(question: String?, answer: String, defaultQuestion: String) {
+            let q = (question?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? defaultQuestion
+            turns.append(VqaTurn(q: q, a: answer))
+        }
     }
 
     /// 响应者回执 SOS 告警：onMyWay=true「我在赶来」（更强安心信号）/ false「我已看到」（纯 ack）。

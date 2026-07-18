@@ -424,7 +424,9 @@ struct ChatView: View {
     @State private var playingVideo: PlayableVideo?
     @State private var zoomImage: ZoomableImage?    // 点开图片全屏查看
     @State private var askingImage: UIImage?        // 正在对其提问的图片（弹出提问框→图像问答 VQA，对齐网页端）
+    @State private var askingImageKey: String?      // 该图片所属消息 id（对话归属键：换图重置追问上下文）
     @State private var askDraft = ""                // 提问框文本（可 VoiceOver 键盘听写）
+    @State private var visionConvo = APIClient.VqaConversation() // 图像问答多轮对话（连续追问，对标 Be My AI）
     @State private var groupDetail: GroupConversationInfo? // 群聊：成员表（发言人名字/管理）
     @State private var showGroupInfo = false
     @State private var showSearch = false
@@ -562,7 +564,7 @@ struct ChatView: View {
         .alert(ChatStrings.askPhotoTitle(lang), isPresented: Binding(get: { askingImage != nil }, set: { if !$0 { askingImage = nil } })) {
             TextField(ChatStrings.askPhotoPlaceholder(lang), text: $askDraft)
             Button(ChatStrings.askPhotoSubmit(lang)) {
-                if let img = askingImage, !askDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { describeImage(img, question: askDraft) }
+                if let img = askingImage, !askDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { describeImage(img, key: askingImageKey ?? "", question: askDraft) }
                 askingImage = nil
             }
             Button(CallStrings.cancel(lang), role: .cancel) { askingImage = nil }
@@ -698,9 +700,9 @@ struct ChatView: View {
                             .accessibilityAction(named: Text(ChatStrings.copyPhotoText(lang))) { copyImageText(img) }
                             // AI 场景描述（读字之外的语义层）：亲友拍来的不只是文字——"看看我家新沙发"这类照片
                             // OCR 无字可读，此前盲人只能听"图片"两个字。走服务端视觉大模型（配额/限流/fail-closed）。
-                            .accessibilityAction(named: Text(ChatStrings.describePhoto(lang))) { describeImage(img) }
+                            .accessibilityAction(named: Text(ChatStrings.describePhoto(lang))) { describeImage(img, key: m.id) }
                             // 图像问答：对图片问具体问题（听写问题→AI 直接答）——比泛描述更有针对性，对齐网页端。
-                            .accessibilityAction(named: Text(ChatStrings.askPhoto(lang))) { askDraft = ""; askingImage = img }
+                            .accessibilityAction(named: Text(ChatStrings.askPhoto(lang))) { askDraft = ""; askingImage = img; askingImageKey = m.id }
                         // 可见"读文字"按钮：上面的 OCR 读文字此前**只在 VoiceOver 转子**（最难发现的层）——转子操作连很多
                         // VoiceOver 用户都不知道、不用 VoiceOver 的盲人更无从触发。读亲友拍来的处方/时刻表/纸条是核心场景，
                         // 须有可见可点入口（同音频气泡的可见播放按钮）。转子操作保留，作为熟练用户的快捷。
@@ -709,12 +711,12 @@ struct ChatView: View {
                         }
                         .buttonStyle(.borderless)
                         // 可见"描述照片"按钮（与"读文字"同理：转子最难发现，核心场景须可见入口）。
-                        Button { describeImage(img) } label: {
+                        Button { describeImage(img, key: m.id) } label: {
                             Label(ChatStrings.describePhoto(lang), systemImage: "sparkles").font(.footnote)
                         }
                         .buttonStyle(.borderless)
                         // 可见"问关于照片"按钮（图像问答 VQA）：转子操作最难发现，核心场景须可见入口。
-                        Button { askDraft = ""; askingImage = img } label: {
+                        Button { askDraft = ""; askingImage = img; askingImageKey = m.id } label: {
                             Label(ChatStrings.askPhoto(lang), systemImage: "questionmark.circle").font(.footnote)
                         }
                         .buttonStyle(.borderless)
@@ -764,8 +766,9 @@ struct ChatView: View {
     /// 语音**随文字语言**（中/英）朗读，与识别屏"读文字"同一管线（orderedOCRText + dominantTextIsChinese）。
     /// AI 描述照片：降采样(长边 1024/JPEG 0.7——护每日付费配额与上传体积)→服务端视觉大模型→朗读。
     /// 失败按错误码给具体原因（配额用尽/未配置/太大——绝不笼统"失败"让盲人徒劳重试）；临近配额上限（≤3）追加提醒。
-    /// question 为空=泛描述；有值=**图像问答 VQA**（端点支持 question，系统提示已"有具体问题就直接回答"；对齐网页端 iter300）。
-    private func describeImage(_ img: UIImage, question: String? = nil) {
+    /// question 为空=泛描述；有值=**图像问答 VQA**（对齐网页端）。key=图片所属消息 id，用于**多轮追问**：同图追问带上历史、
+    /// 换图自动重置对话（连续图像问答，对标 Be My AI——盲人对同一张图接着问"多少钱""保质期到哪"，模型据上下文答）。
+    private func describeImage(_ img: UIImage, key: String, question: String? = nil) {
         let lang = self.lang
         guard let token = session.token else { return }
         SpeechHub.shared.speak(ChatStrings.describingPhoto(lang), channel: .query, voiceCode: lang.voiceCode) // 即时提示，云端往返不冷场
@@ -775,11 +778,16 @@ struct ChatView: View {
             return
         }
         let q = question?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let qParam = (q?.isEmpty == false) ? q : nil
+        // 换图则重置对话；取已有轮作 history（同图追问的上下文）。泛描述轮记默认问句，供后续追问有上下文。
+        let history = visionConvo.historyForNewQuestion(imageKey: key)
+        let defaultQuestion = lang == .zh ? "请描述这张照片" : "Describe this photo."
         Task {
             do {
                 let r = try await APIClient().visionDescribe(token: token, jpegBase64: jpeg.base64EncodedString(),
-                                                             question: (q?.isEmpty == false) ? q : nil,
+                                                             question: qParam, history: history.isEmpty ? nil : history,
                                                              lang: lang == .zh ? "zh" : "en")
+                await MainActor.run { self.visionConvo.record(question: qParam, answer: r.text, defaultQuestion: defaultQuestion) } // 仅成功轮入对话（供追问）
                 var out = r.text
                 if let note = ChatStrings.quotaRemainingNote(remaining: r.remaining, lang) {
                     out += lang == .zh ? "。\(note)" : ". \(note)"

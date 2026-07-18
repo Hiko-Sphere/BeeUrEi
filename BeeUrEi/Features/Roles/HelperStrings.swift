@@ -120,6 +120,14 @@ enum HelperStrings {
         if amOwner == false { return l == .zh ? " · 你是 TA 的紧急联系人" : " · you're their emergency contact" }
         return l == .zh ? " · 紧急联系人" : " · emergency contact"
     }
+    /// 「你是 N 人的紧急联系人、但本机通知没开」自查（协助端**假安心**防护，与网页端 EmergencyContactPushWarning
+    /// 同口径）：作为已接受的紧急联系人，若本机关了通知，对方遇险的告警推送到不了你——而你不自知。emergencyFor>0 且
+    /// 通知未开 → 返回可行动警告（去系统设置开通知）；否则 nil（有责任且通知开着=正常，不打扰）。纯逻辑可单测。
+    static func emergencyContactPushWarning(emergencyFor: Int, notificationsOn: Bool, _ l: Language) -> String? {
+        guard emergencyFor > 0, !notificationsOn else { return nil }
+        return l == .zh ? "你是 \(emergencyFor) 位联系人的紧急联系人，但本机通知没开——TA 遇险时的告警可能到不了你。请在系统设置里开启本 App 通知。"
+                        : "You're the emergency contact for \(emergencyFor) \(emergencyFor > 1 ? "people" : "person"), but notifications are off on this device — you may miss their alerts. Turn on notifications for this app in Settings."
+    }
     static func callA11y(_ name: String, _ l: Language) -> String { l == .zh ? "呼叫 \(name)" : "Call \(name)" }
     static func familyNavTitle(_ l: Language) -> String { l == .zh ? "我的亲人" : "My Family" }
     static func addFamilyA11y(_ l: Language) -> String { l == .zh ? "添加亲人或求助者" : "Add family or requester" }

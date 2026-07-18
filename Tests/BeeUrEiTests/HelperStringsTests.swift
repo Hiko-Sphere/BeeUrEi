@@ -15,6 +15,23 @@ final class HelperStringsTests: XCTestCase {
         XCTAssertEqual(HelperStrings.waitText(180, .zh), "3 分钟")
     }
 
+    /// 协助端假安心自查：我是紧急联系人却关了通知 → 警告去开；有责任且通知开着/无责任 → nil（不打扰）。
+    func testEmergencyContactPushWarning() {
+        func hasCJK(_ s: String) -> Bool { s.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }
+        // 是 3 人的紧急联系人 + 通知关 → 警告，含人数、"通知没开"、可行动"系统设置"。
+        let warn = HelperStrings.emergencyContactPushWarning(emergencyFor: 3, notificationsOn: false, .zh)
+        XCTAssertNotNil(warn)
+        XCTAssertTrue(warn!.contains("3 位")); XCTAssertTrue(warn!.contains("通知没开")); XCTAssertTrue(warn!.contains("系统设置"))
+        // 通知开着 → nil（有责任但可达，不打扰）。
+        XCTAssertNil(HelperStrings.emergencyContactPushWarning(emergencyFor: 3, notificationsOn: true, .zh))
+        // 不是任何人的紧急联系人 → nil（即便通知关也无此责任警告）。
+        XCTAssertNil(HelperStrings.emergencyContactPushWarning(emergencyFor: 0, notificationsOn: false, .zh))
+        // 英文：单复数 + 不串中文 + 含 "notifications are off"。
+        let en1 = HelperStrings.emergencyContactPushWarning(emergencyFor: 1, notificationsOn: false, .en)!
+        XCTAssertTrue(en1.contains("1 person")); XCTAssertFalse(hasCJK(en1)); XCTAssertTrue(en1.contains("notifications are off"))
+        XCTAssertTrue(HelperStrings.emergencyContactPushWarning(emergencyFor: 2, notificationsOn: false, .en)!.contains("2 people"))
+    }
+
     func testWaitTextLongWaitsReadInHours() {
         // ≥1h 按"H 小时 M 分钟"读（公开求助最长滞留 4h TTL，原只到分钟一档→"240 分钟"难读）；与 web formatWaited 同口径。
         XCTAssertEqual(HelperStrings.waitText(3599, .zh), "59 分钟")       // <1h 仍分钟

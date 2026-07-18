@@ -1,5 +1,6 @@
 import SwiftUI
 import AudioToolbox // 新求助进队短提示音（系统短音，不占语音总线/来电铃）
+import UserNotifications // 查本机通知授权：作为紧急联系人却关了通知＝TA 遇险告警到不了你（协助端假安心自查）
 
 /// 协助端主界面（协助者 + 亲友**合并**）：三个标签页，同时具备两个角色的全部功能。
 /// ①「帮助大家」公开求助队列 + 随机/偏好匹配（帮陌生人）
@@ -18,6 +19,7 @@ struct AssistHomeView: View {
     @State private var queueGeneration = 0               // refreshQueue 代际号：丢弃多入口并发的陈旧响应（复审#4）
     @State private var pendingLinks: [IncomingLinkInfo] = []   // 待我确认的请求
     @State private var myLinks: [FamilyLinkInfo] = []           // 我的关系（已建立 + 我发出的待确认）
+    @State private var notificationsOn = true                   // 本机通知授权（乐观默认 true，避免加载中闪现假警告）
     @State private var linkBusy: Set<String> = []
     @State private var showAddFamily = false
     @State private var newFamilyUsername = ""
@@ -320,6 +322,14 @@ struct AssistHomeView: View {
 
                 Section(HelperStrings.familyHeader(lang)) {
                     let accepted = myLinks.filter { $0.isAccepted }
+                    // 假安心自查：我是 N 人的紧急联系人（amOwner==false∧isEmergency）却关了本机通知 → TA 遇险的
+                    // 告警推送到不了我。醒目提示去开通知（与网页端 EmergencyContactPushWarning 同口径）。
+                    let emergencyFor = accepted.filter { $0.amOwner == false && $0.isEmergency }.count
+                    if let warn = HelperStrings.emergencyContactPushWarning(emergencyFor: emergencyFor, notificationsOn: notificationsOn, lang) {
+                        Label(warn, systemImage: "bell.slash.fill")
+                            .font(.footnote).foregroundStyle(Color.beeWarn)
+                            .accessibilityLabel(warn)
+                    }
                     if accepted.isEmpty {
                         Text(HelperStrings.noRelationsYet(lang))
                             .foregroundStyle(.secondary)
@@ -451,6 +461,9 @@ struct AssistHomeView: View {
         guard let token = session.token else { return }
         if let inc = try? await APIClient().incomingLinks(token: token) { pendingLinks = inc }   // 待我确认
         if let mine = try? await APIClient().familyLinks(token: token) { myLinks = mine }         // 我的关系
+        // 本机通知授权自查：作为已接受的紧急联系人却关了通知＝对方遇险告警到不了你（假安心）——据此提示去开。
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        notificationsOn = settings.authorizationStatus == .authorized
     }
 
     private func refreshQueue() async {

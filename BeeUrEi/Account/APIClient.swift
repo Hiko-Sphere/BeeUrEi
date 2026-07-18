@@ -334,6 +334,9 @@ struct EmergencyReadinessInfo: Codable, Sendable {
     }
 }
 
+/// 「发送测试告警」结果：sent(能即时收到几位/共几位联系人) / rateLimited(限流 429，每小时最多 3 次) / failed(网络/其它)。
+enum TestAlertOutcome: Equatable, Sendable { case sent(notified: Int, contacts: Int); case rateLimited; case failed }
+
 struct IncomingLinkInfo: Codable, Sendable, Identifiable {
     let id: String
     let ownerId: String
@@ -816,6 +819,25 @@ struct APIClient {
     func emergencyReadiness(token: String) async -> EmergencyReadinessInfo? {
         guard let data = try? await authedGet("/api/emergency/readiness", token: token) else { return nil }
         return try? JSONDecoder().decode(EmergencyReadinessInfo.self, from: data)
+    }
+
+    /// 发送一条**测试**告警（服务端 delivery_check，非真 SOS——绝不触发亲友端遇险响铃/大模态、不落紧急事件账），
+    /// 供盲人验证"我的求助真能送到联系人"。服务端限流每小时 3 次（429→rateLimited，给明确提示而非泛泛失败）。
+    /// 直用原始请求以据状态码区分限流；网络/解析异常一律 failed（best-effort，绝不因测试崩）。
+    func sendTestAlert(token: String) async -> TestAlertOutcome {
+        var req = URLRequest(url: apiURL("/api/emergency/test"))
+        req.httpMethod = "POST"
+        req.timeoutInterval = 30
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = Data("{}".utf8)
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              let http = resp as? HTTPURLResponse else { return .failed }
+        if http.statusCode == 429 { return .rateLimited }
+        guard http.statusCode == 200,
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let notified = obj["notified"] as? Int, let contacts = obj["contacts"] as? Int else { return .failed }
+        return .sent(notified: notified, contacts: contacts)
     }
 
     func incomingLinks(token: String) async throws -> [IncomingLinkInfo] {

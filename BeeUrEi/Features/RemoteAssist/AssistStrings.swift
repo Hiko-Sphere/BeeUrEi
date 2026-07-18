@@ -89,6 +89,30 @@ enum AssistStrings {
     static func noLinksYet(_ l: Language) -> String {
         l == .zh ? "还没有绑定。下面按对方用户名添加。" : "No links yet. Add someone by username below."
     }
+    /// 「发送测试告警」按钮标签 + 确认（发给真实联系人，须确认避免误发）+ 结果播报（纯逻辑，可单测）。
+    static func testAlertButton(_ l: Language) -> String { l == .zh ? "发送测试告警" : "Send a test alert" }
+    static func testAlertSending(_ l: Language) -> String { l == .zh ? "正在发送测试告警…" : "Sending a test alert…" }
+    static func testAlertConfirm(_ l: Language) -> String {
+        l == .zh ? "会给你的联系人发一条**测试**通知（明确标注是测试，不会当作真的求助）。确认发送？"
+                 : "This sends a test notification to your contacts (clearly marked as a test, not a real emergency). Send it?"
+    }
+    /// 测试告警结果播报：告诉盲人到底有几位联系人能即时收到（验证 SOS 真能到人）；限流/失败各给可行动提示。
+    static func testAlertResult(_ outcome: TestAlertOutcome, _ l: Language) -> String {
+        let zh = l == .zh
+        switch outcome {
+        case .sent(let notified, let contacts):
+            if contacts == 0 { return zh ? "你还没有联系人，无从测起。请先在下面添加紧急联系人。" : "You have no contacts to test. Add an emergency contact below first." }
+            if notified == 0 { return zh ? "测试已发出，但你的\(contacts)位联系人暂时都收不到（没装 App 或没开通知）。请让他们开启通知，否则真出事你的求助到不了他们。"
+                                        : "Test sent, but none of your \(contacts) contacts can receive it yet (app not installed or notifications off). Ask them to turn on notifications, or your real SOS won't reach them." }
+            if notified < contacts { return zh ? "测试已发出，\(contacts)位联系人中有\(notified)位能即时收到，其余暂时收不到——请让他们开启通知。"
+                                              : "Test sent — \(notified) of \(contacts) contacts can receive it instantly; the rest can't yet. Ask them to turn on notifications." }
+            return zh ? "测试已发出，你的\(notified)位联系人都能即时收到。紧急求助已就绪。" : "Test sent — all \(notified) of your contacts can receive it instantly. Your SOS is ready."
+        case .rateLimited:
+            return zh ? "测试太频繁了，每小时最多测 3 次，请稍后再试。" : "Too many tests — up to 3 per hour. Please try again later."
+        case .failed:
+            return zh ? "测试发送失败，请检查网络后再试。" : "Couldn't send the test — check your connection and try again."
+        }
+    }
     static func pendingSuffix(_ l: Language) -> String { l == .zh ? " · 待对方接受" : " · awaiting their approval" }
     /// 紧急联系人徽标后缀，按**方向**区分：amOwner==false（对方是链 owner）=我是 TA 的紧急联系人（TA 遇险叫我，我对 TA 负责）；
     /// 否则=对方是我的紧急联系人。此前两向都笼统显示"紧急联系人"，让人误读安全责任方向。isEmergency=false → 空串。

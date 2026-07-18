@@ -14,6 +14,8 @@ struct FamilyLinksView: View {
     @State private var links: [FamilyLinkInfo] = []
     @State private var loaded = false            // 首次加载完成才判"无紧急联系人"，避免加载中闪现警告
     @State private var readiness: EmergencyReadinessInfo?  // 紧急就绪度（含紧急联系人可否被推送触达）——补"有没有"之外的"收不收得到"
+    @State private var confirmTestAlert = false  // 「发送测试告警」二次确认（会给真实联系人发测试通知，防误发）
+    @State private var sendingTest = false
     @State private var newUsername = ""
     @State private var newRelation = ""
     @State private var newPhone = ""
@@ -57,6 +59,17 @@ struct FamilyLinksView: View {
                     Label(warn, systemImage: "bell.slash.fill")
                         .font(.footnote).foregroundStyle(Color.beeDanger)
                         .accessibilityLabel(warn)
+                }
+                // 「发送测试告警」：验证"我的求助真能送到联系人"——比读警告更确定（真发一条测试通知看谁收到）。
+                // 仅在有联系人时显示（无联系人无从测起）。会给真实联系人发测试通知，故二次确认防误发。
+                if loaded && !links.isEmpty {
+                    Button {
+                        confirmTestAlert = true
+                    } label: {
+                        Label(AssistStrings.testAlertButton(lang), systemImage: "bell.badge.fill")
+                    }
+                    .disabled(sendingTest)
+                    .accessibilityHint(AssistStrings.testAlertConfirm(lang))
                 }
             }
 
@@ -140,6 +153,10 @@ struct FamilyLinksView: View {
         .onChange(of: emergencyInfo) { _, m in if let m, !m.isEmpty { announce(m) } }
         .onChange(of: successText) { _, s in if let s, !s.isEmpty { announce(s) } }
         .task { await load() }
+        .confirmationDialog(AssistStrings.testAlertConfirm(lang), isPresented: $confirmTestAlert, titleVisibility: .visible) {
+            Button(AssistStrings.testAlertButton(lang)) { Task { await sendTest() } }
+            Button(AssistStrings.cancel(lang), role: .cancel) {}
+        }
         .fullScreenCover(item: $emergencyCall) { s in
             CallView(role: .blind, callId: s.id) {
                 // 挂断时取消待接登记，避免对端在 TTL 内仍弹出已结束的来电。
@@ -173,6 +190,17 @@ struct FamilyLinksView: View {
         readiness = await api.emergencyReadiness(token: token) // 就绪度并行/顺带取（失败=nil，不影响列表；只用于可达性警告）
         // 紧急联系人不可达时**主动播报**（盲人看不到屏上警告条；VoiceOver 开→系统公告，否则 App 语音）。
         if let warn = readiness?.unreachableEmergencyWarning(lang) { announce(warn) }
+    }
+
+    /// 发送测试告警并把结果**朗读**给盲人（到底几位收到=SOS 真能到人吗）；完成后顺带刷新就绪度。
+    private func sendTest() async {
+        guard !sendingTest, let token = KeychainStore.read() else { return }
+        sendingTest = true
+        announce(AssistStrings.testAlertSending(lang))
+        let outcome = await api.sendTestAlert(token: token)
+        sendingTest = false
+        successText = AssistStrings.testAlertResult(outcome, lang) // onChange 会朗读
+        readiness = await api.emergencyReadiness(token: token) // 测完刷新可达性（家人可能刚开了通知）
     }
 
     /// 视障侧统一播报：VoiceOver 开→系统公告即可；未开→用 App 语音（SpeechHub .query）念出来，

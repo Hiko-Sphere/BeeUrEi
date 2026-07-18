@@ -83,4 +83,28 @@ final class EmergencyAckTests: XCTestCase {
         XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
         XCTAssertTrue(en.lowercased().contains("notifications"))
     }
+
+    // MARK: 测试告警结果播报（验证"我的求助真能到人"）
+
+    func testTestAlertResultMessages() {
+        // 全部可达 → 就绪确认。
+        XCTAssertTrue(AssistStrings.testAlertResult(.sent(notified: 2, contacts: 2), .zh).contains("就绪"))
+        // 部分可达 → 报出几位收得到 + 催其余开通知。
+        let partial = AssistStrings.testAlertResult(.sent(notified: 1, contacts: 3), .zh)
+        XCTAssertTrue(partial.contains("3位") && partial.contains("1位") && partial.contains("开启通知"))
+        // 都收不到 → 强警告。
+        XCTAssertTrue(AssistStrings.testAlertResult(.sent(notified: 0, contacts: 2), .zh).contains("都收不到"))
+        // 无联系人 → 提示先加。
+        XCTAssertTrue(AssistStrings.testAlertResult(.sent(notified: 0, contacts: 0), .zh).contains("还没有联系人"))
+        // 限流 → 明确"每小时最多"，非泛泛失败。
+        XCTAssertTrue(AssistStrings.testAlertResult(.rateLimited, .zh).contains("每小时最多"))
+        XCTAssertFalse(AssistStrings.testAlertResult(.rateLimited, .zh).contains("网络")) // 与失败区分
+        // 失败 → 网络提示。
+        XCTAssertTrue(AssistStrings.testAlertResult(.failed, .zh).contains("网络"))
+        // 英文分支不串中文。
+        for o: TestAlertOutcome in [.sent(notified: 1, contacts: 2), .rateLimited, .failed] {
+            let en = AssistStrings.testAlertResult(o, .en)
+            XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(en)")
+        }
+    }
 }

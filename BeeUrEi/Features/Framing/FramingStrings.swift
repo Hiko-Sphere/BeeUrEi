@@ -361,6 +361,7 @@ enum FramingStrings {
     /// 膳食/宗教认证标注 canonical key（服务端 extractDietaryLabels 归并后的子集）→ 本地化名。
     private static let dietaryNames: [String: (zh: String, en: String)] = [
         "gluten-free": ("无麸质", "gluten-free"), "lactose-free": ("无乳糖", "lactose-free"),
+        "dairy-free": ("无乳制品", "dairy-free"),
         "vegan": ("纯素", "vegan"), "vegetarian": ("素食", "vegetarian"),
         "halal": ("清真", "halal"), "kosher": ("洁食", "kosher"),
         "organic": ("有机", "organic"), "sugar-free": ("无糖", "sugar-free"),

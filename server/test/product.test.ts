@@ -41,6 +41,9 @@ describe('Open Food Facts 商品查询', () => {
   it('extractDietaryLabels：归并同义词到 canonical、只收膳食/宗教认证子集、剥前缀/去重/表外忽略', () => {
     expect(extractDietaryLabels(['en:gluten-free', 'en:vegan', 'en:halal'])).toEqual(['gluten-free', 'vegan', 'halal'])
     expect(extractDietaryLabels(['en:no-gluten', 'en:no-lactose', 'en:no-added-sugar'])).toEqual(['gluten-free', 'lactose-free', 'sugar-free']) // 同义词归并到 canonical
+    // 无奶(dairy-free) 与 无乳糖(lactose-free) 是**不同** canonical（无奶=完全不含奶，牛奶过敏/纯素据此决策；无乳糖仅去乳糖仍可能含乳蛋白）：各自保留、绝不合并。
+    expect(extractDietaryLabels(['en:dairy-free', 'en:lactose-free'])).toEqual(['dairy-free', 'lactose-free'])
+    expect(extractDietaryLabels(['en:no-dairy', 'en:milk-free'])).toEqual(['dairy-free']) // no-dairy/milk-free 同义归并 + 去重
     expect(extractDietaryLabels(['en:eu-organic', 'fr:organic'])).toEqual(['organic']) // 归并 + 去重（canonical 首现）
     // 非转基因（中国食用油/大豆制品法定醒目标注，盲人刚需）+ 无防腐剂：多同义写法归并到 canonical。
     expect(extractDietaryLabels(['en:no-gmos', 'en:no-preservatives'])).toEqual(['no-gmo', 'no-preservatives'])

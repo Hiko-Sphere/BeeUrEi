@@ -74,6 +74,9 @@ export function extractAllergens(tags: unknown): string[] {
 const DIETARY_LABEL_MAP: Record<string, string> = {
   'gluten-free': 'gluten-free', 'no-gluten': 'gluten-free',
   'lactose-free': 'lactose-free', 'no-lactose': 'lactose-free',
+  // 无奶/无乳制品：与"无乳糖"是**不同**声明——无乳糖仅去乳糖、仍可能含乳蛋白；无奶=完全不含奶，
+  // 牛奶过敏者与纯素者据此决策（乳糖不耐者才看无乳糖）。故单列 canonical，不与 lactose-free 合并。
+  'dairy-free': 'dairy-free', 'no-dairy': 'dairy-free', 'milk-free': 'dairy-free',
   'vegan': 'vegan',
   'vegetarian': 'vegetarian',
   'halal': 'halal',

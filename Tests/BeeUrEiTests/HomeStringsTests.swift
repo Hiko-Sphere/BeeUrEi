@@ -104,6 +104,9 @@ final class HomeStringsTests: XCTestCase {
         // 导航进度"还有多远"（新增）须在自述里——盲人无法浏览 UI 发现功能，语音能力必须可被语音发现。
         XCTAssertTrue(HomeStrings.voiceCommandsHelp(.zh).contains("还有多远"))
         XCTAssertTrue(HomeStrings.voiceCommandsHelp(.en).lowercased().contains("how much farther"))
+        // 「带我去那里」（找到最近地点后就近导航）须在自述里，否则盲人不知这条能力存在。
+        XCTAssertTrue(HomeStrings.voiceCommandsHelp(.zh).contains("带我去那里"))
+        XCTAssertTrue(HomeStrings.voiceCommandsHelp(.en).lowercased().contains("take me there"))
         XCTAssertFalse(HomeStrings.voiceCommandsHelp(.en).contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
 

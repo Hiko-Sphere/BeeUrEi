@@ -465,6 +465,15 @@ struct HubView: View {
         case .ahead: locationDescriber.describeAhead()
         case .facing: locationDescriber.describeFacing()
         case .findNearest(let cat): locationDescriber.findNearest(cat) // 「最近的厕所/药店」就近找地点
+        // 「带我去那里」：findNearest 报了最近地点后，用其**精确坐标**就近步行导航过去（免再搜名字导错）。
+        // 还没找过地点则如实提示先找（盲人无从确认命令是否生效，绝不静默）。
+        case .navigateToLastFound:
+            if let f = AppRoute.shared.lastFoundNearest {
+                AppRoute.shared.pendingNavAction = .coordinate(lat: f.lat, lon: f.lon, name: f.name)
+                showNavigation = true
+            } else {
+                speak(HomeStrings.noPlaceToNavigateSpeak(lang))
+            }
         case .weather: weatherSpeaker.announce()
         case .look: showFraming = true
         case .readText: route.pendingChannel = .text; showFraming = true

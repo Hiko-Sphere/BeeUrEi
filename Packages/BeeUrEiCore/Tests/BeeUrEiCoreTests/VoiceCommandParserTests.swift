@@ -59,6 +59,12 @@ final class VoiceCommandParserTests: XCTestCase {
             ("附近哪里有便利店", .findNearest("便利店")), ("nearest pharmacy", .findNearest("pharmacy")),
             // 冲突守卫：含**地名**的"最近的X有多远"仍走 findNearest（问某地点距离），不被裸进度问句"还有多远"抢。
             ("最近的厕所有多远", .findNearest("厕所")), ("离我最近的药店有多远", .findNearest("药店")),
+            // 「带我去那里」（findNearest 报了最近地点后就近导航过去）：指示代词式，不含具体地名。
+            ("去那里", .navigateToLastFound), ("带我过去", .navigateToLastFound), ("导航过去", .navigateToLastFound),
+            ("怎么去那里", .navigateToLastFound), ("导航去那里", .navigateToLastFound),
+            ("take me there", .navigateToLastFound), ("go there", .navigateToLastFound), ("navigate there", .navigateToLastFound),
+            // 冲突守卫：含具体地名的"带我去某地"仍走 navigate（搜该地名），不被"带我过去"的指示代词式抢。
+            ("带我去那个商场", .navigate("那个商场")), ("导航到人民医院", .navigate("人民医院")),
             ("where can i find a restroom", .findNearest("restroom")),
             ("坐地铁去西单", .transit("西单")), ("坐公交车去医院", .transit("医院")), ("take transit to the airport", .transit("the airport")),
             ("回家", .navigateHome), ("带我回家", .navigateHome), ("take me home", .navigateHome),

@@ -190,7 +190,14 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
                                                                                 toLat: p.lat, toLon: p.lon, heading: heading))
                 }
                 let text = PoiCalloutComposer.nearest(from: obs, query: query, radiusMeters: resp.radius, language: lang, unit: FeatureSettings().distanceUnit)
-                await MainActor.run { self.finish(text) }
+                // 存下被朗读的**那一处**最近地点（同一 nearestIndex 选择，obs 与 resp.pois 同序），供语音"带我去那里"精确导航过去。
+                // amap POI 是 GCJ-02 → 转 WGS-84 存（导航层按 WGS-84 消费，内部再转 GCJ）。无有效地点则清空（不留陈旧）。
+                let found: (name: String, lat: Double, lon: Double)? = PoiCalloutComposer.nearestIndex(from: obs).map { idx in
+                    let p = resp.pois[idx]
+                    let w = ChinaCoord.gcj02ToWgs84(lat: p.lat, lon: p.lon)
+                    return (name: p.name, lat: w.lat, lon: w.lon)
+                }
+                await MainActor.run { AppRoute.shared.lastFoundNearest = found; self.finish(text) }
             } catch {
                 // 高德失败回退 MapKit——但若看门狗已超时复位则不再做无用检索（复审并发#2）。
                 await MainActor.run { if self.isDescribing { self.mapKitNearest(loc, query: query, radius: radius) } }
@@ -207,15 +214,22 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
         MKLocalSearch(request: request).start { [weak self] response, _ in
             guard let self else { return }
             let heading = self.lastHeading
-            let obs: [PoiObservation] = (response?.mapItems ?? []).prefix(15).compactMap { item in
+            // 保留 obs 与坐标**并行**（compactMap 会丢无名/无坐标项，索引须一致才能据 nearestIndex 取回被朗读那处的坐标）。
+            let items: [(obs: PoiObservation, coord: CLLocationCoordinate2D)] = (response?.mapItems ?? []).prefix(15).compactMap { item in
                 guard let name = item.name, let ploc = item.placemark.location else { return nil }
-                return PoiObservation(
+                let o = PoiObservation(
                     name: name,
                     distanceMeters: loc.distance(from: ploc),
                     relativeBearingDegrees: self.relativeBearing(fromLat: loc.coordinate.latitude, fromLon: loc.coordinate.longitude,
                                                                  toLat: ploc.coordinate.latitude, toLon: ploc.coordinate.longitude, heading: heading))
+                return (o, ploc.coordinate)
             }
+            let obs = items.map(\.obs)
             let text = PoiCalloutComposer.nearest(from: obs, query: query, radiusMeters: radius, language: self.lang, unit: FeatureSettings().distanceUnit)
+            // 存下被朗读的那一处（海外 MapKit 坐标已是 WGS-84，直存），供"带我去那里"精确导航；无有效地点则清空。
+            AppRoute.shared.lastFoundNearest = PoiCalloutComposer.nearestIndex(from: obs).map { idx in
+                (name: obs[idx].name, lat: items[idx].coord.latitude, lon: items[idx].coord.longitude)
+            }
             self.finish(text)
         }
     }

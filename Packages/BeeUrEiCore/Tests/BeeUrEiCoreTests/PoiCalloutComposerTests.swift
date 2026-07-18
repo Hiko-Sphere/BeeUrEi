@@ -142,6 +142,19 @@ final class PoiCalloutComposerTests: XCTestCase {
             "No pharmacy found within 800 meters") // 公制 <1km 仍"米"（逐字不变）；只有空名/被过滤者=没找到
     }
 
+    func testNearestIndexMatchesNearestSelection() {
+        // nearestIndex 与 nearest 同选择：设备层据此下标取回被朗读那处的坐标（"带我去那里"精确导航），保证"报的"="去的"。
+        let pois = [poi("远药店", 300, 90), poi("近药店", 80, 0), poi("脚下药店", 2, 0)] // 2m 太近(所在建筑)剔除
+        XCTAssertEqual(PoiCalloutComposer.nearestIndex(from: pois), 1) // "近药店"（80m 最近且 >5m）
+        // 无有效地点 → nil：空数组、空名、全 ≤5m。
+        XCTAssertNil(PoiCalloutComposer.nearestIndex(from: []))
+        XCTAssertNil(PoiCalloutComposer.nearestIndex(from: [poi("  ", 50, 0)]))
+        XCTAssertNil(PoiCalloutComposer.nearestIndex(from: [poi("脚下", 2, 0), poi("也脚下", 4.9, 0)]))
+        // 与 nearest 朗读的地点严格一致：nearest 报的名字＝nearestIndex 指向的那个 POI 的名字（防各自选、导错地点）。
+        let idx = PoiCalloutComposer.nearestIndex(from: pois)!
+        XCTAssertTrue(PoiCalloutComposer.nearest(from: pois, query: "药店", radiusMeters: 1000, language: .zh).contains(pois[idx].name))
+    }
+
     /// sibling-gap 收口：英制用户听 POI 距离是英尺/英里，"没查到"兜底句的半径也须随单位（曾裸报"米"＝单位割裂）。
     func testEmptyRadiusRespectsImperialUnit() {
         // 250m → 820 英尺（<1000ft）。ahead + around 两分支都覆盖。

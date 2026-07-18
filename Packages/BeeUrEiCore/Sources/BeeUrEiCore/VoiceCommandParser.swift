@@ -38,6 +38,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case sendLocation(to: String)   // 把我的位置发给X（"告诉妈妈我在哪"）——盲人免进聊天找按钮，一句话共享位置
     case find(String)               // 找某个具体物品（已教物品或可找类别，如"找我的钥匙"/"find my keys"）
     case findNearest(String)        // 就近找**公共地点类别**（"最近的厕所在哪"/"nearest pharmacy"）——区别于 find(个人物品)与 around(泛问周围)
+    case navigateToLastFound        // 「带我去刚找到的地点」（"去那里/带我过去/导航过去"）——findNearest 报了最近的X后就近步行导航过去，用其精确坐标（免再搜名字导错）
     case adjustSpeech(SpeechRateAdjust) // 语音调语速：说快点/说慢点/正常语速（找滑块成本高，语速最常想即时调）
     case adjustVerbosity(VerbosityAdjust) // 语音调详略：说简短点/说详细点（赶路想精简/熟悉后嫌啰嗦）
     case commands                   // 自述能做什么（盲人无法浏览 UI 发现功能——语音能力必须能被语音发现）
@@ -142,6 +143,12 @@ public enum VoiceCommandParser {
         // 但 .date 的裸"日期"/"几号"仍归 .date（这里的键都不含裸"日期"）。读的是包装印刷日期，非今天日期。
         if has(["保质期", "有效期", "生产日期", "保存期", "赏味期", "读日期", "看日期", "包装日期", "过期", "expir", "best before", "use by", "shelf life"]) { return .readDates }
         if has(["几号", "今天几号", "日期", "星期几", "礼拜几", "周几", "今天星期", "today's date", "what's the date", "what day", "what date"]) { return .date }
+        // 「带我去刚找到的地点」（findNearest 报了最近的X后接一句"去那里/带我过去"就近导航过去，用其精确坐标免再搜名字导错）：
+        // 须在 navigate（parseDestination "带我去X"）之前——否则"带我去那里"被当作搜"那里"这个地名（搜不到/命中别处）。都是**指示代词**
+        // 引导（那里/那儿/过去/there），不含具体地名，故不与"带我去某商场"冲突；上层据是否已有 lastFoundNearest 决定导航或提示先找地点。
+        // 注：isWholeCommand 会剥掉"带我/导航"等前缀——故这里列**剥离后**的规范形（"带我过去"→"过去"、"导航去那里"→"去那里"）。
+        if isWholeCommand(t, ["去那里", "去那儿", "过去", "怎么去那里", "怎么去那儿", "怎么过去", "到那里去", "到那儿去",
+                              "go there", "take me there", "navigate there", "directions there", "how do i get there"]) { return .navigateToLastFound }
         // 原路返回（面包屑折返）须在回家/去公司之前：使"带我沿原路回家"走折返而非回家（复审 F2）。
         if has(["原路返回", "返回出发", "带我回去", "沿原路", "go back", "take me back", "backtrack", "retrace", "the way i came"]) { return .goHome }
         // 回家/去公司：导航到**已保存的**家/公司地址。用**整句匹配**（去礼貌前后缀后恰好是这些短语），而非子串——

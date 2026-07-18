@@ -113,15 +113,12 @@ public enum PoiCalloutComposer {
     public static func nearest(from pois: [PoiObservation], query: String, radiusMeters: Int, language: Language, unit: DistanceUnit = .metric) -> String {
         let zh = language == .zh
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let best = pois
-            .filter { $0.distanceMeters.isFinite && $0.distanceMeters > minDistanceMeters
-                      && !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .min { $0.distanceMeters < $1.distanceMeters }
-        guard let best else {
+        guard let bestIdx = nearestIndex(from: pois) else {
             // 半径随单位（同 compose 兜底：英制用户别听裸"米"）——走 DistanceUnit.farDistance 同一换算源。
             let radiusStr = unit.farDistance(meters: Double(radiusMeters), language: language)
             return zh ? "附近\(radiusStr)内没找到\(q)" : "No \(q) found within \(radiusStr)"
         }
+        let best = pois[bestIdx]
         let name = best.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let dm = SpokenStrings.locationDistance(best.distanceMeters, zh ? .zh : .en, unit: unit) // 溢出安全 + ≥1km 用公里
         if let rel = best.relativeBearingDegrees, rel.isFinite {
@@ -130,5 +127,19 @@ public enum PoiCalloutComposer {
                       : "Nearest \(q): \(name), about \(dm), \(hour) o'clock"
         }
         return zh ? "最近的\(q)：\(name)，约\(dm)" : "Nearest \(q): \(name), about \(dm)"
+    }
+
+    /// 最近有效地点在输入数组中的**下标**（同 `nearest` 的筛选：距离有限且 > 5m、名字非空；取最近，并列取先出现者）。无有效项 → nil。
+    /// 抽出供设备层据**同一选择**拿到被朗读那个地点的坐标（"带我去刚找到的地点"就近导航过去）——保证"报的"与"去的"是同一处，
+    /// 绝不各自独立选而把盲人导向另一个地点（导错地点对盲人代价大）。`nearest` 亦复用它，单一选择真源。
+    public static func nearestIndex(from pois: [PoiObservation]) -> Int? {
+        var bestIdx: Int? = nil
+        var bestDist = Double.greatestFiniteMagnitude
+        for (i, p) in pois.enumerated() {
+            guard p.distanceMeters.isFinite, p.distanceMeters > minDistanceMeters,
+                  !p.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            if p.distanceMeters < bestDist { bestDist = p.distanceMeters; bestIdx = i }
+        }
+        return bestIdx
     }
 }

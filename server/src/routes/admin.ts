@@ -324,6 +324,31 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     }
   })
 
+  // 预防性 SOS 安全网**归因钻取**：overview.sosSafetyNet 只给总数、无法定位到人（aggregate→attribution 缺口）——
+  // 此处列出安全网当下已失效的**具体**活跃盲人，运维据此逐一主动联系（"请家人装 App、开通知"），把"知道有 N 人
+  // 出问题"变成"知道是谁、去补"。与 overview 同源 blindSosReadiness，故本列表 total === overview.sosSafetyNet.broken。
+  // reason：no_contact=完全没设 accepted 联系人；contacts_unreachable=设了但此刻全收不到即时推送。online/createdAt
+  // 供优先级（no_contact 更彻底优先；同类按注册新→旧，新用户更可能还没设置）。点进 /api/admin/users/:id 看联系人明细。
+  app.get('/api/admin/sos-safety-net', adminOnly, async () => {
+    const now = Date.now()
+    const online = presence.availableUserIds(now)
+    const broken = store.allUsers()
+      .filter((u) => u.role === 'blind' && u.status === 'active')
+      .map((u) => ({ u, r: blindSosReadiness(store, webPush.configured, u.id) }))
+      .filter(({ r }) => r.acceptedTotal === 0 || r.acceptedReachable === 0)
+      .map(({ u, r }) => ({
+        id: u.id,
+        name: u.displayName,
+        reason: r.acceptedTotal === 0 ? ('no_contact' as const) : ('contacts_unreachable' as const),
+        acceptedTotal: r.acceptedTotal,
+        acceptedReachable: r.acceptedReachable,
+        online: online.has(u.id),
+        createdAt: u.createdAt,
+      }))
+      .sort((a, b) => (a.reason === b.reason ? b.createdAt - a.createdAt : a.reason === 'no_contact' ? -1 : 1))
+    return { broken, total: broken.length }
+  })
+
   // —— 实名认证（KYC）人工审核 ——
   // 队列：仅元数据，绝不含姓名/证件号/图片。默认 status=pending。
   app.get('/api/admin/verifications', adminOnly, async (req) => {

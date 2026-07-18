@@ -56,4 +56,40 @@ describe('admin 总览 sosSafetyNet（预防性 SOS 安全网就绪）', () => {
     expect(ov.sosSafetyNet).toEqual({ blindTotal: 1, noContact: 0, contactsUnreachable: 1, broken: 1 })
     await app.close()
   })
+
+  it('归因钻取 /api/admin/sos-safety-net：列出具体失效盲人+reason，total 与 overview.broken 一致，就绪者不入列', async () => {
+    const { app, store } = seedWith(true)
+    const adminTok = await login(app)
+    // 同上：bA=no_contact、bB=contacts_unreachable、bC=ready、bD=disabled(不计)。
+    store.createUser({ id: 'bA', username: 'bA', passwordHash: 'x', displayName: '小A', role: 'blind', status: 'active', createdAt: 100 })
+    store.createUser({ id: 'bB', username: 'bB', passwordHash: 'x', displayName: '小B', role: 'blind', status: 'active', createdAt: 200 })
+    store.createUser({ id: 'cB', username: 'cB', passwordHash: 'x', displayName: 'cB', role: 'family', status: 'active', createdAt: 1 })
+    store.createLink({ id: 'lB', ownerId: 'bB', memberId: 'cB', relation: '家人', isEmergency: true, createdAt: 1, status: 'accepted' })
+    store.createUser({ id: 'bC', username: 'bC', passwordHash: 'x', displayName: '小C', role: 'blind', status: 'active', createdAt: 1 })
+    store.createUser({ id: 'cC', username: 'cC', passwordHash: 'x', displayName: 'cC', role: 'family', status: 'active', createdAt: 1, apnsToken: 'a'.repeat(64) })
+    store.createLink({ id: 'lC', ownerId: 'bC', memberId: 'cC', relation: '家人', isEmergency: true, createdAt: 1, status: 'accepted' })
+    store.createUser({ id: 'bD', username: 'bD', passwordHash: 'x', displayName: '小D', role: 'blind', status: 'disabled', createdAt: 1 })
+
+    const ov = (await app.inject({ method: 'GET', url: '/api/admin/overview', headers: auth(adminTok) })).json()
+    const list = (await app.inject({ method: 'GET', url: '/api/admin/sos-safety-net', headers: auth(adminTok) })).json()
+    // 列表长度 === overview 的 broken 计数（同源 blindSosReadiness，绝不漂移）。
+    expect(list.total).toBe(ov.sosSafetyNet.broken)
+    expect(list.total).toBe(2)
+    const byId = Object.fromEntries((list.broken as Array<{ id: string; name: string; reason: string; acceptedTotal: number }>).map((x) => [x.id, x]))
+    expect(byId['bA']).toMatchObject({ name: '小A', reason: 'no_contact', acceptedTotal: 0 })
+    expect(byId['bB']).toMatchObject({ name: '小B', reason: 'contacts_unreachable', acceptedTotal: 1 })
+    expect('bC' in byId).toBe(false)   // 就绪者不入列
+    expect('bD' in byId).toBe(false)   // 停用盲人不入列
+    // no_contact 排在 contacts_unreachable 之前（更彻底的失效优先触达）。
+    expect((list.broken as Array<{ reason: string }>)[0].reason).toBe('no_contact')
+    await app.close()
+  })
+
+  it('无鉴权 / 非管理员 → 拒绝', async () => {
+    const { app } = seedWith(true)
+    const userTok = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'plain', password: 'secret123', role: 'blind' } })).json().token as string
+    expect((await app.inject({ method: 'GET', url: '/api/admin/sos-safety-net' })).statusCode).toBe(401)
+    expect((await app.inject({ method: 'GET', url: '/api/admin/sos-safety-net', headers: auth(userTok) })).statusCode).toBe(403)
+    await app.close()
+  })
 })

@@ -48,6 +48,7 @@ const I18N = {
     openReports: '待处理举报', recordingsCount: '录制记录', visionToday: 'AI 描述（今日）', visionCap: '单用户每日上限', byRole: '按角色分布', version: '版本', uptime: '运行时长', activeEmergencies: '正在进行的紧急',
     activeUnreachable: '紧急·无人可即时触达', activeUnreachSub: '安全网正静默失效，速联系本人/亲友',
     sosBroken: '安全网失效·盲人 SOS 无人可达', sosBrokenNoContact: '没设联系人', sosBrokenUnreach: '联系人全不可达',
+    sosBrokenListHint: '点某人查看其联系人明细，逐一联系提醒补齐（让家人装 App、开通知）。',
     emergTotals: '紧急告警·累计', emergTotAcked: '已响应', emergUnreached: '未触达',
     diskLow: '磁盘余量告急', diskFree: '磁盘余量', diskLowHint: '满盘将致数据库写入失败整站瘫——清理镜像/日志或扩容',
     backupStale: '备份已过期', backupOk: '最近备份', backupStaleHint: '每日备份超过 26 小时未更新（或一份都没有）——灾备正静默失效，请检查磁盘/权限',
@@ -188,6 +189,7 @@ const I18N = {
     openReports: 'Open reports', recordingsCount: 'Recordings', visionToday: 'AI describes (today)', visionCap: 'Per-user daily cap', byRole: 'By role', version: 'Version', uptime: 'Uptime', activeEmergencies: 'Active emergencies',
     activeUnreachable: 'Emergency · reached no one', activeUnreachSub: 'Safety net silently failing — contact them/family',
     sosBroken: 'Safety net broken · SOS reaches no one', sosBrokenNoContact: 'no contact set', sosBrokenUnreach: 'contacts unreachable',
+    sosBrokenListHint: 'Open a person to see their contacts, then reach out so they add one (family installs the app, enables notifications).',
     emergTotals: 'Emergency alerts (total)', emergTotAcked: 'Acknowledged', emergUnreached: 'Reached no one',
     diskLow: 'Disk space critical', diskFree: 'Disk free', diskLowHint: 'A full disk breaks database writes and takes the site down — prune images/logs or grow the volume',
     backupStale: 'Backup stale', backupOk: 'Last backup', backupStaleHint: 'No daily backup in over 26 hours (or none at all) — disaster recovery is silently failing; check disk/permissions',
@@ -602,12 +604,19 @@ async function loadDashboard() {
     state.overview = ov.value;
     trackServerCommit(state.overview);
     state.emergencies = settledField(em, 'events') || []; // 畸形/rejection 都退空——emergencies 端点独立降级，不连累整个仪表盘
+    await refreshSosBroken(); // 预防性安全网归因名单（仅当有失效者才打端点）
     renderChrome();
     renderDashboard();
     if (!state.refreshTimer) state.refreshTimer = setInterval(async () => {
-      if (currentRoute() === '') { try { state.overview = await api('/api/admin/overview'); trackServerCommit(state.overview); renderDashboard(); } catch {} }
+      if (currentRoute() === '') { try { state.overview = await api('/api/admin/overview'); trackServerCommit(state.overview); await refreshSosBroken(); renderDashboard(); } catch {} }
     }, 15000);
   } catch (err) { viewEl().innerHTML = `<div class="err-banner">${esc(errText(err.code))}</div>`; }
+}
+// 预防性 SOS 安全网归因名单：仅当 overview 报有失效者(broken>0)才拉具体名单（否则不打端点、清空）。
+// 端点失败退 null（面板不渲染该区，诚实缺席，不连累仪表盘）。
+async function refreshSosBroken() {
+  const n = state.overview && state.overview.sosSafetyNet && state.overview.sosSafetyNet.broken;
+  state.sosBroken = n > 0 ? await api('/api/admin/sos-safety-net').then((r) => r.broken).catch(() => null) : null;
 }
 function backupAge(o){ if(!o.backup) return ''; var a=o.backup.latestAgeMs; return a==null?'—':(a<3600000?Math.round(a/60000)+'m':(a/3600000).toFixed(1)+'h'); }
 function statCard(k, v, sub, cls) {
@@ -674,6 +683,7 @@ function renderDashboard() {
       <h3>${esc(t('byRole'))}</h3>
       <div class="card"><div class="bars">${bars}</div></div>
     </div>
+    ${sosSafetyNetSection()}
     ${emergencySection()}
     <div class="section">
       <h3>${esc(t('version'))} · ${esc(t('uptime'))}</h3>
@@ -688,6 +698,27 @@ function renderDashboard() {
   // 面板更新提示：点击刷新取新码（绝不自动刷，见 trackServerCommit）。
   const reloadBtn = viewEl().querySelector('[data-action="reloadPanel"]');
   if (reloadBtn) reloadBtn.addEventListener('click', () => location.reload());
+  // 安全网归因名单：点某人进用户抽屉看联系人明细、据此联系补齐。
+  viewEl().querySelectorAll('.sos-broken-row').forEach((el) => el.addEventListener('click', () => openUserDrawer(el.dataset.uid)));
+}
+// 预防性 SOS 安全网**归因名单**：点开每人进用户抽屉看联系人明细，逐一主动联系补齐（把 overview 的总数
+// 变成可行动的"是谁"）。空/未加载则不渲染。名字/reason 皆经 esc（用户可控串在汇聚点编码）。
+function sosSafetyNetSection() {
+  const list = state.sosBroken;
+  if (!list || !list.length) return '';
+  const rows = list.map((b) => {
+    const reason = b.reason === 'no_contact' ? t('sosBrokenNoContact') : t('sosBrokenUnreach');
+    return `<button class="live-member sos-broken-row" data-uid="${esc(b.id)}">
+      <span class="nm">${esc(b.name)}</span>
+      <span class="sos-reason">${esc(reason)}</span>
+      ${b.online ? `<span class="pill ok">${esc(t('online'))}</span>` : ''}
+    </button>`;
+  }).join('');
+  return `<div class="section">
+    <h3>⚠️ ${esc(t('sosBroken'))} · ${list.length}</h3>
+    <div class="card"><div class="live-members">${rows}</div>
+      <p class="sub">${esc(t('sosBrokenListHint'))}</p></div>
+  </div>`;
 }
 // 紧急事件区（值守）：谁在何时触发了摔倒/撞击/SOS、通知到几人、位置来源诚实标注
 // （最后已知位置绝不伪装成实时；地图链接一律 Apple Maps，坐标为 WGS-84，与全栈口径一致）。

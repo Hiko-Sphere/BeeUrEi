@@ -772,8 +772,10 @@ struct ChatView: View {
         let lang = self.lang
         guard let token = session.token else { return }
         SpeechHub.shared.speak(ChatStrings.describingPhoto(lang), channel: .query, voiceCode: lang.voiceCode) // 即时提示，云端往返不冷场
-        let scaled = Self.resized(img, maxSide: 1024)
-        guard let jpeg = scaled.jpegData(compressionQuality: 0.7) else {
+        // 视觉上传口径统一（VisionImageEncoding，与"看一看"同源）：长边上限 + 质量 0.85——此前这里 0.7、看一看 0.6，
+        // 两处不一致且偏低，会把细字压糊、抵消云端 detail=high 的读字收益。resized 保留（对相册图按 EXIF 方向正确绘制）。
+        let scaled = Self.resized(img, maxSide: CGFloat(VisionImageEncoding.maxLongSidePixels))
+        guard let jpeg = scaled.jpegData(compressionQuality: CGFloat(VisionImageEncoding.jpegQuality)) else {
             SpeechHub.shared.speak(ChatStrings.aiDescribeErrorText("encode_failed", lang), channel: .query, voiceCode: lang.voiceCode)
             return
         }

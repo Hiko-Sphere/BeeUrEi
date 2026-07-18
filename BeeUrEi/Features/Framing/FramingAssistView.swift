@@ -955,14 +955,19 @@ final class FramingAssistViewModel {
         }
     }
 
-    /// 视觉大模型用 JPEG：长边降到 ≤1024（护每日付费配额与上传体积，同聊天"描述照片"口径），质量 0.6。
-    private static func visionJPEG(from cg: CGImage, maxSide: CGFloat = 1024) -> Data? {
-        let w = CGFloat(cg.width), h = CGFloat(cg.height)
+    /// 视觉大模型用 JPEG：长边降到 ≤上限、质量统一（VisionImageEncoding，与聊天"描述照片"同口径；此前两处
+    /// 各硬编码 0.6/0.7 不一致且偏低，会把细字压糊、抵消云端 detail=high 的读字收益）。
+    private static func visionJPEG(from cg: CGImage) -> Data? {
+        let q = CGFloat(VisionImageEncoding.jpegQuality)
         let img = UIImage(cgImage: cg)
-        let scale = min(1, maxSide / max(w, h))
-        if scale >= 1 { return img.jpegData(compressionQuality: 0.6) }
-        let size = CGSize(width: w * scale, height: h * scale)
-        return UIGraphicsImageRenderer(size: size).jpegData(withCompressionQuality: 0.6) { _ in
+        // 未超长边上限：原图直接编码（fittedSize 对小图返回原尺寸，绝不放大）。
+        if Double(max(cg.width, cg.height)) <= VisionImageEncoding.maxLongSidePixels {
+            return img.jpegData(compressionQuality: q)
+        }
+        let fitted = VisionImageEncoding.fittedSize(width: Double(cg.width), height: Double(cg.height))
+        guard fitted.width > 0, fitted.height > 0 else { return img.jpegData(compressionQuality: q) } // 坏尺寸兜底：发原图
+        let size = CGSize(width: fitted.width, height: fitted.height)
+        return UIGraphicsImageRenderer(size: size).jpegData(withCompressionQuality: q) { _ in
             img.draw(in: CGRect(origin: .zero, size: size))
         }
     }

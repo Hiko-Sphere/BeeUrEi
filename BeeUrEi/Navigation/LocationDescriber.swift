@@ -271,6 +271,45 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
         }
     }
 
+    /// MapKit POI 类别 → 简短本地化类别名（境外「周围有什么」用，补齐与境内高德 category 的 parity）。
+    /// 境内高德 POI 会随播类型（"肯德基，快餐厅"），境外 MapKit 路径此前把 pointOfInterestCategory 丢弃——
+    /// ZH 盲人在国外只听到陌生店名（"Boots""Tesco"），不知是药店/超市。补上让他一听即知这是什么地方。
+    /// 只映射**对出行有用、含义明确**的常见类别（吃/医/钱/交通/如厕/住宿/店铺等）；未知/未映射 → nil
+    /// （composer 自然不追加、回退原行为，绝不硬凑）。composer 仅在中文模式追加类别（英文嗓念中文类别会乱），
+    /// 但这里如实按语言给名，交由 composer 决定是否追加（保持职责单一、便于单测）。
+    static func poiCategoryName(_ cat: MKPointOfInterestCategory?, _ lang: Language) -> String? {
+        guard let cat else { return nil }
+        let zh = lang == .zh
+        switch cat {
+        case .restaurant: return zh ? "餐厅" : "restaurant"
+        case .cafe: return zh ? "咖啡馆" : "café"
+        case .bakery: return zh ? "面包店" : "bakery"
+        case .foodMarket: return zh ? "超市" : "market"
+        case .pharmacy: return zh ? "药店" : "pharmacy"
+        case .hospital: return zh ? "医院" : "hospital"
+        case .bank: return zh ? "银行" : "bank"
+        case .atm: return zh ? "取款机" : "ATM"
+        case .gasStation: return zh ? "加油站" : "gas station"
+        case .evCharger: return zh ? "充电站" : "EV charger"
+        case .parking: return zh ? "停车场" : "parking"
+        case .publicTransport: return zh ? "公交站" : "transit stop"
+        case .restroom: return zh ? "卫生间" : "restroom"
+        case .hotel: return zh ? "酒店" : "hotel"
+        case .store: return zh ? "商店" : "store"
+        case .park: return zh ? "公园" : "park"
+        case .library: return zh ? "图书馆" : "library"
+        case .school: return zh ? "学校" : "school"
+        case .university: return zh ? "大学" : "university"
+        case .postOffice: return zh ? "邮局" : "post office"
+        case .police: return zh ? "警察局" : "police"
+        case .fireStation: return zh ? "消防站" : "fire station"
+        case .museum: return zh ? "博物馆" : "museum"
+        case .fitnessCenter: return zh ? "健身房" : "gym"
+        case .laundry: return zh ? "洗衣店" : "laundry"
+        default: return nil // 未映射类别：不硬凑，回退无类别行为
+        }
+    }
+
     /// Apple Maps 周边 POI（境外，或国内高德失败回退）。
     private func mapKitPoiCallouts(_ loc: CLLocation, radius: Int) {
         let request = MKLocalPointsOfInterestRequest(center: loc.coordinate, radius: CLLocationDistance(radius))
@@ -283,7 +322,8 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
                     name: name,
                     distanceMeters: loc.distance(from: ploc),
                     relativeBearingDegrees: self.relativeBearing(fromLat: loc.coordinate.latitude, fromLon: loc.coordinate.longitude,
-                                                                 toLat: ploc.coordinate.latitude, toLon: ploc.coordinate.longitude, heading: heading))
+                                                                 toLat: ploc.coordinate.latitude, toLon: ploc.coordinate.longitude, heading: heading),
+                    category: Self.poiCategoryName(item.pointOfInterestCategory, self.lang)) // 类别随 POI 喂给 composer，境外也报"药店/超市"等类型（与境内高德 parity）
             }
             let text = PoiCalloutComposer.compose(pois: obs, mode: self.composerMode, radiusMeters: radius,
                                                   headingAvailable: heading != nil, language: self.lang,

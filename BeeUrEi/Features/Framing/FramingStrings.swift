@@ -26,7 +26,10 @@ enum FramingStrings {
     }
     static func copied(_ l: Language) -> String { l == .zh ? "已复制到剪贴板" : "Copied to clipboard" }
     static func nothingToExplore(_ l: Language) -> String {
-        l == .zh ? "这一帧没认出物体或文字，请对准后再试" : "Nothing recognized in this frame — aim and try again"
+        // 本地物体/文字识别这一帧空手——指路「描述场景」(云端 AI 能看画面里有什么)，别让盲人对着无法本地识别的
+        // 画面(复杂场景/无常见物)反复试却始终"没认出"而卡住（与 noTextFoundTryAI 同一兜底出路）。
+        l == .zh ? "这一帧没认出物体或文字，请对准后再试；也可以试试「描述场景」看看画面里有什么。"
+                 : "Nothing recognized in this frame — aim and try again, or try “Describe scene” to hear what's in view."
     }
 
     // MARK: 取景识别
@@ -516,8 +519,10 @@ enum FramingStrings {
         l == .zh ? "纸币：可能是\(name)" : "Banknote: possibly \(name)"
     }
     static func banknoteNone(_ l: Language) -> String {
-        l == .zh ? "没认出纸币面额。请把纸币平整地举在镜头前约三十厘米再试"
-                 : "Couldn't read the denomination. Hold the note flat about thirty centimeters away and try again."
+        // 端侧只认人民币；外币/破损/角度差会认不出。指路「描述场景」(云端 AI)——它能读出"这是一张 20 美元"这类外币，
+        // 是本地纸币识别唯一的兜底出路，盲人不知道就以为这张钱没法认。
+        l == .zh ? "没认出纸币面额。请把纸币平整地举在镜头前约三十厘米再试；如果是外币或看不清，可以试试「描述场景」。"
+                 : "Couldn't read the denomination. Hold the note flat about thirty centimeters away and try again; for foreign currency or if it's unclear, try “Describe scene”."
     }
     static func yuan(_ d: Int, jiao: Bool = false, _ l: Language) -> String {
         // 角面额（第四套 1角/2角/5角）：单位不同，绝不与"元"混说——防 5 角被读成 5 元（10 倍）。

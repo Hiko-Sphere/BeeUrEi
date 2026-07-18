@@ -100,6 +100,19 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), en) // 英文不串中文
     }
 
+    func testRecognitionDeadEndsSuggestSceneDescribe() {
+        // 本地识别的两条死路（认不出纸币面额 / 这一帧没认出物体或文字）都须指向「描述场景」这条云端兜底出路——
+        // 尤其纸币：端侧只认人民币，外币/破损靠 AI 描述才认得出，盲人不知道就以为这张钱没法认。
+        for s in [FramingStrings.banknoteNone(.zh), FramingStrings.nothingToExplore(.zh)] {
+            XCTAssertTrue(s.contains("描述场景"), "中文死路须指路描述场景：\(s)")
+        }
+        XCTAssertTrue(FramingStrings.banknoteNone(.zh).contains("外币"), "纸币死路须点明外币可用描述场景") // 外币是本地识别的主要盲区
+        for s in [FramingStrings.banknoteNone(.en), FramingStrings.nothingToExplore(.en)] {
+            XCTAssertTrue(s.contains("Describe scene"), "en 死路须指路 Describe scene：\(s)")
+            XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文不串中文：\(s)")
+        }
+    }
+
     func testProductEnergySpeakKcalPer100g() {
         // 热量后缀（"每100克约X千卡"）：盲人读不到卡路里、数卡/控糖控重需要；真 0（水/无糖饮料）照常报；nil/负→nil。
         XCTAssertEqual(FramingStrings.productEnergySpeak(54, .zh), "。每100克约54千卡")

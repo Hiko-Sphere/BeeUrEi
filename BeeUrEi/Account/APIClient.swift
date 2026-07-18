@@ -1196,6 +1196,7 @@ struct APIClient {
         let ingredients: String?     // 配料表原文（"生牛乳、白砂糖、食品添加剂…"）——盲人**读不到配料表**，查素食/忌口成分/"这是什么做的"的核心刚需，过敏原标注覆盖不了的具体成分靠它；空/缺省=无数据
         let energyKcal100g: Int?     // 热量（每 100 克/毫升千卡）——盲人读不到卡路里，而数卡/控糖控重(减肥/糖尿病)正需这个绝对值；nil/缺省=无数据
         let macros100g: Macros100g? // 四大营养素克数（每 100 克）：碳水/糖/蛋白质/脂肪——热量之外的定量刚需（糖尿病算碳水、健身看蛋白）；各字段独立 nil=无数据
+        let servingGrams: Double?   // 一份的克数（OFF serving_quantity）——盲人吃的是一份、不是 100 克；有它+per-100g 即可算每份的千卡/碳水；nil=无
 
         /// 每 100 克四大营养素**克数**（服务端保留 1 位小数）。各字段独立可缺，缺=nil（不猜）。
         struct Macros100g: Codable, Equatable {

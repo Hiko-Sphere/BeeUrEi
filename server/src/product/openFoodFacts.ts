@@ -41,6 +41,10 @@ export interface ProductInfo {
   /// 的定量刚需——**糖尿病人靠总碳水克数算胰岛素/控碳水**（nutrientLevels 只给"高糖"定性档、给不了这个用于计量的数），
   /// 健身/肾病看蛋白质、控脂看脂肪。含量档是"高/中/低"、克数才是"多少"，二者互补。缺/脏数据各字段独立 → null（不猜）。
   macros100g: Macros100g
+  /// 一**份**的克数（OFF serving_quantity，如 30 表示每份 30 克/毫升）。盲人**吃的是一份、不是 100 克**——per-100g 太抽象，
+  /// 而"这一份约多少千卡/多少碳水"才是数卡/算胰岛素时真正要的量。有它 + energyKcal100g/carbs 即可算出每份的绝对值。
+  /// 非有限/≤0/缺 → null（不猜；一份 0 克无意义）。上限夹 5000（单份物理上远小于此，防脏数据）。
+  servingGrams?: number | null
 }
 
 /// 每 100 克四大营养素克数（各字段可缺，独立 null，绝不因某素缺就丢整组）。糖(sugars)是碳水的子项，OFF 常两者都给。
@@ -159,6 +163,14 @@ export function parseNutrimentGrams(v: unknown): number | null {
   return Math.round(Math.min(n, 1000) * 10) / 10
 }
 
+/// 一份的克数（OFF serving_quantity，数字或数字串）：转有限**正**数、保留 1 位小数；**≤0/非有限/缺 → null**
+/// （一份 0 克无意义，绝不据此算出"每份 0 千卡"的假数）。上限夹 5000（单份物理上远小于此，拦脏数据的天文值）。
+export function parseServingGrams(v: unknown): number | null {
+  const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v.trim()) : NaN
+  if (!Number.isFinite(n) || n <= 0) return null
+  return Math.round(Math.min(n, 5000) * 10) / 10
+}
+
 /// Nutri-Score 分级：只接受可信的 a..e（OFF 用小写；'unknown'/'not-applicable'/空/其它 → null，绝不猜）。
 export function parseNutriScore(grade: unknown): string | null {
   if (typeof grade !== 'string') return null
@@ -199,7 +211,7 @@ export type LookupOutcome =
 
 /// 查一个条码，区分"真未收录(notFound)"与"瞬时故障(failed)"（用于差异化缓存；两者对客户端都表现为拿不到名字）。
 export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeoutMs = 5000): Promise<LookupOutcome> {
-  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,allergens_tags,traces_tags,nutriscore_grade,nova_group,labels_tags,quantity,nutrient_levels,ingredients_text,nutriments`
+  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,allergens_tags,traces_tags,nutriscore_grade,nova_group,labels_tags,quantity,nutrient_levels,ingredients_text,nutriments,serving_quantity`
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
@@ -233,6 +245,7 @@ export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeo
           fat: parseNutrimentGrams(nut?.['fat_100g']),
         }
       })(),
+      servingGrams: parseServingGrams(p?.serving_quantity),
     } }
   } catch {
     return { kind: 'failed' } // 超时/网络/解析异常：瞬时故障，不长缓存，绝不编造商品名

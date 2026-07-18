@@ -134,6 +134,25 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertNil(FramingStrings.productMacrosSpeak(carbohydrates: -1, sugars: .nan, protein: .infinity, fat: nil, .zh)) // 负/非有限全跳过→nil
     }
 
+    func testProductServingSpeakPerServing() {
+        // 每份的绝对量（盲人吃一份不是 100 克）：从 per-100g × 一份克数算出每份千卡/碳水；整数去尾零。
+        XCTAssertEqual(FramingStrings.productServingSpeak(servingGrams: 30, energyKcal100g: 400, carbs100g: 12, .zh),
+                       "。每份约30克：约120千卡、碳水3.6克") // 400×30/100=120 千卡；12×30/100=3.6 克
+        // 只有热量、无碳水 → 只报每份千卡。
+        XCTAssertEqual(FramingStrings.productServingSpeak(servingGrams: 250, energyKcal100g: 54, carbs100g: nil, .zh),
+                       "。每份约250克：约135千卡") // 54×250/100=135
+        // 无一份克数 → nil（无从算每份）。
+        XCTAssertNil(FramingStrings.productServingSpeak(servingGrams: nil, energyKcal100g: 400, carbs100g: 12, .zh))
+        // 一份 0 克/负 → nil（无意义，绝不算出"每份 0 千卡"假数）。
+        XCTAssertNil(FramingStrings.productServingSpeak(servingGrams: 0, energyKcal100g: 400, carbs100g: 12, .zh))
+        // 有一份克数但热量与碳水都缺 → nil（没什么可算）。
+        XCTAssertNil(FramingStrings.productServingSpeak(servingGrams: 30, energyKcal100g: nil, carbs100g: nil, .zh))
+        // 英文分支不串中文。
+        let en = FramingStrings.productServingSpeak(servingGrams: 30, energyKcal100g: 400, carbs100g: 12, .en)!
+        XCTAssertEqual(en, ". Per serving ~30 g: about 120 kcal, carbs 3.6 g")
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
+
     func testTorchAutoOnTellsUserItWasSolved() {
         // 太暗自动点灯的播报：须点明已打开手电筒 + 提示重试（而非只说"太暗"卡住）。
         let zh = FramingStrings.torchAutoOn(.zh)

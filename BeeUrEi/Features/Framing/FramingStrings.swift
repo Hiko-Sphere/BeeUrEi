@@ -428,6 +428,30 @@ enum FramingStrings {
         let joined = parts.joined(separator: zh ? "，" : ", ")
         return zh ? "。每100克：\(joined)" : ". Per 100g: \(joined)"
     }
+
+    /// **每份**的绝对量（"每份约30克：约135千卡、碳水4克"）——盲人吃的是一份、不是 100 克，per-100g 太抽象；有一份克数
+    /// (servingGrams)即可从 per-100g 算出这一份到底多少千卡/多少碳水（数卡/算胰岛素真正要的量）。只报有效的（energy/carbs
+    /// 各自缺就跳过）；servingGrams 无效、或 energy 与 carbs 都缺 → nil。整数去尾零；接在 per-100g 之后（同一营养簇的"具体到一份"）。
+    static func productServingSpeak(servingGrams: Double?, energyKcal100g: Int?, carbs100g: Double?, _ l: Language) -> String? {
+        guard let s = servingGrams, s.isFinite, s > 0 else { return nil }
+        let zh = l == .zh
+        func grams(_ v: Double) -> String {
+            let r = v.rounded() == v ? String(Int(v)) : String(format: "%.1f", v)
+            return zh ? "\(r)克" : "\(r) g"
+        }
+        var parts: [String] = []
+        if let e = energyKcal100g, e >= 0 {
+            let perServing = Int((Double(e) * s / 100).rounded())
+            parts.append(zh ? "约\(perServing)千卡" : "about \(perServing) kcal")
+        }
+        if let c = carbs100g, c.isFinite, c >= 0 {
+            let perServing = (c * s / 100 * 10).rounded() / 10
+            parts.append((zh ? "碳水" : "carbs ") + grams(perServing))
+        }
+        guard !parts.isEmpty else { return nil }
+        let joined = parts.joined(separator: zh ? "、" : ", ")
+        return zh ? "。每份约\(grams(s))：\(joined)" : ". Per serving ~\(grams(s)): \(joined)"
+    }
     /// Wi-Fi 配置码：显示网络名 + **密码**——盲人看不到贴纸上的密码，密码正是扫这张码的目的（此前只报网络名，
     /// 拿不到密码根本连不上网）。开放网络明确标注无密码。cred 为 nil（畸形 WIFI: 码）退化为通用词。
     static func wifiResult(_ cred: WifiCredential?, _ l: Language) -> String {

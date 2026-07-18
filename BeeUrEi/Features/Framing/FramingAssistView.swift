@@ -1480,8 +1480,10 @@ final class FramingAssistViewModel {
                 let ingredientsSuffix = FramingStrings.productIngredientsSpeak(info.ingredients, self.lang) ?? "" // 配料表最长放最后播
                 let energySuffix = FramingStrings.productEnergySpeak(info.energyKcal100g, self.lang) ?? "" // 热量随营养信息
                 let macrosSuffix = FramingStrings.productMacrosSpeak(carbohydrates: info.macros100g?.carbohydrates, sugars: info.macros100g?.sugars, protein: info.macros100g?.protein, fat: info.macros100g?.fat, self.lang) ?? "" // 四大营养素克数紧随热量
-                self.resultText = alertPrefix + dietPrefix + FramingStrings.productResult(info.name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + energySuffix + macrosSuffix + dietarySuffix + ingredientsSuffix
-                self.speak(alertPrefix + dietPrefix + FramingStrings.thisIs(info.name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + energySuffix + macrosSuffix + dietarySuffix + ingredientsSuffix) // 一次 speak：.query 替换语义
+                // 每份的绝对量（约X千卡、碳水Y克）紧随 per-100g——盲人吃一份不是 100 克。仅在线查到 servingGrams 时报（离线复扫无此字段则退回 per-100g）。
+                let servingSuffix = FramingStrings.productServingSpeak(servingGrams: info.servingGrams, energyKcal100g: info.energyKcal100g, carbs100g: info.macros100g?.carbohydrates, self.lang) ?? ""
+                self.resultText = alertPrefix + dietPrefix + FramingStrings.productResult(info.name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + energySuffix + macrosSuffix + servingSuffix + dietarySuffix + ingredientsSuffix
+                self.speak(alertPrefix + dietPrefix + FramingStrings.thisIs(info.name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + energySuffix + macrosSuffix + servingSuffix + dietarySuffix + ingredientsSuffix) // 一次 speak：.query 替换语义
             } else {
                 // 回退：原"起名"路径（弹窗 + 提示），与在线查询前行为一致。
                 self.pendingProductCode = barcode

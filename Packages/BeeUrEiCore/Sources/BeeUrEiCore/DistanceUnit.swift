@@ -37,4 +37,15 @@ public enum DistanceUnit: String, Sendable, CaseIterable {
             return language == .zh ? "\(ft)英尺" : "\(ft) feet"
         }
     }
+
+    /// 近距转向提示（turn-by-turn）的英尺档：把换算后的英尺**吸附到最近的 5 英尺整档**（下限 5 英尺），
+    /// 令英制用户听到 15 / 35 / 50 / 65 这类整档，而非 farDistance 逐英尺取整得到的 16 / 33 / 49 / 66
+    /// 伪精确碎数——与公制侧「5 米整档、跨档才变」同样"离散不刷屏"的初衷一致（对标 Soundscape / WeWALK）。
+    /// 仅用于 RouteProgress 已取到 5 米档的近距（量级 ≤ announceWithinMeters）；位置尺度距离（含英里滚动）
+    /// 仍走 farDistance，勿在此处理。溢出/非有限先经 safeRoundedInt 夹紧（负/坏值→0→下限 5 英尺）。
+    static func maneuverFeet(meters: Double) -> Int {
+        let m = Double(SpokenStrings.safeRoundedInt(meters))
+        let snapped = (m / metersPerFoot / 5).rounded() * 5
+        return max(5, Int(snapped))
+    }
 }

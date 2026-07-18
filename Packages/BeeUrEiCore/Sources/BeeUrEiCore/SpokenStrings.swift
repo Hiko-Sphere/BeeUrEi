@@ -247,13 +247,16 @@ public enum SpokenStrings {
     }
 
     /// 转向距离播报。`meters` 是上层已按 5 米档取整的距离（**决策/取档全在公制**，仅此处按用户单位格式化输出）。
-    /// 英制走 DistanceUnit.farDistance 同一换算源（英尺）——英制用户导航全程听英尺/英里，转向距离曾裸报"米"＝单位割裂
-    /// （turn-by-turn 距离早已接英制，此近距转向提示是漏网的姊妹缺口）。公制分支逐字不变（回归安全）。
+    /// 英制吸附到最近 5 英尺整档（DistanceUnit.maneuverFeet）——英制用户导航全程听英尺，转向距离曾裸报"米"＝单位割裂
+    /// （turn-by-turn 距离早已接英制，此近距转向提示是漏网的姊妹缺口）；且**不走 farDistance**：farDistance ≥1000ft
+    /// 会滚成"英里"，与公制分支近距永不滚"公里"（"\(meters) 米"）不对称，maneuverFeet 恒给英尺、量级一致。公制分支逐字不变（回归安全）。
     public static func maneuverInMeters(_ meters: Int, instruction: String, unit: DistanceUnit = .metric, _ lang: Language) -> String {
         let dist: String
         switch unit {
         case .metric:   dist = lang == .zh ? "\(meters) 米" : "\(meters) m"
-        case .imperial: dist = DistanceUnit.imperial.farDistance(meters: Double(meters), language: lang)
+        case .imperial:
+            let ft = DistanceUnit.maneuverFeet(meters: Double(meters))
+            dist = lang == .zh ? "\(ft)英尺" : "\(ft) feet"
         }
         switch lang {
         case .zh: return "前方约 \(dist)后\(instruction)"

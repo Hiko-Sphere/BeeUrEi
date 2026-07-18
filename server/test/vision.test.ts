@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
-import { visionConfigured, visionDescribe, buildVisionMessages } from '../src/vision/visionClient'
+import { visionConfigured, visionDescribe, buildVisionMessages, imageDetailFromEnv } from '../src/vision/visionClient'
 import { hashPassword } from '../src/auth/passwords'
 
 // 1×1 合法 base64（fetch 被 stub，内容不重要，只需通过 base64 字符集与大小校验）。
@@ -53,7 +53,41 @@ describe('visionClient（AI 视觉描述，provider 无关 / OpenAI 兼容）', 
     expect(body.messages[0].role).toBe('system')
     expect(body.messages[1].content[0]).toMatchObject({ type: 'text', text: '前面能走吗' })
     expect(body.messages[1].content[1].image_url.url).toBe('data:image/jpeg;base64,ABC')
+    // 默认 detail='high'：盲人扫药盒/价签/号码须读准细字，低分辨率降采样会糊掉（system 提示要求逐位读准剂量/金额）。
+    expect(body.messages[1].content[1].image_url.detail).toBe('high')
     expect(body.temperature).toBeLessThanOrEqual(0.3) // 低温偏客观
+  })
+
+  it('VISION_IMAGE_DETAIL=off → image_url 不带 detail（回到改动前行为，兼容不认该字段的端点）', async () => {
+    setConfig()
+    process.env.VISION_IMAGE_DETAIL = 'off'
+    const f = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) }))
+    vi.stubGlobal('fetch', f)
+    await visionDescribe({ imageDataUrl: 'data:image/jpeg;base64,ABC', lang: 'zh' })
+    const body = JSON.parse((f.mock.calls[0] as unknown as [string, { body: string }])[1].body)
+    expect('detail' in body.messages[1].content[1].image_url).toBe(false)
+    delete process.env.VISION_IMAGE_DETAIL
+  })
+
+  it('VISION_IMAGE_DETAIL=low → 透传 low（成本敏感自托管者可降配）', async () => {
+    setConfig()
+    process.env.VISION_IMAGE_DETAIL = 'low'
+    const f = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) }))
+    vi.stubGlobal('fetch', f)
+    await visionDescribe({ imageDataUrl: 'data:image/jpeg;base64,ABC', lang: 'zh' })
+    const body = JSON.parse((f.mock.calls[0] as unknown as [string, { body: string }])[1].body)
+    expect(body.messages[1].content[1].image_url.detail).toBe('low')
+    delete process.env.VISION_IMAGE_DETAIL
+  })
+
+  it('imageDetailFromEnv：默认/非法→high，low/auto/high 透传，off→undefined（大小写不敏感）', () => {
+    expect(imageDetailFromEnv(undefined)).toBe('high')   // 未设：准确优先
+    expect(imageDetailFromEnv('')).toBe('high')          // 空串
+    expect(imageDetailFromEnv('nonsense')).toBe('high')  // 非法值不静默降精度
+    expect(imageDetailFromEnv('high')).toBe('high')
+    expect(imageDetailFromEnv('LOW')).toBe('low')         // 大小写不敏感
+    expect(imageDetailFromEnv(' Auto ')).toBe('auto')     // 去空白
+    expect(imageDetailFromEnv('off')).toBe('off')         // 显式关闭哨兵（非 undefined，避免默认参数回落 high）
   })
 
   it('buildVisionMessages：追问历史注入为 user/assistant 轮，图片始终在**当前**轮（连续图像问答，对标 Be My AI）', () => {
@@ -64,6 +98,11 @@ describe('visionClient（AI 视觉描述，provider 无关 / OpenAI 兼容）', 
     expect(single[1]).toMatchObject({ role: 'user' })
     expect(single[1].content[0]).toMatchObject({ type: 'text', text: '有台阶吗' })
     expect(single[1].content[1].image_url.url).toBe('data:image/jpeg;base64,IMG')
+    expect(single[1].content[1].image_url.detail).toBe('high') // 默认高分辨率（读准细字）
+    // 传 'off'（对应 VISION_IMAGE_DETAIL=off）→ image_url 不带 detail 字段。用 'off' 而非 undefined：默认参数
+    // 对显式 undefined 同样回落 'high'，故 off 须是真实哨兵值。
+    const off = buildVisionMessages({ imageDataUrl: 'data:image/jpeg;base64,IMG', question: 'x', lang: 'zh' }, 'off') as any[]
+    expect('detail' in off[1].content[1].image_url).toBe(false)
     // 有历史：system + 历史 Q/A（纯文本轮）+ 当前(图+新问)。图片只在当前轮（模型现在看图、结合历史答追问）。
     const multi = buildVisionMessages({
       imageDataUrl: 'data:image/jpeg;base64,IMG', question: '价格是多少',

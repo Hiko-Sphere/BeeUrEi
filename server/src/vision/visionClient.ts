@@ -11,7 +11,21 @@ function cfg() {
     base: process.env.VISION_API_BASE?.trim(),
     model: process.env.VISION_MODEL?.trim(),
     maxTokens: Number(process.env.VISION_MAX_TOKENS ?? '500'),
+    imageDetail: imageDetailFromEnv(process.env.VISION_IMAGE_DETAIL),
   }
+}
+
+/// 图像分辨率档（OpenAI 兼容 image_url.detail）。**默认 'high'**：盲人扫药盒剂量/价签/电话号/门牌最需**读准
+/// 细小文字与数字**，而不带 detail 时多数端点按 'auto' 把图降采样到 ~512px（App 上传前又常已压缩），细字糊成读不出——
+/// 而 systemPrompt 恰恰要求逐位读准剂量/金额/号码，低分辨率下根本做不到（读错剂量/金额对盲人代价严重）。
+/// 成本敏感的自托管者可 VISION_IMAGE_DETAIL=low/auto 降配；个别不认该字段的端点可设 'off' 完全不发 detail
+/// （回到本次改动前的行为）。非法/未设 → 'high'（准确优先，绝不因配错静默降精度）。
+/// 用 'off' 作**哨兵**（而非 undefined）：buildVisionMessages 的默认参数 = 'high'，传 undefined 会触发默认值
+/// （JS 默认参数对"显式 undefined"同样生效）＝反把 off 变回 high，故 off 必须是一个真实值。
+export function imageDetailFromEnv(raw: string | undefined): 'high' | 'low' | 'auto' | 'off' {
+  const v = raw?.trim().toLowerCase()
+  if (v === 'low' || v === 'auto' || v === 'high' || v === 'off') return v
+  return 'high'
 }
 
 /// 三者齐备才算配置完成（provider 无关，不预设任何默认厂商，避免把请求误发到错误端点）。
@@ -57,7 +71,7 @@ export interface DescribeInput {
 /// 组装视觉接口的多轮 messages（纯逻辑，可单测）：system 提示 + 历史 Q&A（追问的对话上下文，仅文本）+ 当前提问
 /// （图片附在**当前**轮——模型现在看到图、结合历史文本答追问，对标 Be My AI 的连续追问）。历史空=单轮（与原行为逐字一致）。
 /// 剔除空 q 或空 a 的坏历史轮（不污染上下文）。
-export function buildVisionMessages(input: DescribeInput): unknown[] {
+export function buildVisionMessages(input: DescribeInput, imageDetail: 'high' | 'low' | 'auto' | 'off' = 'high'): unknown[] {
   const question = input.question?.trim() || defaultQuestion(input.lang)
   const historyTurns = (input.history ?? [])
     .filter((h) => h.q.trim() && h.a.trim())
@@ -65,12 +79,15 @@ export function buildVisionMessages(input: DescribeInput): unknown[] {
       { role: 'user', content: h.q.trim() },
       { role: 'assistant', content: h.a.trim() },
     ])
+  // detail 只在非 'off' 时附上（'off'＝省略，回到不带 detail 的原行为，兼容个别不认该字段的端点）。
+  const imageUrl: Record<string, unknown> = { url: input.imageDataUrl }
+  if (imageDetail !== 'off') imageUrl.detail = imageDetail
   return [
     { role: 'system', content: systemPrompt(input.lang) },
     ...historyTurns,
     { role: 'user', content: [
       { type: 'text', text: question },
-      { type: 'image_url', image_url: { url: input.imageDataUrl } },
+      { type: 'image_url', image_url: imageUrl },
     ] },
   ]
 }
@@ -82,7 +99,7 @@ export async function visionDescribe(input: DescribeInput): Promise<string> {
   const url = `${c.base.replace(/\/+$/, '')}/chat/completions`
   const body = {
     model: c.model,
-    messages: buildVisionMessages(input),
+    messages: buildVisionMessages(input, c.imageDetail),
     max_tokens: Number.isFinite(c.maxTokens) && c.maxTokens > 0 ? c.maxTokens : 500,
     temperature: 0.2, // 低温：偏客观、少发挥（安全攸关，减少臆造）
   }

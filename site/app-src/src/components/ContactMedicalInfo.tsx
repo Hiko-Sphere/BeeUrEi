@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, APIError } from '../lib/api'
 import { useI18n } from '../lib/i18n'
+import { medicalStalenessCaution } from '../lib/medicalStaleness'
 import { timeAgo } from './ui'
 
 /// 施救医疗信息（点击拉取遇险者的紧急医疗信息——服务端仅授权其 accepted 紧急联系人）。独立组件（原在
@@ -46,6 +47,12 @@ export function ContactMedicalInfo({ userId, emphasize }: { userId: string; emph
       {state.updatedAt != null && (
         <div className="mt-1.5 text-xs text-faint">{t('更新于 ', 'Updated ')}{timeAgo(state.updatedAt, lang)}</div>
       )}
+      {/* 陈旧警示（约 1 年未更新）：危急中施救者据数年前的用药/过敏行动会误判——给出醒目、可行动的核对提醒。
+          用 text-danger（AA 达标：浅底 ≥4.9:1、.dark 提亮）而非 text-warn(#f2a900 作文字对比不足)。role=alert 令读屏立即播报。 */}
+      {state.updatedAt != null && (() => {
+        const caution = medicalStalenessCaution(state.updatedAt, Date.now(), lang)
+        return caution ? <p role="alert" className="mt-1.5 text-xs font-medium text-danger">{caution}</p> : null
+      })()}
     </div>
   )
   const msg = state.kind === 'none' ? t('对方未填写医疗信息', 'No medical info provided')

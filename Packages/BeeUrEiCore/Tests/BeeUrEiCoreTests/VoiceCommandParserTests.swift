@@ -200,6 +200,25 @@ final class VoiceCommandParserTests: XCTestCase {
         XCTAssertEqual(VoiceCommandParser.parse("去最近的地铁站坐地铁"), .findNearest("地铁站"))
     }
 
+    func testSavedPlaceLabelForTransitDestination() {
+        // 「坐公交去公司/回家」的目的地词映射到已保存地点 label——用保存的地址规划公交，非把字面"公司"当地名 geocode
+        // （否则命中随便一家公司/搜不到），补齐与步行 navigateWork 的口径缺口。
+        XCTAssertEqual(VoiceCommandParser.savedPlaceLabel(forDestination: "公司"), "work")
+        XCTAssertEqual(VoiceCommandParser.savedPlaceLabel(forDestination: "单位"), "work")
+        XCTAssertEqual(VoiceCommandParser.savedPlaceLabel(forDestination: "办公室"), "work")
+        XCTAssertEqual(VoiceCommandParser.savedPlaceLabel(forDestination: "work"), "work")
+        XCTAssertEqual(VoiceCommandParser.savedPlaceLabel(forDestination: "The Office"), "work") // 去空白/大小写不敏感
+        XCTAssertEqual(VoiceCommandParser.savedPlaceLabel(forDestination: "家"), "home")
+        XCTAssertEqual(VoiceCommandParser.savedPlaceLabel(forDestination: "家里"), "home")
+        XCTAssertEqual(VoiceCommandParser.savedPlaceLabel(forDestination: "home"), "home")
+        // **精确整词**：真实公司/大厦名不误命中（照常按名 geocode）。
+        XCTAssertNil(VoiceCommandParser.savedPlaceLabel(forDestination: "腾讯公司"))
+        XCTAssertNil(VoiceCommandParser.savedPlaceLabel(forDestination: "国贸大厦"))
+        XCTAssertNil(VoiceCommandParser.savedPlaceLabel(forDestination: "医院"))
+        // 端到端：坐公交去公司 → transit("公司")，其 dest 再经 savedPlaceLabel 映射到 work（上层据此用保存地址规划）。
+        XCTAssertEqual(VoiceCommandParser.parse("坐公交去公司"), .transit("公司"))
+    }
+
     func testReadPhoneVsCallPerson() {
         // "读电话号码" = 读出号码；"打电话/呼叫" = 拨号给人（help），互不抢。
         XCTAssertEqual(VoiceCommandParser.parse("读一下上面的电话"), .readPhone)

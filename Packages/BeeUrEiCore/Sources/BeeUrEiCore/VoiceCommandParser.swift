@@ -318,6 +318,19 @@ public enum VoiceCommandParser {
         return nil
     }
 
+    /// 把公交/导航**目的地词**映射到已保存地点 label（"家/公司/单位/办公室…" → "home"/"work"）。
+    /// 用途：「坐公交去公司」提取出的 dest="公司" 若不映射，会被当**字面地名**去地理编码——命中随便一家公司或搜不到；
+    /// 映射到 "work" 后，上层用**保存的公司地址**规划公交（与步行 navigateWork 同口径，补齐 transit 侧缺口）。
+    /// **精确整词匹配**（去空白/小写后恰好等于集合内某词）：只认裸"公司/家"等，"腾讯公司"/"XX大厦"不误命中、照常按名地理编码。非家/公司 → nil。
+    public static func savedPlaceLabel(forDestination dest: String) -> String? {
+        let d = dest.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let home: Set<String> = ["家", "家里", "回家", "我家", "home", "my home", "my place"]
+        let work: Set<String> = ["公司", "单位", "办公室", "我公司", "我的公司", "work", "office", "the office", "my office", "my work", "my workplace", "workplace"]
+        if home.contains(d) { return "home" }
+        if work.contains(d) { return "work" }
+        return nil
+    }
+
     /// 提取导航目的地；无导航意图返回 nil；有意图但没说去哪 → .navigate(nil) 由上面兜底。
     static func parseDestination(_ text: String) -> String? {
         // "带我去趟超市""导航到一趟医院"——口语量词"趟/一趟"混进目的地会让地理编码搜"趟超市"搜不到；剥掉。

@@ -485,7 +485,14 @@ struct HubView: View {
         case .navigate(let dest):
             if let dest { AppRoute.shared.pendingNavAction = .search(dest) }
             showNavigation = true
-        case .transit(let dest): transitPlanner.plan(to: dest) // 「坐公交/地铁去X」：语音直接朗读整段公交路线
+        case .transit(let dest):
+            // 「坐公交去公司/回家」：目的地是家/公司词时，用**保存的地址**规划（否则字面"公司"会命中随便一家公司/搜不到，
+            // 与步行 navigateWork 同口径）；普通地名照常按名规划。语音直接朗读整段公交路线。
+            if let label = VoiceCommandParser.savedPlaceLabel(forDestination: dest) {
+                transitToSaved(label: label, literalFallback: dest)
+            } else {
+                transitPlanner.plan(to: dest)
+            }
         case .goHome:
             AppRoute.shared.pendingNavAction = .backtrack
             showNavigation = true
@@ -562,6 +569,22 @@ struct HubView: View {
                     showNavigation = true
                 } else {
                     speak(isHome ? HomeStrings.noHomeSet(lang) : HomeStrings.noWorkSet(lang))
+                }
+            }
+        }
+    }
+
+    /// 「坐公交去公司/回家」：用**保存的**家/公司地址规划公交（非字面"公司"，避免命中随便一家公司/搜不到）。
+    /// 没存该地点/未登录 → 退回按字面词规划（至少试一次；对"家"这类必失败的字面词由 transit 端点如实报"找不到目的地"）。
+    private func transitToSaved(label: String, literalFallback: String) {
+        guard let token = session.token else { transitPlanner.plan(to: literalFallback); return }
+        Task {
+            let places = (try? await APIClient().savedPlaces(token: token)) ?? []
+            await MainActor.run {
+                if let p = places.first(where: { $0.label == label }), !p.address.isEmpty {
+                    transitPlanner.plan(to: p.address) // 用保存的地址（真实地名）规划公交
+                } else {
+                    transitPlanner.plan(to: literalFallback) // 没存则退回字面词
                 }
             }
         }

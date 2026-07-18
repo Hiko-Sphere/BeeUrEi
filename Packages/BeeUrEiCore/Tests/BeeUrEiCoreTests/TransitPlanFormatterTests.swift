@@ -187,6 +187,21 @@ final class TransitPlanFormatterTests: XCTestCase {
         XCTAssertFalse(TransitPlanFormatter.summary(TransitPlan(durationSeconds: 900, walkingDistanceMeters: 200, fareYuan: 0, legs: [leg]), language: .zh).contains("票价"))
     }
 
+    func testArrivalClockAppendedToHeader() {
+        // 预计到达时刻（与步行导航同措辞"预计X到达"/"arriving around X"）：盲人据此判断能否赶上约定，省心算。
+        // 拼在时长/步行/换乘/票价之后、句号之前；缺/空 → 不报（严格附加，不凭空报）。
+        let leg = TransitLeg(kind: .subway, line: "地铁1号线", fromStop: "A", toStop: "B", stops: 3, distanceMeters: 5000, durationSeconds: 600)
+        let plan = TransitPlan(durationSeconds: 1980, walkingDistanceMeters: 350, legs: [leg])
+        let zh = TransitPlanFormatter.summary(plan, language: .zh, arrivalClock: "下午3:25")
+        XCTAssertTrue(zh.contains("预计下午3:25到达"), "须报到达时刻：\(zh)")
+        // en 到达措辞为英文（整段 summary 仍会含中文线路/站名——原样保留供对照站牌，故不整串查 CJK）。
+        let en = TransitPlanFormatter.summary(plan, language: .en, arrivalClock: "3:25 PM")
+        XCTAssertTrue(en.contains("arriving around 3:25 PM"), "en 到达时刻：\(en)")
+        // 缺（默认 nil）/空白 arrivalClock → 不出现"预计…到达"（与旧 narration 逐字一致，向后兼容）。
+        XCTAssertFalse(TransitPlanFormatter.summary(plan, language: .zh).contains("预计"))
+        XCTAssertFalse(TransitPlanFormatter.summary(plan, language: .zh, arrivalClock: "   ").contains("预计"))
+    }
+
     func testResolvedDestinationConfirmationLeadsSummary() {
         // 目的地回读确认（按名字规划时）：坐公交前一听高德规范化全称即核对——高德可能匹配到别区同名地点。
         // 放在最前（先确认"去哪"再讲怎么走）；无 resolvedName（精确坐标规划）→ 不出现、与旧 narration 一致。

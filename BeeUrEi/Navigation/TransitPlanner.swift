@@ -67,7 +67,11 @@ final class TransitPlanner: NSObject, CLLocationManagerDelegate {
             let g = ChinaCoord.wgs84ToGcj02(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude)
             do {
                 let plan = try await AMapTransitClient().transit(originLatGcj: g.lat, originLonGcj: g.lon, destination: dest)
-                await MainActor.run { self.finish(TransitPlanFormatter.summary(plan, language: l, unit: u)) }
+                await MainActor.run {
+                    // 预计到达时刻（now+总时长）：盲人据此判断能否赶上约定，省心算——与步行导航同源、公交此前只报总时长。
+                    let arrival = self.arrivalClockString(durationSeconds: plan.durationSeconds, lang: l)
+                    self.finish(TransitPlanFormatter.summary(plan, language: l, unit: u, arrivalClock: arrival))
+                }
             } catch {
                 await MainActor.run { self.finish(self.failureText(for: error, dest: dest, lang: l)) }
             }
@@ -76,6 +80,16 @@ final class TransitPlanner: NSObject, CLLocationManagerDelegate {
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         finish(lang == .zh ? "定位失败，请检查定位权限与信号" : "Locating failed — check location permission and signal")
+    }
+
+    /// now + 总时长 → 本地化时钟到达时刻（"下午3:25"/"3:25 PM"，12/24 制随 locale）。与步行导航 arrivalClockString 同源同措辞。
+    /// 非有限/负时长（上游脏数据）→ nil（不凭空报到达时刻）。
+    private func arrivalClockString(durationSeconds: Double, lang l: Language) -> String? {
+        guard durationSeconds.isFinite, durationSeconds >= 0 else { return nil }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: l.localeIdentifier)
+        f.setLocalizedDateFormatFromTemplate("jmm")
+        return f.string(from: Date().addingTimeInterval(durationSeconds))
     }
 
     /// 后端错误码 → 盲人可懂的失败原因（透传自 /api/nav/transit）。

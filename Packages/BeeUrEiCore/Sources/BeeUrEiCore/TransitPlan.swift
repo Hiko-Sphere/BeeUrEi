@@ -44,7 +44,10 @@ public struct TransitPlan: Decodable, Sendable, Equatable {
 /// 总时长/步行 → 逐段"步行N米 / 乘(换)线路 从X站上车 坐N站到Y站下车"。**上/下车站名是最关键信息**
 /// （盲人靠车内报站判断何时下车），故即便站数口径有±1 也不致误事——站名始终准确。
 public enum TransitPlanFormatter {
-    public static func summary(_ plan: TransitPlan, language: Language, unit: DistanceUnit = .metric) -> String {
+    /// arrivalClock：预计到达的本地化时钟时刻（"下午3:25"/"3:25 PM"，由 App 层按 now+durationSeconds 算好传入，
+    /// 与步行导航同源 arrivalClockString）。盲人据此判断能否赶上约定，省"现在几点+还要多久"的心算（对标 Citymapper/Google
+    /// 把到达时刻放在最显眼处）——此前步行导航已报到达时刻、公交却只报总时长，是 sibling-gap。缺/空 → 不报（不凭空）。
+    public static func summary(_ plan: TransitPlan, language: Language, unit: DistanceUnit = .metric, arrivalClock: String? = nil) -> String {
         let zh = language == .zh
         // 目的地回读确认（仅按名字规划时有）：坐公交前一听高德规范化全称即可核对——高德可能匹配到别区同名地点，
         // 上错车/坐错方向对盲人代价大。放在最前，先确认"去哪"再讲怎么走。精确坐标规划无名字 → 空、自然跳过。
@@ -67,16 +70,20 @@ public enum TransitPlanFormatter {
             let num = f.rounded() == f ? "\(SpokenStrings.safeRoundedInt(f))" : String(format: "%.1f", f)
             return zh ? "票价约\(num)元" : "fare about \(num) yuan"
         }()
+        // 预计到达时刻（与步行导航 arrivalClockString 同措辞"预计X到达"/"arriving around X"）：拼在时长/步行/换乘/票价之后。
+        let arrivalStr = clean(arrivalClock)
         let header: String
         if zh {
             var h = "全程约\(mins)分钟，步行共\(walkStr)"
             if transfers > 0 { h += "，需换乘\(transfers)次" }
             if let fs = fareStr { h += "，\(fs)" }
+            if let ac = arrivalStr { h += "，预计\(ac)到达" }
             header = h + "。"
         } else {
             var h = "About \(mins) minutes total, \(walkStr) of walking"
             if transfers > 0 { h += ", \(transfers) transfer\(transfers == 1 ? "" : "s")" }
             if let fs = fareStr { h += ", \(fs)" }
+            if let ac = arrivalStr { h += ", arriving around \(ac)" }
             header = h + ". "
         }
 

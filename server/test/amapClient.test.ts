@@ -23,7 +23,7 @@ describe('amapClient（国内步行导航）', () => {
     expect(amapConfigured()).toBe(true)
     vi.stubGlobal('fetch', vi.fn(async (url: string) =>
       ok(url.includes('geocode')
-        ? { status: '1', infocode: '10000', geocodes: [{ location: '116.397,39.908' }] }
+        ? { status: '1', infocode: '10000', geocodes: [{ location: '116.397,39.908', formatted_address: '北京市东城区天安门' }] }
         : {
             status: '1', infocode: '10000',
             route: {
@@ -41,7 +41,7 @@ describe('amapClient（国内步行导航）', () => {
             },
           }),
     ))
-    expect(await amapGeocode('天安门')).toBe('116.397,39.908')
+    expect(await amapGeocode('天安门')).toEqual({ location: '116.397,39.908', formattedAddress: '北京市东城区天安门' }) // 坐标 + 规范化全称（供盲人回读确认目的地）
     const route = await amapWalking('116.40,39.90', '116.42,39.91')
     expect(route.steps.length).toBe(2)
     expect(route.steps[0]).toMatchObject({ instruction: '向北', distanceMeters: 100 })

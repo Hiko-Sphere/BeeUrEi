@@ -187,6 +187,21 @@ final class TransitPlanFormatterTests: XCTestCase {
         XCTAssertFalse(TransitPlanFormatter.summary(TransitPlan(durationSeconds: 900, walkingDistanceMeters: 200, fareYuan: 0, legs: [leg]), language: .zh).contains("票价"))
     }
 
+    func testResolvedDestinationConfirmationLeadsSummary() {
+        // 目的地回读确认（按名字规划时）：坐公交前一听高德规范化全称即核对——高德可能匹配到别区同名地点。
+        // 放在最前（先确认"去哪"再讲怎么走）；无 resolvedName（精确坐标规划）→ 不出现、与旧 narration 一致。
+        let leg = TransitLeg(kind: .subway, line: "地铁1号线", fromStop: "A", toStop: "B", stops: 3, distanceMeters: 5000, durationSeconds: 600)
+        let zh = TransitPlanFormatter.summary(TransitPlan(durationSeconds: 900, walkingDistanceMeters: 200, resolvedName: "北京市朝阳区国贸", legs: [leg]), language: .zh)
+        XCTAssertTrue(zh.hasPrefix("去北京市朝阳区国贸。"), "确认须领起整段：\(zh)")
+        let en = TransitPlanFormatter.summary(TransitPlan(durationSeconds: 900, walkingDistanceMeters: 200, resolvedName: "Guomao, Beijing", legs: [leg]), language: .en)
+        XCTAssertTrue(en.hasPrefix("To Guomao, Beijing. "), "en 确认领起：\(en)")
+        // 无/空名（精确坐标规划或服务端未回传）→ 不出现"去…"确认前缀（严格附加，不硬凑）。
+        let noName = TransitPlanFormatter.summary(TransitPlan(durationSeconds: 900, walkingDistanceMeters: 200, resolvedName: nil, legs: [leg]), language: .zh)
+        XCTAssertTrue(noName.hasPrefix("全程约"), "无名字应直接以行程概览起句：\(noName)")
+        let blank = TransitPlanFormatter.summary(TransitPlan(durationSeconds: 900, walkingDistanceMeters: 200, resolvedName: "  ", legs: [leg]), language: .zh)
+        XCTAssertTrue(blank.hasPrefix("全程约"), "空白名字按无名字处理：\(blank)")
+    }
+
     func testEmptyLineFallsBackToGenericMode() {
         let leg = TransitLeg(kind: .bus, line: "  ", fromStop: "甲", toStop: "乙", stops: 2, distanceMeters: 1000, durationSeconds: 300)
         let out = TransitPlanFormatter.summary(TransitPlan(durationSeconds: 300, walkingDistanceMeters: 0, legs: [leg]), language: .zh)

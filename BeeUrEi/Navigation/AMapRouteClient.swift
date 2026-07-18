@@ -13,6 +13,9 @@ struct AMapWalkStep: Decodable {
 struct AMapWalkRoute: Decodable {
     let destinationLat: Double?
     let destinationLon: Double?
+    /// 高德规范化后的目的地全称（按**名字**导航时服务端回传，如"北京市东城区协和医院"）。出发前回读让盲人核对——
+    /// 高德可能把"协和医院"匹配到别区同名分院，一听全称即知走错。精确坐标导航（聊天分享位置）无名字 → nil。
+    let resolvedName: String?
     let steps: [AMapWalkStep]
     /// 高德权威全程里程/时长（服务端 /api/nav/walking 一直在返，此前被 Codable 静默丢弃）：
     /// 里程按真实道路算（含折线采样点之间的路程）、时长按高德步行模型——比本地"转向点连线累距+

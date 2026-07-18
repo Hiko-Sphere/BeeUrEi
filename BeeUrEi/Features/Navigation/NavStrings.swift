@@ -127,6 +127,13 @@ enum NavStrings {
     static func navStartedStatus(_ n: Int, _ l: Language) -> String {
         l == .zh ? "导航开始，共 \(n) 步" : "Navigation started — \(n) steps"
     }
+    /// 目的地回读确认前缀（仅按**名字**导航时有 name）：出发前先念高德规范化全称，让盲人核对——高德可能把
+    /// "协和医院"匹配到别区同名分院，一听全称即知走错、可及时停下。精确坐标导航（聊天分享位置）无 name → 空、
+    /// 自然跳过。拼在 navStarted/staticRoute 播报**之前**成同一句（SpeechHub .query 替换语义，分两次 speak 会互顶）。
+    static func destinationConfirmation(_ name: String?, _ l: Language) -> String {
+        guard let n = name?.trimmingCharacters(in: .whitespacesAndNewlines), !n.isEmpty else { return "" }
+        return l == .zh ? "导航到\(n)。" : "Heading to \(n). "
+    }
     static func navStartedSpeak(_ n: Int, _ first: String, _ l: Language) -> String {
         l == .zh ? "导航开始，共\(n)步。\(first)" : "Navigation started, \(n) steps. \(first)"
     }

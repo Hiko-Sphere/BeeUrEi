@@ -38,12 +38,14 @@ export function registerNavRoutes(app: FastifyInstance, store: Store): void {
       // 已知精确坐标 → 直接构造 GCJ-02 "经度,纬度" 目的地串（amapWalking 接受坐标串），跳过 geocode——
       // 聊天分享位置精确导航，绝不再按名字搜命中别处。否则回退按名字 geocode。
       let dest: string
+      let resolvedName = '' // 高德规范化后的目的地全称（按名字导航时供 App 出发前回读"导航到：X"让盲人核对；精确坐标路径无名字→空）
       if (destLat != null && destLon != null) {
         dest = `${destLon},${destLat}`
       } else {
         const geocoded = await amapGeocode(destination!) // refine 已保证二者其一，此处 destination 必有
         if (!geocoded) return reply.code(404).send({ error: 'destination_not_found' }) // 地址确实查不到
-        dest = geocoded
+        dest = geocoded.location
+        resolvedName = geocoded.formattedAddress
       }
 
       const origin = `${originLon},${originLat}` // 高德为 经度,纬度
@@ -52,6 +54,8 @@ export function registerNavRoutes(app: FastifyInstance, store: Store): void {
       const [dLon, dLat] = dest.split(',').map(Number)
       return {
         destination: dest,
+        // 目的地规范化全称：盲人按名字导航时出发前回读核对（高德可能匹配到别区同名地点）。无名字/空→null。
+        resolvedName: resolvedName || null,
         destinationLat: Number.isFinite(dLat) ? dLat : null,
         destinationLon: Number.isFinite(dLon) ? dLon : null,
         steps: route.steps,
@@ -147,18 +151,21 @@ export function registerNavRoutes(app: FastifyInstance, store: Store): void {
     const origin = `${originLon},${originLat}` // 高德序：经度,纬度（GCJ-02）
     try {
       let dest: string
+      let resolvedName = '' // 高德规范化后的目的地全称（按名字规划时供 App 回读"去X的公交路线"让盲人核对；精确坐标路径→空）
       if (destLat != null && destLon != null) {
         dest = `${destLon},${destLat}`
       } else {
         const geocoded = await amapGeocode(destination!) // refine 已保证二者其一
         if (!geocoded) return reply.code(404).send({ error: 'destination_not_found' })
-        dest = geocoded
+        dest = geocoded.location
+        resolvedName = geocoded.formattedAddress
       }
       const city = await amapRegeoAdcode(origin) // 公交 API 的 city 必填：起点行政区 adcode
       if (!city) return reply.code(502).send({ error: 'city_unresolved' }) // 逆地理无 adcode（极少）→ 无法规划公交
       const plan = await amapTransit(origin, dest, city)
       if (!plan) return reply.code(404).send({ error: 'no_transit_route' }) // 太近应步行/无公交覆盖/跨城无直达
-      return plan
+      // 目的地规范化全称随方案返回：盲人按名字坐公交前回读核对（免误往别区同名地点）。无名字/空→null。
+      return { ...plan, resolvedName: resolvedName || null }
     } catch (e) {
       if (e instanceof AmapError) {
         req.log?.error?.({ infocode: e.infocode, info: e.info }, '[nav/transit] AMap request failed')

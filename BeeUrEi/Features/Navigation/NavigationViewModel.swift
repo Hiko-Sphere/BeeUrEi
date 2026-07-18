@@ -384,17 +384,19 @@ final class NavigationViewModel {
                 if previewing { narratePreview(); return } // 预览：不进实时跟踪，逐步试听
                 if let first = result.first {
                     lastResolvedDestination = destinationQuery // 成功取到路线：可入收藏（见 P2 审计）
+                    // 目的地回读确认（仅按名字导航时；精确坐标路径 route.resolvedName=nil→空前缀）：拼在起步播报之前成同一句。
+                    let destConfirm = NavStrings.destinationConfirmation(route.resolvedName, lang)
                     if destination != nil, !maneuvers.isEmpty {
                         cacheCurrentPlan() // 断网降级缓存（#8）
                         status = NavStrings.navStartedStatus(result.count, lang)
-                        speak(NavStrings.navStartedSpeak(result.count, first.instruction, lang))
+                        speak(destConfirm + NavStrings.navStartedSpeak(result.count, first.instruction, lang))
                         // 全程概览：国内 maneuvers 是 GCJ-02，起点须同系纠偏后再累距。
                         let gO = ChinaCoord.wgs84ToGcj02(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude)
                         announceJourneyOverview(fromLat: gO.lat, fromLon: gO.lon)
                     } else {
                         // 后端未带折线（旧版本）：退化为静态步骤读出。
                         status = NavStrings.staticRouteStatus(result.count, lang)
-                        speak(NavStrings.staticRouteSpeak(result.count, first.instruction, lang))
+                        speak(destConfirm + NavStrings.staticRouteSpeak(result.count, first.instruction, lang))
                     }
                 } else {
                     failStatus(NavStrings.noWalkingRoute(lang))

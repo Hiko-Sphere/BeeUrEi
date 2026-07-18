@@ -92,6 +92,18 @@ final class NavStringsTests: XCTestCase {
         XCTAssertEqual(NavStrings.geocodeLocale(.en).identifier, "en_US")
     }
 
+    // 目的地回读确认（按名字导航时）：出发前念高德规范化全称让盲人核对；无名字（精确坐标导航）→ 空、自然跳过。
+    func testDestinationConfirmation() {
+        XCTAssertEqual(NavStrings.destinationConfirmation("北京市东城区协和医院", .zh), "导航到北京市东城区协和医院。")
+        let en = NavStrings.destinationConfirmation("Peking Union Hospital", .en)
+        XCTAssertEqual(en, "Heading to Peking Union Hospital. ")
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+        // 无/空/纯空白名字（精确坐标导航或旧后端）→ 空前缀（严格附加，绝不硬凑"导航到。"）。
+        XCTAssertEqual(NavStrings.destinationConfirmation(nil, .zh), "")
+        XCTAssertEqual(NavStrings.destinationConfirmation("", .zh), "")
+        XCTAssertEqual(NavStrings.destinationConfirmation("   ", .en), "")
+    }
+
     // 路线副标题/无障碍名：创建者透明（亲友画的→"由 X"；自存→无创建者）。
     func testRouteCreatorTransparency() {
         XCTAssertTrue(NavStrings.routeSubtitle(3, by: "女儿", .zh).contains("由女儿创建"))

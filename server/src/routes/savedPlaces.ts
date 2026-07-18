@@ -9,9 +9,9 @@ import { gcj02ToWgs84 } from '../nav/chinaCoord'
 /// 未配 amap / 境外地址 / 查不到 / 出错 → 返回 undefined，地点照存、只是无围栏。amapGeocode 返回 GCJ-02，转回 WGS-84。
 async function geocodeToWgs(address: string): Promise<{ lat: number; lng: number } | undefined> {
   try {
-    const g = await amapGeocode(address) // "经度,纬度" GCJ-02
+    const g = await amapGeocode(address) // GCJ-02 坐标 + 规范化全称（此处只需坐标供围栏，名字不用）
     if (!g) return undefined
-    const [lonS, latS] = g.split(',')
+    const [lonS, latS] = g.location.split(',')
     const lon = Number(lonS), lat = Number(latS)
     if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return undefined
     const w = gcj02ToWgs84(lat, lon)

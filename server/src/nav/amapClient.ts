@@ -148,15 +148,28 @@ function assertAmapOk(res: Response, data: { status?: string; info?: string; inf
   }
 }
 
-/// 地址 → "经度,纬度"（GCJ-02）。返回 undefined 表示**地址确实无匹配**；key/配额等错误抛 AmapError。
-export async function amapGeocode(address: string): Promise<string | undefined> {
+/// 地理编码结果：GCJ-02 坐标 + 高德规范化后的目的地全称。
+export interface GeocodeResult {
+  /// "经度,纬度"（GCJ-02）——用于路由。
+  location: string
+  /// 高德对该地址的规范化全称（如"北京市东城区协和医院"）。盲人按**名字**导航时用它**回读确认目的地**——
+  /// 高德可能把"协和医院"匹配到别区同名分院/别的同名地点，出发前回读全称让盲人一听即知"不对，这不是我要去的"，
+  /// 避免懵然走/坐错方向。高德 geocode 恒返 formatted_address；空则空串（客户端据空与否决定是否回读）。
+  formattedAddress: string
+}
+
+/// 地址 → 地理编码结果（GCJ-02 坐标 + 规范化全称）。返回 undefined 表示**地址确实无匹配**；key/配额等错误抛 AmapError。
+export async function amapGeocode(address: string): Promise<GeocodeResult | undefined> {
   const key = apiKey()
   if (!key) return undefined
   const url = `${AMAP_BASE}/geocode/geo?address=${encodeURIComponent(address)}&key=${key}`
   const res = await amapFetch(url)
-  const data = (await res.json()) as { status?: string; info?: string; infocode?: string; geocodes?: Array<{ location?: string }> }
+  const data = (await res.json()) as { status?: string; info?: string; infocode?: string; geocodes?: Array<{ location?: string; formatted_address?: unknown }> }
   assertAmapOk(res, data) // key 平台不符/配额等 → 抛 AmapError，不静默退化成"未找到"
-  return data.geocodes?.[0]?.location
+  const g = data.geocodes?.[0]
+  const location = (g?.location ?? '').trim()
+  if (!location) return undefined // 无坐标即无有效匹配（空 geocodes / 坏项）
+  return { location, formattedAddress: amapStr(g?.formatted_address).trim() }
 }
 
 /// 步行路线（origin/destination 均为 "经度,纬度"）。返回逐步指令。key/配额等错误抛 AmapError。

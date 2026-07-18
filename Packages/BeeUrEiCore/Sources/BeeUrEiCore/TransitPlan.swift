@@ -30,10 +30,13 @@ public struct TransitPlan: Decodable, Sendable, Equatable {
     public let durationSeconds: Double
     public let walkingDistanceMeters: Double
     public let fareYuan: Double?    // 方案总票价（元）——盲人扫不到票价牌，须提前备零钱/知道花费。缺→不报
+    /// 高德规范化后的目的地全称（按**名字**规划时服务端回传，如"北京市朝阳区国贸"）。坐公交前回读让盲人核对目的地——
+    /// 高德可能匹配到别区同名地点，一听全称即知选错。精确坐标规划（聊天分享位置）无名字 → nil。
+    public let resolvedName: String?
     public let legs: [TransitLeg]
-    public init(durationSeconds: Double, walkingDistanceMeters: Double, fareYuan: Double? = nil, legs: [TransitLeg]) {
+    public init(durationSeconds: Double, walkingDistanceMeters: Double, fareYuan: Double? = nil, resolvedName: String? = nil, legs: [TransitLeg]) {
         self.durationSeconds = durationSeconds; self.walkingDistanceMeters = walkingDistanceMeters
-        self.fareYuan = fareYuan; self.legs = legs
+        self.fareYuan = fareYuan; self.resolvedName = resolvedName; self.legs = legs
     }
 }
 
@@ -43,6 +46,12 @@ public struct TransitPlan: Decodable, Sendable, Equatable {
 public enum TransitPlanFormatter {
     public static func summary(_ plan: TransitPlan, language: Language, unit: DistanceUnit = .metric) -> String {
         let zh = language == .zh
+        // 目的地回读确认（仅按名字规划时有）：坐公交前一听高德规范化全称即可核对——高德可能匹配到别区同名地点，
+        // 上错车/坐错方向对盲人代价大。放在最前，先确认"去哪"再讲怎么走。精确坐标规划无名字 → 空、自然跳过。
+        let destPrefix: String = {
+            guard let name = clean(plan.resolvedName) else { return "" }
+            return zh ? "去\(name)。" : "To \(name). "
+        }()
         // safeRoundedInt：巨大有限时长/距离(上游脏数据) Int() 会溢出陷阱崩溃，须夹取到 [0, 1e6]。
         let mins = max(1, SpokenStrings.safeRoundedInt(plan.durationSeconds / 60))
         // 步行距离随单位（英制用户全程听英尺/英里，这里的"步行共 X 米"曾裸报"米"＝单位割裂，sibling-gap）。
@@ -131,7 +140,7 @@ public enum TransitPlanFormatter {
         }
         let sep = zh ? "，" : ", "
         let tail = zh ? "。" : "."
-        return header + parts.joined(separator: sep) + tail
+        return destPrefix + header + parts.joined(separator: sep) + tail
     }
 
     private static func clean(_ s: String?) -> String? {

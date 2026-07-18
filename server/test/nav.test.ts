@@ -79,7 +79,7 @@ describe('AMap walking nav proxy', () => {
       ok: true, status: 200,
       json: async () =>
         url.includes('geocode')
-          ? { status: '1', infocode: '10000', geocodes: [{ location: '116.397,39.908' }] }
+          ? { status: '1', infocode: '10000', geocodes: [{ location: '116.397,39.908', formatted_address: '北京市东城区天安门广场' }] }
           : { status: '1', infocode: '10000', route: { paths: [{ distance: '820', duration: '660', steps: [{ instruction: '向北步行', distance: '120' }, { instruction: '到达目的地', distance: '0' }] }] } },
     })))
     const app = buildApp(new MemoryStore())
@@ -92,6 +92,8 @@ describe('AMap walking nav proxy', () => {
     expect(res.statusCode).toBe(200)
     const body = res.json()
     expect(body.destination).toBe('116.397,39.908')
+    // 按名字导航 → 回读高德规范化全称（盲人出发前核对，免误往别区同名地点）。
+    expect(body.resolvedName).toBe('北京市东城区天安门广场')
     expect(body.steps[0]).toMatchObject({ instruction: '向北步行', distanceMeters: 120 })
     expect(body.steps.length).toBe(2)
     // 全程距离/时长随响应返回（App 起步先播"全程约 820 米、约 11 分钟"），与逐步分开。
@@ -156,6 +158,7 @@ describe('AMap walking nav proxy', () => {
     expect(body.destination).toBe('116.397,39.908') // 高德序：经度,纬度
     expect(body.destinationLat).toBe(39.908)
     expect(body.destinationLon).toBe(116.397)
+    expect(body.resolvedName).toBeNull() // 精确坐标路径无名字可回读 → null（不硬凑）
     expect(fetchMock.mock.calls.every(([u]) => !String(u).includes('geocode'))).toBe(true) // 全程零 geocode 调用
     await app.close()
   })
@@ -245,7 +248,7 @@ describe('AMap walking nav proxy', () => {
   const transitFetch = (transitBody: unknown) => vi.fn(async (url: string) =>
     ({ ok: true, status: 200, json: async () =>
       String(url).includes('/geocode/regeo') ? { status: '1', infocode: '10000', regeocode: { addressComponent: { adcode: '110000' } } }
-      : String(url).includes('/geocode/geo') ? { status: '1', infocode: '10000', geocodes: [{ location: '116.45,39.92' }] }
+      : String(url).includes('/geocode/geo') ? { status: '1', infocode: '10000', geocodes: [{ location: '116.45,39.92', formatted_address: '北京市朝阳区国贸' }] }
       : String(url).includes('/direction/transit') ? transitBody
       : { status: '0', info: 'unexpected', infocode: '20000' } }))
 
@@ -263,6 +266,7 @@ describe('AMap walking nav proxy', () => {
     const body = res.json()
     expect(body.durationSeconds).toBe(1980)
     expect(body.walkingDistanceMeters).toBe(350)
+    expect(body.resolvedName).toBe('北京市朝阳区国贸') // 按名字规划 → 回读规范化全称（盲人坐公交前核对）
     expect(body.legs).toEqual([
       { kind: 'walk', distanceMeters: 200, durationSeconds: 170 },
       { kind: 'subway', line: '地铁1号线', direction: '苹果园--四惠东', fromStop: '西单站', toStop: '国贸站', stops: 6, distanceMeters: 6000, durationSeconds: 900 },

@@ -104,13 +104,17 @@ enum LiveLocationStrings {
     /// 带**最近路口**（两条相交路名）时附"，附近路口X与Y交叉口"；带**最近地标**（如"国贸大厦"）时附"，最近地标X"——
     /// 均为盲人转告出租/路人的强定位锚点，与本人「我在哪」同款（此前联系人侧丢弃了服务端已下发的路口/地标，死字段）。
     /// base 空 → nil（无地址，绝不硬凑）。同名两路不成交叉口→跳过；地标名已出现在前文（与 AOI/门牌重名）→跳过防赘述。
-    static func contactAddressText(address: String, township: String, aoiName: String?,
+    static func contactAddressText(address: String, township: String, aoiName: String?, aoiDistanceMeters: Double? = nil,
                                    firstRoad: String? = nil, secondRoad: String? = nil,
                                    landmarkName: String? = nil, _ l: Language) -> String? {
         let base = (address.isEmpty ? township : address).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !base.isEmpty else { return nil }
         var s = base
-        if let a = aoiName?.trimmingCharacters(in: .whitespacesAndNewlines), !a.isEmpty, !s.contains(a) {
+        // AOI 距离门（与 WhereAmIComposer ≤300m 同口径）：太远的关联 AOI 不谎称对方"在X一带"——家人追踪盲人时
+        // 复述一个远处 AOI 是误导（对安全攸关的位置尤其不能假报）。距离未知（旧数据/旧服务端）→ 显示（服务端
+        // AOI 通常是点所属、距离≈0）；已知且 >300m 或非有限 → 隐藏。
+        let aoiWithinRange: Bool = { guard let d = aoiDistanceMeters else { return true }; return d.isFinite && d <= 300 }()
+        if let a = aoiName?.trimmingCharacters(in: .whitespacesAndNewlines), !a.isEmpty, !s.contains(a), aoiWithinRange {
             s += l == .zh ? "（在\(a)一带）" : " (near \(a))"
         }
         if let f = firstRoad?.trimmingCharacters(in: .whitespacesAndNewlines), !f.isEmpty,

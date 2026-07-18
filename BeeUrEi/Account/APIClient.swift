@@ -1872,7 +1872,7 @@ struct ContactAddressInfo: Codable {
     let aoi: AOI?
     let intersection: Intersection?
     let landmark: Landmark?
-    struct AOI: Codable { let name: String }
+    struct AOI: Codable { let name: String; var distanceMeters: Double? } // 距离：太远的关联 AOI 不谎称"在X一带"（与 WhereAmIComposer ≤300m 同口径）
     struct Intersection: Codable { let firstRoad: String; let secondRoad: String }
     struct Landmark: Codable { let name: String }
 }

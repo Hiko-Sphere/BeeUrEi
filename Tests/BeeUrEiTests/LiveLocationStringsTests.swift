@@ -88,6 +88,25 @@ final class LiveLocationStringsTests: XCTestCase {
         XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
 
+    /// AOI 距离门（与 WhereAmIComposer ≤300m 同口径）：太远的关联 AOI 不谎称对方"在X一带"——追踪盲人时复述
+    /// 远处 AOI 是误导（安全攸关的位置不能假报）。距离未知→显示（服务端 AOI 通常距离≈0）。
+    func testContactAddressAoiDistanceGate() {
+        // 近（50m）→ 附 AOI。
+        XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "景华南街5号", township: "", aoiName: "华贸中心", aoiDistanceMeters: 50, .zh),
+                       "景华南街5号（在华贸中心一带）")
+        // 恰好 300m → 仍附（临界）。
+        XCTAssertTrue(LiveLocationStrings.contactAddressText(address: "景华南街5号", township: "", aoiName: "华贸中心", aoiDistanceMeters: 300, .zh)!.contains("华贸中心"))
+        // 远（500m）→ **不附**（绝不谎称在远处 AOI 一带）；只报基址。
+        XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "景华南街5号", township: "", aoiName: "华贸中心", aoiDistanceMeters: 500, .zh),
+                       "景华南街5号")
+        // 非有限距离（坏数据）→ 不附。
+        XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "景华南街5号", township: "", aoiName: "华贸中心", aoiDistanceMeters: .nan, .zh),
+                       "景华南街5号")
+        // 距离未知（nil，旧数据）→ 附（向后兼容，不因缺距离而丢 AOI）。
+        XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "景华南街5号", township: "", aoiName: "华贸中心", aoiDistanceMeters: nil, .zh),
+                       "景华南街5号（在华贸中心一带）")
+    }
+
     func testContactAddressTextIncludesIntersection() {
         // 最近路口（两条相交路名）：盲人转告出租/路人的强定位锚点，与本人「我在哪」同款。附在 AOI 之后。
         XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "建国路88号", township: "", aoiName: nil,

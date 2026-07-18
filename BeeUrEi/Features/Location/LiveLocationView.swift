@@ -178,7 +178,7 @@ struct LiveLocationView: View {
         SpeechHub.shared.speak(LiveLocationStrings.addressLoadingSpeak(lang), channel: .query, voiceCode: lang.voiceCode)
         let info = await APIClient().contactAddress(token: token, userId: c.userId)
         addressLoadingIds.remove(c.userId)
-        if let info, let text = LiveLocationStrings.contactAddressText(address: info.address, township: info.township, aoiName: info.aoi?.name, firstRoad: info.intersection?.firstRoad, secondRoad: info.intersection?.secondRoad, landmarkName: info.landmark?.name, lang) {
+        if let info, let text = LiveLocationStrings.contactAddressText(address: info.address, township: info.township, aoiName: info.aoi?.name, aoiDistanceMeters: info.aoi?.distanceMeters, firstRoad: info.intersection?.firstRoad, secondRoad: info.intersection?.secondRoad, landmarkName: info.landmark?.name, lang) {
             addresses[c.userId] = (text, c.updatedAt) // 记下对应的 updatedAt：对方下次移动后此地址即被判过时、重查
             SpeechHub.shared.speak(LiveLocationStrings.contactAtAddressSpeak(name: c.displayName, address: text, lang), channel: .query, voiceCode: lang.voiceCode)
         } else {

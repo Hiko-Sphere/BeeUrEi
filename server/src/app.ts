@@ -294,7 +294,7 @@ export function buildApp(store: Store = makeDefaultStore(), options: AppOptions 
       (id) => presence.isAvailable(id, Date.now()) || hub.isOnline(id)) // 群成员在线/待命（与亲友列表/会话同口径）
     registerMediaRoutes(instance, store) // 视频等大文件（磁盘存储）
     registerReportRoutes(instance, store)
-    registerAdminRoutes(instance, store, presence, metrics, hub, callControl, pushSender, mailer)
+    registerAdminRoutes(instance, store, presence, metrics, hub, callControl, pushSender, mailer, webPushSender)
     registerRecordingRoutes(instance, store, recordingConsent, pendingCalls, openHelp)
     registerNotificationRoutes(instance, store) // 站内通知收件箱（举报处理结果等）
     registerDevRoutes(instance, store)

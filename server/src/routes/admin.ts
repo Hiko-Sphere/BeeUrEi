@@ -20,6 +20,8 @@ import type { PresenceRegistry } from '../assist/presence'
 import { type SignalingHub } from '../signaling/hub'
 import { type CallControlBridge } from '../signaling/callControl'
 import { type PushSender, NoopPushSender } from '../push/apns'
+import { type WebPushSender, NoopWebPushSender } from '../push/webPush'
+import { isRealtimeReachable, blindSosReadiness } from '../emergency/reachability'
 import { type Mailer, NoopMailer } from '../mail/mailer'
 import { type Metrics } from '../metrics/metrics'
 import { pushLang, pushStrings } from '../push/pushStrings'
@@ -60,7 +62,7 @@ const kycRejectSchema = z.object({
 
 const START_MS = Date.now()
 
-export function registerAdminRoutes(app: FastifyInstance, store: Store, presence: PresenceRegistry, metrics: Metrics, hub?: SignalingHub, callControl?: CallControlBridge, push: PushSender = new NoopPushSender(), mailer: Mailer = new NoopMailer()): void {
+export function registerAdminRoutes(app: FastifyInstance, store: Store, presence: PresenceRegistry, metrics: Metrics, hub?: SignalingHub, callControl?: CallControlBridge, push: PushSender = new NoopPushSender(), mailer: Mailer = new NoopMailer(), webPush: WebPushSender = new NoopWebPushSender()): void {
   const adminOnly = { preHandler: requireAuth(['admin']) }
   // 当前活跃管理员数（用于"最后一名管理员"保护，防把后台锁死）。
   const activeAdminCount = () => store.allUsers().filter((u) => u.role === 'admin' && u.status === 'active').length
@@ -209,6 +211,19 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     // **全量**查询（openEmergencyEventsSince），非 recentEmergencyEvents(N).filter——那是"最近 N 条"窗口，
     // 高峰期未解除的旧事件掉出窗口会让危机计数**少报**（管理员误信"没有活跃紧急"，假安心；b03ebba 列表截断的姊妹）。
     const activeEmerg = store.openEmergencyEventsSince(now - DAY)
+    // 预防性 SOS 安全网观测（**事前**，与 activeUnreachable 的**事后**互补）：现有 activeUnreachable 只在 SOS 真的
+    // 触发且没触达任何人时才亮——那时已错过黄金时间。此处提前一步：此刻有多少活跃盲人的安全网已**悄然失效**——
+    // 完全没设 accepted 联系人(noContact)，或设了但联系人此刻全都收不到即时推送(contactsUnreachable，如家人卸载了
+    // App / 关了通知)。运维据此在危机**前**主动补位（"请家人装 App 开通知"），把安全网从"出事才发现断了"变"平时补上"。
+    // 口径 = 实际告警扇出面（全体 accepted ∧ 未互相拉黑），与 emergency 就绪自检同源。
+    let sosNoContact = 0
+    let sosContactsUnreachable = 0
+    const activeBlind = users.filter((u) => u.role === 'blind' && u.status === 'active')
+    for (const b of activeBlind) {
+      const r = blindSosReadiness(store, webPush.configured, b.id)
+      if (r.acceptedTotal === 0) sosNoContact++
+      else if (r.acceptedReachable === 0) sosContactsUnreachable++
+    }
     return {
       users: { total: users.length, active, disabled, byRole },
       online: { total: online.size, helpers: onlineHelpers, blind: onlineBlind },
@@ -240,6 +255,14 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       // （联系本人/其亲友）的信号。自托管者未必跑 Prometheus（emergency_unreachable_total 累计计数看不到），
       // per-event「未触达任何人」红标又要滚列表才见——故把这个点时计数直接摆到概览、逼近置顶。
       activeUnreachable: activeEmerg.filter((e) => e.notified === 0).length,
+      // 预防性 SOS 安全网就绪（事前）：broken = 安全网当下已失效的活跃盲人数（最该主动补位），
+      // = noContact（没设 accepted 联系人）+ contactsUnreachable（设了但联系人全收不到即时推送）。
+      sosSafetyNet: {
+        blindTotal: activeBlind.length,
+        noContact: sosNoContact,
+        contactsUnreachable: sosContactsUnreachable,
+        broken: sosNoContact + sosContactsUnreachable,
+      },
       // 紧急告警**响应履约**（自本进程启动累计，与上面 activeEmergencies 点时态互补）：alerts=告警总数（含手动 SOS/
       // 摔倒 与 dead-man's-switch 未报到，iter385 已统一计入）；acked=被亲友"知道了/在赶来"响应的累计次数；unreachable=
       // 触达 0 人的累计次数。响应率(acked/alerts)是"SOS 到底有没有人看见/管"的可靠性履历——只看点时态 activeEmergencies
@@ -543,10 +566,10 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
     // 对方能否被**即时推送触达**（有 APNs token 或已订阅 Web 推送）——诊断"SOS/告警为何无人收到"的关键：
     // 一个盲人有紧急联系人、但那些联系人都没装 App/没开推送时，其 SOS 静默失效（overview 的 unreachable 计数
     // 只给总量、无法定位到人）。运维据此可主动让用户"请家人装 App 开通知"。best-effort：订阅查询异常按不可达。
-    const hasPush = (uid: string): boolean => {
-      if (store.findById(uid)?.apnsToken) return true
-      try { return store.webPushSubscriptionsForUser(uid).length > 0 } catch { return false }
-    }
+    // 与告警扇出/emergency 就绪自检**同口径**（单点定义在 emergency/reachability）：APNs token 或（Web 推送
+    // 已配置 VAPID ∧ 有活订阅）。此前此处漏门 webPush.configured——没配 VAPID 时会把仅有 web 订阅的联系人误判
+    // 可达（实际 SOS 到不了），修正后与"实际能不能即时触达"一致。
+    const hasPush = (uid: string): boolean => isRealtimeReachable(store, webPush.configured, uid, store.findById(uid)?.apnsToken)
     // 绑定关系：盲人侧(owner) 与 协助侧(member) 两个方向合并，标出对方与状态、及**对方可否被推送触达**。
     const links = [
       ...store.linksByOwner(id).map((l) => ({ direction: 'owner' as const, otherId: l.memberId, otherName: nameOf(l.memberId), relation: l.relation, isEmergency: l.isEmergency, status: l.status ?? 'accepted', reachable: hasPush(l.memberId) })),

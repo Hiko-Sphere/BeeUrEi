@@ -47,7 +47,8 @@ const I18N = {
     panelUpdated: '管理面板有新版本（服务端已更新）', refreshNow: '点击刷新',
     openReports: '待处理举报', recordingsCount: '录制记录', visionToday: 'AI 描述（今日）', visionCap: '单用户每日上限', byRole: '按角色分布', version: '版本', uptime: '运行时长', activeEmergencies: '正在进行的紧急',
     activeUnreachable: '紧急·无人可即时触达', activeUnreachSub: '安全网正静默失效，速联系本人/亲友',
-    emergTotals: '紧急告警·累计', emergAcked: '已响应', emergUnreached: '未触达',
+    sosBroken: '安全网失效·盲人 SOS 无人可达', sosBrokenNoContact: '没设联系人', sosBrokenUnreach: '联系人全不可达',
+    emergTotals: '紧急告警·累计', emergTotAcked: '已响应', emergUnreached: '未触达',
     diskLow: '磁盘余量告急', diskFree: '磁盘余量', diskLowHint: '满盘将致数据库写入失败整站瘫——清理镜像/日志或扩容',
     backupStale: '备份已过期', backupOk: '最近备份', backupStaleHint: '每日备份超过 26 小时未更新（或一份都没有）——灾备正静默失效，请检查磁盘/权限',
     relayFails: '通话中继失败', callFailSub: '本次启动以来 · 普通/信令', relayFailHint: '中继不可达多半是 TURN/安全组未放行 3478',
@@ -186,7 +187,8 @@ const I18N = {
     panelUpdated: 'A new version of this panel is available (server updated)', refreshNow: 'Refresh now',
     openReports: 'Open reports', recordingsCount: 'Recordings', visionToday: 'AI describes (today)', visionCap: 'Per-user daily cap', byRole: 'By role', version: 'Version', uptime: 'Uptime', activeEmergencies: 'Active emergencies',
     activeUnreachable: 'Emergency · reached no one', activeUnreachSub: 'Safety net silently failing — contact them/family',
-    emergTotals: 'Emergency alerts (total)', emergAcked: 'Acknowledged', emergUnreached: 'Reached no one',
+    sosBroken: 'Safety net broken · SOS reaches no one', sosBrokenNoContact: 'no contact set', sosBrokenUnreach: 'contacts unreachable',
+    emergTotals: 'Emergency alerts (total)', emergTotAcked: 'Acknowledged', emergUnreached: 'Reached no one',
     diskLow: 'Disk space critical', diskFree: 'Disk free', diskLowHint: 'A full disk breaks database writes and takes the site down — prune images/logs or grow the volume',
     backupStale: 'Backup stale', backupOk: 'Last backup', backupStaleHint: 'No daily backup in over 26 hours (or none at all) — disaster recovery is silently failing; check disk/permissions',
     relayFails: 'Call relay failures', callFailSub: 'since start · generic/signaling', relayFailHint: 'Relay unreachable usually means TURN / security-group 3478 blocked',
@@ -641,7 +643,8 @@ function renderDashboard() {
     <div class="cards">
       ${o.activeEmergencies != null && o.activeEmergencies > 0 ? statCard(t('activeEmergencies'), o.activeEmergencies, '', 'danger') : ''}
       ${o.activeUnreachable != null && o.activeUnreachable > 0 ? statCard(t('activeUnreachable'), o.activeUnreachable, t('activeUnreachSub'), 'danger') : ''}
-      ${o.emergencyTotals != null && o.emergencyTotals.alerts > 0 ? statCard(t('emergTotals'), o.emergencyTotals.alerts, t('emergAcked') + ': ' + o.emergencyTotals.acked + ' · ' + t('emergUnreached') + ': ' + o.emergencyTotals.unreachable) : ''}
+      ${o.sosSafetyNet != null && o.sosSafetyNet.broken > 0 ? statCard(t('sosBroken'), o.sosSafetyNet.broken, o.sosSafetyNet.noContact + ' ' + t('sosBrokenNoContact') + ' · ' + o.sosSafetyNet.contactsUnreachable + ' ' + t('sosBrokenUnreach'), 'warn') : ''}
+      ${o.emergencyTotals != null && o.emergencyTotals.alerts > 0 ? statCard(t('emergTotals'), o.emergencyTotals.alerts, t('emergTotAcked') + ': ' + o.emergencyTotals.acked + ' · ' + t('emergUnreached') + ': ' + o.emergencyTotals.unreachable) : ''}
       ${o.disk && o.disk.low ? statCard(t('diskLow'), (o.disk.freeBytes / 1073741824).toFixed(1) + ' GB (' + Math.round(o.disk.freeBytes / o.disk.totalBytes * 100) + '%)', t('diskLowHint'), 'danger') : ''}
       ${o.backup && o.backup.stale ? statCard(t('backupStale'), backupAge(o), t('backupStaleHint'), 'danger') : ''}
       ${statCard(t('totalUsers'), o.users.total)}

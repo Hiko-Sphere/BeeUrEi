@@ -109,6 +109,7 @@ button { font-family: inherit; }
 .stat .sub { font-size: 12px; color: var(--text-faint); margin-top: 2px; }
 .stat .v.danger { color: var(--danger); }
 .stat .v.success { color: var(--success); }
+.stat .v.warn { color: var(--warn); }
 .section { margin-top: 26px; }
 .section h3 { font-size: 14px; color: var(--text-dim); font-weight: 700; text-transform: none; margin: 0 0 12px; }
 

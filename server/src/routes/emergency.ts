@@ -6,6 +6,7 @@ import { requireAuth } from '../auth/rbac'
 import { type PresenceRegistry } from '../assist/presence'
 import { type LiveLocationRegistry } from '../location/liveLocations'
 import { planEmergencyRoute } from '../emergency/routing'
+import { isRealtimeReachable } from '../emergency/reachability'
 import { broadcastAllClear } from '../emergency/allClear'
 import { NoopPushSender, type PushSender } from '../push/apns'
 import { NoopWebPushSender, type WebPushSender } from '../push/webPush'
@@ -111,9 +112,9 @@ export function registerEmergencyRoutes(app: FastifyInstance, store: Store,
   app.get('/api/emergency/readiness', { preHandler: requireAuth() }, async (req) => {
     const allAccepted = acceptedContactLinks(req.user!.sub) // 排除被拉黑者：就绪判定须与实际告警扇出面一致
     const emergencyLinks = allAccepted.filter((l) => l.isEmergency)
-    // 与告警扇出时的 hasRealtimePush 同口径（emergency/alert 内）：有 APNs token 或（Web 推送已配置且有订阅）即可即时触达。
+    // 与告警扇出时的 hasRealtimePush 同口径：单点定义在 emergency/reachability（admin 观测亦复用，避免漂移）。
     const isReachable = (uid: string, apnsToken?: string): boolean =>
-      !!apnsToken || (webPush.configured && safeWebPushSubs(uid).length > 0)
+      isRealtimeReachable(store, webPush.configured, uid, apnsToken)
     const linkReachable = (l: { memberId: string }): boolean => {
       const u = store.findById(l.memberId)
       return !!u && isReachable(u.id, u.apnsToken)

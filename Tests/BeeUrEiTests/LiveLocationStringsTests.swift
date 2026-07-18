@@ -112,6 +112,30 @@ final class LiveLocationStringsTests: XCTestCase {
         XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
 
+    func testContactAddressTextIncludesLandmark() {
+        // 最近地标（如"国贸大厦"）：中式定位习惯常靠地标（"到X大厦"），是转告出租/路人的强锚点，与本人「我在哪」同款。附在路口之后。
+        XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "光华路5号", township: "", aoiName: nil,
+                                                              landmarkName: "国贸大厦", .zh),
+                       "光华路5号，最近地标国贸大厦")
+        // 路口 + 地标同现：先路口后地标（与本人 where-am-I 同序）。
+        XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "光华路5号", township: "", aoiName: nil,
+                                                              firstRoad: "光华路", secondRoad: "东三环", landmarkName: "国贸大厦", .zh),
+                       "光华路5号，附近路口光华路与东三环交叉口，最近地标国贸大厦")
+        // 地标名已现于前文（与 AOI 重名）→ 跳过防赘述（"在国贸一带…最近地标国贸"）。
+        XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "光华路5号", township: "", aoiName: "国贸中心",
+                                                              landmarkName: "国贸中心", .zh),
+                       "光华路5号（在国贸中心一带）")
+        // 地标名空 → 跳过（不给"最近地标"半句）。
+        XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "光华路5号", township: "", aoiName: nil,
+                                                              landmarkName: "   ", .zh),
+                       "光华路5号")
+        // 英文分支不串中文。
+        let en = LiveLocationStrings.contactAddressText(address: "5 Guanghua Rd", township: "", aoiName: nil,
+                                                        landmarkName: "China World Tower", .en)!
+        XCTAssertEqual(en, "5 Guanghua Rd, nearest landmark China World Tower")
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
+
     func testAddressStillFreshInvalidatesOnMove() {
         // 缓存地址仅当仍对应联系人当前位置（updatedAt 一致）才复用/显示——对方移动后旧地址过时，须重查、不复述旧位置。
         XCTAssertTrue(LiveLocationStrings.addressStillFresh(cachedUpdatedAt: 1_700_000_000_000, currentUpdatedAt: 1_700_000_000_000)) // 未移动→仍新鲜

@@ -50,6 +50,11 @@ export function SharingContactRow({ c, lang, t, live, callDisabled, onLocate, on
       if (text && f && sec && f !== sec) {
         text += t(`，附近路口${f}与${sec}交叉口`, `, nearby intersection ${f} and ${sec}`)
       }
+      // 最近地标（如"国贸大厦"）：中式定位常靠地标（"到X大厦"），同为强转告锚点。地标名已现于前文（与 AOI/门牌重名）→ 跳过防赘述。
+      const lm = r.landmark?.name?.trim()
+      if (text && lm && !text.includes(lm)) {
+        text += t(`，最近地标${lm}`, `, nearest landmark ${lm}`)
+      }
       if (!text) { setAddrState('error'); return }
       setAddr({ text, at: c.updatedAt }); setAddrState('idle') // 绑定当前 updatedAt：对方移动后此地址即被 freshAddr 判过时
     } catch { setAddrState('error') } // 404(境外/无数据/未共享)/网络/服务端错误一律显式提示，绝不留空

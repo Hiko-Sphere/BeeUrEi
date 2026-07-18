@@ -23,6 +23,16 @@ enum MedicalInfoStrings {
     static func charCount(_ n: Int, _ l: Language) -> String { "\(n)/4000" }
     /// 上次更新时刻（提醒本人别让医疗信息过期）。
     static func lastUpdated(_ when: String, _ l: Language) -> String { l == .zh ? "上次更新：\(when)" : "Last updated: \(when)" }
+    /// 医疗信息**陈旧提醒**：距上次更新超过约 1 年 → 提示复核。用药、过敏、慢性病会变，陈旧信息会误导施救者
+    /// （如已停的药、新增的过敏）——只显 lastUpdated 时间戳、盲人无从判断"这算不算旧了"，故据阈值给出可行动提醒。
+    /// updatedAtMs/nowMs 均为**毫秒**（服务端 Date.now() 口径）。纯逻辑、now 可注入、可单测；未达阈值/非有限 → nil。
+    static func stalenessWarning(updatedAtMs: Double, nowMs: Double, _ l: Language) -> String? {
+        let days = (nowMs - updatedAtMs) / 86_400_000
+        guard days.isFinite, days >= 365 else { return nil }
+        let months = max(12, Int(days / 30))
+        return l == .zh ? "医疗信息已约\(months)个月没更新了——用药或病史可能已变，建议复核一下，免得施救者拿到过时信息。"
+                        : "Your medical info hasn't been updated in about \(months) months — meds or conditions may have changed. Please review it so responders don't act on outdated info."
+    }
 }
 
 struct MedicalInfoView: View {
@@ -57,6 +67,10 @@ struct MedicalInfoView: View {
                     if let updatedAt, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text(MedicalInfoStrings.lastUpdated(RecordingStrings.timeText(updatedAt, lang), lang))
                             .font(.caption).foregroundStyle(.secondary)
+                        // 陈旧提醒（约 1 年未更新）：黄色（非危急红）的可行动提示——用药/病史会变，别让施救者拿到过时信息。
+                        if let warn = MedicalInfoStrings.stalenessWarning(updatedAtMs: updatedAt, nowMs: Date().timeIntervalSince1970 * 1000, lang) {
+                            Text(warn).font(.caption).foregroundStyle(Color.beeWarn).accessibilityLabel(warn)
+                        }
                     }
                 } footer: {
                     Text(MedicalInfoStrings.explain(lang))

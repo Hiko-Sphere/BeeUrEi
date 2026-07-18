@@ -194,4 +194,27 @@ final class ServerErrorMappingTests: XCTestCase {
         XCTAssertFalse(en.isEmpty)
         XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文串中文：\(en)")
     }
+
+    func testMedicalInfoStalenessWarning() {
+        let dayMs = 86_400_000.0
+        let now = 1_700_000_000_000.0
+        // 未满 1 年 → 无提醒（不打扰刚更新的人）。
+        XCTAssertNil(MedicalInfoStrings.stalenessWarning(updatedAtMs: now - 200 * dayMs, nowMs: now, .zh))
+        XCTAssertNil(MedicalInfoStrings.stalenessWarning(updatedAtMs: now - 364 * dayMs, nowMs: now, .zh)) // 恰好差一天
+        // 超过 1 年 → 提醒并说明缘由（用药/病史会变）。guard 而非 !，避免阈值回归时 force-unwrap 崩测（给干净 XCTFail）。
+        guard let warn = MedicalInfoStrings.stalenessWarning(updatedAtMs: now - 400 * dayMs, nowMs: now, .zh) else {
+            XCTFail("400 天未更新应给陈旧提醒"); return
+        }
+        XCTAssertTrue(warn.contains("建议复核") && warn.contains("13个月")) // 400/30≈13 个月
+        // 两年前 → 约 24 个月。
+        XCTAssertEqual(MedicalInfoStrings.stalenessWarning(updatedAtMs: now - 730 * dayMs, nowMs: now, .zh)?.contains("24个月"), true)
+        // 非有限（坏时间戳）→ nil，绝不崩/瞎报。
+        XCTAssertNil(MedicalInfoStrings.stalenessWarning(updatedAtMs: .nan, nowMs: now, .zh))
+        // 英文分支不串中文。
+        guard let en = MedicalInfoStrings.stalenessWarning(updatedAtMs: now - 400 * dayMs, nowMs: now, .en) else {
+            XCTFail("英文 400 天应给提醒"); return
+        }
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+        XCTAssertTrue(en.lowercased().contains("review"))
+    }
 }

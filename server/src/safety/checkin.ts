@@ -205,6 +205,12 @@ export function fireExpiredSafetyTimers(
           void push.sendAlert(m.apnsToken, title, body, extra, undefined, badge).catch(() => { /* 单点失败不阻断 */ })
         }
       }
+      // dead-man's-switch 到点扇出的这次告警**同样计入告警总数**（与 SOS 首呼 emergency.ts 同口径、无条件计）：
+      // checkin 告警走同一紧急事件管线（createEmergencyEvent、可升级重呼、admin 紧急列表可见），是货真价实的紧急
+      // 告警。此前只计 emergency_unreachable_total、漏计 emergency_alerts_total → "未触达率"(unreachable/alerts) 的
+      // 分子含 checkin 失败、分母却漏 checkin 告警，率虚高甚至（全为 checkin 告警时）除零。与 iter384 help 计数
+      // 漏账、拉黑绕过同类：安全告警有**多条触发路径**（手动 SOS / dead-man's-switch），每条都须计同一组指标。
+      metrics?.inc('emergency_alerts_total')
       // 触达=0 但有联系人：dead-man's-switch 到点告警却无人能实时收到——比 SOS 首呼未触达更凶险（本人可能已
       // 失能、这正是最后一道防线），运维最该 page。与 emergency.ts 首呼同口径的聚合信号；members===0 不计（无联系人是配置问题）。
       if (notified === 0 && members.length > 0) metrics?.inc('emergency_unreachable_total')

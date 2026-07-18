@@ -265,12 +265,16 @@ describe('安全报到到期自动告警（fireExpiredSafetyTimers）', () => {
     store.createSafetyTimer({ id: 'stUnr', ownerId: blind.id, startedAt: now - 30 * 60_000, dueAt: now - 1000, status: 'active' })
     expect(fireExpiredSafetyTimers(store, new CapturingPush(), webPush, now, GRACE, undefined, metrics)).toBe(1)
     expect(incs.filter((n) => n === 'emergency_unreachable_total')).toHaveLength(1) // 触达 0 且有联系人 → 计数
-    // 可达场景：family 有 APNs token → notified≥1 → 不计。
+    // dead-man's-switch 到点扇出的告警**无条件**计入 emergency_alerts_total（与 SOS 首呼同口径）——否则"未触达率"
+    // (unreachable/alerts) 分母漏 checkin 告警、分子含其失败，率虚高甚至除零（iter384 计数漏账同类）。
+    expect(incs.filter((n) => n === 'emergency_alerts_total')).toHaveLength(1)
+    // 可达场景：family 有 APNs token → notified≥1 → 不计 unreachable，但**仍计一次 alerts**（告警确实发出了）。
     incs.length = 0
     store.updateUser(family.id, { apnsToken: 'k'.repeat(64) })
     store.createSafetyTimer({ id: 'stReach', ownerId: blind.id, startedAt: now - 30 * 60_000, dueAt: now - 1000, status: 'active' })
     fireExpiredSafetyTimers(store, new CapturingPush(), webPush, now, GRACE, undefined, metrics)
     expect(incs.filter((n) => n === 'emergency_unreachable_total')).toHaveLength(0) // 可达 → 不计
+    expect(incs.filter((n) => n === 'emergency_alerts_total')).toHaveLength(1)      // 告警仍计（无条件）
   })
 
   // 最后已知位置来源 stub（形状同 LiveLocationRegistry.lastKnownForEmergency）。

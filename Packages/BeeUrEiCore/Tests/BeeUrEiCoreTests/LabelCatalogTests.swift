@@ -39,6 +39,20 @@ final class LabelCatalogTests: XCTestCase {
         XCTAssertFalse(hazard.isHighRisk(catalog.localizedName("cat")))       // 猫（非高危）
     }
 
+    func testSidewalkFurnitureHighRiskBothLanguages() {
+        // 椅子(chair)/盆栽(potted plant)：与 bench 同类的人行道齐腰高固定障碍，两语言都应命中高危加成
+        // （经 localizedName 真流程：chair→椅子/chair、potted plant→盆栽/potted plant）。此前唯独漏此二类高危加成。
+        let zhL = LabelCatalog(language: .zh), zhH = HazardCatalog(language: .zh)
+        XCTAssertTrue(zhH.isHighRisk(zhL.localizedName("chair")))         // 椅子
+        XCTAssertTrue(zhH.isHighRisk(zhL.localizedName("potted plant")))  // 盆栽
+        let enL = LabelCatalog(language: .en), enH = HazardCatalog(language: .en)
+        XCTAssertTrue(enH.isHighRisk(enL.localizedName("chair")))
+        XCTAssertTrue(enH.isHighRisk(enL.localizedName("potted plant")))
+        // 回归：非障碍（猫）仍非高危，确认没把"所有物体"误升为高危。
+        XCTAssertFalse(zhH.isHighRisk(zhL.localizedName("cat")))
+        XCTAssertFalse(enH.isHighRisk(enL.localizedName("cat")))
+    }
+
     func testUnknownObstacleIsHighRiskInBothLanguages() {
         // 未识别障碍（中文回退"障碍物"/英文"obstacle"）两种语言都应命中高危加成——否则中文用户
         // 漏掉"不认识但挡路"的危险（修复前 HazardCatalog 中文侧是"障碍"≠LabelCatalog 的"障碍物"）。

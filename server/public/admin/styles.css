@@ -325,6 +325,9 @@ tr.sel { background: color-mix(in srgb, var(--honey) 12%, transparent); }
 .live-member:hover { border-color: var(--honey); }
 .live-member .nm { font-weight: 600; }
 .sos-reason { font-size: 12px; color: var(--warn); }
+/* 紧急事件当事人名（可点进用户抽屉）：轻量链接样式，不喧宾夺主但可点。 */
+.emerg-user { background: none; border: none; padding: 0; font: inherit; color: inherit; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
+.emerg-user:hover { color: var(--honey); }
 
 /* ---- identity verification (KYC) review ---- */
 .seg-row { display: inline-flex; gap: 2px; padding: 3px; background: var(--surface-2); border: 1px solid var(--border);

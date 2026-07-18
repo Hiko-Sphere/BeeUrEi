@@ -1,7 +1,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { AmapCircuit, resetAmapBreaker } from '../src/nav/amapClient'
 import { buildApp } from '../src/app'
-import { MemoryStore } from '../src/db/store'
+import { MemoryStore, type User } from '../src/db/store'
+import { hashPassword } from '../src/auth/passwords'
 
 describe('AmapCircuit 纯状态机', () => {
   it('连续失败达阈值 → open；冷却内快失败；冷却满 → halfOpen 探测', () => {
@@ -128,6 +129,34 @@ describe('高德熔断集成（HTTP）', () => {
     await around(); await around(); await around()
     const metrics = (await app.inject({ method: 'GET', url: '/metrics' })).body
     expect(metrics).toContain('beeurei_amap_breaker_open_total 0') // 从未熔断
+    await app.close()
+  })
+
+  it('admin 概览 amap.breakerState 反映**实时**熔断状态（closed→open）——运维据此判断"导航此刻是否挂了"', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    process.env.AMAP_BREAKER_THRESHOLD = '2'
+    process.env.AMAP_BREAKER_COOLDOWN_MS = '30000'
+    resetAmapBreaker()
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('network down') }))
+
+    const store = new MemoryStore()
+    const admin: User = { id: 'a1', username: 'root', passwordHash: hashPassword('rootpass1'), displayName: 'root', role: 'admin', status: 'active', createdAt: Date.now() }
+    store.createUser(admin)
+    const app = buildApp(store)
+    const adminTok = (await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'root', password: 'rootpass1' } })).json().token as string
+    const overview = async () => (await app.inject({ method: 'GET', url: '/api/admin/overview', headers: { authorization: `Bearer ${adminTok}` } })).json()
+
+    // 初始：熔断闭合 → 概览如实报 'closed'（证伪：字段被硬编码为 'open' 时此断言红）。
+    expect((await overview()).amap.breakerState).toBe('closed')
+
+    // 连打两次导航令高德连续失败 → 阈值 2 → 熔断打开。
+    const u = (await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'brkov', password: 'a-strong-pass-9', role: 'helper' } })).json().token
+    const around = () => app.inject({ method: 'GET', url: '/api/nav/around?lat=39.9&lon=116.4', headers: { authorization: `Bearer ${u}` } })
+    expect((await around()).statusCode).toBe(502)
+    expect((await around()).statusCode).toBe(502)
+
+    // 熔断已 open → 概览实时反映 'open'（证伪：字段被硬编码 'closed' 或删除→此断言红）。
+    expect((await overview()).amap.breakerState).toBe('open')
     await app.close()
   })
 })

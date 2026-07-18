@@ -61,6 +61,10 @@ function makeAmapBreaker(): AmapCircuit {
 let amapBreaker = makeAmapBreaker()
 /// 测试隔离/配置重载：按当前 env 重建熔断器（生产不调用——buildApp 只构造一次）。
 export function resetAmapBreaker(): void { amapBreaker = makeAmapBreaker() }
+/// 当前熔断**实时状态**（closed=正常｜open=正快失败·导航此刻不可用｜halfOpen=正在探测恢复）。
+/// 供 admin 概览实时可见"导航骨干此刻是否挂了"——与累计 breakerOpen 计数（历史跳闸次数）互补：
+/// 计数=过去跳过几次，状态=**现在**是否断路。读取当前模块级实例，故 reset 后如实反映。
+export function amapBreakerState(): 'closed' | 'open' | 'halfOpen' { return amapBreaker.stateName }
 
 /// 带硬超时 + 网络瞬断重试一次的实际调用（不含熔断）。allowRetry=false 时**不重试**——用于 halfOpen 探测：
 /// 探测只为尽快判定"高德恢复了没"，失败无论如何都要重新熔断，多等一次重试只会把恢复判定拖慢一倍（复审 MEDIUM）。

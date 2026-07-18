@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PKG_VERSION, gitCommit } from '../version'
 import { diskUsage, isDiskLow, dataDir } from '../monitoring/disk'
+import { amapBreakerState } from '../nav/amapClient'
 import { visionDailyMax } from './vision'
 import { latestBackupInfo, backupKeepDays } from '../backup/autoBackup'
 import { z } from 'zod'
@@ -250,6 +251,10 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
         timeouts: metrics.get('amap_timeouts_total'),
         netErrors: metrics.get('amap_errors_total'),
         breakerOpen: metrics.get('amap_breaker_open_total'),
+        // breakerState=**此刻**熔断实时状态：open＝高德正被断路、导航/周边/公交全在快失败（此刻不可用），
+        // 运维需立即查 key/配额/上游；halfOpen＝正探测恢复；closed＝正常。与 breakerOpen（历史跳闸累计数）互补：
+        // 计数只说"过去跳过几次"，无法区分"1 小时前跳过已恢复"与"此刻正断路"——状态才是可行动的实时信号。
+        breakerState: amapBreakerState(),
         lastError: metrics.getNote('amap_last_error')?.value ?? null,
         lastErrorAt: metrics.getNote('amap_last_error')?.at ?? null,
       },

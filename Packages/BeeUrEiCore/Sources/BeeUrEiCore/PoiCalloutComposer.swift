@@ -70,11 +70,13 @@ public enum PoiCalloutComposer {
                 if mode == .ahead { continue } // 没有可信朝向，"前方"无从判定——下面给校准提示
                 phrase = zh ? "约\(dm)，\(name)" : "\(name), about \(dm)"
             }
-            // 类别补在名字后（帮盲人识别品牌店类型："肯德基，快餐厅"）：**仅中文**补——高德类别是中文，英文无对应，
-            // 且英文嗓念中文类别=乱码。名字已含该类型词（"全家便利店"含"便利店"）则不重复。定向找某类走 nearest()，
-            // 用户已知类型故那里不补。
-            if zh, let cat = poi.category?.trimmingCharacters(in: .whitespacesAndNewlines), !cat.isEmpty, !name.contains(cat) {
-                phrase += "，\(cat)"
+            // 类别补在名字后（帮盲人识别品牌店类型："肯德基，快餐厅" / "Starbucks, café"）：中文照补；英文只补
+            // **不含 CJK** 的类别——高德类别恒中文（英文嗓念=乱码，跳过），而境外 MapKit 侧 poiCategoryName 已按语言
+            // 给出英文类别（"café"/"pharmacy"），此前被"仅中文"一刀切误吞、境外英文用户听不到类型（与 MapKit"境外也报
+            // 类型"意图相悖）。名字已含该类型词（"全家便利店"含"便利店"）则不重复。定向找某类走 nearest()（用户已知类型）不补。
+            if let cat = poi.category?.trimmingCharacters(in: .whitespacesAndNewlines), !cat.isEmpty, !name.contains(cat),
+               zh || !cat.unicodeScalars.contains(where: { $0.value >= 0x4E00 && $0.value <= 0x9FFF }) {
+                phrase += zh ? "，\(cat)" : ", \(cat)"
             }
 
             guard seenNames.insert(name.lowercased()).inserted else { continue } // 同名只留首个**可播报**的（即最近的合格者）

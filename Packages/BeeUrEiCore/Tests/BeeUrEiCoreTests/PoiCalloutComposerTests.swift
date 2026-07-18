@@ -9,8 +9,8 @@ final class PoiCalloutComposerTests: XCTestCase {
         PoiObservation(name: name, distanceMeters: dist, relativeBearingDegrees: rel, category: cat)
     }
 
-    func testCategoryAppendedForBrandNamesZhOnlyNotWhenRedundant() {
-        // 品牌店（名字听不出类型）→ 补类别帮识别；名字已含类型词则不重复；只中文补（高德类别是中文）。
+    func testCategoryAppendedForBrandNamesLanguageCompatibleNotWhenRedundant() {
+        // 品牌店（名字听不出类型）→ 补类别帮识别；名字已含类型词则不重复；类别须与输出语言相容。
         let brand = PoiCalloutComposer.compose(
             pois: [poi("肯德基", 30, 0, cat: "快餐厅")],
             mode: .around, radiusMeters: 250, headingAvailable: true, language: .zh)
@@ -20,11 +20,17 @@ final class PoiCalloutComposerTests: XCTestCase {
             pois: [poi("全家便利店", 30, 0, cat: "便利店")],
             mode: .around, radiusMeters: 250, headingAvailable: true, language: .zh)
         XCTAssertEqual(redundant, "周围：12点钟方向约30米，全家便利店")
-        // 英文不补（高德类别是中文，英文嗓念中文=乱码）。
-        let en = PoiCalloutComposer.compose(
+        // 英文 + **中文**类别（高德源）：跳过（英文嗓念中文=乱码），只留名字。
+        let enCjk = PoiCalloutComposer.compose(
             pois: [poi("KFC", 30, 0, cat: "快餐厅")],
             mode: .around, radiusMeters: 250, headingAvailable: true, language: .en)
-        XCTAssertFalse(en.contains("快餐厅"))
+        XCTAssertFalse(enCjk.contains("快餐厅"))
+        // 英文 + **英文**类别（境外 MapKit poiCategoryName 已按语言给出"café"）：**补上**——境外英文用户也听得到类型
+        // （修此前"仅中文补"把 MapKit 英文类别一刀切误吞的缺口）。
+        let enLatin = PoiCalloutComposer.compose(
+            pois: [poi("Starbucks", 30, 0, cat: "café")],
+            mode: .around, radiusMeters: 250, headingAvailable: true, language: .en)
+        XCTAssertEqual(enLatin, "Around you: Starbucks, about 30 meters, 12 o'clock, café")
         // 空类别（MapKit 源无类别）→ 不补、不崩。
         let none = PoiCalloutComposer.compose(
             pois: [poi("星巴克", 30, 0, cat: nil), poi("瑞幸", 40, 0, cat: "  ")],

@@ -89,15 +89,36 @@ enum LiveLocationStrings {
         return l == .zh ? "电量 \(pct)%" : "battery \(pct)%"
     }
 
-    /// 联系人单元的合并无障碍标签（battery 为 nil 时不含电量段）。
-    static func contactA11y(name: String, role: String, distance: String, accuracy: String? = nil, updated: String, battery: String? = nil, _ l: Language) -> String {
+    /// 联系人单元的合并无障碍标签（battery/address 为 nil 时不含对应段）。
+    static func contactA11y(name: String, role: String, distance: String, accuracy: String? = nil, updated: String, battery: String? = nil, address: String? = nil, _ l: Language) -> String {
         let sep = l == .zh ? "，" : ", "
         var base = l == .zh ? "\(name)，\(role)，\(distance)" : "\(name), \(role), \(distance)"
         if let accuracy { base += sep + accuracy }   // 精度紧跟距离/方位——盲人据此知道位置有多准
         base += sep + updated
         if let battery { base += sep + battery }
+        if let address, !address.isEmpty { base += sep + (l == .zh ? "所在地址：\(address)" : "address: \(address)") } // 已取到才含（VoiceOver 复读也念地址）
         return base
     }
+
+    /// 联系人所在地的可读地址文本（逆地理结果）：address 优先、空则退 township；带 AOI 时附"（在X一带）"大方位锚点。
+    /// 二者皆空 → nil（无地址，绝不硬凑）。盲人看不到地图，靠这句**听到**家人在哪条街/哪片区域（对标 Find My 显示地址）。
+    static func contactAddressText(address: String, township: String, aoiName: String?, _ l: Language) -> String? {
+        let base = (address.isEmpty ? township : address).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !base.isEmpty else { return nil }
+        if let a = aoiName?.trimmingCharacters(in: .whitespacesAndNewlines), !a.isEmpty, !base.contains(a) {
+            return l == .zh ? "\(base)（在\(a)一带）" : "\(base) (near \(a))"
+        }
+        return base
+    }
+    /// 读出"某人在：地址"（盲人点联系人行时的语音）。
+    static func contactAtAddressSpeak(name: String, address: String, _ l: Language) -> String {
+        l == .zh ? "\(name)在：\(address)" : "\(name) is at: \(address)"
+    }
+    static func addressLoadingSpeak(_ l: Language) -> String { l == .zh ? "正在查询所在地址…" : "Looking up their address…" }
+    static func addressUnavailableSpeak(_ l: Language) -> String {
+        l == .zh ? "暂时查不到所在地址，对方可能在境外或没有数据" : "Address unavailable — they may be overseas or there's no data"
+    }
+    static func viewAddressHint(_ l: Language) -> String { l == .zh ? "双击可听所在地址" : "Double-tap to hear their address" }
 
     static func featureOffTitle(_ l: Language) -> String { l == .zh ? "位置共享已关闭" : "Location sharing is off" }
     static func featureOffMessage(_ l: Language) -> String { l == .zh ? "管理员已停用该功能" : "Disabled by the administrator" }

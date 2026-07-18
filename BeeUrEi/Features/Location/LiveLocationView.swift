@@ -9,6 +9,8 @@ struct LiveLocationView: View {
     @Environment(AuthSession.self) private var session
     @State private var manager = LiveLocationManager.shared
     @State private var camera: MapCameraPosition = .automatic
+    @State private var addresses: [String: String] = [:]   // userId → 已取到的可读所在地址（盲人按需查、缓存复听不重复打高德）
+    @State private var addressLoadingIds: Set<String> = []  // 正在查询的 userId（防同一联系人并发重复请求）
     private var lang: Language { FeatureSettings().language }
     private var unit: DistanceUnit { FeatureSettings().distanceUnit } // 距离单位（公制/英制，随设置）
 
@@ -123,9 +125,15 @@ struct LiveLocationView: View {
         let updated = LiveLocationStrings.updatedAgo(secondsSince(c.updatedAt), lang)
         let battery = LiveLocationStrings.batteryText(c.battery, lang) // nil=对端未上报（老客户端），不显示不猜
         let batteryLow = (c.battery ?? 100) <= 20
+        let address = addresses[c.userId]
         return Button {
-            camera = .region(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: c.lat, longitude: c.lng),
-                                                 latitudinalMeters: 400, longitudinalMeters: 400))
+            // 盲人侧：地图不显示，点行=**读出对方所在街道地址**（看不到 pin 的刚需）；明眼侧：点行把地图移到其位置。
+            if isBlind {
+                Task { await loadAndSpeakAddress(c) }
+            } else {
+                camera = .region(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: c.lat, longitude: c.lng),
+                                                     latitudinalMeters: 400, longitudinalMeters: 400))
+            }
         } label: {
             BeeCard {
                 HStack(spacing: BeeSpacing.md) {
@@ -139,6 +147,10 @@ struct LiveLocationView: View {
                         } else {
                             Text(updated).font(.caption2).foregroundStyle(.secondary)
                         }
+                        if let address {
+                            // 已查到的所在街道地址（盲人听不到地图时的关键落点；明眼侧也顺带看到）。
+                            Text("📍 \(address)").font(.caption2).foregroundStyle(.secondary)
+                        }
                     }
                     Spacer(minLength: 0)
                     Circle().fill(Color.beeSuccess).frame(width: 9, height: 9)
@@ -148,7 +160,27 @@ struct LiveLocationView: View {
         .buttonStyle(BeePressStyle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel(LiveLocationStrings.contactA11y(name: c.displayName, role: AccountStrings.roleName(c.role, lang),
-                                                            distance: distanceText, accuracy: accuracy, updated: updated, battery: battery, lang))
+                                                            distance: distanceText, accuracy: accuracy, updated: updated, battery: battery, address: address, lang))
+        .accessibilityHint(isBlind ? LiveLocationStrings.viewAddressHint(lang) : "") // 盲人：告知双击可听所在地址
+    }
+
+    /// 盲人点联系人行：把其位置逆地理成街道地址并**读出**（缓存复听不重复打高德；查不到显式告知，绝不编造）。
+    @MainActor private func loadAndSpeakAddress(_ c: ContactLocationInfo) async {
+        if let cached = addresses[c.userId] { // 已查过：直接复听，不再打高德
+            SpeechHub.shared.speak(LiveLocationStrings.contactAtAddressSpeak(name: c.displayName, address: cached, lang), channel: .query, voiceCode: lang.voiceCode)
+            return
+        }
+        guard let token = session.token, !addressLoadingIds.contains(c.userId) else { return }
+        addressLoadingIds.insert(c.userId)
+        SpeechHub.shared.speak(LiveLocationStrings.addressLoadingSpeak(lang), channel: .query, voiceCode: lang.voiceCode)
+        let info = await APIClient().contactAddress(token: token, userId: c.userId)
+        addressLoadingIds.remove(c.userId)
+        if let info, let text = LiveLocationStrings.contactAddressText(address: info.address, township: info.township, aoiName: info.aoi?.name, lang) {
+            addresses[c.userId] = text
+            SpeechHub.shared.speak(LiveLocationStrings.contactAtAddressSpeak(name: c.displayName, address: text, lang), channel: .query, voiceCode: lang.voiceCode)
+        } else {
+            SpeechHub.shared.speak(LiveLocationStrings.addressUnavailableSpeak(lang), channel: .query, voiceCode: lang.voiceCode)
+        }
     }
 
     // MARK: 计算

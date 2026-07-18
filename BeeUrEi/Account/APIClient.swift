@@ -1720,6 +1720,23 @@ struct APIClient {
         guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.decoding }
         return (r.sharing, r.sharingUntil, r.contacts)
     }
+
+    /// 逆地理编码某共享位置联系人的当前位置为可读地址（GET /api/locations/address）。坐标由服务端用其**权威**共享
+    /// 位置（不传坐标），授权=可见其共享。盲人看不到地图，据此**听到**家人在哪条街/哪片区域。查不到/境外/任何错误 → nil
+    /// （上层显式提示"暂查不到"，绝不编造地址）。仅境内高德有数据。
+    func contactAddress(token: String, userId: String) async -> ContactAddressInfo? {
+        guard let q = userId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
+        guard let data = try? await authedGet("/api/locations/address?userId=\(q)", token: token) else { return nil }
+        return try? JSONDecoder().decode(ContactAddressInfo.self, from: data)
+    }
+}
+
+/// 联系人当前位置的可读地址（GET /api/locations/address；仅境内高德有数据）。landmark/intersection 等额外字段忽略。
+struct ContactAddressInfo: Codable {
+    let address: String
+    let township: String
+    let aoi: AOI?
+    struct AOI: Codable { let name: String }
 }
 
 /// 正在共享位置的联系人（来自 GET /api/locations/contacts）。

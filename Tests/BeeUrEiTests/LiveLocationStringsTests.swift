@@ -71,4 +71,28 @@ final class LiveLocationStringsTests: XCTestCase {
             XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
         }
     }
+
+    func testContactAddressTextComposition() {
+        // address 优先；带 AOI 附"（在X一带）"大方位锚点（盲人看不到地图，靠这句听到家人在哪片）。
+        XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "北京市朝阳区呼家楼街道景华南街5号", township: "呼家楼街道", aoiName: "华贸中心", .zh),
+                       "北京市朝阳区呼家楼街道景华南街5号（在华贸中心一带）")
+        // address 空 → 退回 township；无 AOI → 只报基址。
+        XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "", township: "望京街道", aoiName: nil, .zh), "望京街道")
+        // AOI 名已含在基址里 → 不重复附。
+        XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "华贸中心南门", township: "", aoiName: "华贸中心", .zh), "华贸中心南门")
+        // address 与 township 皆空 → nil（无地址，绝不硬凑"（在X一带）"这种半句）。
+        XCTAssertNil(LiveLocationStrings.contactAddressText(address: "   ", township: "", aoiName: "某AOI", .zh))
+        // 英文分支不串中文。
+        let en = LiveLocationStrings.contactAddressText(address: "5 Jinghua St", township: "", aoiName: "Guomao", .en)!
+        XCTAssertEqual(en, "5 Jinghua St (near Guomao)")
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
+
+    func testContactA11yIncludesAddressOnlyWhenPresent() {
+        // 取到地址 → 合并 a11y 标签含"所在地址：X"（VoiceOver 复读也念）；未取到（nil）→ 不含该段（严格附加）。
+        let withAddr = LiveLocationStrings.contactA11y(name: "妈妈", role: "亲友", distance: "约 200 米，在你的东北", updated: "刚刚更新", address: "朝阳区XX路", .zh)
+        XCTAssertTrue(withAddr.contains("所在地址：朝阳区XX路"), withAddr)
+        let noAddr = LiveLocationStrings.contactA11y(name: "妈妈", role: "亲友", distance: "约 200 米", updated: "刚刚更新", .zh)
+        XCTAssertFalse(noAddr.contains("所在地址"), noAddr)
+    }
 }

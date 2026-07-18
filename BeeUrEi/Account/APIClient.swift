@@ -1762,12 +1762,16 @@ struct APIClient {
     }
 }
 
-/// 联系人当前位置的可读地址（GET /api/locations/address；仅境内高德有数据）。landmark/intersection 等额外字段忽略。
+/// 联系人当前位置的可读地址（GET /api/locations/address；仅境内高德有数据）。含**最近路口**（两条相交路名）——
+/// 盲人转告出租/路人的强定位锚点，与本人「我在哪」（WhereAmIComposer）同款；此前联系人侧丢弃了服务端已下发的
+/// intersection（死字段），此处兑现。landmark 暂忽略（次要，另行）。
 struct ContactAddressInfo: Codable {
     let address: String
     let township: String
     let aoi: AOI?
+    let intersection: Intersection?
     struct AOI: Codable { let name: String }
+    struct Intersection: Codable { let firstRoad: String; let secondRoad: String }
 }
 
 /// 正在共享位置的联系人（来自 GET /api/locations/contacts）。

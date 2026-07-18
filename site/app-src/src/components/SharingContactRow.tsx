@@ -44,7 +44,12 @@ export function SharingContactRow({ c, lang, t, live, callDisabled, onLocate, on
       const line = (r.address || r.township || '').trim()
       const area = r.aoi?.name?.trim()
       // 地址 + 所在区域（"在XX一带"）——区域是比街道更强的大方位锚点，家人一听即知在哪片。二者皆空→按无地址处理。
-      const text = area && !line.includes(area) ? `${line}（${t('在', 'near ')}${area}${t('一带', '')}）`.trim() : line
+      let text = area && !line.includes(area) ? `${line}（${t('在', 'near ')}${area}${t('一带', '')}）`.trim() : line
+      // 最近路口（两条**不同**相交路名）：转告出租/路人的强定位锚点，与盲人端「我在哪」同款。同名两路不成交叉口→跳过。
+      const f = r.intersection?.firstRoad?.trim(); const sec = r.intersection?.secondRoad?.trim()
+      if (text && f && sec && f !== sec) {
+        text += t(`，附近路口${f}与${sec}交叉口`, `, nearby intersection ${f} and ${sec}`)
+      }
       if (!text) { setAddrState('error'); return }
       setAddr({ text, at: c.updatedAt }); setAddrState('idle') // 绑定当前 updatedAt：对方移动后此地址即被 freshAddr 判过时
     } catch { setAddrState('error') } // 404(境外/无数据/未共享)/网络/服务端错误一律显式提示，绝不留空

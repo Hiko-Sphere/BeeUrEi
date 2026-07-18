@@ -100,15 +100,22 @@ enum LiveLocationStrings {
         return base
     }
 
-    /// 联系人所在地的可读地址文本（逆地理结果）：address 优先、空则退 township；带 AOI 时附"（在X一带）"大方位锚点。
-    /// 二者皆空 → nil（无地址，绝不硬凑）。盲人看不到地图，靠这句**听到**家人在哪条街/哪片区域（对标 Find My 显示地址）。
-    static func contactAddressText(address: String, township: String, aoiName: String?, _ l: Language) -> String? {
+    /// 联系人所在地的可读地址文本（逆地理结果）：address 优先、空则退 township；带 AOI 时附"（在X一带）"大方位锚点；
+    /// 带**最近路口**（两条相交路名）时再附"，附近路口X与Y交叉口"——盲人转告出租/路人的强定位锚点，与本人「我在哪」
+    /// 同款（此前联系人侧丢弃了服务端已下发的路口，死字段）。base 空 → nil（无地址，绝不硬凑）。同名两路不成交叉口→跳过。
+    static func contactAddressText(address: String, township: String, aoiName: String?,
+                                   firstRoad: String? = nil, secondRoad: String? = nil, _ l: Language) -> String? {
         let base = (address.isEmpty ? township : address).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !base.isEmpty else { return nil }
-        if let a = aoiName?.trimmingCharacters(in: .whitespacesAndNewlines), !a.isEmpty, !base.contains(a) {
-            return l == .zh ? "\(base)（在\(a)一带）" : "\(base) (near \(a))"
+        var s = base
+        if let a = aoiName?.trimmingCharacters(in: .whitespacesAndNewlines), !a.isEmpty, !s.contains(a) {
+            s += l == .zh ? "（在\(a)一带）" : " (near \(a))"
         }
-        return base
+        if let f = firstRoad?.trimmingCharacters(in: .whitespacesAndNewlines), !f.isEmpty,
+           let sec = secondRoad?.trimmingCharacters(in: .whitespacesAndNewlines), !sec.isEmpty, f != sec {
+            s += l == .zh ? "，附近路口\(f)与\(sec)交叉口" : ", nearby intersection \(f) and \(sec)"
+        }
+        return s
     }
     /// 读出"某人在：地址"（盲人点联系人行时的语音）。
     static func contactAtAddressSpeak(name: String, address: String, _ l: Language) -> String {

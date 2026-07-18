@@ -45,6 +45,8 @@ export interface ContactAddress {
   township: string
   landmark?: { name: string; direction: string; distanceMeters: number }
   aoi?: { name: string; distanceMeters: number }
+  // 最近路口（两条相交路名）：读屏/低视力家人转告出租/路人的强定位锚点，与盲人端「我在哪」同款（服务端一直下发，此前 web 丢弃）。
+  intersection?: { firstRoad: string; secondRoad: string; direction: string; distanceMeters: number }
 }
 /// 保存的常用地点（"家"/"公司"/自定义）：只存**本人**的地址字符串；服务端保存时一次性地理编码出 WGS-84 坐标
 /// （lat/lng）供围栏判定——地理编码失败（未配 amap/境外/查不到）则 lat/lng 为空，地点照存但**无到达/离开提醒**。

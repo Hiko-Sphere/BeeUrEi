@@ -88,6 +88,30 @@ final class LiveLocationStringsTests: XCTestCase {
         XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
 
+    func testContactAddressTextIncludesIntersection() {
+        // 最近路口（两条相交路名）：盲人转告出租/路人的强定位锚点，与本人「我在哪」同款。附在 AOI 之后。
+        XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "建国路88号", township: "", aoiName: nil,
+                                                              firstRoad: "建国路", secondRoad: "东三环", .zh),
+                       "建国路88号，附近路口建国路与东三环交叉口")
+        // AOI + 路口同现：先区域后路口。
+        XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "建国路88号", township: "", aoiName: "国贸",
+                                                              firstRoad: "建国路", secondRoad: "东三环", .zh),
+                       "建国路88号（在国贸一带），附近路口建国路与东三环交叉口")
+        // 同名两路不成交叉口（高德自相交/改名点）→ 跳过，绝不拼"X与X交叉口"（念给司机毫无意义）。
+        XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "人民路5号", township: "", aoiName: nil,
+                                                              firstRoad: "人民路", secondRoad: "人民路", .zh),
+                       "人民路5号")
+        // 任一路名空 → 跳过（不给半个路口）。
+        XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "人民路5号", township: "", aoiName: nil,
+                                                              firstRoad: "人民路", secondRoad: "  ", .zh),
+                       "人民路5号")
+        // 英文分支不串中文。
+        let en = LiveLocationStrings.contactAddressText(address: "88 Jianguo Rd", township: "", aoiName: nil,
+                                                        firstRoad: "Jianguo Rd", secondRoad: "E 3rd Ring", .en)!
+        XCTAssertEqual(en, "88 Jianguo Rd, nearby intersection Jianguo Rd and E 3rd Ring")
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
+
     func testAddressStillFreshInvalidatesOnMove() {
         // 缓存地址仅当仍对应联系人当前位置（updatedAt 一致）才复用/显示——对方移动后旧地址过时，须重查、不复述旧位置。
         XCTAssertTrue(LiveLocationStrings.addressStillFresh(cachedUpdatedAt: 1_700_000_000_000, currentUpdatedAt: 1_700_000_000_000)) // 未移动→仍新鲜

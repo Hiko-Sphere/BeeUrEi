@@ -13,6 +13,7 @@ extension FamilyLinkInfo {
 struct FamilyLinksView: View {
     @State private var links: [FamilyLinkInfo] = []
     @State private var loaded = false            // 首次加载完成才判"无紧急联系人"，避免加载中闪现警告
+    @State private var readiness: EmergencyReadinessInfo?  // 紧急就绪度（含紧急联系人可否被推送触达）——补"有没有"之外的"收不收得到"
     @State private var newUsername = ""
     @State private var newRelation = ""
     @State private var newPhone = ""
@@ -49,6 +50,13 @@ struct FamilyLinksView: View {
                     Label(AssistStrings.noEmergencyContactWarning(lang), systemImage: "exclamationmark.triangle.fill")
                         .font(.footnote).foregroundStyle(Color.beeDanger)
                         .accessibilityLabel(AssistStrings.noEmergencyContactWarning(lang))
+                }
+                // 有紧急联系人、但其中有的**收不到即时求助**（没装 App/没开通知）——补 hasUsableEmergencyContact 只查"有没有"的缺口：
+                // 指定了紧急联系人不等于 SOS 到得了他们。点名谁不可达，让盲人去让家人开通知（读屏与非 VoiceOver 都听得到）。
+                if let warn = readiness?.unreachableEmergencyWarning(lang) {
+                    Label(warn, systemImage: "bell.slash.fill")
+                        .font(.footnote).foregroundStyle(Color.beeDanger)
+                        .accessibilityLabel(warn)
                 }
             }
 
@@ -162,6 +170,9 @@ struct FamilyLinksView: View {
         guard let token = KeychainStore.read() else { errorText = AssistStrings.loginFirst(lang); return }
         do { links = try await api.familyLinks(token: token); errorText = nil; loaded = true }
         catch { errorText = AssistStrings.loadFailed(lang) }
+        readiness = await api.emergencyReadiness(token: token) // 就绪度并行/顺带取（失败=nil，不影响列表；只用于可达性警告）
+        // 紧急联系人不可达时**主动播报**（盲人看不到屏上警告条；VoiceOver 开→系统公告，否则 App 语音）。
+        if let warn = readiness?.unreachableEmergencyWarning(lang) { announce(warn) }
     }
 
     /// 视障侧统一播报：VoiceOver 开→系统公告即可；未开→用 App 语音（SpeechHub .query）念出来，

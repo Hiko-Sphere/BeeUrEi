@@ -53,4 +53,34 @@ final class EmergencyAckTests: XCTestCase {
             XCTAssertFalse(s.isEmpty)
         }
     }
+
+    // MARK: 紧急就绪度——紧急联系人可否被推送触达（补 hasUsableEmergencyContact 的"收不收得到"缺口）
+
+    func testUnreachableEmergencyWarningFiresOnlyWhenSomeUnreachable() {
+        typealias R = EmergencyReadinessInfo
+        // 全部可达 → 无警告（就绪）。
+        XCTAssertNil(R(hasEmergencyContact: true, total: 2, reachable: 2, acceptedTotal: 2, acceptedReachable: 2,
+                       contacts: [.init(name: "小红", relation: "女儿", reachable: true), .init(name: "小明", relation: "儿子", reachable: true)])
+                       .unreachableEmergencyWarning(.zh))
+        // 无紧急联系人 → nil（由本地 hasUsableEmergencyContact 另报，不在此重复）。
+        XCTAssertNil(R(hasEmergencyContact: false, total: 0, reachable: 0, acceptedTotal: 0, acceptedReachable: 0, contacts: [])
+                       .unreachableEmergencyWarning(.zh))
+        // 有紧急联系人但一位不可达 → 警告并**点名**那位（更可行动）。
+        let warn = R(hasEmergencyContact: true, total: 2, reachable: 1, acceptedTotal: 2, acceptedReachable: 1,
+                     contacts: [.init(name: "小红", relation: "女儿", reachable: true), .init(name: "小明", relation: "儿子", reachable: false)])
+                     .unreachableEmergencyWarning(.zh)
+        XCTAssertNotNil(warn)
+        XCTAssertTrue(warn!.contains("小明"))       // 点名不可达者
+        XCTAssertFalse(warn!.contains("小红"))      // 可达者不点名
+        XCTAssertTrue(warn!.contains("开启通知"))   // 给出可行动建议
+        // 缺 contacts 明细（老服务端）→ 退回按**数量**报，仍不静默。
+        let byCount = R(hasEmergencyContact: true, total: 3, reachable: 1, acceptedTotal: 3, acceptedReachable: 1, contacts: nil)
+                        .unreachableEmergencyWarning(.zh)
+        XCTAssertNotNil(byCount); XCTAssertTrue(byCount!.contains("2位"))
+        // 英文分支不串中文。
+        let en = R(hasEmergencyContact: true, total: 1, reachable: 0, acceptedTotal: 1, acceptedReachable: 0,
+                   contacts: [.init(name: "Ann", relation: "daughter", reachable: false)]).unreachableEmergencyWarning(.en)!
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+        XCTAssertTrue(en.lowercased().contains("notifications"))
+    }
 }

@@ -309,6 +309,31 @@ struct FamilyLinkInfo: Codable, Sendable, Identifiable {
     var showsVerifiedBadge: Bool { verified == true }
 }
 
+/// 紧急求助**就绪度**（GET /api/emergency/readiness；与 web EmergencyReadinessCard 同数据源）：不只查"有没有紧急联系人"，
+/// 更查那些联系人能否**被即时推送触达**（有 APNs token 或已订阅 Web 推送）——补齐 hasUsableEmergencyContact 只查"有没有"、
+/// 不查"收不收得到"的假安心缺口：盲人指定了紧急联系人、但对方没装 App/没开通知时，其 SOS 静默失效却毫不知情。
+struct EmergencyReadinessInfo: Codable, Sendable {
+    let hasEmergencyContact: Bool
+    let total: Int            // 已指定的紧急联系人数
+    let reachable: Int        // 其中可被即时推送触达的数
+    var acceptedTotal: Int?   // 全体已接受联系人数（告警实际扇出面）
+    var acceptedReachable: Int?
+    var contacts: [Contact]?  // 逐个紧急联系人的可达性（供点名"谁收不到"）
+    struct Contact: Codable, Sendable { let name: String; let relation: String?; let reachable: Bool }
+
+    /// 已指定紧急联系人、但其中有的**收不到即时求助**时的警告文案（点名谁不可达，更可行动）。全部可达/无紧急联系人 → nil
+    /// （后者由本地 hasUsableEmergencyContact 另报，不重复）。纯逻辑、可单测。
+    func unreachableEmergencyWarning(_ l: Language) -> String? {
+        guard hasEmergencyContact, reachable < total else { return nil }
+        let names = (contacts ?? []).filter { !$0.reachable }.map(\.name).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        let unreachCount = total - reachable
+        let who = names.isEmpty ? (l == .zh ? "有\(unreachCount)位紧急联系人" : "\(unreachCount) of your emergency contacts")
+                                : (l == .zh ? "紧急联系人\(names.joined(separator: "、"))" : "emergency \(unreachCount == 1 ? "contact" : "contacts") \(names.joined(separator: ", "))")
+        return l == .zh ? "\(who)暂时收不到你的求助（没装 App 或没开通知）。请让他们装上 App 并开启通知，否则出事时你的 SOS 到不了他们。"
+                        : "\(who) can't receive your alerts yet (app not installed or notifications off). Ask them to install the app and turn on notifications, or your SOS won't reach them."
+    }
+}
+
 struct IncomingLinkInfo: Codable, Sendable, Identifiable {
     let id: String
     let ownerId: String
@@ -785,6 +810,12 @@ struct APIClient {
         let links = (try? JSONDecoder().decode(R.self, from: data))?.links ?? []
         EmergencyDialCache.update(from: links) // 无网兜底拨号缓存：每次拉到亲友列表顺手刷新（唯一数据入口）
         return links
+    }
+
+    /// 紧急求助就绪度（含紧急联系人可否被推送触达）。失败/离线 → nil（不制造假警报，UI 退回本地"有没有紧急联系人"检查）。
+    func emergencyReadiness(token: String) async -> EmergencyReadinessInfo? {
+        guard let data = try? await authedGet("/api/emergency/readiness", token: token) else { return nil }
+        return try? JSONDecoder().decode(EmergencyReadinessInfo.self, from: data)
     }
 
     func incomingLinks(token: String) async throws -> [IncomingLinkInfo] {

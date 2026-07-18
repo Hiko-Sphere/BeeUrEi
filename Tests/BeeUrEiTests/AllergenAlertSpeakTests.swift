@@ -37,4 +37,16 @@ final class AllergenAlertSpeakTests: XCTestCase {
             XCTAssertFalse(FramingStrings.allergenDisplay(key, .en).isEmpty)
         }
     }
+
+    /// 安全不变量：AllergenAlert.matched 回的是**产品原键**（OFF 常给具体品类 almonds/salmon/shrimps 而非大类），
+    /// 故 categoryOfSpecific 的每个具体键都须有**中文名**——否则中文用户扫到该品类会听原始英文（"almonds"）而非
+    /// "杏仁"，个人化过敏警告的关键词读不懂（安全攸关）。以 categoryOfSpecific 为真相源，日后加映射漏配中文即红。
+    func testSpecificAllergenVarietiesLocalizedInChinese() {
+        func hasCJK(_ s: String) -> Bool { s.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }
+        for (specific, _) in AllergenAlert.categoryOfSpecific {
+            let zh = FramingStrings.allergenDisplay(specific, .zh)
+            XCTAssertTrue(hasCJK(zh), "具体过敏原 '\(specific)' 缺中文名，会给中文用户读原始英文：\(zh)")
+            XCTAssertFalse(FramingStrings.allergenDisplay(specific, .en).isEmpty) // 英文侧非空（兜底/显式皆可）
+        }
+    }
 }

@@ -268,6 +268,34 @@ enum FramingStrings {
         "mustard": ("芥末", "mustard"), "sesame-seeds": ("芝麻", "sesame"),
         "sulphur-dioxide-and-sulphites": ("二氧化硫及亚硫酸盐", "sulphites"),
         "lupin": ("羽扇豆", "lupin"), "molluscs": ("贝类", "molluscs"), "wheat": ("小麦", "wheat"),
+        // 具体品类：OFF 的 allergens_tags 常给具体品类（产品标"almonds"而非大类"nuts"），AllergenAlert.matched 回的是
+        // 产品原键，故这些具体名也须有中文——否则中文用户听到原始英文（"almonds"）而非"杏仁"，过敏警告的关键词读不懂
+        // （安全攸关）。英文侧原本靠连字符转空格兜底已正确，此处补齐中文（键须与 AllergenAlert.categoryOfSpecific 逐一对应）。
+        // 树坚果
+        "almonds": ("杏仁", "almonds"), "hazelnuts": ("榛子", "hazelnuts"), "walnuts": ("核桃", "walnuts"),
+        "cashew-nuts": ("腰果", "cashew nuts"), "cashews": ("腰果", "cashews"),
+        "pecan-nuts": ("碧根果", "pecan nuts"), "pecans": ("碧根果", "pecans"),
+        "pistachios": ("开心果", "pistachios"), "pistachio-nuts": ("开心果", "pistachio nuts"), "pistachio": ("开心果", "pistachio"),
+        "brazil-nuts": ("巴西坚果", "brazil nuts"),
+        "macadamia-nuts": ("夏威夷果", "macadamia nuts"), "macadamia": ("夏威夷果", "macadamia"), "queensland-nuts": ("夏威夷果", "queensland nuts"),
+        "pine-nuts": ("松子", "pine nuts"),
+        // 含麸质谷物
+        "barley": ("大麦", "barley"), "rye": ("黑麦", "rye"), "oats": ("燕麦", "oats"),
+        "spelt": ("斯佩尔特小麦", "spelt"), "kamut": ("卡姆小麦", "kamut"), "triticale": ("小黑麦", "triticale"),
+        // 甲壳类
+        "shrimps": ("虾", "shrimps"), "prawns": ("对虾", "prawns"), "crab": ("蟹", "crab"),
+        "lobster": ("龙虾", "lobster"), "crayfish": ("小龙虾", "crayfish"), "langoustine": ("海螯虾", "langoustine"),
+        // 软体动物
+        "mussels": ("贻贝", "mussels"), "oysters": ("牡蛎", "oysters"), "clams": ("蛤蜊", "clams"),
+        "scallops": ("扇贝", "scallops"), "squid": ("鱿鱼", "squid"), "octopus": ("章鱼", "octopus"),
+        "snails": ("蜗牛", "snails"), "cuttlefish": ("墨鱼", "cuttlefish"),
+        // 鱼类
+        "salmon": ("三文鱼", "salmon"), "tuna": ("金枪鱼", "tuna"), "cod": ("鳕鱼", "cod"),
+        "mackerel": ("鲭鱼", "mackerel"), "sardines": ("沙丁鱼", "sardines"), "anchovies": ("凤尾鱼", "anchovies"),
+        "herring": ("鲱鱼", "herring"), "trout": ("鳟鱼", "trout"), "haddock": ("黑线鳕", "haddock"),
+        "hake": ("无须鳕", "hake"), "pollock": ("狭鳕", "pollock"),
+        // 大豆/芝麻别名
+        "soy": ("大豆", "soy"), "soya": ("大豆", "soya"), "sesame": ("芝麻", "sesame"),
     ]
 
     /// 单个过敏原显示名：已知走表；未知**不丢弃**（丢了会造成"只含这些"的假完整），连字符转空格原词读出。

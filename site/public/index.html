@@ -76,11 +76,11 @@
         "Real-time on-device obstacle avoidance / 端侧实时避障",
         "Read text, identify objects and colours / 朗读文字、识物、辨色",
         "Optional cloud AI scene description and conversational visual Q&A with follow-up questions / 可选云端 AI 场景描述与可连续追问的图像问答",
-        "Walking navigation and retrace / 步行导航与原路返回",
-        "Orientation cues: where am I with nearest landmarks and area, what's around by clock direction, and voice search for the nearest restroom or pharmacy / 环境感知与定向：我在哪（含最近地标与所在区域）、按时钟方位报周围、语音找最近的厕所或药店",
-        "Public-transit journeys read aloud: transfers, fare, direction and station entrances / 公交地铁换乘方案朗读：换乘、票价、行车方向、进出站口",
+        "Walking navigation and retrace — ask how much farther anytime / 步行导航与原路返回，导航中随时问「还有多远」",
+        "Orientation cues: where am I with nearest landmarks and area, what's around by clock direction, and voice search for the nearest restroom or pharmacy — then just say “take me there” and it walks you to it / 环境感知与定向：我在哪（含最近地标与所在区域）、按时钟方位报周围、语音找最近的厕所或药店——再说一句「带我去那里」就导航过去",
+        "Public-transit journeys read aloud: transfers, fare, direction and station entrances, and late-night runs include night buses / 公交地铁换乘方案朗读：换乘、票价、行车方向、进出站口，深夜自动纳入夜班车",
         "One-tap remote human assistance / 一键远程协助",
-        "Fall alerts and emergency calls / 摔倒报警与紧急呼叫",
+        "Fall alerts and emergency calls, with a test alert to check your SOS actually reaches your contacts / 摔倒报警与紧急呼叫，可发测试告警验证求助真能送到联系人",
         "Live location sharing with family, with a contact's address read aloud — area, nearest intersection and landmark / 与亲友实时位置共享，可朗读联系人所在地址（所在区域、最近路口与地标）",
         "Safety check-in (dead-man's switch) with voice completion / 安全报到，语音报平安",
         "Banknote identification, cash counting, expiry-date reading, and barcode scan for name, allergens, ingredients, calories and macronutrient grams (carbs/protein/fat per 100 g) for carb-counting / 认钱点钞、读保质期、扫码报出商品名·过敏原·配料表·热量与四大营养素克数（碳水/蛋白质/脂肪，糖尿病算碳水）",
@@ -281,7 +281,7 @@
         <h3><span lang="zh">步行 · 公交导航与原路返回</span><span lang="en">Walking &amp; transit navigation, retrace</span></h3>
         <p><span lang="zh">输入目的地，跟着语音与「钟面方向」步行；海外用 Apple 地图、中国大陆用高德。进陌生地方先「开始记路」，要回去时「原路返回」，跟着提示音走回出发点。</span><span lang="en">Enter a destination and walk by voice and clock-face directions — Apple Maps abroad, AMap in mainland China. Tap “Start a breadcrumb” before somewhere unfamiliar, then “Retrace” to follow audio cues back to where you started.</span></p>
         <ul class="pts">
-          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">过城坐公交/地铁：说「坐公交去X」即读出整条换乘方案——换几次车、票价多少、每段坐哪条线、往哪个方向、从哪个口进出、坐几站下车</span><span lang="en">Public transit across town: say “take transit to X” to hear the whole route — number of transfers, fare, and for each leg the line, direction, station entrance/exit, and how many stops to your stop</span></span></li>
+          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">过城坐公交/地铁：说「坐公交去X」即读出整条换乘方案——换几次车、票价多少、每段坐哪条线、往哪个方向、从哪个口进出、坐几站下车；深夜常规车收班后，自动把夜班车也算进来，不至于查了个已停运的方案空等</span><span lang="en">Public transit across town: say “take transit to X” to hear the whole route — number of transfers, fare, and for each leg the line, direction, station entrance/exit, and how many stops to your stop; late at night, after regular lines stop, it automatically includes night buses so you're not sent to wait for one that isn't running</span></span></li>
           <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">出门前可「预览路线」先试听一遍</span><span lang="en">Preview the route by ear before you set off</span></span></li>
           <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true" focusable="false"><path d="M4 12.5 10 18 20 6"/></svg></span><span><span lang="zh">常用目的地一键直达</span><span lang="en">Saved places in one tap</span></span></li>
         </ul>
@@ -339,7 +339,7 @@
       <div class="role" role="listitem">
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M12 21s-7-5.6-7-11a7 7 0 0 1 14 0c0 5.4-7 11-7 11z"/><circle cx="12" cy="10" r="2.4"/></svg></span>
         <h3><span lang="zh">知道你身在何处</span><span lang="en">Always know where you are</span></h3>
-        <p><span lang="zh">「我在哪」播报当前位置、朝向与最近的地标；「周围有什么」按时钟方位环顾四周；「前方有什么」汇总正前方的场景；还能语音直接找「最近的厕所 / 药店」。</span><span lang="en">“Where am I” speaks your location, heading and nearest landmarks; “What’s around” scans your surroundings by clock direction; “What’s ahead” sums up the scene in front of you; and you can voice-search for the nearest restroom or pharmacy.</span></p>
+        <p><span lang="zh">「我在哪」播报当前位置、朝向与最近的地标；「周围有什么」按时钟方位环顾四周；「前方有什么」汇总正前方的场景；还能语音直接找「最近的厕所 / 药店」，找到后再说一句「带我去那里」，就用它的精确位置一路把你导航过去——不必自己再报一遍地名。</span><span lang="en">“Where am I” speaks your location, heading and nearest landmarks; “What’s around” scans your surroundings by clock direction; “What’s ahead” sums up the scene in front of you; and you can voice-search for the nearest restroom or pharmacy — then just say “take me there” and it navigates you to that exact spot, no need to name the place again.</span></p>
       </div>
       <div class="role" role="listitem">
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8 5.9 18.1M18.1 5.9 19.8 4.2"/></svg></span>
@@ -349,7 +349,7 @@
       <div class="role" role="listitem">
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M10.3 4.2 3.4 17a2 2 0 0 0 1.7 3h13.8a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z"/><path d="M12 9v5M12 17.5v.01"/></svg></span>
         <h3><span lang="zh">摔倒报警 · 紧急呼叫</span><span lang="en">Fall alerts · emergency</span></h3>
-        <p><span lang="zh">检测疑似摔倒或剧烈撞击，未及时取消则通知家人；一键紧急呼叫并尽力附带粗略位置。</span><span lang="en">Detects a suspected fall or impact and notifies family if not cancelled; one-tap emergency call with a best-effort coarse location.</span></p>
+        <p><span lang="zh">检测疑似摔倒或剧烈撞击，未及时取消则通知家人；一键紧急呼叫并尽力附带粗略位置。还能提前发一条测试告警，看看你的联系人到底收不收得到——万一有人没装 App 或没开通知，趁没出事就先修好，而不是真求助时才发现没人收到。</span><span lang="en">Detects a suspected fall or impact and notifies family if not cancelled; one-tap emergency call with a best-effort coarse location. You can also send a test alert ahead of time to see whether your contacts actually receive it — so if someone hasn't installed the app or turned on notifications, you fix it before an emergency, not during one.</span></p>
       </div>
       <div class="role" role="listitem">
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M12 3 5 6v5c0 4.4 3 8.2 7 9.6 4-1.4 7-5.2 7-9.6V6l-7-3z"/><path d="m9 12 2 2 4-4.5"/></svg></span>

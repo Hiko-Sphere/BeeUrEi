@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, APIError, contentBlockedText, reencodeToJpeg, blobToDataUrl, type SelfView, type SessionInfo, type VerificationStatusInfo, type QuietHoursInfo, type PushCategory } from '../lib/api'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
+import { medicalStalenessSelfReminder } from '../lib/medicalStaleness'
 import { subscribeWebPush, unsubscribeWebPush, isWebPushSubscribed, webPushSupported, resyncWebPushSubscription } from '../lib/webPush'
 import { inQuietHoursNow } from '../lib/quietHours'
 import { installAvailable, promptInstall, onInstallAvailable } from '../lib/installPrompt'
@@ -771,16 +772,20 @@ function PushCategoriesCard() {
 
 /// 紧急医疗信息：本人填写关键健康信息，供指定紧急亲友遇险时查看施救。加密存储（服务端 AES-256-GCM）。
 function MedicalInfoCard() {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const toast = useToast()
   const [loading, setLoading] = useState(true)
   const [text, setText] = useState('')
   const [saving, setSaving] = useState(false)
+  // 服务端 /api/account/medical 一直下发 updatedAt，此前本人填写卡**丢弃**了它(死字段)：既不显"上次更新"、
+  // 也无陈旧提醒，本人无从判断自己的医疗信息是否已过时(用药/病史会变)。与施救者查看侧(ContactMedicalInfo)、
+  // iOS 填写侧(MedicalInfoView, iter398)对齐补齐。
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null)
 
   useEffect(() => {
     let alive = true
     void (async () => {
-      try { const { medicalInfo } = await api.medicalInfo(); if (alive) setText(medicalInfo) }
+      try { const { medicalInfo, updatedAt } = await api.medicalInfo(); if (alive) { setText(medicalInfo); setUpdatedAt(updatedAt) } }
       catch { /* 读取失败：留空 */ } finally { if (alive) setLoading(false) }
     })()
     return () => { alive = false }
@@ -788,9 +793,15 @@ function MedicalInfoCard() {
 
   const save = async () => {
     setSaving(true)
-    try { await api.setMedicalInfo(text); toast(text.trim() ? t('已保存', 'Saved') : t('已清除', 'Cleared'), 'ok') }
+    try {
+      await api.setMedicalInfo(text)
+      setUpdatedAt(text.trim() ? Date.now() : null) // 保存即"现在更新"；清空则无更新记录（与 iOS 一致）
+      toast(text.trim() ? t('已保存', 'Saved') : t('已清除', 'Cleared'), 'ok')
+    }
     catch { toast(t('保存失败', 'Failed to save'), 'error') } finally { setSaving(false) }
   }
+
+  const staleReminder = updatedAt != null && text.trim() ? medicalStalenessSelfReminder(updatedAt, Date.now(), lang) : null
 
   return (
     <Card className="p-5">
@@ -805,6 +816,11 @@ function MedicalInfoCard() {
         placeholder={t('例：A 型血；青霉素过敏；服用华法林；家庭医生 138…', 'e.g. Type A; penicillin allergy; on warfarin; GP 555…')}
         aria-label={t('紧急医疗信息', 'Emergency medical info')}
         className="mt-3 w-full resize-y rounded-xl border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-honey disabled:opacity-50" />
+      {/* 上次更新（绝对时刻 fmtTime）+ 陈旧复核提醒：仅当有已保存内容时显示。updatedAt 曾被丢弃=死字段。 */}
+      {updatedAt != null && text.trim() && (
+        <div className="mt-2 text-xs text-faint">{t('上次更新：', 'Last updated: ')}{fmtTime(updatedAt, lang)}</div>
+      )}
+      {staleReminder && <p className="mt-1 text-xs font-medium text-accent">{staleReminder}</p>}
       <div className="mt-2 flex items-center justify-between">
         <span className="text-xs text-faint">{text.length}/4000</span>
         <Button variant="soft" onClick={save} disabled={loading || saving}>{t('保存', 'Save')}</Button>

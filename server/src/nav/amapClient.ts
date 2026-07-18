@@ -264,6 +264,9 @@ export interface AmapReverseGeocode {
   /// 最近的**路口/交叉口**（两条相交路名 + 绝对方位 + 直线距离米）：盲人定位与向路人/司机说明"在哪个路口"
   /// 的天然锚点（对标 Soundscape / BlindSquare 的路口播报，往往比 POI 地标更利于定向）。缺则 undefined。
   intersection?: { firstRoad: string; secondRoad: string; direction: string; distanceMeters: number }
+  /// 所在**区域/AOI**（所在的商场/公园/园区/小区，regeocode.aois）+ 直线距离米：比街道地址更强的大方位锚点——
+  /// 盲人听"你在XX购物中心一带"立刻知道自己在哪片区域（对标地图 App 把 AOI 作定位主标题）。缺则 undefined。
+  aoi?: { name: string; distanceMeters: number }
 }
 
 /// 逆地理编码（location="经度,纬度" GCJ-02）→ 可播报地址 + 最近地标。
@@ -282,6 +285,7 @@ export async function amapReverseGeocode(location: string): Promise<AmapReverseG
       addressComponent?: { township?: unknown }
       pois?: Array<{ name?: unknown; direction?: unknown; distance?: unknown }>
       roadinters?: Array<{ first_name?: unknown; second_name?: unknown; direction?: unknown; distance?: unknown }>
+      aois?: Array<{ name?: unknown; distance?: unknown }>
     }
   }
   assertAmapOk(res, data)
@@ -317,8 +321,21 @@ export async function amapReverseGeocode(location: string): Promise<AmapReverseG
     if (!Number.isFinite(d) || d < 0) continue
     if (d < bestInter) { bestInter = d; intersection = { firstRoad: first, secondRoad: second, direction: amapStr(ri.direction).trim(), distanceMeters: d } }
   }
-  if (!address && !township && !landmark && !intersection) return undefined // 什么都没有 → 视作无结果（上层回退 Apple）
-  return { address, township, landmark, intersection }
+  // 所在区域 AOI（所在商场/公园/园区/小区）：比街道更强的大方位锚点。取距离最小的**有效**项（同 landmark 的空距离陷阱守卫：
+  // 空距离 []→''→Number('')===0 会伪装成"0米"抢名额）。regeocode.aois 是点所在/所属的 AOI，distance 常为 0（在其内）。
+  let aoi: AmapReverseGeocode['aoi'] | undefined
+  let bestAoi = Infinity
+  for (const a of rc.aois ?? []) {
+    const name = amapStr(a.name).trim()
+    if (!name) continue
+    const ds = amapStr(a.distance).trim()
+    if (!ds) continue
+    const d = Number(ds)
+    if (!Number.isFinite(d) || d < 0) continue
+    if (d < bestAoi) { bestAoi = d; aoi = { name, distanceMeters: d } }
+  }
+  if (!address && !township && !landmark && !intersection && !aoi) return undefined // 什么都没有 → 视作无结果（上层回退 Apple）
+  return { address, township, landmark, intersection, aoi }
 }
 
 /// 逆地理编码取行政区 adcode（公交路径规划的 city 参数必填，用起点 adcode）。key/配额等错误抛 AmapError；无 key/无匹配→undefined。

@@ -120,6 +120,41 @@ final class WhereAmIComposerTests: XCTestCase {
         XCTAssertEqual(WhereAmIComposer.compose(g, language: .en), "Can't determine your location")
     }
 
+    private func aoi(_ name: String, _ dist: Double) -> ReverseGeocode.AreaOfInterest {
+        ReverseGeocode.AreaOfInterest(name: name, distanceMeters: dist)
+    }
+
+    func testAoiLeadsAndCombinesWithAddress() {
+        // 所在区域 AOI（商场/公园/园区）领起——最强大方位锚点；其后接地址。名字保留中文原文（要念给路人核对）。
+        let g = ReverseGeocode(address: "北京市朝阳区建国路87号", township: "呼家楼街道",
+                               landmark: nil, intersection: nil, aoi: aoi("华贸购物中心", 0))
+        XCTAssertEqual(WhereAmIComposer.compose(g, language: .zh), "你在华贸购物中心一带，北京市朝阳区建国路87号")
+        XCTAssertEqual(WhereAmIComposer.compose(g, language: .en), "You're around 华贸购物中心, 北京市朝阳区建国路87号")
+    }
+
+    func testAoiOnlyNoAddress() {
+        let g = ReverseGeocode(address: "", township: "", landmark: nil, intersection: nil, aoi: aoi("朝阳公园", 20))
+        XCTAssertEqual(WhereAmIComposer.compose(g, language: .zh), "你在朝阳公园一带")
+    }
+
+    func testAoiTooFarNotReported() {
+        // AOI 太远（>300m）：不谎称"你在…一带"，只报地址（坏/远数据不外发，与全库一致）。
+        let g = ReverseGeocode(address: "某地", township: "", landmark: nil, intersection: nil, aoi: aoi("远处商场", 500))
+        XCTAssertEqual(WhereAmIComposer.compose(g, language: .zh), "你大概在：某地")
+        // 无地址 + 远 AOI → 无内容 → 兜底"无法确定"（绝不空串）。
+        let g2 = ReverseGeocode(address: "", township: "", landmark: nil, intersection: nil, aoi: aoi("远处商场", 500))
+        XCTAssertEqual(WhereAmIComposer.compose(g2, language: .zh), "无法确定当前位置")
+    }
+
+    func testAoiLeadsThenAddressThenIntersection() {
+        // 顺序：AOI 领起 → 地址 → 路口接续。
+        let g = ReverseGeocode(address: "北京市朝阳区", township: "望京街道", landmark: nil,
+                               intersection: inter("广顺北大街", "阜通西大街", "西", 40), aoi: aoi("望京SOHO", 10))
+        let zh = WhereAmIComposer.compose(g, language: .zh)
+        XCTAssertTrue(zh.hasPrefix("你在望京SOHO一带，北京市朝阳区"), "AOI 领起+地址：\(zh)")
+        XCTAssertTrue(zh.contains("。附近路口：广顺北大街与阜通西大街交叉口"), "路口接续：\(zh)")
+    }
+
     func testDecodableMatchesServerContract() throws {
         // 服务端 /api/nav/whereami 的 JSON（landmark/intersection 可缺省）能被 Decodable 正确解出。
         let json = """

@@ -37,6 +37,26 @@ describe('AMap reverse-geocode「我在哪」proxy', () => {
     await app.close()
   })
 
+  it('AOI（所在商场/公园/园区）：从 regeocode.aois 取最近有效项随结果返回（比街道更强的大方位锚点）', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({
+      status: '1', infocode: '10000',
+      regeocode: {
+        formatted_address: '北京市朝阳区', addressComponent: { township: '望京街道' }, pois: [],
+        aois: [
+          { name: '远处园区', distance: '260' },
+          { name: '华贸购物中心', distance: '0' }, // 最近(在其内) → 选中
+          { name: '空距离AOI', distance: [] },       // 空距离陷阱(''→Number('')===0) → 先剔，不误当"0米"抢名额
+        ],
+      },
+    }) })))
+    const app = buildApp(new MemoryStore())
+    const res = await get(app, await token(app))
+    expect(res.statusCode).toBe(200)
+    expect(res.json().aoi).toEqual({ name: '华贸购物中心', distanceMeters: 0 })
+    await app.close()
+  })
+
   it('最近路口（roadinters）：按最小距离挑有效项，随地标一并返回（Soundscape 式路口锚点）', async () => {
     process.env.AMAP_API_KEY = 'webkey'
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({

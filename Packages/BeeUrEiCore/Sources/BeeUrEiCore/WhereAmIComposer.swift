@@ -25,6 +25,12 @@ public struct ReverseGeocode: Decodable, Equatable, Sendable {
             self.firstRoad = firstRoad; self.secondRoad = secondRoad; self.direction = direction; self.distanceMeters = distanceMeters
         }
     }
+    /// 所在区域 AOI（所在商场/公园/园区/小区 + 直线距离米）：比街道更强的大方位锚点，盲人一听即知在哪片区域。
+    public struct AreaOfInterest: Decodable, Equatable, Sendable {
+        public let name: String
+        public let distanceMeters: Double
+        public init(name: String, distanceMeters: Double) { self.name = name; self.distanceMeters = distanceMeters }
+    }
     /// 高德格式化完整地址（如"北京市朝阳区呼家楼街道…"）；无则空串。
     public let address: String
     /// 街道/乡镇（addressComponent.township）。空则空串。
@@ -33,8 +39,10 @@ public struct ReverseGeocode: Decodable, Equatable, Sendable {
     public let landmark: Landmark?
     /// 最近路口；缺则 nil。
     public let intersection: Intersection?
-    public init(address: String, township: String, landmark: Landmark?, intersection: Intersection? = nil) {
-        self.address = address; self.township = township; self.landmark = landmark; self.intersection = intersection
+    /// 所在区域 AOI；缺则 nil。
+    public let aoi: AreaOfInterest?
+    public init(address: String, township: String, landmark: Landmark?, intersection: Intersection? = nil, aoi: AreaOfInterest? = nil) {
+        self.address = address; self.township = township; self.landmark = landmark; self.intersection = intersection; self.aoi = aoi
     }
 }
 
@@ -43,11 +51,16 @@ public struct ReverseGeocode: Decodable, Equatable, Sendable {
 public enum WhereAmIComposer {
     public static func compose(_ g: ReverseGeocode, language: Language, unit: DistanceUnit = .metric) -> String {
         let zh = language == .zh
-        // 主体优先用完整地址，其次退到街道/乡镇。
-        let body = !g.address.isEmpty ? g.address : g.township
         var out = ""
+        // 所在区域 AOI 领起（最强大方位锚点，盲人一听即知在哪片区域）：仅当确在其内/近旁（≤300m）才报，
+        // 太远的关联 AOI 不谎称"你在…一带"。名字为中文原文（同地址：要念给路人/司机核对）。
+        if let a = g.aoi, !a.name.trimmingCharacters(in: .whitespaces).isEmpty, a.distanceMeters.isFinite, a.distanceMeters <= 300 {
+            out = zh ? "你在\(a.name)一带" : "You're around \(a.name)"
+        }
+        // 地址主体：AOI 之后接续（"，"），或独立起句（"你大概在："）。优先完整地址，其次退到街道/乡镇。
+        let body = !g.address.isEmpty ? g.address : g.township
         if !body.isEmpty {
-            out = (zh ? "你大概在：" : "You're near: ") + body
+            out += out.isEmpty ? (zh ? "你大概在：" : "You're near: ") + body : (zh ? "，" : ", ") + body
         }
         // 路口在地标之前：路口是更强的定向锚点（对标 Soundscape 优先播路口）。hasPrev=前面是否已有内容（决定用"。"接续还是起句）。
         if let clause = intersectionClause(g.intersection, zh: zh, hasPrev: !out.isEmpty, unit: unit) {

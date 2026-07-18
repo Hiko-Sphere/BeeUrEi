@@ -9,6 +9,7 @@ public enum TransitLegKind: String, Decodable, Sendable {
 public struct TransitLeg: Decodable, Sendable, Equatable {
     public let kind: TransitLegKind
     public let line: String?       // 线路名（"地铁1号线"/"300路"/车次）
+    public let direction: String?  // 行车方向/终点括注（"苹果园--四惠东"）——盲人在站台须知开往哪个方向才能上对侧站台/对方向的车
     public let fromStop: String?   // 上车站
     public let toStop: String?     // 下车站
     public let stops: Int?         // 乘坐站数（含到站）
@@ -16,10 +17,10 @@ public struct TransitLeg: Decodable, Sendable, Equatable {
     public let exit: String?       // 地铁出站口名（如"D口"）——从哪个口出站；同上，过城落地的关键指令
     public let distanceMeters: Double
     public let durationSeconds: Double
-    public init(kind: TransitLegKind, line: String?, fromStop: String?, toStop: String?,
+    public init(kind: TransitLegKind, line: String?, direction: String? = nil, fromStop: String?, toStop: String?,
                 stops: Int?, entrance: String? = nil, exit: String? = nil,
                 distanceMeters: Double, durationSeconds: Double) {
-        self.kind = kind; self.line = line; self.fromStop = fromStop; self.toStop = toStop
+        self.kind = kind; self.line = line; self.direction = direction; self.fromStop = fromStop; self.toStop = toStop
         self.stops = stops; self.entrance = entrance; self.exit = exit
         self.distanceMeters = distanceMeters; self.durationSeconds = durationSeconds
     }
@@ -79,7 +80,7 @@ public enum TransitPlanFormatter {
                 // 进/出站口按乘客动作顺序：进站(entrance)→上车→坐N站→下车→出站(exit)。仅地铁段有（服务端只对 subway 置），
                 // 公交段 entrance/exit 恒 nil→自然跳过。站口相距甚远、盲人走错口极难折返，是过城落地的关键指令。
                 if zh {
-                    var s = "\(verbZh)\(line)"
+                    var s = "\(verbZh)\(line)" + directionPhrase(leg.direction, zh: true)
                     if let e = clean(leg.entrance) { s += "，从\(e)进站" }
                     if let f = clean(leg.fromStop) { s += "，\(f)上车" }
                     if let stops = leg.stops, stops > 0 { s += "，坐\(stops)站" }
@@ -87,7 +88,7 @@ public enum TransitPlanFormatter {
                     if let x = clean(leg.exit) { s += "，从\(x)出站" }
                     parts.append(s + rideDurationSuffix(leg.durationSeconds, zh: true))
                 } else {
-                    var s = "\(verbEn) \(line)"
+                    var s = "\(verbEn) \(line)" + directionPhrase(leg.direction, zh: false)
                     if let e = clean(leg.entrance) { s += ", enter at \(e)" }
                     if let f = clean(leg.fromStop) { s += " from \(f)" }
                     if let stops = leg.stops, stops > 0 { s += ", ride \(stops) stop\(stops == 1 ? "" : "s")" }
@@ -126,6 +127,18 @@ public enum TransitPlanFormatter {
     private static func clean(_ s: String?) -> String? {
         guard let t = s?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else { return nil }
         return t
+    }
+
+    /// 行车方向/终点括注的可听化：高德多给**两端终点**（"苹果园--四惠东"=整条线两端，非单向），故分隔符归一为
+    /// **枚举**（中"、"/英" / "）列出两端而非"到"（后者读成"从A到B"会误导为单向）；TTS 也不把"--"念成"减减"。
+    /// 终点站名保持中文（盲人要念给站务、或据站台指示牌两端站名核对，同地址口径）。中文"（X方向）"、英文" (X direction)"——
+    /// 让盲人在站台按两端站名认对站台/方向的车（对侧站台/反向，上错难折返）。单终点（高德有时只给一个）直接括出。空→""。
+    private static func directionPhrase(_ dir: String?, zh: Bool) -> String {
+        guard let d = clean(dir) else { return "" }
+        let sep = zh ? "、" : " / "
+        var normalized = d
+        for token in ["--", "—", "－－", "~", "～", "-"] { normalized = normalized.replacingOccurrences(of: token, with: sep) }
+        return zh ? "（\(normalized)方向）" : " (\(normalized) direction)"
     }
 
     /// 单段**乘车**时长后缀（"，约25分钟"/", about 25 min"）：盲人靠它感知这程要坐多久——比数站更直观（数不清 15 站、

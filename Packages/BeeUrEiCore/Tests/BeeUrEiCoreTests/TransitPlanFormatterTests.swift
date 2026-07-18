@@ -152,6 +152,26 @@ final class TransitPlanFormatterTests: XCTestCase {
         XCTAssertFalse(zh2.contains("进站") || zh2.contains("出站"), "无站口不该出现进/出站字样：\(zh2)")
     }
 
+    func testDirectionAnnouncedForBoarding() {
+        // 行车方向/终点：盲人在站台须知开往哪个方向才能上对侧站台/对方向的车（上错难折返）。高德给两端"苹果园--四惠东"，
+        // 分隔符归一为枚举"、"、括进"（…方向）"，在线路名之后、上车之前。
+        let leg = TransitLeg(kind: .subway, line: "地铁1号线", direction: "苹果园--四惠东",
+                             fromStop: "王府井", toStop: "四惠", stops: 4, distanceMeters: 6000, durationSeconds: 720)
+        let zh = TransitPlanFormatter.summary(TransitPlan(durationSeconds: 900, walkingDistanceMeters: 100, legs: [leg]), language: .zh)
+        XCTAssertTrue(zh.contains("（苹果园、四惠东方向）"), "须报方向且'--'归一为'、'：\(zh)")
+        XCTAssertTrue(zh.range(of: "方向）")!.lowerBound < zh.range(of: "王府井上车")!.lowerBound, "方向应在上车之前：\(zh)")
+        let en = TransitPlanFormatter.summary(TransitPlan(durationSeconds: 900, walkingDistanceMeters: 100, legs: [leg]), language: .en)
+        XCTAssertTrue(en.contains("(苹果园 / 四惠东 direction)"), "en 方向且分隔归一为 /：\(en)")
+        // 单终点（高德有时只给一个方向）：直接括出，不硬拼分隔。
+        let single = TransitLeg(kind: .bus, line: "300路", direction: "内环", fromStop: "A", toStop: "B", stops: 3, distanceMeters: 4000, durationSeconds: 600)
+        let z2 = TransitPlanFormatter.summary(TransitPlan(durationSeconds: 600, walkingDistanceMeters: 0, legs: [single]), language: .zh)
+        XCTAssertTrue(z2.contains("（内环方向）"), "单终点方向：\(z2)")
+        // 无方向（旧数据/服务端未提取）→ 不出现"方向"字样，与旧 narration 一致（严格附加、不硬凑）。
+        let noDir = TransitLeg(kind: .subway, line: "5号线", direction: nil, fromStop: "P", toStop: "Q", stops: 2, distanceMeters: 3000, durationSeconds: 300)
+        let z3 = TransitPlanFormatter.summary(TransitPlan(durationSeconds: 300, walkingDistanceMeters: 0, legs: [noDir]), language: .zh)
+        XCTAssertFalse(z3.contains("方向"), "无方向数据不该出现'方向'：\(z3)")
+    }
+
     func testEmptyLineFallsBackToGenericMode() {
         let leg = TransitLeg(kind: .bus, line: "  ", fromStop: "甲", toStop: "乙", stops: 2, distanceMeters: 1000, durationSeconds: 300)
         let out = TransitPlanFormatter.summary(TransitPlan(durationSeconds: 300, walkingDistanceMeters: 0, legs: [leg]), language: .zh)

@@ -342,6 +342,8 @@ export type TransitLegKind = 'walk' | 'bus' | 'subway' | 'railway' | 'taxi'
 export interface TransitLeg {
   kind: TransitLegKind
   line?: string           // 线路名（"1号线"/"300路"/车次），已去掉"(始发-终点)"括注
+  direction?: string      // 行车方向/终点括注（"苹果园--四惠东"，从 line 名括注提取）——盲人在站台须知开往哪个方向
+                          // 才能上对站台/对方向的车（两个方向常在对侧站台，上错极难折返），是过城最关键的上车指令之一
   fromStop?: string       // 上车站
   toStop?: string         // 下车站
   stops?: number          // 乘坐站数（含到站）
@@ -362,6 +364,15 @@ function cleanLineName(name: string | undefined): string {
   const n = (name ?? '').trim()
   const cut = n.search(/[(（]/)
   return (cut > 0 ? n.slice(0, cut) : n).trim()
+}
+
+/// 从线路名的**括注**取行车方向/终点："地铁1号线(苹果园--四惠东)" → "苹果园--四惠东"；"300路(内环)" → "内环"。
+/// cleanLineName 把它剥掉给了简洁线路名，但这段正是盲人上车最需要的方向信息（对侧站台/反向车，上错难折返）。
+/// 只取内容、原样保留高德分隔符（客户端 formatter 按语言归一为"到"/"to" 再朗读）。空/无括注 → undefined（不硬报）。
+function lineDirection(name: string | undefined): string | undefined {
+  const m = (name ?? '').match(/[(（]([^)）]+)[)）]/)
+  const inner = m?.[1]?.trim()
+  return inner ? inner : undefined
 }
 
 /// 公交/地铁路径规划（origin/destination="经度,纬度" GCJ-02，city=起点 adcode）。返回高德推荐的第一条方案；
@@ -413,6 +424,7 @@ export async function amapTransit(origin: string, destination: string, city: str
       legs.push({
         kind: isSubway ? 'subway' : 'bus',
         line: cleanLineName(line.name),
+        direction: lineDirection(line.name),
         fromStop: (line.departure_stop?.name ?? '').trim() || undefined,
         toStop: (line.arrival_stop?.name ?? '').trim() || undefined,
         stops,

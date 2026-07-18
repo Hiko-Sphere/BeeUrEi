@@ -100,9 +100,11 @@ describe('amapClient（国内步行导航）', () => {
     expect(subway.entrance).toBe('A口')
     expect(subway.exit).toBe('D口')
     expect(subway.line).toBe('地铁1号线') // 括注已去
+    expect(subway.direction).toBe('苹果园-四惠东') // 但方向/终点从括注提取出来（客户端再按语言归一分隔符朗读）——盲人上车须知开往哪端
     const bus = plan!.legs.find((l) => l.kind === 'bus')!
     expect(bus.entrance).toBeUndefined() // 公交段不携带站口（空对象/非地铁 → undefined）
     expect(bus.exit).toBeUndefined()
+    expect(bus.direction).toBeUndefined() // "300路" 无括注 → 无方向
   })
 
   it('公交方案：出租车段（首末公里）解成 taxi 腿，不再被整段丢弃；空占位 taxi:{} 不误当一段', async () => {

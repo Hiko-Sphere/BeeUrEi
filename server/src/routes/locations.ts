@@ -10,6 +10,8 @@ import { decideLowBatteryWarn } from '../location/lowBattery'
 import { type PushSender, NoopPushSender } from '../push/apns'
 import { pushLang, pushStrings } from '../push/pushStrings'
 import { notifyUser } from '../notifications/notify'
+import { amapConfigured, amapReverseGeocode, AmapError } from '../nav/amapClient'
+import { wgs84ToGcj02 } from '../nav/chinaCoord'
 
 /// 到达围栏状态（纯内存，userId → 当前"在内"的地点 label 集合）：作下次判定的 prevInside。
 /// 重启即清（重启后首个更新可能重复提示一次到达，可接受）；规模化可换 Redis。同 PresenceRegistry 惯例。
@@ -174,6 +176,37 @@ export function registerLocationRoutes(app: FastifyInstance, store: Store, live:
       })
       .filter((c): c is NonNullable<typeof c> => c != null)
     return { sharing: live.isSharing(me, now), sharingUntil: live.sharingUntil(me, now), contacts }
+  })
+
+  // 把**某共享位置联系人**的当前位置逆地理编码成可读街道地址（读屏/低视力家人看不到地图 pin，需要文字地址才能
+  // 知道对方在哪、读给别人听、或据此赶去；对标 Find My/Google 位置共享都给出街道地址）。坐标取服务端**权威的**
+  // 该联系人实时共享位置（非客户端传入，杜绝越权反查任意坐标），授权=可见其共享（已接受联系人且共享中新鲜，与
+  // /contacts 同一可见性口径）。全栈存 WGS-84、高德 regeo 要 GCJ-02 → 服务端转（境外原样返回、amap 无数据自然 404）。
+  // amap 有额度计费故限流；前端按需（点"查看地址"才请求）而非随位置刷新反复打。
+  app.get('/api/locations/address', { preHandler: [requireAuth(), requireFeature(store, 'locationSharing')],
+                                      config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
+    if (!amapConfigured()) return reply.code(503).send({ error: 'amap_not_configured' })
+    const parsed = z.object({ userId: z.string().min(1).max(64) }).safeParse(req.query)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_input' })
+    const me = req.user!.sub
+    const target = parsed.data.userId
+    // 授权：只能反查**已接受联系人**且其**当前正共享且新鲜**的位置（杜绝越权查任意人/任意坐标）。
+    if (!contactIds(me).includes(target)) return reply.code(404).send({ error: 'not_sharing' })
+    const loc = live.visible(target, Date.now())
+    if (!loc) return reply.code(404).send({ error: 'not_sharing' }) // 未共享/已过期：无位置可解析
+    const gcj = wgs84ToGcj02(loc.lat, loc.lng) // 全栈 WGS-84 → 高德 GCJ-02（境外原样）
+    try {
+      const result = await amapReverseGeocode(`${gcj.lon},${gcj.lat}`) // 高德序：经度,纬度
+      if (!result) return reply.code(404).send({ error: 'address_not_found' }) // 境外/极偏 → 无地址（前端回退只显坐标/地图）
+      return result
+    } catch (e) {
+      if (e instanceof AmapError) {
+        req.log?.error?.({ infocode: e.infocode, info: e.info }, '[locations/address] AMap request failed')
+        return reply.code(502).send({ error: 'amap_error', infocode: e.infocode, info: e.info })
+      }
+      console.error('[locations/address] unexpected error', e)
+      return reply.code(502).send({ error: 'nav_unavailable' })
+    }
   })
 
   // 请求对方共享位置（Google Maps 式 nudge）：家人打电话没人接、开始担心 → 一键请求；对方收到可操作

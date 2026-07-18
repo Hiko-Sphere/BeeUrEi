@@ -39,6 +39,13 @@ export interface RouteWaypoint { lat: number; lng: number; note?: string }
 /// 路线库条目（坐标全程 WGS-84——编辑器必须用 OSM 瓦片，绝不可换 amap GCJ-02 瓦片，会系统性偏移百米级）。
 export interface SavedRouteInfo { id: string; ownerId: string; createdBy: string; createdByName?: string | null; name: string; waypoints: RouteWaypoint[]; createdAt: number; updatedAt: number; role: 'owner' | 'creator' }
 export interface ContactLocation { userId: string; displayName: string; avatar?: string | null; role: string; lat: number; lng: number; accuracy?: number | null; heading?: number | null; battery?: number | null; updatedAt: number }
+/// 联系人当前位置的可读地址（高德逆地理，仅境内有数据）：读屏/低视力家人看不到地图 pin，据此知道对方在哪、读给别人听。
+export interface ContactAddress {
+  address: string
+  township: string
+  landmark?: { name: string; direction: string; distanceMeters: number }
+  aoi?: { name: string; distanceMeters: number }
+}
 /// 保存的常用地点（"家"/"公司"/自定义）：只存**本人**的地址字符串；服务端保存时一次性地理编码出 WGS-84 坐标
 /// （lat/lng）供围栏判定——地理编码失败（未配 amap/境外/查不到）则 lat/lng 为空，地点照存但**无到达/离开提醒**。
 export interface SavedPlace { ownerId: string; label: string; address: string; lat?: number | null; lng?: number | null; updatedAt: number }
@@ -400,6 +407,8 @@ export const api = {
     post('/api/locations/update', body) as Promise<{ ok: boolean; sharingUntil: number }>,
   stopSharingLocation: () => post('/api/locations/stop'),
   contactLocations: () => get('/api/locations/contacts') as Promise<{ sharing: boolean; sharingUntil: number; contacts: ContactLocation[] }>,
+  // 按需把联系人当前位置逆地理成可读地址（点"查看地址"才请求；坐标由服务端用其权威共享位置，不传坐标）。仅境内有数据。
+  contactAddress: (userId: string) => get(`/api/locations/address?userId=${encodeURIComponent(userId)}`) as Promise<ContactAddress>,
   // 请求对方共享位置（nudge，对方自行决定）：alreadySharing=对方已在共享；deduped=5 分钟内已请求过。
   requestLocation: (userId: string) => post('/api/locations/request', { userId }) as Promise<{ ok: boolean; alreadySharing?: boolean; deduped?: boolean }>,
 

@@ -1,13 +1,33 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { SharingContactRow } from './SharingContactRow'
-import type { ContactLocation } from '../lib/api'
+import { api, type ContactLocation } from '../lib/api'
 
 const t = (zh: string) => zh // 少参可赋给 (zh,en)=>string(TS 结构化类型),避开 no-unused-vars
 const c: ContactLocation = { userId: 'u1', displayName: '小明', avatar: null, role: 'blind', lat: 31, lng: 121, updatedAt: Date.now(), battery: 15 }
 
 describe('SharingContactRow 共享位置联系人行（定位/呼叫/发消息）', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('查看地址：点击→逆地理成文字街道地址并显示（读屏 aria-live 可闻）；带 AOI 时附"在X一带"', async () => {
+    vi.spyOn(api, 'contactAddress').mockResolvedValue({
+      address: '北京市朝阳区呼家楼街道景华南街5号', township: '呼家楼街道', aoi: { name: '华贸中心', distanceMeters: 0 },
+    })
+    render(<ul><SharingContactRow c={c} lang="zh" t={t} live onLocate={() => {}} onCall={() => {}} onMessage={() => {}} /></ul>)
+    fireEvent.click(screen.getByRole('button', { name: '查看 小明 所在地址' }))
+    expect(await screen.findByText(/北京市朝阳区呼家楼街道景华南街5号/)).toBeInTheDocument()
+    expect(screen.getByText(/华贸中心/)).toBeInTheDocument() // AOI 大方位锚点一并呈现
+    expect(api.contactAddress).toHaveBeenCalledWith('u1')
+  })
+
+  it('查看地址失败（境外/无数据/网络）→ 显式提示不留空（绝不让家人误以为无响应）', async () => {
+    vi.spyOn(api, 'contactAddress').mockRejectedValue(new Error('address_not_found'))
+    render(<ul><SharingContactRow c={c} lang="zh" t={t} live onLocate={() => {}} onCall={() => {}} onMessage={() => {}} /></ul>)
+    fireEvent.click(screen.getByRole('button', { name: '查看 小明 所在地址' }))
+    expect(await screen.findByText(/暂时无法获取地址/)).toBeInTheDocument()
+  })
+
   it('渲染姓名 + 定位/呼叫/发消息三动作各触发对应回调', () => {
     const onLocate = vi.fn(), onCall = vi.fn(), onMessage = vi.fn()
     render(<ul><SharingContactRow c={c} lang="zh" t={t} live onLocate={onLocate} onCall={onCall} onMessage={onMessage} /></ul>)

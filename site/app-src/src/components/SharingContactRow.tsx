@@ -1,11 +1,12 @@
-import type { ContactLocation } from '../lib/api'
+import { useState } from 'react'
+import { api, type ContactLocation } from '../lib/api'
 import { Avatar, RelativeTime } from './ui'
 import { batteryBadge } from '../lib/battery'
 import { viewAccuracyNote } from '../lib/geoAccuracy'
 import { getUnit } from '../lib/distanceUnit'
 import { headingPhrase } from '../lib/heading'
 import { roleLabel } from './Layout'
-import { IconPhone, IconChat, IconPin } from './icons'
+import { IconPhone, IconChat, IconPin, IconZoom } from './icons'
 import { appleMapsDirectionsUrl, validLatLng } from '../lib/location'
 
 /// 「正在共享位置的联系人」行（Locations 页用；独立文件不碰 Leaflet，可 jsdom 单测）。
@@ -28,8 +29,27 @@ export function SharingContactRow({ c, lang, t, live, callDisabled, onLocate, on
   const b = batteryBadge(c.battery, lang)
   const acc = viewAccuracyNote(c.accuracy, t, getUnit()) // {text,coarse}｜null：粗定位(≥500m)显式标"大致位置"，读屏家人不误信街道级
   const head = headingPhrase(c.heading, lang)  // "正朝东北方向移动"；静止/不可用→null 省略
+
+  // 「查看所在地址」：读屏/低视力家人看不到地图 pin，点一下把对方位置逆地理成文字街道地址（对标 Find My/Google
+  // 位置共享给出地址）。**按需**请求（点击才打高德，非随位置刷新反复打）；仅境内有数据，境外/无数据显式告知。
+  const [addr, setAddr] = useState<string | null>(null)
+  const [addrState, setAddrState] = useState<'idle' | 'loading' | 'error'>('idle')
+  async function loadAddress() {
+    if (addrState === 'loading') return
+    setAddrState('loading')
+    try {
+      const r = await api.contactAddress(c.userId)
+      const line = (r.address || r.township || '').trim()
+      const area = r.aoi?.name?.trim()
+      // 地址 + 所在区域（"在XX一带"）——区域是比街道更强的大方位锚点，家人一听即知在哪片。二者皆空→按无地址处理。
+      const text = area && !line.includes(area) ? `${line}（${t('在', 'near ')}${area}${t('一带', '')}）`.trim() : line
+      if (!text) { setAddrState('error'); return }
+      setAddr(text); setAddrState('idle')
+    } catch { setAddrState('error') } // 404(境外/无数据/未共享)/网络/服务端错误一律显式提示，绝不留空
+  }
+
   return (
-    <li className="flex items-center gap-2 px-4 py-3 hover:surface-2">
+    <li className="flex flex-col gap-1.5 px-4 py-3 hover:surface-2"><div className="flex items-center gap-2">
       {/* 定位：点信息区在地图上平移到该联系人（Enter 可激活）。 */}
       <button type="button" onClick={onLocate} className="flex min-w-0 flex-1 items-center gap-3 text-left"
         aria-label={t(`在地图上定位 ${c.displayName}`, `Locate ${c.displayName} on the map`)}>
@@ -51,6 +71,13 @@ export function SharingContactRow({ c, lang, t, live, callDisabled, onLocate, on
         ? <span data-testid="live-dot" data-live="1" className="inline-block h-2 w-2 shrink-0 rounded-full bg-ok ring-live" aria-hidden />
         : <span data-testid="live-dot" data-live="0" title={t('共享中，暂无最新位置', 'Sharing, no recent update')}
             className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--text-faint)]" aria-hidden />}
+      {/* 查看所在地址：把对方位置逆地理成文字街道地址（读屏/低视力家人看不到 pin 的刚需）。按需请求、可重试。 */}
+      <button type="button" onClick={loadAddress} disabled={addrState === 'loading'}
+        aria-label={t(`查看 ${c.displayName} 所在地址`, `Show ${c.displayName}'s address`)}
+        title={t('查看所在地址', 'Show address')}
+        className="shrink-0 rounded-full p-2 text-accent transition hover:surface-2 disabled:opacity-40">
+        <IconZoom width={18} height={18} />
+      </button>
       {/* 呼叫（通话中禁，避免并发）＋ 发消息：把家人引到位置页的低电量告警"趁没关机联系他"就地可达。 */}
       <button type="button" onClick={onCall} disabled={callDisabled}
         aria-label={t(`呼叫 ${c.displayName}`, `Call ${c.displayName}`)}
@@ -70,6 +97,17 @@ export function SharingContactRow({ c, lang, t, live, callDisabled, onLocate, on
           className="shrink-0 rounded-full p-2 text-accent transition hover:surface-2">
           <IconPin width={18} height={18} />
         </a>
+      )}
+      </div>
+      {/* 地址结果：aria-live 让读屏在加载完成时即时念出地址（安全相关信息）。加载中/失败均显式，绝不留空。 */}
+      {(addr || addrState !== 'idle') && (
+        <div aria-live="polite" className="pl-[50px] text-xs text-faint">
+          {addrState === 'loading'
+            ? t('正在获取地址…', 'Getting address…')
+            : addrState === 'error'
+              ? <span className="text-danger">{t('暂时无法获取地址（可能在境外或无数据）', "Address unavailable (may be overseas or no data)")}</span>
+              : addr && <>📍 {addr}</>}
+        </div>
       )}
     </li>
   )

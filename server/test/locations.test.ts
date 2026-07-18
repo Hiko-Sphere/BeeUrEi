@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
 
@@ -186,6 +186,62 @@ describe('请求共享位置 /api/locations/request（nudge，绝非远程强开
     const again = await app.inject({ method: 'POST', url: '/api/locations/request', headers: auth(A.token), payload: { userId: B.id } })
     expect(again.json()).toMatchObject({ ok: true, deduped: true })
     expect(notifs(B.id)).toHaveLength(1)
+    await app.close()
+  })
+})
+
+describe('联系人位置 → 可读地址 /api/locations/address', () => {
+  afterEach(() => { vi.unstubAllGlobals(); delete process.env.AMAP_API_KEY })
+
+  it('反查已共享联系人的地址（服务端权威坐标、WGS-84→GCJ-02 后 amap regeo）', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({
+      status: '1', infocode: '10000',
+      regeocode: { formatted_address: '北京市朝阳区呼家楼街道景华南街5号', addressComponent: { township: '呼家楼街道' }, pois: [] },
+    }) })))
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const A = await register(app, 'addr_a', 'blind')
+    const B = await register(app, 'addr_b', 'helper')
+    await link(app, A, B.id, B.token)
+    await app.inject({ method: 'POST', url: '/api/locations/update', headers: auth(B.token), payload: { lat: 39.9, lng: 116.4 } })
+    // A 读屏家人查 B 的地址（B 未传坐标——服务端用其权威共享坐标）。
+    const res = await app.inject({ method: 'GET', url: `/api/locations/address?userId=${B.id}`, headers: auth(A.token) })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().address).toBe('北京市朝阳区呼家楼街道景华南街5号')
+    await app.close()
+  })
+
+  it('越权/未共享一律 404 not_sharing（不能反查非联系人或未共享者的地址）', async () => {
+    process.env.AMAP_API_KEY = 'webkey'
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ status: '1', infocode: '10000', regeocode: { formatted_address: '某地', addressComponent: {}, pois: [] } }) })))
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const A = await register(app, 'addr_c', 'blind')
+    const B = await register(app, 'addr_d', 'helper')
+    const C = await register(app, 'addr_e', 'helper') // 与 A 无绑定
+    await link(app, A, B.id, B.token)
+    // 未绑定者 C **即便正在共享**，A 也 404（授权守卫独立于"是否共享"：非联系人不可反查其地址）。
+    await app.inject({ method: 'POST', url: '/api/locations/update', headers: auth(C.token), payload: { lat: 39.9, lng: 116.4 } })
+    expect((await app.inject({ method: 'GET', url: `/api/locations/address?userId=${C.id}`, headers: auth(A.token) })).statusCode).toBe(404)
+    // 已绑定 B 但**尚未共享** → 404 not_sharing（无位置可解析）。
+    expect((await app.inject({ method: 'GET', url: `/api/locations/address?userId=${B.id}`, headers: auth(A.token) })).statusCode).toBe(404)
+    // B 共享后 A 可查；随后 B 停止 → 再查又 404（可见性随共享状态实时收回）。
+    await app.inject({ method: 'POST', url: '/api/locations/update', headers: auth(B.token), payload: { lat: 39.9, lng: 116.4 } })
+    expect((await app.inject({ method: 'GET', url: `/api/locations/address?userId=${B.id}`, headers: auth(A.token) })).statusCode).toBe(200)
+    await app.inject({ method: 'POST', url: '/api/locations/stop', headers: auth(B.token) })
+    expect((await app.inject({ method: 'GET', url: `/api/locations/address?userId=${B.id}`, headers: auth(A.token) })).statusCode).toBe(404)
+    await app.close()
+  })
+
+  it('未配 amap → 503；缺 userId → 400', async () => {
+    const store = new MemoryStore()
+    const app = buildApp(store)
+    const A = await register(app, 'addr_f', 'blind')
+    delete process.env.AMAP_API_KEY
+    expect((await app.inject({ method: 'GET', url: `/api/locations/address?userId=x`, headers: auth(A.token) })).statusCode).toBe(503)
+    process.env.AMAP_API_KEY = 'webkey'
+    expect((await app.inject({ method: 'GET', url: `/api/locations/address`, headers: auth(A.token) })).statusCode).toBe(400)
     await app.close()
   })
 })

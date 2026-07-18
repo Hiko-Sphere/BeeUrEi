@@ -332,6 +332,31 @@ struct EmergencyReadinessInfo: Codable, Sendable {
         return l == .zh ? "\(who)暂时收不到你的求助（没装 App 或没开通知）。请让他们装上 App 并开启通知，否则出事时你的 SOS 到不了他们。"
                         : "\(who) can't receive your alerts yet (app not installed or notifications off). Ask them to install the app and turn on notifications, or your SOS won't reach them."
     }
+
+    /// 应急就绪**主提示**（纯逻辑·可单测·与网页端 EmergencyReadinessCard 同口径）。返回 (文案, 是否危险级)；
+    /// 有可达联系人且不缺紧急联系人时 → nil（个别紧急联系人不可达由 unreachableEmergencyWarning 另报）。
+    /// **关键：以实际告警扇出面 acceptedReachable/acceptedTotal 为准**——SOS/摔倒扇给**全体 accepted**（非仅
+    /// isEmergency），故"会不会有人被通知"须看全体可达数。此前 iOS 据 hasUsableEmergencyContact 只查 isEmergency，
+    /// 于是"有非紧急联系人（会被通知）却没标紧急"时误报"SOS 无人可通知"＝假警报（吓到本已部分受保护的盲人）。
+    /// acceptedTotal/Reachable 缺失（旧服务端）→ 回落紧急联系人口径 total/reachable（不静默）。
+    func readinessNotice(_ l: Language) -> (text: String, danger: Bool)? {
+        let accTotal = acceptedTotal ?? total
+        let accReach = acceptedReachable ?? reachable
+        if accTotal == 0 {
+            return (l == .zh ? "你还没有任何联系人——出事时不会有人收到告警。请先在下方添加联系人。"
+                             : "You have no contacts yet — no one will be alerted in an emergency. Add a contact below first.", true)
+        }
+        if accReach == 0 {
+            return (l == .zh ? "你有\(accTotal)位联系人，但此刻都收不到即时求助（没装 App 或没开通知）。请让他们装 App、开启通知，否则出事时你的 SOS 到不了任何人。"
+                             : "You have \(accTotal) contacts, but none can receive instant alerts right now (app not installed or notifications off). Ask them to install the app and enable notifications, or your SOS won't reach anyone.", true)
+        }
+        if !hasEmergencyContact {
+            // 会被通知（非假警报），只是建议指定紧急联系人以享医疗信息共享——提示级（非危险红）。
+            return (l == .zh ? "出事时你的\(accTotal)位联系人都会收到告警。建议把最信任的人设为紧急联系人——紧急时他们还能看到你的医疗信息。"
+                             : "Your \(accTotal) contacts will all be alerted in an emergency. Consider marking your most trusted person as an emergency contact — they can also see your medical info in an emergency.", false)
+        }
+        return nil
+    }
 }
 
 /// 「发送测试告警」结果：sent(能即时收到几位/共几位联系人) / rateLimited(限流 429，每小时最多 3 次) / failed(网络/其它)。

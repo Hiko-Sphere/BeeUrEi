@@ -46,19 +46,23 @@ struct FamilyLinksView: View {
                 if let emergencyInfo {
                     Text(emergencyInfo).font(.footnote).foregroundStyle(.secondary)
                 }
-                // 主动安全提示：还没有"已接受的紧急联系人"时，SOS/摔倒告警将无人可通知（静默假安心）——
-                // 提前在此醒目提示去设置，别等真出事触发 SOS 才发现"没有可通知的亲友"。
-                if loaded && !FamilyLinkInfo.hasUsableEmergencyContact(in: links) {
-                    Label(AssistStrings.noEmergencyContactWarning(lang), systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote).foregroundStyle(Color.beeDanger)
-                        .accessibilityLabel(AssistStrings.noEmergencyContactWarning(lang))
-                }
-                // 有紧急联系人、但其中有的**收不到即时求助**（没装 App/没开通知）——补 hasUsableEmergencyContact 只查"有没有"的缺口：
-                // 指定了紧急联系人不等于 SOS 到得了他们。点名谁不可达，让盲人去让家人开通知（读屏与非 VoiceOver 都听得到）。
-                if let warn = readiness?.unreachableEmergencyWarning(lang) {
+                // 应急就绪**主提示**（就绪度以**实际告警扇出面** acceptedReachable 为准——SOS/摔倒扇给全体 accepted，
+                // 非仅 isEmergency）：没联系人/有联系人却都收不到→危险；有可达联系人但没标紧急→提示级。**避免"有非紧急
+                // 联系人却误报无人会被通知"的假警报**（与网页端 EmergencyReadinessCard 同口径）。
+                if loaded, let notice = readiness?.readinessNotice(lang) {
+                    Label(notice.text, systemImage: notice.danger ? "exclamationmark.triangle.fill" : "info.circle.fill")
+                        .font(.footnote).foregroundStyle(notice.danger ? Color.beeDanger : .secondary)
+                        .accessibilityLabel(notice.text)
+                } else if let warn = readiness?.unreachableEmergencyWarning(lang) {
+                    // 有可达紧急联系人、但其中个别不可达（没装 App/没开通知）：点名谁不可达，让盲人去让家人开通知。
                     Label(warn, systemImage: "bell.slash.fill")
                         .font(.footnote).foregroundStyle(Color.beeDanger)
                         .accessibilityLabel(warn)
+                } else if loaded && readiness == nil && !FamilyLinkInfo.hasUsableEmergencyContact(in: links) {
+                    // 就绪度加载失败的兜底：至少提醒"没有紧急联系人"（保守，宁可多提醒也别漏报安全网空）。
+                    Label(AssistStrings.noEmergencyContactWarning(lang), systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote).foregroundStyle(Color.beeDanger)
+                        .accessibilityLabel(AssistStrings.noEmergencyContactWarning(lang))
                 }
                 // 「发送测试告警」：验证"我的求助真能送到联系人"——比读警告更确定（真发一条测试通知看谁收到）。
                 // 仅在有联系人时显示（无联系人无从测起）。会给真实联系人发测试通知，故二次确认防误发。
@@ -188,8 +192,10 @@ struct FamilyLinksView: View {
         do { links = try await api.familyLinks(token: token); errorText = nil; loaded = true }
         catch { errorText = AssistStrings.loadFailed(lang) }
         readiness = await api.emergencyReadiness(token: token) // 就绪度并行/顺带取（失败=nil，不影响列表；只用于可达性警告）
-        // 紧急联系人不可达时**主动播报**（盲人看不到屏上警告条；VoiceOver 开→系统公告，否则 App 语音）。
-        if let warn = readiness?.unreachableEmergencyWarning(lang) { announce(warn) }
+        // 应急就绪问题**主动播报**（盲人看不到屏上警告条；VoiceOver 开→系统公告，否则 App 语音）：优先播危险级
+        // 主提示（没联系人/都不可达），否则播"个别紧急联系人不可达"。提示级（有联系人会被通知、只是没标紧急）不打扰、不播。
+        if let notice = readiness?.readinessNotice(lang), notice.danger { announce(notice.text) }
+        else if let warn = readiness?.unreachableEmergencyWarning(lang) { announce(warn) }
     }
 
     /// 发送测试告警并把结果**朗读**给盲人（到底几位收到=SOS 真能到人吗）；完成后顺带刷新就绪度。

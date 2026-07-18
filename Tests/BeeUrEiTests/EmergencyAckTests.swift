@@ -84,6 +84,36 @@ final class EmergencyAckTests: XCTestCase {
         XCTAssertTrue(en.lowercased().contains("notifications"))
     }
 
+    /// readinessNotice：以**实际告警扇出面 acceptedReachable** 判定，修"有非紧急联系人却误报无人会被通知"的假警报。
+    func testReadinessNoticeUsesAcceptedFanoutNotJustEmergency() {
+        typealias R = EmergencyReadinessInfo
+        func hasCJK(_ s: String) -> Bool { s.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }
+        // 完全没有联系人 → 危险"没人会被通知"。
+        let none = R(hasEmergencyContact: false, total: 0, reachable: 0, acceptedTotal: 0, acceptedReachable: 0, contacts: [])
+            .readinessNotice(.zh)
+        XCTAssertEqual(none?.danger, true); XCTAssertTrue(none!.text.contains("还没有任何联系人"))
+        // **假警报修复的核心**：有 2 位 accepted 非紧急联系人（都可达、会被告警）、无紧急联系人 →
+        // 提示级（danger=false），说"都会收到告警"，绝不再说"无人可通知"。
+        let nonEmerg = R(hasEmergencyContact: false, total: 0, reachable: 0, acceptedTotal: 2, acceptedReachable: 2, contacts: [])
+            .readinessNotice(.zh)
+        XCTAssertEqual(nonEmerg?.danger, false)                 // 非危险：确有人会被通知
+        XCTAssertTrue(nonEmerg!.text.contains("都会收到告警"))   // 如实告知会被通知
+        XCTAssertFalse(nonEmerg!.text.contains("无人"))         // 绝不误报"无人"
+        // 有联系人但此刻都收不到即时推送 → 危险"都收不到，SOS 到不了任何人"。
+        let unreach = R(hasEmergencyContact: true, total: 1, reachable: 0, acceptedTotal: 3, acceptedReachable: 0, contacts: nil)
+            .readinessNotice(.zh)
+        XCTAssertEqual(unreach?.danger, true); XCTAssertTrue(unreach!.text.contains("3位")); XCTAssertTrue(unreach!.text.contains("到不了任何人"))
+        // 有可达紧急联系人（就绪）→ nil（个别不可达交给 unreachableEmergencyWarning）。
+        XCTAssertNil(R(hasEmergencyContact: true, total: 2, reachable: 2, acceptedTotal: 2, acceptedReachable: 2, contacts: nil).readinessNotice(.zh))
+        XCTAssertNil(R(hasEmergencyContact: true, total: 2, reachable: 1, acceptedTotal: 2, acceptedReachable: 1, contacts: nil).readinessNotice(.zh))
+        // 旧服务端缺 acceptedTotal/Reachable → 回落 total/reachable：有紧急联系人可达 → nil；全不可达 → 危险。
+        XCTAssertNil(R(hasEmergencyContact: true, total: 1, reachable: 1, acceptedTotal: nil, acceptedReachable: nil, contacts: nil).readinessNotice(.zh))
+        XCTAssertEqual(R(hasEmergencyContact: true, total: 1, reachable: 0, acceptedTotal: nil, acceptedReachable: nil, contacts: nil).readinessNotice(.zh)?.danger, true)
+        // 英文分支不串中文。
+        let en = R(hasEmergencyContact: false, total: 0, reachable: 0, acceptedTotal: 2, acceptedReachable: 2, contacts: []).readinessNotice(.en)
+        XCTAssertNotNil(en); XCTAssertFalse(hasCJK(en!.text)); XCTAssertTrue(en!.text.lowercased().contains("alerted"))
+    }
+
     // MARK: 测试告警结果播报（验证"我的求助真能到人"）
 
     func testTestAlertResultMessages() {

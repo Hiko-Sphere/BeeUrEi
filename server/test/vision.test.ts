@@ -68,6 +68,9 @@ describe('visionClient（AI 视觉描述，provider 无关 / OpenAI 兼容）', 
     await visionDescribe({ imageDataUrl: 'data:image/jpeg;base64,ABC', lang: 'en' })
     expect(cap[0]).toContain('重拍')    // zh：太暗/太模糊/没对准 → 建议重拍
     expect(cap[1]).toMatch(/retake/i)  // en：same guidance
+    // 关键数字（金额/剂量/电话/门牌）须逐位读准、看不清就说哪部分不确定，绝不补全成完整数字（读错代价严重）。
+    expect(cap[0]).toContain('关键数字')
+    expect(cap[1]).toMatch(/critical numbers/i)
   })
 
   it('空回复 → 抛 VisionError（fail-closed，绝不返回罐头兜底文案）', async () => {

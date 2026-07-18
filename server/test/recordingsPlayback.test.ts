@@ -169,6 +169,9 @@ describe('录制媒体播放（流式 + 授权 + Range）', () => {
     await app.inject({ method: 'GET', url: `/api/recordings/${recording.id}/media`, headers: { ...auth(at), range: 'bytes=10-20' } })
     await app.inject({ method: 'GET', url: `/api/recordings/${recording.id}/media`, headers: { ...auth(at), range: 'bytes=-5' } })
     expect(auditCount()).toBe(1) // 一次观看 = 一条审计（修复前=每个请求各一条，共 4 条）
+    // 审计条目**自描述**：含参与人数（与 call.observe 同口径；此前非删除录制 detail 为空、复核者需回查元数据）。
+    const entry = store.allAuditEntries().find((e) => e.action === 'recording.view' && e.targetId === recording.id)
+    expect(entry?.detail).toContain('participant(s)')
     await app.close()
   })
 

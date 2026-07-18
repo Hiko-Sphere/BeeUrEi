@@ -185,7 +185,15 @@ export function registerRecordingRoutes(app: FastifyInstance, store: Store, cons
     const mime = media?.mime ?? 'video/quicktime'
     // 管理员查看留痕（尤其是查看用户已软删除的录制——可追责）。去重：一次观看的多个 Range 请求只留一条。
     if (isAdmin && !isOwner && shouldAuditRecordingView(ident.user.id, id, Date.now())) {
-      store.createAuditEntry({ id: randomUUID(), adminId: ident.user.id, action: 'recording.view', targetType: 'recording', targetId: id, detail: rec.deletedAt != null ? 'user-deleted (legal hold)' : undefined, at: Date.now() })
+      // 审计 detail **自描述**（与 call.observe 的 "observing N participant(s)" 同口径）：合规复核者读审计日志即知
+      // 看的是"哪类原因、几方参与、是否用户已删"的录制，无需回查录制元数据（此前非删除录制 detail 为空、信息不自足）。
+      const parts = rec.participants ?? Array.from(new Set([rec.ownerId, ...rec.consentBy]))
+      const detail = [
+        rec.reason ? `reason=${rec.reason}` : null,
+        `${parts.length} participant(s)`,
+        rec.deletedAt != null ? 'user-deleted (legal hold)' : null,
+      ].filter(Boolean).join(' · ')
+      store.createAuditEntry({ id: randomUUID(), adminId: ident.user.id, action: 'recording.view', targetType: 'recording', targetId: id, detail, at: Date.now() })
     }
     return streamWithRange(req, reply, mediaPath(rec.mediaId), mime)
   })

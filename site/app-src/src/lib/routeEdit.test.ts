@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { insertWaypoint, moveWaypointTo, type LatLng } from './routeEdit'
+import { insertWaypoint, moveWaypointTo, deleteWaypoint, type LatLng } from './routeEdit'
 
 const P = (n: number) => ({ lat: n, lng: n })
 
@@ -64,5 +64,36 @@ describe('moveWaypointTo（拖动标记微调航点位置）', () => {
     expect(moveWaypointTo(wps, -1, 9, 9)).toEqual(wps)
     expect(moveWaypointTo(wps, 0, NaN, 9)).toEqual(wps)
     expect(moveWaypointTo(wps, 0, 9, Infinity)).toEqual(wps)
+  })
+})
+
+describe('deleteWaypoint（删航点并调整选中）', () => {
+  it('删的正是选中点 / 无选中 → 选中清空', () => {
+    const wps = [P(1), P(2), P(3)]
+    expect(deleteWaypoint(wps, 1, 1)).toEqual({ waypoints: [P(1), P(3)], selectedIdx: null })   // 删选中点
+    expect(deleteWaypoint(wps, 1, null)).toEqual({ waypoints: [P(1), P(3)], selectedIdx: null }) // 无选中
+  })
+
+  it('选中点在被删点之后 → 索引 −1（仍指向原来那个航点，不丢位置）', () => {
+    const wps = [P(1), P(2), P(3), P(4)]
+    const r = deleteWaypoint(wps, 1, 3) // 选中 idx3(=P4)，删 idx1(=P2)
+    expect(r.waypoints).toEqual([P(1), P(3), P(4)])
+    expect(r.selectedIdx).toBe(2)
+    expect(r.waypoints[r.selectedIdx!]).toEqual(P(4)) // 选中仍是原来的 P4
+  })
+
+  it('选中点在被删点之前 → 索引不变', () => {
+    expect(deleteWaypoint([P(1), P(2), P(3)], 2, 0)).toEqual({ waypoints: [P(1), P(2)], selectedIdx: 0 })
+  })
+
+  it('越界 i → 原样返回、选中不变（坏输入不动作）', () => {
+    const wps = [P(1), P(2)]
+    expect(deleteWaypoint(wps, 5, 1)).toEqual({ waypoints: wps, selectedIdx: 1 })
+    expect(deleteWaypoint(wps, -1, 0)).toEqual({ waypoints: wps, selectedIdx: 0 })
+  })
+
+  it('保留 note 等附加字段', () => {
+    const wps: LatLng[] = [{ lat: 1, lng: 1, note: 'a' }, { lat: 2, lng: 2, note: 'b' }]
+    expect(deleteWaypoint(wps, 0, null).waypoints).toEqual([{ lat: 2, lng: 2, note: 'b' }])
   })
 })

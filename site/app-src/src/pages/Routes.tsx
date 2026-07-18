@@ -3,7 +3,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { api, APIError, contentBlockedText, type SavedRouteInfo, type RouteWaypoint, type FamilyLink } from '../lib/api'
 import { routeDistanceMeters, routeDistanceText, routeWalkingText } from '../lib/location'
-import { insertWaypoint, moveWaypointTo } from '../lib/routeEdit'
+import { insertWaypoint, moveWaypointTo, deleteWaypoint } from '../lib/routeEdit'
 import { getUnit } from '../lib/distanceUnit'
 import { useI18n } from '../lib/i18n'
 import { useSession } from '../lib/session'
@@ -229,7 +229,9 @@ export function RoutesPage() {
                   className="rounded px-1.5 text-sm text-soft hover:surface-2 disabled:opacity-30"
                   aria-label={t(`把第 ${i + 1} 个路线点下移`, `Move point ${i + 1} down`)}>↓</button>
                 <button onClick={() => {
-                  setEditing({ ...editing, waypoints: wp.filter((_, j) => j !== i) }); setSelectedIdx(null)
+                  // 纯逻辑 deleteWaypoint（已测）：删点并正确调整选中索引，不再一律清空选中（中段编辑保留位置）。
+                  const res = deleteWaypoint(wp, i, selectedIdx)
+                  setEditing({ ...editing, waypoints: res.waypoints }); setSelectedIdx(res.selectedIdx)
                 }} className="text-xs text-danger hover:underline" aria-label={t(`删除第 ${i + 1} 个路线点`, `Delete point ${i + 1}`)}>
                   {t('删除', 'Delete')}
                 </button>

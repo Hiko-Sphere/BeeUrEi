@@ -29,3 +29,24 @@ export function moveWaypointTo<T extends LatLng>(waypoints: readonly T[], i: num
   next[i] = { ...next[i], lat, lng }
   return next
 }
+
+/// 删除第 i 个航点，并**正确调整选中索引**（此前 Routes.tsx 内联 `filter` + 一律 `setSelectedIdx(null)`：删
+/// 任意点都清空当前选中，中段编辑时很烦——删掉误加的点后想接着在原选中点后补点，选中却没了、只能重选）。
+/// 返回新序列与调整后的选中索引：
+/// - 无选中，或删的正是选中点 → null；
+/// - 选中点在被删点**之后**（selectedIdx > i）→ 索引 −1（它整体前移一格，仍指向同一个航点）；
+/// - 选中点在被删点**之前**（selectedIdx < i）→ 索引不变。
+/// 越界 i → 原样返回、选中不变（坏输入不动作，同 moveWaypointTo）。保留 note 等附加字段。
+export function deleteWaypoint<T extends LatLng>(
+  waypoints: readonly T[],
+  i: number,
+  selectedIdx: number | null,
+): { waypoints: T[]; selectedIdx: number | null } {
+  if (i < 0 || i >= waypoints.length) return { waypoints: [...waypoints], selectedIdx }
+  const next = waypoints.filter((_, j) => j !== i)
+  let sel: number | null
+  if (selectedIdx == null || selectedIdx === i) sel = null
+  else if (selectedIdx > i) sel = selectedIdx - 1
+  else sel = selectedIdx
+  return { waypoints: next, selectedIdx: sel }
+}

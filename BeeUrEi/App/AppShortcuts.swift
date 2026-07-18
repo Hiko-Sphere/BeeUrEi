@@ -25,6 +25,10 @@ final class AppRoute {
     /// 语音指令：定向呼叫某位亲友（"给妈妈打电话"→ 打开求助界面并按名字自动拨打）。**一次性**：
     /// RemoteAssistView 加载联系人后消费即清，绝不因重开界面重复拨打（拨号是外呼副作用，必须严格一次）。
     var pendingCallName: String?
+    /// 导航中的**当前剩余里程播报**（"还有约300米，预计4分钟"），由 NavigationViewModel 每次更新剩余时写入、结束/开始导航清空。
+    /// 供语音"还有多远"按需回述——导航屏是独立 sheet、其 model 不被 Hub 直接持有，故经此共享值中转（只写读、无视图观察 → 不触发重绘）。
+    /// nil = 当前未在导航或尚未算出剩余。
+    var currentNavRemaining: String?
     private init() {}
 }
 

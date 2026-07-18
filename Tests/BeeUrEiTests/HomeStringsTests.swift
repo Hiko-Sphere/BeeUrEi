@@ -101,6 +101,9 @@ final class HomeStringsTests: XCTestCase {
         // AI 详细描述场景（iter296 新增）必须在自述里，否则盲人无从发现（iter297 补齐可发现性）。
         XCTAssertTrue(HomeStrings.voiceCommandsHelp(.zh).contains("描述场景"))
         XCTAssertTrue(HomeStrings.voiceCommandsHelp(.en).lowercased().contains("describe the scene"))
+        // 导航进度"还有多远"（新增）须在自述里——盲人无法浏览 UI 发现功能，语音能力必须可被语音发现。
+        XCTAssertTrue(HomeStrings.voiceCommandsHelp(.zh).contains("还有多远"))
+        XCTAssertTrue(HomeStrings.voiceCommandsHelp(.en).lowercased().contains("how much farther"))
         XCTAssertFalse(HomeStrings.voiceCommandsHelp(.en).contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
     }
 

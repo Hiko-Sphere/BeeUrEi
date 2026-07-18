@@ -44,6 +44,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case repeatLast                 // 重复刚才的播报
     case time                       // 现在几点（盲人看不到时钟，最高频的语音查询）
     case battery                    // 电量还剩多少（手机没电=丢失导航/求助工具，盲人尤需随时确认）
+    case navRemaining               // 导航进度：还有多远/还要多久（导航中按需查一次剩余里程+预计到达；里程碑自动播报间隔可能较远，看不到屏上进度）
     case date                       // 今天几号/星期几
     case openSettings               // 打开设置（语言/无障碍/摔倒检测等非语音可调项——语音直达免找按钮）
     case describeScene              // 云端 AI 详细描述眼前画面（对标 Be My AI/Envision——比本地 SceneSummarizer 粗汇总更丰富的自然语言描述）
@@ -132,6 +133,11 @@ public enum VoiceCommandParser {
         // 置于具体命令之后、通用 look 之前：与现有触发词无子串冲突（"打电话"含"电话"非"电量"；readBus 的"几路"非"几点"）。
         if has(["几点", "报时", "报个时", "报一下时间", "报下时间", "告诉我时间", "现在时间", "什么时间", "时间是", "what time", "the time", "tell me the time"]) { return .time }
         if has(["电量", "电池", "多少电", "还有多少电", "剩多少电", "还剩多少电", "battery", "battery level", "power left", "how much power"]) { return .battery }
+        // 导航进度（"还有多远/还要多久/快到了吗"）：导航中盲人看不到屏上进度、自动里程碑播报间隔又可能较远，按需查一次剩余里程+预计到达。
+        // 只匹配**不含地名**的裸进度问句（都带"还/快/farther/left/there yet"，暗示当前正在进行的这趟）——findNearest 的"最近的X有多远"
+        // 含地名且在更前处理、不会落到这；不收含地名的"多久到X"以免误抢"多久到公司"这类问某地行程时长。上层据当前是否在导航回述或告知"没在导航"。
+        if has(["还有多远", "还要多久", "还有多久", "还有多长时间", "还差多远", "快到了吗", "快到了没", "快到了没有",
+                "how much farther", "how much further", "how much longer", "how far to go", "how far left", "are we there yet"]) { return .navRemaining }
         // 包装日期（保质期/生产日期）须在 .date（今天几号）之前：这些短语含"日期"，会被 .date 的"日期"抢；
         // 但 .date 的裸"日期"/"几号"仍归 .date（这里的键都不含裸"日期"）。读的是包装印刷日期，非今天日期。
         if has(["保质期", "有效期", "生产日期", "保存期", "赏味期", "读日期", "看日期", "包装日期", "过期", "expir", "best before", "use by", "shelf life"]) { return .readDates }

@@ -136,6 +136,7 @@ final class NavigationViewModel {
         headingFilter = HeadingFilter()
         waypointAdvance.reset()
         remainingAnnouncer.reset(); remaining = ""; remainingArrivalClock = nil // 新目的地：清空剩余里程碑基线与屏显
+        AppRoute.shared.currentNavRemaining = nil // 语音"还有多远"共享值：新导航先清空，未算出前回述"正在计算"
         offRouteStreak = 0
         lastHeadingTime = 0
         running = true
@@ -167,6 +168,7 @@ final class NavigationViewModel {
         spatial.stop()   // 释放空间音引擎（见审查 #11）
         NavVoice.shared.stop() // 停掉仍在念的导航指令
         remaining = ""; remainingArrivalClock = nil // 清屏显剩余里程
+        AppRoute.shared.currentNavRemaining = nil // 语音"还有多远"共享值：停导航即清，避免停后仍回述陈旧剩余
         status = NavStrings.navStopped(lang)
     }
 
@@ -267,6 +269,7 @@ final class NavigationViewModel {
                 let eta = RouteRemaining.etaSeconds(remainingMeters: rem, speedMps: speed)
                 remaining = NavStrings.remainingDistance(meters: Int(rem.rounded()), etaSeconds: eta, unit: unit, lang)
                 remainingArrivalClock = arrivalClockString(etaSeconds: eta) // 与 remaining 同步更新，供"重听"报到达时刻
+                AppRoute.shared.currentNavRemaining = remaining // 语音"还有多远"按需回述（导航屏 sheet 的 model 不被 Hub 直接持有，经共享值中转）
                 if remainingAnnouncer.update(remainingMeters: rem) != nil {
                     NavVoice.shared.speakCallout(remaining)
                 }

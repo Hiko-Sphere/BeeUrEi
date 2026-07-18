@@ -42,6 +42,10 @@ final class VoiceCommandParserTests: XCTestCase {
             ("你会什么", .commands), ("你能做什么", .commands), ("what can you do", .commands),
             ("现在几点", .time), ("几点了", .time), ("报时", .time), ("what time is it", .time),
             ("还有多少电", .battery), ("电量多少", .battery), ("剩多少电", .battery), ("battery level", .battery),
+            // 导航进度"还有多远/还要多久"（导航中按需查剩余里程+预计到达）：只匹配不含地名的裸进度问句。
+            ("还有多远", .navRemaining), ("还要多久", .navRemaining), ("还有多久", .navRemaining), ("快到了吗", .navRemaining),
+            ("还有多长时间", .navRemaining), ("快到了没", .navRemaining), ("how much farther", .navRemaining),
+            ("how much longer", .navRemaining), ("how far to go", .navRemaining), ("are we there yet", .navRemaining),
             ("今天几号", .date), ("今天星期几", .date), ("what's the date", .date), ("what day is it", .date),
             ("打开设置", .openSettings), ("设置", .openSettings), ("open settings", .openSettings), ("preferences", .openSettings),
             ("说快点", .adjustSpeech(.faster)), ("太慢了", .adjustSpeech(.faster)), ("speak faster", .adjustSpeech(.faster)),
@@ -53,6 +57,8 @@ final class VoiceCommandParserTests: XCTestCase {
             ("带我去北京西站", .navigate("北京西站")), ("导航到医院", .navigate("医院")),
             ("最近的厕所在哪", .findNearest("厕所")), ("离我最近的药店", .findNearest("药店")),
             ("附近哪里有便利店", .findNearest("便利店")), ("nearest pharmacy", .findNearest("pharmacy")),
+            // 冲突守卫：含**地名**的"最近的X有多远"仍走 findNearest（问某地点距离），不被裸进度问句"还有多远"抢。
+            ("最近的厕所有多远", .findNearest("厕所")), ("离我最近的药店有多远", .findNearest("药店")),
             ("where can i find a restroom", .findNearest("restroom")),
             ("坐地铁去西单", .transit("西单")), ("坐公交车去医院", .transit("医院")), ("take transit to the airport", .transit("the airport")),
             ("回家", .navigateHome), ("带我回家", .navigateHome), ("take me home", .navigateHome),

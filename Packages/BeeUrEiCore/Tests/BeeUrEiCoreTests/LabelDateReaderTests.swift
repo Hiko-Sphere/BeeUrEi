@@ -180,6 +180,20 @@ final class LabelDateReaderTests: XCTestCase {
         XCTAssertNil(LabelDateReader.find(texts: ["出厂编号 2026-08"], language: .zh))
     }
 
+    func testFreshnessCosmeticAndEnjoyByLabels() {
+        // 保鲜期（生鲜/冷藏，主流写成时长）：标签 + 时长双门控 → surface。
+        XCTAssertTrue(LabelDateReader.find(texts: ["保鲜期 7天"], language: .zh)!.contains("保鲜期 7天"))
+        XCTAssertTrue(LabelDateReader.find(texts: ["保鲜期 2026.07.31"], language: .zh)!.contains("2026.07.31"))
+        // 限用日期（化妆品使用期限）：此前"限期"/"有效日期"皆不含它 → 整行被丢，现补齐。
+        XCTAssertTrue(LabelDateReader.find(texts: ["限用日期 2026/07"], language: .zh)!.contains("2026/07"))
+        // enjoy by（美式食品）：标签 + 月份名日期。
+        XCTAssertTrue(LabelDateReader.find(texts: ["ENJOY BY DEC 2026"], language: .en)!.contains("DEC 2026"))
+        // 精度守卫①：含"保鲜"但非"保鲜期"标签的容器名（"保鲜盒"）不误报（无标签）。
+        XCTAssertNil(LabelDateReader.find(texts: ["食品保鲜盒"], language: .zh))
+        // 精度守卫②：含"保鲜期"标签但无任何日期/时长的广告语不surface（双门控缺日期样式）。
+        XCTAssertNil(LabelDateReader.find(texts: ["锁住保鲜期"], language: .zh))
+    }
+
     func testDedupAndCap() {
         // OCR 常重复同一行：去重。
         let r = LabelDateReader.find(texts: ["保质期 2026.07.15", "保质期 2026.07.15"], language: .zh)!

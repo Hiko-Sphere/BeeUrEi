@@ -17,9 +17,13 @@ public enum LabelDateReader {
         // 出厂/包装/灌装日期：电子产品、包装食品（肉/菜）、瓶装饮料酒油极常见的生产类日期，与"生产日期"并列而非其子串，
         // 此前整行被丢——盲人扫这些包装拿不到出厂/包装/灌装日期（判新鲜度的安全刚需）。双门控（须同行有日期样式）故精度不降。
         "出厂日期", "包装日期", "灌装日期",
+        // 保鲜期：生鲜/冷藏食品主流保质标注（"保鲜期7天"），与"保存期"并列**非其子串**（保鲜≠保存）；
+        // 限用日期：化妆品（台湾/进口）标准"使用期限"写法，与"有效日期"并列**非其子串**（限用日期不含"限期"/"有效日期"）。
+        // 盲人看不到化妆品/生鲜包装的期限，此前整行被丢——新鲜度/安全刚需。双门控（同行须有日期样式/时长）故精度不降。
+        "保鲜期", "限用日期",
         // "manufacture"（非 "manufactured"）：兼收正式写法 "date of manufacture" 与 "manufactured"（后者含前者子串），
-        // 此前只认 "manufactured"、漏了 "date of manufacture"。
-        "best before", "best by", "use by", "expiry", "expires", "expiration", "manufacture", "sell by",
+        // 此前只认 "manufactured"、漏了 "date of manufacture"。enjoy by：美式食品（乳制品/预制食品）常见"最佳食用"写法。
+        "best before", "best by", "use by", "enjoy by", "expiry", "expires", "expiration", "manufacture", "sell by",
         "production date", "shelf life", "shelf-life", // shelf life=保质期、expiration(date)=美式常见有效期，此前完全不识
     ]
 

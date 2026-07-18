@@ -89,4 +89,21 @@ final class SpokenStringsTests: XCTestCase {
         XCTAssertEqual(SpokenStrings.nutrition(nutriScore: "a", novaGroup: 9, .zh), "。营养分级A（最好）") // 坏 NOVA 丢、保留分级
         XCTAssertEqual(SpokenStrings.nutrition(nutriScore: "x", novaGroup: 2, .en), ". processed culinary ingredient") // 坏分级丢、保留 NOVA
     }
+
+    func testCashAmount() {
+        // 仅角：不缀"0 元"——一枚 5 角念"5 角"而非"0 元 5 角"（防被听成含元的更大额；点钞钱数错是真金白银）。
+        XCTAssertEqual(SpokenStrings.cashAmount(fen: 50, .zh), "5 角")
+        XCTAssertEqual(SpokenStrings.cashAmount(fen: 50, .en), "5 jiao")
+        XCTAssertEqual(SpokenStrings.cashAmount(fen: 20, .zh), "2 角")   // 2 角
+        // 仅元：不缀"0 角"（历史行为保持）。
+        XCTAssertEqual(SpokenStrings.cashAmount(fen: 15000, .zh), "150 元")
+        XCTAssertEqual(SpokenStrings.cashAmount(fen: 100, .en), "1 yuan")
+        // 元 + 角。
+        XCTAssertEqual(SpokenStrings.cashAmount(fen: 150, .zh), "1 元 5 角")
+        XCTAssertEqual(SpokenStrings.cashAmount(fen: 15050, .zh), "150 元 5 角") // 100+50+5角 的运行总额
+        XCTAssertEqual(SpokenStrings.cashAmount(fen: 150, .en), "1 yuan 5 jiao")
+        // 零：明确"0 元"起点，绝不空播（清零/未数）。
+        XCTAssertEqual(SpokenStrings.cashAmount(fen: 0, .zh), "0 元")
+        XCTAssertEqual(SpokenStrings.cashAmount(fen: 0, .en), "0 yuan")
+    }
 }

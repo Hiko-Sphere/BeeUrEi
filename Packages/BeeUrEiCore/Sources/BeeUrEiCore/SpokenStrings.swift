@@ -593,4 +593,20 @@ public enum SpokenStrings {
     public static func deviceOverheated(_ lang: Language) -> String {
         switch lang { case .zh: return "设备过热，避障暂停"; case .en: return "Device overheated, obstacle alerts paused" }
     }
+
+    /// 现金金额口播（分 → 元/角）：点钞运行总额的钱数部分。纸币/硬币最小 1 角（无"分"），故 (fen%100)/10 = 角。
+    /// **仅角时不缀"0 元"**——一枚 5 角念「5 角」而非「0 元 5 角」：后者别扭，且盲人听到带"元"的前缀易误判成更大额
+    /// （把 5 角听成含元的钱），点钞钱数错是真金白银。仅元时不缀"0 角"；金额为 0（清零/未数）→「0 元」明确起点、不空播。
+    /// 整体框架语（"共 X 张"）由调用侧（App FramingStrings）拼；此处只管钱数，与 [[CashCounter]] 的 totalFen 对接。
+    public static func cashAmount(fen: Int, _ lang: Language) -> String {
+        let yuan = fen / 100, jiao = (fen % 100) / 10
+        switch lang {
+        case .zh:
+            if yuan == 0 && jiao > 0 { return "\(jiao) 角" }
+            return jiao > 0 ? "\(yuan) 元 \(jiao) 角" : "\(yuan) 元"
+        case .en:
+            if yuan == 0 && jiao > 0 { return "\(jiao) jiao" }
+            return jiao > 0 ? "\(yuan) yuan \(jiao) jiao" : "\(yuan) yuan"
+        }
+    }
 }

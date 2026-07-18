@@ -522,14 +522,13 @@ enum FramingStrings {
 
     // MARK: 点钞（CashCounter）——逐张累加报运行总额，对标 Cash Reader / Seeing AI。
 
-    /// 运行总额（"共 3 张，150 元"）：分→元/角（纸币最小 1 角，无"分"）。张数在前帮用户核对漏扫/多扫。
+    /// 运行总额（"共 3 张，150 元"）：钱数部分走核心 `SpokenStrings.cashAmount`（已单测，含"仅角不缀0元"）。
+    /// 张数在前帮用户核对漏扫/多扫。
     static func cashTotal(totalFen: Int, count: Int, _ l: Language) -> String {
-        let yuanPart = totalFen / 100, jiaoPart = (totalFen % 100) / 10
+        let money = SpokenStrings.cashAmount(fen: totalFen, l)
         if l == .zh {
-            let money = jiaoPart > 0 ? "\(yuanPart) 元 \(jiaoPart) 角" : "\(yuanPart) 元"
             return "共 \(count) 张，\(money)"
         }
-        let money = jiaoPart > 0 ? "\(yuanPart) yuan \(jiaoPart) jiao" : "\(yuanPart) yuan"
         return "\(count) note\(count == 1 ? "" : "s"), \(money)"
     }
     /// 逐张计入播报："加 五十元，共 3 张，150 元"（denom 用已本地化的 yuan() 名）。

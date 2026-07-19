@@ -605,6 +605,7 @@ export function registerAdminRoutes(app: FastifyInstance, store: Store, presence
       direction: c.callerId === id ? 'outgoing' : 'incoming',
       peerName: nameOf(c.callerId === id ? c.calleeId : c.callerId),
       status: c.status,
+      emergency: c.emergency ?? false, // SOS 求助呼叫——用户抽屉的近期通话须能区分"未接的紧急求助"与日常协助（与通话列表同口径，此前抽屉漏=死字段）
       createdAt: c.createdAt,
     }))
     // 拉黑：拆成"我拉黑了谁 / 谁拉黑了我"两向。

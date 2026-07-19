@@ -206,6 +206,14 @@ describe('admin + reports', () => {
     expect(byId['call-sos'].emergency).toBe(true)
     expect(byId['call-abc'].emergency).toBe(false)
 
+    // 用户抽屉的近期通话同样带 emergency（此前抽屉的 recentCalls 漏 emergency=同款死字段，
+    // 管理员查某盲人档案看不出哪几通是 SOS 求助——频繁 SOS=真困境或滥用，正是须一眼看出的信号）。
+    const detail = await app.inject({ method: 'GET', url: `/api/admin/users/${blindId}`, headers: adminAuth })
+    expect(detail.statusCode).toBe(200)
+    const recentById = Object.fromEntries((detail.json().recentCalls as { callId: string; emergency: boolean }[]).map((c) => [c.callId, c]))
+    expect(recentById['call-sos'].emergency).toBe(true)
+    expect(recentById['call-abc'].emergency).toBe(false)
+
     // 非管理员被拒
     const helperToken = helper.json().token
     const forbidden = await app.inject({ method: 'GET', url: '/api/admin/links', headers: { authorization: `Bearer ${helperToken}` } })

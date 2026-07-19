@@ -73,7 +73,7 @@ const I18N = {
     recList: '录制记录', deleteRec: '删除', confirmDeleteRec: '确认彻底删除这条录制（含媒体文件，不可恢复）？', noRecordings: '暂无录制记录',
     playRec: '播放', recParticipants: '参与者', recDuration: '时长', recLocation: '地点', recViewLocation: '查看位置', recUserDeleted: '用户已删除·留存中', recNoMedia: '媒体不可用', playFailed: '无法播放该录制', closeBtn: '关闭',
     evidence: '附带录制证据', viewEvidence: '查看证据录制',
-    openReportsAgainst: '条待处理举报', repeatOffenderHint: '该用户被多次举报（待处理），建议优先合并研判',
+    openReportsAgainst: '条待处理举报', repeatOffenderHint: '该用户被多次举报（待处理），建议优先合并研判', repOpenUser: '查看该用户（其它举报 / 通话史 / 封禁状态），据此研判处置',
     idReview: '实名审核', idQueue: '待审核', idStatusAll: '全部', idStatusPending: '待审核', idStatusVerified: '已通过', idStatusRejected: '已拒绝',
     idApplicant: '申请人', idDocType: '证件类型', idSubmittedVia: '提交方式', idAttempt: '次数', idSubmittedAt: '提交时间', idDecidedAt: '审核时间', idDecidedBy: '审核人',
     idViaSelf: '本人', idViaAssisted: '亲友协助', noVerifications: '暂无实名申请',
@@ -214,7 +214,7 @@ const I18N = {
     recList: 'Recordings', deleteRec: 'Delete', confirmDeleteRec: 'Permanently delete this recording (incl. media file, cannot be undone)?', noRecordings: 'No recordings',
     playRec: 'Play', recParticipants: 'Participants', recDuration: 'Duration', recLocation: 'Location', recViewLocation: 'View location', recUserDeleted: 'User-deleted · retained', recNoMedia: 'Media unavailable', playFailed: "Couldn't play this recording", closeBtn: 'Close',
     evidence: 'Recording evidence', viewEvidence: 'View evidence recording',
-    openReportsAgainst: 'open reports', repeatOffenderHint: 'Multiple open reports against this user — prioritize a combined review',
+    openReportsAgainst: 'open reports', repeatOffenderHint: 'Multiple open reports against this user — prioritize a combined review', repOpenUser: 'Open user (other reports / call history / ban status) to inform your decision',
     idReview: 'Identity review', idQueue: 'Queue', idStatusAll: 'All', idStatusPending: 'Pending', idStatusVerified: 'Verified', idStatusRejected: 'Rejected',
     idApplicant: 'Applicant', idDocType: 'Document', idSubmittedVia: 'Via', idAttempt: 'Attempt', idSubmittedAt: 'Submitted', idDecidedAt: 'Decided', idDecidedBy: 'Reviewer',
     idViaSelf: 'Self', idViaAssisted: 'Assisted', noVerifications: 'No identity submissions',
@@ -1664,7 +1664,7 @@ function renderReports() {
     return `
     <div class="rep">
       <div class="body">
-        <div class="who">${esc(r.reporterName)} <span class="arrow">→</span> ${esc(r.targetName)}${repeat}</div>
+        <div class="who"><button type="button" class="emerg-user rep-user" data-uid="${esc(String(r.reporterId))}" title="${esc(t('repOpenUser'))}">${esc(r.reporterName)}</button> <span class="arrow">→</span> <button type="button" class="emerg-user rep-user" data-uid="${esc(String(r.targetUserId))}" title="${esc(t('repOpenUser'))}">${esc(r.targetName)}</button>${repeat}</div>
         <div class="reason">${esc(r.reason || '—')}</div>
         <div class="meta">${esc(fmtDate(r.createdAt))}${r.callId ? ' · call ' + esc(r.callId.slice(0, 8)) : ''}${r.evidenceRecordingId ? ' · ' + esc(t('evidence')) : ''}${r.status !== 'open' && r.resolvedByName ? ' · ' + esc(t('resolvedBy')) + ' ' + esc(r.resolvedByName) : ''}</div>
       </div>
@@ -1685,6 +1685,9 @@ function renderReports() {
     if (r) openModerateDialog(r);
   }));
   viewEl().querySelectorAll('[data-playev]').forEach((b) => b.addEventListener('click', () => playRecordingModal(b.dataset.playev)));
+  // 举报人/被举报人名直达用户抽屉：审核前需一键查看被举报人全貌（其它举报/通话史/封禁状态），
+  // 而非退回用户页手动搜（与首页应急行/旁观通话成员同款直达）。
+  viewEl().querySelectorAll('.rep-user').forEach((el) => el.addEventListener('click', () => { if (el.dataset.uid) openUserDrawer(el.dataset.uid); }));
 }
 
 // 审核处置模态：展示举报 → 必填理由 → 选择 忽略/警告/暂停/封禁 → 调 /moderate → 落审计并刷新。

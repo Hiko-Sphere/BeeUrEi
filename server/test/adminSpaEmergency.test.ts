@@ -8,12 +8,13 @@ import vm from 'node:vm'
 /// 不命中则显式抛错，绝不静默空测）；DOM 用**宽容自引用 stub 元素**（getElementById/querySelector 都回它，
 /// innerHTML 可读写）——渲染函数写完 innerHTML 后测试读回断言，事件绑定全 noop。
 interface SpaTest {
-  state: { lang: string; emergencies: unknown[]; calls: unknown[]; callsQuery: string; overview: unknown; token: string | null; bootCommit: string | null; updateReady: boolean }
+  state: { lang: string; emergencies: unknown[]; calls: unknown[]; callsQuery: string; overview: unknown; reports: unknown[]; token: string | null; bootCommit: string | null; updateReady: boolean }
   t: (k: string) => string
   emergencySection: () => string
   statCard: (k: string, v: unknown, sub?: string, cls?: string) => string
   renderCalls: () => void
   renderDashboard: () => void
+  renderReports: () => void
   pickWsToken: (turnResp: unknown) => string
   emergenciesCsvRows: (list: Record<string, unknown>[]) => (string | number)[][]
   emergencyTriageSort: (list: Record<string, unknown>[]) => Record<string, unknown>[]
@@ -29,7 +30,7 @@ function loadSpa(): SpaTest {
   let src = readFileSync(path, 'utf8')
   const anchor = '\nrender();'
   if (!src.includes(anchor)) throw new Error('app.js bootstrap anchor "render();" not found — update test')
-  src = src.replace(anchor, '\nglobalThis.__test = { state, t, emergencySection, statCard, renderCalls, renderDashboard, pickWsToken, emergenciesCsvRows, emergencyTriageSort, openReportRepeatCounts, reportsTriageSort, settledField, trackServerCommit, validateFilterTerms };\nrender();')
+  src = src.replace(anchor, '\nglobalThis.__test = { state, t, emergencySection, statCard, renderCalls, renderDashboard, renderReports, pickWsToken, emergenciesCsvRows, emergencyTriageSort, openReportRepeatCounts, reportsTriageSort, settledField, trackServerCommit, validateFilterTerms };\nrender();')
   const noop = (): void => {}
   const classList = { add: noop, remove: noop, toggle: noop, contains: () => false }
   // 自引用宽容元素：querySelector 返回自身（事件绑定链不断）、querySelectorAll 空数组、其余 noop。
@@ -491,5 +492,42 @@ describe('举报惯犯识别 openReportRepeatCounts / reportsTriageSort（连环
     // bad(count2) 两条浮顶且早的在前，once(count1) 沉底
     expect(out.map((r) => r.id)).toEqual(['b1', 'b2', 'x1'])
     expect(input.map((r) => r.id)).toEqual(['x1', 'b2', 'b1']) // 原数组不变
+  })
+})
+
+describe('管理面板 举报区 举报人/被举报人直达用户抽屉（审核前一键查看被举报人全貌）', () => {
+  const report = (o: Record<string, unknown> = {}) => ({
+    id: 'r1', reporterId: 'rep1', targetUserId: 'tgt1', reporterName: '举报人甲', targetName: '被举报乙',
+    reason: '辱骂', status: 'open', createdAt: 1_700_000_000_000, ...o,
+  })
+  it('举报人与被举报人都渲染成可点按钮，data-uid 指向各自用户 id（此前是纯文本，须退回用户页手搜）', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    spa.state.reports = [report()]
+    spa.renderReports()
+    const html = spa.view.innerHTML
+    expect(html).toMatch(/class="emerg-user rep-user"[^>]*data-uid="tgt1"/) // 被举报人 → 目标 id
+    expect(html).toMatch(/class="emerg-user rep-user"[^>]*data-uid="rep1"/) // 举报人 → 举报人 id
+    expect(html).toContain('被举报乙')
+    expect(html).toContain('举报人甲')
+    expect(html).toContain('其它举报') // 悬浮提示用审核语境文案（repOpenUser），非应急"联系补救"
+  })
+  it('已处置举报同样可直达（resolved 分区的行也带按钮，便于回溯查该用户）', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'en'
+    spa.state.reports = [report({ status: 'resolved', decision: 'banned' })]
+    spa.renderReports()
+    const html = spa.view.innerHTML
+    expect(html).toMatch(/class="emerg-user rep-user"[^>]*data-uid="tgt1"/)
+    expect(html).toContain('Open user') // en 语境提示
+  })
+  it('id 做输出编码：畸形 targetUserId 的引号被 esc 中和，无法破出 data-uid 属性', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    spa.state.reports = [report({ targetUserId: '"><b>x' })]
+    spa.renderReports()
+    const html = spa.view.innerHTML
+    expect(html).not.toContain('data-uid=""><b>x') // 未破出属性
+    expect(html).toContain('&quot;&gt;&lt;b&gt;x') // 已被 HTML 实体编码中和
   })
 })

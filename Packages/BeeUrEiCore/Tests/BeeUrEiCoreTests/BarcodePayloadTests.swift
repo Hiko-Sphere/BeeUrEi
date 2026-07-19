@@ -152,9 +152,16 @@ final class BarcodePayloadTests: XCTestCase {
         // 裸 VEVENT + 纯日期 DTSTART（无时间）。
         XCTAssertEqual(BarcodePayload.classify("BEGIN:VEVENT\nSUMMARY:Meeting\nDTSTART:20260720\nEND:VEVENT"),
                        .calendarEvent(title: "Meeting", start: "2026-07-20"))
-        // DTSTART 带 TZID 参数：值在**首个冒号后**（参数不干扰）。
+        // DTSTART 带 TZID 具名时区：值在首个冒号后，且**标出时区**（否则盲人把 09:00 纽约时误当本地 9 点）。
+        // 斜杠/下划线转空格更好念：America/New_York → "America New York"。
         XCTAssertEqual(BarcodePayload.classify("BEGIN:VEVENT\nDTSTART;TZID=America/New_York:20260720T090000\nSUMMARY:Call\nEND:VEVENT"),
-                       .calendarEvent(title: "Call", start: "2026-07-20 09:00"))
+                       .calendarEvent(title: "Call", start: "2026-07-20 09:00 America New York"))
+        // 多参数（VALUE=DATE-TIME;TZID=...）仍正确取到 TZID。
+        XCTAssertEqual(BarcodePayload.classify("BEGIN:VEVENT\nDTSTART;VALUE=DATE-TIME;TZID=Asia/Shanghai:20260720T193000\nSUMMARY:晚宴\nEND:VEVENT"),
+                       .calendarEvent(title: "晚宴", start: "2026-07-20 19:30 Asia Shanghai"))
+        // TZID 但**纯日期**（无时间）：不标时区（Z/TZID 仅对时刻有意义）。
+        XCTAssertEqual(BarcodePayload.classify("BEGIN:VEVENT\nDTSTART;TZID=Asia/Shanghai:20260720\nSUMMARY:全天\nEND:VEVENT"),
+                       .calendarEvent(title: "全天", start: "2026-07-20"))
         // SUMMARY 转义 \, → , 。
         XCTAssertEqual(BarcodePayload.classify("BEGIN:VEVENT\nSUMMARY:Product\\, Launch\nEND:VEVENT"),
                        .calendarEvent(title: "Product, Launch", start: nil))

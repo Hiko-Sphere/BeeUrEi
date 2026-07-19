@@ -155,7 +155,7 @@ public enum BarcodePayload {
             let value = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
             guard !value.isEmpty else { continue }
             if key == "SUMMARY", title == nil { title = unescapeICal(value) }
-            else if key == "DTSTART", start == nil { start = formatICalDate(value) }
+            else if key == "DTSTART", start == nil { start = formatICalDate(value, tzid: tzidParam(line[line.startIndex..<colon])) }
         }
         return (title, start)
     }
@@ -175,7 +175,20 @@ public enum BarcodePayload {
     }
 
     /// iCal DTSTART 值 → 可听日期。识别 `YYYYMMDD` 与 `YYYYMMDDTHHMMSS[Z]`（取到分钟）；其余原样返回（不臆造）。
-    private static func formatICalDate(_ v: String) -> String {
+    /// 从 iCal 属性的**参数区**（属性名与冒号之间、`;` 分隔，如 `DTSTART;VALUE=DATE-TIME;TZID=America/New_York`）
+    /// 取 TZID 值。无则 nil。参数名大小写不敏感；跳过属性名本身（dropFirst）。
+    static func tzidParam(_ keyPart: Substring) -> String? {
+        for p in keyPart.split(separator: ";").dropFirst() {
+            let kv = p.split(separator: "=", maxSplits: 1)
+            if kv.count == 2, kv[0].trimmingCharacters(in: .whitespaces).uppercased() == "TZID" {
+                let tz = kv[1].trimmingCharacters(in: .whitespaces)
+                if !tz.isEmpty { return tz }
+            }
+        }
+        return nil
+    }
+
+    private static func formatICalDate(_ v: String, tzid: String? = nil) -> String {
         let digits = v.prefix { $0.isNumber }      // 前导数字（遇 T 停）
         guard digits.count >= 8 else { return v }   // 非 YYYYMMDD 形态 → 原样
         let y = digits.prefix(4), mo = digits.dropFirst(4).prefix(2), d = digits.dropFirst(6).prefix(2)
@@ -184,10 +197,14 @@ public enum BarcodePayload {
             let time = v[v.index(after: tIdx)...].prefix { $0.isNumber }
             if time.count >= 4 {
                 out += " \(time.prefix(2)):\(time.dropFirst(2).prefix(2))"
-                // DTSTART 以 Z 结尾 = UTC（世界时）：如实标出，否则盲人把 UTC 时刻误当本地时间（如 14:00Z 在北京实为 22:00
-                // 却听成"下午2点"、错过或错时赴约）。与"不做时区换算、请核对"一致——只如实标 UTC、不替用户换算；Z 本就是印在
-                // 码里的字面信息，标出比丢弃更faithful。仅有时间时才标（纯日期无时区语义）。
+                // 时区如实标出（否则盲人把非本地时刻误当本地、赴错约）；只标、不替用户换算，与"请核对"一致。仅有时间时才标。
+                // Z=世界时优先（Z 与 TZID 互斥：UTC 值不带 TZID 参数）；否则用 TZID 具名时区（斜杠/下划线转空格更好念，
+                // 如 America/New_York→"America New York"；截 40 字防超长脏 TZID 刷屏）。本地/浮动时间（无 Z 无 TZID）不标。
                 if v.uppercased().hasSuffix("Z") { out += " UTC" }
+                else if let tz = tzid, !tz.isEmpty {
+                    let clean = tz.replacingOccurrences(of: "/", with: " ").replacingOccurrences(of: "_", with: " ")
+                    out += " " + String(clean.prefix(40))
+                }
             }
         }
         return out

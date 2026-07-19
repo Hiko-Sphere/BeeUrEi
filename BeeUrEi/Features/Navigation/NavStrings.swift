@@ -221,6 +221,13 @@ enum NavStrings {
     static func compassRestored(_ l: Language) -> String {
         l == .zh ? "指南针已恢复，方向提示继续。" : "Compass restored — direction cues resumed."
     }
+    static func gpsSignalWeak(_ l: Language) -> String {
+        l == .zh ? "定位信号弱，方向提示暂停。请留在原地稍等，信号恢复后我会继续引导。"
+                 : "Weak location signal — direction cues paused. Please stay where you are; I'll resume once the signal recovers."
+    }
+    static func gpsSignalRestored(_ l: Language) -> String {
+        l == .zh ? "定位已恢复，继续引导。" : "Location restored — resuming guidance."
+    }
 
     // MARK: 沿途 callout
 

@@ -77,6 +77,7 @@ final class NavigationViewModel {
     @ObservationIgnored private var lastOffRouteAnnounce: TimeInterval = 0
     @ObservationIgnored private var lastHeadingTime: TimeInterval = 0   // 最近一次可信航向的时刻(单调钟)；陈旧则抑制信标（见审查 #4）
     @ObservationIgnored private var compassGate = CompassAnnounceGate()  // 罗盘持续不可信/恢复时**语音**告知（盲人看不到系统「图-8」校准 UI）
+    @ObservationIgnored private var gpsSignalGate = GpsSignalAnnounceGate()  // GPS 信号持续弱/恢复时**语音**告知（信标静默停时盲人看不到精度、分不清「到了/卡死/信号弱」）
     @ObservationIgnored private var waypointAdvance = WaypointAdvance() // "越过波谷"几何推进判定（核心，已测；见回归 #1/#2）
     @ObservationIgnored private var remainingAnnouncer = RemainingDistanceAnnouncer() // 剩余里程碑播报（核心，已测）
     @ObservationIgnored private var offRouteStreak = 0                  // 连续判定偏航的帧数，需≥2 抗单帧抖动（见审查 #3）
@@ -156,6 +157,7 @@ final class NavigationViewModel {
         service.onAuthDenied = { [weak self] in self?.handleLocationDenied() }
         service.onReducedAccuracy = { [weak self] in self?.handleReducedAccuracy() }
         announcedReducedAccuracy = false // 每次导航重新判定精确位置
+        gpsSignalGate = GpsSignalAnnounceGate() // 每次导航重置信号播报态，避免上次导航的"弱"态残留致本次开局平白播"已恢复"
         service.requestAuthAndStart()
     }
 
@@ -197,6 +199,14 @@ final class NavigationViewModel {
             return (g.lat, g.lon)
         }()
         let level = gate.level(horizontalAccuracyMeters: loc.horizontalAccuracy)
+
+        // 定位信号持续弱→恢复时**语音**告知：level==.none 会把信标/偏航/剩余里程全部静默停掉，盲人看不到精度、
+        // 分不清是"到了""卡死"还是"信号弱"，可能误以为只是暂时没提示而继续盲走。去抖同罗盘（GpsSignalAnnounceGate，已测）。
+        switch gpsSignalGate.update(usable: level != .none, at: now) {
+        case .weak:     speak(NavStrings.gpsSignalWeak(lang))     // 信标已静默——告知为何停 + 请留在原地稍候
+        case .restored: speak(NavStrings.gpsSignalRestored(lang))
+        case .none:     break
+        }
 
         // 偏航检测 → 重新规划（核心 OffRouteDetector，已测）。
         // 安全门控：仅在**精度可信**(level != .none)且有真实折线(>=2 点)时才判定偏航，否则低精度抖动会反复
@@ -701,6 +711,7 @@ final class NavigationViewModel {
         service.onAuthDenied = { [weak self] in self?.handleLocationDenied() }
         service.onReducedAccuracy = { [weak self] in self?.handleReducedAccuracy() }
         announcedReducedAccuracy = false // 每次导航重新判定精确位置
+        gpsSignalGate = GpsSignalAnnounceGate() // 每次导航重置信号播报态，避免上次导航的"弱"态残留致本次开局平白播"已恢复"
         service.requestAuthAndStart()
     }
 
@@ -760,6 +771,7 @@ final class NavigationViewModel {
         service.onAuthDenied = { [weak self] in self?.handleLocationDenied() }
         service.onReducedAccuracy = { [weak self] in self?.handleReducedAccuracy() }
         announcedReducedAccuracy = false // 每次导航重新判定精确位置
+        gpsSignalGate = GpsSignalAnnounceGate() // 每次导航重置信号播报态，避免上次导航的"弱"态残留致本次开局平白播"已恢复"
         service.requestAuthAndStart()
     }
 
@@ -826,6 +838,7 @@ final class NavigationViewModel {
         service.onAuthDenied = { [weak self] in self?.handleLocationDenied() }
         service.onReducedAccuracy = { [weak self] in self?.handleReducedAccuracy() }
         announcedReducedAccuracy = false // 每次导航重新判定精确位置
+        gpsSignalGate = GpsSignalAnnounceGate() // 每次导航重置信号播报态，避免上次导航的"弱"态残留致本次开局平白播"已恢复"
         service.requestAuthAndStart()
     }
 

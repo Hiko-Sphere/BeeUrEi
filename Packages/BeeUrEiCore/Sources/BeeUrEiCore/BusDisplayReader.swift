@@ -45,13 +45,18 @@ public enum BusDisplayReader {
             // 站台上的盲人被告知"车到了"而其实还有 5 分钟，可能提前迈向路缘（安全攸关）。同本文件 min⊂Mint、
             // 站⊂站台 的整词门控口径。lower 已小写，正则大小写无碍。
             let hasArriveVerb = lower.range(of: "arriv(?!al)", options: .regularExpression) != nil
+            // "Due"（英式站牌到站状态词，车已到站）算即将到站；但 "due in N min" 是**倒计时**（还有 N 分钟到），
+            // 不能误当"车已到"压掉真实的"N 分钟"读数——否则站台上的盲人被告知"车到了"而其实还有几分钟，
+            // 可能提前迈向路缘（安全攸关，同 arriv(?!al) 防名词、"到站"防名词头的口径）。
+            // \bdue\b(?!\s+in\b)：只认独立/状态词 "Due"（含 "bus due"），排除 "due in ..."。lower 已小写。
+            let hasDueNow = lower.range(of: "\\bdue\\b(?!\\s+in\\b)", options: .regularExpression) != nil
             // 中文即将到站：即将 / 进站 / **已到站**（车已抵达）。"已到站"补齐与英文动词 arrived 对称的"已抵达"信号——
             // 此前中文只认"即将/进站"，漏了直白的"已到站"。**只收带"已"的形式**：裸"到站"是名词歧义
             // （"距到站还有3分钟"/"到站时间"里 到站=名词，误判会把"还有3分钟"压成假"车到了"、让盲人提前迈向路缘，安全攸关），
             // 而"已到站"里"已"恒为完成体动词标记、不构成名词头（无"已到站时间"这类词），故高精度零误报。
             // 繁体变体（台港澳/进口牌，OCRLanguagePolicy 已加 zh-Hant，Vision 会如实产出繁体字）：即將(將≠将)、
             // 進站(進≠进) 与简体不同码点，不补则繁体 LED"即將進站"匹配不到、当地盲人漏判到站。已到站(已到站简繁同形)已覆盖。
-            if t.contains("即将") || t.contains("即將") || t.contains("进站") || t.contains("進站") || t.contains("已到站") || hasArriveVerb || lower.contains("approach") || lower.contains(" due") || lower == "due" {
+            if t.contains("即将") || t.contains("即將") || t.contains("进站") || t.contains("進站") || t.contains("已到站") || hasArriveVerb || lower.contains("approach") || hasDueNow {
                 imminent = true
             }
             if minutes == nil, let n = firstNumber(minutesRegexes, in: lower) { minutes = n }

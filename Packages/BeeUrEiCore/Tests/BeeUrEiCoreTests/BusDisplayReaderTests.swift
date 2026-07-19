@@ -139,6 +139,18 @@ final class BusDisplayReaderTests: XCTestCase {
         XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["Approaching"], language: .en), "arriving now")
     }
 
+    func testDueStatusVsDueInCountdown() {
+        // "Due"（英式站牌到站状态词）= 车已到站 → 即将到站。
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["Due"], language: .en), "arriving now")
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["Bus due"], language: .en), "arriving now")
+        // 回归：**"due in N min" 是倒计时**（还有 N 分钟到），绝不能被 " due" 子串误当"车已到"而压掉
+        // 真实的 "N 分钟"读数——否则站台盲人被告知"车到了"却实际还有几分钟，可能提前迈向路缘（安全攸关）。
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["Bus due in 3 min"], language: .en), "about 3 min")
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["Due in 5 mins"], language: .en), "about 5 min")
+        // "due in N stops" 同理不被误判即将。
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["Due in 2 stops"], language: .en), "2 stops away")
+    }
+
     func testChineseAlreadyArrivedIsImminent() {
         // 中文"已到站"（车已抵达）= 即将到站——补齐与英文动词 arrived 对称的信号（此前只认"即将/进站"）。
         XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["103路", "已到站"], language: .zh), "即将到站")

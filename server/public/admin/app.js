@@ -173,6 +173,8 @@ const I18N = {
       'user.clearPasskeys': '清除 Passkey', 'user.forceLogout': '强制下线', 'report.resolve': '处理举报',
       'report.dismiss': '审核·忽略', 'report.warn': '审核·警告', 'report.suspend': '审核·暂停', 'report.ban': '审核·封禁',
       'config.update': '修改全站配置', 'user.edit': '编辑资料', 'user.resetPassword': '重设密码', 'user.delete': '删除用户', 'user.features': '功能覆盖', 'user.export': '导出数据', 'db.backup': '数据库备份',
+      // 隐私敏感动作（旁观通话 / 披露实名 / 查看·删除录音）尤须在审计日志清晰可读——此前落原始码。
+      'call.observe': '旁观通话', 'kyc.view': '实名·查看姓名', 'kyc.approve': '实名·通过', 'kyc.reject': '实名·驳回', 'kyc.revoke': '实名·撤销', 'kyc.hold': '实名·暂挂开关', 'mail.test': '测试邮件', 'recording.view': '查看录音', 'recording.delete': '删除录音',
     },
     roles: { blind: '视障用户', helper: '协助者', family: '亲友', admin: '管理员', developer: '开发者' },
     callStatus: { answered: '已接通', declined: '已拒绝', missed: '未接', ended: '已结束', ongoing: '进行中', ringing: '振铃中' },
@@ -315,6 +317,8 @@ const I18N = {
       'user.clearPasskeys': 'Clear passkeys', 'user.forceLogout': 'Force sign-out', 'report.resolve': 'Resolve report',
       'report.dismiss': 'Moderate · dismiss', 'report.warn': 'Moderate · warn', 'report.suspend': 'Moderate · suspend', 'report.ban': 'Moderate · ban',
       'config.update': 'Update site config', 'user.edit': 'Edit profile', 'user.resetPassword': 'Reset password', 'user.delete': 'Delete user', 'user.features': 'Feature override', 'user.export': 'Export data', 'db.backup': 'Database backup',
+      // Privacy-sensitive actions (observe call / disclose real name / view·delete recording) must read clearly in the audit log — previously raw codes.
+      'call.observe': 'Observe call', 'kyc.view': 'KYC · view name', 'kyc.approve': 'KYC · approve', 'kyc.reject': 'KYC · reject', 'kyc.revoke': 'KYC · revoke', 'kyc.hold': 'KYC · hold toggle', 'mail.test': 'Test email', 'recording.view': 'View recording', 'recording.delete': 'Delete recording',
     },
     roles: { blind: 'Blind / low-vision', helper: 'Helper', family: 'Family', admin: 'Admin', developer: 'Developer' },
     callStatus: { answered: 'Answered', declined: 'Declined', missed: 'Missed', ended: 'Ended', ongoing: 'Ongoing', ringing: 'Ringing' },

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type NotificationInfo } from '../../lib/api'
 import { pickUnreadEmergencies, playEmergencyChime, clearedSenderLatest, isClearedByLaterAllClear, ackEventNotifIds, respondingEventIds } from '../../lib/emergencyAlerts'
 import { emergencyLocInfo } from '../../lib/emergencyLoc'
+import { plural } from '../../lib/plural'
 import { appleMapsUrl, appleMapsDirectionsUrl } from '../../lib/location'
 import { useI18n } from '../../lib/i18n'
 import { Modal, fmtTime } from '../../components/ui'
@@ -63,7 +64,7 @@ export function EmergencyAlertModal({ alert, othersCount, beingHandled, onAck, o
           </div>
         )}
         {othersCount > 0 && (
-          <p className="text-xs text-faint">{t(`还有 ${othersCount} 条未读紧急告警，见通知页`, `${othersCount} more unread emergency alert(s) in Alerts`)}</p>
+          <p className="text-xs text-faint">{t(`还有 ${othersCount} 条未读紧急告警，见通知页`, `${othersCount} more unread emergency ${plural(othersCount, 'alert')} in Alerts`)}</p>
         )}
         {/* 施救辅助：按需查看遇险者的紧急医疗信息（授权在服务端，仅其紧急联系人可读）。
             hasMedical=1（发起人确有医疗信息）→ 醒目提示，避免施救者忽略。 */}

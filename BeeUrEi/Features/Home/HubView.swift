@@ -1,6 +1,23 @@
 import SwiftUI
 import UIKit
 
+/// 「回家/去公司」保存地点解析（纯逻辑·可单测）：把 label（home/work）+ 已存地点列表，解析成"用哪个地址导航/规划"
+/// 或"未设置该地点→给清晰可行动提示"。步行 navigateToSaved 与公交 transitToSaved **共用**此解析——此前两处各写各的、
+/// 已漂移：公交侧"未设置"时退回按**字面词**"家"/"公司"规划，而 amap 找不到"家"这类概念词、只回confusing"找不到目的地"；
+/// 步行侧早已给清晰的"你还没设置家的地址，去设置里添加"。单点收口，杜绝再漂移（label 只可能 home/work，见 savedPlaceLabel）。
+enum SavedPlaceRouting {
+    enum Resolution: Equatable {
+        case address(String)      // 用此地址导航/规划公交
+        case notSet(isHome: Bool) // 未设置该地点 → 播 noHomeSet/noWorkSet（清晰可行动，绝不退回字面词让 amap 报"找不到目的地"）
+    }
+    static func resolve(label: String, places: [APIClient.SavedPlace]) -> Resolution {
+        if let p = places.first(where: { $0.label == label }), !p.address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return .address(p.address)
+        }
+        return .notSet(isHome: label == "home")
+    }
+}
+
 /// 视障首屏（全新 Hub）：**不再自动进入导盲/相机**。落地是一个平静的功能中枢——
 /// 大字高对比、超大带标签按钮、VoiceOver 优先；求助最突出且双指双击随时直达；
 /// 导盲/避障降级为「出行」区里一个显眼的入口，由用户显式进入（独立全屏 ObstacleModeView）。
@@ -498,9 +515,9 @@ struct HubView: View {
             // 「坐公交去公司/回家」：目的地是家/公司词时，用**保存的地址**规划（否则字面"公司"会命中随便一家公司/搜不到，
             // 与步行 navigateWork 同口径）；普通地名照常按名规划。语音直接朗读整段公交路线。
             if let label = VoiceCommandParser.savedPlaceLabel(forDestination: dest) {
-                transitToSaved(label: label, literalFallback: dest)
+                transitToSaved(label: label) // home/work → 用保存地址规划；未设置则清晰提示（不退回字面"家"/"公司"）
             } else {
-                transitPlanner.plan(to: dest)
+                transitPlanner.plan(to: dest) // 普通地名照常按名规划
             }
         case .goHome:
             AppRoute.shared.pendingNavAction = .backtrack
@@ -578,12 +595,13 @@ struct HubView: View {
         Task {
             let places = (try? await APIClient().savedPlaces(token: token)) ?? []
             await MainActor.run {
-                if let p = places.first(where: { $0.label == label }), !p.address.isEmpty {
+                switch SavedPlaceRouting.resolve(label: label, places: places) {
+                case .address(let addr):
                     speak(isHome ? HomeStrings.navigatingHome(lang) : HomeStrings.navigatingWork(lang))
-                    AppRoute.shared.pendingNavAction = .search(p.address)
+                    AppRoute.shared.pendingNavAction = .search(addr)
                     showNavigation = true
-                } else {
-                    speak(isHome ? HomeStrings.noHomeSet(lang) : HomeStrings.noWorkSet(lang))
+                case .notSet(let home):
+                    speak(home ? HomeStrings.noHomeSet(lang) : HomeStrings.noWorkSet(lang))
                 }
             }
         }
@@ -591,15 +609,18 @@ struct HubView: View {
 
     /// 「坐公交去公司/回家」：用**保存的**家/公司地址规划公交（非字面"公司"，避免命中随便一家公司/搜不到）。
     /// 没存该地点/未登录 → 退回按字面词规划（至少试一次；对"家"这类必失败的字面词由 transit 端点如实报"找不到目的地"）。
-    private func transitToSaved(label: String, literalFallback: String) {
-        guard let token = session.token else { transitPlanner.plan(to: literalFallback); return }
+    /// 「坐公交回家/去公司」：用**保存的**家/公司地址规划公交（label 只可能 home/work，见 savedPlaceLabel）。与步行
+    /// navigateToSaved **共用** SavedPlaceRouting.resolve——未登录/未设地址给清晰可行动提示，**绝不退回字面词"家"**
+    /// （amap 找不到概念词、只回confusing"找不到目的地"；此前公交侧正是这么漂移的坑）。
+    private func transitToSaved(label: String) {
+        func speak(_ t: String) { SpeechHub.shared.speak(t, channel: .query, voiceCode: lang.voiceCode) }
+        guard let token = session.token else { speak(HomeStrings.voiceNeedLogin(lang)); return }
         Task {
             let places = (try? await APIClient().savedPlaces(token: token)) ?? []
             await MainActor.run {
-                if let p = places.first(where: { $0.label == label }), !p.address.isEmpty {
-                    transitPlanner.plan(to: p.address) // 用保存的地址（真实地名）规划公交
-                } else {
-                    transitPlanner.plan(to: literalFallback) // 没存则退回字面词
+                switch SavedPlaceRouting.resolve(label: label, places: places) {
+                case .address(let addr): transitPlanner.plan(to: addr) // 用保存的地址（真实地名）规划公交
+                case .notSet(let home): speak(home ? HomeStrings.noHomeSet(lang) : HomeStrings.noWorkSet(lang))
                 }
             }
         }

@@ -205,16 +205,25 @@ final class ServerErrorMappingTests: XCTestCase {
         guard let warn = MedicalInfoStrings.stalenessWarning(updatedAtMs: now - 400 * dayMs, nowMs: now, .zh) else {
             XCTFail("400 天未更新应给陈旧提醒"); return
         }
-        XCTAssertTrue(warn.contains("建议复核") && warn.contains("13个月")) // 400/30≈13 个月
-        // 两年前 → 约 24 个月。
-        XCTAssertEqual(MedicalInfoStrings.stalenessWarning(updatedAtMs: now - 730 * dayMs, nowMs: now, .zh)?.contains("24个月"), true)
+        XCTAssertTrue(warn.contains("建议复核") && warn.contains("13个月")) // 400/30≈13 个月（<2 年用月）
+        // ≥2 年改用"年"表述（"约36个月"难听清，"约3年"一听即知）。恰 2 年→"约2年"，不再"约24个月"。
+        XCTAssertEqual(MedicalInfoStrings.stalenessWarning(updatedAtMs: now - 730 * dayMs, nowMs: now, .zh)?.contains("约2年"), true)
+        XCTAssertEqual(MedicalInfoStrings.stalenessWarning(updatedAtMs: now - 730 * dayMs, nowMs: now, .zh)?.contains("个月"), false)
+        // 三年前 → "约3年"（而非"约36个月"）。
+        XCTAssertEqual(MedicalInfoStrings.stalenessWarning(updatedAtMs: now - 1095 * dayMs, nowMs: now, .zh)?.contains("约3年"), true)
+        // 临界回归：730 天差一天（729）仍用月（约24个月），不早跳"年"。
+        XCTAssertEqual(MedicalInfoStrings.stalenessWarning(updatedAtMs: now - 729 * dayMs, nowMs: now, .zh)?.contains("个月"), true)
         // 非有限（坏时间戳）→ nil，绝不崩/瞎报。
         XCTAssertNil(MedicalInfoStrings.stalenessWarning(updatedAtMs: .nan, nowMs: now, .zh))
-        // 英文分支不串中文。
+        // 英文分支不串中文（月与年两支都验）。
         guard let en = MedicalInfoStrings.stalenessWarning(updatedAtMs: now - 400 * dayMs, nowMs: now, .en) else {
             XCTFail("英文 400 天应给提醒"); return
         }
         XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
         XCTAssertTrue(en.lowercased().contains("review"))
+        // 英文 ≥2 年用 years（复数正确）。
+        let enYears = MedicalInfoStrings.stalenessWarning(updatedAtMs: now - 1095 * dayMs, nowMs: now, .en)
+        XCTAssertEqual(enYears?.contains("about 3 years"), true)
+        XCTAssertEqual(enYears?.lowercased().contains("month"), false)
     }
 }

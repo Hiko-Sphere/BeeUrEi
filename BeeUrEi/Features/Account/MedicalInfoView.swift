@@ -29,9 +29,18 @@ enum MedicalInfoStrings {
     static func stalenessWarning(updatedAtMs: Double, nowMs: Double, _ l: Language) -> String? {
         let days = (nowMs - updatedAtMs) / 86_400_000
         guard days.isFinite, days >= 365 else { return nil }
-        let months = max(12, Int(days / 30))
-        return l == .zh ? "医疗信息已约\(months)个月没更新了——用药或病史可能已变，建议复核一下，免得施救者拿到过时信息。"
-                        : "Your medical info hasn't been updated in about \(months) months — meds or conditions may have changed. Please review it so responders don't act on outdated info."
+        // ≥2 年改用"年"表述——"约36个月"/"约121个月"这种大月数盲人靠听极难换算，"约3年"/"约10年"一听即知有多旧
+        // （同 hoursMinutesPhrase 的可听度取向）；1~2 年仍用月（约13~24个月，够直观）。陈旧提醒越好懂越促成复核。
+        let age: String
+        if days >= 730 {
+            let years = Int(days / 365)
+            age = l == .zh ? "约\(years)年" : "about \(years) year\(years == 1 ? "" : "s")"
+        } else {
+            let months = max(12, Int(days / 30))
+            age = l == .zh ? "约\(months)个月" : "about \(months) month\(months == 1 ? "" : "s")"
+        }
+        return l == .zh ? "医疗信息已\(age)没更新了——用药或病史可能已变，建议复核一下，免得施救者拿到过时信息。"
+                        : "Your medical info hasn't been updated in \(age) — meds or conditions may have changed. Please review it so responders don't act on outdated info."
     }
 }
 

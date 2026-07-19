@@ -10,6 +10,10 @@ final class SavedRouteMatcherTests: XCTestCase {
         XCTAssertEqual(SavedRouteMatcher.match(spoken: "家到 菜场", names: ["家到菜场"]), 0)
         XCTAssertEqual(SavedRouteMatcher.match(spoken: "妈妈画的路", names: ["妈妈画路"]), 0)
         XCTAssertEqual(SavedRouteMatcher.match(spoken: "Home To Market", names: ["home to market"]), 0)
+        // 全角空格（U+3000，中文 IME/粘贴常混入）与制表符同样剥除——此前只剥 ASCII 空格会漏配。
+        XCTAssertEqual(SavedRouteMatcher.match(spoken: "家到菜场", names: ["家到\u{3000}菜场"]), 0)   // 存名含全角空格
+        XCTAssertEqual(SavedRouteMatcher.match(spoken: "家到\u{3000}菜场", names: ["家到菜场"]), 0)   // 说的含全角空格
+        XCTAssertEqual(SavedRouteMatcher.match(spoken: "家到\t菜场", names: ["家到菜场"]), 0)          // 制表符
     }
 
     func testUniqueContainmentBothDirections() {

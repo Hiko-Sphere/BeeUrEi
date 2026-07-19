@@ -6,8 +6,10 @@ import Foundation
 /// 也绝不猜错一条让盲人走错路——人工路线是安全路径，选错路线比选不中更危险）。
 public enum SavedRouteMatcher {
     static func normalize(_ s: String) -> String {
+        // 剥**所有**空白（全角空格 U+3000/制表/换行，非仅 ASCII 空格）——中文 IME 或粘贴常混入全角空格，
+        // 只剥 ASCII 空格会让"家到　菜场"(全角)配不上语音的"家到菜场"而漏配。剥空白只去噪、绝不制造误配（更安全）。
         s.lowercased()
-            .replacingOccurrences(of: " ", with: "")
+            .components(separatedBy: .whitespacesAndNewlines).joined()
             .replacingOccurrences(of: "的", with: "")
     }
 

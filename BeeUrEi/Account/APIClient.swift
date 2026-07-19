@@ -1154,10 +1154,14 @@ struct APIClient {
     struct VqaConversation: Equatable {
         private(set) var turns: [VqaTurn] = []
         private(set) var key: String?
+        /// 服务端 history 上限（vision 路由 `z.array(...).max(8)`）：追问历史至多带这些轮。**与 web 同值**。
+        static let maxHistory = 8
         /// 开始一轮提问：换了图片(key 变)则先重置对话；返回应作为 history 发送的已有轮（空数组=单轮，调用方转 nil）。
+        /// 只带**最近 maxHistory 轮**——否则第 9+ 次追问会带 >8 轮历史被服务端 400 拒、连续追问直接断（对标 Be My AI
+        /// 深度追问，盲人正靠追问逐点问清一张图）。滑动窗口保最近上下文，追问永不因历史过长而失败。
         mutating func historyForNewQuestion(imageKey: String) -> [VqaTurn] {
             if key != imageKey { turns = []; key = imageKey }
-            return turns
+            return Array(turns.suffix(Self.maxHistory))
         }
         /// 上游**成功**后记录一轮（只记成功轮，失败不入对话）：泛描述(question 空)记 defaultQuestion 供后续追问上下文。
         mutating func record(question: String?, answer: String, defaultQuestion: String) {

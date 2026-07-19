@@ -52,6 +52,18 @@ final class AiDescribeTests: XCTestCase {
         XCTAssertEqual(c2.historyForNewQuestion(imageKey: "X"), [APIClient.VqaTurn(q: "请描述这张照片", a: "答")])
     }
 
+    /// 深度追问历史滑动窗口：历史最多带 maxHistory(8) 轮——否则第 9+ 次追问带 >8 轮被服务端 400 拒、连续追问断。
+    func testVqaHistoryCappedToMaxForServerLimit() {
+        var convo = APIClient.VqaConversation()
+        _ = convo.historyForNewQuestion(imageKey: "A")
+        // 记 12 轮（同一张图深度追问）。
+        for i in 1...12 { convo.record(question: "q\(i)", answer: "a\(i)", defaultQuestion: "请描述这张照片") }
+        let h = convo.historyForNewQuestion(imageKey: "A")
+        XCTAssertEqual(h.count, APIClient.VqaConversation.maxHistory)          // 至多 8 轮，永不超服务端上限
+        XCTAssertEqual(h.first, APIClient.VqaTurn(q: "q5", a: "a5"))            // 保留**最近** 8 轮（q5…q12），丢最旧
+        XCTAssertEqual(h.last, APIClient.VqaTurn(q: "q12", a: "a12"))
+    }
+
     func testEnglishHasNoChinese() {
         var samples = [ChatStrings.describePhoto(.en), ChatStrings.describingPhoto(.en),
                        ChatStrings.quotaRemainingNote(remaining: 1, .en)!,

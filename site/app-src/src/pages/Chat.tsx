@@ -1199,7 +1199,8 @@ function ImageMessage({ src, t }: { src: string; t: (z: string, e: string) => st
     setDescribing(true)
     try {
       // 泛描述轮的 q 记为默认问句送服务端（供后续追问有上下文），显示时仍按 null 处理不显问句。
-      const history = turns.map((tn) => ({ q: tn.q ?? t('请描述这张照片', 'Describe this photo.'), a: tn.a }))
+      // 只带**最近 8 轮**（服务端 history 上限 max(8)，与 iOS VqaConversation.maxHistory 同值）——否则第 9+ 次追问带 >8 轮被 400 拒、追问断。
+      const history = turns.slice(-8).map((tn) => ({ q: tn.q ?? t('请描述这张照片', 'Describe this photo.'), a: tn.a }))
       const r = await api.visionDescribe(src, m[1] as 'image/jpeg' | 'image/png' | 'image/webp', lang, q, history.length ? history : undefined)
       setTurns((prev) => [...prev, { q: q?.trim() ? q.trim() : null, a: r.text }])
       setQuestion('')

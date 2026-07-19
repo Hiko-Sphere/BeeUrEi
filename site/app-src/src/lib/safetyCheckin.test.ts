@@ -9,6 +9,11 @@ describe('safety check-in 剩余时间/时长格式（与 iOS SafetyTimerFormat 
     expect(remainingText(1800, 'zh')).toBe('还有约 30 分钟')
     expect(remainingText(5400, 'zh')).toBe('还有约 1 小时 30 分钟')
     expect(remainingText(3660, 'en')).toContain('1h')
+    // 整点小时不拖"0 分钟"（"2 小时"而非"2 小时 0 分钟"；与 durationName 同口径）——24h 窗口每小时会经过整点。
+    expect(remainingText(7200, 'zh')).toBe('还有约 2 小时')
+    expect(remainingText(3600, 'zh')).toBe('还有约 1 小时')
+    expect(remainingText(7200, 'en')).toBe('About 2h left')
+    expect(remainingText(24 * 3600, 'zh')).toBe('还有约 24 小时') // 最长报到窗口
   })
   it('负值/0 夹到 0，不产生负数或崩', () => {
     expect(remainingText(-50, 'zh')).toBe('还有约 0 分钟')

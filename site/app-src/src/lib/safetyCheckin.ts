@@ -3,8 +3,14 @@ export function remainingText(sec: number, lang: 'zh' | 'en'): string {
   const s = Math.max(0, Math.floor(sec))
   const h = Math.floor(s / 3600)
   const m = Math.floor((s % 3600) / 60)
-  if (lang === 'zh') return h > 0 ? `还有约 ${h} 小时 ${m} 分钟` : `还有约 ${m} 分钟`
-  return h > 0 ? `About ${h}h ${m}m left` : `About ${m} min left`
+  // 整点小时不拖"0 分钟"（"2 小时"而非"2 小时 0 分钟"——与 durationName / iOS hoursMinutesPhrase 同口径；
+  // 报到窗口最长 24h，倒计时每小时会经过一次整点分钟，"X 小时 0 分钟"读屏冗余）。
+  if (lang === 'zh') {
+    if (h > 0) return m > 0 ? `还有约 ${h} 小时 ${m} 分钟` : `还有约 ${h} 小时`
+    return `还有约 ${m} 分钟`
+  }
+  if (h > 0) return m > 0 ? `About ${h}h ${m}m left` : `About ${h}h left`
+  return `About ${m} min left`
 }
 
 /// 安全报到实时剩余秒数：从绝对到期时刻 dueAt 减当前时刻，取整、floored 到 0。用于倒计时**每秒递减显示**——

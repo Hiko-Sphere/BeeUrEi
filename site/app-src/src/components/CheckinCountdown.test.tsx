@@ -11,7 +11,7 @@ describe('CheckinCountdown 安全报到实时倒计时', () => {
     const base = 1_700_000_000_000
     vi.setSystemTime(base)
     render(<CheckinCountdown dueAt={base + 60 * 60_000} lang="zh" />) // 到期在 60 分钟后
-    expect(screen.getByText('还有约 1 小时 0 分钟')).toBeInTheDocument()
+    expect(screen.getByText('还有约 1 小时')).toBeInTheDocument() // 整点小时不拖"0 分钟"（remainingText 修正）
     // 推进 30 分钟（interval 每秒触发 setNowMs）：应递减到约 30 分钟，而非冻结在 60。
     act(() => { vi.advanceTimersByTime(30 * 60_000) })
     expect(screen.getByText('还有约 30 分钟')).toBeInTheDocument()

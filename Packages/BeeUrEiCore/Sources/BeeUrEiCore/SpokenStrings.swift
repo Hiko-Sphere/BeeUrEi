@@ -47,6 +47,26 @@ public enum SpokenStrings {
         return Int(min(max(v, 0), 1_000_000).rounded())
     }
 
+    /// 时长可读短语（分钟数→"X分钟"/"X小时"/"X小时Y分钟"；英文完整词 "X minutes"/"X hour(s)"/"X hour(s) Y minute(s)"）。
+    /// ≥60 分钟拆小时+分钟：长时段（过城公交/高铁常 >60 分钟）裸报分钟最难靠听建立时长概念——"1 小时 30 分钟"远比
+    /// "90 分钟"好懂（盲人靠听，整点更易建立时长概念）。英文用**完整单位词**+单复数正确（"1 minute"非"1 minutes"），
+    /// 保证 TTS 清晰（同 farDistance 全词口径，缩写"min"可能被念成字母）。<60 分钟：zh 逐字"X分钟"、en "X minutes"。
+    /// 负数按 0 兜底；纯逻辑可单测。
+    public static func hoursMinutesPhrase(minutes: Int, _ lang: Language) -> String {
+        let m = max(0, minutes)
+        let h = m / 60, mm = m % 60
+        switch lang {
+        case .zh:
+            if m < 60 { return "\(m)分钟" }
+            return mm == 0 ? "\(h)小时" : "\(h)小时\(mm)分钟"
+        case .en:
+            func mins(_ n: Int) -> String { "\(n) minute\(n == 1 ? "" : "s")" }
+            if m < 60 { return mins(m) }
+            let hrs = "\(h) hour\(h == 1 ? "" : "s")"
+            return mm == 0 ? hrs : "\(hrs) \(mins(mm))"
+        }
+    }
+
     /// 详细距离：非法/退化距离退化为「非常近」。
     public static func meters(_ d: Double, _ lang: Language) -> String {
         guard d.isFinite, d > 0 else { return veryClose(lang) }

@@ -73,14 +73,16 @@ public enum TransitPlanFormatter {
         // 预计到达时刻（与步行导航 arrivalClockString 同措辞"预计X到达"/"arriving around X"）：拼在时长/步行/换乘/票价之后。
         let arrivalStr = clean(arrivalClock)
         let header: String
+        // 总时长 ≥60 分钟拆"X小时Y分钟"（过城公交/高铁常 >60 分钟，裸报"90分钟"最难靠听建立时长概念）。<60 逐字不变。
+        let durationPhrase = SpokenStrings.hoursMinutesPhrase(minutes: mins, language)
         if zh {
-            var h = "全程约\(mins)分钟，步行共\(walkStr)"
+            var h = "全程约\(durationPhrase)，步行共\(walkStr)"
             if transfers > 0 { h += "，需换乘\(transfers)次" }
             if let fs = fareStr { h += "，\(fs)" }
             if let ac = arrivalStr { h += "，预计\(ac)到达" }
             header = h + "。"
         } else {
-            var h = "About \(mins) minutes total, \(walkStr) of walking"
+            var h = "About \(durationPhrase) total, \(walkStr) of walking"
             if transfers > 0 { h += ", \(transfers) transfer\(transfers == 1 ? "" : "s")" }
             if let fs = fareStr { h += ", \(fs)" }
             if let ac = arrivalStr { h += ", arriving around \(ac)" }
@@ -173,6 +175,8 @@ public enum TransitPlanFormatter {
     private static func rideDurationSuffix(_ seconds: Double, zh: Bool) -> String {
         guard seconds.isFinite, seconds > 0 else { return "" }
         let mins = max(1, SpokenStrings.safeRoundedInt(seconds / 60))
-        return zh ? "，约\(mins)分钟" : ", about \(mins) min"
+        // 与总时长同口径：≥60 分钟拆"X小时Y分钟"（高铁段常 >60 分钟，单段也须好懂），英文完整词（"min"→"minutes"更 TTS 清晰）。
+        let phrase = SpokenStrings.hoursMinutesPhrase(minutes: mins, zh ? .zh : .en)
+        return zh ? "，约\(phrase)" : ", about \(phrase)"
     }
 }

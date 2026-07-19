@@ -106,4 +106,22 @@ final class SpokenStringsTests: XCTestCase {
         XCTAssertEqual(SpokenStrings.cashAmount(fen: 0, .zh), "0 元")
         XCTAssertEqual(SpokenStrings.cashAmount(fen: 0, .en), "0 yuan")
     }
+
+    func testHoursMinutesPhrase() {
+        // <60：逐字"X分钟"/"X minutes"（既有短时长读法不变）。
+        XCTAssertEqual(SpokenStrings.hoursMinutesPhrase(minutes: 45, .zh), "45分钟")
+        XCTAssertEqual(SpokenStrings.hoursMinutesPhrase(minutes: 45, .en), "45 minutes")
+        XCTAssertEqual(SpokenStrings.hoursMinutesPhrase(minutes: 59, .zh), "59分钟")
+        // ≥60：拆"X小时Y分钟"（长时段靠听更好懂，"1小时30分钟"胜"90分钟"）。
+        XCTAssertEqual(SpokenStrings.hoursMinutesPhrase(minutes: 90, .zh), "1小时30分钟")
+        XCTAssertEqual(SpokenStrings.hoursMinutesPhrase(minutes: 90, .en), "1 hour 30 minutes")
+        // 整点小时不拖"0分钟"。
+        XCTAssertEqual(SpokenStrings.hoursMinutesPhrase(minutes: 60, .zh), "1小时")
+        XCTAssertEqual(SpokenStrings.hoursMinutesPhrase(minutes: 120, .en), "2 hours")
+        // 英文单复数正确：1 hour / 1 minute 单数，绝不"1 hours"/"1 minutes"（TTS 完整词更清晰）。
+        XCTAssertEqual(SpokenStrings.hoursMinutesPhrase(minutes: 61, .en), "1 hour 1 minute")
+        XCTAssertEqual(SpokenStrings.hoursMinutesPhrase(minutes: 1, .en), "1 minute")
+        // 负数按 0 兜底，不崩不产负值。
+        XCTAssertEqual(SpokenStrings.hoursMinutesPhrase(minutes: -5, .zh), "0分钟")
+    }
 }

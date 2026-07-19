@@ -37,7 +37,7 @@ final class TransitPlanFormatterTests: XCTestCase {
         let threeRides = TransitPlan(durationSeconds: 3600, walkingDistanceMeters: 200,
                                      legs: [ride(.subway, "1号线", "A", "B", 2), ride(.subway, "2号线", "B", "C", 3),
                                             ride(.bus, "5路", "C", "D", 4)])
-        XCTAssertTrue(TransitPlanFormatter.summary(threeRides, language: .en).hasPrefix("About 60 minutes total, 200 meters of walking, 2 transfers. "))
+        XCTAssertTrue(TransitPlanFormatter.summary(threeRides, language: .en).hasPrefix("About 1 hour total, 200 meters of walking, 2 transfers. ")) // 60 分钟→"1 hour"（≥60 拆小时）
         // 直达（单段乘车）不报"换乘0次"，也不出现换乘措辞。
         let direct = TransitPlan(durationSeconds: 600, walkingDistanceMeters: 100,
                                  legs: [ride(.bus, "300路", "甲", "乙", 4), walk(100)])
@@ -52,7 +52,7 @@ final class TransitPlanFormatterTests: XCTestCase {
                                legs: [ride(.bus, "300路", "甲", "乙", 4), ride(.railway, "G101次", "乙站", "丙站", 0),
                                       ride(.subway, "2号线", "丙", "丁", 3)])
         let out = TransitPlanFormatter.summary(plan, language: .zh)
-        XCTAssertTrue(out.hasPrefix("全程约60分钟，步行共200米，需换乘2次。"))
+        XCTAssertTrue(out.hasPrefix("全程约1小时，步行共200米，需换乘2次。")) // 60 分钟→"1小时"（≥60 拆小时）
         XCTAssertTrue(out.contains("乘坐300路"))       // 首段乘车：乘坐
         XCTAssertTrue(out.contains("换乘G101次"))       // 火车作为第二段乘车：换乘（修复前是"乘坐G101次"）
         XCTAssertTrue(out.contains("换乘2号线"))         // 第三段：换乘
@@ -74,7 +74,7 @@ final class TransitPlanFormatterTests: XCTestCase {
         let plan = TransitPlan(durationSeconds: 600, walkingDistanceMeters: 100,
                                legs: [ride(.bus, "300路", "甲站", "乙站", 4), walk(100)])
         let out = TransitPlanFormatter.summary(plan, language: .en)
-        XCTAssertEqual(out, "About 10 minutes total, 100 meters of walking. take 300路 from 甲站, ride 4 stops to 乙站, about 15 min, walk 100 meters to arrive.")
+        XCTAssertEqual(out, "About 10 minutes total, 100 meters of walking. take 300路 from 甲站, ride 4 stops to 乙站, about 15 minutes, walk 100 meters to arrive.") // per-leg 用完整词 minutes（"min"易被 TTS 误读）
     }
 
     func testImperialUnitFormatsWalkingDistances() {
@@ -246,13 +246,33 @@ final class TransitPlanFormatterTests: XCTestCase {
         XCTAssertTrue(out.hasPrefix("全程约1分钟"))
     }
 
+    func testLongDurationBrokenIntoHoursTotalAndPerLeg() {
+        // 过城行程 ≥60 分钟：总时长与逐段时长都拆"X小时Y分钟"——长时段裸报"90分钟"最难靠听建立时长概念
+        //（"1小时30分钟"远比"90分钟"好懂）。<60 分钟读法逐字不变（既有短程测试守卫）。
+        // 90 分钟高铁直达（单段≈全程）：header 与 leg 同口径，不再一处"1小时30分钟"一处"90分钟"自相矛盾。
+        let rail90 = TransitPlan(durationSeconds: 5400, walkingDistanceMeters: 100,
+                                 legs: [TransitLeg(kind: .railway, line: "G101次", fromStop: "北京南", toStop: "天津西",
+                                                   stops: 0, distanceMeters: 120000, durationSeconds: 5400)])
+        let zh = TransitPlanFormatter.summary(rail90, language: .zh)
+        XCTAssertTrue(zh.hasPrefix("全程约1小时30分钟，"), zh)   // 总时长
+        XCTAssertTrue(zh.contains("约1小时30分钟"), zh)          // 逐段时长同口径
+        let en = TransitPlanFormatter.summary(rail90, language: .en)
+        XCTAssertTrue(en.hasPrefix("About 1 hour 30 minutes total, "), en)
+        XCTAssertTrue(en.contains("about 1 hour 30 minutes"), en)
+        // 整小时不拖"0分钟"：120 分钟→"2小时"/"2 hours"。
+        let h2 = TransitPlan(durationSeconds: 7200, walkingDistanceMeters: 0,
+                             legs: [TransitLeg(kind: .railway, line: "D5", fromStop: "A", toStop: "B", stops: 0, distanceMeters: 100000, durationSeconds: 7200)])
+        XCTAssertTrue(TransitPlanFormatter.summary(h2, language: .zh).hasPrefix("全程约2小时，"))
+        XCTAssertTrue(TransitPlanFormatter.summary(h2, language: .en).hasPrefix("About 2 hours total, "))
+    }
+
     func testHugeFiniteValuesDoNotOverflowCrash() {
         // 巨大有限时长/距离（>Int.max）：原 Int() 溢出陷阱崩溃；safeRoundedInt 夹取到 1e6，不崩。
         let plan = TransitPlan(durationSeconds: 1e19, walkingDistanceMeters: 1e19,
                                legs: [TransitLeg(kind: .bus, line: "1路", fromStop: "甲", toStop: "乙", stops: 2,
                                                  distanceMeters: 1e19, durationSeconds: 1e19)])
         let out = TransitPlanFormatter.summary(plan, language: .zh)
-        XCTAssertTrue(out.contains("1000000")) // 夹取有界，无崩溃
+        XCTAssertTrue(out.contains("16666小时")) // 夹取有界（1e6 分钟经小时短语=16666小时40分钟），无崩溃
     }
 
     func testDecodesFromServerJSON() throws {

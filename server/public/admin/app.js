@@ -779,10 +779,10 @@ function emergencySection() {
 //   1 = 进行中（有人响应/尚未升级，正在处理或太新）；
 //   0 = 已报平安解除（最低，沉底）。与屏上红标(noReach/unanswered)口径一致。
 function emergencyTier(e) {
-  if (e.resolvedAt != null) return 0;
-  if (e.notified === 0) return 3;
-  if (e.ackedAt == null && e.escalatedAt != null) return 2;
-  return 1;
+  if (e.resolvedAt != null) return 0;             // 已解除 — 沉底（非待介入）
+  if (e.notified === 0) return 4;                 // 未触达任何人 — 最危急，运维最该立刻人工介入
+  if (e.ackedAt == null) return e.escalatedAt != null ? 3 : 2; // 无人响应：升级后仍无响应 > 尚未响应；都比"有人在处理"更需盯
+  return 1;                                       // 有人已响应(ack) — 有人在处理，相对可缓，浮于已解除之上、沉于未响应之下
 }
 // 分诊排序：先按层级降序（紧急在前），同层按时间新→旧。**不改导出/存储顺序**，只排屏显。
 function emergencyTriageSort(list) {

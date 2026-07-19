@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, APIError, type EmergencyReadiness } from '../lib/api'
 import { useI18n } from '../lib/i18n'
+import { plural, verbHaveHas } from '../lib/plural'
 import { Card, Button, useToast } from './ui'
 
 /// 应急就绪自检卡（Family 页）：出事**之前**先确认紧急联系人能否即时收到告警——防"安全网其实是空的/
@@ -20,8 +21,10 @@ export function EmergencyReadinessCard({ refreshKey }: { refreshKey?: unknown })
     try {
       const res = await api.sendTestAlert()
       toast(res.notified >= res.contacts && res.contacts > 0
-        ? t(`测试告警已发出，${res.contacts} 位联系人都能即时收到。`, `Test sent — all ${res.contacts} contacts can receive it instantly.`)
-        : t(`测试告警已发给 ${res.contacts} 位联系人，其中 ${res.notified} 位有即时推送通道。`, `Test sent to ${res.contacts} contacts; ${res.notified} have an instant push channel.`),
+        ? t(`测试告警已发出，${res.contacts} 位联系人都能即时收到。`,
+            `Test sent — ${res.contacts === 1 ? 'your contact can' : `all ${res.contacts} contacts can`} receive it instantly.`)
+        : t(`测试告警已发给 ${res.contacts} 位联系人，其中 ${res.notified} 位有即时推送通道。`,
+            `Test sent to ${res.contacts} ${plural(res.contacts, 'contact')}; ${res.notified} ${verbHaveHas(res.notified)} an instant push channel.`),
         res.notified >= res.contacts ? 'ok' : 'info')
     } catch (e) {
       // 3/时限流：测试反复点会触发——明确告知"太频繁"而非泛泛"发送失败"，避免用户误以为链路坏了。
@@ -60,13 +63,14 @@ export function EmergencyReadinessCard({ refreshKey }: { refreshKey?: unknown })
               'You have no contacts yet — no one will be alerted in an emergency. Add a contact first.')}</p>
           ) : !anyReachable ? (
             <p className="mt-0.5 text-sm text-danger">{t(`你有 ${r.acceptedTotal} 位联系人，但都收不到即时告警——需在其设备上安装 App 并开启通知。`,
-              `You have ${r.acceptedTotal} contacts, but none can receive instant alerts — they need to install the app and enable notifications.`)}</p>
+              `You have ${r.acceptedTotal} ${plural(r.acceptedTotal, 'contact')}, but ${r.acceptedTotal === 1 ? "they can't" : 'none can'} receive instant alerts — they need to install the app and enable notifications.`)}</p>
           ) : !r.hasEmergencyContact ? (
             // 修复要点：会被通知，别再谎称"无人会被通知"；只是建议指定紧急联系人以享医疗信息共享。
             <p className="mt-0.5 text-sm text-soft">{t(`出事时你的 ${r.acceptedTotal} 位联系人都会收到告警。建议把最信任的人设为紧急联系人——紧急时他们还能看到你的医疗信息。`,
-              `Your ${r.acceptedTotal} contacts will all be alerted in an emergency. Consider setting your most trusted person as an emergency contact — they can also see your medical info in an emergency.`)}</p>
+              `${r.acceptedTotal === 1 ? 'Your contact will be' : `Your ${r.acceptedTotal} contacts will all be`} alerted in an emergency. Consider setting your most trusted person as an emergency contact — they can also see your medical info in an emergency.`)}</p>
           ) : emergencyAllReachable ? (
-            <p className="mt-0.5 text-sm text-soft">{t(`你的 ${r.total} 位紧急联系人都能即时收到告警。`, `All ${r.total} of your emergency contacts can receive instant alerts.`)}</p>
+            <p className="mt-0.5 text-sm text-soft">{t(`你的 ${r.total} 位紧急联系人都能即时收到告警。`,
+              r.total === 1 ? 'Your emergency contact can receive instant alerts.' : `All ${r.total} of your emergency contacts can receive instant alerts.`)}</p>
           ) : (
             <>
               <p className="mt-0.5 text-sm text-danger">{t(`${r.total} 位紧急联系人中只有 ${r.reachable} 位能即时收到告警。不可达的联系人需在其设备上安装 App 并开启通知。`,

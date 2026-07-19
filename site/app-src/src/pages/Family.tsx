@@ -4,6 +4,7 @@ import { api, APIError, contentBlockedText, type FamilyLink, type IncomingLink, 
 import { pollWhileVisible } from '../lib/poll'
 import { hasUsableEmergencyContact } from '../lib/emergencyContacts'
 import { emergencyDirection } from '../lib/emergencyRelation'
+import { plural } from '../lib/plural'
 import { durationName, nextCheckinLabel } from '../lib/safetyCheckin'
 import { classifyIdentifier } from '../lib/identifier'
 import { useI18n } from '../lib/i18n'
@@ -470,7 +471,7 @@ function DailyScheduleSection() {
           <span className="text-xs text-faint">{t('临时暂停（到点自动恢复，比关闭更安全）：', 'Pause temporarily (auto-resumes, safer than turning off):')}</span>
           {[1, 3, 7].map((d) => (
             <button key={d} type="button" onClick={() => void pauseFor(d)} disabled={busy}
-              aria-label={t(`暂停 ${d} 天`, `Pause ${d} days`)}
+              aria-label={t(`暂停 ${d} 天`, `Pause ${d} ${plural(d, 'day')}`)}
               className="rounded-lg surface-2 px-2.5 py-1 text-xs font-medium text-accent transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50">
               {t(`${d} 天`, `${d}d`)}
             </button>

@@ -5,6 +5,7 @@ import { api, APIError, contentBlockedText, type SavedRouteInfo, type RouteWaypo
 import { routeDistanceMeters, routeDistanceText, routeWalkingText } from '../lib/location'
 import { insertWaypoint, moveWaypointTo, deleteWaypoint, reorderWaypoint } from '../lib/routeEdit'
 import { getUnit } from '../lib/distanceUnit'
+import { plural } from '../lib/plural'
 import { useI18n } from '../lib/i18n'
 import { useSession } from '../lib/session'
 import { Card, Button, EmptyState, useToast, Modal } from '../components/ui'
@@ -181,7 +182,7 @@ export function RoutesPage() {
               </select>
             )}
             <span className="text-xs text-faint">
-              {t(`${wp.length} 个点`, `${wp.length} points`)}
+              {t(`${wp.length} 个点`, `${wp.length} ${plural(wp.length, 'point')}`)}
               {wp.length >= 2 && ` · ${routeDistanceText(routeDistanceMeters(wp), t, getUnit())} · ${routeWalkingText(routeDistanceMeters(wp), t)}`}
             </span>
             <div className="ml-auto flex gap-2">
@@ -269,7 +270,7 @@ export function RoutesPage() {
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-semibold">{r.name}</div>
                     <div className="mt-0.5 text-xs text-faint">
-                      {t(`给${ownerName(r)} · ${r.waypoints.length} 个点`, `For ${ownerName(r)} · ${r.waypoints.length} points`)}
+                      {t(`给${ownerName(r)} · ${r.waypoints.length} 个点`, `For ${ownerName(r)} · ${r.waypoints.length} ${plural(r.waypoints.length, 'point')}`)}
                       {r.waypoints.length >= 2 && ` · ${routeDistanceText(routeDistanceMeters(r.waypoints), t, getUnit())} · ${routeWalkingText(routeDistanceMeters(r.waypoints), t)}`}
                     </div>
                     {/* 信任透明：这条是别人替我画的（role=owner 且有创建者名）→ 显示"由 X 创建"，让要沿它走的人知道路线可信度取决于谁画的

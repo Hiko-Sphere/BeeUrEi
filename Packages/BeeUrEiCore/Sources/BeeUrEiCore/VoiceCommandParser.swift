@@ -52,6 +52,7 @@ public enum VoiceCommand: Equatable, Sendable {
     case checkinSafe                // 报平安（结束安全报到/解除已发告警）——报到到点前手在盲杖上，语音是最该有的通道
     case savedRoute(String)         // 走某条保存的路线（"走家到菜场的路线"）——人工踩好的路线是最安全的导航，须语音可达
     case stopNavigation             // 结束/取消步行导航（"结束导航"）——走路的盲人想停下时找不到屏上按钮，语音是最该有的通道；只停导航，绝不解析"挂断"以防切断求助
+    case nextManeuver               // 「下一步怎么走」按需预听即将到来的转向（方位+距离）——beacon 只给方位、navRemaining 只给总剩余，自动转向播报要 ≤20m 才触发；竞品(Apple/Google Maps)皆可随时预听下一步
     case unknown
 }
 
@@ -139,6 +140,11 @@ public enum VoiceCommandParser {
         // 含地名且在更前处理、不会落到这；不收含地名的"多久到X"以免误抢"多久到公司"这类问某地行程时长。上层据当前是否在导航回述或告知"没在导航"。
         if has(["还有多远", "还要多久", "还有多久", "还有多长时间", "还差多远", "快到了吗", "快到了没", "快到了没有",
                 "how much farther", "how much further", "how much longer", "how far to go", "how far left", "are we there yet"]) { return .navRemaining }
+        // 「下一步怎么走」：导航中盲人任意时刻主动预听即将到来的转向（方位+距离）——beacon 只给方位、navRemaining 只给
+        // 总剩余，自动转向播报要 ≤20m 才触发；此为按需"预听下一步"（竞品 Apple/Google Maps 标配）。裸问句、不含地名，
+        // 置于 navigate/findNearest 兜底之前先认领；键均为完整"下一步/下一个路口/next turn"等，与"下一班车"等无子串冲突。
+        if has(["下一步", "下一个路口", "下个路口", "下一个转弯", "下一个弯", "下一个拐", "接下来怎么走", "接下来往哪", "接下来怎么拐",
+                "next turn", "next step", "what's next", "whats next", "what is next", "next direction", "upcoming turn", "next maneuver"]) { return .nextManeuver }
         // 包装日期（保质期/生产日期）须在 .date（今天几号）之前：这些短语含"日期"，会被 .date 的"日期"抢；
         // 但 .date 的裸"日期"/"几号"仍归 .date（这里的键都不含裸"日期"）。读的是包装印刷日期，非今天日期。
         if has(["保质期", "有效期", "生产日期", "保存期", "赏味期", "读日期", "看日期", "包装日期", "过期", "expir", "best before", "use by", "shelf life"]) { return .readDates }

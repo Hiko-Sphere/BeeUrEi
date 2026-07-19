@@ -281,6 +281,24 @@ enum NavStrings {
         return l == .zh ? "\(nearPrefix)还有约\(dist)，\(eta)" : "\(nearPrefix)about \(dist) to go, \(eta)"
     }
 
+    /// 「下一步怎么走」按需回述：即将到来的转向指令 + 到它的距离。与自动转向播报（RouteProgress ≤20m 才触发）不同，
+    /// 这是盲人**任意时刻**主动问"接下来往哪走"的答复——beacon 只给方位、navRemaining 只给总剩余，都不含"下个路口
+    /// 是左是右、还有多远"（竞品 Apple/Google Maps 皆可随时预听下一步）。距离复用 distancePhrase（≥1km 念公里、末段精确到米）。
+    static func nextManeuverPhrase(instruction: String, distanceMeters: Int, unit: DistanceUnit = .metric, _ l: Language) -> String {
+        let dist = distancePhrase(meters: max(0, distanceMeters), unit: unit, l)
+        let ins = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        if ins.isEmpty {   // 极少数缺指令文本：仍报距离，绝不给空句让盲人以为没听清
+            return l == .zh ? "下一个路口还有约\(dist)" : "About \(dist) to the next turn"
+        }
+        return l == .zh ? "下一步：还有约\(dist)，\(ins)" : "Next: in about \(dist), \(ins)"
+    }
+
+    /// 已过完所有转向点、只剩直行到终点时，「下一步怎么走」的答复：没有更多转弯，继续前往目的地
+    /// （避免此刻误报"正在计算"——其实是没有下一转弯了，如实告知才不让盲人干等一个不会来的转向）。
+    static func continueToDestination(_ l: Language) -> String {
+        l == .zh ? "没有更多转弯了，继续前往目的地" : "No more turns — keep heading to the destination"
+    }
+
     /// 出发时的全程概览（导航开始先报整条路线长度与预计时长，给盲人整体预期）："全程约 1.2 公里，预计 15 分钟"。
     /// 竞品(Apple/Google/Soundscape)均在开始导航时先报路线总览；ETA 为初始估计（尚未起步、用默认步速）。
     /// arrivalClock：预计到达的**本地化时钟时刻**（如"下午3:25"/"3:25 PM"，由调用方按用户 locale 格式化）。

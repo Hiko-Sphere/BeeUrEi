@@ -29,6 +29,10 @@ final class AppRoute {
     /// 供语音"还有多远"按需回述——导航屏是独立 sheet、其 model 不被 Hub 直接持有，故经此共享值中转（只写读、无视图观察 → 不触发重绘）。
     /// nil = 当前未在导航或尚未算出剩余。
     var currentNavRemaining: String?
+    /// 导航中**即将到来的转向**的按需回述文本（"下一步：还有约120米，左转进入建国路"），由 NavigationViewModel 每次更新
+    /// 时写入、结束/开始导航清空。供语音"下一步怎么走"随时预听——beacon 只给方位、currentNavRemaining 只给总剩余，都不含
+    /// "下个路口左还是右、还有多远"；经此共享值中转（导航屏是独立 sheet、其 model 不被 Hub 直接持有）。nil = 未在导航或尚未算出。
+    var currentNavNextManeuver: String?
     /// findNearest 刚报出的**最近地点**（名字 + WGS-84 坐标），供语音"带我去那里"就近导航过去——用**精确坐标**（非再搜名字，
     /// 避免"麦当劳卫生间"这类名字 geocode 到别处把盲人导错）。LocationDescriber 报完最近地点即写入（与朗读的那处严格同一个 POI），
     /// 新一次 findNearest 覆盖。nil = 还没找过地点。经 AppRoute 中转同 currentNavRemaining（LocationDescriber 与 Hub 分属不同视图）。

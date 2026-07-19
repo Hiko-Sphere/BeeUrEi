@@ -239,6 +239,33 @@ final class NavStringsTests: XCTestCase {
         }
     }
 
+    // 语音"下一步怎么走"：即将到来的转向（指令 + 到它的距离），距离档与 remainingDistance 共用同一 distancePhrase。
+    func testNextManeuverPhrase() {
+        // <1km → 取整到 10 米 + 指令：120 → "120 米"。
+        XCTAssertEqual(NavStrings.nextManeuverPhrase(instruction: "左转进入建国路", distanceMeters: 120, .zh),
+                       "下一步：还有约120 米，左转进入建国路")
+        // ≥1km → 公里一位小数（远处第一个转向仍可听）。
+        XCTAssertEqual(NavStrings.nextManeuverPhrase(instruction: "右转", distanceMeters: 1234, .zh),
+                       "下一步：还有约1.2 公里，右转")
+        // 指令首尾空白照常裁剪；负距离夹 0（不出负数）。
+        XCTAssertEqual(NavStrings.nextManeuverPhrase(instruction: "  向东直行  ", distanceMeters: 80, .zh),
+                       "下一步：还有约80 米，向东直行")
+        // 缺指令文本 → 仍报距离到下一个路口，绝不给"下一步：，"这种空句。
+        XCTAssertEqual(NavStrings.nextManeuverPhrase(instruction: "   ", distanceMeters: 200, .zh),
+                       "下一个路口还有约200 米")
+        XCTAssertFalse(NavStrings.nextManeuverPhrase(instruction: "", distanceMeters: 200, .zh).contains("："))
+        // 已过完转向点 → "没有更多转弯，继续前往目的地"（不误报"正在计算"）。
+        XCTAssertEqual(NavStrings.continueToDestination(.zh), "没有更多转弯了，继续前往目的地")
+        // 英文变体：正确措辞 + 不混中文。
+        XCTAssertEqual(NavStrings.nextManeuverPhrase(instruction: "Turn left", distanceMeters: 120, .en),
+                       "Next: in about 120 m, Turn left")
+        for s in [NavStrings.nextManeuverPhrase(instruction: "Turn left", distanceMeters: 120, .en),
+                  NavStrings.nextManeuverPhrase(instruction: "", distanceMeters: 300, .en),
+                  NavStrings.continueToDestination(.en)] {
+            XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文混中文：\(s)")
+        }
+    }
+
     // 出发全程概览："全程约 X，预计 Y"（距离/ETA 档与 remainingDistance 共用同一格式化）。
     func testJourneyOverviewFormatting() {
         XCTAssertEqual(NavStrings.journeyOverview(meters: 1234, etaSeconds: 900, .zh), "全程约1.2 公里，预计 15 分钟")

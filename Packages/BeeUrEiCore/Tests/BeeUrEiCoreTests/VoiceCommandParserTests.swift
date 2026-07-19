@@ -46,6 +46,10 @@ final class VoiceCommandParserTests: XCTestCase {
             ("还有多远", .navRemaining), ("还要多久", .navRemaining), ("还有多久", .navRemaining), ("快到了吗", .navRemaining),
             ("还有多长时间", .navRemaining), ("快到了没", .navRemaining), ("how much farther", .navRemaining),
             ("how much longer", .navRemaining), ("how far to go", .navRemaining), ("are we there yet", .navRemaining),
+            // 「下一步怎么走」（导航中按需预听即将到来的转向）：裸问句、不含地名，与 navRemaining/navigate/findNearest 各不相扰。
+            ("下一步", .nextManeuver), ("下一步怎么走", .nextManeuver), ("下一个路口", .nextManeuver), ("下个路口", .nextManeuver),
+            ("下一个路口往哪拐", .nextManeuver), ("接下来怎么走", .nextManeuver), ("接下来往哪走", .nextManeuver),
+            ("next turn", .nextManeuver), ("next step", .nextManeuver), ("what's next", .nextManeuver), ("upcoming turn", .nextManeuver),
             ("今天几号", .date), ("今天星期几", .date), ("what's the date", .date), ("what day is it", .date),
             ("打开设置", .openSettings), ("设置", .openSettings), ("open settings", .openSettings), ("preferences", .openSettings),
             ("说快点", .adjustSpeech(.faster)), ("太慢了", .adjustSpeech(.faster)), ("speak faster", .adjustSpeech(.faster)),

@@ -138,6 +138,7 @@ final class NavigationViewModel {
         waypointAdvance.reset()
         remainingAnnouncer.reset(); remaining = ""; remainingArrivalClock = nil // 新目的地：清空剩余里程碑基线与屏显
         AppRoute.shared.currentNavRemaining = nil // 语音"还有多远"共享值：新导航先清空，未算出前回述"正在计算"
+        AppRoute.shared.currentNavNextManeuver = nil // 语音"下一步怎么走"共享值：新导航先清空，未算出前回述"正在计算"
         offRouteStreak = 0
         lastHeadingTime = 0
         running = true
@@ -171,6 +172,7 @@ final class NavigationViewModel {
         NavVoice.shared.stop() // 停掉仍在念的导航指令
         remaining = ""; remainingArrivalClock = nil // 清屏显剩余里程
         AppRoute.shared.currentNavRemaining = nil // 语音"还有多远"共享值：停导航即清，避免停后仍回述陈旧剩余
+        AppRoute.shared.currentNavNextManeuver = nil // 语音"下一步怎么走"共享值：停导航即清，避免停后仍回述陈旧转向
         status = NavStrings.navStopped(lang)
     }
 
@@ -305,6 +307,9 @@ final class NavigationViewModel {
         // 已过完所有转向点：接近目的地判定。**到达=高确定性结论，也要过精度门控**——
         // 否则低精度下单帧 GPS 抖到 15m 内就会误报到达并永久停止导航（见审查 #1）。
         guard stepIndex < maneuvers.count else {
+            // 语音"下一步怎么走"：已过完所有转向点，如实答"没有更多转弯，继续前往目的地"（categorically 正确、不依赖精度），
+            // 避免此刻回述陈旧转向或误报"正在计算"——让盲人干等一个不会来的转向。
+            AppRoute.shared.currentNavNextManeuver = NavStrings.continueToDestination(lang)
             let toDest = Geo.distanceMeters(fromLat: lat, fromLon: lon, toLat: dest.latitude, toLon: dest.longitude)
             if toDest < 15 {
                 if level == .precise {
@@ -324,6 +329,11 @@ final class NavigationViewModel {
         // 转向播报（精度门控，核心 RouteProgress，已测）。
         let next = maneuvers[stepIndex]
         let distance = Geo.distanceMeters(fromLat: lat, fromLon: lon, toLat: next.coordinate.latitude, toLon: next.coordinate.longitude)
+        // 语音"下一步怎么走"共享值：写入当前即将到来的转向（指令 + 到它的距离），供盲人任意时刻预听。仅精度可信时更新——
+        // 距离不可信时不覆盖（沿用 currentNavRemaining 的精度纪律），保留上次可信值好过报一个漂移的距离。
+        if level != .none {
+            AppRoute.shared.currentNavNextManeuver = NavStrings.nextManeuverPhrase(instruction: next.instruction, distanceMeters: Int(distance.rounded()), unit: unit, lang)
+        }
         let decision = progress.decide(distanceToManeuverMeters: distance, instruction: next.instruction, level: level, language: lang, unit: unit)
         if decision.shouldAnnounce, let text = decision.text {
             // 触觉须与语音同用去重条件：站在/慢速通过路口时 decide() 每帧都返回同一"现在转向"，

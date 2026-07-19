@@ -537,6 +537,13 @@ struct HubView: View {
             if showNavigation, let r = AppRoute.shared.currentNavRemaining, !r.isEmpty { speak(r) }
             else if showNavigation { speak(HomeStrings.navRemainingComputing(lang)) }
             else { speak(HomeStrings.navNotActiveSpeak(lang)) }
+        // 「下一步怎么走」：导航中按需预听即将到来的转向（方位+距离）——beacon 只给方位、navRemaining 只给总剩余，
+        // 自动转向播报要 ≤20m 才触发；NavigationViewModel 每次更新写入 currentNavNextManeuver。没在导航如实告知；
+        // 导航中但尚未算出（刚开始/定位未定）报"正在计算"，不静默、不误报"没在导航"。
+        case .nextManeuver:
+            if showNavigation, let n = AppRoute.shared.currentNavNextManeuver, !n.isEmpty { speak(n) }
+            else if showNavigation { speak(HomeStrings.navRemainingComputing(lang)) }
+            else { speak(HomeStrings.navNotActiveSpeak(lang)) }
         case .navigateHome: navigateToSaved(label: "home") // 「回家」：导航到已保存的家地址
         case .navigateWork: navigateToSaved(label: "work") // 「去公司」：导航到已保存的公司地址
         case .messages: showMessages = true

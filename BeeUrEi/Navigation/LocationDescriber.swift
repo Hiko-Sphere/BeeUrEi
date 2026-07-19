@@ -108,9 +108,12 @@ final class LocationDescriber: NSObject, CLLocationManagerDelegate {
         guard newHeading.headingAccuracy >= 0 else { return } // 罗盘不可信不更新
         let h = newHeading.trueHeading >= 0 ? newHeading.trueHeading : newHeading.magneticHeading
         lastHeading = h
-        // 「我朝哪个方向」：拿到第一个可信罗盘读数即播报八方位并复位（finish 停罗盘，后续读数不再重复播）。
-        // 非有限读数 CompassRose 返回 nil → 不 finish，继续等下一个可信读数（不会播"方向未知"这种废话）。
-        if mode == .facing, isDescribing, let cardinal = CompassRose.cardinal(degrees: h, language: lang) {
+        // 「我朝哪个方向」：拿到第一个**精度可信**的罗盘读数即播报八方位并复位（finish 停罗盘，后续读数不再重复播）。
+        // 关键：用 reliableCardinal 而非 cardinal——headingAccuracy≥0 仅表示"非无效"，磁干扰/未校准时可达 40°+ 仍是"有效"，
+        // 但八方位每档 45°、大误差会整档报错误导盲人方向感（与信标同阈值 ≤20°）。精度不可信/非有限读数返回 nil →
+        // 不 finish，继续等下一个可信读数；20s 仍无则看门狗播"平举画 8 字校准罗盘"（run() 内已备该指引）。
+        if mode == .facing, isDescribing,
+           let cardinal = CompassRose.reliableCardinal(degrees: h, accuracyDegrees: newHeading.headingAccuracy, language: lang) {
             finish(lang == .zh ? "你正面朝\(cardinal)" : "You're facing \(cardinal)")
         }
     }

@@ -15,4 +15,12 @@ public enum CompassRose {
         let idx = min(Int(normalized / 45), 7) // 归一后必 <8；min 兜底浮点边界
         return names[idx]
     }
+
+    /// 「我朝哪个方向」的**可信**播报：仅当罗盘精度可信（`accuracyDegrees` 在 HeadingFilter 阈值内，默认 ≤20°）
+    /// 且航向有限时返回八方位名；否则返回 nil。八方位每档 45°，>20° 误差足以整档报错——对盲人是危险的方向误导，
+    /// 故不可信时宁可不报（调用方据 nil 继续等可信读数，久无则播"画 8 字校准"指引），与导航信标同一门槛（单一事实源）。
+    public static func reliableCardinal(degrees: Double, accuracyDegrees: Double, language: Language) -> String? {
+        guard HeadingFilter.isReliable(accuracyDegrees: accuracyDegrees) else { return nil }
+        return cardinal(degrees: degrees, language: language)
+    }
 }

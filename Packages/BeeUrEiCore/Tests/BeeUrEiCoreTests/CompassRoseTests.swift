@@ -35,4 +35,18 @@ final class CompassRoseTests: XCTestCase {
         XCTAssertNil(CompassRose.cardinal(degrees: .infinity, language: .zh))
         XCTAssertNil(CompassRose.cardinal(degrees: -.infinity, language: .en))
     }
+
+    /// 「我朝哪个方向」的可信播报门槛：精度可信（≤20°）才报八方位，否则 nil（不用不可信罗盘误导盲人绝对朝向）。
+    func testReliableCardinalGatesOnAccuracy() {
+        // 精度可信（≤20°）→ 正常返回八方位（与 cardinal 一致）。
+        XCTAssertEqual(CompassRose.reliableCardinal(degrees: 90, accuracyDegrees: 5, language: .zh), "正东")
+        XCTAssertEqual(CompassRose.reliableCardinal(degrees: 0, accuracyDegrees: 20, language: .en), "north") // 恰在阈值上
+        // 精度不可信：headingAccuracy≥0 仅"非无效"，磁干扰/未校准可达 40°+ 仍"有效"，但足以整档报错 → nil，绝不轻报。
+        XCTAssertNil(CompassRose.reliableCardinal(degrees: 90, accuracyDegrees: 21, language: .zh))  // 越过阈值
+        XCTAssertNil(CompassRose.reliableCardinal(degrees: 90, accuracyDegrees: 45, language: .zh))  // 典型未校准
+        // 无效读数（CLHeading 用负值表示无效/受干扰）→ nil。
+        XCTAssertNil(CompassRose.reliableCardinal(degrees: 90, accuracyDegrees: -1, language: .zh))
+        // 精度可信但航向非有限（坏罗盘算出 NaN）→ 仍 nil（委托 cardinal 的 isFinite 守卫，不崩溃）。
+        XCTAssertNil(CompassRose.reliableCardinal(degrees: .nan, accuracyDegrees: 5, language: .zh))
+    }
 }

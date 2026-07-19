@@ -4,12 +4,24 @@ import Foundation
 ///
 /// 用单位向量做指数平滑以正确处理 359°→1° 的环绕；用 `headingAccuracy` 判断是否可信。
 public struct HeadingFilter {
+    /// 罗盘可信阈值（航向精度上限，度）：headingAccuracy 超过此值即视为磁干扰/未校准，不可用于定向。
+    /// 信标(NavigationViewModel)与「我朝哪个方向」(LocationDescriber/CompassRose.reliableCardinal)共用同一阈值
+    /// ——单一事实源，避免两处各写魔法数而漂移。八方位每档 45°，>20° 误差足以整档报错，故此门槛对定向播报尤重。
+    public static let defaultMaxTrustedAccuracyDegrees: Double = 20
+
+    /// 无实例的可信判定（供一次性罗盘读数场景，如「我朝哪个方向」，复用与信标同一阈值）。
+    /// CLHeading 用负 `headingAccuracy` 表示无效/受干扰；上限外的大误差同样判不可信。
+    public static func isReliable(accuracyDegrees: Double,
+                                  maxTrusted: Double = HeadingFilter.defaultMaxTrustedAccuracyDegrees) -> Bool {
+        accuracyDegrees >= 0 && accuracyDegrees <= maxTrusted
+    }
+
     public let smoothingFactor: Double          // 新样本权重 0...1
     public let maxTrustedAccuracyDegrees: Double
 
     private var smoothed: Double?               // 0...360
 
-    public init(smoothingFactor: Double = 0.3, maxTrustedAccuracyDegrees: Double = 20) {
+    public init(smoothingFactor: Double = 0.3, maxTrustedAccuracyDegrees: Double = HeadingFilter.defaultMaxTrustedAccuracyDegrees) {
         self.smoothingFactor = smoothingFactor
         self.maxTrustedAccuracyDegrees = maxTrustedAccuracyDegrees
     }
@@ -40,9 +52,9 @@ public struct HeadingFilter {
         return deg
     }
 
-    /// 航向是否可信。CLHeading 用负 `headingAccuracy` 表示无效/受干扰。
+    /// 航向是否可信。CLHeading 用负 `headingAccuracy` 表示无效/受干扰。委托静态实现，用本实例自己的上限。
     public func isReliable(accuracyDegrees: Double) -> Bool {
-        accuracyDegrees >= 0 && accuracyDegrees <= maxTrustedAccuracyDegrees
+        Self.isReliable(accuracyDegrees: accuracyDegrees, maxTrusted: maxTrustedAccuracyDegrees)
     }
 
     public var current: Double? { smoothed }

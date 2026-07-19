@@ -10,6 +10,26 @@ final class HeadingFilterTests: XCTestCase {
         XCTAssertFalse(f.isReliable(accuracyDegrees: -1))   // 无效/受干扰
     }
 
+    /// 无实例的静态可信判定（供「我朝哪个方向」等一次性读数场景复用同一阈值）：与实例判定同口径，默认 ≤20°。
+    func testStaticReliabilityMatchesInstanceAndDefault() {
+        // 默认常量 = 20°，是信标与朝向播报共用的单一事实源。
+        XCTAssertEqual(HeadingFilter.defaultMaxTrustedAccuracyDegrees, 20)
+        // 静态判定：边界含 20、拒 >20 与负值。
+        XCTAssertTrue(HeadingFilter.isReliable(accuracyDegrees: 0))
+        XCTAssertTrue(HeadingFilter.isReliable(accuracyDegrees: 20))
+        XCTAssertFalse(HeadingFilter.isReliable(accuracyDegrees: 20.1))
+        XCTAssertFalse(HeadingFilter.isReliable(accuracyDegrees: 45))
+        XCTAssertFalse(HeadingFilter.isReliable(accuracyDegrees: -1))
+        // 默认实例与静态判定逐点一致（委托关系不漂移）。
+        let f = HeadingFilter()
+        for a in [-5.0, 0, 5, 20, 20.1, 30, 90] {
+            XCTAssertEqual(f.isReliable(accuracyDegrees: a), HeadingFilter.isReliable(accuracyDegrees: a), "accuracy=\(a) 实例与静态判定应一致")
+        }
+        // 自定义上限经静态 maxTrusted 传参同样生效。
+        XCTAssertTrue(HeadingFilter.isReliable(accuracyDegrees: 30, maxTrusted: 40))
+        XCTAssertFalse(HeadingFilter.isReliable(accuracyDegrees: 41, maxTrusted: 40))
+    }
+
     func testFirstSampleSetsValue() {
         var f = HeadingFilter(smoothingFactor: 0.3)
         XCTAssertEqual(f.update(headingDegrees: 100, accuracyDegrees: 5), 100, accuracy: 0.0001)

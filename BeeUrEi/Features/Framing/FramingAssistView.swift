@@ -30,6 +30,7 @@ final class FramingAssistViewModel {
     // 对应应用并预填**（拨号盘/浏览器/邮件/信息），iOS 要求用户再确认——绝不代拨/代发（OCR 或 QR 可能有误/恶意，
     // 由用户复核后再操作）。切到任何其它识别（stopContinuous）即清，不残留过期按钮。
     private(set) var resultAction: FramingAction?
+    private(set) var resultActionSecondary: FramingAction?    // 第二动作（名片=拨打+导航两件事：主拨打、次导航到地址）
     private(set) var counting = false                         // 点钞模式：逐张扫纸币累加、报运行总额（Cash Reader 式）
     @ObservationIgnored private var cash = CashCounter()      // 点钞累加器（核心，已测）；分为单位、可撤销
     var torchOn = false                                       // 手电筒开关（手动按钮 + 太暗自动点亮共用；视图绑定）
@@ -1094,8 +1095,15 @@ final class FramingAssistViewModel {
                         // 可复制内容改为解析后的可读信息（比原始 vCard 文本更有用）。
                         self.copyableResult = self.resultText
                         self.speak(self.resultText)
+                        // 名片两大动作：唯一电话→一键拨打（主，多号码不自动拨避免拨错）；有地址→一键导航到地址
+                        // （次动作；无可拨电话时升为主动作）——盲人扫商务名片可直接走去对方公司/住处（与位置码导航同取向）。
                         if c.phones.count == 1, let tel = EmergencyPhoneFallback.telURLString(c.phones[0]), let url = URL(string: tel) {
                             self.resultAction = FramingAction(label: FramingStrings.uiDial(self.lang), url: url)
+                        }
+                        if let addr = c.address, !addr.isEmpty,
+                           let navStr = FramingStrings.addressNavigationURL(addr), let navURL = URL(string: navStr) {
+                            let nav = FramingAction(label: FramingStrings.uiNavigate(self.lang), url: navURL)
+                            if self.resultAction == nil { self.resultAction = nav } else { self.resultActionSecondary = nav }
                         }
                     } else {
                         self.resultText = FramingStrings.contactResult(self.lang)
@@ -1355,7 +1363,7 @@ final class FramingAssistViewModel {
     func stopContinuous() {
         stopLightTone()
         stopColorContinuous()
-        resultAction = nil // 切到其它识别：清掉上次结果遗留的一键动作按钮
+        resultAction = nil; resultActionSecondary = nil // 切到其它识别：清掉上次结果遗留的一键动作按钮
     }
 
     /// 光线探测一次性概述（明暗等级 + 亮源方向，核心 LightMeter，已测）。
@@ -1780,6 +1788,13 @@ struct FramingAssistView: View {
                     if let action = model.resultAction {
                         Button(action.label) { UIApplication.shared.open(action.url) }
                             .buttonStyle(.borderedProminent).tint(.beeHoney)
+                            .frame(minHeight: 44)
+                            .accessibilityHint(FramingStrings.uiActionHint(model.lang))
+                    }
+                    // 第二动作（名片=拨打 + 导航）：次要样式区别于主动作，两键都够大（≥44）、读屏各自可达。
+                    if let action2 = model.resultActionSecondary {
+                        Button(action2.label) { UIApplication.shared.open(action2.url) }
+                            .buttonStyle(.bordered).tint(.beeHoney)
                             .frame(minHeight: 44)
                             .accessibilityHint(FramingStrings.uiActionHint(model.lang))
                     }

@@ -30,6 +30,23 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertFalse(url.contains("?ll="), url)                  // 不是"只显示图钉"的旧 center 参数
     }
 
+    func testAddressNavigationURLWalkingDirectionsAndEncoding() {
+        // 名片地址「导航」：地址串作 daddr（Apple 地图地理编码）、步行方向；地址含空格/逗号/中文须百分号编码（无裸空格）。
+        let u = FramingStrings.addressNavigationURL("123 Main St, Springfield, IL")
+        XCTAssertNotNil(u)
+        XCTAssertTrue(u!.hasPrefix("https://maps.apple.com/?daddr="), u!)
+        XCTAssertTrue(u!.hasSuffix("&dirflg=w"), u!)               // 步行模式
+        XCTAssertFalse(u!.contains(" "), u!)                        // 已编码：无裸空格（否则 URL(string:) 会失败）
+        XCTAssertTrue(u!.contains("123"), u!)
+        // 中文地址同样能编码成可用 URL（URL(string:) 不为 nil）。
+        let z = FramingStrings.addressNavigationURL("北京市海淀区科技路123号")
+        XCTAssertNotNil(z)
+        XCTAssertNotNil(URL(string: z!))
+        // 空/纯空白 → nil（绝不给打不开的按钮）。
+        XCTAssertNil(FramingStrings.addressNavigationURL("   "))
+        XCTAssertNil(FramingStrings.addressNavigationURL(""))
+    }
+
     func testProductDietaryLabelsSpeakLabeledNotJudged() {
         // 膳食/宗教认证标注（盲人看不到包装认证：乳糜泻/乳糖不耐/素食/宗教/糖尿病刚需）。canonical key → 本地化名。
         let zh = FramingStrings.productDietaryLabelsSpeak(["gluten-free", "vegan", "halal"], .zh)

@@ -542,6 +542,14 @@ enum FramingStrings {
     static func geoNavigationURL(_ lat: Double, _ lng: Double) -> String {
         "https://maps.apple.com/?daddr=\(lat),\(lng)&dirflg=w"
     }
+    /// 名片地址「导航」动作的 Apple 地图深链：把地址串作 daddr（Apple 地图会地理编码），步行方向直接开始导航到该地址
+    /// ——盲人扫商务名片可一键走去对方公司/住处（同 geoNavigationURL 步行取向，仅目标由坐标换成地址文本）。
+    /// 地址含空格/逗号/中文 → 百分号编码；编码失败或空白 → nil（绝不给一个打不开的按钮）。
+    static func addressNavigationURL(_ address: String) -> String? {
+        let a = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !a.isEmpty, let enc = a.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
+        return "https://maps.apple.com/?daddr=\(enc)&dirflg=w"
+    }
     static func contactResult(_ l: Language) -> String { l == .zh ? "名片码" : "Contact card" }
     static func contactSpeak(_ l: Language) -> String {
         l == .zh ? "是一张电子名片，内容已可复制" : "It's a contact card; you can copy it"

@@ -65,6 +65,8 @@ final class BusDisplayReaderTests: XCTestCase {
         // 站数（分钟缺失时）。
         XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["还有2站"], language: .zh), "还有2站")
         XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["3 stops"], language: .en), "3 stops away")
+        // 1 站用**单数** stop（此前 "1 stops away" 语病）。
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["1 stop"], language: .en), "1 stop away")
         // 即将到站（最高优先，压过分钟/站）。
         XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["即将进站", "还有3分钟"], language: .zh), "即将到站")
         XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["Arriving"], language: .en), "arriving now")

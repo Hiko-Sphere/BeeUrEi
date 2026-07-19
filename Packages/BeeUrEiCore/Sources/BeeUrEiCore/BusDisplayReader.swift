@@ -54,7 +54,7 @@ public enum BusDisplayReader {
         // 让站台上的盲人对已进站的车毫无提示（会错过车/以为还早）。
         if imminent || minutes == 0 || stops == 0 { return zh ? "即将到站" : "arriving now" }
         if let m = minutes, m >= 1, m < 120 { return zh ? "还有约\(m)分钟" : "about \(m) min" }
-        if let s = stops, s >= 1, s < 100 { return zh ? "还有\(s)站" : "\(s) stops away" }
+        if let s = stops, s >= 1, s < 100 { return zh ? "还有\(s)站" : "\(s) stop\(s == 1 ? "" : "s") away" } // 1 站用单数 stop（"1 stops away" 语病）
         return nil
     }
 

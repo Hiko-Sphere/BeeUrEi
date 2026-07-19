@@ -21,11 +21,20 @@ final class DistanceUnitTests: XCTestCase {
     }
 
     func testImperialMilesAboveThreshold() {
-        // 1 英里 = 1609.344 m → "1 mile"（去尾零）。
-        XCTAssertEqual(DistanceUnit.imperial.farDistance(meters: 1609.344, language: .en), "1 miles")
+        // 1 英里 = 1609.344 m → "1 mile"（去尾零 + 单数，非语病 "1 miles"）。
+        XCTAssertEqual(DistanceUnit.imperial.farDistance(meters: 1609.344, language: .en), "1 mile")
         // 800m ≈ 2625 ft ≥ 1000 → 英里：800/1609.344≈0.497→0.5 英里。
         XCTAssertEqual(DistanceUnit.imperial.farDistance(meters: 800, language: .en), "0.5 miles")
         XCTAssertEqual(DistanceUnit.imperial.farDistance(meters: 3218.688, language: .zh), "2英里") // 正好 2 英里
+    }
+
+    /// 值为 1 用**单数**单位词（此前一律复数：1 meters / 1 kilometers / 1 miles 皆语病）。
+    func testUnitSingularAtOne() {
+        XCTAssertEqual(DistanceUnit.metric.farDistance(meters: 1, language: .en), "1 meter")     // 非 "1 meters"
+        XCTAssertEqual(DistanceUnit.metric.farDistance(meters: 2, language: .en), "2 meters")     // 复数不变
+        // 英尺侧：入参先取整到米，1 米≈3.28 英尺 → ft 恒 ∈{0,3,7,…}、永不为 1，无 "1 foot" 可达，恒 feet（复数正确）。
+        XCTAssertEqual(DistanceUnit.imperial.farDistance(meters: 3, language: .en), "10 feet")     // 3m→~10ft
+        // 边界 1km/1mile 单数已由 SpokenStringsTests / testImperialMilesAboveThreshold 覆盖。
     }
 
     func testImperialThresholdBoundary() {

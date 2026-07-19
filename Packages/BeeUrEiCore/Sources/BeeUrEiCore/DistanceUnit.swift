@@ -23,17 +23,20 @@ public enum DistanceUnit: String, Sendable, CaseIterable {
             if m >= 1000 {
                 let km = (m / 100).rounded() / 10                 // 0.1 公里
                 let s = km == km.rounded() ? String(Int(km)) : String(format: "%.1f", km)
-                return language == .zh ? "\(s)公里" : "\(s) kilometers"
+                // 恰 "1" 用单数 kilometer（"1 kilometers" 是语病；分数如 "1.2 kilometers" 仍复数）。中文无复数。
+                return language == .zh ? "\(s)公里" : "\(s) kilometer\(s == "1" ? "" : "s")"
             }
-            return language == .zh ? "\(Int(m))米" : "\(Int(m)) meters"
+            return language == .zh ? "\(Int(m))米" : "\(Int(m)) meter\(Int(m) == 1 ? "" : "s")"
         case .imperial:
             let feet = m / DistanceUnit.metersPerFoot
             if feet >= 1000 {
                 let miles = (m / DistanceUnit.metersPerMile * 10).rounded() / 10  // 0.1 英里
                 let s = miles == miles.rounded() ? String(Int(miles)) : String(format: "%.1f", miles)
-                return language == .zh ? "\(s)英里" : "\(s) miles"
+                return language == .zh ? "\(s)英里" : "\(s) mile\(s == "1" ? "" : "s")"
             }
             let ft = Int(feet.rounded())
+            // 恒复数 feet：入参 meters 先取整到米（safeRoundedInt），1 米≈3.28 英尺 → ft 取值恒 ∈{0,3,7,…}，
+            // 永不为 1（"1 foot" 不可达），故无需单数分支。
             return language == .zh ? "\(ft)英尺" : "\(ft) feet"
         }
     }

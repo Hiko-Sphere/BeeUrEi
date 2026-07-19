@@ -34,7 +34,7 @@ final class SpokenStringsTests: XCTestCase {
 
     func testLocationDistanceKilometersAtAndAboveOneKm() {
         XCTAssertEqual(SpokenStrings.locationDistance(1000, .zh), "1公里")      // 边界：整公里去尾零
-        XCTAssertEqual(SpokenStrings.locationDistance(1000, .en), "1 kilometers")
+        XCTAssertEqual(SpokenStrings.locationDistance(1000, .en), "1 kilometer") // 单数（非语病 "1 kilometers"）
         XCTAssertEqual(SpokenStrings.locationDistance(1500, .zh), "1.5公里")    // 0.1 精度
         XCTAssertEqual(SpokenStrings.locationDistance(2000, .en), "2 kilometers") // 去尾零 2.0→2
         XCTAssertEqual(SpokenStrings.locationDistance(1050, .zh), "1.1公里")    // 1050→10.5→四舍五入 11→1.1

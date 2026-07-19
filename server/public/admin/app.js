@@ -98,7 +98,7 @@ const I18N = {
     relationships: '关系', calls: '通话', owner: '视障用户', member: '协助者 / 亲友', relationCol: '关系',
     unreachablePush: '推送不可达', unreachablePushHint: '此联系人无 App 推送/未开通知，SOS 与告警无法即时送达（请让其装 App、开启通知）',
     emergency: '紧急', sosCall: '紧急求助', exportCsv: '导出 CSV', noLinks: '暂无绑定关系', caller: '主叫', callee: '被叫', time: '时间', duration: '时长',
-    callCount: '通话记录', searchLinks: '搜索姓名…', searchCalls: '搜索姓名…',
+    callCount: '通话记录', searchLinks: '搜索姓名…', searchCalls: '搜索姓名…', rowOpenUser: '查看该用户详情（联系人 / 通话史 / 封禁状态）',
     linkAccepted: '已绑定', linkPending: '待确认', linkDeclined: '已拒绝',
     newUsers7d: '近 7 天新增', newUsers30d: '近 30 天新增', regTrend: '注册趋势（近 30 天）',
     blocks: '拉黑', blocker: '拉黑方', blocked: '被拉黑', noBlocks: '暂无拉黑记录', searchBlocks: '搜索姓名…',
@@ -239,7 +239,7 @@ const I18N = {
     relationships: 'Relations', calls: 'Calls', owner: 'Blind user', member: 'Helper / family', relationCol: 'Relation',
     unreachablePush: 'no push', unreachablePushHint: "No app push / notifications off — SOS and alerts can't reach them instantly (ask them to install the app and enable notifications)",
     emergency: 'Emergency', sosCall: 'SOS', exportCsv: 'Export CSV', noLinks: 'No relationships yet', caller: 'Caller', callee: 'Callee', time: 'Time', duration: 'Duration',
-    callCount: 'Call records', searchLinks: 'Search name…', searchCalls: 'Search name…',
+    callCount: 'Call records', searchLinks: 'Search name…', searchCalls: 'Search name…', rowOpenUser: 'Open user detail (contacts / call history / ban status)',
     linkAccepted: 'Linked', linkPending: 'Pending', linkDeclined: 'Declined',
     newUsers7d: 'New · 7d', newUsers30d: 'New · 30d', regTrend: 'Registrations (last 30 days)',
     blocks: 'Blocks', blocker: 'Blocker', blocked: 'Blocked', noBlocks: 'No blocks', searchBlocks: 'Search name…',
@@ -1297,9 +1297,9 @@ function renderCalls() {
   const list = filteredCalls();
   const rows = list.map((c) => `
     <tr>
-      <td><div class="nm">${esc(c.callerName)}</div></td>
+      <td><div class="nm"><button type="button" class="emerg-user row-user" data-uid="${esc(String(c.callerId))}" title="${esc(t('rowOpenUser'))}">${esc(c.callerName)}</button></div></td>
       <td><span class="arrow">→</span></td>
-      <td><div class="nm">${esc(c.calleeName)}</div></td>
+      <td><div class="nm"><button type="button" class="emerg-user row-user" data-uid="${esc(String(c.calleeId))}" title="${esc(t('rowOpenUser'))}">${esc(c.calleeName)}</button></div></td>
       <td>${c.emergency ? `<span class="pill danger">🆘 ${esc(t('sosCall'))}</span> ` : ''}${esc(callStatusName(c.status))}</td>
       <td class="n">${esc(fmtDur(c.durationSec))}</td>
       <td class="cell-date">${esc(fmtDate(c.createdAt))}</td>
@@ -1317,6 +1317,8 @@ function renderCalls() {
       : `<div class="empty"><div class="ico">📞</div><p>${esc(t('noCalls'))}</p></div>`}
     </div>`;
   $('#cq').addEventListener('input', (e) => { state.callsQuery = e.target.value; renderCalls(); $('#cq').focus(); });
+  // 主叫/被叫名直达用户抽屉：审 SOS 求助通话时一键查看主叫的联系人/可达性/封禁状态（与举报行/首页应急行同款直达）。
+  viewEl().querySelectorAll('.row-user').forEach((el) => el.addEventListener('click', () => { if (el.dataset.uid) openUserDrawer(el.dataset.uid); }));
   viewEl().querySelector('[data-action="reloadCalls"]').addEventListener('click', loadCalls);
   viewEl().querySelector('[data-action="exportCalls"]').addEventListener('click', () => {
     downloadCSV('beeurei-calls.csv', [
@@ -1340,9 +1342,9 @@ function renderBlocks() {
   const list = filteredBlocks();
   const rows = list.map((b) => `
     <tr>
-      <td><div class="nm">${esc(b.blockerName)}</div></td>
+      <td><div class="nm"><button type="button" class="emerg-user row-user" data-uid="${esc(String(b.blockerId))}" title="${esc(t('rowOpenUser'))}">${esc(b.blockerName)}</button></div></td>
       <td><span class="arrow">🚫</span></td>
-      <td><div class="nm">${esc(b.blockedName)}</div></td>
+      <td><div class="nm"><button type="button" class="emerg-user row-user" data-uid="${esc(String(b.blockedId))}" title="${esc(t('rowOpenUser'))}">${esc(b.blockedName)}</button></div></td>
       <td class="cell-date">${esc(fmtDate(b.createdAt))}</td>
     </tr>`).join('');
   viewEl().innerHTML = `
@@ -1358,6 +1360,8 @@ function renderBlocks() {
       : `<div class="empty"><div class="ico">🚫</div><p>${esc(t('noBlocks'))}</p></div>`}
     </div>`;
   $('#bq').addEventListener('input', (e) => { state.blocksQuery = e.target.value; renderBlocks(); $('#bq').focus(); });
+  // 拉黑双方名直达用户抽屉：核查拉黑纠纷/滥用时一键查看任一方详情（与通话行/举报行同款直达）。
+  viewEl().querySelectorAll('.row-user').forEach((el) => el.addEventListener('click', () => { if (el.dataset.uid) openUserDrawer(el.dataset.uid); }));
   viewEl().querySelector('[data-action="reloadBlocks"]').addEventListener('click', loadBlocks);
   viewEl().querySelector('[data-action="exportBlocks"]').addEventListener('click', () => {
     downloadCSV('beeurei-blocks.csv', [

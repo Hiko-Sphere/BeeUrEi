@@ -9,6 +9,7 @@ import { parseLocation, appleMapsUrl, appleMapsDirectionsUrl, locationMessageTex
 import { linkifyParts } from '../lib/linkify'
 import { imageFileFromClipboard } from '../lib/clipboardImage'
 import { downscaleForVision } from '../lib/visionImage'
+import { plural } from '../lib/plural'
 import { isForwardableKind } from '../lib/chatMessage'
 import { draftKey as draftKeyOf, draftPreview } from '../lib/draft'
 import { isNearBottom } from '../lib/scroll'
@@ -1208,7 +1209,7 @@ function ImageMessage({ src, t }: { src: string; t: (z: string, e: string) => st
       setTurns((prev) => [...prev, { q: q?.trim() ? q.trim() : null, a: r.text }])
       setQuestion('')
       if (typeof r.remaining === 'number' && r.remaining <= 3) {
-        toast(lang === 'zh' ? `今日 AI 描述还剩 ${r.remaining} 次` : `${r.remaining} AI descriptions left today`, 'info')
+        toast(lang === 'zh' ? `今日 AI 描述还剩 ${r.remaining} 次` : `${r.remaining} AI ${plural(r.remaining, 'description')} left today`, 'info')
       }
     } catch (err) {
       toast(visionErrorText(err, t), 'error')

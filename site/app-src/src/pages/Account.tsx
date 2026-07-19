@@ -3,6 +3,7 @@ import { api, APIError, contentBlockedText, reencodeToJpeg, blobToDataUrl, type 
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { medicalStalenessSelfReminder } from '../lib/medicalStaleness'
+import { plural } from '../lib/plural'
 import { subscribeWebPush, unsubscribeWebPush, isWebPushSubscribed, webPushSupported, resyncWebPushSubscription } from '../lib/webPush'
 import { inQuietHoursNow } from '../lib/quietHours'
 import { installAvailable, promptInstall, onInstallAvailable } from '../lib/installPrompt'
@@ -386,7 +387,7 @@ function TwoFactorDialog({ onClose, onChanged }: { onClose: () => void; onChange
         ) : status.enabled ? (
           <div className="mt-4 flex flex-col gap-3">
             <p className="text-sm text-soft">{t('已开启。登录时除密码外还需输入验证器的验证码。', 'On. Signing in requires a code from your authenticator in addition to your password.')}</p>
-            <p className="text-xs text-faint">{t(`剩余 ${status.recoveryCodesRemaining} 个恢复码`, `${status.recoveryCodesRemaining} recovery codes left`)}</p>
+            <p className="text-xs text-faint">{t(`剩余 ${status.recoveryCodesRemaining} 个恢复码`, `${status.recoveryCodesRemaining} recovery ${plural(status.recoveryCodesRemaining, 'code')} left`)}</p>
             {err && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{err}</div>}
             <div className="flex flex-col gap-2">
               <Button variant="soft" loading={busy} onClick={regenerate}>{t('重新生成恢复码', 'Regenerate recovery codes')}</Button>

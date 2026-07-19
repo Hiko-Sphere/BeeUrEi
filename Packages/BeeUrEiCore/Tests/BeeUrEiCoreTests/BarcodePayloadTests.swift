@@ -140,9 +140,15 @@ final class BarcodePayloadTests: XCTestCase {
     }
 
     func testCalendarEvent() {
-        // 标准 VCALENDAR 包 VEVENT：解出标题 + 开始时刻（DTSTART 带 Z 取到分钟）。
+        // 标准 VCALENDAR 包 VEVENT：解出标题 + 开始时刻。DTSTART 带 Z=UTC → 明确标 "UTC"（否则盲人误当本地时间）。
         let ical = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nSUMMARY:产品发布会\r\nDTSTART:20260720T140000Z\r\nEND:VEVENT\r\nEND:VCALENDAR"
-        XCTAssertEqual(BarcodePayload.classify(ical), .calendarEvent(title: "产品发布会", start: "2026-07-20 14:00"))
+        XCTAssertEqual(BarcodePayload.classify(ical), .calendarEvent(title: "产品发布会", start: "2026-07-20 14:00 UTC"))
+        // 本地/浮动时间（无 Z）：不加 UTC——如实读印着的本地时刻。
+        XCTAssertEqual(BarcodePayload.classify("BEGIN:VEVENT\nSUMMARY:本地会\nDTSTART:20260720T140000\nEND:VEVENT"),
+                       .calendarEvent(title: "本地会", start: "2026-07-20 14:00"))
+        // 纯日期带 Z 少见，但纯日期无时间语义 → 不加 UTC（Z 仅时间才有意义）。
+        XCTAssertEqual(BarcodePayload.classify("BEGIN:VEVENT\nSUMMARY:全天\nDTSTART:20260720\nEND:VEVENT"),
+                       .calendarEvent(title: "全天", start: "2026-07-20"))
         // 裸 VEVENT + 纯日期 DTSTART（无时间）。
         XCTAssertEqual(BarcodePayload.classify("BEGIN:VEVENT\nSUMMARY:Meeting\nDTSTART:20260720\nEND:VEVENT"),
                        .calendarEvent(title: "Meeting", start: "2026-07-20"))

@@ -184,6 +184,10 @@ public enum BarcodePayload {
             let time = v[v.index(after: tIdx)...].prefix { $0.isNumber }
             if time.count >= 4 {
                 out += " \(time.prefix(2)):\(time.dropFirst(2).prefix(2))"
+                // DTSTART 以 Z 结尾 = UTC（世界时）：如实标出，否则盲人把 UTC 时刻误当本地时间（如 14:00Z 在北京实为 22:00
+                // 却听成"下午2点"、错过或错时赴约）。与"不做时区换算、请核对"一致——只如实标 UTC、不替用户换算；Z 本就是印在
+                // 码里的字面信息，标出比丢弃更faithful。仅有时间时才标（纯日期无时区语义）。
+                if v.uppercased().hasSuffix("Z") { out += " UTC" }
             }
         }
         return out

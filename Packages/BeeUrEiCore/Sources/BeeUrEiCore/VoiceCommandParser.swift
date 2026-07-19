@@ -274,8 +274,12 @@ public enum VoiceCommandParser {
         guard t.contains("route"), ["take", "follow", "walk", "start"].contains(where: { t.contains($0) }) else { return nil }
         if let r = t.range(of: " route"), r.lowerBound > t.startIndex {
             var name = String(t[..<r.lowerBound])
-            for v in ["take", "follow", "walk", "start"] {
-                if let vr = name.range(of: v) { name = String(name[vr.upperBound...]); break }
+            // 剥**最靠前**（按位置取最左）的行走动词，而非按列表序命中——否则路线名含较靠前列出的动词子串时会被
+            // 错误截断：如 "start the boardwalk route" 里 "walk"⊂board`walk` 先于真正的前导动词 "start" 命中、
+            // 名字被截成空 → 返回 nil → 存好的 boardwalk/riverwalk/sidewalk/walkway 类步道路线永远走不了
+            // （盲人被告知查无此路线）。取最左动词只剥真正的前导动词，路线名里的动词子串不受影响。
+            if let leftmost = ["take", "follow", "walk", "start"].compactMap({ name.range(of: $0) }).min(by: { $0.lowerBound < $1.lowerBound }) {
+                name = String(name[leftmost.upperBound...])
             }
             name = name.replacingOccurrences(of: " the ", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
             if name.hasPrefix("the ") { name = String(name.dropFirst(4)) }

@@ -550,6 +550,12 @@ final class VoiceCommandParserTests: XCTestCase {
         XCTAssertEqual(VoiceCommandParser.parse("按妈妈画的路线走"), .savedRoute("妈妈画"))   // "的"尾剥离
         XCTAssertEqual(VoiceCommandParser.parse("take the home to market route"), .savedRoute("home to market"))
         XCTAssertEqual(VoiceCommandParser.parse("follow route 2"), .savedRoute("2"))
+        // 回归：路线名含行走动词**子串**（boardwalk/riverwalk/sidewalk/walkway 等常见步道名）不得被误截。
+        // 曾 bug：动词按列表序命中，"walk"⊂boardwalk 先于前导动词 "start" 命中 → 名字截空 → 返回 nil、走不了此路线。
+        XCTAssertEqual(VoiceCommandParser.parse("start the boardwalk route"), .savedRoute("boardwalk"))
+        XCTAssertEqual(VoiceCommandParser.parse("follow the riverwalk route"), .savedRoute("riverwalk"))
+        XCTAssertEqual(VoiceCommandParser.parse("take the sidewalk route"), .savedRoute("sidewalk"))
+        XCTAssertEqual(VoiceCommandParser.parse("walk the walkway route"), .savedRoute("walkway"))
         // 缺名字（裸"走路线"）→ 不触发（落 unknown，而非带空名开导航）。
         XCTAssertNotEqual(VoiceCommandParser.parse("走路线"), .savedRoute(""))
         // 缺行走动词（询问类）→ 不触发。

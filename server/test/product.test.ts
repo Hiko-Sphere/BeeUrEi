@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { composeProductName, extractAllergens, extractDietaryLabels, extractNutrientLevels, lookupProduct, parseNutriScore, parseNovaGroup, parseQuantity, parseIngredients, parseEnergyKcal, parseNutrimentGrams, parseServingGrams } from '../src/product/openFoodFacts'
+import { composeProductName, pickLocalizedText, extractAllergens, extractDietaryLabels, extractNutrientLevels, lookupProduct, parseNutriScore, parseNovaGroup, parseQuantity, parseIngredients, parseEnergyKcal, parseNutrimentGrams, parseServingGrams } from '../src/product/openFoodFacts'
 import { buildApp } from '../src/app'
 import { MemoryStore } from '../src/db/store'
 
@@ -27,6 +27,47 @@ describe('Open Food Facts 商品查询', () => {
   it('组名截断超长到 120 字', () => {
     const long = 'x'.repeat(300)
     expect(composeProductName({ product_name: long })!.length).toBe(120)
+  })
+
+  it('pickLocalizedText：优先界面语言专属字段 → 回退通用 → 回退另一语言（进口货中文专名/配料的本地化）', () => {
+    // 进口货：通用 product_name 是原产国外语，中文贡献者填了 product_name_zh。
+    const imp = { product_name: 'Shiroi Koibito', product_name_zh: '白色恋人' }
+    expect(pickLocalizedText(imp, 'product_name', 'zh')).toBe('白色恋人')       // zh 用户取中文专名
+    expect(pickLocalizedText(imp, 'product_name', 'en')).toBe('Shiroi Koibito') // en 用户无 _en → 回退通用
+    // 三语齐全：各取所属。
+    const tri = { product_name: 'X', product_name_zh: '中文名', product_name_en: 'English Name' }
+    expect(pickLocalizedText(tri, 'product_name', 'zh')).toBe('中文名')
+    expect(pickLocalizedText(tri, 'product_name', 'en')).toBe('English Name')
+    // 只有通用：两种语言都回退到它（向后兼容，绝不因偏好某语言丢名）。
+    expect(pickLocalizedText({ product_name: '苏打饼干' }, 'product_name', 'zh')).toBe('苏打饼干')
+    expect(pickLocalizedText({ product_name: '苏打饼干' }, 'product_name', 'en')).toBe('苏打饼干')
+    // 只有另一语言专属（无通用）：末级回退拿到它，好过空（有中文名的进口货，en 用户也听到中文名而非无名）。
+    expect(pickLocalizedText({ product_name_zh: '仅中文' }, 'product_name', 'en')).toBe('仅中文')
+    // 坏/缺字段安全。
+    expect(pickLocalizedText({ product_name_zh: 42, product_name: null }, 'product_name', 'zh')).toBe('')
+    expect(pickLocalizedText({}, 'product_name', 'zh')).toBe('')
+  })
+
+  it('composeProductName(lang)：按界面语言优先取 product_name_{lang}（品牌前缀逻辑不变）', () => {
+    const imp = { brands: '石屋制果', product_name: 'Shiroi Koibito', product_name_zh: '白色恋人' }
+    expect(composeProductName(imp, 'zh')).toBe('石屋制果 白色恋人')       // zh：中文专名 + 品牌
+    expect(composeProductName(imp, 'en')).toBe('石屋制果 Shiroi Koibito') // en：回退通用外文名 + 品牌
+    expect(composeProductName({ product_name: 'Generic', product_name_zh: 'Generic' })).toBeTruthy() // 默认 lang=zh（向后兼容）
+  })
+
+  it('lookupProduct(lang)：按语言取商品名与配料表版本（进口货中文专名/中文配料）', async () => {
+    const respond = (body: unknown) => async () => ({ ok: true, json: async () => body })
+    const product = { brands: 'Meiji', product_name: 'Meiji Milk', product_name_zh: '明治牛奶',
+      ingredients_text: 'Raw milk, sugar', ingredients_text_zh: '生牛乳、白砂糖' }
+    const zh = await lookupProduct('6901234567890', respond({ status: 1, product }), 'zh')
+    expect(zh.kind === 'found' && zh.info.name).toBe('Meiji 明治牛奶')        // 中文专名
+    expect(zh.kind === 'found' && zh.info.ingredients).toBe('生牛乳、白砂糖') // 中文配料
+    const en = await lookupProduct('6901234567890', respond({ status: 1, product }), 'en')
+    expect(en.kind === 'found' && en.info.name).toBe('Meiji Milk')            // 无 _en → 通用外文名
+    expect(en.kind === 'found' && en.info.ingredients).toBe('Raw milk, sugar')
+    // 默认 lang 省略 = zh（向后兼容，旧调用签名）。
+    const def = await lookupProduct('6901234567890', respond({ status: 1, product }))
+    expect(def.kind === 'found' && def.info.name).toBe('Meiji 明治牛奶')
   })
 
   it('extractAllergens：剥语言前缀/去重/去空/上限/坏数据安全', () => {

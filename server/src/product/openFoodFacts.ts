@@ -57,14 +57,27 @@ export interface Macros100g {
 
 type FetchLike = (url: string, init?: unknown) => Promise<{ ok: boolean; json: () => Promise<unknown> }>
 
+export type ProductLang = 'zh' | 'en'
+
+/// OFF 的多语言文本字段选择：优先取**界面语言专属**字段（product_name_zh / ingredients_text_en…），
+/// 缺则回退通用字段（product_name），再回退另一语言。进口商品 OFF 常已由中文贡献者填了 `_zh` 专名/配料，
+/// 而通用 `product_name` 仍是原产国外语——不取 `_zh` 时，中文盲人扫进口货只能听到外语名/外语配料（识别本地化缺口）。
+/// 取空白安全（缺字段/非字符串→''），三级回退保证至少拿到通用字段、绝不因偏好某语言而丢名。
+export function pickLocalizedText(p: Record<string, unknown>, base: string, lang: ProductLang): string {
+  const get = (k: string): string => (typeof p[k] === 'string' ? (p[k] as string).trim() : '')
+  const other: ProductLang = lang === 'zh' ? 'en' : 'zh'
+  return get(`${base}_${lang}`) || get(base) || get(`${base}_${other}`)
+}
+
 /// 从 Open Food Facts 商品对象组一个可读名："品牌 商品名"。多品牌取首个；商品名已含品牌则不重复前缀；
 /// 均为空返回 null（上层据此回退"用户起名"）。截断防超长播报。
-export function composeProductName(product: unknown): string | null {
+/// lang：按界面语言优先取 product_name_{lang}（进口货的中文专名），缺则回退通用/另一语言（见 pickLocalizedText）。
+export function composeProductName(product: unknown, lang: ProductLang = 'zh'): string | null {
   if (!product || typeof product !== 'object') return null
   const p = product as Record<string, unknown>
   const brandRaw = typeof p.brands === 'string' ? p.brands : ''
   const brand = (brandRaw.split(',')[0] ?? '').trim()
-  const name = typeof p.product_name === 'string' ? p.product_name.trim() : ''
+  const name = pickLocalizedText(p, 'product_name', lang)
   // 名字已含品牌则不重复前缀——**大小写不敏感**比对：OFF 的 brands 常与 product_name 大小写不一致
   // （brands 多为全大写，如 brands="COCA-COLA" / product_name="Coca-Cola Zero"）。区分大小写会判为"不含"、
   // 于是把品牌又拼一遍 → 盲人听到"COCA-COLA Coca-Cola Zero"（同一品牌念两遍）。转小写比对消除该重复。
@@ -213,8 +226,10 @@ export type LookupOutcome =
   | { kind: 'failed' }
 
 /// 查一个条码，区分"真未收录(notFound)"与"瞬时故障(failed)"（用于差异化缓存；两者对客户端都表现为拿不到名字）。
-export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeoutMs = 5000): Promise<LookupOutcome> {
-  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,allergens_tags,traces_tags,nutriscore_grade,nova_group,labels_tags,quantity,nutrient_levels,ingredients_text,nutriments,serving_quantity`
+export async function lookupProduct(barcode: string, fetchImpl: FetchLike, lang: ProductLang = 'zh', timeoutMs = 5000): Promise<LookupOutcome> {
+  // 一并取**语言专属**字段（product_name_zh/_en、ingredients_text_zh/_en）：进口货 OFF 常填了中文专名/配料而通用字段仍是外语，
+  // 不取则中文盲人扫进口货听不到中文名/配料（见 pickLocalizedText）。通用字段保留作回退。
+  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,product_name_zh,product_name_en,brands,allergens_tags,traces_tags,nutriscore_grade,nova_group,labels_tags,quantity,nutrient_levels,ingredients_text,ingredients_text_zh,ingredients_text_en,nutriments,serving_quantity`
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
@@ -225,7 +240,7 @@ export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeo
     if (!res.ok) return { kind: 'failed' } // 非 200：上游侧问题，视为瞬时故障不长缓存
     const data = (await res.json()) as Record<string, unknown> | null
     if (!data || data.status !== 1) return { kind: 'notFound' } // status 1=收录，0=明确未收录
-    const name = composeProductName(data.product)
+    const name = composeProductName(data.product, lang)
     if (!name) return { kind: 'notFound' } // 有记录但无可读名：等同未收录
     const p = data.product as Record<string, unknown> | undefined
     return { kind: 'found', info: {
@@ -237,7 +252,7 @@ export async function lookupProduct(barcode: string, fetchImpl: FetchLike, timeo
       dietaryLabels: extractDietaryLabels(p?.labels_tags),
       quantity: parseQuantity(p?.quantity),
       nutrientLevels: extractNutrientLevels(p?.nutrient_levels),
-      ingredients: parseIngredients(p?.ingredients_text),
+      ingredients: parseIngredients(p ? pickLocalizedText(p, 'ingredients_text', lang) : undefined),
       energyKcal100g: parseEnergyKcal((p?.nutriments as Record<string, unknown> | undefined)?.['energy-kcal_100g']),
       macros100g: ((): Macros100g => {
         const nut = p?.nutriments as Record<string, unknown> | undefined

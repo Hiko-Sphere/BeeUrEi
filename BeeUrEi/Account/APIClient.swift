@@ -1254,8 +1254,9 @@ struct APIClient {
     }
 
     /// 商品条码 → 商品名+标注过敏原（服务端代理 Open Food Facts）。查不到/离线/任何错误一律 nil（上层回退"用户起名"，绝不编造）。
-    func lookupProduct(token: String, barcode: String) async -> ProductLookupInfo? {
-        guard let data = try? await authedGet("/api/product/\(barcode)", token: token) else { return nil }
+    /// lang：按界面语言取商品名/配料的语言版本（进口货 OFF 常有中文专名/配料，见服务端 pickLocalizedText）。barcode 已由客户端限数字、无需转义。
+    func lookupProduct(token: String, barcode: String, lang: String) async -> ProductLookupInfo? {
+        guard let data = try? await authedGet("/api/product/\(barcode)?lang=\(lang)", token: token) else { return nil }
         return try? JSONDecoder().decode(ProductLookupInfo.self, from: data)
     }
 

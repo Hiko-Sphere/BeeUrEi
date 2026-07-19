@@ -1469,7 +1469,7 @@ final class FramingAssistViewModel {
             guard let self else { return }
             var found: APIClient.ProductLookupInfo?
             if let token = KeychainStore.read() {
-                found = await APIClient().lookupProduct(token: token, barcode: barcode)
+                found = await APIClient().lookupProduct(token: token, barcode: barcode, lang: self.lang == .zh ? "zh" : "en")
             }
             guard !self.paused else { return } // 已关闭/被来电盖上：不再改 UI/播报
             // 期间又扫了新条码（gen 已变）→ 丢弃这次的慢响应：否则会把 A 商品的名字/过敏原报到已切换的 B 结果上（复审#1，安全）

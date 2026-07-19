@@ -14,13 +14,31 @@ final class CallQualityAnnouncerTests: XCTestCase {
         XCTAssertNil(a.update(.weak, language: .zh))
     }
 
-    func testRecoveryAnnouncedAfterWeak() {
+    func testRecoveryToGoodSaysFullyRecovered() {
+        var a = CallQualityAnnouncer(confirmations: 2)
+        _ = a.update(.weak, language: .zh); _ = a.update(.weak, language: .zh) // 进入弱
+        XCTAssertNil(a.update(.fair, language: .zh))    // 恢复需确认
+        let r = a.update(.good, language: .zh)          // 第 2 次非弱、且到 good → 彻底恢复
+        XCTAssertNotNil(r); XCTAssertTrue(r!.contains("恢复了"), r ?? "nil")
+        XCTAssertNil(a.update(.good, language: .zh))    // 已恢复不重复
+    }
+
+    func testRecoveryOnlyToFairSaysImprovedNotFullyRecovered() {
+        // 从弱只恢复到 fair（好转但仍不稳）：不说"恢复了"（否则盲人误以为可停止找位置），而是如实"好一些了、可能仍卡顿"。
         var a = CallQualityAnnouncer(confirmations: 2)
         _ = a.update(.weak, language: .zh); _ = a.update(.weak, language: .zh) // 进入弱
         XCTAssertNil(a.update(.good, language: .zh))    // 恢复需确认
-        let r = a.update(.fair, language: .zh)          // 第 2 次非弱 → 恢复
-        XCTAssertNotNil(r); XCTAssertTrue(r!.contains("恢复"))
-        XCTAssertNil(a.update(.good, language: .zh))    // 已恢复不重复
+        let r = a.update(.fair, language: .zh)          // 第 2 次非弱、确认时为 fair → 好转但未彻底
+        XCTAssertNotNil(r)
+        XCTAssertTrue(r!.contains("好一些"), r ?? "nil")
+        XCTAssertFalse(r!.contains("恢复了"), r ?? "nil") // 绝不谎称"彻底恢复"
+        // 英文对称。
+        var b = CallQualityAnnouncer(confirmations: 2)
+        _ = b.update(.weak, language: .en); _ = b.update(.weak, language: .en)
+        _ = b.update(.good, language: .en)
+        let en = b.update(.fair, language: .en)
+        XCTAssertEqual(en?.contains("improved but may still stutter"), true)
+        XCTAssertEqual(en?.contains("back to normal"), false)
     }
 
     func testNoAnnounceForGoodFairAtStartOrBetween() {

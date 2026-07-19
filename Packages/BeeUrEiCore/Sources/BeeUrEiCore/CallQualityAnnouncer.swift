@@ -75,14 +75,15 @@ public struct CallQualityAnnouncer: Sendable {
         if pendingWeak == isWeak { pendingCount += 1 } else { pendingWeak = isWeak; pendingCount = 1 }
         guard pendingCount >= confirmations else { return nil }
         announcedWeak = isWeak; pendingWeak = nil; pendingCount = 0
+        // 恢复时按恢复到的档区分：恢复到 good=彻底好了；只到 fair=好转但仍不稳（如从死角挪到"能用但一般"的位置）。
+        // 后者若也说"恢复了"会让盲人误以为可停止找位置、随后仍遇卡顿而困惑——如实说"好些了但仍可能卡顿"更可行动。
+        let fullyRecovered = (level == .good)
         if language == .zh {
-            return isWeak
-                ? "通话信号弱，可能会卡顿或听不清；换个位置、靠近路由器可能会好一些。"
-                : "通话信号恢复了。"
+            if isWeak { return "通话信号弱，可能会卡顿或听不清；换个位置、靠近路由器可能会好一些。" }
+            return fullyRecovered ? "通话信号恢复了。" : "通话信号好一些了，但可能仍有卡顿。"
         } else {
-            return isWeak
-                ? "Call signal is weak — audio may stutter; moving or getting closer to your router may help."
-                : "Call signal is back to normal."
+            if isWeak { return "Call signal is weak — audio may stutter; moving or getting closer to your router may help." }
+            return fullyRecovered ? "Call signal is back to normal." : "Call signal improved but may still stutter."
         }
     }
 }

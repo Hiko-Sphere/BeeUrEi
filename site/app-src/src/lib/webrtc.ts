@@ -79,8 +79,9 @@ export class CallQualityAnnouncer {
   private readonly confirmations: number
   constructor(confirmations = 2) { this.confirmations = confirmations } // 不用参数属性：web 构建 erasableSyntaxOnly 禁用
 
-  /// 喂入最新信号档，返回需播报的语义（'weak' 转弱 / 'recovered' 恢复 / null 无需播）。
-  update(quality: Quality): 'weak' | 'recovered' | null {
+  /// 喂入最新信号档，返回需播报的语义（'weak' 转弱 / 'recovered' 彻底恢复(good) / 'improved' 好转但仍不稳(仅到 fair) /
+  /// null 无需播）。恢复只到 fair 时不说"恢复了"——否则误导用户可停止找位置、随后仍卡顿（与 iOS 核心同口径）。
+  update(quality: Quality): 'weak' | 'recovered' | 'improved' | null {
     if (quality === 'unknown') return null // 无数据：中性，保留正在累积的确认
     const isWeak = quality === 'weak'
     if (isWeak === this.announcedWeak) { this.pendingWeak = null; this.pendingCount = 0; return null } // 与已播一致：稳定，清累积
@@ -88,7 +89,8 @@ export class CallQualityAnnouncer {
     else { this.pendingWeak = isWeak; this.pendingCount = 1 }
     if (this.pendingCount < this.confirmations) return null
     this.announcedWeak = isWeak; this.pendingWeak = null; this.pendingCount = 0
-    return isWeak ? 'weak' : 'recovered'
+    if (isWeak) return 'weak'
+    return quality === 'good' ? 'recovered' : 'improved' // 到 good=彻底恢复；只到 fair=好转但仍不稳
   }
 }
 

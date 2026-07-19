@@ -89,6 +89,7 @@ export function CallScreen({ call, onEnd }: { call: ActiveCall; onEnd: (reason?:
             const say = qualityAnnouncerRef.current.update(q)
             if (say === 'weak') setQualityNote(t('通话信号弱，可能卡顿或听不清；换个位置或靠近路由器可能会好一些。', 'Call signal is weak — audio may stutter; moving or getting closer to your router may help.'))
             else if (say === 'recovered') setQualityNote(t('通话信号恢复了。', 'Call signal is back to normal.'))
+            else if (say === 'improved') setQualityNote(t('通话信号好一些了，但可能仍有卡顿。', 'Call signal improved but may still stutter.')) // 只恢复到 fair：不谎称"恢复了"
           },
           onAdminObserving: (info) => setAdmin(info),
           onPeerRecording: (on) => setPeerRecording(on),

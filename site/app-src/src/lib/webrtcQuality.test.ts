@@ -105,14 +105,21 @@ describe('CallQualityAnnouncer（读屏主动播报去抖，与 iOS 同款）', 
     expect(a.update('weak')).toBe('weak') // 3 → 播
     expect(a.update('weak')).toBeNull()   // 已播弱：不重复
   })
-  it('从弱恢复须连续确认后才播；起步 good/fair 不播（不表态）', () => {
+  it('从弱恢复须连续确认后才播；起步 good/fair 不播（不表态）；恢复到 good→recovered', () => {
     const a = new CallQualityAnnouncer(2)
     expect(a.update('good')).toBeNull()   // 起步正常不播
     expect(a.update('fair')).toBeNull()   // fair↔good 不表态
     a.update('weak'); a.update('weak')    // 进入弱（confirmations=2）
-    expect(a.update('good')).toBeNull()   // 恢复需确认
-    expect(a.update('fair')).toBe('recovered') // 第 2 次非弱 → 恢复
+    expect(a.update('fair')).toBeNull()   // 恢复需确认
+    expect(a.update('good')).toBe('recovered') // 第 2 次非弱、且到 good → 彻底恢复
     expect(a.update('good')).toBeNull()   // 已恢复不重复
+  })
+  it('从弱只恢复到 fair→improved（好转但仍不稳），不谎称 recovered', () => {
+    const a = new CallQualityAnnouncer(2)
+    a.update('weak'); a.update('weak')    // 进入弱
+    expect(a.update('good')).toBeNull()   // 恢复需确认
+    expect(a.update('fair')).toBe('improved') // 确认时为 fair → 好转但未彻底，与 iOS 核心同口径
+    expect(a.update('fair')).toBeNull()   // 已播不重复
   })
   it('unknown 中性：不表态、也不清正在累积的确认', () => {
     const a = new CallQualityAnnouncer(3)

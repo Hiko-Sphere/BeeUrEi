@@ -286,8 +286,10 @@ enum SafetyTimerFormat {
     static func remainingText(sec: Int, _ l: Language) -> String {
         let s = max(0, sec)
         let h = s / 3600, m = (s % 3600) / 60
-        if l == .zh { return h > 0 ? "还有约 \(h) 小时 \(m) 分钟" : "还有约 \(m) 分钟" }
-        return h > 0 ? "About \(h)h \(m)m left" : "About \(m) min left"
+        // 整点小时不拖"0 分钟"（"2 小时"而非"2 小时 0 分钟"——与本类 durationName / web remainingText 同口径；报到窗口
+        // 最长 24h，倒计时每小时都会经过一次整点分钟，"X 小时 0 分钟"读屏冗余、跨端读法不一）。
+        if l == .zh { return h > 0 ? (m > 0 ? "还有约 \(h) 小时 \(m) 分钟" : "还有约 \(h) 小时") : "还有约 \(m) 分钟" }
+        return h > 0 ? (m > 0 ? "About \(h)h \(m)m left" : "About \(h)h left") : "About \(m) min left"
     }
     /// 时长选项显示名（30 分钟 / 2 小时…）。
     static func durationName(_ m: Int, _ l: Language) -> String {

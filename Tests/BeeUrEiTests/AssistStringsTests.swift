@@ -179,6 +179,11 @@ final class AssistStringsTests: XCTestCase {
         XCTAssertEqual(SafetyTimerFormat.remainingText(sec: 1800, .zh), "还有约 30 分钟")
         XCTAssertEqual(SafetyTimerFormat.remainingText(sec: 5400, .zh), "还有约 1 小时 30 分钟")
         XCTAssertTrue(SafetyTimerFormat.remainingText(sec: 3660, .en).contains("1h"))
+        // 整点小时不拖"0 分钟"（"2 小时"而非"2 小时 0 分钟"；与 durationName / web remainingText 同口径，24h 窗口每小时经过整点）。
+        XCTAssertEqual(SafetyTimerFormat.remainingText(sec: 7200, .zh), "还有约 2 小时")
+        XCTAssertEqual(SafetyTimerFormat.remainingText(sec: 3600, .zh), "还有约 1 小时")
+        XCTAssertEqual(SafetyTimerFormat.remainingText(sec: 7200, .en), "About 2h left")
+        XCTAssertEqual(SafetyTimerFormat.remainingText(sec: 24 * 3600, .zh), "还有约 24 小时") // 最长报到窗口
         XCTAssertEqual(SafetyTimerFormat.remainingText(sec: -50, .zh), "还有约 0 分钟") // 负值夹到 0，不崩
         XCTAssertEqual(SafetyTimerFormat.durationName(30, .zh), "30 分钟")
         XCTAssertEqual(SafetyTimerFormat.durationName(120, .zh), "2 小时")

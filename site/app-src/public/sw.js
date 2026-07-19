@@ -116,21 +116,31 @@ self.addEventListener('notificationclick', (event) => {
   // 聊天：单聊按 fromId 直达对端会话、群聊按 groupId 直达该群（/app/chat/g/<id>，与单聊 /app/chat/<peerId> 对称）；
   // 二者皆缺才落聊天列表。群消息 web push 服务端带 groupId（见 messages.ts 群扇出），此前 SW 只认 fromId、
   // 群消息点开只到列表、还得再找那个群——补齐群深链。
-  const path = d0.kind === 'incoming_call' ? '/app/'
-    : d0.kind === 'chat_message'
-      ? (d0.fromId ? '/app/chat/' + encodeURIComponent(d0.fromId)
-        : d0.groupId ? '/app/chat/g/' + encodeURIComponent(d0.groupId)
-        : '/app/chat')
-    // 请求共享位置（可操作 nudge）/ 你请求的人开始共享了 → 直达位置页（开关/地图都在那里；与应用内 NotifDestination 一致）。
-    // location_request/location_share_started 绝非告警，路由无歧义。
-    : (d0.kind === 'location_request' || d0.kind === 'location_share_started') ? '/app/locations'
-    // 会话类通知（群成员变动/置顶）→ 直达会话（群深链 /chat/g/:id、单聊 /chat/:peerId），与应用内 notifDestination 一致。
-    // 例外：group_removed（你被移出）/group_dissolved（群已散）——进不去那个群，落通知页而非深链到空群。
-    : ((d0.kind && d0.kind.indexOf('group') !== -1 && d0.kind !== 'group_removed' && d0.kind !== 'group_dissolved') || d0.kind === 'message_pinned')
-      ? (d0.groupId ? '/app/chat/g/' + encodeURIComponent(d0.groupId)
-        : d0.fromId ? '/app/chat/' + encodeURIComponent(d0.fromId)
-        : '/app/notifications')
-    : '/app/notifications'
+  const k = d0.kind || ''
+  // 紧急告警（SOS 首呼/升级/未报到：服务端统一带 type='emergency_alert'，或首呼事由 fall/crash/manual）一律落通知页——
+  // 那里有诚实位置标注 + 回拨/我在赶来；**绝不**因 kind 含 'checkin'(未报到) 等被下面按类映射误引去别处（安全攸关）。
+  const urgent0 = d0.type === 'emergency_alert' || k === 'fall' || k === 'crash' || k === 'manual'
+  let path
+  if (k === 'incoming_call') path = '/app/' // 来电 → 首页（全局 IncomingCallHost 任何页都弹铃，首页最快）
+  // 聊天推送 → 对端/群会话（单聊 fromId 直达、群聊 groupId 深链；二者皆缺落聊天列表）。
+  else if (k === 'chat_message') path = d0.fromId ? '/app/chat/' + encodeURIComponent(d0.fromId)
+    : d0.groupId ? '/app/chat/g/' + encodeURIComponent(d0.groupId) : '/app/chat'
+  else if (urgent0) path = '/app/notifications' // SOS 告警 → 通知页（诚实位置标注 + 回拨）
+  // 以下**非告警**类：直达各自可操作页，与应用内 notifDestination **逐类一致**（推送点开即到能处理它的页面，而非
+  // 一律落通知页再自己找）。notifyUser 下发的推送 data.kind===站内通知 kind，故可复用同一映射。顺序敏感同 notifDestination：
+  // security 系先于 friend/link（…apple_linked 含 'link'）；emergency_contact 是"你被设为紧急联系人"关系事件(非 SOS)→ 亲友页。
+  else if (k.indexOf('security') !== -1 || k.indexOf('medical') !== -1 || k.indexOf('kyc') !== -1 || k.indexOf('verif') !== -1) path = '/app/account'
+  else if (k.indexOf('emergency_contact') !== -1) path = '/app/family'
+  else if (k.indexOf('checkin') !== -1) path = '/app/family' // 报到提醒(checkin_reminder) → 亲友页(报平安/延长卡就在那)
+  else if (k.indexOf('friend') !== -1 || k.indexOf('link') !== -1) path = '/app/family'
+  // 会话类通知（群成员变动/置顶）→ 直达会话；被移出/群解散例外落通知页（进不去那个群，绝不深链到空群/403）。
+  else if ((k.indexOf('group') !== -1 && k !== 'group_removed' && k !== 'group_dissolved') || k === 'message_pinned')
+    path = d0.groupId ? '/app/chat/g/' + encodeURIComponent(d0.groupId)
+      : d0.fromId ? '/app/chat/' + encodeURIComponent(d0.fromId) : '/app/notifications'
+  else if (k.indexOf('route') !== -1) path = '/app/routes' // 亲友加了新路线 → 路线库页
+  else if (k.indexOf('place') !== -1 || k.indexOf('arrival') !== -1 || k.indexOf('battery') !== -1) path = '/app/locations' // 到达/离开围栏/低电量 → 位置页看对方在哪
+  else if (k === 'location_request' || k === 'location_share_started') path = '/app/locations' // 请求共享位置 nudge / 对方开始共享 → 位置页
+  else path = '/app/notifications' // 告警后续(报平安/响应中/已确认)等 → 通知页
   const target = new URL(path, self.location.origin).href
   event.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })

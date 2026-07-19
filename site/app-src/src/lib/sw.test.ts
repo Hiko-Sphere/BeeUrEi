@@ -209,11 +209,35 @@ describe('sw.js 通知点击深链（notificationclick 路由）', () => {
     expect(await fireClick({ kind: 'group_removed', groupId: 'g1' })).toBe(`${O}/app/notifications`)
     expect(await fireClick({ kind: 'group_dissolved', groupId: 'g1' })).toBe(`${O}/app/notifications`)
   })
-  it('告警/其它 kind → 通知页（诚实位置标注 + 回拨都在那）', async () => {
-    expect(await fireClick({ kind: 'emergency_alert', fromId: 'u1' })).toBe(`${O}/app/notifications`)
-    expect(await fireClick({ kind: 'friend_request', fromId: 'u2' })).toBe(`${O}/app/notifications`)
-    // 未报到告警：data.kind='checkin' 但 type='emergency_alert'——须留在通知页(地图+回拨)，绝不因 'checkin' 被误引去别处。
+  it('SOS 告警/告警后续 → 通知页（诚实位置标注 + 回拨都在那）', async () => {
+    // SOS 首呼（fall/crash/manual）与升级（type=emergency_alert）：位置标注+回拨都在通知页，绝不引去别处（安全攸关）。
+    expect(await fireClick({ kind: 'emergency_alert', type: 'emergency_alert', fromId: 'u1' })).toBe(`${O}/app/notifications`)
+    expect(await fireClick({ kind: 'fall', fromId: 'u1' })).toBe(`${O}/app/notifications`)
+    expect(await fireClick({ kind: 'crash', fromId: 'u1' })).toBe(`${O}/app/notifications`)
+    expect(await fireClick({ kind: 'manual', fromId: 'u1' })).toBe(`${O}/app/notifications`)
+    // 关键安全区分：未报到告警 data.kind='checkin' 但带 type='emergency_alert'——须留通知页(地图+回拨)，
+    // 绝不因 kind 含 'checkin' 被误引去亲友页。
     expect(await fireClick({ kind: 'checkin', type: 'emergency_alert', fromId: 'u3' })).toBe(`${O}/app/notifications`)
+    // 告警后续（报平安/响应中/已确认）非告警本身、无专属去处 → 通知页兜底。
+    expect(await fireClick({ kind: 'emergency_clear', fromId: 'u4' })).toBe(`${O}/app/notifications`)
+    expect(await fireClick({ kind: 'emergency_responding', fromId: 'u5' })).toBe(`${O}/app/notifications`)
+  })
+
+  it('非告警推送 → 直达可操作页（与应用内 notifDestination 逐类一致，推送点开即到能处理它的页面）', async () => {
+    // 好友请求 → 亲友页（接受/拒绝就在那；此前一律落通知页要再自己找）。
+    expect(await fireClick({ kind: 'friend_request', fromId: 'u2' })).toBe(`${O}/app/family`)
+    // 报到提醒（data.kind='checkin_reminder'，非 emergency）→ 亲友页(报平安/延长卡)——这条通知的全部意义就是"去报到"。
+    expect(await fireClick({ kind: 'checkin_reminder', timerId: 't1' })).toBe(`${O}/app/family`)
+    // 被设为紧急联系人（关系事件，含子串 emergency 但非 SOS）→ 亲友页。
+    expect(await fireClick({ kind: 'emergency_contact_set', fromId: 'u6' })).toBe(`${O}/app/family`)
+    // 账号/安全类 → 账户页；须先于 friend/link 判（apple_linked 含 'link' 不得误落亲友页）。
+    expect(await fireClick({ kind: 'security_password_changed' })).toBe(`${O}/app/account`)
+    expect(await fireClick({ kind: 'security_apple_linked' })).toBe(`${O}/app/account`)
+    expect(await fireClick({ kind: 'medical_info', fromId: 'u7' })).toBe(`${O}/app/account`)
+    // 亲友新加路线 → 路线库页；到达围栏/低电量 → 位置页。
+    expect(await fireClick({ kind: 'route_added', routeId: 'r1' })).toBe(`${O}/app/routes`)
+    expect(await fireClick({ kind: 'place_arrival', fromId: 'u8' })).toBe(`${O}/app/locations`)
+    expect(await fireClick({ kind: 'contact_low_battery', fromId: 'u9' })).toBe(`${O}/app/locations`)
   })
 })
 

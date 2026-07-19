@@ -250,6 +250,20 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertEqual(FramingStrings.uiDelete(.en), "Delete")
     }
 
+    func testHistoryKindLabels() {
+        // 各识别类别在历史面板的本地化标签（VoiceOver 念"场景/文字/日期…"以区分记录类型）。
+        XCTAssertEqual(FramingStrings.historyKind("dates", .zh), "日期")
+        XCTAssertEqual(FramingStrings.historyKind("barcode", .en), "Code")
+        // scene（AI 场景描述）：须与"文字/Text"区分——这是整段场景叙述、非拍到的文字。
+        // 此前无 "scene" 分支 → 落 default 被误标"文字/Text"（AI 描述已可复制+入历史，标签须对得上）。
+        XCTAssertEqual(FramingStrings.historyKind("scene", .zh), "场景")
+        XCTAssertEqual(FramingStrings.historyKind("scene", .en), "Scene")
+        XCTAssertNotEqual(FramingStrings.historyKind("scene", .zh), FramingStrings.historyKind("text", .zh)) // 绝不与"文字"同标签
+        // 未知类别兜底"文字/Text"（不崩、不空）。
+        XCTAssertEqual(FramingStrings.historyKind("mystery", .zh), "文字")
+        XCTAssertEqual(FramingStrings.historyKind("mystery", .en), "Text")
+    }
+
     func testLowConfidencePhrases() {
         XCTAssertEqual(FramingStrings.maybeThis("椅子", .zh), "可能是椅子")
         XCTAssertEqual(FramingStrings.recognizedMaybeResult("chair", .en), "Possibly: chair")

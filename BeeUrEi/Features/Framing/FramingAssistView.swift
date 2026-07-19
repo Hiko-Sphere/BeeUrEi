@@ -964,6 +964,11 @@ final class FramingAssistViewModel {
                 var out = r.text
                 if let note = ChatStrings.quotaRemainingNote(remaining: r.remaining, lang) { out += lang == .zh ? "。\(note)" : ". \(note)" }
                 self.resultText = out
+                // 场景描述是最丰富的识别结果，却此前唯一既不可复制、也不进识别历史的一类（OCR/日期/电话/扫码等都进）——
+                // 补齐与其它识别同口径：可复制（盲人把"我面前是什么"粘给明眼人核对/存档）+ 入历史（"再听一遍刚才那段描述"、
+                // 可搜索回看）。复制/历史存**纯描述** r.text（不含"今日还剩N次"配额提醒，避免粘进备忘录，同 dates 口径）。
+                self.copyableResult = r.text
+                self.historyStore.add(kind: "scene", content: r.text)
                 self.speak(out)
             } catch APIError.server(let code) {
                 guard !self.paused else { return }

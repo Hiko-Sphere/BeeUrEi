@@ -852,6 +852,7 @@ enum FramingStrings {
             case "dates": return "日期"
             case "phone": return "电话"
             case "email": return "邮箱"
+            case "scene": return "场景"   // AI 场景描述（历史里与"文字"区分：这是整段场景叙述、非拍到的文字）
             default: return "文字"
             }
         case .en:
@@ -862,6 +863,7 @@ enum FramingStrings {
             case "dates": return "Date"
             case "phone": return "Phone"
             case "email": return "Email"
+            case "scene": return "Scene"  // AI 场景描述
             default: return "Text"
             }
         }

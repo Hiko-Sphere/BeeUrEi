@@ -14,7 +14,15 @@ export function linkifyParts(text: string): LinkPart[] {
     // 去掉 URL 尾部常见的句子标点（. , ; : ! ? 右括号）——通常是句子标点而非 URL 的一部分，作为普通文本另分一段。
     let url = m[0]
     let trailing = ''
-    while (url.length > 0 && /[.,;:!?)]$/.test(url[url.length - 1])) { trailing = url[url.length - 1] + trailing; url = url.slice(0, -1) }
+    while (url.length > 0) {
+      const ch = url[url.length - 1]
+      if ('.,;:!?'.includes(ch)) { trailing = ch + trailing; url = url.slice(0, -1); continue }
+      // 尾部右括号：仅当 URL 内**无配对左括号**时才当句子标点剥离（"(见 https://a.com)"）；有左括号说明 `)` 是
+      // URL 的组成部分（维基消歧义 https://zh.wikipedia.org/wiki/北京_(消歧义)、许多 CMS 带括号路径），保留——
+      // 否则链接被截成打不开的残链，家人分享的维基/带括号链接点了 404。
+      if (ch === ')' && !url.slice(0, -1).includes('(')) { trailing = ch + trailing; url = url.slice(0, -1); continue }
+      break
+    }
     if (start > last) parts.push({ text: text.slice(last, start) })
     if (url.length > 0) parts.push({ url })
     if (trailing) parts.push({ text: trailing })

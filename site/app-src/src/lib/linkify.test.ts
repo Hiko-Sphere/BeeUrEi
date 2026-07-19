@@ -17,6 +17,19 @@ describe('linkifyParts（聊天 URL 自动识别，XSS 安全）', () => {
     expect(linkifyParts('(https://a.com)')).toEqual([{ text: '(' }, { url: 'https://a.com' }, { text: ')' }])
   })
 
+  it('URL 内配对括号保留（维基消歧义/带括号路径不被截断成残链）', () => {
+    // 尾部右括号有配对左括号 → 是 URL 一部分，保留。
+    expect(linkifyParts('见 https://zh.wikipedia.org/wiki/北京_(消歧义)')).toEqual([
+      { text: '见 ' }, { url: 'https://zh.wikipedia.org/wiki/北京_(消歧义)' },
+    ])
+    // 配对括号 URL + 句末句号 → 保留 URL 的 `)`、只把句号作文本。
+    expect(linkifyParts('https://en.wikipedia.org/wiki/Foo_(bar).')).toEqual([
+      { url: 'https://en.wikipedia.org/wiki/Foo_(bar)' }, { text: '.' },
+    ])
+    // 无配对左括号的尾部 `)` 仍作句子标点剥离（回归："(见 https://a.com)"）。
+    expect(linkifyParts('(https://a.com)')).toEqual([{ text: '(' }, { url: 'https://a.com' }, { text: ')' }])
+  })
+
   it('多个 URL 都识别', () => {
     const parts = linkifyParts('a https://x.com b http://y.com c')
     expect(parts.filter((p) => 'url' in p)).toEqual([{ url: 'https://x.com' }, { url: 'http://y.com' }])

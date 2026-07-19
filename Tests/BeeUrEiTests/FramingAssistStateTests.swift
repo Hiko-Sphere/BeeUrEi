@@ -121,4 +121,29 @@ final class FramingAssistStateTests: XCTestCase {
         XCTAssertFalse(FramingAssistViewModel.dominantTextIsChinese("123-456 $%^"))
         XCTAssertFalse(FramingAssistViewModel.dominantTextIsChinese(""))
     }
+
+    /// 找空座位覆盖长椅：公交站/公园/候车厅主流座位是 bench(长椅)，此前不可寻找、也不判占用。
+    func testSeatConfigCoversBench() {
+        // 长椅须可寻找（此前缺失，盲人在站台"找空座位"搜不到长椅）。
+        XCTAssertTrue(FramingAssistViewModel.findableCategories.contains("bench"))
+        // "能坐的"座位类＝椅/沙发/长椅三者：找座位取并集搜索并统一做占用判定。
+        XCTAssertEqual(FramingAssistViewModel.seatLabels, ["chair", "couch", "bench"])
+        // 三者都在可寻找列表里（否则并集搜到的类型无从作为目标解析）。
+        for s in FramingAssistViewModel.seatLabels {
+            XCTAssertTrue(FramingAssistViewModel.findableCategories.contains(s), "座位类 \(s) 不在可寻找列表")
+        }
+    }
+
+    /// 座位口语词解析到座位类别（并集搜索由此触发）：说"座位/长椅/沙发"都能落到 seatLabels 内的某个标签。
+    func testSeatWordsResolveToSeatLabels() {
+        let cats = [(label: "chair", name: "椅子"), (label: "couch", name: "沙发"),
+                    (label: "bench", name: "长椅"), (label: "bottle", name: "瓶子")]
+        func resolve(_ s: String) -> FindResolution { FindTargetResolver.resolve(spoken: s, taughtNames: [], categories: cats) }
+        // "座位"经同义词兜底 → chair（seatLabels 成员 → 触发并集搜索）。
+        XCTAssertEqual(resolve("找空座位"), .category("chair"))
+        XCTAssertEqual(resolve("座位"), .category("chair"))
+        // "长椅"按显示名匹配 → bench（此前 bench 不在可寻找列表，永远解析不到）。
+        XCTAssertEqual(resolve("长椅"), .category("bench"))
+        XCTAssertEqual(resolve("沙发"), .category("couch"))
+    }
 }

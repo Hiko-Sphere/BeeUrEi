@@ -262,9 +262,13 @@ final class FramingAssistViewModel {
     // MARK: 找周围的物品（Lookout Find 式：通用类别寻找，复用 YOLO + 时钟方位 + LiDAR 距离）
 
     /// 可寻找的通用类别（COCO 标签；显示名经 LabelCatalog 按语言解析）。只放当前模型真能检出的类别，避免"永远找不到"。
+    /// bench(长椅)：公交站/公园/候车厅的主流座位，此前缺失——盲人在站台"找空座位"却搜不到长椅；补入并纳入座位占用判定。
     static let findableCategories: [String] = [
-        "chair", "couch", "bed", "dining table", "toilet", "bottle", "cup", "cell phone", "backpack",
+        "chair", "couch", "bench", "bed", "dining table", "toilet", "bottle", "cup", "cell phone", "backpack",
     ]
+    /// 「能坐的」座位类标签：找空座位时三者取并集搜索（用户说"座位/椅子/长椅/沙发"要的都是**能坐下的地方**），
+    /// 并对命中者做占用判定优先挑空着的。非座位类别（水瓶/门/厕所…）不受影响。
+    static let seatLabels: Set<String> = ["chair", "couch", "bench"]
     @ObservationIgnored private var categoryTarget: (label: String, name: String)?
 
     /// 类别的本地化显示名（中文"椅子"/英文 "chair"，复用核心 LabelCatalog 映射）。
@@ -289,13 +293,16 @@ final class FramingAssistViewModel {
     /// 类别寻找帧：YOLO 命中类别即报方位与 LiDAR 距离（与"找我的东西"同节奏去抖）。
     private func categoryFindStep(_ frame: SensorFrame, category: (label: String, name: String)) {
         let dets = detector.detect(in: frame.pixelBuffer, regionOfInterest: CGRect(x: 0, y: 0, width: 1, height: 1))
-        let categoryDets = dets.filter { $0.label.lowercased() == category.label }
-        let isSeat = category.label == "chair" || category.label == "couch"
-        // 找空座位：多把候选椅/沙发中**优先挑一把看起来空着**的（同帧人框判占用，核心 SeatOccupancy.pickSeatIndex 已测），
-        // 全部"可能有人"才退回最高置信度那把——此前一律取最高置信度，可能把盲人指向已占的椅、忽略画面里真空着的那把。
+        // 找空座位：椅/沙发/长椅取**并集**搜索（用户要的是"能坐的地方"，不在意具体是哪种），并优先挑一把**看起来空着**
+        // 的（同帧人框判占用，核心 SeatOccupancy.pickSeatIndex 已测）；全部"可能有人"才退回最高置信度那把——此前只搜单一
+        // 类别、且一律取最高置信度，公交站的长椅根本搜不到、有空椅也可能被指向已占的那把。非座位类别照旧按目标标签搜。
+        let isSeat = FramingAssistViewModel.seatLabels.contains(category.label)
+        let persons = isSeat ? dets.filter { $0.label.lowercased() == "person" }.compactMap(\.box) : []
+        let categoryDets = isSeat
+            ? dets.filter { FramingAssistViewModel.seatLabels.contains($0.label.lowercased()) }
+            : dets.filter { $0.label.lowercased() == category.label }
         let hit: DetectedObject?
         if isSeat {
-            let persons = dets.filter { $0.label.lowercased() == "person" }.compactMap(\.box)
             let withBox = categoryDets.filter { $0.box != nil }
             let seats = withBox.map { (box: $0.box!, confidence: Double($0.confidence)) }
             hit = SeatOccupancy.pickSeatIndex(seats: seats, persons: persons).map { withBox[$0] }
@@ -315,16 +322,18 @@ final class FramingAssistViewModel {
                 }
             }
             let where_ = FramingStrings.direction(hour: clock.hour, lang)
-            // 找空座位：椅子/沙发命中时用同帧 person 框做占用判定（核心 SeatOccupancy，已测）。
+            // 报**实际找到**的座位类型名（找到长椅就说"长椅"、找到沙发说"沙发"，而非笼统的目标名"椅子"——
+            // 并集搜索下命中的可能不是目标那种）。非座位类别仍用目标名。
+            let foundName = isSeat ? categoryName(hit.label.lowercased()) : category.name
+            // 找空座位：座位类（椅/沙发/长椅）命中时用同帧 person 框做占用判定（核心 SeatOccupancy，已测）。
             // 补齐 Apple Magnifier Pro 机型独占的 Announce Seat Occupancy；保守措辞"可能有人"。
             var seatNote = ""
-            if category.label == "chair" || category.label == "couch" {
-                let persons = dets.filter { $0.label.lowercased() == "person" }.compactMap(\.box)
+            if isSeat {
                 seatNote = SeatOccupancy.judge(seat: box, persons: persons) == .free
                     ? FramingStrings.seatLooksFree(lang) : FramingStrings.seatMaybeOccupied(lang)
             }
-            guidanceText = FramingStrings.foundCategoryGuide(category.name, where_, lang) + seatNote
-            speak(FramingStrings.foundCategorySpeak(category.name, where_, distText, lang) + seatNote)
+            guidanceText = FramingStrings.foundCategoryGuide(foundName, where_, lang) + seatNote
+            speak(FramingStrings.foundCategorySpeak(foundName, where_, distText, lang) + seatNote)
         } else if frame.timestamp - lastFindHeartbeat >= 6 {
             lastFindHeartbeat = frame.timestamp
             speak(FramingStrings.stillSearchingFor(category.name, lang), hint: true) // 心跳提示：不打断结果播报

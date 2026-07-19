@@ -1,5 +1,6 @@
 import XCTest
 import CoreVideo
+import simd
 @testable import BeeUrEi
 
 /// F1 第三批：避障主链路（HomeViewModel.handle）安全纪律单测——合成帧直驱 + 全反馈通道 mock（零音频）。
@@ -152,5 +153,19 @@ final class HomeViewModelSafetyTests: XCTestCase {
         let vm = makeVM()
         vm.handle(makeFrame(timestamp: 10, depthMeters: 0.6)) // 中央 0.6m：危险区
         XCTAssertFalse(coordinator.submitted.isEmpty) // 确实提交了播报事件（仲裁口径）
+    }
+
+    func testFusionFovUsesRealIntrinsicsElseFallback() {
+        // 障碍方位融合的 FOV：有真实相机内参(ARKit 源)则据之算，缺失/坏内参回退 68°（= 原硬编码行为，零回归）。
+        // 此前硬编码 68° 忽略机型广角差(~68–77°)，把靠近正前/右前分界的障碍方位算偏（见 fusionFOV/handle 修复）。
+        let cam = CameraGeometry(intrinsics: CameraIntrinsics(fx: 500, fy: 500, cx: 500, cy: 500),
+                                 cameraToWorld: matrix_identity_float4x4, worldUp: SIMD3<Float>(0, 1, 0),
+                                 imageWidth: 1000, imageHeight: 1000)
+        XCTAssertEqual(HomeViewModel.fusionFOV(camera: cam), 90, accuracy: 1e-6) // fx=w/2 → 2·atan(1)=90°
+        XCTAssertEqual(HomeViewModel.fusionFOV(camera: nil), 68, accuracy: 1e-9) // 非 ARKit 源/缺失 → 回退 68
+        let bad = CameraGeometry(intrinsics: CameraIntrinsics(fx: 0, fy: 0, cx: 0, cy: 0),
+                                 cameraToWorld: matrix_identity_float4x4, worldUp: SIMD3<Float>(0, 1, 0),
+                                 imageWidth: 1000, imageHeight: 1000)
+        XCTAssertEqual(HomeViewModel.fusionFOV(camera: bad), 68, accuracy: 1e-9) // 坏内参(fx=0) → CameraFOV 自身回退 68
     }
 }

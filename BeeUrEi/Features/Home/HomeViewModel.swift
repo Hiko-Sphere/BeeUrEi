@@ -67,7 +67,11 @@ final class HomeViewModel {
         self.crossingSignal = crossingSignal
         self.coordinator = coordinator ?? FeedbackCoordinator(sinks: [speech, HapticFeedback()])
     }
-    @ObservationIgnored private let fusion = ObstacleFusion(horizontalFOVDegrees: 68)
+    /// 障碍方位融合用的水平 FOV：有真实相机内参(ARKit 源)则据之算(=CameraFOV)，缺失(非 ARKit 源)回退 68°
+    /// （后置广角经验值，= 原硬编码行为）。抽出以锁住"有内参用真实 FOV、无则回退"的选择——纯逻辑可单测。
+    static func fusionFOV(camera: CameraGeometry?) -> Double {
+        camera.map { CameraFOV.horizontalDegrees(fx: $0.intrinsics.fx, imageWidth: $0.imageWidth) } ?? 68
+    }
     // 语言相关目录（按播报语言构建；运行时改语言由 refreshLanguage() 重建，E5）。
     @ObservationIgnored private var lang: Language = FeatureSettings().language
     @ObservationIgnored private var labels = LabelCatalog(language: FeatureSettings().language)
@@ -420,6 +424,11 @@ final class HomeViewModel {
                 if a.marksFresh { freshAnnouncedThisGreen = true }
             }
         }
+        // 障碍方位用**真实相机 FOV**（ARKit 内参算，同 FramingAssistView 识别路径）而非硬编码 68°——不同机型广角
+        // 水平 FOV 差 ~68–77°，硬编码会把靠近正前/右前分界的障碍方位算偏（12↔1 点即"正前方"↔"右前方"，盲人据此
+        // 决定停还是绕，安全攸关）。内参缺失/异常时回退 68°（= 原行为）→ 严格更准、零回归。frame.camera 的内参正对应
+        // detector 跑的这帧 pixelBuffer（同一 ARFrame，见 ARDepthCameraSource），方位换算口径自洽。选择逻辑抽 fusionFOV 可单测。
+        let fusion = ObstacleFusion(horizontalFOVDegrees: Self.fusionFOV(camera: frame.camera))
         let obstacles = detections.map { det -> Obstacle in
             // 用检测框真实纵向中心取距离，而非永远取深度图垂直中线(y=0.5)——否则地上/头顶等
             // 非居中目标会读到中线那片远处地面/背景的距离，距离严重说错（安全攸关，见审查 #6）。

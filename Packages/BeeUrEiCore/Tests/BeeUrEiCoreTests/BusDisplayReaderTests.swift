@@ -133,4 +133,19 @@ final class BusDisplayReaderTests: XCTestCase {
         // "到站时间"表头 + 真实"还有3分钟"：报分钟，不被误判即将（"已到站"不匹配"到站时间"）。
         XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["到站时间", "还有3分钟"], language: .zh), "还有约3分钟")
     }
+
+    func testArrivalHintTraditionalChinese() {
+        // 繁体牌（台港澳/进口，OCRLanguagePolicy 已加 zh-Hant → Vision 产出繁体字）：即將(將)/進站(進)/分鐘(鐘)
+        // 与简体不同码点，此前只认简体、繁体牌整条到站信息被漏，当地盲人误判"车还早/已过"。
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["即將進站"], language: .zh), "即将到站")           // 即將+進站 皆繁体
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["103", "即將到站"], language: .zh), "即将到站")     // 即將(將)但到站同形
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["車輛進站"], language: .zh), "即将到站")           // 進站(進)
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["還有5分鐘"], language: .zh), "还有约5分钟")        // 分鐘(鐘)：输出仍简体（zh）
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["尚有0分鐘"], language: .zh), "即将到站")          // 繁体 0分鐘 = 已到站
+        // 繁体月台/站臺（臺≠台）："2站臺"(Platform 2) 绝不误读成"还有2站"——同简体"2站台"的安全门控。
+        XCTAssertNil(BusDisplayReader.arrivalHint(texts: ["2站臺"], language: .zh))
+        XCTAssertNil(BusDisplayReader.arrivalHint(texts: ["在3站臺候車"], language: .zh))
+        // 繁体月台杂讯 + 真到站同现：跳过站臺、命中真的"3站"。
+        XCTAssertEqual(BusDisplayReader.arrivalHint(texts: ["2站臺", "還有3站"], language: .zh), "还有3站")
+    }
 }

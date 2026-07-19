@@ -44,7 +44,9 @@ public enum BusDisplayReader {
             // 此前中文只认"即将/进站"，漏了直白的"已到站"。**只收带"已"的形式**：裸"到站"是名词歧义
             // （"距到站还有3分钟"/"到站时间"里 到站=名词，误判会把"还有3分钟"压成假"车到了"、让盲人提前迈向路缘，安全攸关），
             // 而"已到站"里"已"恒为完成体动词标记、不构成名词头（无"已到站时间"这类词），故高精度零误报。
-            if t.contains("即将") || t.contains("进站") || t.contains("已到站") || hasArriveVerb || lower.contains("approach") || lower.contains(" due") || lower == "due" {
+            // 繁体变体（台港澳/进口牌，OCRLanguagePolicy 已加 zh-Hant，Vision 会如实产出繁体字）：即將(將≠将)、
+            // 進站(進≠进) 与简体不同码点，不补则繁体 LED"即將進站"匹配不到、当地盲人漏判到站。已到站(已到站简繁同形)已覆盖。
+            if t.contains("即将") || t.contains("即將") || t.contains("进站") || t.contains("進站") || t.contains("已到站") || hasArriveVerb || lower.contains("approach") || lower.contains(" due") || lower == "due" {
                 imminent = true
             }
             if minutes == nil, let n = firstNumber(minutesRegexes, in: lower) { minutes = n }
@@ -66,10 +68,11 @@ public enum BusDisplayReader {
     /// 数字须紧邻单位（容零或多个空格），故 CJK 地名（火车站的"车"、分钟寺的"往"）前无数字自然不匹配。
     private static let minutesRegexes: [NSRegularExpression] = [
         "([0-9]+)\\s*分钟",
+        "([0-9]+)\\s*分鐘",   // 繁体：鐘≠钟，繁体牌"5分鐘"不补则漏（台港澳/进口，OCR 已产繁体字）
         "([0-9]+)\\s*(?:minutes?|mins?)(?![a-z])",
     ].compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
     private static let stopsRegexes: [NSRegularExpression] = [
-        "([0-9]+)\\s*站(?!台)",
+        "([0-9]+)\\s*站(?![台臺])",   // (?![台臺])：排除站台/月台(简)与站臺(繁 臺≠台)——"2站臺"(Platform 2)不得误读成"还有2站"
         "([0-9]+)\\s*stops?(?![a-z])",
     ].compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
 

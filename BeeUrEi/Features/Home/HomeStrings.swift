@@ -334,6 +334,8 @@ enum HomeStrings {
         case "image": return l == .zh ? "一张图片" : "a photo"
         case "video": return l == .zh ? "一段视频" : "a video"
         case "location": return l == .zh ? "一个位置" : "a location"
+        // 已撤回：此前落 default → text 为空 → 读出"老王："后无内容（读消息汇报里突兀的空白）。与会话列表预览同口径给明确措辞。
+        case "recalled": return l == .zh ? "一条已撤回的消息" : "a recalled message"
         default:
             if text.contains("https://maps.apple.com/?ll=") { return l == .zh ? "一个位置" : "a location" }
             let t = text.trimmingCharacters(in: .whitespacesAndNewlines)

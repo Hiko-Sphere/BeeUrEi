@@ -86,6 +86,9 @@ final class HomeStringsTests: XCTestCase {
         XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
         // Apple 地图链接文本按位置读（与列表预览一致）。
         XCTAssertTrue(HomeStrings.unreadReadout([C(name: "爸", kind: "text", text: "https://maps.apple.com/?ll=39.9,116.4", unread: 1)], .zh).contains("一个位置"))
+        // 已撤回消息（text 空）：明确读"一条已撤回的消息"，绝不读成"老王："后一片空白（与列表预览同口径）。
+        XCTAssertTrue(HomeStrings.unreadReadout([C(name: "老王", kind: "recalled", text: "", unread: 1)], .zh).contains("老王：一条已撤回的消息"))
+        XCTAssertTrue(HomeStrings.unreadReadout([C(name: "Bob", kind: "recalled", text: "", unread: 1)], .en).contains("Bob: a recalled message"))
     }
 
     func testVoiceCommandsHelpAdvertisesCallByName() {

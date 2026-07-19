@@ -100,7 +100,7 @@ struct AdminHomeView: View {
                             .disabled(savingRec)
                         Toggle(lang == .zh ? "录制需各方同意" : "Require everyone's consent", isOn: Binding(get: { cfg.requireConsent }, set: { v in Task { await setRec(consent: v) } }))
                             .disabled(savingRec)
-                        LabeledContent(lang == .zh ? "保留天数" : "Retention", value: lang == .zh ? "\(cfg.retentionDays) 天" : "\(cfg.retentionDays) days")
+                        LabeledContent(lang == .zh ? "保留天数" : "Retention", value: lang == .zh ? "\(cfg.retentionDays) 天" : "\(cfg.retentionDays) \(SpokenStrings.enPlural(cfg.retentionDays, "day"))")
                     } else if loading {
                         Text(AccountStrings.loadingGeneric(lang)).foregroundStyle(.secondary)
                     } else {

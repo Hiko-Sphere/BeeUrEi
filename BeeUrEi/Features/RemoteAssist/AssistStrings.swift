@@ -103,10 +103,10 @@ enum AssistStrings {
         case .sent(let notified, let contacts):
             if contacts == 0 { return zh ? "你还没有联系人，无从测起。请先在下面添加紧急联系人。" : "You have no contacts to test. Add an emergency contact below first." }
             if notified == 0 { return zh ? "测试已发出，但你的\(contacts)位联系人暂时都收不到（没装 App 或没开通知）。请让他们开启通知，否则真出事你的求助到不了他们。"
-                                        : "Test sent, but none of your \(contacts) contacts can receive it yet (app not installed or notifications off). Ask them to turn on notifications, or your real SOS won't reach them." }
+                                        : "Test sent, but \(contacts == 1 ? "your contact can't" : "none of your \(contacts) contacts can") receive it yet (app not installed or notifications off). Ask them to turn on notifications, or your real SOS won't reach them." }
             if notified < contacts { return zh ? "测试已发出，\(contacts)位联系人中有\(notified)位能即时收到，其余暂时收不到——请让他们开启通知。"
                                               : "Test sent — \(notified) of \(contacts) contacts can receive it instantly; the rest can't yet. Ask them to turn on notifications." }
-            return zh ? "测试已发出，你的\(notified)位联系人都能即时收到。紧急求助已就绪。" : "Test sent — all \(notified) of your contacts can receive it instantly. Your SOS is ready."
+            return zh ? "测试已发出，你的\(notified)位联系人都能即时收到。紧急求助已就绪。" : "Test sent — \(notified == 1 ? "your contact can" : "all \(notified) of your contacts can") receive it instantly. Your SOS is ready."
         case .rateLimited:
             return zh ? "测试太频繁了，每小时最多测 3 次，请稍后再试。" : "Too many tests — up to 3 per hour. Please try again later."
         case .failed:

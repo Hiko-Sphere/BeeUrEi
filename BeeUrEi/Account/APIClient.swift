@@ -365,12 +365,12 @@ struct EmergencyReadinessInfo: Codable, Sendable {
         }
         if accReach == 0 {
             return (l == .zh ? "你有\(accTotal)位联系人，但此刻都收不到即时求助（没装 App 或没开通知）。请让他们装 App、开启通知，否则出事时你的 SOS 到不了任何人。"
-                             : "You have \(accTotal) contacts, but none can receive instant alerts right now (app not installed or notifications off). Ask them to install the app and enable notifications, or your SOS won't reach anyone.", true)
+                             : "You have \(accTotal) \(SpokenStrings.enPlural(accTotal, "contact")), but \(accTotal == 1 ? "they can't" : "none can") receive instant alerts right now (app not installed or notifications off). Ask them to install the app and enable notifications, or your SOS won't reach anyone.", true)
         }
         if !hasEmergencyContact {
             // 会被通知（非假警报），只是建议指定紧急联系人以享医疗信息共享——提示级（非危险红）。
             return (l == .zh ? "出事时你的\(accTotal)位联系人都会收到告警。建议把最信任的人设为紧急联系人——紧急时他们还能看到你的医疗信息。"
-                             : "Your \(accTotal) contacts will all be alerted in an emergency. Consider marking your most trusted person as an emergency contact — they can also see your medical info in an emergency.", false)
+                             : "\(accTotal == 1 ? "Your contact will be" : "Your \(accTotal) contacts will all be") alerted in an emergency. Consider marking your most trusted person as an emergency contact — they can also see your medical info in an emergency.", false)
         }
         return nil
     }

@@ -190,6 +190,12 @@ public enum SpokenStrings {
         }
     }
 
+    /// 英文按**数量**取单/复数词（"1 point" / "3 points"）：n 绝对值为 1 用单数，否则 pluralForm（缺省用 pluralizeEn 规则）。
+    /// 修 "1 points"/"1 contacts"/"1 days"/"1 members" 类语病。中文无复数、调用方仅英文分支用。纯逻辑可单测。
+    public static func enPlural(_ n: Int, _ singular: String, _ pluralForm: String? = nil) -> String {
+        abs(n) == 1 ? singular : (pluralForm ?? pluralizeEn(singular))
+    }
+
     /// 英文名词复数（场景概述"3 buses"/"3 people"）：朴素 +s 对 COCO 类别集会出错——bus→buss、person→persons、
     /// wine glass→wine glasss、bench→benchs、mouse→mouses、knife→knifes 皆非正确英文，盲人听到明显语病、不够"顶尖"。
     /// 按 COCO 标签集处理不规则词与咝音词尾；其余 +s。中文侧不受影响（"个"通用量词）。纯逻辑可单测。

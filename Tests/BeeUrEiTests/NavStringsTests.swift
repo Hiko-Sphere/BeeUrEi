@@ -172,6 +172,16 @@ final class NavStringsTests: XCTestCase {
         XCTAssertTrue(a.hasSuffix("双击开始引导"), a)
     }
 
+    /// 英文路线点计数单复数：1 个点用单数 point（此前记路第一个点会说 "Recording: 1 points" 语病）。
+    func testRoutePointCountSingular() {
+        XCTAssertEqual(NavStrings.routePointCount(1, .en), "1 point")   // 非 "1 points"
+        XCTAssertEqual(NavStrings.routePointCount(3, .en), "3 points")  // 复数不变
+        XCTAssertEqual(NavStrings.routePointCount(1, .zh), "1 个路线点") // 中文无复数
+        // 记路播报（第一个点）英文单数。
+        XCTAssertTrue(NavStrings.routeItemA11y("Home", 1, by: nil, .en).contains("1 point,"), NavStrings.routeItemA11y("Home", 1, by: nil, .en))
+        XCTAssertFalse(NavStrings.routeItemA11y("Home", 1, by: nil, .en).contains("1 points"))
+    }
+
     /// 步行时间 ≥60 分钟拆"X 小时 Y 分钟"（盲人靠听："1 小时 30 分钟"远比"90 分钟"好懂），与网页端逐字对齐。
     func testWalkTimePhraseHourBreakdown() {
         // <60：仍是原样"步行约 X 分钟"（既有短路线读法零变化）。

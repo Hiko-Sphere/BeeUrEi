@@ -70,6 +70,19 @@ final class SceneSummarizerTests: XCTestCase {
     }
 
     /// 英文复数正确性（此前朴素 +s：3 buss / 3 persons / 3 wine glasss / 3 benchs 皆语病）。
+    /// enPlural（按数量取单/复数，修 "1 points"/"1 contacts"/"1 days" 类语病）。
+    func testEnPluralByCount() {
+        XCTAssertEqual(SpokenStrings.enPlural(1, "point"), "point")   // 单数
+        XCTAssertEqual(SpokenStrings.enPlural(0, "point"), "points")  // 0 复数
+        XCTAssertEqual(SpokenStrings.enPlural(3, "point"), "points")
+        XCTAssertEqual(SpokenStrings.enPlural(1, "contact"), "contact")
+        XCTAssertEqual(SpokenStrings.enPlural(2, "day"), "days")
+        XCTAssertEqual(SpokenStrings.enPlural(1, "day"), "day")
+        XCTAssertEqual(SpokenStrings.enPlural(-1, "member"), "member") // 绝对值 1
+        XCTAssertEqual(SpokenStrings.enPlural(2, "bus"), "buses")      // 走 pluralizeEn 规则（咝音 +es）
+        XCTAssertEqual(SpokenStrings.enPlural(3, "person", "people"), "people") // 显式不规则复数
+    }
+
     func testEnglishPluralization() {
         // 不规则词。
         XCTAssertEqual(SpokenStrings.pluralizeEn("person"), "people")

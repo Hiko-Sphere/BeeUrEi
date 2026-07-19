@@ -360,7 +360,7 @@ enum ChatStrings {
         }
     }
     static func groupInfo(_ l: Language) -> String { l == .zh ? "群信息" : "Group info" }
-    static func members(_ n: Int, _ l: Language) -> String { l == .zh ? "\(n) 名成员" : "\(n) members" }
+    static func members(_ n: Int, _ l: Language) -> String { l == .zh ? "\(n) 名成员" : "\(n) \(SpokenStrings.enPlural(n, "member"))" }
     static func owner(_ l: Language) -> String { l == .zh ? "群主" : "Owner" }
     static func addMember(_ l: Language) -> String { l == .zh ? "添加成员" : "Add member" }
     static func removeMember(_ l: Language) -> String { l == .zh ? "移出群聊" : "Remove" }

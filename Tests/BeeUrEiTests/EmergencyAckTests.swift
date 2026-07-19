@@ -112,6 +112,15 @@ final class EmergencyAckTests: XCTestCase {
         // 英文分支不串中文。
         let en = R(hasEmergencyContact: false, total: 0, reachable: 0, acceptedTotal: 2, acceptedReachable: 2, contacts: []).readinessNotice(.en)
         XCTAssertNotNil(en); XCTAssertFalse(hasCJK(en!.text)); XCTAssertTrue(en!.text.lowercased().contains("alerted"))
+        // 英文单复数：恰 1 位联系人不再语病（"1 contacts"/"Your 1 contacts will all be"）。
+        let one = R(hasEmergencyContact: false, total: 0, reachable: 0, acceptedTotal: 1, acceptedReachable: 1, contacts: []).readinessNotice(.en)!
+        XCTAssertTrue(one.text.hasPrefix("Your contact will be alerted"), one.text)   // 非 "Your 1 contacts will all be"
+        XCTAssertFalse(one.text.contains("1 contacts"), one.text)
+        let oneUnreach = R(hasEmergencyContact: false, total: 0, reachable: 0, acceptedTotal: 1, acceptedReachable: 0, contacts: []).readinessNotice(.en)!
+        XCTAssertTrue(oneUnreach.text.contains("You have 1 contact, but they can't"), oneUnreach.text) // 非 "1 contacts, but none can"
+        // 2 位仍复数（回归）。
+        let two = R(hasEmergencyContact: false, total: 0, reachable: 0, acceptedTotal: 2, acceptedReachable: 2, contacts: []).readinessNotice(.en)!
+        XCTAssertTrue(two.text.contains("Your 2 contacts will all be"), two.text)
     }
 
     // MARK: 测试告警结果播报（验证"我的求助真能到人"）

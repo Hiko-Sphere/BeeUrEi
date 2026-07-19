@@ -58,7 +58,7 @@ enum NavStrings {
     static func offRouteReturnToPath(_ l: Language) -> String { l == .zh ? "已偏离路线较远，请沿原路返回" : "You are far off the route — please retrace your steps" }
     static func customRouteInstruction(_ l: Language) -> String { l == .zh ? "沿路线继续" : "Continue along the route" }
     static func customRouteStatus(_ name: String, _ n: Int, _ l: Language) -> String {
-        l == .zh ? "沿路线「\(name)」引导中（\(n) 个路线点）" : "Following route \(name) (\(n) points)"
+        l == .zh ? "沿路线「\(name)」引导中（\(n) 个路线点）" : "Following route \(name) (\(n) \(SpokenStrings.enPlural(n, "point")))"
     }
     static func customRouteStartSpeak(_ name: String, _ l: Language) -> String {
         l == .zh ? "开始沿路线\(name)引导，请跟随提示音方向" : "Starting route \(name) — follow the beacon"
@@ -81,7 +81,7 @@ enum NavStrings {
     static func offlineRouteStatus(_ n: Int, _ l: Language) -> String {
         l == .zh ? "离线路线引导中（\(n) 个转向点）" : "Offline route guidance (\(n) turns)"
     }
-    static func routePointCount(_ n: Int, _ l: Language) -> String { l == .zh ? "\(n) 个路线点" : "\(n) points" }
+    static func routePointCount(_ n: Int, _ l: Language) -> String { l == .zh ? "\(n) 个路线点" : "\(n) \(SpokenStrings.enPlural(n, "point"))" }
     static func routePreviewHint(_ name: String, _ l: Language) -> String {
         l == .zh ? "不走路，先听一遍\(name)的全程" : "Hear the whole \(name) route without walking it"
     }
@@ -119,7 +119,7 @@ enum NavStrings {
             if l == .zh { howFar = "约\(dist)，" + (mins.map { walkTimePhrase(minutes: $0, l) + "，" } ?? "") }
             else { howFar = "about \(dist), " + (mins.map { walkTimePhrase(minutes: $0, l) + ", " } ?? "") }
         }
-        return l == .zh ? "路线\(name)，\(n) 个路线点，\(howFar)\(who)双击开始引导" : "Route \(name), \(n) points, \(howFar)\(who)double-tap to start"
+        return l == .zh ? "路线\(name)，\(n) 个路线点，\(howFar)\(who)双击开始引导" : "Route \(name), \(n) \(SpokenStrings.enPlural(n, "point")), \(howFar)\(who)double-tap to start"
     }
     static func nearDestination(_ l: Language) -> String { l == .zh ? "已接近目的地" : "You're near the destination" }
     /// 到达播报**带目的地名**：盲人看不到自己到没到、也无从确认到的是不是**对**的地方——念出目的地名（"已接近
@@ -193,10 +193,10 @@ enum NavStrings {
         l == .zh ? "开始记路。走吧，我会记住来路。" : "Trail recording started. Walk on — I'll remember the way."
     }
     static func trailProgress(_ n: Int, _ l: Language) -> String {
-        l == .zh ? "记路中：已记 \(n) 个点" : "Recording: \(n) points"
+        l == .zh ? "记路中：已记 \(n) 个点" : "Recording: \(n) \(SpokenStrings.enPlural(n, "point"))"
     }
     static func trailStopStatus(_ n: Int, _ l: Language) -> String {
-        l == .zh ? "已记 \(n) 个点，可点「原路返回」" : "\(n) points recorded — you can backtrack now"
+        l == .zh ? "已记 \(n) 个点，可点「原路返回」" : "\(n) \(SpokenStrings.enPlural(n, "point")) recorded — you can backtrack now"
     }
     static func trailTooFew(_ l: Language) -> String {
         l == .zh ? "记录点太少，暂无法回程" : "Too few points to backtrack yet"
@@ -323,7 +323,7 @@ enum NavStrings {
     }
     static func stopTrail(_ l: Language) -> String { l == .zh ? "停止记路" : "Stop Recording" }
     static func backtrack(_ n: Int, _ l: Language) -> String {
-        l == .zh ? "原路返回（已记 \(n) 个点）" : "Backtrack (\(n) points recorded)"
+        l == .zh ? "原路返回（已记 \(n) 个点）" : "Backtrack (\(n) \(SpokenStrings.enPlural(n, "point")) recorded)"
     }
     static func backtrackHint(_ l: Language) -> String {
         l == .zh ? "沿记录的来路反向引导你走回出发点" : "Guides you back along the recorded path to your start"

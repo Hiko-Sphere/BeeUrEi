@@ -191,6 +191,13 @@ export function RoutesPage() {
                 title={t('聚焦地图后可用方向键平移，再点此把中心加为路线点', 'Focus the map and pan with arrow keys, then add its centre as a point')}>
                 {t('把地图中心加为点', 'Add map centre')}
               </Button>
+              {/* 键盘等效"微调位置"（WCAG 2.1.1，与"加中心点"同 sibling）：拖动微调既有点只能用鼠标——
+                  键盘用户选中某点、平移地图到正确位置，按此把选中点移到地图中心，无需拖动。仅选中点时可用。 */}
+              <Button variant="soft" disabled={selectedIdx == null}
+                onClick={() => { const c = mapRef.current?.getCenter(); if (c && selectedIdx != null) { setEditing({ ...editing, waypoints: moveWaypointTo(editing.waypoints, selectedIdx, c.lat, c.lng) }) } }}
+                title={t('先选中一个点、平移地图到正确位置，再点此把该点移到地图中心（键盘替代拖动微调）', 'Select a point, pan the map to the right spot, then move the point to the centre (keyboard alternative to dragging)')}>
+                {t('把选中点移到中心', 'Move point to centre')}
+              </Button>
               <Button variant="soft" onClick={() => { if (wp.length) { setEditing({ ...editing, waypoints: wp.slice(0, -1) }); setSelectedIdx(null) } }} disabled={!wp.length}>
                 {t('撤销最后一点', 'Undo last')}
               </Button>

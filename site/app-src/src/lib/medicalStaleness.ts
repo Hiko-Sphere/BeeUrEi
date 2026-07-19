@@ -12,27 +12,35 @@
 const DAY_MS = 86_400_000
 const STALE_DAYS = 365
 
-/// 陈旧月数：达阈值返回 ≥12 的整数月，否则 null。两侧文案的唯一真相来源。
-function staleMonths(updatedAtMs: number, nowMs: number): number | null {
+/// 陈旧年龄短语：达阈值返回本地化「N 个月」/「N 年」，否则 null。两侧文案的唯一真相来源。
+/// **≥2 年（≥730 天）改用「年」**——"约 36 个月/121 个月"靠听极难换算，"约 3 年/10 年"一听即知有多旧
+/// （施救者/本人都受益；responder 侧尤甚，急救中要快速判断）；1~2 年仍用月（13~24 个月够直观）。
+/// 与 iOS `MedicalInfoStrings.stalenessWarning` 同口径（≥730 天→年、否则 max(12, floor(days/30)) 月）。
+function staleAge(updatedAtMs: number, nowMs: number, lang: 'zh' | 'en'): string | null {
   const days = (nowMs - updatedAtMs) / DAY_MS
   if (!Number.isFinite(days) || days < STALE_DAYS) return null
-  return Math.max(12, Math.floor(days / 30))
+  if (days >= 730) {
+    const years = Math.floor(days / 365)
+    return lang === 'zh' ? `${years} 年` : `${years} year${years === 1 ? '' : 's'}`
+  }
+  const months = Math.max(12, Math.floor(days / 30))
+  return lang === 'zh' ? `${months} 个月` : `${months} month${months === 1 ? '' : 's'}`
 }
 
 /// 施救者侧：陈旧 → 醒目、可行动的核对提醒；否则 null。
 export function medicalStalenessCaution(updatedAtMs: number, nowMs: number, lang: 'zh' | 'en'): string | null {
-  const months = staleMonths(updatedAtMs, nowMs)
-  if (months == null) return null
+  const age = staleAge(updatedAtMs, nowMs, lang)
+  if (age == null) return null
   return lang === 'zh'
-    ? `⚠️ 这份医疗信息约 ${months} 个月前更新，用药或过敏可能已变——施救前请尽量与本人或家属再确认。`
-    : `⚠️ This medical info was updated about ${months} months ago — meds or allergies may have changed. Confirm with them or family before acting if you can.`
+    ? `⚠️ 这份医疗信息约 ${age}前更新，用药或过敏可能已变——施救前请尽量与本人或家属再确认。`
+    : `⚠️ This medical info was updated about ${age} ago — meds or allergies may have changed. Confirm with them or family before acting if you can.`
 }
 
 /// 本人侧：陈旧 → 提醒复核更新自己的医疗信息；否则 null。与 iOS 填写者侧同措辞。
 export function medicalStalenessSelfReminder(updatedAtMs: number, nowMs: number, lang: 'zh' | 'en'): string | null {
-  const months = staleMonths(updatedAtMs, nowMs)
-  if (months == null) return null
+  const age = staleAge(updatedAtMs, nowMs, lang)
+  if (age == null) return null
   return lang === 'zh'
-    ? `医疗信息已约 ${months} 个月没更新了——用药或病史可能已变，建议复核一下，免得施救者拿到过时信息。`
-    : `Your medical info hasn't been updated in about ${months} months — meds or conditions may have changed. Please review it so responders don't act on outdated info.`
+    ? `医疗信息已约 ${age}没更新了——用药或病史可能已变，建议复核一下，免得施救者拿到过时信息。`
+    : `Your medical info hasn't been updated in about ${age} — meds or conditions may have changed. Please review it so responders don't act on outdated info.`
 }

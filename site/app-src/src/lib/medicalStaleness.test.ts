@@ -20,8 +20,17 @@ describe('medicalStalenessCaution 施救者侧医疗信息陈旧警示', () => {
     expect(s).toContain('再确认')
     expect(s).toContain('⚠️')
   })
-  it('730 天 → 24 个月', () => {
-    expect(medicalStalenessCaution(NOW - 730 * DAY, NOW, 'zh')).toContain('24 个月')
+  it('≥2 年改用「年」（急救中"约 3 年前"比"约 36 个月前"快辨），恰 2 年→2 年、3 年→3 年', () => {
+    const y2 = medicalStalenessCaution(NOW - 730 * DAY, NOW, 'zh')
+    expect(y2).toContain('2 年')
+    expect(y2).not.toContain('个月')
+    expect(medicalStalenessCaution(NOW - 1095 * DAY, NOW, 'zh')).toContain('3 年')
+    // 临界回归：729 天仍用月（约 24 个月），不早跳年。
+    expect(medicalStalenessCaution(NOW - 729 * DAY, NOW, 'zh')).toContain('个月')
+    // 英文 ≥2 年用 years（复数正确、不串月）。
+    const enY = medicalStalenessCaution(NOW - 1095 * DAY, NOW, 'en')
+    expect(enY).toContain('3 years')
+    expect(enY).not.toContain('month')
   })
   it('非有限（NaN/Infinity）→ null，绝不渲染 "NaN 个月"', () => {
     expect(medicalStalenessCaution(NaN, NOW, 'zh')).toBeNull()
@@ -51,8 +60,11 @@ describe('medicalStalenessSelfReminder 本人侧复核提醒（与 iOS 填写者
     expect(s).toContain('建议复核')
     expect(s).not.toContain('施救前') // 本人侧措辞，不串施救者侧
   })
-  it('730 天 → 24 个月；365 天恰好 → 12 个月（max 兜底）', () => {
-    expect(medicalStalenessSelfReminder(NOW - 730 * DAY, NOW, 'zh')).toContain('24 个月')
+  it('≥2 年→「年」（2 年→2 年、3 年→3 年）；365 天恰好 → 12 个月（max 兜底）；729 天仍用月', () => {
+    expect(medicalStalenessSelfReminder(NOW - 730 * DAY, NOW, 'zh')).toContain('2 年')
+    expect(medicalStalenessSelfReminder(NOW - 730 * DAY, NOW, 'zh')).not.toContain('个月')
+    expect(medicalStalenessSelfReminder(NOW - 1095 * DAY, NOW, 'zh')).toContain('3 年')
+    expect(medicalStalenessSelfReminder(NOW - 729 * DAY, NOW, 'zh')).toContain('个月')
     expect(medicalStalenessSelfReminder(NOW - 365 * DAY, NOW, 'zh')).toContain('12 个月')
   })
   it('非有限 / 未来时间戳 → null', () => {

@@ -1019,8 +1019,11 @@ final class FramingAssistViewModel {
                             let m = self.productStore.macros(for: first)
                             return FramingStrings.productMacrosSpeak(carbohydrates: m["carbohydrates"], sugars: m["sugars"], protein: m["protein"], fat: m["fat"], self.lang) ?? ""
                         }()
-                        self.resultText = alertPrefix + dietPrefix + FramingStrings.productResult(name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + energySuffix + macrosSuffix + dietarySuffix + ingredientsSuffix
-                        self.speak(alertPrefix + dietPrefix + FramingStrings.thisIs(name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + energySuffix + macrosSuffix + dietarySuffix + ingredientsSuffix)
+                        // 每份绝对量（约X千卡、碳水Y克）紧随 per-100g——盲人吃一份不是 100 克，每份碳水是糖尿病算胰岛素的核心数。
+                        // 与在线首扫同口径：离线复扫也从本地库读回 servingGrams/热量/碳水算出（此前只有首扫报、复扫丢——sibling 缺口）。
+                        let servingSuffix = FramingStrings.productServingSpeak(servingGrams: self.productStore.servingGrams(for: first), energyKcal100g: self.productStore.energyKcal(for: first), carbs100g: self.productStore.macros(for: first)["carbohydrates"], self.lang) ?? ""
+                        self.resultText = alertPrefix + dietPrefix + FramingStrings.productResult(name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + energySuffix + macrosSuffix + servingSuffix + dietarySuffix + ingredientsSuffix
+                        self.speak(alertPrefix + dietPrefix + FramingStrings.thisIs(name, self.lang) + quantitySuffix + allergenSuffix + tracesSuffix + nutritionSuffix + nutrientLevelsSuffix + energySuffix + macrosSuffix + servingSuffix + dietarySuffix + ingredientsSuffix)
                     } else {
                         // 本地没起过名：先在线查一次（Open Food Facts）——查到直接报名字并记住（对标 Seeing AI），
                         // 查不到/离线再回退到"用户起名"（严格附加，绝不回退失败）。
@@ -1470,7 +1473,7 @@ final class FramingAssistViewModel {
                 self.productStore.save(barcode: barcode, name: info.name, allergens: allergens, traces: traces,
                                        nutriScore: info.nutriScore, novaGroup: info.novaGroup, dietaryLabels: dietaryLabels, quantity: info.quantity,
                                        nutrientLevels: nutrientLevels, ingredients: info.ingredients, energyKcal: info.energyKcal100g,
-                                       macros: macros) // 过敏原+微量+营养+膳食标注+净含量+逐素含量档+配料表+热量+四大营养素克数随名字存，下次离线也能报
+                                       macros: macros, servingGrams: info.servingGrams) // 过敏原+微量+营养+膳食标注+净含量+逐素含量档+配料表+热量+四大营养素克数+每份克数随名字存，下次离线也能报（每份碳水是糖尿病算胰岛素的核心数）
                 // 个人化过敏原预警置最前（命中用户标记的即醒目警告；叠加不替代全量播报）。营养预警紧随其后。
                 let match = AllergenAlert.matched(productAllergens: allergens, productTraces: traces, userAllergens: FeatureSettings().myAllergens)
                 let alertPrefix = FramingStrings.allergenAlertSpeak(contained: match.contained, traces: match.traces, self.lang) ?? ""

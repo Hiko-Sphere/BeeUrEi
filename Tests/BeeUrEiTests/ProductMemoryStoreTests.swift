@@ -173,6 +173,28 @@ final class ProductMemoryStoreTests: XCTestCase {
         XCTAssertEqual(store.macros(for: "unknown"), [:]) // 无数据=空（不猜）
     }
 
+    func testServingGramsRoundTripAndRenamePreserves() {
+        let store = ProductMemoryStore(fileURL: fileURL)
+        // 每份克数随名字存（供离线复扫也能报每份绝对量——糖尿病算胰岛素要的是每份碳水，不是每 100 克）。
+        // 此前**唯独** servingGrams 不落盘：首扫报"每份约30克…"、复扫丢——与所有姊妹字段（热量/四大素/含量档）不一致的 sibling 缺口。
+        store.save(barcode: "690", name: "酸奶", servingGrams: 100)
+        XCTAssertEqual(store.servingGrams(for: "690"), 100)
+        // 用户手动改名（默认 nil servingGrams）不得抹掉已存的每份克数。
+        store.save(barcode: "690", name: "我的酸奶")
+        XCTAssertEqual(store.servingGrams(for: "690"), 100)
+        // 落盘重载后仍在（独立旁路 plist）；删除连带清。
+        let reloaded = ProductMemoryStore(fileURL: fileURL)
+        XCTAssertEqual(reloaded.servingGrams(for: "690"), 100)
+        reloaded.delete(barcode: "690")
+        XCTAssertNil(reloaded.servingGrams(for: "690"))
+        XCTAssertNil(store.servingGrams(for: "unknown")) // 无数据=nil（不猜）
+        // 脏值不写：≤0/非有限的每份克数忽略（缺≠0，同热量口径）。
+        store.save(barcode: "700", name: "坏数据", servingGrams: 0)
+        XCTAssertNil(store.servingGrams(for: "700"))
+        store.save(barcode: "701", name: "坏数据2", servingGrams: .nan)
+        XCTAssertNil(store.servingGrams(for: "701"))
+    }
+
     func testLegacyNameOnlyFileStillLoads() {
         // 老版本只有名字 plist（无 allergens/traces/dietary 旁路文件）：名字照常、过敏原/微量/膳食标注为空——零迁移。
         let legacy = ["123": "酱油"]
@@ -189,11 +211,12 @@ final class ProductMemoryStoreTests: XCTestCase {
         XCTAssertNil(store.ingredients(for: "123"))
         XCTAssertNil(store.energyKcal(for: "123"))
         XCTAssertEqual(store.macros(for: "123"), [:]) // 无 macros 旁路文件→空
+        XCTAssertNil(store.servingGrams(for: "123")) // 无 serving 旁路文件→nil
     }
 
     func testProductLookupInfoDecodesNutrientLevels() throws {
         // 服务端 /api/product 下发 nutrientLevels（逐素含量档）；iOS 须解码——此前缺此字段，糖尿病/高血压盲人扫码听不到"糖/盐偏高"。
-        let json = #"{"name":"汽水","allergens":[],"traces":[],"nutriScore":"e","novaGroup":4,"dietaryLabels":[],"quantity":"330 ml","nutrientLevels":{"sugars":"high","salt":"low"},"ingredients":"水、白砂糖、二氧化碳","energyKcal100g":42,"macros100g":{"carbohydrates":12.3,"sugars":4.5,"protein":3,"fat":3.6}}"#
+        let json = #"{"name":"汽水","allergens":[],"traces":[],"nutriScore":"e","novaGroup":4,"dietaryLabels":[],"quantity":"330 ml","nutrientLevels":{"sugars":"high","salt":"low"},"ingredients":"水、白砂糖、二氧化碳","energyKcal100g":42,"macros100g":{"carbohydrates":12.3,"sugars":4.5,"protein":3,"fat":3.6},"servingGrams":330}"#
         let info = try JSONDecoder().decode(APIClient.ProductLookupInfo.self, from: Data(json.utf8))
         XCTAssertEqual(info.nutrientLevels?["sugars"], "high")
         XCTAssertEqual(info.nutrientLevels?["salt"], "low")
@@ -203,6 +226,7 @@ final class ProductMemoryStoreTests: XCTestCase {
         XCTAssertEqual(info.macros100g?.sugars, 4.5)
         XCTAssertEqual(info.macros100g?.protein, 3)
         XCTAssertEqual(info.macros100g?.fat, 3.6)
+        XCTAssertEqual(info.servingGrams, 330)                 // 每份克数下发须解码——每份碳水是糖尿病算胰岛素的核心数
         // 旧/缺字段负载 → nil（向后兼容，不崩）。
         let legacy = #"{"name":"牛奶"}"#
         let legacyInfo = try JSONDecoder().decode(APIClient.ProductLookupInfo.self, from: Data(legacy.utf8))
@@ -210,6 +234,7 @@ final class ProductMemoryStoreTests: XCTestCase {
         XCTAssertNil(legacyInfo.ingredients)
         XCTAssertNil(legacyInfo.energyKcal100g)
         XCTAssertNil(legacyInfo.macros100g) // 缺字段→nil（向后兼容）
+        XCTAssertNil(legacyInfo.servingGrams) // 缺字段→nil（向后兼容）
     }
 
     func testSaveAndLookup() {

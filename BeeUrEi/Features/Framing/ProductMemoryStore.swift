@@ -15,6 +15,7 @@ final class ProductMemoryStore {
     private var ingredientItems: [String: String] = [:] // 条码 → 配料表原文（"生牛乳、白砂糖…"，在线查到时随名字存，离线复扫也能报）
     private var energyItems: [String: Int] = [:] // 条码 → 热量千卡/100（在线查到时随名字存，离线复扫也能报卡路里）
     private var macroItems: [String: [String: Double]] = [:] // 条码 → 四大营养素克数（carbohydrates/sugars/protein/fat→g，在线查到时随名字存，离线复扫也能报——单一合并旁路文件，非逐素一文件）
+    private var servingItems: [String: Double] = [:] // 条码 → 一份的克数（OFF serving_quantity，在线查到时随名字存）——盲人吃一份不是 100 克，糖尿病算胰岛素要的是**每份**碳水；离线复扫也能报每份绝对量
     private let fileURL: URL
     private let allergensURL: URL // 独立旁路文件：老版本的名字 plist 原样不动（零迁移风险），缺文件=全空
     private let tracesURL: URL    // 同款独立旁路文件（缺文件=全空，零迁移风险）
@@ -26,6 +27,7 @@ final class ProductMemoryStore {
     private let ingredientsURL: URL // 同款独立旁路文件（缺文件=全空，零迁移风险）
     private let energyURL: URL     // 同款独立旁路文件（缺文件=全空，零迁移风险）
     private let macrosURL: URL     // 同款独立旁路文件（缺文件=全空，零迁移风险）
+    private let servingURL: URL    // 同款独立旁路文件（缺文件=全空，零迁移风险）
 
     /// fileURL 可注入（单测用临时目录）；默认存 Application Support。
     init(fileURL: URL? = nil) {
@@ -47,6 +49,7 @@ final class ProductMemoryStore {
         self.ingredientsURL = self.fileURL.deletingPathExtension().appendingPathExtension("ingredients.plist")
         self.energyURL = self.fileURL.deletingPathExtension().appendingPathExtension("energy.plist")
         self.macrosURL = self.fileURL.deletingPathExtension().appendingPathExtension("macros.plist")
+        self.servingURL = self.fileURL.deletingPathExtension().appendingPathExtension("serving.plist")
         load()
     }
 
@@ -84,11 +87,14 @@ final class ProductMemoryStore {
     /// 上层只报有数据的素、缺的跳过（不猜、缺≠0，同热量口径）。
     func macros(for barcode: String) -> [String: Double] { macroItems[barcode] ?? [:] }
 
-    /// allergens/traces/营养/膳食标注/净含量/配料/热量 只在**有数据**时覆盖——用户手动改名（save(barcode:name:) 默认空）不得抹掉已存的标注。
+    /// 一份的克数（OFF serving_quantity，在线查到时存下的）。nil=无数据（不猜）——有它 + per-100g 即可算每份千卡/碳水。
+    func servingGrams(for barcode: String) -> Double? { servingItems[barcode] }
+
+    /// allergens/traces/营养/膳食标注/净含量/配料/热量/每份克数 只在**有数据**时覆盖——用户手动改名（save(barcode:name:) 默认空）不得抹掉已存的标注。
     func save(barcode: String, name: String, allergens: [String] = [], traces: [String] = [],
               nutriScore: String? = nil, novaGroup: Int? = nil, dietaryLabels: [String] = [], quantity: String? = nil,
               nutrientLevels: [String: String] = [:], ingredients: String? = nil, energyKcal: Int? = nil,
-              macros: [String: Double] = [:]) {
+              macros: [String: Double] = [:], servingGrams: Double? = nil) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !barcode.isEmpty else { return }
         items[barcode] = trimmed
@@ -102,6 +108,7 @@ final class ProductMemoryStore {
         if let ingredients, !ingredients.isEmpty { ingredientItems[barcode] = ingredients }
         if let energyKcal { energyItems[barcode] = energyKcal }
         if !macros.isEmpty { macroItems[barcode] = macros }
+        if let servingGrams, servingGrams.isFinite, servingGrams > 0 { servingItems[barcode] = servingGrams } // 缺/脏值不写（不猜、缺≠0，同热量口径）
         persist()
     }
 
@@ -117,6 +124,7 @@ final class ProductMemoryStore {
         ingredientItems.removeValue(forKey: barcode)
         energyItems.removeValue(forKey: barcode)
         macroItems.removeValue(forKey: barcode)
+        servingItems.removeValue(forKey: barcode)
         persist()
     }
 
@@ -154,6 +162,9 @@ final class ProductMemoryStore {
         }
         if let data = try? PropertyListEncoder().encode(macroItems) {
             try? data.write(to: macrosURL, options: [.atomic, .completeFileProtection])
+        }
+        if let data = try? PropertyListEncoder().encode(servingItems) {
+            try? data.write(to: servingURL, options: [.atomic, .completeFileProtection])
         }
     }
 
@@ -201,6 +212,10 @@ final class ProductMemoryStore {
         if let data = try? Data(contentsOf: macrosURL),
            let decoded = try? PropertyListDecoder().decode([String: [String: Double]].self, from: data) {
             macroItems = decoded
+        }
+        if let data = try? Data(contentsOf: servingURL),
+           let decoded = try? PropertyListDecoder().decode([String: Double].self, from: data) {
+            servingItems = decoded
         }
     }
 }

@@ -345,9 +345,14 @@ enum HomeStrings {
 
     /// 语音"读消息"汇报：只读**有未读**会话（单聊+群聊）的最新一条（隐私+简短，不逐条翻历史），至多 cap 个，超出提示"等"。
     /// 无未读→"没有未读消息"。群聊点名"群「X」"以与联系人区分。让盲人不进聊天界面、一句话即可听到谁发了什么（对标 Siri）。
-    static func unreadReadout(_ items: [UnreadConversation], cap: Int = 5, _ l: Language) -> String {
+    /// missedCalls：未看的未接来电数——有人**当面**打来找过你，比未读消息更急，放最前先报（盲人看不到角标，此前只能靠
+    /// App 图标角标/进账户页翻才知，语音"读消息"完全听不到未接来电；≤0 不提，与"没有未读消息"同口径不误报）。
+    static func unreadReadout(_ items: [UnreadConversation], missedCalls: Int = 0, cap: Int = 5, _ l: Language) -> String {
+        let missedPrefix: String = missedCalls > 0
+            ? (l == .zh ? "你有 \(missedCalls) 个未接来电。" : "\(missedCalls) missed call\(missedCalls == 1 ? "" : "s"). ")
+            : ""
         let withUnread = items.filter { $0.unread > 0 }
-        guard !withUnread.isEmpty else { return l == .zh ? "没有未读消息。" : "No unread messages." }
+        guard !withUnread.isEmpty else { return missedPrefix + (l == .zh ? "没有未读消息。" : "No unread messages.") }
         let shown = withUnread.prefix(max(1, cap))
         let parts = shown.map { c -> String in
             let preview = messageReadoutPreview(kind: c.kind, text: c.text, l)
@@ -367,7 +372,7 @@ enum HomeStrings {
         let head = l == .zh ? "你有 \(withUnread.count) 个会话有未读消息。" : "\(withUnread.count) conversation\(withUnread.count > 1 ? "s" : "") with unread messages. "
         let body = parts.joined(separator: l == .zh ? "；" : "; ")
         let tail = withUnread.count > shown.count ? (l == .zh ? "；等" : "; and more") : ""
-        return head + body + tail
+        return missedPrefix + head + body + tail
     }
 
     // MARK: 红绿灯横幅（Oko 式第三通道）

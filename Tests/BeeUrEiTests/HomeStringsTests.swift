@@ -95,6 +95,26 @@ final class HomeStringsTests: XCTestCase {
         XCTAssertTrue(HomeStrings.unreadReadout([C(name: "Bob", kind: "recalled", text: "", unread: 1)], .en).contains("Bob: a recalled message"))
     }
 
+    func testUnreadReadoutMissedCalls() {
+        typealias C = HomeStrings.UnreadConversation
+        // 未接来电：盲人看不到角标、语音"读消息"此前完全听不到——须在读消息时一并告知（有人当面找过你，更急）。
+        // 有未接 + 无未读消息：仍先报未接，再报"没有未读消息"（不因无消息而吞掉未接）。
+        XCTAssertEqual(HomeStrings.unreadReadout([], missedCalls: 2, .zh), "你有 2 个未接来电。没有未读消息。")
+        XCTAssertEqual(HomeStrings.unreadReadout([], missedCalls: 1, .en), "1 missed call. No unread messages.")   // 英文单数
+        XCTAssertEqual(HomeStrings.unreadReadout([], missedCalls: 3, .en), "3 missed calls. No unread messages.")  // 英文复数
+        // 有未接 + 有未读消息：未接放**最前**，其后才是会话未读。
+        let r = HomeStrings.unreadReadout([C(name: "妈妈", kind: "text", text: "到了吗", unread: 1)], missedCalls: 2, .zh)
+        XCTAssertTrue(r.hasPrefix("你有 2 个未接来电。"))
+        XCTAssertTrue(r.contains("妈妈：到了吗"))
+        // missedCalls=0（默认）：绝不提未接，与既有行为一字不差（回归保护）。
+        XCTAssertEqual(HomeStrings.unreadReadout([], missedCalls: 0, .zh), "没有未读消息。")
+        XCTAssertEqual(HomeStrings.unreadReadout([], .zh), "没有未读消息。")
+        // 英文 + 未接：不串中文。
+        let en = HomeStrings.unreadReadout([C(name: "Mom", kind: "text", text: "hi", unread: 1)], missedCalls: 2, .en)
+        XCTAssertTrue(en.hasPrefix("2 missed calls. "))
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+    }
+
     func testVoiceCommandsHelpAdvertisesCallByName() {
         // 语音能力必须能被语音发现：自述里要提"给某人打电话"，否则加了 callContact 盲人也无从得知。
         XCTAssertTrue(HomeStrings.voiceCommandsHelp(.zh).contains("给某人打电话"))

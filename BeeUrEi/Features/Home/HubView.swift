@@ -630,11 +630,14 @@ struct HubView: View {
         func speak(_ t: String) { SpeechHub.shared.speak(t, channel: .query, voiceCode: lang.voiceCode) }
         guard let token = session.token else { speak(HomeStrings.voiceNeedLogin(lang)); return }
         Task {
-            // 单聊 + 群聊都要读（未读角标口径含两者；只读单聊会漏群未读、与角标不符）。两请求并发，任一失败即兜底。
+            // 单聊 + 群聊都要读（未读角标口径含两者；只读单聊会漏群未读、与角标不符）。三请求并发，任一失败即兜底。
+            // 未接来电一并拉取：盲人看不到角标，语音"读消息"此前完全听不到未接来电——有人当面找过你比未读消息更急，先报。
             async let directCall = APIClient().conversations(token: token)
             async let groupCall = APIClient().groups(token: token)
+            async let summaryCall = APIClient().unreadSummary(token: token)
             let direct = try? await directCall
             let groups = try? await groupCall
+            let missed = (try? await summaryCall)?.missedCallBadgeCount ?? 0 // 汇总失败→0（尽力而为，不阻塞消息朗读）
             guard direct != nil || groups != nil else { speak(HomeStrings.voiceReadFailed(lang)); return }
             var withTime: [(item: HomeStrings.UnreadConversation, at: Int)] = []
             for c in direct ?? [] where c.unread > 0 {
@@ -648,7 +651,7 @@ struct HubView: View {
                 withTime.append((HomeStrings.UnreadConversation(name: g.group.name, kind: last.kind, text: last.text, unread: g.unread, isGroup: true, sender: sender), last.createdAt))
             }
             let items = withTime.sorted { $0.at > $1.at }.map(\.item) // 最新的未读会话先读
-            speak(HomeStrings.unreadReadout(items, lang))
+            speak(HomeStrings.unreadReadout(items, missedCalls: missed, lang))
         }
     }
 

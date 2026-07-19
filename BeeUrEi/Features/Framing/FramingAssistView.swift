@@ -1084,9 +1084,9 @@ final class FramingAssistViewModel {
                 case .sms(let number, let body):
                     self.resultText = FramingStrings.smsResult(number, body, self.lang)
                     self.speak(FramingStrings.smsSpeak(number, body, self.lang))
-                    let digits = (number ?? "").filter { $0.isNumber || $0 == "+" }
-                    if !digits.isEmpty, let url = URL(string: "sms:\(digits)") {
-                        self.resultAction = FramingAction(label: FramingStrings.uiSendSms(self.lang), url: url) // 打开信息
+                    // 打开信息并**预填正文**（此前只带号码、丢了正文，短信码的意义常正是那条关键字正文；smsComposeURL 已测）。
+                    if let url = FramingStrings.smsComposeURL(number: number, body: body) {
+                        self.resultAction = FramingAction(label: FramingStrings.uiSendSms(self.lang), url: url)
                     }
                 case .contact:
                     // 解析名片（vCard/MECARD，核心 VCardParser 已测）：读出姓名/单位/电话/邮箱，唯一电话可一键拨打。

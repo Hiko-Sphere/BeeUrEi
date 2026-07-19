@@ -524,6 +524,20 @@ enum FramingStrings {
         guard let body, !body.isEmpty else { return base }
         return base + (l == .zh ? "，内容：\(body)" : "; message: \(body)")
     }
+    /// 短信码「发短信」的 compose URL：号码 + **预填正文**。此前动作只带号码、丢了正文——而短信码的意义常正是那条
+    /// "发 KEYWORD 到 12345"的正文（订阅/报名/投票/捐款），盲人听得到内容却发不出、还得凭记忆盲打关键字，等于没兑现。
+    /// iOS `sms:<号码>&body=<正文>` 打开信息并**预填**，用户看/听后**手动发送**（绝不代发，与拨号/写邮件同——只备好不替按）。
+    /// 号码仅留数字与 +（挡注入）；正文百分号编码，并把 `&/+/=/?/#` 也编码，防正文里的这些字符截断出多余参数。空号码→nil。
+    static func smsComposeURL(number: String?, body: String?) -> URL? {
+        let digits = (number ?? "").filter { $0.isNumber || $0 == "+" }
+        guard !digits.isEmpty else { return nil }
+        var s = "sms:\(digits)"
+        if let b = body?.trimmingCharacters(in: .whitespacesAndNewlines), !b.isEmpty {
+            let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&+=?#/"))
+            if let enc = b.addingPercentEncoding(withAllowedCharacters: allowed) { s += "&body=\(enc)" }
+        }
+        return URL(string: s)
+    }
     /// 位置码结果文本：地名（若有）+ 坐标（供核对/复制）。
     static func geoResult(_ lat: Double, _ lng: Double, _ label: String?, _ l: Language) -> String {
         let coord = String(format: "%.5f, %.5f", lat, lng)

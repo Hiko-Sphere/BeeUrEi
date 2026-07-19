@@ -47,6 +47,30 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertNil(FramingStrings.addressNavigationURL(""))
     }
 
+    func testSmsComposeURLPrefillsBodyNotJustNumber() {
+        // 短信码「发短信」须**预填正文**（短信码常正是那条"发 KEYWORD 到 12345"的关键字，盲人盲打不出）。
+        let u = FramingStrings.smsComposeURL(number: "12345", body: "JOIN")
+        XCTAssertNotNil(u)
+        XCTAssertEqual(u?.scheme, "sms")
+        XCTAssertTrue(u!.absoluteString.hasPrefix("sms:12345"), u!.absoluteString)
+        XCTAssertTrue(u!.absoluteString.contains("body=JOIN"), u!.absoluteString) // 正文进 body=，不再丢
+        // 号码只留数字与 +（挡注入/花括号）；正文含空格/中文 → 百分号编码成可用 URL（URL(string:) 不为 nil）。
+        let z = FramingStrings.smsComposeURL(number: "+86 138-0000-0000", body: "报名 志愿者")
+        XCTAssertNotNil(z)
+        XCTAssertTrue(z!.absoluteString.hasPrefix("sms:+8613800000000"), z!.absoluteString) // 空格/连字符剔除，+ 保留
+        XCTAssertFalse(z!.absoluteString.contains(" "), z!.absoluteString)                   // 正文空格已编码，无裸空格
+        // 正文里的 & / = 等须被编码，绝不截断出多余参数（防"发 A&cmd=B"这类被拆开）。
+        let amp = FramingStrings.smsComposeURL(number: "12345", body: "A&B=C")
+        XCTAssertNotNil(amp)
+        XCTAssertFalse(amp!.absoluteString.contains("A&B"), amp!.absoluteString) // & 已编码，不残留裸 &
+        // 无正文 → 只带号码（回退旧行为，仍可打开信息）。
+        let noBody = FramingStrings.smsComposeURL(number: "12345", body: nil)
+        XCTAssertEqual(noBody?.absoluteString, "sms:12345")
+        // 空号码 → nil（绝不给打不开的按钮）。
+        XCTAssertNil(FramingStrings.smsComposeURL(number: "", body: "JOIN"))
+        XCTAssertNil(FramingStrings.smsComposeURL(number: nil, body: "JOIN"))
+    }
+
     func testProductDietaryLabelsSpeakLabeledNotJudged() {
         // 膳食/宗教认证标注（盲人看不到包装认证：乳糜泻/乳糖不耐/素食/宗教/糖尿病刚需）。canonical key → 本地化名。
         let zh = FramingStrings.productDietaryLabelsSpeak(["gluten-free", "vegan", "halal"], .zh)

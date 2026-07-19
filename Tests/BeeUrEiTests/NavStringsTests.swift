@@ -223,4 +223,40 @@ final class NavStringsTests: XCTestCase {
             XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文混中文：\(s)")
         }
     }
+
+    /// 公交规划失败文案（透传服务端错误码）。判错的后果：给盲人**误导性**的下一步。
+    /// 关键安全点：no_transit_route 对**远处**目的地绝不建议"步行"（跨城/无覆盖也报此码，盲人真会试着走）。
+    func testTransitFailureTextByCode() {
+        // 目的地名嵌入 + 各错误码分派。
+        XCTAssertTrue(TransitPlanner.failureText(code: "destination_not_found", dest: "协和医院", straightLineMeters: nil, .zh).contains("协和医院"))
+        XCTAssertTrue(TransitPlanner.failureText(code: "city_unresolved", dest: "X", straightLineMeters: nil, .zh).contains("城市"))
+        XCTAssertTrue(TransitPlanner.failureText(code: "amap_not_configured", dest: "X", straightLineMeters: nil, .zh).contains("暂未开通"))
+        // 未知码 / nil 码（非服务端错误）→ 各自的通用重试文案，绝不空。
+        XCTAssertFalse(TransitPlanner.failureText(code: "amap_error", dest: "X", straightLineMeters: nil, .zh).isEmpty)
+        XCTAssertTrue(TransitPlanner.failureText(code: nil, dest: "X", straightLineMeters: nil, .zh).contains("请稍后再试"))
+        // 英文侧不串中文。
+        for code in ["no_transit_route", "destination_not_found", "city_unresolved", "amap_not_configured", "amap_error"] {
+            let s = TransitPlanner.failureText(code: code, dest: "Union Hospital", straightLineMeters: 5000, .en)
+            XCTAssertFalse(s.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }), "英文混中文：\(s)")
+        }
+    }
+
+    /// no_transit_route 的**距离感知**：远(≥2km)不提步行、近/未知才提步行。这条线错=对盲人的危险误导。
+    func testTransitNoRouteWalkSuggestionGatedByDistance() {
+        // 远处(3km) → 不建议步行。
+        let farZh = TransitPlanner.failureText(code: "no_transit_route", dest: "国贸", straightLineMeters: 3000, .zh)
+        XCTAssertTrue(farZh.contains("较远"))
+        XCTAssertFalse(farZh.contains("步行"))
+        let farEn = TransitPlanner.failureText(code: "no_transit_route", dest: "Guomao", straightLineMeters: 3000, .en)
+        XCTAssertFalse(farEn.lowercased().contains("walk"))
+        // 近处(500m) → 保留"可以步行"。
+        let nearZh = TransitPlanner.failureText(code: "no_transit_route", dest: "国贸", straightLineMeters: 500, .zh)
+        XCTAssertTrue(nearZh.contains("步行"))
+        // 距离未知(名字规划，nil) → 保守保留步行提示（无从判断远近）。
+        let unknownZh = TransitPlanner.failureText(code: "no_transit_route", dest: "国贸", straightLineMeters: nil, .zh)
+        XCTAssertTrue(unknownZh.contains("步行"))
+        // 非有限距离（脏数据）→ 当作未知，保留步行提示（不因 NaN 误判为远）。
+        let nanZh = TransitPlanner.failureText(code: "no_transit_route", dest: "国贸", straightLineMeters: .nan, .zh)
+        XCTAssertTrue(nanZh.contains("步行"))
+    }
 }

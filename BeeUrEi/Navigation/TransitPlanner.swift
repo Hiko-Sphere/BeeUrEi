@@ -91,7 +91,10 @@ final class TransitPlanner: NSObject, CLLocationManagerDelegate {
                     self.finish(TransitPlanFormatter.summary(plan, language: l, unit: u, arrivalClock: arrival))
                 }
             } catch {
-                await MainActor.run { self.finish(self.failureText(for: error, dest: dest, lang: l)) }
+                let code: String? = { if case let APIError.server(c) = error { return c } else { return nil } }()
+                // 直线距离仅精确坐标规划时可算（GCJ 两点间距离≈WGS，用于 no_transit_route 判"是否值得建议步行"）。
+                let straight = destGcj.map { Geo.distanceMeters(fromLat: g.lat, fromLon: g.lon, toLat: $0.lat, toLon: $0.lon) }
+                await MainActor.run { self.finish(TransitPlanner.failureText(code: code, dest: dest, straightLineMeters: straight, l)) }
             }
         }
     }
@@ -110,14 +113,23 @@ final class TransitPlanner: NSObject, CLLocationManagerDelegate {
         return f.string(from: Date().addingTimeInterval(durationSeconds))
     }
 
-    /// 后端错误码 → 盲人可懂的失败原因（透传自 /api/nav/transit）。
-    private func failureText(for error: Error, dest: String, lang l: Language) -> String {
+    /// 后端错误码 → 盲人可懂的失败原因（透传自 /api/nav/transit）。纯逻辑·可单测。
+    /// - code: nil 表示非服务端错误（网络/解析等）——给通用重试文案。
+    /// - straightLineMeters: 起点→目的地直线距离(米)，仅**精确坐标**规划(聊天分享位置)时可知；名字规划为 nil。
+    ///   no_transit_route 时据此避免对**远处**目的地误建议"可以步行"——跨城/无公交覆盖同样报 no_transit_route（见服务端），
+    ///   对 3km 外的地点说"可以步行"是危险的误导（盲人真会试着走）。
+    static func failureText(code: String?, dest: String, straightLineMeters: Double?, _ l: Language) -> String {
         let zh = l == .zh
-        guard case let APIError.server(code) = error else {
+        guard let code else {
             return zh ? "公交路线规划失败，请稍后再试" : "Transit planning failed — please try again"
         }
         switch code {
         case "no_transit_route":
+            // 已知直线距离且较远(≥2km) → 步行不现实，绝不建议步行；较近或距离未知 → 保留"可步行"提示。
+            if let m = straightLineMeters, m.isFinite, m >= 2000 {
+                return zh ? "没找到到\(dest)的公交路线，该地点较远，请换个说法或核对地点再试"
+                          : "No transit route to \(dest) found — it's quite far; try another name or check the place"
+            }
             return zh ? "没找到到\(dest)的公交路线，可能距离较近可以步行，或换个说法再试"
                       : "No transit route to \(dest) found — it may be close enough to walk"
         case "destination_not_found":

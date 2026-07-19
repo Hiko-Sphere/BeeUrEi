@@ -335,6 +335,14 @@ public enum SpokenStrings {
         }
     }
 
+    /// 找光模式下**四周皆暗、无明显更亮一侧**时的明确告知——让盲人据此换个地方找，不必干等一个不会来的方向指引。
+    public static func lightNoBrighterDirection(_ lang: Language) -> String {
+        switch lang {
+        case .zh: return "，没有明显更亮的方向"
+        case .en: return ", no clearly brighter direction"
+        }
+    }
+
     public static func lightWarning(_ level: LightMeter.Level, _ lang: Language) -> String? {
         switch lang {
         case .zh:

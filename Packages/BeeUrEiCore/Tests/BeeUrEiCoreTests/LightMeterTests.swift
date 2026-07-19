@@ -27,6 +27,22 @@ final class LightMeterTests: XCTestCase {
         }
     }
 
+    func testDescriptionNoBrighterDirectionOnlyWhenDark() {
+        // 很暗 + 左右均衡（无更亮一侧）→ 明确告知"没有明显更亮的方向"（找光模式：换地方找，别干等方向）。
+        let darkEvenZh = m.description(brightness: 0.05, brighterSide: .even, language: .zh)
+        XCTAssertTrue(darkEvenZh.contains("没有明显更亮的方向"), darkEvenZh)
+        let darkEvenEn = m.description(brightness: 0.05, brighterSide: .even, language: .en)
+        XCTAssertTrue(darkEvenEn.lowercased().contains("no clearly brighter direction"), darkEvenEn)
+        // 很暗 + 有更亮一侧 → 照常报方向，不加"没有方向"（二者互斥）。
+        let darkLeft = m.description(brightness: 0.05, brighterSide: .left, language: .zh)
+        XCTAssertTrue(darkLeft.contains("亮的方向在左边"))
+        XCTAssertFalse(darkLeft.contains("没有明显更亮的方向"))
+        // 较暗(dim) + 均衡 → **不**加（可能是正前方小光源使左右均衡，不误报"没方向"）。
+        XCTAssertFalse(m.description(brightness: 0.2, brighterSide: .even, language: .zh).contains("没有明显更亮的方向"))
+        // 光线充足 + 均衡 → 不加（"充足"本身已足够）。
+        XCTAssertFalse(m.description(brightness: 0.8, brighterSide: .even, language: .zh).contains("没有明显更亮的方向"))
+    }
+
     func testLuminance() {
         XCTAssertEqual(LightMeter.luminance(r: 1, g: 1, b: 1), 1, accuracy: 0.001)
         XCTAssertEqual(LightMeter.luminance(r: 0, g: 0, b: 0), 0, accuracy: 0.001)

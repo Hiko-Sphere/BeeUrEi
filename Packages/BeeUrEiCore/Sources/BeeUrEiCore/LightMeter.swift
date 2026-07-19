@@ -39,13 +39,18 @@ public struct LightMeter: Sendable {
         return .even
     }
 
-    /// 光线探测播报："光线充足" / "光线很暗，亮的方向在左边"。
+    /// 光线探测播报："光线充足" / "光线很暗，亮的方向在左边" / "光线很暗，没有明显更亮的方向"。
     public func description(brightness: Double, brighterSide side: Side, language: Language = .zh) -> String {
-        var text = SpokenStrings.lightLevel(level(brightness: brightness), language)
+        let lvl = level(brightness: brightness)
+        var text = SpokenStrings.lightLevel(lvl, language)
         switch side {
         case .left: text += SpokenStrings.lightBrighter(left: true, language)
         case .right: text += SpokenStrings.lightBrighter(left: false, language)
-        case .even: break
+        case .even:
+            // 四周很暗且左右均衡（无明显更亮一侧）：找光模式下明确告知"没有更亮的方向"，用户据此换个地方找，而非
+            // 干等一个不会来的方向指引。**仅 .dark 才说**——.dark(均值 <暗阈)意味四周确实都很暗（真有明显光源均值不会
+            // 这么低，断言安全）；.dim 可能是正前方小光源使左右均衡、误报"没方向"，故不加；.ok 本身已足够、无需。
+            if lvl == .dark { text += SpokenStrings.lightNoBrighterDirection(language) }
         }
         return text
     }

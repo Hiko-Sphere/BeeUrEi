@@ -107,6 +107,36 @@ final class LiveLocationStringsTests: XCTestCase {
                        "景华南街5号（在华贸中心一带）")
     }
 
+    /// 路口/地标的**方位+距离**（服务端一直下发、此前 iOS 丢弃=死字段；与盲人端「我在哪」及网页端 composeContactAddress
+    /// 同口径）：帮家人定位对方在哪一侧、多远。
+    func testContactAddressDirectionAndDistance() {
+        // 地标有方位+距离 → "东约50米"。
+        XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "人民路5号", township: "", aoiName: nil,
+                                                              landmarkName: "国贸大厦", landmarkDirection: "东", landmarkDistanceMeters: 50, .zh),
+                       "人民路5号，最近地标国贸大厦，东约50米")
+        // 距离缺失 → 只留方位"东北侧"。
+        XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "人民路5号", township: "", aoiName: nil,
+                                                              landmarkName: "国贸大厦", landmarkDirection: "东北", landmarkDistanceMeters: .nan, .zh),
+                       "人民路5号，最近地标国贸大厦，东北侧")
+        // 方位与距离都缺 → 只名字（向后兼容，与旧调用逐字一致）。
+        XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "人民路5号", township: "", aoiName: nil,
+                                                              landmarkName: "国贸大厦", .zh),
+                       "人民路5号，最近地标国贸大厦")
+        // 路口有方位+距离。
+        XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "建国路88号", township: "", aoiName: nil,
+                                                              firstRoad: "建国路", secondRoad: "东三环", intersectionDirection: "南", intersectionDistanceMeters: 30, .zh),
+                       "建国路88号，附近路口建国路与东三环交叉口，南约30米")
+        // 英文：方位译八方位（东→east）、不串中文。
+        let en = LiveLocationStrings.contactAddressText(address: "5 Rd", township: "", aoiName: nil,
+                                                        landmarkName: "CBD Tower", landmarkDirection: "东", landmarkDistanceMeters: 40, .en)!
+        XCTAssertEqual(en, "5 Rd, nearest landmark CBD Tower, east about 40 m")
+        XCTAssertFalse(en.contains(where: { $0.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF } }))
+        // 无方位有距离（英文）→ 只 "about N m"，不残留空格/中文。
+        XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "5 Rd", township: "", aoiName: nil,
+                                                              landmarkName: "Tower", landmarkDirection: "", landmarkDistanceMeters: 40, .en),
+                       "5 Rd, nearest landmark Tower, about 40 m")
+    }
+
     func testContactAddressTextIncludesIntersection() {
         // 最近路口（两条相交路名）：盲人转告出租/路人的强定位锚点，与本人「我在哪」同款。附在 AOI 之后。
         XCTAssertEqual(LiveLocationStrings.contactAddressText(address: "建国路88号", township: "", aoiName: nil,

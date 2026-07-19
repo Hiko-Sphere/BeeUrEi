@@ -1873,8 +1873,10 @@ struct ContactAddressInfo: Codable {
     let intersection: Intersection?
     let landmark: Landmark?
     struct AOI: Codable { let name: String; var distanceMeters: Double? } // 距离：太远的关联 AOI 不谎称"在X一带"（与 WhereAmIComposer ≤300m 同口径）
-    struct Intersection: Codable { let firstRoad: String; let secondRoad: String }
-    struct Landmark: Codable { let name: String }
+    // 方位/距离：服务端一直下发（intersection/landmark 的 direction+distanceMeters），此前 iOS 只解名字=死字段——
+    // 补齐后家人可听到"在路口/地标哪一侧、多远"（与盲人端「我在哪」及网页端 composeContactAddress 同口径）。
+    struct Intersection: Codable { let firstRoad: String; let secondRoad: String; var direction: String?; var distanceMeters: Double? }
+    struct Landmark: Codable { let name: String; var direction: String?; var distanceMeters: Double? }
 }
 
 /// 正在共享位置的联系人（来自 GET /api/locations/contacts）。

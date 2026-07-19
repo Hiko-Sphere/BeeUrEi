@@ -210,6 +210,24 @@ describe('管理面板 总览「通话中继失败」卡（运维可见 TURN 故
     expect(spa.view.innerHTML).not.toContain('AI 描述（今日）') // 优雅缺省，不崩、不占位
   })
 
+  it('高德连接失败卡：timeouts+netErrors>0 → 渲染「高德连接失败」+ 合计（连不上高德与 key 错误分开诊断）；都 0/缺省不渲染', () => {
+    const spa = loadSpa()
+    spa.state.lang = 'zh'
+    // 纯连接失败（upstreamErrors=0）：此前只见熔断、看不出是网络问题；连接卡即刻点明"连不上高德"。
+    spa.state.overview = overview({ amap: { calls: 10, upstreamErrors: 0, timeouts: 3, netErrors: 2, breakerState: 'open' } })
+    spa.renderDashboard()
+    expect(spa.view.innerHTML).toContain('高德连接失败')
+    expect(spa.view.innerHTML).toMatch(/高德连接失败[\s\S]*?>\s*5/) // timeouts 3 + netErrors 2 = 5
+    // timeouts+netErrors 都为 0：不渲染连接卡（无连接问题不占位）。
+    spa.state.overview = overview({ amap: { calls: 10, upstreamErrors: 1, timeouts: 0, netErrors: 0, breakerState: 'closed' } })
+    spa.renderDashboard()
+    expect(spa.view.innerHTML).not.toContain('高德连接失败')
+    // 旧后端无 amap 字段 → 不崩、不渲染。
+    spa.state.overview = overview()
+    spa.renderDashboard()
+    expect(spa.view.innerHTML).not.toContain('高德连接失败')
+  })
+
   it('activeUnreachable>0 → 置顶 danger 卡「紧急·无人可即时触达」+ 行动提示；=0/缺省不渲染', () => {
     const spa = loadSpa()
     spa.state.lang = 'zh'

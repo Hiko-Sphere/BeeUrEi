@@ -85,6 +85,16 @@ enum NavStrings {
     static func routePreviewHint(_ name: String, _ l: Language) -> String {
         l == .zh ? "不走路，先听一遍\(name)的全程" : "Hear the whole \(name) route without walking it"
     }
+    /// 步行时间可读短语（"步行约 15 分钟" / "步行约 1 小时 5 分钟"）：≥60 分钟拆成"X 小时 Y 分钟"，
+    /// 与网页端 Routes 页 `routeWalkingText` **逐字对齐**——同一条路线在盲人 iOS 与亲友网页读法一致。
+    /// 长路线播报"90 分钟"远不如"1 小时 30 分钟"好懂（盲人靠听，整点更易建立时长概念）。纯逻辑可单测。
+    static func walkTimePhrase(minutes mins: Int, _ l: Language) -> String {
+        if mins < 60 { return l == .zh ? "步行约 \(mins) 分钟" : "~\(mins) min walk" }
+        let h = mins / 60, mm = mins % 60
+        if mm == 0 { return l == .zh ? "步行约 \(h) 小时" : "~\(h) h walk" }
+        return l == .zh ? "步行约 \(h) 小时 \(mm) 分钟" : "~\(h) h \(mm) min walk"
+    }
+
     /// 路线副标题："N 个路线点" + 创建者（亲友画的→"由 X 创建"；自存→"自存"）。信任透明：盲人须知谁画的。
     /// 路线库副标题："8 个点 · 约1.2 公里 · 步行约 17 分钟 · 由妈妈创建"。
     /// 距离/步行时间在 meters 有效(>0)时才追加（与网页端 Routes 页对齐，补齐盲人端"这条多长/多久"的展示缺口）；
@@ -94,7 +104,7 @@ enum NavStrings {
         if let m = meters, m.isFinite, m > 0 {
             head += l == .zh ? " · 约\(distancePhrase(meters: Int(m.rounded()), unit: unit, l))" : " · ~\(distancePhrase(meters: Int(m.rounded()), unit: unit, l))"
             if let mins = RouteRemaining.estimatedWalkMinutes(meters: m) {
-                head += l == .zh ? " · 步行约 \(mins) 分钟" : " · ~\(mins) min walk"
+                head += " · " + walkTimePhrase(minutes: mins, l)
             }
         }
         if let c = creator, !c.isEmpty { return l == .zh ? "\(head) · 由\(c)创建" : "\(head) · by \(c)" }
@@ -106,8 +116,8 @@ enum NavStrings {
         if let m = meters, m.isFinite, m > 0 {
             let dist = distancePhrase(meters: Int(m.rounded()), unit: unit, l)
             let mins = RouteRemaining.estimatedWalkMinutes(meters: m)
-            if l == .zh { howFar = "约\(dist)，" + (mins.map { "步行约 \($0) 分钟，" } ?? "") }
-            else { howFar = "about \(dist), " + (mins.map { "~\($0) min walk, " } ?? "") }
+            if l == .zh { howFar = "约\(dist)，" + (mins.map { walkTimePhrase(minutes: $0, l) + "，" } ?? "") }
+            else { howFar = "about \(dist), " + (mins.map { walkTimePhrase(minutes: $0, l) + ", " } ?? "") }
         }
         return l == .zh ? "路线\(name)，\(n) 个路线点，\(howFar)\(who)双击开始引导" : "Route \(name), \(n) points, \(howFar)\(who)double-tap to start"
     }

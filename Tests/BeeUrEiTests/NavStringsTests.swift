@@ -172,6 +172,23 @@ final class NavStringsTests: XCTestCase {
         XCTAssertTrue(a.hasSuffix("双击开始引导"), a)
     }
 
+    /// 步行时间 ≥60 分钟拆"X 小时 Y 分钟"（盲人靠听："1 小时 30 分钟"远比"90 分钟"好懂），与网页端逐字对齐。
+    func testWalkTimePhraseHourBreakdown() {
+        // <60：仍是原样"步行约 X 分钟"（既有短路线读法零变化）。
+        XCTAssertEqual(NavStrings.walkTimePhrase(minutes: 17, .zh), "步行约 17 分钟")
+        XCTAssertEqual(NavStrings.walkTimePhrase(minutes: 59, .en), "~59 min walk")
+        // 整小时（无余分）→ "步行约 X 小时"，不拖"0 分钟"。
+        XCTAssertEqual(NavStrings.walkTimePhrase(minutes: 60, .zh), "步行约 1 小时")
+        XCTAssertEqual(NavStrings.walkTimePhrase(minutes: 120, .en), "~2 h walk")
+        // 有余分 → "步行约 X 小时 Y 分钟"。
+        XCTAssertEqual(NavStrings.walkTimePhrase(minutes: 90, .zh), "步行约 1 小时 30 分钟")
+        XCTAssertEqual(NavStrings.walkTimePhrase(minutes: 65, .en), "~1 h 5 min walk")
+        // 长路线的副标题真的走小时拆分（而非"90 分钟"）：6480m / 1.2 / 60 = 90 分钟。
+        let long = NavStrings.routeSubtitle(20, meters: 6480, by: nil, unit: .metric, .zh)
+        XCTAssertTrue(long.contains("步行约 1 小时 30 分钟"), long)
+        XCTAssertFalse(long.contains("步行约 90 分钟"), long)
+    }
+
     // 剩余路程 + ETA 播报：距离档（公里/米）+ ETA 档（分钟/不到 1 分钟/缺测省略）三向组合正确、英文不混中文。
     func testRemainingDistanceFormatting() {
         // ≥1km → 公里一位小数（1234m=1.2km）；ETA 正常分钟（240s=4min）。

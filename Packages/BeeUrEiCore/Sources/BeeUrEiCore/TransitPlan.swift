@@ -73,16 +73,21 @@ public enum TransitPlanFormatter {
         // 预计到达时刻（与步行导航 arrivalClockString 同措辞"预计X到达"/"arriving around X"）：拼在时长/步行/换乘/票价之后。
         let arrivalStr = clean(arrivalClock)
         let header: String
+        // 无步行的方案（站内上下车、amap 报 0 米步行）不报"步行共0米"——那句既冗余又误导（好像量了 0 步行，其实压根没有
+        // 要走的路）；对标 Citymapper/Google：没有步行就不占一句。仅在真有步行（取整后 ≥1 米）时附该分句。
+        let hasWalking = SpokenStrings.safeRoundedInt(plan.walkingDistanceMeters) > 0
         // 总时长 ≥60 分钟拆"X小时Y分钟"（过城公交/高铁常 >60 分钟，裸报"90分钟"最难靠听建立时长概念）。<60 逐字不变。
         let durationPhrase = SpokenStrings.hoursMinutesPhrase(minutes: mins, language)
         if zh {
-            var h = "全程约\(durationPhrase)，步行共\(walkStr)"
+            var h = "全程约\(durationPhrase)"
+            if hasWalking { h += "，步行共\(walkStr)" }
             if transfers > 0 { h += "，需换乘\(transfers)次" }
             if let fs = fareStr { h += "，\(fs)" }
             if let ac = arrivalStr { h += "，预计\(ac)到达" }
             header = h + "。"
         } else {
-            var h = "About \(durationPhrase) total, \(walkStr) of walking"
+            var h = "About \(durationPhrase) total"
+            if hasWalking { h += ", \(walkStr) of walking" }
             if transfers > 0 { h += ", \(transfers) transfer\(transfers == 1 ? "" : "s")" }
             if let fs = fareStr { h += ", \(fs)" }
             if let ac = arrivalStr { h += ", arriving around \(ac)" }

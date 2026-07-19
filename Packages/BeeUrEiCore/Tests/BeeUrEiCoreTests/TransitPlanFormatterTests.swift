@@ -16,6 +16,22 @@ final class TransitPlanFormatterTests: XCTestCase {
         XCTAssertEqual(out, "全程约33分钟，步行共350米。步行200米，乘坐地铁1号线，西单站上车，坐6站到国贸站下车，约15分钟，步行150米到达。")
     }
 
+    func testNoWalkingOmitsWalkingClause() {
+        // 无步行的方案（站内上下车、amap 报 0 米步行）：header 不出现"步行共0米"这种冗余/误导句（对标 Citymapper/Google）。
+        let plan = TransitPlan(durationSeconds: 900, walkingDistanceMeters: 0,
+                               legs: [ride(.subway, "地铁2号线", "西直门", "东直门", 4)])
+        let zh = TransitPlanFormatter.summary(plan, language: .zh)
+        XCTAssertTrue(zh.hasPrefix("全程约15分钟。乘坐地铁2号线"), zh) // 时长后直接进第一段，无"，步行共…"
+        XCTAssertFalse(zh.contains("步行"), zh)                       // 全程无步行字样
+        let en = TransitPlanFormatter.summary(plan, language: .en)
+        XCTAssertTrue(en.hasPrefix("About 15 minutes total. take 地铁2号线"), en) // 无", … of walking"
+        XCTAssertFalse(en.lowercased().contains("walking"), en)
+        // 回归：真有步行的方案仍照常报"步行共X"（不误伤既有行为）。
+        let withWalk = TransitPlan(durationSeconds: 600, walkingDistanceMeters: 100,
+                                   legs: [ride(.bus, "300路", "甲", "乙", 4), walk(100)])
+        XCTAssertTrue(TransitPlanFormatter.summary(withWalk, language: .zh).hasPrefix("全程约10分钟，步行共100米。"))
+    }
+
     func testTransferUsesHuanchengForSecondRide() {
         // 第二段乘车用"换乘"，第一段用"乘坐"。
         let plan = TransitPlan(durationSeconds: 2400, walkingDistanceMeters: 300,
@@ -124,7 +140,7 @@ final class TransitPlanFormatterTests: XCTestCase {
         // 缺站名/站数时不崩、不留悬空标点，仍给出线路。
         let leg = TransitLeg(kind: .subway, line: "地铁2号线", fromStop: nil, toStop: nil, stops: nil, distanceMeters: 3000, durationSeconds: 600)
         let out = TransitPlanFormatter.summary(TransitPlan(durationSeconds: 600, walkingDistanceMeters: 0, legs: [leg]), language: .zh)
-        XCTAssertEqual(out, "全程约10分钟，步行共0米。乘坐地铁2号线，约10分钟。")
+        XCTAssertEqual(out, "全程约10分钟。乘坐地铁2号线，约10分钟。") // 无步行→不拖"步行共0米"
     }
 
     func testSubwayEntranceExitNarratedInActionOrder() {
@@ -220,7 +236,7 @@ final class TransitPlanFormatterTests: XCTestCase {
     func testEmptyLineFallsBackToGenericMode() {
         let leg = TransitLeg(kind: .bus, line: "  ", fromStop: "甲", toStop: "乙", stops: 2, distanceMeters: 1000, durationSeconds: 300)
         let out = TransitPlanFormatter.summary(TransitPlan(durationSeconds: 300, walkingDistanceMeters: 0, legs: [leg]), language: .zh)
-        XCTAssertEqual(out, "全程约5分钟，步行共0米。乘坐公交，甲上车，坐2站到乙下车，约5分钟。")
+        XCTAssertEqual(out, "全程约5分钟。乘坐公交，甲上车，坐2站到乙下车，约5分钟。") // 无步行→不拖"步行共0米"
     }
 
     func testPerLegRideDurationSpokenButNotForWalk() {
@@ -262,8 +278,8 @@ final class TransitPlanFormatterTests: XCTestCase {
         // 整小时不拖"0分钟"：120 分钟→"2小时"/"2 hours"。
         let h2 = TransitPlan(durationSeconds: 7200, walkingDistanceMeters: 0,
                              legs: [TransitLeg(kind: .railway, line: "D5", fromStop: "A", toStop: "B", stops: 0, distanceMeters: 100000, durationSeconds: 7200)])
-        XCTAssertTrue(TransitPlanFormatter.summary(h2, language: .zh).hasPrefix("全程约2小时，"))
-        XCTAssertTrue(TransitPlanFormatter.summary(h2, language: .en).hasPrefix("About 2 hours total, "))
+        XCTAssertTrue(TransitPlanFormatter.summary(h2, language: .zh).hasPrefix("全程约2小时。")) // 无步行→时长后直接句号
+        XCTAssertTrue(TransitPlanFormatter.summary(h2, language: .en).hasPrefix("About 2 hours total. "))
     }
 
     func testHugeFiniteValuesDoNotOverflowCrash() {

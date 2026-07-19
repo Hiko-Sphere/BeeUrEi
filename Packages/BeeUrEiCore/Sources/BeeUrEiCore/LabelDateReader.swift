@@ -21,6 +21,11 @@ public enum LabelDateReader {
         // 限用日期：化妆品（台湾/进口）标准"使用期限"写法，与"有效日期"并列**非其子串**（限用日期不含"限期"/"有效日期"）。
         // 盲人看不到化妆品/生鲜包装的期限，此前整行被丢——新鲜度/安全刚需。双门控（同行须有日期样式/时长）故精度不降。
         "保鲜期", "限用日期",
+        // 繁体中文包装（台湾/港澳/进口商品，大陆超市亦常见进口货）：凡与简体**字形不同**的标签须单列——繁简是不同码点，
+        // 简体串匹配不到繁体（如"保質期"≠"保质期"），此前繁体包装整行被丢，盲人扫进口食品/化妆品/药品读不出保质/生产日期
+        // （新鲜度/安全刚需）。字形相同的（有效期/保存期/到期/有效日期/限用日期…）已被上面覆盖，不重列。「製造日期」是
+        // 繁体包装比「生產日期」更主流的生产类写法，一并补上。双门控（同行须有日期样式/时长）不变，精度不降。
+        "保質期", "生產日期", "製造日期", "賞味期", "出廠日期", "包裝日期", "灌裝日期", "保鮮期",
         // "manufacture"（非 "manufactured"）：兼收正式写法 "date of manufacture" 与 "manufactured"（后者含前者子串），
         // 此前只认 "manufactured"、漏了 "date of manufacture"。enjoy by：美式食品（乳制品/预制食品）常见"最佳食用"写法。
         "best before", "best by", "use by", "enjoy by", "expiry", "expires", "expiration", "manufacture", "sell by",
@@ -91,7 +96,9 @@ public enum LabelDateReader {
     /// （沿用本模块"避免 CJK 数字误配"原则）；门控同样要求同行有日期标签，故精度不降（无标签的"12个月"不会被读出）。
     private static let durationRegexes: [NSRegularExpression] = {
         let patterns = [
-            "[0-9]{1,4}\\s*(?:个月|个星期|周|天|年)",                 // 12个月 / 360天 / 3年 / 2周
+            // 简体+繁体时长单位：個月/個星期/週 是繁体码点，与简体 个月/个星期/周 不同，繁体进口包装的"有效期限18個月"
+            // 此前因单位不匹配被丢（天/年简繁同形，已覆盖）。门控同样要求同行有日期标签，精度不降。
+            "[0-9]{1,4}\\s*(?:个月|個月|个星期|個星期|周|週|天|年)",   // 12个月 / 18個月 / 360天 / 3年 / 2周 / 2週
             "\\b[0-9]{1,4}\\s*(?:months?|days?|years?|weeks?)\\b",    // 18 months / 720 days / 2 years
         ]
         return patterns.compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }

@@ -199,4 +199,21 @@ final class LabelDateReaderTests: XCTestCase {
         let r = LabelDateReader.find(texts: ["保质期 2026.07.15", "保质期 2026.07.15"], language: .zh)!
         XCTAssertEqual(r.components(separatedBy: "2026.07.15").count - 1, 1) // 只出现一次
     }
+
+    func testTraditionalChineseLabelsAndDurations() {
+        // 繁体标签（台湾/港澳/进口包装）：字形与简体不同，此前整行被丢。标签 + 日期/时长双门控。
+        XCTAssertTrue(LabelDateReader.find(texts: ["保質期 2026.07.15"], language: .zh)!.contains("2026.07.15")) // 質≠质
+        XCTAssertTrue(LabelDateReader.find(texts: ["生產日期 2026/07/31"], language: .zh)!.contains("2026/07/31")) // 產≠产
+        XCTAssertTrue(LabelDateReader.find(texts: ["製造日期 20260731"], language: .zh)!.contains("20260731")) // 繁体主流生产写法
+        XCTAssertTrue(LabelDateReader.find(texts: ["出廠日期 2026年07月"], language: .zh)!.contains("2026年07月")) // 廠≠厂
+        // 繁体时长单位：個月/週（進口食品/化妆品"有效期限18個月"），此前单位不匹配被丢。
+        XCTAssertTrue(LabelDateReader.find(texts: ["有效期限 18個月"], language: .zh)!.contains("18個月")) // 個≠个
+        XCTAssertTrue(LabelDateReader.find(texts: ["保存期 2週"], language: .zh)!.contains("2週"))            // 週≠周
+        // 精度守卫：繁体标签但无日期/时长（双门控缺日期样式）不误报。
+        XCTAssertNil(LabelDateReader.find(texts: ["保質期見瓶身"], language: .zh))
+        // 红线不变：仍附"请核对"、绝不判是否过期。
+        let r = LabelDateReader.find(texts: ["保質期 2026.07.15"], language: .zh)!
+        XCTAssertTrue(r.contains("请核对"))
+        XCTAssertFalse(r.contains("过期"))
+    }
 }

@@ -289,8 +289,19 @@ final class FramingAssistViewModel {
     /// 类别寻找帧：YOLO 命中类别即报方位与 LiDAR 距离（与"找我的东西"同节奏去抖）。
     private func categoryFindStep(_ frame: SensorFrame, category: (label: String, name: String)) {
         let dets = detector.detect(in: frame.pixelBuffer, regionOfInterest: CGRect(x: 0, y: 0, width: 1, height: 1))
-        let hit = dets.filter { $0.label.lowercased() == category.label }
-            .max { $0.confidence < $1.confidence }
+        let categoryDets = dets.filter { $0.label.lowercased() == category.label }
+        let isSeat = category.label == "chair" || category.label == "couch"
+        // 找空座位：多把候选椅/沙发中**优先挑一把看起来空着**的（同帧人框判占用，核心 SeatOccupancy.pickSeatIndex 已测），
+        // 全部"可能有人"才退回最高置信度那把——此前一律取最高置信度，可能把盲人指向已占的椅、忽略画面里真空着的那把。
+        let hit: DetectedObject?
+        if isSeat {
+            let persons = dets.filter { $0.label.lowercased() == "person" }.compactMap(\.box)
+            let withBox = categoryDets.filter { $0.box != nil }
+            let seats = withBox.map { (box: $0.box!, confidence: Double($0.confidence)) }
+            hit = SeatOccupancy.pickSeatIndex(seats: seats, persons: persons).map { withBox[$0] }
+        } else {
+            hit = categoryDets.max { $0.confidence < $1.confidence }
+        }
         if let hit, let box = hit.box {
             guard frame.timestamp - lastFindHit >= 2.5 else { return } // 命中去抖
             lastFindHit = frame.timestamp

@@ -55,4 +55,43 @@ final class SeatOccupancyTests: XCTestCase {
         let sitting = NormalizedBox(x: 0.42, y: 0.25, width: 0.18, height: 0.5)
         XCTAssertEqual(SeatOccupancy.judge(seat: chair, persons: [garbage, sitting]), .maybeOccupied)
     }
+
+    // MARK: pickSeatIndex（多把候选优先挑空着的那把）
+
+    func testPicksFreeSeatOverHigherConfidenceOccupied() {
+        // 座位0：置信度最高(0.9)但**被占**；座位1：置信度稍低(0.6)但**空着**——须指向 1（空的那把），
+        // 而非最显眼但已占的 0（"找空座位"的全部意义）。
+        let occupied = NormalizedBox(x: 0.1, y: 0.3, width: 0.2, height: 0.3)
+        let sitter = NormalizedBox(x: 0.12, y: 0.25, width: 0.18, height: 0.5) // 压住 occupied
+        let free = NormalizedBox(x: 0.7, y: 0.3, width: 0.2, height: 0.3)
+        let idx = SeatOccupancy.pickSeatIndex(seats: [(occupied, 0.9), (free, 0.6)], persons: [sitter])
+        XCTAssertEqual(idx, 1)
+    }
+
+    func testAllOccupiedFallsBackToHighestConfidence() {
+        // 全部"可能有人"→ 退回置信度最高的那把（如实报"可能有人"，绝不谎报空、也不放弃指路）。
+        let s0 = NormalizedBox(x: 0.1, y: 0.3, width: 0.2, height: 0.3)
+        let s1 = NormalizedBox(x: 0.6, y: 0.3, width: 0.2, height: 0.3)
+        let p0 = NormalizedBox(x: 0.12, y: 0.25, width: 0.18, height: 0.5)
+        let p1 = NormalizedBox(x: 0.62, y: 0.25, width: 0.18, height: 0.5)
+        XCTAssertEqual(SeatOccupancy.pickSeatIndex(seats: [(s0, 0.5), (s1, 0.8)], persons: [p0, p1]), 1)
+    }
+
+    func testPicksHighestConfidenceAmongMultipleFree() {
+        // 多把都空着 → 取置信度最高的那把（最可信的检测，指路更准）。
+        let a = NormalizedBox(x: 0.1, y: 0.3, width: 0.2, height: 0.3)
+        let b = NormalizedBox(x: 0.7, y: 0.3, width: 0.2, height: 0.3)
+        XCTAssertEqual(SeatOccupancy.pickSeatIndex(seats: [(a, 0.5), (b, 0.85)], persons: []), 1)
+    }
+
+    func testPickEmptyCandidatesIsNil() {
+        XCTAssertNil(SeatOccupancy.pickSeatIndex(seats: [], persons: []))
+    }
+
+    func testPickNonFiniteConfidenceTreatedAsZero() {
+        // 非有限置信度当 0：不因坏读数抢占；另一把有限置信度的空座应胜出。
+        let a = NormalizedBox(x: 0.1, y: 0.3, width: 0.2, height: 0.3)
+        let b = NormalizedBox(x: 0.7, y: 0.3, width: 0.2, height: 0.3)
+        XCTAssertEqual(SeatOccupancy.pickSeatIndex(seats: [(a, .nan), (b, 0.3)], persons: []), 1)
+    }
 }

@@ -29,4 +29,23 @@ public enum SeatOccupancy {
         }
         return .free
     }
+
+    /// 多把候选座位里的**优先选座**（纯逻辑，可单测）：盲人说"找空座位"要的是被指向一把**空**椅，
+    /// 而非画面里最显眼但**已占**的那把（坐到别人身上社交成本高）。规则：先在**看起来空着**的座位里取
+    /// 置信度最高的那把；若全部"可能有人"，退回置信度最高的那把（如实报"可能有人"，不谎报空）。
+    /// 空候选/座位框全非有限 → nil（无从指路，绝不硬指）。非有限置信度当 0（不因坏读数抢占）。
+    public static func pickSeatIndex(seats: [(box: NormalizedBox, confidence: Double)],
+                                     persons: [NormalizedBox], minOverlapRatio: Double = 0.22) -> Int? {
+        var bestFree: (idx: Int, conf: Double)?
+        var bestAny: (idx: Int, conf: Double)?
+        for (i, s) in seats.enumerated() {
+            let conf = s.confidence.isFinite ? s.confidence : 0
+            if bestAny == nil || conf > bestAny!.conf { bestAny = (i, conf) }
+            if judge(seat: s.box, persons: persons, minOverlapRatio: minOverlapRatio) == .free,
+               bestFree == nil || conf > bestFree!.conf {
+                bestFree = (i, conf)
+            }
+        }
+        return (bestFree ?? bestAny)?.idx
+    }
 }

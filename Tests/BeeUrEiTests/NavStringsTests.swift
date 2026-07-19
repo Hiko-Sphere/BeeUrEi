@@ -199,6 +199,23 @@ final class NavStringsTests: XCTestCase {
         XCTAssertFalse(long.contains("步行约 90 分钟"), long)
     }
 
+    /// 导航 ETA（出发总览/途中里程碑）≥60 分钟同样拆"X 小时 Y 分钟"——长步行/长路线的"预计 90 分钟"靠听难懂，
+    /// 与 walkTimePhrase/公交总时长同口径；<60 分钟逐字不变（既有短程读法零变化）。
+    func testEtaHourBreakdownForLongRoutes() {
+        // <60 分钟：ETA 读法逐字不变（回归保护）。
+        XCTAssertTrue(NavStrings.journeyOverview(meters: 2000, etaSeconds: 1500, .zh).contains("预计 25 分钟")) // 25 分钟仍逐字
+        XCTAssertEqual(NavStrings.journeyOverview(meters: 2000, etaSeconds: 600, unit: .imperial, .en), "Route is about 1.2 miles, ~10 min") // 与既有单元测试同口径
+        // ≥60 分钟：拆"X 小时 Y 分钟"（90 分钟步行的长路线总览）。
+        let zh = NavStrings.journeyOverview(meters: 7000, etaSeconds: 5400, .zh) // 5400s = 90 分钟
+        XCTAssertTrue(zh.contains("预计 1小时30分钟"), zh)
+        XCTAssertFalse(zh.contains("预计 90 分钟"), zh)
+        let en = NavStrings.journeyOverview(meters: 7000, etaSeconds: 5400, .en)
+        XCTAssertTrue(en.contains("~1 hour 30 minutes"), en)
+        // 途中里程碑同口径。整小时不拖"0分钟"：3600s=60 分钟→"1小时"。
+        XCTAssertTrue(NavStrings.remainingDistance(meters: 5000, etaSeconds: 3600, .zh).contains("预计 1小时"))
+        XCTAssertFalse(NavStrings.remainingDistance(meters: 5000, etaSeconds: 3600, .zh).contains("预计 60 分钟"))
+    }
+
     // 剩余路程 + ETA 播报：距离档（公里/米）+ ETA 档（分钟/不到 1 分钟/缺测省略）三向组合正确、英文不混中文。
     func testRemainingDistanceFormatting() {
         // ≥1km → 公里一位小数（1234m=1.2km）；ETA 正常分钟（240s=4min）。

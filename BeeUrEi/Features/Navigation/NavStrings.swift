@@ -257,11 +257,16 @@ enum NavStrings {
         return l == .zh ? "\(m) 米" : "\(m) m"
     }
 
-    /// ETA 短语（缺测/非有限→nil，调用方省略）："预计 4 分钟" / "预计不到 1 分钟"。
+    /// ETA 短语（缺测/非有限→nil，调用方省略）："预计 4 分钟" / "预计不到 1 分钟" / 长程"预计 1 小时 30 分钟"。
     private static func etaPhrase(_ etaSeconds: Double?, _ l: Language) -> String? {
         guard let eta = etaSeconds, eta.isFinite, eta >= 0 else { return nil }
         if eta < 60 { return l == .zh ? "预计不到 1 分钟" : "~under a minute" }
         let mins = Int((eta / 60).rounded())
+        // ≥60 分钟拆"X小时Y分钟"（长步行/长路线的 ETA 靠听更好懂，与 walkTimePhrase/公交总时长同口径）；<60 逐字不变。
+        if mins >= 60 {
+            return l == .zh ? "预计 \(SpokenStrings.hoursMinutesPhrase(minutes: mins, .zh))"
+                            : "~\(SpokenStrings.hoursMinutesPhrase(minutes: mins, .en))"
+        }
         return l == .zh ? "预计 \(mins) 分钟" : "~\(mins) min"
     }
 

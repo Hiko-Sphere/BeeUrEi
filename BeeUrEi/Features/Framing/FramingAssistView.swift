@@ -1075,11 +1075,12 @@ final class FramingAssistViewModel {
                     if let tel = EmergencyPhoneFallback.telURLString(number), let url = URL(string: tel) {
                         self.resultAction = FramingAction(label: FramingStrings.uiDial(self.lang), url: url) // 打开拨号盘预填
                     }
-                case .email(let addr):
-                    self.resultText = FramingStrings.emailResult(addr, self.lang)
-                    self.speak(FramingStrings.emailSpeak(addr, self.lang))
-                    if let a = addr, let url = URL(string: "mailto:\(a)") {
-                        self.resultAction = FramingAction(label: FramingStrings.uiSendEmail(self.lang), url: url) // 打开邮件撰写
+                case .email(let addr, let subject, let body):
+                    self.resultText = FramingStrings.emailResult(addr, subject, body, self.lang)
+                    self.speak(FramingStrings.emailSpeak(addr, subject, body, self.lang))
+                    // 打开邮件撰写并**预填主题/正文**（此前只带地址、丢了主题正文；mailtoComposeURL 已测）。
+                    if let url = FramingStrings.mailtoComposeURL(address: addr, subject: subject, body: body) {
+                        self.resultAction = FramingAction(label: FramingStrings.uiSendEmail(self.lang), url: url)
                     }
                 case .sms(let number, let body):
                     self.resultText = FramingStrings.smsResult(number, body, self.lang)

@@ -71,6 +71,27 @@ final class FramingStringsTests: XCTestCase {
         XCTAssertNil(FramingStrings.smsComposeURL(number: nil, body: "JOIN"))
     }
 
+    func testMailtoComposeURLPrefillsSubjectAndBody() {
+        // 邮箱码「写邮件」须**预填主题/正文**（报名/投诉/客服模板码的意义常正是那预置内容，盲人盲打不出）。
+        let u = FramingStrings.mailtoComposeURL(address: "hi@example.com", subject: "RSVP Picnic", body: "Count me in")
+        XCTAssertNotNil(u)
+        XCTAssertEqual(u?.scheme, "mailto")
+        XCTAssertTrue(u!.absoluteString.hasPrefix("mailto:hi@example.com?"), u!.absoluteString)
+        XCTAssertTrue(u!.absoluteString.contains("subject=RSVP%20Picnic"), u!.absoluteString) // 主题进 subject=、空格编码
+        XCTAssertTrue(u!.absoluteString.contains("body=Count%20me%20in"), u!.absoluteString)   // 正文进 body=
+        XCTAssertFalse(u!.absoluteString.contains(" "), u!.absoluteString)                     // 无裸空格（否则 URL 失败）
+        // 主题/正文里的 & = 须被编码，绝不截断出多余头字段（防注入额外 subject/body）。
+        let inj = FramingStrings.mailtoComposeURL(address: "a@b.cn", subject: "A&cc=evil@x.com", body: nil)
+        XCTAssertNotNil(inj)
+        XCTAssertFalse(inj!.absoluteString.contains("A&cc="), inj!.absoluteString) // & 已编码，不残留裸 &
+        // 只有地址、无主题正文 → 只带地址（回退旧行为，仍可写邮件）。
+        let bare = FramingStrings.mailtoComposeURL(address: "a@b.cn", subject: nil, body: nil)
+        XCTAssertEqual(bare?.absoluteString, "mailto:a@b.cn")
+        // 空地址 → nil（绝不给打不开的按钮）。
+        XCTAssertNil(FramingStrings.mailtoComposeURL(address: "", subject: "x", body: "y"))
+        XCTAssertNil(FramingStrings.mailtoComposeURL(address: nil, subject: "x", body: "y"))
+    }
+
     func testProductDietaryLabelsSpeakLabeledNotJudged() {
         // 膳食/宗教认证标注（盲人看不到包装认证：乳糜泻/乳糖不耐/素食/宗教/糖尿病刚需）。canonical key → 本地化名。
         let zh = FramingStrings.productDietaryLabelsSpeak(["gluten-free", "vegan", "halal"], .zh)

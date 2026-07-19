@@ -507,10 +507,36 @@ enum FramingStrings {
     }
     static func phoneResult(_ n: String, _ l: Language) -> String { l == .zh ? "电话：\(n)" : "Phone: \(n)" }
     static func phoneSpeak(_ n: String, _ l: Language) -> String { l == .zh ? "是电话号码：\(n)" : "It's a phone number: \(n)" }
-    static func emailResult(_ a: String?, _ l: Language) -> String { l == .zh ? "邮箱：\(a ?? "")" : "Email: \(a ?? "")" }
-    static func emailSpeak(_ a: String?, _ l: Language) -> String {
-        l == .zh ? "是电子邮箱地址" + (a.map { "：\($0)" } ?? "") + "，内容已可复制"
-                 : "It's an email address" + (a.map { ": \($0)" } ?? "") + "; you can copy it"
+    static func emailResult(_ a: String?, _ subject: String?, _ body: String?, _ l: Language) -> String {
+        var s = l == .zh ? "邮箱：\(a ?? "")" : "Email: \(a ?? "")"
+        if let subj = subject, !subj.isEmpty { s += l == .zh ? "，主题：\(subj)" : ", subject: \(subj)" }
+        if let b = body, !b.isEmpty { s += l == .zh ? "，正文：\(b)" : ", body: \(b)" }
+        return s
+    }
+    /// 读邮箱码：地址 + **预填的主题/正文**（读全供核对——不报主题正文＝盲人不知会替他发什么内容、什么主题）。
+    static func emailSpeak(_ a: String?, _ subject: String?, _ body: String?, _ l: Language) -> String {
+        var s = l == .zh ? "是电子邮箱地址" + (a.map { "：\($0)" } ?? "")
+                         : "It's an email address" + (a.map { ": \($0)" } ?? "")
+        if let subj = subject, !subj.isEmpty { s += l == .zh ? "，主题：\(subj)" : ", subject: \(subj)" }
+        if let b = body, !b.isEmpty { s += l == .zh ? "，正文：\(b)" : ", body: \(b)" }
+        s += l == .zh ? "，内容已可复制" : "; you can copy it"
+        return s
+    }
+    /// 邮箱码「写邮件」的 compose URL：地址 + **预填主题/正文**（此前动作只带地址、丢了主题正文——报名/投诉/客服
+    /// 模板码的意义常正是那预置内容，盲人听得到却发不出、还得盲打）。`mailto:<地址>?subject=<主题>&body=<正文>`
+    /// 打开邮件撰写并预填，用户看/听后**手动发送**（绝不代发，与拨号/发短信同）。主题/正文百分号编码，并把
+    /// `&/+/=/?/#` 也编码防截断；地址亦编码。空地址 → nil。
+    static func mailtoComposeURL(address: String?, subject: String?, body: String?) -> URL? {
+        let a = (address ?? "").trimmingCharacters(in: .whitespaces)
+        guard !a.isEmpty, let encAddr = a.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
+        let valAllowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&+=?#/"))
+        var params: [String] = []
+        if let s = subject?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty,
+           let e = s.addingPercentEncoding(withAllowedCharacters: valAllowed) { params.append("subject=\(e)") }
+        if let b = body?.trimmingCharacters(in: .whitespacesAndNewlines), !b.isEmpty,
+           let e = b.addingPercentEncoding(withAllowedCharacters: valAllowed) { params.append("body=\(e)") }
+        let q = params.isEmpty ? "" : "?" + params.joined(separator: "&")
+        return URL(string: "mailto:\(encAddr)\(q)")
     }
     static func smsResult(_ n: String?, _ body: String?, _ l: Language) -> String {
         let base = l == .zh ? "短信：\(n ?? "")" : "SMS: \(n ?? "")"

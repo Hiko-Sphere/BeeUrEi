@@ -79,9 +79,15 @@ final class BarcodePayloadTests: XCTestCase {
     }
 
     func testEmail() {
-        XCTAssertEqual(BarcodePayload.classify("mailto:hi@example.com"), .email(address: "hi@example.com"))
-        XCTAssertEqual(BarcodePayload.classify("MAILTO:a@b.cn?subject=Hello"), .email(address: "a@b.cn")) // 去 ?参数
-        XCTAssertEqual(BarcodePayload.classify("mailto:"), .email(address: nil))                            // 空地址
+        XCTAssertEqual(BarcodePayload.classify("mailto:hi@example.com"), .email(address: "hi@example.com", subject: nil, body: nil))
+        // 主题一并解出（此前 ?参数被整段丢弃，盲人扫码不知邮件主题）。
+        XCTAssertEqual(BarcodePayload.classify("MAILTO:a@b.cn?subject=Hello"), .email(address: "a@b.cn", subject: "Hello", body: nil))
+        // 主题+正文都解出，%20 解码为空格；RFC 6068：`+` 是字面加号、**不当空格**（异于 sms:）。
+        XCTAssertEqual(BarcodePayload.classify("mailto:a@b.cn?subject=RSVP%20Picnic&body=Count%20me%20in"),
+                       .email(address: "a@b.cn", subject: "RSVP Picnic", body: "Count me in"))
+        XCTAssertEqual(BarcodePayload.classify("mailto:a@b.cn?body=1+1%3D2"),
+                       .email(address: "a@b.cn", subject: nil, body: "1+1=2")) // + 保留字面、%3D→=
+        XCTAssertEqual(BarcodePayload.classify("mailto:"), .email(address: nil, subject: nil, body: nil))     // 空地址
     }
 
     func testSMS() {

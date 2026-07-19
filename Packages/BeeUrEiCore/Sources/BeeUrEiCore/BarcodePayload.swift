@@ -6,7 +6,7 @@ public enum BarcodePayloadKind: Equatable, Sendable {
     case wifi(ssid: String?)            // WIFI: 配置码
     case url(host: String?)             // http(s) 链接
     case phone(number: String)          // tel: 电话
-    case email(address: String?)        // mailto: 电子邮箱
+    case email(address: String?, subject: String?, body: String?) // mailto: 电子邮箱（含预填主题/正文，RFC 6068）
     case sms(number: String?, body: String?) // SMSTO:/sms: 发短信（number=收件号码，body=预填正文）
     case contact                        // vCard / MECARD 名片
     case geo(latitude: Double, longitude: Double, label: String?) // geo: 地理坐标（RFC 5870/地图分享）——可导航前往
@@ -36,11 +36,15 @@ public enum BarcodePayload {
             let n = String(trimmed.dropFirst("TEL:".count)).trimmingCharacters(in: .whitespaces)
             return n.isEmpty ? .text : .phone(number: n) // 空 tel: 回落文本，不谎报"这是电话号码"却没号可拨（对抗复审 LOW，与 mailto/sms 同口径）
         }
-        // 邮箱：`mailto:addr?subject=...` → addr（去掉 ? 之后的参数）。常见联系人 QR，读原始"mailto 冒号…"体验差。
+        // 邮箱：`mailto:addr?subject=...&body=...` → 地址 + **主题/正文一并解出**（RFC 6068）。盲人扫码只报地址、
+        // 不报主题正文＝不知这封邮件会替他写什么、发去哪个主题（报名/投诉/客服模板码常预置内容），须如实读全并在
+        // "写邮件"动作里预填（与短信码正文同取向）。地址到首个 ? 为止；其后查询串取 subject/body。
         if upper.hasPrefix("MAILTO:") {
-            let rest = trimmed.dropFirst("MAILTO:".count).prefix { $0 != "?" }
-            let addr = rest.trimmingCharacters(in: .whitespaces)
-            return .email(address: addr.isEmpty ? nil : addr)
+            let afterScheme = trimmed.dropFirst("MAILTO:".count)
+            let addr = afterScheme.prefix { $0 != "?" }.trimmingCharacters(in: .whitespaces)
+            let query = String(afterScheme.drop { $0 != "?" }.dropFirst())
+            return .email(address: addr.isEmpty ? nil : addr,
+                          subject: mailtoParam(query, "subject"), body: mailtoParam(query, "body"))
         }
         // 短信：`SMSTO:number:message`（冒号后正文，原样）/ `sms:number?body=...`（查询参数，URL 编码）。
         // **正文一并解出**：盲人扫码只报号码、不报正文=不知会发出什么内容（订阅/付费短信可乘虚而入），须如实读全（与
@@ -240,6 +244,20 @@ public enum BarcodePayload {
             let raw = kv[1].replacingOccurrences(of: "+", with: " ")
             let decoded = raw.removingPercentEncoding ?? raw
             let t = decoded.trimmingCharacters(in: .whitespaces)
+            return t.isEmpty ? nil : t
+        }
+        return nil
+    }
+
+    /// mailto 查询参数（RFC 6068）：与 smsBodyParam 同结构，但**不把 `+` 当空格**——RFC 6068 里 mailto 的
+    /// hfields 空格是 %20、`+` 是字面加号（sms: 的 body 走 form-urlencoded 故 +＝空格，二者语义相反，不可共用）。
+    /// 大小写不敏感匹配 key（subject/body）。%xx 解码后去首尾空白；空值 → nil。
+    static func mailtoParam(_ query: String, _ key: String) -> String? {
+        for pair in query.split(separator: "&") {
+            let kv = pair.split(separator: "=", maxSplits: 1)
+            guard kv.count == 2, kv[0].lowercased() == key else { continue }
+            let decoded = String(kv[1]).removingPercentEncoding ?? String(kv[1])
+            let t = decoded.trimmingCharacters(in: .whitespacesAndNewlines)
             return t.isEmpty ? nil : t
         }
         return nil

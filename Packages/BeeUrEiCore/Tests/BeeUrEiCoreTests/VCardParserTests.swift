@@ -72,4 +72,29 @@ final class VCardParserTests: XCTestCase {
         // 只有 TITLE（无名/无联系方式）也算有效名片（不当空）。
         XCTAssertEqual(VCardParser.parse("BEGIN:VCARD\nTITLE:CTO\nEND:VCARD")?.title, "CTO")
     }
+
+    func testVCardAddress() {
+        // ADR（地址）：名片核心信息之一，此前被丢——盲人扫名片听不到公司/住址、无从赴约或导航前往。补齐。
+        // vCard ADR 结构化 `PO;EXT;街道;城市;省;邮编;国家`，多含空占位（;;）：跳空、其余以 ", " 连接。
+        let v = "BEGIN:VCARD\nFN:张三\nADR;TYPE=WORK:;;科技路123号;北京市;;100085;中国\nTEL:13800001111\nEND:VCARD"
+        XCTAssertEqual(VCardParser.parse(v)?.address, "科技路123号, 北京市, 100085, 中国")
+        // 英文地址 + 参数化 ADR 键。
+        XCTAssertEqual(VCardParser.parse("BEGIN:VCARD\nADR;TYPE=HOME:;;123 Main St;Springfield;IL;62704;USA\nEND:VCARD")?.address,
+                       "123 Main St, Springfield, IL, 62704, USA")
+        // 多条 ADR 取**首个**非空（名片常 WORK/HOME 两条）。
+        XCTAssertEqual(VCardParser.parse("BEGIN:VCARD\nADR:;;;;;;\nADR:;;办公楼;上海;;;\nEND:VCARD")?.address, "办公楼, 上海")
+        // vCard 转义：\, → 字面逗号（不被当组件分隔）；\n → 空格。
+        XCTAssertEqual(VCardParser.parse("BEGIN:VCARD\nADR:;;123 Main St\\, Suite 5;City;;;\nEND:VCARD")?.address, "123 Main St, Suite 5, City")
+        // 全空 ADR（;;;;;;）→ 无地址（不硬报空字符串）。
+        XCTAssertNil(VCardParser.parse("BEGIN:VCARD\nADR:;;;;;;\nFN:x\nEND:VCARD")?.address)
+        // MECARD ADR（逗号分组）：切分去空、", " 连接。
+        XCTAssertEqual(VCardParser.parse("MECARD:N:李四;ADR:中关村大街,北京;TEL:13712340000;;")?.address, "中关村大街, 北京")
+    }
+
+    func testFormatVCardAddressUnit() {
+        XCTAssertEqual(VCardParser.formatVCardAddress(";;街;城;省;邮;国"), "街, 城, 省, 邮, 国")
+        XCTAssertEqual(VCardParser.formatVCardAddress(";;;;;;"), nil)          // 全空
+        XCTAssertEqual(VCardParser.formatVCardAddress(""), nil)                // 空串
+        XCTAssertEqual(VCardParser.formatVCardAddress("A\\;B;City"), "A;B, City") // \; → 字面分号不切
+    }
 }

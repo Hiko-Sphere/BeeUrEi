@@ -1090,7 +1090,7 @@ final class FramingAssistViewModel {
                 case .contact:
                     // 解析名片（vCard/MECARD，核心 VCardParser 已测）：读出姓名/单位/电话/邮箱，唯一电话可一键拨打。
                     if let c = VCardParser.parse(first) {
-                        self.resultText = FramingStrings.contactDetail(name: c.name, org: c.org, phones: c.phones, emails: c.emails, title: c.title, url: c.url, self.lang)
+                        self.resultText = FramingStrings.contactDetail(name: c.name, org: c.org, phones: c.phones, emails: c.emails, title: c.title, url: c.url, address: c.address, self.lang)
                         // 可复制内容改为解析后的可读信息（比原始 vCard 文本更有用）。
                         self.copyableResult = self.resultText
                         self.speak(self.resultText)

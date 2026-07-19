@@ -8,6 +8,7 @@ import { joinNames } from '../lib/listFormat'
 import { parseLocation, appleMapsUrl, appleMapsDirectionsUrl, locationMessageText } from '../lib/location'
 import { linkifyParts } from '../lib/linkify'
 import { imageFileFromClipboard } from '../lib/clipboardImage'
+import { downscaleForVision } from '../lib/visionImage'
 import { isForwardableKind } from '../lib/chatMessage'
 import { draftKey as draftKeyOf, draftPreview } from '../lib/draft'
 import { isNearBottom } from '../lib/scroll'
@@ -1201,7 +1202,9 @@ function ImageMessage({ src, t }: { src: string; t: (z: string, e: string) => st
       // 泛描述轮的 q 记为默认问句送服务端（供后续追问有上下文），显示时仍按 null 处理不显问句。
       // 只带**最近 8 轮**（服务端 history 上限 max(8)，与 iOS VqaConversation.maxHistory 同值）——否则第 9+ 次追问带 >8 轮被 400 拒、追问断。
       const history = turns.slice(-8).map((tn) => ({ q: tn.q ?? t('请描述这张照片', 'Describe this photo.'), a: tn.a }))
-      const r = await api.visionDescribe(src, m[1] as 'image/jpeg' | 'image/png' | 'image/webp', lang, q, history.length ? history : undefined)
+      // 降采样到 ≤1024 长边（与 iOS 同）再送——聊天图片可达 50MB、而 vision 端点上限 5MB，直接发大图会被 413「太大」拒。
+      const vis = await downscaleForVision(src)
+      const r = await api.visionDescribe(vis.dataUrl, vis.mime, lang, q, history.length ? history : undefined)
       setTurns((prev) => [...prev, { q: q?.trim() ? q.trim() : null, a: r.text }])
       setQuestion('')
       if (typeof r.remaining === 'number' && r.remaining <= 3) {

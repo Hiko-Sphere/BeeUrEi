@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { useSession } from '../lib/session'
 import { useI18n } from '../lib/i18n'
 import { api, type AppConfig } from '../lib/api'
+import { resolveGlobalBanner } from '../lib/globalBanner'
 import { getTheme, setTheme, appTitle, type Theme } from '../lib/theme'
 import { updateAppBadge } from '../lib/appBadge'
 import { updateAvailable } from '../lib/appVersion'
@@ -155,13 +156,17 @@ export function Layout({ children }: { children: ReactNode }) {
             </button>
           </div>
         )}
-        {/* 全站公告 / 维护横幅 */}
-        {config?.maintenance?.enabled && (
-          <div className="bg-danger px-4 py-2 text-center text-sm font-medium text-white">{config.maintenance.message || t('系统维护中', 'Under maintenance')}</div>
-        )}
-        {config?.announcement?.enabled && config.announcement.text && (
-          <div className="bg-honey/20 px-4 py-2 text-center text-sm text-[var(--text)]">{config.announcement.text}</div>
-        )}
+        {/* 全站公告 / 维护横幅（字段名须为 active/message，见 resolveGlobalBanner——此前误读 enabled/text 致横幅从不显示）。
+            role=status + aria-live 让读屏协助者也能被念到维护/公告（与 iOS 语音播报同口径）。 */}
+        {(() => {
+          const b = resolveGlobalBanner(config)
+          if (!b) return null
+          const text = b.kind === 'maintenance' && !b.message ? t('系统维护中', 'Under maintenance') : b.message
+          const cls = b.tone === 'danger' ? 'bg-danger font-medium text-white'
+            : b.tone === 'warning' ? 'bg-danger/20 font-medium text-[var(--text)]'
+            : 'bg-honey/20 text-[var(--text)]'
+          return <div role="status" aria-live="polite" className={`px-4 py-2 text-center text-sm ${cls}`}>{text}</div>
+        })()}
         {/* 条款重新同意横幅：醒目但**非阻断**（绝不挡住协助者响应紧急求助）；持续显示直到同意。role=alert 读屏可闻。 */}
         {needsConsent && (
           <div role="alert" className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 border-b border-[var(--line)] bg-honey/25 px-4 py-2.5 text-center text-sm text-[var(--text)]">

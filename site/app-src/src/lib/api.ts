@@ -69,8 +69,10 @@ export interface AppConfig {
   features: Record<string, boolean>
   registrationEnabled: boolean
   recording: { enabled: boolean; requireConsent: boolean }
-  announcement?: { enabled: boolean; text?: string; level?: string } | null
-  maintenance?: { enabled: boolean; message?: string } | null
+  // 字段名须与服务端契约一致：announcement/maintenance 用 active + message（**非** enabled/text）——
+  // 此前 web 误读 enabled/text，运行时恒为 undefined→横幅**从不显示**，admin 发的维护/公告协助端完全看不到（见 resolveGlobalBanner）。
+  announcement?: { active: boolean; message?: string; level?: string } | null
+  maintenance?: { active: boolean; message?: string } | null
   requireVerification?: boolean
   legalVersion?: string // 当前条款版本；与 me.legalConsentVersion 不一致则请用户重新同意
 }

@@ -25,6 +25,10 @@ public final class ObstacleTrack: Identifiable {
     public private(set) var confirmed: Bool = false
     private var range = AlphaBetaFilter(alpha: 0.5, beta: 0.15)
     private let bearingAlpha: Double
+    /// 连续漏检累计的时长（秒）。再命中时把它并入本帧 dt 交给 α-β 滤波——否则滤波以为距上次测量只过了
+    /// 一帧，会把"漏检期间目标真实移动的位移"当成单帧位移，闭合速度**暴涨约 ×(漏检帧数+1)**（TTC 被
+    /// 严重低估、误触急迫告警）。命中即清零。安全攸关：闭合速度→TTC→避障急迫度。
+    private var missedDt: Double = 0
 
     init(id: Int, obs: TrackObservation, bearingAlpha: Double, confirmHits: Int) {
         self.id = id
@@ -54,11 +58,13 @@ public final class ObstacleTrack: Identifiable {
         // 标签，稳定播报。默认精确关联时 obs.label 恒等于 label，此处本就是 no-op（对既有行为零影响）。
         isHazard = obs.isHazard
         bearingDegrees = ObstacleTracker.emaAngle(bearingDegrees, obs.bearingDegrees, alpha: bearingAlpha)
-        if let d = obs.distanceMeters { range.update(measurement: d, dt: dt) }
+        // 并入漏检累计时长：再命中时按"距上次测量的真实间隔"更新滤波，闭合速度不因漏检而暴涨。
+        if let d = obs.distanceMeters { range.update(measurement: d, dt: dt + missedDt) }
+        missedDt = 0
         if hits >= confirmHits { confirmed = true }
     }
 
-    func missed() { misses += 1 }
+    func missed(dt: Double) { misses += 1; missedDt += dt.isFinite ? dt : 0 }
 }
 
 /// 轻量多目标跟踪（ByteTrack 思路简化）：贪心方位关联 + tentative/confirmed/lost 生命周期。
@@ -101,7 +107,7 @@ public final class ObstacleTracker {
                 used.insert(j)
                 track.matched(observations[j], dt: dt, confirmHits: confirmHits)
             } else {
-                track.missed()
+                track.missed(dt: dt)
             }
         }
         // 未匹配观测 → 新轨迹。

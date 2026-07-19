@@ -175,6 +175,24 @@ final class ObstacleTrackerTests: XCTestCase {
         XCTAssertGreaterThan(track.closingSpeed, 0)   // 正在靠近
         XCTAssertNotNil(track.timeToCollision)
     }
+
+    // 回归：目标以**恒定** 1 m/s 逼近，中间夹 5 帧漏检后重捕获，闭合速度不得暴涨。
+    // 修复前：漏检期间滤波不推进，再命中时按单帧 dt(0.5s) 计算，把 3s 的真实位移当成 0.5s 的位移
+    // → 闭合速度 ≈ ×(漏检帧数+1) 暴涨（此例 ~1.0→~1.75）→ TTC 被严重低估 → 误触急迫避障告警。
+    func testClosingSpeedStableAcrossMissGap() {
+        let t = ObstacleTracker(confirmHits: 1)
+        // 连续 12 帧，恒定 1 m/s 逼近（每 0.5s 帧距离 -0.5m）：12.0→6.5，让闭合速度收敛到 ≈1。
+        for i in 0..<12 { _ = t.update([obs("car", 0, 12.0 - Double(i) * 0.5)], dt: 0.5) }
+        let before = t.confirmedTracks.first!.closingSpeed
+        XCTAssertEqual(before, 1, accuracy: 0.3)
+        // 5 帧漏检（2.5s），目标仍以 1 m/s 逼近。
+        for _ in 0..<5 { _ = t.update([], dt: 0.5) }
+        // 第 6 帧重捕获：距上次测量(6.5) 已过 6 帧×0.5=3.0s → 真实距离 6.5 - 3.0 = 3.5。
+        _ = t.update([obs("car", 0, 3.5)], dt: 0.5)
+        let after = t.confirmedTracks.first!.closingSpeed
+        // 真实闭合速度恒为 1 m/s；漏检重捕获后不得偏离太多（修复前会冲到 ~1.75）。
+        XCTAssertEqual(after, before, accuracy: 0.4)
+    }
 }
 
 final class RiskAndTrafficTests: XCTestCase {

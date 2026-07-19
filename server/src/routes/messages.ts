@@ -56,7 +56,8 @@ import { requireAuth } from '../auth/rbac'
 import { requireFeature } from '../auth/featureGate'
 import { NoopPushSender, type PushSender } from '../push/apns'
 import { NoopWebPushSender, type WebPushSender } from '../push/webPush'
-import { pushLang, pushStrings, type PushLang } from '../push/pushStrings'
+import { pushLang, pushStrings } from '../push/pushStrings'
+import { messagePreview } from '../notifications/messagePreview'
 import { notifyUser } from '../notifications/notify'
 import { shouldSuppressPush } from '../notifications/quietHours'
 import { removeMediaFile } from '../media/storage'
@@ -95,19 +96,7 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
                                       webPush: WebPushSender = new NoopWebPushSender(),
                                       isOnline: (userId: string) => boolean = () => false): void {
 
-  /// 推送预览文案（语音/图片/视频/位置用占位，文本截 80 字）。
-  function previewOf(kind: ChatMessage['kind'], text: string, l: PushLang): string {
-    if (kind === 'audio') return l === 'en' ? '[Voice message]' : '[语音消息]'
-    if (kind === 'image') return l === 'en' ? '[Photo]' : '[图片]'
-    if (kind === 'video') return l === 'en' ? '[Video]' : '[视频]'
-    if (kind === 'location') return l === 'en' ? '[Location]' : '[位置]'
-    // iOS 默认把位置发成 kind=text + 内嵌 Apple 地图链接：推送预览也显示 [位置]，
-    // 否则盲人收到的推送是一串原始 maps URL（与 iOS/web 列表预览保持一致）。
-    if (text.includes('https://maps.apple.com/?ll=')) return l === 'en' ? '[Location]' : '[位置]'
-    return text.slice(0, 80)
-  }
-
-  // 发送消息（单聊传 toId，群聊传 groupId）。
+  // 发送消息（单聊传 toId，群聊传 groupId）。推送预览走核心 messagePreview（媒体占位 + 文本代理对安全截断 + 省略号）。
   app.post('/api/messages', { preHandler: [requireAuth(), requireFeature(store, 'messaging')],
                               config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
     const parsed = sendSchema.safeParse(req.body)
@@ -176,7 +165,7 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
             if (shouldSuppressPush(member.quietHours, 'chat_message', Date.now())) continue
             const l = pushLang(member.language)
             const title = pushStrings.groupMessageTitle(sender.displayName, group.name, l)
-            const body = pushStrings.newMessageBody(previewOf(kind, text, l), l)
+            const body = pushStrings.newMessageBody(messagePreview(kind, text, l), l)
             const badge = totalUnreadFor(store, memberId).total // 图标角标=该成员未读总数（含本条）；APNs+Web Push 同带
             if (member.apnsToken) {
               void pushSender.sendAlert(member.apnsToken, title, body,
@@ -212,7 +201,7 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
       try {
         const l = pushLang(recipient.language)
         const title = pushStrings.newMessageTitle(sender.displayName, l)
-        const body = pushStrings.newMessageBody(previewOf(kind, text, l), l)
+        const body = pushStrings.newMessageBody(messagePreview(kind, text, l), l)
         const badge = totalUnreadFor(store, toId!).total // 图标角标=收件人未读总数（含本条）；APNs+Web Push 同带
         if (recipient.apnsToken) {
           void pushSender.sendAlert(recipient.apnsToken, title, body,
@@ -417,7 +406,7 @@ export function registerMessageRoutes(app: FastifyInstance, store: Store,
           const l = pushLang(u.language)
           notifyUser(store, pushSender, uid, 'message_pinned',
             pushStrings.messagePinnedTitle(pinner.displayName, l),
-            pushStrings.messagePinnedBody(previewOf(msg.kind, msg.text, l), l),
+            pushStrings.messagePinnedBody(messagePreview(msg.kind, msg.text, l), l),
             msg.groupId ? { groupId: msg.groupId, fromId: me } : { fromId: me })
         }
       } catch { /* 通知失败绝不阻断置顶 */ }

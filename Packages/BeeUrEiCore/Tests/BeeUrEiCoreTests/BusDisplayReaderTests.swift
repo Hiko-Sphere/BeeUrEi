@@ -14,6 +14,23 @@ final class BusDisplayReaderTests: XCTestCase {
         XCTAssertEqual(BusDisplayReader.pick(texts: ["103", "热线12345678", "开往东站"]), ["103", "开往东站"])
     }
 
+    func testCombinedRouteAndDestinationLineNotDropped() {
+        // 路线+方向印在**同一行**（>8 字且含数字）：此前既非纯线路号(>8)又被终点站过滤排除(含数字)→整行丢弃，
+        // 盲人对这班车零信息。现作兜底 tier 兜住——扫到最有用的那行必须读出来。
+        XCTAssertEqual(BusDisplayReader.pick(texts: ["103路开往火车站"]), ["103路开往火车站"])
+        XCTAssertEqual(BusDisplayReader.pick(texts: ["Route 103 to Downtown"]), ["Route 103 to Downtown"])
+        // 仍先电话/序列号过滤：含 ≥8 连续数字的长行仍丢弃（不因兜底 tier 漏进杂讯）。
+        XCTAssertEqual(BusDisplayReader.pick(texts: ["购票请拨12345678转9"]), [])
+    }
+
+    func testMixedTierIsFallbackOnly_NoNoiseWhenRouteAndDestPresent() {
+        // 有纯线路号 + 终点站时，兜底 tier**不触及**（maxItems 已填满）：长广告行"关注公众号送10元话费"不会挤进播报。
+        XCTAssertEqual(
+            BusDisplayReader.pick(texts: ["8路", "开往火车站", "关注公众号送10元话费"]),
+            ["8路", "开往火车站"]
+        )
+    }
+
     func testDestinationByLength() {
         // 无线路号时：不含数字的行按长度取最长（终点站通常比站牌杂字长）
         XCTAssertEqual(BusDisplayReader.pick(texts: ["快", "Central Station"]), ["Central Station", "快"])

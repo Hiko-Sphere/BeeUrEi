@@ -17,10 +17,15 @@ public enum BusDisplayReader {
             .filter { !$0.isEmpty && longestDigitRun(in: $0) < 8 }
         var seen = Set<String>()
         let unique = cleaned.filter { seen.insert($0).inserted }
-        let routes = unique.filter { $0.count <= 8 && $0.contains(where: isAsciiDigit) }
+        let routes = unique.filter { $0.count <= 8 && $0.contains(where: isAsciiDigit) } // 短数字行=线路号，最优先
         let destinations = unique.filter { !$0.contains(where: isAsciiDigit) }
             .sorted { $0.count > $1.count }
-        return Array((routes + destinations).prefix(maxItems))
+        // 含数字的**长行**（路线+方向印在同一行，如"103路开往火车站"/"Route 103 to Downtown"）：既 >8 字非纯线路号、
+        // 又因含数字被终点站过滤排除——此前落入两 filter 之间**整行丢弃**，盲人对这班车零信息（scan 到最有用的那行反而没读出）。
+        // 已过电话/序列号过滤(longestDigitRun<8)故非杂讯。作**兜底 tier**：仅在纯线路号/终点站填不满 maxItems 时补上，
+        // 正常"线路号+终点各一行"时不触及（不加噪）。三谓词互斥（≤8∧digit / no-digit / >8∧digit），仍是无重叠划分。
+        let mixed = unique.filter { $0.count > 8 && $0.contains(where: isAsciiDigit) }
+        return Array((routes + destinations + mixed).prefix(maxItems))
     }
 
     /// 到站信息（LED 报站牌）：盲人在站台最想知道"我的车还有多久到"。从 OCR 行提取到站提示——

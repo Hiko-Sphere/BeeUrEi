@@ -135,8 +135,8 @@ final class LocalizationTests: XCTestCase {
         let objs: [(label: String, normalizedX: Double)] = [
             ("person", 0.5), ("person", 0.5), ("vehicle", 0.8), ("pole", 0.1),
         ]
-        // 顺序：先中间(2 person)，再左(pole)，再右(vehicle)。
-        XCTAssertEqual(s.summary(objects: objs, language: .en), "Ahead: 2 persons in the center; pole on the left; vehicle on the right")
+        // 顺序：先中间(2 person)，再左(pole)，再右(vehicle)。person 复数是 people（非朴素 "persons"，见 pluralizeEn）。
+        XCTAssertEqual(s.summary(objects: objs, language: .en), "Ahead: 2 people in the center; pole on the left; vehicle on the right")
     }
 
     // MARK: RouteProgress

@@ -186,8 +186,27 @@ public enum SpokenStrings {
         guard count > 1 else { return label }
         switch lang {
         case .zh: return "\(count)个\(label)"
-        case .en: return "\(count) \(label)s"
+        case .en: return "\(count) \(pluralizeEn(label))"
         }
+    }
+
+    /// 英文名词复数（场景概述"3 buses"/"3 people"）：朴素 +s 对 COCO 类别集会出错——bus→buss、person→persons、
+    /// wine glass→wine glasss、bench→benchs、mouse→mouses、knife→knifes 皆非正确英文，盲人听到明显语病、不够"顶尖"。
+    /// 按 COCO 标签集处理不规则词与咝音词尾；其余 +s。中文侧不受影响（"个"通用量词）。纯逻辑可单测。
+    static func pluralizeEn(_ s: String) -> String {
+        switch s {
+        case "person": return "people"
+        case "mouse": return "mice"
+        case "knife": return "knives"
+        case "sheep", "skis", "scissors": return s // 不变 / 本已是复数
+        default: break
+        }
+        let lower = s.lowercased()
+        // 咝音词尾 s/ss/sh/ch/x/z → +es：bus→buses、wine glass→wine glasses、toothbrush→toothbrushes、bench→benches。
+        if lower.hasSuffix("s") || lower.hasSuffix("sh") || lower.hasSuffix("ch") || lower.hasSuffix("x") || lower.hasSuffix("z") {
+            return s + "es"
+        }
+        return s + "s"
     }
 
     /// 某分区汇总：「<区>有<内容>」。

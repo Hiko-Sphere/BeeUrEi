@@ -68,4 +68,34 @@ final class SceneSummarizerTests: XCTestCase {
         XCTAssertTrue(out.contains("person in the center"), out)   // 0.5 → 中
         XCTAssertTrue(out.hasPrefix("Ahead:"), out)
     }
+
+    /// 英文复数正确性（此前朴素 +s：3 buss / 3 persons / 3 wine glasss / 3 benchs 皆语病）。
+    func testEnglishPluralization() {
+        // 不规则词。
+        XCTAssertEqual(SpokenStrings.pluralizeEn("person"), "people")
+        XCTAssertEqual(SpokenStrings.pluralizeEn("mouse"), "mice")
+        XCTAssertEqual(SpokenStrings.pluralizeEn("knife"), "knives")
+        // 不变 / 本已复数。
+        XCTAssertEqual(SpokenStrings.pluralizeEn("sheep"), "sheep")
+        XCTAssertEqual(SpokenStrings.pluralizeEn("scissors"), "scissors")
+        XCTAssertEqual(SpokenStrings.pluralizeEn("skis"), "skis")
+        // 咝音词尾 → +es。
+        XCTAssertEqual(SpokenStrings.pluralizeEn("bus"), "buses")
+        XCTAssertEqual(SpokenStrings.pluralizeEn("wine glass"), "wine glasses")
+        XCTAssertEqual(SpokenStrings.pluralizeEn("toothbrush"), "toothbrushes")
+        XCTAssertEqual(SpokenStrings.pluralizeEn("bench"), "benches")
+        // 常规 +s（多词只影响末词，仍整体 +s）。
+        XCTAssertEqual(SpokenStrings.pluralizeEn("chair"), "chairs")
+        XCTAssertEqual(SpokenStrings.pluralizeEn("cell phone"), "cell phones")
+        XCTAssertEqual(SpokenStrings.pluralizeEn("cake"), "cakes")
+        // 端到端：场景概述里读出正确复数（此前会说 "3 buss"）。
+        let out = s.summary(objects: [("bus", 0.5), ("bus", 0.52), ("bus", 0.55)], language: .en)
+        XCTAssertTrue(out.contains("3 buses"), out)
+        XCTAssertFalse(out.contains("buss"), out)
+        let ppl = s.summary(objects: [("person", 0.5), ("person", 0.52)], language: .en)
+        XCTAssertTrue(ppl.contains("2 people"), ppl)
+        // 中文不受影响：仍"个"通用量词。
+        let zh = s.summary(objects: [("公交车", 0.5), ("公交车", 0.52)], language: .zh)
+        XCTAssertTrue(zh.contains("2个公交车"), zh)
+    }
 }

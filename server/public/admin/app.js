@@ -1253,8 +1253,8 @@ function renderLinks() {
   const list = filteredLinks();
   const rows = list.map((l) => `
     <tr>
-      <td><div class="nm">${esc(l.ownerName)}</div><div class="un">${esc(roleName(l.ownerRole) || '—')}</div></td>
-      <td><div class="nm">${esc(l.memberName)}</div><div class="un">${esc(roleName(l.memberRole) || '—')}</div></td>
+      <td><div class="nm"><button type="button" class="emerg-user row-user" data-uid="${esc(String(l.ownerId))}" title="${esc(t('rowOpenUser'))}">${esc(l.ownerName)}</button></div><div class="un">${esc(roleName(l.ownerRole) || '—')}</div></td>
+      <td><div class="nm"><button type="button" class="emerg-user row-user" data-uid="${esc(String(l.memberId))}" title="${esc(t('rowOpenUser'))}">${esc(l.memberName)}</button></div><div class="un">${esc(roleName(l.memberRole) || '—')}</div></td>
       <td>${esc(l.relation || '—')}</td>
       <td>${l.isEmergency ? `<span class="pill role-admin">⚠️ ${esc(t('emergency'))}</span>` : '—'}</td>
       <td>${linkStatusPill(l.status)}</td>
@@ -1273,6 +1273,8 @@ function renderLinks() {
       : `<div class="empty"><div class="ico">🔗</div><p>${esc(t('noLinks'))}</p></div>`}
     </div>`;
   $('#lq').addEventListener('input', (e) => { state.linksQuery = e.target.value; renderLinks(); $('#lq').focus(); });
+  // 绑定双方（owner/member）名直达用户抽屉：核查关系/紧急联系人设置时一键查看任一方详情（与通话/拉黑/举报行同款直达）。
+  viewEl().querySelectorAll('.row-user').forEach((el) => el.addEventListener('click', () => { if (el.dataset.uid) openUserDrawer(el.dataset.uid); }));
   viewEl().querySelector('[data-action="reloadLinks"]').addEventListener('click', loadLinks);
   viewEl().querySelector('[data-action="exportLinks"]').addEventListener('click', () => {
     downloadCSV('beeurei-relationships.csv', [

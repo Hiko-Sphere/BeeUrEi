@@ -325,7 +325,7 @@ enum HomeStrings {
     static func voiceReadFailed(_ l: Language) -> String { l == .zh ? "读取消息失败，请稍后再试。" : "Couldn't read messages. Try again later." }
 
     /// 语音"读消息"的一条会话输入（单聊或群聊：对端/群名 + 最新一条 + 未读数）。isGroup 标记群聊，播报时点明"群"。
-    struct UnreadConversation { let name: String; let kind: String; let text: String; let unread: Int; var isGroup: Bool = false }
+    struct UnreadConversation { let name: String; let kind: String; let text: String; let unread: Int; var isGroup: Bool = false; var sender: String? = nil }
 
     /// 非文本消息的可读占位（与服务端推送预览同口径）；文本原样、截断防超长；Apple 地图链接文本视作位置。
     static func messageReadoutPreview(kind: String, text: String, _ l: Language) -> String {
@@ -351,7 +351,16 @@ enum HomeStrings {
         let shown = withUnread.prefix(max(1, cap))
         let parts = shown.map { c -> String in
             let preview = messageReadoutPreview(kind: c.kind, text: c.text, l)
-            let name = c.isGroup ? (l == .zh ? "群「\(c.name)」" : "group “\(c.name)”") : c.name
+            // 群消息点名**发送者**：单聊里 name 即发送者，群里 name 是群名——盲人须知群里"谁"发的（否则只听到群名+内容、不知找谁）。
+            // 发送者未知（发信人已退群/查不到名）→ 退回只报群名（现有行为）。
+            let name: String
+            if c.isGroup, let s = c.sender, !s.isEmpty {
+                name = l == .zh ? "群「\(c.name)」\(s)" : "\(s) in “\(c.name)”"
+            } else if c.isGroup {
+                name = l == .zh ? "群「\(c.name)」" : "group “\(c.name)”"
+            } else {
+                name = c.name
+            }
             let more = c.unread > 1 ? (l == .zh ? "（等 \(c.unread) 条）" : " (\(c.unread) unread)") : ""
             return l == .zh ? "\(name)：\(preview)\(more)" : "\(name): \(preview)\(more)"
         }

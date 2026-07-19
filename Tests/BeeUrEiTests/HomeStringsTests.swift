@@ -70,13 +70,17 @@ final class HomeStringsTests: XCTestCase {
         let r = HomeStrings.unreadReadout([
             C(name: "妈妈", kind: "text", text: "到家了吗", unread: 1),
             C(name: "小明", kind: "audio", text: "data:audio/m4a;base64,AAAA", unread: 3),
-            C(name: "家人群", kind: "text", text: "晚上吃饭", unread: 2, isGroup: true),
+            C(name: "家人群", kind: "text", text: "晚上吃饭", unread: 2, isGroup: true, sender: "爸爸"),
             C(name: "已读的人", kind: "text", text: "旧消息", unread: 0),
         ], .zh)
         XCTAssertTrue(r.contains("你有 3 个会话有未读消息")) // 单聊+群聊都计入
         XCTAssertTrue(r.contains("妈妈：到家了吗"))
         XCTAssertTrue(r.contains("小明：语音消息（等 3 条）"))
-        XCTAssertTrue(r.contains("群「家人群」：晚上吃饭（等 2 条）")) // 群聊点名"群"
+        XCTAssertTrue(r.contains("群「家人群」爸爸：晚上吃饭（等 2 条）")) // 群聊点名"群"+发送者（盲人须知群里谁发的）
+        // 发送者未知（发信人已退群）→ 退回只报群名。
+        XCTAssertTrue(HomeStrings.unreadReadout([C(name: "同事群", kind: "text", text: "开会", unread: 1, isGroup: true, sender: nil)], .zh).contains("群「同事群」：开会"))
+        // 英文群+发送者："<sender> in “<group>”"。
+        XCTAssertTrue(HomeStrings.unreadReadout([C(name: "Family", kind: "text", text: "dinner", unread: 1, isGroup: true, sender: "Dad")], .en).contains("Dad in “Family”: dinner"))
         XCTAssertFalse(r.contains("已读的人")) // unread=0 不读
         // 超过 cap 提示"等"；英文不串中文。
         let many = (1...7).map { C(name: "P\($0)", kind: "text", text: "hi", unread: 1) }

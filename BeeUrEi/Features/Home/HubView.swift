@@ -642,7 +642,10 @@ struct HubView: View {
             }
             for g in groups ?? [] where g.unread > 0 {
                 guard let last = g.last else { continue } // 有未读必有最新一条；防御性跳过空群
-                withTime.append((HomeStrings.UnreadConversation(name: g.group.name, kind: last.kind, text: last.text, unread: g.unread, isGroup: true), last.createdAt))
+                // 群里点名发送者：从群成员里按 last.fromId 解析显示名（服务端 groups 已附 members 名单，无需额外请求）；
+                // 查不到（发信人已退群）→ nil，读消息退回只报群名。
+                let sender = g.members.first { $0.id == last.fromId }?.displayName
+                withTime.append((HomeStrings.UnreadConversation(name: g.group.name, kind: last.kind, text: last.text, unread: g.unread, isGroup: true, sender: sender), last.createdAt))
             }
             let items = withTime.sorted { $0.at > $1.at }.map(\.item) // 最新的未读会话先读
             speak(HomeStrings.unreadReadout(items, lang))

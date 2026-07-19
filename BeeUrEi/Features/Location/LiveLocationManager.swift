@@ -200,7 +200,10 @@ final class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         // 即便缓存清理被绕过，也不会把旧/他人定位发出去（见复审 HIGH）。
         guard Date().timeIntervalSince(loc.timestamp) < 30 else { return }
         lastPublish = Date()
-        let course = loc.course >= 0 ? loc.course : nil
+        // 航迹方向（"正朝X方向移动"）：不只看 course≥0（"非无效"），还要 courseAccuracy 可信——低速/差 GPS 下
+        // course 虽有效但 ±几十度、几乎乱指，八方位每档 45° 会整档报错，误导监护家人（与「我朝哪个方向」对罗盘同门槛，
+        // valid≠trustworthy，核心 CourseFilter 已测）。不可信→nil＝对端省略方向，好过报错方向。
+        let course = CourseFilter.trustworthyCourse(courseDegrees: loc.course, accuracyDegrees: loc.courseAccuracy)
         let acc = loc.horizontalAccuracy >= 0 ? loc.horizontalAccuracy : nil
         // 随位置附上电量%（Find My/Life360 惯例）：亲友看到"快没电"可在盲人失联前主动联系。未知(-1)不带。
         UIDevice.current.isBatteryMonitoringEnabled = true

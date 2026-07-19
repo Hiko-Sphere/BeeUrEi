@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { cardinal, headingPhrase } from './heading'
+import { cardinal, headingPhrase, trustworthyHeading, MIN_HEADING_SPEED_MPS } from './heading'
 
 describe('cardinal（方位角→八方位，与 iOS CompassRose 同口径）', () => {
   it('正方位落在各自扇区中心', () => {
@@ -35,6 +35,35 @@ describe('cardinal（方位角→八方位，与 iOS CompassRose 同口径）', 
     expect(cardinal(Infinity, 'zh')).toBeNull()
     expect(cardinal(null, 'zh')).toBeNull()
     expect(cardinal(undefined, 'zh')).toBeNull()
+  })
+})
+
+describe('trustworthyHeading（上报前按 speed 门控行进方向，与 iOS CourseFilter 同原则）', () => {
+  it('heading 有效 + 速度足够 → 归一化返回', () => {
+    expect(trustworthyHeading(90, 3)).toBe(90)
+    expect(trustworthyHeading(0, 0.5)).toBe(0)      // 恰在阈值上（不 < 0.5）
+    expect(trustworthyHeading(359, 10)).toBe(359)
+  })
+  it('近静止（speed < 0.5 m/s）→ null（关键改进：低速 heading 是噪声，旧代码会误发）', () => {
+    expect(trustworthyHeading(90, 0)).toBeNull()
+    expect(trustworthyHeading(90, 0.3)).toBeNull()
+    expect(trustworthyHeading(90, MIN_HEADING_SPEED_MPS - 0.01)).toBeNull()
+  })
+  it('heading 无效（null/NaN/Infinity）→ null，无论速度', () => {
+    expect(trustworthyHeading(null, 5)).toBeNull()
+    expect(trustworthyHeading(undefined, 5)).toBeNull()
+    expect(trustworthyHeading(NaN, 5)).toBeNull()
+    expect(trustworthyHeading(Infinity, 5)).toBeNull()
+  })
+  it('speed 缺失/非有限（浏览器不报）→ 退化为仅按 heading 有效（不误伤、不改旧行为）', () => {
+    expect(trustworthyHeading(135, null)).toBe(135)
+    expect(trustworthyHeading(135, undefined)).toBe(135)
+    expect(trustworthyHeading(135, NaN)).toBe(135)
+  })
+  it('归一到 [0,360)：负数/超 360 等价角同结果', () => {
+    expect(trustworthyHeading(-90, 5)).toBe(270)
+    expect(trustworthyHeading(360, 5)).toBe(0)
+    expect(trustworthyHeading(450, 5)).toBe(90)
   })
 })
 

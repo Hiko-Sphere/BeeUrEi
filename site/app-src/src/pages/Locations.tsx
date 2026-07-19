@@ -7,7 +7,7 @@ import { batteryBadge, batteryPercent } from '../lib/battery'
 import { shareTtlSec, SHARE_DURATIONS } from '../lib/locationShare'
 import { validAccuracyMeters, viewAccuracyNote, shareAccuracyNote } from '../lib/geoAccuracy'
 import { getUnit } from '../lib/distanceUnit'
-import { headingPhrase } from '../lib/heading'
+import { headingPhrase, trustworthyHeading } from '../lib/heading'
 import { appleMapsUrl } from '../lib/location'
 import { useI18n } from '../lib/i18n'
 import { useSession } from '../lib/session'
@@ -165,7 +165,9 @@ export function LocationsPage() {
     if (!p) return
     try {
       await api.updateLocation({ lat: p.latitude, lng: p.longitude, accuracy: p.accuracy ?? undefined,
-        heading: (p.heading != null && !Number.isNaN(p.heading)) ? p.heading : undefined,
+        // 行进方向：不只判 heading 有效，还按 coords.speed 门控——低速/近静止时 heading 是噪声，八方位每档 45°
+        // 会整档报错，误导监护家人判断盲人走向（valid≠trustworthy，与 iOS CourseFilter 同原则；trustworthyHeading 已测）。
+        heading: trustworthyHeading(p.heading, p.speed) ?? undefined,
         // 上报本机电量（Find My/Life360 惯例）：亲友看到"快没电"可在失联前主动联系；也让服务端低电量预警对 web 共享者生效。
         // 此前 web 从不上报电量（只上报了 accuracy/heading），web 共享者的联系人永远看到"无电量"、低电量预警也不触发。
         battery: batteryPercent(batteryMgr.current?.level),
